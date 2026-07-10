@@ -1,18 +1,35 @@
+import {
+  AppWindow,
+  Boxes,
+  BriefcaseBusiness,
+  CalendarClock,
+  ChevronDown,
+  Coins,
+  Database,
+  Gauge,
+  KeyRound,
+  PlugZap,
+  Route,
+  ShieldCheck,
+  Timer
+} from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+import { GatewayPipeline } from "./gateway-pipeline";
+import { RequestIdCopyButton } from "./request-id-copy-button";
+import { RequestLogDetailDismissLink } from "./request-log-detail-dismiss-link";
+import { StatusBadge } from "./request-log-status-badge";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import {
   formatBudgetScopeDisplayName,
   formatDisplayIdentifier
 } from "@/lib/formatting/display-identifiers";
 import {
-  formatDateTime,
   formatInteger,
-  formatLatency,
   nullableText
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
-import { RequestLogDetailDismissLink } from "./request-log-detail-dismiss-link";
-import { StatusBadge } from "./request-log-status-badge";
 
 type RequestLogDetailProps = {
   locale: Locale;
@@ -25,42 +42,39 @@ const requestDetailText: Record<
   Locale,
   {
     back: string;
+    capturedPrompt: string;
     close: string;
     detailTitle: string;
     emptyPreview: string;
-    capturedPrompt: string;
+    no: string;
     none: string;
-    noPreview: string;
     promptCapture: string;
     truncated: string;
     yes: string;
-    no: string;
   }
 > = {
   en: {
     back: "Back to request logs",
+    capturedPrompt: "Captured prompt",
     close: "Close",
     detailTitle: "Request detail",
     emptyPreview: "No preview stored",
-    capturedPrompt: "Captured prompt",
+    no: "no",
     none: "none",
-    noPreview: "No preview stored",
     promptCapture: "Prompt capture",
     truncated: "Truncated",
-    no: "no",
     yes: "yes"
   },
   ko: {
     back: "요청 로그로 돌아가기",
+    capturedPrompt: "캡처된 프롬프트",
     close: "닫기",
     detailTitle: "요청 상세",
-    emptyPreview: "저장된 preview 없음",
-    capturedPrompt: "캡처된 프롬프트",
+    emptyPreview: "저장된 미리보기 없음",
+    no: "아니오",
     none: "없음",
-    noPreview: "저장된 preview 없음",
     promptCapture: "프롬프트 캡처",
     truncated: "잘림 여부",
-    no: "아니오",
     yes: "예"
   }
 };
@@ -77,12 +91,12 @@ export function RequestLogDetail({
     <main className="console-content">
       <section className="detail-header">
         <div>
-          <Link className="back-link" href={`/tenants/${tenantId}/request-logs`}>
+          <Link className="back-link" href={"/tenants/" + tenantId + "/request-logs"}>
             {text.back}
           </Link>
           <h2>{formatDisplayIdentifier(record.requestId)}</h2>
         </div>
-        <StatusBadge status={record.status} />
+        <StatusBadge label={requestStatusLabel(record, locale)} status={record.status} />
       </section>
 
       <section className="detail-grid detail-stack-grid">
@@ -98,7 +112,7 @@ export function RequestLogDetailAside({
   tenantId,
   timezone
 }: RequestLogDetailProps) {
-  const closeHref = `/tenants/${tenantId}/request-logs`;
+  const closeHref = "/tenants/" + tenantId + "/request-logs";
   const text = requestDetailText[locale];
 
   return (
@@ -108,19 +122,23 @@ export function RequestLogDetailAside({
         className="request-log-detail-backdrop"
         href={closeHref}
       />
-      <aside aria-label="Request detail" className="request-log-detail-aside" role="dialog">
+      <aside
+        aria-label={text.detailTitle}
+        className="request-log-detail-aside"
+        role="dialog"
+      >
         <div className="request-log-detail-aside-header">
           <div>
             <span>{text.detailTitle}</span>
             <h3>{formatDisplayIdentifier(record.requestId)}</h3>
           </div>
-          <StatusBadge status={record.status} />
+          <StatusBadge label={requestStatusLabel(record, locale)} status={record.status} />
           <RequestLogDetailDismissLink
             ariaLabel={text.close}
             className="request-log-detail-close"
             href={closeHref}
           >
-            X
+            ×
           </RequestLogDetailDismissLink>
         </div>
         <RequestLogDetailPanel locale={locale} record={record} timezone={timezone} />
@@ -136,174 +154,628 @@ export function RequestLogDetailPanel({
 }: Omit<RequestLogDetailProps, "tenantId">) {
   const text = requestDetailText[locale];
   const domainOutcomes = record.domainOutcomes;
-  const hasErrorDetail = Boolean(record.errorCode || record.errorStage || record.errorMessage);
   const runtimeSnapshot = record.metadata?.runtime?.runtimeSnapshot;
+  const hasErrorDetail = Boolean(
+    record.errorCode || record.errorStage || record.errorMessage
+  );
 
   return (
-    <article className="console-panel detail-panel detail-panel-stack">
-      <DetailSection
-        title="Request context"
-        rows={[
-          ["Created", formatDateTime(record.createdAt, timezone)],
-          ["Completed", formatDateTime(record.completedAt, timezone)],
-          ["HTTP status", String(record.httpStatus)]
-        ]}
-      />
+    <article className="request-detail-workspace">
+      <RequestSummary locale={locale} record={record} timezone={timezone} />
+      <GatewayPipeline locale={locale} record={record} />
 
-      <DetailSection
-        title="Safety"
-        rows={[
-          [
-            "Outcome",
-            record.safetySummary?.outcome ?? domainOutcomes?.safety?.outcome ?? record.maskingAction
-          ],
-          ["Masking action", record.safetySummary?.maskingAction ?? record.maskingAction],
-          [
-            "Detected count",
-            String(record.safetySummary?.detectedCount ?? record.maskingDetectedCount)
-          ],
-          [
-            "Detected types",
-            record.safetySummary?.detectorCategories?.join(", ") ||
-              record.maskingDetectedTypes?.join(", ") ||
-              text.none
-          ],
-          [
-            "Policy allowed types",
-            record.safetySummary?.policyAllowedTypes?.join(", ") || text.none
-          ],
-          [
-            "Mandatory protected types",
-            record.safetySummary?.mandatoryProtectedTypes?.join(", ") || text.none
-          ],
-          ["Prompt preview", nullableText(record.redactedPromptPreview, text.emptyPreview)]
-        ]}
-      />
+      <section
+        aria-label={locale === "ko" ? "요청 세부 정보" : "Request detail sections"}
+        className="request-detail-accordions"
+      >
+        <h3 className="request-detail-sections-title">
+          {locale === "ko" ? "세부 정보" : "Details"}
+        </h3>
+        <DetailAccordion
+          icon={<KeyRound aria-hidden="true" />}
+          title={locale === "ko" ? "인증 및 컨텍스트" : "Authentication & Context"}
+        >
+          <DetailRows
+            rows={[
+              [detailLabel(locale, "Created", "요청 시각"), formatDetailDateTime(record.createdAt, timezone, locale)],
+              [detailLabel(locale, "Completed", "완료 시각"), formatDetailDateTime(record.completedAt, timezone, locale)],
+              [detailLabel(locale, "HTTP status", "HTTP 상태"), String(record.httpStatus)],
+              [detailLabel(locale, "Project ID", "프로젝트 ID"), record.projectId],
+              [detailLabel(locale, "Application ID", "애플리케이션 ID"), record.applicationId],
+              [detailLabel(locale, "Auth outcome", "인증 결과"), localizedOutcome(domainOutcomes?.auth?.outcome, locale, text.none)],
+              [detailLabel(locale, "Runtime outcome", "실행 환경 결과"), localizedOutcome(domainOutcomes?.runtime?.outcome, locale, text.none)],
+              [detailLabel(locale, "Runtime state", "실행 환경 상태"), localizedOutcome(runtimeSnapshot?.runtimeState, locale, text.none)],
+              [detailLabel(locale, "Runtime snapshot", "실행 스냅샷"), runtimeSnapshot?.runtimeSnapshotId ?? text.none],
+              [
+                detailLabel(locale, "Snapshot version", "스냅샷 버전"),
+                runtimeSnapshot
+                  ? String(runtimeSnapshot.runtimeSnapshotVersion)
+                  : text.none
+              ],
+              [detailLabel(locale, "Gateway instance", "게이트웨이 인스턴스"), runtimeSnapshot?.gatewayInstanceId ?? text.none]
+            ]}
+          />
+        </DetailAccordion>
 
-      {record.promptCapture?.enabled && record.promptCapture.capturedPrompt ? (
-        <section className="detail-section">
-          <h3>{text.promptCapture}</h3>
-          <dl>
-            <div>
-              <dt>{text.capturedPrompt}</dt>
-              <dd className="detail-preformatted">{record.promptCapture.capturedPrompt}</dd>
-            </div>
-            <div>
-              <dt>{text.truncated}</dt>
-              <dd>{record.promptCapture.truncated ? text.yes : text.no}</dd>
-            </div>
-          </dl>
-        </section>
-      ) : null}
+        <DetailAccordion
+          icon={<ShieldCheck aria-hidden="true" />}
+          title={locale === "ko" ? "적용된 정책" : "Policies applied"}
+        >
+          <DetailRows
+            rows={[
+              [detailLabel(locale, "Budget attribution", "예산 귀속"), formatBudgetAttribution(record, locale)],
+              [detailLabel(locale, "Budget scope type", "예산 범위 유형"), localizedCode(record.budgetScope.budgetScopeType, locale)],
+              [detailLabel(locale, "Budget scope ID", "예산 범위 ID"), record.budgetScope.budgetScopeId],
+              [detailLabel(locale, "Resolved by", "범위 결정 기준"), localizedCode(record.budgetScope.resolvedBy, locale)],
+              [detailLabel(locale, "Rate limit", "요청 제한"), localizedOutcome(domainOutcomes?.rateLimit?.outcome, locale, text.none)],
+              [detailLabel(locale, "Budget", "예산"), localizedOutcome(domainOutcomes?.budget?.outcome, locale, text.none)],
+              [
+                detailLabel(locale, "Safety", "안전 정책"),
+                localizedOutcome(record.safetySummary?.outcome ??
+                  domainOutcomes?.safety?.outcome ??
+                  record.maskingAction, locale, text.none)
+              ],
+              [
+                detailLabel(locale, "Masking action", "마스킹 처리"),
+                localizedOutcome(record.safetySummary?.maskingAction ?? record.maskingAction, locale, text.none)
+              ],
+              [
+                detailLabel(locale, "Detected count", "탐지 건수"),
+                String(
+                  record.safetySummary?.detectedCount ??
+                    record.maskingDetectedCount
+                )
+              ],
+              [
+                detailLabel(locale, "Detected types", "탐지 유형"),
+                record.safetySummary?.detectorCategories?.join(", ") ||
+                  record.maskingDetectedTypes?.join(", ") ||
+                  text.none
+              ],
+              [
+                detailLabel(locale, "Policy allowed types", "정책 허용 유형"),
+                record.safetySummary?.policyAllowedTypes?.join(", ") || text.none
+              ],
+              [
+                detailLabel(locale, "Mandatory protected types", "필수 보호 유형"),
+                record.safetySummary?.mandatoryProtectedTypes?.join(", ") ||
+                  text.none
+              ],
+              [
+                detailLabel(locale, "Prompt preview", "프롬프트 미리보기"),
+                nullableText(record.redactedPromptPreview, text.emptyPreview)
+              ],
+              ...(record.promptCapture?.enabled &&
+              record.promptCapture.capturedPrompt
+                ? ([
+                    [
+                      text.capturedPrompt,
+                      <span className="detail-preformatted" key="captured-prompt">
+                        {record.promptCapture.capturedPrompt}
+                      </span>
+                    ],
+                    [
+                      text.truncated,
+                      record.promptCapture.truncated ? text.yes : text.no
+                    ]
+                  ] as DetailRow[])
+                : [])
+            ]}
+          />
+        </DetailAccordion>
 
-      <DetailSection
-        title="Project policy"
-        rows={[
-          ["Project ID", record.projectId],
-          ["Budget attribution", formatBudgetScopeDisplayName(record.budgetScope)],
-          ["Resolved by", record.budgetScope.resolvedBy]
-        ]}
-      />
+        <DetailAccordion
+          icon={<Route aria-hidden="true" />}
+          title={locale === "ko" ? "라우팅 결정" : "Routing decision"}
+        >
+          <DetailRows
+            rows={[
+              [detailLabel(locale, "Outcome", "결과"), localizedOutcome(domainOutcomes?.routing?.outcome, locale, text.none)],
+              [detailLabel(locale, "Selected provider", "선택된 프로바이더"), nullableText(record.selectedProvider, text.none)],
+              [detailLabel(locale, "Selected model", "선택된 모델"), nullableText(record.selectedModel, text.none)],
+              [detailLabel(locale, "Routing reason", "라우팅 근거"), localizedCode(record.routingReason, locale, text.none)],
+              [detailLabel(locale, "Prompt category", "프롬프트 분류"), localizedCode(record.promptCategory, locale, text.none)]
+            ]}
+          />
+        </DetailAccordion>
 
-      <DetailSection
-        title="Advanced / Runtime boundary"
-        rows={[
-          ["Application ID", record.applicationId],
-          ["Budget scope type", record.budgetScope.budgetScopeType],
-          ["Budget scope ID", record.budgetScope.budgetScopeId],
-          ["Runtime state", runtimeSnapshot?.runtimeState ?? text.none],
-          ["Runtime snapshot", runtimeSnapshot?.runtimeSnapshotId ?? text.none],
-          [
-            "Snapshot version",
-            runtimeSnapshot ? String(runtimeSnapshot.runtimeSnapshotVersion) : text.none
-          ],
-          ["Gateway instance", runtimeSnapshot?.gatewayInstanceId ?? text.none]
-        ]}
-      />
+        <DetailAccordion
+          icon={<Database aria-hidden="true" />}
+          title={locale === "ko" ? "캐시 결과" : "Cache result"}
+        >
+          <DetailRows
+            rows={[
+              [detailLabel(locale, "Outcome", "결과"), localizedOutcome(domainOutcomes?.cache?.outcome, locale, text.none)],
+              [detailLabel(locale, "Cache", "캐시"), formatCacheResult(record, locale)],
+              [
+                detailLabel(locale, "Cache decision", "캐시 결정 근거"),
+                nullableText(record.cacheDecisionReason, text.none)
+              ],
+              [
+                detailLabel(locale, "Cache hit request", "캐시 적중 원본 요청"),
+                nullableText(
+                  record.cacheHitRequestId
+                    ? formatDisplayIdentifier(record.cacheHitRequestId)
+                    : null,
+                  text.none
+                )
+              ],
+              [detailLabel(locale, "Saved cost", "절감 비용"), formatMicroUsd(record.savedCostMicroUsd)]
+            ]}
+          />
+        </DetailAccordion>
 
-      <DetailSection
-        title="Gateway outcome"
-        rows={[
-          ["Terminal status", record.terminalStatus ?? record.status],
-          ["Auth", domainOutcomes?.auth?.outcome ?? text.none],
-          ["Runtime", domainOutcomes?.runtime?.outcome ?? text.none],
-          ["Rate limit", domainOutcomes?.rateLimit?.outcome ?? text.none],
-          ["Budget", domainOutcomes?.budget?.outcome ?? text.none],
-          ["Safety", domainOutcomes?.safety?.outcome ?? text.none],
-          ["Routing", domainOutcomes?.routing?.outcome ?? text.none],
-          ["Cache", domainOutcomes?.cache?.outcome ?? text.none],
-          ["Provider", domainOutcomes?.provider?.outcome ?? text.none],
-          ["Fallback", domainOutcomes?.fallback?.outcome ?? text.none],
-          ["Streaming", domainOutcomes?.streaming?.outcome ?? text.none],
-          ["Logging", domainOutcomes?.logging?.outcome ?? text.none]
-        ]}
-      />
+        <DetailAccordion
+          icon={<PlugZap aria-hidden="true" />}
+          title={locale === "ko" ? "프로바이더 호출" : "Provider call"}
+        >
+          <DetailRows
+            rows={[
+              [
+                detailLabel(locale, "Provider called", "프로바이더 호출 여부"),
+                record.providerCalled === undefined
+                  ? text.none
+                  : record.providerCalled ? text.yes : text.no
+              ],
+              [detailLabel(locale, "Provider outcome", "프로바이더 결과"), localizedOutcome(domainOutcomes?.provider?.outcome, locale, text.none)],
+              [detailLabel(locale, "Fallback outcome", "대체 경로 결과"), localizedOutcome(domainOutcomes?.fallback?.outcome, locale, text.none)],
+              [detailLabel(locale, "Streaming", "스트리밍"), localizedOutcome(domainOutcomes?.streaming?.outcome, locale, text.none)],
+              [detailLabel(locale, "Logging", "로그 기록"), localizedOutcome(domainOutcomes?.logging?.outcome, locale, text.none)],
+              [detailLabel(locale, "Total tokens", "전체 토큰"), formatInteger(record.totalTokens)],
+              [detailLabel(locale, "Estimated cost", "예상 비용"), formatMicroUsd(record.costMicroUsd)],
+              [
+                detailLabel(locale, "Total latency", "총 처리 시간"),
+                formatDetailLatency(
+                  record.latencySummary?.totalLatencyMs ?? record.latencyMs,
+                  locale
+                )
+              ],
+              [
+                detailLabel(locale, "Gateway latency", "게이트웨이 처리 시간"),
+                record.latencySummary
+                  ? formatDetailLatency(
+                      record.latencySummary.gatewayInternalLatencyMs,
+                      locale
+                    )
+                  : text.none
+              ],
+              [
+                detailLabel(locale, "Provider latency", "프로바이더 처리 시간"),
+                formatDetailLatency(
+                  record.latencySummary?.providerLatencyMs ??
+                    record.providerLatencyMs,
+                  locale
+                )
+              ],
+              ...(hasErrorDetail
+                ? ([
+                    [detailLabel(locale, "Error code", "오류 코드"), nullableText(record.errorCode, text.none)],
+                    [detailLabel(locale, "Error stage", "오류 단계"), nullableText(record.errorStage, text.none)],
+                    [
+                      detailLabel(locale, "Sanitized message", "정제된 오류 메시지"),
+                      nullableText(record.errorMessage, text.none)
+                    ]
+                  ] as DetailRow[])
+                : [])
+            ]}
+          />
+        </DetailAccordion>
 
-      <DetailSection
-        title="Routing and cache"
-        rows={[
-          ["Selected provider", nullableText(record.selectedProvider)],
-          ["Selected model", nullableText(record.selectedModel)],
-          ["Provider called", record.providerCalled ? text.yes : text.no],
-          ["Routing reason", nullableText(record.routingReason, text.none)],
-          ["Cache", `${record.cacheType}:${record.cacheStatus}`],
-          ["Cache decision", nullableText(record.cacheDecisionReason, text.none)],
-          [
-            "Cache hit request",
-            nullableText(
-              record.cacheHitRequestId ? formatDisplayIdentifier(record.cacheHitRequestId) : null
-            )
-          ],
-          ["Prompt category", nullableText(record.promptCategory, text.none)]
-        ]}
-      />
-
-      <DetailSection
-        title="Usage and latency"
-        rows={[
-          ["Total tokens", formatInteger(record.totalTokens)],
-          ["Estimated cost", formatMicroUsd(record.costMicroUsd)],
-          ["Saved cost", formatMicroUsd(record.savedCostMicroUsd)],
-          ["Total latency", formatLatency(record.latencySummary?.totalLatencyMs ?? record.latencyMs)],
-          [
-            "Gateway latency",
-            formatLatency(record.latencySummary?.gatewayInternalLatencyMs ?? record.latencyMs)
-          ],
-          [
-            "Provider latency",
-            formatLatency(record.latencySummary?.providerLatencyMs ?? record.providerLatencyMs)
-          ]
-        ]}
-      />
-
-      {hasErrorDetail ? (
-        <DetailSection
-          title="Error"
-          rows={[
-            ["Error code", nullableText(record.errorCode, text.none)],
-            ["Error stage", nullableText(record.errorStage, text.none)],
-            ["Message", nullableText(record.errorMessage, text.none)]
-          ]}
-        />
-      ) : null}
+        <DetailAccordion
+          technical
+          title={locale === "ko" ? "기술 정보 펼치기" : "Show technical information"}
+        >
+          <DetailRows
+            rows={[
+              [detailLabel(locale, "Request ID", "요청 ID"), record.requestId],
+              [detailLabel(locale, "Terminal status", "최종 상태"), record.terminalStatus ?? record.status],
+              [detailLabel(locale, "Provider", "프로바이더"), nullableText(record.selectedProvider, text.none)],
+              [detailLabel(locale, "Model", "모델"), nullableText(record.selectedModel, text.none)],
+              [detailLabel(locale, "Routing result", "라우팅 결과"), domainOutcomes?.routing?.outcome ?? text.none],
+              [detailLabel(locale, "Cache result", "캐시 결과"), domainOutcomes?.cache?.outcome ?? record.cacheStatus],
+              [detailLabel(locale, "Total tokens", "전체 토큰"), formatInteger(record.totalTokens)],
+              [detailLabel(locale, "Estimated cost", "예상 비용"), formatMicroUsd(record.costMicroUsd)],
+              [detailLabel(locale, "Error code", "오류 코드"), nullableText(record.errorCode, text.none)]
+            ]}
+          />
+        </DetailAccordion>
+      </section>
     </article>
   );
 }
 
-function DetailSection({ rows, title }: { rows: Array<[string, string]>; title: string }) {
+type DetailRow = [string, ReactNode];
+
+function RequestSummary({
+  locale,
+  record,
+  timezone
+}: {
+  locale: Locale;
+  record: InvocationLogRecord;
+  timezone: string;
+}) {
+  const provider = record.selectedProvider ?? record.requestedProvider;
+  const model = record.selectedModel ?? record.requestedModel;
+
   return (
-    <section className="detail-section">
-      <h3>{title}</h3>
-      <dl>
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{formatDisplayIdentifier(value)}</dd>
-          </div>
-        ))}
-      </dl>
+    <section
+      aria-label={locale === "ko" ? "요청 요약" : "Request summary"}
+      className="request-detail-summary"
+    >
+      <div className="request-detail-summary-id">
+        <div>
+          <span>{locale === "ko" ? "요청 ID" : "Request ID"}</span>
+          <strong>{formatDisplayIdentifier(record.requestId)}</strong>
+        </div>
+        <RequestIdCopyButton locale={locale} requestId={record.requestId} />
+      </div>
+      <div className="request-detail-summary-grid">
+        <SummaryMetric
+          icon={<CalendarClock aria-hidden="true" />}
+          label={locale === "ko" ? "요청 시각" : "Time"}
+          value={formatSummaryTime(record.createdAt, timezone, locale)}
+        />
+        <SummaryMetric
+          icon={<BriefcaseBusiness aria-hidden="true" />}
+          label={locale === "ko" ? "프로젝트" : "Project"}
+          value={summaryIdentifier(record.projectId)}
+        />
+        <SummaryMetric
+          icon={<AppWindow aria-hidden="true" />}
+          label={locale === "ko" ? "애플리케이션" : "Application"}
+          value={summaryIdentifier(record.applicationId)}
+        />
+        <SummaryMetric
+          icon={<Boxes aria-hidden="true" />}
+          label={locale === "ko" ? "프로바이더 / 모델" : "Provider / Model"}
+          value={
+            <span className="request-detail-summary-provider">
+              <ProviderFamilyIcon
+                className="request-detail-provider-icon"
+                family={providerFamily(provider)}
+                size={28}
+              />
+              <span>
+                <strong>
+                  {providerDisplayName(provider) + " / " + (model ?? "-")}
+                </strong>
+              </span>
+            </span>
+          }
+        />
+        <SummaryMetric
+          icon={<Gauge aria-hidden="true" />}
+          label={locale === "ko" ? "최종 상태" : "Final status"}
+          value={
+            <StatusBadge
+              label={requestStatusLabel(record, locale)}
+              status={record.status}
+            />
+          }
+        />
+        <SummaryMetric
+          icon={<Timer aria-hidden="true" />}
+          label={locale === "ko" ? "총 처리시간" : "Total processing"}
+          value={formatDetailLatency(
+            record.latencySummary?.totalLatencyMs ?? record.latencyMs,
+            locale
+          )}
+        />
+        <SummaryMetric
+          icon={<Boxes aria-hidden="true" />}
+          label={locale === "ko" ? "사용 토큰" : "Tokens"}
+          value={formatInteger(record.totalTokens)}
+        />
+        <SummaryMetric
+          icon={<Coins aria-hidden="true" />}
+          label={locale === "ko" ? "예상 비용" : "Estimated cost"}
+          value={formatMicroUsd(record.costMicroUsd)}
+        />
+      </div>
     </section>
   );
+}
+
+function SummaryMetric({
+  icon,
+  label,
+  value
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="request-detail-summary-item">
+      <span className="request-detail-summary-icon">{icon}</span>
+      <span>
+        <small>{label}</small>
+        <span className="request-detail-summary-value">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+function DetailAccordion({
+  children,
+  icon,
+  technical = false,
+  title
+}: {
+  children: ReactNode;
+  icon?: ReactNode;
+  technical?: boolean;
+  title: string;
+}) {
+  return (
+    <details
+      className="request-detail-accordion"
+      data-technical={technical || undefined}
+    >
+      <summary>
+        <span className="request-detail-accordion-title">
+          {icon ? <span className="request-detail-accordion-icon">{icon}</span> : null}
+          {title}
+        </span>
+        <ChevronDown aria-hidden="true" />
+      </summary>
+      <div className="request-detail-accordion-content">{children}</div>
+    </details>
+  );
+}
+
+function DetailRows({ rows }: { rows: DetailRow[] }) {
+  return (
+    <dl className="request-detail-rows">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{typeof value === "string" ? formatDisplayIdentifier(value) : value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function providerFamily(provider: string | null) {
+  const normalized = provider?.toLowerCase() ?? "";
+
+  if (normalized.includes("anthropic") || normalized.includes("claude")) {
+    return "claude";
+  }
+  if (normalized.includes("gemini") || normalized.includes("google")) {
+    return "gemini";
+  }
+  if (normalized.includes("mock")) {
+    return "mock";
+  }
+  return normalized.includes("openai") ? "openai" : "new-provider";
+}
+
+function detailLabel(locale: Locale, english: string, korean: string) {
+  return locale === "ko" ? korean : english;
+}
+
+function formatDetailDateTime(
+  value: string | null | undefined,
+  timezone: string,
+  locale: Locale
+) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    timeZone: timezone
+  }).format(date);
+}
+
+function formatSummaryTime(value: string, timezone: string, locale: Locale) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const languageTag = locale === "ko" ? "ko-KR" : "en-US";
+  const time = new Intl.DateTimeFormat(languageTag, {
+    hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: timezone
+  }).format(date);
+  const day = new Intl.DateTimeFormat(languageTag, {
+    day: "numeric",
+    month: "short",
+    timeZone: timezone
+  }).format(date);
+
+  return (
+    <span className="request-detail-summary-time">
+      <strong>{time}</strong>
+      <small>{day}</small>
+    </span>
+  );
+}
+
+function formatDetailLatency(value: number | null, locale: Locale) {
+  return value === null
+    ? locale === "ko" ? "호출 안 함" : "not called"
+    : `${formatInteger(value)} ms`;
+}
+
+function summaryIdentifier(value: string | null | undefined) {
+  const normalized = value?.trim();
+  if (!normalized || normalized.startsWith("live_gateway_") || normalized.startsWith("unknown_")) {
+    return "-";
+  }
+  return formatDisplayIdentifier(normalized);
+}
+
+function providerDisplayName(provider: string | null) {
+  const normalized = provider?.trim().toLowerCase() ?? "";
+
+  if (!normalized) return "-";
+  if (normalized.includes("openai")) return "OpenAI";
+  if (normalized.includes("anthropic") || normalized.includes("claude")) return "Anthropic";
+  if (normalized.includes("gemini") || normalized.includes("google")) return "Google Gemini";
+  if (normalized.includes("mock")) return "Mock Provider";
+  return provider ?? "-";
+}
+
+function requestStatusLabel(record: InvocationLogRecord, locale: Locale) {
+  if (record.httpStatus >= 200 && record.httpStatus < 300) {
+    return `${record.httpStatus} OK`;
+  }
+  if (record.httpStatus === 429) {
+    return locale === "ko" ? "429 요청 제한" : "429 Rate limited";
+  }
+  if (record.status === "blocked") {
+    return locale === "ko" ? `${record.httpStatus} 차단` : `${record.httpStatus} Blocked`;
+  }
+  if (record.status === "failed") {
+    return locale === "ko" ? `${record.httpStatus} 실패` : `${record.httpStatus} Failed`;
+  }
+  return String(record.httpStatus);
+}
+
+const koreanCodeLabels: Record<string, string> = {
+  application: "애플리케이션",
+  balanced: "균형 우선",
+  coding: "코딩",
+  default_application: "기본 애플리케이션",
+  default_project: "기본 프로젝트",
+  disabled: "비활성",
+  exact: "정확 일치",
+  explicit_application: "지정 애플리케이션",
+  general: "일반",
+  latency: "응답 속도 우선",
+  low_cost: "비용 우선",
+  low_latency: "응답 속도 우선",
+  lowest_cost: "최저 비용 우선",
+  none: "사용 안 함",
+  pinned: "고정 모델",
+  pinned_model: "고정 모델",
+  project: "프로젝트",
+  project_default: "프로젝트 기본값",
+  selected: "선택됨",
+  semantic: "의미 기반",
+  standard: "표준 라우팅",
+  "standard routing": "표준 라우팅",
+  summarization: "요약",
+  team: "팀"
+};
+
+function localizedCode(
+  value: string | null | undefined,
+  locale: Locale,
+  fallback = "-"
+) {
+  const displayValue = value?.trim();
+  if (!displayValue) {
+    return fallback;
+  }
+  const normalized = displayValue.toLowerCase();
+  return locale === "ko"
+    ? koreanCodeLabels[normalized] ?? displayValue
+    : displayValue;
+}
+
+function formatBudgetAttribution(record: InvocationLogRecord, locale: Locale) {
+  if (locale === "en") {
+    return formatBudgetScopeDisplayName(record.budgetScope);
+  }
+  if (record.budgetScope.budgetScopeType === "application") {
+    return "프로젝트 기본 정책";
+  }
+
+  const type = localizedCode(record.budgetScope.budgetScopeType, locale, "예산 정책");
+  const scopeId = record.budgetScope.budgetScopeId?.trim();
+  return scopeId ? `${type}: ${formatDisplayIdentifier(scopeId)}` : type;
+}
+
+function formatCacheResult(record: InvocationLogRecord, locale: Locale) {
+  if (locale === "en") {
+    return `${record.cacheType}: ${record.cacheStatus}`;
+  }
+
+  return `${localizedCode(record.cacheType, locale)} · ${localizedOutcome(
+    record.cacheStatus,
+    locale,
+    "확인 불가"
+  )}`;
+}
+
+const koreanOutcomeLabels: Record<string, string> = {
+  allowed: "허용",
+  authenticated: "인증 완료",
+  blocked: "차단",
+  bypass: "우회",
+  bypassed: "우회",
+  completed: "완료",
+  cancelled: "취소됨",
+  degraded: "제한 모드",
+  denied: "거부",
+  deferred: "지연 기록",
+  disabled: "비활성",
+  error: "오류",
+  failed: "실패",
+  hit: "캐시 적중",
+  interrupted: "중단",
+  invalid_api_key: "API 키 오류",
+  invalid_app_token: "앱 토큰 오류",
+  last_known_safe_used: "마지막 정상 스냅샷 사용",
+  masked: "마스킹됨",
+  masking_applied: "마스킹 적용",
+  miss: "캐시 미스",
+  no_snapshot: "스냅샷 없음",
+  none: "없음",
+  not_called: "호출 안 함",
+  not_checked: "확인 안 함",
+  not_needed: "대체 경로 불필요",
+  not_started: "시작 안 함",
+  not_streaming: "스트리밍 아님",
+  not_used: "미사용",
+  passed: "통과",
+  queued: "대기 중",
+  rate_limited: "요청 제한",
+  redacted: "마스킹됨",
+  selected: "선택됨",
+  skipped: "건너뜀",
+  snapshot_active: "활성 스냅샷",
+  stale_snapshot_used: "이전 스냅샷 사용",
+  started: "시작됨",
+  scope_mismatch: "범위 불일치",
+  store_skipped: "저장 생략",
+  success: "성공",
+  timeout: "시간 초과",
+  unauthorized: "인증 실패",
+  warned: "경고",
+  written: "기록 완료"
+};
+
+function localizedOutcome(
+  value: string | null | undefined,
+  locale: Locale,
+  fallback: string
+) {
+  if (!value) {
+    return fallback;
+  }
+  if (locale === "en") {
+    return value;
+  }
+
+  return koreanOutcomeLabels[value.trim().toLowerCase()] ?? value;
 }
 
 function formatMicroUsd(value: number) {
