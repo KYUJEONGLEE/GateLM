@@ -4,7 +4,6 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Building2,
   Save,
   Upload,
   UserPlus,
@@ -234,8 +233,11 @@ const projectEmployeeText: Record<
     available: string;
     budget: string;
     cancel: string;
+    confirmDisable: string;
     department: string;
     disable: string;
+    disableConfirmMessage: string;
+    disableConfirmTitle: string;
     email: string;
     employeeList: string;
     employees: string;
@@ -248,12 +250,12 @@ const projectEmployeeText: Record<
     noDepartments: string;
     noEmployees: string;
     note: string;
+    policySettings: string;
     providerIds: string;
     remaining: string;
     save: string;
     searchEmployee: string;
     selectDepartment: string;
-    title: string;
     warning: string;
   }
 > = {
@@ -265,8 +267,11 @@ const projectEmployeeText: Record<
     available: "Available",
     budget: "Monthly limit",
     cancel: "Cancel",
+    confirmDisable: "Disable",
     department: "Department",
     disable: "Disable",
+    disableConfirmMessage: " will be disabled for this project. Continue?",
+    disableConfirmTitle: "Disable employee",
     email: "Email",
     employeeList: "Employee list",
     employees: "Employees",
@@ -279,12 +284,12 @@ const projectEmployeeText: Record<
     noDepartments: "No departments found.",
     noEmployees: "No employees in this department.",
     note: "Note",
+    policySettings: "Policy settings",
     providerIds: "Providers",
     remaining: "Remaining",
     save: "Save",
     searchEmployee: "Search by name or email",
     selectDepartment: "Select department",
-    title: "Department employees",
     warning: "Warning"
   },
   ko: {
@@ -295,8 +300,11 @@ const projectEmployeeText: Record<
     available: "미배정",
     budget: "월 한도",
     cancel: "취소",
+    confirmDisable: "비활성화",
     department: "부서",
     disable: "비활성화",
+    disableConfirmMessage: " 직원을 현재 프로젝트에서 비활성화합니다. 계속하시겠습니까?",
+    disableConfirmTitle: "직원 비활성화",
     email: "이메일",
     employeeList: "직원 목록",
     employees: "직원",
@@ -309,12 +317,12 @@ const projectEmployeeText: Record<
     noDepartments: "등록된 부서가 없습니다.",
     noEmployees: "이 부서에 배정 가능한 직원이 없습니다.",
     note: "메모",
+    policySettings: "정책 수정",
     providerIds: "Provider",
     remaining: "잔여",
     save: "저장",
     searchEmployee: "이름 또는 이메일 검색",
     selectDepartment: "부서 선택",
-    title: "부서 직원 배정",
     warning: "경고"
   }
 };
@@ -337,8 +345,10 @@ export function ProjectEmployeeAssignmentSection({
   const [assignments, setAssignments] = useState<ProjectEmployeeAssignmentRecord[]>(
     model.assignmentsByProjectId[project.id] ?? []
   );
-  const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [isEmployeePolicyDialogOpen, setIsEmployeePolicyDialogOpen] = useState(false);
+  const [assignmentToDisable, setAssignmentToDisable] =
+    useState<ProjectEmployeeAssignmentRecord | null>(null);
   const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
   const [assignmentDepartment, setAssignmentDepartment] = useState("");
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
@@ -361,17 +371,6 @@ export function ProjectEmployeeAssignmentSection({
           )
         ),
     [activeAssignmentByEmployeeId, model.employees]
-  );
-  const departments = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          projectEmployees
-            .map((employee) => employee.department?.trim())
-            .filter((department): department is string => Boolean(department))
-        )
-      ).sort((left, right) => left.localeCompare(right)),
-    [projectEmployees]
   );
   const tenantDepartments = useMemo(
     () =>
@@ -400,37 +399,6 @@ export function ProjectEmployeeAssignmentSection({
     status: "idle"
   });
 
-  useEffect(() => {
-    if (!selectedDepartment && departments[0]) {
-      setSelectedDepartment(departments[0]);
-      return;
-    }
-
-    if (selectedDepartment && !departments.includes(selectedDepartment)) {
-      setSelectedDepartment(departments[0] ?? "");
-    }
-  }, [departments, selectedDepartment]);
-
-  const departmentEmployees = useMemo(
-    () =>
-      projectEmployees.filter(
-        (employee) => employee.department?.trim() === selectedDepartment
-      ),
-    [projectEmployees, selectedDepartment]
-  );
-  const employeeCountByDepartment = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const employee of projectEmployees) {
-      const department = employee.department?.trim();
-      if (!department) {
-        continue;
-      }
-      counts.set(department, (counts.get(department) ?? 0) + 1);
-    }
-
-    return counts;
-  }, [projectEmployees]);
   const assignableEmployees = useMemo(() => {
     const normalizedQuery = employeeSearchQuery.trim().toLocaleLowerCase();
 
@@ -463,10 +431,10 @@ export function ProjectEmployeeAssignmentSection({
   ]);
 
   useEffect(() => {
-    if (!departmentEmployees.some((employee) => employee.id === selectedEmployeeId)) {
-      setSelectedEmployeeId(departmentEmployees[0]?.id ?? "");
+    if (!projectEmployees.some((employee) => employee.id === selectedEmployeeId)) {
+      setSelectedEmployeeId(projectEmployees[0]?.id ?? "");
     }
-  }, [departmentEmployees, selectedEmployeeId]);
+  }, [projectEmployees, selectedEmployeeId]);
 
   useEffect(() => {
     if (!assignableEmployees.some((employee) => employee.id === candidateEmployeeId)) {
@@ -494,12 +462,36 @@ export function ProjectEmployeeAssignmentSection({
     0
   );
   const remainingBudgetUsd = project.totalBudgetUsd - assignedBudgetUsd;
+  const selectedEmployee = projectEmployees.find(
+    (employee) => employee.id === selectedEmployeeId
+  );
+  const employeeToDisable = assignmentToDisable
+    ? model.employees.find((employee) => employee.id === assignmentToDisable.employeeId)
+    : undefined;
 
   function openAssignmentDialog() {
     setAssignmentDepartment(tenantDepartments[0] ?? "");
     setEmployeeSearchQuery("");
     setCandidateEmployeeId("");
     setIsAssignmentDialogOpen(true);
+  }
+
+  function openEmployeePolicyDialog(employeeId: string) {
+    const existingAssignment = assignments.find(
+      (assignment) => assignment.employeeId === employeeId
+    );
+
+    setSelectedEmployeeId(employeeId);
+    setAssignmentValues({
+      allowedModelKeys: existingAssignment?.policy.allowedModelKeys.join(", ") ?? "",
+      allowedProviderConnectionIds:
+        existingAssignment?.policy.allowedProviderConnectionIds.join(", ") ?? "",
+      monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
+      policyNote: existingAssignment?.policy.note ?? "",
+      warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
+    });
+    setSubmitState({ message: "", status: "idle" });
+    setIsEmployeePolicyDialogOpen(true);
   }
 
   async function submitNewAssignment() {
@@ -544,7 +536,6 @@ export function ProjectEmployeeAssignmentSection({
 
     const assignment = payload.assignment;
     setAssignments((current) => upsertAssignment(current, assignment));
-    setSelectedDepartment(employee.department?.trim() ?? "");
     setSelectedEmployeeId(employee.id);
     setIsAssignmentDialogOpen(false);
     setSubmitState({ message: text.assignmentCreated, status: "success" });
@@ -593,6 +584,7 @@ export function ProjectEmployeeAssignmentSection({
       message: locale === "ko" ? "직원 한도가 저장되었습니다." : "Employee limit saved.",
       status: "success"
     });
+    setIsEmployeePolicyDialogOpen(false);
     setPendingAction(null);
     router.refresh();
   }
@@ -629,6 +621,7 @@ export function ProjectEmployeeAssignmentSection({
       message: locale === "ko" ? "배정이 비활성화되었습니다." : "Assignment disabled.",
       status: "success"
     });
+    setAssignmentToDisable(null);
     setPendingAction(null);
     router.refresh();
   }
@@ -636,8 +629,9 @@ export function ProjectEmployeeAssignmentSection({
   return (
     <section className="team-section project-department-section">
       <div className="team-section-header team-section-header-with-actions">
-        <div>
-          <h3>{text.title}</h3>
+        <div className="project-employee-list-heading">
+          <h3>{text.employeeList}</h3>
+          <span>{projectEmployees.length}</span>
         </div>
         <div className="project-department-header-actions">
           <div
@@ -658,216 +652,246 @@ export function ProjectEmployeeAssignmentSection({
         </div>
       </div>
 
-        {model.source === "fixture" ? (
-          <Alert variant="warning">
-            <AlertDescription>
-              {text.fixtureFallback} {model.loadError}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {submitState.message ? (
-          <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
-            <AlertDescription>{submitState.message}</AlertDescription>
-          </Alert>
-        ) : null}
+      {model.source === "fixture" ? (
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.fixtureFallback} {model.loadError}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {submitState.message ? (
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
+      ) : null}
 
-        {departments.length === 0 ? (
-          <p className="project-empty">{text.noAssignments}</p>
-        ) : (
-          <div
-            aria-label={text.department}
-            className="project-department-toggles"
-            role="group"
-          >
-            {departments.map((department) => (
-              <button
-                aria-pressed={selectedDepartment === department}
-                className="project-department-toggle"
-                data-active={selectedDepartment === department}
-                disabled={pendingAction !== null}
-                key={department}
-                onClick={() => setSelectedDepartment(department)}
-                type="button"
-              >
-                <Building2 aria-hidden="true" />
-                <span>
-                  <strong>{department}</strong>
-                  <small>
-                    {employeeCountByDepartment.get(department) ?? 0} {text.employees}
-                  </small>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
+      {projectEmployees.length === 0 ? (
+        <p className="project-empty">{text.noAssignments}</p>
+      ) : (
+        <div className="project-employee-table-wrap">
+          <table className="project-employee-table">
+            <thead>
+              <tr>
+                <th scope="col">{text.name}</th>
+                <th scope="col">{text.department}</th>
+                <th scope="col">{text.budget}</th>
+                <th scope="col">{text.management}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projectEmployees.map((employee) => {
+                const assignment = activeAssignmentByEmployeeId.get(employee.id);
+                if (!assignment) {
+                  return null;
+                }
 
-        {selectedEmployeeId ? (
-          <>
+                return (
+                  <tr key={assignment.id}>
+                    <td>
+                      <button
+                        className="project-employee-name-button"
+                        onClick={() => openEmployeePolicyDialog(employee.id)}
+                        type="button"
+                      >
+                        {employee.name?.trim() || "-"}
+                      </button>
+                    </td>
+                    <td>{employee.department?.trim() || "-"}</td>
+                    <td>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</td>
+                    <td className="project-employee-table-action">
+                      <Button
+                        disabled={pendingAction !== null}
+                        onClick={() => {
+                          setSubmitState({ message: "", status: "idle" });
+                          setAssignmentToDisable(assignment);
+                        }}
+                        type="button"
+                        variant="outline"
+                      >
+                        <Users aria-hidden="true" />
+                        {pendingAction === `disable:${assignment.id}`
+                          ? "..."
+                          : text.disable}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (pendingAction !== "assign") {
+            setIsEmployeePolicyDialogOpen(open);
+          }
+        }}
+        open={isEmployeePolicyDialogOpen}
+      >
+        <DialogContent className="employee-policy-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedEmployee?.name?.trim() || "-"} · {text.policySettings}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="employee-policy-dialog-meta">
+            {selectedEmployee?.department?.trim() || "-"}
+          </p>
+          {submitState.status === "error" && submitState.message ? (
+            <Alert variant="destructive">
+              <AlertDescription>{submitState.message}</AlertDescription>
+            </Alert>
+          ) : null}
           <div className="modal-form-grid project-employee-policy-fields">
-          <label className="policy-field">
-            <span>{text.budget}</span>
-            <input
-              min={0}
-              onChange={(event) =>
-                setAssignmentValues((current) => ({
-                  ...current,
-                  monthlyBudgetLimitUsd: Number(event.target.value)
-                }))
-              }
-              step="0.01"
-              type="number"
-              value={assignmentValues.monthlyBudgetLimitUsd}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.warning}</span>
-            <input
-              max={100}
-              min={0}
-              onChange={(event) =>
-                setAssignmentValues((current) => ({
-                  ...current,
-                  warningThresholdPercent: Number(event.target.value)
-                }))
-              }
-              type="number"
-              value={assignmentValues.warningThresholdPercent}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.modelKeys}</span>
-            <input
-              onChange={(event) =>
-                setAssignmentValues((current) => ({
-                  ...current,
-                  allowedModelKeys: event.target.value
-                }))
-              }
-              type="text"
-              value={assignmentValues.allowedModelKeys}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.providerIds}</span>
-            <input
-              onChange={(event) =>
-                setAssignmentValues((current) => ({
-                  ...current,
-                  allowedProviderConnectionIds: event.target.value
-                }))
-              }
-              type="text"
-              value={assignmentValues.allowedProviderConnectionIds}
-            />
-          </label>
-          <label className="policy-field team-description-field">
-            <span>{text.note}</span>
-            <input
-              maxLength={500}
-              onChange={(event) =>
-                setAssignmentValues((current) => ({
-                  ...current,
-                  policyNote: event.target.value
-                }))
-              }
-              type="text"
-              value={assignmentValues.policyNote}
-            />
-          </label>
+            <label className="policy-field">
+              <span>{text.budget}</span>
+              <input
+                min={0}
+                onChange={(event) =>
+                  setAssignmentValues((current) => ({
+                    ...current,
+                    monthlyBudgetLimitUsd: Number(event.target.value)
+                  }))
+                }
+                step="0.01"
+                type="number"
+                value={assignmentValues.monthlyBudgetLimitUsd}
+              />
+            </label>
+            <label className="policy-field">
+              <span>{text.warning}</span>
+              <input
+                max={100}
+                min={0}
+                onChange={(event) =>
+                  setAssignmentValues((current) => ({
+                    ...current,
+                    warningThresholdPercent: Number(event.target.value)
+                  }))
+                }
+                type="number"
+                value={assignmentValues.warningThresholdPercent}
+              />
+            </label>
+            <label className="policy-field">
+              <span>{text.modelKeys}</span>
+              <input
+                onChange={(event) =>
+                  setAssignmentValues((current) => ({
+                    ...current,
+                    allowedModelKeys: event.target.value
+                  }))
+                }
+                type="text"
+                value={assignmentValues.allowedModelKeys}
+              />
+            </label>
+            <label className="policy-field">
+              <span>{text.providerIds}</span>
+              <input
+                onChange={(event) =>
+                  setAssignmentValues((current) => ({
+                    ...current,
+                    allowedProviderConnectionIds: event.target.value
+                  }))
+                }
+                type="text"
+                value={assignmentValues.allowedProviderConnectionIds}
+              />
+            </label>
+            <label className="policy-field team-description-field">
+              <span>{text.note}</span>
+              <input
+                maxLength={500}
+                onChange={(event) =>
+                  setAssignmentValues((current) => ({
+                    ...current,
+                    policyNote: event.target.value
+                  }))
+                }
+                type="text"
+                value={assignmentValues.policyNote}
+              />
+            </label>
           </div>
           <div className="modal-actions">
-          <span className="application-budget-summary">
-            {text.remaining}: {formatBudgetUsd(remainingBudgetUsd)}
-          </span>
-          <Button
-            disabled={pendingAction !== null || !selectedEmployeeId}
-            onClick={() => void submitAssignment()}
-            type="button"
-          >
-            <Save aria-hidden="true" />
-            {pendingAction === "assign" ? "..." : text.save}
-          </Button>
+            <span className="application-budget-summary">
+              {text.remaining}: {formatBudgetUsd(remainingBudgetUsd)}
+            </span>
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => setIsEmployeePolicyDialogOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || !selectedEmployeeId}
+              onClick={() => void submitAssignment()}
+              type="button"
+            >
+              <Save aria-hidden="true" />
+              {pendingAction === "assign" ? "..." : text.save}
+            </Button>
           </div>
-          </>
-        ) : null}
+        </DialogContent>
+      </Dialog>
 
-        {projectEmployees.length > 0 ? (
-          <section
-            aria-labelledby="project-employee-list-heading"
-            className="project-employee-list-section"
-          >
-            <div className="project-employee-list-heading">
-              <h4 id="project-employee-list-heading">{text.employeeList}</h4>
-              <span>{projectEmployees.length}</span>
-            </div>
-            <div className="project-employee-table-wrap">
-              <table className="project-employee-table">
-                <thead>
-                  <tr>
-                    <th scope="col">{text.name}</th>
-                    <th scope="col">{text.department}</th>
-                    <th scope="col">{text.budget}</th>
-                    <th scope="col">{text.management}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projectEmployees.map((employee) => {
-                    const assignment = activeAssignmentByEmployeeId.get(employee.id);
-                    if (!assignment) {
-                      return null;
-                    }
-
-                    const isSelected = selectedEmployeeId === employee.id;
-                    const selectEmployee = () => {
-                      setSelectedDepartment(employee.department?.trim() ?? "");
-                      setSelectedEmployeeId(employee.id);
-                    };
-
-                    return (
-                      <tr
-                        data-active={isSelected}
-                        key={assignment.id}
-                        onClick={selectEmployee}
-                        onKeyDown={(event) => {
-                          if (event.target !== event.currentTarget) {
-                            return;
-                          }
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            selectEmployee();
-                          }
-                        }}
-                        tabIndex={0}
-                      >
-                        <td>
-                          <strong>{employee.name?.trim() || "-"}</strong>
-                        </td>
-                        <td>{employee.department?.trim() || "-"}</td>
-                        <td>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</td>
-                        <td className="project-employee-table-action">
-                          <Button
-                            disabled={pendingAction !== null}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void disableAssignment(assignment);
-                            }}
-                            type="button"
-                            variant="outline"
-                          >
-                            <Users aria-hidden="true" />
-                            {pendingAction === `disable:${assignment.id}`
-                              ? "..."
-                              : text.disable}
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
+      <Dialog
+        onOpenChange={(open) => {
+          if (
+            !open &&
+            pendingAction !== `disable:${assignmentToDisable?.id ?? ""}`
+          ) {
+            setAssignmentToDisable(null);
+          }
+        }}
+        open={assignmentToDisable !== null}
+      >
+        <DialogContent className="employee-disable-dialog">
+          <DialogHeader>
+            <DialogTitle>{text.disableConfirmTitle}</DialogTitle>
+          </DialogHeader>
+          <p className="employee-disable-confirmation">
+            <strong>{employeeToDisable?.name?.trim() || "-"}</strong>
+            <span>{text.disableConfirmMessage}</span>
+          </p>
+          {submitState.status === "error" && submitState.message ? (
+            <Alert variant="destructive">
+              <AlertDescription>{submitState.message}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="modal-actions">
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => setAssignmentToDisable(null)}
+              type="button"
+              variant="outline"
+            >
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || assignmentToDisable === null}
+              onClick={() => {
+                if (assignmentToDisable) {
+                  void disableAssignment(assignmentToDisable);
+                }
+              }}
+              type="button"
+              variant="destructive"
+            >
+              <Users aria-hidden="true" />
+              {assignmentToDisable &&
+              pendingAction === `disable:${assignmentToDisable.id}`
+                ? "..."
+                : text.confirmDisable}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         onOpenChange={(open) => {
