@@ -1024,7 +1024,7 @@ export function ProviderConnectionManagement({
 
   return (
     <main className="console-content management-line-content">
-      <section className="dashboard-hero provider-page-header">
+      <section className="dashboard-hero">
         <div>
           <h2>{text.title}</h2>
         </div>

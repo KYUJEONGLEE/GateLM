@@ -4,7 +4,6 @@ import type { BreadcrumbItem } from "@/components/ui/breadcrumb";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type {
   RuntimePolicyConfig,
-  RuntimePolicyDetector,
   RuntimePolicyDraftValues,
   RuntimePolicyModel
 } from "@/lib/control-plane/runtime-policy-types";
@@ -87,15 +86,10 @@ export type RuntimePolicyEditorText = {
   apiKeyIssued: string;
   budget: string;
   budgetEnforcement: string;
-  budgetPolicyEnabled: string;
-  budgetPolicyHint: string;
   budgetTab: string;
   budgetWarning: string;
-  blockAction: string;
   cache: string;
   cacheEnabled: string;
-  cacheEnabledHint: string;
-  cacheSettings: string;
   cacheSection: string;
   cacheTab: string;
   cacheTtl: string;
@@ -105,11 +99,9 @@ export type RuntimePolicyEditorText = {
   configVersion: string;
   defaultRoute: string;
   details: string;
-  detectorNames: Record<RuntimePolicyDetector["type"], string>;
   detectorType: string;
   detectors: string;
   disabled: string;
-  edit: string;
   enabled: string;
   fallbackRoute: string;
   fixtureFallback: string;
@@ -133,7 +125,6 @@ export type RuntimePolicyEditorText = {
   policyDetails: string;
   pricing: string;
   pricingVersion: string;
-  privacyMasking: string;
   promptCapture: string;
   promptCaptureEnabled: string;
   promptCaptureMaxChars: string;
@@ -147,7 +138,6 @@ export type RuntimePolicyEditorText = {
   rateLimit: string;
   rateLimitInfo: string;
   rateLimitTab: string;
-  redactAction: string;
   refillRate: string;
   remove: string;
   responseCapture: string;
@@ -172,5 +162,4 @@ export type RuntimePolicyEditorText = {
   templateFallback: string;
   title: string;
   tokens: string;
-  unsavedChanges: string;
 };

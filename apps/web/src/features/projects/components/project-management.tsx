@@ -429,7 +429,7 @@ export function ProjectDetailManagement({
           </div>
           <div className="project-detail-general-content">
             <div className="project-detail-form">
-              <label className="policy-field project-general-name-field">
+              <label className="policy-field">
                 <span>{text.name}</span>
                 <input
                   maxLength={120}
@@ -443,7 +443,7 @@ export function ProjectDetailManagement({
                   value={values.name}
                 />
               </label>
-              <label className="policy-field project-general-description-field">
+              <label className="policy-field">
                 <span>{text.description}</span>
                 <input
                   maxLength={500}
@@ -457,46 +457,42 @@ export function ProjectDetailManagement({
                   value={values.description}
                 />
               </label>
-              <div className="project-general-meta-grid">
-                <label className="policy-field project-general-budget-field">
-                  <span>{text.totalBudget}</span>
-                  <div className="project-general-budget-input">
-                    <span aria-hidden="true">$</span>
-                    <input
-                      min={0}
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          totalBudgetUsd: Number(event.target.value)
-                        }))
-                      }
-                      step="0.01"
-                      type="number"
-                      value={values.totalBudgetUsd}
-                    />
-                  </div>
-                </label>
-                <label className="policy-field project-general-status-field">
-                  <span>{text.status}</span>
-                  <div className="project-general-status-input" data-status={values.status}>
-                    <span aria-hidden="true" />
-                    <select
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          status: event.target.value as ProjectStatus
-                        }))
-                      }
-                      value={values.status}
-                    >
-                      {projectStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {formatProjectStatus(status)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
+              <label className="policy-field">
+                <span>{text.totalBudget}</span>
+                <input
+                  min={0}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      totalBudgetUsd: Number(event.target.value)
+                    }))
+                  }
+                  step="0.01"
+                  type="number"
+                  value={values.totalBudgetUsd}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.status}</span>
+                <select
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      status: event.target.value as ProjectStatus
+                    }))
+                  }
+                  value={values.status}
+                >
+                  {projectStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {formatProjectStatus(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="project-detail-project-id-row">
+                <span>{text.projectId}</span>
+                <code>{project.id}</code>
               </div>
             </div>
             <div className="project-detail-actions">
@@ -606,7 +602,7 @@ export function ProjectDetailSection({
           </div>
           <div className="project-detail-general-content">
             <div className="project-detail-form">
-              <label className="policy-field project-general-name-field">
+              <label className="policy-field">
                 <span>{text.name}</span>
                 <input
                   maxLength={120}
@@ -620,7 +616,7 @@ export function ProjectDetailSection({
                   value={values.name}
                 />
               </label>
-              <label className="policy-field project-general-description-field">
+              <label className="policy-field">
                 <span>{text.description}</span>
                 <input
                   maxLength={500}
@@ -634,49 +630,42 @@ export function ProjectDetailSection({
                   value={values.description}
                 />
               </label>
-              <div className="project-general-meta-grid">
-                <label className="policy-field project-general-budget-field">
-                  <span>{text.totalBudget}</span>
-                  <div className="project-general-budget-input">
-                    <span aria-hidden="true">$</span>
-                    <input
-                      min={0}
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          totalBudgetUsd: Number(event.target.value)
-                        }))
-                      }
-                      step="0.01"
-                      type="number"
-                      value={values.totalBudgetUsd}
-                    />
-                  </div>
-                </label>
-                <label className="policy-field project-general-status-field">
-                  <span>{text.status}</span>
-                  <div
-                    className="project-general-status-input"
-                    data-status={values.status}
-                  >
-                    <span aria-hidden="true" />
-                    <select
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          status: event.target.value as ProjectStatus
-                        }))
-                      }
-                      value={values.status}
-                    >
-                      {projectStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {formatProjectStatus(status)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
+              <label className="policy-field">
+                <span>{text.totalBudget}</span>
+                <input
+                  min={0}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      totalBudgetUsd: Number(event.target.value)
+                    }))
+                  }
+                  step="0.01"
+                  type="number"
+                  value={values.totalBudgetUsd}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.status}</span>
+                <select
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      status: event.target.value as ProjectStatus
+                    }))
+                  }
+                  value={values.status}
+                >
+                  {projectStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {formatProjectStatus(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="project-detail-project-id-row">
+                <span>{text.projectId}</span>
+                <code>{project.id}</code>
               </div>
             </div>
             <div className="project-detail-actions">
