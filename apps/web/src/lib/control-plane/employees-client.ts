@@ -166,6 +166,13 @@ export async function getEmployeeControlModel(
   };
 }
 
+export async function getTenantEmployees(routeTenantId: string): Promise<EmployeeRecord[]> {
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
+  const result = await listEmployees(controlPlaneTenantId);
+
+  return result.ok ? result.data : getFixtureEmployees(controlPlaneTenantId);
+}
+
 export async function getProjectEmployeeControlModel(
   routeTenantId: string,
   project: ProjectRecord
