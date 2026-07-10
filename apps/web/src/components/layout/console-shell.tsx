@@ -583,6 +583,7 @@ export function ConsoleShell({
                 align="end"
                 aria-label={text.settings}
                 className="console-sidebar-settings-popover"
+                side="top"
                 sideOffset={8}
               >
                 <div className="console-sidebar-settings-row">
