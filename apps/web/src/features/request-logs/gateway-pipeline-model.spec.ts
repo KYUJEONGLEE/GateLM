@@ -248,6 +248,24 @@ test("uses warning copy and tone for a budget warning", () => {
   });
 });
 
+test("falls back safely when legacy cache status is missing", () => {
+  const model = buildGatewayPipelineModel(
+    record({
+      cacheStatus: undefined as unknown as string,
+      domainOutcomes: {
+        ...outcomes(),
+        cache: { outcome: "" }
+      }
+    })
+  );
+
+  expect(step(model, "cache")).toMatchObject({
+    statusLabel: "NOT USED",
+    tone: "skipped"
+  });
+  expect(model.flow.cacheOutcome).toBe("not_used");
+});
+
 function step(
   model: ReturnType<typeof buildGatewayPipelineModel>,
   id: ReturnType<typeof buildGatewayPipelineModel>["stages"][number]["id"]

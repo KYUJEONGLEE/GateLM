@@ -235,9 +235,9 @@ export function LiveRequestsView({
                   <span
                     className="dashboard-live-project-pill"
                     data-project-tone={projectPillTone(row.projectId || row.projectName)}
-                    title={row.projectId}
+                    title={projectTitle(row)}
                   >
-                    {row.projectName}
+                    {row.projectName || "-"}
                   </span>
                 </td>
                 <td>
@@ -333,8 +333,16 @@ function LiveProviderModel({ row }: { row: LiveRequestRow }) {
   );
 }
 
-function projectPillTone(value: string) {
-  return stableHash(value) % projectPillToneCount;
+export function projectPillTone(value: string | null | undefined) {
+  const seed = typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : "unknown-project";
+
+  return stableHash(seed) % projectPillToneCount;
+}
+
+function projectTitle(row: LiveRequestRow) {
+  return row.projectId || row.projectName || "Unknown project";
 }
 
 function stableHash(value: string) {

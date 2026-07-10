@@ -110,7 +110,7 @@ export function buildGatewayPipelineModel(
   const providerOutcome = normalizedOutcome(outcomes?.provider);
   const fallbackOutcome = normalizedOutcome(outcomes?.fallback);
   const cacheOutcome =
-    normalizedOutcome(outcomes?.cache) || record.cacheStatus.toLowerCase();
+    normalizedOutcome(outcomes?.cache) || normalizedCacheStatus(record.cacheStatus);
   const callState = providerCallState(record, providerOutcome);
 
   const stages: GatewayPipelineStage[] = [
@@ -437,8 +437,14 @@ function stage(
   return { description, emphasized, id, statusLabel, title, tone };
 }
 
-function normalizedOutcome(outcome: DomainOutcome | undefined) {
+function normalizedOutcome(outcome: DomainOutcome | null | undefined) {
   return outcome?.outcome?.trim().toLowerCase() ?? "";
+}
+
+function normalizedCacheStatus(cacheStatus: string | null | undefined) {
+  return typeof cacheStatus === "string" && cacheStatus.trim().length > 0
+    ? cacheStatus.trim().toLowerCase()
+    : "not_used";
 }
 
 function mergeOutcomeTones(outcomes: string[]): GatewayPipelineTone {
