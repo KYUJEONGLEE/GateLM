@@ -4437,8 +4437,6 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   width: min(100%, 1584px);
   min-height: 44px;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
 }
 
 .project-page-header h2 {
@@ -4449,14 +4447,9 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   line-height: var(--line-height-tight);
 }
 
-.project-page-header-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.project-page-header-actions .project-create-button {
-  min-height: 42px;
+.project-sort-control .project-create-button {
+  min-height: 49px;
+  margin-left: auto;
   gap: 8px;
   padding: 0 16px;
   font-size: var(--font-size-md);
@@ -4464,7 +4457,7 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   white-space: nowrap;
 }
 
-.project-page-header-actions .project-create-button svg {
+.project-sort-control .project-create-button svg {
   width: 18px;
   height: 18px;
 }

@@ -202,17 +202,6 @@ export function ProjectManagement({
     <main className="console-content management-line-content">
       <header className="project-page-header">
         <h2>{text.title}</h2>
-        {canCreateProject ? (
-          <div className="project-page-header-actions">
-            <Link
-              className="primary-button project-create-button"
-              href={`/tenants/${model.routeTenantId}/onboarding`}
-            >
-              <Plus aria-hidden="true" />
-              {text.createProject}
-            </Link>
-          </div>
-        ) : null}
       </header>
 
       {model.source === "fixture" ? (
@@ -248,6 +237,15 @@ export function ProjectManagement({
                   </button>
                 ))}
               </div>
+              {canCreateProject ? (
+                <Link
+                  className="primary-button project-create-button"
+                  href={`/tenants/${model.routeTenantId}/onboarding`}
+                >
+                  <Plus aria-hidden="true" />
+                  {text.createProject}
+                </Link>
+              ) : null}
             </div>
 
             <div className="project-card-grid">
