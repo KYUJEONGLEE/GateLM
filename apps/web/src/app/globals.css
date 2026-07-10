@@ -4432,16 +4432,41 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   height: 16px;
 }
 
-.dashboard-hero-actions .project-create-hero-button {
-  min-height: 48px;
-  padding: 0 22px;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
+.project-page-header {
+  display: flex;
+  width: min(100%, 1584px);
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.dashboard-hero-actions .project-create-hero-button svg {
-  width: 20px;
-  height: 20px;
+.project-page-header h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.project-page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.project-page-header-actions .project-create-button {
+  min-height: 42px;
+  gap: 8px;
+  padding: 0 16px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.project-page-header-actions .project-create-button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .project-create-form {
@@ -4558,13 +4583,8 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   width: min(100%, 1584px);
 }
 
-.management-line-content > .console-panel.project-list-panel > .panel-heading,
-.management-line-content > .console-panel.project-list-panel > :not(.panel-heading) {
+.management-line-content > .console-panel.project-list-panel > * {
   grid-column: 1;
-}
-
-.management-line-content > .console-panel.project-list-panel > .panel-heading h3 {
-  font-size: calc(var(--font-size-xl) * 1.35);
 }
 
 .project-sort-control {
