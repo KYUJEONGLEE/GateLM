@@ -7712,13 +7712,13 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-screen .request-log-list-panel {
-  gap: 18px;
-  padding: 28px 34px 0;
-  overflow: hidden;
-  border: 1px solid var(--request-log-border);
-  border-radius: var(--radius-lg);
-  background: var(--request-log-panel-bg);
-  box-shadow: var(--request-log-panel-shadow);
+  gap: 20px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .request-log-workspace-toolbar {
@@ -7738,10 +7738,10 @@ html[data-theme="dark"] .request-log-screen {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0;
   min-width: 0;
-  padding: 24px 26px;
-  border: 1px solid var(--request-log-border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--request-log-summary-bg);
+  padding: 20px 0;
+  border-top: 1px solid var(--request-log-border);
+  border-bottom: 1px solid var(--request-log-border);
+  background: transparent;
 }
 
 .request-log-summary-item {
@@ -7760,11 +7760,11 @@ html[data-theme="dark"] .request-log-screen {
 
 .request-log-summary-icon {
   display: inline-grid;
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 999px;
+  border-radius: 7px;
 }
 
 .request-log-summary-item[data-tone="total"] .request-log-summary-icon,
@@ -7802,7 +7802,7 @@ html[data-theme="dark"] .request-log-screen {
 
 .request-log-summary-item strong {
   color: var(--request-log-text);
-  font-size: clamp(24px, 1.9vw, 32px);
+  font-size: var(--font-size-2xl);
   line-height: 1.05;
 }
 
@@ -7863,7 +7863,7 @@ html[data-theme="dark"] .request-log-screen {
   order: 3;
   overflow-x: auto;
   border: 1px solid var(--request-log-border-strong);
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   background: var(--request-log-table-bg);
 }
 
@@ -8158,11 +8158,6 @@ html[data-theme="dark"] .request-log-screen {
   .request-log-summary-strip,
   .request-log-screen .request-log-filter-settings {
     grid-template-columns: 1fr;
-  }
-
-  .request-log-screen .request-log-list-panel {
-    padding-right: 18px;
-    padding-left: 18px;
   }
 
   .request-log-hero h2 {

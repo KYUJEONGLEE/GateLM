@@ -311,7 +311,7 @@ export function RequestLogTable({
 
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={selectedRequestId ? "open" : "closed"}>
-          <div className="console-panel request-log-list-panel">
+          <div className="request-log-list-panel">
             <div className="request-log-workspace-toolbar">
               <div className="request-log-hero-actions" aria-label="Live log controls">
                 <span className="request-log-hero-control">
