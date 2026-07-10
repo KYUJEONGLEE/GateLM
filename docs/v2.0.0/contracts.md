@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Contracts
 
+> [!IMPORTANT]
+> **문서 상태: Historical behavior baseline.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 계약은 current 문서가 명시적으로 상속한 영역의 baseline compatibility에만 사용하며, 새 기능의 roadmap이나 구현 순서를 정의하지 않는다.
+
 ## 1. Status
 
 이 문서는 GateLM v2.0.0 계약 기준 문서다.
@@ -1005,6 +1008,7 @@ docs/v2.0.0/fixtures/
 최종 schema 파일:
 
 ```text
+chat-conversation.schema.json
 dashboard-overview.schema.json
 gateway-request-context.schema.json
 gateway-stage-outcomes.schema.json
@@ -1018,6 +1022,7 @@ safety-domain-outcome.schema.json
 최종 fixture 파일은 같은 basename에 `.fixture.json` suffix를 사용한다.
 
 ```text
+chat-conversation.fixture.json
 dashboard-overview.fixture.json
 gateway-request-context.fixture.json
 gateway-stage-outcomes.fixture.json

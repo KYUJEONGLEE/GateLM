@@ -1,5 +1,8 @@
 # GateLM v2.0.0 RC Checklist
 
+> [!IMPORTANT]
+> **문서 상태: Historical RC checklist.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 checklist는 current release gate가 아니다.
+
 ## Purpose
 
 This checklist defines the minimum evidence required before calling a branch a v2.0.0 release candidate.

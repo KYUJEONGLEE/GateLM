@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Implementation PR Packets
 
+> [!IMPORTANT]
+> **문서 상태: Historical PR execution packets.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 여기에 적힌 branch, files, order는 v2.0.0 시점의 계획이며 current 작업 지시나 전체 완료 증거가 아니다.
+
 이 문서는 `docs/v2.0.0/implementation-tasks.md`를 에이전트가 바로 실행할 수 있는 PR 단위 작업 패킷으로 쪼갠다.
 
 공식 계약 우선순위는 항상 아래를 따른다.

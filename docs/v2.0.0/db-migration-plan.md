@@ -1,5 +1,8 @@
 # GateLM v2.0.0 DB Migration Plan
 
+> [!IMPORTANT]
+> **문서 상태: Historical migration plan.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 inventory와 순서는 v2.0.0 시점의 실행 계획이며 current DB 상태는 실제 schema/migration으로 다시 확인한다.
+
 이 문서는 v2.0.0 구현을 위한 DB migration 방향을 정리한다.
 
 중요:
