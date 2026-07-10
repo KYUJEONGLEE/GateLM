@@ -15279,6 +15279,139 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-height: 38px;
 }
 
+.management-line-content .project-department-section .project-budget-badge {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.project-department-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.project-department-toggle {
+  display: grid;
+  min-width: 0;
+  min-height: 64px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-department-toggle > svg {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+  color: var(--text-muted);
+}
+
+.project-department-toggle > span,
+.project-department-employee-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.project-department-toggle strong,
+.project-department-employee-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-department-toggle small,
+.project-department-employee-copy small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-department-toggle:hover,
+.project-department-toggle[data-active="true"] {
+  border-color: var(--accent-strong);
+  background: var(--accent);
+}
+
+.project-department-toggle[data-active="true"] > svg {
+  color: var(--accent-strong);
+}
+
+.project-department-toggle:disabled,
+.project-department-employee:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.project-department-employees {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-department-employee {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-department-employee:hover,
+.project-department-employee[data-active="true"] {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.project-department-employee-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.project-department-employee-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.project-department-employee[data-active="true"] .project-department-employee-icon {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+
+.project-employee-policy-fields {
+  padding-top: 4px;
+}
+
 @media (max-width: 980px) {
   .employee-add-grid,
   .employee-invite-grid {
@@ -15328,6 +15461,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .employee-panel-header .primary-button {
     width: 100%;
   }
+
+  .project-department-employees {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -15351,5 +15488,18 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
   .employee-panel {
     padding: 16px;
+  }
+
+  .project-department-toggles {
+    grid-template-columns: 1fr;
+  }
+
+  .project-department-employee {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .project-department-employee .project-status-badge {
+    grid-column: 2;
+    justify-self: start;
   }
 }

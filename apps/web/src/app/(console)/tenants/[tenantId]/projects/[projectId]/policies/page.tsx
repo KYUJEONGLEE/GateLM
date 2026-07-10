@@ -6,9 +6,9 @@ import {
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectApiKeysModel } from "@/lib/control-plane/api-keys-client";
+import { getProjectEmployeeControlModel } from "@/lib/control-plane/employees-client";
 import { getProjectAdminsModel } from "@/lib/control-plane/project-admins-client";
 import { getProjectRuntimePolicyModel } from "@/lib/control-plane/project-runtime-client";
-import { getProjectTeamsModel } from "@/lib/control-plane/teams-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ProjectPoliciesPageProps = {
@@ -31,9 +31,9 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
     notFound();
   }
 
-  const [projectAdminsModel, projectTeamsModel, projectApiKeysModel] = await Promise.all([
+  const [projectAdminsModel, projectEmployeeModel, projectApiKeysModel] = await Promise.all([
     getProjectAdminsModel(effectiveTenantId, projectRuntime.project.id),
-    getProjectTeamsModel(effectiveTenantId, projectRuntime.project.id),
+    getProjectEmployeeControlModel(effectiveTenantId, projectRuntime.project),
     getProjectApiKeysModel(effectiveTenantId, projectRuntime.project.id)
   ]);
 
@@ -62,7 +62,7 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
         project={projectRuntime.project}
         projectAdminsModel={projectAdminsModel}
         projectApiKeysModel={projectApiKeysModel}
-        projectTeamsModel={projectTeamsModel}
+        projectEmployeeModel={projectEmployeeModel}
         tenantId={effectiveTenantId}
       />
     </RuntimePolicyEditor>

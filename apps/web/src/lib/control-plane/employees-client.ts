@@ -166,6 +166,55 @@ export async function getEmployeeControlModel(
   };
 }
 
+export async function getProjectEmployeeControlModel(
+  routeTenantId: string,
+  project: ProjectRecord
+): Promise<EmployeeControlModel> {
+  const controlPlaneBaseUrl = getControlPlaneBaseUrl();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
+  const [employeesResult, assignmentsResult] = await Promise.all([
+    listEmployees(controlPlaneTenantId),
+    listProjectEmployees(project.id)
+  ]);
+
+  if (employeesResult.ok && assignmentsResult.ok) {
+    return {
+      assignmentsByProjectId: {
+        [project.id]: assignmentsResult.data.data
+      },
+      controlPlaneBaseUrl,
+      controlPlaneTenantId,
+      employees: employeesResult.data,
+      loadError: null,
+      projects: [project],
+      routeTenantId,
+      source: "control-plane"
+    };
+  }
+
+  const loadError = [
+    employeesResult.ok ? null : employeesResult.error,
+    assignmentsResult.ok ? null : assignmentsResult.error
+  ]
+    .filter((error): error is string => Boolean(error))
+    .join(" ");
+
+  return {
+    assignmentsByProjectId: assignmentsResult.ok
+      ? { [project.id]: assignmentsResult.data.data }
+      : {},
+    controlPlaneBaseUrl,
+    controlPlaneTenantId,
+    employees: employeesResult.ok
+      ? employeesResult.data
+      : getFixtureEmployees(controlPlaneTenantId),
+    loadError,
+    projects: [project],
+    routeTenantId,
+    source: "fixture"
+  };
+}
+
 export async function importEmployeesCsv(
   values: EmployeeCsvImportValues,
   options?: ControlPlaneRequestOptions

@@ -2,9 +2,9 @@
 
 import dynamic from "next/dynamic";
 import type { ApiKeysModel } from "@/lib/control-plane/api-keys-types";
+import type { EmployeeControlModel } from "@/lib/control-plane/employees-types";
 import type { ProjectAdminsModel } from "@/lib/control-plane/project-admins-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { ProjectTeamsModel } from "@/lib/control-plane/teams-types";
 import type { Locale } from "@/lib/i18n/locale";
 import { RuntimePolicyMovedBudgetSlot } from "./runtime-policy-editor";
 
@@ -13,7 +13,7 @@ type ProjectPolicyGeneralContentProps = {
   project: ProjectRecord;
   projectAdminsModel: ProjectAdminsModel;
   projectApiKeysModel: ApiKeysModel;
-  projectTeamsModel: ProjectTeamsModel;
+  projectEmployeeModel: EmployeeControlModel;
   tenantId: string;
 };
 
@@ -28,9 +28,10 @@ type ProjectAdminSectionProps = {
   model: ProjectAdminsModel;
 };
 
-type ProjectTeamAssignmentSectionProps = {
+type ProjectEmployeeAssignmentSectionProps = {
   locale: Locale;
-  model: ProjectTeamsModel;
+  model: EmployeeControlModel;
+  project: ProjectRecord;
 };
 
 type ProjectGatewayApiKeyPanelProps = {
@@ -64,10 +65,10 @@ const ProjectAdminSection = dynamic<ProjectAdminSectionProps>(
   }
 );
 
-const ProjectTeamAssignmentSection = dynamic<ProjectTeamAssignmentSectionProps>(
+const ProjectEmployeeAssignmentSection = dynamic<ProjectEmployeeAssignmentSectionProps>(
   () =>
-    import("@/features/teams/components/team-management").then(
-      (module) => module.ProjectTeamAssignmentSection
+    import("@/features/employees/components/employee-control-management").then(
+      (module) => module.ProjectEmployeeAssignmentSection
     ),
   {
     loading: LazySectionFallback,
@@ -102,7 +103,7 @@ export function ProjectPolicyGeneralContent({
   project,
   projectAdminsModel,
   projectApiKeysModel,
-  projectTeamsModel,
+  projectEmployeeModel,
   tenantId
 }: ProjectPolicyGeneralContentProps) {
   return (
@@ -113,7 +114,11 @@ export function ProjectPolicyGeneralContent({
       <RuntimePolicyMovedBudgetSlot />
       <div className="project-policy-general-tab management-line-content">
         <ProjectAdminSection locale={locale} model={projectAdminsModel} />
-        <ProjectTeamAssignmentSection locale={locale} model={projectTeamsModel} />
+        <ProjectEmployeeAssignmentSection
+          locale={locale}
+          model={projectEmployeeModel}
+          project={project}
+        />
         <ProjectGatewayApiKeyPanel locale={locale} model={projectApiKeysModel} />
         <ProjectDeleteSection locale={locale} project={project} tenantId={tenantId} />
       </div>

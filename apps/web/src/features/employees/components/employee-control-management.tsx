@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Building2,
   Save,
   Upload,
   UserPlus,
@@ -227,6 +228,7 @@ const projectEmployeeText: Record<
   Locale,
   {
     assigned: string;
+    available: string;
     budget: string;
     department: string;
     disable: string;
@@ -247,6 +249,7 @@ const projectEmployeeText: Record<
 > = {
   en: {
     assigned: "Assigned",
+    available: "Available",
     budget: "Monthly limit",
     department: "Department",
     disable: "Disable",
@@ -266,6 +269,7 @@ const projectEmployeeText: Record<
   },
   ko: {
     assigned: "배정",
+    available: "미배정",
     budget: "월 한도",
     department: "부서",
     disable: "비활성화",
@@ -285,7 +289,15 @@ const projectEmployeeText: Record<
   }
 };
 
-export function ProjectEmployeeAssignment({
+export function ProjectEmployeeAssignment(props: ProjectEmployeeAssignmentProps) {
+  return (
+    <main className="console-content management-line-content">
+      <ProjectEmployeeAssignmentSection {...props} />
+    </main>
+  );
+}
+
+export function ProjectEmployeeAssignmentSection({
   locale,
   model,
   project
@@ -297,6 +309,9 @@ export function ProjectEmployeeAssignment({
       Array.from(
         new Set(
           model.employees
+            .filter(
+              (employee) => employee.status === "active" || employee.status === "staged"
+            )
             .map((employee) => employee.department?.trim())
             .filter((department): department is string => Boolean(department))
         )
@@ -337,12 +352,28 @@ export function ProjectEmployeeAssignment({
       model.employees
         .filter(
           (employee) =>
-            employee.department === selectedDepartment &&
+            employee.department?.trim() === selectedDepartment &&
             (employee.status === "active" || employee.status === "staged")
         )
         .sort((left, right) => left.email.localeCompare(right.email)),
     [model.employees, selectedDepartment]
   );
+  const employeeCountByDepartment = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const employee of model.employees) {
+      const department = employee.department?.trim();
+      if (
+        !department ||
+        (employee.status !== "active" && employee.status !== "staged")
+      ) {
+        continue;
+      }
+      counts.set(department, (counts.get(department) ?? 0) + 1);
+    }
+
+    return counts;
+  }, [model.employees]);
 
   useEffect(() => {
     if (!departmentEmployees.some((employee) => employee.id === selectedEmployeeId)) {
@@ -366,6 +397,15 @@ export function ProjectEmployeeAssignment({
   }, [assignments, selectedEmployeeId]);
 
   const activeAssignments = assignments.filter((assignment) => assignment.status === "active");
+  const activeAssignmentByEmployeeId = useMemo(
+    () =>
+      new Map(
+        assignments
+          .filter((assignment) => assignment.status === "active")
+          .map((assignment) => [assignment.employeeId, assignment])
+      ),
+    [assignments]
+  );
   const assignedBudgetUsd = activeAssignments.reduce(
     (total, assignment) => total + assignment.monthlyBudgetLimitUsd,
     0
@@ -454,8 +494,7 @@ export function ProjectEmployeeAssignment({
   }
 
   return (
-    <main className="console-content management-line-content">
-      <section className="team-section">
+    <section className="team-section project-department-section">
         <div className="team-section-header team-section-header-with-actions">
           <div>
             <h3>{text.title}</h3>
@@ -482,41 +521,77 @@ export function ProjectEmployeeAssignment({
           </Alert>
         ) : null}
 
-        <div className="modal-form-grid">
-          <label className="policy-field">
-            <span>{text.department}</span>
-            <select
-              disabled={pendingAction !== null || departments.length === 0}
-              onChange={(event) => setSelectedDepartment(event.target.value)}
-              value={selectedDepartment}
-            >
-              {departments.length === 0 ? (
-                <option value="">{text.noDepartments}</option>
-              ) : null}
-              {departments.map((department) => (
-                <option key={department} value={department}>
-                  {department}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="policy-field">
-            <span>{text.employees}</span>
-            <select
-              disabled={pendingAction !== null || departmentEmployees.length === 0}
-              onChange={(event) => setSelectedEmployeeId(event.target.value)}
-              value={selectedEmployeeId}
-            >
-              {departmentEmployees.length === 0 ? (
-                <option value="">{text.noEmployees}</option>
-              ) : null}
-              {departmentEmployees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name ? `${employee.name} · ${employee.email}` : employee.email}
-                </option>
-              ))}
-            </select>
-          </label>
+        {departments.length === 0 ? (
+          <p className="project-empty">{text.noDepartments}</p>
+        ) : (
+          <div
+            aria-label={text.department}
+            className="project-department-toggles"
+            role="group"
+          >
+            {departments.map((department) => (
+              <button
+                aria-pressed={selectedDepartment === department}
+                className="project-department-toggle"
+                data-active={selectedDepartment === department}
+                disabled={pendingAction !== null}
+                key={department}
+                onClick={() => setSelectedDepartment(department)}
+                type="button"
+              >
+                <Building2 aria-hidden="true" />
+                <span>
+                  <strong>{department}</strong>
+                  <small>
+                    {employeeCountByDepartment.get(department) ?? 0} {text.employees}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selectedDepartment ? (
+          <div className="project-department-employees">
+            {departmentEmployees.length === 0 ? (
+              <p className="project-empty">{text.noEmployees}</p>
+            ) : (
+              departmentEmployees.map((employee) => {
+                const isAssigned = activeAssignmentByEmployeeId.has(employee.id);
+                const isSelected = selectedEmployeeId === employee.id;
+
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className="project-department-employee"
+                    data-active={isSelected}
+                    disabled={pendingAction !== null}
+                    key={employee.id}
+                    onClick={() => setSelectedEmployeeId(employee.id)}
+                    type="button"
+                  >
+                    <span className="project-department-employee-icon">
+                      <Users aria-hidden="true" />
+                    </span>
+                    <span className="project-department-employee-copy">
+                      <strong>{employee.name?.trim() || employee.email}</strong>
+                      <small>{employee.email}</small>
+                    </span>
+                    <Badge
+                      className="project-status-badge"
+                      data-status={isAssigned ? "ACTIVE" : "DISABLED"}
+                      variant="outline"
+                    >
+                      {isAssigned ? text.assigned : text.available}
+                    </Badge>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        ) : null}
+
+        <div className="modal-form-grid project-employee-policy-fields">
           <label className="policy-field">
             <span>{text.budget}</span>
             <input
@@ -602,13 +677,13 @@ export function ProjectEmployeeAssignment({
           </Button>
         </div>
 
-        {assignments.length === 0 ? (
+        {activeAssignments.length === 0 ? (
           <p className="project-empty">
             {departments.length === 0 ? text.noDepartments : text.noAssignments}
           </p>
         ) : (
           <div className="team-list">
-            {assignments.map((assignment) => (
+            {activeAssignments.map((assignment) => (
               <article className="team-row" key={assignment.id}>
                 <div className="team-row-summary">
                   <div>
@@ -645,8 +720,7 @@ export function ProjectEmployeeAssignment({
             ))}
           </div>
         )}
-      </section>
-    </main>
+    </section>
   );
 }
 
