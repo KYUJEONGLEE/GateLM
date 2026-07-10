@@ -436,13 +436,13 @@ export function ConsoleShell({
         >
           <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
         </button>
-        <a className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
+        <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
           <span className="console-brand-mark">G</span>
           <span className="console-brand-copy">
             <strong>GateLM</strong>
           </span>
-        </a>
-        <a
+        </Link>
+        <Link
           aria-label={text.landing}
           className="console-mobile-landing-link"
           href="/?view=landing"
@@ -450,7 +450,7 @@ export function ConsoleShell({
         >
           <House aria-hidden="true" size={17} strokeWidth={2.4} />
           <span>{text.landing}</span>
-        </a>
+        </Link>
       </header>
       <button
         aria-label={text.collapseNavigation}
@@ -460,13 +460,13 @@ export function ConsoleShell({
       />
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
-          <a className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
+          <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
             <span className="console-brand-mark">G</span>
             <span className="console-brand-copy">
               <strong>GateLM</strong>
               <small>Web Console</small>
             </span>
-          </a>
+          </Link>
           <button
             aria-expanded={!isSidebarCollapsed}
             aria-label={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
@@ -479,7 +479,7 @@ export function ConsoleShell({
           </button>
         </div>
 
-        <a
+        <Link
           className="console-landing-link"
           href="/?view=landing"
           onClick={closeMobileNavigation}
@@ -487,7 +487,7 @@ export function ConsoleShell({
         >
           <House aria-hidden="true" size={16} strokeWidth={2.4} />
           <span>{text.landing}</span>
-        </a>
+        </Link>
 
         <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {

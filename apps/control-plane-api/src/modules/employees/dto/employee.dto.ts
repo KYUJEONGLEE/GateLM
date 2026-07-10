@@ -62,12 +62,6 @@ export class CreateEmployeeDto {
   @MaxLength(120)
   department?: string;
 
-  @Transform(({ value }) => trimString(value))
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  jobTitle?: string;
-
   @IsOptional()
   @IsIn(EMPLOYEE_STATUS_VALUES)
   status?: EmployeeStatus;
@@ -86,12 +80,6 @@ export class UpdateEmployeeDto {
   @IsString()
   @MaxLength(120)
   department?: string;
-
-  @Transform(({ value }) => trimString(value))
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  jobTitle?: string;
 
   @IsOptional()
   @IsIn(EMPLOYEE_STATUS_VALUES)
@@ -191,7 +179,6 @@ export interface EmployeeResponseDto {
   email: string;
   name: string | null;
   department: string | null;
-  jobTitle: string | null;
   status: EmployeeStatus;
   invitationStatus: EmployeeInvitationStatus;
   invitedAt: string | null;
@@ -255,7 +242,6 @@ export interface ProjectEmployeeAssignmentResponseDto {
   employeeEmail: string;
   employeeName: string | null;
   employeeDepartment: string | null;
-  employeeJobTitle: string | null;
   employeeStatus: EmployeeStatus;
   invitationStatus: EmployeeInvitationStatus;
   monthlyBudgetLimitMicroUsd: number;

@@ -12,7 +12,6 @@ export type EmployeeRecord = {
   id: string;
   invitationStatus: EmployeeInvitationStatus;
   invitedAt: string | null;
-  jobTitle: string | null;
   name: string | null;
   projectCount: number;
   status: EmployeeStatus;
@@ -59,7 +58,6 @@ export type ProjectEmployeeAssignmentRecord = {
   employeeDepartment: string | null;
   employeeEmail: string;
   employeeId: string;
-  employeeJobTitle: string | null;
   employeeName: string | null;
   employeeStatus: EmployeeStatus;
   id: string;
@@ -101,7 +99,6 @@ export type EmployeeControlModel = {
 export type EmployeeCreateValues = {
   department: string;
   email: string;
-  jobTitle: string;
   name: string;
   tenantId?: string;
 };
@@ -110,7 +107,6 @@ export type EmployeeUpdateValues = {
   department: string;
   employeeId: string;
   invitationStatus: EmployeeInvitationStatus;
-  jobTitle: string;
   name: string;
   status: EmployeeStatus;
   tenantId: string;

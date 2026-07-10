@@ -14930,39 +14930,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   text-transform: uppercase;
 }
 
-.employee-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: max-content;
-  max-width: 100%;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-  box-shadow: var(--shadow-xs);
-}
-
-.employee-tabs button {
-  min-height: 38px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
-.employee-tabs button[data-active="true"] {
-  background: var(--surface);
-  color: var(--foreground);
-  box-shadow: var(--shadow-sm);
-}
-
 .employee-panel {
   display: grid;
   gap: 16px;
@@ -14971,6 +14938,95 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+}
+
+.employee-add-trigger {
+  white-space: nowrap;
+}
+
+.employee-list-section {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.employee-list-actions {
+  justify-content: flex-end;
+}
+
+.employee-invite-all-mobile-button {
+  display: none;
+}
+
+.employee-add-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+  max-height: min(720px, calc(100vh - 32px));
+  gap: 16px;
+  overflow-y: auto;
+  border-radius: 8px;
+}
+
+.employee-add-methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.employee-add-method-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+}
+
+.employee-add-method-button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.employee-add-method-button:hover,
+.employee-add-method-button[data-active="true"] {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-sm);
+}
+
+.employee-add-method-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.employee-add-dialog-section {
+  display: grid;
+  gap: 16px;
+}
+
+.employee-csv-upload-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.employee-csv-upload-row .primary-button {
+  min-height: 36px;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .employee-panel-header,
@@ -15015,11 +15071,13 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   align-items: start;
 }
 
-.employee-panel .policy-field {
+.employee-panel .policy-field,
+.employee-add-dialog .policy-field {
   gap: 6px;
 }
 
-.employee-panel .policy-field span {
+.employee-panel .policy-field span,
+.employee-add-dialog .policy-field span {
   color: var(--text-muted);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -15028,7 +15086,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .employee-panel .policy-field input,
 .employee-panel .policy-field select,
-.employee-panel .policy-field textarea {
+.employee-panel .policy-field textarea,
+.employee-add-dialog .policy-field input,
+.employee-add-dialog .policy-field select,
+.employee-add-dialog .policy-field textarea {
   width: 100%;
   min-height: 40px;
   border: 1px solid var(--border);
@@ -15041,11 +15102,14 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .employee-panel .policy-field input,
-.employee-panel .policy-field select {
+.employee-panel .policy-field select,
+.employee-add-dialog .policy-field input,
+.employee-add-dialog .policy-field select {
   padding: 0 11px;
 }
 
-.employee-panel .policy-field textarea {
+.employee-panel .policy-field textarea,
+.employee-add-dialog .policy-field textarea {
   min-height: 104px;
   max-height: 150px;
   padding: 10px 11px;
@@ -15080,11 +15144,11 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .employee-list-row {
   display: grid;
   grid-template-columns:
-    minmax(140px, 0.9fr)
+    minmax(100px, 0.65fr)
     minmax(112px, 0.72fr)
     minmax(160px, 1fr)
-    minmax(220px, 1.35fr)
-    minmax(94px, 0.58fr);
+    minmax(210px, 1.35fr)
+    minmax(190px, 1.05fr);
   align-items: center;
 }
 
@@ -15133,6 +15197,22 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   color: var(--accent-strong);
 }
 
+.employee-invitation-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.employee-invitation-header .employee-list-sort-button {
+  flex: 1 1 auto;
+  padding-right: 6px;
+}
+
+.employee-invite-all-button {
+  min-width: 78px;
+  margin-right: 8px;
+}
+
 .employee-list {
   display: grid;
   gap: 0;
@@ -15176,6 +15256,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-right: 8px;
+  padding-left: 10px;
 }
 
 .employee-invitation-cell button {
@@ -15207,6 +15289,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     display: none;
   }
 
+  .employee-invite-all-mobile-button {
+    display: inline-flex;
+  }
+
   .employee-list-row {
     grid-template-columns: 1fr;
     gap: 9px;
@@ -15234,7 +15320,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     letter-spacing: 0;
   }
 
-  .employee-list-toolbar,
   .employee-panel-header {
     align-items: stretch;
     flex-direction: column;
@@ -15254,14 +15339,11 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     font-size: var(--font-size-2xl);
   }
 
-  .employee-tabs,
-  .employee-tabs button,
   .employee-actions button,
   .employee-pagination button {
     width: 100%;
   }
 
-  .employee-tabs,
   .employee-actions,
   .employee-pagination {
     display: grid;

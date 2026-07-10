@@ -15,6 +15,12 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
@@ -46,6 +52,7 @@ type SubmitState = {
 
 type EmployeeSortDirection = "asc" | "desc";
 type EmployeeSortField = "department" | "email" | "invitation" | "name" | "project";
+type EmployeeAddMethod = "csv" | "invite";
 
 type EmployeeResponsePayload = {
   employee?: EmployeeRecord;
@@ -70,7 +77,6 @@ type ProjectEmployeeResponsePayload = {
 const emptyCreateValues: EmployeeCreateValues = {
   department: "",
   email: "",
-  jobTitle: "",
   name: ""
 };
 
@@ -84,6 +90,7 @@ const employeeText: Record<
     cancel: string;
     created: string;
     csv: string;
+    csvUpload: string;
     department: string;
     disable: string;
     email: string;
@@ -94,11 +101,10 @@ const employeeText: Record<
     imported: string;
     invitation: string;
     inviteLink: string;
+    inviteAll: string;
     inviteResend: string;
     inviteSend: string;
     inviteSent: string;
-    jobTitle: string;
-    listTab: string;
     management: string;
     modelKeys: string;
     name: string;
@@ -131,6 +137,7 @@ const employeeText: Record<
     cancel: "Cancel",
     created: "Created",
     csv: "CSV",
+    csvUpload: "CSV file upload",
     department: "Department",
     disable: "Disable",
     email: "Email",
@@ -141,11 +148,10 @@ const employeeText: Record<
     imported: "Imported",
     invitation: "Invite",
     inviteLink: "Invitation link",
+    inviteAll: "Invite all",
     inviteResend: "Resend",
     inviteSend: "Send invite",
     inviteSent: "Invitation email sent.",
-    jobTitle: "Job title",
-    listTab: "Employee list",
     management: "management",
     modelKeys: "Models",
     name: "Name",
@@ -177,6 +183,7 @@ const employeeText: Record<
     cancel: "취소",
     created: "생성",
     csv: "CSV",
+    csvUpload: "CSV 파일 업로드",
     department: "부서",
     disable: "비활성화",
     email: "이메일",
@@ -187,11 +194,10 @@ const employeeText: Record<
     imported: "등록됨",
     invitation: "초대",
     inviteLink: "초대 링크",
+    inviteAll: "일괄 초대",
     inviteResend: "재발송",
     inviteSend: "초대 메일 보내기",
     inviteSent: "초대 메일을 발송했습니다.",
-    jobTitle: "직책",
-    listTab: "직원 목록",
     management: "관리",
     modelKeys: "모델",
     name: "이름",
@@ -647,14 +653,15 @@ export function ProjectEmployeeAssignment({
 export function EmployeeControlManagement({ locale, model }: EmployeeControlManagementProps) {
   const router = useRouter();
   const text = employeeText[locale];
-  const [activeTab, setActiveTab] = useState<"add" | "list">("add");
+  const [addMethod, setAddMethod] = useState<EmployeeAddMethod>("csv");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [employees, setEmployees] = useState<EmployeeRecord[]>(model.employees);
   const [projects, setProjects] = useState<ProjectRecord[]>(model.projects);
   const [assignmentsByProjectId, setAssignmentsByProjectId] = useState(
     model.assignmentsByProjectId
   );
   const [csvText, setCsvText] = useState(
-    "project,department,email,name,jobTitle,employeeBudgetUsd,projectBudgetUsd\n"
+    "project,department,email,name,employeeBudgetUsd,projectBudgetUsd\n"
   );
   const [createValues, setCreateValues] = useState<EmployeeCreateValues>(emptyCreateValues);
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -793,6 +800,7 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       status: "success"
     });
     setPendingAction(null);
+    setIsAddDialogOpen(false);
     router.refresh();
   }
 
@@ -845,6 +853,7 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     setPageIndex(0);
     setSubmitState({ message: text.inviteSent, status: "success" });
     setPendingAction(null);
+    setIsAddDialogOpen(false);
     router.refresh();
   }
 
@@ -866,29 +875,94 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     router.refresh();
   }
 
-  async function requestEmployeeInvitation(employeeId: string) {
-    const response = await fetch("/api/control-plane/employees", {
-      body: JSON.stringify({
-        action: "invite",
-        values: {
-          employeeId,
-          tenantId: model.controlPlaneTenantId
-        }
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as EmployeeInvitationResponsePayload;
-
-    if (!response.ok || !payload.invitation) {
+  async function sendInvitesForAllEmployees() {
+    const targets = employees.filter((employee) => employee.invitationStatus !== "accepted");
+    if (targets.length === 0) {
       setSubmitState({
-        message: payload.error ?? "Employee invitation failed.",
-        status: "error"
+        message:
+          locale === "ko"
+            ? "일괄 초대할 직원이 없습니다."
+            : "There are no employees to invite.",
+        status: "success"
       });
-      return null;
+      return;
     }
 
-    return payload.invitation;
+    setPendingAction("inviteAll");
+    setSubmitState({ message: "", status: "idle" });
+    setLastInviteUrl(null);
+
+    const invitations: EmployeeInvitationResult[] = [];
+    let failedCount = 0;
+
+    for (let index = 0; index < targets.length; index += 5) {
+      const batch = targets.slice(index, index + 5);
+      const results = await Promise.all(
+        batch.map((employee) => requestEmployeeInvitation(employee.id, false))
+      );
+      for (const invitation of results) {
+        if (invitation) {
+          invitations.push(invitation);
+        } else {
+          failedCount += 1;
+        }
+      }
+    }
+
+    mergeEmployees(invitations.map((invitation) => invitation.employee));
+    const successCount = invitations.length;
+    setSubmitState({
+      message:
+        locale === "ko"
+          ? failedCount > 0
+            ? `${successCount}명 발송, ${failedCount}명 실패`
+            : `${successCount}명에게 초대 메일을 발송했습니다.`
+          : failedCount > 0
+            ? `${successCount} sent, ${failedCount} failed`
+            : `Invitation emails sent to ${successCount} employees.`,
+      status: failedCount > 0 ? "error" : "success"
+    });
+    setPendingAction(null);
+    router.refresh();
+  }
+
+  async function requestEmployeeInvitation(employeeId: string, reportError = true) {
+    try {
+      const response = await fetch("/api/control-plane/employees", {
+        body: JSON.stringify({
+          action: "invite",
+          values: {
+            employeeId,
+            tenantId: model.controlPlaneTenantId
+          }
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response
+        .json()
+        .catch(() => ({}))) as EmployeeInvitationResponsePayload;
+
+      if (!response.ok || !payload.invitation) {
+        if (reportError) {
+          setSubmitState({
+            message: payload.error ?? "Employee invitation failed.",
+            status: "error"
+          });
+        }
+        return null;
+      }
+
+      return payload.invitation;
+    } catch {
+      if (reportError) {
+        setSubmitState({
+          message: "Employee invitation failed.",
+          status: "error"
+        });
+      }
+      return null;
+    }
   }
 
   function mergeEmployees(nextEmployees: EmployeeRecord[]) {
@@ -919,6 +993,25 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       }
       return next;
     });
+  }
+
+  function openEmployeeAddDialog() {
+    setAddMethod("csv");
+    setSubmitState({ message: "", status: "idle" });
+    setLastInviteUrl(null);
+    setIsAddDialogOpen(true);
+  }
+
+  function changeAddMethod(method: EmployeeAddMethod) {
+    setAddMethod(method);
+    setSubmitState({ message: "", status: "idle" });
+  }
+
+  function changeAddDialogOpen(open: boolean) {
+    if (!open && pendingAction !== null) {
+      return;
+    }
+    setIsAddDialogOpen(open);
   }
 
   function changeEmployeeSort(field: EmployeeSortField) {
@@ -965,27 +1058,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
         </div>
       </section>
 
-      <div className="employee-tabs" role="tablist">
-        <button
-          aria-selected={activeTab === "add"}
-          data-active={activeTab === "add"}
-          onClick={() => setActiveTab("add")}
-          role="tab"
-          type="button"
-        >
-          {text.addTab}
-        </button>
-        <button
-          aria-selected={activeTab === "list"}
-          data-active={activeTab === "list"}
-          onClick={() => setActiveTab("list")}
-          role="tab"
-          type="button"
-        >
-          {text.listTab}
-        </button>
-      </div>
-
       {model.source === "fixture" ? (
         <Alert variant="warning">
           <AlertDescription>
@@ -993,12 +1065,12 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
           </AlertDescription>
         </Alert>
       ) : null}
-      {submitState.message ? (
+      {!isAddDialogOpen && submitState.message ? (
         <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
       ) : null}
-      {lastInviteUrl ? (
+      {!isAddDialogOpen && lastInviteUrl ? (
         <Alert variant="success">
           <AlertDescription>
             {text.inviteLink}: <a href={lastInviteUrl}>{lastInviteUrl}</a>
@@ -1006,195 +1078,279 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
         </Alert>
       ) : null}
 
-      {activeTab === "add" ? (
-        <>
-          <section className="employee-panel employee-csv-panel">
-            <div className="employee-panel-header">
-              <div>
-                <h3>{text.csv}</h3>
+      <section className="employee-list-section">
+        <div className="employee-list-toolbar employee-list-actions">
+          <Button
+            className="employee-invite-all-mobile-button"
+            disabled={
+              pendingAction !== null ||
+              employees.every((employee) => employee.invitationStatus === "accepted")
+            }
+            onClick={() => void sendInvitesForAllEmployees()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <UserPlus aria-hidden="true" />
+            {pendingAction === "inviteAll" ? "..." : text.inviteAll}
+          </Button>
+          <Button
+            className="employee-add-trigger"
+            disabled={pendingAction !== null}
+            onClick={openEmployeeAddDialog}
+            size="sm"
+            type="button"
+          >
+            <UserPlus aria-hidden="true" />
+            {text.addTab}
+          </Button>
+        </div>
+
+        {employees.length === 0 ? (
+          <p className="project-empty">{text.noEmployees}</p>
+        ) : (
+          <>
+            <div className="employee-list-grid">
+              <div className="employee-list-header">
+                {renderEmployeeSortHeader("name", text.name)}
+                {renderEmployeeSortHeader("department", text.department)}
+                {renderEmployeeSortHeader("project", text.projectCount)}
+                {renderEmployeeSortHeader("email", text.email)}
+                <div className="employee-invitation-header">
+                  {renderEmployeeSortHeader("invitation", text.invitation)}
+                  <Button
+                    className="employee-invite-all-button"
+                    disabled={
+                      pendingAction !== null ||
+                      employees.every((employee) => employee.invitationStatus === "accepted")
+                    }
+                    onClick={() => void sendInvitesForAllEmployees()}
+                    size="xs"
+                    type="button"
+                    variant="outline"
+                  >
+                    <UserPlus aria-hidden="true" />
+                    {pendingAction === "inviteAll" ? "..." : text.inviteAll}
+                  </Button>
+                </div>
               </div>
-              <label className="primary-button" htmlFor="employee-csv-file">
-                <Upload aria-hidden="true" />
-                CSV
-              </label>
-              <input
-                accept=".csv,text/csv"
-                className="sr-only"
-                id="employee-csv-file"
-                onChange={(event) => void handleCsvFile(event)}
-                type="file"
-              />
+              <div className="employee-list">
+                {currentPageEmployees.map((employee) => {
+                  const projectNames = projectNamesByEmployeeId.get(employee.id) ?? [];
+                  return (
+                    <article className="employee-list-row" key={employee.id}>
+                      <div
+                        className="employee-list-cell employee-name-cell"
+                        data-label={text.name}
+                      >
+                        <strong>{nullableText(employee.name, employee.email)}</strong>
+                      </div>
+                      <div
+                        className="employee-list-cell employee-department-cell"
+                        data-label={text.department}
+                      >
+                        <p>{nullableText(employee.department, "-")}</p>
+                      </div>
+                      <div
+                        className="employee-list-cell employee-project-cell"
+                        data-label={text.projectCount}
+                      >
+                        <p>{projectNames.length > 0 ? projectNames.join(", ") : "-"}</p>
+                      </div>
+                      <div
+                        className="employee-list-cell employee-email-cell"
+                        data-label={text.email}
+                      >
+                        <p>{employee.email}</p>
+                      </div>
+                      <div
+                        className="employee-list-cell employee-invitation-cell"
+                        data-label={text.invitation}
+                      >
+                        <Badge variant="outline">
+                          {formatInvitationStatus(employee.invitationStatus, locale)}
+                        </Badge>
+                        {employee.invitationStatus !== "accepted" ? (
+                          <Button
+                            disabled={pendingAction !== null}
+                            onClick={() => void sendInviteForEmployee(employee)}
+                            type="button"
+                            variant="outline"
+                          >
+                            <UserPlus aria-hidden="true" />
+                            {pendingAction === `invite:${employee.id}`
+                              ? "..."
+                              : employee.invitationStatus === "pending"
+                                ? text.inviteResend
+                                : text.inviteSend}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             </div>
-            <div className="employee-add-grid employee-csv-only-grid">
+            <div className="employee-pagination">
+              <Button
+                disabled={pageIndex === 0}
+                onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                type="button"
+                variant="outline"
+              >
+                {text.previous}
+              </Button>
+              <span className="application-budget-summary">
+                {text.page} {pageIndex + 1} / {pageCount}
+              </span>
+              <Button
+                disabled={pageIndex >= pageCount - 1}
+                onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
+                type="button"
+                variant="outline"
+              >
+                {text.next}
+              </Button>
+            </div>
+          </>
+        )}
+      </section>
+
+      <Dialog onOpenChange={changeAddDialogOpen} open={isAddDialogOpen}>
+        <DialogContent className="employee-add-dialog">
+          <DialogHeader>
+            <DialogTitle>{text.addTab}</DialogTitle>
+          </DialogHeader>
+
+          <div aria-label={text.addTab} className="employee-add-methods" role="tablist">
+            <button
+              aria-controls="employee-add-csv-panel"
+              aria-selected={addMethod === "csv"}
+              className="employee-add-method-button"
+              data-active={addMethod === "csv"}
+              disabled={pendingAction !== null}
+              id="employee-add-csv-tab"
+              onClick={() => changeAddMethod("csv")}
+              role="tab"
+              type="button"
+            >
+              <Upload aria-hidden="true" />
+              {text.csvUpload}
+            </button>
+            <button
+              aria-controls="employee-add-invite-panel"
+              aria-selected={addMethod === "invite"}
+              className="employee-add-method-button"
+              data-active={addMethod === "invite"}
+              disabled={pendingAction !== null}
+              id="employee-add-invite-tab"
+              onClick={() => changeAddMethod("invite")}
+              role="tab"
+              type="button"
+            >
+              <UserPlus aria-hidden="true" />
+              {text.employeeAddTitle}
+            </button>
+          </div>
+
+          {submitState.message ? (
+            <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+              <AlertDescription>{submitState.message}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {addMethod === "csv" ? (
+            <div
+              aria-labelledby="employee-add-csv-tab"
+              className="employee-add-dialog-section"
+              id="employee-add-csv-panel"
+              role="tabpanel"
+            >
+              <div className="employee-csv-upload-row">
+                <label className="primary-button" htmlFor="employee-csv-file">
+                  <Upload aria-hidden="true" />
+                  {text.csvUpload}
+                </label>
+                <input
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  disabled={pendingAction !== null}
+                  id="employee-csv-file"
+                  onChange={(event) => void handleCsvFile(event)}
+                  type="file"
+                />
+              </div>
               <label className="policy-field employee-csv-field">
                 <span>{text.csv}</span>
                 <textarea
+                  disabled={pendingAction !== null}
                   onChange={(event) => setCsvText(event.target.value)}
-                  rows={3}
+                  rows={4}
                   value={csvText}
                 />
               </label>
-            </div>
-            <div className="employee-actions">
-              <Button
-                disabled={pendingAction !== null || csvText.trim().length === 0}
-                onClick={() => void submitImportCsv()}
-                type="button"
-              >
-                <Upload aria-hidden="true" />
-                {pendingAction === "importCsv" ? "..." : text.import}
-              </Button>
-            </div>
-          </section>
-
-          <section className="employee-panel employee-invite-panel">
-            <div className="employee-panel-header">
-              <div>
-                <h3>{text.employeeAddTitle}</h3>
+              <div className="employee-actions">
+                <Button
+                  disabled={pendingAction !== null || csvText.trim().length === 0}
+                  onClick={() => void submitImportCsv()}
+                  type="button"
+                >
+                  <Upload aria-hidden="true" />
+                  {pendingAction === "importCsv" ? "..." : text.import}
+                </Button>
               </div>
             </div>
-            <div className="employee-invite-grid">
-              <label className="policy-field">
-                <span>{text.name}</span>
-                <input
-                  maxLength={120}
-                  onChange={(event) =>
-                    setCreateValues((current) => ({ ...current, name: event.target.value }))
-                  }
-                  type="text"
-                  value={createValues.name}
-                />
-              </label>
-              <label className="policy-field">
-                <span>{text.email}</span>
-                <input
-                  maxLength={320}
-                  onChange={(event) =>
-                    setCreateValues((current) => ({ ...current, email: event.target.value }))
-                  }
-                  type="email"
-                  value={createValues.email}
-                />
-              </label>
-            </div>
-            <div className="employee-actions">
-              <Button
-                disabled={
-                  pendingAction !== null ||
-                  createValues.email.trim().length === 0 ||
-                  createValues.name.trim().length === 0
-                }
-                onClick={() => void submitCreateEmployee()}
-                type="button"
-              >
-                <UserPlus aria-hidden="true" />
-                {pendingAction === "create" ? "..." : text.inviteSend}
-              </Button>
-            </div>
-          </section>
-        </>
-      ) : (
-        <section className="employee-panel employee-list-panel">
-          <div className="employee-list-toolbar">
-            <div>
-              <h3>{text.employees}</h3>
-            </div>
-          </div>
-
-          {employees.length === 0 ? (
-            <p className="project-empty">{text.noEmployees}</p>
           ) : (
-            <>
-              <div className="employee-list-grid">
-                <div className="employee-list-header">
-                  {renderEmployeeSortHeader("name", text.name)}
-                  {renderEmployeeSortHeader("department", text.department)}
-                  {renderEmployeeSortHeader("project", text.projectCount)}
-                  {renderEmployeeSortHeader("email", text.email)}
-                  {renderEmployeeSortHeader("invitation", text.invitation)}
-                </div>
-                <div className="employee-list">
-                  {currentPageEmployees.map((employee) => {
-                    const projectNames = projectNamesByEmployeeId.get(employee.id) ?? [];
-                    return (
-                      <article className="employee-list-row" key={employee.id}>
-                        <div
-                          className="employee-list-cell employee-name-cell"
-                          data-label={text.name}
-                        >
-                          <strong>{nullableText(employee.name, employee.email)}</strong>
-                        </div>
-                        <div
-                          className="employee-list-cell employee-department-cell"
-                          data-label={text.department}
-                        >
-                          <p>{nullableText(employee.department, "-")}</p>
-                        </div>
-                        <div
-                          className="employee-list-cell employee-project-cell"
-                          data-label={text.projectCount}
-                        >
-                          <p>{projectNames.length > 0 ? projectNames.join(", ") : "-"}</p>
-                        </div>
-                        <div
-                          className="employee-list-cell employee-email-cell"
-                          data-label={text.email}
-                        >
-                          <p>{employee.email}</p>
-                        </div>
-                        <div
-                          className="employee-list-cell employee-invitation-cell"
-                          data-label={text.invitation}
-                        >
-                          <Badge variant="outline">
-                            {formatInvitationStatus(employee.invitationStatus, locale)}
-                          </Badge>
-                          {employee.invitationStatus !== "accepted" ? (
-                            <Button
-                              disabled={pendingAction !== null}
-                              onClick={() => void sendInviteForEmployee(employee)}
-                              type="button"
-                              variant="outline"
-                            >
-                              <UserPlus aria-hidden="true" />
-                              {pendingAction === `invite:${employee.id}`
-                                ? "..."
-                                : employee.invitationStatus === "pending"
-                                  ? text.inviteResend
-                                  : text.inviteSend}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
+            <div
+              aria-labelledby="employee-add-invite-tab"
+              className="employee-add-dialog-section"
+              id="employee-add-invite-panel"
+              role="tabpanel"
+            >
+              <div className="employee-invite-grid">
+                <label className="policy-field">
+                  <span>{text.name}</span>
+                  <input
+                    disabled={pendingAction !== null}
+                    maxLength={120}
+                    onChange={(event) =>
+                      setCreateValues((current) => ({ ...current, name: event.target.value }))
+                    }
+                    type="text"
+                    value={createValues.name}
+                  />
+                </label>
+                <label className="policy-field">
+                  <span>{text.email}</span>
+                  <input
+                    disabled={pendingAction !== null}
+                    maxLength={320}
+                    onChange={(event) =>
+                      setCreateValues((current) => ({ ...current, email: event.target.value }))
+                    }
+                    type="email"
+                    value={createValues.email}
+                  />
+                </label>
               </div>
-              <div className="employee-pagination">
+              <div className="employee-actions">
                 <Button
-                  disabled={pageIndex === 0}
-                  onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                  disabled={
+                    pendingAction !== null ||
+                    createValues.email.trim().length === 0 ||
+                    createValues.name.trim().length === 0
+                  }
+                  onClick={() => void submitCreateEmployee()}
                   type="button"
-                  variant="outline"
                 >
-                  {text.previous}
-                </Button>
-                <span className="application-budget-summary">
-                  {text.page} {pageIndex + 1} / {pageCount}
-                </span>
-                <Button
-                  disabled={pageIndex >= pageCount - 1}
-                  onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
-                  type="button"
-                  variant="outline"
-                >
-                  {text.next}
+                  <UserPlus aria-hidden="true" />
+                  {pendingAction === "create" ? "..." : text.inviteSend}
                 </Button>
               </div>
-            </>
+            </div>
           )}
-        </section>
-      )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

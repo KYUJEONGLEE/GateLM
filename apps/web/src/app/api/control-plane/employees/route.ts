@@ -132,7 +132,6 @@ function isEmployeeCreateValues(value: unknown): value is EmployeeCreateValues {
   return (
     typeof record.department === "string" &&
     typeof record.email === "string" &&
-    typeof record.jobTitle === "string" &&
     typeof record.name === "string" &&
     typeof record.tenantId === "string"
   );
@@ -181,7 +180,6 @@ function isEmployeeUpdateValues(value: unknown): value is EmployeeUpdateValues {
     typeof record.department === "string" &&
     typeof record.employeeId === "string" &&
     isInvitationStatus(record.invitationStatus) &&
-    typeof record.jobTitle === "string" &&
     typeof record.name === "string" &&
     isEmployeeStatus(record.status) &&
     typeof record.tenantId === "string"
@@ -203,10 +201,12 @@ function isProjectEmployeeAssignmentValues(
     record.allowedProviderConnectionIds.every((item) => typeof item === "string") &&
     typeof record.employeeId === "string" &&
     typeof record.monthlyBudgetLimitUsd === "number" &&
+    Number.isFinite(record.monthlyBudgetLimitUsd) &&
     typeof record.policyNote === "string" &&
     typeof record.projectId === "string" &&
     (record.status === undefined || isProjectEmployeeStatus(record.status)) &&
-    typeof record.warningThresholdPercent === "number"
+    typeof record.warningThresholdPercent === "number" &&
+    Number.isFinite(record.warningThresholdPercent)
   );
 }
 

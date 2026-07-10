@@ -303,7 +303,6 @@ model Employee {
   email               String
   name                String?
   department          String?
-  jobTitle            String?
   status              String    @default("staged")
   invitationStatus    String    @default("not_sent")
   invitationTokenHash String?   @unique

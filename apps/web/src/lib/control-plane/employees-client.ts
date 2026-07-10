@@ -270,7 +270,6 @@ export async function createEmployee(
         body: JSON.stringify({
           department: values.department.trim() || undefined,
           email: values.email.trim(),
-          jobTitle: values.jobTitle.trim() || undefined,
           name: values.name.trim() || undefined
         }),
         cache: "no-store",
@@ -302,7 +301,6 @@ export async function updateEmployee(
         body: JSON.stringify({
           department: values.department.trim(),
           invitationStatus: values.invitationStatus,
-          jobTitle: values.jobTitle.trim(),
           name: values.name.trim(),
           status: values.status
         }),
@@ -842,7 +840,6 @@ function toEmployeeRecord(value: unknown): EmployeeRecord | null {
     id: record.id,
     invitationStatus,
     invitedAt: typeof record.invitedAt === "string" ? record.invitedAt : null,
-    jobTitle: typeof record.jobTitle === "string" ? record.jobTitle : null,
     name: typeof record.name === "string" ? record.name : null,
     projectCount: record.projectCount,
     status,
@@ -925,7 +922,6 @@ function toProjectEmployeeAssignmentRecord(
       typeof record.employeeDepartment === "string" ? record.employeeDepartment : null,
     employeeEmail: record.employeeEmail,
     employeeId: record.employeeId,
-    employeeJobTitle: typeof record.employeeJobTitle === "string" ? record.employeeJobTitle : null,
     employeeName: typeof record.employeeName === "string" ? record.employeeName : null,
     employeeStatus,
     id: record.id,
@@ -1034,7 +1030,6 @@ function getFixtureEmployees(tenantId: string): EmployeeRecord[] {
       id: "employee_fixture_minji",
       invitationStatus: "not_sent",
       invitedAt: null,
-      jobTitle: "Support operator",
       name: "Minji Kim",
       projectCount: 0,
       status: "staged",
@@ -1050,7 +1045,6 @@ function getFixtureEmployees(tenantId: string): EmployeeRecord[] {
       id: "employee_fixture_junho",
       invitationStatus: "not_sent",
       invitedAt: null,
-      jobTitle: "Backend engineer",
       name: "Junho Lee",
       projectCount: 0,
       status: "staged",

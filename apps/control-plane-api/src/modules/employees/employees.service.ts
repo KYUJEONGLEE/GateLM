@@ -45,6 +45,15 @@ import {
 
 const DEFAULT_PROJECT_BUDGET_USD = 100;
 const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
+const DEPRECATED_JOB_TITLE_CSV_HEADERS = [
+  'jobtitle',
+  'job_title',
+  'title',
+  'position',
+  'role',
+  '직책',
+  '직무',
+] as const;
 
 const CSV_HEADER_ALIASES = {
   allowedModelKeys: ['allowedmodelkeys', 'allowed_model_keys', 'models', 'model_keys', '모델'],
@@ -65,7 +74,6 @@ const CSV_HEADER_ALIASES = {
     'budget_usd',
     '직원예산',
   ],
-  jobTitle: ['jobtitle', 'job_title', 'title', 'position', 'role', '직책', '직무'],
   name: ['name', 'full_name', 'fullname', '이름', '성명'],
   policyNote: ['policynote', 'policy_note', 'note', '메모'],
   project: ['project', 'project_name', '프로젝트'],
@@ -107,7 +115,6 @@ type ProjectImportProjection = Pick<
 type ParsedCsvRow = {
   department: string | null;
   email: string;
-  jobTitle: string | null;
   name: string | null;
   rowNumber: number;
 };
@@ -185,7 +192,6 @@ export class EmployeesService {
         data: {
           department: this.toNullableString(dto.department),
           email,
-          jobTitle: this.toNullableString(dto.jobTitle),
           name: this.toNullableString(dto.name),
           status: dto.status ?? 'staged',
           tenantId,
@@ -239,19 +245,22 @@ export class EmployeesService {
     let updatedCount = 0;
     const employees = await this.prisma.$transaction(async (tx) => {
       const imported: EmployeeWithProjectCount[] = [];
+      const existingEmployees = await tx.employee.findMany({
+        where: {
+          deletedAt: null,
+          email: { in: dedupedRows.map((row) => row.email) },
+          tenantId,
+        },
+      });
+      const existingEmployeesByEmail = new Map(
+        existingEmployees.map((employee) => [employee.email, employee]),
+      );
 
       for (const row of dedupedRows) {
-        const existing = await tx.employee.findFirst({
-          where: {
-            deletedAt: null,
-            email: row.email,
-            tenantId,
-          },
-        });
+        const existing = existingEmployeesByEmail.get(row.email);
         const data = {
           department: row.department,
           email: row.email,
-          jobTitle: row.jobTitle,
           name: row.name,
         };
 
@@ -317,7 +326,23 @@ export class EmployeesService {
     let assignmentUpdatedCount = 0;
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const employeesByEmail = new Map<string, EmployeeWithProjectCount>();
+      const existingEmployees = await tx.employee.findMany({
+        where: {
+          deletedAt: null,
+          email: { in: [...new Set(rows.map((row) => row.email))] },
+          tenantId,
+        },
+        include: {
+          _count: {
+            select: {
+              projectAssignments: true,
+            },
+          },
+        },
+      });
+      const employeesByEmail = new Map<string, EmployeeWithProjectCount>(
+        existingEmployees.map((employee) => [employee.email, employee]),
+      );
       const projectsByName = new Map<
         string,
         { project: ProjectImportProjection; runtimeApplicationId: string | null }
@@ -326,17 +351,10 @@ export class EmployeesService {
       const touchedAssignmentKeys = new Set<string>();
 
       for (const row of rows) {
-        const existingEmployee = await tx.employee.findFirst({
-          where: {
-            deletedAt: null,
-            email: row.email,
-            tenantId,
-          },
-        });
+        const existingEmployee = employeesByEmail.get(row.email);
         const employeeData = {
           department: row.department,
           email: row.email,
-          jobTitle: row.jobTitle,
           name: row.name,
         };
         const employee = existingEmployee
@@ -622,9 +640,6 @@ export class EmployeesService {
     if (dto.department !== undefined) {
       data.department = this.toNullableString(dto.department);
     }
-    if (dto.jobTitle !== undefined) {
-      data.jobTitle = this.toNullableString(dto.jobTitle);
-    }
     if (dto.status !== undefined) {
       data.status = dto.status;
       if (dto.status === 'archived') {
@@ -692,59 +707,95 @@ export class EmployeesService {
     employeeId: string,
     dto: UpsertProjectEmployeeAssignmentDto,
   ): Promise<ProjectEmployeeAssignmentResponseDto> {
-    const project = await this.getProjectOrThrow(projectId);
-    const employee = await this.getEmployeeOrThrow(project.tenantId, employeeId);
-    const existing = await this.prisma.projectEmployeeAssignment.findUnique({
-      where: {
-        projectId_employeeId: {
-          employeeId,
-          projectId,
+    return this.prisma.$transaction(async (tx) => {
+      const lockedProjects = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "projects"
+        WHERE "id" = ${projectId}::uuid
+        FOR UPDATE
+      `;
+      if (!lockedProjects[0]) {
+        throw new NotFoundException('Project not found.');
+      }
+
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: {
+          id: true,
+          tenantId: true,
+          totalBudgetUsd: true,
         },
-      },
-    });
-    const monthlyBudgetLimitMicroUsd =
-      dto.monthlyBudgetLimitUsd !== undefined
-        ? this.usdToMicroUsd(dto.monthlyBudgetLimitUsd)
-        : existing?.monthlyBudgetLimitMicroUsd ?? 0n;
-    const warningThresholdPercent =
-      dto.warningThresholdPercent ??
-      existing?.warningThresholdPercent ??
-      DEFAULT_WARNING_THRESHOLD_PERCENT;
-    const status = dto.status ?? existing?.status ?? 'active';
-    const policy = this.mergeProjectEmployeePolicy(existing?.policy, dto);
+      });
+      if (!project) {
+        throw new NotFoundException('Project not found.');
+      }
 
-    await this.assertProjectBudgetCanCoverEmployeeLimits({
-      employeeId,
-      monthlyBudgetLimitMicroUsd,
-      project,
-      status,
-    });
+      const employee = await tx.employee.findFirst({
+        where: {
+          deletedAt: null,
+          id: employeeId,
+          tenantId: project.tenantId,
+        },
+      });
+      if (!employee) {
+        throw new NotFoundException('Employee not found.');
+      }
 
-    const assignment = existing
-      ? await this.prisma.projectEmployeeAssignment.update({
-          where: { id: existing.id },
-          data: {
-            monthlyBudgetLimitMicroUsd,
-            policy,
-            status,
-            warningThresholdPercent,
+      const existing = await tx.projectEmployeeAssignment.findUnique({
+        where: {
+          projectId_employeeId: {
+            employeeId,
+            projectId,
           },
-          include: { employee: true },
-        })
-      : await this.prisma.projectEmployeeAssignment.create({
-          data: {
-            employeeId: employee.id,
-            monthlyBudgetLimitMicroUsd,
-            policy,
-            projectId: project.id,
-            status,
-            tenantId: project.tenantId,
-            warningThresholdPercent,
-          },
-          include: { employee: true },
-        });
+        },
+      });
+      const monthlyBudgetLimitMicroUsd =
+        dto.monthlyBudgetLimitUsd !== undefined
+          ? this.usdToMicroUsd(dto.monthlyBudgetLimitUsd)
+          : existing?.monthlyBudgetLimitMicroUsd ?? 0n;
+      const warningThresholdPercent =
+        dto.warningThresholdPercent ??
+        existing?.warningThresholdPercent ??
+        DEFAULT_WARNING_THRESHOLD_PERCENT;
+      const status = dto.status ?? existing?.status ?? 'active';
+      const policy = this.mergeProjectEmployeePolicy(existing?.policy, dto);
 
-    return this.toProjectEmployeeAssignmentResponse(assignment);
+      await this.assertProjectBudgetCanCoverEmployeeLimits(
+        {
+          employeeId,
+          monthlyBudgetLimitMicroUsd,
+          project,
+          status,
+        },
+        tx,
+      );
+
+      const assignment = existing
+        ? await tx.projectEmployeeAssignment.update({
+            where: { id: existing.id },
+            data: {
+              monthlyBudgetLimitMicroUsd,
+              policy,
+              status,
+              warningThresholdPercent,
+            },
+            include: { employee: true },
+          })
+        : await tx.projectEmployeeAssignment.create({
+            data: {
+              employeeId: employee.id,
+              monthlyBudgetLimitMicroUsd,
+              policy,
+              projectId: project.id,
+              status,
+              tenantId: project.tenantId,
+              warningThresholdPercent,
+            },
+            include: { employee: true },
+          });
+
+      return this.toProjectEmployeeAssignmentResponse(assignment);
+    });
   }
 
   async disableProjectEmployeeAssignment(
@@ -873,11 +924,11 @@ export class EmployeesService {
     monthlyBudgetLimitMicroUsd: bigint;
     project: ProjectBudgetProjection;
     status: string;
-  }): Promise<void> {
+  }, tx: Prisma.TransactionClient): Promise<void> {
     const projectBudgetMicroUsd = this.usdToMicroUsd(
       this.toProjectBudgetUsd(args.project.totalBudgetUsd),
     );
-    const activeAssignments = await this.prisma.projectEmployeeAssignment.findMany({
+    const activeAssignments = await tx.projectEmployeeAssignment.findMany({
       where: {
         employeeId: { not: args.employeeId },
         projectId: args.project.id,
@@ -910,6 +961,15 @@ export class EmployeesService {
       throw new BadRequestException('CSV header row is required.');
     }
 
+    const hasJobTitleHeader = headers.some((header) =>
+      DEPRECATED_JOB_TITLE_CSV_HEADERS.some(
+        (alias) => alias === normalizeHeader(header),
+      ),
+    );
+    if (hasJobTitleHeader) {
+      throw new BadRequestException('CSV jobTitle column is no longer supported.');
+    }
+
     const headerMap = buildHeaderMap(headers);
     if (headerMap.email === undefined) {
       throw new BadRequestException('CSV must include an email column.');
@@ -940,7 +1000,6 @@ export class EmployeesService {
           this.toNullableString(readOptionalCsvCell(row, headerMap.department)) ??
           defaultDepartment,
         email,
-        jobTitle: this.toNullableString(readOptionalCsvCell(row, headerMap.jobTitle)),
         name: this.toNullableString(readOptionalCsvCell(row, headerMap.name)),
         rowNumber,
       });
@@ -957,6 +1016,15 @@ export class EmployeesService {
 
     if (!headers || headers.length === 0) {
       throw new BadRequestException('CSV header row is required.');
+    }
+
+    const hasJobTitleHeader = headers.some((header) =>
+      DEPRECATED_JOB_TITLE_CSV_HEADERS.some(
+        (alias) => alias === normalizeHeader(header),
+      ),
+    );
+    if (hasJobTitleHeader) {
+      throw new BadRequestException('CSV jobTitle column is no longer supported.');
     }
 
     const headerMap = buildHeaderMap(headers);
@@ -1017,7 +1085,6 @@ export class EmployeesService {
         department: this.toNullableString(readOptionalCsvCell(row, headerMap.department)),
         email,
         employeeBudgetUsd: employeeBudgetUsd ?? 0,
-        jobTitle: this.toNullableString(readOptionalCsvCell(row, headerMap.jobTitle)),
         name: this.toNullableString(readOptionalCsvCell(row, headerMap.name)),
         policyNote: this.toNullableString(readOptionalCsvCell(row, headerMap.policyNote)),
         projectBudgetUsd,
@@ -1102,7 +1169,6 @@ export class EmployeesService {
       id: employee.id,
       invitationStatus: normalizeInvitationStatus(employee.invitationStatus),
       invitedAt: employee.invitedAt?.toISOString() ?? null,
-      jobTitle: employee.jobTitle,
       name: employee.name,
       projectCount: employee._count.projectAssignments,
       status: normalizeEmployeeStatus(employee.status),
@@ -1120,7 +1186,6 @@ export class EmployeesService {
       employeeDepartment: assignment.employee.department,
       employeeEmail: assignment.employee.email,
       employeeId: assignment.employeeId,
-      employeeJobTitle: assignment.employee.jobTitle,
       employeeName: assignment.employee.name,
       employeeStatus: normalizeEmployeeStatus(assignment.employee.status),
       id: assignment.id,
