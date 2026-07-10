@@ -3,10 +3,19 @@
 import {
   Eye,
   Info,
+  Maximize2,
+  Minimize2,
   RotateCw
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import type {
   LiveRequestRow,
@@ -15,6 +24,8 @@ import type {
 } from "@/lib/gateway/live-requests-types";
 
 export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
+const LIVE_REQUESTS_COMPACT_LIMIT = 5;
+const LIVE_REQUESTS_EXPANDED_LIMIT = 10;
 
 type LiveRequestsCardFilters = {
   budgetScopeId: string;
@@ -85,6 +96,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   const [modelOptions, setModelOptions] = useState<string[]>(() => normalizeModelOptions(initialPayload?.modelOptions));
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(!initialPayload);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -103,7 +115,8 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
           tenantId
         },
         statusFilter,
-        modelFilter
+        modelFilter,
+        isExpanded ? LIVE_REQUESTS_EXPANDED_LIMIT : LIVE_REQUESTS_COMPACT_LIMIT
       ),
     [
       budgetScopeId,
@@ -112,6 +125,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
       range,
       resolvedBy,
       tenantId,
+      isExpanded,
       modelFilter,
       statusFilter
     ]
@@ -196,140 +210,283 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
     [modelFilter, projectId, range, statusFilter, tenantId]
   );
 
+  const filterControls = (
+    <LiveRequestFilterControls
+      modelFilter={modelFilter}
+      modelOptions={modelOptions}
+      onModelFilterChange={setModelFilter}
+      onStatusFilterChange={setStatusFilter}
+      statusFilter={statusFilter}
+    />
+  );
+
   return (
-    <section className="dashboard-live-requests-panel" aria-label="Live Requests">
-      <div className="dashboard-live-requests-header">
-        <div>
+    <Dialog onOpenChange={setIsExpanded} open={isExpanded}>
+      <section className="dashboard-live-requests-panel" aria-label="Live Requests">
+        <div className="dashboard-live-requests-header">
           <div className="dashboard-live-requests-title">
             <h2>Live Requests</h2>
             <Info aria-hidden="true" size={15} strokeWidth={2.1} />
           </div>
+          <div className="dashboard-live-requests-actions">
+            {filterControls}
+            <DialogTrigger
+              aria-label="Expand live requests"
+              className="dashboard-live-requests-icon-button"
+              title="Expand live requests"
+            >
+              <Maximize2 aria-hidden="true" size={16} strokeWidth={2.2} />
+            </DialogTrigger>
+            <Link className="dashboard-live-requests-view-all" href={viewAllLogsHref}>
+              View all logs
+            </Link>
+          </div>
         </div>
-        <div className="dashboard-live-requests-actions">
-          <select
-            aria-label="Filter live requests by status"
-            onChange={(event) => setStatusFilter(event.target.value as LiveRequestStatusFilter)}
-            value={statusFilter}
-          >
-            {statusFilters.map((status) => (
-              <option key={status.value || "all"} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter live requests by model"
-            onChange={(event) => setModelFilter(event.target.value)}
-            value={modelFilter}
-          >
-            <option value="">All Models</option>
-            {modelOptions.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-          <Link className="dashboard-live-requests-view-all" href={viewAllLogsHref}>
-            View all logs
-          </Link>
-        </div>
-      </div>
 
-      {error ? (
-        <div className="dashboard-live-requests-error" role="status">
-          <span>{error}</span>
-          {rows.length > 0 ? <small>Showing last successful refresh</small> : null}
-        </div>
-      ) : null}
+        <LiveRequestsError error={error} hasRows={rows.length > 0} />
+        <LiveRequestsTable
+          isLoading={isLoading}
+          modelFilter={modelFilter}
+          projectId={projectId}
+          range={range}
+          rows={rows.slice(0, LIVE_REQUESTS_COMPACT_LIMIT)}
+          statusFilter={statusFilter}
+          tenantId={tenantId}
+        />
 
-      <div className="dashboard-live-requests-table-wrap">
-        <table className="dashboard-live-requests-table">
-          <thead>
+        <div className="dashboard-live-requests-footer">
+          <span>Showing latest {Math.min(rows.length, LIVE_REQUESTS_COMPACT_LIMIT)} requests</span>
+        </div>
+      </section>
+
+      <DialogContent
+        aria-describedby={undefined}
+        className="dashboard-live-requests-dialog"
+        showClose={false}
+      >
+        <header className="dashboard-live-requests-dialog-header">
+          <div className="dashboard-live-requests-dialog-heading">
+            <div className="dashboard-live-requests-dialog-title-row">
+              <DialogTitle>Live Requests</DialogTitle>
+              <span className="dashboard-live-requests-live-status">
+                <span aria-hidden="true" />
+                Live
+              </span>
+            </div>
+          </div>
+          <div className="dashboard-live-requests-dialog-actions">
+            {filterControls}
+            <button
+              aria-label="Refresh live requests"
+              className="dashboard-live-requests-icon-button"
+              onClick={() => void loadRequests({ silent: false })}
+              title="Refresh live requests"
+              type="button"
+            >
+              <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
+            </button>
+            <Link className="dashboard-live-requests-view-all" href={viewAllLogsHref}>
+              View all logs
+            </Link>
+            <DialogClose
+              aria-label="Collapse live requests"
+              className="dashboard-live-requests-icon-button"
+              title="Collapse live requests"
+            >
+              <Minimize2 aria-hidden="true" size={17} strokeWidth={2.2} />
+            </DialogClose>
+          </div>
+        </header>
+
+        <LiveRequestsError error={error} hasRows={rows.length > 0} />
+        <LiveRequestsTable
+          expanded
+          isLoading={isLoading}
+          modelFilter={modelFilter}
+          projectId={projectId}
+          range={range}
+          rows={rows}
+          statusFilter={statusFilter}
+          tenantId={tenantId}
+        />
+
+        <footer className="dashboard-live-requests-dialog-footer">
+          <span>Showing latest {rows.length} requests</span>
+          <span>Refreshes every second</span>
+        </footer>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LiveRequestFilterControls({
+  modelFilter,
+  modelOptions,
+  onModelFilterChange,
+  onStatusFilterChange,
+  statusFilter
+}: {
+  modelFilter: string;
+  modelOptions: string[];
+  onModelFilterChange: (value: string) => void;
+  onStatusFilterChange: (value: LiveRequestStatusFilter) => void;
+  statusFilter: LiveRequestStatusFilter;
+}) {
+  return (
+    <>
+      <select
+        aria-label="Filter live requests by status"
+        onChange={(event) => onStatusFilterChange(event.target.value as LiveRequestStatusFilter)}
+        value={statusFilter}
+      >
+        {statusFilters.map((status) => (
+          <option key={status.value || "all"} value={status.value}>
+            {status.label}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter live requests by model"
+        onChange={(event) => onModelFilterChange(event.target.value)}
+        value={modelFilter}
+      >
+        <option value="">All Models</option>
+        {modelOptions.map((model) => (
+          <option key={model} value={model}>
+            {model}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+function LiveRequestsError({ error, hasRows }: { error: string | null; hasRows: boolean }) {
+  if (!error) {
+    return null;
+  }
+
+  return (
+    <div className="dashboard-live-requests-error" role="status">
+      <span>{error}</span>
+      {hasRows ? <small>Showing last successful refresh</small> : null}
+    </div>
+  );
+}
+
+function LiveRequestsTable({
+  expanded = false,
+  isLoading,
+  modelFilter,
+  projectId,
+  range,
+  rows,
+  statusFilter,
+  tenantId
+}: {
+  expanded?: boolean;
+  isLoading: boolean;
+  modelFilter: string;
+  projectId: string;
+  range: string;
+  rows: LiveRequestRow[];
+  statusFilter: LiveRequestStatusFilter;
+  tenantId: string;
+}) {
+  return (
+    <div
+      className="dashboard-live-requests-table-wrap"
+      data-expanded={expanded ? "true" : "false"}
+    >
+      <table className="dashboard-live-requests-table">
+        <thead>
+          <tr>
+            <th>Request Time</th>
+            <th>Name</th>
+            <th>Project</th>
+            <th>Model</th>
+            <th>Status</th>
+            <th>Cache</th>
+            <th>Safety</th>
+            <th>Latency</th>
+            <th>Tokens</th>
+            <th>Cost (USD)</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {isLoading && rows.length === 0 ? (
             <tr>
-              <th>Request Time</th>
-              <th>Name</th>
-              <th>Project</th>
-              <th>Model</th>
-              <th>Status</th>
-              <th>Cache</th>
-              <th>Safety</th>
-              <th>Latency</th>
-              <th>Tokens</th>
-              <th>Cost (USD)</th>
-              <th>Actions</th>
+              <td className="dashboard-live-requests-state" colSpan={11}>
+                <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
+                Loading live requests
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {isLoading && rows.length === 0 ? (
-              <tr>
-                <td className="dashboard-live-requests-state" colSpan={11}>
-                  <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
-                  Loading live requests
-                </td>
-              </tr>
-            ) : null}
-            {!isLoading && rows.length === 0 ? (
-              <tr>
-                <td className="dashboard-live-requests-state" colSpan={11}>
-                  No recent requests for selected filters
-                </td>
-              </tr>
-            ) : null}
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{formatLiveTime(row.timestamp)}</td>
-                <td>
-                  {row.userName ? (
-                    <span title={row.userName}>{row.userName}</span>
-                  ) : (
-                    <span className="dashboard-live-muted-value">-</span>
+          ) : null}
+          {!isLoading && rows.length === 0 ? (
+            <tr>
+              <td className="dashboard-live-requests-state" colSpan={11}>
+                No recent requests for selected filters
+              </td>
+            </tr>
+          ) : null}
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{formatLiveTime(row.timestamp)}</td>
+              <td>
+                {row.userName ? (
+                  <span title={row.userName}>{row.userName}</span>
+                ) : (
+                  <span className="dashboard-live-muted-value">-</span>
+                )}
+              </td>
+              <td>
+                <span
+                  className="dashboard-live-project-pill"
+                  style={projectPillStyle(row.projectId || row.projectName)}
+                  title={row.projectId}
+                >
+                  {row.projectName}
+                </span>
+              </td>
+              <td>
+                <LiveProviderModel row={row} />
+              </td>
+              <td>
+                <span className="dashboard-live-status-badge" data-status-tone={statusTone(row)}>
+                  {row.statusLabel}
+                </span>
+              </td>
+              <td>
+                <OptionalBadge kind="cache" value={row.cacheStatus} />
+              </td>
+              <td>
+                <OptionalBadge kind="safety" value={row.safetyAction} />
+              </td>
+              <td>{formatLiveLatency(row.latencyMs)}</td>
+              <td>{integerFormatter.format(row.totalTokens)}</td>
+              <td>{compactUsdFormatter.format(row.costUsd)}</td>
+              <td>
+                <Link
+                  aria-label={`Open request log ${row.requestId}`}
+                  className="dashboard-live-action-link"
+                  href={requestLogsHref(
+                    tenantId,
+                    range,
+                    statusFilter,
+                    modelFilter,
+                    projectId,
+                    row.requestId
                   )}
-                </td>
-                <td>
-                  <span
-                    className="dashboard-live-project-pill"
-                    style={projectPillStyle(row.projectId || row.projectName)}
-                    title={row.projectId}
-                  >
-                    {row.projectName}
-                  </span>
-                </td>
-                <td>
-                  <LiveProviderModel row={row} />
-                </td>
-                <td>
-                  <span className="dashboard-live-status-badge" data-status-tone={statusTone(row)}>
-                    {row.statusLabel}
-                  </span>
-                </td>
-                <td>
-                  <OptionalBadge kind="cache" value={row.cacheStatus} />
-                </td>
-                <td>
-                  <OptionalBadge kind="safety" value={row.safetyAction} />
-                </td>
-                <td>{formatLiveLatency(row.latencyMs)}</td>
-                <td>{integerFormatter.format(row.totalTokens)}</td>
-                <td>{compactUsdFormatter.format(row.costUsd)}</td>
-                <td>
-                  <Link
-                    aria-label={`Open request log ${row.requestId}`}
-                    className="dashboard-live-action-link"
-                    href={requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId, row.requestId)}
-                  >
-                    <Eye aria-hidden="true" size={15} strokeWidth={2.2} />
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="dashboard-live-requests-footer">
-        <span>Showing latest 5 requests</span>
-      </div>
-    </section>
+                >
+                  <Eye aria-hidden="true" size={15} strokeWidth={2.2} />
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -372,9 +529,11 @@ function stableHash(value: string) {
 function liveRequestsApiQuery(
   filters: LiveRequestsCardFilters,
   status: LiveRequestStatusFilter,
-  model: string
+  model: string,
+  limit: number
 ) {
   const query = new URLSearchParams({
+    limit: String(limit),
     range: filters.range,
     tenantId: filters.tenantId
   });

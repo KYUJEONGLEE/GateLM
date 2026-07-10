@@ -18,6 +18,7 @@ import type {
 export type LiveOverviewRequestsFilters = {
   budgetScopeId?: string;
   budgetScopeType?: string;
+  limit?: number;
   model?: string;
   projectId?: string;
   range?: LiveDashboardRange;
@@ -31,7 +32,8 @@ export type LiveOverviewRequestsOptions = {
   projects?: ProjectRecord[];
 };
 
-const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
+const LIVE_REQUESTS_DEFAULT_DISPLAY_LIMIT = 5;
+const LIVE_REQUESTS_MAX_DISPLAY_LIMIT = 10;
 const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
 export async function getLiveOverviewRequests(
   tenantId: string,
@@ -39,6 +41,7 @@ export async function getLiveOverviewRequests(
   options: LiveOverviewRequestsOptions = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const liveRange = getDashboardLiveRange(filters.range);
+  const displayLimit = normalizeDisplayLimit(filters.limit);
   const [projectsModel, employees] = await Promise.all([
     options.projects ? Promise.resolve(undefined) : getProjectsModel(tenantId),
     getTenantEmployees(tenantId)
@@ -49,7 +52,9 @@ export async function getLiveOverviewRequests(
     budgetScopeId: filters.budgetScopeId,
     budgetScopeType: filters.budgetScopeType,
     from: liveRange.from,
-    limit: filters.model ? LIVE_REQUESTS_FILTER_FETCH_LIMIT : LIVE_REQUESTS_DISPLAY_LIMIT,
+    limit: filters.model
+      ? Math.max(displayLimit, LIVE_REQUESTS_FILTER_FETCH_LIMIT)
+      : displayLimit,
     projectId: filters.projectId,
     projectIds,
     resolvedBy: filters.resolvedBy,
@@ -68,7 +73,7 @@ export async function getLiveOverviewRequests(
   const modelFilter = normalizeModelFilter(filters.model);
   const rows = allRows
     .filter((row) => !modelFilter || normalizeModelFilter(row.model) === modelFilter)
-    .slice(0, LIVE_REQUESTS_DISPLAY_LIMIT);
+    .slice(0, displayLimit);
   const modelOptions = buildModelOptions(allRows, filters.model);
 
   return {
@@ -77,6 +82,14 @@ export async function getLiveOverviewRequests(
     projectNameSource: options.projectNameSource ?? projectsModel?.source ?? "control-plane",
     rows
   };
+}
+
+function normalizeDisplayLimit(value: number | undefined) {
+  if (!Number.isInteger(value) || !value || value < 1) {
+    return LIVE_REQUESTS_DEFAULT_DISPLAY_LIMIT;
+  }
+
+  return Math.min(value, LIVE_REQUESTS_MAX_DISPLAY_LIMIT);
 }
 
 function buildProjectNameMap(projects: ProjectRecord[]) {

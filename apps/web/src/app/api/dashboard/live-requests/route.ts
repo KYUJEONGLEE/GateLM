@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     {
       budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
       budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
+      limit: normalizeLimit(query.get("limit")),
       model: optionalQueryValue(query, "model"),
       projectId: effectiveProjectId ?? requestedProjectId,
       range: normalizeRange(query.get("range")),
@@ -77,4 +78,14 @@ function normalizeStatus(value: string | null): LiveRequestStatusFilter {
   }
 
   return "";
+}
+
+function normalizeLimit(value: string | null) {
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return undefined;
+  }
+
+  return Math.min(parsed, 10);
 }
