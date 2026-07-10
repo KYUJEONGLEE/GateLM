@@ -116,7 +116,7 @@ Likely files:
 | Gateway config | `apps/gateway-core/internal/config/config.go`, `apps/gateway-core/cmd/gateway/main.go` |
 | Control Plane provider catalog | `apps/control-plane-api/src/modules/provider-connections/**`, `apps/control-plane-api/src/modules/runtime-configs/**` |
 | Control Plane DB | `apps/control-plane-api/prisma/schema.prisma`, `apps/control-plane-api/prisma/migrations/**`, `db/migrations/004_create_provider_and_models.sql` |
-| Env examples | `apps/control-plane-api/.env.example`, Gateway env docs/config if present |
+| Env examples | root `.env.example`, Gateway env docs/config if present |
 | Docs/schema | `docs/v2.0.0/schemas/provider-catalog.schema.json`, `docs/v2.0.0/fixtures/provider-catalog.fixture.json` |
 
 Tasks:
