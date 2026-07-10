@@ -41,6 +41,12 @@ export type EmployeeInvitationStatus =
 export type ProjectEmployeeStatus =
   (typeof PROJECT_EMPLOYEE_STATUS_VALUES)[number];
 
+export type ProjectEmployeeQuotaStatus =
+  | 'exceeded'
+  | 'not_configured'
+  | 'warning'
+  | 'within_limit';
+
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
@@ -272,6 +278,11 @@ export interface ProjectEmployeeAssignmentResponseDto {
   invitationStatus: EmployeeInvitationStatus;
   monthlyBudgetLimitMicroUsd: number;
   monthlyBudgetLimitUsd: number;
+  monthlyRemainingUsd: number;
+  monthlyUsedMicroUsd: number;
+  monthlyUsedUsd: number;
+  quotaStatus: ProjectEmployeeQuotaStatus;
+  quotaUsagePercent: number;
   warningThresholdPercent: number;
   policy: ProjectEmployeePolicyDto;
   status: ProjectEmployeeStatus;

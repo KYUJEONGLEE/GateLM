@@ -14,6 +14,11 @@ type EmployeePolicyReader = {
   toProjectEmployeePolicy(
     policy: Record<string, unknown>,
   ): ProjectEmployeePolicyDto;
+  toProjectEmployeeQuotaStatus(
+    limitMicroUsd: bigint,
+    usedMicroUsd: bigint,
+    warningThresholdPercent: number,
+  ): 'exceeded' | 'not_configured' | 'warning' | 'within_limit';
 };
 
 describe('EmployeesService employee rate limit policy', () => {
@@ -61,4 +66,18 @@ describe('EmployeesService employee rate limit policy', () => {
       rateLimit: { enabled: true, limit: 5, windowSeconds: 30 },
     });
   });
+
+  it.each([
+    { expected: 'not_configured', limit: 0n, used: 0n, warning: 80 },
+    { expected: 'within_limit', limit: 100n, used: 79n, warning: 80 },
+    { expected: 'warning', limit: 100n, used: 80n, warning: 80 },
+    { expected: 'exceeded', limit: 100n, used: 100n, warning: 80 },
+  ])(
+    'returns $expected for the employee monthly quota',
+    ({ expected, limit, used, warning }) => {
+      expect(
+        policyReader.toProjectEmployeeQuotaStatus(limit, used, warning),
+      ).toBe(expected);
+    },
+  );
 });

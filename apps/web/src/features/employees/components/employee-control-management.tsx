@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Gauge,
   Save,
   Upload,
   UserPlus,
@@ -21,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
@@ -237,10 +239,12 @@ const projectEmployeeText: Record<
     disableConfirmTitle: string;
     email: string;
     employeeList: string;
+    enabled: string;
     employees: string;
     fixtureFallback: string;
     management: string;
     modelKeys: string;
+    monthlyUsage: string;
     name: string;
     noAssignments: string;
     noCandidates: string;
@@ -249,7 +253,13 @@ const projectEmployeeText: Record<
     note: string;
     policySettings: string;
     providerIds: string;
+    quotaExceeded: string;
+    quotaNotConfigured: string;
+    quotaWarning: string;
+    quotaWithinLimit: string;
+    rateLimit: string;
     remaining: string;
+    requestsPerMinute: string;
     save: string;
     searchEmployee: string;
     selectDepartment: string;
@@ -272,9 +282,11 @@ const projectEmployeeText: Record<
     email: "Email",
     employeeList: "Employee list",
     employees: "Employees",
+    enabled: "Enabled",
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     management: "Management",
     modelKeys: "Models",
+    monthlyUsage: "Used this month",
     name: "Name",
     noAssignments: "No project employees.",
     noCandidates: "No employees available for assignment.",
@@ -283,7 +295,13 @@ const projectEmployeeText: Record<
     note: "Note",
     policySettings: "Policy settings",
     providerIds: "Providers",
+    quotaExceeded: "High-cost models restricted",
+    quotaNotConfigured: "No quota",
+    quotaWarning: "Near limit",
+    quotaWithinLimit: "Within limit",
+    rateLimit: "Employee rate limit",
     remaining: "Remaining",
+    requestsPerMinute: "Requests per minute",
     save: "Save",
     searchEmployee: "Search by name or email",
     selectDepartment: "Select department",
@@ -305,9 +323,11 @@ const projectEmployeeText: Record<
     email: "이메일",
     employeeList: "직원 목록",
     employees: "직원",
+    enabled: "활성화",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
     management: "관리",
     modelKeys: "모델",
+    monthlyUsage: "이번 달 사용액",
     name: "이름",
     noAssignments: "Project에 배정된 직원이 없습니다.",
     noCandidates: "배정할 수 있는 직원이 없습니다.",
@@ -316,7 +336,13 @@ const projectEmployeeText: Record<
     note: "메모",
     policySettings: "정책 수정",
     providerIds: "Provider",
+    quotaExceeded: "고비용 모델 제한",
+    quotaNotConfigured: "한도 미설정",
+    quotaWarning: "한도 임박",
+    quotaWithinLimit: "정상",
+    rateLimit: "개인 Rate Limit",
     remaining: "잔여",
+    requestsPerMinute: "분당 요청 한도",
     save: "저장",
     searchEmployee: "이름 또는 이메일 검색",
     selectDepartment: "부서 선택",
@@ -388,6 +414,9 @@ export function ProjectEmployeeAssignmentSection({
     allowedProviderConnectionIds: "",
     monthlyBudgetLimitUsd: 0,
     policyNote: "",
+    rateLimitEnabled: false,
+    rateLimitLimit: 60,
+    rateLimitWindowSeconds: 60,
     warningThresholdPercent: 80
   });
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -450,6 +479,10 @@ export function ProjectEmployeeAssignmentSection({
         existingAssignment?.policy.allowedProviderConnectionIds.join(", ") ?? "",
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
       policyNote: existingAssignment?.policy.note ?? "",
+      rateLimitEnabled: existingAssignment?.policy.rateLimit.enabled ?? false,
+      rateLimitLimit: existingAssignment?.policy.rateLimit.limit ?? 60,
+      rateLimitWindowSeconds:
+        existingAssignment?.policy.rateLimit.windowSeconds ?? 60,
       warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
     });
   }, [assignments, selectedEmployeeId]);
@@ -462,6 +495,29 @@ export function ProjectEmployeeAssignmentSection({
   const selectedEmployee = projectEmployees.find(
     (employee) => employee.id === selectedEmployeeId
   );
+  const selectedAssignment = selectedEmployeeId
+    ? activeAssignmentByEmployeeId.get(selectedEmployeeId)
+    : undefined;
+  const selectedQuotaStatus = selectedAssignment?.quotaStatus ?? "not_configured";
+  const selectedQuotaStatusLabel = {
+    exceeded: text.quotaExceeded,
+    not_configured: text.quotaNotConfigured,
+    warning: text.quotaWarning,
+    within_limit: text.quotaWithinLimit
+  }[selectedQuotaStatus];
+  const selectedQuotaProgress = Math.min(
+    Math.max(selectedAssignment?.quotaUsagePercent ?? 0, 0),
+    100
+  );
+  const assignmentValuesInvalid =
+    !Number.isFinite(assignmentValues.monthlyBudgetLimitUsd) ||
+    assignmentValues.monthlyBudgetLimitUsd < 0 ||
+    !Number.isInteger(assignmentValues.rateLimitLimit) ||
+    assignmentValues.rateLimitLimit < 1 ||
+    assignmentValues.rateLimitLimit > 100000 ||
+    !Number.isInteger(assignmentValues.warningThresholdPercent) ||
+    assignmentValues.warningThresholdPercent < 0 ||
+    assignmentValues.warningThresholdPercent > 100;
   const employeeToDisable = assignmentToDisable
     ? model.employees.find((employee) => employee.id === assignmentToDisable.employeeId)
     : undefined;
@@ -485,6 +541,10 @@ export function ProjectEmployeeAssignmentSection({
         existingAssignment?.policy.allowedProviderConnectionIds.join(", ") ?? "",
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
       policyNote: existingAssignment?.policy.note ?? "",
+      rateLimitEnabled: existingAssignment?.policy.rateLimit.enabled ?? false,
+      rateLimitLimit: existingAssignment?.policy.rateLimit.limit ?? 60,
+      rateLimitWindowSeconds:
+        existingAssignment?.policy.rateLimit.windowSeconds ?? 60,
       warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
     });
     setSubmitState({ message: "", status: "idle" });
@@ -508,6 +568,10 @@ export function ProjectEmployeeAssignmentSection({
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
       policyNote: existingAssignment?.policy.note ?? "",
       projectId: project.id,
+      rateLimitEnabled: existingAssignment?.policy.rateLimit.enabled ?? false,
+      rateLimitLimit: existingAssignment?.policy.rateLimit.limit ?? 60,
+      rateLimitWindowSeconds:
+        existingAssignment?.policy.rateLimit.windowSeconds ?? 60,
       status: "active",
       warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
     };
@@ -552,6 +616,9 @@ export function ProjectEmployeeAssignmentSection({
       monthlyBudgetLimitUsd: assignmentValues.monthlyBudgetLimitUsd,
       policyNote: assignmentValues.policyNote,
       projectId: project.id,
+      rateLimitEnabled: assignmentValues.rateLimitEnabled,
+      rateLimitLimit: assignmentValues.rateLimitLimit,
+      rateLimitWindowSeconds: assignmentValues.rateLimitWindowSeconds,
       status: "active",
       warningThresholdPercent: assignmentValues.warningThresholdPercent
     };
@@ -578,7 +645,7 @@ export function ProjectEmployeeAssignmentSection({
     const assignment = payload.assignment;
     setAssignments((current) => upsertAssignment(current, assignment));
     setSubmitState({
-      message: locale === "ko" ? "직원 한도가 저장되었습니다." : "Employee limit saved.",
+      message: locale === "ko" ? "직원 정책이 저장되었습니다." : "Employee policy saved.",
       status: "success"
     });
     setIsEmployeePolicyDialogOpen(false);
@@ -694,7 +761,22 @@ export function ProjectEmployeeAssignmentSection({
                       </button>
                     </td>
                     <td>{employee.department?.trim() || "-"}</td>
-                    <td>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</td>
+                    <td>
+                      <div className="project-employee-quota-cell">
+                        <strong>
+                          {formatBudgetUsd(assignment.monthlyUsedUsd)} /{" "}
+                          {formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}
+                        </strong>
+                        <small data-quota-status={assignment.quotaStatus}>
+                          {{
+                            exceeded: text.quotaExceeded,
+                            not_configured: text.quotaNotConfigured,
+                            warning: text.quotaWarning,
+                            within_limit: text.quotaWithinLimit
+                          }[assignment.quotaStatus]}
+                        </small>
+                      </div>
+                    </td>
                     <td className="project-employee-table-action">
                       <Button
                         disabled={pendingAction !== null}
@@ -741,6 +823,26 @@ export function ProjectEmployeeAssignmentSection({
               <AlertDescription>{submitState.message}</AlertDescription>
             </Alert>
           ) : null}
+          <div className="employee-policy-usage-summary" data-quota-status={selectedQuotaStatus}>
+            <div className="employee-policy-usage-heading">
+              <span>{text.monthlyUsage}</span>
+              <Badge variant="outline">{selectedQuotaStatusLabel}</Badge>
+            </div>
+            <strong>
+              {formatBudgetUsd(selectedAssignment?.monthlyUsedUsd ?? 0)} /{" "}
+              {formatBudgetUsd(selectedAssignment?.monthlyBudgetLimitUsd ?? 0)}
+            </strong>
+            <div
+              aria-label={text.monthlyUsage}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={Math.round(selectedQuotaProgress)}
+              className="employee-policy-quota-progress"
+              role="progressbar"
+            >
+              <span style={{ width: `${selectedQuotaProgress}%` }} />
+            </div>
+          </div>
           <div className="modal-form-grid project-employee-policy-fields">
             <label className="policy-field">
               <span>{text.budget}</span>
@@ -755,6 +857,41 @@ export function ProjectEmployeeAssignmentSection({
                 step="0.01"
                 type="number"
                 value={assignmentValues.monthlyBudgetLimitUsd}
+              />
+            </label>
+            <div className="employee-rate-limit-control">
+              <div className="employee-rate-limit-heading">
+                <Gauge aria-hidden="true" size={18} />
+                <span>{text.rateLimit}</span>
+              </div>
+              <label className="employee-rate-limit-toggle">
+                <Switch
+                  checked={assignmentValues.rateLimitEnabled}
+                  onCheckedChange={(checked) =>
+                    setAssignmentValues((current) => ({
+                      ...current,
+                      rateLimitEnabled: checked
+                    }))
+                  }
+                />
+                <span>{text.enabled}</span>
+              </label>
+            </div>
+            <label className="policy-field">
+              <span>{text.requestsPerMinute}</span>
+              <input
+                disabled={!assignmentValues.rateLimitEnabled}
+                max={100000}
+                min={1}
+                onChange={(event) =>
+                  setAssignmentValues((current) => ({
+                    ...current,
+                    rateLimitLimit: Number(event.target.value)
+                  }))
+                }
+                step={1}
+                type="number"
+                value={assignmentValues.rateLimitLimit}
               />
             </label>
             <label className="policy-field">
@@ -826,7 +963,11 @@ export function ProjectEmployeeAssignmentSection({
               {text.cancel}
             </Button>
             <Button
-              disabled={pendingAction !== null || !selectedEmployeeId}
+              disabled={
+                pendingAction !== null ||
+                !selectedEmployeeId ||
+                assignmentValuesInvalid
+              }
               onClick={() => void submitAssignment()}
               type="button"
             >

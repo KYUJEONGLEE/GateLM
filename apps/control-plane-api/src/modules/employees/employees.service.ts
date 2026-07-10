@@ -37,6 +37,7 @@ import {
   ListEmployeesQueryDto,
   ProjectEmployeeAssignmentResponseDto,
   ProjectEmployeePolicyDto,
+  ProjectEmployeeQuotaStatus,
   ProjectEmployeesResponseDto,
   ProjectEmployeeStatus,
   UpdateEmployeeDto,
@@ -141,6 +142,11 @@ type PreparedOrganizationAssignment = {
   employee: EmployeeWithProjectCount;
   projectEntry: ProjectImportEntry;
   row: ParsedOrganizationCsvRow;
+};
+
+type ProjectEmployeeUsageRow = {
+  employeeId: string;
+  usedMicroUsd: bigint;
 };
 
 @Injectable()
@@ -713,11 +719,17 @@ export class EmployeesService {
     projectId: string,
   ): Promise<ProjectEmployeesResponseDto> {
     const project = await this.getProjectOrThrow(projectId);
-    const assignments = await this.prisma.projectEmployeeAssignment.findMany({
-      where: { projectId },
-      include: { employee: true },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+    const [assignments, usageRows] = await Promise.all([
+      this.prisma.projectEmployeeAssignment.findMany({
+        where: { projectId },
+        include: { employee: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      }),
+      this.listProjectEmployeeMonthlyUsage(project.tenantId, project.id),
+    ]);
+    const usageByEmployeeId = new Map(
+      usageRows.map((row) => [row.employeeId, row.usedMicroUsd]),
+    );
     const activeAssignments = assignments.filter(
       (assignment) => assignment.status === 'active',
     );
@@ -735,7 +747,10 @@ export class EmployeesService {
         remainingBudgetUsd: projectBudgetUsd - assignedBudgetUsd,
       },
       data: assignments.map((assignment) =>
-        this.toProjectEmployeeAssignmentResponse(assignment),
+        this.toProjectEmployeeAssignmentResponse(
+          assignment,
+          usageByEmployeeId.get(assignment.employeeId) ?? 0n,
+        ),
       ),
       projectId: project.id,
       tenantId: project.tenantId,
@@ -834,7 +849,29 @@ export class EmployeesService {
             include: { employee: true },
           });
 
-      return this.toProjectEmployeeAssignmentResponse(assignment);
+      const usageRows = await tx.$queryRaw<ProjectEmployeeUsageRow[]>`
+        SELECT
+          ${employee.id}::text AS "employeeId",
+          COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd"
+        FROM employees employee
+        LEFT JOIN p0_llm_invocation_logs log
+          ON log.tenant_id = ${project.tenantId}::uuid
+         AND log.project_id = ${project.id}::uuid
+         AND log.created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+         AND log.created_at < (date_trunc('month', now() AT TIME ZONE 'UTC') + interval '1 month') AT TIME ZONE 'UTC'
+         AND (
+           log.end_user_id = employee.id::text
+           OR log.end_user_id = employee."userId"::text
+           OR lower(log.end_user_id) = lower(employee.email)
+         )
+        WHERE employee.id = ${employee.id}::uuid
+        GROUP BY employee.id
+      `;
+
+      return this.toProjectEmployeeAssignmentResponse(
+        assignment,
+        usageRows[0]?.usedMicroUsd ?? 0n,
+      );
     });
   }
 
@@ -1249,7 +1286,19 @@ export class EmployeesService {
 
   private toProjectEmployeeAssignmentResponse(
     assignment: ProjectEmployeeWithEmployee,
+    monthlyUsedMicroUsd = 0n,
   ): ProjectEmployeeAssignmentResponseDto {
+    const monthlyBudgetLimitMicroUsd = assignment.monthlyBudgetLimitMicroUsd;
+    const monthlyRemainingMicroUsd =
+      monthlyBudgetLimitMicroUsd > monthlyUsedMicroUsd
+        ? monthlyBudgetLimitMicroUsd - monthlyUsedMicroUsd
+        : 0n;
+    const quotaUsagePercent =
+      monthlyBudgetLimitMicroUsd > 0n
+        ? (Number(monthlyUsedMicroUsd) * 100) /
+          Number(monthlyBudgetLimitMicroUsd)
+        : 0;
+
     return {
       createdAt: assignment.createdAt.toISOString(),
       employeeDepartment: assignment.employee.department,
@@ -1261,17 +1310,75 @@ export class EmployeesService {
       invitationStatus: normalizeInvitationStatus(
         assignment.employee.invitationStatus,
       ),
-      monthlyBudgetLimitMicroUsd: Number(assignment.monthlyBudgetLimitMicroUsd),
+      monthlyBudgetLimitMicroUsd: Number(monthlyBudgetLimitMicroUsd),
       monthlyBudgetLimitUsd: this.microUsdToUsdNumber(
-        assignment.monthlyBudgetLimitMicroUsd,
+        monthlyBudgetLimitMicroUsd,
       ),
+      monthlyRemainingUsd: this.microUsdToUsdNumber(
+        monthlyRemainingMicroUsd,
+      ),
+      monthlyUsedMicroUsd: Number(monthlyUsedMicroUsd),
+      monthlyUsedUsd: this.microUsdToUsdNumber(monthlyUsedMicroUsd),
       policy: this.toProjectEmployeePolicy(assignment.policy),
       projectId: assignment.projectId,
+      quotaStatus: this.toProjectEmployeeQuotaStatus(
+        monthlyBudgetLimitMicroUsd,
+        monthlyUsedMicroUsd,
+        assignment.warningThresholdPercent,
+      ),
+      quotaUsagePercent,
       status: normalizeProjectEmployeeStatus(assignment.status),
       tenantId: assignment.tenantId,
       updatedAt: assignment.updatedAt.toISOString(),
       warningThresholdPercent: assignment.warningThresholdPercent,
     };
+  }
+
+  private async listProjectEmployeeMonthlyUsage(
+    tenantId: string,
+    projectId: string,
+  ): Promise<ProjectEmployeeUsageRow[]> {
+    return this.prisma.$queryRaw<ProjectEmployeeUsageRow[]>`
+      SELECT
+        employee.id::text AS "employeeId",
+        COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd"
+      FROM project_employee_assignments assignment
+      JOIN employees employee
+        ON employee.id = assignment."employeeId"
+       AND employee."tenantId" = assignment."tenantId"
+      LEFT JOIN p0_llm_invocation_logs log
+        ON log.tenant_id = ${tenantId}::uuid
+       AND log.project_id = ${projectId}::uuid
+       AND log.created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+       AND log.created_at < (date_trunc('month', now() AT TIME ZONE 'UTC') + interval '1 month') AT TIME ZONE 'UTC'
+       AND (
+         log.end_user_id = employee.id::text
+         OR log.end_user_id = employee."userId"::text
+         OR lower(log.end_user_id) = lower(employee.email)
+       )
+      WHERE assignment."tenantId" = ${tenantId}::uuid
+        AND assignment."projectId" = ${projectId}::uuid
+      GROUP BY employee.id
+    `;
+  }
+
+  private toProjectEmployeeQuotaStatus(
+    limitMicroUsd: bigint,
+    usedMicroUsd: bigint,
+    warningThresholdPercent: number,
+  ): ProjectEmployeeQuotaStatus {
+    if (limitMicroUsd <= 0n) {
+      return 'not_configured';
+    }
+    if (usedMicroUsd >= limitMicroUsd) {
+      return 'exceeded';
+    }
+    const warningAt =
+      (limitMicroUsd * BigInt(warningThresholdPercent)) / 100n;
+    if (warningThresholdPercent > 0 && usedMicroUsd >= warningAt) {
+      return 'warning';
+    }
+    return 'within_limit';
   }
 
   private toNullableString(value: string | null | undefined): string | null {

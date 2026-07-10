@@ -3,6 +3,11 @@ import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 export type EmployeeStatus = "active" | "archived" | "staged" | "suspended";
 export type EmployeeInvitationStatus = "accepted" | "not_sent" | "pending" | "revoked";
 export type ProjectEmployeeStatus = "active" | "disabled";
+export type ProjectEmployeeQuotaStatus =
+  | "exceeded"
+  | "not_configured"
+  | "warning"
+  | "within_limit";
 
 export type EmployeeRecord = {
   acceptedAt: string | null;
@@ -51,6 +56,13 @@ export type ProjectEmployeePolicy = {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
   note: string | null;
+  rateLimit: ProjectEmployeeRateLimitPolicy;
+};
+
+export type ProjectEmployeeRateLimitPolicy = {
+  enabled: boolean;
+  limit: number;
+  windowSeconds: number;
 };
 
 export type ProjectEmployeeAssignmentRecord = {
@@ -64,8 +76,13 @@ export type ProjectEmployeeAssignmentRecord = {
   invitationStatus: EmployeeInvitationStatus;
   monthlyBudgetLimitMicroUsd: number;
   monthlyBudgetLimitUsd: number;
+  monthlyRemainingUsd: number;
+  monthlyUsedMicroUsd: number;
+  monthlyUsedUsd: number;
   policy: ProjectEmployeePolicy;
   projectId: string;
+  quotaStatus: ProjectEmployeeQuotaStatus;
+  quotaUsagePercent: number;
   status: ProjectEmployeeStatus;
   tenantId: string;
   updatedAt: string;
@@ -135,6 +152,9 @@ export type ProjectEmployeeAssignmentValues = {
   monthlyBudgetLimitUsd: number;
   policyNote: string;
   projectId: string;
+  rateLimitEnabled: boolean;
+  rateLimitLimit: number;
+  rateLimitWindowSeconds: number;
   status?: ProjectEmployeeStatus;
   warningThresholdPercent: number;
 };

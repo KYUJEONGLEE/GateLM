@@ -15527,6 +15527,33 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   gap: 6px;
 }
 
+.project-employee-quota-cell {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.project-employee-quota-cell strong {
+  color: var(--foreground);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.project-employee-quota-cell small {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.project-employee-quota-cell small[data-quota-status="warning"] {
+  color: var(--warning-text);
+}
+
+.project-employee-quota-cell small[data-quota-status="exceeded"] {
+  color: var(--danger-text);
+}
+
 .project-department-employee {
   display: grid;
   min-width: 0;
@@ -15591,6 +15618,59 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   font-weight: var(--font-weight-medium);
 }
 
+.employee-policy-usage-summary {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.employee-policy-usage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.employee-policy-usage-summary > strong {
+  color: var(--foreground);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.employee-policy-quota-progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--muted);
+}
+
+.employee-policy-quota-progress > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-strong);
+  transition: width 180ms ease;
+}
+
+.employee-policy-usage-summary[data-quota-status="warning"]
+  .employee-policy-quota-progress
+  > span {
+  background: var(--warning);
+}
+
+.employee-policy-usage-summary[data-quota-status="exceeded"]
+  .employee-policy-quota-progress
+  > span {
+  background: var(--danger);
+}
+
 .employee-policy-dialog .project-employee-policy-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 280px));
@@ -15619,6 +15699,48 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   color: var(--foreground);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-medium);
+}
+
+.employee-rate-limit-control {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  align-self: end;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.employee-rate-limit-heading,
+.employee-rate-limit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employee-rate-limit-heading {
+  color: var(--foreground);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.employee-rate-limit-heading svg {
+  color: var(--accent-strong);
+}
+
+.employee-rate-limit-toggle {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.employee-policy-dialog .policy-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .employee-policy-dialog .application-budget-summary {
