@@ -34,6 +34,7 @@
   --success-border: #bbf7d0;
   --success-text: #166534;
   --warning: #b45309;
+  --warning-indicator: #f59e0b;
   --warning-soft: #fffbeb;
   --warning-border: #fde68a;
   --warning-text: #92400e;
@@ -41,6 +42,22 @@
   --danger-soft: #fee2e2;
   --danger-border: #fecaca;
   --danger-text: #991b1b;
+  --policy-redact-soft: #dbeafe;
+  --policy-redact-border: #60a5fa;
+  --policy-redact-text: #1d4ed8;
+  --policy-redact-hover: #bfdbfe;
+  --policy-redact-hover-border: #2563eb;
+  --policy-block-soft: #fee2e2;
+  --policy-block-border: #f87171;
+  --policy-block-text: #b91c1c;
+  --policy-block-hover: #fecaca;
+  --policy-block-hover-border: #dc2626;
+  --enforcement-disabled-background: var(--danger);
+  --enforcement-disabled-foreground: #ffffff;
+  --enforcement-warn-background: #facc15;
+  --enforcement-warn-foreground: #422006;
+  --enforcement-block-background: #111111;
+  --enforcement-block-foreground: #ffffff;
   --neutral-soft: #f4f6f8;
   --neutral-border: #e2e8f0;
   --neutral-text: #5b6472;
@@ -123,6 +140,7 @@ html[data-theme="dark"] {
   --success-border: rgba(48, 209, 88, 0.28);
   --success-text: #b7f7c7;
   --warning: #ffd166;
+  --warning-indicator: #ffd166;
   --warning-soft: rgba(255, 209, 102, 0.12);
   --warning-border: rgba(255, 209, 102, 0.3);
   --warning-text: #ffe6a6;
@@ -130,6 +148,22 @@ html[data-theme="dark"] {
   --danger-soft: rgba(255, 107, 107, 0.12);
   --danger-border: rgba(255, 107, 107, 0.32);
   --danger-text: #ffc7c7;
+  --policy-redact-soft: rgb(30 58 138 / 58%);
+  --policy-redact-border: #3b82f6;
+  --policy-redact-text: #bfdbfe;
+  --policy-redact-hover: rgb(30 64 175 / 70%);
+  --policy-redact-hover-border: #60a5fa;
+  --policy-block-soft: rgb(127 29 29 / 52%);
+  --policy-block-border: #ef4444;
+  --policy-block-text: #fecaca;
+  --policy-block-hover: rgb(153 27 27 / 66%);
+  --policy-block-hover-border: #f87171;
+  --enforcement-disabled-background: var(--danger);
+  --enforcement-disabled-foreground: #0d1117;
+  --enforcement-warn-background: #ffd166;
+  --enforcement-warn-foreground: #2a1d00;
+  --enforcement-block-background: #050505;
+  --enforcement-block-foreground: #ffffff;
   --neutral-soft: #1c2128;
   --neutral-border: #30363d;
   --neutral-text: #9aa4b2;
@@ -3700,7 +3734,7 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   height: 8px;
   border: 2px solid var(--surface);
   border-radius: 999px;
-  background: #f59e0b;
+  background: var(--warning-indicator);
   box-shadow: 0 1px 3px rgb(15 23 42 / 24%);
   content: "";
 }
@@ -7626,27 +7660,15 @@ html[data-theme="dark"] .provider-card-icon[data-family="openai"] img {
 }
 
 .policy-detector-mode-button[data-action="redact"] {
-  background: #dbeafe;
-  border-color: #60a5fa;
-  color: #1d4ed8;
+  background: var(--policy-redact-soft);
+  border-color: var(--policy-redact-border);
+  color: var(--policy-redact-text);
 }
 
 .policy-detector-mode-button[data-action="block"] {
-  background: #fee2e2;
-  border-color: #f87171;
-  color: #b91c1c;
-}
-
-html[data-theme="dark"] .policy-detector-mode-button[data-action="redact"] {
-  background: rgb(30 58 138 / 58%);
-  border-color: #3b82f6;
-  color: #bfdbfe;
-}
-
-html[data-theme="dark"] .policy-detector-mode-button[data-action="block"] {
-  background: rgb(127 29 29 / 52%);
-  border-color: #ef4444;
-  color: #fecaca;
+  background: var(--policy-block-soft);
+  border-color: var(--policy-block-border);
+  color: var(--policy-block-text);
 }
 
 .policy-detector-mode-button:hover:not(:disabled),
@@ -7656,13 +7678,13 @@ html[data-theme="dark"] .policy-detector-mode-button[data-action="block"] {
 }
 
 .policy-detector-mode-button[data-action="redact"]:hover:not(:disabled) {
-  background: #bfdbfe;
-  border-color: #2563eb;
+  background: var(--policy-redact-hover);
+  border-color: var(--policy-redact-hover-border);
 }
 
 .policy-detector-mode-button[data-action="block"]:hover:not(:disabled) {
-  background: #fecaca;
-  border-color: #dc2626;
+  background: var(--policy-block-hover);
+  border-color: var(--policy-block-hover-border);
 }
 
 .policy-detector-mode-button:disabled {
@@ -16486,7 +16508,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .project-policy-general-tab.management-line-content
   > .gateway-api-key-section
   .gateway-api-key-heading h3 {
-  font-size: 26px;
+  font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
 }
 
@@ -16536,7 +16558,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   border: 0;
   background: transparent;
   color: var(--foreground);
-  font-size: 28px;
+  font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   outline: 0;
 }
@@ -16571,7 +16593,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .project-general-budget-input > span {
   color: var(--foreground);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 26px;
+  font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
 }
 
@@ -16596,7 +16618,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .project-general-budget-input
   input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 30px;
+  font-size: var(--font-size-2xl);
 }
 
 .project-general-status-input > span {
@@ -16686,18 +16708,18 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .budget-enforcement-options button[data-active="true"][data-mode="disabled"] {
-  background: var(--danger);
-  color: #ffffff;
+  background: var(--enforcement-disabled-background);
+  color: var(--enforcement-disabled-foreground);
 }
 
 .budget-enforcement-options button[data-active="true"][data-mode="warn"] {
-  background: #facc15;
-  color: #422006;
+  background: var(--enforcement-warn-background);
+  color: var(--enforcement-warn-foreground);
 }
 
 .budget-enforcement-options button[data-active="true"][data-mode="block"] {
-  background: #111111;
-  color: #ffffff;
+  background: var(--enforcement-block-background);
+  color: var(--enforcement-block-foreground);
 }
 
 .budget-enforcement-options button:disabled {

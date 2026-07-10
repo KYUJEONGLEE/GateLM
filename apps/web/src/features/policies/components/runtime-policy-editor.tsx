@@ -31,6 +31,7 @@ import type {
   SubmitState
 } from "./runtime-policy-editor-types";
 import {
+  areRuntimePolicyDraftValuesEqual,
   getRoutingProviderOptions,
   getSelectedRoutingProviderConnections,
   getSelectedRoutingProviderNames,
@@ -499,7 +500,7 @@ export function RuntimePolicyEditor({
     setSavedDraftValues(nextDraftValues);
   }, [model.activeConfig, model.applicationId, model.providerConnections.available]);
   const hasUnsavedChanges = useMemo(
-    () => JSON.stringify(draftValues) !== JSON.stringify(savedDraftValues),
+    () => !areRuntimePolicyDraftValuesEqual(draftValues, savedDraftValues),
     [draftValues, savedDraftValues]
   );
   const hasActiveApiKey = activeApiKeyCount > 0;
