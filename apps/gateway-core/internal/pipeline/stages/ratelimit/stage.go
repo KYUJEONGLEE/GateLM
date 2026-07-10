@@ -48,10 +48,23 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	if gatewayCtx.Runtime.HasRateLimitConfig {
 		config = mergeRuntimeRateLimitConfig(s.config, gatewayCtx.Runtime.RateLimitConfig)
 	}
+	if gatewayCtx.Runtime.HasEmployeePolicy &&
+		gatewayCtx.Runtime.EmployeePolicy.RateLimit.Enabled &&
+		gatewayCtx.Identity.EmployeeID != "" {
+		employeeRateLimit := gatewayCtx.Runtime.EmployeePolicy.RateLimit
+		config = ratelimit.NormalizeConfig(ratelimit.Config{
+			Enabled:       true,
+			Scope:         ratelimit.ScopeEmployee,
+			Algorithm:     s.config.Algorithm,
+			WindowSeconds: employeeRateLimit.WindowSeconds,
+			Limit:         employeeRateLimit.Limit,
+		})
+	}
 	rateLimitReq := ratelimit.Request{
 		TenantID:      gatewayCtx.Identity.TenantID,
 		ProjectID:     gatewayCtx.Identity.ProjectID,
 		ApplicationID: gatewayCtx.Identity.ApplicationID,
+		EmployeeID:    gatewayCtx.Identity.EmployeeID,
 		Config:        config,
 		Now:           nowFn(),
 	}

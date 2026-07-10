@@ -45,6 +45,8 @@ import {
 
 const DEFAULT_PROJECT_BUDGET_USD = 100;
 const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
+const DEFAULT_EMPLOYEE_RATE_LIMIT = 60;
+const DEFAULT_EMPLOYEE_RATE_LIMIT_WINDOW_SECONDS = 60;
 const DEPRECATED_JOB_TITLE_CSV_HEADERS = [
   'jobtitle',
   'job_title',
@@ -1177,6 +1179,12 @@ export class EmployeesService {
         dto.policyNote !== undefined
           ? this.toNullableString(dto.policyNote)
           : current.note,
+      rateLimit: {
+        enabled: dto.rateLimitEnabled ?? current.rateLimit.enabled,
+        limit: dto.rateLimitLimit ?? current.rateLimit.limit,
+        windowSeconds:
+          dto.rateLimitWindowSeconds ?? current.rateLimit.windowSeconds,
+      },
     };
   }
 
@@ -1188,8 +1196,15 @@ export class EmployeesService {
         allowedModelKeys: [],
         allowedProviderConnectionIds: [],
         note: null,
+        rateLimit: {
+          enabled: false,
+          limit: DEFAULT_EMPLOYEE_RATE_LIMIT,
+          windowSeconds: DEFAULT_EMPLOYEE_RATE_LIMIT_WINDOW_SECONDS,
+        },
       };
     }
+
+    const rateLimit = isRecord(policy.rateLimit) ? policy.rateLimit : {};
 
     return {
       allowedModelKeys: readStringArray(policy.allowedModelKeys),
@@ -1197,6 +1212,20 @@ export class EmployeesService {
         policy.allowedProviderConnectionIds,
       ),
       note: typeof policy.note === 'string' && policy.note.trim() ? policy.note : null,
+      rateLimit: {
+        enabled:
+          typeof rateLimit.enabled === 'boolean' ? rateLimit.enabled : false,
+        limit: readPositiveInteger(
+          rateLimit.limit,
+          DEFAULT_EMPLOYEE_RATE_LIMIT,
+          100000,
+        ),
+        windowSeconds: readPositiveInteger(
+          rateLimit.windowSeconds,
+          DEFAULT_EMPLOYEE_RATE_LIMIT_WINDOW_SECONDS,
+          3600,
+        ),
+      },
     };
   }
 
@@ -1381,6 +1410,19 @@ function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? uniqueTrimmedStrings(value.filter((item): item is string => typeof item === 'string'))
     : [];
+}
+
+function readPositiveInteger(
+  value: unknown,
+  fallback: number,
+  maximum: number,
+): number {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= maximum
+    ? value
+    : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

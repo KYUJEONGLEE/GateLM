@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -640,5 +641,35 @@ func TestBuildTerminalLogStoresRoutingDiagnosticsMetadata(t *testing.T) {
 	}
 	if !diagnostics.Ambiguous || diagnostics.ScoreMargin != 1 || len(diagnostics.ScoreVector) != 2 {
 		t.Fatalf("unexpected routing diagnostics metadata: %#v", diagnostics)
+	}
+}
+
+func TestBuildTerminalLogStoresEmployeePolicyDecisionWithoutChangingBudgetScope(t *testing.T) {
+	startedAt := time.Date(2026, 7, 10, 1, 2, 3, 0, time.UTC)
+	decision := &employeepolicy.Decision{
+		EmployeeID:             "employee_demo",
+		QuotaOutcome:           employeepolicy.QuotaOutcomeExceeded,
+		QuotaReason:            employeepolicy.QuotaReasonExceededQualityGuard,
+		QuotaLimitMicroUSD:     1_000_000,
+		QuotaUsedMicroUSD:      1_100_000,
+		QuotaRemainingMicroUSD: -100_000,
+	}
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:              "request_employee_quota",
+		ApplicationID:          "app_demo",
+		EndUserID:              "employee_demo",
+		EmployeePolicyDecision: decision,
+		Status:                 StatusSuccess,
+		HTTPStatus:             200,
+		StartedAt:              startedAt,
+		CompletedAt:            startedAt.Add(10 * time.Millisecond),
+	})
+
+	metadataDecision, ok := log.Metadata["employeePolicyDecision"].(employeepolicy.Decision)
+	if !ok || metadataDecision.QuotaOutcome != employeepolicy.QuotaOutcomeExceeded {
+		t.Fatalf("expected employee policy metadata, got %#v", log.Metadata)
+	}
+	if log.BudgetScope.Type != budget.ScopeTypeApplication || log.BudgetScope.ID != "app_demo" {
+		t.Fatalf("employee quota must not create user budget scope, got %#v", log.BudgetScope)
 	}
 }

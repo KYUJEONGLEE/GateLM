@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -149,6 +150,24 @@ export class UpsertProjectEmployeeAssignmentDto {
   warningThresholdPercent?: number;
 
   @IsOptional()
+  @IsBoolean()
+  rateLimitEnabled?: boolean;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  rateLimitLimit?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3600)
+  rateLimitWindowSeconds?: number;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
@@ -232,6 +251,13 @@ export interface ProjectEmployeePolicyDto {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
   note: string | null;
+  rateLimit: ProjectEmployeeRateLimitPolicyDto;
+}
+
+export interface ProjectEmployeeRateLimitPolicyDto {
+  enabled: boolean;
+  limit: number;
+  windowSeconds: number;
 }
 
 export interface ProjectEmployeeAssignmentResponseDto {
