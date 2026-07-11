@@ -40,6 +40,7 @@ export function BudgetPolicyPanel({
           </div>
           <Switch
             checked={draftValues.budgetEnabled}
+            id="runtime-policy-budget-enabled"
             onCheckedChange={(checked) =>
               onDraftValuesChange((current) => ({
                 ...current,

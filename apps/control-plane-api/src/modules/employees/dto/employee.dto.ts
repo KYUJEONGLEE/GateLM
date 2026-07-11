@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -39,6 +40,12 @@ export type EmployeeInvitationStatus =
   (typeof EMPLOYEE_INVITATION_STATUS_VALUES)[number];
 export type ProjectEmployeeStatus =
   (typeof PROJECT_EMPLOYEE_STATUS_VALUES)[number];
+
+export type ProjectEmployeeQuotaStatus =
+  | 'exceeded'
+  | 'not_configured'
+  | 'warning'
+  | 'within_limit';
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -149,6 +156,24 @@ export class UpsertProjectEmployeeAssignmentDto {
   warningThresholdPercent?: number;
 
   @IsOptional()
+  @IsBoolean()
+  rateLimitEnabled?: boolean;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  rateLimitLimit?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3600)
+  rateLimitWindowSeconds?: number;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
@@ -232,6 +257,13 @@ export interface ProjectEmployeePolicyDto {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
   note: string | null;
+  rateLimit: ProjectEmployeeRateLimitPolicyDto;
+}
+
+export interface ProjectEmployeeRateLimitPolicyDto {
+  enabled: boolean;
+  limit: number;
+  windowSeconds: number;
 }
 
 export interface ProjectEmployeeAssignmentResponseDto {
@@ -246,6 +278,11 @@ export interface ProjectEmployeeAssignmentResponseDto {
   invitationStatus: EmployeeInvitationStatus;
   monthlyBudgetLimitMicroUsd: number;
   monthlyBudgetLimitUsd: number;
+  monthlyRemainingUsd: number;
+  monthlyUsedMicroUsd: number;
+  monthlyUsedUsd: number;
+  quotaStatus: ProjectEmployeeQuotaStatus;
+  quotaUsagePercent: number;
   warningThresholdPercent: number;
   policy: ProjectEmployeePolicyDto;
   status: ProjectEmployeeStatus;

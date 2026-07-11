@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -36,13 +37,15 @@ type RequestContext struct {
 }
 
 type IdentityContext struct {
-	TenantID      string
-	ProjectID     string
-	ApplicationID string
-	APIKeyID      string
-	AppTokenID    string
-	EndUserID     string
-	FeatureID     string
+	TenantID       string
+	ProjectID      string
+	ApplicationID  string
+	APIKeyID       string
+	AppTokenID     string
+	TrustedActorID string
+	EmployeeID     string
+	EndUserID      string
+	FeatureID      string
 }
 
 type RuntimeContext struct {
@@ -51,6 +54,8 @@ type RuntimeContext struct {
 	RoutingPolicyHash  string
 	Snapshot           runtimeconfig.RuntimeSnapshotProvenance
 	SafetyPolicy       runtimeconfig.SafetyPolicy
+	EmployeePolicy     employeepolicy.Policy
+	HasEmployeePolicy  bool
 
 	RateLimitConfig    ratelimit.Config
 	HasRateLimitConfig bool
@@ -67,8 +72,9 @@ type RuntimeContext struct {
 }
 
 type GovernanceContext struct {
-	RateLimitDecision *ratelimit.Decision
-	BudgetDecision    *budget.Decision
+	RateLimitDecision      *ratelimit.Decision
+	BudgetDecision         *budget.Decision
+	EmployeePolicyDecision *employeepolicy.Decision
 }
 
 type MaskingContext struct {
