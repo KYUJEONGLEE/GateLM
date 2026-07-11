@@ -18,15 +18,21 @@ type Queryer interface {
 }
 
 type Resolver struct {
-	db Queryer
+	db         Queryer
+	usageStore employeepolicy.DailyTokenUsageStore
 }
 
 type storedPolicy struct {
-	RateLimit employeepolicy.RateLimitPolicy `json:"rateLimit"`
+	DailyTokenLimit employeepolicy.DailyTokenPolicy `json:"dailyTokenLimit"`
+	RateLimit       employeepolicy.RateLimitPolicy  `json:"rateLimit"`
 }
 
 func NewResolver(db Queryer) *Resolver {
-	return &Resolver{db: db}
+	return NewResolverWithDailyTokenUsage(db, nil)
+}
+
+func NewResolverWithDailyTokenUsage(db Queryer, usageStore employeepolicy.DailyTokenUsageStore) *Resolver {
+	return &Resolver{db: db, usageStore: usageStore}
 }
 
 func (r *Resolver) Resolve(ctx context.Context, req employeepolicy.ResolveRequest) (employeepolicy.Policy, error) {
@@ -47,24 +53,30 @@ func (r *Resolver) Resolve(ctx context.Context, req employeepolicy.ResolveReques
 	now = now.UTC()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	nextDayStart := dayStart.AddDate(0, 0, 1)
 
 	var employeeID string
 	var policyJSON []byte
 	var limitMicroUSD int64
 	var warningThresholdPercent int
 	var usedMicroUSD int64
+	var dailyUsedTokens int64
 	err := r.db.QueryRow(ctx, resolveEmployeePolicySQL,
 		tenantID,
 		projectID,
 		actorID,
 		monthStart,
 		nextMonthStart,
+		dayStart,
+		nextDayStart,
 	).Scan(
 		&employeeID,
 		&policyJSON,
 		&limitMicroUSD,
 		&warningThresholdPercent,
 		&usedMicroUSD,
+		&dailyUsedTokens,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -80,11 +92,27 @@ func (r *Resolver) Resolve(ctx context.Context, req employeepolicy.ResolveReques
 		}
 	}
 
+	if r.usageStore != nil && persisted.DailyTokenLimit.Enabled && persisted.DailyTokenLimit.Limit > 0 {
+		usageKey := employeepolicy.DailyTokenUsageKey{
+			TenantID: tenantID, ProjectID: projectID, EmployeeID: employeeID, DayStart: dayStart,
+		}
+		if currentUsage, usageErr := r.usageStore.GetOrSeed(
+			ctx, usageKey, dailyUsedTokens, nextDayStart.Add(time.Hour),
+		); usageErr == nil {
+			dailyUsedTokens = currentUsage
+		}
+	}
+
 	return employeepolicy.Normalize(employeepolicy.Policy{
 		TenantID:   tenantID,
 		ProjectID:  projectID,
 		EmployeeID: employeeID,
-		RateLimit:  persisted.RateLimit,
+		DailyToken: employeepolicy.DailyTokenPolicy{
+			Enabled: persisted.DailyTokenLimit.Enabled,
+			Limit:   persisted.DailyTokenLimit.Limit,
+			Used:    dailyUsedTokens,
+		},
+		RateLimit: persisted.RateLimit,
 		Quota: employeepolicy.QuotaPolicy{
 			Enabled:                 limitMicroUSD > 0,
 			LimitMicroUSD:           limitMicroUSD,
@@ -143,5 +171,18 @@ select
         or l.end_user_id = a.user_id::text
         or l.end_user_id = lower(a.email)
       )
-  ), 0)::bigint as used_micro_usd
+  ), 0)::bigint as used_micro_usd,
+  coalesce((
+    select sum(l.total_tokens)
+    from p0_llm_invocation_logs l
+    where l.tenant_id = $1::uuid
+      and l.project_id = $2::uuid
+      and l.created_at >= $6::timestamptz
+      and l.created_at < $7::timestamptz
+      and (
+        l.end_user_id = a.employee_id::text
+        or l.end_user_id = a.user_id::text
+        or l.end_user_id = lower(a.email)
+      )
+  ), 0)::bigint as daily_used_tokens
 from matched_assignment a`

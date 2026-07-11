@@ -253,6 +253,8 @@ const projectEmployeeText: Record<
     budget: string;
     cancel: string;
     confirmDisable: string;
+    dailyTokenLimit: string;
+    dailyTokenUsage: string;
     department: string;
     disable: string;
     disableConfirmMessage: string;
@@ -304,6 +306,8 @@ const projectEmployeeText: Record<
     budget: "Monthly limit",
     cancel: "Cancel",
     confirmDisable: "Disable",
+    dailyTokenLimit: "Daily token limit",
+    dailyTokenUsage: "Used today (UTC)",
     department: "Department",
     disable: "Disable",
     disableConfirmMessage: " will be disabled for this project. Continue?",
@@ -354,6 +358,8 @@ const projectEmployeeText: Record<
     budget: "월 한도",
     cancel: "취소",
     confirmDisable: "비활성화",
+    dailyTokenLimit: "일일 토큰 한도",
+    dailyTokenUsage: "오늘 사용 토큰 (UTC)",
     department: "부서",
     disable: "비활성화",
     disableConfirmMessage: " 직원을 현재 프로젝트에서 비활성화합니다. 계속하시겠습니까?",
@@ -459,6 +465,7 @@ export function ProjectEmployeeAssignmentSection({
     [model.employees]
   );
   const [assignmentValues, setAssignmentValues] = useState({
+    dailyTokenLimit: 0,
     monthlyBudgetLimitUsd: 0,
     policyNote: "",
     rateLimitEnabled: false,
@@ -583,7 +590,14 @@ export function ProjectEmployeeAssignmentSection({
     Math.max(selectedAssignment?.quotaUsagePercent ?? 0, 0),
     100
   );
+  const selectedDailyTokenProgress = Math.min(
+    Math.max(selectedAssignment?.dailyTokenUsagePercent ?? 0, 0),
+    100
+  );
   const assignmentValuesInvalid =
+    !Number.isInteger(assignmentValues.dailyTokenLimit) ||
+    assignmentValues.dailyTokenLimit < 0 ||
+    assignmentValues.dailyTokenLimit > 1000000000 ||
     !Number.isFinite(assignmentValues.monthlyBudgetLimitUsd) ||
     assignmentValues.monthlyBudgetLimitUsd < 0 ||
     (assignmentValues.rateLimitEnabled &&
@@ -689,6 +703,7 @@ export function ProjectEmployeeAssignmentSection({
       allowedModelKeys: existingAssignment?.policy.allowedModelKeys ?? [],
       allowedProviderConnectionIds:
         existingAssignment?.policy.allowedProviderConnectionIds ?? [],
+      dailyTokenLimit: existingAssignment?.policy.dailyTokenLimit.limit ?? 0,
       employeeId: employee.id,
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
       policyNote: existingAssignment?.policy.note ?? "",
@@ -739,6 +754,7 @@ export function ProjectEmployeeAssignmentSection({
       allowedProviderConnectionIds: uniqueStrings(
         providerModelRows.map((row) => row.providerConnectionId)
       ),
+      dailyTokenLimit: assignmentValues.dailyTokenLimit,
       employeeId: selectedEmployeeId,
       monthlyBudgetLimitUsd: assignmentValues.monthlyBudgetLimitUsd,
       policyNote: assignmentValues.policyNote,
@@ -981,7 +997,45 @@ export function ProjectEmployeeAssignmentSection({
                   <span style={{ width: `${selectedQuotaProgress}%` }} />
                 </div>
               </div>
+              <div
+                className="employee-policy-usage-summary"
+                data-quota-status={selectedAssignment?.dailyTokenStatus ?? "not_configured"}
+              >
+                <div className="employee-policy-usage-heading">
+                  <span>{text.dailyTokenUsage}</span>
+                </div>
+                <strong>
+                  {formatTokenCount(selectedAssignment?.dailyTokenUsed ?? 0, locale)} /{" "}
+                  {formatTokenCount(selectedAssignment?.policy.dailyTokenLimit.limit ?? 0, locale)}
+                </strong>
+                <div
+                  aria-label={text.dailyTokenUsage}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={Math.round(selectedDailyTokenProgress)}
+                  className="employee-policy-quota-progress"
+                  role="progressbar"
+                >
+                  <span style={{ width: selectedDailyTokenProgress + "%" }} />
+                </div>
+              </div>
               <div className="modal-form-grid project-employee-policy-fields">
+                <label className="policy-field">
+                  <span>{text.dailyTokenLimit}</span>
+                  <input
+                    max={1000000000}
+                    min={0}
+                    onChange={(event) =>
+                      setAssignmentValues((current) => ({
+                        ...current,
+                        dailyTokenLimit: Number(event.target.value)
+                      }))
+                    }
+                    step={1000}
+                    type="number"
+                    value={assignmentValues.dailyTokenLimit}
+                  />
+                </label>
                 <label className="policy-field">
                   <span>{text.budget}</span>
                   <input
@@ -2136,6 +2190,7 @@ function getEmployeePolicyFormState(
 ) {
   return {
     assignmentValues: {
+      dailyTokenLimit: assignment?.policy.dailyTokenLimit.limit ?? 0,
       monthlyBudgetLimitUsd: assignment?.monthlyBudgetLimitUsd ?? 0,
       policyNote: assignment?.policy.note ?? "",
       rateLimitEnabled: assignment?.policy.rateLimit.enabled ?? false,
@@ -2230,6 +2285,12 @@ function compareProjectNames(left: string[] = [], right: string[] = []) {
 
 function getEmployeeDisplayName(employee: EmployeeRecord) {
   return nullableText(employee.name, employee.email);
+}
+
+function formatTokenCount(value: number, locale: Locale) {
+  return new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    maximumFractionDigits: 0
+  }).format(Math.max(0, value));
 }
 
 function formatBudgetUsd(value: number) {

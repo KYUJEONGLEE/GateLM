@@ -230,6 +230,11 @@ function isProjectEmployeeAssignmentValues(
     record.allowedModelKeys.every((item) => typeof item === "string") &&
     Array.isArray(record.allowedProviderConnectionIds) &&
     record.allowedProviderConnectionIds.every((item) => typeof item === "string") &&
+    (record.dailyTokenLimit === undefined ||
+      (typeof record.dailyTokenLimit === "number" &&
+        Number.isInteger(record.dailyTokenLimit) &&
+        record.dailyTokenLimit >= 0 &&
+        record.dailyTokenLimit <= 1000000000)) &&
     typeof record.employeeId === "string" &&
     typeof record.monthlyBudgetLimitUsd === "number" &&
     Number.isFinite(record.monthlyBudgetLimitUsd) &&

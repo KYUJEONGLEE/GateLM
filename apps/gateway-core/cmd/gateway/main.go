@@ -18,6 +18,7 @@ import (
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	credentialpostgres "gatelm/apps/gateway-core/internal/adapters/credentials/postgres"
 	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
+	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
@@ -131,6 +132,7 @@ func main() {
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
+	dailyTokenUsageStore := redisemployeepolicy.NewDailyTokenUsageStore(redisClient)
 	var terminalLogWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
 	var asyncTerminalLogWriter *asyncinvocationlog.TerminalLogWriter
 	if cfg.AsyncLogEnabled {
@@ -142,6 +144,10 @@ func main() {
 		})
 		terminalLogWriter = asyncTerminalLogWriter
 	}
+	terminalLogWriter = redisemployeepolicy.NewTrackingTerminalLogWriter(
+		terminalLogWriter,
+		dailyTokenUsageStore,
+	)
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
 	costCalculator := costing.NewCalculator(postgrespricing.NewReader(postgresPool))
 	routerOptions := []app.RouterOption{
@@ -166,7 +172,10 @@ func main() {
 	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
-		employeepolicystage.NewStage(postgresemployeepolicy.NewResolver(postgresPool)),
+		employeepolicystage.NewStage(postgresemployeepolicy.NewResolverWithDailyTokenUsage(
+			postgresPool,
+			dailyTokenUsageStore,
+		)),
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)

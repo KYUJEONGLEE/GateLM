@@ -16,10 +16,11 @@ import (
 func TestResolverLoadsAssignmentPolicyAndMonthlyUsage(t *testing.T) {
 	db := &fakeQueryer{row: fakeRow{values: []any{
 		"00000000-0000-4000-8000-000000000401",
-		[]byte(`{"rateLimit":{"enabled":true,"limit":5,"windowSeconds":60}}`),
+		[]byte(`{"dailyTokenLimit":{"enabled":true,"limit":10000},"rateLimit":{"enabled":true,"limit":5,"windowSeconds":60}}`),
 		int64(1_000_000),
 		80,
 		int64(750_000),
+		int64(1_200),
 	}}}
 	resolver := NewResolver(db)
 	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
@@ -39,6 +40,9 @@ func TestResolverLoadsAssignmentPolicyAndMonthlyUsage(t *testing.T) {
 	if !policy.Quota.Enabled || policy.Quota.UsedMicroUSD != 750_000 || policy.Quota.LimitMicroUSD != 1_000_000 {
 		t.Fatalf("unexpected quota policy: %#v", policy.Quota)
 	}
+	if !policy.DailyToken.Enabled || policy.DailyToken.Limit != 10_000 || policy.DailyToken.Used != 1_200 {
+		t.Fatalf("unexpected daily token policy: %#v", policy.DailyToken)
+	}
 	if !strings.Contains(db.query, "project_employee_assignments") || !strings.Contains(db.query, "p0_llm_invocation_logs") {
 		t.Fatalf("resolver must join assignment and usage sources: %s", db.query)
 	}
@@ -48,8 +52,11 @@ func TestResolverLoadsAssignmentPolicyAndMonthlyUsage(t *testing.T) {
 	if !strings.Contains(db.query, "l.end_user_id = lower(a.email)") {
 		t.Fatalf("resolver must normalize only the employee email fallback: %s", db.query)
 	}
-	if len(db.args) != 5 || db.args[3] != time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC) {
+	if len(db.args) != 7 || db.args[3] != time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC) {
 		t.Fatalf("unexpected monthly lookup args: %#v", db.args)
+	}
+	if db.args[5] != time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC) {
+		t.Fatalf("unexpected daily lookup args: %#v", db.args)
 	}
 }
 

@@ -41,6 +41,7 @@ describe('EmployeesService employee rate limit policy', () => {
       note: 'legacy',
     });
 
+    expect(policy.dailyTokenLimit).toEqual({ enabled: false, limit: 0 });
     expect(policy.rateLimit).toEqual({
       enabled: false,
       limit: 60,
@@ -54,10 +55,12 @@ describe('EmployeesService employee rate limit policy', () => {
       {
         allowedModelKeys: ['mock-balanced'],
         allowedProviderConnectionIds: ['connection-1'],
+        dailyTokenLimit: { enabled: true, limit: 50000 },
         note: 'keep',
         rateLimit: { enabled: false, limit: 60, windowSeconds: 60 },
       },
       {
+        dailyTokenLimit: 75000,
         rateLimitEnabled: true,
         rateLimitLimit: 5,
         rateLimitWindowSeconds: 30,
@@ -67,6 +70,7 @@ describe('EmployeesService employee rate limit policy', () => {
     expect(merged).toEqual({
       allowedModelKeys: ['mock-balanced'],
       allowedProviderConnectionIds: ['connection-1'],
+      dailyTokenLimit: { enabled: true, limit: 75000 },
       note: 'keep',
       rateLimit: { enabled: true, limit: 5, windowSeconds: 30 },
     });
@@ -81,6 +85,7 @@ describe('EmployeesService employee rate limit policy', () => {
 
     const result = await validationPipe.transform(
       {
+        dailyTokenLimit: 100000,
         monthlyBudgetLimitUsd: 25,
         rateLimitEnabled: true,
         rateLimitLimit: 12,
@@ -95,6 +100,7 @@ describe('EmployeesService employee rate limit policy', () => {
     );
 
     expect(result).toMatchObject({
+      dailyTokenLimit: 100000,
       rateLimitEnabled: true,
       rateLimitLimit: 12,
       rateLimitWindowSeconds: 60,
