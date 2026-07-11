@@ -29,9 +29,36 @@ export type AnalyticsLatencyDistributionChartPoint = {
   p99: number | null;
 };
 
-const axisColor = "#95a3b7";
-const gridColor = "rgba(148, 163, 184, 0.14)";
-const tooltipBackground = "rgba(8, 13, 22, 0.96)";
+type AnalyticsChartTheme = {
+  axis: string;
+  border: string;
+  grid: string;
+  label: string;
+  tooltipBackground: string;
+  tooltipBorder: string;
+  tooltipText: string;
+};
+
+const analyticsChartThemes: Record<"light" | "dark", AnalyticsChartTheme> = {
+  light: {
+    axis: "#64748b",
+    border: "rgba(100, 116, 139, 0.28)",
+    grid: "rgba(100, 116, 139, 0.14)",
+    label: "#334155",
+    tooltipBackground: "rgba(255, 255, 255, 0.98)",
+    tooltipBorder: "rgba(100, 116, 139, 0.26)",
+    tooltipText: "#0f172a"
+  },
+  dark: {
+    axis: "#9aa4b2",
+    border: "rgba(148, 163, 184, 0.24)",
+    grid: "rgba(148, 163, 184, 0.14)",
+    label: "#d7dee9",
+    tooltipBackground: "rgba(8, 13, 22, 0.96)",
+    tooltipBorder: "rgba(148, 163, 184, 0.22)",
+    tooltipText: "#f8fafc"
+  }
+};
 let analyticsEchartsRuntimePromise: Promise<EChartsRuntime> | null = null;
 
 export function AnalyticsProviderLatencyBarChart({
@@ -41,6 +68,7 @@ export function AnalyticsProviderLatencyBarChart({
   ariaLabel: string;
   rows: AnalyticsProviderLatencyChartRow[];
 }) {
+  const theme = useAnalyticsChartTheme();
   const option = useMemo<EChartOption>(
     () => ({
       animation: false,
@@ -51,17 +79,17 @@ export function AnalyticsProviderLatencyBarChart({
         right: 26,
         top: 12
       },
-      tooltip: analyticsTooltip("ms"),
+      tooltip: analyticsTooltip("ms", theme),
       xAxis: {
         axisLabel: {
-          color: axisColor,
+          color: theme.axis,
           fontSize: 14,
           fontWeight: 700,
           formatter: compactAxisNumber
         },
         axisLine: {
           lineStyle: {
-            color: "rgba(148, 163, 184, 0.24)"
+            color: theme.border
           }
         },
         axisTick: {
@@ -69,14 +97,14 @@ export function AnalyticsProviderLatencyBarChart({
         },
         splitLine: {
           lineStyle: {
-            color: gridColor
+            color: theme.grid
           }
         },
         type: "value"
       },
       yAxis: {
         axisLabel: {
-          color: "#d7dee9",
+          color: theme.label,
           fontSize: 14,
           fontWeight: 800
         },
@@ -102,7 +130,7 @@ export function AnalyticsProviderLatencyBarChart({
         }
       ]
     }),
-    [rows]
+    [rows, theme]
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-provider-latency-chart" option={option} />;
@@ -115,6 +143,7 @@ export function AnalyticsLatencyDistributionLineChart({
   ariaLabel: string;
   points: AnalyticsLatencyDistributionChartPoint[];
 }) {
+  const theme = useAnalyticsChartTheme();
   const xAxisLabelInterval = readableCategoryInterval(points.length);
   const option = useMemo<EChartOption>(
     () => ({
@@ -133,16 +162,16 @@ export function AnalyticsLatencyDistributionLineChart({
         itemWidth: 7,
         right: 6,
         textStyle: {
-          color: "#cbd5e1",
+          color: theme.label,
           fontSize: 14,
           fontWeight: 800
         },
         top: 0
       },
-      tooltip: analyticsTooltip("ms"),
+      tooltip: analyticsTooltip("ms", theme),
       xAxis: {
         axisLabel: {
-          color: axisColor,
+          color: theme.axis,
           fontSize: 14,
           fontWeight: 700,
           hideOverlap: true,
@@ -150,7 +179,7 @@ export function AnalyticsLatencyDistributionLineChart({
         },
         axisLine: {
           lineStyle: {
-            color: "rgba(148, 163, 184, 0.24)"
+            color: theme.border
           }
         },
         axisTick: {
@@ -162,7 +191,7 @@ export function AnalyticsLatencyDistributionLineChart({
       },
       yAxis: {
         axisLabel: {
-          color: axisColor,
+          color: theme.axis,
           fontSize: 14,
           fontWeight: 700,
           formatter: compactAxisNumber
@@ -175,7 +204,7 @@ export function AnalyticsLatencyDistributionLineChart({
         },
         splitLine: {
           lineStyle: {
-            color: gridColor
+            color: theme.grid
           }
         },
         type: "value"
@@ -186,7 +215,7 @@ export function AnalyticsLatencyDistributionLineChart({
         analyticsLineSeries("p99", points.map((point) => point.p99))
       ]
     }),
-    [points, xAxisLabelInterval]
+    [points, theme, xAxisLabelInterval]
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-latency-distribution-chart" option={option} />;
@@ -292,24 +321,46 @@ function analyticsLineSeries(name: string, data: Array<number | null>) {
   };
 }
 
-function analyticsTooltip(unit: string) {
+function analyticsTooltip(unit: string, theme: AnalyticsChartTheme) {
   return {
     axisPointer: {
       type: "line"
     },
-    backgroundColor: tooltipBackground,
-    borderColor: "rgba(148, 163, 184, 0.22)",
+    backgroundColor: theme.tooltipBackground,
+    borderColor: theme.tooltipBorder,
     borderWidth: 1,
     confine: true,
     extraCssText: "box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42); border-radius: 8px;",
     textStyle: {
-      color: "#f8fafc",
+      color: theme.tooltipText,
       fontSize: 14,
       fontWeight: 800
     },
     trigger: "axis",
     valueFormatter: (value: unknown) => `${formatNumber(Number(value ?? 0))} ${unit}`
   };
+}
+
+function useAnalyticsChartTheme() {
+  const [themeName, setThemeName] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateTheme = () => {
+      setThemeName(root.dataset.theme === "dark" ? "dark" : "light");
+    };
+    const observer = new MutationObserver(updateTheme);
+
+    updateTheme();
+    observer.observe(root, {
+      attributeFilter: ["data-theme"],
+      attributes: true
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return analyticsChartThemes[themeName];
 }
 
 function compactAxisNumber(value: number) {
