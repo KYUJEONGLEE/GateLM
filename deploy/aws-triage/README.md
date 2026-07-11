@@ -209,6 +209,74 @@ Then publish a new RuntimeSnapshot from the Console or admin API and recreate th
 docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core application web
 ```
 
+## Isolated Mock Performance Environment
+
+Do not switch the normal `.env` or published RuntimeSnapshot to Mock for load
+testing. The performance environment uses a separate Compose project, database,
+Redis volume, network, ports, and generated test credentials:
+
+```text
+project:          gatelm-aws-perf
+gateway:          http://127.0.0.1:18080
+control plane:    http://127.0.0.1:13001
+postgres volume:  gatelm-aws-perf-postgres-data
+redis volume:     gatelm-aws-perf-redis-data
+```
+
+The performance override forces `OPENAI_API_KEY` and both Provider credential
+maps to empty values. Its bootstrap fails unless the target PostgreSQL container
+belongs to `gatelm-aws-perf` and mounts the expected isolated volume.
+
+Create `.env.perf` once. The generated secret values are written with mode `600`
+and are not printed:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+bash scripts/perf-init.sh
+```
+
+On the first run after building or pulling new runtime source, build and start
+the minimal performance stack. This applies the existing migrations only to the
+isolated database, publishes a Mock RuntimeSnapshot, starts the runtime, and
+runs the fail-closed routing preflight:
+
+```bash
+bash scripts/perf-up.sh --build
+```
+
+For later starts with already-current images, omit `--build`:
+
+```bash
+bash scripts/perf-up.sh
+```
+
+Run the safety preflight again before every k6 session:
+
+```bash
+bash scripts/perf-preflight.sh
+```
+
+The preflight requires all of the following before load is allowed:
+
+- no live Provider credential in Control Plane or Gateway
+- `selectedProvider=mock` and a Mock catalog model (`mock-*` suffix)
+- published RuntimeSnapshot provenance
+- successful Request Detail with `fallback=not_needed`
+
+Point k6 only at `http://127.0.0.1:18080`. Port `8080` belongs to the normal
+stack and may call an actual Provider.
+
+Stop the performance containers without deleting their volumes:
+
+```bash
+bash scripts/perf-down.sh
+```
+
+This setup isolates data and Provider credentials, but it does not isolate EC2
+CPU, memory, or disk I/O. Results on the shared host are suitable for relative
+regression checks, not production capacity claims. Use a dedicated load-test
+host and target environment for formal capacity evidence.
+
 ## Start
 
 ```bash

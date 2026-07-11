@@ -1,6 +1,7 @@
 ﻿.env
 .env.*
 !.env.example
+!deploy/aws-triage/.env.perf.example
 plan.md
 .codex/
 .codex-*.log

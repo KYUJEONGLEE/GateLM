@@ -1,0 +1,56 @@
+name: gatelm-aws-perf
+
+services:
+  postgres:
+    restart: "no"
+
+  redis:
+    restart: "no"
+
+  mock-provider:
+    restart: "no"
+
+  control-plane-api:
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      GATELM_DEPLOYMENT_ENV: perf
+      GATELM_DEMO_PROVIDER_MODE: mock
+      GATELM_DEMO_MOCK_PROVIDER_BASE_URL: http://mock-provider:8090
+      GATELM_DEMO_TENANT_ID: ${GATELM_DEMO_TENANT_ID}
+      GATELM_DEMO_PROJECT_ID: ${GATELM_DEMO_PROJECT_ID}
+      GATELM_DEMO_APPLICATION_ID: ${GATELM_DEMO_APPLICATION_ID}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ""
+      CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP: ""
+      OPENAI_API_KEY: ""
+
+  gateway-core:
+    restart: "no"
+    environment:
+      GATEWAY_DEFAULT_PROVIDER: mock
+      GATEWAY_DEFAULT_MODEL: mock-balanced
+      GATEWAY_LOW_COST_MODEL: mock-fast
+      GATEWAY_HIGH_QUALITY_MODEL: mock-smart
+      GATEWAY_AI_SAFETY_SIDECAR_ENABLED: "false"
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ""
+      GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP: ""
+      OPENAI_API_KEY: ""
+
+  ai-service:
+    restart: "no"
+
+  application:
+    restart: "no"
+
+  web:
+    restart: "no"
+
+volumes:
+  postgres_data:
+    name: gatelm-aws-perf-postgres-data
+  redis_data:
+    name: gatelm-aws-perf-redis-data
+
+networks:
+  gatelm_internal:
+    name: gatelm-aws-perf-internal
