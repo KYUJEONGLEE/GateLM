@@ -8,6 +8,7 @@ import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
+import { buildProjectEmployeeAssignmentRequestBody } from "@/lib/control-plane/employee-assignment-request";
 import {
   cachedControlPlaneRead,
   CONTROL_PLANE_READ_CACHE_SECONDS,
@@ -410,17 +411,7 @@ export async function upsertProjectEmployeeAssignment(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}/employees/${encodeURIComponent(values.employeeId)}`,
       {
-        body: JSON.stringify({
-          allowedModelKeys: values.allowedModelKeys,
-          allowedProviderConnectionIds: values.allowedProviderConnectionIds,
-          monthlyBudgetLimitUsd: values.monthlyBudgetLimitUsd,
-          policyNote: values.policyNote.trim() || undefined,
-          rateLimitEnabled: values.rateLimitEnabled,
-          rateLimitLimit: values.rateLimitLimit,
-          rateLimitWindowSeconds: values.rateLimitWindowSeconds,
-          status: values.status ?? "active",
-          warningThresholdPercent: values.warningThresholdPercent
-        }),
+        body: JSON.stringify(buildProjectEmployeeAssignmentRequestBody(values)),
         cache: "no-store",
         headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"

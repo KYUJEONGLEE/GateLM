@@ -786,12 +786,22 @@ export function ProjectEmployeeAssignmentSection({
     }
 
     const assignment = payload.assignment;
+    if (assignment.policy.dailyTokenLimit.limit !== assignmentValues.dailyTokenLimit) {
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? "일일 토큰 한도가 저장 결과에 반영되지 않았습니다. 다시 시도해 주세요."
+            : "The daily token limit was not reflected in the saved policy. Please try again.",
+        status: "error"
+      });
+      setPendingAction(null);
+      return;
+    }
     setAssignments((current) => upsertAssignment(current, assignment));
     setSubmitState({
       message: locale === "ko" ? "직원 정책이 저장되었습니다." : "Employee policy saved.",
       status: "success"
     });
-    setIsEmployeePolicyDialogOpen(false);
     setPendingAction(null);
     router.refresh();
   }
@@ -964,6 +974,11 @@ export function ProjectEmployeeAssignmentSection({
               <AlertDescription>{submitState.message}</AlertDescription>
             </Alert>
           ) : null}
+          {submitState.status === "success" && submitState.message ? (
+            <Alert>
+              <AlertDescription>{submitState.message}</AlertDescription>
+            </Alert>
+          ) : null}
           <Tabs
             className="employee-policy-tabs"
             onValueChange={(value) => setEmployeePolicyTab(value as EmployeePolicyTab)}
@@ -1022,19 +1037,22 @@ export function ProjectEmployeeAssignmentSection({
               <div className="modal-form-grid project-employee-policy-fields">
                 <label className="policy-field">
                   <span>{text.dailyTokenLimit}</span>
-                  <input
-                    max={1000000000}
-                    min={0}
-                    onChange={(event) =>
-                      setAssignmentValues((current) => ({
-                        ...current,
-                        dailyTokenLimit: Number(event.target.value)
-                      }))
-                    }
-                    step={1000}
-                    type="number"
-                    value={assignmentValues.dailyTokenLimit}
-                  />
+                  <span className="employee-policy-input-suffix">
+                    <input
+                      max={1000000}
+                      min={0}
+                      onChange={(event) =>
+                        setAssignmentValues((current) => ({
+                          ...current,
+                          dailyTokenLimit: Number(event.target.value) * 1000
+                        }))
+                      }
+                      step={1}
+                      type="number"
+                      value={assignmentValues.dailyTokenLimit / 1000}
+                    />
+                    <span aria-hidden="true">K</span>
+                  </span>
                 </label>
                 <label className="policy-field">
                   <span>{text.budget}</span>
