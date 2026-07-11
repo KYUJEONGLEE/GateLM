@@ -14,7 +14,12 @@ test("project cards expose the original usage presentation and open from the ful
     `/tenants/${tenantId}/onboarding`
   );
 
-  await expect(page.getByTestId("project-sort-current")).toHaveText("Usage");
+  const usageSort = page.getByRole("button", { exact: true, name: "Usage" });
+  const latestSort = page.getByRole("button", { exact: true, name: "Latest" });
+
+  await expect(usageSort).toHaveAttribute("aria-pressed", "true");
+  await latestSort.click();
+  await expect(latestSort).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { exact: true, name: "Budget" })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "Limit risk" })).toHaveCount(0);
 
@@ -22,7 +27,7 @@ test("project cards expose the original usage presentation and open from the ful
   const policyPattern = new RegExp(`^${escapeRegExp(projectsPath)}/[^/]+/policies$`);
 
   await expect(projectCard).toHaveAttribute("href", policyPattern);
-  await expect(projectCard).toHaveAttribute("aria-label", /Edit project$/);
+  await expect(projectCard).toHaveAttribute("aria-label", /Project settings$/);
 
   await projectCard.getByRole("heading").click();
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(projectsPath)}/[^/]+/policies$`));

@@ -18,6 +18,7 @@ import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import {
+  compareProjectCreatedAtDescending,
   getProjectCreateActionLocation,
   isProjectVisibleInList
 } from "./project-management-state";
@@ -47,6 +48,7 @@ type ProjectResponsePayload = {
   project?: ProjectRecord;
 };
 
+type ProjectSortMode = "latest" | "usage";
 type ProjectBudgetState = "alert" | "draft" | "operational" | "warning";
 
 const projectStatuses: ProjectStatus[] = ["ACTIVE", "DRAFT", "DISABLED", "ARCHIVED"];
@@ -63,8 +65,7 @@ const projectText: Record<
     costReportFallback: string;
     fixtureFallback: string;
     detailSaved: string;
-    editProject: string;
-    editPolicy: string;
+    projectSettings: string;
     draftBadge: string;
     general: string;
     name: string;
@@ -74,6 +75,7 @@ const projectText: Record<
     delete: string;
     deleteConfirm: string;
     sortLabel: string;
+    sortLatest: string;
     sortUsage: string;
     totalBudget: string;
     status: string;
@@ -90,8 +92,7 @@ const projectText: Record<
     costReportFallback: "Monthly usage is unavailable.",
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
     detailSaved: "Project saved.",
-    editProject: "Edit project",
-    editPolicy: "Edit policy",
+    projectSettings: "Project settings",
     draftBadge: "Saved draft",
     general: "General",
     name: "Name",
@@ -101,6 +102,7 @@ const projectText: Record<
     delete: "Delete",
     deleteConfirm: "Delete this project? This action cannot be undone.",
     sortLabel: "Sort by",
+    sortLatest: "Latest",
     sortUsage: "Usage",
     totalBudget: "Project budget",
     status: "Status",
@@ -116,8 +118,7 @@ const projectText: Record<
     costReportFallback: "월간 사용량을 불러올 수 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
     detailSaved: "프로젝트가 저장되었습니다.",
-    editProject: "프로젝트 수정",
-    editPolicy: "프로젝트 정책 수정",
+    projectSettings: "프로젝트 설정",
     draftBadge: "임시 저장",
     general: "일반",
     name: "이름",
@@ -127,6 +128,7 @@ const projectText: Record<
     delete: "삭제",
     deleteConfirm: "이 프로젝트를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
     sortLabel: "정렬 기준",
+    sortLatest: "최신순",
     sortUsage: "사용량순",
     totalBudget: "프로젝트 예산",
     status: "상태",
@@ -143,6 +145,7 @@ export function ProjectManagement({
   monthlyCostReport
 }: ProjectManagementProps) {
   const text = projectText[locale];
+  const [sortMode, setSortMode] = useState<ProjectSortMode>("usage");
   const projects = useMemo(
     () => model.projects.filter((project) => isProjectVisibleInList(project.status)),
     [model.projects]
@@ -165,14 +168,15 @@ export function ProjectManagement({
   const sortedProjects = useMemo(
     () =>
       [...projects].sort((left, right) =>
-        compareProjectsByUsage(
+        compareProjects(
           left,
           right,
+          sortMode,
           getProjectUsage(left, projectCostsById.get(left.id), usageKnown),
           getProjectUsage(right, projectCostsById.get(right.id), usageKnown)
         )
       ),
-    [projectCostsById, projects, usageKnown]
+    [projectCostsById, projects, sortMode, usageKnown]
   );
   const createProjectActionLocation = getProjectCreateActionLocation(
     projects.length,
@@ -220,9 +224,20 @@ export function ProjectManagement({
           <div className="project-card-list">
             <div className="project-sort-control" aria-label={text.sortLabel}>
               <span>{text.sortLabel}</span>
-              <span className="project-sort-current" data-testid="project-sort-current">
-                {text.sortUsage}
-              </span>
+              <div className="project-sort-buttons">
+                {(["usage", "latest"] as const).map((mode) => (
+                  <button
+                    aria-pressed={sortMode === mode}
+                    className="project-sort-button"
+                    data-active={sortMode === mode}
+                    key={mode}
+                    onClick={() => setSortMode(mode)}
+                    type="button"
+                  >
+                    {mode === "usage" ? text.sortUsage : text.sortLatest}
+                  </button>
+                ))}
+              </div>
               {createProjectActionLocation === "toolbar" ? createProjectAction : null}
             </div>
 
@@ -231,11 +246,7 @@ export function ProjectManagement({
                 const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
                 const opensPolicy = project.status !== "DRAFT" && Boolean(project.runtimeApplicationId);
                 const editProjectHref = opensPolicy ? `${projectHref}/policies` : projectHref;
-                const editProjectLabel = opensPolicy
-                  ? locale === "ko"
-                    ? text.editPolicy
-                    : text.editProject
-                  : text.editProject;
+                const editProjectLabel = text.projectSettings;
                 const usage = getProjectUsage(
                   project,
                   projectCostsById.get(project.id),
@@ -859,12 +870,20 @@ type ProjectUsage = {
   usagePercent: number | null;
 };
 
-function compareProjectsByUsage(
+function compareProjects(
   left: ProjectRecord,
   right: ProjectRecord,
+  sortMode: ProjectSortMode,
   leftUsage: ProjectUsage,
   rightUsage: ProjectUsage
 ) {
+  if (sortMode === "latest") {
+    return (
+      compareProjectCreatedAtDescending(left, right) ||
+      compareProjectIdentity(left, right)
+    );
+  }
+
   return (
     compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
     compareNullableDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||

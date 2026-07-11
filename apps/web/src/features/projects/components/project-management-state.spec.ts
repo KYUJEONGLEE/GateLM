@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  compareProjectCreatedAtDescending,
   getProjectCreateActionLocation,
   isProjectVisibleInList
 } from "./project-management-state";
@@ -22,4 +23,13 @@ test("keeps DRAFT projects in the main list and excludes only ARCHIVED projects"
   expect(isProjectVisibleInList("DRAFT")).toBe(true);
   expect(isProjectVisibleInList("DISABLED")).toBe(true);
   expect(isProjectVisibleInList("ARCHIVED")).toBe(false);
+});
+
+test("sorts the newest project first", () => {
+  expect(
+    compareProjectCreatedAtDescending(
+      { createdAt: "2026-07-11T12:00:00.000Z" },
+      { createdAt: "2026-07-10T12:00:00.000Z" }
+    )
+  ).toBeLessThan(0);
 });
