@@ -308,12 +308,14 @@ function TenantRoutingPanel({
       offDefaultRoute: { ...offDefaultRoute },
       routingRows: cloneRoutingRows(routingRows)
     });
-    setIsSaveConfirmed(true);
     setStatusMessage("변경사항을 저장했습니다.");
     saveConfirmationTimeout.current = setTimeout(() => {
-      setIsSaveConfirmed(false);
-      saveConfirmationTimeout.current = null;
-    }, saveConfirmationDurationMs);
+      setIsSaveConfirmed(true);
+      saveConfirmationTimeout.current = setTimeout(() => {
+        setIsSaveConfirmed(false);
+        saveConfirmationTimeout.current = null;
+      }, saveConfirmationDurationMs);
+    }, 0);
   }
 
   function changeRoutingEnabled(checked: boolean) {

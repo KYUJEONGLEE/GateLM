@@ -191,6 +191,7 @@ test("subsequent OFF and ON restores the existing routing rows", async ({ page }
 test("save confirms the click and restores saved settings after a tab round trip", async ({
   page
 }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto(tenantManagementPath);
 
   const routingSwitch = page.getByRole("switch", { exact: true, name: "Auto routing" });
@@ -212,12 +213,30 @@ test("save confirms the click and restores saved settings after a tab round trip
   await page.getByLabel("Fallback 모델 선택", { exact: true }).selectOption("Gemini Flash");
 
   const saveButton = page.locator(".tenant-routing-save-button");
+  await saveButton.evaluate((element) => {
+    element.setAttribute("data-test-save-animation-starts", "0");
+    element.addEventListener("animationstart", (event) => {
+      if (
+        event.target !== element ||
+        (event as AnimationEvent).animationName !== "tenant-routing-save-confirmation"
+      ) {
+        return;
+      }
+      const currentCount = Number(element.getAttribute("data-test-save-animation-starts")) || 0;
+      element.setAttribute("data-test-save-animation-starts", String(currentCount + 1));
+    });
+  });
   await expect(saveButton).toHaveText("변경사항 저장");
   await saveButton.click();
   await expect(saveButton).toHaveAttribute("data-save-confirmed", "true");
   await expect(saveButton).toHaveText("저장됨");
   await expect(saveButton).toHaveCSS("animation-name", "tenant-routing-save-confirmation");
+  await expect(saveButton).toHaveAttribute("data-test-save-animation-starts", "1");
   await expect(page.getByRole("status")).toHaveText("변경사항을 저장했습니다.");
+
+  await saveButton.click();
+  await expect(saveButton).toHaveAttribute("data-save-confirmed", "true");
+  await expect(saveButton).toHaveAttribute("data-test-save-animation-starts", "2");
 
   await page
     .getByLabel("일반 채팅 기본 모델 모델", { exact: true })
@@ -464,8 +483,8 @@ function getSetCookieValue(headers: { name: string; value: string }[], cookieNam
 
     const [nameValue] = header.value.split(";");
     const separatorIndex = nameValue.indexOf("=");
-    const name = separatorIndex >= 0 ? nameValue.slice(0, separatorIndex) : "";
-    const value = separatorIndex >= 0 ? nameValue.slice(separatorIndex + 1) : "";
+    const name = separatorIndex >= 0 ? nameValue.slice(0, separatorIndex).trim() : "";
+    const value = separatorIndex >= 0 ? nameValue.slice(separatorIndex + 1).trim() : "";
 
     if (name === cookieName) {
       return value;
