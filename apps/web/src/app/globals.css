@@ -4822,52 +4822,34 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   line-height: var(--line-height-snug);
 }
 
-.project-sort-buttons {
+.project-sort-current {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 11px;
-}
-
-.project-sort-button {
-  min-height: 49px;
-  padding: 0 19px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  background: var(--accent-strong);
+  border: 1px solid var(--accent-strong);
   border-radius: var(--radius-sm);
-  color: var(--foreground);
-  font-size: calc(calc(var(--font-size-sm) * 1.35) + var(--global-font-lift));
+  color: var(--primary-foreground);
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-snug);
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
-}
-
-.project-sort-button:hover {
-  border-color: var(--accent-strong);
-  color: var(--accent-strong);
-}
-
-.project-sort-button[data-active="true"] {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: var(--primary-foreground);
+  white-space: nowrap;
 }
 
 .project-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 1380px);
   gap: 22px;
 }
 
 .project-card {
   display: grid;
   min-width: 0;
-  min-height: 292px;
-  gap: 26px;
-  padding: 28px;
+  min-height: 270px;
+  gap: 22px;
+  padding: 24px;
   background:
     linear-gradient(180deg, rgba(16, 163, 127, 0.035), transparent 42%),
     var(--surface);
@@ -13331,7 +13313,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .project-sort-control,
-  .project-sort-buttons,
   .project-card-actions {
     width: 100%;
   }
@@ -13339,11 +13320,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .project-sort-control {
     align-items: stretch;
     justify-content: flex-start;
-  }
-
-  .project-sort-buttons {
-    display: grid;
-    grid-template-columns: 1fr;
   }
 
   .project-sort-control .project-create-button {

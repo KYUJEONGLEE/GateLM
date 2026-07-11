@@ -47,11 +47,9 @@ type ProjectResponsePayload = {
   project?: ProjectRecord;
 };
 
-type ProjectSortMode = "budget" | "limitRisk" | "usage";
 type ProjectBudgetState = "alert" | "draft" | "operational" | "warning";
 
 const projectStatuses: ProjectStatus[] = ["ACTIVE", "DRAFT", "DISABLED", "ARCHIVED"];
-const projectSortModes: ProjectSortMode[] = ["budget", "limitRisk", "usage"];
 const defaultWarningThresholdPercent = 80;
 
 const projectText: Record<
@@ -75,9 +73,7 @@ const projectText: Record<
     save: string;
     delete: string;
     deleteConfirm: string;
-    sortBudget: string;
     sortLabel: string;
-    sortLimitRisk: string;
     sortUsage: string;
     totalBudget: string;
     status: string;
@@ -104,9 +100,7 @@ const projectText: Record<
     save: "Save",
     delete: "Delete",
     deleteConfirm: "Delete this project? This action cannot be undone.",
-    sortBudget: "Budget",
     sortLabel: "Sort by",
-    sortLimitRisk: "Limit risk",
     sortUsage: "Usage",
     totalBudget: "Project budget",
     status: "Status",
@@ -132,9 +126,7 @@ const projectText: Record<
     save: "저장",
     delete: "삭제",
     deleteConfirm: "이 프로젝트를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
-    sortBudget: "예산순",
     sortLabel: "정렬 기준",
-    sortLimitRisk: "한도 위험순",
     sortUsage: "사용량순",
     totalBudget: "프로젝트 예산",
     status: "상태",
@@ -151,7 +143,6 @@ export function ProjectManagement({
   monthlyCostReport
 }: ProjectManagementProps) {
   const text = projectText[locale];
-  const [sortMode, setSortMode] = useState<ProjectSortMode>("usage");
   const projects = useMemo(
     () => model.projects.filter((project) => isProjectVisibleInList(project.status)),
     [model.projects]
@@ -174,15 +165,14 @@ export function ProjectManagement({
   const sortedProjects = useMemo(
     () =>
       [...projects].sort((left, right) =>
-        compareProjectsBySortMode(
+        compareProjectsByUsage(
           left,
           right,
-          sortMode,
           getProjectUsage(left, projectCostsById.get(left.id), usageKnown),
           getProjectUsage(right, projectCostsById.get(right.id), usageKnown)
         )
       ),
-    [projectCostsById, projects, sortMode, usageKnown]
+    [projectCostsById, projects, usageKnown]
   );
   const createProjectActionLocation = getProjectCreateActionLocation(
     projects.length,
@@ -230,20 +220,9 @@ export function ProjectManagement({
           <div className="project-card-list">
             <div className="project-sort-control" aria-label={text.sortLabel}>
               <span>{text.sortLabel}</span>
-              <div className="project-sort-buttons">
-                {projectSortModes.map((mode) => (
-                  <button
-                    aria-pressed={sortMode === mode}
-                    className="project-sort-button"
-                    data-active={sortMode === mode}
-                    key={mode}
-                    onClick={() => setSortMode(mode)}
-                    type="button"
-                  >
-                    {formatProjectSortMode(mode, text)}
-                  </button>
-                ))}
-              </div>
+              <span className="project-sort-current" data-testid="project-sort-current">
+                {text.sortUsage}
+              </span>
               {createProjectActionLocation === "toolbar" ? createProjectAction : null}
             </div>
 
@@ -877,38 +856,20 @@ type ProjectMonthlyCostRecord = ProjectMonthlyCostReport["projectCosts"][number]
 
 type ProjectUsage = {
   costMicroUsd: number | null;
-  remainingBudgetUsd: number | null;
   usagePercent: number | null;
 };
 
-function compareProjectsBySortMode(
+function compareProjectsByUsage(
   left: ProjectRecord,
   right: ProjectRecord,
-  sortMode: ProjectSortMode,
   leftUsage: ProjectUsage,
   rightUsage: ProjectUsage
 ) {
-  if (sortMode === "budget") {
-    return compareDescending(left.totalBudgetUsd, right.totalBudgetUsd) || compareProjectIdentity(left, right);
-  }
-
-  if (sortMode === "limitRisk") {
-    return (
-      compareNullableAscending(leftUsage.remainingBudgetUsd, rightUsage.remainingBudgetUsd) ||
-      compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
-      compareProjectIdentity(left, right)
-    );
-  }
-
   return (
     compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
     compareNullableDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
     compareProjectIdentity(left, right)
   );
-}
-
-function compareDescending(left: number, right: number) {
-  return right - left;
 }
 
 function compareProjectIdentity(left: ProjectRecord, right: ProjectRecord) {
@@ -943,22 +904,6 @@ function compareNullableDescending(left: number | null, right: number | null) {
   return right - left;
 }
 
-function compareNullableAscending(left: number | null, right: number | null) {
-  if (left === null && right === null) {
-    return 0;
-  }
-
-  if (left === null) {
-    return 1;
-  }
-
-  if (right === null) {
-    return -1;
-  }
-
-  return left - right;
-}
-
 function getProjectUsage(
   project: ProjectRecord,
   monthlyCost: ProjectMonthlyCostRecord | undefined,
@@ -967,7 +912,6 @@ function getProjectUsage(
   if (!usageKnown) {
     return {
       costMicroUsd: null,
-      remainingBudgetUsd: null,
       usagePercent: null
     };
   }
@@ -979,7 +923,6 @@ function getProjectUsage(
 
   return {
     costMicroUsd,
-    remainingBudgetUsd: budgetUsd - costUsd,
     usagePercent
   };
 }
@@ -1017,18 +960,6 @@ function formatProjectBudgetState(state: ProjectBudgetState, text: (typeof proje
   }
 
   return text.operating;
-}
-
-function formatProjectSortMode(mode: ProjectSortMode, text: (typeof projectText)[Locale]) {
-  if (mode === "budget") {
-    return text.sortBudget;
-  }
-
-  if (mode === "limitRisk") {
-    return text.sortLimitRisk;
-  }
-
-  return text.sortUsage;
 }
 
 function formatUsagePercent(value: number | null) {

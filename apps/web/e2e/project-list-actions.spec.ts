@@ -14,12 +14,9 @@ test("project cards expose the original usage presentation and open from the ful
     `/tenants/${tenantId}/onboarding`
   );
 
-  const usageSort = page.getByRole("button", { exact: true, name: "Usage" });
-  const budgetSort = page.getByRole("button", { exact: true, name: "Budget" });
-
-  await expect(usageSort).toHaveAttribute("aria-pressed", "true");
-  await budgetSort.click();
-  await expect(budgetSort).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("project-sort-current")).toHaveText("Usage");
+  await expect(page.getByRole("button", { exact: true, name: "Budget" })).toHaveCount(0);
+  await expect(page.getByRole("button", { exact: true, name: "Limit risk" })).toHaveCount(0);
 
   const projectCard = page.getByTestId("project-card").first();
   const policyPattern = new RegExp(`^${escapeRegExp(projectsPath)}/[^/]+/policies$`);
