@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BrainCircuit,
+  Check,
   Code2,
   FileText,
   Languages,
   MessageSquareMore,
-  RefreshCcw
+  RefreshCcw,
+  Sparkles
 } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
@@ -39,7 +41,7 @@ const providerCatalog = [
   }
 ] satisfies ProviderCatalogEntry[];
 
-const initialRoutingRows: RoutingCategoryRow[] = [
+const recommendedRoutingRows: RoutingCategoryRow[] = [
   {
     defaultRoute: { model: "GPT-4o", provider: "openai" },
     highQualityRoute: { model: "Claude Sonnet", provider: "anthropic" },
@@ -87,6 +89,10 @@ const initialOffDefaultRoute: RoutingModelSelection = {
   provider: "openai"
 };
 
+const routingRouteKeys = ["defaultRoute", "highQualityRoute"] as const;
+const recommendationHighlightDurationMs = 1600;
+const saveConfirmationDurationMs = 1800;
+
 type TenantManagementSection = (typeof tenantManagementSections)[number]["id"];
 type RoutingRouteKey = "defaultRoute" | "highQualityRoute";
 
@@ -110,6 +116,14 @@ type RoutingCategoryRow = {
   label: string;
 };
 
+type TenantRoutingSettings = {
+  fallbackRoute: RoutingModelSelection;
+  hasInitializedAutoRouting: boolean;
+  isRoutingEnabled: boolean;
+  offDefaultRoute: RoutingModelSelection;
+  routingRows: RoutingCategoryRow[];
+};
+
 function getTenantManagementTabId(section: TenantManagementSection) {
   return `tenant-management-tab-${section}`;
 }
@@ -122,16 +136,64 @@ function getProvider(provider: string) {
   return providerCatalog.find((entry) => entry.provider === provider) ?? providerCatalog[0];
 }
 
-function createInitialRoutingRows(): RoutingCategoryRow[] {
-  return initialRoutingRows.map((row) => ({
+function createRecommendedRoutingRows(): RoutingCategoryRow[] {
+  return cloneRoutingRows(recommendedRoutingRows);
+}
+
+function cloneRoutingRows(rows: RoutingCategoryRow[]): RoutingCategoryRow[] {
+  return rows.map((row) => ({
     ...row,
     defaultRoute: { ...row.defaultRoute },
     highQualityRoute: { ...row.highQualityRoute }
   }));
 }
 
+function createRoutingRowsFromDefault(
+  defaultRoute: RoutingModelSelection
+): RoutingCategoryRow[] {
+  return recommendedRoutingRows.map((row) => ({
+    ...row,
+    defaultRoute: { ...defaultRoute },
+    highQualityRoute: { ...defaultRoute }
+  }));
+}
+
+function getRoutingRouteId(rowId: string, routeKey: RoutingRouteKey) {
+  return `${rowId}:${routeKey}`;
+}
+
+function isSameRoutingSelection(
+  current: RoutingModelSelection,
+  next: RoutingModelSelection
+) {
+  return current.provider === next.provider && current.model === next.model;
+}
+
+function createInitialTenantRoutingSettings(): TenantRoutingSettings {
+  return {
+    fallbackRoute: { ...initialFallbackRoute },
+    hasInitializedAutoRouting: false,
+    isRoutingEnabled: false,
+    offDefaultRoute: { ...initialOffDefaultRoute },
+    routingRows: createRoutingRowsFromDefault(initialOffDefaultRoute)
+  };
+}
+
+function cloneTenantRoutingSettings(settings: TenantRoutingSettings): TenantRoutingSettings {
+  return {
+    fallbackRoute: { ...settings.fallbackRoute },
+    hasInitializedAutoRouting: settings.hasInitializedAutoRouting,
+    isRoutingEnabled: settings.isRoutingEnabled,
+    offDefaultRoute: { ...settings.offDefaultRoute },
+    routingRows: cloneRoutingRows(settings.routingRows)
+  };
+}
+
 export default function TenantsPage() {
   const [activeSection, setActiveSection] = useState<TenantManagementSection>("routing");
+  const [savedRoutingSettings, setSavedRoutingSettings] = useState<TenantRoutingSettings>(
+    createInitialTenantRoutingSettings
+  );
 
   return (
     <main className="console-content management-line-content tenant-management-content">
@@ -172,26 +234,144 @@ export default function TenantsPage() {
         role="tabpanel"
         tabIndex={0}
       >
-        {activeSection === "routing" ? <TenantRoutingPanel /> : null}
+        {activeSection === "routing" ? (
+          <TenantRoutingPanel
+            initialSettings={savedRoutingSettings}
+            onSave={(settings) => setSavedRoutingSettings(cloneTenantRoutingSettings(settings))}
+          />
+        ) : null}
       </div>
     </main>
   );
 }
 
-function TenantRoutingPanel() {
+function TenantRoutingPanel({
+  initialSettings,
+  onSave
+}: {
+  initialSettings: TenantRoutingSettings;
+  onSave: (settings: TenantRoutingSettings) => void;
+}) {
+  const hasInitializedAutoRouting = useRef(initialSettings.hasInitializedAutoRouting);
+  const recommendationHighlightTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveConfirmationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fallbackRoute, setFallbackRoute] = useState<RoutingModelSelection>(() => ({
-    ...initialFallbackRoute
+    ...initialSettings.fallbackRoute
   }));
-  const [isRoutingEnabled, setIsRoutingEnabled] = useState(true);
+  const [highlightedRouteIds, setHighlightedRouteIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const [isRoutingEnabled, setIsRoutingEnabled] = useState(initialSettings.isRoutingEnabled);
+  const [isSaveConfirmed, setIsSaveConfirmed] = useState(false);
   const [offDefaultRoute, setOffDefaultRoute] = useState<RoutingModelSelection>(() => ({
-    ...initialOffDefaultRoute
+    ...initialSettings.offDefaultRoute
   }));
-  const [routingRows, setRoutingRows] = useState<RoutingCategoryRow[]>(createInitialRoutingRows);
+  const [routingRows, setRoutingRows] = useState<RoutingCategoryRow[]>(() =>
+    cloneRoutingRows(initialSettings.routingRows)
+  );
   const [statusMessage, setStatusMessage] = useState("");
+
+  useEffect(
+    () => () => {
+      if (recommendationHighlightTimeout.current) {
+        clearTimeout(recommendationHighlightTimeout.current);
+      }
+      if (saveConfirmationTimeout.current) {
+        clearTimeout(saveConfirmationTimeout.current);
+      }
+    },
+    []
+  );
+
+  function clearRecommendationHighlight() {
+    if (recommendationHighlightTimeout.current) {
+      clearTimeout(recommendationHighlightTimeout.current);
+      recommendationHighlightTimeout.current = null;
+    }
+    setHighlightedRouteIds(new Set());
+  }
+
+  function clearSaveConfirmation() {
+    if (saveConfirmationTimeout.current) {
+      clearTimeout(saveConfirmationTimeout.current);
+      saveConfirmationTimeout.current = null;
+    }
+    setIsSaveConfirmed(false);
+  }
+
+  function saveRoutingSettings() {
+    clearSaveConfirmation();
+    onSave({
+      fallbackRoute: { ...fallbackRoute },
+      hasInitializedAutoRouting: hasInitializedAutoRouting.current,
+      isRoutingEnabled,
+      offDefaultRoute: { ...offDefaultRoute },
+      routingRows: cloneRoutingRows(routingRows)
+    });
+    setIsSaveConfirmed(true);
+    setStatusMessage("변경사항을 저장했습니다.");
+    saveConfirmationTimeout.current = setTimeout(() => {
+      setIsSaveConfirmed(false);
+      saveConfirmationTimeout.current = null;
+    }, saveConfirmationDurationMs);
+  }
+
+  function changeRoutingEnabled(checked: boolean) {
+    clearRecommendationHighlight();
+    clearSaveConfirmation();
+    setIsRoutingEnabled(checked);
+
+    if (checked && !hasInitializedAutoRouting.current) {
+      setRoutingRows(createRoutingRowsFromDefault(offDefaultRoute));
+      hasInitializedAutoRouting.current = true;
+      setStatusMessage("OFF 기본 모델을 모든 카테고리와 난이도에 복사했습니다.");
+      return;
+    }
+
+    setStatusMessage("");
+  }
+
+  function applyRecommendedRouting() {
+    clearSaveConfirmation();
+    const recommendedRows = createRecommendedRoutingRows();
+    const routeIdsToHighlight = new Set<string>();
+    let changedRouteCount = 0;
+
+    for (const recommendedRow of recommendedRows) {
+      const currentRow = routingRows.find((row) => row.id === recommendedRow.id);
+
+      for (const routeKey of routingRouteKeys) {
+        routeIdsToHighlight.add(getRoutingRouteId(recommendedRow.id, routeKey));
+        if (
+          !currentRow ||
+          !isSameRoutingSelection(currentRow[routeKey], recommendedRow[routeKey])
+        ) {
+          changedRouteCount += 1;
+        }
+      }
+    }
+
+    clearRecommendationHighlight();
+    setRoutingRows(recommendedRows);
+    setHighlightedRouteIds(routeIdsToHighlight);
+
+    if (changedRouteCount === 0) {
+      setStatusMessage("추천 모델 설정을 다시 적용했습니다.");
+    } else {
+      setStatusMessage(`${changedRouteCount}개 모델 설정을 추천 모델로 변경했습니다.`);
+    }
+
+    recommendationHighlightTimeout.current = setTimeout(() => {
+      setHighlightedRouteIds(new Set());
+      recommendationHighlightTimeout.current = null;
+    }, recommendationHighlightDurationMs);
+  }
 
   function updateProvider(rowId: string, routeKey: RoutingRouteKey, provider: string) {
     const nextProvider = getProvider(provider);
 
+    clearRecommendationHighlight();
+    clearSaveConfirmation();
     setRoutingRows((currentRows) =>
       currentRows.map((row) =>
         row.id === rowId
@@ -209,6 +389,8 @@ function TenantRoutingPanel() {
   }
 
   function updateModel(rowId: string, routeKey: RoutingRouteKey, model: string) {
+    clearRecommendationHighlight();
+    clearSaveConfirmation();
     setRoutingRows((currentRows) =>
       currentRows.map((row) =>
         row.id === rowId
@@ -228,6 +410,7 @@ function TenantRoutingPanel() {
   function updateFallbackProvider(provider: string) {
     const nextProvider = getProvider(provider);
 
+    clearSaveConfirmation();
     setFallbackRoute({
       model: nextProvider.models[0] ?? "",
       provider: nextProvider.provider
@@ -236,6 +419,7 @@ function TenantRoutingPanel() {
   }
 
   function updateFallbackModel(model: string) {
+    clearSaveConfirmation();
     setFallbackRoute((current) => ({ ...current, model }));
     setStatusMessage("");
   }
@@ -243,6 +427,7 @@ function TenantRoutingPanel() {
   function updateOffDefaultProvider(provider: string) {
     const nextProvider = getProvider(provider);
 
+    clearSaveConfirmation();
     setOffDefaultRoute({
       model: nextProvider.models[0] ?? "",
       provider: nextProvider.provider
@@ -251,15 +436,25 @@ function TenantRoutingPanel() {
   }
 
   function updateOffDefaultModel(model: string) {
+    clearSaveConfirmation();
     setOffDefaultRoute((current) => ({ ...current, model }));
     setStatusMessage("");
   }
 
   function resetRoutingSettings() {
+    clearRecommendationHighlight();
+    clearSaveConfirmation();
+
+    if (isRoutingEnabled) {
+      setRoutingRows(createRoutingRowsFromDefault(offDefaultRoute));
+      setStatusMessage("모든 카테고리 모델을 OFF 기본 모델로 초기화했습니다.");
+      return;
+    }
+
+    hasInitializedAutoRouting.current = false;
     setFallbackRoute({ ...initialFallbackRoute });
-    setIsRoutingEnabled(true);
     setOffDefaultRoute({ ...initialOffDefaultRoute });
-    setRoutingRows(createInitialRoutingRows());
+    setRoutingRows(createRoutingRowsFromDefault(initialOffDefaultRoute));
     setStatusMessage("라우팅 설정을 초기화했습니다.");
   }
 
@@ -268,7 +463,7 @@ function TenantRoutingPanel() {
       className="tenant-routing-panel"
       onSubmit={(event) => {
         event.preventDefault();
-        setStatusMessage("변경사항을 현재 화면에 저장했습니다.");
+        saveRoutingSettings();
       }}
     >
       <section className="tenant-routing-enable-card" aria-labelledby="tenant-auto-routing-title">
@@ -281,10 +476,7 @@ function TenantRoutingPanel() {
             aria-label="Auto routing"
             checked={isRoutingEnabled}
             className="tenant-routing-switch"
-            onCheckedChange={(checked) => {
-              setIsRoutingEnabled(checked);
-              setStatusMessage("");
-            }}
+            onCheckedChange={changeRoutingEnabled}
           />
           <span>{isRoutingEnabled ? "ON" : "OFF"}</span>
         </div>
@@ -293,8 +485,18 @@ function TenantRoutingPanel() {
       {isRoutingEnabled ? (
         <section className="tenant-routing-model-card" aria-labelledby="tenant-routing-model-title">
           <header className="tenant-routing-model-heading">
-            <h3 id="tenant-routing-model-title">카테고리별 모델 설정</h3>
-            <p>각 카테고리에 사용할 기본 모델과 고성능 모델을 선택하세요.</p>
+            <div className="tenant-routing-model-heading-copy">
+              <h3 id="tenant-routing-model-title">카테고리별 모델 설정</h3>
+              <p>각 카테고리에 사용할 기본 모델과 고성능 모델을 선택하세요.</p>
+            </div>
+            <button
+              className="secondary-button tenant-routing-recommend-button"
+              onClick={applyRecommendedRouting}
+              type="button"
+            >
+              <Sparkles aria-hidden="true" />
+              추천 모델 자동 설정
+            </button>
           </header>
 
           <div className="tenant-routing-table" role="table" aria-label="카테고리별 모델 설정">
@@ -315,6 +517,9 @@ function TenantRoutingPanel() {
                   <RoutingModelControls
                     categoryLabel={row.label}
                     disabled={false}
+                    highlighted={highlightedRouteIds.has(
+                      getRoutingRouteId(row.id, "defaultRoute")
+                    )}
                     label="기본 모델"
                     onModelChange={(model) => updateModel(row.id, "defaultRoute", model)}
                     onProviderChange={(provider) =>
@@ -325,6 +530,9 @@ function TenantRoutingPanel() {
                   <RoutingModelControls
                     categoryLabel={row.label}
                     disabled={false}
+                    highlighted={highlightedRouteIds.has(
+                      getRoutingRouteId(row.id, "highQualityRoute")
+                    )}
                     label="고성능 모델"
                     onModelChange={(model) => updateModel(row.id, "highQualityRoute", model)}
                     onProviderChange={(provider) =>
@@ -366,8 +574,13 @@ function TenantRoutingPanel() {
         >
           초기화
         </button>
-        <button className="primary-button tenant-routing-save-button" type="submit">
-          변경사항 저장
+        <button
+          className="primary-button tenant-routing-save-button"
+          data-save-confirmed={isSaveConfirmed ? "true" : undefined}
+          type="submit"
+        >
+          {isSaveConfirmed ? <Check aria-hidden="true" /> : null}
+          {isSaveConfirmed ? "저장됨" : "변경사항 저장"}
         </button>
       </div>
 
@@ -396,7 +609,7 @@ function TenantRoutingPanel() {
         />
       </section>
 
-      <p className="sr-only" aria-live="polite">
+      <p className="sr-only" aria-atomic="true" aria-live="polite" role="status">
         {statusMessage}
       </p>
     </form>
@@ -406,6 +619,7 @@ function TenantRoutingPanel() {
 function RoutingModelControls({
   categoryLabel,
   disabled,
+  highlighted,
   label,
   onModelChange,
   onProviderChange,
@@ -413,6 +627,7 @@ function RoutingModelControls({
 }: {
   categoryLabel: string;
   disabled: boolean;
+  highlighted: boolean;
   label: string;
   onModelChange: (model: string) => void;
   onProviderChange: (provider: string) => void;
@@ -421,7 +636,12 @@ function RoutingModelControls({
   const selectedProvider = getProvider(selection.provider);
 
   return (
-    <div className="tenant-routing-route" data-column-label={label} role="cell">
+    <div
+      className="tenant-routing-route"
+      data-column-label={label}
+      data-recommendation-highlighted={highlighted ? "true" : undefined}
+      role="cell"
+    >
       <div className="tenant-routing-model-selectors">
         <label className="tenant-routing-provider-control">
           <span className="sr-only">

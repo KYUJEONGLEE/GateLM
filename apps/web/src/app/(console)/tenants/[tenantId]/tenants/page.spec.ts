@@ -10,6 +10,10 @@ test("tenant routing page keeps the requested copy contract", async () => {
   expect(pageSource).toContain("Tenant 관리");
   expect(pageSource).toContain("Auto routing");
   expect(pageSource).toContain("카테고리별 모델 설정");
+  expect(pageSource).toContain("추천 모델 자동 설정");
+  expect(pageSource).toContain("data-recommendation-highlighted");
+  expect(pageSource).toContain("data-save-confirmed");
+  expect(pageSource).toContain('"저장됨"');
   expect(pageSource).toContain("고성능 모델");
   expect(pageSource).toContain("Fallback 모델 설정");
   expect(pageSource).toContain("Auto routing OFF 시 기본 모델");
