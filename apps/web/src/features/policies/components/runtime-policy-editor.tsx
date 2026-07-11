@@ -131,6 +131,16 @@ function getPolicyTabId(section: PolicySection) {
 function getPolicyPanelId(section: PolicySection) {
   return `policy-panel-${section}`;
 }
+function getDefaultPolicySection(
+  hasGeneralSection: boolean,
+  hasEmployeeSection: boolean
+): PolicySection {
+  if (hasGeneralSection) {
+    return "general";
+  }
+
+  return hasEmployeeSection ? "employees" : "routing";
+}
 
 function getPolicySectionLabel(section: PolicySection, text: RuntimePolicyEditorText) {
   switch (section) {
@@ -470,7 +480,7 @@ export function RuntimePolicyEditor({
     status: "idle"
   });
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>(
-    hasGeneralSection ? "general" : "routing"
+    () => getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
   );
   const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
@@ -496,14 +506,15 @@ export function RuntimePolicyEditor({
     [hasEmployeeSection, hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
   );
   useEffect(() => {
-    if (!hasGeneralSection && activePolicySection === "general") {
-      setActivePolicySection("routing");
-    }
-    if (!hasEmployeeSection && activePolicySection === "employees") {
-      setActivePolicySection(hasGeneralSection ? "general" : "routing");
-    }
-    if (shouldMoveBudgetToGeneral && activePolicySection === "budget") {
-      setActivePolicySection(hasGeneralSection ? "general" : "routing");
+    const activeSectionUnavailable =
+      (!hasGeneralSection && activePolicySection === "general") ||
+      (!hasEmployeeSection && activePolicySection === "employees") ||
+      (shouldMoveBudgetToGeneral && activePolicySection === "budget");
+
+    if (activeSectionUnavailable) {
+      setActivePolicySection(
+        getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
+      );
     }
   }, [activePolicySection, hasEmployeeSection, hasGeneralSection, shouldMoveBudgetToGeneral]);
   useEffect(() => {
