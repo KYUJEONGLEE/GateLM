@@ -1,5 +1,8 @@
 # Exact Cache Routing-Aware 계약
 
+> [!IMPORTANT]
+> **문서 상태: Historical supporting contract.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. current 문서가 baseline compatibility 확인을 요구할 때만 사용하며 `contracts.md`에 종속된다.
+
 이 문서는 Exact Cache와 Routing 팀 간 공유용 계약 요약이다.
 
 공식 기준 문서는 `docs/v2.0.0/contracts.md`다. 이 문서와 충돌하면 `contracts.md`를 우선한다.

@@ -1,5 +1,8 @@
 # GateLM v2.1.0 Production Images
 
+> [!NOTE]
+> **문서 상태: Versioned image target reference.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. image tag 예시는 공식 v2.1.0 release 발행을 증명하지 않는다.
+
 This document records the v2.1.0 self-host image build targets.
 
 `docs/v2.0.0/contracts.md` remains the source of truth for Gateway behavior, RuntimeSnapshot, Provider, Observability, API, DB, Event, Metrics, and Security-sensitive fields. These images only package the existing services for self-host delivery.

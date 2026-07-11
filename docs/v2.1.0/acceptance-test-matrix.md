@@ -1,5 +1,8 @@
 # GateLM v2.1.0 Self-host Acceptance Test Matrix
 
+> [!NOTE]
+> **문서 상태: Versioned self-host scope.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 이 matrix의 존재만으로 current HEAD의 fresh-host acceptance 또는 공식 v2.1.0 release 완료를 의미하지 않는다.
+
 This document fixes the testable completion conditions for the v2.1.0 self-host MVP.
 
 `docs/v2.0.0/contracts.md` remains the official source for Gateway behavior, RuntimeSnapshot, Provider, Observability, API, DB, Event, Metrics, and Security-sensitive fields. This matrix does not create new product API, DB, Event, or Metrics contracts.
@@ -169,4 +172,3 @@ smoke-test
 - Request Log shows the request.
 - v2.0.0 Gateway behavior remains intact.
 - forbidden sensitive values are absent from images, compose files, env examples, docs, scripts, logs, API responses, UI, metrics labels, and smoke output.
-

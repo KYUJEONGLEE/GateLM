@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Implementation Plan
 
+> [!IMPORTANT]
+> **문서 상태: Historical implementation plan.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 문서의 phase와 순서를 current backlog 또는 전체 완료 증거로 사용하지 않는다.
+
 ## 1. Purpose
 
 This document is the top-level implementation plan for GateLM v2.0.0.

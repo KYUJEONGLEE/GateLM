@@ -1,5 +1,8 @@
 # GateLM v2.1 Routing Advanced Plan
 
+> [!NOTE]
+> **문서 상태: Versioned offline evaluation plan.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 코드 존재와 production maturity를 구분한다.
+
 ## 목표
 
 v2.1 라우팅 고도화의 1차 목표는 외부 모델을 추가 호출하지 않고, 룰 기반 라우팅이 비용 절감에 도움이 되는지 측정 가능한 형태로 만드는 것이다.

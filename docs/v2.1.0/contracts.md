@@ -1,5 +1,8 @@
 # GateLM v2.1.0 Self-host Contracts
 
+> [!NOTE]
+> **문서 상태: Latest versioned self-host contract scope.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. v2.0.0 참조는 inherited compatibility이며 완료된 v2.0.0 구현 계획을 current roadmap으로 되돌리지 않는다.
+
 ## 1. Status
 
 This document defines the GateLM v2.1.0 self-host delivery contract.
@@ -294,4 +297,3 @@ and the result is:
 - Request Log shows the request.
 - Restarting containers preserves PostgreSQL-backed data.
 - No forbidden sensitive value is exposed in image, compose file, env example, logs, API response, UI, metrics label, fixture, or smoke output.
-
