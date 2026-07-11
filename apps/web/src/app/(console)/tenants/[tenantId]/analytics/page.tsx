@@ -8,17 +8,24 @@ import {
   Gauge,
   LineChart,
   Sparkles,
-  ShieldCheck,
-  Zap
+  ShieldCheck
 } from "lucide-react";
 import {
   AnalyticsLatencyDistributionLineChart,
   AnalyticsProviderLatencyBarChart
 } from "@/features/analytics/components/analytics-performance-charts";
+import {
+  AnalyticsCachePanel,
+  AnalyticsCostPanel,
+  AnalyticsReliabilityPanel,
+  AnalyticsUsagePanel
+} from "@/features/analytics/components/analytics-domain-panels";
 import { PolicyImpactPanel } from "@/features/analytics/components/policy-impact-panel";
+import { buildAnalyticsOverviewReadModel } from "@/features/analytics/analytics-overview-read-model";
 import { buildPolicyImpactReadModel } from "@/features/analytics/policy-impact-read-model";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import {
   getAnalyticsPerformanceRange,
@@ -72,8 +79,6 @@ type AnalyticsPageText = {
   latencyDistributionTitle: string;
   performanceIntro: string;
   performanceSummaryAria: string;
-  placeholderBody: string;
-  placeholderTitleTemplate: string;
   providerLatencyAria: string;
   providerLatencyEmpty: string;
   providerLatencySubtitle: string;
@@ -136,8 +141,6 @@ const analyticsPageText: Record<Locale, AnalyticsPageText> = {
     latencyDistributionTitle: "Latency Distribution",
     performanceIntro: "Analyze model and provider performance from real Gateway request logs.",
     performanceSummaryAria: "Performance summary",
-    placeholderBody: "This iteration implements the Performance tab only. No mock charts are shown here.",
-    placeholderTitleTemplate: "{tab} analytics is not implemented yet",
     providerLatencyAria: "p95 latency by provider",
     providerLatencyEmpty: "No provider latency data yet",
     providerLatencySubtitle: "Compare provider-level tail latency.",
@@ -210,8 +213,6 @@ const analyticsPageText: Record<Locale, AnalyticsPageText> = {
     latencyDistributionTitle: "지연 시간 분포",
     performanceIntro: "모델과 제공자별 성능 지표를 실제 Gateway request log 기준으로 분석합니다.",
     performanceSummaryAria: "성능 요약",
-    placeholderBody: "이번 작업 범위는 성능 탭입니다. 이 탭에는 mock 차트를 넣지 않았습니다.",
-    placeholderTitleTemplate: "{tab} 분석은 아직 구현되지 않았습니다",
     providerLatencyAria: "Provider별 p95 지연 시간",
     providerLatencyEmpty: "아직 Provider 지연 시간 데이터가 없습니다",
     providerLatencySubtitle: "Provider별 tail latency를 비교합니다.",
@@ -287,9 +288,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const filters = buildAnalyticsFilters(resolvedSearchParams);
   const liveRange = getAnalyticsPerformanceRange(filters.range);
   const shouldLoadPerformance = activeTab === "performance";
-  const shouldLoadImpact = activeTab === "impact";
+  const shouldLoadOverview = activeTab !== "performance";
 
-  const [locale, projectsModel, performance, policyOverview] = await Promise.all([
+  const [locale, projectsModel, performance, dashboardOverview] = await Promise.all([
     getRequestLocale(),
     getProjectsModel(tenantId),
     shouldLoadPerformance
@@ -301,7 +302,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           range: filters.range
         })
       : Promise.resolve(undefined),
-    shouldLoadImpact
+    shouldLoadOverview
       ? getLiveDashboardOverview(tenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
@@ -316,6 +317,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const analyticsTabs = getAnalyticsTabs(text);
   const analyticsRangeOptions = getAnalyticsRangeOptions(text);
   const showProviderModelFilters = activeTab === "performance";
+  const overviewReadModel = buildAnalyticsOverviewReadModel(dashboardOverview);
 
   return (
     <main className="console-content analytics-page">
@@ -365,7 +367,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
                 <option value="">{text.allModels}</option>
                 {modelOptions.map((model) => (
                   <option key={model} value={model}>
-                    {model}
+                    {formatModelDisplayName(model)}
                   </option>
                 ))}
               </select>
@@ -401,7 +403,15 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       {activeTab === "impact" ? (
         <PolicyImpactPanel
           locale={locale}
-          model={buildPolicyImpactReadModel(policyOverview)}
+          model={buildPolicyImpactReadModel(dashboardOverview)}
+        />
+      ) : activeTab === "usage" ? (
+        <AnalyticsUsagePanel locale={locale} model={overviewReadModel} />
+      ) : activeTab === "cost" ? (
+        <AnalyticsCostPanel
+          locale={locale}
+          model={overviewReadModel}
+          projects={activeProjects}
         />
       ) : activeTab === "performance" ? (
         <PerformancePanel
@@ -413,8 +423,10 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           text={text}
           tenantId={tenantId}
         />
+      ) : activeTab === "reliability" ? (
+        <AnalyticsReliabilityPanel locale={locale} model={overviewReadModel} />
       ) : (
-        <AnalyticsPlaceholder activeTab={activeTab} text={text} />
+        <AnalyticsCachePanel locale={locale} model={overviewReadModel} />
       )}
 
       <footer className="analytics-freshness">
@@ -470,30 +482,21 @@ function PerformancePanel({
 
       <section className="analytics-kpi-grid" aria-label={text.performanceSummaryAria}>
         <AnalyticsKpiCard
+          detail={`${text.summaryThroughput} ${formatThroughput(performance.summary.throughputPerMinute)}`}
           icon={Clock3}
           label={text.summaryAvgLatency}
           tone="violet"
           value={formatMs(performance.summary.avgLatencyMs)}
         />
         <AnalyticsKpiCard
+          detail={`${text.summaryP99Latency} ${formatMs(performance.summary.p99LatencyMs)}`}
           icon={Gauge}
           label={text.summaryP95Latency}
           tone="blue"
           value={formatMs(performance.summary.p95LatencyMs)}
         />
         <AnalyticsKpiCard
-          icon={Zap}
-          label={text.summaryP99Latency}
-          tone="green"
-          value={formatMs(performance.summary.p99LatencyMs)}
-        />
-        <AnalyticsKpiCard
-          icon={Activity}
-          label={text.summaryThroughput}
-          tone="orange"
-          value={formatThroughput(performance.summary.throughputPerMinute)}
-        />
-        <AnalyticsKpiCard
+          detail={`${formatInteger(performance.summary.totalRequests)} ${text.tableHeaders.requests}`}
           icon={ShieldCheck}
           label={text.summaryErrorRate}
           tone="red"
@@ -514,27 +517,26 @@ function PerformancePanel({
             <table className="analytics-table">
               <thead>
                 <tr>
-                  <th>{text.tableHeaders.provider}</th>
-                  <th>{text.tableHeaders.model}</th>
+                  <th>{text.tableHeaders.provider} / {text.tableHeaders.model}</th>
                   <th>{text.tableHeaders.requests}</th>
-                  <th>{text.tableHeaders.avgLatency}</th>
-                  <th>{text.tableHeaders.p95Latency}</th>
+                  <th>{text.tableHeaders.avgLatency} / {text.tableHeaders.p95Latency}</th>
                   <th>{text.tableHeaders.errorRate}</th>
-                  <th>{text.tableHeaders.costPerReq}</th>
                   <th>{text.tableHeaders.totalCost}</th>
                   <th>{text.tableHeaders.cacheHitRate}</th>
                 </tr>
               </thead>
               <tbody>
-                {performance.providerModelPerformance.map((row) => (
+                {performance.providerModelPerformance.slice(0, 4).map((row) => (
                   <tr key={`${row.provider}:${row.model}`}>
-                    <td>{row.provider}</td>
-                    <td>{row.model}</td>
+                    <td>
+                      <span className="analytics-provider-model-cell">
+                        <strong>{row.provider}</strong>
+                        <small>{formatModelDisplayName(row.model)}</small>
+                      </span>
+                    </td>
                     <td>{formatInteger(row.requests)}</td>
-                    <td>{formatMs(row.avgLatencyMs)}</td>
-                    <td>{formatMs(row.p95LatencyMs)}</td>
+                    <td>{formatMs(row.avgLatencyMs)} / {formatMs(row.p95LatencyMs)}</td>
                     <td>{formatRate(row.errorRate)}</td>
-                    <td>{formatUsdNumber(row.costPerRequestUsd)}</td>
                     <td>{formatUsdString(row.totalCostUsd)}</td>
                     <td>{formatRate(row.cacheHitRate)}</td>
                   </tr>
@@ -614,7 +616,7 @@ function PerformancePanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {performance.slowestRequests.map((row) => (
+                  {performance.slowestRequests.slice(0, 4).map((row) => (
                     <tr key={row.requestId}>
                       <td>{formatShortTime(row.timestamp, locale)}</td>
                       <td>
@@ -622,7 +624,7 @@ function PerformancePanel({
                           {shortRequestId(row.requestId)}
                         </Link>
                       </td>
-                      <td>{row.model}</td>
+                      <td>{formatModelDisplayName(row.model)}</td>
                       <td>{projectNameById.get(row.projectId) ?? row.projectId}</td>
                       <td>{formatMs(row.latencyMs)}</td>
                       <td>
@@ -645,11 +647,13 @@ function PerformancePanel({
 }
 
 function AnalyticsKpiCard({
+  detail,
   icon: Icon,
   label,
   tone,
   value
 }: {
+  detail?: string;
   icon: typeof Activity;
   label: string;
   tone: string;
@@ -664,18 +668,8 @@ function AnalyticsKpiCard({
         <p>{label}</p>
       </div>
       <strong>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
     </article>
-  );
-}
-
-function AnalyticsPlaceholder({ activeTab, text }: { activeTab: AnalyticsTab; text: AnalyticsPageText }) {
-  return (
-    <section className="analytics-tab-panel">
-      <article className="analytics-state-card">
-        <strong>{placeholderTitle(activeTab, text)}</strong>
-        <p>{text.placeholderBody}</p>
-      </article>
-    </section>
   );
 }
 
@@ -779,14 +773,6 @@ function getAnalyticsRangeOptions(text: AnalyticsPageText) {
     label: text.rangeLabels[value],
     value
   }));
-}
-
-function tabLabel(tab: AnalyticsTab, text: AnalyticsPageText) {
-  return text.tabLabels[tab] ?? text.title;
-}
-
-function placeholderTitle(tab: AnalyticsTab, text: AnalyticsPageText) {
-  return text.placeholderTitleTemplate.replace("{tab}", tabLabel(tab, text));
 }
 
 function rangeLabel(range: LiveAnalyticsRange, text: AnalyticsPageText) {

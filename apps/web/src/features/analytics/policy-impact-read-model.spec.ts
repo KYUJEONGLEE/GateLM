@@ -70,7 +70,7 @@ test("builds policy impact metrics from canonical dashboard evidence", () => {
     ],
       byTerminalStatus: []
     }
-  } as DashboardOverview;
+  } as unknown as DashboardOverview;
 
   const model = buildPolicyImpactReadModel(overview);
 
