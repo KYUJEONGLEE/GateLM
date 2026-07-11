@@ -29,10 +29,10 @@ const stageIcons: Record<
 };
 
 const fullProviderPath =
-  "M 83 150 L 250 150 L 417 150 L 583 150 C 620 150 625 183 667 183 C 708 183 714 150 750 150 L 917 150";
+  "M 83 150 L 250 150 L 417 150 L 583 150 L 750 150 L 917 150";
 const cacheFlowPath =
-  "M 83 150 L 250 150 L 417 150 L 583 150 C 614 140 620 72 667 58";
-const cacheBranchPath = "M 583 150 C 614 140 620 72 667 58";
+  "M 83 150 L 250 150 L 417 150 L 583 150 C 583 95 600 58 667 58";
+const cacheBranchPath = "M 583 150 C 583 95 600 58 667 58";
 const providerPaths: Record<GatewayPipelineStageId, string> = {
   request: "M 83 150 L 84 150",
   authentication: "M 83 150 L 250 150",
@@ -40,7 +40,7 @@ const providerPaths: Record<GatewayPipelineStageId, string> = {
   decision: "M 83 150 L 250 150 L 417 150 L 583 150",
   cache: cacheFlowPath,
   adapter:
-    "M 83 150 L 250 150 L 417 150 L 583 150 C 620 150 625 183 667 183 C 708 183 714 150 750 150",
+    "M 83 150 L 250 150 L 417 150 L 583 150 L 750 150",
   provider: fullProviderPath
 };
 const successfulPrefixPaths: Record<GatewayPipelineStageId, string> = {
@@ -56,8 +56,7 @@ const terminalSegmentPaths: Partial<Record<GatewayPipelineStageId, string>> = {
   authentication: "M 83 150 L 250 150",
   guardrails: "M 250 150 L 417 150",
   decision: "M 417 150 L 583 150",
-  adapter:
-    "M 583 150 C 620 150 625 183 667 183 C 708 183 714 150 750 150",
+  adapter: "M 583 150 L 750 150",
   provider: "M 750 150 L 917 150"
 };
 
@@ -246,7 +245,10 @@ export function GatewayPipeline({
                 <strong data-emphasized={pipelineStage.emphasized || undefined}>
                   {stageTitles[locale][pipelineStage.id]}
                 </strong>
-                <p>{pipelineStage.description}</p>
+                <PipelineStageDescription
+                  description={pipelineStage.description}
+                  stageId={pipelineStage.id}
+                />
               </li>
             );
           })}
@@ -274,6 +276,29 @@ export function GatewayPipeline({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function PipelineStageDescription({
+  description,
+  stageId
+}: {
+  description: string;
+  stageId: GatewayPipelineStageId;
+}) {
+  if (stageId !== "provider" || !description.includes(" · ")) {
+    return <p>{description}</p>;
+  }
+
+  const [summary, ...identityParts] = description.split(" · ");
+
+  return (
+    <p className="gateway-pipeline-provider-description">
+      <span>{summary}</span>
+      <span className="gateway-pipeline-provider-identity">
+        {identityParts.join(" · ")}
+      </span>
+    </p>
   );
 }
 

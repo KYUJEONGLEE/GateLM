@@ -340,13 +340,13 @@ function adapterStage(
   const errorStage = record.errorStage?.toLowerCase() ?? "";
 
   if (errorStage.includes("adapter")) {
-    return stage("adapter", "Provider Adapter", "FAILED", "프로바이더 어댑터 호출 실패", "error", true);
+    return stage("adapter", "Provider Adapter", "FAILED", "어댑터 호출 실패", "error", true);
   }
   if (callState === "not_called") {
-    return stage("adapter", "Provider Adapter", "SKIPPED", "프로바이더 어댑터 호출 안 함", "skipped", true);
+    return stage("adapter", "Provider Adapter", "SKIPPED", "어댑터 호출 생략", "skipped", true);
   }
   if (callState === "called") {
-    return stage("adapter", "Provider Adapter", "CALLED", "프로바이더 어댑터 호출됨", "policy", true);
+    return stage("adapter", "Provider Adapter", "CALLED", "어댑터 호출 완료", "policy", true);
   }
 
   return stage("adapter", "Provider Adapter", "UNKNOWN", "어댑터 호출 여부를 확인할 수 없습니다.", "neutral", true);
@@ -358,21 +358,21 @@ function providerStage(
   callState: ProviderCallState
 ): GatewayPipelineStage {
   if (callState === "not_called") {
-    return stage("provider", "LLM Provider", "NOT CALLED", "프로바이더 호출 안 함", "skipped", true);
+    return stage("provider", "LLM Provider", "NOT CALLED", "호출 생략", "skipped", true);
   }
   if (callState === "unknown") {
-    return stage("provider", "LLM Provider", "UNKNOWN", "프로바이더 호출 여부를 확인할 수 없습니다.", "neutral", true);
+    return stage("provider", "LLM Provider", "UNKNOWN", "호출 상태 확인 불가", "neutral", true);
   }
 
   const tone = outcomeTone(providerOutcome);
   let description = "프로바이더 결과를 확인할 수 없습니다.";
 
   if (tone === "success") {
-    description = "프로바이더 응답 수신 성공";
+    description = "응답 수신 성공";
   } else if (tone === "error") {
-    description = "프로바이더 호출 실패";
+    description = "호출 실패";
   } else if (tone === "skipped") {
-    description = "프로바이더 호출 안 함";
+    description = "호출 생략";
   }
 
   const providerIdentity = [record.selectedProvider, record.selectedModel]

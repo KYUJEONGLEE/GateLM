@@ -160,7 +160,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Project",
-          ko: "Project"
+          ko: "프로젝트"
         },
         item: "project",
         path: (tenantId) => `/tenants/${tenantId}/projects`
@@ -176,7 +176,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Providers",
-          ko: "Provider"
+          ko: "프로바이더"
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
