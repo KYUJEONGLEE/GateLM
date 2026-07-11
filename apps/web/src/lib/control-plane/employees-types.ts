@@ -55,8 +55,14 @@ export type EmployeeInvitationResult = {
 export type ProjectEmployeePolicy = {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
+  dailyTokenLimit: ProjectEmployeeDailyTokenLimitPolicy;
   note: string | null;
   rateLimit: ProjectEmployeeRateLimitPolicy;
+};
+
+export type ProjectEmployeeDailyTokenLimitPolicy = {
+  enabled: boolean;
+  limit: number;
 };
 
 export type ProjectEmployeeRateLimitPolicy = {
@@ -74,6 +80,10 @@ export type ProjectEmployeeAssignmentRecord = {
   employeeStatus: EmployeeStatus;
   id: string;
   invitationStatus: EmployeeInvitationStatus;
+  dailyTokenRemaining: number;
+  dailyTokenStatus: ProjectEmployeeQuotaStatus;
+  dailyTokenUsed: number;
+  dailyTokenUsagePercent: number;
   monthlyBudgetLimitMicroUsd: number;
   monthlyBudgetLimitUsd: number;
   monthlyRemainingUsd: number;
@@ -148,6 +158,7 @@ export type EmployeeInvitationValues = {
 export type ProjectEmployeeAssignmentValues = {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
+  dailyTokenLimit?: number;
   employeeId: string;
   monthlyBudgetLimitUsd: number;
   policyNote: string;

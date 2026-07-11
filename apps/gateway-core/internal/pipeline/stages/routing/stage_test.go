@@ -267,3 +267,23 @@ func TestStageDoesNotRestrictHighQualityAtEmployeeWarningThreshold(t *testing.T)
 		t.Fatal("employee quota warning must not restrict high quality")
 	}
 }
+
+func TestStageRestrictsHighQualityWhenEmployeeDailyTokenLimitExceeded(t *testing.T) {
+	router := &fakeRouter{decision: routing.Decision{RequestedModel: "auto"}}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{RequestedModel: "auto"},
+		Governance: request.GovernanceContext{
+			EmployeePolicyDecision: &employeepolicy.Decision{
+				DailyTokenOutcome: employeepolicy.DailyTokenOutcomeExceeded,
+			},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if !router.request.HighQualityRestricted {
+		t.Fatal("expected employee daily token exceed to restrict high quality")
+	}
+}

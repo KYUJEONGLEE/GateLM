@@ -145,6 +145,7 @@ type PreparedOrganizationAssignment = {
 };
 
 type ProjectEmployeeUsageRow = {
+  dailyUsedTokens: bigint;
   employeeId: string;
   usedMicroUsd: bigint;
 };
@@ -725,10 +726,10 @@ export class EmployeesService {
         include: { employee: true },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       }),
-      this.listProjectEmployeeMonthlyUsage(project.tenantId, project.id),
+      this.listProjectEmployeeUsage(project.tenantId, project.id),
     ]);
     const usageByEmployeeId = new Map(
-      usageRows.map((row) => [row.employeeId, row.usedMicroUsd]),
+      usageRows.map((row) => [row.employeeId, row]),
     );
     const activeAssignments = assignments.filter(
       (assignment) => assignment.status === 'active',
@@ -749,7 +750,8 @@ export class EmployeesService {
       data: assignments.map((assignment) =>
         this.toProjectEmployeeAssignmentResponse(
           assignment,
-          usageByEmployeeId.get(assignment.employeeId) ?? 0n,
+          usageByEmployeeId.get(assignment.employeeId)?.usedMicroUsd ?? 0n,
+          usageByEmployeeId.get(assignment.employeeId)?.dailyUsedTokens ?? 0n,
         ),
       ),
       projectId: project.id,
@@ -852,7 +854,11 @@ export class EmployeesService {
       const usageRows = await tx.$queryRaw<ProjectEmployeeUsageRow[]>`
         SELECT
           ${employee.id}::text AS "employeeId",
-          COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd"
+          COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd",
+        COALESCE(SUM(log.total_tokens) FILTER (
+            WHERE log.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+              AND log.created_at < (date_trunc('day', now() AT TIME ZONE 'UTC') + interval '1 day') AT TIME ZONE 'UTC'
+          ), 0)::bigint AS "dailyUsedTokens"
         FROM employees employee
         LEFT JOIN p0_llm_invocation_logs log
           ON log.tenant_id = ${project.tenantId}::uuid
@@ -871,6 +877,7 @@ export class EmployeesService {
       return this.toProjectEmployeeAssignmentResponse(
         assignment,
         usageRows[0]?.usedMicroUsd ?? 0n,
+        usageRows[0]?.dailyUsedTokens ?? 0n,
       );
     });
   }
@@ -1212,6 +1219,10 @@ export class EmployeesService {
         dto.allowedProviderConnectionIds !== undefined
           ? uniqueTrimmedStrings(dto.allowedProviderConnectionIds)
           : current.allowedProviderConnectionIds,
+      dailyTokenLimit: {
+        enabled: (dto.dailyTokenLimit ?? current.dailyTokenLimit.limit) > 0,
+        limit: dto.dailyTokenLimit ?? current.dailyTokenLimit.limit,
+      },
       note:
         dto.policyNote !== undefined
           ? this.toNullableString(dto.policyNote)
@@ -1232,6 +1243,10 @@ export class EmployeesService {
       return {
         allowedModelKeys: [],
         allowedProviderConnectionIds: [],
+        dailyTokenLimit: {
+          enabled: false,
+          limit: 0,
+        },
         note: null,
         rateLimit: {
           enabled: false,
@@ -1241,6 +1256,9 @@ export class EmployeesService {
       };
     }
 
+    const dailyTokenLimit = isRecord(policy.dailyTokenLimit)
+      ? policy.dailyTokenLimit
+      : {};
     const rateLimit = isRecord(policy.rateLimit) ? policy.rateLimit : {};
 
     return {
@@ -1248,6 +1266,13 @@ export class EmployeesService {
       allowedProviderConnectionIds: readStringArray(
         policy.allowedProviderConnectionIds,
       ),
+      dailyTokenLimit: {
+        enabled:
+          typeof dailyTokenLimit.enabled === 'boolean'
+            ? dailyTokenLimit.enabled
+            : readPositiveInteger(dailyTokenLimit.limit, 0, 1000000000) > 0,
+        limit: readPositiveInteger(dailyTokenLimit.limit, 0, 1000000000),
+      },
       note: typeof policy.note === 'string' && policy.note.trim() ? policy.note : null,
       rateLimit: {
         enabled:
@@ -1287,6 +1312,7 @@ export class EmployeesService {
   private toProjectEmployeeAssignmentResponse(
     assignment: ProjectEmployeeWithEmployee,
     monthlyUsedMicroUsd = 0n,
+    dailyUsedTokens = 0n,
   ): ProjectEmployeeAssignmentResponseDto {
     const monthlyBudgetLimitMicroUsd = assignment.monthlyBudgetLimitMicroUsd;
     const monthlyRemainingMicroUsd =
@@ -1297,6 +1323,14 @@ export class EmployeesService {
       monthlyBudgetLimitMicroUsd > 0n
         ? (Number(monthlyUsedMicroUsd) * 100) /
           Number(monthlyBudgetLimitMicroUsd)
+        : 0;
+    const policy = this.toProjectEmployeePolicy(assignment.policy);
+    const dailyTokenLimit = BigInt(policy.dailyTokenLimit.limit);
+    const dailyTokenRemaining =
+      dailyTokenLimit > dailyUsedTokens ? dailyTokenLimit - dailyUsedTokens : 0n;
+    const dailyTokenUsagePercent =
+      dailyTokenLimit > 0n
+        ? (Number(dailyUsedTokens) * 100) / Number(dailyTokenLimit)
         : 0;
 
     return {
@@ -1310,6 +1344,14 @@ export class EmployeesService {
       invitationStatus: normalizeInvitationStatus(
         assignment.employee.invitationStatus,
       ),
+      dailyTokenRemaining: Number(dailyTokenRemaining),
+      dailyTokenStatus: this.toProjectEmployeeQuotaStatus(
+        dailyTokenLimit,
+        dailyUsedTokens,
+        100,
+      ),
+      dailyTokenUsed: Number(dailyUsedTokens),
+      dailyTokenUsagePercent,
       monthlyBudgetLimitMicroUsd: Number(monthlyBudgetLimitMicroUsd),
       monthlyBudgetLimitUsd: this.microUsdToUsdNumber(
         monthlyBudgetLimitMicroUsd,
@@ -1319,7 +1361,7 @@ export class EmployeesService {
       ),
       monthlyUsedMicroUsd: Number(monthlyUsedMicroUsd),
       monthlyUsedUsd: this.microUsdToUsdNumber(monthlyUsedMicroUsd),
-      policy: this.toProjectEmployeePolicy(assignment.policy),
+      policy,
       projectId: assignment.projectId,
       quotaStatus: this.toProjectEmployeeQuotaStatus(
         monthlyBudgetLimitMicroUsd,
@@ -1334,14 +1376,18 @@ export class EmployeesService {
     };
   }
 
-  private async listProjectEmployeeMonthlyUsage(
+  private async listProjectEmployeeUsage(
     tenantId: string,
     projectId: string,
   ): Promise<ProjectEmployeeUsageRow[]> {
     return this.prisma.$queryRaw<ProjectEmployeeUsageRow[]>`
       SELECT
         employee.id::text AS "employeeId",
-        COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd"
+        COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd",
+          COALESCE(SUM(log.total_tokens) FILTER (
+            WHERE log.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+              AND log.created_at < (date_trunc('day', now() AT TIME ZONE 'UTC') + interval '1 day') AT TIME ZONE 'UTC'
+          ), 0)::bigint AS "dailyUsedTokens"
       FROM project_employee_assignments assignment
       JOIN employees employee
         ON employee.id = assignment."employeeId"

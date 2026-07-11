@@ -42,3 +42,21 @@ func TestEvaluateTreatsZeroQuotaAsNotConfigured(t *testing.T) {
 		t.Fatalf("zero quota must remain unconfigured, got %#v", decision)
 	}
 }
+
+func TestEvaluateRestrictsHighQualityAfterDailyTokenLimitExceeded(t *testing.T) {
+	allowed := Evaluate(Policy{
+		EmployeeID: "employee_1",
+		DailyToken: DailyTokenPolicy{Enabled: true, Limit: 1000, Used: 999},
+	})
+	if allowed.DailyTokenOutcome != DailyTokenOutcomeAllowed || RestrictsHighQuality(&allowed) {
+		t.Fatalf("daily token usage below limit must stay unrestricted, got %#v", allowed)
+	}
+
+	exceeded := Evaluate(Policy{
+		EmployeeID: "employee_1",
+		DailyToken: DailyTokenPolicy{Enabled: true, Limit: 1000, Used: 1000},
+	})
+	if exceeded.DailyTokenOutcome != DailyTokenOutcomeExceeded || !RestrictsHighQuality(&exceeded) {
+		t.Fatalf("daily token limit must restrict high quality, got %#v", exceeded)
+	}
+}
