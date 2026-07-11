@@ -16926,8 +16926,41 @@ html:has(.tenant-management-content) {
 }
 
 .tenant-routing-model-heading {
-  display: grid;
-  gap: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.tenant-routing-model-heading-copy {
+  min-width: 0;
+}
+
+.tenant-routing-recommend-button {
+  display: inline-flex;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 18%, transparent);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.tenant-routing-recommend-button:hover:not(:disabled) {
+  background: var(--brand-blue-strong);
+  border-color: var(--brand-blue-strong);
+}
+
+.tenant-routing-recommend-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .tenant-routing-table {
@@ -16996,6 +17029,35 @@ html:has(.tenant-management-content) {
 .tenant-routing-route {
   display: flex;
   align-items: center;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.tenant-routing-route[data-recommendation-highlighted="true"] {
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent);
+  animation: tenant-routing-recommendation-highlight 1600ms ease-out both;
+}
+
+.tenant-routing-route[data-recommendation-highlighted="true"]
+  :is(.tenant-routing-provider-control, .tenant-routing-model-control) {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
+@keyframes tenant-routing-recommendation-highlight {
+  0%,
+  38% {
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
 }
 
 .tenant-routing-model-selectors {
@@ -17113,16 +17175,53 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 .tenant-routing-save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--primary);
   color: var(--primary-foreground);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 18%, transparent);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .tenant-routing-save-button:hover:not(:disabled) {
   background: var(--brand-blue-strong);
 }
 
+.tenant-routing-save-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+
+.tenant-routing-save-button[data-save-confirmed="true"] {
+  background: var(--brand-blue-strong);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent),
+    0 10px 22px color-mix(in srgb, var(--primary) 22%, transparent);
+  animation: tenant-routing-save-confirmation 520ms ease-out;
+}
+
+@keyframes tenant-routing-save-confirmation {
+  0% {
+    transform: scale(0.97);
+  }
+
+  55% {
+    transform: scale(1.035);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 .tenant-routing-reset-button:focus-visible,
+.tenant-routing-recommend-button:focus-visible,
 .tenant-routing-save-button:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--ring) 22%, transparent);
   outline-offset: 2px;
@@ -17222,6 +17321,15 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
     display: none;
   }
 
+  .tenant-routing-model-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tenant-routing-recommend-button {
+    width: fit-content;
+  }
+
   .tenant-routing-table-row {
     grid-template-columns: minmax(0, 1fr);
     padding: 16px;
@@ -17279,6 +17387,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .tenant-routing-recommend-button {
+    width: 100%;
+  }
+
   .tenant-routing-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -17286,6 +17398,15 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 
   .tenant-routing-actions button {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tenant-routing-route,
+  .tenant-routing-route[data-recommendation-highlighted="true"],
+  .tenant-routing-save-button[data-save-confirmed="true"] {
+    animation: none;
+    transition: none;
   }
 }
 
