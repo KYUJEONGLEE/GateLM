@@ -254,12 +254,14 @@ export function GatewayPipeline({
           })}
         </ol>
 
-        <span
-          className="gateway-pipeline-cache-label"
-          data-route={model.flow.route}
-        >
-          {cacheRouteLabel(model.flow.cacheOutcome, locale)}
-        </span>
+        {model.flow.cacheOutcome !== "miss" ? (
+          <span
+            className="gateway-pipeline-cache-label"
+            data-route={model.flow.route}
+          >
+            {cacheRouteLabel(model.flow.cacheOutcome, locale)}
+          </span>
+        ) : null}
       </div>
 
       {model.fallback ? (

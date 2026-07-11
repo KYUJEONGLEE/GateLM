@@ -1,5 +1,4 @@
 import {
-  AppWindow,
   Boxes,
   BriefcaseBusiness,
   CalendarClock,
@@ -427,7 +426,6 @@ function RequestSummary({
       >
         <span>{locale === "ko" ? "최종 결과" : "Final outcome"}</span>
         <strong>{requestStatusLabel(record, locale)}</strong>
-        <p>{requestOutcomeSummary(record, locale)}</p>
       </div>
       <div
         aria-label={locale === "ko" ? "핵심 수치" : "Key metrics"}
@@ -469,12 +467,7 @@ function RequestSummary({
         <SummaryMetric
           icon={<BriefcaseBusiness aria-hidden="true" />}
           label={locale === "ko" ? "프로젝트" : "Project"}
-          value={summaryIdentifier(record.projectId)}
-        />
-        <SummaryMetric
-          icon={<AppWindow aria-hidden="true" />}
-          label={locale === "ko" ? "애플리케이션" : "Application"}
-          value={summaryIdentifier(record.applicationId)}
+          value={record.projectName?.trim() || summaryIdentifier(record.projectId)}
         />
         <SummaryMetric
           icon={<Boxes aria-hidden="true" />}
@@ -488,7 +481,7 @@ function RequestSummary({
               />
               <span>
                 <strong>
-                  {providerDisplayName(provider) + " / " + (model ?? "-")}
+                  {model ?? "-"}
                 </strong>
               </span>
             </span>
@@ -645,17 +638,6 @@ function summaryIdentifier(value: string | null | undefined) {
   return formatDisplayIdentifier(normalized);
 }
 
-function providerDisplayName(provider: string | null) {
-  const normalized = provider?.trim().toLowerCase() ?? "";
-
-  if (!normalized) return "-";
-  if (normalized.includes("openai")) return "OpenAI";
-  if (normalized.includes("anthropic") || normalized.includes("claude")) return "Anthropic";
-  if (normalized.includes("gemini") || normalized.includes("google")) return "Google Gemini";
-  if (normalized.includes("mock")) return "Mock Provider";
-  return provider ?? "-";
-}
-
 function requestStatusLabel(record: InvocationLogRecord, locale: Locale) {
   if (record.httpStatus >= 200 && record.httpStatus < 300) {
     return `${record.httpStatus} OK`;
@@ -683,34 +665,6 @@ function requestSummaryTone(record: InvocationLogRecord) {
     return "warning";
   }
   return "error";
-}
-
-function requestOutcomeSummary(record: InvocationLogRecord, locale: Locale) {
-  const cacheHit = (record.cacheStatus ?? "").trim().toLowerCase() === "hit";
-
-  if (record.httpStatus >= 200 && record.httpStatus < 300) {
-    if (cacheHit) {
-      return locale === "ko"
-        ? "캐시 응답으로 요청을 완료했으며 프로바이더 호출은 생략했습니다."
-        : "The request completed from cache without calling the provider.";
-    }
-    return locale === "ko"
-      ? "게이트웨이 정책을 통과하고 프로바이더 응답까지 정상적으로 완료했습니다."
-      : "The request passed gateway policy and completed with a provider response.";
-  }
-  if (record.httpStatus === 429 || record.status === "rate_limited") {
-    return locale === "ko"
-      ? "요청 제한 정책에서 처리를 중단했으며 프로바이더는 호출하지 않았습니다."
-      : "Rate limiting stopped the request before the provider was called.";
-  }
-  if (record.status === "blocked") {
-    return locale === "ko"
-      ? "보호 정책에서 요청을 차단했으며 프로바이더는 호출하지 않았습니다."
-      : "A guardrail blocked the request before the provider was called.";
-  }
-  return locale === "ko"
-    ? "요청 처리 중 오류가 발생했습니다. 아래 흐름에서 중단 단계를 확인하세요."
-    : "The request failed. Review the flow below to find the stopping stage.";
 }
 
 const koreanCodeLabels: Record<string, string> = {
