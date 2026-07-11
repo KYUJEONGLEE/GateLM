@@ -92,6 +92,12 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   await expect(drawer.getByRole("heading", { name: "요청 상세" })).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "요청 흐름" })).toBeVisible();
   const requestSummary = drawer.getByLabel("요청 요약");
+  await expect(
+    requestSummary.getByRole("group", { name: "핵심 수치" })
+  ).toBeVisible();
+  await expect(
+    requestSummary.getByRole("group", { name: "요청 컨텍스트" })
+  ).toBeVisible();
   for (const label of [
     "요청 시각",
     "프로젝트",
@@ -232,6 +238,13 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
     drawer.locator('.gateway-pipeline-stage[data-stage="guardrails"][data-tone="error"]')
   ).toHaveCount(1);
   await expect(drawer.locator('.gateway-pipeline-path-terminal[data-tone="error"]')).toHaveCount(1);
+  const safetySummary = drawer
+    .locator(".request-detail-accordion > summary")
+    .filter({ hasText: /^적용된 정책$/ });
+  await safetySummary.click();
+  await expect(
+    safetySummary.locator("..").getByText("이메일", { exact: true })
+  ).toBeVisible();
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
 
   await focus.getByRole("button", { name: "Open request detail req-live-4" }).click();
@@ -363,7 +376,17 @@ function detailRecord(requestId: string): InvocationLogRecord {
   }
 
   if (requestId === "req-live-3") {
-    return terminalDetailRecord(base, baseOutcomes, "blocked");
+    return {
+      ...terminalDetailRecord(base, baseOutcomes, "blocked"),
+      maskingDetectedCount: 1,
+      maskingDetectedTypes: ["email"],
+      safetySummary: {
+        detectedCount: 1,
+        detectorCategories: [],
+        maskingAction: "blocked",
+        outcome: "blocked"
+      }
+    };
   }
 
   if (requestId === "req-live-4") {

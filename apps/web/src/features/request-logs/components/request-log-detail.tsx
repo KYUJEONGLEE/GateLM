@@ -228,8 +228,9 @@ export function RequestLogDetailPanel({
               [
                 detailLabel(locale, "Detected types", "탐지 유형"),
                 localizedCodeList(
-                  record.safetySummary?.detectorCategories ??
-                    record.maskingDetectedTypes,
+                  record.safetySummary?.detectorCategories?.length
+                    ? record.safetySummary.detectorCategories
+                    : record.maskingDetectedTypes,
                   locale,
                   text.none
                 )
@@ -431,6 +432,7 @@ function RequestSummary({
       <div
         aria-label={locale === "ko" ? "핵심 수치" : "Key metrics"}
         className="request-detail-key-metrics"
+        role="group"
       >
         <SummaryMetric
           icon={<Timer aria-hidden="true" />}
@@ -457,6 +459,7 @@ function RequestSummary({
       <div
         aria-label={locale === "ko" ? "요청 컨텍스트" : "Request context"}
         className="request-detail-context-grid"
+        role="group"
       >
         <SummaryMetric
           icon={<CalendarClock aria-hidden="true" />}
