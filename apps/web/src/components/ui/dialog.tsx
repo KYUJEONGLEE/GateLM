@@ -29,16 +29,21 @@ function DialogContent({
   children,
   showClose = true,
   anchorStyle,
+  backdropClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   anchorStyle?: React.CSSProperties
+  backdropClassName?: string
   showClose?: boolean
 }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
         data-slot="dialog-backdrop"
-        className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[1px] transition-opacity data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
+        className={cn(
+          "fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[1px] transition-opacity data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
+          backdropClassName
+        )}
       />
       <DialogPrimitive.Popup
         data-slot="dialog-content"

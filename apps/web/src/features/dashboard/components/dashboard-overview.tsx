@@ -382,6 +382,7 @@ export function DashboardOverviewView({
               tenantId: overview.filters.tenantId
             }}
             initialPayload={liveRequests}
+            locale={locale}
           />
         </div>
         <aside className="dashboard-ai-panel" aria-label="AI analysis workspace">
