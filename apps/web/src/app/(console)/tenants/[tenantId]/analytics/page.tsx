@@ -10,6 +10,7 @@ import {
   Sparkles,
   ShieldCheck
 } from "lucide-react";
+import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link";
 import {
   AnalyticsLatencyDistributionLineChart,
   AnalyticsProviderLatencyBarChart
@@ -387,7 +388,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         {analyticsTabs.map((tab) => {
           const Icon = tab.icon;
           return (
-            <Link
+            <IntentPrefetchLink
               className="analytics-tab"
               data-active={tab.id === activeTab}
               href={analyticsTabHref(tenantId, tab.id, filters)}
@@ -395,7 +396,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
             >
               <Icon aria-hidden="true" size={17} />
               {tab.label}
-            </Link>
+            </IntentPrefetchLink>
           );
         })}
       </nav>

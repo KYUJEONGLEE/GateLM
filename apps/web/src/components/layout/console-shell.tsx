@@ -20,6 +20,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link";
 import {
   getConsoleNavigationState,
   type ConsoleSection,
@@ -403,7 +404,7 @@ export function ConsoleShell({
       }
 
       return (
-        <Link
+        <IntentPrefetchLink
           aria-current={isChildActive(child) ? "page" : undefined}
           className="console-subnav-link"
           data-active={isChildActive(child)}
@@ -414,7 +415,7 @@ export function ConsoleShell({
           <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
           <span>{childLabel}</span>
           {child.badge ? <span className="console-nav-badge">{child.badge}</span> : null}
-        </Link>
+        </IntentPrefetchLink>
       );
     });
   }
