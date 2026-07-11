@@ -101,6 +101,8 @@ const emptyCreateValues: EmployeeCreateValues = {
   name: ""
 };
 
+const emptyProviderConnections: ProviderConnectionRecord[] = [];
+
 const employeeText: Record<
   Locale,
   {
@@ -408,7 +410,7 @@ export function ProjectEmployeeAssignmentSection({
   locale,
   model,
   project,
-  providerConnections = []
+  providerConnections = emptyProviderConnections
 }: ProjectEmployeeAssignmentProps) {
   const router = useRouter();
   const text = projectEmployeeText[locale];
