@@ -28,7 +28,7 @@ const providerOptions: Array<{ label: string; value: "" | ProviderModelUsageProv
 ];
 
 const usageColors = ["#3b82f6", "#2dd4bf", "#34d399", "#f59e0b", "#8b5cf6"];
-const MAX_DIRECT_USAGE_ROWS = 4;
+const MAX_DIRECT_USAGE_ROWS = 3;
 
 export function ProviderModelUsageCard({
   rows

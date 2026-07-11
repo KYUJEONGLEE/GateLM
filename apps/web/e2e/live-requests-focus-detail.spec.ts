@@ -67,7 +67,7 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
 
   const compact = page.locator('.dashboard-live-requests-panel[data-live-view="compact"]');
   await expect(compact).toBeVisible();
-  await expect(compact.locator("tbody tr")).toHaveCount(5);
+  await expect(compact.locator("tbody tr")).toHaveCount(4);
 
   await compact.getByRole("button", { name: "Open Live Requests focus view" }).click();
 

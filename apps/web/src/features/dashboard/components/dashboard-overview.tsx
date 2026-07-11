@@ -1,7 +1,6 @@
 import {
   Activity,
   CheckCircle2,
-  Clock3,
   DollarSign,
   RotateCcw
 } from "lucide-react";
@@ -282,18 +281,11 @@ export function DashboardOverviewView({
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)}건 성공`,
+      detail: `${formatInteger(overview.successfulRequests)}건 성공 · 평균 ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
       icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: "성공률",
       tone: "green",
       value: formatPercent(successRate)
-    },
-    {
-      detail: `p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
-      icon: <Clock3 aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "평균 지연 시간",
-      tone: "violet",
-      value: formatLatency(Math.round(overview.averageLatencyMs))
     },
     {
       detail: "이번 달 실시간 누적 비용",

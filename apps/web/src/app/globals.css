@@ -1657,7 +1657,7 @@ select {
 }
 
 .dashboard-overview-workspace .dashboard-kpi-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .dashboard-main-panel {
@@ -18168,6 +18168,80 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
 .dashboard-live-requests-footer small {
   color: var(--text-muted);
   font-size: inherit;
+}
+
+/* Monitoring overview presentation scale: keep the operational layout, raise scanability. */
+.dashboard-overview-content .dashboard-main-header h1 {
+  font-size: calc(48px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-kpi-card {
+  min-height: 176px;
+}
+
+.dashboard-overview-content .dashboard-kpi-label,
+.dashboard-overview-content .dashboard-kpi-card p {
+  font-size: calc(22px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-kpi-card strong {
+  font-size: calc(42px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-cost-over-time-header h2,
+.dashboard-overview-content .dashboard-provider-usage-header h2,
+.dashboard-overview-content .dashboard-live-requests-title h2 {
+  font-size: calc(28px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-cost-over-time-header p,
+.dashboard-overview-content .dashboard-cost-over-time-header > span,
+.dashboard-overview-content .dashboard-cost-over-time-legend,
+.dashboard-overview-content .dashboard-provider-usage-header select,
+.dashboard-overview-content .dashboard-provider-usage-row strong,
+.dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot),
+.dashboard-overview-content .dashboard-provider-usage-row em {
+  font-size: calc(20px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-provider-usage-center strong {
+  font-size: calc(34px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-provider-usage-center span,
+.dashboard-overview-content .dashboard-live-requests-table th {
+  font-size: calc(16px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-live-requests-table td,
+.dashboard-overview-content .dashboard-live-requests-footer {
+  font-size: calc(17px + var(--global-font-lift));
+}
+
+.dashboard-overview-content .dashboard-live-mini-badge,
+.dashboard-overview-content .dashboard-live-status-badge {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: calc(20px + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+}
+
+@media (max-width: 760px) {
+  .dashboard-overview-content .dashboard-main-header h1 {
+    font-size: calc(36px + var(--global-font-lift));
+  }
+
+  .dashboard-overview-content .dashboard-kpi-label,
+  .dashboard-overview-content .dashboard-kpi-card p,
+  .dashboard-overview-content .dashboard-cost-over-time-header p,
+  .dashboard-overview-content .dashboard-cost-over-time-header > span,
+  .dashboard-overview-content .dashboard-cost-over-time-legend,
+  .dashboard-overview-content .dashboard-provider-usage-header select,
+  .dashboard-overview-content .dashboard-provider-usage-row strong,
+  .dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot),
+  .dashboard-overview-content .dashboard-provider-usage-row em {
+    font-size: calc(16px + var(--global-font-lift));
+  }
 }
 
 .live-requests-focus-backdrop {
