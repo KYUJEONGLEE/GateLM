@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
-import { AiInsightsPanel } from "@/features/dashboard/components/ai-insights-panel";
 import { CostOverTimeCard } from "@/features/dashboard/components/cost-over-time-card";
 import { DashboardAutoRefresh } from "@/features/dashboard/components/dashboard-auto-refresh";
 import {
@@ -274,9 +273,6 @@ export function DashboardOverviewView({
       overview.dataFreshness.generatedAt ||
       overview.range.to
   );
-  const selectedProject = filters.projectId
-    ? projects.find((project) => project.id === filters.projectId)
-    : null;
   const kpiCards = [
     {
       detail: `${formatInteger(overview.totalRequests)}건 · ${kpiRangeLabel(filters.range)}`,
@@ -385,21 +381,6 @@ export function DashboardOverviewView({
             locale={locale}
           />
         </div>
-        <aside className="dashboard-ai-panel" aria-label="AI analysis workspace">
-          <AiInsightsPanel
-            averageLatencyMs={overview.averageLatencyMs}
-            cacheHitRate={overview.exactCacheHitRate ?? overview.cacheHitRate}
-            monthToDateSpendMicroUsd={monthToDate.totalCostMicroUsd}
-            p95LatencyMs={overview.p95LatencyMs}
-            projectId={filters.projectId || null}
-            projectName={selectedProject?.name ?? null}
-            rangeLabel={rangeLabel(filters.range)}
-            recentRequests={liveRequests?.rows}
-            successRate={successRate}
-            tenantId={overview.filters.tenantId}
-            totalRequests={overview.totalRequests}
-          />
-        </aside>
       </section>
 
       {detailPanel}

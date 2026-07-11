@@ -8,7 +8,7 @@ import type { InvocationLogRecord } from "../src/lib/fixtures/v1-observability-f
 import type { LiveRequestRow } from "../src/lib/gateway/live-requests-types";
 
 const tenantId = "tenant_demo_acme";
-const dashboardPath = `/tenants/${tenantId}/dashboard`;
+const dashboardPath = `/tenants/${tenantId}/dashboard?range=1d`;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 const controlPlaneBaseUrl = (
   process.env.GATELM_CONTROL_PLANE_BASE_URL ??
@@ -97,8 +97,8 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
     "프로젝트",
     "애플리케이션",
     "프로바이더 / 모델",
-    "최종 상태",
-    "총 처리시간",
+    "최종 결과",
+    "총 처리 시간",
     "사용 토큰",
     "예상 비용"
   ]) {
@@ -116,8 +116,8 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   await expect(drawer.locator(".gateway-pipeline-fallback")).toHaveCount(0);
 
   const drawerBox = await drawer.boundingBox();
-  expect(drawerBox?.width).toBeGreaterThanOrEqual(1295);
-  expect(drawerBox?.width).toBeLessThanOrEqual(1320);
+  expect(drawerBox?.width).toBeGreaterThanOrEqual(1590);
+  expect(drawerBox?.width).toBeLessThanOrEqual(1610);
 
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
   await expect(drawer).toBeHidden();
@@ -186,11 +186,14 @@ test("keeps the existing Request Logs detail route working with the redesigned p
     .click();
   await expect(aside.getByText("표준 라우팅", { exact: true })).toBeVisible();
 
-  await aside
-    .locator(".request-detail-accordion summary")
-    .filter({ hasText: "캐시 결과" })
-    .click();
-  await expect(aside.getByText("정확 일치 · 캐시 미스", { exact: true })).toBeVisible();
+  const cacheSummary = aside
+    .locator(".request-detail-accordion > summary")
+    .filter({ hasText: /^캐시 결과$/ });
+  const cacheDetails = cacheSummary.locator("..");
+  await cacheSummary.click();
+  await expect(
+    cacheDetails.getByText("정확 일치 · 캐시 미스", { exact: true })
+  ).toBeVisible();
   await expect(aside.getByText("standard routing", { exact: true })).toHaveCount(0);
   await expect(aside.getByText("exact:miss", { exact: true })).toHaveCount(0);
 });
