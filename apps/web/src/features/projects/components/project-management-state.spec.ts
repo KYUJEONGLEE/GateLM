@@ -33,3 +33,24 @@ test("sorts the newest project first", () => {
     )
   ).toBeLessThan(0);
 });
+
+test("keeps projects with invalid creation dates after valid projects", () => {
+  expect(
+    compareProjectCreatedAtDescending(
+      { createdAt: "not-a-date" },
+      { createdAt: "2026-07-11T12:00:00.000Z" }
+    )
+  ).toBeGreaterThan(0);
+  expect(
+    compareProjectCreatedAtDescending(
+      { createdAt: "2026-07-11T12:00:00.000Z" },
+      { createdAt: "not-a-date" }
+    )
+  ).toBeLessThan(0);
+  expect(
+    compareProjectCreatedAtDescending(
+      { createdAt: "invalid-left" },
+      { createdAt: "invalid-right" }
+    )
+  ).toBe(0);
+});

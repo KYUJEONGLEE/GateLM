@@ -8,7 +8,18 @@ export function compareProjectCreatedAtDescending(
   left: { createdAt: string },
   right: { createdAt: string }
 ) {
-  return Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  const leftTime = Date.parse(left.createdAt);
+  const rightTime = Date.parse(right.createdAt);
+
+  if (Number.isNaN(leftTime)) {
+    return Number.isNaN(rightTime) ? 0 : 1;
+  }
+
+  if (Number.isNaN(rightTime)) {
+    return -1;
+  }
+
+  return rightTime - leftTime;
 }
 
 export function getProjectCreateActionLocation(
