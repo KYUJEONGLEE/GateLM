@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowRight, Clock3, Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -17,7 +17,10 @@ import type {
 import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
-import { getProjectCreateActionLocation } from "./project-management-state";
+import {
+  getProjectCreateActionLocation,
+  getRelativeTokenUsagePercent
+} from "./project-management-state";
 
 type ProjectManagementProps = {
   budgetThresholds: ProjectBudgetThresholdRecord[];
@@ -44,117 +47,121 @@ type ProjectResponsePayload = {
   project?: ProjectRecord;
 };
 
-type ProjectSortMode = "budget" | "limitRisk" | "usage";
+type ProjectSortMode = "budgetRisk" | "tokens";
 type ProjectBudgetState = "alert" | "operational" | "warning";
 
 const projectStatuses: ProjectStatus[] = ["ACTIVE", "DRAFT", "DISABLED", "ARCHIVED"];
-const projectSortModes: ProjectSortMode[] = ["budget", "limitRisk", "usage"];
+const projectSortModes: ProjectSortMode[] = ["budgetRisk", "tokens"];
 const defaultWarningThresholdPercent = 80;
+const compactTokenFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+  notation: "compact"
+});
 
 const projectText: Record<
   Locale,
   {
-    actions: string;
+    budgetUsage: string;
     createProject: string;
-    created: string;
     description: string;
-    edit: string;
-    editProject?: string;
-    editPolicy: string;
     empty: string;
     budgetAlert: string;
     budgetWarning: string;
     costReportFallback: string;
     fixtureFallback: string;
     detailSaved: string;
+    draftBadge: string;
+    draftDescription: string;
+    draftTitle: string;
     general: string;
+    manageProject: string;
     name: string;
+    openProject: string;
     operating: string;
-    project: string;
-    projectId: string;
+    operatingProjects: string;
+    previewUsage: string;
     save: string;
     delete: string;
     deleteConfirm: string;
-    sortBudget: string;
+    sortBudgetRisk: string;
     sortLabel: string;
-    sortLimitRisk: string;
-    sortUsage: string;
+    sortTokens: string;
     totalBudget: string;
-    deleted: string;
-    source: string;
     status: string;
     title: string;
-    updated: string;
-    usage: string;
+    tokenComparison: string;
+    tokenComparisonEmpty: string;
+    tokenUsage: string;
+    usageUnavailable: string;
   }
 > = {
   en: {
-    actions: "Actions",
+    budgetUsage: "Budget used",
     createProject: "Create Project",
-    created: "Created",
     description: "Description",
-    edit: "Edit",
-    editProject: "Edit project",
-    editPolicy: "Edit policy",
     empty: "No projects found.",
-    budgetAlert: "Limit exceeded",
-    budgetWarning: "Warning",
+    budgetAlert: "Budget exceeded",
+    budgetWarning: "Budget warning",
     costReportFallback: "Monthly usage is unavailable.",
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
     detailSaved: "Project saved.",
+    draftBadge: "Saved draft",
+    draftDescription: "These projects were saved before setup was completed.",
+    draftTitle: "Projects in progress",
     general: "General",
+    manageProject: "Manage project",
     name: "Name",
+    openProject: "Open project",
     operating: "Operating",
-    project: "Project",
-    projectId: "Project ID",
+    operatingProjects: "Operating projects",
+    previewUsage: "Showing synthetic monthly usage for layout preview only.",
     save: "Save",
     delete: "Delete",
     deleteConfirm: "Delete this project? This action cannot be undone.",
-    sortBudget: "Budget",
+    sortBudgetRisk: "Budget used",
     sortLabel: "Sort by",
-    sortLimitRisk: "Limit risk",
-    sortUsage: "Usage",
+    sortTokens: "Token usage",
     totalBudget: "Project budget",
-    deleted: "Project deleted.",
-    source: "Source",
     status: "Status",
     title: "Projects",
-    updated: "Updated",
-    usage: "Usage"
+    tokenComparison: "of the highest project usage",
+    tokenComparisonEmpty: "No token usage to compare yet.",
+    tokenUsage: "Token usage",
+    usageUnavailable: "Usage unavailable"
   },
   ko: {
-    actions: "작업",
+    budgetUsage: "예산 소진율",
     createProject: "프로젝트 생성",
-    created: "생성일",
     description: "설명",
-    edit: "수정",
-    editProject: "프로젝트 수정",
-    editPolicy: "프로젝트 정책 수정",
     empty: "프로젝트가 없습니다.",
-    budgetAlert: "한도 초과",
-    budgetWarning: "주의",
+    budgetAlert: "예산 초과",
+    budgetWarning: "예산 경고",
     costReportFallback: "월간 사용량을 불러올 수 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
     detailSaved: "프로젝트가 저장되었습니다.",
+    draftBadge: "임시 저장",
+    draftDescription: "프로젝트 생성을 완료하기 전에 임시 저장된 항목입니다.",
+    draftTitle: "작성 중인 프로젝트",
     general: "일반",
+    manageProject: "프로젝트 관리",
     name: "이름",
+    openProject: "프로젝트 열기",
     operating: "운영 중",
-    project: "프로젝트",
-    projectId: "프로젝트 ID",
+    operatingProjects: "운영 프로젝트",
+    previewUsage: "화면 검토를 위한 합성 월간 사용량을 표시 중입니다.",
     save: "저장",
     delete: "삭제",
     deleteConfirm: "이 프로젝트를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
-    sortBudget: "예산순",
+    sortBudgetRisk: "예산 소진율",
     sortLabel: "정렬 기준",
-    sortLimitRisk: "한도 위험순",
-    sortUsage: "사용량순",
+    sortTokens: "토큰 사용량",
     totalBudget: "프로젝트 예산",
-    deleted: "프로젝트가 삭제되었습니다.",
-    source: "출처",
     status: "상태",
     title: "프로젝트",
-    updated: "수정일",
-    usage: "사용률"
+    tokenComparison: "최대 사용 프로젝트 대비",
+    tokenComparisonEmpty: "아직 비교할 토큰 사용량이 없습니다.",
+    tokenUsage: "토큰 사용량",
+    usageUnavailable: "사용량 미확인"
   }
 };
 
@@ -166,12 +173,16 @@ export function ProjectManagement({
   monthlyCostReport
 }: ProjectManagementProps) {
   const text = projectText[locale];
-  const [sortMode, setSortMode] = useState<ProjectSortMode>("usage");
+  const [sortMode, setSortMode] = useState<ProjectSortMode>("budgetRisk");
   const projects = useMemo(
     () =>
       model.projects.filter(
         (project) => project.status !== "ARCHIVED" && project.status !== "DRAFT"
       ),
+    [model.projects]
+  );
+  const draftProjects = useMemo(
+    () => model.projects.filter((project) => project.status === "DRAFT"),
     [model.projects]
   );
   const projectCostsById = useMemo(
@@ -188,19 +199,58 @@ export function ProjectManagement({
       ),
     [budgetThresholds]
   );
-  const usageKnown = monthlyCostReport.source === "gateway";
-  const sortedProjects = useMemo(
+  const usageKnown = monthlyCostReport.source !== "unavailable";
+  const highestProjectTokens = useMemo(
     () =>
-      [...projects].sort((left, right) =>
+      usageKnown
+        ? Math.max(
+            0,
+            ...projects.map((project) => projectCostsById.get(project.id)?.totalTokens ?? 0)
+          )
+        : null,
+    [projectCostsById, projects, usageKnown]
+  );
+  const projectItems = useMemo(
+    () =>
+      projects.map((project) => {
+        const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
+        const usage = getProjectUsage(project, projectCostsById.get(project.id), usageKnown);
+        const warningThresholdPercent =
+          warningThresholdsByProjectId.get(project.id) ?? defaultWarningThresholdPercent;
+
+        return {
+          budgetProgress: clampProgress(usage.usagePercent),
+          budgetState: getProjectBudgetState(usage.usagePercent, warningThresholdPercent),
+          href: project.runtimeApplicationId ? `${projectHref}/policies` : projectHref,
+          project,
+          tokenProgress: getRelativeTokenUsagePercent(
+            usage.totalTokens,
+            highestProjectTokens
+          ),
+          usage
+        };
+      }),
+    [
+      highestProjectTokens,
+      model.routeTenantId,
+      projectCostsById,
+      projects,
+      usageKnown,
+      warningThresholdsByProjectId
+    ]
+  );
+  const sortedProjectItems = useMemo(
+    () =>
+      [...projectItems].sort((left, right) =>
         compareProjectsBySortMode(
-          left,
-          right,
+          left.project,
+          right.project,
           sortMode,
-          getProjectUsage(left, projectCostsById.get(left.id), usageKnown),
-          getProjectUsage(right, projectCostsById.get(right.id), usageKnown)
+          left.usage,
+          right.usage
         )
       ),
-    [projectCostsById, projects, sortMode, usageKnown]
+    [projectItems, sortMode]
   );
   const createProjectActionLocation = getProjectCreateActionLocation(
     projects.length,
@@ -228,10 +278,50 @@ export function ProjectManagement({
         </Alert>
       ) : null}
 
-      {monthlyCostReport.loadError ? (
+      {monthlyCostReport.source === "preview" ? (
+        <Alert>
+          <AlertDescription>{text.previewUsage}</AlertDescription>
+        </Alert>
+      ) : monthlyCostReport.loadError ? (
         <Alert variant="warning">
           <AlertDescription>{text.costReportFallback}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {draftProjects.length > 0 ? (
+        <section className="console-panel project-draft-panel" aria-label={text.draftTitle}>
+          <div className="project-draft-heading">
+            <span className="project-draft-icon" aria-hidden="true">
+              <Clock3 />
+            </span>
+            <div>
+              <h3>
+                {text.draftTitle} <span>{draftProjects.length}</span>
+              </h3>
+              <p>{text.draftDescription}</p>
+            </div>
+          </div>
+          <div className="project-draft-list">
+            {draftProjects.map((project) => (
+              <Link
+                className="project-draft-link"
+                href={`/tenants/${model.routeTenantId}/projects/${project.id}`}
+                key={project.id}
+              >
+                <span className="project-draft-name">
+                  <Badge className="project-draft-badge" variant="outline">
+                    {text.draftBadge}
+                  </Badge>
+                  <strong>{project.name}</strong>
+                </span>
+                <span className="project-draft-action">
+                  {text.openProject}
+                  <ArrowRight aria-hidden="true" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <section className="console-panel project-list-panel">
@@ -242,102 +332,106 @@ export function ProjectManagement({
           </div>
         ) : (
           <div className="project-card-list">
-            <div className="project-sort-control" aria-label={text.sortLabel}>
-              <span>{text.sortLabel}</span>
-              <div className="project-sort-buttons">
-                {projectSortModes.map((mode) => (
-                  <button
-                    aria-pressed={sortMode === mode}
-                    className="project-sort-button"
-                    data-active={sortMode === mode}
-                    key={mode}
-                    onClick={() => setSortMode(mode)}
-                    type="button"
-                  >
-                    {formatProjectSortMode(mode, text)}
-                  </button>
-                ))}
+            <div className="project-list-toolbar">
+              <h3>
+                {text.operatingProjects} <span>{projects.length}</span>
+              </h3>
+              <div className="project-sort-control" aria-label={text.sortLabel}>
+                <span>{text.sortLabel}</span>
+                <div className="project-sort-buttons">
+                  {projectSortModes.map((mode) => (
+                    <button
+                      aria-pressed={sortMode === mode}
+                      className="project-sort-button"
+                      data-active={sortMode === mode}
+                      key={mode}
+                      onClick={() => setSortMode(mode)}
+                      type="button"
+                    >
+                      {formatProjectSortMode(mode, text)}
+                    </button>
+                  ))}
+                </div>
+                {createProjectActionLocation === "toolbar" ? createProjectAction : null}
               </div>
-              {createProjectActionLocation === "toolbar" ? createProjectAction : null}
             </div>
 
             <div className="project-card-grid">
-              {sortedProjects.map((project) => {
-                const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
-                const editProjectHref = project.runtimeApplicationId
-                  ? `${projectHref}/policies`
-                  : projectHref;
-                const editProjectLabel = project.runtimeApplicationId
-                  ? locale === "ko"
-                    ? text.editPolicy
-                    : text.editProject ?? text.edit
-                  : text.editProject ?? text.edit;
-                const editProjectActionKind = project.runtimeApplicationId ? "policy" : "project";
-                const usage = getProjectUsage(project, projectCostsById.get(project.id), usageKnown);
-                const warningThresholdPercent =
-                  warningThresholdsByProjectId.get(project.id) ?? defaultWarningThresholdPercent;
-                const budgetState = getProjectBudgetState(
-                  usage.usagePercent,
-                  warningThresholdPercent
-                );
-                const progressWidth = usage.usagePercent === null
-                  ? 0
-                  : Math.max(0, Math.min(usage.usagePercent, 100));
-                const usageCostText = `${formatMicroUsd(usage.costMicroUsd)} / ${formatBudgetUsd(project.totalBudgetUsd)}`;
-
-                return (
-                  <article
+              {sortedProjectItems.map((item) => (
+                  <Link
+                    aria-label={`${item.project.name} ${text.manageProject}`}
                     className="project-card"
-                    data-budget-state={budgetState}
+                    data-budget-state={item.budgetState}
                     data-testid="project-card"
-                    key={project.id}
+                    href={item.href}
+                    key={item.project.id}
                   >
                     <div className="project-card-title-row">
-                      <h4 className="project-card-title">{project.name}</h4>
-                      <Badge
-                        className="project-budget-badge"
-                        data-budget-state={budgetState}
-                        variant="outline"
-                      >
-                        {formatProjectBudgetState(budgetState, text)}
-                      </Badge>
+                      <h4 className="project-card-title">{item.project.name}</h4>
                     </div>
 
-                    <div className="project-card-usage">
-                      <div className="project-usage-summary">
-                        <div>
-                          <span className="project-usage-label">{text.usage}</span>
-                          <strong className="project-usage-value">
-                            {formatUsagePercent(usage.usagePercent)}
-                          </strong>
+                    <div className="project-card-metrics">
+                      <div className="project-card-metric project-budget-metric">
+                        <div className="project-metric-heading">
+                          <span>{text.budgetUsage}</span>
+                          <strong>{formatUsagePercent(item.usage.usagePercent)}</strong>
                         </div>
-                        <span className="project-usage-cost">{usageCostText}</span>
+                        <div
+                          aria-label={text.budgetUsage}
+                          aria-valuemax={100}
+                          aria-valuemin={0}
+                          aria-valuenow={item.usage.usagePercent === null ? undefined : Math.round(item.budgetProgress)}
+                          className="project-usage-track"
+                          role="progressbar"
+                        >
+                          <span
+                            className="project-usage-fill"
+                            style={{ width: `${item.budgetProgress}%` }}
+                          />
+                        </div>
+                        <p className="project-metric-detail">
+                          {item.usage.costMicroUsd === null
+                            ? text.usageUnavailable
+                            : `${formatMicroUsd(item.usage.costMicroUsd)} / ${formatBudgetUsd(
+                                item.project.totalBudgetUsd
+                              )}`}
+                        </p>
                       </div>
-                      <div
-                        aria-label={text.usage}
-                        aria-valuemax={100}
-                        aria-valuemin={0}
-                        aria-valuenow={Math.round(progressWidth)}
-                        className="project-usage-track"
-                        role="progressbar"
-                      >
-                        <span className="project-usage-fill" style={{ width: `${progressWidth}%` }} />
+
+                      <div className="project-card-metric project-token-metric">
+                        <div className="project-metric-heading">
+                          <span>{text.tokenUsage}</span>
+                          <strong>{formatTokenCount(item.usage.totalTokens)}</strong>
+                        </div>
+                        <div
+                          aria-label={text.tokenUsage}
+                          aria-valuemax={100}
+                          aria-valuemin={0}
+                          aria-valuenow={item.tokenProgress === null ? undefined : Math.round(item.tokenProgress)}
+                          className="project-token-track"
+                          role="progressbar"
+                        >
+                          <span
+                            className="project-token-fill"
+                            style={{ width: `${item.tokenProgress ?? 0}%` }}
+                          />
+                        </div>
+                        <p className="project-metric-detail">
+                          {item.tokenProgress === null
+                            ? text.usageUnavailable
+                            : highestProjectTokens === 0
+                              ? text.tokenComparisonEmpty
+                              : `${text.tokenComparison} ${Math.round(item.tokenProgress)}%`}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="project-card-actions">
-                      <Link
-                        className="secondary-button project-list-action-link"
-                        data-action-kind={editProjectActionKind}
-                        href={editProjectHref}
-                      >
-                        {editProjectLabel}
-                        <ArrowRight aria-hidden="true" />
-                      </Link>
-                    </div>
-                  </article>
-                );
-              })}
+                    <span className="project-card-action">
+                      {text.manageProject}
+                      <ArrowRight aria-hidden="true" />
+                    </span>
+                  </Link>
+              ))}
             </div>
           </div>
         )}
@@ -884,7 +978,7 @@ type ProjectMonthlyCostRecord = ProjectMonthlyCostReport["projectCosts"][number]
 
 type ProjectUsage = {
   costMicroUsd: number | null;
-  remainingBudgetUsd: number | null;
+  totalTokens: number | null;
   usagePercent: number | null;
 };
 
@@ -895,27 +989,18 @@ function compareProjectsBySortMode(
   leftUsage: ProjectUsage,
   rightUsage: ProjectUsage
 ) {
-  if (sortMode === "budget") {
-    return compareDescending(left.totalBudgetUsd, right.totalBudgetUsd) || compareProjectIdentity(left, right);
-  }
-
-  if (sortMode === "limitRisk") {
+  if (sortMode === "budgetRisk") {
     return (
-      compareNullableAscending(leftUsage.remainingBudgetUsd, rightUsage.remainingBudgetUsd) ||
       compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
+      compareNullableDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
       compareProjectIdentity(left, right)
     );
   }
 
   return (
-    compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
-    compareNullableDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
+    compareNullableDescending(leftUsage.totalTokens, rightUsage.totalTokens) ||
     compareProjectIdentity(left, right)
   );
-}
-
-function compareDescending(left: number, right: number) {
-  return right - left;
 }
 
 function compareProjectIdentity(left: ProjectRecord, right: ProjectRecord) {
@@ -932,22 +1017,6 @@ function compareStableText(left: string, right: string) {
   }
 
   return 0;
-}
-
-function compareNullableAscending(left: number | null, right: number | null) {
-  if (left === null && right === null) {
-    return 0;
-  }
-
-  if (left === null) {
-    return 1;
-  }
-
-  if (right === null) {
-    return -1;
-  }
-
-  return left - right;
 }
 
 function compareNullableDescending(left: number | null, right: number | null) {
@@ -974,7 +1043,7 @@ function getProjectUsage(
   if (!usageKnown) {
     return {
       costMicroUsd: null,
-      remainingBudgetUsd: null,
+      totalTokens: null,
       usagePercent: null
     };
   }
@@ -986,7 +1055,7 @@ function getProjectUsage(
 
   return {
     costMicroUsd,
-    remainingBudgetUsd: budgetUsd - costUsd,
+    totalTokens: monthlyCost?.totalTokens ?? 0,
     usagePercent
   };
 }
@@ -1010,33 +1079,17 @@ function getProjectBudgetState(
   return "operational";
 }
 
-function formatProjectBudgetState(state: ProjectBudgetState, text: (typeof projectText)[Locale]) {
-  if (state === "alert") {
-    return text.budgetAlert;
-  }
-
-  if (state === "warning") {
-    return text.budgetWarning;
-  }
-
-  return text.operating;
-}
-
 function formatProjectSortMode(mode: ProjectSortMode, text: (typeof projectText)[Locale]) {
-  if (mode === "budget") {
-    return text.sortBudget;
+  if (mode === "budgetRisk") {
+    return text.sortBudgetRisk;
   }
 
-  if (mode === "limitRisk") {
-    return text.sortLimitRisk;
-  }
-
-  return text.sortUsage;
+  return text.sortTokens;
 }
 
 function formatUsagePercent(value: number | null) {
   if (value === null) {
-    return "0%";
+    return "—";
   }
 
   return `${Math.round(value)}%`;
@@ -1044,10 +1097,26 @@ function formatUsagePercent(value: number | null) {
 
 function formatMicroUsd(value: number | null) {
   if (value === null) {
-    return "$0";
+    return "—";
   }
 
   return formatBudgetUsd(value / 1_000_000);
+}
+
+function formatTokenCount(value: number | null) {
+  if (value === null) {
+    return "—";
+  }
+
+  return compactTokenFormatter.format(value);
+}
+
+function clampProgress(value: number | null) {
+  if (value === null) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(value, 100));
 }
 
 function getProjectUpdateValues(project: ProjectRecord): ProjectUpdateValues {
