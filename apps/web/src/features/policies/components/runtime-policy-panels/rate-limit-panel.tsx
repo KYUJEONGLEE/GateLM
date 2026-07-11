@@ -44,6 +44,7 @@ export function RateLimitPolicyPanel({
       <label className="policy-toggle-row">
         <Switch
           checked={draftValues.rateLimitEnabled}
+          id="runtime-policy-rate-limit-enabled"
           onCheckedChange={(checked) =>
             onDraftValuesChange((current) => ({
               ...current,

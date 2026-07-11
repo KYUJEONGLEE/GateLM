@@ -47,6 +47,7 @@ export function CachePolicyPanel({
               <Switch
                 aria-label={text.cacheEnabled}
                 checked={draftValues.cacheEnabled}
+                id="runtime-policy-cache-enabled"
                 onCheckedChange={(checked) =>
                   onDraftValuesChange((current) => ({
                     ...current,

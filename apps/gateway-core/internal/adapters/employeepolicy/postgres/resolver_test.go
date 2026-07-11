@@ -42,6 +42,12 @@ func TestResolverLoadsAssignmentPolicyAndMonthlyUsage(t *testing.T) {
 	if !strings.Contains(db.query, "project_employee_assignments") || !strings.Contains(db.query, "p0_llm_invocation_logs") {
 		t.Fatalf("resolver must join assignment and usage sources: %s", db.query)
 	}
+	if strings.Contains(db.query, "lower(l.end_user_id)") {
+		t.Fatalf("resolver must not apply lower() to the indexed end_user_id column: %s", db.query)
+	}
+	if !strings.Contains(db.query, "l.end_user_id = lower(a.email)") {
+		t.Fatalf("resolver must normalize only the employee email fallback: %s", db.query)
+	}
 	if len(db.args) != 5 || db.args[3] != time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC) {
 		t.Fatalf("unexpected monthly lookup args: %#v", db.args)
 	}

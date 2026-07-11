@@ -862,7 +862,7 @@ export class EmployeesService {
          AND (
            log.end_user_id = employee.id::text
            OR log.end_user_id = employee."userId"::text
-           OR lower(log.end_user_id) = lower(employee.email)
+           OR log.end_user_id = lower(employee.email)
          )
         WHERE employee.id = ${employee.id}::uuid
         GROUP BY employee.id
@@ -1354,7 +1354,7 @@ export class EmployeesService {
        AND (
          log.end_user_id = employee.id::text
          OR log.end_user_id = employee."userId"::text
-         OR lower(log.end_user_id) = lower(employee.email)
+         OR log.end_user_id = lower(employee.email)
        )
       WHERE assignment."tenantId" = ${tenantId}::uuid
         AND assignment."projectId" = ${projectId}::uuid

@@ -16165,8 +16165,14 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   border-radius: 8px;
 }
 
-.employee-policy-dialog-meta {
-  margin: -8px 0 0;
+.employee-policy-dialog-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.employee-policy-dialog-title small {
+  margin: 0;
   color: var(--text-muted);
   font-size: calc(var(--font-size-md) + var(--global-font-lift));
   font-weight: var(--font-weight-medium);
@@ -16178,15 +16184,32 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .employee-policy-tabs [data-slot="tabs-list"] {
-  height: 40px;
-  border-radius: 7px;
+  width: 100%;
+  height: 42px;
+  justify-content: flex-start;
+  gap: 24px;
+  padding: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
 }
 
 .employee-policy-tabs [data-slot="tabs-trigger"] {
-  min-width: 132px;
-  height: 32px;
-  border-radius: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 42px;
+  justify-content: flex-start;
+  padding: 0 2px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
   font-size: var(--font-size-md);
+}
+
+.employee-policy-tabs [data-slot="tabs-trigger"][data-selected] {
+  border-bottom-color: var(--accent-strong);
+  background: transparent;
+  box-shadow: none;
 }
 
 .employee-policy-tab-content {
@@ -16279,6 +16302,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .employee-rate-limit-control {
+  grid-column: 1 / -1;
   display: flex;
   min-height: 46px;
   align-items: center;
@@ -16289,12 +16313,21 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
 }
 
 .employee-rate-limit-fields {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
+}
+
+.employee-policy-note-field {
+  grid-column: 1;
 }
 
 .employee-policy-input-suffix {
@@ -16315,30 +16348,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   font-weight: var(--font-weight-semibold);
   pointer-events: none;
   transform: translateY(-50%);
-}
-
-.employee-rate-limit-heading,
-.employee-rate-limit-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.employee-rate-limit-heading {
-  color: var(--foreground);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-}
-
-.employee-rate-limit-heading svg {
-  color: var(--accent-strong);
-}
-
-.employee-rate-limit-toggle {
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
 }
 
 .employee-policy-dialog .policy-field input:disabled {
@@ -16766,11 +16775,11 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .employee-policy-tabs [data-slot="tabs-list"] {
-    width: 100%;
+    gap: 18px;
   }
 
   .employee-policy-tabs [data-slot="tabs-trigger"] {
-    min-width: 0;
+    font-size: var(--font-size-base);
   }
 
   .employee-provider-model-row {

@@ -141,7 +141,7 @@ select
       and (
         l.end_user_id = a.employee_id::text
         or l.end_user_id = a.user_id::text
-        or lower(l.end_user_id) = lower(a.email)
+        or l.end_user_id = lower(a.email)
       )
   ), 0)::bigint as used_micro_usd
 from matched_assignment a`

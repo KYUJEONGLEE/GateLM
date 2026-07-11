@@ -152,9 +152,9 @@ export type ProjectEmployeeAssignmentValues = {
   monthlyBudgetLimitUsd: number;
   policyNote: string;
   projectId: string;
-  rateLimitEnabled: boolean;
-  rateLimitLimit: number;
-  rateLimitWindowSeconds: number;
+  rateLimitEnabled?: boolean;
+  rateLimitLimit?: number;
+  rateLimitWindowSeconds?: number;
   status?: ProjectEmployeeStatus;
   warningThresholdPercent: number;
 };

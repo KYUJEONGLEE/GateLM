@@ -237,15 +237,17 @@ function isProjectEmployeeAssignmentValues(
     record.monthlyBudgetLimitUsd <= 100000000 &&
     typeof record.policyNote === "string" &&
     typeof record.projectId === "string" &&
-    typeof record.rateLimitEnabled === "boolean" &&
-    typeof record.rateLimitLimit === "number" &&
-    Number.isInteger(record.rateLimitLimit) &&
-    record.rateLimitLimit >= 1 &&
-    record.rateLimitLimit <= 100000 &&
-    typeof record.rateLimitWindowSeconds === "number" &&
-    Number.isInteger(record.rateLimitWindowSeconds) &&
-    record.rateLimitWindowSeconds >= 1 &&
-    record.rateLimitWindowSeconds <= 3600 &&
+    (record.rateLimitEnabled === undefined || typeof record.rateLimitEnabled === "boolean") &&
+    (record.rateLimitLimit === undefined ||
+      (typeof record.rateLimitLimit === "number" &&
+        Number.isInteger(record.rateLimitLimit) &&
+        record.rateLimitLimit >= 1 &&
+        record.rateLimitLimit <= 100000)) &&
+    (record.rateLimitWindowSeconds === undefined ||
+      (typeof record.rateLimitWindowSeconds === "number" &&
+        Number.isInteger(record.rateLimitWindowSeconds) &&
+        record.rateLimitWindowSeconds >= 1 &&
+        record.rateLimitWindowSeconds <= 3600)) &&
     (record.status === undefined || isProjectEmployeeStatus(record.status)) &&
     typeof record.warningThresholdPercent === "number" &&
     Number.isInteger(record.warningThresholdPercent) &&

@@ -4,7 +4,6 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Gauge,
   Plus,
   Save,
   Trash2,
@@ -333,9 +332,9 @@ const projectEmployeeText: Record<
     quotaNotConfigured: "No quota",
     quotaWarning: "Near limit",
     quotaWithinLimit: "Within limit",
-    rateLimit: "Enable employee rate limit",
+    rateLimit: "Rate Limit",
     remaining: "Project remaining budget",
-    refillRequestsPerSecond: "Refill tokens / sec (Token Bucket)",
+    refillRequestsPerSecond: "Refill tokens / sec",
     requestsPerMinute: "Requests per minute",
     removeModel: "Remove model",
     save: "Save",
@@ -383,9 +382,9 @@ const projectEmployeeText: Record<
     quotaNotConfigured: "한도 미설정",
     quotaWarning: "한도 임박",
     quotaWithinLimit: "정상",
-    rateLimit: "개인 Rate Limit 활성화",
+    rateLimit: "Rate Limit",
     remaining: "프로젝트 잔여 예산",
-    refillRequestsPerSecond: "초당 충전 토큰 (Token Bucket)",
+    refillRequestsPerSecond: "초당 토큰 충전",
     requestsPerMinute: "분당 요청 한도",
     removeModel: "모델 삭제",
     save: "저장",
@@ -587,19 +586,19 @@ export function ProjectEmployeeAssignmentSection({
   const assignmentValuesInvalid =
     !Number.isFinite(assignmentValues.monthlyBudgetLimitUsd) ||
     assignmentValues.monthlyBudgetLimitUsd < 0 ||
-    !Number.isInteger(assignmentValues.rateLimitLimit) ||
-    assignmentValues.rateLimitLimit < 1 ||
-    assignmentValues.rateLimitLimit > 100000 ||
-    !Number.isInteger(assignmentValues.rateLimitRefillTokensPerSecond) ||
-    assignmentValues.rateLimitRefillTokensPerSecond < 1 ||
-    assignmentValues.rateLimitRefillTokensPerSecond > 100000 ||
-    !Number.isInteger(assignmentValues.rateLimitWindowSeconds) ||
-    assignmentValues.rateLimitWindowSeconds < 1 ||
-    assignmentValues.rateLimitWindowSeconds > 3600 ||
+    (assignmentValues.rateLimitEnabled &&
+      (!Number.isInteger(assignmentValues.rateLimitLimit) ||
+        assignmentValues.rateLimitLimit < 1 ||
+        assignmentValues.rateLimitLimit > 100000 ||
+        !Number.isInteger(assignmentValues.rateLimitRefillTokensPerSecond) ||
+        assignmentValues.rateLimitRefillTokensPerSecond < 1 ||
+        assignmentValues.rateLimitRefillTokensPerSecond > 100000 ||
+        !Number.isInteger(assignmentValues.rateLimitWindowSeconds) ||
+        assignmentValues.rateLimitWindowSeconds < 1 ||
+        assignmentValues.rateLimitWindowSeconds > 3600)) ||
     !Number.isInteger(assignmentValues.warningThresholdPercent) ||
     assignmentValues.warningThresholdPercent < 0 ||
     assignmentValues.warningThresholdPercent > 100 ||
-    assignmentValues.warningThresholdPercent % 5 !== 0 ||
     providerModelRows.some((row) => !row.providerConnectionId || !row.model) ||
     selectedProviderModelKeys.size !== providerModelRows.length;
   const employeeToDisable = assignmentToDisable
@@ -939,13 +938,11 @@ export function ProjectEmployeeAssignmentSection({
       >
         <DialogContent className="employee-policy-dialog">
           <DialogHeader>
-            <DialogTitle>
-              {selectedEmployee?.name?.trim() || "-"} · {text.policySettings}
+            <DialogTitle className="employee-policy-dialog-title">
+              <span>{selectedEmployee?.name?.trim() || "-"}</span>
+              <small>{selectedEmployee?.department?.trim() || "-"}</small>
             </DialogTitle>
           </DialogHeader>
-          <p className="employee-policy-dialog-meta">
-            {selectedEmployee?.department?.trim() || "-"}
-          </p>
           {submitState.status === "error" && submitState.message ? (
             <Alert variant="destructive">
               <AlertDescription>{submitState.message}</AlertDescription>
@@ -1019,24 +1016,20 @@ export function ProjectEmployeeAssignmentSection({
                     <span aria-hidden="true">%</span>
                   </span>
                 </label>
-                <div className="employee-rate-limit-control">
-                  <div className="employee-rate-limit-heading">
-                    <Gauge aria-hidden="true" size={18} />
-                    <span>{text.rateLimit}</span>
-                  </div>
-                  <label className="employee-rate-limit-toggle">
-                    <Switch
-                      checked={assignmentValues.rateLimitEnabled}
-                      onCheckedChange={(checked) =>
-                        setAssignmentValues((current) => ({
-                          ...current,
-                          rateLimitEnabled: checked
-                        }))
-                      }
-                    />
-                    <span>{text.enabled}</span>
-                  </label>
-                </div>
+                <label className="employee-rate-limit-control">
+                  <span>{text.rateLimit}</span>
+                  <Switch
+                    aria-label={text.rateLimit}
+                    checked={assignmentValues.rateLimitEnabled}
+                    id="employee-rate-limit-enabled"
+                    onCheckedChange={(checked) =>
+                      setAssignmentValues((current) => ({
+                        ...current,
+                        rateLimitEnabled: checked
+                      }))
+                    }
+                  />
+                </label>
                 {assignmentValues.rateLimitEnabled ? (
                   <div className="employee-rate-limit-fields">
                     <label className="policy-field">
@@ -1083,7 +1076,7 @@ export function ProjectEmployeeAssignmentSection({
                     </label>
                   </div>
                 ) : null}
-                <label className="policy-field team-description-field">
+                <label className="policy-field employee-policy-note-field">
                   <span>{text.note}</span>
                   <input
                     maxLength={500}
