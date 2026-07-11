@@ -2,10 +2,8 @@
 
 import dynamic from "next/dynamic";
 import type { ApiKeysModel } from "@/lib/control-plane/api-keys-types";
-import type { EmployeeControlModel } from "@/lib/control-plane/employees-types";
 import type { ProjectAdminsModel } from "@/lib/control-plane/project-admins-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type { Locale } from "@/lib/i18n/locale";
 import { RuntimePolicyMovedBudgetSlot } from "./runtime-policy-editor";
 
@@ -14,8 +12,6 @@ type ProjectPolicyGeneralContentProps = {
   project: ProjectRecord;
   projectAdminsModel: ProjectAdminsModel;
   projectApiKeysModel: ApiKeysModel;
-  projectEmployeeModel: EmployeeControlModel;
-  providerConnections: ProviderConnectionRecord[];
   tenantId: string;
 };
 
@@ -28,13 +24,6 @@ type ProjectDetailSectionProps = {
 type ProjectAdminSectionProps = {
   locale: Locale;
   model: ProjectAdminsModel;
-};
-
-type ProjectEmployeeAssignmentSectionProps = {
-  locale: Locale;
-  model: EmployeeControlModel;
-  project: ProjectRecord;
-  providerConnections: ProviderConnectionRecord[];
 };
 
 type ProjectGatewayApiKeyPanelProps = {
@@ -61,17 +50,6 @@ const ProjectAdminSection = dynamic<ProjectAdminSectionProps>(
   () =>
     import("@/features/project-admins/components/project-admin-management").then(
       (module) => module.ProjectAdminSection
-    ),
-  {
-    loading: LazySectionFallback,
-    ssr: false
-  }
-);
-
-const ProjectEmployeeAssignmentSection = dynamic<ProjectEmployeeAssignmentSectionProps>(
-  () =>
-    import("@/features/employees/components/employee-control-management").then(
-      (module) => module.ProjectEmployeeAssignmentSection
     ),
   {
     loading: LazySectionFallback,
@@ -106,8 +84,6 @@ export function ProjectPolicyGeneralContent({
   project,
   projectAdminsModel,
   projectApiKeysModel,
-  projectEmployeeModel,
-  providerConnections,
   tenantId
 }: ProjectPolicyGeneralContentProps) {
   return (
@@ -118,12 +94,6 @@ export function ProjectPolicyGeneralContent({
       <RuntimePolicyMovedBudgetSlot />
       <div className="project-policy-general-tab management-line-content">
         <ProjectAdminSection locale={locale} model={projectAdminsModel} />
-        <ProjectEmployeeAssignmentSection
-          locale={locale}
-          model={projectEmployeeModel}
-          project={project}
-          providerConnections={providerConnections}
-        />
         <ProjectGatewayApiKeyPanel locale={locale} model={projectApiKeysModel} />
         <ProjectDeleteSection locale={locale} project={project} tenantId={tenantId} />
       </div>

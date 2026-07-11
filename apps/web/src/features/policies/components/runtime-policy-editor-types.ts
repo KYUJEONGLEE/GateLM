@@ -14,6 +14,7 @@ export type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
   breadcrumbItems?: BreadcrumbItem[];
   children?: ReactNode;
+  employeeSection?: ReactNode;
   generalFooter?: ReactNode;
   generalBudgetPanelPlacement?: "afterChildren" | "childSlot";
   hideStreamingTab?: boolean;
@@ -47,6 +48,7 @@ export type OneTimeApiKeyState = {
 
 export type PolicySection =
   | "general"
+  | "employees"
   | "safety"
   | "routing"
   | "budget"
@@ -111,6 +113,7 @@ export type RuntimePolicyEditorText = {
   disabled: string;
   edit: string;
   enabled: string;
+  employees: string;
   fallbackRoute: string;
   fixtureFallback: string;
   general: string;
