@@ -1339,6 +1339,21 @@ select {
   padding: var(--space-8) var(--space-8) var(--space-12);
 }
 
+.dashboard-overview-content {
+  width: 100%;
+  max-width: none;
+  align-content: start;
+  justify-self: stretch;
+}
+
+.dashboard-overview-content .dashboard-main-header,
+.dashboard-overview-content .dashboard-summary-bar,
+.dashboard-overview-content .dashboard-overview-workspace,
+.dashboard-overview-content .dashboard-main-panel {
+  width: 100%;
+  min-width: 0;
+}
+
 .dashboard-hero,
 .detail-header {
   display: flex;

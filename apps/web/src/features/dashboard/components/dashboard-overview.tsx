@@ -305,7 +305,10 @@ export function DashboardOverviewView({
   ];
 
   return (
-    <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
+    <main
+      className="console-content dashboard-overview-content"
+      data-motion={suppressContentMotion ? "none" : undefined}
+    >
       <DashboardRangePreferenceSync range={filters.range} />
       <DashboardAutoRefresh />
       <section className="dashboard-main-header">
