@@ -6,7 +6,7 @@ import {
   RotateCcw
 } from "lucide-react";
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { CostOverTimeCard } from "@/features/dashboard/components/cost-over-time-card";
 import { DashboardAutoRefresh } from "@/features/dashboard/components/dashboard-auto-refresh";
 import {
@@ -365,15 +365,7 @@ export function DashboardOverviewView({
               initialSummary={costOverTime}
               rangeLabel={rangeLabel(filters.range)}
             />
-            {filters.projectId === "" ? (
-              <ProjectSpendByCostChart
-                overview={overview}
-                projects={projects}
-                rangeLabel={rangeLabel(filters.range)}
-              />
-            ) : (
-              <ProviderModelUsageCard rows={buildProviderModelUsageRows(overview)} />
-            )}
+            <ProviderModelUsageCard rows={buildProviderModelUsageRows(overview)} />
           </div>
           <LiveRequestsCard
             filters={{
@@ -461,73 +453,6 @@ function formatMicroUsd(value: number) {
     minimumFractionDigits: 2,
     style: "currency"
   }).format(dollars);
-}
-
-function ProjectSpendByCostChart({
-  overview,
-  projects,
-  rangeLabel
-}: {
-  overview: DashboardOverview;
-  projects: ProjectRecord[];
-  rangeLabel: string;
-}) {
-  const rows = buildProjectSpendRows(overview, projects);
-  const maxCost = Math.max(...rows.map((row) => row.costMicroUsd), 0);
-
-  return (
-    <section className="dashboard-project-spend-panel" aria-label="Project spend by cost">
-      <div className="dashboard-project-spend-header">
-        <div>
-          <h2>Project Spend by Cost</h2>
-          <p>프로젝트별 발생 비용 기준</p>
-        </div>
-        <span>{rangeLabel}</span>
-      </div>
-      {rows.length > 0 ? (
-        <div className="dashboard-project-spend-table">
-          <div className="dashboard-project-spend-row dashboard-project-spend-row-head">
-            <span>Project</span>
-            <span>Cost</span>
-            <span>%</span>
-          </div>
-          {rows.map((row) => (
-            <div className="dashboard-project-spend-row" key={row.projectId}>
-              <strong>{row.projectName}</strong>
-              <div className="dashboard-project-spend-bar-track">
-                <span
-                  className="dashboard-project-spend-bar"
-                  style={{
-                    "--project-spend-width": `${maxCost > 0 ? Math.max((row.costMicroUsd / maxCost) * 100, 2) : 2}%`
-                  } as CSSProperties}
-                />
-              </div>
-              <span className="dashboard-project-spend-cost">{formatMicroUsd(row.costMicroUsd)}</span>
-              <span className="dashboard-project-spend-percent">{formatPercent(row.share)}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="dashboard-project-spend-empty">No project cost data yet</div>
-      )}
-    </section>
-  );
-}
-
-function buildProjectSpendRows(overview: DashboardOverview, projects: ProjectRecord[]) {
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
-  const sourceRows = overview.costByProject ?? [];
-  const totalCost = sourceRows.reduce((sum, row) => sum + Math.max(row.costMicroUsd, 0), 0);
-
-  return sourceRows
-    .filter((row) => row.requestCount > 0 || row.costMicroUsd > 0)
-    .map((row) => ({
-      costMicroUsd: Math.max(row.costMicroUsd, 0),
-      projectId: row.projectId,
-      projectName: projectNames.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
-      share: totalCost > 0 ? Math.max(row.costMicroUsd, 0) / totalCost : 0
-    }))
-    .sort((left, right) => right.costMicroUsd - left.costMicroUsd);
 }
 
 function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModelUsageRow[] {
