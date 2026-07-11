@@ -4825,20 +4825,21 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 .project-sort-buttons {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 11px;
+  gap: 8px;
 }
 
 .project-sort-button {
-  min-height: 49px;
-  padding: 0 19px;
+  min-height: 44px;
+  padding: 0 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--foreground);
-  font-size: calc(calc(var(--font-size-sm) * 1.35) + var(--global-font-lift));
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-snug);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background 140ms ease,
     border-color 140ms ease,
@@ -4859,20 +4860,28 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 .project-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 1380px);
   gap: 22px;
 }
 
 .project-card {
   display: grid;
-  min-height: 292px;
-  gap: 26px;
-  padding: 28px;
+  min-width: 0;
+  min-height: 270px;
+  gap: 22px;
+  padding: 24px;
   background:
     linear-gradient(180deg, rgba(16, 163, 127, 0.035), transparent 42%),
     var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+  color: inherit;
   box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+
+.project-card:hover {
+  text-decoration: none;
 }
 
 .project-card[data-budget-state="alert"] {
@@ -4901,16 +4910,31 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 }
 
 .project-budget-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 28px;
   flex: 0 0 auto;
+  overflow: visible;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: calc(var(--font-size-md) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-snug);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .project-budget-badge[data-budget-state="operational"] {
   border-color: var(--success-border);
   background: var(--success-soft);
   color: var(--success-text);
+}
+
+.project-budget-badge[data-budget-state="draft"] {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
 }
 
 .project-budget-badge[data-budget-state="warning"] {
@@ -5003,7 +5027,7 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   border-radius: 0;
   box-shadow: none;
   color: var(--foreground);
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
+  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
   text-align: left;
@@ -5015,10 +5039,6 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   color: var(--foreground);
   text-decoration: underline;
   text-underline-offset: 4px;
-}
-
-.project-card-actions .project-list-action-link[data-action-kind="policy"] {
-  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
 }
 
 .project-card-actions .project-list-action-link svg {
@@ -5817,12 +5837,18 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 .management-line-content .project-detail-panel .project-detail-form {
   flex: 1 1 0;
   grid-template-columns:
-    minmax(0, 1fr)
-    minmax(0, 1.4fr)
-    minmax(0, 0.75fr)
-    minmax(0, 0.75fr);
+    minmax(0, 0.8fr)
+    minmax(0, 1.2fr)
+    minmax(280px, 1.25fr);
   width: auto;
   max-width: none;
+}
+
+.project-detail-content .project-general-name-field > span,
+.project-detail-content .project-general-description-field > span,
+.project-detail-content .project-general-budget-field > span,
+.project-detail-content .project-general-status-field > span {
+  white-space: nowrap;
 }
 
 .management-line-content .project-detail-panel .project-delete-section {
@@ -13317,9 +13343,19 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     width: 100%;
   }
 
+  .project-sort-control {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
   .project-sort-buttons {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-sort-control .project-create-button {
+    width: 100%;
+    margin-left: 0;
   }
 
   .project-card-grid {

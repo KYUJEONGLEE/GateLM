@@ -13,9 +13,14 @@ import type {
   ProviderConnectionRecord,
   ProviderConnectionsModel
 } from "@/lib/control-plane/provider-connections-types";
+import {
+  getSelectableOnboardingRuntimeModels,
+  getSelectedOnboardingRuntimeModel,
+  type OnboardingRuntimeModelOption
+} from "@/lib/control-plane/onboarding-runtime-readiness";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { TeamFormValues, TeamRecord, TeamsModel } from "@/lib/control-plane/teams-types";
-import type { AdminOnboardingModel, AdminProviderModel } from "@/lib/fixtures/v1-admin-fixtures";
+import type { AdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 
 type AdminOnboardingFlowProps = {
@@ -185,13 +190,6 @@ type TeamCreateState = {
   status: "error" | "idle" | "saving";
 };
 
-type RuntimeModelOption = {
-  label: string;
-  providerConnectionId: string | null;
-  providerTenantId: string | null;
-  value: string;
-};
-
 export function AdminOnboardingFlow({
   activeStepId,
   gatewayBaseUrl,
@@ -209,10 +207,9 @@ export function AdminOnboardingFlow({
   const [providerConnections, setProviderConnections] = useState<ProviderConnectionRecord[]>(
     () => providerConnectionsModel.providers
   );
-  const selectableModels = getSelectableModelOptions(
+  const selectableModels = getSelectableOnboardingRuntimeModels(
     providerConnections,
-    providerConnectionsModel.controlPlaneTenantId,
-    model.provider.models
+    providerConnectionsModel.controlPlaneTenantId
   );
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft(selectableModels));
   const [teams, setTeams] = useState<TeamRecord[]>(() => teamsModel.teams);
@@ -450,14 +447,19 @@ export function AdminOnboardingFlow({
     setProjectCompletionState({ error: "", status: "saving" });
 
     const selectedModel = draft.selectedModelKey.trim()
-      ? getSelectedModelOption(
+      ? getSelectedOnboardingRuntimeModel(
           selectableModels,
           draft.selectedModelKey,
           projectSetupState.project?.tenantId ?? ""
         )
       : null;
 
-    if (draft.selectedModelKey.trim() && !selectedModel) {
+    if (!draft.selectedModelKey.trim()) {
+      setProjectCompletionState({ error: "", status: "complete" });
+      return true;
+    }
+
+    if (!selectedModel) {
       setProjectCompletionState({
         error:
           locale === "ko"
@@ -477,10 +479,8 @@ export function AdminOnboardingFlow({
             description: draft.projectDescription,
             name: draft.projectName,
             projectId: projectSetupState.project.id,
-            providerConnectionIds: selectedModel?.providerConnectionId
-              ? [selectedModel.providerConnectionId]
-              : [],
-            selectedModelKey: draft.selectedModelKey,
+            providerConnectionIds: [selectedModel.providerConnectionId],
+            selectedModelKey: selectedModel.value,
             status: "ACTIVE",
             totalBudgetUsd: Number(draft.projectTotalBudgetUsd),
             warningThresholdPercent: Number(draft.warningThresholdPercent)
@@ -1000,7 +1000,7 @@ function getStepState(index: number, activeIndex: number) {
 }
 
 function buildInitialDraft(
-  selectableModels: RuntimeModelOption[]
+  selectableModels: OnboardingRuntimeModelOption[]
 ): OnboardingDraft {
   return {
     projectDescription: "",
@@ -1009,71 +1009,4 @@ function buildInitialDraft(
     selectedModelKey: selectableModels[0]?.value ?? "",
     warningThresholdPercent: "80"
   };
-}
-
-function getSelectedModelOption(
-  options: RuntimeModelOption[],
-  value: string,
-  projectTenantId: string
-) {
-  return (
-    options.find(
-      (option) =>
-        option.value === value &&
-        (!option.providerTenantId || option.providerTenantId === projectTenantId)
-    ) ?? null
-  );
-}
-
-function getSelectableModelOptions(
-  providerConnections: ProviderConnectionRecord[],
-  controlPlaneTenantId: string,
-  fallbackModels: AdminProviderModel[] = []
-): RuntimeModelOption[] {
-  const providerConnectionOptions = providerConnections
-    .filter((providerConnection) =>
-      isTenantLevelProviderConnection(providerConnection, controlPlaneTenantId)
-    )
-    .flatMap((providerConnection) =>
-      getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
-        label: `${model} (${providerConnection.provider})`,
-        providerConnectionId: providerConnection.id,
-        providerTenantId: providerConnection.tenantId,
-        value: `${providerConnection.provider}::${model}`
-      }))
-    );
-
-  if (providerConnectionOptions.length > 0) {
-    return providerConnectionOptions;
-  }
-
-  return fallbackModels
-    .filter((model) => model.status === "active" || model.status === "ACTIVE")
-    .map((model) => ({
-      label: `${model.displayName || model.model} (${model.provider})`,
-      providerConnectionId: null,
-      providerTenantId: null,
-      value: `${model.provider}::${model.model}`
-    }));
-}
-
-function isTenantLevelProviderConnection(
-  providerConnection: ProviderConnectionRecord,
-  controlPlaneTenantId: string
-) {
-  return providerConnection.projectId === null && providerConnection.tenantId === controlPlaneTenantId;
-}
-
-function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
-  const models = providerConfig?.models;
-
-  return Array.isArray(models)
-    ? Array.from(
-        new Set(
-          models
-            .map((model) => (typeof model === "string" ? model.trim() : ""))
-            .filter(Boolean)
-        )
-      )
-    : [];
 }
