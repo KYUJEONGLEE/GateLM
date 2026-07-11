@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { ProjectPolicyEmployeeContent } from "@/features/policies/components/project-policy-employee-content";
 import { ProjectPolicyGeneralContent } from "@/features/policies/components/project-policy-general-content";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
 import {
@@ -56,14 +57,20 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
       model={projectRuntime.policyModel}
       generalBudgetPanelPlacement="childSlot"
       moveBudgetToGeneral
+      employeeSection={
+        <ProjectPolicyEmployeeContent
+          locale={locale}
+          model={projectEmployeeModel}
+          project={projectRuntime.project}
+          providerConnections={projectRuntime.policyModel.providerConnections.available}
+        />
+      }
     >
       <ProjectPolicyGeneralContent
         locale={locale}
         project={projectRuntime.project}
         projectAdminsModel={projectAdminsModel}
         projectApiKeysModel={projectApiKeysModel}
-        projectEmployeeModel={projectEmployeeModel}
-        providerConnections={projectRuntime.policyModel.providerConnections.available}
         tenantId={effectiveTenantId}
       />
     </RuntimePolicyEditor>

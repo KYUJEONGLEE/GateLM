@@ -136,6 +136,8 @@ function getPolicySectionLabel(section: PolicySection, text: RuntimePolicyEditor
   switch (section) {
     case "general":
       return text.general;
+    case "employees":
+      return text.employees;
     case "safety":
       return text.safetyTab;
     case "routing":
@@ -197,6 +199,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     disabled: "Disabled",
     edit: "Edit",
     enabled: "Enabled",
+    employees: "Employees",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
     general: "General",
@@ -312,6 +315,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     disabled: "비활성화",
     edit: "편집",
     enabled: "사용",
+    employees: "직원",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
     general: "일반",
@@ -420,6 +424,7 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
       );
     case "streaming":
       return <PolicyPanelFallback heading={text.streaming} />;
+    case "employees":
     case "general":
       return null;
   }
@@ -428,6 +433,7 @@ export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
   children,
+  employeeSection,
   generalBudgetPanelPlacement = "afterChildren",
   generalFooter,
   hideStreamingTab = false,
@@ -438,6 +444,7 @@ export function RuntimePolicyEditor({
   const router = useRouter();
   const text = policyText[locale];
   const hasGeneralSection = Boolean(children || generalFooter);
+  const hasEmployeeSection = Boolean(employeeSection);
   const shouldMoveBudgetToGeneral = moveBudgetToGeneral && hasGeneralSection;
   const shouldRenderMovedBudgetInChildSlot =
     shouldMoveBudgetToGeneral && generalBudgetPanelPlacement === "childSlot";
@@ -473,24 +480,32 @@ export function RuntimePolicyEditor({
       const policySectionsForContext = shouldMoveBudgetToGeneral
         ? policySections.filter((section) => section !== "budget")
         : policySections;
-      const sections: PolicySection[] = hasGeneralSection
-        ? ["general", ...policySectionsForContext]
-        : [...policySectionsForContext];
+      const sections: PolicySection[] = [];
+      if (hasGeneralSection) {
+        sections.push("general");
+      }
+      if (hasEmployeeSection) {
+        sections.push("employees");
+      }
+      sections.push(...policySectionsForContext);
 
       return hideStreamingTab
         ? sections.filter((section) => section !== "streaming")
         : sections;
     },
-    [hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
+    [hasEmployeeSection, hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
   );
   useEffect(() => {
     if (!hasGeneralSection && activePolicySection === "general") {
       setActivePolicySection("routing");
     }
+    if (!hasEmployeeSection && activePolicySection === "employees") {
+      setActivePolicySection(hasGeneralSection ? "general" : "routing");
+    }
     if (shouldMoveBudgetToGeneral && activePolicySection === "budget") {
       setActivePolicySection(hasGeneralSection ? "general" : "routing");
     }
-  }, [activePolicySection, hasGeneralSection, shouldMoveBudgetToGeneral]);
+  }, [activePolicySection, hasEmployeeSection, hasGeneralSection, shouldMoveBudgetToGeneral]);
   useEffect(() => {
     const nextDraftValues = getWritableRuntimePolicyDraftValues(
       model.activeConfig,
@@ -869,6 +884,8 @@ export function RuntimePolicyEditor({
             <StreamingPolicyPanel runtimeSnapshot={model.runtimeSnapshot} text={text} />
           </Suspense>
         );
+      case "employees":
+        return employeeSection;
       case "general":
         return null;
     }
@@ -954,32 +971,34 @@ export function RuntimePolicyEditor({
             );
           })}
         </div>
-        <div className="policy-actions">
-          <Button
-            aria-label={
-              hasUnsavedChanges
-                ? `${text.saveDraft}: ${text.unsavedChanges}`
-                : text.saveDraft
-            }
-            className="policy-draft-button"
-            data-unsaved={hasUnsavedChanges}
-            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
-            onClick={() => void submitPolicy("save-draft")}
-            type="button"
-            variant="outline"
-          >
-            <Save aria-hidden="true" />
-            {text.saveDraft}
-          </Button>
-          <Button
-            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
-            onClick={() => void submitPolicy("publish")}
-            type="button"
-          >
-            <UploadCloud aria-hidden="true" />
-            {text.publish}
-          </Button>
-        </div>
+        {activePolicySection !== "employees" ? (
+          <div className="policy-actions">
+            <Button
+              aria-label={
+                hasUnsavedChanges
+                  ? `${text.saveDraft}: ${text.unsavedChanges}`
+                  : text.saveDraft
+              }
+              className="policy-draft-button"
+              data-unsaved={hasUnsavedChanges}
+              disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+              onClick={() => void submitPolicy("save-draft")}
+              type="button"
+              variant="outline"
+            >
+              <Save aria-hidden="true" />
+              {text.saveDraft}
+            </Button>
+            <Button
+              disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+              onClick={() => void submitPolicy("publish")}
+              type="button"
+            >
+              <UploadCloud aria-hidden="true" />
+              {text.publish}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {hasGeneralSection && activePolicySection === "general" ? (
