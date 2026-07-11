@@ -3,9 +3,10 @@ import { buildProjectUsagePreview } from "./project-usage-preview";
 
 test("builds deterministic project usage preview data", () => {
   const report = buildProjectUsagePreview([
-    { id: "project_hr", totalBudgetUsd: 100 },
-    { id: "project_faq", totalBudgetUsd: 200 },
-    { id: "project_assignment", totalBudgetUsd: 100 }
+    { id: "project_hr", status: "ACTIVE", totalBudgetUsd: 100 },
+    { id: "project_draft", status: "DRAFT", totalBudgetUsd: 100 },
+    { id: "project_faq", status: "ACTIVE", totalBudgetUsd: 200 },
+    { id: "project_assignment", status: "ACTIVE", totalBudgetUsd: 100 }
   ]);
 
   expect(report.source).toBe("preview");

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   getProjectCreateActionLocation,
-  getRelativeTokenUsagePercent
+  isProjectVisibleInList
 } from "./project-management-state";
 
 test("places the Tenant Admin create action in the empty state", () => {
@@ -17,12 +17,9 @@ test("does not expose the create action to Project Admins", () => {
   expect(getProjectCreateActionLocation(1, false)).toBeNull();
 });
 
-test("compares token usage with the highest visible project", () => {
-  expect(getRelativeTokenUsagePercent(5_000_000, 10_000_000)).toBe(50);
-  expect(getRelativeTokenUsagePercent(10_000_000, 10_000_000)).toBe(100);
-});
-
-test("keeps unavailable and zero token usage distinguishable", () => {
-  expect(getRelativeTokenUsagePercent(null, null)).toBeNull();
-  expect(getRelativeTokenUsagePercent(0, 0)).toBe(0);
+test("keeps DRAFT projects in the main list and excludes only ARCHIVED projects", () => {
+  expect(isProjectVisibleInList("ACTIVE")).toBe(true);
+  expect(isProjectVisibleInList("DRAFT")).toBe(true);
+  expect(isProjectVisibleInList("DISABLED")).toBe(true);
+  expect(isProjectVisibleInList("ARCHIVED")).toBe(false);
 });

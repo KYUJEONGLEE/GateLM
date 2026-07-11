@@ -4796,7 +4796,7 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 
 .project-card-list {
   display: grid;
-  gap: 22px;
+  gap: 26px;
 }
 
 .management-line-content > .console-panel.project-list-panel {
@@ -4808,40 +4808,16 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   grid-column: 1;
 }
 
-.project-list-toolbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 18px 24px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.project-list-toolbar h3 {
-  margin: 0;
-  color: var(--foreground);
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-tight);
-}
-
-.project-list-toolbar h3 span {
-  color: var(--text-muted);
-}
-
 .project-sort-control {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex: 1 1 520px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
 }
 
 .project-sort-control > span {
   color: var(--text-muted);
-  font-size: calc(var(--font-size-base) + var(--global-font-lift));
+  font-size: calc(calc(var(--font-size-sm) * 1.35) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-snug);
 }
@@ -4849,17 +4825,17 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 .project-sort-buttons {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 11px;
 }
 
 .project-sort-button {
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 49px;
+  padding: 0 19px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--foreground);
-  font-size: calc(var(--font-size-base) + var(--global-font-lift));
+  font-size: calc(calc(var(--font-size-sm) * 1.35) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-snug);
   cursor: pointer;
@@ -4882,40 +4858,36 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 
 .project-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 400px));
-  justify-content: start;
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
 }
 
 .project-card {
-  display: flex;
+  display: grid;
   min-width: 0;
-  min-height: 306px;
-  flex-direction: column;
-  gap: 18px;
-  padding: 24px;
-  background: var(--surface);
+  min-height: 292px;
+  gap: 26px;
+  padding: 28px;
+  background:
+    linear-gradient(180deg, rgba(16, 163, 127, 0.035), transparent 42%),
+    var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: inherit;
   box-shadow: var(--shadow-sm);
   text-decoration: none;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
 }
 
 .project-card:hover {
-  border-color: color-mix(in srgb, var(--accent-strong) 56%, var(--border));
-  box-shadow: var(--shadow-md);
   text-decoration: none;
-  transform: translateY(-2px);
 }
 
-.project-card:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent-strong) 26%, transparent);
-  outline-offset: 3px;
+.project-card[data-budget-state="alert"] {
+  border-color: var(--danger-border);
+}
+
+.project-card[data-budget-state="warning"] {
+  border-color: var(--warning-border);
 }
 
 .project-card-title-row {
@@ -4937,9 +4909,21 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 
 .project-budget-badge {
   flex: 0 0 auto;
-  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+  font-size: calc(var(--font-size-md) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-snug);
+}
+
+.project-budget-badge[data-budget-state="operational"] {
+  border-color: var(--success-border);
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+.project-budget-badge[data-budget-state="draft"] {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
 }
 
 .project-budget-badge[data-budget-state="warning"] {
@@ -4954,64 +4938,51 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   color: var(--danger-text);
 }
 
-.project-card-metrics {
+.project-card-usage {
   display: grid;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--surface-subtle);
-  border-radius: 6px;
+  align-self: end;
+  gap: 10px;
 }
 
-.project-card-metric {
-  display: grid;
-  gap: 7px;
-}
-
-.project-card-metric + .project-card-metric {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.project-metric-heading {
+.project-usage-summary {
   display: flex;
-  align-items: baseline;
+  align-items: end;
   justify-content: space-between;
   gap: 12px;
 }
 
-.project-metric-heading span {
+.project-usage-label,
+.project-usage-cost {
+  display: block;
   color: var(--text-muted);
-  font-size: calc(var(--font-size-md) + var(--global-font-lift));
+  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
 }
 
-.project-metric-heading strong {
+.project-usage-value {
+  display: block;
+  margin-top: 2px;
   color: var(--foreground);
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
+  font-size: calc(var(--font-size-3xl) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
 }
 
-.project-metric-detail {
-  min-height: 24px;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: calc(var(--font-size-base) + var(--global-font-lift));
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
+.project-usage-cost {
+  color: var(--foreground);
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  text-align: right;
 }
 
-.project-usage-track,
-.project-token-track {
+.project-usage-track {
   position: relative;
   overflow: hidden;
-  height: 9px;
+  height: 8px;
   background: var(--surface-subtle);
   border-radius: 999px;
 }
 
-.project-usage-fill,
-.project-token-fill {
+.project-usage-fill {
   display: block;
   height: 100%;
   background: var(--accent-strong);
@@ -5026,32 +4997,46 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   background: var(--danger);
 }
 
-.project-token-fill {
-  background: color-mix(in srgb, var(--accent-strong) 76%, #4f46e5 24%);
-}
-
-.project-card-action {
+.project-card-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-  color: var(--accent-strong);
-  font-size: var(--font-size-base);
+  justify-content: flex-start;
+  min-width: 0;
+  align-self: end;
+}
+
+.project-card-actions .project-list-action-link {
+  justify-content: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-snug);
+  line-height: var(--line-height-tight);
+  text-align: left;
+  white-space: normal;
 }
 
-.project-card-action svg {
-  width: 18px;
-  height: 18px;
-  transition: transform 140ms ease;
+.project-card-actions .project-list-action-link:hover:not(:disabled) {
+  background: transparent;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
-.project-card:hover .project-card-action svg {
-  transform: translateX(3px);
+.project-card-actions .project-list-action-link[data-action-kind="policy"] {
+  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
+}
+
+.project-card-actions .project-list-action-link svg {
+  width: 0.9em;
+  height: 0.9em;
 }
 
 .project-table-field {
@@ -5784,124 +5769,6 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 .management-line-content > .console-panel.project-list-panel > * {
   grid-column: auto;
   width: 100%;
-}
-
-.management-line-content > .console-panel.project-draft-panel {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
-  align-items: center;
-  gap: 20px 32px;
-  width: min(100%, 1584px);
-  padding: 20px 24px;
-  background: var(--surface-subtle);
-}
-
-.management-line-content > .console-panel.project-draft-panel > * {
-  grid-column: auto;
-  width: auto;
-}
-
-.project-draft-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  min-width: 0;
-}
-
-.project-draft-icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  place-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  color: var(--accent-strong);
-}
-
-.project-draft-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.project-draft-heading h3 {
-  margin: 0;
-  color: var(--foreground);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-snug);
-}
-
-.project-draft-heading h3 span {
-  color: var(--text-muted);
-}
-
-.project-draft-heading p {
-  margin: 5px 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-}
-
-.project-draft-list {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.project-draft-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-  padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: inherit;
-  text-decoration: none;
-  transition: border-color 140ms ease;
-}
-
-.project-draft-link:hover {
-  border-color: color-mix(in srgb, var(--accent-strong) 55%, var(--border));
-  text-decoration: none;
-}
-
-.project-draft-name,
-.project-draft-action {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.project-draft-name strong {
-  color: var(--foreground);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
-  overflow-wrap: anywhere;
-}
-
-.project-draft-badge {
-  flex: 0 0 auto;
-  background: var(--surface-subtle);
-  color: var(--text-muted);
-}
-
-.project-draft-action {
-  flex: 0 0 auto;
-  color: var(--accent-strong);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-}
-
-.project-draft-action svg {
-  width: 17px;
-  height: 17px;
 }
 
 .management-line-content .panel-heading h3,
@@ -12642,11 +12509,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .project-card-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 400px));
-  }
-
-  .management-line-content > .console-panel.project-draft-panel {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .console-shell {
@@ -13468,11 +13331,11 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .project-sort-control,
-  .project-sort-buttons {
+  .project-sort-buttons,
+  .project-card-actions {
     width: 100%;
   }
 
-  .project-list-toolbar,
   .project-sort-control {
     align-items: stretch;
     justify-content: flex-start;
@@ -13492,13 +13355,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     grid-template-columns: 1fr;
   }
 
-  .project-card {
-    max-width: none;
-  }
-
-  .project-draft-link {
-    align-items: flex-start;
-    flex-direction: column;
+  .project-card-actions {
+    grid-template-columns: 1fr;
   }
 
   .project-create-form button,

@@ -8,7 +8,7 @@ const previewProfiles = [
   { budgetRatio: 0.18, requestCount: 290, totalTokens: 640_000 }
 ] as const;
 
-type PreviewProject = Pick<ProjectRecord, "id" | "totalBudgetUsd">;
+type PreviewProject = Pick<ProjectRecord, "id" | "status" | "totalBudgetUsd">;
 
 export function buildProjectUsagePreview(
   projects: PreviewProject[]
@@ -16,18 +16,20 @@ export function buildProjectUsagePreview(
   return {
     generatedAt: new Date().toISOString(),
     loadError: null,
-    projectCosts: projects.map((project, index) => {
-      const profile = previewProfiles[index % previewProfiles.length];
+    projectCosts: projects
+      .filter((project) => project.status !== "ARCHIVED" && project.status !== "DRAFT")
+      .map((project, index) => {
+        const profile = previewProfiles[index % previewProfiles.length];
 
-      return {
-        costMicroUsd: Math.round(
-          Math.max(0, project.totalBudgetUsd) * profile.budgetRatio * 1_000_000
-        ),
-        projectId: project.id,
-        requestCount: profile.requestCount,
-        totalTokens: profile.totalTokens
-      };
-    }),
+        return {
+          costMicroUsd: Math.round(
+            Math.max(0, project.totalBudgetUsd) * profile.budgetRatio * 1_000_000
+          ),
+          projectId: project.id,
+          requestCount: profile.requestCount,
+          totalTokens: profile.totalTokens
+        };
+      }),
     source: "preview"
   };
 }
