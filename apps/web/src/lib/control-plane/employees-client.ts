@@ -415,6 +415,9 @@ export async function upsertProjectEmployeeAssignment(
           allowedProviderConnectionIds: values.allowedProviderConnectionIds,
           monthlyBudgetLimitUsd: values.monthlyBudgetLimitUsd,
           policyNote: values.policyNote.trim() || undefined,
+          rateLimitEnabled: values.rateLimitEnabled,
+          rateLimitLimit: values.rateLimitLimit,
+          rateLimitWindowSeconds: values.rateLimitWindowSeconds,
           status: values.status ?? "active",
           warningThresholdPercent: values.warningThresholdPercent
         }),
@@ -1008,8 +1011,18 @@ function toProjectEmployeeAssignmentRecord(
     invitationStatus,
     monthlyBudgetLimitMicroUsd: record.monthlyBudgetLimitMicroUsd,
     monthlyBudgetLimitUsd: record.monthlyBudgetLimitUsd,
+    monthlyRemainingUsd:
+      typeof record.monthlyRemainingUsd === "number"
+        ? record.monthlyRemainingUsd
+        : record.monthlyBudgetLimitUsd,
+    monthlyUsedMicroUsd:
+      typeof record.monthlyUsedMicroUsd === "number" ? record.monthlyUsedMicroUsd : 0,
+    monthlyUsedUsd: typeof record.monthlyUsedUsd === "number" ? record.monthlyUsedUsd : 0,
     policy,
     projectId: record.projectId,
+    quotaStatus: normalizeProjectEmployeeQuotaStatus(record.quotaStatus),
+    quotaUsagePercent:
+      typeof record.quotaUsagePercent === "number" ? record.quotaUsagePercent : 0,
     status,
     tenantId: record.tenantId,
     updatedAt: record.updatedAt,
@@ -1023,11 +1036,37 @@ function toProjectEmployeePolicy(value: unknown): ProjectEmployeePolicy | null {
   }
 
   const record = value as Record<string, unknown>;
+  const rateLimit =
+    record.rateLimit && typeof record.rateLimit === "object"
+      ? (record.rateLimit as Record<string, unknown>)
+      : {};
   return {
     allowedModelKeys: readStringArray(record.allowedModelKeys),
     allowedProviderConnectionIds: readStringArray(record.allowedProviderConnectionIds),
-    note: typeof record.note === "string" && record.note.trim() ? record.note : null
+    note: typeof record.note === "string" && record.note.trim() ? record.note : null,
+    rateLimit: {
+      enabled: typeof rateLimit.enabled === "boolean" ? rateLimit.enabled : false,
+      limit:
+        typeof rateLimit.limit === "number" && Number.isInteger(rateLimit.limit)
+          ? rateLimit.limit
+          : 60,
+      windowSeconds:
+        typeof rateLimit.windowSeconds === "number" && Number.isInteger(rateLimit.windowSeconds)
+          ? rateLimit.windowSeconds
+          : 60
+    }
   };
+}
+
+function normalizeProjectEmployeeQuotaStatus(
+  value: unknown
+): ProjectEmployeeAssignmentRecord["quotaStatus"] {
+  return value === "exceeded" ||
+    value === "not_configured" ||
+    value === "warning" ||
+    value === "within_limit"
+    ? value
+    : "not_configured";
 }
 
 function toProjectEmployeeBudget(value: unknown) {

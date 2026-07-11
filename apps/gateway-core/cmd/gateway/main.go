@@ -17,6 +17,7 @@ import (
 	credentialcomposite "gatelm/apps/gateway-core/internal/adapters/credentials/composite"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	credentialpostgres "gatelm/apps/gateway-core/internal/adapters/credentials/postgres"
+	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
@@ -45,6 +46,7 @@ import (
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
+	employeepolicystage "gatelm/apps/gateway-core/internal/pipeline/stages/employeepolicy"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 
@@ -164,6 +166,7 @@ func main() {
 	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
+		employeepolicystage.NewStage(postgresemployeepolicy.NewResolver(postgresPool)),
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)

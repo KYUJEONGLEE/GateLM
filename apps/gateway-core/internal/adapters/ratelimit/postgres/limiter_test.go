@@ -113,6 +113,32 @@ func TestLimiterUsesProjectScopeWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestLimiterUsesProjectEmployeeScopeWhenConfigured(t *testing.T) {
+	db := &fakeQueryer{row: fakeRow{requestCount: 1}}
+	limiter := NewLimiter(db)
+	config := testConfig(3)
+	config.Scope = ratelimit.ScopeEmployee
+
+	decision, err := limiter.Check(context.Background(), ratelimit.Request{
+		TenantID:   testTenantID,
+		ProjectID:  testProjectID,
+		EmployeeID: "employee_demo",
+		Config:     config,
+		Now:        time.Date(2026, 7, 10, 9, 0, 10, 0, time.UTC),
+	})
+
+	if err != nil {
+		t.Fatalf("expected employee scoped request to pass, got %v", err)
+	}
+	wantScopeID := testProjectID + ":employee_demo"
+	if decision.Scope != ratelimit.ScopeEmployee || decision.ScopeID != wantScopeID {
+		t.Fatalf("expected employee scope decision, got %#v", decision)
+	}
+	if len(db.args) != 6 || db.args[1] != ratelimit.ScopeEmployee || db.args[2] != wantScopeID {
+		t.Fatalf("expected employee scope query args, got %#v", db.args)
+	}
+}
+
 func TestLimiterBlocksRequestWhenCounterExceedsLimit(t *testing.T) {
 	// Given PostgreSQL counter가 이미 limit에 도달했다
 	now := time.Date(2026, 6, 27, 9, 0, 42, 0, time.UTC)

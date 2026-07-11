@@ -10,6 +10,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/costing"
+	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -31,8 +32,9 @@ type TerminalLog struct {
 	SecurityPolicyHash string
 	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
 
-	RateLimitDecision *ratelimit.Decision
-	BudgetDecision    *budget.Decision
+	RateLimitDecision      *ratelimit.Decision
+	BudgetDecision         *budget.Decision
+	EmployeePolicyDecision *employeepolicy.Decision
 
 	Endpoint               string
 	Method                 string
@@ -129,8 +131,9 @@ type TerminalLogInput struct {
 	SecurityPolicyHash string
 	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
 
-	RateLimitDecision *ratelimit.Decision
-	BudgetDecision    *budget.Decision
+	RateLimitDecision      *ratelimit.Decision
+	BudgetDecision         *budget.Decision
+	EmployeePolicyDecision *employeepolicy.Decision
 
 	Endpoint               string
 	Method                 string
@@ -307,6 +310,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.BudgetDecision != nil {
 		metadata["budgetDecision"] = *input.BudgetDecision
 	}
+	if input.EmployeePolicyDecision != nil {
+		metadata["employeePolicyDecision"] = *input.EmployeePolicyDecision
+	}
 	resolvedBudgetScope := budget.NormalizeScope(input.BudgetScope, input.ApplicationID)
 	metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, input.ApplicationID)
 	runtimeSnapshot := input.RuntimeSnapshot.Normalize(runtimeconfig.ActiveConfig{
@@ -407,6 +413,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
 	budgetDecision := input.BudgetDecision.Clone()
+	employeePolicyDecision := input.EmployeePolicyDecision.Clone()
 
 	log := TerminalLog{
 		RequestID:          requestID,
@@ -423,8 +430,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		SecurityPolicyHash: strings.TrimSpace(input.SecurityPolicyHash),
 		RuntimeSnapshot:    runtimeSnapshot,
 
-		RateLimitDecision: rateLimitDecision,
-		BudgetDecision:    budgetDecision,
+		RateLimitDecision:      rateLimitDecision,
+		BudgetDecision:         budgetDecision,
+		EmployeePolicyDecision: employeePolicyDecision,
 
 		Endpoint:               firstNonEmptyString(input.Endpoint, "/v1/chat/completions"),
 		Method:                 firstNonEmptyString(input.Method, "POST"),

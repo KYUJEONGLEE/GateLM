@@ -118,6 +118,7 @@ export function SafetyPolicyPanel({
             <Switch
               aria-label={text.promptCapture}
               checked={draftValues.promptCaptureEnabled}
+              id="runtime-policy-prompt-capture-enabled"
               onCheckedChange={(checked) =>
                 onDraftValuesChange((current) => ({
                   ...current,
@@ -184,6 +185,7 @@ function DetectorEditor({
             <Switch
               aria-label={`${detectorName} ${labels.enabled}`}
               checked={detector.enabled}
+              id={`runtime-policy-detector-${detector.type}-enabled`}
               onCheckedChange={(checked) =>
                 onChange({
                   ...detector,

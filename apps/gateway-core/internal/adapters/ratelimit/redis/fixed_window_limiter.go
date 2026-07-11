@@ -135,7 +135,7 @@ func (l *FixedWindowLimiter) fixedWindowKey(tenantID string, scope string, scope
 }
 
 func validateFixedWindowRequest(config ratelimit.Config, tenantID string, scopeID string) error {
-	if config.Scope != ratelimit.ScopeApplication && config.Scope != ratelimit.ScopeProject {
+	if config.Scope != ratelimit.ScopeApplication && config.Scope != ratelimit.ScopeProject && config.Scope != ratelimit.ScopeEmployee {
 		return fmt.Errorf("%w: unsupported scope %q", ErrMissingConfig, config.Scope)
 	}
 	if config.Algorithm != ratelimit.AlgorithmFixedWindow {

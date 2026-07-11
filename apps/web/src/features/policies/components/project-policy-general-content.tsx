@@ -5,6 +5,7 @@ import type { ApiKeysModel } from "@/lib/control-plane/api-keys-types";
 import type { EmployeeControlModel } from "@/lib/control-plane/employees-types";
 import type { ProjectAdminsModel } from "@/lib/control-plane/project-admins-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type { Locale } from "@/lib/i18n/locale";
 import { RuntimePolicyMovedBudgetSlot } from "./runtime-policy-editor";
 
@@ -14,6 +15,7 @@ type ProjectPolicyGeneralContentProps = {
   projectAdminsModel: ProjectAdminsModel;
   projectApiKeysModel: ApiKeysModel;
   projectEmployeeModel: EmployeeControlModel;
+  providerConnections: ProviderConnectionRecord[];
   tenantId: string;
 };
 
@@ -32,6 +34,7 @@ type ProjectEmployeeAssignmentSectionProps = {
   locale: Locale;
   model: EmployeeControlModel;
   project: ProjectRecord;
+  providerConnections: ProviderConnectionRecord[];
 };
 
 type ProjectGatewayApiKeyPanelProps = {
@@ -104,6 +107,7 @@ export function ProjectPolicyGeneralContent({
   projectAdminsModel,
   projectApiKeysModel,
   projectEmployeeModel,
+  providerConnections,
   tenantId
 }: ProjectPolicyGeneralContentProps) {
   return (
@@ -118,6 +122,7 @@ export function ProjectPolicyGeneralContent({
           locale={locale}
           model={projectEmployeeModel}
           project={project}
+          providerConnections={providerConnections}
         />
         <ProjectGatewayApiKeyPanel locale={locale} model={projectApiKeysModel} />
         <ProjectDeleteSection locale={locale} project={project} tenantId={tenantId} />

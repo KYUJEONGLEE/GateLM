@@ -63,6 +63,7 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
         projectAdminsModel={projectAdminsModel}
         projectApiKeysModel={projectApiKeysModel}
         projectEmployeeModel={projectEmployeeModel}
+        providerConnections={projectRuntime.policyModel.providerConnections.available}
         tenantId={effectiveTenantId}
       />
     </RuntimePolicyEditor>

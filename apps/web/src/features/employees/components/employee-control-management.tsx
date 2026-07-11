@@ -4,14 +4,16 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Plus,
   Save,
+  Trash2,
   Upload,
   UserPlus,
   Users,
   Wallet
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,12 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  getProviderConnectionFamily,
+  ProviderFamilyIcon
+} from "@/features/provider-connections/components/provider-family-icon";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
@@ -31,6 +39,11 @@ import type {
   ProjectEmployeeAssignmentValues
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+import {
+  getRateLimitRefillTokensPerSecond,
+  getRateLimitWindowSeconds
+} from "@/lib/control-plane/runtime-policy-types";
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -43,6 +56,7 @@ type ProjectEmployeeAssignmentProps = {
   locale: Locale;
   model: EmployeeControlModel;
   project: ProjectRecord;
+  providerConnections?: ProviderConnectionRecord[];
 };
 
 type SubmitState = {
@@ -53,6 +67,13 @@ type SubmitState = {
 type EmployeeSortDirection = "asc" | "desc";
 type EmployeeSortField = "department" | "email" | "invitation" | "name" | "project";
 type EmployeeAddMethod = "csv" | "invite";
+type EmployeePolicyTab = "limits" | "provider-model";
+
+type EmployeeProviderModelRow = {
+  id: string;
+  model: string;
+  providerConnectionId: string;
+};
 
 type EmployeeResponsePayload = {
   employee?: EmployeeRecord;
@@ -224,6 +245,7 @@ const projectEmployeeText: Record<
   Locale,
   {
     addEmployee: string;
+    addModel: string;
     assign: string;
     assigned: string;
     assignmentCreated: string;
@@ -237,10 +259,15 @@ const projectEmployeeText: Record<
     disableConfirmTitle: string;
     email: string;
     employeeList: string;
+    enabled: string;
     employees: string;
     fixtureFallback: string;
     management: string;
     modelKeys: string;
+    noProviderModels: string;
+    noSelectedModels: string;
+    limitSettings: string;
+    monthlyUsage: string;
     name: string;
     noAssignments: string;
     noCandidates: string;
@@ -249,15 +276,27 @@ const projectEmployeeText: Record<
     note: string;
     policySettings: string;
     providerIds: string;
+    providerModelSettings: string;
+    quotaExceeded: string;
+    quotaNotConfigured: string;
+    quotaWarning: string;
+    quotaWithinLimit: string;
+    rateLimit: string;
     remaining: string;
+    refillRequestsPerSecond: string;
+    requestsPerMinute: string;
+    removeModel: string;
     save: string;
     searchEmployee: string;
     selectDepartment: string;
-    warning: string;
+    selectModel: string;
+    selectProvider: string;
+    budgetWarning: string;
   }
 > = {
   en: {
     addEmployee: "Assign employee",
+    addModel: "Add model",
     assign: "Assign",
     assigned: "Assigned",
     assignmentCreated: "Employee assigned to this project.",
@@ -272,9 +311,14 @@ const projectEmployeeText: Record<
     email: "Email",
     employeeList: "Employee list",
     employees: "Employees",
+    enabled: "Enabled",
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     management: "Management",
     modelKeys: "Models",
+    noProviderModels: "No registered Provider models.",
+    noSelectedModels: "No models selected.",
+    limitSettings: "Limits",
+    monthlyUsage: "Used this month",
     name: "Name",
     noAssignments: "No project employees.",
     noCandidates: "No employees available for assignment.",
@@ -283,14 +327,26 @@ const projectEmployeeText: Record<
     note: "Note",
     policySettings: "Policy settings",
     providerIds: "Providers",
-    remaining: "Remaining",
+    providerModelSettings: "Provider / Model",
+    quotaExceeded: "High-cost models restricted",
+    quotaNotConfigured: "No quota",
+    quotaWarning: "Near limit",
+    quotaWithinLimit: "Within limit",
+    rateLimit: "Rate Limit",
+    remaining: "Project remaining budget",
+    refillRequestsPerSecond: "Refill tokens / sec",
+    requestsPerMinute: "Requests per minute",
+    removeModel: "Remove model",
     save: "Save",
     searchEmployee: "Search by name or email",
     selectDepartment: "Select department",
-    warning: "Warning"
+    selectModel: "Select model",
+    selectProvider: "Select Provider",
+    budgetWarning: "Budget warning"
   },
   ko: {
     addEmployee: "직원 배정",
+    addModel: "모델 추가",
     assign: "배정",
     assigned: "배정",
     assignmentCreated: "직원을 현재 프로젝트에 배정했습니다.",
@@ -305,9 +361,14 @@ const projectEmployeeText: Record<
     email: "이메일",
     employeeList: "직원 목록",
     employees: "직원",
+    enabled: "활성화",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
     management: "관리",
     modelKeys: "모델",
+    noProviderModels: "등록된 Provider 모델이 없습니다.",
+    noSelectedModels: "선택된 모델이 없습니다.",
+    limitSettings: "한도 설정",
+    monthlyUsage: "이번 달 사용액",
     name: "이름",
     noAssignments: "Project에 배정된 직원이 없습니다.",
     noCandidates: "배정할 수 있는 직원이 없습니다.",
@@ -316,11 +377,22 @@ const projectEmployeeText: Record<
     note: "메모",
     policySettings: "정책 수정",
     providerIds: "Provider",
-    remaining: "잔여",
+    providerModelSettings: "Provider / Model",
+    quotaExceeded: "고비용 모델 제한",
+    quotaNotConfigured: "한도 미설정",
+    quotaWarning: "한도 임박",
+    quotaWithinLimit: "정상",
+    rateLimit: "Rate Limit",
+    remaining: "프로젝트 잔여 예산",
+    refillRequestsPerSecond: "초당 토큰 충전",
+    requestsPerMinute: "분당 요청 한도",
+    removeModel: "모델 삭제",
     save: "저장",
     searchEmployee: "이름 또는 이메일 검색",
     selectDepartment: "부서 선택",
-    warning: "경고"
+    selectModel: "모델 선택",
+    selectProvider: "Provider 선택",
+    budgetWarning: "예산 경고"
   }
 };
 
@@ -335,7 +407,8 @@ export function ProjectEmployeeAssignment(props: ProjectEmployeeAssignmentProps)
 export function ProjectEmployeeAssignmentSection({
   locale,
   model,
-  project
+  project,
+  providerConnections = []
 }: ProjectEmployeeAssignmentProps) {
   const router = useRouter();
   const text = projectEmployeeText[locale];
@@ -350,6 +423,8 @@ export function ProjectEmployeeAssignmentSection({
   const [assignmentDepartment, setAssignmentDepartment] = useState("");
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
   const [candidateEmployeeId, setCandidateEmployeeId] = useState("");
+  const [employeePolicyTab, setEmployeePolicyTab] = useState<EmployeePolicyTab>("limits");
+  const providerModelRowSequence = useRef(0);
   const activeAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.status === "active"),
     [assignments]
@@ -384,12 +459,15 @@ export function ProjectEmployeeAssignmentSection({
     [model.employees]
   );
   const [assignmentValues, setAssignmentValues] = useState({
-    allowedModelKeys: "",
-    allowedProviderConnectionIds: "",
     monthlyBudgetLimitUsd: 0,
     policyNote: "",
+    rateLimitEnabled: false,
+    rateLimitLimit: 60,
+    rateLimitRefillTokensPerSecond: 1,
+    rateLimitWindowSeconds: 60,
     warningThresholdPercent: 80
   });
+  const [providerModelRows, setProviderModelRows] = useState<EmployeeProviderModelRow[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
@@ -426,6 +504,40 @@ export function ProjectEmployeeAssignmentSection({
     employeeSearchQuery,
     model.employees
   ]);
+  const selectableProviderConnections = useMemo(
+    () =>
+      providerConnections
+        .filter(
+          (providerConnection) =>
+            providerConnection.status !== "DISABLED" &&
+            getProviderConnectionModels(providerConnection).length > 0
+        )
+        .sort((left, right) => left.displayName.localeCompare(right.displayName)),
+    [providerConnections]
+  );
+  const providerConnectionsById = useMemo(
+    () => new Map(providerConnections.map((providerConnection) => [providerConnection.id, providerConnection])),
+    [providerConnections]
+  );
+  const selectedProviderModelKeys = useMemo(
+    () =>
+      new Set(
+        providerModelRows
+          .filter((row) => row.providerConnectionId && row.model)
+          .map((row) => providerModelKey(row.providerConnectionId, row.model))
+      ),
+    [providerModelRows]
+  );
+  const hasAvailableProviderModel = useMemo(
+    () =>
+      selectableProviderConnections.some((providerConnection) =>
+        getProviderConnectionModels(providerConnection).some(
+          (modelName) =>
+            !selectedProviderModelKeys.has(providerModelKey(providerConnection.id, modelName))
+        )
+      ),
+    [selectableProviderConnections, selectedProviderModelKeys]
+  );
 
   useEffect(() => {
     if (!projectEmployees.some((employee) => employee.id === selectedEmployeeId)) {
@@ -443,16 +555,11 @@ export function ProjectEmployeeAssignmentSection({
     const existingAssignment = assignments.find(
       (assignment) => assignment.employeeId === selectedEmployeeId
     );
+    const formState = getEmployeePolicyFormState(existingAssignment, providerConnections);
 
-    setAssignmentValues({
-      allowedModelKeys: existingAssignment?.policy.allowedModelKeys.join(", ") ?? "",
-      allowedProviderConnectionIds:
-        existingAssignment?.policy.allowedProviderConnectionIds.join(", ") ?? "",
-      monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
-      policyNote: existingAssignment?.policy.note ?? "",
-      warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
-    });
-  }, [assignments, selectedEmployeeId]);
+    setAssignmentValues(formState.assignmentValues);
+    setProviderModelRows(formState.providerModelRows);
+  }, [assignments, providerConnections, selectedEmployeeId]);
 
   const assignedBudgetUsd = activeAssignments.reduce(
     (total, assignment) => total + assignment.monthlyBudgetLimitUsd,
@@ -462,6 +569,38 @@ export function ProjectEmployeeAssignmentSection({
   const selectedEmployee = projectEmployees.find(
     (employee) => employee.id === selectedEmployeeId
   );
+  const selectedAssignment = selectedEmployeeId
+    ? activeAssignmentByEmployeeId.get(selectedEmployeeId)
+    : undefined;
+  const selectedQuotaStatus = selectedAssignment?.quotaStatus ?? "not_configured";
+  const selectedQuotaStatusLabel = {
+    exceeded: text.quotaExceeded,
+    not_configured: text.quotaNotConfigured,
+    warning: text.quotaWarning,
+    within_limit: text.quotaWithinLimit
+  }[selectedQuotaStatus];
+  const selectedQuotaProgress = Math.min(
+    Math.max(selectedAssignment?.quotaUsagePercent ?? 0, 0),
+    100
+  );
+  const assignmentValuesInvalid =
+    !Number.isFinite(assignmentValues.monthlyBudgetLimitUsd) ||
+    assignmentValues.monthlyBudgetLimitUsd < 0 ||
+    (assignmentValues.rateLimitEnabled &&
+      (!Number.isInteger(assignmentValues.rateLimitLimit) ||
+        assignmentValues.rateLimitLimit < 1 ||
+        assignmentValues.rateLimitLimit > 100000 ||
+        !Number.isInteger(assignmentValues.rateLimitRefillTokensPerSecond) ||
+        assignmentValues.rateLimitRefillTokensPerSecond < 1 ||
+        assignmentValues.rateLimitRefillTokensPerSecond > 100000 ||
+        !Number.isInteger(assignmentValues.rateLimitWindowSeconds) ||
+        assignmentValues.rateLimitWindowSeconds < 1 ||
+        assignmentValues.rateLimitWindowSeconds > 3600)) ||
+    !Number.isInteger(assignmentValues.warningThresholdPercent) ||
+    assignmentValues.warningThresholdPercent < 0 ||
+    assignmentValues.warningThresholdPercent > 100 ||
+    providerModelRows.some((row) => !row.providerConnectionId || !row.model) ||
+    selectedProviderModelKeys.size !== providerModelRows.length;
   const employeeToDisable = assignmentToDisable
     ? model.employees.find((employee) => employee.id === assignmentToDisable.employeeId)
     : undefined;
@@ -477,18 +616,64 @@ export function ProjectEmployeeAssignmentSection({
     const existingAssignment = assignments.find(
       (assignment) => assignment.employeeId === employeeId
     );
+    const formState = getEmployeePolicyFormState(existingAssignment, providerConnections);
 
     setSelectedEmployeeId(employeeId);
-    setAssignmentValues({
-      allowedModelKeys: existingAssignment?.policy.allowedModelKeys.join(", ") ?? "",
-      allowedProviderConnectionIds:
-        existingAssignment?.policy.allowedProviderConnectionIds.join(", ") ?? "",
-      monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
-      policyNote: existingAssignment?.policy.note ?? "",
-      warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
-    });
+    setAssignmentValues(formState.assignmentValues);
+    setProviderModelRows(formState.providerModelRows);
+    setEmployeePolicyTab("limits");
     setSubmitState({ message: "", status: "idle" });
     setIsEmployeePolicyDialogOpen(true);
+  }
+
+  function addProviderModelRow() {
+    for (const providerConnection of selectableProviderConnections) {
+      const modelName = getProviderConnectionModels(providerConnection).find(
+        (candidate) =>
+          !selectedProviderModelKeys.has(providerModelKey(providerConnection.id, candidate))
+      );
+
+      if (modelName) {
+        providerModelRowSequence.current += 1;
+        setProviderModelRows((current) => [
+          ...current,
+          {
+            id: `new-provider-model-${providerModelRowSequence.current}`,
+            model: modelName,
+            providerConnectionId: providerConnection.id
+          }
+        ]);
+        return;
+      }
+    }
+  }
+
+  function updateProviderModelRow(
+    rowId: string,
+    next: Pick<EmployeeProviderModelRow, "model" | "providerConnectionId">
+  ) {
+    setProviderModelRows((current) =>
+      current.map((row) => (row.id === rowId ? { ...row, ...next } : row))
+    );
+  }
+
+  function changeProviderModelRowProvider(rowId: string, providerConnectionId: string) {
+    const providerConnection = providerConnectionsById.get(providerConnectionId);
+    const usedKeys = new Set(
+      providerModelRows
+        .filter((row) => row.id !== rowId && row.providerConnectionId && row.model)
+        .map((row) => providerModelKey(row.providerConnectionId, row.model))
+    );
+    const firstAvailableModel = providerConnection
+      ? getProviderConnectionModels(providerConnection).find(
+          (modelName) => !usedKeys.has(providerModelKey(providerConnectionId, modelName))
+        ) ?? ""
+      : "";
+
+    updateProviderModelRow(rowId, {
+      model: firstAvailableModel,
+      providerConnectionId
+    });
   }
 
   async function submitNewAssignment() {
@@ -508,6 +693,10 @@ export function ProjectEmployeeAssignmentSection({
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
       policyNote: existingAssignment?.policy.note ?? "",
       projectId: project.id,
+      rateLimitEnabled: existingAssignment?.policy.rateLimit.enabled ?? false,
+      rateLimitLimit: existingAssignment?.policy.rateLimit.limit ?? 60,
+      rateLimitWindowSeconds:
+        existingAssignment?.policy.rateLimit.windowSeconds ?? 60,
       status: "active",
       warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
     };
@@ -546,12 +735,17 @@ export function ProjectEmployeeAssignmentSection({
     }
 
     const values: ProjectEmployeeAssignmentValues = {
-      allowedModelKeys: splitCommaList(assignmentValues.allowedModelKeys),
-      allowedProviderConnectionIds: splitCommaList(assignmentValues.allowedProviderConnectionIds),
+      allowedModelKeys: uniqueStrings(providerModelRows.map((row) => row.model)),
+      allowedProviderConnectionIds: uniqueStrings(
+        providerModelRows.map((row) => row.providerConnectionId)
+      ),
       employeeId: selectedEmployeeId,
       monthlyBudgetLimitUsd: assignmentValues.monthlyBudgetLimitUsd,
       policyNote: assignmentValues.policyNote,
       projectId: project.id,
+      rateLimitEnabled: assignmentValues.rateLimitEnabled,
+      rateLimitLimit: assignmentValues.rateLimitLimit,
+      rateLimitWindowSeconds: assignmentValues.rateLimitWindowSeconds,
       status: "active",
       warningThresholdPercent: assignmentValues.warningThresholdPercent
     };
@@ -578,7 +772,7 @@ export function ProjectEmployeeAssignmentSection({
     const assignment = payload.assignment;
     setAssignments((current) => upsertAssignment(current, assignment));
     setSubmitState({
-      message: locale === "ko" ? "직원 한도가 저장되었습니다." : "Employee limit saved.",
+      message: locale === "ko" ? "직원 정책이 저장되었습니다." : "Employee policy saved.",
       status: "success"
     });
     setIsEmployeePolicyDialogOpen(false);
@@ -694,7 +888,22 @@ export function ProjectEmployeeAssignmentSection({
                       </button>
                     </td>
                     <td>{employee.department?.trim() || "-"}</td>
-                    <td>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</td>
+                    <td>
+                      <div className="project-employee-quota-cell">
+                        <strong>
+                          {formatBudgetUsd(assignment.monthlyUsedUsd)} /{" "}
+                          {formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}
+                        </strong>
+                        <small data-quota-status={assignment.quotaStatus}>
+                          {{
+                            exceeded: text.quotaExceeded,
+                            not_configured: text.quotaNotConfigured,
+                            warning: text.quotaWarning,
+                            within_limit: text.quotaWithinLimit
+                          }[assignment.quotaStatus]}
+                        </small>
+                      </div>
+                    </td>
                     <td className="project-employee-table-action">
                       <Button
                         disabled={pendingAction !== null}
@@ -729,90 +938,287 @@ export function ProjectEmployeeAssignmentSection({
       >
         <DialogContent className="employee-policy-dialog">
           <DialogHeader>
-            <DialogTitle>
-              {selectedEmployee?.name?.trim() || "-"} · {text.policySettings}
+            <DialogTitle className="employee-policy-dialog-title">
+              <span>{selectedEmployee?.name?.trim() || "-"}</span>
+              <small>{selectedEmployee?.department?.trim() || "-"}</small>
             </DialogTitle>
           </DialogHeader>
-          <p className="employee-policy-dialog-meta">
-            {selectedEmployee?.department?.trim() || "-"}
-          </p>
           {submitState.status === "error" && submitState.message ? (
             <Alert variant="destructive">
               <AlertDescription>{submitState.message}</AlertDescription>
             </Alert>
           ) : null}
-          <div className="modal-form-grid project-employee-policy-fields">
-            <label className="policy-field">
-              <span>{text.budget}</span>
-              <input
-                min={0}
-                onChange={(event) =>
-                  setAssignmentValues((current) => ({
-                    ...current,
-                    monthlyBudgetLimitUsd: Number(event.target.value)
-                  }))
-                }
-                step="0.01"
-                type="number"
-                value={assignmentValues.monthlyBudgetLimitUsd}
-              />
-            </label>
-            <label className="policy-field">
-              <span>{text.warning}</span>
-              <input
-                max={100}
-                min={0}
-                onChange={(event) =>
-                  setAssignmentValues((current) => ({
-                    ...current,
-                    warningThresholdPercent: Number(event.target.value)
-                  }))
-                }
-                type="number"
-                value={assignmentValues.warningThresholdPercent}
-              />
-            </label>
-            <label className="policy-field">
-              <span>{text.modelKeys}</span>
-              <input
-                onChange={(event) =>
-                  setAssignmentValues((current) => ({
-                    ...current,
-                    allowedModelKeys: event.target.value
-                  }))
-                }
-                type="text"
-                value={assignmentValues.allowedModelKeys}
-              />
-            </label>
-            <label className="policy-field">
-              <span>{text.providerIds}</span>
-              <input
-                onChange={(event) =>
-                  setAssignmentValues((current) => ({
-                    ...current,
-                    allowedProviderConnectionIds: event.target.value
-                  }))
-                }
-                type="text"
-                value={assignmentValues.allowedProviderConnectionIds}
-              />
-            </label>
-            <label className="policy-field team-description-field">
-              <span>{text.note}</span>
-              <input
-                maxLength={500}
-                onChange={(event) =>
-                  setAssignmentValues((current) => ({
-                    ...current,
-                    policyNote: event.target.value
-                  }))
-                }
-                type="text"
-                value={assignmentValues.policyNote}
-              />
-            </label>
-          </div>
+          <Tabs
+            className="employee-policy-tabs"
+            onValueChange={(value) => setEmployeePolicyTab(value as EmployeePolicyTab)}
+            value={employeePolicyTab}
+          >
+            <TabsList aria-label={text.policySettings}>
+              <TabsTrigger value="limits">{text.limitSettings}</TabsTrigger>
+              <TabsTrigger value="provider-model">{text.providerModelSettings}</TabsTrigger>
+            </TabsList>
+            <TabsContent className="employee-policy-tab-content" value="limits">
+              <div
+                className="employee-policy-usage-summary"
+                data-quota-status={selectedQuotaStatus}
+              >
+                <div className="employee-policy-usage-heading">
+                  <span>{text.monthlyUsage}</span>
+                  <Badge variant="outline">{selectedQuotaStatusLabel}</Badge>
+                </div>
+                <strong>
+                  {formatBudgetUsd(selectedAssignment?.monthlyUsedUsd ?? 0)} /{" "}
+                  {formatBudgetUsd(selectedAssignment?.monthlyBudgetLimitUsd ?? 0)}
+                </strong>
+                <div
+                  aria-label={text.monthlyUsage}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={Math.round(selectedQuotaProgress)}
+                  className="employee-policy-quota-progress"
+                  role="progressbar"
+                >
+                  <span style={{ width: `${selectedQuotaProgress}%` }} />
+                </div>
+              </div>
+              <div className="modal-form-grid project-employee-policy-fields">
+                <label className="policy-field">
+                  <span>{text.budget}</span>
+                  <input
+                    min={0}
+                    onChange={(event) =>
+                      setAssignmentValues((current) => ({
+                        ...current,
+                        monthlyBudgetLimitUsd: Number(event.target.value)
+                      }))
+                    }
+                    step="0.01"
+                    type="number"
+                    value={assignmentValues.monthlyBudgetLimitUsd}
+                  />
+                </label>
+                <label className="policy-field employee-budget-warning-field">
+                  <span>{text.budgetWarning}</span>
+                  <span className="employee-policy-input-suffix">
+                    <input
+                      max={100}
+                      min={0}
+                      onChange={(event) =>
+                        setAssignmentValues((current) => ({
+                          ...current,
+                          warningThresholdPercent: Number(event.target.value)
+                        }))
+                      }
+                      step={5}
+                      type="number"
+                      value={assignmentValues.warningThresholdPercent}
+                    />
+                    <span aria-hidden="true">%</span>
+                  </span>
+                </label>
+                <label className="employee-rate-limit-control">
+                  <span>{text.rateLimit}</span>
+                  <Switch
+                    aria-label={text.rateLimit}
+                    checked={assignmentValues.rateLimitEnabled}
+                    id="employee-rate-limit-enabled"
+                    onCheckedChange={(checked) =>
+                      setAssignmentValues((current) => ({
+                        ...current,
+                        rateLimitEnabled: checked
+                      }))
+                    }
+                  />
+                </label>
+                {assignmentValues.rateLimitEnabled ? (
+                  <div className="employee-rate-limit-fields">
+                    <label className="policy-field">
+                      <span>{text.requestsPerMinute}</span>
+                      <input
+                        max={100000}
+                        min={1}
+                        onChange={(event) => {
+                          const limit = Number(event.target.value);
+                          setAssignmentValues((current) => ({
+                            ...current,
+                            rateLimitLimit: limit,
+                            rateLimitWindowSeconds: getRateLimitWindowSeconds(
+                              limit,
+                              current.rateLimitRefillTokensPerSecond
+                            )
+                          }));
+                        }}
+                        step={1}
+                        type="number"
+                        value={assignmentValues.rateLimitLimit}
+                      />
+                    </label>
+                    <label className="policy-field">
+                      <span>{text.refillRequestsPerSecond}</span>
+                      <input
+                        max={100000}
+                        min={1}
+                        onChange={(event) => {
+                          const refillTokensPerSecond = Number(event.target.value);
+                          setAssignmentValues((current) => ({
+                            ...current,
+                            rateLimitRefillTokensPerSecond: refillTokensPerSecond,
+                            rateLimitWindowSeconds: getRateLimitWindowSeconds(
+                              current.rateLimitLimit,
+                              refillTokensPerSecond
+                            )
+                          }));
+                        }}
+                        step={1}
+                        type="number"
+                        value={assignmentValues.rateLimitRefillTokensPerSecond}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <label className="policy-field employee-policy-note-field">
+                  <span>{text.note}</span>
+                  <input
+                    maxLength={500}
+                    onChange={(event) =>
+                      setAssignmentValues((current) => ({
+                        ...current,
+                        policyNote: event.target.value
+                      }))
+                    }
+                    type="text"
+                    value={assignmentValues.policyNote}
+                  />
+                </label>
+              </div>
+            </TabsContent>
+            <TabsContent className="employee-policy-tab-content" value="provider-model">
+              <div className="employee-provider-model-toolbar">
+                <span>{text.providerModelSettings}</span>
+                <Button
+                  disabled={!hasAvailableProviderModel}
+                  onClick={addProviderModelRow}
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus aria-hidden="true" />
+                  {text.addModel}
+                </Button>
+              </div>
+              {selectableProviderConnections.length === 0 && providerModelRows.length === 0 ? (
+                <p className="employee-provider-model-empty">{text.noProviderModels}</p>
+              ) : null}
+              {selectableProviderConnections.length > 0 && providerModelRows.length === 0 ? (
+                <p className="employee-provider-model-empty">{text.noSelectedModels}</p>
+              ) : null}
+              <div className="employee-provider-model-list">
+                {providerModelRows.map((row) => {
+                  const selectedProvider = providerConnectionsById.get(
+                    row.providerConnectionId
+                  );
+                  const providerSelectable = selectableProviderConnections.some(
+                    (providerConnection) => providerConnection.id === row.providerConnectionId
+                  );
+                  const modelOptions = selectedProvider
+                    ? getProviderConnectionModels(selectedProvider)
+                    : [];
+                  const selectedModelAvailable = modelOptions.includes(row.model);
+
+                  return (
+                    <div className="employee-provider-model-row" key={row.id}>
+                      <label className="employee-provider-model-field">
+                        <span>{text.providerIds}</span>
+                        <div className="employee-provider-model-select">
+                          {selectedProvider ? (
+                            <ProviderFamilyIcon
+                              className="employee-provider-model-icon"
+                              family={getProviderConnectionFamily(selectedProvider)}
+                              size={20}
+                            />
+                          ) : (
+                            <span className="employee-provider-model-icon" aria-hidden="true">
+                              -
+                            </span>
+                          )}
+                          <select
+                            aria-label={text.selectProvider}
+                            onChange={(event) =>
+                              changeProviderModelRowProvider(row.id, event.target.value)
+                            }
+                            value={row.providerConnectionId}
+                          >
+                            <option value="">{text.selectProvider}</option>
+                            {selectedProvider && !providerSelectable ? (
+                              <option value={selectedProvider.id}>
+                                {selectedProvider.displayName}
+                              </option>
+                            ) : null}
+                            {selectableProviderConnections.map((providerConnection) => (
+                              <option key={providerConnection.id} value={providerConnection.id}>
+                                {providerConnection.displayName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                      <label className="employee-provider-model-field">
+                        <span>{text.modelKeys}</span>
+                        <select
+                          aria-label={text.selectModel}
+                          disabled={!selectedProvider}
+                          onChange={(event) =>
+                            updateProviderModelRow(row.id, {
+                              model: event.target.value,
+                              providerConnectionId: row.providerConnectionId
+                            })
+                          }
+                          value={row.model}
+                        >
+                          <option value="">{text.selectModel}</option>
+                          {row.model && !selectedModelAvailable ? (
+                            <option value={row.model}>{row.model}</option>
+                          ) : null}
+                          {modelOptions.map((modelName) => {
+                            const usedByAnotherRow = providerModelRows.some(
+                              (candidate) =>
+                                candidate.id !== row.id &&
+                                candidate.providerConnectionId === row.providerConnectionId &&
+                                candidate.model === modelName
+                            );
+
+                            return (
+                              <option
+                                disabled={usedByAnotherRow}
+                                key={modelName}
+                                value={modelName}
+                              >
+                                {modelName}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </label>
+                      <Button
+                        aria-label={text.removeModel}
+                        className="employee-provider-model-remove"
+                        onClick={() =>
+                          setProviderModelRows((current) =>
+                            current.filter((candidate) => candidate.id !== row.id)
+                          )
+                        }
+                        size="icon"
+                        title={text.removeModel}
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </TabsContent>
+          </Tabs>
           <div className="modal-actions">
             <span className="application-budget-summary">
               {text.remaining}: {formatBudgetUsd(remainingBudgetUsd)}
@@ -826,7 +1232,11 @@ export function ProjectEmployeeAssignmentSection({
               {text.cancel}
             </Button>
             <Button
-              disabled={pendingAction !== null || !selectedEmployeeId}
+              disabled={
+                pendingAction !== null ||
+                !selectedEmployeeId ||
+                assignmentValuesInvalid
+              }
               onClick={() => void submitAssignment()}
               type="button"
             >
@@ -1378,8 +1788,9 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
 
     return (
       <button
-        aria-label={`${label} ${locale === "ko" ? "정렬" : "sort"}`}
-        aria-sort={isActive ? directionLabel : "none"}
+        aria-label={`${label} ${locale === "ko" ? "정렬" : "sort"}${
+          isActive ? ` (${directionLabel})` : ""
+        }`}
         className="employee-list-sort-button"
         data-active={isActive}
         onClick={() => changeEmployeeSort(field)}
@@ -1719,8 +2130,90 @@ function upsertAssignment(
   );
 }
 
-function splitCommaList(value: string): string[] {
-  return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
+function getEmployeePolicyFormState(
+  assignment: ProjectEmployeeAssignmentRecord | undefined,
+  providerConnections: ProviderConnectionRecord[]
+) {
+  return {
+    assignmentValues: {
+      monthlyBudgetLimitUsd: assignment?.monthlyBudgetLimitUsd ?? 0,
+      policyNote: assignment?.policy.note ?? "",
+      rateLimitEnabled: assignment?.policy.rateLimit.enabled ?? false,
+      rateLimitLimit: assignment?.policy.rateLimit.limit ?? 60,
+      rateLimitRefillTokensPerSecond: getRateLimitRefillTokensPerSecond(
+        assignment?.policy.rateLimit.limit ?? 60,
+        assignment?.policy.rateLimit.windowSeconds ?? 60
+      ),
+      rateLimitWindowSeconds: assignment?.policy.rateLimit.windowSeconds ?? 60,
+      warningThresholdPercent: assignment?.warningThresholdPercent ?? 80
+    },
+    providerModelRows: buildEmployeeProviderModelRows(assignment, providerConnections)
+  };
+}
+
+function buildEmployeeProviderModelRows(
+  assignment: ProjectEmployeeAssignmentRecord | undefined,
+  providerConnections: ProviderConnectionRecord[]
+): EmployeeProviderModelRow[] {
+  const allowedProviderIds = uniqueStrings(
+    assignment?.policy.allowedProviderConnectionIds ?? []
+  );
+  const allowedModels = uniqueStrings(assignment?.policy.allowedModelKeys ?? []);
+  const allowedProviders = allowedProviderIds
+    .map((providerId) =>
+      providerConnections.find((providerConnection) => providerConnection.id === providerId)
+    )
+    .filter(
+      (providerConnection): providerConnection is ProviderConnectionRecord =>
+        Boolean(providerConnection)
+    );
+  const rows = allowedModels.map((modelName, index) => {
+    const matchingProvider =
+      allowedProviders.find((providerConnection) =>
+        getProviderConnectionModels(providerConnection).includes(modelName)
+      ) ??
+      (allowedProviders.length === 1 ? allowedProviders[0] : undefined) ??
+      providerConnections.find((providerConnection) =>
+        getProviderConnectionModels(providerConnection).includes(modelName)
+      );
+
+    return {
+      id: `saved-provider-model-${index}`,
+      model: modelName,
+      providerConnectionId: matchingProvider?.id ?? ""
+    };
+  });
+  const representedProviderIds = new Set(rows.map((row) => row.providerConnectionId));
+
+  for (const providerId of allowedProviderIds) {
+    if (!representedProviderIds.has(providerId)) {
+      rows.push({
+        id: `saved-provider-only-${rows.length}`,
+        model: "",
+        providerConnectionId: providerId
+      });
+    }
+  }
+
+  return rows;
+}
+
+function getProviderConnectionModels(providerConnection: ProviderConnectionRecord): string[] {
+  const models = providerConnection.providerConfig?.models;
+
+  return Array.isArray(models)
+    ? uniqueStrings(
+        models.map((modelName) => (typeof modelName === "string" ? modelName : ""))
+      )
+    : [];
+}
+
+function providerModelKey(providerConnectionId: string, model: string) {
+  return `${providerConnectionId.trim()}::${model.trim()}`;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function compareEmployeeName(left: EmployeeRecord, right: EmployeeRecord) {
