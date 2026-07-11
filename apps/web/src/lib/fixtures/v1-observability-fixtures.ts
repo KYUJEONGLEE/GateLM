@@ -85,6 +85,7 @@ export type InvocationLogRecord = {
   traceId: string;
   tenantId: string;
   projectId: string;
+  projectName?: string | null;
   applicationId: string;
   budgetScope: BudgetScope;
   apiKeyId: string;

@@ -1,12 +1,10 @@
 import {
-  AppWindow,
   Boxes,
   BriefcaseBusiness,
   CalendarClock,
   ChevronDown,
   Coins,
   Database,
-  Gauge,
   KeyRound,
   PlugZap,
   Route,
@@ -228,18 +226,29 @@ export function RequestLogDetailPanel({
               ],
               [
                 detailLabel(locale, "Detected types", "탐지 유형"),
-                record.safetySummary?.detectorCategories?.join(", ") ||
-                  record.maskingDetectedTypes?.join(", ") ||
+                localizedCodeList(
+                  record.safetySummary?.detectorCategories?.length
+                    ? record.safetySummary.detectorCategories
+                    : record.maskingDetectedTypes,
+                  locale,
                   text.none
+                )
               ],
               [
                 detailLabel(locale, "Policy allowed types", "정책 허용 유형"),
-                record.safetySummary?.policyAllowedTypes?.join(", ") || text.none
+                localizedCodeList(
+                  record.safetySummary?.policyAllowedTypes,
+                  locale,
+                  text.none
+                )
               ],
               [
                 detailLabel(locale, "Mandatory protected types", "필수 보호 유형"),
-                record.safetySummary?.mandatoryProtectedTypes?.join(", ") ||
+                localizedCodeList(
+                  record.safetySummary?.mandatoryProtectedTypes,
+                  locale,
                   text.none
+                )
               ],
               [
                 detailLabel(locale, "Prompt preview", "프롬프트 미리보기"),
@@ -289,7 +298,7 @@ export function RequestLogDetailPanel({
               [detailLabel(locale, "Cache", "캐시"), formatCacheResult(record, locale)],
               [
                 detailLabel(locale, "Cache decision", "캐시 결정 근거"),
-                nullableText(record.cacheDecisionReason, text.none)
+                localizedCode(record.cacheDecisionReason, locale, text.none)
               ],
               [
                 detailLabel(locale, "Cache hit request", "캐시 적중 원본 요청"),
@@ -368,14 +377,15 @@ export function RequestLogDetailPanel({
           <DetailRows
             rows={[
               [detailLabel(locale, "Request ID", "요청 ID"), record.requestId],
-              [detailLabel(locale, "Terminal status", "최종 상태"), record.terminalStatus ?? record.status],
-              [detailLabel(locale, "Provider", "프로바이더"), nullableText(record.selectedProvider, text.none)],
-              [detailLabel(locale, "Model", "모델"), nullableText(record.selectedModel, text.none)],
-              [detailLabel(locale, "Routing result", "라우팅 결과"), domainOutcomes?.routing?.outcome ?? text.none],
-              [detailLabel(locale, "Cache result", "캐시 결과"), domainOutcomes?.cache?.outcome ?? record.cacheStatus],
-              [detailLabel(locale, "Total tokens", "전체 토큰"), formatInteger(record.totalTokens)],
-              [detailLabel(locale, "Estimated cost", "예상 비용"), formatMicroUsd(record.costMicroUsd)],
-              [detailLabel(locale, "Error code", "오류 코드"), nullableText(record.errorCode, text.none)]
+              [
+                detailLabel(locale, "Terminal status", "최종 상태"),
+                localizedOutcome(record.terminalStatus ?? record.status, locale, text.none)
+              ],
+              [
+                detailLabel(locale, "Routing result", "라우팅 결과"),
+                localizedOutcome(domainOutcomes?.routing?.outcome, locale, text.none)
+              ],
+              [detailLabel(locale, "Cache result", "캐시 결과"), formatCacheResult(record, locale)]
             ]}
           />
         </DetailAccordion>
@@ -410,7 +420,45 @@ function RequestSummary({
         </div>
         <RequestIdCopyButton locale={locale} requestId={record.requestId} />
       </div>
-      <div className="request-detail-summary-grid">
+      <div
+        className="request-detail-outcome"
+        data-status-tone={requestSummaryTone(record)}
+      >
+        <span>{locale === "ko" ? "최종 결과" : "Final outcome"}</span>
+        <strong>{requestStatusLabel(record, locale)}</strong>
+      </div>
+      <div
+        aria-label={locale === "ko" ? "핵심 수치" : "Key metrics"}
+        className="request-detail-key-metrics"
+        role="group"
+      >
+        <SummaryMetric
+          icon={<Timer aria-hidden="true" />}
+          kind="key"
+          label={locale === "ko" ? "총 처리 시간" : "Total processing"}
+          value={formatDetailLatency(
+            record.latencySummary?.totalLatencyMs ?? record.latencyMs,
+            locale
+          )}
+        />
+        <SummaryMetric
+          icon={<Boxes aria-hidden="true" />}
+          kind="key"
+          label={locale === "ko" ? "사용 토큰" : "Tokens"}
+          value={formatInteger(record.totalTokens)}
+        />
+        <SummaryMetric
+          icon={<Coins aria-hidden="true" />}
+          kind="key"
+          label={locale === "ko" ? "예상 비용" : "Estimated cost"}
+          value={formatMicroUsd(record.costMicroUsd)}
+        />
+      </div>
+      <div
+        aria-label={locale === "ko" ? "요청 컨텍스트" : "Request context"}
+        className="request-detail-context-grid"
+        role="group"
+      >
         <SummaryMetric
           icon={<CalendarClock aria-hidden="true" />}
           label={locale === "ko" ? "요청 시각" : "Time"}
@@ -419,12 +467,7 @@ function RequestSummary({
         <SummaryMetric
           icon={<BriefcaseBusiness aria-hidden="true" />}
           label={locale === "ko" ? "프로젝트" : "Project"}
-          value={summaryIdentifier(record.projectId)}
-        />
-        <SummaryMetric
-          icon={<AppWindow aria-hidden="true" />}
-          label={locale === "ko" ? "애플리케이션" : "Application"}
-          value={summaryIdentifier(record.applicationId)}
+          value={record.projectName?.trim() || summaryIdentifier(record.projectId)}
         />
         <SummaryMetric
           icon={<Boxes aria-hidden="true" />}
@@ -438,39 +481,11 @@ function RequestSummary({
               />
               <span>
                 <strong>
-                  {providerDisplayName(provider) + " / " + (model ?? "-")}
+                  {model ?? "-"}
                 </strong>
               </span>
             </span>
           }
-        />
-        <SummaryMetric
-          icon={<Gauge aria-hidden="true" />}
-          label={locale === "ko" ? "최종 상태" : "Final status"}
-          value={
-            <StatusBadge
-              label={requestStatusLabel(record, locale)}
-              status={record.status}
-            />
-          }
-        />
-        <SummaryMetric
-          icon={<Timer aria-hidden="true" />}
-          label={locale === "ko" ? "총 처리시간" : "Total processing"}
-          value={formatDetailLatency(
-            record.latencySummary?.totalLatencyMs ?? record.latencyMs,
-            locale
-          )}
-        />
-        <SummaryMetric
-          icon={<Boxes aria-hidden="true" />}
-          label={locale === "ko" ? "사용 토큰" : "Tokens"}
-          value={formatInteger(record.totalTokens)}
-        />
-        <SummaryMetric
-          icon={<Coins aria-hidden="true" />}
-          label={locale === "ko" ? "예상 비용" : "Estimated cost"}
-          value={formatMicroUsd(record.costMicroUsd)}
         />
       </div>
     </section>
@@ -479,15 +494,17 @@ function RequestSummary({
 
 function SummaryMetric({
   icon,
+  kind = "context",
   label,
   value
 }: {
   icon: ReactNode;
+  kind?: "context" | "key";
   label: string;
   value: ReactNode;
 }) {
   return (
-    <div className="request-detail-summary-item">
+    <div className="request-detail-summary-item" data-summary-kind={kind}>
       <span className="request-detail-summary-icon">{icon}</span>
       <span>
         <small>{label}</small>
@@ -621,17 +638,6 @@ function summaryIdentifier(value: string | null | undefined) {
   return formatDisplayIdentifier(normalized);
 }
 
-function providerDisplayName(provider: string | null) {
-  const normalized = provider?.trim().toLowerCase() ?? "";
-
-  if (!normalized) return "-";
-  if (normalized.includes("openai")) return "OpenAI";
-  if (normalized.includes("anthropic") || normalized.includes("claude")) return "Anthropic";
-  if (normalized.includes("gemini") || normalized.includes("google")) return "Google Gemini";
-  if (normalized.includes("mock")) return "Mock Provider";
-  return provider ?? "-";
-}
-
 function requestStatusLabel(record: InvocationLogRecord, locale: Locale) {
   if (record.httpStatus >= 200 && record.httpStatus < 300) {
     return `${record.httpStatus} OK`;
@@ -648,13 +654,29 @@ function requestStatusLabel(record: InvocationLogRecord, locale: Locale) {
   return String(record.httpStatus);
 }
 
+function requestSummaryTone(record: InvocationLogRecord) {
+  if (record.httpStatus >= 200 && record.httpStatus < 300) {
+    return "success";
+  }
+  if (record.httpStatus === 429 || record.status === "rate_limited") {
+    return "warning";
+  }
+  if (record.status === "blocked") {
+    return "warning";
+  }
+  return "error";
+}
+
 const koreanCodeLabels: Record<string, string> = {
+  account_number: "계좌번호",
+  api_key: "API 키",
   application: "애플리케이션",
   balanced: "균형 우선",
   coding: "코딩",
   default_application: "기본 애플리케이션",
   default_project: "기본 프로젝트",
   disabled: "비활성",
+  email: "이메일",
   exact: "정확 일치",
   explicit_application: "지정 애플리케이션",
   general: "일반",
@@ -663,10 +685,13 @@ const koreanCodeLabels: Record<string, string> = {
   low_latency: "응답 속도 우선",
   lowest_cost: "최저 비용 우선",
   none: "사용 안 함",
+  phone: "전화번호",
+  phone_number: "전화번호",
   pinned: "고정 모델",
   pinned_model: "고정 모델",
   project: "프로젝트",
   project_default: "프로젝트 기본값",
+  private_url: "비공개 URL",
   selected: "선택됨",
   semantic: "의미 기반",
   standard: "표준 라우팅",
@@ -674,6 +699,18 @@ const koreanCodeLabels: Record<string, string> = {
   summarization: "요약",
   team: "팀"
 };
+
+function localizedCodeList(
+  values: string[] | null | undefined,
+  locale: Locale,
+  fallback: string
+) {
+  if (!values?.length) {
+    return fallback;
+  }
+
+  return values.map((value) => localizedCode(value, locale)).join(", ");
+}
 
 function localizedCode(
   value: string | null | undefined,
