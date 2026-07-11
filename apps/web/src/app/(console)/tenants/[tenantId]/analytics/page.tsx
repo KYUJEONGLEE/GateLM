@@ -7,6 +7,7 @@ import {
   Download,
   Gauge,
   LineChart,
+  Sparkles,
   ShieldCheck,
   Zap
 } from "lucide-react";
@@ -14,6 +15,8 @@ import {
   AnalyticsLatencyDistributionLineChart,
   AnalyticsProviderLatencyBarChart
 } from "@/features/analytics/components/analytics-performance-charts";
+import { PolicyImpactPanel } from "@/features/analytics/components/policy-impact-panel";
+import { buildPolicyImpactReadModel } from "@/features/analytics/policy-impact-read-model";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
@@ -23,6 +26,7 @@ import {
   type LiveAnalyticsPerformance,
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
+import { getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -39,7 +43,7 @@ type AnalyticsPageProps = {
   }>;
 };
 
-type AnalyticsTab = "usage" | "cost" | "performance" | "reliability" | "cache";
+type AnalyticsTab = "impact" | "usage" | "cost" | "performance" | "reliability" | "cache";
 
 type AnalyticsFilterState = {
   model: string;
@@ -167,6 +171,7 @@ const analyticsPageText: Record<Locale, AnalyticsPageText> = {
     tabLabels: {
       cache: "Cache",
       cost: "Cost",
+      impact: "Policy Impact",
       performance: "Performance",
       reliability: "Reliability",
       usage: "Usage"
@@ -240,6 +245,7 @@ const analyticsPageText: Record<Locale, AnalyticsPageText> = {
     tabLabels: {
       cache: "캐시",
       cost: "비용",
+      impact: "정책 효과",
       performance: "성능",
       reliability: "안정성",
       usage: "사용량"
@@ -264,6 +270,7 @@ const analyticsTabConfigs: Array<{
   icon: typeof BarChart3;
   id: AnalyticsTab;
 }> = [
+  { icon: Sparkles, id: "impact" },
   { icon: BarChart3, id: "usage" },
   { icon: Database, id: "cost" },
   { icon: LineChart, id: "performance" },
@@ -280,8 +287,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const filters = buildAnalyticsFilters(resolvedSearchParams);
   const liveRange = getAnalyticsPerformanceRange(filters.range);
   const shouldLoadPerformance = activeTab === "performance";
+  const shouldLoadImpact = activeTab === "impact";
 
-  const [locale, projectsModel, performance] = await Promise.all([
+  const [locale, projectsModel, performance, policyOverview] = await Promise.all([
     getRequestLocale(),
     getProjectsModel(tenantId),
     shouldLoadPerformance
@@ -290,6 +298,12 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           projectId: filters.projectId || undefined,
           provider: filters.provider || undefined,
           model: filters.model || undefined,
+          range: filters.range
+        })
+      : Promise.resolve(undefined),
+    shouldLoadImpact
+      ? getLiveDashboardOverview(tenantId, {
+          projectId: filters.projectId || undefined,
           range: filters.range
         })
       : Promise.resolve(undefined)
@@ -301,6 +315,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const text = analyticsPageText[locale];
   const analyticsTabs = getAnalyticsTabs(text);
   const analyticsRangeOptions = getAnalyticsRangeOptions(text);
+  const showProviderModelFilters = activeTab === "performance";
 
   return (
     <main className="console-content analytics-page">
@@ -331,28 +346,32 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
             ))}
           </select>
         </label>
-        <label>
-          <span>{text.filterProvider}</span>
-          <select defaultValue={filters.provider} name="provider">
-            <option value="">{text.allProviders}</option>
-            {providerOptions.map((provider) => (
-              <option key={provider} value={provider}>
-                {provider}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>{text.filterModel}</span>
-          <select defaultValue={filters.model} name="model">
-            <option value="">{text.allModels}</option>
-            {modelOptions.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showProviderModelFilters ? (
+          <>
+            <label>
+              <span>{text.filterProvider}</span>
+              <select defaultValue={filters.provider} name="provider">
+                <option value="">{text.allProviders}</option>
+                {providerOptions.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{text.filterModel}</span>
+              <select defaultValue={filters.model} name="model">
+                <option value="">{text.allModels}</option>
+                {modelOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
         <button className="analytics-apply-button" type="submit">
           {text.apply}
         </button>
@@ -379,7 +398,12 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })}
       </nav>
 
-      {activeTab === "performance" ? (
+      {activeTab === "impact" ? (
+        <PolicyImpactPanel
+          locale={locale}
+          model={buildPolicyImpactReadModel(policyOverview)}
+        />
+      ) : activeTab === "performance" ? (
         <PerformancePanel
           filters={filters}
           locale={locale}
@@ -683,11 +707,18 @@ function normalizeAnalyticsRange(value: string | undefined): LiveAnalyticsRange 
 }
 
 function normalizeAnalyticsTab(value: string | undefined): AnalyticsTab {
-  if (value === "usage" || value === "cost" || value === "reliability" || value === "cache") {
+  if (
+    value === "impact" ||
+    value === "usage" ||
+    value === "cost" ||
+    value === "performance" ||
+    value === "reliability" ||
+    value === "cache"
+  ) {
     return value;
   }
 
-  return "performance";
+  return "impact";
 }
 
 function normalizeOptionalText(value: string | undefined) {
