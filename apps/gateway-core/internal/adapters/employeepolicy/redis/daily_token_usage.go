@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -137,10 +138,17 @@ func (w *TrackingTerminalLogWriter) WriteTerminalLog(ctx context.Context, entry 
 		completedAt = time.Now().UTC()
 	}
 	dayStart := time.Date(completedAt.Year(), completedAt.Month(), completedAt.Day(), 0, 0, 0, 0, time.UTC)
-	return w.store.Add(ctx, employeepolicy.DailyTokenUsageKey{
+	if err := w.store.Add(ctx, employeepolicy.DailyTokenUsageKey{
 		TenantID: entry.TenantID, ProjectID: entry.ProjectID,
 		EmployeeID: decision.EmployeeID, DayStart: dayStart,
-	}, entry.RequestID, int64(entry.TotalTokens), dayStart.AddDate(0, 0, 1).Add(time.Hour))
+	}, entry.RequestID, int64(entry.TotalTokens), dayStart.AddDate(0, 0, 1).Add(time.Hour)); err != nil {
+		log.Printf("employee daily token usage update failed request_id=%q employee_id=%q cause=%q",
+			entry.RequestID,
+			decision.EmployeeID,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func normalizeExpiry(expiresAt time.Time) time.Time {
@@ -164,10 +172,11 @@ func redisInt64(value any) (int64, error) {
 }
 
 const getOrSeedDailyTokenScript = `
-local current = redis.call("GET", KEYS[1])
-if not current then
-  redis.call("SET", KEYS[1], ARGV[1], "EXAT", ARGV[2], "NX")
-  current = redis.call("GET", KEYS[1])
+local seed = tonumber(ARGV[1]) or 0
+local current = tonumber(redis.call("GET", KEYS[1]))
+if not current or current < seed then
+  redis.call("SET", KEYS[1], seed, "EXAT", ARGV[2])
+  return seed
 end
 return current
 `

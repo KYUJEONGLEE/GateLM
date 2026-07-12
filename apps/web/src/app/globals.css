@@ -15767,6 +15767,61 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   align-items: start;
 }
 
+.employee-invite-department-field {
+  grid-column: 1 / -1;
+}
+
+.employee-department-edit-button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
+.employee-department-edit-button:hover,
+.employee-department-edit-button:focus-visible {
+  color: var(--accent-strong);
+  text-decoration-color: currentColor;
+}
+
+.employee-department-edit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.employee-department-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-width: 440px;
+  gap: 18px;
+}
+
+.employee-department-dialog .policy-field {
+  gap: 8px;
+}
+
+.employee-department-dialog .policy-field > span {
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-md) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
+}
+
+.employee-department-dialog .policy-field input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: calc(var(--font-size-md) + var(--global-font-lift));
+}
+
 .employee-panel .policy-field,
 .employee-add-dialog .policy-field {
   gap: 6px;
@@ -16054,9 +16109,29 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .project-employee-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 760px;
   border-collapse: collapse;
   background: var(--surface);
+}
+
+.project-employee-name-column {
+  width: 20%;
+}
+
+.project-employee-department-column {
+  width: 16%;
+}
+
+.project-employee-cost-column {
+  width: 25%;
+}
+
+.project-employee-token-column {
+  width: 23%;
+}
+
+.project-employee-action-column {
+  width: 16%;
 }
 
 .project-employee-table th,
@@ -16214,40 +16289,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   font-weight: var(--font-weight-medium);
 }
 
-.employee-policy-tabs {
-  min-height: 360px;
-  gap: 16px;
-}
-
-.employee-policy-tabs [data-slot="tabs-list"] {
-  width: 100%;
-  height: 42px;
-  justify-content: flex-start;
-  gap: 24px;
-  padding: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  border-radius: 0;
-  background: transparent;
-}
-
-.employee-policy-tabs [data-slot="tabs-trigger"] {
-  flex: 0 0 auto;
-  min-width: 0;
-  height: 42px;
-  justify-content: flex-start;
-  padding: 0 2px;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  font-size: var(--font-size-md);
-}
-
-.employee-policy-tabs [data-slot="tabs-trigger"][data-selected] {
-  border-bottom-color: var(--accent-strong);
-  background: transparent;
-  box-shadow: none;
-}
-
 .employee-policy-tab-content {
   display: grid;
   align-content: start;
@@ -16309,9 +16350,131 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .employee-policy-dialog .project-employee-policy-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 280px));
-  gap: 14px 16px;
-  justify-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.employee-policy-compact-row {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--foreground);
+  font-size: calc(var(--font-size-md) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
+}
+
+.employee-policy-input-suffix.employee-policy-compact-input {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  width: 108px;
+  min-height: 42px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.employee-policy-dialog
+  .employee-policy-input-suffix.employee-policy-compact-input
+  > input {
+  width: 72px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  text-align: right;
+}
+
+.employee-policy-input-suffix.employee-policy-compact-input > span {
+  position: static;
+  font-size: var(--font-size-md);
+  transform: none;
+}
+
+.employee-policy-input-suffix.employee-policy-compact-input:focus-within {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-strong) 18%, transparent);
+}
+
+.employee-policy-unit-stepper {
+  display: grid;
+  width: 132px;
+  min-height: 42px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.employee-policy-unit-stepper:focus-within {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-strong) 18%, transparent);
+}
+
+.employee-policy-unit-stepper > input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  text-align: right;
+}
+
+.employee-policy-stepper-buttons {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  border-left: 1px solid var(--border-subtle);
+}
+
+.employee-policy-stepper-buttons > button {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.employee-policy-stepper-buttons > button:first-child {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.employee-policy-stepper-buttons > button:hover:not(:disabled) {
+  background: var(--surface-subtle);
+  color: var(--foreground);
+}
+
+.employee-policy-stepper-buttons > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.employee-policy-stepper-buttons svg {
+  width: 14px;
+  height: 14px;
 }
 
 .employee-policy-dialog .policy-field {
@@ -16389,122 +16552,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .employee-policy-dialog .policy-field input:disabled {
   cursor: not-allowed;
   opacity: 0.58;
-}
-
-.employee-provider-model-toolbar {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.employee-provider-model-toolbar > span {
-  color: var(--foreground);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.employee-provider-model-toolbar button {
-  min-height: 36px;
-}
-
-.employee-provider-model-empty {
-  margin: 0;
-  padding: 28px 0;
-  border-top: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  font-size: var(--font-size-md);
-  text-align: center;
-}
-
-.employee-provider-model-list {
-  display: grid;
-}
-
-.employee-provider-model-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
-  gap: 14px;
-  align-items: end;
-  padding: 14px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.employee-provider-model-row:last-child {
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.employee-provider-model-field {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-}
-
-.employee-provider-model-field > span {
-  color: var(--text-muted);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-}
-
-.employee-provider-model-field select {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--foreground);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
-}
-
-.employee-provider-model-field select:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-}
-
-.employee-provider-model-select {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  align-items: center;
-}
-
-.employee-provider-model-select select {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  padding-left: 44px;
-}
-
-.employee-provider-model-icon {
-  z-index: 1;
-  display: grid;
-  width: 28px;
-  height: 28px;
-  grid-column: 1;
-  grid-row: 1;
-  place-items: center;
-  justify-self: center;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  pointer-events: none;
-}
-
-.employee-provider-model-icon img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
-}
-
-.employee-provider-model-remove {
-  margin-bottom: 4px;
-  color: var(--text-muted);
 }
 
 .employee-policy-dialog .application-budget-summary {
@@ -16804,31 +16851,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
   .employee-rate-limit-fields {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .employee-policy-tabs {
-    min-height: 0;
-  }
-
-  .employee-policy-tabs [data-slot="tabs-list"] {
-    gap: 18px;
-  }
-
-  .employee-policy-tabs [data-slot="tabs-trigger"] {
-    font-size: var(--font-size-base);
-  }
-
-  .employee-provider-model-row {
-    grid-template-columns: minmax(0, 1fr) 36px;
-  }
-
-  .employee-provider-model-field {
-    grid-column: 1;
-  }
-
-  .employee-provider-model-remove {
-    grid-column: 2;
-    grid-row: 1;
   }
 
   .employee-policy-dialog .modal-actions {
@@ -17481,7 +17503,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   .project-detail-general-content
   > .project-detail-actions {
   width: 100%;
-  margin-top: 0;
+  margin-top: 14px;
   justify-content: flex-end;
 }
 

@@ -1,6 +1,115 @@
--- Contract DDL for tenant-chat/v1. This file is not an applied migration.
--- The implementation migration must preserve these names, types, constraints,
--- indexes, tenant predicates, and additive/expand-first semantics.
+-- Tenant Chat v1 is additive and intentionally separate from the legacy
+-- Project/Application runtime tables.
+
+CREATE TABLE tenant_chat_pricing_catalogs (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  version bigint NOT NULL,
+  digest text NOT NULL,
+  currency char(3) NOT NULL DEFAULT 'USD',
+  unit text NOT NULL DEFAULT 'micro_usd_per_1m_tokens',
+  document jsonb NOT NULL,
+  effective_at timestamptz NOT NULL,
+  published_at timestamptz NOT NULL,
+  published_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT tenant_chat_pricing_tenant_version_key UNIQUE (tenant_id, version),
+  CONSTRAINT tenant_chat_pricing_tenant_digest_key UNIQUE (tenant_id, digest),
+  CONSTRAINT tenant_chat_pricing_identity_tenant_key UNIQUE (id, tenant_id),
+  CONSTRAINT tenant_chat_pricing_version_check CHECK (version > 0),
+  CONSTRAINT tenant_chat_pricing_currency_check CHECK (currency = 'USD'),
+  CONSTRAINT tenant_chat_pricing_unit_check CHECK (unit = 'micro_usd_per_1m_tokens'),
+  CONSTRAINT tenant_chat_pricing_digest_check CHECK (digest ~ '^sha256:[A-Za-z0-9_-]{43}$'),
+  CONSTRAINT tenant_chat_pricing_document_check CHECK (jsonb_typeof(document) = 'object')
+);
+
+CREATE INDEX tenant_chat_pricing_tenant_effective_idx
+  ON tenant_chat_pricing_catalogs (tenant_id, effective_at DESC);
+
+CREATE TABLE tenant_chat_runtime_configs (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  version bigint NOT NULL,
+  content_hash text NOT NULL,
+  publish_state "RuntimeConfigPublishState" NOT NULL DEFAULT 'DRAFT',
+  document jsonb NOT NULL,
+  effective_at timestamptz NULL,
+  published_at timestamptz NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT tenant_chat_runtime_config_tenant_version_key UNIQUE (tenant_id, version),
+  CONSTRAINT tenant_chat_runtime_config_identity_tenant_key UNIQUE (id, tenant_id),
+  CONSTRAINT tenant_chat_runtime_config_version_check CHECK (version > 0),
+  CONSTRAINT tenant_chat_runtime_config_hash_check CHECK (content_hash ~ '^sha256:[A-Za-z0-9_-]{43}$'),
+  CONSTRAINT tenant_chat_runtime_config_document_check CHECK (jsonb_typeof(document) = 'object')
+);
+
+CREATE INDEX tenant_chat_runtime_config_tenant_state_idx
+  ON tenant_chat_runtime_configs (tenant_id, publish_state);
+
+CREATE TABLE tenant_chat_runtime_snapshots (
+  snapshot_id text PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  runtime_config_id uuid NOT NULL,
+  pricing_catalog_id uuid NOT NULL,
+  version bigint NOT NULL,
+  digest text NOT NULL,
+  policy_version bigint NOT NULL,
+  employee_notice_version bigint NOT NULL,
+  pricing_version bigint NOT NULL,
+  pricing_digest text NOT NULL,
+  snapshot_body jsonb NOT NULL,
+  published_at timestamptz NOT NULL,
+  published_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT tenant_chat_snapshot_tenant_version_key UNIQUE (tenant_id, version),
+  CONSTRAINT tenant_chat_snapshot_identity_key UNIQUE (snapshot_id, tenant_id),
+  CONSTRAINT tenant_chat_snapshot_runtime_config_tenant_fkey
+    FOREIGN KEY (runtime_config_id, tenant_id)
+    REFERENCES tenant_chat_runtime_configs (id, tenant_id) ON DELETE RESTRICT,
+  CONSTRAINT tenant_chat_snapshot_pricing_catalog_tenant_fkey
+    FOREIGN KEY (pricing_catalog_id, tenant_id)
+    REFERENCES tenant_chat_pricing_catalogs (id, tenant_id) ON DELETE RESTRICT,
+  CONSTRAINT tenant_chat_snapshot_versions_check CHECK (
+    version > 0
+    AND policy_version > 0
+    AND employee_notice_version > 0
+    AND pricing_version > 0
+  ),
+  CONSTRAINT tenant_chat_snapshot_digest_check CHECK (
+    digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
+    AND pricing_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
+  ),
+  CONSTRAINT tenant_chat_snapshot_body_check CHECK (
+    jsonb_typeof(snapshot_body) = 'object'
+    AND snapshot_body->>'snapshotId' = snapshot_id
+    AND snapshot_body->>'tenantId' = tenant_id::text
+    AND (snapshot_body->>'version')::bigint = version
+    AND snapshot_body->>'digest' = digest
+  )
+);
+
+CREATE INDEX tenant_chat_snapshot_tenant_published_idx
+  ON tenant_chat_runtime_snapshots (tenant_id, published_at DESC);
+CREATE INDEX tenant_chat_snapshot_runtime_config_idx
+  ON tenant_chat_runtime_snapshots (runtime_config_id);
+CREATE INDEX tenant_chat_snapshot_pricing_catalog_idx
+  ON tenant_chat_runtime_snapshots (pricing_catalog_id);
+
+CREATE TABLE tenant_chat_active_runtime_snapshots (
+  tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE RESTRICT,
+  snapshot_id text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by text NOT NULL,
+  CONSTRAINT tenant_chat_active_snapshot_key UNIQUE (snapshot_id, tenant_id),
+  CONSTRAINT tenant_chat_active_snapshot_identity_fkey
+    FOREIGN KEY (snapshot_id, tenant_id)
+    REFERENCES tenant_chat_runtime_snapshots (snapshot_id, tenant_id) ON DELETE RESTRICT
+);
+
+-- The eight Gateway-owned usage records below mirror the tenant-chat/v1 DDL
+-- contract. Their writers are introduced by the private Gateway PR.
 
 CREATE TABLE tenant_chat_request_admissions (
   admission_id uuid PRIMARY KEY,
@@ -180,8 +289,6 @@ CREATE TABLE tenant_chat_usage_reservations (
   CONSTRAINT tenant_chat_reservation_request_key UNIQUE (request_id),
   CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id, tenant_id),
   CONSTRAINT tenant_chat_reservation_idempotency_key UNIQUE (tenant_id, user_id, idempotency_key),
-  -- The referenced user-period row already has direct tenant/user FKs;
-  -- duplicate direct FKs on this reservation are intentionally omitted.
   CONSTRAINT tenant_chat_reservation_user_period_fkey
     FOREIGN KEY (tenant_id, user_id, user_period_start)
     REFERENCES tenant_chat_user_token_periods (tenant_id, user_id, period_start) ON DELETE RESTRICT,
@@ -430,7 +537,5 @@ CREATE INDEX tenant_chat_log_user_idx
 CREATE INDEX tenant_chat_log_employee_idx
   ON tenant_chat_invocation_logs (employee_id) WHERE employee_id IS NOT NULL;
 
--- No DROP/DOWN statement belongs in the implementation migration. Runtime roles
--- receive only the table privileges required by the ownership matrix; DDL stays
--- with the migration role. Raw content, JWTs, secrets, provider error bodies,
--- canonical bytes, and HMAC keys are forbidden in every table above.
+-- No destructive down statement is included. Runtime roles receive only the
+-- privileges assigned by the deployment role/grant step.
