@@ -55,7 +55,8 @@ func (s *ReservationStore) RecordConfirmedAttempt(
 			       confirmed_cache_read_input_tokens, confirmed_cost_micro_usd
 			FROM tenant_chat_provider_attempts
 			WHERE request_id = $1 AND attempt_no = $2
-		`, requestContext.RequestID, attemptNo).Scan(
+			  AND reservation_id = $3::uuid AND tenant_id = $4::uuid
+		`, requestContext.RequestID, attemptNo, reservationID, requestContext.ExecutionScope.TenantID).Scan(
 			&storedOutcome, &storedInput, &storedOutput, &storedCacheRead, &storedCost,
 		)
 		if err != nil || storedOutcome != outcome || storedInput != usage.InputTokens ||

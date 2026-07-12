@@ -109,6 +109,42 @@ func TestAuthenticateFailsClosedWhenJTIStoreIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestAuthenticateRejectsNonUUIDPersistenceIdentityBeforeJTIConsumption(t *testing.T) {
+	key := []byte("01234567890123456789012345678901")
+	requestContext := admissionContextFixture()
+	requestContext.ExecutionScope.TenantID = "tenant_fixture_001"
+	requestContext.ExecutionScope.BudgetScope.ID = requestContext.ExecutionScope.TenantID
+	bindingDigest, _, err := tenantchat.ComputeBindingDigest(
+		tenantchat.BuildBindingObject(requestContext, tenantchat.EmptyPayloadDigest),
+		key,
+	)
+	if err != nil {
+		t.Fatalf("compute fixture binding: %v", err)
+	}
+	requestContext.BindingDigest = bindingDigest
+	consumer := &fakeJTIConsumer{}
+	authenticator := New(
+		fakeVerifier{token: workloadauth.VerifiedToken{
+			Claims:     claimsForContext(requestContext, bindingDigest),
+			BindingKey: key,
+		}},
+		consumer,
+	)
+
+	if _, err := authenticator.Authenticate(
+		context.Background(),
+		"Bearer signed-token",
+		tenantchat.PhaseAdmission,
+		requestContext,
+		nil,
+	); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("want invalid token for non-UUID persistence identity, got %v", err)
+	}
+	if consumer.calls != 0 {
+		t.Fatalf("invalid persistence identity consumed jti: calls=%d", consumer.calls)
+	}
+}
+
 func admissionContextFixture() tenantchat.RequestContext {
 	return tenantchat.RequestContext{
 		Surface:        "tenant_chat",
@@ -118,14 +154,14 @@ func admissionContextFixture() tenantchat.RequestContext {
 		IdempotencyKey: "turn_fixture_001_attempt_1",
 		ExecutionScope: tenantchat.ExecutionScope{
 			Kind:     "tenant_chat",
-			TenantID: "tenant_fixture_001",
+			TenantID: "00000000-0000-4000-8000-000000000100",
 			Actor: tenantchat.Actor{
-				UserID:     "user_fixture_001",
+				UserID:     "00000000-0000-4000-8000-000000000200",
 				ActorKind:  "employee",
-				EmployeeID: "employee_fixture_001",
+				EmployeeID: "00000000-0000-4000-8000-000000000300",
 			},
-			QuotaScope:  tenantchat.ScopeReference{Type: "user", ID: "user_fixture_001"},
-			BudgetScope: tenantchat.ScopeReference{Type: "tenant", ID: "tenant_fixture_001"},
+			QuotaScope:  tenantchat.ScopeReference{Type: "user", ID: "00000000-0000-4000-8000-000000000200"},
+			BudgetScope: tenantchat.ScopeReference{Type: "tenant", ID: "00000000-0000-4000-8000-000000000100"},
 		},
 		Snapshot: tenantchat.SnapshotReference{
 			Version:               12,

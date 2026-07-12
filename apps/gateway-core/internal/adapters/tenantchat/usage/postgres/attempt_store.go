@@ -69,7 +69,12 @@ func (s *ReservationStore) StartAttempt(
 		SELECT kind, provider_id, model_key
 		FROM tenant_chat_provider_attempts
 		WHERE request_id = $1 AND attempt_no = $2
-	`, requestContext.RequestID, attemptNo).Scan(&existingKind, &existingProvider, &existingModel)
+		  AND reservation_id = $3::uuid AND tenant_id = $4::uuid
+	`, requestContext.RequestID, attemptNo, reservationID, requestContext.ExecutionScope.TenantID).Scan(
+		&existingKind,
+		&existingProvider,
+		&existingModel,
+	)
 	if err == nil {
 		if existingKind != kind || existingProvider != route.ProviderID || existingModel != route.ModelKey {
 			return tenantchat.ErrIdempotencyConflict

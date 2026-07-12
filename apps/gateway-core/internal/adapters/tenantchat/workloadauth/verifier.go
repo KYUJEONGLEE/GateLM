@@ -1,6 +1,7 @@
 package workloadauth
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -272,7 +273,7 @@ func readJSONFile(path string, target any) error {
 	if err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err

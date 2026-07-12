@@ -172,8 +172,13 @@ func writeError(w http.ResponseWriter, status int, code, message string, retryAf
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
+	response, err := json.Marshal(payload)
+	if err != nil {
+		status = http.StatusServiceUnavailable
+		response = []byte(`{"code":"CHAT_USAGE_GUARD_UNAVAILABLE","message":"Tenant chat response is unavailable."}`)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	_, _ = w.Write(response)
 }

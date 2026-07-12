@@ -3,10 +3,15 @@ package requestauth
 import (
 	"context"
 	"errors"
+	"regexp"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
+)
+
+var canonicalUUIDPattern = regexp.MustCompile(
+	`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
 )
 
 var (
@@ -53,6 +58,9 @@ func (a *Authenticator) Authenticate(
 	if err != nil || workloadauth.MatchContext(verified, requestContext) != nil {
 		return workloadauth.VerifiedToken{}, ErrTokenInvalid
 	}
+	if !validPersistenceIdentity(requestContext) {
+		return workloadauth.VerifiedToken{}, ErrTokenInvalid
+	}
 
 	payloadDigest := tenantchat.EmptyPayloadDigest
 	if expectedPhase == tenantchat.PhaseCompletion {
@@ -73,4 +81,20 @@ func (a *Authenticator) Authenticate(
 		return workloadauth.VerifiedToken{}, ErrGuardUnavailable
 	}
 	return verified, nil
+}
+
+func validPersistenceIdentity(requestContext tenantchat.RequestContext) bool {
+	actor := requestContext.ExecutionScope.Actor
+	if !canonicalUUIDPattern.MatchString(requestContext.ExecutionScope.TenantID) ||
+		!canonicalUUIDPattern.MatchString(actor.UserID) {
+		return false
+	}
+	if actor.EmployeeID != "" && !canonicalUUIDPattern.MatchString(actor.EmployeeID) {
+		return false
+	}
+	if requestContext.Phase != tenantchat.PhaseAdmission &&
+		!canonicalUUIDPattern.MatchString(requestContext.AdmissionID) {
+		return false
+	}
+	return true
 }

@@ -122,6 +122,22 @@ func TestPrivateHandlerReturnsSafeContractErrors(t *testing.T) {
 	}
 }
 
+func TestPrivateHandlerMapsInvalidPersistenceIdentityToTokenInvalid(t *testing.T) {
+	auth := &fakeAuthenticator{err: requestauth.ErrTokenInvalid}
+	router := NewRouter(auth, &fakeAdmissionService{}, 64*1024)
+	recorder := performJSONRequest(t, router, "/internal/v1/tenant-chat/admissions", domain.AdmissionRequest{})
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", recorder.Code)
+	}
+	var response domain.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode token error response: %v", err)
+	}
+	if response.Code != "CHAT_TOKEN_INVALID" {
+		t.Fatalf("unexpected token error response: %+v", response)
+	}
+}
+
 func TestCancelRequiresPathAndBoundAdmissionToMatch(t *testing.T) {
 	auth := &fakeAuthenticator{}
 	router := NewRouter(auth, &fakeAdmissionService{}, 64*1024)
@@ -156,6 +172,24 @@ func TestServiceErrorMapping(t *testing.T) {
 				t.Fatalf("unexpected safe error mapping: %+v", response)
 			}
 		})
+	}
+}
+
+func TestWriteJSONMarshalsBeforeSendingSuccessStatus(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeJSON(recorder, http.StatusOK, struct {
+		Unsupported chan int `json:"unsupported"`
+	}{Unsupported: make(chan int)})
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want safe 503 when response marshal fails, got %d", recorder.Code)
+	}
+	var response domain.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode safe fallback response: %v", err)
+	}
+	if response.Code != "CHAT_USAGE_GUARD_UNAVAILABLE" {
+		t.Fatalf("unexpected safe fallback response: %+v", response)
 	}
 }
 

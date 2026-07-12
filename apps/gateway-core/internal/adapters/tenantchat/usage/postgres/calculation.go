@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"time"
+	_ "time/tzdata"
 
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
