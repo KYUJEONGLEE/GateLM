@@ -1,0 +1,107 @@
+{
+  "algorithm": "HMAC-SHA-256",
+  "canonicalization": "RFC8785-JCS",
+  "encoding": "unpadded-base64url",
+  "keyEncoding": "hex",
+  "vectors": [
+    {
+      "vectorId": "admission_employee_v1",
+      "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "bindingObject": {
+        "admissionId": null,
+        "executionScope": {
+          "kind": "tenant_chat",
+          "tenantId": "tenant_fixture_001",
+          "actor": {
+            "userId": "user_fixture_001",
+            "actorKind": "employee",
+            "employeeId": "employee_fixture_001"
+          },
+          "quotaScope": {
+            "type": "user",
+            "id": "user_fixture_001"
+          },
+          "budgetScope": {
+            "type": "tenant",
+            "id": "tenant_fixture_001"
+          }
+        },
+        "idempotencyKey": "turn_fixture_001_attempt_1",
+        "payloadDigest": "sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
+        "phase": "admission",
+        "requestId": "request_fixture_001",
+        "snapshotDigest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+        "snapshotVersion": 12,
+        "turnId": "turn_fixture_001"
+      },
+      "canonicalBinding": "{\"admissionId\":null,\"executionScope\":{\"actor\":{\"actorKind\":\"employee\",\"employeeId\":\"employee_fixture_001\",\"userId\":\"user_fixture_001\"},\"budgetScope\":{\"id\":\"tenant_fixture_001\",\"type\":\"tenant\"},\"kind\":\"tenant_chat\",\"quotaScope\":{\"id\":\"user_fixture_001\",\"type\":\"user\"},\"tenantId\":\"tenant_fixture_001\"},\"idempotencyKey\":\"turn_fixture_001_attempt_1\",\"payloadDigest\":\"sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\",\"phase\":\"admission\",\"requestId\":\"request_fixture_001\",\"snapshotDigest\":\"sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec\",\"snapshotVersion\":12,\"turnId\":\"turn_fixture_001\"}",
+      "expectedBindingDigest": "hmac-sha256:MeYTXadcD790UJLYvmFMd48iaeL6GkCOj4ZG2MamNCw"
+    },
+    {
+      "vectorId": "completion_employee_v1",
+      "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "bindingObject": {
+        "admissionId": "admission_fixture_001",
+        "executionScope": {
+          "kind": "tenant_chat",
+          "tenantId": "tenant_fixture_001",
+          "actor": {
+            "userId": "user_fixture_001",
+            "actorKind": "employee",
+            "employeeId": "employee_fixture_001"
+          },
+          "quotaScope": {
+            "type": "user",
+            "id": "user_fixture_001"
+          },
+          "budgetScope": {
+            "type": "tenant",
+            "id": "tenant_fixture_001"
+          }
+        },
+        "idempotencyKey": "turn_fixture_001_attempt_1",
+        "payloadDigest": "sha256:qxvu5nu3j1XwQhFqg059fhmOHoqs-wMgvFsCW2DN3Uk",
+        "phase": "completion",
+        "requestId": "request_fixture_001",
+        "snapshotDigest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+        "snapshotVersion": 12,
+        "turnId": "turn_fixture_001"
+      },
+      "canonicalBinding": "{\"admissionId\":\"admission_fixture_001\",\"executionScope\":{\"actor\":{\"actorKind\":\"employee\",\"employeeId\":\"employee_fixture_001\",\"userId\":\"user_fixture_001\"},\"budgetScope\":{\"id\":\"tenant_fixture_001\",\"type\":\"tenant\"},\"kind\":\"tenant_chat\",\"quotaScope\":{\"id\":\"user_fixture_001\",\"type\":\"user\"},\"tenantId\":\"tenant_fixture_001\"},\"idempotencyKey\":\"turn_fixture_001_attempt_1\",\"payloadDigest\":\"sha256:qxvu5nu3j1XwQhFqg059fhmOHoqs-wMgvFsCW2DN3Uk\",\"phase\":\"completion\",\"requestId\":\"request_fixture_001\",\"snapshotDigest\":\"sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec\",\"snapshotVersion\":12,\"turnId\":\"turn_fixture_001\"}",
+      "expectedBindingDigest": "hmac-sha256:E_a6REovuD7mq7JnRmYM13OLskiwxIjWlfDccOHXE_c"
+    },
+    {
+      "vectorId": "cancel_employee_v1",
+      "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "bindingObject": {
+        "admissionId": "admission_fixture_001",
+        "executionScope": {
+          "kind": "tenant_chat",
+          "tenantId": "tenant_fixture_001",
+          "actor": {
+            "userId": "user_fixture_001",
+            "actorKind": "employee",
+            "employeeId": "employee_fixture_001"
+          },
+          "quotaScope": {
+            "type": "user",
+            "id": "user_fixture_001"
+          },
+          "budgetScope": {
+            "type": "tenant",
+            "id": "tenant_fixture_001"
+          }
+        },
+        "idempotencyKey": "turn_fixture_001_attempt_1",
+        "payloadDigest": "sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
+        "phase": "cancel",
+        "requestId": "request_fixture_001",
+        "snapshotDigest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+        "snapshotVersion": 12,
+        "turnId": "turn_fixture_001"
+      },
+      "canonicalBinding": "{\"admissionId\":\"admission_fixture_001\",\"executionScope\":{\"actor\":{\"actorKind\":\"employee\",\"employeeId\":\"employee_fixture_001\",\"userId\":\"user_fixture_001\"},\"budgetScope\":{\"id\":\"tenant_fixture_001\",\"type\":\"tenant\"},\"kind\":\"tenant_chat\",\"quotaScope\":{\"id\":\"user_fixture_001\",\"type\":\"user\"},\"tenantId\":\"tenant_fixture_001\"},\"idempotencyKey\":\"turn_fixture_001_attempt_1\",\"payloadDigest\":\"sha256:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\",\"phase\":\"cancel\",\"requestId\":\"request_fixture_001\",\"snapshotDigest\":\"sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec\",\"snapshotVersion\":12,\"turnId\":\"turn_fixture_001\"}",
+      "expectedBindingDigest": "hmac-sha256:TditR0RY_MznMSbmMHI_jxuS_EKP7JmAC25b_wKiFFw"
+    }
+  ]
+}

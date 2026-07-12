@@ -1,0 +1,501 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "GateLM Tenant Chat Private Gateway API",
+    "version": "tenant-chat/v1",
+    "description": "Private service-to-service contract. These paths must not be registered on the public /v1 listener or published as a host port."
+  },
+  "servers": [
+    {
+      "url": "http://gateway-core:8081",
+      "description": "Compose private service network only"
+    }
+  ],
+  "security": [
+    { "workloadJwt": [] }
+  ],
+  "paths": {
+    "/internal/v1/tenant-chat/admissions": {
+      "post": {
+        "operationId": "createTenantChatAdmission",
+        "summary": "Create a content-free request-rate and concurrency admission",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdmissionRequest" },
+              "examples": {
+                "employeeAdmission": { "$ref": "#/components/examples/AdmissionRequestExample" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A new 30-second admission was created.",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AdmissionResponse" },
+                "examples": { "created": { "$ref": "#/components/examples/AdmissionResponseExample" } }
+              }
+            }
+          },
+          "200": {
+            "description": "Same key and binding replayed the existing admission; no extra slot was consumed.",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AdmissionResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/TokenInvalid" },
+          "409": { "$ref": "#/components/responses/IdempotencyConflict" },
+          "429": { "$ref": "#/components/responses/AdmissionRateLimited" },
+          "503": { "$ref": "#/components/responses/GuardUnavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": {
+      "post": {
+        "operationId": "cancelTenantChatAdmission",
+        "summary": "Idempotently cancel an unconsumed admission",
+        "parameters": [
+          {
+            "name": "admissionId",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/OpaqueId" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CancelRequest" },
+              "examples": { "cancel": { "$ref": "#/components/examples/CancelRequestExample" } }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cancelled now or replayed an earlier successful cancel.",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CancelResponse" },
+                "examples": { "cancelled": { "$ref": "#/components/examples/CancelResponseExample" } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/TokenInvalid" },
+          "409": { "$ref": "#/components/responses/AdmissionExpiredOrConflict" },
+          "503": { "$ref": "#/components/responses/GuardUnavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/completions": {
+      "post": {
+        "operationId": "completeTenantChatTurn",
+        "summary": "Consume an admission and stream the policy/provider result",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CompletionRequest" },
+              "examples": { "streaming": { "$ref": "#/components/examples/CompletionRequestExample" } }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New execution, in-flight attach, or terminal replay. Each SSE data object follows completion-sse-event.schema.json.",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" },
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" },
+                "x-sse-data-schema": "../schemas/completion-sse-event.schema.json",
+                "examples": {
+                  "final": {
+                    "value": "id: request_fixture_001:5\nevent: tenant_chat.final\ndata: {\"type\":\"tenant_chat.final\",\"schemaVersion\":1,\"requestId\":\"request_fixture_001\",\"turnId\":\"turn_fixture_001\",\"sequence\":5,\"terminalOutcome\":\"succeeded\",\"effectiveModelKey\":\"model_standard_001\",\"usage\":{\"inputTokens\":640,\"outputTokens\":320,\"totalTokens\":960,\"usageQuality\":\"confirmed\"},\"quotaState\":\"normal\",\"budgetState\":\"warning\",\"cacheOutcome\":\"miss\",\"replayed\":false}\n\n"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/TokenInvalid" },
+          "403": { "$ref": "#/components/responses/LimitDenied" },
+          "409": { "$ref": "#/components/responses/CompletionConflict" },
+          "429": { "$ref": "#/components/responses/AdmissionRateLimited" },
+          "502": { "$ref": "#/components/responses/ProviderFailed" },
+          "503": { "$ref": "#/components/responses/RuntimeOrGuardUnavailable" },
+          "504": { "$ref": "#/components/responses/ProviderTimeout" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "workloadJwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "gatelm-workload+jwt",
+        "description": "Ed25519 JWT defined by workload-jwt-claims.schema.json"
+      }
+    },
+    "headers": {
+      "IdempotencyReplayed": {
+        "required": true,
+        "schema": { "type": "boolean" },
+        "description": "true only when an existing execution result or stream was reused"
+      }
+    },
+    "schemas": {
+      "OpaqueId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "AdmissionContext": {
+        "allOf": [
+          { "$ref": "../schemas/gateway-request-context.schema.json" },
+          {
+            "type": "object",
+            "properties": { "phase": { "const": "admission" } }
+          }
+        ]
+      },
+      "CancelContext": {
+        "allOf": [
+          { "$ref": "../schemas/gateway-request-context.schema.json" },
+          {
+            "type": "object",
+            "properties": { "phase": { "const": "cancel" } }
+          }
+        ]
+      },
+      "CompletionContext": {
+        "allOf": [
+          { "$ref": "../schemas/gateway-request-context.schema.json" },
+          {
+            "type": "object",
+            "properties": { "phase": { "const": "completion" } }
+          }
+        ]
+      },
+      "AdmissionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["context"],
+        "properties": { "context": { "$ref": "#/components/schemas/AdmissionContext" } }
+      },
+      "CancelRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["context"],
+        "properties": { "context": { "$ref": "#/components/schemas/CancelContext" } }
+      },
+      "CompletionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["context", "input"],
+        "properties": {
+          "context": { "$ref": "#/components/schemas/CompletionContext" },
+          "input": { "$ref": "#/components/schemas/CompletionInput" }
+        }
+      },
+      "CompletionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["messages", "stream"],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": { "$ref": "#/components/schemas/EphemeralMessage" }
+          },
+          "stream": { "const": true }
+        }
+      },
+      "EphemeralMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "Ephemeral provider-bound content. Never log, persist in Gateway tables, or include in metrics."
+          }
+        }
+      },
+      "AdmissionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["admissionId", "requestId", "state", "expiresAt", "replayed"],
+        "properties": {
+          "admissionId": { "$ref": "#/components/schemas/OpaqueId" },
+          "requestId": { "$ref": "#/components/schemas/OpaqueId" },
+          "state": { "const": "active" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "replayed": { "type": "boolean" }
+        }
+      },
+      "CancelResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["admissionId", "requestId", "state", "slotReleased", "replayed"],
+        "properties": {
+          "admissionId": { "$ref": "#/components/schemas/OpaqueId" },
+          "requestId": { "$ref": "#/components/schemas/OpaqueId" },
+          "state": { "const": "cancelled" },
+          "slotReleased": { "type": "boolean" },
+          "replayed": { "type": "boolean" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "CHAT_INVALID_REQUEST",
+              "CHAT_SCOPE_FIELD_FORBIDDEN",
+              "CHAT_TOKEN_INVALID",
+              "CHAT_USER_DISABLED",
+              "CHAT_TENANT_DISABLED",
+              "CHAT_MEMBERSHIP_DISABLED",
+              "CHAT_EMPLOYEE_DISABLED",
+              "CHAT_QUOTA_HARD_LIMIT",
+              "CHAT_BUDGET_HARD_LIMIT",
+              "CHAT_POLICY_ACK_REQUIRED",
+              "CHAT_IDEMPOTENCY_CONFLICT",
+              "CHAT_ADMISSION_EXPIRED",
+              "CHAT_RATE_LIMITED",
+              "CHAT_CONCURRENCY_LIMITED",
+              "CHAT_PROVIDER_FAILED",
+              "CHAT_RUNTIME_UNAVAILABLE",
+              "CHAT_USAGE_GUARD_UNAVAILABLE",
+              "CHAT_NO_ELIGIBLE_ROUTE",
+              "CHAT_PROVIDER_TIMEOUT"
+            ]
+          },
+          "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "retryAfterSeconds": { "type": "integer", "minimum": 1, "maximum": 300 }
+        }
+      }
+    },
+    "responses": {
+      "InvalidRequest": {
+        "description": "400 CHAT_INVALID_REQUEST or CHAT_SCOPE_FIELD_FORBIDDEN",
+        "x-error-codes": ["CHAT_INVALID_REQUEST", "CHAT_SCOPE_FIELD_FORBIDDEN"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "TokenInvalid": {
+        "description": "401 CHAT_TOKEN_INVALID",
+        "x-error-codes": ["CHAT_TOKEN_INVALID"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "LimitDenied": {
+        "description": "403 CHAT_QUOTA_HARD_LIMIT or CHAT_BUDGET_HARD_LIMIT. User and Employee entitlement errors are owned by Chat API, not this private Gateway API.",
+        "x-error-codes": ["CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "IdempotencyConflict": {
+        "description": "409 CHAT_IDEMPOTENCY_CONFLICT",
+        "x-error-codes": ["CHAT_IDEMPOTENCY_CONFLICT"],
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "code": "CHAT_IDEMPOTENCY_CONFLICT", "message": "The idempotency key is bound to a different request." }
+          }
+        }
+      },
+      "AdmissionExpiredOrConflict": {
+        "description": "409 CHAT_ADMISSION_EXPIRED or CHAT_IDEMPOTENCY_CONFLICT",
+        "x-error-codes": ["CHAT_ADMISSION_EXPIRED", "CHAT_IDEMPOTENCY_CONFLICT"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "CompletionConflict": {
+        "description": "409 admission, idempotency, or policy acknowledgement conflict",
+        "x-error-codes": ["CHAT_ADMISSION_EXPIRED", "CHAT_IDEMPOTENCY_CONFLICT", "CHAT_POLICY_ACK_REQUIRED"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "AdmissionRateLimited": {
+        "description": "429 CHAT_RATE_LIMITED or CHAT_CONCURRENCY_LIMITED",
+        "x-error-codes": ["CHAT_RATE_LIMITED", "CHAT_CONCURRENCY_LIMITED"],
+        "headers": {
+          "Retry-After": { "schema": { "type": "integer", "minimum": 1, "maximum": 300 } }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "GuardUnavailable": {
+        "description": "503 CHAT_USAGE_GUARD_UNAVAILABLE",
+        "x-error-codes": ["CHAT_USAGE_GUARD_UNAVAILABLE"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RuntimeOrGuardUnavailable": {
+        "description": "503 CHAT_RUNTIME_UNAVAILABLE, CHAT_USAGE_GUARD_UNAVAILABLE, or CHAT_NO_ELIGIBLE_ROUTE",
+        "x-error-codes": ["CHAT_RUNTIME_UNAVAILABLE", "CHAT_USAGE_GUARD_UNAVAILABLE", "CHAT_NO_ELIGIBLE_ROUTE"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "ProviderFailed": {
+        "description": "502 CHAT_PROVIDER_FAILED",
+        "x-error-codes": ["CHAT_PROVIDER_FAILED"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "ProviderTimeout": {
+        "description": "504 CHAT_PROVIDER_TIMEOUT",
+        "x-error-codes": ["CHAT_PROVIDER_TIMEOUT"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      }
+    },
+    "examples": {
+      "AdmissionRequestExample": {
+        "value": {
+          "context": {
+            "surface": "tenant_chat",
+            "phase": "admission",
+            "requestId": "request_fixture_001",
+            "turnId": "turn_fixture_001",
+            "idempotencyKey": "turn_fixture_001_attempt_1",
+            "executionScope": {
+              "kind": "tenant_chat",
+              "tenantId": "tenant_fixture_001",
+              "actor": {
+                "userId": "user_fixture_001",
+                "actorKind": "employee",
+                "employeeId": "employee_fixture_001"
+              },
+              "quotaScope": { "type": "user", "id": "user_fixture_001" },
+              "budgetScope": { "type": "tenant", "id": "tenant_fixture_001" }
+            },
+            "snapshot": {
+              "version": 12,
+              "digest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+              "policyVersion": 8,
+              "employeeNoticeVersion": 3,
+              "pricingVersion": 5
+            },
+            "bindingDigest": "hmac-sha256:MeYTXadcD790UJLYvmFMd48iaeL6GkCOj4ZG2MamNCw"
+          }
+        }
+      },
+      "AdmissionResponseExample": {
+        "value": {
+          "admissionId": "admission_fixture_001",
+          "requestId": "request_fixture_001",
+          "state": "active",
+          "expiresAt": "2026-07-12T12:00:30Z",
+          "replayed": false
+        }
+      },
+      "CancelRequestExample": {
+        "value": {
+          "context": {
+            "surface": "tenant_chat",
+            "phase": "cancel",
+            "requestId": "request_fixture_001",
+            "turnId": "turn_fixture_001",
+            "idempotencyKey": "turn_fixture_001_attempt_1",
+            "admissionId": "admission_fixture_001",
+            "executionScope": {
+              "kind": "tenant_chat",
+              "tenantId": "tenant_fixture_001",
+              "actor": {
+                "userId": "user_fixture_001",
+                "actorKind": "employee",
+                "employeeId": "employee_fixture_001"
+              },
+              "quotaScope": { "type": "user", "id": "user_fixture_001" },
+              "budgetScope": { "type": "tenant", "id": "tenant_fixture_001" }
+            },
+            "snapshot": {
+              "version": 12,
+              "digest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+              "policyVersion": 8,
+              "employeeNoticeVersion": 3,
+              "pricingVersion": 5
+            },
+            "bindingDigest": "hmac-sha256:TditR0RY_MznMSbmMHI_jxuS_EKP7JmAC25b_wKiFFw"
+          }
+        }
+      },
+      "CancelResponseExample": {
+        "value": {
+          "admissionId": "admission_fixture_001",
+          "requestId": "request_fixture_001",
+          "state": "cancelled",
+          "slotReleased": true,
+          "replayed": false
+        }
+      },
+      "CompletionRequestExample": {
+        "value": {
+          "context": {
+            "surface": "tenant_chat",
+            "phase": "completion",
+            "requestId": "request_fixture_001",
+            "turnId": "turn_fixture_001",
+            "idempotencyKey": "turn_fixture_001_attempt_1",
+            "admissionId": "admission_fixture_001",
+            "executionScope": {
+              "kind": "tenant_chat",
+              "tenantId": "tenant_fixture_001",
+              "actor": {
+                "userId": "user_fixture_001",
+                "actorKind": "employee",
+                "employeeId": "employee_fixture_001"
+              },
+              "quotaScope": { "type": "user", "id": "user_fixture_001" },
+              "budgetScope": { "type": "tenant", "id": "tenant_fixture_001" }
+            },
+            "snapshot": {
+              "version": 12,
+              "digest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+              "policyVersion": 8,
+              "employeeNoticeVersion": 3,
+              "pricingVersion": 5
+            },
+            "bindingDigest": "hmac-sha256:E_a6REovuD7mq7JnRmYM13OLskiwxIjWlfDccOHXE_c",
+            "usageIntent": {
+              "estimatedInputTokens": 640,
+              "maxOutputTokens": 1024,
+              "requestedTier": "auto",
+              "cacheStrategy": "exact"
+            }
+          },
+          "input": {
+            "messages": [
+              { "role": "user", "content": "<ephemeral>" }
+            ],
+            "stream": true
+          }
+        }
+      }
+    }
+  }
+}

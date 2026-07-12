@@ -12,7 +12,9 @@
     "requests",
     "usage",
     "policyStates",
-    "latency"
+    "latency",
+    "provenance",
+    "breakdowns"
   ],
   "properties": {
     "surface": { "const": "tenant_chat" },
@@ -33,27 +35,37 @@
       "additionalProperties": false,
       "required": [
         "total",
+        "activeUsers",
         "succeeded",
         "failed",
+        "cancelled",
         "cacheHits",
         "rateLimited",
+        "concurrencyLimited",
         "safetyBlocked",
         "quotaBlocked",
         "budgetBlocked",
         "fallbackRequests",
-        "providerAttempts"
+        "fallbackSucceeded",
+        "providerAttempts",
+        "billableAttempts"
       ],
       "properties": {
         "total": { "$ref": "#/$defs/count" },
+        "activeUsers": { "$ref": "#/$defs/count" },
         "succeeded": { "$ref": "#/$defs/count" },
         "failed": { "$ref": "#/$defs/count" },
+        "cancelled": { "$ref": "#/$defs/count" },
         "cacheHits": { "$ref": "#/$defs/count" },
         "rateLimited": { "$ref": "#/$defs/count" },
+        "concurrencyLimited": { "$ref": "#/$defs/count" },
         "safetyBlocked": { "$ref": "#/$defs/count" },
         "quotaBlocked": { "$ref": "#/$defs/count" },
         "budgetBlocked": { "$ref": "#/$defs/count" },
         "fallbackRequests": { "$ref": "#/$defs/count" },
-        "providerAttempts": { "$ref": "#/$defs/count" }
+        "fallbackSucceeded": { "$ref": "#/$defs/count" },
+        "providerAttempts": { "$ref": "#/$defs/count" },
+        "billableAttempts": { "$ref": "#/$defs/count" }
       }
     },
     "usage": {
@@ -88,11 +100,28 @@
     "latency": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["p50Ms", "p95Ms", "p99Ms"],
+      "required": ["p50Ms", "p95Ms", "p99Ms", "providerP95Ms"],
       "properties": {
         "p50Ms": { "$ref": "#/$defs/count" },
         "p95Ms": { "$ref": "#/$defs/count" },
-        "p99Ms": { "$ref": "#/$defs/count" }
+        "p99Ms": { "$ref": "#/$defs/count" },
+        "providerP95Ms": { "$ref": "#/$defs/count" }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshotVersion", "pricingVersion", "requestCount", "confirmedCostMicroUsd"],
+        "properties": {
+          "snapshotVersion": { "type": "integer", "minimum": 1 },
+          "pricingVersion": { "type": "integer", "minimum": 1 },
+          "requestCount": { "$ref": "#/$defs/count" },
+          "confirmedCostMicroUsd": { "$ref": "#/$defs/count" }
+        }
       }
     },
     "breakdowns": {
@@ -101,13 +130,15 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["providerId", "modelKey", "routeTier", "requestCount", "attemptCount", "confirmedCostMicroUsd"],
+        "required": ["providerId", "modelKey", "routeTier", "requestCount", "attemptCount", "billableAttemptCount", "fallbackSuccessCount", "confirmedCostMicroUsd"],
         "properties": {
           "providerId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "modelKey": { "type": "string", "minLength": 1, "maxLength": 128 },
           "routeTier": { "type": "string", "enum": ["high_quality", "standard", "economy"] },
           "requestCount": { "$ref": "#/$defs/count" },
           "attemptCount": { "$ref": "#/$defs/count" },
+          "billableAttemptCount": { "$ref": "#/$defs/count" },
+          "fallbackSuccessCount": { "$ref": "#/$defs/count" },
           "confirmedCostMicroUsd": { "$ref": "#/$defs/count" }
         }
       }

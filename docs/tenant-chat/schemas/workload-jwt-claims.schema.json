@@ -54,15 +54,22 @@
     "snapshotVersion": { "type": "integer", "minimum": 1 },
     "snapshotDigest": {
       "type": "string",
-      "pattern": "^sha256:[A-Za-z0-9_-]{16,128}$"
+      "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
     },
     "bindingDigest": {
       "type": "string",
-      "pattern": "^hmac-sha256:[A-Za-z0-9_-]{16,128}$"
+      "pattern": "^hmac-sha256:[A-Za-z0-9_-]{43}$"
     },
     "admissionId": { "$ref": "#/$defs/opaqueId" }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": { "phase": { "const": "admission" } },
+        "required": ["phase"]
+      },
+      "then": { "not": { "required": ["admissionId"] } }
+    },
     {
       "if": {
         "properties": { "actorKind": { "const": "employee" } },

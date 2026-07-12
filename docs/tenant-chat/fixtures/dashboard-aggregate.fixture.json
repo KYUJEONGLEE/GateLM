@@ -9,15 +9,20 @@
   },
   "requests": {
     "total": 1200,
+    "activeUsers": 100,
     "succeeded": 1120,
     "failed": 20,
+    "cancelled": 2,
     "cacheHits": 180,
     "rateLimited": 14,
+    "concurrencyLimited": 4,
     "safetyBlocked": 8,
     "quotaBlocked": 4,
     "budgetBlocked": 0,
     "fallbackRequests": 32,
-    "providerAttempts": 1052
+    "fallbackSucceeded": 28,
+    "providerAttempts": 1052,
+    "billableAttempts": 1038
   },
   "usage": {
     "confirmedInputTokens": 880000,
@@ -44,8 +49,17 @@
   "latency": {
     "p50Ms": 740,
     "p95Ms": 2100,
-    "p99Ms": 4200
+    "p99Ms": 4200,
+    "providerP95Ms": 1800
   },
+  "provenance": [
+    {
+      "snapshotVersion": 12,
+      "pricingVersion": 5,
+      "requestCount": 1200,
+      "confirmedCostMicroUsd": 9800000
+    }
+  ],
   "breakdowns": [
     {
       "providerId": "provider_fixture_primary",
@@ -53,6 +67,8 @@
       "routeTier": "standard",
       "requestCount": 900,
       "attemptCount": 930,
+      "billableAttemptCount": 920,
+      "fallbackSuccessCount": 20,
       "confirmedCostMicroUsd": 7600000
     }
   ]

@@ -6,14 +6,15 @@
   "additionalProperties": false,
   "required": [
     "eventId",
+    "schemaVersion",
     "eventType",
     "eventVersion",
     "occurredAt",
+    "aggregateId",
     "requestId",
     "turnId",
     "idempotencyKey",
     "reservationId",
-    "ledgerVersion",
     "executionScope",
     "period",
     "snapshotVersion",
@@ -24,6 +25,7 @@
   ],
   "properties": {
     "eventId": { "$ref": "#/$defs/opaqueId" },
+    "schemaVersion": { "const": 1 },
     "eventType": {
       "type": "string",
       "enum": [
@@ -34,13 +36,13 @@
         "usage_unconfirmed"
       ]
     },
-    "eventVersion": { "const": 1 },
+    "eventVersion": { "type": "integer", "minimum": 1 },
     "occurredAt": { "type": "string", "format": "date-time" },
+    "aggregateId": { "$ref": "#/$defs/opaqueId" },
     "requestId": { "$ref": "#/$defs/opaqueId" },
     "turnId": { "$ref": "#/$defs/opaqueId" },
     "idempotencyKey": { "$ref": "#/$defs/opaqueId" },
     "reservationId": { "$ref": "#/$defs/opaqueId" },
-    "ledgerVersion": { "type": "integer", "minimum": 1 },
     "executionScope": { "$ref": "#/$defs/executionScope" },
     "period": {
       "type": "object",
@@ -75,6 +77,112 @@
       ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "eventType": { "enum": ["usage_reserved", "usage_topped_up"] } },
+        "required": ["eventType"]
+      },
+      "then": {
+        "properties": {
+          "quota": {
+            "properties": {
+              "reservedTokensDelta": { "type": "integer", "minimum": 1 },
+              "confirmedInputTokensDelta": { "const": 0 },
+              "confirmedOutputTokensDelta": { "const": 0 },
+              "confirmedTotalTokensDelta": { "const": 0 },
+              "unconfirmedTokensDelta": { "const": 0 }
+            }
+          },
+          "budget": {
+            "properties": {
+              "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 1 },
+              "confirmedCostMicroUsdDelta": { "const": 0 },
+              "unconfirmedExposureMicroUsdDelta": { "const": 0 }
+            }
+          },
+          "attempts": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "eventType": { "const": "usage_settled" } },
+        "required": ["eventType"]
+      },
+      "then": {
+        "properties": {
+          "quota": {
+            "properties": {
+              "reservedTokensDelta": { "type": "integer", "maximum": 0 },
+              "unconfirmedTokensDelta": { "const": 0 }
+            }
+          },
+          "budget": {
+            "properties": {
+              "reservedCostMicroUsdDelta": { "type": "integer", "maximum": 0 },
+              "unconfirmedExposureMicroUsdDelta": { "const": 0 }
+            }
+          },
+          "attempts": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "eventType": { "const": "usage_released" } },
+        "required": ["eventType"]
+      },
+      "then": {
+        "properties": {
+          "quota": {
+            "properties": {
+              "reservedTokensDelta": { "type": "integer", "maximum": 0 },
+              "confirmedInputTokensDelta": { "const": 0 },
+              "confirmedOutputTokensDelta": { "const": 0 },
+              "confirmedTotalTokensDelta": { "const": 0 },
+              "unconfirmedTokensDelta": { "const": 0 }
+            }
+          },
+          "budget": {
+            "properties": {
+              "reservedCostMicroUsdDelta": { "type": "integer", "maximum": 0 },
+              "confirmedCostMicroUsdDelta": { "const": 0 },
+              "unconfirmedExposureMicroUsdDelta": { "const": 0 }
+            }
+          },
+          "attempts": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "eventType": { "const": "usage_unconfirmed" } },
+        "required": ["eventType"]
+      },
+      "then": {
+        "properties": {
+          "quota": {
+            "properties": {
+              "reservedTokensDelta": { "type": "integer", "maximum": 0 },
+              "confirmedInputTokensDelta": { "const": 0 },
+              "confirmedOutputTokensDelta": { "const": 0 },
+              "confirmedTotalTokensDelta": { "const": 0 },
+              "unconfirmedTokensDelta": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "budget": {
+            "properties": {
+              "reservedCostMicroUsdDelta": { "type": "integer", "maximum": 0 },
+              "confirmedCostMicroUsdDelta": { "const": 0 },
+              "unconfirmedExposureMicroUsdDelta": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "attempts": { "minItems": 1 }
+        }
+      }
+    }
+  ],
   "$defs": {
     "opaqueId": {
       "type": "string",
@@ -105,7 +213,8 @@
         "reservedTokensDelta",
         "confirmedInputTokensDelta",
         "confirmedOutputTokensDelta",
-        "confirmedTotalTokensDelta"
+        "confirmedTotalTokensDelta",
+        "unconfirmedTokensDelta"
       ],
       "properties": {
         "state": {
@@ -115,20 +224,22 @@
         "reservedTokensDelta": { "type": "integer" },
         "confirmedInputTokensDelta": { "type": "integer", "minimum": 0 },
         "confirmedOutputTokensDelta": { "type": "integer", "minimum": 0 },
-        "confirmedTotalTokensDelta": { "type": "integer", "minimum": 0 }
+        "confirmedTotalTokensDelta": { "type": "integer", "minimum": 0 },
+        "unconfirmedTokensDelta": { "type": "integer", "minimum": 0 }
       }
     },
     "budget": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["state", "reservedCostMicroUsdDelta", "confirmedCostMicroUsdDelta"],
+      "required": ["state", "reservedCostMicroUsdDelta", "confirmedCostMicroUsdDelta", "unconfirmedExposureMicroUsdDelta"],
       "properties": {
         "state": {
           "type": "string",
           "enum": ["normal", "warning", "economy", "blocked"]
         },
         "reservedCostMicroUsdDelta": { "type": "integer" },
-        "confirmedCostMicroUsdDelta": { "type": "integer", "minimum": 0 }
+        "confirmedCostMicroUsdDelta": { "type": "integer", "minimum": 0 },
+        "unconfirmedExposureMicroUsdDelta": { "type": "integer", "minimum": 0 }
       }
     },
     "attempt": {

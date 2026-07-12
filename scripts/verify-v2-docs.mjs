@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash, createHmac } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
@@ -29,8 +30,14 @@ const currentSnapshotDocs = [
 const tenantChatDocs = [
   "docs/tenant-chat/README.md",
   "docs/tenant-chat/contracts.md",
+  "docs/tenant-chat/execution-contract.md",
+  "docs/tenant-chat/openapi/private-gateway.openapi.json",
+  "docs/tenant-chat/db/tenant-chat-usage.sql",
   "docs/tenant-chat/schemas/*.schema.json",
   "docs/tenant-chat/fixtures/*.fixture.json",
+  "docs/tenant-chat/vectors/binding-digest-vectors.json",
+  "docs/tenant-chat/vectors/usage-event-vectors.json",
+  "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json",
   "docs/tenant-chat/implementation-plan.md",
   "docs/tenant-chat/handoffs/employee-usage-integration.md",
 ];
@@ -288,6 +295,24 @@ function validateData(schema, data, context, rootSchema, localFailures) {
   if (schema.allOf) {
     for (const subSchema of schema.allOf) {
       validateData(subSchema, data, context, rootSchema, localFailures);
+    }
+  }
+
+  if (schema.if) {
+    const conditionFailures = [];
+    validateData(schema.if, data, context, rootSchema, conditionFailures);
+    if (conditionFailures.length === 0 && schema.then) {
+      validateData(schema.then, data, context, rootSchema, localFailures);
+    } else if (conditionFailures.length > 0 && schema.else) {
+      validateData(schema.else, data, context, rootSchema, localFailures);
+    }
+  }
+
+  if (schema.not) {
+    const notFailures = [];
+    validateData(schema.not, data, context, rootSchema, notFailures);
+    if (notFailures.length === 0) {
+      localFailures.push(`${context.path}: matched a forbidden not schema`);
     }
   }
 
@@ -560,6 +585,257 @@ function assertRuntimeSnapshotGuardrails() {
   }
 }
 
+function canonicalizeJson(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalizeJson(item)).join(",")}]`;
+  }
+
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(value[key])}`)
+    .join(",")}}`;
+}
+
+function sha256Base64Url(value) {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("base64url")}`;
+}
+
+function assertTenantChatExecutableContract() {
+  const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
+  const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
+  const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
+  const usageVectorPath = "docs/tenant-chat/vectors/usage-event-vectors.json";
+  const jwtVectorPath = "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json";
+  const runtimeFixturePath = "docs/tenant-chat/fixtures/tenant-runtime-snapshot.fixture.json";
+
+  const openApi = readJson(openApiPath);
+  if (openApi) {
+    if (openApi.openapi !== "3.1.0") {
+      fail(`${openApiPath}: expected OpenAPI 3.1.0`);
+    }
+
+    const expectedPaths = {
+      "/internal/v1/tenant-chat/admissions": ["200", "201", "400", "401", "409", "429", "503"],
+      "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
+      "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
+    };
+    const errorStatus = new Map([
+      ["CHAT_INVALID_REQUEST", "400"],
+      ["CHAT_SCOPE_FIELD_FORBIDDEN", "400"],
+      ["CHAT_TOKEN_INVALID", "401"],
+      ["CHAT_USER_DISABLED", "403"],
+      ["CHAT_TENANT_DISABLED", "403"],
+      ["CHAT_MEMBERSHIP_DISABLED", "403"],
+      ["CHAT_EMPLOYEE_DISABLED", "403"],
+      ["CHAT_QUOTA_HARD_LIMIT", "403"],
+      ["CHAT_BUDGET_HARD_LIMIT", "403"],
+      ["CHAT_POLICY_ACK_REQUIRED", "409"],
+      ["CHAT_IDEMPOTENCY_CONFLICT", "409"],
+      ["CHAT_ADMISSION_EXPIRED", "409"],
+      ["CHAT_RATE_LIMITED", "429"],
+      ["CHAT_CONCURRENCY_LIMITED", "429"],
+      ["CHAT_PROVIDER_FAILED", "502"],
+      ["CHAT_RUNTIME_UNAVAILABLE", "503"],
+      ["CHAT_USAGE_GUARD_UNAVAILABLE", "503"],
+      ["CHAT_NO_ELIGIBLE_ROUTE", "503"],
+      ["CHAT_PROVIDER_TIMEOUT", "504"],
+    ]);
+
+    for (const [apiPath, statuses] of Object.entries(expectedPaths)) {
+      const operation = openApi.paths?.[apiPath]?.post;
+      if (!operation) {
+        fail(`${openApiPath}: missing POST ${apiPath}`);
+        continue;
+      }
+      if (!operation.requestBody?.required) {
+        fail(`${openApiPath}: POST ${apiPath} requestBody must be required`);
+      }
+      for (const status of statuses) {
+        if (!operation.responses?.[status]) {
+          fail(`${openApiPath}: POST ${apiPath} missing response ${status}`);
+          continue;
+        }
+        if (status.startsWith("2")) {
+          continue;
+        }
+        const responseRef = operation.responses[status].$ref;
+        const responseName = responseRef?.split("/").at(-1);
+        const response = responseName ? openApi.components?.responses?.[responseName] : operation.responses[status];
+        if (!Array.isArray(response?.["x-error-codes"]) || response["x-error-codes"].length === 0) {
+          fail(`${openApiPath}: POST ${apiPath} response ${status} must declare x-error-codes`);
+          continue;
+        }
+        for (const errorCode of response["x-error-codes"]) {
+          if (errorStatus.get(errorCode) !== status) {
+            fail(`${openApiPath}: ${errorCode} is not a valid ${status} error`);
+          }
+        }
+      }
+    }
+
+    const completionExample = openApi.components?.examples?.CompletionRequestExample?.value;
+    const openApiBindingVectors = readJson(bindingVectorPath)?.vectors ?? [];
+    const completionVector = openApiBindingVectors.find(
+      (vector) => vector.vectorId === "completion_employee_v1",
+    );
+    if (completionExample && completionVector) {
+      const payloadDigest = sha256Base64Url(canonicalizeJson(completionExample.input));
+      if (payloadDigest !== completionVector.bindingObject?.payloadDigest) {
+        fail(`${openApiPath}: completion example payload digest does not match completion binding vector`);
+      }
+      if (completionExample.context?.bindingDigest !== completionVector.expectedBindingDigest) {
+        fail(`${openApiPath}: completion example bindingDigest does not match completion binding vector`);
+      }
+    }
+    for (const [exampleName, vectorId] of [
+      ["AdmissionRequestExample", "admission_employee_v1"],
+      ["CancelRequestExample", "cancel_employee_v1"],
+    ]) {
+      const example = openApi.components?.examples?.[exampleName]?.value;
+      const vector = openApiBindingVectors.find((candidate) => candidate.vectorId === vectorId);
+      if (example?.context?.bindingDigest !== vector?.expectedBindingDigest) {
+        fail(`${openApiPath}: ${exampleName} bindingDigest does not match ${vectorId}`);
+      }
+    }
+  }
+
+  const ddl = readText(ddlPath);
+  const expectedTables = [
+    "tenant_chat_request_admissions",
+    "tenant_chat_user_token_periods",
+    "tenant_chat_tenant_cost_periods",
+    "tenant_chat_usage_reservations",
+    "tenant_chat_provider_attempts",
+    "tenant_chat_usage_ledger_entries",
+    "tenant_chat_invocation_outbox",
+    "tenant_chat_invocation_logs",
+  ];
+  for (const table of expectedTables) {
+    if (!ddl.includes(`CREATE TABLE ${table}`)) {
+      fail(`${ddlPath}: missing table ${table}`);
+    }
+  }
+  if (/\bDROP\s+(TABLE|COLUMN|TYPE)\b/i.test(ddl) || /\bALTER\s+TABLE\b[\s\S]*?\bDROP\b/i.test(ddl)) {
+    fail(`${ddlPath}: destructive DROP statement is forbidden`);
+  }
+
+  const bindingVectors = readJson(bindingVectorPath);
+  if (bindingVectors) {
+    if (bindingVectors.algorithm !== "HMAC-SHA-256" || bindingVectors.canonicalization !== "RFC8785-JCS") {
+      fail(`${bindingVectorPath}: unexpected algorithm or canonicalization`);
+    }
+    for (const vector of bindingVectors.vectors ?? []) {
+      const canonical = canonicalizeJson(vector.bindingObject);
+      if (canonical !== vector.canonicalBinding) {
+        fail(`${bindingVectorPath}: ${vector.vectorId} canonical binding mismatch`);
+      }
+      const digest = `hmac-sha256:${createHmac("sha256", Buffer.from(vector.keyHex, "hex"))
+        .update(canonical, "utf8")
+        .digest("base64url")}`;
+      if (digest !== vector.expectedBindingDigest) {
+        fail(`${bindingVectorPath}: ${vector.vectorId} HMAC mismatch`);
+      }
+    }
+  }
+
+  const runtimeSnapshot = readJson(runtimeFixturePath);
+  if (runtimeSnapshot) {
+    const { digest: pricingDigest, ...pricingPayload } = runtimeSnapshot.pricing ?? {};
+    const computedPricingDigest = sha256Base64Url(canonicalizeJson(pricingPayload));
+    if (pricingDigest !== computedPricingDigest) {
+      fail(`${runtimeFixturePath}: pricing digest mismatch`);
+    }
+
+    const { digest, publishedAt, publishedBy, ...snapshotPayload } = runtimeSnapshot;
+    const computedSnapshotDigest = sha256Base64Url(canonicalizeJson(snapshotPayload));
+    if (digest !== computedSnapshotDigest) {
+      fail(`${runtimeFixturePath}: snapshot digest mismatch`);
+    }
+  }
+
+  const usageSchemaPath = "docs/tenant-chat/schemas/usage-settlement-event.schema.json";
+  const usageSchema = readJson(usageSchemaPath);
+  const usageVectors = readJson(usageVectorPath);
+  if (usageSchema && usageVectors) {
+    const eventTypes = new Set();
+    for (const [index, event] of (usageVectors.events ?? []).entries()) {
+      eventTypes.add(event.eventType);
+      if (event.aggregateId !== event.requestId) {
+        fail(`${usageVectorPath}: events[${index}] aggregateId must equal requestId`);
+      }
+      const validationFailures = [];
+      validateData(
+        usageSchema,
+        event,
+        { filePath: usageSchemaPath, path: `$.events[${index}]` },
+        usageSchema,
+        validationFailures,
+      );
+      for (const validationFailure of validationFailures) {
+        fail(`${usageVectorPath}: ${validationFailure}`);
+      }
+    }
+    for (const eventType of [
+      "usage_reserved",
+      "usage_topped_up",
+      "usage_settled",
+      "usage_released",
+      "usage_unconfirmed",
+    ]) {
+      if (!eventTypes.has(eventType)) {
+        fail(`${usageVectorPath}: missing ${eventType} vector`);
+      }
+    }
+  }
+
+  const jwtSchemaPath = "docs/tenant-chat/schemas/workload-jwt-claims.schema.json";
+  const jwtSchema = readJson(jwtSchemaPath);
+  const jwtVectors = readJson(jwtVectorPath);
+  if (jwtSchema && jwtVectors) {
+    const phases = new Set();
+    const bindingByPhase = new Map(
+      (bindingVectors?.vectors ?? []).map((vector) => [vector.bindingObject?.phase, vector.expectedBindingDigest]),
+    );
+    for (const [index, payload] of (jwtVectors.payloads ?? []).entries()) {
+      phases.add(payload.phase);
+      if (payload.bindingDigest !== bindingByPhase.get(payload.phase)) {
+        fail(`${jwtVectorPath}: ${payload.phase} bindingDigest does not match binding vector`);
+      }
+      const validationFailures = [];
+      validateData(
+        jwtSchema,
+        payload,
+        { filePath: jwtSchemaPath, path: `$.payloads[${index}]` },
+        jwtSchema,
+        validationFailures,
+      );
+      for (const validationFailure of validationFailures) {
+        fail(`${jwtVectorPath}: ${validationFailure}`);
+      }
+    }
+    for (const phase of ["admission", "completion", "cancel"]) {
+      if (!phases.has(phase)) {
+        fail(`${jwtVectorPath}: missing ${phase} payload`);
+      }
+    }
+  }
+
+  for (const expectedText of [
+    "openapi/private-gateway.openapi.json",
+    "db/tenant-chat-usage.sql",
+    "vectors/binding-digest-vectors.json",
+    "schemas/tenant-runtime-snapshot.schema.json",
+    "schemas/completion-sse-event.schema.json",
+  ]) {
+    assertIncludes("docs/tenant-chat/README.md", expectedText);
+    assertIncludes("docs/tenant-chat/execution-contract.md", expectedText);
+  }
+}
+
 function main() {
   for (const doc of [
     ...activeEntryDocs,
@@ -581,6 +857,7 @@ function main() {
   assertSchemaFixturePairs();
   assertTenantChatSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
+  assertTenantChatExecutableContract();
   for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
     fail(failure);
   }

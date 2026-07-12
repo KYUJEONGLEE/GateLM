@@ -33,7 +33,7 @@ admin demo tenant/policy/provider seed
 
 | PR | Branch | Base | Demo outcome |
 |---|---|---|---|
-| 01 | `codex/docs/tenant-chat-active-contract` | `dev` | active contract/schema/fixture/handoff와 threat model 확정 |
+| 01 | `codex/docs/tenant-chat-active-contract` | `dev` | active contract/schema/fixture/handoff와 실행 명세 확정 |
 | 02 | `codex/feat/tenant-chat-auth` | PR 01 | invite/login/tenant selection/access+refresh/session revoke |
 | 03 | `codex/feat/tenant-chat-runtime` | PR 02 | tenant RuntimeConfig/Snapshot/publish, quota/cache/provider policy |
 | 04 | `codex/feat/tenant-chat-gateway` | PR 03 | private Gateway, workload JWT, rate, quota/budget ledger, provider/fallback |

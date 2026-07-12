@@ -24,12 +24,12 @@
   },
   "snapshot": {
     "version": 12,
-    "digest": "sha256:fixtureSnapshotDigest001",
+    "digest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
     "policyVersion": 8,
     "employeeNoticeVersion": 3,
     "pricingVersion": 5
   },
-  "bindingDigest": "hmac-sha256:fixtureBindingDigest001",
+  "bindingDigest": "hmac-sha256:E_a6REovuD7mq7JnRmYM13OLskiwxIjWlfDccOHXE_c",
   "usageIntent": {
     "estimatedInputTokens": 640,
     "maxOutputTokens": 1024,

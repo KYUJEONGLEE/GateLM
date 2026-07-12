@@ -49,15 +49,15 @@ Tenant Chat은 기존 Application Chat과 분리한다.
       "userId": "user_demo_001",
       "actorKind": "employee",
       "employeeId": "employee_demo_001"
+    },
+    "quotaScope": {
+      "type": "user",
+      "id": "user_demo_001"
+    },
+    "budgetScope": {
+      "type": "tenant",
+      "id": "tenant_demo_001"
     }
-  },
-  "quotaScope": {
-    "type": "user",
-    "id": "user_demo_001"
-  },
-  "budgetScope": {
-    "type": "tenant",
-    "id": "tenant_demo_001"
   }
 }
 ```
@@ -125,6 +125,8 @@ Common requirements:
 - same `idempotencyKey` + different binding은 `409 CHAT_IDEMPOTENCY_CONFLICT`다.
 - JWT 또는 body를 log하지 않는다.
 
+Endpoint별 request/response, required/optional field, status, error code, idempotency replay와 SSE wire는 [Private Gateway OpenAPI](./openapi/private-gateway.openapi.json)와 [execution contract](./execution-contract.md)를 따른다.
+
 ## 6. Workload JWT
 
 ### 6.1 JOSE header
@@ -158,9 +160,9 @@ Common requirements:
 - `bindingDigest`
 - completion/cancel의 `admissionId`
 
-Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는 ±5초다. `jti`는 token expiry까지 Redis에서 exact-once consume하고 Redis continuity를 확인할 수 없으면 fail closed한다.
+Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는 ±5초다. `jti`는 token expiry까지 Redis에서 exactly-once consume하고 Redis continuity를 확인할 수 없으면 fail closed한다.
 
-`bindingDigest`는 canonical metadata/body의 `HMAC-SHA-256` digest다. content나 digest는 log/metric/fixture에 넣지 않는다.
+`bindingDigest`는 canonical metadata/body의 `HMAC-SHA-256` digest다. 실제 content나 운영 digest는 log/metric/fixture에 넣지 않으며 synthetic contract vector만 허용한다. 정확한 canonicalization과 key 선택은 [execution contract](./execution-contract.md)를 따른다.
 
 ## 7. RuntimeSnapshot과 policy
 
@@ -169,6 +171,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - active snapshot이 없거나 revoked/invalid이면 `503 CHAT_RUNTIME_UNAVAILABLE`로 fail closed한다.
 - rollback은 과거 pointer를 되돌리지 않고, 과거 content를 재검증한 새 monotonic snapshot을 발행한다.
 - routing/provider/safety/cache/quota/budget/pricing capability는 snapshot에 포함한다.
+- 정확한 tenant snapshot shape, digest와 pricing provenance는 [paired schema](./schemas/tenant-runtime-snapshot.schema.json) 및 [execution contract](./execution-contract.md)를 따른다.
 
 ### 7.1 Cache extensibility
 
@@ -261,11 +264,13 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 | `TenantChatInvocationOutbox` | `(aggregateId,eventType,eventVersion)` | atomic projection handoff |
 | `TenantChatInvocationLog` | `requestId` | Request Detail/Dashboard physical read model |
 
+정확한 column/type/PK/FK/nullability/check/index는 [usage DDL contract](./db/tenant-chat-usage.sql)를 따른다. 이 DDL은 아직 적용된 migration이 아니며 Gateway 구현 PR이 동일 의미의 additive Prisma/SQL migration으로 옮긴다.
+
 Correctness source는 period/reservation/ledger transaction이다. `TenantChatInvocationLog`와 Dashboard projector는 재생 가능한 read model이며 projection lag가 quota 판단을 바꾸지 않는다. 기존 `p0_llm_invocation_logs`에 tenant-chat sentinel Project/Application을 넣지 않는다.
 
 ### 9.2 Event
 
-Outbox/event는 paired [usage settlement schema](./schemas/usage-settlement-event.schema.json)를 따른다.
+Ledger transition outbox는 paired [usage settlement schema](./schemas/usage-settlement-event.schema.json)를 따른다. admission/rate/concurrency처럼 usage ledger 이전에 끝난 요청은 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)로 같은 outbox/projector를 사용한다.
 
 Idempotency rules:
 
@@ -275,7 +280,7 @@ Idempotency rules:
 - provider attempt는 `(requestId,attemptNo)` unique다.
 - ledger transition은 expected `ledgerVersion` CAS로 한 번만 적용한다.
 - outbox insert는 ledger transaction과 같은 DB transaction이다.
-- consumer는 `(aggregateId,eventType,eventVersion)` duplicate를 no-op한다.
+- event `schemaVersion=1`, `eventVersion=ledgerVersion`이며 consumer는 `(aggregateId=requestId,eventType,eventVersion)` duplicate를 no-op한다.
 
 ## 10. 오류 계약
 

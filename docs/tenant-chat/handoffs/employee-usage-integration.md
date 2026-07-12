@@ -6,6 +6,8 @@
 
 이 문서는 기존 Application Chat 계약의 빈칸을 채우는 답변이 아니다. 신규 Tenant Chat이 Employee identity/usage 영역과 맞닿는 지점에서 구현에 필요한 값을 고정한다. 기존 Project/Application 경로는 변경하지 않는다.
 
+실제 wire/DB/digest/key operation은 [`../execution-contract.md`](../execution-contract.md), [Private Gateway OpenAPI](../openapi/private-gateway.openapi.json), [usage DDL](../db/tenant-chat-usage.sql)을 함께 따른다. 이 handoff의 요약과 machine-readable artifact가 충돌하면 active contract와 execution artifact를 먼저 수정한다.
+
 ## 1. Tenant Chat 전체 요청 흐름
 
 ```text
@@ -194,7 +196,7 @@ Keys:
 - request/reservation: `requestId`, plus `(tenantId,userId,idempotencyKey)` unique
 - provider attempt: `(requestId,attemptNo)`
 - ledger: `(requestId,ledgerVersion)`
-- outbox/projector dedupe: `(aggregateId,eventType,eventVersion)`
+- outbox/projector dedupe: `(aggregateId=requestId,eventType,eventVersion=ledgerVersion)`
 - invocation read model: `requestId`
 
 Events:
@@ -205,7 +207,7 @@ Events:
 - `usage_released`
 - `usage_unconfirmed`
 
-Machine-readable schema and fallback example: `../schemas/usage-settlement-event.schema.json`, `../fixtures/usage-settlement-event.fixture.json`.
+Machine-readable schema and transition vectors: `../schemas/usage-settlement-event.schema.json`, `../vectors/usage-event-vectors.json`. Pre-ledger block은 `../schemas/invocation-terminal-event.schema.json`을 따른다.
 
 Correctness 기준은 period/reservation/ledger DB transaction이다. Invocation Log와 Dashboard는 outbox projection이며 lag가 enforcement를 바꾸지 않는다.
 

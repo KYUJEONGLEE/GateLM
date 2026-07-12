@@ -1,13 +1,14 @@
 {
   "eventId": "usage_event_fixture_001",
+  "schemaVersion": 1,
   "eventType": "usage_settled",
-  "eventVersion": 1,
+  "eventVersion": 3,
   "occurredAt": "2026-07-12T12:00:30Z",
+  "aggregateId": "request_fixture_001",
   "requestId": "request_fixture_001",
   "turnId": "turn_fixture_001",
   "idempotencyKey": "turn_fixture_001_attempt_1",
   "reservationId": "reservation_fixture_001",
-  "ledgerVersion": 3,
   "executionScope": {
     "kind": "tenant_chat",
     "tenantId": "tenant_fixture_001",
@@ -28,12 +29,14 @@
     "reservedTokensDelta": -4096,
     "confirmedInputTokensDelta": 820,
     "confirmedOutputTokensDelta": 410,
-    "confirmedTotalTokensDelta": 1230
+    "confirmedTotalTokensDelta": 1230,
+    "unconfirmedTokensDelta": 0
   },
   "budget": {
     "state": "normal",
     "reservedCostMicroUsdDelta": -25000,
-    "confirmedCostMicroUsdDelta": 9100
+    "confirmedCostMicroUsdDelta": 9100,
+    "unconfirmedExposureMicroUsdDelta": 0
   },
   "attempts": [
     {
