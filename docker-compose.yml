@@ -319,6 +319,7 @@ services:
     volumes:
       - .:/workspace
       - node_pnpm_store:/pnpm/store
+      - application_next_cache:/workspace/apps/application/.next
     command: ["bash"]
 
   go-toolbox:
@@ -393,6 +394,7 @@ volumes:
   prometheus_data:
   grafana_data:
   node_pnpm_store:
+  application_next_cache:
   go_pkg_cache:
   go_build_cache:
   python_pip_cache:
