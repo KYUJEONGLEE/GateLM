@@ -31,6 +31,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/README.md",
   "docs/tenant-chat/contracts.md",
   "docs/tenant-chat/execution-contract.md",
+  "docs/tenant-chat/openapi/chat-auth.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
   "docs/tenant-chat/db/tenant-chat-usage.sql",
   "docs/tenant-chat/schemas/*.schema.json",
@@ -605,12 +606,35 @@ function sha256Base64Url(value) {
 }
 
 function assertTenantChatExecutableContract() {
+  const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
   const usageVectorPath = "docs/tenant-chat/vectors/usage-event-vectors.json";
   const jwtVectorPath = "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json";
   const runtimeFixturePath = "docs/tenant-chat/fixtures/tenant-runtime-snapshot.fixture.json";
+
+  const authOpenApi = readJson(authOpenApiPath);
+  if (authOpenApi) {
+    if (authOpenApi.openapi !== "3.1.0") {
+      fail(`${authOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+    for (const [method, apiPath] of [
+      ["post", "/api/tenant-chat/auth/login"],
+      ["post", "/api/tenant-chat/auth/refresh"],
+      ["post", "/api/tenant-chat/auth/logout"],
+      ["get", "/api/tenant-chat/auth/session"],
+      ["post", "/api/tenant-chat/auth/tenant"],
+      ["post", "/api/tenant-chat/invitations/accept-password"],
+      ["post", "/api/tenant-chat/invitations/bind-existing"],
+      ["post", "/internal/v1/tenant-chat/auth/password"],
+      ["get", "/internal/v1/tenant-chat/identity/entitlements/{userId}/{tenantId}"],
+    ]) {
+      if (!authOpenApi.paths?.[apiPath]?.[method]) {
+        fail(`${authOpenApiPath}: missing ${method.toUpperCase()} ${apiPath}`);
+      }
+    }
+  }
 
   const openApi = readJson(openApiPath);
   if (openApi) {
@@ -905,6 +929,7 @@ function assertTenantChatExecutableContract() {
   }
 
   for (const expectedText of [
+    "openapi/chat-auth.openapi.json",
     "openapi/private-gateway.openapi.json",
     "db/tenant-chat-usage.sql",
     "vectors/binding-digest-vectors.json",
