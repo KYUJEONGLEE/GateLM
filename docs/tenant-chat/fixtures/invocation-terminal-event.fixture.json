@@ -1,0 +1,26 @@
+{
+  "eventId": "invocation_terminal_fixture_001",
+  "schemaVersion": 1,
+  "eventType": "invocation_terminal",
+  "eventVersion": 1,
+  "occurredAt": "2026-07-12T12:00:01Z",
+  "aggregateId": "request_rate_limited_fixture_001",
+  "requestId": "request_rate_limited_fixture_001",
+  "turnId": "turn_rate_limited_fixture_001",
+  "idempotencyKey": "idempotency_rate_limited_fixture_001",
+  "executionScope": {
+    "kind": "tenant_chat",
+    "tenantId": "tenant_fixture_001",
+    "userId": "user_fixture_001",
+    "actorKind": "employee",
+    "employeeId": "employee_fixture_001"
+  },
+  "snapshotVersion": 12,
+  "pricingVersion": 5,
+  "terminalOutcome": "rate_limited",
+  "errorCode": "CHAT_RATE_LIMITED",
+  "quotaState": "normal",
+  "budgetState": "normal",
+  "cacheOutcome": "off",
+  "latencyMs": 8
+}

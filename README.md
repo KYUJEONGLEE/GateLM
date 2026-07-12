@@ -16,6 +16,7 @@ GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비
 - [`docs/README.md`](docs/README.md): 전체 문서 분류가 필요할 때
 - [`docs/current/implementation-status.md`](docs/current/implementation-status.md): 현재 구현 사실을 확인할 때
 - [`docs/current/documentation-gaps.md`](docs/current/documentation-gaps.md): 충돌이나 미결정 사항을 확인할 때
+- [`docs/tenant-chat/README.md`](docs/tenant-chat/README.md): 신규 Tenant Chat 계약/구현 작업을 할 때
 
 일반 작업은 current 문서와 실제 코드/타입을 기준으로 시작합니다. historical v2 구현 계획을 매 작업의 할 일 목록으로 사용하지 않습니다.
 
@@ -63,6 +64,7 @@ Advanced Routing, Semantic Cache, Safety sidecar, self-host bundle처럼 release
 | `deploy/selfhost` | Single-node Docker Compose self-host bundle |
 | `infra/observability` | Prometheus/Grafana 관측 설정 |
 | `docs/current` | Active documentation entrypoint and implementation snapshot |
+| `docs/tenant-chat` | 신규 Tenant Chat active scoped contract와 schema/fixture/implementation handoff |
 | `docs/v2.1.0` | Latest versioned self-host/routing evidence scope |
 | `docs/v2.0.0` | Historical behavior baseline and past planning/acceptance records |
 
