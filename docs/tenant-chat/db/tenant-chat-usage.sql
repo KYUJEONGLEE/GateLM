@@ -40,6 +40,10 @@ CREATE INDEX tenant_chat_admission_tenant_state_expiry_idx
   ON tenant_chat_request_admissions (tenant_id, state, expires_at);
 CREATE INDEX tenant_chat_admission_tenant_user_created_idx
   ON tenant_chat_request_admissions (tenant_id, user_id, created_at DESC);
+CREATE INDEX tenant_chat_admission_user_idx
+  ON tenant_chat_request_admissions (user_id);
+CREATE INDEX tenant_chat_admission_employee_idx
+  ON tenant_chat_request_admissions (employee_id) WHERE employee_id IS NOT NULL;
 
 CREATE TABLE tenant_chat_user_token_periods (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -81,6 +85,8 @@ CREATE TABLE tenant_chat_user_token_periods (
 
 CREATE INDEX tenant_chat_user_period_tenant_state_idx
   ON tenant_chat_user_token_periods (tenant_id, state, period_start DESC);
+CREATE INDEX tenant_chat_user_period_user_idx
+  ON tenant_chat_user_token_periods (user_id, period_start DESC);
 
 CREATE TABLE tenant_chat_tenant_cost_periods (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -148,6 +154,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_reservation_request_key UNIQUE (request_id),
+  CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id),
   CONSTRAINT tenant_chat_reservation_idempotency_key UNIQUE (tenant_id, user_id, idempotency_key),
   CONSTRAINT tenant_chat_reservation_user_period_fkey
     FOREIGN KEY (tenant_id, user_id, user_period_start)
@@ -178,11 +185,13 @@ CREATE INDEX tenant_chat_reservation_tenant_state_created_idx
   ON tenant_chat_usage_reservations (tenant_id, state, created_at);
 CREATE INDEX tenant_chat_reservation_user_period_idx
   ON tenant_chat_usage_reservations (tenant_id, user_id, user_period_start);
+CREATE INDEX tenant_chat_reservation_cost_period_idx
+  ON tenant_chat_usage_reservations (tenant_id, tenant_period_start, currency);
 
 CREATE TABLE tenant_chat_provider_attempts (
   request_id text NOT NULL,
   attempt_no smallint NOT NULL,
-  reservation_id uuid NOT NULL REFERENCES tenant_chat_usage_reservations(reservation_id) ON DELETE RESTRICT,
+  reservation_id uuid NOT NULL,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   kind text NOT NULL,
   provider_id text NOT NULL,
@@ -205,6 +214,9 @@ CREATE TABLE tenant_chat_provider_attempts (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (request_id, attempt_no),
+  CONSTRAINT tenant_chat_attempt_reservation_request_fkey
+    FOREIGN KEY (reservation_id, request_id)
+    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_attempt_number_check CHECK (attempt_no BETWEEN 1 AND 4),
   CONSTRAINT tenant_chat_attempt_kind_check CHECK (kind IN ('primary', 'fallback')),
   CONSTRAINT tenant_chat_attempt_outcome_check CHECK (
@@ -227,7 +239,7 @@ CREATE TABLE tenant_chat_provider_attempts (
 );
 
 CREATE INDEX tenant_chat_attempt_reservation_idx
-  ON tenant_chat_provider_attempts (reservation_id, attempt_no);
+  ON tenant_chat_provider_attempts (reservation_id, request_id, attempt_no);
 CREATE INDEX tenant_chat_attempt_tenant_completed_idx
   ON tenant_chat_provider_attempts (tenant_id, completed_at DESC);
 
@@ -235,7 +247,7 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
   request_id text NOT NULL,
   ledger_version bigint NOT NULL,
   event_id uuid NOT NULL,
-  reservation_id uuid NOT NULL REFERENCES tenant_chat_usage_reservations(reservation_id) ON DELETE RESTRICT,
+  reservation_id uuid NOT NULL,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   event_type text NOT NULL,
   reserved_tokens_delta bigint NOT NULL DEFAULT 0,
@@ -249,6 +261,9 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (request_id, ledger_version),
   CONSTRAINT tenant_chat_ledger_event_key UNIQUE (event_id),
+  CONSTRAINT tenant_chat_ledger_reservation_request_fkey
+    FOREIGN KEY (reservation_id, request_id)
+    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_ledger_version_check CHECK (ledger_version > 0),
   CONSTRAINT tenant_chat_ledger_event_type_check CHECK (
     event_type IN ('usage_reserved', 'usage_topped_up', 'usage_settled', 'usage_released', 'usage_unconfirmed')
@@ -263,7 +278,7 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
 CREATE INDEX tenant_chat_ledger_tenant_occurred_idx
   ON tenant_chat_usage_ledger_entries (tenant_id, occurred_at DESC);
 CREATE INDEX tenant_chat_ledger_reservation_idx
-  ON tenant_chat_usage_ledger_entries (reservation_id, ledger_version);
+  ON tenant_chat_usage_ledger_entries (reservation_id, request_id, ledger_version);
 
 CREATE TABLE tenant_chat_invocation_outbox (
   event_id uuid PRIMARY KEY,
@@ -380,6 +395,10 @@ CREATE INDEX tenant_chat_log_tenant_user_completed_idx
   ON tenant_chat_invocation_logs (tenant_id, user_id, completed_at DESC);
 CREATE INDEX tenant_chat_log_tenant_outcome_completed_idx
   ON tenant_chat_invocation_logs (tenant_id, terminal_outcome, completed_at DESC);
+CREATE INDEX tenant_chat_log_user_idx
+  ON tenant_chat_invocation_logs (user_id, completed_at DESC);
+CREATE INDEX tenant_chat_log_employee_idx
+  ON tenant_chat_invocation_logs (employee_id) WHERE employee_id IS NOT NULL;
 
 -- No DROP/DOWN statement belongs in the implementation migration. Runtime roles
 -- receive only the table privileges required by the ownership matrix; DDL stays

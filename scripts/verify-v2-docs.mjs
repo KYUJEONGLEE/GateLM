@@ -719,6 +719,30 @@ function assertTenantChatExecutableContract() {
       fail(`${ddlPath}: missing table ${table}`);
     }
   }
+
+  const normalizedDdl = ddl.replace(/\s+/g, " ").trim().toLowerCase();
+  const expectedDdlFragments = [
+    "create index tenant_chat_admission_user_idx on tenant_chat_request_admissions (user_id)",
+    "create index tenant_chat_admission_employee_idx on tenant_chat_request_admissions (employee_id) where employee_id is not null",
+    "create index tenant_chat_user_period_user_idx on tenant_chat_user_token_periods (user_id, period_start desc)",
+    "create index tenant_chat_reservation_cost_period_idx on tenant_chat_usage_reservations (tenant_id, tenant_period_start, currency)",
+    "constraint tenant_chat_reservation_identity_key unique (reservation_id, request_id)",
+    "constraint tenant_chat_attempt_reservation_request_fkey foreign key (reservation_id, request_id) references tenant_chat_usage_reservations (reservation_id, request_id) on delete restrict",
+    "create index tenant_chat_attempt_reservation_idx on tenant_chat_provider_attempts (reservation_id, request_id, attempt_no)",
+    "constraint tenant_chat_ledger_reservation_request_fkey foreign key (reservation_id, request_id) references tenant_chat_usage_reservations (reservation_id, request_id) on delete restrict",
+    "create index tenant_chat_ledger_reservation_idx on tenant_chat_usage_ledger_entries (reservation_id, request_id, ledger_version)",
+    "create index tenant_chat_log_user_idx on tenant_chat_invocation_logs (user_id, completed_at desc)",
+    "create index tenant_chat_log_employee_idx on tenant_chat_invocation_logs (employee_id) where employee_id is not null",
+  ];
+  for (const fragment of expectedDdlFragments) {
+    if (!normalizedDdl.includes(fragment)) {
+      fail(`${ddlPath}: missing executable DDL fragment "${fragment}"`);
+    }
+  }
+
+  if (/reservation_id\s+uuid\s+not\s+null\s+references\s+tenant_chat_usage_reservations/i.test(ddl)) {
+    fail(`${ddlPath}: attempt/ledger reservation identity must use the composite reservation_id/request_id FK`);
+  }
   if (/\bDROP\s+(TABLE|COLUMN|TYPE)\b/i.test(ddl) || /\bALTER\s+TABLE\b[\s\S]*?\bDROP\b/i.test(ddl)) {
     fail(`${ddlPath}: destructive DROP statement is forbidden`);
   }
