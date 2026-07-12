@@ -22,6 +22,9 @@ import type {
   TenantChatRuntimeSnapshotDocument,
 } from './tenant-chat-runtime.types';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class TenantChatRuntimeService {
   constructor(private readonly prisma: PrismaService) {}
@@ -29,6 +32,7 @@ export class TenantChatRuntimeService {
   async getActiveSnapshot(
     tenantId: string,
   ): Promise<TenantChatRuntimeSnapshotDocument> {
+    this.assertDatabaseTenantId(tenantId);
     const pointer = await this.prisma.tenantChatActiveRuntimeSnapshot.findUnique({
       where: { tenantId },
       include: { snapshot: true },
@@ -52,6 +56,7 @@ export class TenantChatRuntimeService {
       }
       throw error;
     }
+    this.assertDatabaseTenantId(snapshot.tenantId);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -220,11 +225,31 @@ export class TenantChatRuntimeService {
         publishedAt: new Date(snapshot.publishedAt),
       },
     });
-    await this.markRuntimeConfigActive(tx, snapshot.tenantId, created.id);
+    await this.supersedeOtherActiveRuntimeConfigs(
+      tx,
+      snapshot.tenantId,
+      created.id,
+    );
     return created;
   }
 
   private async markRuntimeConfigActive(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    runtimeConfigId: string,
+  ): Promise<void> {
+    await this.supersedeOtherActiveRuntimeConfigs(
+      tx,
+      tenantId,
+      runtimeConfigId,
+    );
+    await tx.tenantChatRuntimeConfig.update({
+      where: { id: runtimeConfigId },
+      data: { publishState: RuntimeConfigPublishState.ACTIVE },
+    });
+  }
+
+  private async supersedeOtherActiveRuntimeConfigs(
     tx: Prisma.TransactionClient,
     tenantId: string,
     runtimeConfigId: string,
@@ -236,10 +261,6 @@ export class TenantChatRuntimeService {
         publishState: RuntimeConfigPublishState.ACTIVE,
       },
       data: { publishState: RuntimeConfigPublishState.SUPERSEDED },
-    });
-    await tx.tenantChatRuntimeConfig.update({
-      where: { id: runtimeConfigId },
-      data: { publishState: RuntimeConfigPublishState.ACTIVE },
     });
   }
 
@@ -277,5 +298,13 @@ export class TenantChatRuntimeService {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       (error.code === 'P2002' || error.code === 'P2034')
     );
+  }
+
+  private assertDatabaseTenantId(tenantId: string): void {
+    if (!UUID_PATTERN.test(tenantId)) {
+      throw new BadRequestException(
+        'tenantId must be a UUID at the Control Plane persistence boundary.',
+      );
+    }
   }
 }
