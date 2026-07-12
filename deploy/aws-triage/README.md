@@ -263,8 +263,52 @@ The preflight requires all of the following before load is allowed:
 - published RuntimeSnapshot provenance
 - successful Request Detail with `fallback=not_needed`
 
-Point k6 only at `http://127.0.0.1:18080`. Port `8080` belongs to the normal
-stack and may call an actual Provider.
+Point host-executed k6 only at `http://127.0.0.1:18080`. Host port `8080`
+belongs to the normal stack and may call an actual Provider. The Docker runner
+below uses the isolated performance network instead of either host port.
+
+Run the simple cache-miss baseline with the pinned Docker k6 runner. k6 does
+not need to be installed on the EC2 host:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+GATELM_K6_TARGET_RPS=1 \
+GATELM_K6_DURATION=2m \
+bash scripts/perf-load.sh
+```
+
+The runner performs the Mock routing preflight first, joins only the
+`gatelm-aws-perf-internal` Docker network, and targets `gateway-core:8080`
+inside that network. It passes only the performance API Key and App Token to
+the k6 container. The normal host port `8080` is never used.
+
+Before starting the runner, open an SSH tunnel from the operator machine:
+
+```powershell
+ssh -i "C:\path\to\gatelm.pem" -N `
+  -L 5665:127.0.0.1:5665 `
+  ubuntu@<ec2-public-ip>
+```
+
+Keep that terminal open and browse to:
+
+```text
+http://127.0.0.1:5665
+```
+
+Do not open port `5665` in the EC2 Security Group. The k6 dashboard is
+published on EC2 loopback only. Close the dashboard browser tab after the test
+finishes so k6 can exit and write the self-contained HTML report under
+`reports/perf/`.
+
+Optional runner settings:
+
+| Variable | Default | Purpose |
+|---|---:|---|
+| `GATELM_K6_TARGET_RPS` | `1` | Scheduled cache-miss requests per second |
+| `GATELM_K6_DURATION` | `2m` | Load duration |
+| `GATELM_K6_DASHBOARD_PORT` | `5665` | EC2 loopback dashboard port |
+| `GATELM_K6_DASHBOARD_PERIOD` | `1s` | Live dashboard aggregation period |
 
 Stop the performance containers without deleting their volumes:
 
