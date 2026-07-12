@@ -604,8 +604,6 @@ export function ProjectEmployeeAssignmentSection({
       (assignment) => assignment.employeeId === employee.id
     );
     const values: ProjectEmployeeAssignmentValues = {
-      allowedModelKeys: [],
-      allowedProviderConnectionIds: [],
       dailyTokenLimit: existingAssignment?.policy.dailyTokenLimit.limit ?? 0,
       employeeId: employee.id,
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
@@ -653,8 +651,6 @@ export function ProjectEmployeeAssignmentSection({
     }
 
     const values: ProjectEmployeeAssignmentValues = {
-      allowedModelKeys: [],
-      allowedProviderConnectionIds: [],
       dailyTokenLimit: assignmentValues.dailyTokenLimit,
       employeeId: selectedEmployeeId,
       monthlyBudgetLimitUsd: assignmentValues.monthlyBudgetLimitUsd,

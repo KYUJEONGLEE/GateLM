@@ -1042,8 +1042,6 @@ function toProjectEmployeePolicy(value: unknown): ProjectEmployeePolicy | null {
       ? (record.rateLimit as Record<string, unknown>)
       : {};
   return {
-    allowedModelKeys: readStringArray(record.allowedModelKeys),
-    allowedProviderConnectionIds: readStringArray(record.allowedProviderConnectionIds),
     dailyTokenLimit: {
       enabled:
         typeof dailyTokenLimit.enabled === "boolean"
@@ -1099,10 +1097,6 @@ function toProjectEmployeeBudget(value: unknown) {
     projectBudgetUsd: record.projectBudgetUsd,
     remainingBudgetUsd: record.remainingBudgetUsd
   };
-}
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function normalizeEmployeeStatus(value: unknown): EmployeeStatus | null {

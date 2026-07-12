@@ -20,6 +20,13 @@
 - [`implementation-status.md`](implementation-status.md): 현재 구현 사실을 확인할 때
 - [`documentation-gaps.md`](documentation-gaps.md): 문서/코드 충돌이나 미결정 항목을 확인할 때
 
+Tenant Chat handoff 준비 자료는 계약이 아니라 검토 및 수신 도구다.
+
+- [`tenant-chat-integration-impact-audit.md`](tenant-chat-integration-impact-audit.md): 기존 구조와의 충돌 지점
+- [`tenant-chat-contract-intake-checklist.md`](tenant-chat-contract-intake-checklist.md): Chat 팀 계약 수신 체크리스트
+- [`tenant-chat-v1-gateway-implementation-plan.md`](tenant-chat-v1-gateway-implementation-plan.md): Active 계약 기반 GateLM 구현 순서
+- [`proposals/legacy-application-chat-employee-guard-notes.md`](proposals/legacy-application-chat-employee-guard-notes.md): 기존 Application Chat 동결 범위
+
 ## Scope Router
 
 | 작업 범위 | 먼저 읽을 문서 | 상태 |
@@ -27,6 +34,7 @@
 | 일반 UI, 리팩터링, 버그 수정 | current 문서와 실제 코드/타입 | Active |
 | Self-host 설치와 이미지 | [`../v2.1.0/README.md`](../v2.1.0/README.md) | Latest versioned scope |
 | Advanced Routing offline 평가 | [`../v2.1.0/README.md`](../v2.1.0/README.md) | Versioned evidence scope |
+| Tenant Chat 통합 | PR #293의 `docs/tenant-chat/contracts.md` 및 paired artifact | `tenant-chat/v1` active contract, merge pending |
 | Gateway/API/DB/Event/Metrics 호환성 | [`../v2.0.0/README.md`](../v2.0.0/README.md)에서 해당 baseline 선택 | Baseline compatibility |
 | 보안/PII/비용 정책 | `../policies/`의 관련 문서와 current 계약 | Supporting policy |
 | 아키텍처 배경 | `../architecture/`의 관련 문서 | Supporting reference |

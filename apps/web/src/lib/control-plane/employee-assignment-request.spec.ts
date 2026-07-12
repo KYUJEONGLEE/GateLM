@@ -4,8 +4,6 @@ import { buildProjectEmployeeAssignmentRequestBody } from "./employee-assignment
 test("includes the daily token limit in the Control Plane assignment request", () => {
   expect(
     buildProjectEmployeeAssignmentRequestBody({
-      allowedModelKeys: ["gpt-4o-mini"],
-      allowedProviderConnectionIds: ["provider-openai"],
       dailyTokenLimit: 2000,
       employeeId: "employee-1",
       monthlyBudgetLimitUsd: 100,
@@ -17,8 +15,6 @@ test("includes the daily token limit in the Control Plane assignment request", (
       warningThresholdPercent: 80
     })
   ).toEqual({
-    allowedModelKeys: ["gpt-4o-mini"],
-    allowedProviderConnectionIds: ["provider-openai"],
     dailyTokenLimit: 2000,
     monthlyBudgetLimitUsd: 100,
     policyNote: "daily policy",

@@ -59,15 +59,6 @@ const DEPRECATED_JOB_TITLE_CSV_HEADERS = [
 ] as const;
 
 const CSV_HEADER_ALIASES = {
-  allowedModelKeys: ['allowedmodelkeys', 'allowed_model_keys', 'models', 'model_keys', '모델'],
-  allowedProviderConnectionIds: [
-    'allowedproviderconnectionids',
-    'allowed_provider_connection_ids',
-    'provider_connection_ids',
-    'providers',
-    'provider_ids',
-    '프로바이더',
-  ],
   department: ['department', 'dept', 'team', '부서', '팀'],
   email: ['email', 'e_mail', 'mail', '이메일', '메일'],
   employeeBudgetUsd: [
@@ -128,8 +119,6 @@ type ParsedCsvRow = {
 };
 
 type ParsedOrganizationCsvRow = ParsedCsvRow & {
-  allowedModelKeys: string[];
-  allowedProviderConnectionIds: string[];
   employeeBudgetUsd: number;
   policyNote: string | null;
   projectBudgetUsd: number | null;
@@ -527,8 +516,6 @@ export class EmployeesService {
         );
 
         const policy: Prisma.InputJsonObject = {
-          allowedModelKeys: row.allowedModelKeys,
-          allowedProviderConnectionIds: row.allowedProviderConnectionIds,
           note: row.policyNote,
         };
         const assignment = existingAssignment
@@ -1162,12 +1149,6 @@ export class EmployeesService {
       }
 
       rows.push({
-        allowedModelKeys: splitDelimitedList(
-          readOptionalCsvCell(row, headerMap.allowedModelKeys),
-        ),
-        allowedProviderConnectionIds: splitDelimitedList(
-          readOptionalCsvCell(row, headerMap.allowedProviderConnectionIds),
-        ),
         department: this.toNullableString(readOptionalCsvCell(row, headerMap.department)),
         email,
         employeeBudgetUsd: employeeBudgetUsd ?? 0,
@@ -1211,14 +1192,6 @@ export class EmployeesService {
     const current = this.toProjectEmployeePolicy(currentPolicy);
 
     return {
-      allowedModelKeys:
-        dto.allowedModelKeys !== undefined
-          ? uniqueTrimmedStrings(dto.allowedModelKeys)
-          : current.allowedModelKeys,
-      allowedProviderConnectionIds:
-        dto.allowedProviderConnectionIds !== undefined
-          ? uniqueTrimmedStrings(dto.allowedProviderConnectionIds)
-          : current.allowedProviderConnectionIds,
       dailyTokenLimit: {
         enabled: (dto.dailyTokenLimit ?? current.dailyTokenLimit.limit) > 0,
         limit: dto.dailyTokenLimit ?? current.dailyTokenLimit.limit,
@@ -1241,8 +1214,6 @@ export class EmployeesService {
   ): ProjectEmployeePolicyDto {
     if (!isRecord(policy)) {
       return {
-        allowedModelKeys: [],
-        allowedProviderConnectionIds: [],
         dailyTokenLimit: {
           enabled: false,
           limit: 0,
@@ -1262,10 +1233,6 @@ export class EmployeesService {
     const rateLimit = isRecord(policy.rateLimit) ? policy.rateLimit : {};
 
     return {
-      allowedModelKeys: readStringArray(policy.allowedModelKeys),
-      allowedProviderConnectionIds: readStringArray(
-        policy.allowedProviderConnectionIds,
-      ),
       dailyTokenLimit: {
         enabled:
           typeof dailyTokenLimit.enabled === 'boolean'
@@ -1555,16 +1522,6 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-function uniqueTrimmedStrings(values: string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
-}
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? uniqueTrimmedStrings(value.filter((item): item is string => typeof item === 'string'))
-    : [];
-}
-
 function readPositiveInteger(
   value: unknown,
   fallback: number,
@@ -1580,14 +1537,6 @@ function readPositiveInteger(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function splitDelimitedList(value: string | null): string[] {
-  if (!value) {
-    return [];
-  }
-
-  return uniqueTrimmedStrings(value.split(/[;,|]/));
 }
 
 function parseOptionalNonnegativeNumber(value: string | null): number | null | 'invalid' {

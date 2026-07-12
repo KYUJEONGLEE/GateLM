@@ -43,30 +43,41 @@ model Tenant {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  projects                       Project[]
-  applications                   Application[]
-  providerConnections            ProviderConnection[]
-  providerCredentials            ProviderCredential[]
-  applicationProviderConnections ApplicationProviderConnection[]
-  apiKeys                        GatewayApiKey[]
-  appTokens                      AppToken[]
-  runtimeConfigs                 RuntimeConfig[]
-  runtimeSnapshots               RuntimeSnapshot[]
-  activeSnapshots                ActiveRuntimeSnapshot[]
-  budgetLedgerEntries            BudgetLedgerEntry[]
-  budgetQuotas                   BudgetQuota[]
-  budgetAuditLogs                BudgetAuditLog[]
-  notificationEvents             NotificationEvent[]
-  teams                          Team[]
-  projectTeamAssignments         ProjectTeamAssignment[]
-  tenantMemberships              TenantMembership[]
-  tenantAdmins                   TenantAdmin[]
-  projectAdmins                  ProjectAdmin[]
-  projectAdminInvitations        ProjectAdminInvitation[]
-  employees                      Employee[]
-  projectEmployeeAssignments     ProjectEmployeeAssignment[]
-  conversations                  Conversation[]
-  chatMessages                   ChatMessage[]
+  projects                        Project[]
+  applications                    Application[]
+  providerConnections             ProviderConnection[]
+  providerCredentials             ProviderCredential[]
+  applicationProviderConnections  ApplicationProviderConnection[]
+  apiKeys                         GatewayApiKey[]
+  appTokens                       AppToken[]
+  runtimeConfigs                  RuntimeConfig[]
+  runtimeSnapshots                RuntimeSnapshot[]
+  activeSnapshots                 ActiveRuntimeSnapshot[]
+  budgetLedgerEntries             BudgetLedgerEntry[]
+  budgetQuotas                    BudgetQuota[]
+  budgetAuditLogs                 BudgetAuditLog[]
+  notificationEvents              NotificationEvent[]
+  teams                           Team[]
+  projectTeamAssignments          ProjectTeamAssignment[]
+  tenantMemberships               TenantMembership[]
+  tenantAdmins                    TenantAdmin[]
+  projectAdmins                   ProjectAdmin[]
+  projectAdminInvitations         ProjectAdminInvitation[]
+  employees                       Employee[]
+  projectEmployeeAssignments      ProjectEmployeeAssignment[]
+  conversations                   Conversation[]
+  chatMessages                    ChatMessage[]
+  tenantChatPricingCatalogs       TenantChatPricingCatalog[]
+  tenantChatRuntimeConfigs        TenantChatRuntimeConfig[]
+  tenantChatRuntimeSnapshots      TenantChatRuntimeSnapshot[]
+  tenantChatActiveRuntimeSnapshot TenantChatActiveRuntimeSnapshot?
+  tenantChatRequestAdmissions     TenantChatRequestAdmission[]
+  tenantChatUserTokenPeriods      TenantChatUserTokenPeriod[]
+  tenantChatTenantCostPeriods     TenantChatTenantCostPeriod[]
+  tenantChatProviderAttempts      TenantChatProviderAttempt[]
+  tenantChatUsageLedgerEntries    TenantChatUsageLedgerEntry[]
+  tenantChatInvocationOutbox      TenantChatInvocationOutbox[]
+  tenantChatInvocationLogs        TenantChatInvocationLog[]
 
   @@map("tenants")
 }
@@ -91,8 +102,11 @@ model User {
   tenantMemberships           TenantMembership[]
   tenantAdmins                TenantAdmin[]
   projectAdmins               ProjectAdmin[]
-  sentProjectAdminInvitations ProjectAdminInvitation[] @relation("ProjectAdminInvitationInviter")
+  sentProjectAdminInvitations ProjectAdminInvitation[]     @relation("ProjectAdminInvitationInviter")
   employees                   Employee[]
+  tenantChatRequestAdmissions TenantChatRequestAdmission[]
+  tenantChatUserTokenPeriods  TenantChatUserTokenPeriod[]
+  tenantChatInvocationLogs    TenantChatInvocationLog[]
 
   @@index([email])
   @@index([status])
@@ -314,9 +328,11 @@ model Employee {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
-  tenant             Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user               User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  projectAssignments ProjectEmployeeAssignment[]
+  tenant                      Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                        User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectAssignments          ProjectEmployeeAssignment[]
+  tenantChatRequestAdmissions TenantChatRequestAdmission[]
+  tenantChatInvocationLogs    TenantChatInvocationLog[]
 
   @@index([tenantId, status])
   @@index([tenantId, invitationStatus])
@@ -708,6 +724,341 @@ model ActiveRuntimeSnapshot {
   @@id([tenantId, projectId, applicationId])
   @@index([runtimeSnapshotId])
   @@map("active_runtime_snapshots")
+}
+
+model TenantChatPricingCatalog {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  version     BigInt
+  digest      String
+  currency    String   @default("USD") @db.Char(3)
+  unit        String   @default("micro_usd_per_1m_tokens")
+  document    Json
+  effectiveAt DateTime @map("effective_at") @db.Timestamptz(6)
+  publishedAt DateTime @map("published_at") @db.Timestamptz(6)
+  publishedBy String   @map("published_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  snapshots TenantChatRuntimeSnapshot[]
+
+  @@unique([tenantId, version], map: "tenant_chat_pricing_tenant_version_key")
+  @@unique([tenantId, digest], map: "tenant_chat_pricing_tenant_digest_key")
+  @@index([tenantId, effectiveAt(sort: Desc)], map: "tenant_chat_pricing_tenant_effective_idx")
+  @@map("tenant_chat_pricing_catalogs")
+}
+
+model TenantChatRuntimeConfig {
+  id           String                    @id @default(uuid()) @db.Uuid
+  tenantId     String                    @map("tenant_id") @db.Uuid
+  version      BigInt
+  contentHash  String                    @map("content_hash")
+  publishState RuntimeConfigPublishState @default(DRAFT) @map("publish_state")
+  document     Json
+  effectiveAt  DateTime?                 @map("effective_at") @db.Timestamptz(6)
+  publishedAt  DateTime?                 @map("published_at") @db.Timestamptz(6)
+  createdAt    DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  snapshots TenantChatRuntimeSnapshot[]
+
+  @@unique([tenantId, version], map: "tenant_chat_runtime_config_tenant_version_key")
+  @@index([tenantId, publishState], map: "tenant_chat_runtime_config_tenant_state_idx")
+  @@map("tenant_chat_runtime_configs")
+}
+
+model TenantChatRuntimeSnapshot {
+  snapshotId            String   @id @map("snapshot_id")
+  tenantId              String   @map("tenant_id") @db.Uuid
+  runtimeConfigId       String   @map("runtime_config_id") @db.Uuid
+  pricingCatalogId      String   @map("pricing_catalog_id") @db.Uuid
+  version               BigInt
+  digest                String
+  policyVersion         BigInt   @map("policy_version")
+  employeeNoticeVersion BigInt   @map("employee_notice_version")
+  pricingVersion        BigInt   @map("pricing_version")
+  pricingDigest         String   @map("pricing_digest")
+  snapshotBody          Json     @map("snapshot_body")
+  publishedAt           DateTime @map("published_at") @db.Timestamptz(6)
+  publishedBy           String   @map("published_by")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant         Tenant                           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  runtimeConfig  TenantChatRuntimeConfig          @relation(fields: [runtimeConfigId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  pricingCatalog TenantChatPricingCatalog         @relation(fields: [pricingCatalogId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  activePointer  TenantChatActiveRuntimeSnapshot?
+
+  @@unique([tenantId, version], map: "tenant_chat_snapshot_tenant_version_key")
+  @@unique([snapshotId, tenantId], map: "tenant_chat_snapshot_identity_key")
+  @@index([tenantId, publishedAt(sort: Desc)], map: "tenant_chat_snapshot_tenant_published_idx")
+  @@index([runtimeConfigId], map: "tenant_chat_snapshot_runtime_config_idx")
+  @@index([pricingCatalogId], map: "tenant_chat_snapshot_pricing_catalog_idx")
+  @@map("tenant_chat_runtime_snapshots")
+}
+
+model TenantChatActiveRuntimeSnapshot {
+  tenantId   String   @id @map("tenant_id") @db.Uuid
+  snapshotId String   @map("snapshot_id")
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy  String   @map("updated_by")
+
+  tenant   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  snapshot TenantChatRuntimeSnapshot @relation(fields: [snapshotId, tenantId], references: [snapshotId, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_active_snapshot_identity_fkey")
+
+  @@unique([snapshotId, tenantId], map: "tenant_chat_active_snapshot_key")
+  @@map("tenant_chat_active_runtime_snapshots")
+}
+
+model TenantChatRequestAdmission {
+  admissionId     String    @id @map("admission_id") @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  employeeId      String?   @map("employee_id") @db.Uuid
+  actorKind       String    @map("actor_kind")
+  requestId       String    @unique(map: "tenant_chat_admission_request_key") @map("request_id")
+  turnId          String    @map("turn_id")
+  idempotencyKey  String    @map("idempotency_key")
+  bindingDigest   String    @map("binding_digest")
+  snapshotVersion BigInt    @map("snapshot_version")
+  state           String    @default("active")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt      DateTime? @map("consumed_at") @db.Timestamptz(6)
+  cancelledAt     DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  slotReleasedAt  DateTime? @map("slot_released_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, userId, idempotencyKey], map: "tenant_chat_admission_idempotency_key")
+  @@index([tenantId, state, expiresAt], map: "tenant_chat_admission_tenant_state_expiry_idx")
+  @@index([tenantId, userId, createdAt(sort: Desc)], map: "tenant_chat_admission_tenant_user_created_idx")
+  @@index([userId], map: "tenant_chat_admission_user_idx")
+  @@map("tenant_chat_request_admissions")
+}
+
+model TenantChatUserTokenPeriod {
+  tenantId               String   @map("tenant_id") @db.Uuid
+  userId                 String   @map("user_id") @db.Uuid
+  periodStart            DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd              DateTime @map("period_end") @db.Timestamptz(6)
+  periodTimezone         String   @map("period_timezone")
+  limitTokens            BigInt   @map("limit_tokens")
+  warningThresholdTokens BigInt   @map("warning_threshold_tokens")
+  economyThresholdTokens BigInt   @map("economy_threshold_tokens")
+  hardStopTokens         BigInt   @map("hard_stop_tokens")
+  reservedTokens         BigInt   @default(0) @map("reserved_tokens")
+  confirmedInputTokens   BigInt   @default(0) @map("confirmed_input_tokens")
+  confirmedOutputTokens  BigInt   @default(0) @map("confirmed_output_tokens")
+  confirmedTotalTokens   BigInt   @default(0) @map("confirmed_total_tokens")
+  unconfirmedTokens      BigInt   @default(0) @map("unconfirmed_tokens")
+  state                  String   @default("normal")
+  version                BigInt   @default(1)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user         User                         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  reservations TenantChatUsageReservation[] @relation("TenantChatReservationUserPeriod")
+
+  @@id([tenantId, userId, periodStart])
+  @@index([tenantId, state, periodStart(sort: Desc)], map: "tenant_chat_user_period_tenant_state_idx")
+  @@index([userId, periodStart(sort: Desc)], map: "tenant_chat_user_period_user_idx")
+  @@map("tenant_chat_user_token_periods")
+}
+
+model TenantChatTenantCostPeriod {
+  tenantId                    String   @map("tenant_id") @db.Uuid
+  periodStart                 DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd                   DateTime @map("period_end") @db.Timestamptz(6)
+  periodTimezone              String   @map("period_timezone")
+  currency                    String   @default("USD") @db.Char(3)
+  limitMicroUsd               BigInt   @map("limit_micro_usd")
+  warningThresholdMicroUsd    BigInt   @map("warning_threshold_micro_usd")
+  economyThresholdMicroUsd    BigInt   @map("economy_threshold_micro_usd")
+  hardStopMicroUsd            BigInt   @map("hard_stop_micro_usd")
+  reservedCostMicroUsd        BigInt   @default(0) @map("reserved_cost_micro_usd")
+  confirmedCostMicroUsd       BigInt   @default(0) @map("confirmed_cost_micro_usd")
+  unconfirmedExposureMicroUsd BigInt   @default(0) @map("unconfirmed_exposure_micro_usd")
+  state                       String   @default("normal")
+  version                     BigInt   @default(1)
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  reservations TenantChatUsageReservation[] @relation("TenantChatReservationCostPeriod")
+
+  @@id([tenantId, periodStart, currency])
+  @@index([tenantId, state, periodStart(sort: Desc)], map: "tenant_chat_cost_period_state_idx")
+  @@map("tenant_chat_tenant_cost_periods")
+}
+
+model TenantChatUsageReservation {
+  reservationId               String    @id @map("reservation_id") @db.Uuid
+  tenantId                    String    @map("tenant_id") @db.Uuid
+  userId                      String    @map("user_id") @db.Uuid
+  requestId                   String    @unique(map: "tenant_chat_reservation_request_key") @map("request_id")
+  turnId                      String    @map("turn_id")
+  idempotencyKey              String    @map("idempotency_key")
+  userPeriodStart             DateTime  @map("user_period_start") @db.Timestamptz(6)
+  tenantPeriodStart           DateTime  @map("tenant_period_start") @db.Timestamptz(6)
+  currency                    String    @default("USD") @db.Char(3)
+  snapshotVersion             BigInt    @map("snapshot_version")
+  snapshotDigest              String    @map("snapshot_digest")
+  pricingVersion              BigInt    @map("pricing_version")
+  state                       String    @default("reserved")
+  reservedTokens              BigInt    @default(0) @map("reserved_tokens")
+  reservedCostMicroUsd        BigInt    @default(0) @map("reserved_cost_micro_usd")
+  confirmedInputTokens        BigInt    @default(0) @map("confirmed_input_tokens")
+  confirmedOutputTokens       BigInt    @default(0) @map("confirmed_output_tokens")
+  confirmedCostMicroUsd       BigInt    @default(0) @map("confirmed_cost_micro_usd")
+  unconfirmedTokens           BigInt    @default(0) @map("unconfirmed_tokens")
+  unconfirmedExposureMicroUsd BigInt    @default(0) @map("unconfirmed_exposure_micro_usd")
+  ledgerVersion               BigInt    @default(0) @map("ledger_version")
+  reservedAt                  DateTime  @map("reserved_at") @db.Timestamptz(6)
+  terminalAt                  DateTime? @map("terminal_at") @db.Timestamptz(6)
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  userPeriod       TenantChatUserTokenPeriod    @relation("TenantChatReservationUserPeriod", fields: [tenantId, userId, userPeriodStart], references: [tenantId, userId, periodStart], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_reservation_user_period_fkey")
+  tenantCostPeriod TenantChatTenantCostPeriod   @relation("TenantChatReservationCostPeriod", fields: [tenantId, tenantPeriodStart, currency], references: [tenantId, periodStart, currency], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_reservation_cost_period_fkey")
+  providerAttempts TenantChatProviderAttempt[]
+  ledgerEntries    TenantChatUsageLedgerEntry[]
+
+  @@unique([reservationId, requestId], map: "tenant_chat_reservation_identity_key")
+  @@unique([tenantId, userId, idempotencyKey], map: "tenant_chat_reservation_idempotency_key")
+  @@index([tenantId, state, createdAt], map: "tenant_chat_reservation_tenant_state_created_idx")
+  @@index([tenantId, userId, userPeriodStart], map: "tenant_chat_reservation_user_period_idx")
+  @@index([tenantId, tenantPeriodStart, currency], map: "tenant_chat_reservation_cost_period_idx")
+  @@map("tenant_chat_usage_reservations")
+}
+
+model TenantChatProviderAttempt {
+  requestId                              String    @map("request_id")
+  attemptNo                              Int       @map("attempt_no") @db.SmallInt
+  reservationId                          String    @map("reservation_id") @db.Uuid
+  tenantId                               String    @map("tenant_id") @db.Uuid
+  kind                                   String
+  providerId                             String    @map("provider_id")
+  modelKey                               String    @map("model_key")
+  pricingVersion                         BigInt    @map("pricing_version")
+  inputMicroUsdPerMillionTokens          BigInt    @map("input_micro_usd_per_million_tokens")
+  outputMicroUsdPerMillionTokens         BigInt    @map("output_micro_usd_per_million_tokens")
+  cacheReadInputMicroUsdPerMillionTokens BigInt?   @map("cache_read_input_micro_usd_per_million_tokens")
+  estimatedInputTokens                   BigInt    @map("estimated_input_tokens")
+  maxOutputTokens                        BigInt    @map("max_output_tokens")
+  reservedCostMicroUsd                   BigInt    @map("reserved_cost_micro_usd")
+  confirmedInputTokens                   BigInt    @default(0) @map("confirmed_input_tokens")
+  confirmedOutputTokens                  BigInt    @default(0) @map("confirmed_output_tokens")
+  confirmedCacheReadInputTokens          BigInt    @default(0) @map("confirmed_cache_read_input_tokens")
+  confirmedCostMicroUsd                  BigInt    @default(0) @map("confirmed_cost_micro_usd")
+  outcome                                String?
+  usageQuality                           String    @default("not_available") @map("usage_quality")
+  startedAt                              DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt                            DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt                              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  reservation TenantChatUsageReservation @relation(fields: [reservationId, requestId], references: [reservationId, requestId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_attempt_reservation_request_fkey")
+  tenant      Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@id([requestId, attemptNo])
+  @@index([reservationId, requestId, attemptNo], map: "tenant_chat_attempt_reservation_idx")
+  @@index([tenantId, completedAt(sort: Desc)], map: "tenant_chat_attempt_tenant_completed_idx")
+  @@map("tenant_chat_provider_attempts")
+}
+
+model TenantChatUsageLedgerEntry {
+  requestId                        String   @map("request_id")
+  ledgerVersion                    BigInt   @map("ledger_version")
+  eventId                          String   @unique(map: "tenant_chat_ledger_event_key") @map("event_id") @db.Uuid
+  reservationId                    String   @map("reservation_id") @db.Uuid
+  tenantId                         String   @map("tenant_id") @db.Uuid
+  eventType                        String   @map("event_type")
+  reservedTokensDelta              BigInt   @default(0) @map("reserved_tokens_delta")
+  confirmedInputTokensDelta        BigInt   @default(0) @map("confirmed_input_tokens_delta")
+  confirmedOutputTokensDelta       BigInt   @default(0) @map("confirmed_output_tokens_delta")
+  unconfirmedTokensDelta           BigInt   @default(0) @map("unconfirmed_tokens_delta")
+  reservedCostMicroUsdDelta        BigInt   @default(0) @map("reserved_cost_micro_usd_delta")
+  confirmedCostMicroUsdDelta       BigInt   @default(0) @map("confirmed_cost_micro_usd_delta")
+  unconfirmedExposureMicroUsdDelta BigInt   @default(0) @map("unconfirmed_exposure_micro_usd_delta")
+  occurredAt                       DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt                        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  reservation TenantChatUsageReservation @relation(fields: [reservationId, requestId], references: [reservationId, requestId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_ledger_reservation_request_fkey")
+  tenant      Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@id([requestId, ledgerVersion])
+  @@index([tenantId, occurredAt(sort: Desc)], map: "tenant_chat_ledger_tenant_occurred_idx")
+  @@index([reservationId, requestId, ledgerVersion], map: "tenant_chat_ledger_reservation_idx")
+  @@map("tenant_chat_usage_ledger_entries")
+}
+
+model TenantChatInvocationOutbox {
+  eventId          String    @id @map("event_id") @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  aggregateId      String    @map("aggregate_id")
+  eventType        String    @map("event_type")
+  eventVersion     BigInt    @map("event_version")
+  payload          Json
+  occurredAt       DateTime  @map("occurred_at") @db.Timestamptz(6)
+  availableAt      DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  publishedAt      DateTime? @map("published_at") @db.Timestamptz(6)
+  deliveryAttempts Int       @default(0) @map("delivery_attempts")
+  lastErrorCode    String?   @map("last_error_code")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([aggregateId, eventType, eventVersion], map: "tenant_chat_outbox_idempotency_key")
+  @@index([publishedAt, availableAt, createdAt], map: "tenant_chat_outbox_delivery_idx")
+  @@index([tenantId, createdAt(sort: Desc)], map: "tenant_chat_outbox_tenant_created_idx")
+  @@map("tenant_chat_invocation_outbox")
+}
+
+model TenantChatInvocationLog {
+  requestId             String   @id @map("request_id")
+  tenantId              String   @map("tenant_id") @db.Uuid
+  userId                String   @map("user_id") @db.Uuid
+  employeeId            String?  @map("employee_id") @db.Uuid
+  actorKind             String   @map("actor_kind")
+  turnId                String   @map("turn_id")
+  surface               String   @default("tenant_chat")
+  executionScopeKind    String   @default("tenant_chat") @map("execution_scope_kind")
+  snapshotVersion       BigInt   @map("snapshot_version")
+  snapshotDigest        String   @map("snapshot_digest")
+  pricingVersion        BigInt   @map("pricing_version")
+  terminalOutcome       String   @map("terminal_outcome")
+  effectiveProviderId   String?  @map("effective_provider_id")
+  effectiveModelKey     String?  @map("effective_model_key")
+  attemptCount          Int      @default(0) @map("attempt_count") @db.SmallInt
+  confirmedInputTokens  BigInt   @default(0) @map("confirmed_input_tokens")
+  confirmedOutputTokens BigInt   @default(0) @map("confirmed_output_tokens")
+  confirmedTotalTokens  BigInt   @default(0) @map("confirmed_total_tokens")
+  confirmedCostMicroUsd BigInt   @default(0) @map("confirmed_cost_micro_usd")
+  quotaState            String   @map("quota_state")
+  budgetState           String   @map("budget_state")
+  cacheOutcome          String   @map("cache_outcome")
+  latencyMs             BigInt   @map("latency_ms")
+  startedAt             DateTime @map("started_at") @db.Timestamptz(6)
+  completedAt           DateTime @map("completed_at") @db.Timestamptz(6)
+  projectedEventVersion BigInt   @map("projected_event_version")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_completed_idx")
+  @@index([tenantId, userId, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_user_completed_idx")
+  @@index([tenantId, terminalOutcome, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_outcome_completed_idx")
+  @@index([userId, completedAt(sort: Desc)], map: "tenant_chat_log_user_idx")
+  @@map("tenant_chat_invocation_logs")
 }
 
 model Conversation {
