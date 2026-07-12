@@ -281,8 +281,6 @@ CREATE TABLE tenant_chat_usage_reservations (
   CONSTRAINT tenant_chat_reservation_request_key UNIQUE (request_id),
   CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id),
   CONSTRAINT tenant_chat_reservation_idempotency_key UNIQUE (tenant_id, user_id, idempotency_key),
-  -- The referenced user-period row already has direct tenant/user FKs;
-  -- duplicate direct FKs on this reservation are intentionally omitted.
   CONSTRAINT tenant_chat_reservation_user_period_fkey
     FOREIGN KEY (tenant_id, user_id, user_period_start)
     REFERENCES tenant_chat_user_token_periods (tenant_id, user_id, period_start) ON DELETE RESTRICT,
