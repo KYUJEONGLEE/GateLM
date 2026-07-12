@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
@@ -12,6 +13,40 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 )
+
+func TestParsePostgresPoolConfigAppliesBoundsAndIdentity(t *testing.T) {
+	tuning := config.PostgresPoolConfig{
+		MaxConns:          16,
+		MinConns:          2,
+		MaxConnLifetime:   30 * time.Minute,
+		MaxConnIdleTime:   5 * time.Minute,
+		HealthCheckPeriod: time.Minute,
+	}
+	poolConfig, err := parsePostgresPoolConfig(
+		"postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public",
+		tuning,
+		"gatelm-gateway-log",
+	)
+	if err != nil {
+		t.Fatalf("parse pool config: %v", err)
+	}
+
+	if poolConfig.MaxConns != 16 || poolConfig.MinConns != 2 {
+		t.Fatalf("unexpected connection bounds: max=%d min=%d", poolConfig.MaxConns, poolConfig.MinConns)
+	}
+	if poolConfig.MaxConnLifetime != 30*time.Minute || poolConfig.MaxConnLifetimeJitter != 3*time.Minute {
+		t.Fatalf("unexpected connection lifetime: lifetime=%s jitter=%s", poolConfig.MaxConnLifetime, poolConfig.MaxConnLifetimeJitter)
+	}
+	if poolConfig.MaxConnIdleTime != 5*time.Minute || poolConfig.HealthCheckPeriod != time.Minute {
+		t.Fatalf("unexpected idle health config: idle=%s health=%s", poolConfig.MaxConnIdleTime, poolConfig.HealthCheckPeriod)
+	}
+	if poolConfig.ConnConfig.RuntimeParams["application_name"] != "gatelm-gateway-log" {
+		t.Fatalf("unexpected application name: %q", poolConfig.ConnConfig.RuntimeParams["application_name"])
+	}
+	if strings.Contains(poolConfig.ConnString(), "schema=") {
+		t.Fatal("Prisma-only schema query parameter must not reach pgx")
+	}
+}
 
 func TestIsStrictRuntimeSnapshotMode(t *testing.T) {
 	tests := []struct {

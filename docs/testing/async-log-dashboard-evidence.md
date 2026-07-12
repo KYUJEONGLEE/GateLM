@@ -91,7 +91,7 @@ Not yet covered as first-class metrics:
 
 | Future metric | Current status |
 |---|---|
-| Async log retry count | needs retry logic before metric can be meaningful |
+| Async log retry count | batch failures fall back to single writes; no dedicated retry counter yet |
 | Async log DLQ count | needs dead-letter queue design first |
 | Oldest queued log age | needs queue item enqueue timestamp tracking |
 | Dedicated Provider bypass count | currently approximated from Gateway vs Provider request samples and dashboard cache/safety/rate-limit outcomes |
@@ -122,3 +122,40 @@ For performance tuning, compare queue depth, dropped count, enqueue latency,
 persist latency, and dashboard freshness while changing worker count, batch
 size, and flush interval one variable at a time. A larger queue only absorbs a
 burst; it does not increase steady-state database throughput.
+
+## Database Pool Isolation And Read Caches
+
+Gateway creates separate primary and Request Log PostgreSQL pools. The log
+pool is used by terminal and authentication-failure writers; authentication,
+budget, pricing, credentials, rate-limit fallback, and dashboard reads use the
+primary pool. Both connections set distinct PostgreSQL `application_name`
+values so operators can inspect them without high-cardinality labels.
+
+```text
+GATEWAY_DATABASE_MAX_CONNS=16
+GATEWAY_DATABASE_MIN_CONNS=2
+GATEWAY_LOG_DATABASE_MAX_CONNS=4
+GATEWAY_LOG_DATABASE_MIN_CONNS=2
+```
+
+Size both pools against the database server connection budget. Increasing
+pool limits beyond the database's useful concurrency can increase latency.
+
+Database auth and pricing caches are disabled by default and explicitly
+enabled in the isolated performance Compose profile:
+
+```text
+GATEWAY_AUTH_CACHE_ENABLED=false
+GATEWAY_AUTH_CACHE_TTL_MS=1000
+GATEWAY_AUTH_CACHE_MAX_ENTRIES=4096
+GATEWAY_PRICING_CACHE_ENABLED=false
+GATEWAY_PRICING_CACHE_TTL_MS=5000
+GATEWAY_PRICING_CACHE_MAX_ENTRIES=1024
+```
+
+The auth cache stores successful identities only, uses a bounded LRU, and keys
+entries with HMAC-SHA256; plaintext credentials and invalid credential results
+are never cached. Enabling it creates a revocation visibility window of at
+most the configured TTL, so production enablement requires that tradeoff to
+match the credential revocation SLA. The pricing cache rechecks each rule's
+effective interval and never caches lookup failures.

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +35,29 @@ var asyncLogEnvKeys = []string{
 	"GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS",
 	"GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS",
 	"GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS",
+}
+
+var databasePerformanceEnvKeys = []string{
+	"DATABASE_URL",
+	"GATEWAY_LOG_DATABASE_URL",
+	"GATEWAY_DATABASE_MAX_CONNS",
+	"GATEWAY_DATABASE_MIN_CONNS",
+	"GATEWAY_DATABASE_MAX_CONN_LIFETIME_MS",
+	"GATEWAY_DATABASE_MAX_CONN_IDLE_TIME_MS",
+	"GATEWAY_DATABASE_HEALTH_CHECK_PERIOD_MS",
+	"GATEWAY_LOG_DATABASE_MAX_CONNS",
+	"GATEWAY_LOG_DATABASE_MIN_CONNS",
+	"GATEWAY_LOG_DATABASE_MAX_CONN_LIFETIME_MS",
+	"GATEWAY_LOG_DATABASE_MAX_CONN_IDLE_TIME_MS",
+	"GATEWAY_LOG_DATABASE_HEALTH_CHECK_PERIOD_MS",
+	"GATEWAY_AUTH_CACHE_ENABLED",
+	"GATEWAY_AUTH_CACHE_TTL_MS",
+	"GATEWAY_AUTH_CACHE_MAX_ENTRIES",
+	"GATEWAY_AUTH_CACHE_KEY_SECRET",
+	"GATEWAY_PRICING_CACHE_ENABLED",
+	"GATEWAY_PRICING_CACHE_TTL_MS",
+	"GATEWAY_PRICING_CACHE_MAX_ENTRIES",
+	"GATEWAY_EXACT_CACHE_KEY_SECRET",
 }
 
 var rawResponseCaptureEnvKeys = []string{
@@ -75,6 +99,13 @@ func resetProviderCatalogCacheEnv(t *testing.T) {
 func resetAsyncLogEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range asyncLogEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetDatabasePerformanceEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range databasePerformanceEnvKeys {
 		t.Setenv(key, "")
 	}
 }
@@ -266,6 +297,80 @@ func TestAsyncLogBatchConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if cfg.AsyncLogBatchSize != 250 || cfg.AsyncLogBatchFlushInterval != 25*time.Millisecond {
 		t.Fatalf("unexpected async log batch config: size=%d flush=%s", cfg.AsyncLogBatchSize, cfg.AsyncLogBatchFlushInterval)
+	}
+}
+
+func TestDatabasePerformanceConfigDefaults(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.DatabasePool.MaxConns != 16 || cfg.DatabasePool.MinConns != 2 {
+		t.Fatalf("unexpected primary pool defaults: %+v", cfg.DatabasePool)
+	}
+	if cfg.LogDatabaseURL != cfg.DatabaseURL {
+		t.Fatal("log database should default to the primary database URL")
+	}
+	if cfg.LogDatabasePool.MaxConns != 4 || cfg.LogDatabasePool.MinConns != 2 {
+		t.Fatalf("unexpected log pool defaults: %+v", cfg.LogDatabasePool)
+	}
+	if cfg.AuthCache.Enabled || cfg.PricingCache.Enabled {
+		t.Fatal("DB read caches must require an explicit opt-in")
+	}
+	if cfg.AuthCache.TTL != time.Second || cfg.PricingCache.TTL != 5*time.Second {
+		t.Fatalf("unexpected cache TTL defaults: auth=%s pricing=%s", cfg.AuthCache.TTL, cfg.PricingCache.TTL)
+	}
+}
+
+func TestDatabasePerformanceConfigLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+	t.Setenv("DATABASE_URL", "postgresql://primary.example/gatelm?schema=public")
+	t.Setenv("GATEWAY_LOG_DATABASE_URL", "postgresql://logs.example/gatelm?schema=public")
+	t.Setenv("GATEWAY_DATABASE_MAX_CONNS", "24")
+	t.Setenv("GATEWAY_DATABASE_MIN_CONNS", "4")
+	t.Setenv("GATEWAY_LOG_DATABASE_MAX_CONNS", "8")
+	t.Setenv("GATEWAY_LOG_DATABASE_MIN_CONNS", "3")
+	t.Setenv("GATEWAY_AUTH_CACHE_ENABLED", "true")
+	t.Setenv("GATEWAY_AUTH_CACHE_TTL_MS", "1500")
+	t.Setenv("GATEWAY_AUTH_CACHE_MAX_ENTRIES", "2048")
+	t.Setenv("GATEWAY_AUTH_CACHE_KEY_SECRET", "auth-cache-test-key-material")
+	t.Setenv("GATEWAY_PRICING_CACHE_ENABLED", "true")
+	t.Setenv("GATEWAY_PRICING_CACHE_TTL_MS", "7500")
+	t.Setenv("GATEWAY_PRICING_CACHE_MAX_ENTRIES", "512")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.DatabasePool.MaxConns != 24 || cfg.DatabasePool.MinConns != 4 {
+		t.Fatalf("unexpected primary pool config: %+v", cfg.DatabasePool)
+	}
+	if cfg.LogDatabasePool.MaxConns != 8 || cfg.LogDatabasePool.MinConns != 3 {
+		t.Fatalf("unexpected log pool config: %+v", cfg.LogDatabasePool)
+	}
+	if !cfg.AuthCache.Enabled || cfg.AuthCache.TTL != 1500*time.Millisecond || cfg.AuthCache.MaxEntries != 2048 {
+		t.Fatalf("unexpected auth cache config: enabled=%t ttl=%s maxEntries=%d", cfg.AuthCache.Enabled, cfg.AuthCache.TTL, cfg.AuthCache.MaxEntries)
+	}
+	if !cfg.PricingCache.Enabled || cfg.PricingCache.TTL != 7500*time.Millisecond || cfg.PricingCache.MaxEntries != 512 {
+		t.Fatalf("unexpected pricing cache config: %+v", cfg.PricingCache)
+	}
+}
+
+func TestDatabasePerformanceConfigRejectsPoolMinAboveMax(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+	t.Setenv("GATEWAY_DATABASE_MAX_CONNS", "2")
+	t.Setenv("GATEWAY_DATABASE_MIN_CONNS", "3")
+
+	_, err := LoadWithError()
+	if err == nil || !strings.Contains(err.Error(), "database min connections") {
+		t.Fatalf("expected invalid primary pool error, got %v", err)
 	}
 }
 

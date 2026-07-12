@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -55,6 +56,9 @@ var defaultOpenAIExtraModelNames = []string{
 type Config struct {
 	Port                                   string
 	DatabaseURL                            string
+	DatabasePool                           PostgresPoolConfig
+	LogDatabaseURL                         string
+	LogDatabasePool                        PostgresPoolConfig
 	RedisURL                               string
 	ControlPlaneBaseURL                    string
 	ControlPlaneInternalToken              string
@@ -63,6 +67,8 @@ type Config struct {
 	RuntimeSnapshotCache                   RuntimeSnapshotCacheConfig
 	ProviderCatalogCache                   ProviderCatalogCacheConfig
 	AuthSource                             string
+	AuthCache                              AuthCacheConfig
+	PricingCache                           PricingCacheConfig
 	MockProviderBaseURL                    string
 	DefaultProvider                        string
 	DefaultModel                           string
@@ -149,6 +155,27 @@ type ProviderCatalogCacheConfig struct {
 	StaleTTL time.Duration
 }
 
+type PostgresPoolConfig struct {
+	MaxConns          int
+	MinConns          int
+	MaxConnLifetime   time.Duration
+	MaxConnIdleTime   time.Duration
+	HealthCheckPeriod time.Duration
+}
+
+type AuthCacheConfig struct {
+	Enabled    bool
+	TTL        time.Duration
+	MaxEntries int
+	KeySecret  string
+}
+
+type PricingCacheConfig struct {
+	Enabled    bool
+	TTL        time.Duration
+	MaxEntries int
+}
+
 type SemanticCacheConfig struct {
 	Enabled                 bool
 	Mode                    string
@@ -186,12 +213,29 @@ func Load() Config {
 
 func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
+	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
+	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
 	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
 	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
 	deploymentMode := normalizeDeploymentMode(envString("DEPLOYMENT_MODE", ""))
 	cfg := Config{
-		Port:                envString("GATEWAY_PORT", "8080"),
-		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
+		Port:        envString("GATEWAY_PORT", "8080"),
+		DatabaseURL: databaseURL,
+		DatabasePool: PostgresPoolConfig{
+			MaxConns:          envInt("GATEWAY_DATABASE_MAX_CONNS", 16),
+			MinConns:          envInt("GATEWAY_DATABASE_MIN_CONNS", 2),
+			MaxConnLifetime:   envDurationMillis("GATEWAY_DATABASE_MAX_CONN_LIFETIME_MS", 1800000),
+			MaxConnIdleTime:   envDurationMillis("GATEWAY_DATABASE_MAX_CONN_IDLE_TIME_MS", 300000),
+			HealthCheckPeriod: envDurationMillis("GATEWAY_DATABASE_HEALTH_CHECK_PERIOD_MS", 60000),
+		},
+		LogDatabaseURL: envString("GATEWAY_LOG_DATABASE_URL", databaseURL),
+		LogDatabasePool: PostgresPoolConfig{
+			MaxConns:          envInt("GATEWAY_LOG_DATABASE_MAX_CONNS", 4),
+			MinConns:          envInt("GATEWAY_LOG_DATABASE_MIN_CONNS", 2),
+			MaxConnLifetime:   envDurationMillis("GATEWAY_LOG_DATABASE_MAX_CONN_LIFETIME_MS", 1800000),
+			MaxConnIdleTime:   envDurationMillis("GATEWAY_LOG_DATABASE_MAX_CONN_IDLE_TIME_MS", 300000),
+			HealthCheckPeriod: envDurationMillis("GATEWAY_LOG_DATABASE_HEALTH_CHECK_PERIOD_MS", 60000),
+		},
 		RedisURL:            envString("REDIS_URL", "redis://localhost:6379"),
 		ControlPlaneBaseURL: envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
 		ControlPlaneInternalToken: strings.TrimSpace(
@@ -209,7 +253,18 @@ func LoadWithError() (Config, error) {
 			TTL:      envDurationMillis("GATEWAY_PROVIDER_CATALOG_CACHE_TTL_MS", 5000),
 			StaleTTL: envDurationMillis("GATEWAY_PROVIDER_CATALOG_CACHE_STALE_TTL_MS", 60000),
 		},
-		AuthSource:                             envString("GATEWAY_AUTH_SOURCE", "database"),
+		AuthSource: envString("GATEWAY_AUTH_SOURCE", "database"),
+		AuthCache: AuthCacheConfig{
+			Enabled:    envBool("GATEWAY_AUTH_CACHE_ENABLED", false),
+			TTL:        envDurationMillis("GATEWAY_AUTH_CACHE_TTL_MS", 1000),
+			MaxEntries: envInt("GATEWAY_AUTH_CACHE_MAX_ENTRIES", 4096),
+			KeySecret:  envString("GATEWAY_AUTH_CACHE_KEY_SECRET", exactCacheKeySecret),
+		},
+		PricingCache: PricingCacheConfig{
+			Enabled:    envBool("GATEWAY_PRICING_CACHE_ENABLED", false),
+			TTL:        envDurationMillis("GATEWAY_PRICING_CACHE_TTL_MS", 5000),
+			MaxEntries: envInt("GATEWAY_PRICING_CACHE_MAX_ENTRIES", 1024),
+		},
 		MockProviderBaseURL:                    envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:                        envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
 		DefaultModel:                           envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
@@ -251,7 +306,7 @@ func LoadWithError() (Config, error) {
 		ProviderTimeout:                        envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
 		MaxRequestBodyBytes:                    envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
 		ExactCacheTTL:                          envDurationSeconds("GATEWAY_EXACT_CACHE_TTL_SECONDS", 600),
-		ExactCacheKeySecret:                    envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only"),
+		ExactCacheKeySecret:                    exactCacheKeySecret,
 		RateLimitEnabled:                       envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:                    envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:                         envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
@@ -287,7 +342,29 @@ func LoadWithError() (Config, error) {
 	if err := validateRateLimitConfig(cfg); err != nil {
 		return cfg, err
 	}
+	if err := validatePostgresPoolConfig("database", cfg.DatabasePool); err != nil {
+		return cfg, err
+	}
+	if err := validatePostgresPoolConfig("log database", cfg.LogDatabasePool); err != nil {
+		return cfg, err
+	}
+	if cfg.AuthCache.Enabled && strings.TrimSpace(cfg.AuthCache.KeySecret) == "" {
+		return cfg, errors.New("auth cache requires GATEWAY_AUTH_CACHE_KEY_SECRET")
+	}
+	if cfg.AuthCache.MaxEntries <= 0 || cfg.PricingCache.MaxEntries <= 0 {
+		return cfg, errors.New("auth and pricing cache max entries must be positive")
+	}
 	return cfg, nil
+}
+
+func validatePostgresPoolConfig(name string, cfg PostgresPoolConfig) error {
+	if cfg.MaxConns <= 0 || cfg.MaxConns > 1000 {
+		return fmt.Errorf("%s max connections must be between 1 and 1000", name)
+	}
+	if cfg.MinConns < 0 || cfg.MinConns > cfg.MaxConns {
+		return fmt.Errorf("%s min connections must be between 0 and max connections", name)
+	}
+	return nil
 }
 
 func normalizeDeploymentMode(value string) string {
