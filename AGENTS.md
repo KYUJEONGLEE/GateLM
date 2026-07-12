@@ -31,6 +31,7 @@ GateLM의 현재 개발 상태는 하나의 확정된 SemVer로 선언되어 있
 
 현재 versioned 범위는 다음처럼 사용한다.
 
+- `docs/tenant-chat/`: 신규 Tenant Chat의 active scoped contract다. release SemVer와 독립되며 `docs/current` scope router가 연결한다.
 - `docs/v2.1.0/`: 최신 versioned 문서 범위다. Self-host delivery와 Advanced Routing offline evidence 작업에 한해 사용한다.
 - `docs/v2.0.0/`: 닫힌 historical workstream의 behavior baseline이다. 새 기능의 roadmap이나 착수 계획으로 사용하지 않는다.
 - `docs/v1.0.0/`: 더 오래된 compatibility/history 문서다.
@@ -71,6 +72,7 @@ feature / fix / docs branch
 ## 3. Contract Change Rules
 
 - 새 API route, DB column, Event field, Metrics label, Security-sensitive field는 근거 계약 없이 만들지 않는다.
+- Tenant Chat 관련 계약 민감 작업은 `docs/tenant-chat/README.md`와 `contracts.md`부터 읽는다.
 - current 계약이 없고 v2 baseline만 있는 영역은 baseline 호환성을 확인한 뒤 current 계약 제안부터 만든다.
 - 기능 PR에 계약 의미 변경을 몰래 섞지 않는다.
 - legacy field는 바로 삭제하지 말고 compatibility bridge 여부를 확인한다.

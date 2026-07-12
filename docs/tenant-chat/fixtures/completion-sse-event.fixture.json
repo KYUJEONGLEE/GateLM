@@ -1,0 +1,19 @@
+{
+  "type": "tenant_chat.final",
+  "schemaVersion": 1,
+  "requestId": "request_fixture_001",
+  "turnId": "turn_fixture_001",
+  "sequence": 5,
+  "terminalOutcome": "succeeded",
+  "effectiveModelKey": "model_standard_001",
+  "usage": {
+    "inputTokens": 640,
+    "outputTokens": 320,
+    "totalTokens": 960,
+    "usageQuality": "confirmed"
+  },
+  "quotaState": "normal",
+  "budgetState": "warning",
+  "cacheOutcome": "miss",
+  "replayed": false
+}

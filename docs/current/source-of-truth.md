@@ -4,7 +4,7 @@
 |---|---|
 | Status | Active |
 | Authority | 문서 상태, 읽기 순서, 계약 변경 절차 |
-| Last verified | 2026-07-11 |
+| Last verified | 2026-07-12 |
 
 ## 1. Authority Model
 
@@ -27,6 +27,19 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 ### Documentation governance
 
 이 문서와 [`README.md`](README.md)가 active 기준이다.
+
+### Tenant Chat Product
+
+신규 Tenant Chat bounded context는 다음 문서를 active scoped contract로 사용한다.
+
+- [`../tenant-chat/README.md`](../tenant-chat/README.md): 범위와 읽기 순서
+- [`../tenant-chat/contracts.md`](../tenant-chat/contracts.md): API/DB/Event/Metrics/Security 계약
+- `../tenant-chat/schemas/*.schema.json`: machine-readable integration schema
+- `../tenant-chat/fixtures/*.fixture.json`: 민감정보 없는 계약 fixture
+- [`../tenant-chat/implementation-plan.md`](../tenant-chat/implementation-plan.md): 구현 순서와 acceptance
+- [`../tenant-chat/handoffs/employee-usage-integration.md`](../tenant-chat/handoffs/employee-usage-integration.md): Control Plane/Employee Usage 통합 경계
+
+이 scope는 제품 release SemVer를 선언하지 않는다. 기존 Project/Application Chat과 public `/v1` 경로는 inherited compatibility로 보존하며, Tenant Chat 구현 전까지 current as-built 기능으로 간주하지 않는다.
 
 ### Self-host delivery
 
