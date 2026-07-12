@@ -1,11 +1,17 @@
 import Link from "next/link";
 import {
   Activity,
+  ArrowUpRight,
+  Ban,
   Coins,
   Database,
   Gauge,
+  Route,
+  ShieldAlert,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  TimerOff,
+  Zap
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import {
@@ -20,6 +26,7 @@ import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formattin
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { LiveAnalyticsPerformance } from "@/lib/gateway/live-analytics-performance";
+import type { LiveRequestRow, LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
 import type { Locale } from "@/lib/i18n/locale";
 
 type AnalyticsPanelProps = {
@@ -61,89 +68,148 @@ const stateText: Record<Locale, Record<AnalyticsReadModel["dataState"], string>>
 };
 
 export function AnalyticsImpactPanel({
-  costTrend,
+  liveRequests,
   locale,
-  model
-}: AnalyticsPanelProps & { costTrend: CostOverTimeSummary | undefined }) {
+  model,
+  tenantId
+}: AnalyticsPanelProps & {
+  liveRequests: LiveRequestsPayload | undefined;
+  tenantId: string;
+}) {
   const text = locale === "ko"
     ? {
-        avoided: "Provider 호출 방지",
+        briefing: "Gateway 운영 결과",
         decision: "Gateway 처리 경로",
         decisionSub: "요청이 Provider 호출 전 어디에서 처리되었는지 보여줍니다",
-        evidence: "정책 적용 후 모델 트래픽",
-        evidenceSub: "실제 라우팅된 모델별 요청 비중",
-        policyActions: "정책 동작",
-        policyActionsSub: "선택 기간에 Gateway가 수행한 정책 처리",
-        protected: "보호된 요청",
+        evidence: "최근 처리 근거",
+        evidenceEmpty: "선택한 범위에 최근 요청이 없습니다",
+        evidenceSub: "최근 요청에서 확인된 실제 Gateway 결과",
+        modelTraffic: "모델 라우팅 결과",
+        modelTrafficSub: "선택 기간에 실제로 선택된 모델별 요청량",
+        outcomes: "정책 결과",
+        outcomesSub: "Gateway가 요청마다 수행한 핵심 처리",
+        requests: "전체 요청",
         saved: "절감 비용",
-        savedMeta: "잠재 비용 대비",
-        spend: "실제 Provider 비용",
-        spendSub: "선택 기간의 실제 비용 흐름",
-        title: "정책 효과"
+        success: "최종 성공률",
+        title: "운영 결과"
       }
     : {
-        avoided: "Provider calls avoided",
+        briefing: "Gateway operating results",
         decision: "Gateway decision path",
         decisionSub: "Where requests were handled before a Provider call",
-        evidence: "Model traffic after policy",
-        evidenceSub: "Actual routed request share by model",
-        policyActions: "Policy actions",
-        policyActionsSub: "Gateway actions during the selected range",
-        protected: "Protected requests",
+        evidence: "Recent evidence",
+        evidenceEmpty: "No recent requests in the selected range",
+        evidenceSub: "Observed Gateway outcomes from recent requests",
+        modelTraffic: "Model routing result",
+        modelTrafficSub: "Requests by the models actually selected in this range",
+        outcomes: "Policy outcomes",
+        outcomesSub: "The key actions performed by the Gateway",
+        requests: "Total requests",
         saved: "Recorded savings",
-        savedMeta: "of addressable spend",
-        spend: "Actual Provider spend",
-        spendSub: "Observed Provider cost over the selected range",
-        title: "Policy impact"
+        success: "Final success rate",
+        title: "Operating results"
       };
-  const modelRows = model.impact.modelMix.slice(0, 4);
+  const routedRequests = valueById(model.impact.requestDisposition, "provider");
+  const outcomeMetrics = [
+    { detail: locale === "ko" ? "Provider 선택" : "Provider selected", icon: Route, id: "routed", label: "ROUTED", value: routedRequests },
+    { detail: locale === "ko" ? "호출 재사용" : "Response reused", icon: Zap, id: "cache_hit", label: "CACHE HIT", value: valueById(model.impact.outcomes, "cache_hit") },
+    { detail: locale === "ko" ? "민감정보 보호" : "Sensitive data protected", icon: ShieldCheck, id: "pii_masked", label: "PII MASKED", value: valueById(model.impact.outcomes, "pii_masked") },
+    { detail: locale === "ko" ? "호출 전 제한" : "Stopped before Provider", icon: TimerOff, id: "rate_limited", label: "RATE LIMITED", value: valueById(model.impact.outcomes, "rate_limited") },
+    { detail: locale === "ko" ? "대체 경로 복구" : "Recovered on alternate route", icon: ShieldAlert, id: "fallback", label: "FALLBACK", value: valueById(model.impact.outcomes, "fallback") },
+    { detail: locale === "ko" ? "정책으로 차단" : "Stopped by policy", icon: Ban, id: "blocked", label: "BLOCKED", value: valueById(model.impact.outcomes, "blocked") }
+  ];
+  const recentRows = liveRequests?.rows.slice(0, 4) ?? [];
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
-      <ExecutiveBand
-        accent="impact"
-        icon={Sparkles}
-        lead={{
-          label: text.saved,
-          meta: `${formatPercent(model.impact.spendAvoidanceRate)} ${text.savedMeta}`,
-          value: formatMicroUsd(model.impact.savedCostMicroUsd)
-        }}
-        metrics={[
-          {
-            label: text.avoided,
-            meta: formatPercent(model.impact.avoidedProviderCallRate),
-            value: formatInteger(model.impact.avoidedProviderCalls)
-          },
-          {
-            label: text.protected,
-            meta: formatPercent(model.impact.protectedRequestRate),
-            value: formatInteger(model.impact.protectedRequests)
-          }
-        ]}
-      />
+      <section className="analytics-v4-briefing-band">
+        <div className="analytics-v4-briefing-label">
+          <Sparkles aria-hidden="true" size={24} />
+          <span>{text.briefing}</span>
+        </div>
+        <div className="analytics-v4-headline-metrics">
+          <article>
+            <span>{text.requests}</span>
+            <strong>{formatInteger(model.totalRequests)}</strong>
+          </article>
+          <article>
+            <span>{text.saved}</span>
+            <strong>{formatMicroUsd(model.impact.savedCostMicroUsd)}</strong>
+          </article>
+          <article>
+            <span>{text.success}</span>
+            <strong>{formatPercent(model.reliability.successRate)}</strong>
+          </article>
+        </div>
+      </section>
 
-      <div className="analytics-v3-workspace">
+      <section className="analytics-v4-outcome-section">
+        <div className="analytics-v4-section-heading">
+          <h3>{text.outcomes}</h3>
+          <p>{text.outcomesSub}</p>
+        </div>
+        <div className="analytics-v4-outcome-grid">
+          {outcomeMetrics.map((outcome) => {
+            const Icon = outcome.icon;
+            return (
+              <article data-kind={outcome.id} key={outcome.id}>
+                <div>
+                  <Icon aria-hidden="true" size={24} />
+                  <strong>{outcome.label}</strong>
+                </div>
+                <span>{formatInteger(outcome.value)}</span>
+                <small>{outcome.detail}</small>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="analytics-v4-results-grid">
         <AnalysisSurface
-          className="analytics-v3-main-canvas"
-          metric={formatMicroUsd(model.cost.totalCostMicroUsd)}
-          subtitle={text.spendSub}
-          title={text.spend}
+          className="analytics-v4-model-result"
+          subtitle={text.modelTrafficSub}
+          title={text.modelTraffic}
         >
-          <ChartOrEmpty
-            hasData={Boolean(costTrend?.points.some((point) => point.spendUsd > 0))}
-            locale={locale}
-          >
-            <AnalyticsCostTrendChart ariaLabel={text.spend} points={costTrend?.points ?? []} />
+          <ChartOrEmpty hasData={hasRows(model.impact.modelMix)} locale={locale}>
+            <AnalyticsRankedBarChart
+              ariaLabel={text.modelTraffic}
+              presentation
+              rows={model.impact.modelMix}
+            />
           </ChartOrEmpty>
         </AnalysisSurface>
 
-        <AnalysisSurface
-          className="analytics-v3-driver-rail"
-          subtitle={text.policyActionsSub}
-          title={text.policyActions}
-        >
-          <RankedDriverList locale={locale} rows={model.impact.outcomes} />
-        </AnalysisSurface>
+        <section className="analytics-v4-live-evidence">
+          <div className="analytics-v4-section-heading">
+            <h3>{text.evidence}</h3>
+            <p>{text.evidenceSub}</p>
+          </div>
+          {recentRows.length ? (
+            <ol>
+              {recentRows.map((row) => {
+                const outcome = liveRequestOutcome(row);
+                return (
+                  <li key={row.requestId}>
+                    <Link href={`/tenants/${tenantId}/request-logs?requestId=${encodeURIComponent(row.requestId)}`}>
+                      <div>
+                        <time>{formatEvidenceTime(row.timestamp, locale)}</time>
+                        <strong data-kind={outcome.kind}>{outcome.label}</strong>
+                      </div>
+                      <p>
+                        <span>{row.model}</span>
+                        <em>{formatInteger(row.latencyMs)} ms</em>
+                      </p>
+                      <ArrowUpRight aria-hidden="true" size={22} />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <div className="analytics-v4-evidence-empty">{text.evidenceEmpty}</div>
+          )}
+        </section>
       </div>
 
       <DecisionPath
@@ -152,22 +218,6 @@ export function AnalyticsImpactPanel({
         subtitle={text.decisionSub}
         title={text.decision}
         total={model.totalRequests}
-      />
-
-      <EvidenceTable
-        columns={locale === "ko" ? ["모델", "요청", "트래픽 비중", "상태"] : ["Model", "Requests", "Traffic share", "State"]}
-        emptyLocale={locale}
-        rows={modelRows.map((row) => ({
-          cells: [
-            <strong key="model">{row.label}</strong>,
-            formatInteger(row.value),
-            formatPercent(safeRatio(row.value, model.totalRequests)),
-            <EvidenceState key="state" label={locale === "ko" ? "라우팅됨" : "Routed"} tone="success" />
-          ],
-          key: row.id
-        }))}
-        subtitle={text.evidenceSub}
-        title={text.evidence}
       />
     </PanelShell>
   );
@@ -709,34 +759,6 @@ function AnalysisSurface({
   );
 }
 
-function RankedDriverList({ locale, rows }: { locale: Locale; rows: AnalyticsValueRow[] }) {
-  const visibleRows = rows.filter((row) => row.value > 0).slice(0, 5);
-  const max = Math.max(...visibleRows.map((row) => row.value), 1);
-  const total = visibleRows.reduce((sum, row) => sum + row.value, 0);
-
-  if (!visibleRows.length) {
-    return <AnalyticsEmpty locale={locale} compact />;
-  }
-
-  return (
-    <ol className="analytics-v3-driver-list">
-      {visibleRows.map((row, index) => (
-        <li key={row.id}>
-          <span>{index + 1}</span>
-          <div>
-            <strong>{row.label}</strong>
-            <i style={{ "--analytics-share": `${Math.max(4, (row.value / max) * 100)}%` } as CSSProperties} />
-          </div>
-          <em>
-            {formatInteger(row.value)}
-            <small>{formatPercent(safeRatio(row.value, total))}</small>
-          </em>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 function DecisionPath({
   locale,
   rows,
@@ -938,4 +960,46 @@ function shortRequestId(value: string) {
 
 function safeRatio(numerator: number, denominator: number) {
   return denominator > 0 ? numerator / denominator : 0;
+}
+
+function valueById(rows: AnalyticsValueRow[], id: string) {
+  return rows.find((row) => row.id === id)?.value ?? 0;
+}
+
+function liveRequestOutcome(row: LiveRequestRow) {
+  if (row.status === "rate_limited" || row.statusCode === 429) {
+    return { kind: "rate_limited", label: "RATE LIMITED" };
+  }
+
+  if (row.status === "blocked" || row.safetyAction === "BLOCKED") {
+    return { kind: "blocked", label: "BLOCKED" };
+  }
+
+  if (row.fallbackUsed) {
+    return { kind: "fallback", label: "FALLBACK" };
+  }
+
+  if (row.safetyAction === "MASKED" || row.safetyAction === "REDACTED") {
+    return { kind: "pii_masked", label: "PII MASKED" };
+  }
+
+  if (row.cacheStatus === "HIT") {
+    return { kind: "cache_hit", label: "CACHE HIT" };
+  }
+
+  return { kind: "routed", label: "ROUTED" };
+}
+
+function formatEvidenceTime(value: string, locale: Locale) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(date);
 }

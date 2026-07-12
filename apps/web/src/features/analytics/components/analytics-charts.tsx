@@ -40,12 +40,14 @@ export function AnalyticsRankedBarChart({
   className = "analytics-v3-ranked-chart",
   kind = "count",
   maxRows = 5,
+  presentation = false,
   rows
 }: {
   ariaLabel: string;
   className?: string;
   kind?: AnalyticsValueKind;
   maxRows?: number;
+  presentation?: boolean;
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
@@ -53,12 +55,17 @@ export function AnalyticsRankedBarChart({
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 360,
-      grid: { bottom: 24, left: 132, right: 82, top: 12 },
+      grid: {
+        bottom: presentation ? 28 : 24,
+        left: presentation ? 178 : 132,
+        right: presentation ? 102 : 82,
+        top: 12
+      },
       tooltip: analyticsTooltip(tooltipUnit(kind), theme),
       xAxis: {
         axisLabel: {
           color: theme.axis,
-          fontSize: 13,
+          fontSize: presentation ? 17 : 13,
           fontWeight: 700,
           formatter: (value: number) => formatValue(value, kind, true)
         },
@@ -71,11 +78,11 @@ export function AnalyticsRankedBarChart({
       yAxis: {
         axisLabel: {
           color: theme.label,
-          fontSize: 14,
+          fontSize: presentation ? 19 : 14,
           fontWeight: 800,
           margin: 13,
           overflow: "truncate",
-          width: 112
+          width: presentation ? 154 : 112
         },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -85,7 +92,7 @@ export function AnalyticsRankedBarChart({
       },
       series: [
         {
-          barMaxWidth: 18,
+          barMaxWidth: presentation ? 26 : 18,
           data: visibleRows.map((row, index) => ({
             itemStyle: {
               borderRadius: [0, 3, 3, 0],
@@ -95,7 +102,7 @@ export function AnalyticsRankedBarChart({
           })),
           label: {
             color: theme.label,
-            fontSize: 14,
+            fontSize: presentation ? 20 : 14,
             fontWeight: 900,
             formatter: ({ value }: { value: number }) => formatValue(value, kind, false),
             position: "right",
@@ -105,7 +112,7 @@ export function AnalyticsRankedBarChart({
         }
       ]
     }),
-    [kind, theme, visibleRows]
+    [kind, presentation, theme, visibleRows]
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;

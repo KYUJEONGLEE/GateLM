@@ -26,6 +26,7 @@ import {
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
 import { getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -73,11 +74,11 @@ const pageText = {
     provider: "Provider",
     range: "Time range",
     rangeLabels: { "15m": "15 minutes", "1h": "1 hour", "1d": "24 hours", "1w": "7 days" },
-    subtitle: "Cost, policy, and operational performance",
+    subtitle: "Gateway outcomes, cost, and operational performance",
     tabs: {
       cache: "Cache",
       cost: "Cost",
-      impact: "Policy impact",
+      impact: "Outcomes",
       performance: "Performance",
       reliability: "Reliability",
       usage: "Usage"
@@ -95,11 +96,11 @@ const pageText = {
     provider: "Provider",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
-    subtitle: "비용, 정책, 운영 성능 분석",
+    subtitle: "Gateway 결과, 비용, 운영 성능 분석",
     tabs: {
       cache: "캐시",
       cost: "비용",
-      impact: "정책 효과",
+      impact: "운영 결과",
       performance: "성능",
       reliability: "안정성",
       usage: "사용량"
@@ -115,9 +116,10 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const filters = buildFilters(resolvedSearchParams);
   const needsPerformance =
     activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
-  const needsCostTrend = activeTab === "impact" || activeTab === "cost";
+  const needsCostTrend = activeTab === "cost";
+  const needsLiveEvidence = activeTab === "impact";
 
-  const [locale, projectsModel, overview, performance, costTrend] = await Promise.all([
+  const [locale, projectsModel, overview, performance, costTrend, liveRequests] = await Promise.all([
     getRequestLocale(),
     getProjectsModel(tenantId),
     getLiveDashboardOverview(tenantId, {
@@ -137,6 +139,12 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           projectId: filters.projectId || undefined,
           range: filters.range
         })
+      : Promise.resolve(undefined),
+    needsLiveEvidence
+      ? getLiveOverviewRequests(tenantId, {
+          projectId: filters.projectId || undefined,
+          range: filters.range
+        })
       : Promise.resolve(undefined)
   ]);
 
@@ -149,7 +157,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const showProviderModelFilters = activeTab === "performance";
 
   return (
-    <main className="console-content analytics-v3-page">
+    <main className="console-content analytics-v3-page analytics-v4-page">
       <header className="analytics-v3-command-header">
         <div className="analytics-v3-title-block">
           <h1>{text.title}</h1>
@@ -227,7 +235,12 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       </nav>
 
       {activeTab === "impact" ? (
-        <AnalyticsImpactPanel costTrend={costTrend} locale={locale} model={model} />
+        <AnalyticsImpactPanel
+          liveRequests={liveRequests}
+          locale={locale}
+          model={model}
+          tenantId={tenantId}
+        />
       ) : activeTab === "usage" ? (
         <AnalyticsUsagePanel locale={locale} model={model} performance={performance} />
       ) : activeTab === "cost" ? (
