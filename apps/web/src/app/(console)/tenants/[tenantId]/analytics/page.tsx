@@ -21,12 +21,14 @@ import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import {
+  getAnalyticsPerformanceRange,
   getLiveAnalyticsPerformance,
   type LiveAnalyticsPerformance,
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
 import { getLiveAnalyticsV5Evidence } from "@/lib/gateway/live-analytics-v5";
 import { getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -114,12 +116,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const resolvedSearchParams = await searchParams;
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const filters = buildFilters(resolvedSearchParams);
-  const needsPerformance =
-    activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
+  const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
+  const needsReliabilityEvidence = activeTab === "reliability";
+  const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
-  const [locale, projectsModel, overview, performance, costTrend, v5Evidence] = await Promise.all([
+  const [locale, projectsModel, overview, performance, costTrend, v5Evidence, reliabilityRecords] = await Promise.all([
     getRequestLocale(),
     getProjectsModel(tenantId),
     getLiveDashboardOverview(tenantId, {
@@ -144,6 +147,15 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       ? getLiveAnalyticsV5Evidence(tenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
+        })
+      : Promise.resolve(undefined),
+    needsReliabilityEvidence
+      ? getLiveGatewayRequestLogs({
+          from: reliabilityRange.from,
+          limit: 100,
+          projectId: filters.projectId || undefined,
+          tenantId,
+          to: reliabilityRange.to
         })
       : Promise.resolve(undefined)
   ]);
@@ -269,8 +281,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         <AnalyticsReliabilityPanel
           locale={locale}
           model={model}
-          performance={performance}
           projectNameById={projectNameById}
+          records={reliabilityRecords}
           range={filters.range}
           tenantId={tenantId}
         />

@@ -22,6 +22,7 @@ import {
   AnalyticsRequestVolumeChart
 } from "@/features/analytics/components/analytics-charts";
 import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
+import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
@@ -36,6 +37,13 @@ type AnalyticsPanelProps = {
 
 type PerformancePanelProps = AnalyticsPanelProps & {
   performance: LiveAnalyticsPerformance | undefined;
+  projectNameById: Map<string, string>;
+  range: string;
+  tenantId: string;
+};
+
+type ReliabilityPanelProps = AnalyticsPanelProps & {
+  records: InvocationLogRecord[] | undefined;
   projectNameById: Map<string, string>;
   range: string;
   tenantId: string;
@@ -504,42 +512,41 @@ export function AnalyticsPerformancePanel({
 export function AnalyticsReliabilityPanel({
   locale,
   model,
-  performance,
   projectNameById,
+  records,
   range,
   tenantId
-}: PerformancePanelProps) {
+}: ReliabilityPanelProps) {
   const text = locale === "ko"
     ? {
+        continuity: "서비스 연속성",
+        continuitySub: "직접 성공, Fallback 복구, 실패와 취소 경로",
         error: "시스템 오류율",
         fallback: "Fallback 복구",
-        latency: "응답 안정성",
-        latencySub: "시간대별 p50, p95, p99 변동",
+        incident: "최근 안정성 근거",
+        incidentSub: "Fallback 복구·실패·취소가 발생한 최근 요청",
         outcome: "최종 요청 상태",
         outcomeSub: "모든 요청의 terminal status 분포",
-        provider: "Provider 지연",
-        providerSub: "Provider별 p95 지연 시간",
-        slow: "안정성 조사 대상",
-        slowSub: "느리거나 실패 가능성이 높은 최근 요청",
         success: "성공률",
         title: "안정성",
         viewLogs: "전체 로그"
       }
     : {
+        continuity: "Service continuity",
+        continuitySub: "Direct success, fallback recovery, failure, and cancellation paths",
         error: "System error rate",
         fallback: "Fallback recoveries",
-        latency: "Response stability",
-        latencySub: "p50, p95, and p99 movement over time",
+        incident: "Recent reliability evidence",
+        incidentSub: "Recent requests with fallback recovery, failure, or cancellation",
         outcome: "Terminal outcomes",
         outcomeSub: "Terminal status distribution across all requests",
-        provider: "Provider latency",
-        providerSub: "p95 latency by Provider",
-        slow: "Reliability investigations",
-        slowSub: "Recent requests most likely to need investigation",
         success: "Success rate",
         title: "Reliability",
         viewLogs: "View all logs"
       };
+  const reliabilityRecords = (records ?? [])
+    .filter(isReliabilityEvidence)
+    .slice(0, 4);
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
@@ -554,43 +561,36 @@ export function AnalyticsReliabilityPanel({
       />
 
       <div className="analytics-v3-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.latencySub} title={text.latency}>
-          <ChartOrEmpty hasData={Boolean(performance?.latencyDistribution.some(hasLatencyPoint))} locale={locale}>
-            <AnalyticsLatencyTrendChart ariaLabel={text.latency} points={performance?.latencyDistribution ?? []} />
+        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.outcomeSub} title={text.outcome}>
+          <ChartOrEmpty hasData={hasRows(model.reliability.terminalOutcomes)} locale={locale}>
+            <AnalyticsCompositionChart ariaLabel={text.outcome} rows={model.reliability.terminalOutcomes} />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.providerSub} title={text.provider}>
-          <ChartOrEmpty hasData={hasRows(model.reliability.providerLatency)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.provider} kind="milliseconds" rows={model.reliability.providerLatency} />
+        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.continuitySub} title={text.continuity}>
+          <ChartOrEmpty hasData={hasRows(model.reliability.continuityPaths)} locale={locale} compact>
+            <AnalyticsRankedBarChart ariaLabel={text.continuity} rows={model.reliability.continuityPaths} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
 
-      <CompositionSection
-        locale={locale}
-        rows={model.reliability.terminalOutcomes}
-        subtitle={text.outcomeSub}
-        title={text.outcome}
-      />
-
       <EvidenceTable
         action={<Link href={`/tenants/${tenantId}/request-logs?range=${range}`}>{text.viewLogs}</Link>}
-        columns={locale === "ko" ? ["요청", "모델", "프로젝트", "지연", "상태"] : ["Request", "Model", "Project", "Latency", "State"]}
+        columns={locale === "ko" ? ["요청", "프로젝트", "모델", "연속성 결과", "상태"] : ["Request", "Project", "Model", "Continuity", "Status"]}
         emptyLocale={locale}
-        rows={(performance?.slowestRequests ?? []).slice(0, 4).map((row) => ({
+        rows={reliabilityRecords.map((row) => ({
           cells: [
             <Link href={`/tenants/${tenantId}/request-logs?requestId=${encodeURIComponent(row.requestId)}`} key="request">
               {shortRequestId(row.requestId)}
             </Link>,
-            formatModelDisplayName(row.model),
             projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
-            formatMs(row.latencyMs),
-            <StatusBadge code={row.statusCode} key="status" status={row.status} />
+            formatModelDisplayName(row.selectedModel ?? row.requestedModel ?? "-"),
+            <ReliabilityBadge key="continuity" record={row} />,
+            <StatusBadge code={row.httpStatus} key="status" status={row.terminalStatus ?? row.status} />
           ],
           key: row.requestId
         }))}
-        subtitle={text.slowSub}
-        title={text.slow}
+        subtitle={text.incidentSub}
+        title={text.incident}
       />
     </PanelShell>
   );
@@ -809,41 +809,6 @@ function DecisionPath({
   );
 }
 
-function CompositionSection({
-  locale,
-  rows,
-  subtitle,
-  title
-}: {
-  locale: Locale;
-  rows: AnalyticsValueRow[];
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <section className="analytics-v3-composition-section">
-      <div className="analytics-v3-section-heading">
-        <div>
-          <h3>{title}</h3>
-          <p>{subtitle}</p>
-        </div>
-      </div>
-      <ChartOrEmpty hasData={hasRows(rows)} locale={locale} compact>
-        <AnalyticsCompositionChart ariaLabel={title} rows={rows} />
-      </ChartOrEmpty>
-      <div className="analytics-v3-composition-legend">
-        {rows.filter((row) => row.value > 0).slice(0, 5).map((row) => (
-          <span data-kind={row.id} key={row.id}>
-            <i />
-            {row.label}
-            <strong>{formatInteger(row.value)}</strong>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function EvidenceTable({
   action,
   columns,
@@ -919,6 +884,28 @@ function EvidenceState({ label, tone }: { label: string; tone: "neutral" | "succ
 function StatusBadge({ code, status }: { code: number; status: string }) {
   const tone = code >= 500 || status === "failed" ? "error" : code >= 400 ? "warning" : "success";
   return <span className="analytics-v3-status" data-tone={tone}>{code || status}</span>;
+}
+
+function ReliabilityBadge({ record }: { record: InvocationLogRecord }) {
+  const fallbackOutcome = record.domainOutcomes?.fallback.outcome?.toLowerCase();
+  const status = record.terminalStatus ?? record.status;
+
+  if (fallbackOutcome === "success") {
+    return <span className="analytics-v3-status" data-tone="success">FALLBACK RECOVERED</span>;
+  }
+  if (fallbackOutcome === "failed") {
+    return <span className="analytics-v3-status" data-tone="error">FALLBACK FAILED</span>;
+  }
+  if (status === "cancelled") {
+    return <span className="analytics-v3-status" data-tone="warning">CANCELLED</span>;
+  }
+  return <span className="analytics-v3-status" data-tone="error">FAILED</span>;
+}
+
+function isReliabilityEvidence(record: InvocationLogRecord) {
+  const fallbackOutcome = record.domainOutcomes?.fallback.outcome?.toLowerCase();
+  const status = record.terminalStatus ?? record.status;
+  return status === "failed" || status === "cancelled" || fallbackOutcome === "success" || fallbackOutcome === "failed";
 }
 
 function hasRows(rows: AnalyticsValueRow[]) {

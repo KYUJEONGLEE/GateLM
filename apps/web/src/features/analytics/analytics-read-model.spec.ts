@@ -173,9 +173,13 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
     totalCostMicroUsd: 8000
   });
   expect(model.reliability).toMatchObject({
+    continuityPaths: [
+      { id: "direct_success", label: "DIRECT SUCCESS", value: 14 },
+      { id: "fallback_success", label: "FALLBACK RECOVERED", value: 1 },
+      { id: "failed", label: "FAILED", value: 1 },
+      { id: "cancelled", label: "CANCELLED", value: 0 }
+    ],
     fallbackSuccesses: 1,
-    gatewayP95LatencyMs: 90,
-    providerP95LatencyMs: 520,
     successRate: 0.75,
     systemErrorRate: 0.05
   });

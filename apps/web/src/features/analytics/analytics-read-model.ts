@@ -41,10 +41,8 @@ export type AnalyticsReadModel = {
     spendAvoidanceRate: number;
   };
   reliability: {
+    continuityPaths: AnalyticsValueRow[];
     fallbackSuccesses: number;
-    gatewayP95LatencyMs: number;
-    providerLatency: AnalyticsValueRow[];
-    providerP95LatencyMs: number;
     successRate: number;
     systemErrorRate: number;
     terminalOutcomes: AnalyticsValueRow[];
@@ -179,10 +177,17 @@ export function buildAnalyticsReadModel(
       spendAvoidanceRate: safeRatio(overview.savedCostMicroUsd, addressableSpend)
     },
     reliability: {
+      continuityPaths: [
+        {
+          id: "direct_success",
+          label: "DIRECT SUCCESS",
+          value: Math.max(0, overview.successfulRequests - fallbackSuccesses)
+        },
+        { id: "fallback_success", label: "FALLBACK RECOVERED", value: fallbackSuccesses },
+        { id: "failed", label: "FAILED", value: overview.failedRequests },
+        { id: "cancelled", label: "CANCELLED", value: overview.cancelledRequests ?? 0 }
+      ],
       fallbackSuccesses,
-      gatewayP95LatencyMs: overview.performance?.p95GatewayInternalLatencyMs ?? overview.p95LatencyMs,
-      providerLatency: aggregateProviderLatency(overview),
-      providerP95LatencyMs: overview.performance?.p95ProviderLatencyMs ?? 0,
       successRate: safeRatio(overview.successfulRequests, overview.totalRequests),
       systemErrorRate:
         overview.performance?.systemErrorRate ??
@@ -261,10 +266,8 @@ function emptyAnalyticsReadModel(): AnalyticsReadModel {
       spendAvoidanceRate: 0
     },
     reliability: {
+      continuityPaths: [],
       fallbackSuccesses: 0,
-      gatewayP95LatencyMs: 0,
-      providerLatency: [],
-      providerP95LatencyMs: 0,
       successRate: 0,
       systemErrorRate: 0,
       terminalOutcomes: []
@@ -301,22 +304,6 @@ function aggregateModelRows(
   });
 
   return [...totals.entries()]
-    .map(([label, value]) => ({ id: label, label, value }))
-    .sort((left, right) => right.value - left.value);
-}
-
-function aggregateProviderLatency(overview: DashboardOverview): AnalyticsValueRow[] {
-  const providerLatency = new Map<string, number>();
-
-  (overview.breakdowns?.byProviderModel ?? []).forEach((row) => {
-    providerLatency.set(
-      row.selectedProvider,
-      Math.max(providerLatency.get(row.selectedProvider) ?? 0, row.p95ProviderLatencyMs)
-    );
-  });
-
-  return [...providerLatency.entries()]
-    .filter(([, value]) => value > 0)
     .map(([label, value]) => ({ id: label, label, value }))
     .sort((left, right) => right.value - left.value);
 }
