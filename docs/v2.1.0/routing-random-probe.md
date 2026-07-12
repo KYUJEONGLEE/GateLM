@@ -1,5 +1,8 @@
 # GateLM Routing Random Probe
 
+> [!NOTE]
+> **문서 상태: Versioned evidence scenario.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 이 probe는 accuracy나 production readiness를 증명하지 않는다.
+
 ## 목적
 
 정답 라벨이 없는 한국어 synthetic 입력 1000개를 넣고, 현재 룰 기반 라우터가 어떤 category와 tier로 분류하는지 분포를 관찰한다.

@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Demo Scenario And Evidence
 
+> [!IMPORTANT]
+> **문서 상태: Historical demo evidence.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 시나리오는 v2.0.0 시점의 발표 동선이며 current UI/runbook으로 간주하지 않는다.
+
 이 문서는 v2.0.0 발표/시연에서 구현된 동작을 증명하기 위한 실행 순서다.
 데모는 기능 설명이 아니라, 같은 요청 흐름이 Gateway, Request Detail, Dashboard, Metrics에서 일관되게 보이는지 확인하는 데 집중한다.
 

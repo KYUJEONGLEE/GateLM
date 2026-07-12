@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Implementation Tasks
 
+> [!IMPORTANT]
+> **문서 상태: Historical task breakdown.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 task 목록은 current 작업 지시나 전체 완료 증거가 아니다.
+
 This document is the coding task plan for `docs/v2.0.0/implementation-plan.md`.
 
 `contracts.md`, schemas, and fixtures are still the contract source of truth. This file names likely modules and files to touch so each PR can start quickly.

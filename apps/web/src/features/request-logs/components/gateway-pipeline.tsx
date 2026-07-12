@@ -245,10 +245,6 @@ export function GatewayPipeline({
                 <strong data-emphasized={pipelineStage.emphasized || undefined}>
                   {stageTitles[locale][pipelineStage.id]}
                 </strong>
-                <PipelineStageDescription
-                  description={pipelineStage.description}
-                  stageId={pipelineStage.id}
-                />
               </li>
             );
           })}
@@ -278,29 +274,6 @@ export function GatewayPipeline({
         </div>
       ) : null}
     </section>
-  );
-}
-
-function PipelineStageDescription({
-  description,
-  stageId
-}: {
-  description: string;
-  stageId: GatewayPipelineStageId;
-}) {
-  if (stageId !== "provider" || !description.includes(" · ")) {
-    return <p>{description}</p>;
-  }
-
-  const [summary, ...identityParts] = description.split(" · ");
-
-  return (
-    <p className="gateway-pipeline-provider-description">
-      <span>{summary}</span>
-      <span className="gateway-pipeline-provider-identity">
-        {identityParts.join(" · ")}
-      </span>
-    </p>
   );
 }
 

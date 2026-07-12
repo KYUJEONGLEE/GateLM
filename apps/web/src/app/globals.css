@@ -4825,20 +4825,21 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 .project-sort-buttons {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 11px;
+  gap: 8px;
 }
 
 .project-sort-button {
-  min-height: 49px;
-  padding: 0 19px;
+  min-height: 44px;
+  padding: 0 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--foreground);
-  font-size: calc(calc(var(--font-size-sm) * 1.35) + var(--global-font-lift));
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-snug);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background 140ms ease,
     border-color 140ms ease,
@@ -4859,20 +4860,28 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 .project-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 1380px);
   gap: 22px;
 }
 
 .project-card {
   display: grid;
-  min-height: 292px;
-  gap: 26px;
-  padding: 28px;
+  min-width: 0;
+  min-height: 270px;
+  gap: 22px;
+  padding: 24px;
   background:
     linear-gradient(180deg, rgba(16, 163, 127, 0.035), transparent 42%),
     var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+  color: inherit;
   box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+
+.project-card:hover {
+  text-decoration: none;
 }
 
 .project-card[data-budget-state="alert"] {
@@ -4901,16 +4910,31 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 }
 
 .project-budget-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 28px;
   flex: 0 0 auto;
+  overflow: visible;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: calc(var(--font-size-md) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-snug);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .project-budget-badge[data-budget-state="operational"] {
   border-color: var(--success-border);
   background: var(--success-soft);
   color: var(--success-text);
+}
+
+.project-budget-badge[data-budget-state="draft"] {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
 }
 
 .project-budget-badge[data-budget-state="warning"] {
@@ -5003,7 +5027,7 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   border-radius: 0;
   box-shadow: none;
   color: var(--foreground);
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
+  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
   text-align: left;
@@ -5015,10 +5039,6 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   color: var(--foreground);
   text-decoration: underline;
   text-underline-offset: 4px;
-}
-
-.project-card-actions .project-list-action-link[data-action-kind="policy"] {
-  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
 }
 
 .project-card-actions .project-list-action-link svg {
@@ -5817,12 +5837,18 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 .management-line-content .project-detail-panel .project-detail-form {
   flex: 1 1 0;
   grid-template-columns:
-    minmax(0, 1fr)
-    minmax(0, 1.4fr)
-    minmax(0, 0.75fr)
-    minmax(0, 0.75fr);
+    minmax(0, 0.8fr)
+    minmax(0, 1.2fr)
+    minmax(280px, 1.25fr);
   width: auto;
   max-width: none;
+}
+
+.project-detail-content .project-general-name-field > span,
+.project-detail-content .project-general-description-field > span,
+.project-detail-content .project-general-budget-field > span,
+.project-detail-content .project-general-status-field > span {
+  white-space: nowrap;
 }
 
 .management-line-content .project-detail-panel .project-delete-section {
@@ -13317,9 +13343,19 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     width: 100%;
   }
 
+  .project-sort-control {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
   .project-sort-buttons {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-sort-control .project-create-button {
+    width: 100%;
+    margin-left: 0;
   }
 
   .project-card-grid {
@@ -16948,8 +16984,41 @@ html:has(.tenant-management-content) {
 }
 
 .tenant-routing-model-heading {
-  display: grid;
-  gap: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.tenant-routing-model-heading-copy {
+  min-width: 0;
+}
+
+.tenant-routing-recommend-button {
+  display: inline-flex;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 18%, transparent);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.tenant-routing-recommend-button:hover:not(:disabled) {
+  background: var(--brand-blue-strong);
+  border-color: var(--brand-blue-strong);
+}
+
+.tenant-routing-recommend-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .tenant-routing-table {
@@ -17018,6 +17087,35 @@ html:has(.tenant-management-content) {
 .tenant-routing-route {
   display: flex;
   align-items: center;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.tenant-routing-route[data-recommendation-highlighted="true"] {
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent);
+  animation: tenant-routing-recommendation-highlight 1600ms ease-out both;
+}
+
+.tenant-routing-route[data-recommendation-highlighted="true"]
+  :is(.tenant-routing-provider-control, .tenant-routing-model-control) {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
+@keyframes tenant-routing-recommendation-highlight {
+  0%,
+  38% {
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
 }
 
 .tenant-routing-model-selectors {
@@ -17135,16 +17233,53 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 .tenant-routing-save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--primary);
   color: var(--primary-foreground);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 18%, transparent);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .tenant-routing-save-button:hover:not(:disabled) {
   background: var(--brand-blue-strong);
 }
 
+.tenant-routing-save-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+
+.tenant-routing-save-button[data-save-confirmed="true"] {
+  background: var(--brand-blue-strong);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent),
+    0 10px 22px color-mix(in srgb, var(--primary) 22%, transparent);
+  animation: tenant-routing-save-confirmation 520ms ease-out;
+}
+
+@keyframes tenant-routing-save-confirmation {
+  0% {
+    transform: scale(0.97);
+  }
+
+  55% {
+    transform: scale(1.035);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 .tenant-routing-reset-button:focus-visible,
+.tenant-routing-recommend-button:focus-visible,
 .tenant-routing-save-button:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--ring) 22%, transparent);
   outline-offset: 2px;
@@ -17244,6 +17379,15 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
     display: none;
   }
 
+  .tenant-routing-model-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tenant-routing-recommend-button {
+    width: fit-content;
+  }
+
   .tenant-routing-table-row {
     grid-template-columns: minmax(0, 1fr);
     padding: 16px;
@@ -17301,6 +17445,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .tenant-routing-recommend-button {
+    width: 100%;
+  }
+
   .tenant-routing-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -17308,6 +17456,15 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 
   .tenant-routing-actions button {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tenant-routing-route,
+  .tenant-routing-route[data-recommendation-highlighted="true"],
+  .tenant-routing-save-button[data-save-confirmed="true"] {
+    animation: none;
+    transition: none;
   }
 }
 

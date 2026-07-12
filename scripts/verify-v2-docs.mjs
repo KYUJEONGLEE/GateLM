@@ -16,18 +16,46 @@ const requiredTopLevelSchemaFields = [
   "additionalProperties",
 ];
 
-const sourceOfTruthDocs = [
+const activeEntryDocs = [
+  "docs/current/README.md",
+  "docs/current/source-of-truth.md",
+];
+
+const currentSnapshotDocs = [
+  "docs/current/implementation-status.md",
+  "docs/current/documentation-gaps.md",
+];
+
+const versionStatusDocs = [
+  "docs/v2.0.0/README.md",
+  "docs/v2.1.0/README.md",
+];
+
+const baselineContractDocs = [
   "docs/v2.0.0/contracts.md",
   "docs/v2.0.0/schemas/*.schema.json",
   "docs/v2.0.0/fixtures/*.fixture.json",
-  "docs/v2.0.0/implementation-plan.md",
-  "docs/v2.0.0/implementation-tasks.md",
 ];
 
-const executionDocs = [
+const historicalV2Docs = [
+  "docs/v2.0.0/implementation-plan.md",
+  "docs/v2.0.0/implementation-tasks.md",
   "docs/v2.0.0/implementation-pr-packets.md",
   "docs/v2.0.0/acceptance-test-matrix.md",
   "docs/v2.0.0/db-migration-plan.md",
+];
+
+const versionedV21Docs = [
+  "docs/v2.1.0/contracts.md",
+  "docs/v2.1.0/implementation-plan.md",
+  "docs/v2.1.0/implementation-tasks.md",
+  "docs/v2.1.0/acceptance-test-matrix.md",
+  "docs/v2.1.0/production-images.md",
+  "docs/v2.1.0/category-evaluation-dataset-contract.md",
+  "docs/v2.1.0/schemas/category-evaluation-record.schema.json",
+  "docs/v2.1.0/routing-advanced-plan.md",
+  "docs/v2.1.0/routing-performance-test-scenario.md",
+  "docs/v2.1.0/routing-random-probe.md",
 ];
 
 const entryDocs = ["AGENTS.md", "README.md", "docs/README.md"];
@@ -124,18 +152,52 @@ function assertRuntimeBaseline() {
   }
 }
 
-function assertEntryDocs() {
+function assertDocumentationRouting() {
   for (const doc of entryDocs) {
     assertExists(doc);
-    for (const source of sourceOfTruthDocs) {
-      assertIncludes(doc, source);
+    for (const activeEntryDoc of activeEntryDocs) {
+      assertIncludes(doc, activeEntryDoc);
     }
   }
 
-  for (const doc of entryDocs) {
-    for (const executionDoc of executionDocs) {
-      assertIncludes(doc, executionDoc);
-    }
+  for (const currentDoc of currentSnapshotDocs) {
+    assertIncludes("docs/current/README.md", path.basename(currentDoc));
+  }
+
+  for (const versionStatusDoc of versionStatusDocs) {
+    const versionDir = path.basename(path.dirname(versionStatusDoc));
+    assertIncludes("docs/current/README.md", `${versionDir}/README.md`);
+    assertIncludes(versionStatusDoc, "../current/README.md");
+  }
+
+  for (const expectedText of [
+    "Historical baseline",
+    "contracts.md",
+    "schemas/*.schema.json",
+    "fixtures/*.fixture.json",
+    "implementation-plan.md",
+    "implementation-tasks.md",
+    "implementation-pr-packets.md",
+    "acceptance-test-matrix.md",
+    "db-migration-plan.md",
+  ]) {
+    assertIncludes("docs/v2.0.0/README.md", expectedText);
+  }
+
+  for (const expectedText of [
+    "Latest versioned scope reference",
+    "contracts.md",
+    "implementation-plan.md",
+    "implementation-tasks.md",
+    "acceptance-test-matrix.md",
+    "production-images.md",
+    "category-evaluation-dataset-contract.md",
+    "schemas/category-evaluation-record.schema.json",
+    "routing-advanced-plan.md",
+    "routing-performance-test-scenario.md",
+    "routing-random-probe.md",
+  ]) {
+    assertIncludes("docs/v2.1.0/README.md", expectedText);
   }
 }
 
@@ -441,14 +503,21 @@ function assertRuntimeSnapshotGuardrails() {
 }
 
 function main() {
-  for (const doc of [...sourceOfTruthDocs, ...executionDocs]) {
+  for (const doc of [
+    ...activeEntryDocs,
+    ...currentSnapshotDocs,
+    ...versionStatusDocs,
+    ...baselineContractDocs,
+    ...historicalV2Docs,
+    ...versionedV21Docs,
+  ]) {
     if (!doc.includes("*")) {
       assertExists(doc);
     }
   }
 
   assertRuntimeBaseline();
-  assertEntryDocs();
+  assertDocumentationRouting();
   assertCiGate();
   assertSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
@@ -457,14 +526,14 @@ function main() {
   }
 
   if (failures.length > 0) {
-    console.error("v2 document verification failed:");
+    console.error("GateLM documentation verification failed:");
     for (const failure of failures) {
       console.error(`- ${failure}`);
     }
     process.exit(1);
   }
 
-  console.log("v2 document verification passed.");
+  console.log("GateLM documentation verification passed.");
 }
 
 main();

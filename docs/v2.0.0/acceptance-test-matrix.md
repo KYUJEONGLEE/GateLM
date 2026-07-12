@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Acceptance Test Matrix
 
+> [!IMPORTANT]
+> **문서 상태: Historical acceptance criteria.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 문서는 v2.0.0 시점의 완료 조건이며 current acceptance나 실제 release completion을 증명하지 않는다.
+
 이 문서는 v2 구현 PR의 완료 조건을 테스트 가능한 문장으로 고정한다.
 
 공식 계약은 `docs/v2.0.0/contracts.md`가 우선이다. 이 문서는 테스트/리뷰 보조 문서이며 새 API, DB, Event, Metrics field를 확정하지 않는다.
