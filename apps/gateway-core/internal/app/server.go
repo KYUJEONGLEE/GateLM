@@ -13,9 +13,13 @@ type Server struct {
 }
 
 func NewServer(cfg config.Config, handler http.Handler) *Server {
+	return NewServerAtAddress(":"+cfg.Port, handler)
+}
+
+func NewServerAtAddress(address string, handler http.Handler) *Server {
 	return &Server{
 		httpServer: &http.Server{
-			Addr:              ":" + cfg.Port,
+			Addr:              address,
 			Handler:           handler,
 			ReadHeaderTimeout: 5 * time.Second,
 		},

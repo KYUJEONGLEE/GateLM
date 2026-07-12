@@ -124,6 +124,15 @@ type Config struct {
 	ResponseCaptureEnabled                 bool
 	ResponseCaptureMaxChars                int
 	SemanticCache                          SemanticCacheConfig
+	TenantChatPrivate                      TenantChatPrivateConfig
+}
+
+type TenantChatPrivateConfig struct {
+	Enabled             bool
+	ListenAddress       string
+	WorkloadJWKSFile    string
+	BindingHMACKeysFile string
+	WorkloadJTIPrefix   string
 }
 
 type AISafetySidecarConfig struct {
@@ -276,6 +285,13 @@ func LoadWithError() (Config, error) {
 		ResponseCaptureEnabled:    envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
 		ResponseCaptureMaxChars:   envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:             semanticCache,
+		TenantChatPrivate: TenantChatPrivateConfig{
+			Enabled:             envBool("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED", false),
+			ListenAddress:       strings.TrimSpace(envString("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS", ":8081")),
+			WorkloadJWKSFile:    strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JWKS_FILE", "")),
+			BindingHMACKeysFile: strings.TrimSpace(envString("TENANT_CHAT_BINDING_HMAC_KEYS_FILE", "")),
+			WorkloadJTIPrefix:   strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX", "tenant-chat:workload-jti:")),
+		},
 	}
 	if err != nil {
 		return cfg, err
@@ -283,7 +299,33 @@ func LoadWithError() (Config, error) {
 	if err := validateRateLimitConfig(cfg); err != nil {
 		return cfg, err
 	}
+	if err := validateTenantChatPrivateConfig(cfg); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
+}
+
+func validateTenantChatPrivateConfig(cfg Config) error {
+	private := cfg.TenantChatPrivate
+	if !private.Enabled {
+		return nil
+	}
+	if private.ListenAddress == "" {
+		return fmt.Errorf("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS is required when private Gateway is enabled")
+	}
+	if private.ListenAddress == ":"+cfg.Port || private.ListenAddress == "0.0.0.0:"+cfg.Port {
+		return fmt.Errorf("Tenant Chat private listener must not share GATEWAY_PORT")
+	}
+	if private.WorkloadJWKSFile == "" {
+		return fmt.Errorf("TENANT_CHAT_WORKLOAD_JWKS_FILE is required when private Gateway is enabled")
+	}
+	if private.BindingHMACKeysFile == "" {
+		return fmt.Errorf("TENANT_CHAT_BINDING_HMAC_KEYS_FILE is required when private Gateway is enabled")
+	}
+	if private.WorkloadJTIPrefix == "" {
+		return fmt.Errorf("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX is required when private Gateway is enabled")
+	}
+	return nil
 }
 
 func normalizeDeploymentMode(value string) string {
