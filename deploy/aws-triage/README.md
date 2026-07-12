@@ -6,9 +6,10 @@ It differs from `deploy/selfhost` on purpose:
 
 - app images are built from the current repo on the EC2 instance
 - no ECR, ECS, RDS, ElastiCache, ALB, Route53, or Secrets Manager is required
-- PostgreSQL, Redis, mock provider, AI service, Control Plane, Gateway, and Web run on one Docker network
+- PostgreSQL, Redis, mock provider, AI service, Control Plane, Gateway, Web Console, Chat API, and Chat Web run on one Docker network
 - PostgreSQL, Redis, mock provider, and AI service are not published to the EC2 host
-- the customer application runs on port 3002 so Web Console application/chat links do not fall back to localhost
+- GateLM Chat Web runs on port 3002; Chat API remains private on the Docker network at port 3003
+- the legacy `apps/application` image is not part of this production-like stack
 - the default provider mode is mock
 - the current Gateway chat path authenticates with the project Gateway API key; demo seed credentials are not used in AWS/prod-like environments
 
@@ -42,9 +43,13 @@ Replace:
 
 - `GATELM_PUBLIC_DOMAIN`
 - `GATELM_PUBLIC_BASE_URL`
-- `GATELM_APPLICATION_BASE_URL`
+- `GATELM_CHAT_WEB_ORIGIN`
 - `POSTGRES_PASSWORD`
 - `CONTROL_PLANE_INTERNAL_SERVICE_TOKEN`
+- `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`
+- `TENANT_CHAT_WEB_SERVICE_TOKEN`
+- `TENANT_CHAT_ACCESS_JWT_SECRET`
+- `TENANT_CHAT_INTENT_SECRET`
 - `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` (use the same value)
 - `GATELM_GATEWAY_API_KEY`
 - `GATEWAY_EXACT_CACHE_KEY_SECRET`
@@ -64,6 +69,10 @@ CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=false
 CONTROL_PLANE_AUTH_STATE_SECRET=<random-long-value>
 CONTROL_PLANE_INTERNAL_SERVICE_TOKEN=<random-long-value>
 GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN=<same-random-long-value>
+TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN=<separate-random-long-value>
+TENANT_CHAT_WEB_SERVICE_TOKEN=<separate-random-long-value>
+TENANT_CHAT_ACCESS_JWT_SECRET=<separate-random-long-value>
+TENANT_CHAT_INTENT_SECRET=<separate-random-long-value>
 SMTP_HOST=<smtp-host>
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -92,19 +101,7 @@ Do not change this key after storing provider credentials unless you also
 rotate or re-register those credentials. The value is a server-only encryption
 key, not a provider API key.
 
-To point the demo chat surface at a project created through the Web Console,
-keep the key values only in the EC2 `.env` file:
-
-```bash
-GATELM_CONTROL_PLANE_TENANT_ID=<tenant-uuid>
-GATELM_CONTROL_PLANE_PROJECT_ID=<project-uuid>
-GATELM_CONTROL_PLANE_APPLICATION_ID=<application-uuid>
-GATELM_GATEWAY_API_KEY=<project-gateway-api-key>
-GATELM_APPLICATION_CHAT_API_KEYS='{"<project-uuid>":"<project-gateway-api-key>"}'
-GATELM_APPLICATION_CHAT_PROFILES='[{"id":"support","label":"Customer Support","projectId":"<project-uuid>","apiKey":"<project-gateway-api-key>"}]'
-```
-
-Do not leave `GATELM_GATEWAY_API_KEY` blank in AWS/prod-like environments. The public Web/Application containers no longer fall back to the seeded demo key. Do not commit real project API keys or provider keys.
+Do not leave `GATELM_GATEWAY_API_KEY` blank in AWS/prod-like environments. The Web Console does not fall back to a seeded demo key. Do not commit real project API keys or provider keys. Tenant Chat conversation execution is not part of this auth-shell slice, so the composer remains disabled until the follow-up model connection work lands.
 
 Optional Google login for the main landing page uses the Web Console auth proxy and Control Plane OAuth handler. Configure these only after creating a Google Cloud OAuth client for the exact callback URL:
 
@@ -112,9 +109,10 @@ Optional Google login for the main landing page uses the Web Console auth proxy 
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=http://<ec2-public-ip>:3000/api/auth/google/callback
+TENANT_CHAT_GOOGLE_REDIRECT_URI=http://<ec2-public-ip>:3002/auth/google/callback
 ```
 
-For HTTPS, use `https://gatelm.co.kr/api/auth/google/callback` and set:
+For HTTPS, use `https://gatelm.co.kr/api/auth/google/callback` for the Console and `https://chat.gatelm.co.kr/auth/google/callback` for Chat, then set:
 
 ```bash
 CONTROL_PLANE_AUTH_COOKIE_SECURE=true
@@ -128,7 +126,8 @@ Recommended public exposure:
 
 - SSH `22`: your IP only
 - Web `3000`: your IP only until HTTPS is ready
-- Application `3002`: your IP only until HTTPS is ready
+- Chat Web `3002`: your IP only until HTTPS is ready
+- Chat API `3003`: Docker-network only; never publish it on the host or Security Group
 - Control Plane `3001`: localhost-bound by default; do not expose publicly
 - Gateway `8080`: localhost-bound by default; do not expose publicly
 
@@ -138,12 +137,12 @@ The default `.env.example` binds host ports like this:
 
 ```bash
 AWS_TRIAGE_WEB_BIND=0.0.0.0
-AWS_TRIAGE_APPLICATION_BIND=0.0.0.0
+AWS_TRIAGE_CHAT_WEB_BIND=0.0.0.0
 AWS_TRIAGE_CONTROL_PLANE_BIND=127.0.0.1
 AWS_TRIAGE_GATEWAY_BIND=127.0.0.1
 ```
 
-After HTTPS is working through Caddy, you can also set `AWS_TRIAGE_WEB_BIND=127.0.0.1` and `AWS_TRIAGE_APPLICATION_BIND=127.0.0.1`, then recreate Web and Application.
+After HTTPS is working through Caddy, set `AWS_TRIAGE_WEB_BIND=127.0.0.1` and `AWS_TRIAGE_CHAT_WEB_BIND=127.0.0.1`, then recreate Web and Chat Web.
 
 ## Build
 
@@ -206,13 +205,13 @@ The right side of each env-map entry is the environment variable name. Put the r
 Then publish a new RuntimeSnapshot from the Console or admin API and recreate the runtime services:
 
 ```bash
-docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core application web
+docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core web chat-api chat-web
 ```
 
 ## Start
 
 ```bash
-docker compose --env-file .env up -d ai-service control-plane-api gateway-core application web
+docker compose --env-file .env up -d ai-service control-plane-api gateway-core web chat-api chat-web
 docker compose --env-file .env ps
 ```
 
@@ -253,17 +252,18 @@ After HTTPS is active, update `.env`:
 ```bash
 GATELM_PUBLIC_DOMAIN=gatelm.co.kr
 GATELM_PUBLIC_BASE_URL=https://gatelm.co.kr
-GATELM_APPLICATION_BASE_URL=https://chat.gatelm.co.kr
+GATELM_CHAT_WEB_ORIGIN=https://chat.gatelm.co.kr
 GOOGLE_OAUTH_REDIRECT_URI=https://gatelm.co.kr/api/auth/google/callback
+TENANT_CHAT_GOOGLE_REDIRECT_URI=https://chat.gatelm.co.kr/auth/google/callback
 CONTROL_PLANE_AUTH_COOKIE_SECURE=true
 AWS_TRIAGE_WEB_BIND=127.0.0.1
-AWS_TRIAGE_APPLICATION_BIND=127.0.0.1
+AWS_TRIAGE_CHAT_WEB_BIND=127.0.0.1
 ```
 
-Then recreate Control Plane, Web, and Application:
+Then recreate Control Plane, Web Console, Chat API, and Chat Web:
 
 ```bash
-docker compose --env-file .env up -d --force-recreate control-plane-api web application
+docker compose --env-file .env up -d --force-recreate control-plane-api web chat-api chat-web
 ```
 
 ## After Pulling A New Main/Dev Build
@@ -279,14 +279,11 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
-docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core application web
+docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core web chat-api chat-web
 docker compose --env-file .env ps
 ```
 
-If chat returns `invalid_api_key`, check that the chat profile or
-`GATELM_GATEWAY_API_KEY` value matches the project Gateway API key stored in
-Control Plane, then recreate `web` and `application`. If Provider registration
-shows `Provider credential encryption backend is not configured`, set
+If Provider registration shows `Provider credential encryption backend is not configured`, set
 `GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY` and recreate `control-plane-api`
 before registering credentials. If Gateway returns a sanitized runtime config
 error, confirm the selected project/application is active and has a published
@@ -314,5 +311,7 @@ Stopping the EC2 instance stops compute charges, but the EBS volume still exists
 - changing provider credential env-map values requires restarting Gateway
 - demo seed is blocked in AWS/prod-like environments; use real tenant/project/application setup
 - Gateway success can come from mock fallback; inspect Gateway metadata when testing live providers
+- Chat authentication state is authoritative in PostgreSQL; Redis is not a session store
+- Chat API is private-only and must not be added to Caddy or a public Security Group rule
 - this path has no managed backup, centralized logs, or multi-instance availability
 - HTTPS/domain support is host-level triage configuration, not a production ALB/ACM deployment

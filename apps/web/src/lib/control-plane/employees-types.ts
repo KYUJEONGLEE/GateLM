@@ -49,7 +49,6 @@ export type EmployeeOrganizationCsvImportResult = EmployeeCsvImportResult & {
 export type EmployeeInvitationResult = {
   employee: EmployeeRecord;
   expiresAt: string;
-  signupUrl: string;
 };
 
 export type ProjectEmployeePolicy = {

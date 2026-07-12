@@ -825,14 +825,13 @@ function getEmployeeInvitationFromPayload(payload: unknown): EmployeeInvitationR
 
   const value = data as Record<string, unknown>;
   const employee = toEmployeeRecord(value.employee);
-  if (!employee || typeof value.expiresAt !== "string" || typeof value.signupUrl !== "string") {
+  if (!employee || typeof value.expiresAt !== "string") {
     return null;
   }
 
   return {
     employee,
-    expiresAt: value.expiresAt,
-    signupUrl: value.signupUrl
+    expiresAt: value.expiresAt
   };
 }
 
