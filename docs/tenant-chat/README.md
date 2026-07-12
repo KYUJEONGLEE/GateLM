@@ -96,3 +96,4 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Dashboard aggregate schema](./schemas/dashboard-aggregate.schema.json)
 - [Chat auth session schema](./schemas/chat-auth-session.schema.json)
 - [Chat entitlement schema](./schemas/chat-entitlement.schema.json)
+- [Auth shell first PR verification evidence](./evidence/auth-shell-first-pr.md)
