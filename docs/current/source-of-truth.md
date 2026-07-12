@@ -72,16 +72,6 @@ Gateway, RuntimeSnapshot, Provider, Request Log, Dashboard, API, DB, Event, Metr
 
 v2.0.0 implementation plan, tasks, PR packets는 historical plan/record다. 새 작업의 순서나 branch 이름을 지시하지 않는다.
 
-### Tenant Chat integration
-
-신규 Tenant Chat과 Control Plane/Employee Usage의 통합 경계는 PR #293의 `docs/tenant-chat/contracts.md`, `execution-contract.md`, OpenAPI, DDL, schema와 vector를 `tenant-chat/v1` active implementation contract로 사용한다. 구현 기준은 PR의 특정 중간 SHA가 아니라 `dev`에 병합되는 최종 head다.
-
-- 기존 Project/Application Chat 계약을 변경하지 않는다.
-- Tenant Chat은 Tenant-only execution scope와 `(tenantId,userId)` canonical actor를 사용한다.
-- 정확성 기준은 Tenant Chat period/reservation/ledger transaction이다.
-- Private Gateway wire, 8개 usage record, event payload, RuntimeSnapshot, digest와 key operation은 paired artifact를 그대로 소비한다.
-- PR #293이 `dev`에 병합되기 전까지 로컬 handoff 문서를 원본 계약으로 복제하지 않는다.
-
 ## 3. Conflict Handling
 
 문서끼리 또는 문서와 코드가 충돌하면 다음 절차를 따른다.

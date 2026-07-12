@@ -7,7 +7,7 @@
 | Provider | Tenant Chat product team |
 | Last reviewed | 2026-07-12 |
 
-이 문서는 Chat 팀의 최종 설계를 누락 없이 구현 계획으로 변환하기 위한 체크리스트다. Active 계약은 PR #293의 `docs/tenant-chat` 실행 계약 패키지이며 계약 ID는 `tenant-chat/v1`이다. OpenAPI, DDL, schema와 vector에 없는 값을 임의로 추측해 구현하지 않는다.
+이 문서는 Chat 팀의 최종 설계를 누락 없이 구현 계획으로 변환하기 위한 체크리스트다. Active 계약은 `docs/tenant-chat` 실행 계약 패키지이며 계약 ID는 `tenant-chat/v1`이다. OpenAPI, DDL, schema와 vector에 없는 값을 임의로 추측해 구현하지 않는다.
 
 ## Contract Intake Status
 

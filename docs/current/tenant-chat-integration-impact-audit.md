@@ -7,7 +7,7 @@
 | Scope | Existing GateLM collision points for a future Tenant Chat handoff |
 | Last reviewed | 2026-07-12 |
 
-이 문서는 Chat 팀의 최종 Tenant Chat 설계를 대신하지 않는다. Active 기준은 PR #293의 `docs/tenant-chat` 실행 계약 패키지(`tenant-chat/v1`)이며, 이 문서는 해당 계약을 현재 저장소에 적용할 때의 충돌 지점을 기록한다.
+이 문서는 Chat 팀의 최종 Tenant Chat 설계를 대신하지 않는다. Active 기준은 `docs/tenant-chat` 실행 계약 패키지(`tenant-chat/v1`)이며, 이 문서는 해당 계약을 현재 저장소에 적용할 때의 충돌 지점을 기록한다.
 
 ## 1. Executive Result
 
@@ -15,7 +15,7 @@
 
 Tenant Chat v1은 `executionScope.kind=tenant_chat`과 Tenant-only runtime identity를 사용한다. 기존 Project/Application 경로에 가짜 ID를 넣어 재사용하지 않으며 별도 private endpoint, ledger, invocation projection을 사용한다.
 
-제품 의미와 배포 순서는 확정됐고 endpoint request/response, DB DDL, event payload, binding digest, key operation과 RuntimeSnapshot schema는 PR #293에 추가됐다. PR1은 해당 artifact를 기준으로 additive runtime·usage 기반을 구현하며, PR이 `dev`에 병합되면 로컬 verifier의 직접 입력으로 사용한다.
+제품 의미와 배포 순서는 확정됐고 endpoint request/response, DB DDL, event payload, binding digest, key operation과 RuntimeSnapshot schema는 `docs/tenant-chat`에 있다. PR1은 해당 artifact를 기준으로 additive runtime·usage 기반을 구현하고 로컬 verifier의 직접 입력으로 사용한다.
 
 ### 1.1 Resolved by the active contract
 
