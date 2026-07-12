@@ -26,6 +26,16 @@ var providerCatalogCacheEnvKeys = []string{
 	"GATEWAY_PROVIDER_CATALOG_CACHE_STALE_TTL_MS",
 }
 
+var asyncLogEnvKeys = []string{
+	"GATEWAY_ASYNC_LOG_ENABLED",
+	"GATEWAY_ASYNC_LOG_QUEUE_SIZE",
+	"GATEWAY_ASYNC_LOG_WORKER_COUNT",
+	"GATEWAY_ASYNC_LOG_BATCH_SIZE",
+	"GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS",
+	"GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS",
+	"GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS",
+}
+
 var rawResponseCaptureEnvKeys = []string{
 	"DEPLOYMENT_MODE",
 	"RAW_RESPONSE_CAPTURE_ENABLED",
@@ -58,6 +68,13 @@ func resetRuntimeSnapshotCacheEnv(t *testing.T) {
 func resetProviderCatalogCacheEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range providerCatalogCacheEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetAsyncLogEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range asyncLogEnvKeys {
 		t.Setenv(key, "")
 	}
 }
@@ -202,6 +219,53 @@ func TestProviderCatalogCacheConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if cfg.ProviderCatalogCache.StaleTTL != 30*time.Second {
 		t.Fatalf("unexpected provider catalog stale TTL: %s", cfg.ProviderCatalogCache.StaleTTL)
+	}
+}
+
+func TestAsyncLogBatchConfigDefaults(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	resetAsyncLogEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.AsyncLogQueueSize != 1024 || cfg.AsyncLogWorkerCount != 2 {
+		t.Fatalf("unexpected async log queue defaults: size=%d workers=%d", cfg.AsyncLogQueueSize, cfg.AsyncLogWorkerCount)
+	}
+	if cfg.AsyncLogBatchSize != 100 {
+		t.Fatalf("unexpected async log batch size: %d", cfg.AsyncLogBatchSize)
+	}
+	if cfg.AsyncLogBatchFlushInterval != 10*time.Millisecond {
+		t.Fatalf("unexpected async log batch flush interval: %s", cfg.AsyncLogBatchFlushInterval)
+	}
+}
+
+func TestAsyncLogBatchConfigLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	resetAsyncLogEnv(t)
+	t.Setenv("GATEWAY_ASYNC_LOG_QUEUE_SIZE", "10000")
+	t.Setenv("GATEWAY_ASYNC_LOG_WORKER_COUNT", "4")
+	t.Setenv("GATEWAY_ASYNC_LOG_BATCH_SIZE", "250")
+	t.Setenv("GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS", "25")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.AsyncLogQueueSize != 10000 || cfg.AsyncLogWorkerCount != 4 {
+		t.Fatalf("unexpected async log queue config: size=%d workers=%d", cfg.AsyncLogQueueSize, cfg.AsyncLogWorkerCount)
+	}
+	if cfg.AsyncLogBatchSize != 250 || cfg.AsyncLogBatchFlushInterval != 25*time.Millisecond {
+		t.Fatalf("unexpected async log batch config: size=%d flush=%s", cfg.AsyncLogBatchSize, cfg.AsyncLogBatchFlushInterval)
 	}
 }
 

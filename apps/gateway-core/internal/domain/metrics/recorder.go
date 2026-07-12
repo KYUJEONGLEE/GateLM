@@ -160,8 +160,15 @@ func (r *Registry) AsyncLogDropped(operation string, status string) {
 }
 
 func (r *Registry) AsyncLogPersist(event AsyncLogEvent) {
+	r.AsyncLogPersistBatch(event, 1)
+}
+
+func (r *Registry) AsyncLogPersistBatch(event AsyncLogEvent, recordCount int) {
+	if recordCount <= 0 {
+		return
+	}
 	labels := asyncLogLabels(event.Operation, event.Status)
-	r.AddCounter(AsyncLogPersistTotal, labels, 1)
+	r.AddCounter(AsyncLogPersistTotal, labels, float64(recordCount))
 	r.ObserveHistogram(AsyncLogPersistDurationSeconds, labels, event.DurationSeconds)
 }
 func (r *Registry) StreamStarted(selectedProvider string, selectedModel string) {

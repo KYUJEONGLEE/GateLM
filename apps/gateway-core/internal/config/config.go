@@ -115,6 +115,8 @@ type Config struct {
 	AsyncLogEnabled                        bool
 	AsyncLogQueueSize                      int
 	AsyncLogWorkerCount                    int
+	AsyncLogBatchSize                      int
+	AsyncLogBatchFlushInterval             time.Duration
 	AsyncLogWriteTimeout                   time.Duration
 	AsyncLogShutdownTimeout                time.Duration
 	PromptCaptureEnabled                   bool
@@ -264,18 +266,20 @@ func LoadWithError() (Config, error) {
 			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
 			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
 		},
-		AsyncLogEnabled:           envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
-		AsyncLogQueueSize:         envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
-		AsyncLogWorkerCount:       envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
-		AsyncLogWriteTimeout:      envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
-		AsyncLogShutdownTimeout:   envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
-		PromptCaptureEnabled:      envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
-		PromptCaptureMaxChars:     envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
-		DeploymentMode:            deploymentMode,
-		RawResponseCaptureEnabled: rawResponseCaptureAllowed(deploymentMode),
-		ResponseCaptureEnabled:    envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
-		ResponseCaptureMaxChars:   envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
-		SemanticCache:             semanticCache,
+		AsyncLogEnabled:            envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
+		AsyncLogQueueSize:          envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
+		AsyncLogWorkerCount:        envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
+		AsyncLogBatchSize:          envInt("GATEWAY_ASYNC_LOG_BATCH_SIZE", 100),
+		AsyncLogBatchFlushInterval: envDurationMillis("GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS", 10),
+		AsyncLogWriteTimeout:       envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
+		AsyncLogShutdownTimeout:    envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
+		PromptCaptureEnabled:       envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
+		PromptCaptureMaxChars:      envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
+		DeploymentMode:             deploymentMode,
+		RawResponseCaptureEnabled:  rawResponseCaptureAllowed(deploymentMode),
+		ResponseCaptureEnabled:     envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
+		ResponseCaptureMaxChars:    envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
+		SemanticCache:              semanticCache,
 	}
 	if err != nil {
 		return cfg, err

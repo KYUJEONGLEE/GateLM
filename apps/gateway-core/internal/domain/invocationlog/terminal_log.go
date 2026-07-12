@@ -254,9 +254,17 @@ type TerminalLogWriter interface {
 	WriteTerminalLog(ctx context.Context, log TerminalLog) error
 }
 
+type TerminalLogBatchWriter interface {
+	WriteTerminalLogs(ctx context.Context, logs []TerminalLog) error
+}
+
 type NoopTerminalLogWriter struct{}
 
 func (NoopTerminalLogWriter) WriteTerminalLog(context.Context, TerminalLog) error {
+	return nil
+}
+
+func (NoopTerminalLogWriter) WriteTerminalLogs(context.Context, []TerminalLog) error {
 	return nil
 }
 

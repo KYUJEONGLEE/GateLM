@@ -105,8 +105,20 @@ The Gateway async terminal log writer is enabled by default:
 GATEWAY_ASYNC_LOG_ENABLED=true
 GATEWAY_ASYNC_LOG_QUEUE_SIZE=1024
 GATEWAY_ASYNC_LOG_WORKER_COUNT=2
+GATEWAY_ASYNC_LOG_BATCH_SIZE=100
+GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS=10
 GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS=2000
 GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS=5000
 ```
 
-For performance tuning, compare queue depth, dropped count, enqueue latency, persist latency, and dashboard freshness while changing `GATEWAY_ASYNC_LOG_WORKER_COUNT` to values such as `1`, `2`, `4`, and `8`.
+The PostgreSQL adapter sends each worker batch with one `pgx.Batch` round trip.
+If a batch write fails, the async writer retries each record individually; the
+Request Log insert and related upserts are idempotent by request/event keys.
+`gatelm_async_log_persist_total` counts records by final persistence outcome,
+while the persist duration histogram observes delegate write calls (single or
+batch).
+
+For performance tuning, compare queue depth, dropped count, enqueue latency,
+persist latency, and dashboard freshness while changing worker count, batch
+size, and flush interval one variable at a time. A larger queue only absorbs a
+burst; it does not increase steady-state database throughput.
