@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const target = new URL(pending);
     if (target.protocol !== 'https:' || target.hostname !== 'accounts.google.com') throw new Error('invalid');
     const response = NextResponse.redirect(target, 303);
-    clearShortCookie(response, COOKIE.oauthPending, '/api/auth/google');
+    clearShortCookie(response, COOKIE.oauthPending, '/api/tenant-chat/auth/google');
     return response;
   } catch {
     return NextResponse.redirect(new URL('/login?error=oauth', request.url), 303);

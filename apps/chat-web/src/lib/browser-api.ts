@@ -22,7 +22,7 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function startGoogle(): Promise<void> {
-  const result = await api<{ continueUrl: string }>('/api/auth/google/start', {
+  const result = await api<{ continueUrl: string }>('/api/tenant-chat/auth/google/start', {
     body: '{}', method: 'POST',
   });
   window.location.assign(result.continueUrl);

@@ -36,7 +36,7 @@ export function setIssuedCookies(response: NextResponse, issued: IssuedSession):
   });
   if (issued.refreshToken) {
     response.cookies.set(COOKIE.refresh, issued.refreshToken, {
-      httpOnly: true, maxAge: 30 * 24 * 60 * 60, path: '/api/auth', sameSite: 'strict', secure,
+      httpOnly: true, maxAge: 30 * 24 * 60 * 60, path: '/api/tenant-chat/auth', sameSite: 'strict', secure,
     });
   }
 }
@@ -44,7 +44,7 @@ export function setIssuedCookies(response: NextResponse, issued: IssuedSession):
 export function clearAuthCookies(response: NextResponse): void {
   const secure = serverEnv().production;
   response.cookies.set(COOKIE.access, '', { httpOnly: true, maxAge: 0, path: '/', sameSite: 'lax', secure });
-  response.cookies.set(COOKIE.refresh, '', { httpOnly: true, maxAge: 0, path: '/api/auth', sameSite: 'strict', secure });
+  response.cookies.set(COOKIE.refresh, '', { httpOnly: true, maxAge: 0, path: '/api/tenant-chat/auth', sameSite: 'strict', secure });
 }
 
 export function clearShortCookie(response: NextResponse, name: string, path = '/'): void {

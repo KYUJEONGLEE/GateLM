@@ -13,10 +13,10 @@ export function TenantPicker() {
   const [session, setSession] = useState<ChatSession | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  useEffect(() => { api<ChatSession>('/api/auth/session').then((value) => { if (value.state === 'authenticated') router.replace('/'); else setSession(value); }).catch(() => router.replace('/login')); }, [router]);
+  useEffect(() => { api<ChatSession>('/api/tenant-chat/auth/session').then((value) => { if (value.state === 'authenticated') router.replace('/'); else setSession(value); }).catch(() => router.replace('/login')); }, [router]);
   async function select(tenantId: string) {
     setBusy(tenantId); setError('');
-    try { await api<ChatSession>('/api/auth/tenant', { body: JSON.stringify({ tenantId }), method: 'POST' }); router.replace('/'); }
+    try { await api<ChatSession>('/api/tenant-chat/auth/tenant', { body: JSON.stringify({ tenantId }), method: 'POST' }); router.replace('/'); }
     catch (reason) { setError(reason instanceof Error ? reason.message : '조직을 선택하지 못했습니다.'); setBusy(''); }
   }
   return <Card className="auth-panel">

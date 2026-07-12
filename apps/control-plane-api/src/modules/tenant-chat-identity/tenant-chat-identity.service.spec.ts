@@ -20,6 +20,7 @@ function makeService(prisma: Record<string, any>, google: Record<string, jest.Mo
 describe('TenantChatIdentityService', () => {
   it('requires normal authentication instead of replacing an existing credential', async () => {
     const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
       $queryRaw: jest.fn().mockResolvedValue([]),
       employee: { findUnique: jest.fn().mockResolvedValue(invitation) },
       user: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([{ id: 'existing-user' }]) },
@@ -31,6 +32,7 @@ describe('TenantChatIdentityService', () => {
 
   it('rejects a Google subject already bound to an account with another email', async () => {
     const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
       $queryRaw: jest.fn().mockResolvedValue([]),
       oAuthAccount: { findUnique: jest.fn().mockResolvedValue({ user: { deletedAt: null, email: 'other@example.test', id: 'user-id', status: 'active' } }) },
     };
@@ -40,5 +42,20 @@ describe('TenantChatIdentityService', () => {
       getProfile: jest.fn().mockResolvedValue({ email: 'invitee@example.test', emailVerified: true, name: '사용자', providerSubject: 'google-subject' }),
     };
     await expect(makeService(prisma, google).completeGoogle({ code: 'one-time-code' })).rejects.toBeInstanceOf(HttpException);
+  });
+
+  it('replaces unexpected transaction failures with a bounded identity error', async () => {
+    const prisma = { $transaction: jest.fn().mockRejectedValue(new Error('database connection details')) };
+    const service = makeService(prisma) as unknown as {
+      identityTransaction: (work: () => Promise<never>) => Promise<never>;
+    };
+
+    await expect(service.identityTransaction(async () => Promise.reject(new Error('unused')))).rejects.toMatchObject({
+      response: {
+        code: 'CHAT_IDENTITY_UNAVAILABLE',
+        message: 'Tenant Chat identity mutation is temporarily unavailable.',
+      },
+      status: 503,
+    });
   });
 });

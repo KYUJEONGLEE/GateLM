@@ -12,8 +12,8 @@ import { api } from '@/lib/browser-api';
 export function ChatShell() {
   const router = useRouter(); const [session, setSession] = useState<ChatSession | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => { api<ChatSession>('/api/auth/session').then((value) => { if (value.state !== 'authenticated') router.replace('/tenants'); else setSession(value); }).catch(() => router.replace('/login')); }, [router]);
-  async function logout() { try { await api('/api/auth/logout', { body: '{}', method: 'POST' }); } finally { router.replace('/login'); router.refresh(); } }
+  useEffect(() => { api<ChatSession>('/api/tenant-chat/auth/session').then((value) => { if (value.state !== 'authenticated') router.replace('/tenants'); else setSession(value); }).catch(() => router.replace('/login')); }, [router]);
+  async function logout() { try { await api('/api/tenant-chat/auth/logout', { body: '{}', method: 'POST' }); } finally { router.replace('/login'); router.refresh(); } }
   if (!session?.selectedTenant) return <main className="empty-chat"><div className="info-box" role="status">GateLM Chat을 준비하는 중…</div></main>;
   const displayName = session.user.name || session.user.email.split('@')[0];
   return <main className="chat-shell">

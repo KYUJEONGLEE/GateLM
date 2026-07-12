@@ -17,7 +17,7 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
   }
   return {
     CHAT_API_PORT: port,
-    DATABASE_URL: required(env, 'DATABASE_URL'),
+    DATABASE_URL: boundedDatabaseUrl(env),
     TENANT_CHAT_ACCESS_JWT_SECRET: strong(env, 'TENANT_CHAT_ACCESS_JWT_SECRET'),
     TENANT_CHAT_CONTROL_PLANE_BASE_URL: httpOrigin(
       env,
@@ -30,6 +30,16 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
     TENANT_CHAT_INTENT_SECRET: strong(env, 'TENANT_CHAT_INTENT_SECRET'),
     TENANT_CHAT_WEB_SERVICE_TOKEN: strong(env, 'TENANT_CHAT_WEB_SERVICE_TOKEN'),
   };
+}
+
+function boundedDatabaseUrl(env: RawEnv): string {
+  const url = new URL(required(env, 'DATABASE_URL'));
+  if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+    throw new Error('DATABASE_URL must be a PostgreSQL URL.');
+  }
+  if (!url.searchParams.has('connection_limit')) url.searchParams.set('connection_limit', '12');
+  if (!url.searchParams.has('pool_timeout')) url.searchParams.set('pool_timeout', '5');
+  return url.toString();
 }
 
 function required(env: RawEnv, key: string): string {

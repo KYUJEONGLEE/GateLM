@@ -17,7 +17,7 @@ export function LoginForm() {
     event.preventDefault(); setBusy(true); setError('');
     const form = new FormData(event.currentTarget);
     try {
-      const session = await api<ChatSession>('/api/auth/login', {
+      const session = await api<ChatSession>('/api/tenant-chat/auth/login', {
         body: JSON.stringify({ email: form.get('email'), password: form.get('password') }), method: 'POST',
       });
       router.replace(session.state === 'authenticated' ? '/' : '/tenants');

@@ -63,11 +63,13 @@ export class TenantChatIdentityService {
 
   async acceptInvitationWithPassword(body: TenantChatInvitationPasswordDto) {
     const passwordHash = await hashPassword(body.password);
-    return this.prisma.$transaction(
+    return this.identityTransaction(
       async (tx) => {
+        const preview = await this.findInvitation(tx, body.token);
+        this.assertInvitationUsable(preview);
+        await this.lockEmail(tx, preview.email);
         const invitation = await this.lockInvitation(tx, body.token);
         this.assertInvitationUsable(invitation);
-        await this.lockEmail(tx, invitation.email);
         const users = await this.findUsersByEmail(tx, invitation.email);
         if (users.length > 0) {
           this.fail(
@@ -90,13 +92,15 @@ export class TenantChatIdentityService {
         await this.bindInvitation(tx, invitation, user.id);
         return this.identityResult(user.id, tx);
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
 
   async bindExistingInvitation(body: TenantChatInvitationBindDto) {
-    return this.prisma.$transaction(
+    return this.identityTransaction(
       async (tx) => {
+        const preview = await this.findInvitation(tx, body.token);
+        this.assertInvitationUsable(preview);
+        await this.lockEmail(tx, preview.email);
         const invitation = await this.lockInvitation(tx, body.token);
         this.assertInvitationUsable(invitation);
         const user = await tx.user.findUnique({ where: { id: body.userId } });
@@ -113,7 +117,6 @@ export class TenantChatIdentityService {
         await this.bindInvitation(tx, invitation, user.id);
         return this.identityResult(user.id, tx);
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
 
@@ -134,7 +137,7 @@ export class TenantChatIdentityService {
       this.fail(HttpStatus.UNAUTHORIZED, 'CHAT_AUTH_REQUIRED', 'Google email verification is required.');
     }
 
-    return this.prisma.$transaction(
+    return this.identityTransaction(
       async (tx) => {
         const email = normalizeEmail(profile.email);
         await this.lockEmail(tx, email);
@@ -216,7 +219,6 @@ export class TenantChatIdentityService {
         await tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
         return this.identityResult(user.id, tx);
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
 
@@ -382,7 +384,22 @@ export class TenantChatIdentityService {
   }
 
   private async lockEmail(tx: Transaction, email: string) {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${normalizeEmail(email)}, 0))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${normalizeEmail(email)}, 0))`;
+  }
+
+  private async identityTransaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
+    try {
+      return await this.prisma.$transaction(work, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.fail(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        'CHAT_IDENTITY_UNAVAILABLE',
+        'Tenant Chat identity mutation is temporarily unavailable.',
+      );
+    }
   }
 
   private fail(status: HttpStatus, code: string, message: string): never {

@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 function fail(request: Request) {
   const response = NextResponse.redirect(new URL('/login?error=oauth', request.url), 303);
   clearShortCookie(response, COOKIE.oauthState, '/auth/google');
-  clearShortCookie(response, COOKIE.oauthPending, '/api/auth/google');
+  clearShortCookie(response, COOKIE.oauthPending, '/api/tenant-chat/auth/google');
   clearShortCookie(response, COOKIE.invitation);
   return response;
 }
