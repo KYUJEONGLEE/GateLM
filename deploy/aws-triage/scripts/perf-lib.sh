@@ -107,6 +107,10 @@ perf_require_env_vars() {
 }
 
 perf_validate_env() {
+  # Existing .env.perf files predate the RuntimeSnapshot-specific setting.
+  export GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT="${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT:-100000}"
+  export GATEWAY_RATE_LIMIT_LIMIT="${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}"
+
   perf_require_env_vars \
     POSTGRES_USER \
     POSTGRES_PASSWORD \
@@ -156,6 +160,12 @@ perf_validate_env() {
     perf_fail "POSTGRES_DB must be gatelm_perf."
   [[ "${GATELM_DEMO_PROVIDER_MODE}" == "mock" ]] || \
     perf_fail "GATELM_DEMO_PROVIDER_MODE must be mock."
+  [[ "${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}" =~ ^[1-9][0-9]*$ ]] || \
+    perf_fail "GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT must be an integer from 1 to 100000."
+  (( ${#GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT} <= 6 )) || \
+    perf_fail "GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT cannot exceed 100000."
+  (( 10#${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT} <= 100000 )) || \
+    perf_fail "GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT cannot exceed 100000."
   [[ "${CONTROL_PLANE_INTERNAL_SERVICE_TOKEN}" == "${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN}" ]] || \
     perf_fail "Control Plane and Gateway internal tokens must match."
   [[ "${AWS_TRIAGE_GATEWAY_BIND}" == "127.0.0.1" ]] || \
@@ -252,6 +262,25 @@ perf_assert_isolated_postgres() {
   [[ "${volume_name}" == "${PERF_POSTGRES_VOLUME}" ]] || \
     perf_fail "Refusing to bootstrap unexpected PostgreSQL volume ${volume_name}."
   perf_log "Isolated PostgreSQL project and volume verified."
+}
+
+perf_assert_runtime_rate_limit() {
+  local actual_policy expected_policy
+  expected_policy="true|application|60|${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}"
+
+  if ! actual_policy="$(perf_compose exec -T postgres psql \
+    -U "${POSTGRES_USER}" \
+    -d "${POSTGRES_DB}" \
+    -tA \
+    -v ON_ERROR_STOP=1 \
+    -c "select concat_ws('|', rs.\"snapshotBody\" #>> '{policies,rateLimit,enabled}', rs.\"snapshotBody\" #>> '{policies,rateLimit,scope}', rs.\"snapshotBody\" #>> '{policies,rateLimit,windowSeconds}', rs.\"snapshotBody\" #>> '{policies,rateLimit,limit}') from active_runtime_snapshots ars join runtime_snapshots rs on rs.id = ars.\"runtimeSnapshotId\" where ars.\"tenantId\" = '${GATELM_DEMO_TENANT_ID}'::uuid and ars.\"projectId\" = '${GATELM_DEMO_PROJECT_ID}'::uuid and ars.\"applicationId\" = '${GATELM_DEMO_APPLICATION_ID}'::uuid;")"; then
+    perf_fail "Could not read the active performance RuntimeSnapshot rate-limit policy."
+  fi
+
+  actual_policy="$(perf_trim "${actual_policy}")"
+  [[ "${actual_policy}" == "${expected_policy}" ]] || \
+    perf_fail "Active RuntimeSnapshot rate-limit policy is ${actual_policy:-missing}; expected ${expected_policy}. Run: bash scripts/perf-up.sh --build"
+  perf_log "Active RuntimeSnapshot rate-limit policy verified (${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}/60s)."
 }
 
 perf_assert_no_live_provider_credentials() {

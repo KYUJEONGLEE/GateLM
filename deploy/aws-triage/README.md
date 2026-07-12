@@ -226,6 +226,9 @@ redis volume:     gatelm-aws-perf-redis-data
 The performance override forces `OPENAI_API_KEY` and both Provider credential
 maps to empty values. Its bootstrap fails unless the target PostgreSQL container
 belongs to `gatelm-aws-perf` and mounts the expected isolated volume.
+It also publishes a performance-only Mock RuntimeSnapshot with the Control
+Plane ceiling of `100000` requests per 60 seconds. Normal and
+actual-Provider RuntimeSnapshots keep their configured limits.
 
 Create `.env.perf` once. The generated secret values are written with mode `600`
 and are not printed:
@@ -259,6 +262,8 @@ bash scripts/perf-preflight.sh
 The preflight requires all of the following before load is allowed:
 
 - no live Provider credential in Control Plane or Gateway
+- active RuntimeSnapshot rate limit matches the performance setting (default
+  `100000` requests per 60 seconds)
 - `selectedProvider=mock` and a Mock catalog model (`mock-*` suffix)
 - published RuntimeSnapshot provenance
 - successful Request Detail with `fallback=not_needed`
@@ -309,6 +314,7 @@ Optional runner settings:
 | `GATELM_K6_DURATION` | `2m` | Load duration |
 | `GATELM_K6_DASHBOARD_PORT` | `5665` | EC2 loopback dashboard port |
 | `GATELM_K6_DASHBOARD_PERIOD` | `1s` | Live dashboard aggregation period |
+| `GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT` | `100000` | Isolated Mock RuntimeSnapshot limit per 60 seconds |
 
 Stop the performance containers without deleting their volumes:
 
