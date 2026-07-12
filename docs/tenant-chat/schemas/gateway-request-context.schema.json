@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v1/gateway-request-context.schema.json",
+  "title": "Tenant Chat Gateway metadata context",
+  "description": "Content-free metadata that accompanies the ephemeral completion payload. This object is safe to validate but identity and digest fields are still forbidden as metric labels.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "surface",
+    "phase",
+    "requestId",
+    "turnId",
+    "idempotencyKey",
+    "executionScope",
+    "snapshot",
+    "bindingDigest"
+  ],
+  "properties": {
+    "surface": { "const": "tenant_chat" },
+    "phase": {
+      "type": "string",
+      "enum": ["admission", "completion", "cancel"]
+    },
+    "requestId": { "$ref": "#/$defs/opaqueId" },
+    "turnId": { "$ref": "#/$defs/opaqueId" },
+    "idempotencyKey": { "$ref": "#/$defs/opaqueId" },
+    "admissionId": { "$ref": "#/$defs/opaqueId" },
+    "executionScope": { "$ref": "#/$defs/executionScope" },
+    "snapshot": { "$ref": "#/$defs/snapshot" },
+    "bindingDigest": {
+      "type": "string",
+      "pattern": "^hmac-sha256:[A-Za-z0-9_-]{16,128}$"
+    },
+    "usageIntent": { "$ref": "#/$defs/usageIntent" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "phase": { "const": "completion" } },
+        "required": ["phase"]
+      },
+      "then": { "required": ["admissionId", "usageIntent"] }
+    },
+    {
+      "if": {
+        "properties": { "phase": { "const": "cancel" } },
+        "required": ["phase"]
+      },
+      "then": { "required": ["admissionId"] }
+    }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "executionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "tenantId", "actor", "quotaScope", "budgetScope"],
+      "properties": {
+        "kind": { "const": "tenant_chat" },
+        "tenantId": { "$ref": "#/$defs/opaqueId" },
+        "actor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "actorKind"],
+          "properties": {
+            "userId": { "$ref": "#/$defs/opaqueId" },
+            "actorKind": {
+              "type": "string",
+              "enum": ["tenant_admin", "employee"]
+            },
+            "employeeId": { "$ref": "#/$defs/opaqueId" }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "actorKind": { "const": "employee" } },
+                "required": ["actorKind"]
+              },
+              "then": { "required": ["employeeId"] }
+            }
+          ]
+        },
+        "quotaScope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "const": "user" },
+            "id": { "$ref": "#/$defs/opaqueId" }
+          }
+        },
+        "budgetScope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "const": "tenant" },
+            "id": { "$ref": "#/$defs/opaqueId" }
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "digest", "policyVersion", "employeeNoticeVersion", "pricingVersion"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[A-Za-z0-9_-]{16,128}$"
+        },
+        "policyVersion": { "type": "integer", "minimum": 1 },
+        "employeeNoticeVersion": { "type": "integer", "minimum": 1 },
+        "pricingVersion": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "usageIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimatedInputTokens", "maxOutputTokens", "requestedTier", "cacheStrategy"],
+      "properties": {
+        "estimatedInputTokens": { "type": "integer", "minimum": 0 },
+        "maxOutputTokens": { "type": "integer", "minimum": 1 },
+        "requestedTier": {
+          "type": "string",
+          "enum": ["auto", "high_quality", "standard", "economy"]
+        },
+        "cacheStrategy": {
+          "type": "string",
+          "enum": ["off", "exact"]
+        }
+      }
+    }
+  }
+}

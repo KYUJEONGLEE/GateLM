@@ -21,6 +21,7 @@
 | Path | Status | Authority | 사용 방법 |
 |---|---|---|---|
 | `docs/current/` | Active | 현재 문서 라우팅과 구현 스냅샷 | 모든 작업의 첫 진입점 |
+| `docs/tenant-chat/` | Active scoped contract | 신규 Tenant Chat API/DB/Event/Metrics/Security 계약 | Tenant Chat 작업에서 current router를 통해 사용 |
 | `docs/v2.1.0/` | Versioned scope | Self-host delivery와 Advanced Routing offline evidence | 해당 범위에서만 사용 |
 | `docs/v2.0.0/` | Historical baseline | 아직 대체되지 않은 행동 계약의 compatibility 기준 | current 문서가 연결할 때만 사용 |
 | `docs/v1.0.0/` | Historical compatibility | v1 호환성 및 과거 evidence | 회귀/이력 조사에만 사용 |
@@ -57,6 +58,12 @@
 따라서 다음 개발 SemVer는 아직 문서로 확정하지 않는다. `docs/current/`는 공식 릴리스 번호가 아니라 `origin/dev` 기준 active development snapshot을 설명한다.
 
 ## 5. Versioned Documentation
+
+### Tenant Chat active scope
+
+[`docs/tenant-chat/README.md`](tenant-chat/README.md)를 먼저 읽는다. 이 scope는 release SemVer와 독립된 `tenant-chat/v1` contract이며, 기존 Project/Application Chat과 분리된 신규 제품의 계약·schema·fixture·구현 계획·통합 handoff를 제공한다.
+
+독립 `chat-web`, `chat-api`, private Gateway, encrypted history와 usage ledger는 계약상 목표이며 현재 구현 사실은 `docs/current/implementation-status.md`에서 별도로 확인한다.
 
 ### v2.1.0
 

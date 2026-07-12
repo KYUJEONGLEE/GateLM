@@ -26,6 +26,15 @@ const currentSnapshotDocs = [
   "docs/current/documentation-gaps.md",
 ];
 
+const tenantChatDocs = [
+  "docs/tenant-chat/README.md",
+  "docs/tenant-chat/contracts.md",
+  "docs/tenant-chat/schemas/*.schema.json",
+  "docs/tenant-chat/fixtures/*.fixture.json",
+  "docs/tenant-chat/implementation-plan.md",
+  "docs/tenant-chat/handoffs/employee-usage-integration.md",
+];
+
 const versionStatusDocs = [
   "docs/v2.0.0/README.md",
   "docs/v2.1.0/README.md",
@@ -163,6 +172,12 @@ function assertDocumentationRouting() {
   for (const currentDoc of currentSnapshotDocs) {
     assertIncludes("docs/current/README.md", path.basename(currentDoc));
   }
+
+  assertIncludes("docs/current/README.md", "../tenant-chat/README.md");
+  assertIncludes("docs/current/source-of-truth.md", "../tenant-chat/contracts.md");
+  assertIncludes("AGENTS.md", "docs/tenant-chat/README.md");
+  assertIncludes("README.md", "docs/tenant-chat/README.md");
+  assertIncludes("docs/README.md", "tenant-chat/README.md");
 
   for (const versionStatusDoc of versionStatusDocs) {
     const versionDir = path.basename(path.dirname(versionStatusDoc));
@@ -487,6 +502,49 @@ function assertSchemaFixturePairs() {
   }
 }
 
+function assertTenantChatSchemaFixturePairs() {
+  const schemaDir = "docs/tenant-chat/schemas";
+  const fixtureDir = "docs/tenant-chat/fixtures";
+  const schemaFiles = listJsonFiles(schemaDir, ".schema.json");
+  const fixtureFiles = listJsonFiles(fixtureDir, ".fixture.json");
+  const schemaBases = new Set(schemaFiles.map((file) => baseName(file, ".schema.json")));
+  const fixtureBases = new Set(fixtureFiles.map((file) => baseName(file, ".fixture.json")));
+
+  for (const schemaBase of schemaBases) {
+    if (!fixtureBases.has(schemaBase)) {
+      fail(`${fixtureDir}/${schemaBase}.fixture.json: missing fixture for schema`);
+    }
+  }
+
+  for (const fixtureBase of fixtureBases) {
+    if (!schemaBases.has(fixtureBase)) {
+      fail(`${schemaDir}/${fixtureBase}.schema.json: missing schema for fixture`);
+    }
+  }
+
+  for (const schemaFile of schemaFiles) {
+    const schema = readJson(schemaFile);
+    if (!schema) continue;
+
+    assertSchemaShape(schema, schemaFile);
+    walkSchemaForProviderModelEnums(schema, schemaFile);
+
+    const fixtureFile = `${fixtureDir}/${baseName(schemaFile, ".schema.json")}.fixture.json`;
+    if (!existsSync(toAbsolute(fixtureFile))) continue;
+
+    const fixture = readJson(fixtureFile);
+    if (!fixture) continue;
+
+    scanFixtureForSensitiveValues(fixture, fixtureFile);
+
+    const validationFailures = [];
+    validateData(schema, fixture, { filePath: schemaFile, path: "$" }, schema, validationFailures);
+    for (const validationFailure of validationFailures) {
+      fail(`${fixtureFile}: ${validationFailure}`);
+    }
+  }
+}
+
 function assertRuntimeSnapshotGuardrails() {
   const runtimeSnapshot = readJson("docs/v2.0.0/fixtures/runtime-snapshot.fixture.json");
   if (!runtimeSnapshot) return;
@@ -506,6 +564,7 @@ function main() {
   for (const doc of [
     ...activeEntryDocs,
     ...currentSnapshotDocs,
+    ...tenantChatDocs,
     ...versionStatusDocs,
     ...baselineContractDocs,
     ...historicalV2Docs,
@@ -520,6 +579,7 @@ function main() {
   assertDocumentationRouting();
   assertCiGate();
   assertSchemaFixturePairs();
+  assertTenantChatSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
   for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
     fail(failure);

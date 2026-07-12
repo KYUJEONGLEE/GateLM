@@ -47,6 +47,7 @@
 
 | Area | Safe statement | Do not assume |
 |---|---|---|
+| Tenant Chat | `docs/tenant-chat`에 active scoped contract와 구현 계획이 존재 | 독립 `chat-web`/`chat-api`/private Gateway/ledger가 현재 구현됨 |
 | Semantic Cache | 코드와 테스트가 존재하며 기본 설정은 disabled/shadow | 기본 live response path 또는 GA |
 | Advanced Routing | 분류/정책/evaluation harness가 존재 | 최신 정확도, SLA, production quality |
 | Provider adapters | adapter 코드와 테스트가 존재 | 모든 vendor의 production credential live 검증 완료 |
