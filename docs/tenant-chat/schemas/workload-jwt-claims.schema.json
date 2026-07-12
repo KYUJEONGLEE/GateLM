@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v1/workload-jwt-claims.schema.json",
+  "title": "Tenant Chat workload JWT claims",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "iss",
+    "aud",
+    "sub",
+    "jti",
+    "iat",
+    "nbf",
+    "exp",
+    "phase",
+    "requestId",
+    "turnId",
+    "idempotencyKey",
+    "tenantId",
+    "userId",
+    "actorKind",
+    "actorAuthzVersion",
+    "tenantAuthzVersion",
+    "sessionVersion",
+    "snapshotVersion",
+    "snapshotDigest",
+    "bindingDigest"
+  ],
+  "properties": {
+    "iss": { "const": "gatelm-chat-api" },
+    "aud": { "const": "gatelm-gateway-tenant-chat" },
+    "sub": { "const": "service:chat-api" },
+    "jti": { "$ref": "#/$defs/opaqueId" },
+    "iat": { "type": "integer", "minimum": 0 },
+    "nbf": { "type": "integer", "minimum": 0 },
+    "exp": { "type": "integer", "minimum": 0 },
+    "phase": {
+      "type": "string",
+      "enum": ["admission", "completion", "cancel"]
+    },
+    "requestId": { "$ref": "#/$defs/opaqueId" },
+    "turnId": { "$ref": "#/$defs/opaqueId" },
+    "idempotencyKey": { "$ref": "#/$defs/opaqueId" },
+    "tenantId": { "$ref": "#/$defs/opaqueId" },
+    "userId": { "$ref": "#/$defs/opaqueId" },
+    "actorKind": {
+      "type": "string",
+      "enum": ["tenant_admin", "employee"]
+    },
+    "employeeId": { "$ref": "#/$defs/opaqueId" },
+    "actorAuthzVersion": { "type": "integer", "minimum": 1 },
+    "tenantAuthzVersion": { "type": "integer", "minimum": 1 },
+    "sessionVersion": { "type": "integer", "minimum": 1 },
+    "snapshotVersion": { "type": "integer", "minimum": 1 },
+    "snapshotDigest": {
+      "type": "string",
+      "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+    },
+    "bindingDigest": {
+      "type": "string",
+      "pattern": "^hmac-sha256:[A-Za-z0-9_-]{43}$"
+    },
+    "admissionId": { "$ref": "#/$defs/opaqueId" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "phase": { "const": "admission" } },
+        "required": ["phase"]
+      },
+      "then": { "not": { "required": ["admissionId"] } }
+    },
+    {
+      "if": {
+        "properties": { "actorKind": { "const": "employee" } },
+        "required": ["actorKind"]
+      },
+      "then": { "required": ["employeeId"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "phase": { "enum": ["completion", "cancel"] }
+        },
+        "required": ["phase"]
+      },
+      "then": { "required": ["admissionId"] }
+    }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    }
+  }
+}

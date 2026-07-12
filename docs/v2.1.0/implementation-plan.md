@@ -1,5 +1,8 @@
 # GateLM v2.1.0 Self-host Implementation Plan
 
+> [!NOTE]
+> **문서 상태: Versioned self-host plan.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 실제 산출물과 acceptance evidence를 확인하지 않고 current backlog 또는 release-complete 상태로 간주하지 않는다.
+
 ## 1. Purpose
 
 This document is the top-level implementation plan for GateLM v2.1.0.
@@ -222,4 +225,3 @@ v2.1.0 is implementation-complete when:
 - Container restart preserves PostgreSQL-backed data.
 - `.env.example`, docs, scripts, images, logs, API responses, UI, and metrics labels do not expose forbidden sensitive values.
 - Helm, HA, air-gap, and optional analytics services remain explicitly out of MVP scope.
-

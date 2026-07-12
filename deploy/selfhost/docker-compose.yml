@@ -49,10 +49,14 @@ services:
       - -c
       - |
         import json, os, time
-        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
         port = int(os.getenv("MOCK_PROVIDER_PORT", "8090"))
         latency_ms = int(os.getenv("MOCK_PROVIDER_DEFAULT_LATENCY_MS", "100"))
+
+        class ConcurrentHTTPServer(ThreadingHTTPServer):
+            daemon_threads = True
+            request_queue_size = 128
 
         def stream_chunks(model):
             created = int(time.time())
@@ -159,7 +163,7 @@ services:
                     "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
                 })
 
-        HTTPServer(("0.0.0.0", port), Handler).serve_forever()
+        ConcurrentHTTPServer(("0.0.0.0", port), Handler).serve_forever()
     ports:
       - "${SELFHOST_MOCK_PROVIDER_PORT}:8090"
     healthcheck:

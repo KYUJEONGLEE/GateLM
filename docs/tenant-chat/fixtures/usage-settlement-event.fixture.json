@@ -1,0 +1,66 @@
+{
+  "eventId": "usage_event_fixture_001",
+  "schemaVersion": 1,
+  "eventType": "usage_settled",
+  "eventVersion": 3,
+  "occurredAt": "2026-07-12T12:00:30Z",
+  "aggregateId": "request_fixture_001",
+  "requestId": "request_fixture_001",
+  "turnId": "turn_fixture_001",
+  "idempotencyKey": "turn_fixture_001_attempt_1",
+  "reservationId": "reservation_fixture_001",
+  "executionScope": {
+    "kind": "tenant_chat",
+    "tenantId": "tenant_fixture_001",
+    "userId": "user_fixture_001",
+    "actorKind": "employee",
+    "employeeId": "employee_fixture_001"
+  },
+  "period": {
+    "start": "2026-07-01T00:00:00Z",
+    "end": "2026-08-01T00:00:00Z",
+    "timezone": "UTC",
+    "currency": "USD"
+  },
+  "snapshotVersion": 12,
+  "pricingVersion": 5,
+  "quota": {
+    "state": "normal",
+    "reservedTokensDelta": -4096,
+    "confirmedInputTokensDelta": 820,
+    "confirmedOutputTokensDelta": 410,
+    "confirmedTotalTokensDelta": 1230,
+    "unconfirmedTokensDelta": 0
+  },
+  "budget": {
+    "state": "normal",
+    "reservedCostMicroUsdDelta": -25000,
+    "confirmedCostMicroUsdDelta": 9100,
+    "unconfirmedExposureMicroUsdDelta": 0
+  },
+  "attempts": [
+    {
+      "attemptNo": 1,
+      "kind": "primary",
+      "providerId": "provider_fixture_primary",
+      "modelKey": "model_fixture_quality",
+      "outcome": "failed_pre_delta",
+      "usageQuality": "confirmed",
+      "inputTokens": 420,
+      "outputTokens": 0,
+      "costMicroUsd": 3100
+    },
+    {
+      "attemptNo": 2,
+      "kind": "fallback",
+      "providerId": "provider_fixture_fallback",
+      "modelKey": "model_fixture_standard",
+      "outcome": "succeeded",
+      "usageQuality": "confirmed",
+      "inputTokens": 400,
+      "outputTokens": 410,
+      "costMicroUsd": 6000
+    }
+  ],
+  "terminalOutcome": "succeeded"
+}

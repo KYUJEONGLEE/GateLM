@@ -17,6 +17,14 @@ const (
 	QuotaReasonWarningThresholdReached = "employee_quota_warning_threshold_reached"
 	QuotaReasonExceededQualityGuard    = "employee_quota_exceeded_quality_guard"
 	QuotaReasonNotConfigured           = "employee_quota_not_configured"
+
+	DailyTokenOutcomeAllowed  = "allowed"
+	DailyTokenOutcomeExceeded = "exceeded"
+	DailyTokenOutcomeNotUsed  = "not_used"
+
+	DailyTokenReasonWithinLimit          = "employee_daily_token_within_limit"
+	DailyTokenReasonExceededQualityGuard = "employee_daily_token_exceeded_quality_guard"
+	DailyTokenReasonNotConfigured        = "employee_daily_token_not_configured"
 )
 
 var (
@@ -37,6 +45,12 @@ type RateLimitPolicy struct {
 	WindowSeconds int  `json:"windowSeconds"`
 }
 
+type DailyTokenPolicy struct {
+	Enabled bool  `json:"enabled"`
+	Limit   int64 `json:"limit"`
+	Used    int64 `json:"used"`
+}
+
 type QuotaPolicy struct {
 	Enabled                 bool  `json:"enabled"`
 	LimitMicroUSD           int64 `json:"limitMicroUsd"`
@@ -45,15 +59,21 @@ type QuotaPolicy struct {
 }
 
 type Policy struct {
-	TenantID   string          `json:"tenantId"`
-	ProjectID  string          `json:"projectId"`
-	EmployeeID string          `json:"employeeId"`
-	RateLimit  RateLimitPolicy `json:"rateLimit"`
-	Quota      QuotaPolicy     `json:"quota"`
+	TenantID   string           `json:"tenantId"`
+	ProjectID  string           `json:"projectId"`
+	EmployeeID string           `json:"employeeId"`
+	DailyToken DailyTokenPolicy `json:"dailyToken"`
+	RateLimit  RateLimitPolicy  `json:"rateLimit"`
+	Quota      QuotaPolicy      `json:"quota"`
 }
 
 type Decision struct {
 	EmployeeID              string `json:"employeeId"`
+	DailyTokenOutcome       string `json:"dailyTokenOutcome"`
+	DailyTokenReason        string `json:"dailyTokenReason"`
+	DailyTokenLimit         int64  `json:"dailyTokenLimit"`
+	DailyTokenUsed          int64  `json:"dailyTokenUsed"`
+	DailyTokenRemaining     int64  `json:"dailyTokenRemaining"`
 	QuotaOutcome            string `json:"quotaOutcome"`
 	QuotaReason             string `json:"quotaReason"`
 	QuotaLimitMicroUSD      int64  `json:"quotaLimitMicroUsd"`
@@ -76,6 +96,12 @@ func Normalize(policy Policy) Policy {
 		policy.RateLimit.WindowSeconds > 3600 {
 		policy.RateLimit.Enabled = false
 	}
+	if policy.DailyToken.Limit <= 0 {
+		policy.DailyToken.Enabled = false
+	}
+	if policy.DailyToken.Used < 0 {
+		policy.DailyToken.Used = 0
+	}
 	if policy.Quota.LimitMicroUSD <= 0 {
 		policy.Quota.Enabled = false
 	}
@@ -90,14 +116,32 @@ func Normalize(policy Policy) Policy {
 
 func Evaluate(policy Policy) Decision {
 	policy = Normalize(policy)
+	dailyTokenRemaining := policy.DailyToken.Limit - policy.DailyToken.Used
+	if dailyTokenRemaining < 0 {
+		dailyTokenRemaining = 0
+	}
 	decision := Decision{
 		EmployeeID:              policy.EmployeeID,
+		DailyTokenOutcome:       DailyTokenOutcomeNotUsed,
+		DailyTokenReason:        DailyTokenReasonNotConfigured,
+		DailyTokenLimit:         policy.DailyToken.Limit,
+		DailyTokenUsed:          policy.DailyToken.Used,
+		DailyTokenRemaining:     dailyTokenRemaining,
 		QuotaOutcome:            QuotaOutcomeNotUsed,
 		QuotaReason:             QuotaReasonNotConfigured,
 		QuotaLimitMicroUSD:      policy.Quota.LimitMicroUSD,
 		QuotaUsedMicroUSD:       policy.Quota.UsedMicroUSD,
 		QuotaRemainingMicroUSD:  policy.Quota.LimitMicroUSD - policy.Quota.UsedMicroUSD,
 		WarningThresholdPercent: policy.Quota.WarningThresholdPercent,
+	}
+	if policy.DailyToken.Enabled {
+		if policy.DailyToken.Used >= policy.DailyToken.Limit {
+			decision.DailyTokenOutcome = DailyTokenOutcomeExceeded
+			decision.DailyTokenReason = DailyTokenReasonExceededQualityGuard
+		} else {
+			decision.DailyTokenOutcome = DailyTokenOutcomeAllowed
+			decision.DailyTokenReason = DailyTokenReasonWithinLimit
+		}
 	}
 	if !policy.Quota.Enabled {
 		return decision
@@ -119,7 +163,8 @@ func Evaluate(policy Policy) Decision {
 }
 
 func RestrictsHighQuality(decision *Decision) bool {
-	return decision != nil && decision.QuotaOutcome == QuotaOutcomeExceeded
+	return decision != nil && (decision.QuotaOutcome == QuotaOutcomeExceeded ||
+		decision.DailyTokenOutcome == DailyTokenOutcomeExceeded)
 }
 
 func (d *Decision) Clone() *Decision {

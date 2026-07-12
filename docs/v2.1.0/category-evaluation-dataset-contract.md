@@ -1,5 +1,8 @@
 # GateLM Category Evaluation Dataset Contract
 
+> [!NOTE]
+> **문서 상태: Versioned offline evidence contract.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 이 계약은 synthetic/redacted routing evaluation 범위이며 Gateway hot path 계약을 새로 정의하지 않는다.
+
 ## 1. 상태
 
 이 문서는 v2.1 룰 기반 라우팅 평가를 위한 offline evidence 계약이다.

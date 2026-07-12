@@ -8,6 +8,7 @@ import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
+import { buildProjectEmployeeAssignmentRequestBody } from "@/lib/control-plane/employee-assignment-request";
 import {
   cachedControlPlaneRead,
   CONTROL_PLANE_READ_CACHE_SECONDS,
@@ -410,17 +411,7 @@ export async function upsertProjectEmployeeAssignment(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}/employees/${encodeURIComponent(values.employeeId)}`,
       {
-        body: JSON.stringify({
-          allowedModelKeys: values.allowedModelKeys,
-          allowedProviderConnectionIds: values.allowedProviderConnectionIds,
-          monthlyBudgetLimitUsd: values.monthlyBudgetLimitUsd,
-          policyNote: values.policyNote.trim() || undefined,
-          rateLimitEnabled: values.rateLimitEnabled,
-          rateLimitLimit: values.rateLimitLimit,
-          rateLimitWindowSeconds: values.rateLimitWindowSeconds,
-          status: values.status ?? "active",
-          warningThresholdPercent: values.warningThresholdPercent
-        }),
+        body: JSON.stringify(buildProjectEmployeeAssignmentRequestBody(values)),
         cache: "no-store",
         headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
@@ -1009,6 +1000,12 @@ function toProjectEmployeeAssignmentRecord(
     employeeStatus,
     id: record.id,
     invitationStatus,
+    dailyTokenRemaining:
+      typeof record.dailyTokenRemaining === "number" ? record.dailyTokenRemaining : 0,
+    dailyTokenStatus: normalizeProjectEmployeeQuotaStatus(record.dailyTokenStatus),
+    dailyTokenUsed: typeof record.dailyTokenUsed === "number" ? record.dailyTokenUsed : 0,
+    dailyTokenUsagePercent:
+      typeof record.dailyTokenUsagePercent === "number" ? record.dailyTokenUsagePercent : 0,
     monthlyBudgetLimitMicroUsd: record.monthlyBudgetLimitMicroUsd,
     monthlyBudgetLimitUsd: record.monthlyBudgetLimitUsd,
     monthlyRemainingUsd:
@@ -1036,6 +1033,10 @@ function toProjectEmployeePolicy(value: unknown): ProjectEmployeePolicy | null {
   }
 
   const record = value as Record<string, unknown>;
+  const dailyTokenLimit =
+    record.dailyTokenLimit && typeof record.dailyTokenLimit === "object"
+      ? (record.dailyTokenLimit as Record<string, unknown>)
+      : {};
   const rateLimit =
     record.rateLimit && typeof record.rateLimit === "object"
       ? (record.rateLimit as Record<string, unknown>)
@@ -1043,6 +1044,16 @@ function toProjectEmployeePolicy(value: unknown): ProjectEmployeePolicy | null {
   return {
     allowedModelKeys: readStringArray(record.allowedModelKeys),
     allowedProviderConnectionIds: readStringArray(record.allowedProviderConnectionIds),
+    dailyTokenLimit: {
+      enabled:
+        typeof dailyTokenLimit.enabled === "boolean"
+          ? dailyTokenLimit.enabled
+          : typeof dailyTokenLimit.limit === "number" && dailyTokenLimit.limit > 0,
+      limit:
+        typeof dailyTokenLimit.limit === "number" && Number.isInteger(dailyTokenLimit.limit)
+          ? dailyTokenLimit.limit
+          : 0
+    },
     note: typeof record.note === "string" && record.note.trim() ? record.note : null,
     rateLimit: {
       enabled: typeof rateLimit.enabled === "boolean" ? rateLimit.enabled : false,

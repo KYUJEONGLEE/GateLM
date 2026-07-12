@@ -152,6 +152,13 @@ export class UpsertProjectEmployeeAssignmentDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1000000000)
+  dailyTokenLimit?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   @Max(100)
   warningThresholdPercent?: number;
 
@@ -256,8 +263,14 @@ export interface EmployeeInvitationResponseDto {
 export interface ProjectEmployeePolicyDto {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
+  dailyTokenLimit: ProjectEmployeeDailyTokenLimitPolicyDto;
   note: string | null;
   rateLimit: ProjectEmployeeRateLimitPolicyDto;
+}
+
+export interface ProjectEmployeeDailyTokenLimitPolicyDto {
+  enabled: boolean;
+  limit: number;
 }
 
 export interface ProjectEmployeeRateLimitPolicyDto {
@@ -276,6 +289,10 @@ export interface ProjectEmployeeAssignmentResponseDto {
   employeeDepartment: string | null;
   employeeStatus: EmployeeStatus;
   invitationStatus: EmployeeInvitationStatus;
+  dailyTokenRemaining: number;
+  dailyTokenStatus: ProjectEmployeeQuotaStatus;
+  dailyTokenUsed: number;
+  dailyTokenUsagePercent: number;
   monthlyBudgetLimitMicroUsd: number;
   monthlyBudgetLimitUsd: number;
   monthlyRemainingUsd: number;

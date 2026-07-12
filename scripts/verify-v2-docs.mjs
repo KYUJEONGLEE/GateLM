@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash, createHmac } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
@@ -16,18 +17,61 @@ const requiredTopLevelSchemaFields = [
   "additionalProperties",
 ];
 
-const sourceOfTruthDocs = [
+const activeEntryDocs = [
+  "docs/current/README.md",
+  "docs/current/source-of-truth.md",
+];
+
+const currentSnapshotDocs = [
+  "docs/current/implementation-status.md",
+  "docs/current/documentation-gaps.md",
+];
+
+const tenantChatDocs = [
+  "docs/tenant-chat/README.md",
+  "docs/tenant-chat/contracts.md",
+  "docs/tenant-chat/execution-contract.md",
+  "docs/tenant-chat/openapi/private-gateway.openapi.json",
+  "docs/tenant-chat/db/tenant-chat-usage.sql",
+  "docs/tenant-chat/schemas/*.schema.json",
+  "docs/tenant-chat/fixtures/*.fixture.json",
+  "docs/tenant-chat/vectors/binding-digest-vectors.json",
+  "docs/tenant-chat/vectors/usage-event-vectors.json",
+  "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json",
+  "docs/tenant-chat/implementation-plan.md",
+  "docs/tenant-chat/handoffs/employee-usage-integration.md",
+];
+
+const versionStatusDocs = [
+  "docs/v2.0.0/README.md",
+  "docs/v2.1.0/README.md",
+];
+
+const baselineContractDocs = [
   "docs/v2.0.0/contracts.md",
   "docs/v2.0.0/schemas/*.schema.json",
   "docs/v2.0.0/fixtures/*.fixture.json",
-  "docs/v2.0.0/implementation-plan.md",
-  "docs/v2.0.0/implementation-tasks.md",
 ];
 
-const executionDocs = [
+const historicalV2Docs = [
+  "docs/v2.0.0/implementation-plan.md",
+  "docs/v2.0.0/implementation-tasks.md",
   "docs/v2.0.0/implementation-pr-packets.md",
   "docs/v2.0.0/acceptance-test-matrix.md",
   "docs/v2.0.0/db-migration-plan.md",
+];
+
+const versionedV21Docs = [
+  "docs/v2.1.0/contracts.md",
+  "docs/v2.1.0/implementation-plan.md",
+  "docs/v2.1.0/implementation-tasks.md",
+  "docs/v2.1.0/acceptance-test-matrix.md",
+  "docs/v2.1.0/production-images.md",
+  "docs/v2.1.0/category-evaluation-dataset-contract.md",
+  "docs/v2.1.0/schemas/category-evaluation-record.schema.json",
+  "docs/v2.1.0/routing-advanced-plan.md",
+  "docs/v2.1.0/routing-performance-test-scenario.md",
+  "docs/v2.1.0/routing-random-probe.md",
 ];
 
 const entryDocs = ["AGENTS.md", "README.md", "docs/README.md"];
@@ -124,18 +168,58 @@ function assertRuntimeBaseline() {
   }
 }
 
-function assertEntryDocs() {
+function assertDocumentationRouting() {
   for (const doc of entryDocs) {
     assertExists(doc);
-    for (const source of sourceOfTruthDocs) {
-      assertIncludes(doc, source);
+    for (const activeEntryDoc of activeEntryDocs) {
+      assertIncludes(doc, activeEntryDoc);
     }
   }
 
-  for (const doc of entryDocs) {
-    for (const executionDoc of executionDocs) {
-      assertIncludes(doc, executionDoc);
-    }
+  for (const currentDoc of currentSnapshotDocs) {
+    assertIncludes("docs/current/README.md", path.basename(currentDoc));
+  }
+
+  assertIncludes("docs/current/README.md", "../tenant-chat/README.md");
+  assertIncludes("docs/current/source-of-truth.md", "../tenant-chat/contracts.md");
+  assertIncludes("AGENTS.md", "docs/tenant-chat/README.md");
+  assertIncludes("README.md", "docs/tenant-chat/README.md");
+  assertIncludes("docs/README.md", "tenant-chat/README.md");
+
+  for (const versionStatusDoc of versionStatusDocs) {
+    const versionDir = path.basename(path.dirname(versionStatusDoc));
+    assertIncludes("docs/current/README.md", `${versionDir}/README.md`);
+    assertIncludes(versionStatusDoc, "../current/README.md");
+  }
+
+  for (const expectedText of [
+    "Historical baseline",
+    "contracts.md",
+    "schemas/*.schema.json",
+    "fixtures/*.fixture.json",
+    "implementation-plan.md",
+    "implementation-tasks.md",
+    "implementation-pr-packets.md",
+    "acceptance-test-matrix.md",
+    "db-migration-plan.md",
+  ]) {
+    assertIncludes("docs/v2.0.0/README.md", expectedText);
+  }
+
+  for (const expectedText of [
+    "Latest versioned scope reference",
+    "contracts.md",
+    "implementation-plan.md",
+    "implementation-tasks.md",
+    "acceptance-test-matrix.md",
+    "production-images.md",
+    "category-evaluation-dataset-contract.md",
+    "schemas/category-evaluation-record.schema.json",
+    "routing-advanced-plan.md",
+    "routing-performance-test-scenario.md",
+    "routing-random-probe.md",
+  ]) {
+    assertIncludes("docs/v2.1.0/README.md", expectedText);
   }
 }
 
@@ -211,6 +295,24 @@ function validateData(schema, data, context, rootSchema, localFailures) {
   if (schema.allOf) {
     for (const subSchema of schema.allOf) {
       validateData(subSchema, data, context, rootSchema, localFailures);
+    }
+  }
+
+  if (schema.if) {
+    const conditionFailures = [];
+    validateData(schema.if, data, context, rootSchema, conditionFailures);
+    if (conditionFailures.length === 0 && schema.then) {
+      validateData(schema.then, data, context, rootSchema, localFailures);
+    } else if (conditionFailures.length > 0 && schema.else) {
+      validateData(schema.else, data, context, rootSchema, localFailures);
+    }
+  }
+
+  if (schema.not) {
+    const notFailures = [];
+    validateData(schema.not, data, context, rootSchema, notFailures);
+    if (notFailures.length === 0) {
+      localFailures.push(`${context.path}: matched a forbidden not schema`);
     }
   }
 
@@ -425,6 +527,49 @@ function assertSchemaFixturePairs() {
   }
 }
 
+function assertTenantChatSchemaFixturePairs() {
+  const schemaDir = "docs/tenant-chat/schemas";
+  const fixtureDir = "docs/tenant-chat/fixtures";
+  const schemaFiles = listJsonFiles(schemaDir, ".schema.json");
+  const fixtureFiles = listJsonFiles(fixtureDir, ".fixture.json");
+  const schemaBases = new Set(schemaFiles.map((file) => baseName(file, ".schema.json")));
+  const fixtureBases = new Set(fixtureFiles.map((file) => baseName(file, ".fixture.json")));
+
+  for (const schemaBase of schemaBases) {
+    if (!fixtureBases.has(schemaBase)) {
+      fail(`${fixtureDir}/${schemaBase}.fixture.json: missing fixture for schema`);
+    }
+  }
+
+  for (const fixtureBase of fixtureBases) {
+    if (!schemaBases.has(fixtureBase)) {
+      fail(`${schemaDir}/${fixtureBase}.schema.json: missing schema for fixture`);
+    }
+  }
+
+  for (const schemaFile of schemaFiles) {
+    const schema = readJson(schemaFile);
+    if (!schema) continue;
+
+    assertSchemaShape(schema, schemaFile);
+    walkSchemaForProviderModelEnums(schema, schemaFile);
+
+    const fixtureFile = `${fixtureDir}/${baseName(schemaFile, ".schema.json")}.fixture.json`;
+    if (!existsSync(toAbsolute(fixtureFile))) continue;
+
+    const fixture = readJson(fixtureFile);
+    if (!fixture) continue;
+
+    scanFixtureForSensitiveValues(fixture, fixtureFile);
+
+    const validationFailures = [];
+    validateData(schema, fixture, { filePath: schemaFile, path: "$" }, schema, validationFailures);
+    for (const validationFailure of validationFailures) {
+      fail(`${fixtureFile}: ${validationFailure}`);
+    }
+  }
+}
+
 function assertRuntimeSnapshotGuardrails() {
   const runtimeSnapshot = readJson("docs/v2.0.0/fixtures/runtime-snapshot.fixture.json");
   if (!runtimeSnapshot) return;
@@ -440,31 +585,372 @@ function assertRuntimeSnapshotGuardrails() {
   }
 }
 
+function canonicalizeJson(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalizeJson(item)).join(",")}]`;
+  }
+
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(value[key])}`)
+    .join(",")}}`;
+}
+
+function sha256Base64Url(value) {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("base64url")}`;
+}
+
+function assertTenantChatExecutableContract() {
+  const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
+  const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
+  const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
+  const usageVectorPath = "docs/tenant-chat/vectors/usage-event-vectors.json";
+  const jwtVectorPath = "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json";
+  const runtimeFixturePath = "docs/tenant-chat/fixtures/tenant-runtime-snapshot.fixture.json";
+
+  const openApi = readJson(openApiPath);
+  if (openApi) {
+    if (openApi.openapi !== "3.1.0") {
+      fail(`${openApiPath}: expected OpenAPI 3.1.0`);
+    }
+
+    const expectedPaths = {
+      "/internal/v1/tenant-chat/admissions": ["200", "201", "400", "401", "409", "429", "503"],
+      "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
+      "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
+    };
+    const errorStatus = new Map([
+      ["CHAT_INVALID_REQUEST", "400"],
+      ["CHAT_SCOPE_FIELD_FORBIDDEN", "400"],
+      ["CHAT_TOKEN_INVALID", "401"],
+      ["CHAT_USER_DISABLED", "403"],
+      ["CHAT_TENANT_DISABLED", "403"],
+      ["CHAT_MEMBERSHIP_DISABLED", "403"],
+      ["CHAT_EMPLOYEE_DISABLED", "403"],
+      ["CHAT_QUOTA_HARD_LIMIT", "403"],
+      ["CHAT_BUDGET_HARD_LIMIT", "403"],
+      ["CHAT_POLICY_ACK_REQUIRED", "409"],
+      ["CHAT_IDEMPOTENCY_CONFLICT", "409"],
+      ["CHAT_ADMISSION_EXPIRED", "409"],
+      ["CHAT_RATE_LIMITED", "429"],
+      ["CHAT_CONCURRENCY_LIMITED", "429"],
+      ["CHAT_PROVIDER_FAILED", "502"],
+      ["CHAT_RUNTIME_UNAVAILABLE", "503"],
+      ["CHAT_USAGE_GUARD_UNAVAILABLE", "503"],
+      ["CHAT_NO_ELIGIBLE_ROUTE", "503"],
+      ["CHAT_PROVIDER_TIMEOUT", "504"],
+    ]);
+
+    for (const [apiPath, statuses] of Object.entries(expectedPaths)) {
+      const operation = openApi.paths?.[apiPath]?.post;
+      if (!operation) {
+        fail(`${openApiPath}: missing POST ${apiPath}`);
+        continue;
+      }
+      if (!operation.requestBody?.required) {
+        fail(`${openApiPath}: POST ${apiPath} requestBody must be required`);
+      }
+      for (const status of statuses) {
+        if (!operation.responses?.[status]) {
+          fail(`${openApiPath}: POST ${apiPath} missing response ${status}`);
+          continue;
+        }
+        if (status.startsWith("2")) {
+          continue;
+        }
+        const responseRef = operation.responses[status].$ref;
+        const responseName = responseRef?.split("/").at(-1);
+        const response = responseName ? openApi.components?.responses?.[responseName] : operation.responses[status];
+        if (!Array.isArray(response?.["x-error-codes"]) || response["x-error-codes"].length === 0) {
+          fail(`${openApiPath}: POST ${apiPath} response ${status} must declare x-error-codes`);
+          continue;
+        }
+        for (const errorCode of response["x-error-codes"]) {
+          if (errorStatus.get(errorCode) !== status) {
+            fail(`${openApiPath}: ${errorCode} is not a valid ${status} error`);
+          }
+        }
+      }
+    }
+
+    const completionExample = openApi.components?.examples?.CompletionRequestExample?.value;
+    const openApiBindingVectors = readJson(bindingVectorPath)?.vectors ?? [];
+    const completionVector = openApiBindingVectors.find(
+      (vector) => vector.vectorId === "completion_employee_v1",
+    );
+    if (completionExample && completionVector) {
+      const payloadDigest = sha256Base64Url(canonicalizeJson(completionExample.input));
+      if (payloadDigest !== completionVector.bindingObject?.payloadDigest) {
+        fail(`${openApiPath}: completion example payload digest does not match completion binding vector`);
+      }
+      if (completionExample.context?.bindingDigest !== completionVector.expectedBindingDigest) {
+        fail(`${openApiPath}: completion example bindingDigest does not match completion binding vector`);
+      }
+    }
+    for (const [exampleName, vectorId] of [
+      ["AdmissionRequestExample", "admission_employee_v1"],
+      ["CancelRequestExample", "cancel_employee_v1"],
+    ]) {
+      const example = openApi.components?.examples?.[exampleName]?.value;
+      const vector = openApiBindingVectors.find((candidate) => candidate.vectorId === vectorId);
+      if (example?.context?.bindingDigest !== vector?.expectedBindingDigest) {
+        fail(`${openApiPath}: ${exampleName} bindingDigest does not match ${vectorId}`);
+      }
+    }
+  }
+
+  const ddl = readText(ddlPath);
+  const expectedTables = [
+    "tenant_chat_request_admissions",
+    "tenant_chat_user_token_periods",
+    "tenant_chat_tenant_cost_periods",
+    "tenant_chat_usage_reservations",
+    "tenant_chat_provider_attempts",
+    "tenant_chat_usage_ledger_entries",
+    "tenant_chat_invocation_outbox",
+    "tenant_chat_invocation_logs",
+  ];
+  for (const table of expectedTables) {
+    if (!ddl.includes(`CREATE TABLE ${table}`)) {
+      fail(`${ddlPath}: missing table ${table}`);
+    }
+  }
+
+  const normalizedDdl = ddl.replace(/\s+/g, " ").trim().toLowerCase();
+  const expectedDdlFragments = [
+    "create index tenant_chat_admission_user_idx on tenant_chat_request_admissions (user_id)",
+    "create index tenant_chat_admission_employee_idx on tenant_chat_request_admissions (employee_id) where employee_id is not null",
+    "create index tenant_chat_user_period_user_idx on tenant_chat_user_token_periods (user_id, period_start desc)",
+    "create index tenant_chat_reservation_cost_period_idx on tenant_chat_usage_reservations (tenant_id, tenant_period_start, currency)",
+    "constraint tenant_chat_reservation_identity_key unique (reservation_id, request_id)",
+    "constraint tenant_chat_attempt_reservation_request_fkey foreign key (reservation_id, request_id) references tenant_chat_usage_reservations (reservation_id, request_id) on delete restrict",
+    "create index tenant_chat_attempt_reservation_idx on tenant_chat_provider_attempts (reservation_id, request_id, attempt_no)",
+    "constraint tenant_chat_ledger_reservation_request_fkey foreign key (reservation_id, request_id) references tenant_chat_usage_reservations (reservation_id, request_id) on delete restrict",
+    "create index tenant_chat_ledger_reservation_idx on tenant_chat_usage_ledger_entries (reservation_id, request_id, ledger_version)",
+    "create index tenant_chat_log_user_idx on tenant_chat_invocation_logs (user_id, completed_at desc)",
+    "create index tenant_chat_log_employee_idx on tenant_chat_invocation_logs (employee_id) where employee_id is not null",
+    "limit_tokens = 0 and warning_threshold_tokens = 0 and economy_threshold_tokens = 0 and hard_stop_tokens = 0 and state = 'blocked'",
+    "limit_micro_usd = 0 and warning_threshold_micro_usd = 0 and economy_threshold_micro_usd = 0 and hard_stop_micro_usd = 0 and state = 'blocked'",
+    "cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens",
+    "confirmed_cache_read_input_tokens <= confirmed_input_tokens",
+  ];
+  for (const fragment of expectedDdlFragments) {
+    if (!normalizedDdl.includes(fragment)) {
+      fail(`${ddlPath}: missing executable DDL fragment "${fragment}"`);
+    }
+  }
+
+  if (/reservation_id\s+uuid\s+not\s+null\s+references\s+tenant_chat_usage_reservations/i.test(ddl)) {
+    fail(`${ddlPath}: attempt/ledger reservation identity must use the composite reservation_id/request_id FK`);
+  }
+  if (/cached_input|confirmed_cached_input/i.test(ddl)) {
+    fail(`${ddlPath}: ambiguous cached_input naming is forbidden; use provider cache_read fields`);
+  }
+  if (/\bDROP\s+(TABLE|COLUMN|TYPE)\b/i.test(ddl) || /\bALTER\s+TABLE\b[\s\S]*?\bDROP\b/i.test(ddl)) {
+    fail(`${ddlPath}: destructive DROP statement is forbidden`);
+  }
+
+  const bindingVectors = readJson(bindingVectorPath);
+  if (bindingVectors) {
+    if (bindingVectors.algorithm !== "HMAC-SHA-256" || bindingVectors.canonicalization !== "RFC8785-JCS") {
+      fail(`${bindingVectorPath}: unexpected algorithm or canonicalization`);
+    }
+    for (const vector of bindingVectors.vectors ?? []) {
+      const canonical = canonicalizeJson(vector.bindingObject);
+      if (canonical !== vector.canonicalBinding) {
+        fail(`${bindingVectorPath}: ${vector.vectorId} canonical binding mismatch`);
+      }
+      const digest = `hmac-sha256:${createHmac("sha256", Buffer.from(vector.keyHex, "hex"))
+        .update(canonical, "utf8")
+        .digest("base64url")}`;
+      if (digest !== vector.expectedBindingDigest) {
+        fail(`${bindingVectorPath}: ${vector.vectorId} HMAC mismatch`);
+      }
+    }
+  }
+
+  const runtimeSnapshot = readJson(runtimeFixturePath);
+  if (runtimeSnapshot) {
+    const { digest: pricingDigest, ...pricingPayload } = runtimeSnapshot.pricing ?? {};
+    const computedPricingDigest = sha256Base64Url(canonicalizeJson(pricingPayload));
+    if (pricingDigest !== computedPricingDigest) {
+      fail(`${runtimeFixturePath}: pricing digest mismatch`);
+    }
+
+    const { digest, publishedAt, publishedBy, ...snapshotPayload } = runtimeSnapshot;
+    const computedSnapshotDigest = sha256Base64Url(canonicalizeJson(snapshotPayload));
+    if (digest !== computedSnapshotDigest) {
+      fail(`${runtimeFixturePath}: snapshot digest mismatch`);
+    }
+
+    for (const policyName of ["quota", "budget"]) {
+      const policy = runtimeSnapshot.policies?.[policyName];
+      if (!(policy?.warningPercent < policy?.economyPercent && policy?.economyPercent < policy?.hardStopPercent)) {
+        fail(`${runtimeFixturePath}: ${policyName} thresholds must be strict increasing`);
+      }
+    }
+
+    for (const [index, route] of (runtimeSnapshot.pricing?.routes ?? []).entries()) {
+      const cacheReadPrice = route.cacheReadInputMicroUsdPerMillionTokens;
+      if (cacheReadPrice !== undefined && cacheReadPrice > route.inputMicroUsdPerMillionTokens) {
+        fail(`${runtimeFixturePath}: pricing.routes[${index}] cache-read price exceeds regular input price`);
+      }
+      if ("cachedInputMicroUsdPerMillionTokens" in route) {
+        fail(`${runtimeFixturePath}: pricing.routes[${index}] uses ambiguous cachedInput pricing`);
+      }
+    }
+
+    const runtimeSchema = readJson("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json");
+    const priceRouteProperties = runtimeSchema?.$defs?.priceRoute?.properties ?? {};
+    if (!("cacheReadInputMicroUsdPerMillionTokens" in priceRouteProperties)) {
+      fail("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json: provider cache-read price field is required");
+    }
+    if ("cachedInputMicroUsdPerMillionTokens" in priceRouteProperties) {
+      fail("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json: ambiguous cachedInput pricing is forbidden");
+    }
+    const budgetWarningMaximum = runtimeSchema?.$defs?.budget?.properties?.warningPercent?.maximum;
+    if (budgetWarningMaximum !== 98) {
+      fail("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json: budget warningPercent maximum must be 98");
+    }
+  }
+
+  const usageSchemaPath = "docs/tenant-chat/schemas/usage-settlement-event.schema.json";
+  const usageSchema = readJson(usageSchemaPath);
+  const usageVectors = readJson(usageVectorPath);
+  if (usageSchema && usageVectors) {
+    const eventTypes = new Set();
+    for (const [index, event] of (usageVectors.events ?? []).entries()) {
+      eventTypes.add(event.eventType);
+      if (event.aggregateId !== event.requestId) {
+        fail(`${usageVectorPath}: events[${index}] aggregateId must equal requestId`);
+      }
+      const validationFailures = [];
+      validateData(
+        usageSchema,
+        event,
+        { filePath: usageSchemaPath, path: `$.events[${index}]` },
+        usageSchema,
+        validationFailures,
+      );
+      for (const validationFailure of validationFailures) {
+        fail(`${usageVectorPath}: ${validationFailure}`);
+      }
+    }
+    for (const eventType of [
+      "usage_reserved",
+      "usage_topped_up",
+      "usage_settled",
+      "usage_released",
+      "usage_unconfirmed",
+    ]) {
+      if (!eventTypes.has(eventType)) {
+        fail(`${usageVectorPath}: missing ${eventType} vector`);
+      }
+    }
+
+    const employeeEvent = (usageVectors.events ?? []).find(
+      (event) => event.executionScope?.actorKind === "employee",
+    );
+    if (employeeEvent) {
+      const invalidEmployeeEvent = structuredClone(employeeEvent);
+      delete invalidEmployeeEvent.executionScope.employeeId;
+      const negativeFailures = [];
+      validateData(
+        usageSchema,
+        invalidEmployeeEvent,
+        { filePath: usageSchemaPath, path: "$.negative.employeeWithoutId" },
+        usageSchema,
+        negativeFailures,
+      );
+      if (negativeFailures.length === 0) {
+        fail(`${usageSchemaPath}: employee actor must require employeeId`);
+      }
+    }
+  }
+
+  const jwtSchemaPath = "docs/tenant-chat/schemas/workload-jwt-claims.schema.json";
+  const jwtSchema = readJson(jwtSchemaPath);
+  const jwtVectors = readJson(jwtVectorPath);
+  if (jwtSchema && jwtVectors) {
+    const phases = new Set();
+    const bindingByPhase = new Map(
+      (bindingVectors?.vectors ?? []).map((vector) => [vector.bindingObject?.phase, vector.expectedBindingDigest]),
+    );
+    for (const [index, payload] of (jwtVectors.payloads ?? []).entries()) {
+      phases.add(payload.phase);
+      if (payload.bindingDigest !== bindingByPhase.get(payload.phase)) {
+        fail(`${jwtVectorPath}: ${payload.phase} bindingDigest does not match binding vector`);
+      }
+      const validationFailures = [];
+      validateData(
+        jwtSchema,
+        payload,
+        { filePath: jwtSchemaPath, path: `$.payloads[${index}]` },
+        jwtSchema,
+        validationFailures,
+      );
+      for (const validationFailure of validationFailures) {
+        fail(`${jwtVectorPath}: ${validationFailure}`);
+      }
+    }
+    for (const phase of ["admission", "completion", "cancel"]) {
+      if (!phases.has(phase)) {
+        fail(`${jwtVectorPath}: missing ${phase} payload`);
+      }
+    }
+  }
+
+  for (const expectedText of [
+    "openapi/private-gateway.openapi.json",
+    "db/tenant-chat-usage.sql",
+    "vectors/binding-digest-vectors.json",
+    "schemas/tenant-runtime-snapshot.schema.json",
+    "schemas/completion-sse-event.schema.json",
+  ]) {
+    assertIncludes("docs/tenant-chat/README.md", expectedText);
+    assertIncludes("docs/tenant-chat/execution-contract.md", expectedText);
+  }
+}
+
 function main() {
-  for (const doc of [...sourceOfTruthDocs, ...executionDocs]) {
+  for (const doc of [
+    ...activeEntryDocs,
+    ...currentSnapshotDocs,
+    ...tenantChatDocs,
+    ...versionStatusDocs,
+    ...baselineContractDocs,
+    ...historicalV2Docs,
+    ...versionedV21Docs,
+  ]) {
     if (!doc.includes("*")) {
       assertExists(doc);
     }
   }
 
   assertRuntimeBaseline();
-  assertEntryDocs();
+  assertDocumentationRouting();
   assertCiGate();
   assertSchemaFixturePairs();
+  assertTenantChatSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
+  assertTenantChatExecutableContract();
   for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
     fail(failure);
   }
 
   if (failures.length > 0) {
-    console.error("v2 document verification failed:");
+    console.error("GateLM documentation verification failed:");
     for (const failure of failures) {
       console.error(`- ${failure}`);
     }
     process.exit(1);
   }
 
-  console.log("v2 document verification passed.");
+  console.log("GateLM documentation verification passed.");
 }
 
 main();

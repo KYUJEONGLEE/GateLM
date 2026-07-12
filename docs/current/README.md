@@ -1,0 +1,60 @@
+# GateLM Current Documentation
+
+| Field | Value |
+|---|---|
+| Status | Active documentation entrypoint |
+| Applies to | 현재 GateLM 개발 작업 |
+| Development baseline | `origin/dev` |
+| Last verified | 2026-07-12 |
+| Version policy | 다음 개발 SemVer 미확정 |
+
+이 폴더는 GateLM의 새 계약을 복제하는 장소가 아니다. 현재 어떤 문서가 어느 범위에서 유효한지 알려주는 안정적인 진입점이다.
+
+## Common Reading
+
+1. [`source-of-truth.md`](source-of-truth.md): 문서 권한과 충돌 처리
+2. 아래 범위 표에서 작업에 필요한 문서만 추가 확인
+
+필요할 때만 다음 문서를 읽는다.
+
+- [`implementation-status.md`](implementation-status.md): 현재 구현 사실을 확인할 때
+- [`documentation-gaps.md`](documentation-gaps.md): 문서/코드 충돌이나 미결정 항목을 확인할 때
+
+## Scope Router
+
+| 작업 범위 | 먼저 읽을 문서 | 상태 |
+|---|---|---|
+| 일반 UI, 리팩터링, 버그 수정 | current 문서와 실제 코드/타입 | Active |
+| 신규 Tenant Chat Product | [`../tenant-chat/README.md`](../tenant-chat/README.md) | Active scoped contract; implementation pending |
+| Self-host 설치와 이미지 | [`../v2.1.0/README.md`](../v2.1.0/README.md) | Latest versioned scope |
+| Advanced Routing offline 평가 | [`../v2.1.0/README.md`](../v2.1.0/README.md) | Versioned evidence scope |
+| Gateway/API/DB/Event/Metrics 호환성 | [`../v2.0.0/README.md`](../v2.0.0/README.md)에서 해당 baseline 선택 | Baseline compatibility |
+| 보안/PII/비용 정책 | `../policies/`의 관련 문서와 current 계약 | Supporting policy |
+| 아키텍처 배경 | `../architecture/`의 관련 문서 | Supporting reference |
+| 실험 및 성능 결과 | `../testing/`, `../ai-safety-lab/` | Evidence, 날짜 확인 필요 |
+| 과거 계획과 결정 | `../archive/`, versioned implementation docs | Historical only |
+
+## Current Classification
+
+- `v2.0.0`: 닫힌 historical workstream의 행동 계약 baseline 및 과거 plan/criteria
+- `v2.1.0`: 저장소에 존재하는 최신 versioned 범위. Self-host와 Advanced Routing evidence를 다룸
+- `tenant-chat/v1`: release SemVer와 독립된 신규 Tenant Chat active scoped contract. 구현 상태는 별도로 확인
+- `origin/dev`: 현재 통합 중인 unreleased development snapshot
+- `v0.0.1`: 공식 GitHub 최신 릴리스
+
+위 네 가지는 같은 의미의 버전 신호가 아니다. 팀이 다음 SemVer를 결정하기 전까지 `current`를 임의의 `v2.2.0` 같은 번호로 치환하지 않는다.
+
+## Rules
+
+- versioned 폴더가 있다는 이유만으로 전체 제품의 active source가 되지 않는다.
+- historical implementation plan/task를 새 작업의 backlog로 사용하지 않는다.
+- current 계약이 없는 영역에서 baseline과 코드가 다르면 추측으로 맞추지 않는다.
+- API/DB/Event/Metrics/Security 의미 변경은 별도 계약 후보로 기록한다.
+- 코드 존재와 GA/release/production-ready 상태를 구분한다.
+- 열린 PR은 병합 전까지 current 구현으로 기록하지 않는다.
+
+## Related Entry Points
+
+- [`../README.md`](../README.md): 전체 문서 라우터
+- [`../../AGENTS.md`](../../AGENTS.md): 구현 에이전트 규칙
+- [`../../README.md`](../../README.md): 저장소 개요와 로컬 baseline
