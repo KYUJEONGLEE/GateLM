@@ -203,7 +203,9 @@ export class TenantChatRuntimeService {
           'Tenant Chat policy version is already bound to different content.',
         );
       }
-      await this.markRuntimeConfigActive(tx, snapshot.tenantId, existing.id);
+      if (existing.publishState !== RuntimeConfigPublishState.ACTIVE) {
+        await this.markRuntimeConfigActive(tx, snapshot.tenantId, existing.id);
+      }
       return existing;
     }
 

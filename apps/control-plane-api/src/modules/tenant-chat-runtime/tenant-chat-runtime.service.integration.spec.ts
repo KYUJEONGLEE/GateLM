@@ -72,6 +72,43 @@ describeIntegration('TenantChatRuntimeService integration', () => {
       },
     ]);
   });
+
+  it('reuses an active runtime config without rewriting it for a pricing-only publish', async () => {
+    const policySnapshot = runtimeSnapshot(tenantId, 3);
+    await service.publishSnapshot({ snapshot: policySnapshot });
+
+    const before = await prisma.tenantChatRuntimeConfig.findUniqueOrThrow({
+      where: {
+        tenantId_version: {
+          tenantId,
+          version: BigInt(policySnapshot.policyVersion),
+        },
+      },
+      select: { id: true, updatedAt: true },
+    });
+
+    const pricingOnlySnapshot = runtimeSnapshot(tenantId, 4);
+    pricingOnlySnapshot.policyVersion = policySnapshot.policyVersion;
+    pricingOnlySnapshot.policies = structuredClone(policySnapshot.policies);
+    pricingOnlySnapshot.pricing.routes = structuredClone(policySnapshot.pricing.routes);
+    pricingOnlySnapshot.pricing.digest = computeTenantChatPricingDigest(
+      pricingOnlySnapshot.pricing,
+    );
+    pricingOnlySnapshot.digest = computeTenantChatSnapshotDigest(pricingOnlySnapshot);
+
+    await service.publishSnapshot({ snapshot: pricingOnlySnapshot });
+
+    const after = await prisma.tenantChatRuntimeConfig.findUniqueOrThrow({
+      where: {
+        tenantId_version: {
+          tenantId,
+          version: BigInt(policySnapshot.policyVersion),
+        },
+      },
+      select: { id: true, updatedAt: true },
+    });
+    expect(after).toEqual(before);
+  });
 });
 
 function runtimeSnapshot(

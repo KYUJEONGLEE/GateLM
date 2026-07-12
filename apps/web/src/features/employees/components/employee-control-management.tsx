@@ -40,6 +40,7 @@ import {
 } from "@/lib/control-plane/runtime-policy-types";
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 
 type EmployeeControlManagementProps = {
   locale: Locale;
@@ -2172,12 +2173,22 @@ function CompactUnitStepper({
   unit,
   value
 }: CompactUnitStepperProps) {
+  const [draftValue, setDraftValue] = useState(() =>
+    formatCompactStepperInput(value, decimals, unit)
+  );
+
+  useEffect(() => {
+    setDraftValue(formatCompactStepperInput(value, decimals, unit));
+  }, [decimals, unit, value]);
+
   function updateValue(nextValue: number) {
     if (!Number.isFinite(nextValue)) {
       return;
     }
     const clampedValue = Math.min(Math.max(nextValue, min), max);
-    onValueChange(Number(clampedValue.toFixed(decimals)));
+    const normalizedValue = Number(clampedValue.toFixed(decimals));
+    setDraftValue(formatCompactStepperInput(normalizedValue, decimals, unit));
+    onValueChange(normalizedValue);
   }
 
   function changeBy(direction: -1 | 1) {
@@ -2192,22 +2203,27 @@ function CompactUnitStepper({
         aria-valuemin={min}
         aria-valuenow={value}
         inputMode={decimals > 0 ? "decimal" : "numeric"}
-        onChange={(event) => {
-          const numericValue = Number(
-            event.target.value.replace(unit, "").replace(/[^0-9.-]/g, "")
-          );
+        onBlur={() => {
+          const numericValue = parseCompactStepperInput(draftValue, unit);
+          if (numericValue === null) {
+            setDraftValue(formatCompactStepperInput(value, decimals, unit));
+            return;
+          }
           updateValue(numericValue);
         }}
+        onChange={(event) => setDraftValue(event.target.value)}
         onFocus={(event) => event.currentTarget.select()}
         onKeyDown={(event) => {
           if (event.key === "ArrowUp" || event.key === "ArrowDown") {
             event.preventDefault();
             changeBy(event.key === "ArrowUp" ? 1 : -1);
+          } else if (event.key === "Enter") {
+            event.currentTarget.blur();
           }
         }}
         role="spinbutton"
         type="text"
-        value={`${formatCompactStepperValue(value, decimals)}${unit}`}
+        value={draftValue}
       />
       <span className="employee-policy-stepper-buttons">
         <button
@@ -2236,6 +2252,10 @@ function formatCompactStepperValue(value: number, decimals: number) {
     return String(value);
   }
   return value.toFixed(decimals).replace(/\.?0+$/, "");
+}
+
+function formatCompactStepperInput(value: number, decimals: number, unit: string) {
+  return `${formatCompactStepperValue(value, decimals)}${unit}`;
 }
 
 function getEmployeePolicyFormState(
