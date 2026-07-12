@@ -178,7 +178,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_reservation_request_key UNIQUE (request_id),
-  CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id),
+  CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id, tenant_id),
   CONSTRAINT tenant_chat_reservation_idempotency_key UNIQUE (tenant_id, user_id, idempotency_key),
   -- The referenced user-period row already has direct tenant/user FKs;
   -- duplicate direct FKs on this reservation are intentionally omitted.
@@ -241,8 +241,8 @@ CREATE TABLE tenant_chat_provider_attempts (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (request_id, attempt_no),
   CONSTRAINT tenant_chat_attempt_reservation_request_fkey
-    FOREIGN KEY (reservation_id, request_id)
-    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id) ON DELETE RESTRICT,
+    FOREIGN KEY (reservation_id, request_id, tenant_id)
+    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_attempt_number_check CHECK (attempt_no BETWEEN 1 AND 4),
   CONSTRAINT tenant_chat_attempt_kind_check CHECK (kind IN ('primary', 'fallback')),
   CONSTRAINT tenant_chat_attempt_outcome_check CHECK (
@@ -255,10 +255,7 @@ CREATE TABLE tenant_chat_provider_attempts (
     AND output_micro_usd_per_million_tokens >= 0
     AND (
       cache_read_input_micro_usd_per_million_tokens IS NULL
-      OR (
-        cache_read_input_micro_usd_per_million_tokens >= 0
-        AND cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens
-      )
+      OR cache_read_input_micro_usd_per_million_tokens >= 0
     )
     AND estimated_input_tokens >= 0
     AND max_output_tokens > 0
@@ -272,7 +269,7 @@ CREATE TABLE tenant_chat_provider_attempts (
 );
 
 CREATE INDEX tenant_chat_attempt_reservation_idx
-  ON tenant_chat_provider_attempts (reservation_id, request_id, attempt_no);
+  ON tenant_chat_provider_attempts (reservation_id, request_id, tenant_id, attempt_no);
 CREATE INDEX tenant_chat_attempt_tenant_completed_idx
   ON tenant_chat_provider_attempts (tenant_id, completed_at DESC);
 
@@ -295,8 +292,8 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
   PRIMARY KEY (request_id, ledger_version),
   CONSTRAINT tenant_chat_ledger_event_key UNIQUE (event_id),
   CONSTRAINT tenant_chat_ledger_reservation_request_fkey
-    FOREIGN KEY (reservation_id, request_id)
-    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id) ON DELETE RESTRICT,
+    FOREIGN KEY (reservation_id, request_id, tenant_id)
+    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_ledger_version_check CHECK (ledger_version > 0),
   CONSTRAINT tenant_chat_ledger_event_type_check CHECK (
     event_type IN ('usage_reserved', 'usage_topped_up', 'usage_settled', 'usage_released', 'usage_unconfirmed')
@@ -311,7 +308,7 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
 CREATE INDEX tenant_chat_ledger_tenant_occurred_idx
   ON tenant_chat_usage_ledger_entries (tenant_id, occurred_at DESC);
 CREATE INDEX tenant_chat_ledger_reservation_idx
-  ON tenant_chat_usage_ledger_entries (reservation_id, request_id, ledger_version);
+  ON tenant_chat_usage_ledger_entries (reservation_id, request_id, tenant_id, ledger_version);
 
 CREATE TABLE tenant_chat_invocation_outbox (
   event_id uuid PRIMARY KEY,

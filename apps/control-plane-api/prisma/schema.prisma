@@ -745,6 +745,7 @@ model TenantChatPricingCatalog {
 
   @@unique([tenantId, version], map: "tenant_chat_pricing_tenant_version_key")
   @@unique([tenantId, digest], map: "tenant_chat_pricing_tenant_digest_key")
+  @@unique([id, tenantId], map: "tenant_chat_pricing_identity_tenant_key")
   @@index([tenantId, effectiveAt(sort: Desc)], map: "tenant_chat_pricing_tenant_effective_idx")
   @@map("tenant_chat_pricing_catalogs")
 }
@@ -765,6 +766,7 @@ model TenantChatRuntimeConfig {
   snapshots TenantChatRuntimeSnapshot[]
 
   @@unique([tenantId, version], map: "tenant_chat_runtime_config_tenant_version_key")
+  @@unique([id, tenantId], map: "tenant_chat_runtime_config_identity_tenant_key")
   @@index([tenantId, publishState], map: "tenant_chat_runtime_config_tenant_state_idx")
   @@map("tenant_chat_runtime_configs")
 }
@@ -786,8 +788,8 @@ model TenantChatRuntimeSnapshot {
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant         Tenant                           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  runtimeConfig  TenantChatRuntimeConfig          @relation(fields: [runtimeConfigId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  pricingCatalog TenantChatPricingCatalog         @relation(fields: [pricingCatalogId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  runtimeConfig  TenantChatRuntimeConfig          @relation(fields: [runtimeConfigId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_snapshot_runtime_config_tenant_fkey")
+  pricingCatalog TenantChatPricingCatalog         @relation(fields: [pricingCatalogId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_snapshot_pricing_catalog_tenant_fkey")
   activePointer  TenantChatActiveRuntimeSnapshot?
 
   @@unique([tenantId, version], map: "tenant_chat_snapshot_tenant_version_key")
@@ -929,7 +931,7 @@ model TenantChatUsageReservation {
   providerAttempts TenantChatProviderAttempt[]
   ledgerEntries    TenantChatUsageLedgerEntry[]
 
-  @@unique([reservationId, requestId], map: "tenant_chat_reservation_identity_key")
+  @@unique([reservationId, requestId, tenantId], map: "tenant_chat_reservation_identity_key")
   @@unique([tenantId, userId, idempotencyKey], map: "tenant_chat_reservation_idempotency_key")
   @@index([tenantId, state, createdAt], map: "tenant_chat_reservation_tenant_state_created_idx")
   @@index([tenantId, userId, userPeriodStart], map: "tenant_chat_reservation_user_period_idx")
@@ -963,11 +965,11 @@ model TenantChatProviderAttempt {
   createdAt                              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  reservation TenantChatUsageReservation @relation(fields: [reservationId, requestId], references: [reservationId, requestId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_attempt_reservation_request_fkey")
+  reservation TenantChatUsageReservation @relation(fields: [reservationId, requestId, tenantId], references: [reservationId, requestId, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_attempt_reservation_request_fkey")
   tenant      Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([requestId, attemptNo])
-  @@index([reservationId, requestId, attemptNo], map: "tenant_chat_attempt_reservation_idx")
+  @@index([reservationId, requestId, tenantId, attemptNo], map: "tenant_chat_attempt_reservation_idx")
   @@index([tenantId, completedAt(sort: Desc)], map: "tenant_chat_attempt_tenant_completed_idx")
   @@map("tenant_chat_provider_attempts")
 }
@@ -989,12 +991,12 @@ model TenantChatUsageLedgerEntry {
   occurredAt                       DateTime @map("occurred_at") @db.Timestamptz(6)
   createdAt                        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  reservation TenantChatUsageReservation @relation(fields: [reservationId, requestId], references: [reservationId, requestId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_ledger_reservation_request_fkey")
+  reservation TenantChatUsageReservation @relation(fields: [reservationId, requestId, tenantId], references: [reservationId, requestId, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_ledger_reservation_request_fkey")
   tenant      Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([requestId, ledgerVersion])
   @@index([tenantId, occurredAt(sort: Desc)], map: "tenant_chat_ledger_tenant_occurred_idx")
-  @@index([reservationId, requestId, ledgerVersion], map: "tenant_chat_ledger_reservation_idx")
+  @@index([reservationId, requestId, tenantId, ledgerVersion], map: "tenant_chat_ledger_reservation_idx")
   @@map("tenant_chat_usage_ledger_entries")
 }
 

@@ -1,13 +1,23 @@
 import { createHash } from 'node:crypto';
 
+import Ajv2020, { type ErrorObject } from 'ajv/dist/2020';
+import addFormats from 'ajv-formats';
+
 import type {
   TenantChatPricing,
   TenantChatRuntimePolicies,
   TenantChatRuntimeSnapshotDocument,
 } from './tenant-chat-runtime.types';
+import tenantRuntimeSnapshotSchema = require('./tenant-runtime-snapshot.schema.json');
 
 const OPAQUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA256_DIGEST_PATTERN = /^sha256:[A-Za-z0-9_-]{43}$/;
+const tenantRuntimeSnapshotAjv = new Ajv2020({ allErrors: true, strict: true });
+addFormats(tenantRuntimeSnapshotAjv);
+const validateTenantRuntimeSnapshotSchema =
+  tenantRuntimeSnapshotAjv.compile<TenantChatRuntimeSnapshotDocument>(
+    tenantRuntimeSnapshotSchema,
+  );
 
 export class TenantChatRuntimeContractError extends Error {
   constructor(message: string) {
@@ -17,8 +27,9 @@ export class TenantChatRuntimeContractError extends Error {
 }
 
 export function validateTenantChatRuntimeSnapshot(
-  snapshot: TenantChatRuntimeSnapshotDocument,
+  snapshot: unknown,
 ): void {
+  assertTenantRuntimeSnapshotSchema(snapshot);
   assertOpaqueId(snapshot.snapshotId, 'snapshotId');
   assertOpaqueId(snapshot.tenantId, 'tenantId');
   assertOpaqueId(snapshot.publishedBy, 'publishedBy');
@@ -156,14 +167,6 @@ function validatePricing(pricing: TenantChatPricing): void {
         route.cacheReadInputMicroUsdPerMillionTokens,
         `${prefix}.cacheReadInputMicroUsdPerMillionTokens`,
       );
-      if (
-        route.cacheReadInputMicroUsdPerMillionTokens >
-        route.inputMicroUsdPerMillionTokens
-      ) {
-        throw new TenantChatRuntimeContractError(
-          `${prefix}.cacheReadInputMicroUsdPerMillionTokens cannot exceed the regular input price`,
-        );
-      }
     }
     if (routeIds.has(route.routeId)) {
       throw new TenantChatRuntimeContractError(
@@ -172,6 +175,25 @@ function validatePricing(pricing: TenantChatPricing): void {
     }
     routeIds.add(route.routeId);
   }
+}
+
+function assertTenantRuntimeSnapshotSchema(
+  snapshot: unknown,
+): asserts snapshot is TenantChatRuntimeSnapshotDocument {
+  if (validateTenantRuntimeSnapshotSchema(snapshot)) {
+    return;
+  }
+  const details = (validateTenantRuntimeSnapshotSchema.errors ?? [])
+    .map(formatSchemaError)
+    .join('; ');
+  throw new TenantChatRuntimeContractError(
+    `RuntimeSnapshot schema validation failed${details ? `: ${details}` : ''}`,
+  );
+}
+
+function formatSchemaError(error: ErrorObject): string {
+  const path = error.instancePath || '/';
+  return `${path} ${error.message ?? 'is invalid'}`;
 }
 
 function validatePolicies(

@@ -16,6 +16,7 @@ CREATE TABLE tenant_chat_pricing_catalogs (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_pricing_tenant_version_key UNIQUE (tenant_id, version),
   CONSTRAINT tenant_chat_pricing_tenant_digest_key UNIQUE (tenant_id, digest),
+  CONSTRAINT tenant_chat_pricing_identity_tenant_key UNIQUE (id, tenant_id),
   CONSTRAINT tenant_chat_pricing_version_check CHECK (version > 0),
   CONSTRAINT tenant_chat_pricing_currency_check CHECK (currency = 'USD'),
   CONSTRAINT tenant_chat_pricing_unit_check CHECK (unit = 'micro_usd_per_1m_tokens'),
@@ -38,6 +39,7 @@ CREATE TABLE tenant_chat_runtime_configs (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_runtime_config_tenant_version_key UNIQUE (tenant_id, version),
+  CONSTRAINT tenant_chat_runtime_config_identity_tenant_key UNIQUE (id, tenant_id),
   CONSTRAINT tenant_chat_runtime_config_version_check CHECK (version > 0),
   CONSTRAINT tenant_chat_runtime_config_hash_check CHECK (content_hash ~ '^sha256:[A-Za-z0-9_-]{43}$'),
   CONSTRAINT tenant_chat_runtime_config_document_check CHECK (jsonb_typeof(document) = 'object')
@@ -49,8 +51,8 @@ CREATE INDEX tenant_chat_runtime_config_tenant_state_idx
 CREATE TABLE tenant_chat_runtime_snapshots (
   snapshot_id text PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  runtime_config_id uuid NOT NULL REFERENCES tenant_chat_runtime_configs(id) ON DELETE RESTRICT,
-  pricing_catalog_id uuid NOT NULL REFERENCES tenant_chat_pricing_catalogs(id) ON DELETE RESTRICT,
+  runtime_config_id uuid NOT NULL,
+  pricing_catalog_id uuid NOT NULL,
   version bigint NOT NULL,
   digest text NOT NULL,
   policy_version bigint NOT NULL,
@@ -63,6 +65,12 @@ CREATE TABLE tenant_chat_runtime_snapshots (
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_snapshot_tenant_version_key UNIQUE (tenant_id, version),
   CONSTRAINT tenant_chat_snapshot_identity_key UNIQUE (snapshot_id, tenant_id),
+  CONSTRAINT tenant_chat_snapshot_runtime_config_tenant_fkey
+    FOREIGN KEY (runtime_config_id, tenant_id)
+    REFERENCES tenant_chat_runtime_configs (id, tenant_id) ON DELETE RESTRICT,
+  CONSTRAINT tenant_chat_snapshot_pricing_catalog_tenant_fkey
+    FOREIGN KEY (pricing_catalog_id, tenant_id)
+    REFERENCES tenant_chat_pricing_catalogs (id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_snapshot_versions_check CHECK (
     version > 0
     AND policy_version > 0
@@ -279,7 +287,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_reservation_request_key UNIQUE (request_id),
-  CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id),
+  CONSTRAINT tenant_chat_reservation_identity_key UNIQUE (reservation_id, request_id, tenant_id),
   CONSTRAINT tenant_chat_reservation_idempotency_key UNIQUE (tenant_id, user_id, idempotency_key),
   CONSTRAINT tenant_chat_reservation_user_period_fkey
     FOREIGN KEY (tenant_id, user_id, user_period_start)
@@ -340,8 +348,8 @@ CREATE TABLE tenant_chat_provider_attempts (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (request_id, attempt_no),
   CONSTRAINT tenant_chat_attempt_reservation_request_fkey
-    FOREIGN KEY (reservation_id, request_id)
-    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id) ON DELETE RESTRICT,
+    FOREIGN KEY (reservation_id, request_id, tenant_id)
+    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_attempt_number_check CHECK (attempt_no BETWEEN 1 AND 4),
   CONSTRAINT tenant_chat_attempt_kind_check CHECK (kind IN ('primary', 'fallback')),
   CONSTRAINT tenant_chat_attempt_outcome_check CHECK (
@@ -354,10 +362,7 @@ CREATE TABLE tenant_chat_provider_attempts (
     AND output_micro_usd_per_million_tokens >= 0
     AND (
       cache_read_input_micro_usd_per_million_tokens IS NULL
-      OR (
-        cache_read_input_micro_usd_per_million_tokens >= 0
-        AND cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens
-      )
+      OR cache_read_input_micro_usd_per_million_tokens >= 0
     )
     AND estimated_input_tokens >= 0
     AND max_output_tokens > 0
@@ -371,7 +376,7 @@ CREATE TABLE tenant_chat_provider_attempts (
 );
 
 CREATE INDEX tenant_chat_attempt_reservation_idx
-  ON tenant_chat_provider_attempts (reservation_id, request_id, attempt_no);
+  ON tenant_chat_provider_attempts (reservation_id, request_id, tenant_id, attempt_no);
 CREATE INDEX tenant_chat_attempt_tenant_completed_idx
   ON tenant_chat_provider_attempts (tenant_id, completed_at DESC);
 
@@ -394,8 +399,8 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
   PRIMARY KEY (request_id, ledger_version),
   CONSTRAINT tenant_chat_ledger_event_key UNIQUE (event_id),
   CONSTRAINT tenant_chat_ledger_reservation_request_fkey
-    FOREIGN KEY (reservation_id, request_id)
-    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id) ON DELETE RESTRICT,
+    FOREIGN KEY (reservation_id, request_id, tenant_id)
+    REFERENCES tenant_chat_usage_reservations (reservation_id, request_id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_ledger_version_check CHECK (ledger_version > 0),
   CONSTRAINT tenant_chat_ledger_event_type_check CHECK (
     event_type IN ('usage_reserved', 'usage_topped_up', 'usage_settled', 'usage_released', 'usage_unconfirmed')
@@ -410,7 +415,7 @@ CREATE TABLE tenant_chat_usage_ledger_entries (
 CREATE INDEX tenant_chat_ledger_tenant_occurred_idx
   ON tenant_chat_usage_ledger_entries (tenant_id, occurred_at DESC);
 CREATE INDEX tenant_chat_ledger_reservation_idx
-  ON tenant_chat_usage_ledger_entries (reservation_id, request_id, ledger_version);
+  ON tenant_chat_usage_ledger_entries (reservation_id, request_id, tenant_id, ledger_version);
 
 CREATE TABLE tenant_chat_invocation_outbox (
   event_id uuid PRIMARY KEY,

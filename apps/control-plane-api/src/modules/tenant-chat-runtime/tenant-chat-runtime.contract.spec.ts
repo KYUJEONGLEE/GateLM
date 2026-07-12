@@ -1,11 +1,41 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import {
   computeTenantChatPricingDigest,
   computeTenantChatSnapshotDigest,
   validateTenantChatRuntimeSnapshot,
 } from './tenant-chat-runtime.contract';
 import type { TenantChatRuntimeSnapshotDocument } from './tenant-chat-runtime.types';
+import runtimeSnapshotSchema = require('./tenant-runtime-snapshot.schema.json');
+
+const runtimeSnapshotValidationVectors = JSON.parse(
+  readFileSync(
+    resolve(
+      __dirname,
+      '../../../../../docs/tenant-chat/vectors/runtime-snapshot-validation-vectors.json',
+    ),
+    'utf8',
+  ),
+) as {
+  cases: Array<{ id: string; path: string; value: unknown; valid: boolean }>;
+};
 
 describe('Tenant Chat runtime contract', () => {
+  it('executes the same RuntimeSnapshot schema published in tenant-chat/v1 docs', () => {
+    const contractSchema = JSON.parse(
+      readFileSync(
+        resolve(
+          __dirname,
+          '../../../../../docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json',
+        ),
+        'utf8',
+      ),
+    ) as unknown;
+
+    expect(runtimeSnapshotSchema).toEqual(contractSchema);
+  });
+
   it('reproduces the tenant-chat/v1 snapshot and pricing digest vectors', () => {
     const snapshot = contractSnapshotFixture();
 
@@ -38,7 +68,63 @@ describe('Tenant Chat runtime contract', () => {
       'must have matching immutable pricing provenance',
     );
   });
+
+  it.each(runtimeSnapshotValidationVectors.cases)(
+    'enforces RuntimeSnapshot validation vector $id',
+    ({ path, value, valid }) => {
+      const snapshot = contractSnapshotFixture();
+      setValueAtPath(snapshot, path, value);
+      snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
+      snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+
+      if (valid) {
+        expect(() => validateTenantChatRuntimeSnapshot(snapshot)).not.toThrow();
+        return;
+      }
+
+      expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
+        'RuntimeSnapshot schema validation failed',
+      );
+    },
+  );
+
+  it('rejects an invalid IANA timezone after JSON Schema validation', () => {
+    const snapshot = contractSnapshotFixture();
+    snapshot.policies.quota.timezone = 'Not/A_Timezone';
+    snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
+    snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+
+    expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
+      'policies.quota.timezone is not an IANA timezone',
+    );
+  });
 });
+
+function setValueAtPath(target: unknown, path: string, value: unknown): void {
+  const segments = path.split('.');
+  let current = target;
+  for (const segment of segments.slice(0, -1)) {
+    if (Array.isArray(current)) {
+      current = current[Number(segment)];
+    } else if (current !== null && typeof current === 'object') {
+      current = (current as Record<string, unknown>)[segment];
+    } else {
+      throw new Error(`Validation vector path is invalid at ${segment}`);
+    }
+  }
+
+  const finalSegment = segments.at(-1);
+  if (!finalSegment) {
+    throw new Error('Validation vector path cannot be empty');
+  }
+  if (Array.isArray(current)) {
+    current[Number(finalSegment)] = structuredClone(value);
+  } else if (current !== null && typeof current === 'object') {
+    (current as Record<string, unknown>)[finalSegment] = structuredClone(value);
+  } else {
+    throw new Error(`Validation vector path is invalid at ${finalSegment}`);
+  }
+}
 
 function contractSnapshotFixture(): TenantChatRuntimeSnapshotDocument {
   return {
