@@ -223,6 +223,10 @@ postgres volume:  gatelm-aws-perf-postgres-data
 redis volume:     gatelm-aws-perf-redis-data
 ```
 
+The performance override also uses the pinned Node-based concurrent Mock
+Provider while preserving `MOCK_PROVIDER_DEFAULT_LATENCY_MS`. This avoids a
+thread-per-request Python server becoming the measured bottleneck.
+
 The performance override forces `OPENAI_API_KEY` and both Provider credential
 maps to empty values. Its bootstrap fails unless the target PostgreSQL container
 belongs to `gatelm-aws-perf` and mounts the expected isolated volume.

@@ -108,6 +108,7 @@ type Config struct {
 	ExpectedApplicationID                  string
 	ReadinessTimeout                       time.Duration
 	ProviderTimeout                        time.Duration
+	ProviderTransport                      ProviderTransportConfig
 	MaxRequestBodyBytes                    int64
 	ExactCacheTTL                          time.Duration
 	ExactCacheKeySecret                    string
@@ -176,6 +177,18 @@ type PricingCacheConfig struct {
 	MaxEntries int
 }
 
+type ProviderTransportConfig struct {
+	MaxIdleConns          int
+	MaxIdleConnsPerHost   int
+	MaxConnsPerHost       int
+	IdleConnTimeout       time.Duration
+	DialTimeout           time.Duration
+	DialKeepAlive         time.Duration
+	TLSHandshakeTimeout   time.Duration
+	ResponseHeaderTimeout time.Duration
+	ExpectContinueTimeout time.Duration
+}
+
 type SemanticCacheConfig struct {
 	Enabled                 bool
 	Mode                    string
@@ -215,6 +228,7 @@ func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
 	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
 	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
+	providerTimeout := envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000)
 	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
 	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
 	deploymentMode := normalizeDeploymentMode(envString("DEPLOYMENT_MODE", ""))
@@ -303,16 +317,27 @@ func LoadWithError() (Config, error) {
 		ExpectedProjectID:                      envString("GATEWAY_EXPECTED_PROJECT_ID", ""),
 		ExpectedApplicationID:                  envString("GATEWAY_EXPECTED_APPLICATION_ID", ""),
 		ReadinessTimeout:                       envDurationMillis("GATEWAY_READINESS_TIMEOUT_MS", 1000),
-		ProviderTimeout:                        envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
-		MaxRequestBodyBytes:                    envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
-		ExactCacheTTL:                          envDurationSeconds("GATEWAY_EXACT_CACHE_TTL_SECONDS", 600),
-		ExactCacheKeySecret:                    exactCacheKeySecret,
-		RateLimitEnabled:                       envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
-		RateLimitWindowSecs:                    envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
-		RateLimitLimit:                         envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
-		RateLimitBackend:                       rateLimitBackend,
-		RateLimitAlgorithm:                     rateLimitAlgorithm,
-		RateLimitRedisKeyPrefix:                strings.TrimSpace(envString("GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX", "")),
+		ProviderTimeout:                        providerTimeout,
+		ProviderTransport: ProviderTransportConfig{
+			MaxIdleConns:          envInt("GATEWAY_PROVIDER_MAX_IDLE_CONNS", 512),
+			MaxIdleConnsPerHost:   envInt("GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST", 256),
+			MaxConnsPerHost:       envInt("GATEWAY_PROVIDER_MAX_CONNS_PER_HOST", 256),
+			IdleConnTimeout:       envDurationMillis("GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS", 90000),
+			DialTimeout:           envDurationMillis("GATEWAY_PROVIDER_DIAL_TIMEOUT_MS", 5000),
+			DialKeepAlive:         envDurationMillis("GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS", 30000),
+			TLSHandshakeTimeout:   envDurationMillis("GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS", 10000),
+			ResponseHeaderTimeout: envDurationMillis("GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS", int(providerTimeout.Milliseconds())),
+			ExpectContinueTimeout: envDurationMillis("GATEWAY_PROVIDER_EXPECT_CONTINUE_TIMEOUT_MS", 1000),
+		},
+		MaxRequestBodyBytes:     envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
+		ExactCacheTTL:           envDurationSeconds("GATEWAY_EXACT_CACHE_TTL_SECONDS", 600),
+		ExactCacheKeySecret:     exactCacheKeySecret,
+		RateLimitEnabled:        envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
+		RateLimitWindowSecs:     envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
+		RateLimitLimit:          envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
+		RateLimitBackend:        rateLimitBackend,
+		RateLimitAlgorithm:      rateLimitAlgorithm,
+		RateLimitRedisKeyPrefix: strings.TrimSpace(envString("GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX", "")),
 		AISafetySidecar: AISafetySidecarConfig{
 			Enabled:     envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
 			EndpointURL: envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
@@ -354,6 +379,9 @@ func LoadWithError() (Config, error) {
 	if cfg.AuthCache.MaxEntries <= 0 || cfg.PricingCache.MaxEntries <= 0 {
 		return cfg, errors.New("auth and pricing cache max entries must be positive")
 	}
+	if err := validateProviderTransportConfig(cfg.ProviderTransport); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
@@ -363,6 +391,19 @@ func validatePostgresPoolConfig(name string, cfg PostgresPoolConfig) error {
 	}
 	if cfg.MinConns < 0 || cfg.MinConns > cfg.MaxConns {
 		return fmt.Errorf("%s min connections must be between 0 and max connections", name)
+	}
+	return nil
+}
+
+func validateProviderTransportConfig(cfg ProviderTransportConfig) error {
+	if cfg.MaxIdleConns <= 0 || cfg.MaxIdleConnsPerHost <= 0 || cfg.MaxConnsPerHost <= 0 {
+		return errors.New("provider HTTP connection limits must be positive")
+	}
+	if cfg.MaxIdleConnsPerHost > cfg.MaxIdleConns {
+		return errors.New("provider max idle connections per host cannot exceed total max idle connections")
+	}
+	if cfg.MaxIdleConnsPerHost > cfg.MaxConnsPerHost {
+		return errors.New("provider max idle connections per host cannot exceed max connections per host")
 	}
 	return nil
 }

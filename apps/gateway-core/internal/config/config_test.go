@@ -60,6 +60,19 @@ var databasePerformanceEnvKeys = []string{
 	"GATEWAY_EXACT_CACHE_KEY_SECRET",
 }
 
+var providerTransportEnvKeys = []string{
+	"GATEWAY_PROVIDER_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_MAX_IDLE_CONNS",
+	"GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST",
+	"GATEWAY_PROVIDER_MAX_CONNS_PER_HOST",
+	"GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_DIAL_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS",
+	"GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_EXPECT_CONTINUE_TIMEOUT_MS",
+}
+
 var rawResponseCaptureEnvKeys = []string{
 	"DEPLOYMENT_MODE",
 	"RAW_RESPONSE_CAPTURE_ENABLED",
@@ -106,6 +119,13 @@ func resetAsyncLogEnv(t *testing.T) {
 func resetDatabasePerformanceEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range databasePerformanceEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetProviderTransportEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range providerTransportEnvKeys {
 		t.Setenv(key, "")
 	}
 }
@@ -371,6 +391,60 @@ func TestDatabasePerformanceConfigRejectsPoolMinAboveMax(t *testing.T) {
 	_, err := LoadWithError()
 	if err == nil || !strings.Contains(err.Error(), "database min connections") {
 		t.Fatalf("expected invalid primary pool error, got %v", err)
+	}
+}
+
+func TestProviderTransportConfigDefaults(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetProviderTransportEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	transport := cfg.ProviderTransport
+	if transport.MaxIdleConns != 512 || transport.MaxIdleConnsPerHost != 256 || transport.MaxConnsPerHost != 256 {
+		t.Fatalf("unexpected provider connection defaults: totalIdle=%d hostIdle=%d hostMax=%d", transport.MaxIdleConns, transport.MaxIdleConnsPerHost, transport.MaxConnsPerHost)
+	}
+	if transport.ResponseHeaderTimeout != cfg.ProviderTimeout {
+		t.Fatalf("response header timeout should follow provider timeout: header=%s provider=%s", transport.ResponseHeaderTimeout, cfg.ProviderTimeout)
+	}
+}
+
+func TestProviderTransportConfigLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetProviderTransportEnv(t)
+	t.Setenv("GATEWAY_PROVIDER_TIMEOUT_MS", "60000")
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS", "1024")
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST", "512")
+	t.Setenv("GATEWAY_PROVIDER_MAX_CONNS_PER_HOST", "768")
+	t.Setenv("GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS", "120000")
+	t.Setenv("GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS", "45000")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	transport := cfg.ProviderTransport
+	if cfg.ProviderTimeout != 60*time.Second || transport.ResponseHeaderTimeout != 45*time.Second {
+		t.Fatalf("unexpected provider timeouts: request=%s header=%s", cfg.ProviderTimeout, transport.ResponseHeaderTimeout)
+	}
+	if transport.MaxIdleConns != 1024 || transport.MaxIdleConnsPerHost != 512 || transport.MaxConnsPerHost != 768 {
+		t.Fatalf("unexpected provider limits: totalIdle=%d hostIdle=%d hostMax=%d", transport.MaxIdleConns, transport.MaxIdleConnsPerHost, transport.MaxConnsPerHost)
+	}
+}
+
+func TestProviderTransportConfigRejectsIdlePerHostAboveTotal(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetProviderTransportEnv(t)
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS", "10")
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST", "11")
+
+	_, err := LoadWithError()
+	if err == nil || !strings.Contains(err.Error(), "per host cannot exceed total") {
+		t.Fatalf("expected invalid provider idle connection error, got %v", err)
 	}
 }
 

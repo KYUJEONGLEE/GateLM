@@ -26,6 +26,7 @@ import (
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
+	providerhttpclient "gatelm/apps/gateway-core/internal/adapters/providers/httpclient"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
@@ -69,7 +70,19 @@ func main() {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
 
-	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
+	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
+		RequestTimeout:        cfg.ProviderTimeout,
+		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
+		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
+		IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
+		DialTimeout:           cfg.ProviderTransport.DialTimeout,
+		DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
+		TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: cfg.ProviderTransport.ResponseHeaderTimeout,
+		ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
+	})
+	defer providerHTTPClient.CloseIdleConnections()
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)

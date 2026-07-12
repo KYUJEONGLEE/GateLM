@@ -159,3 +159,31 @@ are never cached. Enabling it creates a revocation visibility window of at
 most the configured TTL, so production enablement requires that tradeoff to
 match the credential revocation SLA. The pricing cache rechecks each rule's
 effective interval and never caches lookup failures.
+
+## Provider Transport And Performance Mock
+
+Gateway uses a dedicated cloned `http.Transport` for Provider adapters instead
+of Go's low default idle-connection limit per host. Defaults are bounded and
+configurable:
+
+```text
+GATEWAY_PROVIDER_MAX_IDLE_CONNS=512
+GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST=256
+GATEWAY_PROVIDER_MAX_CONNS_PER_HOST=256
+GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS=90000
+GATEWAY_PROVIDER_DIAL_TIMEOUT_MS=5000
+GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS=30000
+GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS=10000
+GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS=<GATEWAY_PROVIDER_TIMEOUT_MS>
+```
+
+The transport keeps proxy behavior and HTTP/2 negotiation from Go's default
+transport while bounding connections per Provider host. Limits must be tuned
+against the Provider's own concurrency and rate limits; raising them does not
+override an upstream quota.
+
+The isolated performance Compose profile replaces the thread-per-request
+Python mock with the repository's Node 22 no-op mock. It retains the configured
+`MOCK_PROVIDER_DEFAULT_LATENCY_MS` (100ms in the perf seed), OpenAI-compatible
+response shape, streaming support, health endpoint, and failure-control
+endpoints. The pinned container runs read-only without Linux capabilities.
