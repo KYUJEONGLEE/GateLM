@@ -287,6 +287,21 @@ The runner performs the Mock routing preflight first, joins only the
 inside that network. It passes only the performance API Key and App Token to
 the k6 container. The normal host port `8080` is never used.
 
+Every run uses a dedicated run ID. After k6 exits, the runner waits for the
+async log queue to drain and reconciles completed k6 iterations against the
+matching `p0_llm_invocation_logs` rows. The run fails unless all of the
+following are true:
+
+- completed load iterations equal total and distinct Request Log rows
+- every matched row is `success`, HTTP `200`, and has written logging outcomes
+- k6 has no failed checks, HTTP failures, or dropped iterations
+- async enqueue/drop/persist error deltas are zero and final queue depth is zero
+
+The HTML dashboard export, safe k6 JSON summary, and combined reconciliation
+report are written under `reports/perf/`. The combined report contains only
+the synthetic run ID and aggregate values; it does not contain credentials,
+raw prompts, or responses.
+
 Before starting the runner, open an SSH tunnel from the operator machine:
 
 ```powershell
@@ -312,8 +327,11 @@ Optional runner settings:
 |---|---:|---|
 | `GATELM_K6_TARGET_RPS` | `1` | Scheduled cache-miss requests per second |
 | `GATELM_K6_DURATION` | `2m` | Load duration |
+| `GATELM_K6_PRE_ALLOCATED_VUS` | target RPS | VUs initialized before the test |
+| `GATELM_K6_MAX_VUS` | target RPS x 2 | Maximum VUs k6 may allocate |
 | `GATELM_K6_DASHBOARD_PORT` | `5665` | EC2 loopback dashboard port |
 | `GATELM_K6_DASHBOARD_PERIOD` | `1s` | Live dashboard aggregation period |
+| `GATELM_PERF_LOG_DRAIN_TIMEOUT_SECONDS` | `60` | Maximum Request Log reconciliation wait |
 | `GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT` | `100000` | Isolated Mock RuntimeSnapshot limit per 60 seconds |
 
 Stop the performance containers without deleting their volumes:
