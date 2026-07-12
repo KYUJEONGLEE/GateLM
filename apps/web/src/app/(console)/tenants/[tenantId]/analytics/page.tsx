@@ -11,12 +11,13 @@ import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link
 import {
   AnalyticsCachePanel,
   AnalyticsCostPanel,
-  AnalyticsImpactPanel,
   AnalyticsPerformancePanel,
   AnalyticsReliabilityPanel,
   AnalyticsUsagePanel
 } from "@/features/analytics/components/analytics-panels";
+import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
+import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
@@ -25,8 +26,8 @@ import {
   type LiveAnalyticsPerformance,
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
+import { getLiveAnalyticsV5Evidence } from "@/lib/gateway/live-analytics-v5";
 import { getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
-import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -74,11 +75,11 @@ const pageText = {
     provider: "Provider",
     range: "Time range",
     rangeLabels: { "15m": "15 minutes", "1h": "1 hour", "1d": "24 hours", "1w": "7 days" },
-    subtitle: "Gateway outcomes, cost, and operational performance",
+    subtitle: "Cost, policy, and operational performance",
     tabs: {
       cache: "Cache",
       cost: "Cost",
-      impact: "Outcomes",
+      impact: "Policy impact",
       performance: "Performance",
       reliability: "Reliability",
       usage: "Usage"
@@ -96,11 +97,11 @@ const pageText = {
     provider: "Provider",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
-    subtitle: "Gateway 결과, 비용, 운영 성능 분석",
+    subtitle: "비용, 정책, 운영 성능 분석",
     tabs: {
       cache: "캐시",
       cost: "비용",
-      impact: "운영 결과",
+      impact: "정책 효과",
       performance: "성능",
       reliability: "안정성",
       usage: "사용량"
@@ -115,11 +116,11 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const filters = buildFilters(resolvedSearchParams);
   const needsPerformance =
-    activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
+    activeTab === "impact" || activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
   const needsCostTrend = activeTab === "cost";
-  const needsLiveEvidence = activeTab === "impact";
+  const needsV5Evidence = activeTab === "impact";
 
-  const [locale, projectsModel, overview, performance, costTrend, liveRequests] = await Promise.all([
+  const [locale, projectsModel, overview, performance, costTrend, v5Evidence] = await Promise.all([
     getRequestLocale(),
     getProjectsModel(tenantId),
     getLiveDashboardOverview(tenantId, {
@@ -140,8 +141,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           range: filters.range
         })
       : Promise.resolve(undefined),
-    needsLiveEvidence
-      ? getLiveOverviewRequests(tenantId, {
+    needsV5Evidence
+      ? getLiveAnalyticsV5Evidence(tenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
         })
@@ -150,6 +151,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
 
   const text = pageText[locale];
   const projects = projectsModel.projects.filter((project) => project.status !== "ARCHIVED");
+  const applicationModels = needsV5Evidence
+    ? await Promise.all(projects.map((project) => getApplicationsModel(tenantId, project.id)))
+    : [];
+  const applicationNameById = new Map(
+    applicationModels.flatMap((applicationModel) => applicationModel.applications)
+      .map((application) => [application.id, application.name] as const)
+  );
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const model = buildAnalyticsReadModel(overview);
   const providerOptions = buildProviderOptions(overview, performance, filters.provider);
@@ -157,7 +165,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const showProviderModelFilters = activeTab === "performance";
 
   return (
-    <main className="console-content analytics-v3-page analytics-v4-page">
+    <main className="console-content analytics-v3-page analytics-v4-page analytics-v5-page">
       <header className="analytics-v3-command-header">
         <div className="analytics-v3-title-block">
           <h1>{text.title}</h1>
@@ -235,11 +243,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       </nav>
 
       {activeTab === "impact" ? (
-        <AnalyticsImpactPanel
-          liveRequests={liveRequests}
+        <AnalyticsV5Overview
+          applicationNameById={applicationNameById}
+          evidence={v5Evidence}
           locale={locale}
           model={model}
-          tenantId={tenantId}
+          performance={performance}
+          range={filters.range}
         />
       ) : activeTab === "usage" ? (
         <AnalyticsUsagePanel locale={locale} model={model} performance={performance} />

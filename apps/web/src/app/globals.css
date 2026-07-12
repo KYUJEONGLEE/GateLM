@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "../features/analytics/analytics-v3.css";
 @import "../features/analytics/analytics-v4.css";
+@import "../features/analytics/analytics-v5.css";
 
 @custom-variant dark (&:is(.dark *));
 
