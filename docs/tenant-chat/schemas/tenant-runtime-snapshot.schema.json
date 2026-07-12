@@ -81,7 +81,10 @@
         "modelKey": { "$ref": "#/$defs/opaqueId" },
         "inputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" },
         "outputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" },
-        "cachedInputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" }
+        "cacheReadInputMicroUsdPerMillionTokens": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "Provider-side prompt-cache read/hit price only. This is unrelated to GateLM Exact Cache and never represents cache creation/write pricing."
+        }
       }
     },
     "policies": {
@@ -125,7 +128,10 @@
       "properties": {
         "period": { "const": "calendar_month" },
         "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "defaultMonthlyTokenLimit": { "$ref": "#/$defs/nonNegativeInteger" },
+        "defaultMonthlyTokenLimit": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "A value of 0 means immediate blocked state, not unlimited usage."
+        },
         "warningPercent": { "type": "integer", "minimum": 1, "maximum": 99 },
         "economyPercent": { "type": "integer", "minimum": 2, "maximum": 119 },
         "hardStopPercent": { "type": "integer", "minimum": 3, "maximum": 1000 }
@@ -139,8 +145,11 @@
         "period": { "const": "calendar_month" },
         "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
         "currency": { "const": "USD" },
-        "monthlyLimitMicroUsd": { "$ref": "#/$defs/nonNegativeInteger" },
-        "warningPercent": { "type": "integer", "minimum": 1, "maximum": 99 },
+        "monthlyLimitMicroUsd": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "A value of 0 means immediate blocked state, not unlimited budget."
+        },
+        "warningPercent": { "type": "integer", "minimum": 1, "maximum": 98 },
         "economyPercent": { "type": "integer", "minimum": 2, "maximum": 99 },
         "hardStopPercent": { "const": 100 }
       }

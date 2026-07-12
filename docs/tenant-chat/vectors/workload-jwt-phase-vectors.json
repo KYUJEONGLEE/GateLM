@@ -25,8 +25,8 @@
       "tenantAuthzVersion": 7,
       "sessionVersion": 3,
       "snapshotVersion": 12,
-      "snapshotDigest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
-      "bindingDigest": "hmac-sha256:MeYTXadcD790UJLYvmFMd48iaeL6GkCOj4ZG2MamNCw"
+      "snapshotDigest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+      "bindingDigest": "hmac-sha256:BMVPZ2qQx-4Ewex5FGnDXGpjERAhSn7WF_3BfkNuG6M"
     },
     {
       "iss": "gatelm-chat-api",
@@ -48,8 +48,8 @@
       "tenantAuthzVersion": 7,
       "sessionVersion": 3,
       "snapshotVersion": 12,
-      "snapshotDigest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
-      "bindingDigest": "hmac-sha256:E_a6REovuD7mq7JnRmYM13OLskiwxIjWlfDccOHXE_c",
+      "snapshotDigest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+      "bindingDigest": "hmac-sha256:wip0OBmQCUFausq7QgVoOecQB22pauanKV0FDKS3Zlc",
       "admissionId": "admission_fixture_001"
     },
     {
@@ -72,8 +72,8 @@
       "tenantAuthzVersion": 7,
       "sessionVersion": 3,
       "snapshotVersion": 12,
-      "snapshotDigest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
-      "bindingDigest": "hmac-sha256:TditR0RY_MznMSbmMHI_jxuS_EKP7JmAC25b_wKiFFw",
+      "snapshotDigest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+      "bindingDigest": "hmac-sha256:GIuCotyTHDkq_Eljy5oz7SCXGvvKQzN--hciUd5RUTQ",
       "admissionId": "admission_fixture_001"
     }
   ]

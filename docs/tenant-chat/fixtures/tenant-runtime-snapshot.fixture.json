@@ -1,13 +1,13 @@
 {
   "snapshotId": "tenant_chat_snapshot_fixture_001",
   "version": 12,
-  "digest": "sha256:0NNKjCcXy3oL8lg0Pv4S_LdOpUjhoZrtup2Ox9LT2ec",
+  "digest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
   "tenantId": "tenant_fixture_001",
   "policyVersion": 8,
   "employeeNoticeVersion": 3,
   "pricing": {
     "version": 5,
-    "digest": "sha256:ZgARchnAugMq59SSFizX_mvfd0GPG6KN-G3nTitCZ5Q",
+    "digest": "sha256:C5SCy-tbYwbIrspYHZGb4qUwneWVrkNRiIdVf0iD6BE",
     "currency": "USD",
     "unit": "micro_usd_per_1m_tokens",
     "effectiveAt": "2026-07-01T00:00:00Z",
@@ -18,7 +18,7 @@
         "modelKey": "model_standard_001",
         "inputMicroUsdPerMillionTokens": 250000,
         "outputMicroUsdPerMillionTokens": 1000000,
-        "cachedInputMicroUsdPerMillionTokens": 25000
+        "cacheReadInputMicroUsdPerMillionTokens": 25000
       },
       {
         "routeId": "route_economy_001",

@@ -203,7 +203,16 @@
           "enum": ["tenant_admin", "employee"]
         },
         "employeeId": { "$ref": "#/$defs/opaqueId" }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "actorKind": { "const": "employee" } },
+            "required": ["actorKind"]
+          },
+          "then": { "required": ["employeeId"] }
+        }
+      ]
     },
     "quota": {
       "type": "object",

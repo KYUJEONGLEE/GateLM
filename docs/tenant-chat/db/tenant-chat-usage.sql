@@ -68,9 +68,21 @@ CREATE TABLE tenant_chat_user_token_periods (
   CONSTRAINT tenant_chat_user_period_range_check CHECK (period_end > period_start),
   CONSTRAINT tenant_chat_user_period_limits_check CHECK (
     limit_tokens >= 0
-    AND warning_threshold_tokens >= 0
-    AND warning_threshold_tokens < economy_threshold_tokens
-    AND economy_threshold_tokens < hard_stop_tokens
+    AND (
+      (
+        limit_tokens = 0
+        AND warning_threshold_tokens = 0
+        AND economy_threshold_tokens = 0
+        AND hard_stop_tokens = 0
+        AND state = 'blocked'
+      )
+      OR (
+        limit_tokens > 0
+        AND warning_threshold_tokens >= 0
+        AND warning_threshold_tokens < economy_threshold_tokens
+        AND economy_threshold_tokens < hard_stop_tokens
+      )
+    )
   ),
   CONSTRAINT tenant_chat_user_period_balances_check CHECK (
     reserved_tokens >= 0
@@ -110,10 +122,22 @@ CREATE TABLE tenant_chat_tenant_cost_periods (
   CONSTRAINT tenant_chat_cost_period_currency_check CHECK (currency = 'USD'),
   CONSTRAINT tenant_chat_cost_period_limits_check CHECK (
     limit_micro_usd >= 0
-    AND warning_threshold_micro_usd >= 0
-    AND warning_threshold_micro_usd < economy_threshold_micro_usd
-    AND economy_threshold_micro_usd < hard_stop_micro_usd
-    AND hard_stop_micro_usd = limit_micro_usd
+    AND (
+      (
+        limit_micro_usd = 0
+        AND warning_threshold_micro_usd = 0
+        AND economy_threshold_micro_usd = 0
+        AND hard_stop_micro_usd = 0
+        AND state = 'blocked'
+      )
+      OR (
+        limit_micro_usd > 0
+        AND warning_threshold_micro_usd >= 0
+        AND warning_threshold_micro_usd < economy_threshold_micro_usd
+        AND economy_threshold_micro_usd < hard_stop_micro_usd
+        AND hard_stop_micro_usd = limit_micro_usd
+      )
+    )
   ),
   CONSTRAINT tenant_chat_cost_period_balances_check CHECK (
     reserved_cost_micro_usd >= 0
@@ -199,13 +223,13 @@ CREATE TABLE tenant_chat_provider_attempts (
   pricing_version bigint NOT NULL,
   input_micro_usd_per_million_tokens bigint NOT NULL,
   output_micro_usd_per_million_tokens bigint NOT NULL,
-  cached_input_micro_usd_per_million_tokens bigint NULL,
+  cache_read_input_micro_usd_per_million_tokens bigint NULL,
   estimated_input_tokens bigint NOT NULL,
   max_output_tokens bigint NOT NULL,
   reserved_cost_micro_usd bigint NOT NULL,
   confirmed_input_tokens bigint NOT NULL DEFAULT 0,
   confirmed_output_tokens bigint NOT NULL DEFAULT 0,
-  confirmed_cached_input_tokens bigint NOT NULL DEFAULT 0,
+  confirmed_cache_read_input_tokens bigint NOT NULL DEFAULT 0,
   confirmed_cost_micro_usd bigint NOT NULL DEFAULT 0,
   outcome text NULL,
   usage_quality text NOT NULL DEFAULT 'not_available',
@@ -227,13 +251,20 @@ CREATE TABLE tenant_chat_provider_attempts (
     pricing_version > 0
     AND input_micro_usd_per_million_tokens >= 0
     AND output_micro_usd_per_million_tokens >= 0
-    AND (cached_input_micro_usd_per_million_tokens IS NULL OR cached_input_micro_usd_per_million_tokens >= 0)
+    AND (
+      cache_read_input_micro_usd_per_million_tokens IS NULL
+      OR (
+        cache_read_input_micro_usd_per_million_tokens >= 0
+        AND cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens
+      )
+    )
     AND estimated_input_tokens >= 0
     AND max_output_tokens > 0
     AND reserved_cost_micro_usd >= 0
     AND confirmed_input_tokens >= 0
     AND confirmed_output_tokens >= 0
-    AND confirmed_cached_input_tokens >= 0
+    AND confirmed_cache_read_input_tokens >= 0
+    AND confirmed_cache_read_input_tokens <= confirmed_input_tokens
     AND confirmed_cost_micro_usd >= 0
   )
 );

@@ -131,7 +131,7 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 - payload를 RFC 8785 JCS UTF-8 bytes로 만들고 SHA-256 후 `sha256:<unpadded-base64url>`로 표현한다.
 - Gateway는 DB body를 다시 digest하고 요청의 version/digest와 exact match할 때만 실행한다.
 - pricing은 snapshot에 `version`, `digest`, `effectiveAt`, USD micro-unit 단가를 immutable하게 pin한다. pricing digest는 pricing object에서 `digest`를 제거한 뒤 같은 RFC 8785/SHA-256/base64url 규칙으로 계산한다.
-- attempt row에는 `pricing_version`과 실제 계산에 쓴 input/output/cached-input 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
+- attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
 
 예약 계산은 integer arithmetic만 사용한다.
 
@@ -142,7 +142,11 @@ outputExposureMicroUsd = ceil(maxOutputTokens * outputMicroUsdPerMillionTokens /
 reservedCostMicroUsd = inputExposureMicroUsd + outputExposureMicroUsd
 ```
 
-fallback 전에는 fallback route의 위 exposure 전체를 추가 top-up한다. 예약은 cache discount를 가정하지 않는다. 정산에서 cached input이 확인되면 `regularInput=inputTokens-cachedInputTokens`로 두고 regular input, cached input, output 항목을 각각 pinned 단가로 계산해 올림한 뒤 합한다. cached-input 단가가 없으면 모든 input을 regular input으로 계산한다. Provider가 total cost를 authoritative하게 제공하더라도 token과 pinned price로 계산한 값과 차이를 기록해 검토하며, MVP ledger의 confirmed cost는 pinned price 계산값을 사용한다. exact cache hit과 pre-call failure는 0이다.
+fallback 전에는 fallback route의 위 exposure 전체를 추가 top-up한다. 예약은 cache discount를 가정하지 않는다. 정산에서 Provider prompt-cache read token이 확인되면 `regularInput=inputTokens-cacheReadInputTokens`로 두고 regular input, cache-read input, output 항목을 각각 pinned 단가로 계산해 올림한 뒤 합한다. cache-read 단가가 없으면 모든 input을 regular input으로 계산한다. `cacheReadInputTokens <= inputTokens`, `cacheReadInputPrice <= regularInputPrice`를 publish/settlement에서 검증한다. Provider cache creation/write token과 가격은 이 read 필드에 넣지 않으며, 지원할 때 5분/1시간 write field를 별도 contract revision으로 추가한다. Provider가 total cost를 authoritative하게 제공하더라도 token과 pinned price로 계산한 값과 차이를 기록해 검토하며, MVP ledger의 confirmed cost는 pinned price 계산값을 사용한다. GateLM Exact Cache hit과 pre-call failure는 Provider를 호출하지 않으므로 0이다.
+
+GateLM Exact Cache와 Provider prompt cache는 별도 기능이다. Exact Cache는 GateLM이 응답을 반환해 Provider 호출 자체가 없고, Provider cache-read는 Provider 호출 안에서 input 일부가 재사용되는 과금 provenance다.
+
+`defaultMonthlyTokenLimit=0` 또는 `monthlyLimitMicroUsd=0`은 무제한이 아니라 즉시 `blocked`다. 이때 materialized warning/economy/hard-stop absolute threshold는 모두 0이고 period row의 state도 `blocked`여야 한다. 양수 limit에서만 threshold를 strict increasing으로 materialize한다.
 
 월 기간은 tenant-configured IANA timezone의 현지 월 1일 00:00 inclusive부터 다음 달 1일 00:00 exclusive까지이며 DB에는 두 경계를 UTC `timestamptz`로 저장한다. timezone 변경은 다음 period부터 적용한다.
 

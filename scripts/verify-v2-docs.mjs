@@ -733,6 +733,10 @@ function assertTenantChatExecutableContract() {
     "create index tenant_chat_ledger_reservation_idx on tenant_chat_usage_ledger_entries (reservation_id, request_id, ledger_version)",
     "create index tenant_chat_log_user_idx on tenant_chat_invocation_logs (user_id, completed_at desc)",
     "create index tenant_chat_log_employee_idx on tenant_chat_invocation_logs (employee_id) where employee_id is not null",
+    "limit_tokens = 0 and warning_threshold_tokens = 0 and economy_threshold_tokens = 0 and hard_stop_tokens = 0 and state = 'blocked'",
+    "limit_micro_usd = 0 and warning_threshold_micro_usd = 0 and economy_threshold_micro_usd = 0 and hard_stop_micro_usd = 0 and state = 'blocked'",
+    "cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens",
+    "confirmed_cache_read_input_tokens <= confirmed_input_tokens",
   ];
   for (const fragment of expectedDdlFragments) {
     if (!normalizedDdl.includes(fragment)) {
@@ -742,6 +746,9 @@ function assertTenantChatExecutableContract() {
 
   if (/reservation_id\s+uuid\s+not\s+null\s+references\s+tenant_chat_usage_reservations/i.test(ddl)) {
     fail(`${ddlPath}: attempt/ledger reservation identity must use the composite reservation_id/request_id FK`);
+  }
+  if (/cached_input|confirmed_cached_input/i.test(ddl)) {
+    fail(`${ddlPath}: ambiguous cached_input naming is forbidden; use provider cache_read fields`);
   }
   if (/\bDROP\s+(TABLE|COLUMN|TYPE)\b/i.test(ddl) || /\bALTER\s+TABLE\b[\s\S]*?\bDROP\b/i.test(ddl)) {
     fail(`${ddlPath}: destructive DROP statement is forbidden`);
@@ -779,6 +786,36 @@ function assertTenantChatExecutableContract() {
     if (digest !== computedSnapshotDigest) {
       fail(`${runtimeFixturePath}: snapshot digest mismatch`);
     }
+
+    for (const policyName of ["quota", "budget"]) {
+      const policy = runtimeSnapshot.policies?.[policyName];
+      if (!(policy?.warningPercent < policy?.economyPercent && policy?.economyPercent < policy?.hardStopPercent)) {
+        fail(`${runtimeFixturePath}: ${policyName} thresholds must be strict increasing`);
+      }
+    }
+
+    for (const [index, route] of (runtimeSnapshot.pricing?.routes ?? []).entries()) {
+      const cacheReadPrice = route.cacheReadInputMicroUsdPerMillionTokens;
+      if (cacheReadPrice !== undefined && cacheReadPrice > route.inputMicroUsdPerMillionTokens) {
+        fail(`${runtimeFixturePath}: pricing.routes[${index}] cache-read price exceeds regular input price`);
+      }
+      if ("cachedInputMicroUsdPerMillionTokens" in route) {
+        fail(`${runtimeFixturePath}: pricing.routes[${index}] uses ambiguous cachedInput pricing`);
+      }
+    }
+
+    const runtimeSchema = readJson("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json");
+    const priceRouteProperties = runtimeSchema?.$defs?.priceRoute?.properties ?? {};
+    if (!("cacheReadInputMicroUsdPerMillionTokens" in priceRouteProperties)) {
+      fail("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json: provider cache-read price field is required");
+    }
+    if ("cachedInputMicroUsdPerMillionTokens" in priceRouteProperties) {
+      fail("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json: ambiguous cachedInput pricing is forbidden");
+    }
+    const budgetWarningMaximum = runtimeSchema?.$defs?.budget?.properties?.warningPercent?.maximum;
+    if (budgetWarningMaximum !== 98) {
+      fail("docs/tenant-chat/schemas/tenant-runtime-snapshot.schema.json: budget warningPercent maximum must be 98");
+    }
   }
 
   const usageSchemaPath = "docs/tenant-chat/schemas/usage-settlement-event.schema.json";
@@ -812,6 +849,25 @@ function assertTenantChatExecutableContract() {
     ]) {
       if (!eventTypes.has(eventType)) {
         fail(`${usageVectorPath}: missing ${eventType} vector`);
+      }
+    }
+
+    const employeeEvent = (usageVectors.events ?? []).find(
+      (event) => event.executionScope?.actorKind === "employee",
+    );
+    if (employeeEvent) {
+      const invalidEmployeeEvent = structuredClone(employeeEvent);
+      delete invalidEmployeeEvent.executionScope.employeeId;
+      const negativeFailures = [];
+      validateData(
+        usageSchema,
+        invalidEmployeeEvent,
+        { filePath: usageSchemaPath, path: "$.negative.employeeWithoutId" },
+        usageSchema,
+        negativeFailures,
+      );
+      if (negativeFailures.length === 0) {
+        fail(`${usageSchemaPath}: employee actor must require employeeId`);
       }
     }
   }
