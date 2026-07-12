@@ -336,7 +336,7 @@
 }
 
 .analytics-v5-latency-row > i,
-.analytics-v5-application-list li > div {
+.analytics-v5-project-list li > div {
   display: block;
   overflow: hidden;
   height: 16px;
@@ -345,7 +345,7 @@
 }
 
 .analytics-v5-latency-row > i > b,
-.analytics-v5-application-list li > div > i {
+.analytics-v5-project-list li > div > i {
   display: block;
   width: var(--analytics-v5-share);
   height: 100%;
@@ -380,7 +380,7 @@
   font-size: calc(24px + var(--global-font-lift));
 }
 
-.analytics-v5-application-list {
+.analytics-v5-project-list {
   display: grid;
   gap: 14px;
   margin: 26px 0 0;
@@ -388,7 +388,7 @@
   list-style: none;
 }
 
-.analytics-v5-application-list li {
+.analytics-v5-project-list li {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(150px, 200px) minmax(0, 1fr) auto;
@@ -396,7 +396,7 @@
   gap: 16px;
 }
 
-.analytics-v5-application-list li > strong {
+.analytics-v5-project-list li > strong {
   overflow: hidden;
   color: var(--foreground);
   font-size: calc(16px + var(--global-font-lift));
@@ -405,18 +405,18 @@
   white-space: nowrap;
 }
 
-.analytics-v5-application-list li > div > i {
+.analytics-v5-project-list li > div > i {
   background: var(--analytics-v5-green-bright);
 }
 
-.analytics-v5-application-list li > span {
+.analytics-v5-project-list li > span {
   color: var(--text-muted);
   font-size: calc(16px + var(--global-font-lift));
   font-weight: 700;
   white-space: nowrap;
 }
 
-.analytics-v5-application-list li > em {
+.analytics-v5-project-list li > em {
   display: none;
 }
 
@@ -495,12 +495,12 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
     height: 265px;
   }
 
-  .analytics-v5-application-list li {
+  .analytics-v5-project-list li {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 12px;
   }
 
-  .analytics-v5-application-list li > div {
+  .analytics-v5-project-list li > div {
     grid-column: 1 / -1;
     grid-row: 2;
   }

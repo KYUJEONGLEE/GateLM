@@ -226,13 +226,17 @@ export function AnalyticsImpactPanel({
 export function AnalyticsUsagePanel({
   locale,
   model,
-  performance
-}: AnalyticsPanelProps & { performance: LiveAnalyticsPerformance | undefined }) {
+  performance,
+  projectNameById
+}: AnalyticsPanelProps & {
+  performance: LiveAnalyticsPerformance | undefined;
+  projectNameById: Map<string, string>;
+}) {
   const text = locale === "ko"
     ? {
         active: "사용 모델",
-        applications: "애플리케이션별 요청",
-        applicationsSub: "요청량 상위 애플리케이션",
+        projects: "프로젝트별 요청",
+        projectsSub: "요청량 상위 프로젝트",
         model: "모델 트래픽",
         modelSub: "실제 라우팅된 모델별 요청량",
         requests: "전체 요청",
@@ -246,8 +250,8 @@ export function AnalyticsUsagePanel({
       }
     : {
         active: "Active models",
-        applications: "Requests by application",
-        applicationsSub: "Applications generating the most traffic",
+        projects: "Requests by project",
+        projectsSub: "Projects generating the most traffic",
         model: "Model traffic",
         modelSub: "Actual routed requests by model",
         requests: "Total requests",
@@ -259,7 +263,7 @@ export function AnalyticsUsagePanel({
         trendSub: "Gateway requests over the selected range",
         title: "Usage"
       };
-  const applicationRows = model.usage.applicationMix.slice(0, 4);
+  const projectRows = model.usage.projectMix.slice(0, 4);
   const tokenCompositionTotal = model.usage.tokenMix.reduce((sum, row) => sum + row.value, 0);
 
   return (
@@ -303,19 +307,19 @@ export function AnalyticsUsagePanel({
       />
 
       <EvidenceTable
-        columns={locale === "ko" ? ["애플리케이션", "요청", "전체 비중", "상태"] : ["Application", "Requests", "Share", "State"]}
+        columns={locale === "ko" ? ["프로젝트", "요청", "전체 비중", "상태"] : ["Project", "Requests", "Share", "State"]}
         emptyLocale={locale}
-        rows={applicationRows.map((row) => ({
+        rows={projectRows.map((row) => ({
           cells: [
-            <strong key="application">{formatDisplayIdentifier(row.label)}</strong>,
+            <strong key="project">{projectNameById.get(row.id) ?? formatDisplayIdentifier(row.label)}</strong>,
             formatInteger(row.value),
             formatPercent(safeRatio(row.value, model.usage.totalRequests)),
             <EvidenceState key="state" label={locale === "ko" ? "활성" : "Active"} tone="success" />
           ],
           key: row.id
         }))}
-        subtitle={text.applicationsSub}
-        title={text.applications}
+        subtitle={text.projectsSub}
+        title={text.projects}
       />
     </PanelShell>
   );

@@ -132,6 +132,7 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
   });
   expect(model.usage).toMatchObject({
     activeModels: 2,
+    projectMix: [{ id: "project-1", label: "project-1", value: 20 }],
     tokensPerRequest: 80,
     totalRequests: 20,
     totalTokens: 1600

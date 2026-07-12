@@ -1,8 +1,8 @@
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performance";
 
-export type AnalyticsV5ApplicationUsage = {
-  applicationId: string;
+export type AnalyticsV5ProjectUsage = {
+  projectId: string;
   costMicroUsd: number;
   requestCount: number;
 };
@@ -15,7 +15,7 @@ export type AnalyticsV5ModelSeries = {
 };
 
 export type AnalyticsV5Evidence = {
-  applicationUsage: AnalyticsV5ApplicationUsage[];
+  projectUsage: AnalyticsV5ProjectUsage[];
   highQualityRate: number;
   highQualityRequests: number;
   latency: {
@@ -38,7 +38,7 @@ const bucketCountByRange: Record<LiveAnalyticsRange, number> = {
 };
 
 const MAX_MODEL_SERIES = 5;
-const MAX_APPLICATION_ROWS = 5;
+const MAX_PROJECT_ROWS = 5;
 
 export function buildAnalyticsV5Evidence(
   records: InvocationLogRecord[],
@@ -53,7 +53,7 @@ export function buildAnalyticsV5Evidence(
     return Number.isFinite(createdAt) && createdAt >= fromMs && createdAt < toMs;
   });
   const modelTotals = new Map<string, number>();
-  const applicationTotals = new Map<string, AnalyticsV5ApplicationUsage>();
+  const projectTotals = new Map<string, AnalyticsV5ProjectUsage>();
   const latencyValues: number[] = [];
   let highQualityRequests = 0;
   let routedRequests = 0;
@@ -73,16 +73,16 @@ export function buildAnalyticsV5Evidence(
       latencyValues.push(record.latencyMs);
     }
 
-    const applicationId = record.applicationId?.trim();
-    if (applicationId) {
-      const current = applicationTotals.get(applicationId) ?? {
-        applicationId,
+    const projectId = record.projectId?.trim();
+    if (projectId) {
+      const current = projectTotals.get(projectId) ?? {
+        projectId,
         costMicroUsd: 0,
         requestCount: 0
       };
       current.requestCount += 1;
       current.costMicroUsd += Math.max(0, record.costMicroUsd || 0);
-      applicationTotals.set(applicationId, current);
+      projectTotals.set(projectId, current);
     }
   });
 
@@ -113,9 +113,9 @@ export function buildAnalyticsV5Evidence(
   latencyValues.sort((left, right) => left - right);
 
   return {
-    applicationUsage: [...applicationTotals.values()]
+    projectUsage: [...projectTotals.values()]
       .sort((left, right) => right.requestCount - left.requestCount)
-      .slice(0, MAX_APPLICATION_ROWS),
+      .slice(0, MAX_PROJECT_ROWS),
     highQualityRate: routedRequests > 0 ? Math.min(1, highQualityRequests / routedRequests) : 0,
     highQualityRequests,
     latency: {

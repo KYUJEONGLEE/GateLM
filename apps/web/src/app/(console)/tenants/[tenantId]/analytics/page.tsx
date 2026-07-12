@@ -17,7 +17,6 @@ import {
 } from "@/features/analytics/components/analytics-panels";
 import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
-import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
@@ -151,13 +150,6 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
 
   const text = pageText[locale];
   const projects = projectsModel.projects.filter((project) => project.status !== "ARCHIVED");
-  const applicationModels = needsV5Evidence
-    ? await Promise.all(projects.map((project) => getApplicationsModel(tenantId, project.id)))
-    : [];
-  const applicationNameById = new Map(
-    applicationModels.flatMap((applicationModel) => applicationModel.applications)
-      .map((application) => [application.id, application.name] as const)
-  );
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const model = buildAnalyticsReadModel(overview);
   const providerOptions = buildProviderOptions(overview, performance, filters.provider);
@@ -244,15 +236,20 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
 
       {activeTab === "impact" ? (
         <AnalyticsV5Overview
-          applicationNameById={applicationNameById}
           evidence={v5Evidence}
           locale={locale}
           model={model}
           performance={performance}
+          projectNameById={projectNameById}
           range={filters.range}
         />
       ) : activeTab === "usage" ? (
-        <AnalyticsUsagePanel locale={locale} model={model} performance={performance} />
+        <AnalyticsUsagePanel
+          locale={locale}
+          model={model}
+          performance={performance}
+          projectNameById={projectNameById}
+        />
       ) : activeTab === "cost" ? (
         <AnalyticsCostPanel
           costTrend={costTrend}

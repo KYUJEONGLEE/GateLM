@@ -52,7 +52,7 @@ export type AnalyticsReadModel = {
   totalRequests: number;
   usage: {
     activeModels: number;
-    applicationMix: AnalyticsValueRow[];
+    projectMix: AnalyticsValueRow[];
     requestsByModel: AnalyticsValueRow[];
     tokenMix: AnalyticsValueRow[];
     tokensPerRequest: number;
@@ -191,11 +191,11 @@ export function buildAnalyticsReadModel(
     totalRequests: overview.totalRequests,
     usage: {
       activeModels: modelMix.filter((row) => row.value > 0).length,
-      applicationMix: (overview.breakdowns?.byApplication ?? [])
+      projectMix: (overview.costByProject ?? [])
         .filter((row) => row.requestCount > 0)
         .map((row) => ({
-          id: row.applicationId,
-          label: row.applicationId,
+          id: row.projectId,
+          label: row.projectId,
           value: row.requestCount
         }))
         .sort((left, right) => right.value - left.value),
@@ -270,7 +270,7 @@ function emptyAnalyticsReadModel(): AnalyticsReadModel {
     totalRequests: 0,
     usage: {
       activeModels: 0,
-      applicationMix: [],
+      projectMix: [],
       requestsByModel: [],
       tokenMix: [
         { id: "prompt", label: "PROMPT", value: 0 },

@@ -14,11 +14,11 @@ import type {
 import type { Locale } from "@/lib/i18n/locale";
 
 type AnalyticsV5OverviewProps = {
-  applicationNameById: Map<string, string>;
   evidence: AnalyticsV5Evidence | undefined;
   locale: Locale;
   model: AnalyticsReadModel;
   performance: LiveAnalyticsPerformance | undefined;
+  projectNameById: Map<string, string>;
   range: LiveAnalyticsRange;
 };
 
@@ -38,17 +38,17 @@ const stateText: Record<Locale, Record<AnalyticsReadModel["dataState"], string>>
 };
 
 export function AnalyticsV5Overview({
-  applicationNameById,
   evidence,
   locale,
   model,
   performance,
+  projectNameById,
   range
 }: AnalyticsV5OverviewProps) {
   const text = locale === "ko"
     ? {
-        applications: "앱별 사용량",
-        applicationsSub: "등록된 애플리케이션의 요청과 비용",
+        projects: "프로젝트별 사용량",
+        projectsSub: "프로젝트에 귀속된 요청과 비용",
         average: "평균 응답",
         cost: "전체 AI 비용",
         costSub: "선택 기간의 실제 Provider 비용",
@@ -69,8 +69,8 @@ export function AnalyticsV5Overview({
         title: "정책 효과"
       }
     : {
-        applications: "Usage by application",
-        applicationsSub: "Requests and cost from registered applications",
+        projects: "Usage by project",
+        projectsSub: "Requests and cost attributed to projects",
         average: "Average response",
         cost: "Total AI spend",
         costSub: "Observed Provider spend for the selected range",
@@ -94,8 +94,8 @@ export function AnalyticsV5Overview({
   const errorRate = performance?.summary.errorRate ?? model.reliability.systemErrorRate;
   const modelRows = model.impact.modelMix.slice(0, 5);
   const latency = evidence?.latency ?? { p50Ms: 0, p95Ms: 0, p99Ms: 0 };
-  const applicationRows = evidence?.applicationUsage ?? [];
-  const maxApplicationRequests = Math.max(...applicationRows.map((row) => row.requestCount), 1);
+  const projectRows = evidence?.projectUsage ?? [];
+  const maxProjectRequests = Math.max(...projectRows.map((row) => row.requestCount), 1);
   const maxLatency = Math.max(latency.p99Ms, latency.p95Ms, latency.p50Ms, 1);
   const policyRows = model.impact.outcomes.filter((row) => row.value > 0);
 
@@ -179,13 +179,13 @@ export function AnalyticsV5Overview({
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>
 
-        <AnalyticsV5Surface subtitle={text.applicationsSub} title={text.applications}>
-          {applicationRows.length ? (
-            <ol className="analytics-v5-application-list">
-              {applicationRows.map((row, index) => (
-                <li key={row.applicationId}>
-                  <strong>{applicationNameById.get(row.applicationId) ?? formatDisplayIdentifier(row.applicationId)}</strong>
-                  <div><i style={{ "--analytics-v5-share": `${Math.max(4, (row.requestCount / maxApplicationRequests) * 100)}%` } as CSSProperties} /></div>
+        <AnalyticsV5Surface subtitle={text.projectsSub} title={text.projects}>
+          {projectRows.length ? (
+            <ol className="analytics-v5-project-list">
+              {projectRows.map((row, index) => (
+                <li key={row.projectId}>
+                  <strong>{projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId)}</strong>
+                  <div><i style={{ "--analytics-v5-share": `${Math.max(4, (row.requestCount / maxProjectRequests) * 100)}%` } as CSSProperties} /></div>
                   <span>{formatInteger(row.requestCount)} · {formatMicroUsd(row.costMicroUsd)}</span>
                   <em>{index + 1}</em>
                 </li>
