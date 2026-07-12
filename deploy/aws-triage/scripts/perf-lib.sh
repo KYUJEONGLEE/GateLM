@@ -36,6 +36,55 @@ perf_trim() {
   printf '%s' "${value}"
 }
 
+perf_is_private_ipv4() {
+  local ip="$1"
+  local first second third fourth octet
+
+  [[ "${ip}" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  first="${BASH_REMATCH[1]}"
+  second="${BASH_REMATCH[2]}"
+  third="${BASH_REMATCH[3]}"
+  fourth="${BASH_REMATCH[4]}"
+
+  for octet in "${first}" "${second}" "${third}" "${fourth}"; do
+    (( 10#${octet} <= 255 )) || return 1
+  done
+
+  ((
+    10#${first} == 10 ||
+    (10#${first} == 172 && 10#${second} >= 16 && 10#${second} <= 31) ||
+    (10#${first} == 192 && 10#${second} == 168)
+  ))
+}
+
+perf_gateway_host_base_url() {
+  printf 'http://%s:%s' "${AWS_TRIAGE_GATEWAY_BIND}" "${AWS_TRIAGE_GATEWAY_PORT}"
+}
+
+perf_machine_identity_hash() {
+  local run_id="$1"
+  local machine_id_path=""
+  local machine_id
+
+  [[ "${run_id}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$ ]] || \
+    perf_fail "Cannot hash machine identity for an invalid run id."
+  perf_need_command "sha256sum" "Install coreutils."
+
+  if [[ -r /etc/machine-id ]]; then
+    machine_id_path=/etc/machine-id
+  elif [[ -r /var/lib/dbus/machine-id ]]; then
+    machine_id_path=/var/lib/dbus/machine-id
+  else
+    perf_fail "A readable machine-id is required for load-generator separation evidence."
+  fi
+
+  machine_id="$(tr -d '[:space:]' < "${machine_id_path}")"
+  [[ "${machine_id}" =~ ^[A-Fa-f0-9]{32,64}$ ]] || \
+    perf_fail "The host machine-id has an unexpected format."
+  printf '%s:%s' "${machine_id}" "${run_id}" | sha256sum | awk '{print $1}'
+  unset machine_id
+}
+
 perf_unquote_env_value() {
   local value="$1"
   if [[ ${#value} -ge 2 ]]; then
@@ -55,6 +104,19 @@ perf_need_command() {
   local install_hint="$2"
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     perf_fail "${command_name} is not installed or not on PATH. ${install_hint}"
+  fi
+}
+
+perf_assert_env_file_permissions() {
+  local env_path="$1"
+  local env_label="${2:-Environment file}"
+
+  if command -v stat >/dev/null 2>&1; then
+    local mode
+    mode="$(stat -c '%a' "${env_path}" 2>/dev/null || true)"
+    if [[ "${mode}" =~ ^[0-7]{3,4}$ ]] && (( (8#${mode} & 077) != 0 )); then
+      perf_fail "${env_label} permissions are too open (${mode}). Run: chmod 600 ${env_path}"
+    fi
   fi
 }
 
@@ -109,6 +171,7 @@ perf_require_env_vars() {
 perf_validate_env() {
   # Existing .env.perf files predate the RuntimeSnapshot-specific setting.
   export GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT="${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT:-100000}"
+  export GATELM_PERF_REMOTE_LOADGEN_ENABLED="${GATELM_PERF_REMOTE_LOADGEN_ENABLED:-false}"
   export GATEWAY_RATE_LIMIT_LIMIT="${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}"
 
   perf_require_env_vars \
@@ -168,10 +231,25 @@ perf_validate_env() {
     perf_fail "GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT cannot exceed 100000."
   [[ "${CONTROL_PLANE_INTERNAL_SERVICE_TOKEN}" == "${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN}" ]] || \
     perf_fail "Control Plane and Gateway internal tokens must match."
-  [[ "${AWS_TRIAGE_GATEWAY_BIND}" == "127.0.0.1" ]] || \
-    perf_fail "The performance Gateway must bind to 127.0.0.1."
+  case "${GATELM_PERF_REMOTE_LOADGEN_ENABLED}" in
+    false)
+      [[ "${AWS_TRIAGE_GATEWAY_BIND}" == "127.0.0.1" ]] || \
+        perf_fail "The performance Gateway must bind to 127.0.0.1 unless remote load generation is explicitly enabled."
+      ;;
+    true)
+      perf_is_private_ipv4 "${AWS_TRIAGE_GATEWAY_BIND}" || \
+        perf_fail "Remote load generation requires AWS_TRIAGE_GATEWAY_BIND to be an exact RFC1918 private IPv4 address, never 0.0.0.0."
+      ;;
+    *)
+      perf_fail "GATELM_PERF_REMOTE_LOADGEN_ENABLED must be true or false."
+      ;;
+  esac
   [[ "${AWS_TRIAGE_CONTROL_PLANE_BIND}" == "127.0.0.1" ]] || \
     perf_fail "The performance Control Plane must bind to 127.0.0.1."
+  [[ "${AWS_TRIAGE_GATEWAY_PORT}" =~ ^[0-9]+$ ]] || \
+    perf_fail "AWS_TRIAGE_GATEWAY_PORT must be an integer."
+  (( 10#${AWS_TRIAGE_GATEWAY_PORT} >= 1024 && 10#${AWS_TRIAGE_GATEWAY_PORT} <= 65535 )) || \
+    perf_fail "AWS_TRIAGE_GATEWAY_PORT must be between 1024 and 65535."
   [[ "${AWS_TRIAGE_GATEWAY_PORT}" != "8080" ]] || \
     perf_fail "The performance Gateway cannot use the normal stack port 8080."
 
@@ -186,13 +264,7 @@ perf_validate_env() {
   [[ "${GATELM_DEMO_APP_TOKEN_ID}" == "00000000-0000-4000-8000-000000000500" ]] || \
     perf_fail "The current seed requires the default performance app token UUID."
 
-  if command -v stat >/dev/null 2>&1; then
-    local mode
-    mode="$(stat -c '%a' "${PERF_ENV_FILE}" 2>/dev/null || true)"
-    if [[ "${mode}" =~ ^[0-7]{3,4}$ ]] && (( (8#${mode} & 077) != 0 )); then
-      perf_fail ".env.perf permissions are too open (${mode}). Run: chmod 600 .env.perf"
-    fi
-  fi
+  perf_assert_env_file_permissions "${PERF_ENV_FILE}" ".env.perf"
 }
 
 perf_compose() {

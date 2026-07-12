@@ -338,6 +338,105 @@ Optional runner settings:
 | `GATELM_PERF_LOG_DRAIN_TIMEOUT_SECONDS` | `60` | Maximum Request Log reconciliation wait |
 | `GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT` | `100000` | Isolated Mock RuntimeSnapshot limit per 60 seconds |
 
+### Dedicated Load Generator Evidence (500 RPS)
+
+The local runner above shares CPU, memory, disk, and Docker networking with the
+Gateway. It is useful for regression checks, but it is not sufficient evidence
+that one Gateway node sustains 500 RPS. Formal capacity evidence requires a
+separate target host and load-generator host in the same private network.
+
+On the target host, set the exact private IPv4 address in `.env.perf` and opt in
+to remote load generation:
+
+```dotenv
+GATELM_PERF_REMOTE_LOADGEN_ENABLED=true
+AWS_TRIAGE_GATEWAY_BIND=10.0.1.10
+AWS_TRIAGE_GATEWAY_PORT=18080
+AWS_TRIAGE_CONTROL_PLANE_BIND=127.0.0.1
+```
+
+`AWS_TRIAGE_GATEWAY_BIND=0.0.0.0` is rejected. In the target Security Group,
+allow inbound TCP `18080` only from the load-generator Security Group or its
+private `/32` address. Do not expose the Control Plane, PostgreSQL, Redis, Mock
+Provider, or k6 dashboard. Recreate and verify the target runtime after the bind
+change:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+bash scripts/perf-up.sh --build
+bash scripts/perf-preflight.sh
+```
+
+Use the same repository commit on the load-generator host. It needs Docker,
+curl, and coreutils, but it does not need the target database or Provider
+credentials. Create its restricted environment file:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+cp loadgen.env.example .env.loadgen
+chmod 600 .env.loadgen
+```
+
+Set `GATELM_LOADGEN_GATEWAY_BASE_URL` to the target's private Gateway endpoint.
+Copy only `GATELM_DEMO_API_KEY` and `GATELM_DEMO_APP_TOKEN` from the isolated
+target `.env.perf`. The runner rejects extra `.env.loadgen` keys, Provider
+credentials, database credentials, internal service tokens, and files readable
+by group or other users.
+
+Run the default capacity profile from the load-generator host:
+
+```bash
+bash scripts/perf-loadgen-run.sh
+```
+
+This schedules `500 RPS` for `2m`, performs the Mock routing preflight, waits for
+the async terminal-log queue to drain, and writes a self-contained bundle under
+`reports/perf/loadgen/`. The bundle omits the target URL and credentials. Its
+manifest deliberately keeps `capacityClaimEligible=false` because the
+load-generator cannot query the target database.
+
+Copy the complete bundle into the same path on the target host, then reconcile
+it against the isolated PostgreSQL database:
+
+```bash
+cd /home/ubuntu/GateLM
+scp -r ubuntu@<load-generator-private-ip>:/home/ubuntu/GateLM/reports/perf/loadgen/<bundle> \
+  reports/perf/loadgen/
+cd deploy/aws-triage
+bash scripts/perf-loadgen-reconcile.sh \
+  /home/ubuntu/GateLM/reports/perf/loadgen/<bundle>
+```
+
+The target writes `loadgen.evidence.json`. `capacityClaimEligible=true` is
+possible only when all of these conditions hold:
+
+- execution mode is `dedicated` and run-scoped machine hashes prove the two
+  scripts ran on different hosts
+- target remote-load mode is explicitly enabled without a wildcard bind
+- target rate is exactly `500 RPS` and duration is at least `2m`
+- k6 has no dropped iterations, failed checks, or HTTP failures
+- completed iterations equal total and distinct Request Log rows
+- every row is successful, HTTP `200`, and has written logging outcomes
+- async enqueue, drop, persist-error, and persist-panic deltas are zero
+- both captured and current terminal-log queue depth are zero
+
+The raw machine ID is never written to the bundle. Each script hashes it with
+the run ID, so the value cannot be correlated across runs.
+
+For script integration checks on one development machine, set the load-generator
+URL to `http://gateway-core:8080` and run:
+
+```bash
+GATELM_LOADGEN_EXECUTION_MODE=local_validation \
+GATELM_LOADGEN_DOCKER_NETWORK=gatelm-aws-perf-internal \
+GATELM_K6_TARGET_RPS=500 \
+GATELM_K6_DURATION=30s \
+bash scripts/perf-loadgen-run.sh
+```
+
+Target-side reconciliation can pass in `local_validation` mode, but capacity
+eligibility remains false by design.
+
 Stop the performance containers without deleting their volumes:
 
 ```bash

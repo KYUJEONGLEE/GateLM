@@ -83,7 +83,7 @@ metrics_after_path="$(mktemp "${K6_REPORT_DIR}/.${evidence_basename}.metrics-aft
 trap 'rm -f "${metrics_before_path}" "${metrics_after_path}"' EXIT
 
 perf_need_command "curl" "Install curl."
-curl -fsS --max-time 5 "http://127.0.0.1:${AWS_TRIAGE_GATEWAY_PORT}/metrics" \
+curl -fsS --max-time 5 "$(perf_gateway_host_base_url)/metrics" \
   > "${metrics_before_path}"
 
 perf_log "Starting ${K6_TARGET_RPS} RPS cache-miss load for ${K6_DURATION} (run id ${run_id})."
@@ -171,7 +171,7 @@ for ((elapsed = 0; elapsed <= LOG_DRAIN_TIMEOUT_SECONDS; elapsed++)); do
   perf_evidence_is_nonnegative_number "${db_p95_latency_ms}" || \
     perf_fail "Request Log reconciliation returned an invalid p95 latency."
 
-  curl -fsS --max-time 5 "http://127.0.0.1:${AWS_TRIAGE_GATEWAY_PORT}/metrics" \
+  curl -fsS --max-time 5 "$(perf_gateway_host_base_url)/metrics" \
     > "${metrics_after_path}"
   queue_depth="$(perf_evidence_metric_integer \
     "${metrics_after_path}" \

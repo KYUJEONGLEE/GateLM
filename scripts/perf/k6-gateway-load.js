@@ -10,6 +10,12 @@ const allowedGatewayBaseUrls = new Set([
 const gatewayBaseUrl = normalizeBaseUrl(
   __ENV.GATEWAY_BASE_URL || "http://127.0.0.1:18080",
 );
+const remoteTargetMode = String(__ENV.GATELM_K6_REMOTE_TARGET_MODE || "")
+  .trim()
+  .toLowerCase();
+const allowedRemoteBaseUrl = normalizeBaseUrl(
+  __ENV.GATELM_K6_ALLOWED_REMOTE_BASE_URL || "",
+);
 const apiKey = requiredEnv("GATELM_DEMO_API_KEY");
 const appToken = requiredEnv("GATELM_DEMO_APP_TOKEN");
 const targetRps = positiveIntEnv("GATELM_K6_TARGET_RPS", 1);
@@ -31,9 +37,12 @@ const evidenceBasename = optionalIdentifierEnv(
   "",
 );
 
-if (!allowedGatewayBaseUrls.has(gatewayBaseUrl)) {
+if (
+  !allowedGatewayBaseUrls.has(gatewayBaseUrl) &&
+  !isExplicitPrivateMockTarget(gatewayBaseUrl)
+) {
   throw new Error(
-    "This load script only allows the isolated Mock Gateway endpoints.",
+    "This load script only allows an explicitly approved isolated Mock Gateway endpoint.",
   );
 }
 
@@ -164,6 +173,10 @@ function renderEvidenceEnv(summary) {
   return [
     "GATELM_EVIDENCE_SCHEMA=gatelm.gateway-load-k6-summary.v1",
     `GATELM_EVIDENCE_RUN_ID=${summary.runId}`,
+    `GATELM_EVIDENCE_TARGET_RPS=${summary.targetRps}`,
+    `GATELM_EVIDENCE_DURATION=${summary.duration}`,
+    `GATELM_EVIDENCE_PRE_ALLOCATED_VUS=${summary.preAllocatedVUs}`,
+    `GATELM_EVIDENCE_MAX_VUS=${summary.maxVUs}`,
     `GATELM_EVIDENCE_LOAD_ITERATIONS=${summary.loadIterations}`,
     `GATELM_EVIDENCE_DROPPED_ITERATIONS=${summary.droppedIterations}`,
     `GATELM_EVIDENCE_CHECKS_PASSED=${summary.checksPassed}`,
@@ -268,6 +281,72 @@ function optionalIdentifierEnv(name, fallback) {
 
 function normalizeBaseUrl(value) {
   return String(value).trim().replace(/\/+$/, "");
+}
+
+function isExplicitPrivateMockTarget(value) {
+  if (
+    remoteTargetMode !== "private_mock" ||
+    allowedRemoteBaseUrl === "" ||
+    value !== allowedRemoteBaseUrl
+  ) {
+    return false;
+  }
+
+  const httpsMatch = value.match(
+    /^https:\/\/([^/:?#]+)(?::([0-9]{1,5}))?$/,
+  );
+  if (httpsMatch) {
+    return isValidHostname(httpsMatch[1]) && isValidPort(httpsMatch[2]);
+  }
+
+  const httpMatch = value.match(
+    /^http:\/\/([0-9]{1,3}(?:\.[0-9]{1,3}){3})(?::([0-9]{1,5}))?$/,
+  );
+  return Boolean(
+    httpMatch && isPrivateIpv4(httpMatch[1]) && isValidPort(httpMatch[2]),
+  );
+}
+
+function isValidHostname(value) {
+  if (
+    !value ||
+    value.length > 253 ||
+    value.startsWith(".") ||
+    value.endsWith(".")
+  ) {
+    return false;
+  }
+  return value
+    .split(".")
+    .every(
+      (label) =>
+        label.length > 0 &&
+        label.length <= 63 &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
+    );
+}
+
+function isValidPort(value) {
+  if (value === undefined) {
+    return true;
+  }
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
+
+function isPrivateIpv4(value) {
+  const octets = value.split(".").map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return false;
+  }
+  return (
+    octets[0] === 10 ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168)
+  );
 }
 
 function randomSuffix() {
