@@ -8,7 +8,6 @@ import {
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import type {
-  LiveAnalyticsPerformance,
   LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
 import type { Locale } from "@/lib/i18n/locale";
@@ -17,7 +16,6 @@ type AnalyticsV5OverviewProps = {
   evidence: AnalyticsV5Evidence | undefined;
   locale: Locale;
   model: AnalyticsReadModel;
-  performance: LiveAnalyticsPerformance | undefined;
   projectNameById: Map<string, string>;
   range: LiveAnalyticsRange;
 };
@@ -41,7 +39,6 @@ export function AnalyticsV5Overview({
   evidence,
   locale,
   model,
-  performance,
   projectNameById,
   range
 }: AnalyticsV5OverviewProps) {
@@ -49,55 +46,59 @@ export function AnalyticsV5Overview({
     ? {
         projects: "프로젝트별 사용량",
         projectsSub: "프로젝트에 귀속된 요청과 비용",
-        average: "평균 응답",
+        balanced: "균형",
         cost: "전체 AI 비용",
         costSub: "선택 기간의 실제 Provider 비용",
         empty: "선택한 기간에 표시할 데이터가 없습니다",
-        error: "오류율",
-        fallback: "Fallback 복구",
+        highQuality: "고품질",
+        lowCost: "저비용 라우팅",
+        lowCostSub: "정책이 선택한 모델 등급 비교",
         modelShare: "모델 트래픽 비중",
         modelShareSub: "실제 선택 모델 기준",
         modelTrend: "모델별 요청 흐름",
         modelTrendSub: "라우팅 정책 적용 후 시간대별 요청 추이",
-        performance: "응답 성능",
-        performanceSub: "선택 기간의 응답 시간 분포",
+        routing: "모델 등급별 라우팅",
+        routingSub: "고품질·균형·저비용 경로의 실제 요청 비중",
         policyEvents: "정책 결과",
         requests: "전체 요청",
         requestsSub: "Gateway가 기록한 전체 트래픽",
         saved: "절감",
-        success: "성공률",
         title: "정책 효과"
       }
     : {
         projects: "Usage by project",
         projectsSub: "Requests and cost attributed to projects",
-        average: "Average response",
+        balanced: "Balanced",
         cost: "Total AI spend",
         costSub: "Observed Provider spend for the selected range",
         empty: "No data for the selected range",
-        error: "Error rate",
-        fallback: "Fallback recoveries",
+        highQuality: "High quality",
+        lowCost: "Low-cost routing",
+        lowCostSub: "Compare model tiers selected by policy",
         modelShare: "Model traffic share",
         modelShareSub: "Based on models actually selected",
         modelTrend: "Requests by model",
         modelTrendSub: "Traffic over time after routing policy",
-        performance: "Response performance",
-        performanceSub: "Response-time distribution for the selected range",
+        routing: "Routing by model tier",
+        routingSub: "Observed high-quality, balanced, and low-cost routing share",
         policyEvents: "Policy outcomes",
         requests: "Total requests",
         requestsSub: "All traffic recorded by the Gateway",
         saved: "saved",
-        success: "success",
         title: "Policy impact"
       };
-  const averageLatency = performance?.summary.avgLatencyMs;
-  const errorRate = performance?.summary.errorRate ?? model.reliability.systemErrorRate;
   const modelRows = model.impact.modelMix.slice(0, 5);
-  const latency = evidence?.latency ?? { p50Ms: 0, p95Ms: 0, p99Ms: 0 };
-  const projectRows = evidence?.projectUsage ?? [];
+  const projectCostById = new Map(model.cost.costByProject.map((row) => [row.id, row.value]));
+  const projectRows = model.usage.projectMix.slice(0, 5).map((row) => ({
+    costMicroUsd: projectCostById.get(row.id) ?? 0,
+    projectId: row.id,
+    requestCount: row.value
+  }));
   const maxProjectRequests = Math.max(...projectRows.map((row) => row.requestCount), 1);
-  const maxLatency = Math.max(latency.p99Ms, latency.p95Ms, latency.p50Ms, 1);
   const policyRows = model.impact.outcomes.filter((row) => row.value > 0);
+  const routingTierRows = model.impact.routingTiers;
+  const routedRequests = routingTierRows.reduce((sum, row) => sum + row.value, 0);
+  const lowCostRequests = valueById(routingTierRows, "low_cost");
 
   return (
     <section className="analytics-v5-overview">
@@ -125,17 +126,12 @@ export function AnalyticsV5Overview({
           <small>{text.requestsSub}</small>
         </article>
         <article className="analytics-v5-metric analytics-v5-response-metric">
-          <span>{text.average} · {text.success}</span>
+          <span>{text.lowCost}</span>
           <div>
-            <strong>
-              {averageLatency === null || averageLatency === undefined
-                ? "—"
-                : formatInteger(Math.round(averageLatency))}
-              {averageLatency === null || averageLatency === undefined ? null : <small>ms</small>}
-            </strong>
-            <em>{formatPercent(model.reliability.successRate)}</em>
+            <strong>{formatPercent(safeRatio(lowCostRequests, routedRequests))}</strong>
+            <em>{formatInteger(lowCostRequests)}</em>
           </div>
-          <small>{text.error} {formatPercent(errorRate)} · {text.fallback} {formatInteger(model.reliability.fallbackSuccesses)}</small>
+          <small>{text.lowCostSub}</small>
         </article>
       </section>
 
@@ -165,16 +161,12 @@ export function AnalyticsV5Overview({
       </div>
 
       <div className="analytics-v5-secondary-grid">
-        <AnalyticsV5Surface subtitle={text.performanceSub} title={text.performance}>
-          {evidence?.recordCount ? (
-            <div className="analytics-v5-latency-list">
-              <LatencyRow label="p50" max={maxLatency} value={latency.p50Ms} />
-              <LatencyRow label="p95" max={maxLatency} tone="warning" value={latency.p95Ms} />
-              <LatencyRow label="p99" max={maxLatency} tone="danger" value={latency.p99Ms} />
-              <div className="analytics-v5-error-rate">
-                <span>{text.error}</span>
-                <strong>{formatPercent(errorRate)}</strong>
-              </div>
+        <AnalyticsV5Surface subtitle={text.routingSub} title={text.routing}>
+          {routingTierRows.length ? (
+            <div className="analytics-v5-routing-tier-list">
+              {routingTierRows.map((row) => (
+                <RoutingTierRow key={row.id} row={row} total={routedRequests} />
+              ))}
             </div>
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>
@@ -218,21 +210,16 @@ function AnalyticsV5Surface({
   );
 }
 
-function LatencyRow({
-  label,
-  max,
-  tone = "normal",
-  value
-}: {
-  label: string;
-  max: number;
-  tone?: "danger" | "normal" | "warning";
-  value: number;
-}) {
+function RoutingTierRow({ row, total }: { row: AnalyticsValueRow; total: number }) {
+  const share = safeRatio(row.value, total);
+
   return (
-    <div className="analytics-v5-latency-row" data-tone={tone}>
-      <div><span>{label}</span><strong>{formatInteger(Math.round(value))}<small>ms</small></strong></div>
-      <i><b style={{ "--analytics-v5-share": `${Math.max(3, (value / max) * 100)}%` } as CSSProperties} /></i>
+    <div className="analytics-v5-routing-tier-row" data-tier={row.id}>
+      <div>
+        <span>{row.label}</span>
+        <strong>{formatInteger(row.value)}<small>{formatPercent(share)}</small></strong>
+      </div>
+      <i><b style={{ "--analytics-v5-share": `${Math.max(3, share * 100)}%` } as CSSProperties} /></i>
     </div>
   );
 }
@@ -258,4 +245,12 @@ function formatMicroUsd(value: number) {
     minimumFractionDigits: 2,
     style: "currency"
   }).format(Number.isFinite(dollars) ? dollars : 0);
+}
+
+function safeRatio(numerator: number, denominator: number) {
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+function valueById(rows: AnalyticsValueRow[], id: string) {
+  return rows.find((row) => row.id === id)?.value ?? 0;
 }

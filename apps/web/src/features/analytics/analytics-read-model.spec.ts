@@ -106,7 +106,32 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
       to: "2026-07-12T00:00:00.000Z"
     },
     rateLimitedRequests: 2,
-    routingCountByModel: [],
+    routingCountByModel: [
+      {
+        requestCount: 8,
+        routingReason: "short_prompt_low_cost",
+        selectedModel: "provider-id:gpt-4o-mini",
+        selectedProvider: "openai-main"
+      },
+      {
+        requestCount: 4,
+        routingReason: "category_reasoning_high_quality",
+        selectedModel: "gpt-4o",
+        selectedProvider: "openai-main"
+      },
+      {
+        requestCount: 6,
+        routingReason: "default_balanced",
+        selectedModel: "gemini-2.5-flash",
+        selectedProvider: "gemini-main"
+      },
+      {
+        requestCount: 2,
+        routingReason: "budget_downgraded_from_high_quality",
+        selectedModel: "provider-id:gpt-4o-mini",
+        selectedProvider: "openai-main"
+      }
+    ],
     savedCostMicroUsd: 2000,
     statusCounts: {},
     successfulRequests: 15,
@@ -129,6 +154,11 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
     cache: 3,
     guardrail: 4,
     provider: 13
+  });
+  expect(Object.fromEntries(model.impact.routingTiers.map((row) => [row.id, row.value]))).toEqual({
+    balanced: 6,
+    high_quality: 4,
+    low_cost: 10
   });
   expect(model.usage).toMatchObject({
     activeModels: 2,

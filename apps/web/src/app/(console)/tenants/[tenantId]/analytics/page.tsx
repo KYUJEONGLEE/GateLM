@@ -115,7 +115,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const filters = buildFilters(resolvedSearchParams);
   const needsPerformance =
-    activeTab === "impact" || activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
+    activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
 
@@ -239,7 +239,6 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           evidence={v5Evidence}
           locale={locale}
           model={model}
-          performance={performance}
           projectNameById={projectNameById}
           range={filters.range}
         />

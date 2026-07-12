@@ -36,6 +36,7 @@ export type AnalyticsReadModel = {
     protectedRequestRate: number;
     protectedRequests: number;
     requestDisposition: AnalyticsValueRow[];
+    routingTiers: AnalyticsValueRow[];
     savedCostMicroUsd: number;
     spendAvoidanceRate: number;
   };
@@ -173,6 +174,7 @@ export function buildAnalyticsReadModel(
         { id: "cache", label: "CACHE SERVED", value: cacheHitRequests },
         { id: "guardrail", label: "STOPPED BEFORE PROVIDER", value: blockedRequests + rateLimitedRequests }
       ],
+      routingTiers: routingTierRows(overview),
       savedCostMicroUsd: overview.savedCostMicroUsd,
       spendAvoidanceRate: safeRatio(overview.savedCostMicroUsd, addressableSpend)
     },
@@ -254,6 +256,7 @@ function emptyAnalyticsReadModel(): AnalyticsReadModel {
         { id: "cache", label: "CACHE SERVED", value: 0 },
         { id: "guardrail", label: "STOPPED BEFORE PROVIDER", value: 0 }
       ],
+      routingTiers: [],
       savedCostMicroUsd: 0,
       spendAvoidanceRate: 0
     },
@@ -316,6 +319,46 @@ function aggregateProviderLatency(overview: DashboardOverview): AnalyticsValueRo
     .filter(([, value]) => value > 0)
     .map(([label, value]) => ({ id: label, label, value }))
     .sort((left, right) => right.value - left.value);
+}
+
+function routingTierRows(overview: DashboardOverview): AnalyticsValueRow[] {
+  const totals = new Map([
+    ["high_quality", 0],
+    ["balanced", 0],
+    ["low_cost", 0],
+    ["other", 0]
+  ]);
+
+  overview.routingCountByModel.forEach((row) => {
+    const tier = classifyRoutingTier(row.routingReason);
+    totals.set(tier, (totals.get(tier) ?? 0) + Math.max(0, row.requestCount));
+  });
+
+  const labels: Record<string, string> = {
+    balanced: "BALANCED",
+    high_quality: "HIGH QUALITY",
+    low_cost: "LOW COST",
+    other: "OTHER"
+  };
+
+  return ["high_quality", "balanced", "low_cost", "other"]
+    .map((id) => ({ id, label: labels[id] ?? id.toUpperCase(), value: totals.get(id) ?? 0 }))
+    .filter((row) => row.value > 0);
+}
+
+function classifyRoutingTier(routingReason: string) {
+  const reason = routingReason.trim().toLowerCase();
+
+  if (reason.includes("low_cost") || reason.includes("downgraded_from_high_quality")) {
+    return "low_cost";
+  }
+  if (reason.includes("high_quality")) {
+    return "high_quality";
+  }
+  if (reason.includes("balanced") || reason.includes("default")) {
+    return "balanced";
+  }
+  return "other";
 }
 
 function terminalOutcomeRows(overview: DashboardOverview): AnalyticsValueRow[] {
