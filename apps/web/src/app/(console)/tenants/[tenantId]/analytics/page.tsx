@@ -113,8 +113,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const resolvedSearchParams = await searchParams;
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const filters = buildFilters(resolvedSearchParams);
-  const needsPerformance = activeTab === "usage" || activeTab === "performance";
-  const needsCostTrend = activeTab === "cost";
+  const needsPerformance =
+    activeTab === "usage" || activeTab === "performance" || activeTab === "reliability";
+  const needsCostTrend = activeTab === "impact" || activeTab === "cost";
 
   const [locale, projectsModel, overview, performance, costTrend] = await Promise.all([
     getRequestLocale(),
@@ -148,72 +149,72 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const showProviderModelFilters = activeTab === "performance";
 
   return (
-    <main className="console-content analytics-v2-page">
-      <header className="analytics-v2-header">
-        <div>
+    <main className="console-content analytics-v3-page">
+      <header className="analytics-v3-command-header">
+        <div className="analytics-v3-title-block">
           <h1>{text.title}</h1>
           <p>{text.subtitle}</p>
         </div>
+
+        <form
+          action={`/tenants/${tenantId}/analytics`}
+          aria-label={text.filterAria}
+          className="analytics-v3-filter-bar"
+        >
+          <input name="tab" type="hidden" value={activeTab} />
+          <label>
+            <span>{text.range}</span>
+            <select defaultValue={filters.range} name="range">
+              {rangeValues.map((range) => (
+                <option key={range} value={range}>{text.rangeLabels[range]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="analytics-v3-project-filter">
+            <span>{text.project}</span>
+            <select defaultValue={filters.projectId} name="projectId">
+              <option value="">{text.allProjects}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </label>
+          {showProviderModelFilters ? (
+            <>
+              <label>
+                <span>{text.provider}</span>
+                <select defaultValue={filters.provider} name="provider">
+                  <option value="">{text.allProviders}</option>
+                  {providerOptions.map((provider) => (
+                    <option key={provider} value={provider}>{provider}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>{text.model}</span>
+                <select defaultValue={filters.model} name="model">
+                  <option value="">{text.allModels}</option>
+                  {modelOptions.map((modelName) => (
+                    <option key={modelName} value={modelName}>{formatModelDisplayName(modelName)}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+          <button aria-label={text.apply} title={text.apply} type="submit">
+            <SlidersHorizontal aria-hidden="true" size={19} />
+            <span>{text.apply}</span>
+          </button>
+        </form>
       </header>
 
-      <form
-        action={`/tenants/${tenantId}/analytics`}
-        aria-label={text.filterAria}
-        className="analytics-v2-filter-bar"
-      >
-        <input name="tab" type="hidden" value={activeTab} />
-        <label>
-          <span>{text.range}</span>
-          <select defaultValue={filters.range} name="range">
-            {rangeValues.map((range) => (
-              <option key={range} value={range}>{text.rangeLabels[range]}</option>
-            ))}
-          </select>
-        </label>
-        <label className="analytics-v2-project-filter">
-          <span>{text.project}</span>
-          <select defaultValue={filters.projectId} name="projectId">
-            <option value="">{text.allProjects}</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.name}</option>
-            ))}
-          </select>
-        </label>
-        {showProviderModelFilters ? (
-          <>
-            <label>
-              <span>{text.provider}</span>
-              <select defaultValue={filters.provider} name="provider">
-                <option value="">{text.allProviders}</option>
-                {providerOptions.map((provider) => (
-                  <option key={provider} value={provider}>{provider}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>{text.model}</span>
-              <select defaultValue={filters.model} name="model">
-                <option value="">{text.allModels}</option>
-                {modelOptions.map((modelName) => (
-                  <option key={modelName} value={modelName}>{formatModelDisplayName(modelName)}</option>
-                ))}
-              </select>
-            </label>
-          </>
-        ) : null}
-        <button type="submit">
-          <SlidersHorizontal aria-hidden="true" size={17} />
-          {text.apply}
-        </button>
-      </form>
-
-      <nav aria-label="Analytics sections" className="analytics-v2-tabs">
+      <nav aria-label="Analytics sections" className="analytics-v3-tabs">
         {tabConfig.map((tab) => {
           const Icon = tab.icon;
           return (
             <IntentPrefetchLink
               aria-current={tab.id === activeTab ? "page" : undefined}
-              className="analytics-v2-tab"
+              className="analytics-v3-tab"
               data-active={tab.id === activeTab}
               href={tabHref(tenantId, tab.id, filters)}
               key={tab.id}
@@ -226,7 +227,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       </nav>
 
       {activeTab === "impact" ? (
-        <AnalyticsImpactPanel locale={locale} model={model} />
+        <AnalyticsImpactPanel costTrend={costTrend} locale={locale} model={model} />
       ) : activeTab === "usage" ? (
         <AnalyticsUsagePanel locale={locale} model={model} performance={performance} />
       ) : activeTab === "cost" ? (
@@ -246,7 +247,14 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           tenantId={tenantId}
         />
       ) : activeTab === "reliability" ? (
-        <AnalyticsReliabilityPanel locale={locale} model={model} />
+        <AnalyticsReliabilityPanel
+          locale={locale}
+          model={model}
+          performance={performance}
+          projectNameById={projectNameById}
+          range={filters.range}
+          tenantId={tenantId}
+        />
       ) : (
         <AnalyticsCachePanel locale={locale} model={model} />
       )}

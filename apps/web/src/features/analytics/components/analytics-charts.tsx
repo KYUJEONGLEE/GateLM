@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import type { CostOverTimePoint } from "@/lib/gateway/cost-over-time-types";
-import type { AnalyticsLatencyDistributionPoint } from "@/lib/gateway/live-analytics-performance";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import {
   AnalyticsEChart,
@@ -11,27 +9,35 @@ import {
   compactAxisNumber,
   useAnalyticsChartTheme
 } from "@/features/analytics/components/analytics-echart";
+import type { CostOverTimePoint } from "@/lib/gateway/cost-over-time-types";
+import type { AnalyticsLatencyDistributionPoint } from "@/lib/gateway/live-analytics-performance";
 
 export type AnalyticsValueKind = "count" | "micro-usd" | "milliseconds" | "tokens";
 
-const palette = ["#10a37f", "#2563eb", "#7c3aed", "#f59e0b", "#64748b"];
+const palette = ["#0f8f66", "#2563eb", "#d97706", "#dc4c4c", "#64748b"];
 const outcomeColors: Record<string, string> = {
-  blocked: "#dc2626",
+  blocked: "#dc4c4c",
   bypass: "#64748b",
-  cache_hit: "#10a37f",
-  fallback: "#7c3aed",
-  guardrail: "#dc2626",
-  hit: "#10a37f",
-  miss: "#f59e0b",
+  cache: "#0f8f66",
+  cache_hit: "#0f8f66",
+  cancelled: "#64748b",
+  completed: "#0f8f66",
+  eligible: "#2563eb",
+  failed: "#dc4c4c",
+  fallback: "#d97706",
+  guardrail: "#dc4c4c",
+  hit: "#0f8f66",
+  miss: "#d97706",
   pii_masked: "#2563eb",
+  prompt: "#2563eb",
+  completion: "#0f8f66",
   provider: "#2563eb",
-  rate_limited: "#f59e0b",
-  cache: "#10a37f"
+  rate_limited: "#d97706"
 };
 
 export function AnalyticsRankedBarChart({
   ariaLabel,
-  className = "analytics-v2-ranked-chart",
+  className = "analytics-v3-ranked-chart",
   kind = "count",
   maxRows = 5,
   rows
@@ -43,11 +49,11 @@ export function AnalyticsRankedBarChart({
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
-  const visibleRows = useMemo(() => rows.slice(0, maxRows), [maxRows, rows]);
+  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, maxRows), [maxRows, rows]);
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
-      animationDuration: 320,
-      grid: { bottom: 22, left: 144, right: 86, top: 8 },
+      animationDuration: 360,
+      grid: { bottom: 24, left: 132, right: 82, top: 12 },
       tooltip: analyticsTooltip(tooltipUnit(kind), theme),
       xAxis: {
         axisLabel: {
@@ -65,11 +71,11 @@ export function AnalyticsRankedBarChart({
       yAxis: {
         axisLabel: {
           color: theme.label,
-          fontSize: 15,
+          fontSize: 14,
           fontWeight: 800,
-          margin: 14,
+          margin: 13,
           overflow: "truncate",
-          width: 124
+          width: 112
         },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -79,17 +85,17 @@ export function AnalyticsRankedBarChart({
       },
       series: [
         {
-          barMaxWidth: 22,
+          barMaxWidth: 18,
           data: visibleRows.map((row, index) => ({
             itemStyle: {
-              borderRadius: [0, 5, 5, 0],
+              borderRadius: [0, 3, 3, 0],
               color: outcomeColors[row.id] ?? palette[index] ?? palette[0]
             },
             value: row.value
           })),
           label: {
             color: theme.label,
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: 900,
             formatter: ({ value }: { value: number }) => formatValue(value, kind, false),
             position: "right",
@@ -105,70 +111,7 @@ export function AnalyticsRankedBarChart({
   return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;
 }
 
-export function AnalyticsDonutChart({
-  ariaLabel,
-  className = "analytics-v2-donut-chart",
-  kind = "count",
-  rows
-}: {
-  ariaLabel: string;
-  className?: string;
-  kind?: AnalyticsValueKind;
-  rows: AnalyticsValueRow[];
-}) {
-  const theme = useAnalyticsChartTheme();
-  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, 5), [rows]);
-  const option = useMemo<AnalyticsEChartOption>(
-    () => ({
-      animationDuration: 320,
-      color: visibleRows.map((row, index) => outcomeColors[row.id] ?? palette[index] ?? palette[0]),
-      legend: {
-        bottom: 0,
-        data: visibleRows.map((row) => row.label),
-        icon: "circle",
-        itemGap: 16,
-        itemHeight: 9,
-        itemWidth: 9,
-        textStyle: { color: theme.label, fontSize: 14, fontWeight: 800 }
-      },
-      series: [
-        {
-          avoidLabelOverlap: true,
-          center: ["50%", "42%"],
-          data: visibleRows.map((row) => ({ name: row.label, value: row.value })),
-          emphasis: {
-            label: {
-              color: theme.label,
-              fontSize: 18,
-              fontWeight: 900,
-              formatter: ({ value }: { value: number }) => formatValue(value, kind, false),
-              show: true
-            },
-            scaleSize: 7
-          },
-          itemStyle: { borderColor: theme.tooltipBackground, borderWidth: 3 },
-          label: { show: false },
-          radius: ["53%", "76%"],
-          type: "pie"
-        }
-      ],
-      tooltip: {
-        backgroundColor: theme.tooltipBackground,
-        borderColor: theme.tooltipBorder,
-        borderWidth: 1,
-        confine: true,
-        textStyle: { color: theme.tooltipText, fontSize: 14, fontWeight: 800 },
-        trigger: "item",
-        valueFormatter: (value: unknown) => formatValue(Number(value ?? 0), kind, false)
-      }
-    }),
-    [kind, theme, visibleRows]
-  );
-
-  return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;
-}
-
-export function AnalyticsDispositionChart({
+export function AnalyticsCompositionChart({
   ariaLabel,
   rows
 }: {
@@ -176,23 +119,37 @@ export function AnalyticsDispositionChart({
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, 6), [rows]);
+  const total = visibleRows.reduce((sum, row) => sum + row.value, 0);
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 360,
-      grid: { bottom: 6, left: 0, right: 0, top: 6 },
+      grid: { bottom: 20, left: 4, right: 4, top: 20 },
       tooltip: analyticsTooltip(" requests", theme),
-      xAxis: { max: total || 1, show: false, type: "value" },
-      yAxis: { data: ["Gateway"], show: false, type: "category" },
-      series: rows.map((row, index) => ({
-        barWidth: 54,
+      xAxis: {
+        axisLabel: { color: theme.axis, fontSize: 13, fontWeight: 700, formatter: compactAxisNumber },
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        minInterval: 1,
+        splitLine: { show: false },
+        type: "value"
+      },
+      yAxis: {
+        axisLabel: { show: false },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        data: ["requests"],
+        type: "category"
+      },
+      series: visibleRows.map((row, index) => ({
+        barMaxWidth: 56,
         data: [row.value],
         itemStyle: {
           borderRadius:
             index === 0
-              ? [7, 0, 0, 7]
-              : index === rows.length - 1
-                ? [0, 7, 7, 0]
+              ? [5, 0, 0, 5]
+              : index === visibleRows.length - 1
+                ? [0, 5, 5, 0]
                 : 0,
           color: outcomeColors[row.id] ?? palette[index] ?? palette[0]
         },
@@ -201,7 +158,7 @@ export function AnalyticsDispositionChart({
           fontSize: 14,
           fontWeight: 900,
           formatter: ({ value }: { value: number }) =>
-            total > 0 && value / total >= 0.12 ? `${Math.round((value / total) * 100)}%` : "",
+            total > 0 && value / total >= 0.13 ? `${Math.round((value / total) * 100)}%` : "",
           position: "inside",
           show: true
         },
@@ -210,16 +167,10 @@ export function AnalyticsDispositionChart({
         type: "bar"
       }))
     }),
-    [rows, theme, total]
+    [theme, total, visibleRows]
   );
 
-  return (
-    <AnalyticsEChart
-      ariaLabel={ariaLabel}
-      className="analytics-v2-disposition-chart"
-      option={option}
-    />
-  );
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-composition-chart" option={option} />;
 }
 
 export function AnalyticsCostTrendChart({
@@ -232,8 +183,8 @@ export function AnalyticsCostTrendChart({
   const theme = useAnalyticsChartTheme();
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
-      animationDuration: 320,
-      grid: { bottom: 30, left: 62, right: 18, top: 18 },
+      animationDuration: 360,
+      grid: { bottom: 34, left: 68, right: 24, top: 24 },
       tooltip: {
         ...analyticsTooltip(" USD", theme),
         valueFormatter: (value: unknown) => formatUsd(Number(value ?? 0))
@@ -260,13 +211,13 @@ export function AnalyticsCostTrendChart({
       },
       series: [
         {
-          areaStyle: { color: "rgba(16, 163, 127, 0.12)" },
+          areaStyle: { color: "rgba(37, 99, 235, 0.08)" },
           data: points.map((point) => point.spendUsd),
-          itemStyle: { color: "#10a37f" },
-          lineStyle: { color: "#10a37f", width: 3 },
-          name: "Spend",
+          itemStyle: { color: "#2563eb" },
+          lineStyle: { color: "#2563eb", width: 3 },
+          name: "Provider spend",
           showSymbol: points.length <= 12,
-          smooth: 0.18,
+          smooth: 0.14,
           symbolSize: 7,
           type: "line"
         }
@@ -275,13 +226,7 @@ export function AnalyticsCostTrendChart({
     [points, theme]
   );
 
-  return (
-    <AnalyticsEChart
-      ariaLabel={ariaLabel}
-      className="analytics-v2-trend-chart"
-      option={option}
-    />
-  );
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-main-chart" option={option} />;
 }
 
 export function AnalyticsLatencyTrendChart({
@@ -294,9 +239,9 @@ export function AnalyticsLatencyTrendChart({
   const theme = useAnalyticsChartTheme();
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
-      animationDuration: 320,
-      color: ["#10a37f", "#2563eb", "#dc2626"],
-      grid: { bottom: 30, left: 58, right: 18, top: 38 },
+      animationDuration: 360,
+      color: ["#0f8f66", "#2563eb", "#dc4c4c"],
+      grid: { bottom: 34, left: 66, right: 24, top: 48 },
       legend: {
         data: ["p50", "p95", "p99"],
         icon: "circle",
@@ -336,13 +281,7 @@ export function AnalyticsLatencyTrendChart({
     [points, theme]
   );
 
-  return (
-    <AnalyticsEChart
-      ariaLabel={ariaLabel}
-      className="analytics-v2-trend-chart"
-      option={option}
-    />
-  );
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-main-chart" option={option} />;
 }
 
 export function AnalyticsRequestVolumeChart({
@@ -355,8 +294,8 @@ export function AnalyticsRequestVolumeChart({
   const theme = useAnalyticsChartTheme();
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
-      animationDuration: 320,
-      grid: { bottom: 30, left: 54, right: 18, top: 18 },
+      animationDuration: 360,
+      grid: { bottom: 34, left: 60, right: 24, top: 24 },
       tooltip: analyticsTooltip(" requests", theme),
       xAxis: {
         axisLabel: { color: theme.axis, fontSize: 13, fontWeight: 700, hideOverlap: true },
@@ -376,13 +315,13 @@ export function AnalyticsRequestVolumeChart({
       },
       series: [
         {
-          areaStyle: { color: "rgba(37, 99, 235, 0.10)" },
+          areaStyle: { color: "rgba(37, 99, 235, 0.08)" },
           data: points.map((point) => point.requests),
           itemStyle: { color: "#2563eb" },
           lineStyle: { color: "#2563eb", width: 3 },
           name: "Requests",
           showSymbol: points.length <= 12,
-          smooth: 0.18,
+          smooth: 0.14,
           symbolSize: 7,
           type: "line"
         }
@@ -391,13 +330,7 @@ export function AnalyticsRequestVolumeChart({
     [points, theme]
   );
 
-  return (
-    <AnalyticsEChart
-      ariaLabel={ariaLabel}
-      className="analytics-v2-trend-chart"
-      option={option}
-    />
-  );
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-main-chart" option={option} />;
 }
 
 function latencySeries(name: string, data: Array<number | null>) {
@@ -407,7 +340,7 @@ function latencySeries(name: string, data: Array<number | null>) {
     lineStyle: { width: 3 },
     name,
     showSymbol: data.length <= 12,
-    smooth: 0.18,
+    smooth: 0.14,
     symbolSize: 7,
     type: "line"
   };
