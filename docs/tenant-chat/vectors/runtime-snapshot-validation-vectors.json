@@ -1,0 +1,55 @@
+{
+  "contractId": "tenant-chat/v1",
+  "schema": "../schemas/tenant-runtime-snapshot.schema.json",
+  "baseFixture": "../fixtures/tenant-runtime-snapshot.fixture.json",
+  "cases": [
+    {
+      "id": "provider-cache-read-above-input-is-valid",
+      "path": "pricing.routes.0.cacheReadInputMicroUsdPerMillionTokens",
+      "value": 500000,
+      "valid": true
+    },
+    {
+      "id": "additional-property-is-invalid",
+      "path": "unexpected",
+      "value": true,
+      "valid": false
+    },
+    {
+      "id": "cache-strategy-enum-is-invalid",
+      "path": "policies.cache.strategy",
+      "value": "semantic",
+      "valid": false
+    },
+    {
+      "id": "budget-period-const-is-invalid",
+      "path": "policies.budget.period",
+      "value": "rolling_month",
+      "valid": false
+    },
+    {
+      "id": "budget-currency-const-is-invalid",
+      "path": "policies.budget.currency",
+      "value": "KRW",
+      "valid": false
+    },
+    {
+      "id": "budget-hard-stop-const-is-invalid",
+      "path": "policies.budget.hardStopPercent",
+      "value": 101,
+      "valid": false
+    },
+    {
+      "id": "fallback-reason-enum-is-invalid",
+      "path": "policies.fallback.allowedReasons",
+      "value": ["provider_overloaded"],
+      "valid": false
+    },
+    {
+      "id": "boolean-type-is-invalid",
+      "path": "policies.safety.enabled",
+      "value": "true",
+      "valid": false
+    }
+  ]
+}

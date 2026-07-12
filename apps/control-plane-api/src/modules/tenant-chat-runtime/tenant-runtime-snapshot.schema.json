@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v1/tenant-runtime-snapshot.schema.json",
+  "title": "Tenant Chat immutable RuntimeSnapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshotId",
+    "version",
+    "digest",
+    "tenantId",
+    "policyVersion",
+    "employeeNoticeVersion",
+    "pricing",
+    "policies",
+    "publishedAt",
+    "publishedBy"
+  ],
+  "properties": {
+    "snapshotId": { "$ref": "#/$defs/opaqueId" },
+    "version": { "type": "integer", "minimum": 1 },
+    "digest": { "$ref": "#/$defs/sha256Digest" },
+    "tenantId": { "$ref": "#/$defs/opaqueId" },
+    "policyVersion": { "type": "integer", "minimum": 1 },
+    "employeeNoticeVersion": { "type": "integer", "minimum": 1 },
+    "pricing": { "$ref": "#/$defs/pricing" },
+    "policies": { "$ref": "#/$defs/policies" },
+    "publishedAt": { "type": "string", "format": "date-time" },
+    "publishedBy": { "$ref": "#/$defs/opaqueId" }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "digest", "currency", "unit", "effectiveAt", "routes"],
+      "properties": {
+        "version": { "$ref": "#/$defs/positiveInteger" },
+        "digest": { "$ref": "#/$defs/sha256Digest" },
+        "currency": { "const": "USD" },
+        "unit": { "const": "micro_usd_per_1m_tokens" },
+        "effectiveAt": { "type": "string", "format": "date-time" },
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/priceRoute" }
+        }
+      }
+    },
+    "priceRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routeId",
+        "providerId",
+        "modelKey",
+        "inputMicroUsdPerMillionTokens",
+        "outputMicroUsdPerMillionTokens"
+      ],
+      "properties": {
+        "routeId": { "$ref": "#/$defs/opaqueId" },
+        "providerId": { "$ref": "#/$defs/opaqueId" },
+        "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "inputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" },
+        "outputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" },
+        "cacheReadInputMicroUsdPerMillionTokens": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "Provider-side prompt-cache read/hit price only. This is unrelated to GateLM Exact Cache and never represents cache creation/write pricing."
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rateLimit", "concurrency", "quota", "budget", "routing", "fallback", "cache", "safety", "streaming"],
+      "properties": {
+        "rateLimit": { "$ref": "#/$defs/rateLimit" },
+        "concurrency": { "$ref": "#/$defs/concurrency" },
+        "quota": { "$ref": "#/$defs/quota" },
+        "budget": { "$ref": "#/$defs/budget" },
+        "routing": { "$ref": "#/$defs/routing" },
+        "fallback": { "$ref": "#/$defs/fallback" },
+        "cache": { "$ref": "#/$defs/cache" },
+        "safety": { "$ref": "#/$defs/safety" },
+        "streaming": { "$ref": "#/$defs/streaming" }
+      }
+    },
+    "rateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "windowSeconds"],
+      "properties": {
+        "requests": { "$ref": "#/$defs/positiveInteger" },
+        "windowSeconds": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
+    "concurrency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxActiveAdmissionsPerUser", "admissionTtlSeconds"],
+      "properties": {
+        "maxActiveAdmissionsPerUser": { "$ref": "#/$defs/positiveInteger" },
+        "admissionTtlSeconds": { "const": 30 }
+      }
+    },
+    "quota": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period", "timezone", "defaultMonthlyTokenLimit", "warningPercent", "economyPercent", "hardStopPercent"],
+      "properties": {
+        "period": { "const": "calendar_month" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "defaultMonthlyTokenLimit": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "A value of 0 means immediate blocked state, not unlimited usage."
+        },
+        "warningPercent": { "type": "integer", "minimum": 1, "maximum": 99 },
+        "economyPercent": { "type": "integer", "minimum": 2, "maximum": 119 },
+        "hardStopPercent": { "type": "integer", "minimum": 3, "maximum": 1000 }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period", "timezone", "currency", "monthlyLimitMicroUsd", "warningPercent", "economyPercent", "hardStopPercent"],
+      "properties": {
+        "period": { "const": "calendar_month" },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "currency": { "const": "USD" },
+        "monthlyLimitMicroUsd": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "A value of 0 means immediate blocked state, not unlimited budget."
+        },
+        "warningPercent": { "type": "integer", "minimum": 1, "maximum": 98 },
+        "economyPercent": { "type": "integer", "minimum": 2, "maximum": 99 },
+        "hardStopPercent": { "const": 100 }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routes"],
+      "properties": {
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/runtimeRoute" }
+        }
+      }
+    },
+    "runtimeRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routeId", "tier", "providerId", "modelKey", "enabled"],
+      "properties": {
+        "routeId": { "$ref": "#/$defs/opaqueId" },
+        "tier": { "type": "string", "enum": ["high_quality", "standard", "economy"] },
+        "providerId": { "$ref": "#/$defs/opaqueId" },
+        "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "routeIds", "maxAttempts", "allowedReasons"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "routeIds": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/opaqueId" }
+        },
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "allowedReasons": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["provider_timeout", "provider_error_pre_delta"] }
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "enabled", "ttlSeconds", "maxEntriesPerUser"],
+      "properties": {
+        "strategy": { "type": "string", "enum": ["off", "exact"] },
+        "enabled": { "type": "boolean" },
+        "ttlSeconds": { "$ref": "#/$defs/positiveInteger" },
+        "maxEntriesPerUser": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "policyDigest"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "policyDigest": { "$ref": "#/$defs/sha256Digest" }
+      }
+    },
+    "streaming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "maxDurationSeconds", "finalEventRequired"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxDurationSeconds": { "$ref": "#/$defs/positiveInteger" },
+        "finalEventRequired": { "const": true }
+      }
+    }
+  }
+}

@@ -1,8 +1,12 @@
 # Tenant Chat Auth Shell 첫 PR 검증 증거
 
-검증일: 2026-07-13 (Asia/Seoul)  
-기준 브랜치: `feat/tenant-chat-auth-shell`  
-기준 base: `origin/dev@b7d1a740b04b522c1c8f1c17f37ab037da7644ee`
+검증일: 2026-07-13 (Asia/Seoul)
+
+기준 브랜치: `feat/tenant-chat-auth-shell`
+
+착수 base: `origin/dev@b7d1a740b04b522c1c8f1c17f37ab037da7644ee`
+
+최종 dev sync: `origin/dev@be9adde7`
 
 이 문서는 직원 초대에서 GateLM Chat shell 진입까지의 첫 vertical slice를 검증한 결과다. 실제 secret, cookie, token, 비밀번호, provider 원문 오류는 기록하지 않는다.
 
@@ -21,7 +25,7 @@ API route와 cookie/session schema의 상세 계약은 `docs/tenant-chat/openapi
 
 ## 2. 실제 통합 검증
 
-격리된 production-like Compose project `gatelm-chat-smoke`에서 빈 PostgreSQL에 24개 migration을 순서대로 적용했다. 합성 tenant/employee만 사용해 다음 흐름을 검증했다.
+격리된 production-like Compose project `gatelm-chat-smoke`에서 빈 PostgreSQL에 당시 24개 migration을 순서대로 적용했다. 합성 tenant/employee만 사용해 다음 흐름을 검증했다.
 
 1. token query가 있는 초대 URL 진입
 2. 즉시 `/invitations/accept` clean URL로 303 redirect
@@ -33,6 +37,8 @@ API route와 cookie/session schema의 상세 계약은 `docs/tenant-chat/openapi
 8. logout revoke와 sessionVersion 증가
 
 DB readback은 초대 수락 뒤 Employee `accepted`, Membership `active`, invitation hash 제거, User binding을 확인했다. refresh 후에는 token row `3`, consumed `1`, replacement-linked `1`, tagged hash `3`이었고 원문 token은 저장되지 않았다. logout 후 합성 사용자의 session은 `2/2` revoke, 최대 sessionVersion `2`, device identifier `2/2` hash 저장이었다.
+
+작업 중 `dev`에 Tenant Chat runtime/usage migration이 먼저 병합된 뒤 최신 base를 다시 동기화했다. 이미 auth migration과 합성 session row가 있는 DB에 pending runtime migration을 적용하는 upgrade smoke와, 빈 DB에 runtime→auth 순서로 25개 migration을 적용하는 clean smoke가 모두 통과했다.
 
 보안 네거티브 케이스:
 
@@ -71,19 +77,21 @@ DB readback은 초대 수락 뒤 Employee `accepted`, Membership `active`, invit
 
 - `corepack pnpm run verify:v2-final`: 통과
   - 문서/secret-shaped value/whitespace 검증
-  - Control Plane typecheck와 18 suites / 198 tests
+  - Control Plane typecheck와 21 suites / 229 tests 통과, DB integration 2 suites / 4 tests 환경 조건으로 skip
   - Dashboard typecheck
   - Gateway `go test ./...`
 - Chat API: typecheck, build, 3 suites / 9 tests 통과
 - Chat Web: typecheck와 production build 통과
 - shared BFF: typecheck, 4 security tests 통과
 - shared UI: typecheck 통과
-- Dashboard: production build, 43 unit tests 통과
+- Dashboard: production build, 45 unit tests 통과
 - Docker: Control Plane, Chat API, Chat Web, Dashboard, legacy Application Linux image build 통과
 - Compose: `config --quiet`, clean migration, health/readiness, private Chat API, Chat host routing 통과
 - OpenAPI/JSON schema-fixture pairing과 `verify:v2-docs` 통과
 
-Dashboard unit 검증 중 순수 색상 helper가 Next UI 컴포넌트 전체를 import해 Windows ESM에서 실패하는 기존 결합을 발견했다. helper를 순수 모듈로 분리한 뒤 43개 테스트가 통과했다.
+Dashboard unit 검증 중 순수 색상 helper가 Next UI 컴포넌트 전체를 import해 Windows ESM에서 실패하는 기존 결합을 발견했다. helper를 순수 모듈로 분리한 뒤 최신 dev 포함 45개 테스트가 통과했다.
+
+최신 `dev` 동기화 뒤 Gateway의 embedded runtime schema test가 Windows checkout의 CRLF/LF 차이를 계약 drift로 오인하는 문제를 발견했다. 의미 없는 line-ending 차이만 정규화하고 실제 schema byte drift 검사는 유지한 뒤 `go test ./...` 전체가 통과했다.
 
 ## 5. 브라우저와 UI QA
 

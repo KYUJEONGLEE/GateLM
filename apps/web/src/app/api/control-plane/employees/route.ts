@@ -226,10 +226,6 @@ function isProjectEmployeeAssignmentValues(
 
   const record = value as Partial<ProjectEmployeeAssignmentValues>;
   return (
-    Array.isArray(record.allowedModelKeys) &&
-    record.allowedModelKeys.every((item) => typeof item === "string") &&
-    Array.isArray(record.allowedProviderConnectionIds) &&
-    record.allowedProviderConnectionIds.every((item) => typeof item === "string") &&
     (record.dailyTokenLimit === undefined ||
       (typeof record.dailyTokenLimit === "number" &&
         Number.isInteger(record.dailyTokenLimit) &&

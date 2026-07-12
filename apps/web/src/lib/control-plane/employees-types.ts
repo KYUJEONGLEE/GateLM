@@ -52,8 +52,6 @@ export type EmployeeInvitationResult = {
 };
 
 export type ProjectEmployeePolicy = {
-  allowedModelKeys: string[];
-  allowedProviderConnectionIds: string[];
   dailyTokenLimit: ProjectEmployeeDailyTokenLimitPolicy;
   note: string | null;
   rateLimit: ProjectEmployeeRateLimitPolicy;
@@ -155,8 +153,6 @@ export type EmployeeInvitationValues = {
 };
 
 export type ProjectEmployeeAssignmentValues = {
-  allowedModelKeys: string[];
-  allowedProviderConnectionIds: string[];
   dailyTokenLimit?: number;
   employeeId: string;
   monthlyBudgetLimitUsd: number;

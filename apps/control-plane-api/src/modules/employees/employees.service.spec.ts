@@ -47,10 +47,11 @@ describe('EmployeesService employee rate limit policy', () => {
       limit: 60,
       windowSeconds: 60,
     });
-    expect(policy.allowedModelKeys).toEqual(['mock-balanced']);
+    expect(policy).not.toHaveProperty('allowedModelKeys');
+    expect(policy).not.toHaveProperty('allowedProviderConnectionIds');
   });
 
-  it('merges employee rate limit fields without dropping model policy', () => {
+  it('merges employee limits without carrying legacy employee routing fields', () => {
     const merged = policyReader.mergeProjectEmployeePolicy(
       {
         allowedModelKeys: ['mock-balanced'],
@@ -68,8 +69,6 @@ describe('EmployeesService employee rate limit policy', () => {
     );
 
     expect(merged).toEqual({
-      allowedModelKeys: ['mock-balanced'],
-      allowedProviderConnectionIds: ['connection-1'],
       dailyTokenLimit: { enabled: true, limit: 75000 },
       note: 'keep',
       rateLimit: { enabled: true, limit: 5, windowSeconds: 30 },
@@ -104,6 +103,36 @@ describe('EmployeesService employee rate limit policy', () => {
       rateLimitEnabled: true,
       rateLimitLimit: 12,
       rateLimitWindowSeconds: 60,
+    });
+  });
+
+  it('rejects removed employee Provider and Model fields', async () => {
+    const validationPipe = new ValidationPipe({
+      forbidNonWhitelisted: true,
+      transform: true,
+      whitelist: true,
+    });
+
+    await expect(
+      validationPipe.transform(
+        {
+          allowedModelKeys: ['mock-balanced'],
+          allowedProviderConnectionIds: ['00000000-0000-4000-8000-000000000001'],
+          monthlyBudgetLimitUsd: 25,
+        },
+        {
+          data: '',
+          metatype: UpsertProjectEmployeeAssignmentDto,
+          type: 'body',
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        message: expect.arrayContaining([
+          'property allowedModelKeys should not exist',
+          'property allowedProviderConnectionIds should not exist',
+        ]),
+      },
     });
   });
 

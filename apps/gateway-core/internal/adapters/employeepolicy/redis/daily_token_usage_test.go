@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"testing"
@@ -53,6 +54,25 @@ func TestTrackingTerminalLogWriterAddsEmployeeProviderTokens(t *testing.T) {
 	}
 }
 
+func TestTrackingTerminalLogWriterDoesNotFailWhenDailyUsageUpdateFails(t *testing.T) {
+	store := &fakeUsageStore{err: errors.New("redis unavailable")}
+	next := &fakeTerminalWriter{}
+	writer := NewTrackingTerminalLogWriter(next, store)
+	err := writer.WriteTerminalLog(context.Background(), invocationlog.TerminalLog{
+		RequestID: "request-redis-failure", TenantID: "tenant", ProjectID: "project",
+		TotalTokens: 42, CompletedAt: time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC),
+		EmployeePolicyDecision: &employeepolicy.Decision{
+			EmployeeID: "employee", DailyTokenLimit: 1000,
+		},
+	})
+	if err != nil {
+		t.Fatalf("redis update failure must not fail terminal log: %v", err)
+	}
+	if next.calls != 1 {
+		t.Fatalf("expected downstream terminal writer once, got %d", next.calls)
+	}
+}
+
 type fakeClient struct {
 	results []any
 	calls   int
@@ -74,6 +94,7 @@ func (w *fakeTerminalWriter) WriteTerminalLog(_ context.Context, _ invocationlog
 }
 
 type fakeUsageStore struct {
+	err       error
 	requestID string
 	tokens    int64
 }
@@ -85,7 +106,7 @@ func (s *fakeUsageStore) GetOrSeed(_ context.Context, _ employeepolicy.DailyToke
 func (s *fakeUsageStore) Add(_ context.Context, _ employeepolicy.DailyTokenUsageKey, requestID string, tokens int64, _ time.Time) error {
 	s.requestID = requestID
 	s.tokens = tokens
-	return nil
+	return s.err
 }
 
 func TestDailyTokenUsageStoreRedisIntegration(t *testing.T) {
@@ -126,5 +147,9 @@ func TestDailyTokenUsageStoreRedisIntegration(t *testing.T) {
 	used, err = store.GetOrSeed(ctx, key, 0, expiresAt)
 	if err != nil || used != 125 {
 		t.Fatalf("expected deduped usage 125, got used=%d err=%v", used, err)
+	}
+	used, err = store.GetOrSeed(ctx, key, 150, expiresAt)
+	if err != nil || used != 150 {
+		t.Fatalf("expected postgres seed to repair redis usage to 150, got used=%d err=%v", used, err)
 	}
 }

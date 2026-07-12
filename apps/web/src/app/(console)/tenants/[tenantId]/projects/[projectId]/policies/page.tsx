@@ -62,7 +62,6 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
           locale={locale}
           model={projectEmployeeModel}
           project={projectRuntime.project}
-          providerConnections={projectRuntime.policyModel.providerConnections.available}
         />
       }
     >
