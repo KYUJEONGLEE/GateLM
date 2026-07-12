@@ -4,16 +4,16 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Plus,
+  ChevronDown,
+  ChevronUp,
   Save,
-  Trash2,
   Upload,
   UserPlus,
   Users,
   Wallet
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,6 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  getProviderConnectionFamily,
-  ProviderFamilyIcon
-} from "@/features/provider-connections/components/provider-family-icon";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
@@ -39,7 +34,6 @@ import type {
   ProjectEmployeeAssignmentValues
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   getRateLimitRefillTokensPerSecond,
   getRateLimitWindowSeconds
@@ -56,7 +50,6 @@ type ProjectEmployeeAssignmentProps = {
   locale: Locale;
   model: EmployeeControlModel;
   project: ProjectRecord;
-  providerConnections?: ProviderConnectionRecord[];
 };
 
 type SubmitState = {
@@ -64,16 +57,21 @@ type SubmitState = {
   status: "error" | "idle" | "success";
 };
 
+type CompactUnitStepperProps = {
+  ariaLabel: string;
+  decimals?: number;
+  max: number;
+  min: number;
+  onValueChange: (value: number) => void;
+  step: number;
+  unit: string;
+  value: number;
+};
+
 type EmployeeSortDirection = "asc" | "desc";
 type EmployeeSortField = "department" | "email" | "invitation" | "name" | "project";
 type EmployeeAddMethod = "csv" | "invite";
-type EmployeePolicyTab = "limits" | "provider-model";
-
-type EmployeeProviderModelRow = {
-  id: string;
-  model: string;
-  providerConnectionId: string;
-};
+const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned_department__";
 
 type EmployeeResponsePayload = {
   employee?: EmployeeRecord;
@@ -110,10 +108,14 @@ const employeeText: Record<
     budget: string;
     cancel: string;
     created: string;
+    createRequired: string;
     csv: string;
     csvUpload: string;
     department: string;
+    departmentPlaceholder: string;
+    departmentRequired: string;
     disable: string;
+    editDepartment: string;
     email: string;
     employeeAddTitle: string;
     employees: string;
@@ -126,7 +128,6 @@ const employeeText: Record<
     inviteResend: string;
     inviteSend: string;
     inviteSent: string;
-    modelKeys: string;
     name: string;
     next: string;
     noAssignments: string;
@@ -136,7 +137,6 @@ const employeeText: Record<
     previous: string;
     project: string;
     projectCount: string;
-    providerIds: string;
     remaining: string;
     save: string;
     sortBy: string;
@@ -153,13 +153,17 @@ const employeeText: Record<
     addTab: "Add employees",
     allocation: "Project allocation",
     assigned: "Assigned",
-    budget: "Monthly limit",
+    budget: "This month's cost limit",
     cancel: "Cancel",
     created: "Created",
+    createRequired: "Name, email, and department are required.",
     csv: "CSV",
     csvUpload: "CSV file upload",
     department: "Department",
+    departmentPlaceholder: "Select or enter a department",
+    departmentRequired: "Department is required.",
     disable: "Disable",
+    editDepartment: "Edit department",
     email: "Email",
     employeeAddTitle: "Individual invite",
     employees: "Employees",
@@ -172,7 +176,6 @@ const employeeText: Record<
     inviteResend: "Resend",
     inviteSend: "Send invite",
     inviteSent: "Invitation email sent.",
-    modelKeys: "Models",
     name: "Name",
     next: "Next",
     noAssignments: "No project employees.",
@@ -182,7 +185,6 @@ const employeeText: Record<
     previous: "Previous",
     project: "Project",
     projectCount: "Projects",
-    providerIds: "Providers",
     remaining: "Remaining",
     save: "Save",
     sortBy: "Sort",
@@ -198,13 +200,17 @@ const employeeText: Record<
     addTab: "직원 추가",
     allocation: "Project 배정",
     assigned: "배정",
-    budget: "월 한도",
+    budget: "이번 달 비용 한도",
     cancel: "취소",
     created: "생성",
+    createRequired: "이름, 이메일, 부서를 입력하세요.",
     csv: "CSV",
     csvUpload: "CSV 파일 업로드",
     department: "부서",
+    departmentPlaceholder: "기존 부서 선택 또는 새 부서 입력",
+    departmentRequired: "부서를 입력하세요.",
     disable: "비활성화",
+    editDepartment: "부서 설정",
     email: "이메일",
     employeeAddTitle: "개별 초대",
     employees: "직원",
@@ -217,7 +223,6 @@ const employeeText: Record<
     inviteResend: "재발송",
     inviteSend: "초대 메일 보내기",
     inviteSent: "초대 메일을 발송했습니다.",
-    modelKeys: "모델",
     name: "이름",
     next: "다음",
     noAssignments: "Project에 배정된 직원이 없습니다.",
@@ -227,7 +232,6 @@ const employeeText: Record<
     previous: "이전",
     project: "Project",
     projectCount: "프로젝트",
-    providerIds: "Provider",
     remaining: "잔여",
     save: "저장",
     sortBy: "정렬",
@@ -245,7 +249,6 @@ const projectEmployeeText: Record<
   Locale,
   {
     addEmployee: string;
-    addModel: string;
     assign: string;
     assigned: string;
     assignmentCreated: string;
@@ -253,7 +256,9 @@ const projectEmployeeText: Record<
     budget: string;
     cancel: string;
     confirmDisable: string;
+    costLimit: string;
     dailyTokenLimit: string;
+    dailyTokenColumn: string;
     dailyTokenUsage: string;
     department: string;
     disable: string;
@@ -265,10 +270,6 @@ const projectEmployeeText: Record<
     employees: string;
     fixtureFallback: string;
     management: string;
-    modelKeys: string;
-    noProviderModels: string;
-    noSelectedModels: string;
-    limitSettings: string;
     monthlyUsage: string;
     name: string;
     noAssignments: string;
@@ -276,9 +277,6 @@ const projectEmployeeText: Record<
     noDepartments: string;
     noEmployees: string;
     note: string;
-    policySettings: string;
-    providerIds: string;
-    providerModelSettings: string;
     quotaExceeded: string;
     quotaNotConfigured: string;
     quotaWarning: string;
@@ -287,26 +285,26 @@ const projectEmployeeText: Record<
     remaining: string;
     refillRequestsPerSecond: string;
     requestsPerMinute: string;
-    removeModel: string;
     save: string;
     searchEmployee: string;
     selectDepartment: string;
-    selectModel: string;
-    selectProvider: string;
+    unassignedDepartment: string;
+    unlimited: string;
     budgetWarning: string;
   }
 > = {
   en: {
     addEmployee: "Assign employee",
-    addModel: "Add model",
     assign: "Assign",
     assigned: "Assigned",
     assignmentCreated: "Employee assigned to this project.",
     available: "Available",
-    budget: "Monthly limit",
+    budget: "This month's cost limit",
     cancel: "Cancel",
     confirmDisable: "Disable",
+    costLimit: "Cost limit",
     dailyTokenLimit: "Daily token limit",
+    dailyTokenColumn: "Daily token",
     dailyTokenUsage: "Used today (UTC)",
     department: "Department",
     disable: "Disable",
@@ -318,10 +316,6 @@ const projectEmployeeText: Record<
     enabled: "Enabled",
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     management: "Management",
-    modelKeys: "Models",
-    noProviderModels: "No registered Provider models.",
-    noSelectedModels: "No models selected.",
-    limitSettings: "Limits",
     monthlyUsage: "Used this month",
     name: "Name",
     noAssignments: "No project employees.",
@@ -329,9 +323,6 @@ const projectEmployeeText: Record<
     noDepartments: "No departments found.",
     noEmployees: "No employees in this department.",
     note: "Note",
-    policySettings: "Policy settings",
-    providerIds: "Providers",
-    providerModelSettings: "Provider / Model",
     quotaExceeded: "High-cost models restricted",
     quotaNotConfigured: "No quota",
     quotaWarning: "Near limit",
@@ -340,25 +331,25 @@ const projectEmployeeText: Record<
     remaining: "Project remaining budget",
     refillRequestsPerSecond: "Refill tokens / sec",
     requestsPerMinute: "Requests per minute",
-    removeModel: "Remove model",
     save: "Save",
     searchEmployee: "Search by name or email",
     selectDepartment: "Select department",
-    selectModel: "Select model",
-    selectProvider: "Select Provider",
+    unassignedDepartment: "No department",
+    unlimited: "Unlimited",
     budgetWarning: "Budget warning"
   },
   ko: {
     addEmployee: "직원 배정",
-    addModel: "모델 추가",
     assign: "배정",
     assigned: "배정",
     assignmentCreated: "직원을 현재 프로젝트에 배정했습니다.",
     available: "미배정",
-    budget: "월 한도",
+    budget: "이번 달 비용 한도",
     cancel: "취소",
     confirmDisable: "비활성화",
+    costLimit: "비용 한도",
     dailyTokenLimit: "일일 토큰 한도",
+    dailyTokenColumn: "일일 Token",
     dailyTokenUsage: "오늘 사용 토큰 (UTC)",
     department: "부서",
     disable: "비활성화",
@@ -370,10 +361,6 @@ const projectEmployeeText: Record<
     enabled: "활성화",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
     management: "관리",
-    modelKeys: "모델",
-    noProviderModels: "등록된 Provider 모델이 없습니다.",
-    noSelectedModels: "선택된 모델이 없습니다.",
-    limitSettings: "한도 설정",
     monthlyUsage: "이번 달 사용액",
     name: "이름",
     noAssignments: "Project에 배정된 직원이 없습니다.",
@@ -381,9 +368,6 @@ const projectEmployeeText: Record<
     noDepartments: "등록된 부서가 없습니다.",
     noEmployees: "이 부서에 배정 가능한 직원이 없습니다.",
     note: "메모",
-    policySettings: "정책 수정",
-    providerIds: "Provider",
-    providerModelSettings: "Provider / Model",
     quotaExceeded: "고비용 모델 제한",
     quotaNotConfigured: "한도 미설정",
     quotaWarning: "한도 임박",
@@ -392,12 +376,11 @@ const projectEmployeeText: Record<
     remaining: "프로젝트 잔여 예산",
     refillRequestsPerSecond: "초당 토큰 충전",
     requestsPerMinute: "분당 요청 한도",
-    removeModel: "모델 삭제",
     save: "저장",
     searchEmployee: "이름 또는 이메일 검색",
     selectDepartment: "부서 선택",
-    selectModel: "모델 선택",
-    selectProvider: "Provider 선택",
+    unassignedDepartment: "부서 미지정",
+    unlimited: "무제한",
     budgetWarning: "예산 경고"
   }
 };
@@ -413,8 +396,7 @@ export function ProjectEmployeeAssignment(props: ProjectEmployeeAssignmentProps)
 export function ProjectEmployeeAssignmentSection({
   locale,
   model,
-  project,
-  providerConnections = []
+  project
 }: ProjectEmployeeAssignmentProps) {
   const router = useRouter();
   const text = projectEmployeeText[locale];
@@ -429,8 +411,6 @@ export function ProjectEmployeeAssignmentSection({
   const [assignmentDepartment, setAssignmentDepartment] = useState("");
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
   const [candidateEmployeeId, setCandidateEmployeeId] = useState("");
-  const [employeePolicyTab, setEmployeePolicyTab] = useState<EmployeePolicyTab>("limits");
-  const providerModelRowSequence = useRef(0);
   const activeAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.status === "active"),
     [assignments]
@@ -464,6 +444,16 @@ export function ProjectEmployeeAssignmentSection({
       ).sort((left, right) => left.localeCompare(right)),
     [model.employees]
   );
+  const hasUnassignedEmployees = useMemo(
+    () =>
+      model.employees.some(
+        (employee) =>
+          (employee.status === "active" || employee.status === "staged") &&
+          !employee.department?.trim() &&
+          !activeAssignmentByEmployeeId.has(employee.id)
+      ),
+    [activeAssignmentByEmployeeId, model.employees]
+  );
   const [assignmentValues, setAssignmentValues] = useState({
     dailyTokenLimit: 0,
     monthlyBudgetLimitUsd: 0,
@@ -474,7 +464,6 @@ export function ProjectEmployeeAssignmentSection({
     rateLimitWindowSeconds: 60,
     warningThresholdPercent: 80
   });
-  const [providerModelRows, setProviderModelRows] = useState<EmployeeProviderModelRow[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
@@ -489,7 +478,9 @@ export function ProjectEmployeeAssignmentSection({
         if (
           (employee.status !== "active" && employee.status !== "staged") ||
           activeAssignmentByEmployeeId.has(employee.id) ||
-          employee.department?.trim() !== assignmentDepartment
+          (assignmentDepartment === UNASSIGNED_DEPARTMENT_VALUE
+            ? Boolean(employee.department?.trim())
+            : employee.department?.trim() !== assignmentDepartment)
         ) {
           return false;
         }
@@ -511,41 +502,6 @@ export function ProjectEmployeeAssignmentSection({
     employeeSearchQuery,
     model.employees
   ]);
-  const selectableProviderConnections = useMemo(
-    () =>
-      providerConnections
-        .filter(
-          (providerConnection) =>
-            providerConnection.status !== "DISABLED" &&
-            getProviderConnectionModels(providerConnection).length > 0
-        )
-        .sort((left, right) => left.displayName.localeCompare(right.displayName)),
-    [providerConnections]
-  );
-  const providerConnectionsById = useMemo(
-    () => new Map(providerConnections.map((providerConnection) => [providerConnection.id, providerConnection])),
-    [providerConnections]
-  );
-  const selectedProviderModelKeys = useMemo(
-    () =>
-      new Set(
-        providerModelRows
-          .filter((row) => row.providerConnectionId && row.model)
-          .map((row) => providerModelKey(row.providerConnectionId, row.model))
-      ),
-    [providerModelRows]
-  );
-  const hasAvailableProviderModel = useMemo(
-    () =>
-      selectableProviderConnections.some((providerConnection) =>
-        getProviderConnectionModels(providerConnection).some(
-          (modelName) =>
-            !selectedProviderModelKeys.has(providerModelKey(providerConnection.id, modelName))
-        )
-      ),
-    [selectableProviderConnections, selectedProviderModelKeys]
-  );
-
   useEffect(() => {
     if (!projectEmployees.some((employee) => employee.id === selectedEmployeeId)) {
       setSelectedEmployeeId(projectEmployees[0]?.id ?? "");
@@ -562,11 +518,10 @@ export function ProjectEmployeeAssignmentSection({
     const existingAssignment = assignments.find(
       (assignment) => assignment.employeeId === selectedEmployeeId
     );
-    const formState = getEmployeePolicyFormState(existingAssignment, providerConnections);
+    const formState = getEmployeePolicyFormState(existingAssignment);
 
     setAssignmentValues(formState.assignmentValues);
-    setProviderModelRows(formState.providerModelRows);
-  }, [assignments, providerConnections, selectedEmployeeId]);
+  }, [assignments, selectedEmployeeId]);
 
   const assignedBudgetUsd = activeAssignments.reduce(
     (total, assignment) => total + assignment.monthlyBudgetLimitUsd,
@@ -612,15 +567,16 @@ export function ProjectEmployeeAssignmentSection({
         assignmentValues.rateLimitWindowSeconds > 3600)) ||
     !Number.isInteger(assignmentValues.warningThresholdPercent) ||
     assignmentValues.warningThresholdPercent < 0 ||
-    assignmentValues.warningThresholdPercent > 100 ||
-    providerModelRows.some((row) => !row.providerConnectionId || !row.model) ||
-    selectedProviderModelKeys.size !== providerModelRows.length;
+    assignmentValues.warningThresholdPercent > 100;
   const employeeToDisable = assignmentToDisable
     ? model.employees.find((employee) => employee.id === assignmentToDisable.employeeId)
     : undefined;
 
   function openAssignmentDialog() {
-    setAssignmentDepartment(tenantDepartments[0] ?? "");
+    setAssignmentDepartment(
+      tenantDepartments[0] ??
+        (hasUnassignedEmployees ? UNASSIGNED_DEPARTMENT_VALUE : "")
+    );
     setEmployeeSearchQuery("");
     setCandidateEmployeeId("");
     setIsAssignmentDialogOpen(true);
@@ -630,64 +586,12 @@ export function ProjectEmployeeAssignmentSection({
     const existingAssignment = assignments.find(
       (assignment) => assignment.employeeId === employeeId
     );
-    const formState = getEmployeePolicyFormState(existingAssignment, providerConnections);
+    const formState = getEmployeePolicyFormState(existingAssignment);
 
     setSelectedEmployeeId(employeeId);
     setAssignmentValues(formState.assignmentValues);
-    setProviderModelRows(formState.providerModelRows);
-    setEmployeePolicyTab("limits");
     setSubmitState({ message: "", status: "idle" });
     setIsEmployeePolicyDialogOpen(true);
-  }
-
-  function addProviderModelRow() {
-    for (const providerConnection of selectableProviderConnections) {
-      const modelName = getProviderConnectionModels(providerConnection).find(
-        (candidate) =>
-          !selectedProviderModelKeys.has(providerModelKey(providerConnection.id, candidate))
-      );
-
-      if (modelName) {
-        providerModelRowSequence.current += 1;
-        setProviderModelRows((current) => [
-          ...current,
-          {
-            id: `new-provider-model-${providerModelRowSequence.current}`,
-            model: modelName,
-            providerConnectionId: providerConnection.id
-          }
-        ]);
-        return;
-      }
-    }
-  }
-
-  function updateProviderModelRow(
-    rowId: string,
-    next: Pick<EmployeeProviderModelRow, "model" | "providerConnectionId">
-  ) {
-    setProviderModelRows((current) =>
-      current.map((row) => (row.id === rowId ? { ...row, ...next } : row))
-    );
-  }
-
-  function changeProviderModelRowProvider(rowId: string, providerConnectionId: string) {
-    const providerConnection = providerConnectionsById.get(providerConnectionId);
-    const usedKeys = new Set(
-      providerModelRows
-        .filter((row) => row.id !== rowId && row.providerConnectionId && row.model)
-        .map((row) => providerModelKey(row.providerConnectionId, row.model))
-    );
-    const firstAvailableModel = providerConnection
-      ? getProviderConnectionModels(providerConnection).find(
-          (modelName) => !usedKeys.has(providerModelKey(providerConnectionId, modelName))
-        ) ?? ""
-      : "";
-
-    updateProviderModelRow(rowId, {
-      model: firstAvailableModel,
-      providerConnectionId
-    });
   }
 
   async function submitNewAssignment() {
@@ -700,9 +604,8 @@ export function ProjectEmployeeAssignmentSection({
       (assignment) => assignment.employeeId === employee.id
     );
     const values: ProjectEmployeeAssignmentValues = {
-      allowedModelKeys: existingAssignment?.policy.allowedModelKeys ?? [],
-      allowedProviderConnectionIds:
-        existingAssignment?.policy.allowedProviderConnectionIds ?? [],
+      allowedModelKeys: [],
+      allowedProviderConnectionIds: [],
       dailyTokenLimit: existingAssignment?.policy.dailyTokenLimit.limit ?? 0,
       employeeId: employee.id,
       monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
@@ -750,10 +653,8 @@ export function ProjectEmployeeAssignmentSection({
     }
 
     const values: ProjectEmployeeAssignmentValues = {
-      allowedModelKeys: uniqueStrings(providerModelRows.map((row) => row.model)),
-      allowedProviderConnectionIds: uniqueStrings(
-        providerModelRows.map((row) => row.providerConnectionId)
-      ),
+      allowedModelKeys: [],
+      allowedProviderConnectionIds: [],
       dailyTokenLimit: assignmentValues.dailyTokenLimit,
       employeeId: selectedEmployeeId,
       monthlyBudgetLimitUsd: assignmentValues.monthlyBudgetLimitUsd,
@@ -887,11 +788,19 @@ export function ProjectEmployeeAssignmentSection({
       ) : (
         <div className="project-employee-table-wrap">
           <table className="project-employee-table">
+            <colgroup>
+              <col className="project-employee-name-column" />
+              <col className="project-employee-department-column" />
+              <col className="project-employee-cost-column" />
+              <col className="project-employee-token-column" />
+              <col className="project-employee-action-column" />
+            </colgroup>
             <thead>
               <tr>
                 <th scope="col">{text.name}</th>
                 <th scope="col">{text.department}</th>
-                <th scope="col">{text.budget}</th>
+                <th scope="col">{text.costLimit}</th>
+                <th scope="col">{text.dailyTokenColumn}</th>
                 <th scope="col">{text.management}</th>
               </tr>
             </thead>
@@ -927,6 +836,27 @@ export function ProjectEmployeeAssignmentSection({
                             warning: text.quotaWarning,
                             within_limit: text.quotaWithinLimit
                           }[assignment.quotaStatus]}
+                        </small>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="project-employee-quota-cell">
+                        <strong>
+                          {formatTokenCount(assignment.dailyTokenUsed, locale)} /{" "}
+                          {formatTokenLimit(
+                            assignment.policy.dailyTokenLimit.limit,
+                            locale,
+                            assignment.policy.dailyTokenLimit.enabled,
+                            text.unlimited
+                          )}
+                        </strong>
+                        <small data-quota-status={assignment.dailyTokenStatus}>
+                          {{
+                            exceeded: text.quotaExceeded,
+                            not_configured: text.quotaNotConfigured,
+                            warning: text.quotaWarning,
+                            within_limit: text.quotaWithinLimit
+                          }[assignment.dailyTokenStatus]}
                         </small>
                       </div>
                     </td>
@@ -979,16 +909,7 @@ export function ProjectEmployeeAssignmentSection({
               <AlertDescription>{submitState.message}</AlertDescription>
             </Alert>
           ) : null}
-          <Tabs
-            className="employee-policy-tabs"
-            onValueChange={(value) => setEmployeePolicyTab(value as EmployeePolicyTab)}
-            value={employeePolicyTab}
-          >
-            <TabsList aria-label={text.policySettings}>
-              <TabsTrigger value="limits">{text.limitSettings}</TabsTrigger>
-              <TabsTrigger value="provider-model">{text.providerModelSettings}</TabsTrigger>
-            </TabsList>
-            <TabsContent className="employee-policy-tab-content" value="limits">
+          <div className="employee-policy-tab-content">
               <div
                 className="employee-policy-usage-summary"
                 data-quota-status={selectedQuotaStatus}
@@ -1021,7 +942,12 @@ export function ProjectEmployeeAssignmentSection({
                 </div>
                 <strong>
                   {formatTokenCount(selectedAssignment?.dailyTokenUsed ?? 0, locale)} /{" "}
-                  {formatTokenCount(selectedAssignment?.policy.dailyTokenLimit.limit ?? 0, locale)}
+                  {formatTokenLimit(
+                    selectedAssignment?.policy.dailyTokenLimit.limit ?? 0,
+                    locale,
+                    selectedAssignment?.policy.dailyTokenLimit.enabled ?? false,
+                    text.unlimited
+                  )}
                 </strong>
                 <div
                   aria-label={text.dailyTokenUsage}
@@ -1035,43 +961,44 @@ export function ProjectEmployeeAssignmentSection({
                 </div>
               </div>
               <div className="modal-form-grid project-employee-policy-fields">
-                <label className="policy-field">
+                <div className="employee-policy-compact-row">
                   <span>{text.dailyTokenLimit}</span>
-                  <span className="employee-policy-input-suffix">
-                    <input
-                      max={1000000}
-                      min={0}
-                      onChange={(event) =>
-                        setAssignmentValues((current) => ({
-                          ...current,
-                          dailyTokenLimit: Number(event.target.value) * 1000
-                        }))
-                      }
-                      step={1}
-                      type="number"
-                      value={assignmentValues.dailyTokenLimit / 1000}
-                    />
-                    <span aria-hidden="true">K</span>
-                  </span>
-                </label>
-                <label className="policy-field">
-                  <span>{text.budget}</span>
-                  <input
+                  <CompactUnitStepper
+                    ariaLabel={text.dailyTokenLimit}
+                    max={1000000}
                     min={0}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setAssignmentValues((current) => ({
                         ...current,
-                        monthlyBudgetLimitUsd: Number(event.target.value)
+                        dailyTokenLimit: value * 1000
                       }))
                     }
-                    step="0.01"
-                    type="number"
+                    step={1}
+                    unit="K"
+                    value={assignmentValues.dailyTokenLimit / 1000}
+                  />
+                </div>
+                <div className="employee-policy-compact-row">
+                  <span>{text.budget}</span>
+                  <CompactUnitStepper
+                    ariaLabel={text.budget}
+                    decimals={2}
+                    max={100000000}
+                    min={0}
+                    onValueChange={(value) =>
+                      setAssignmentValues((current) => ({
+                        ...current,
+                        monthlyBudgetLimitUsd: value
+                      }))
+                    }
+                    step={1}
+                    unit="USD"
                     value={assignmentValues.monthlyBudgetLimitUsd}
                   />
-                </label>
-                <label className="policy-field employee-budget-warning-field">
+                </div>
+                <label className="employee-policy-compact-row employee-budget-warning-field">
                   <span>{text.budgetWarning}</span>
-                  <span className="employee-policy-input-suffix">
+                  <span className="employee-policy-input-suffix employee-policy-compact-input employee-policy-warning-input">
                     <input
                       max={100}
                       min={0}
@@ -1163,134 +1090,7 @@ export function ProjectEmployeeAssignmentSection({
                   />
                 </label>
               </div>
-            </TabsContent>
-            <TabsContent className="employee-policy-tab-content" value="provider-model">
-              <div className="employee-provider-model-toolbar">
-                <span>{text.providerModelSettings}</span>
-                <Button
-                  disabled={!hasAvailableProviderModel}
-                  onClick={addProviderModelRow}
-                  type="button"
-                  variant="outline"
-                >
-                  <Plus aria-hidden="true" />
-                  {text.addModel}
-                </Button>
-              </div>
-              {selectableProviderConnections.length === 0 && providerModelRows.length === 0 ? (
-                <p className="employee-provider-model-empty">{text.noProviderModels}</p>
-              ) : null}
-              {selectableProviderConnections.length > 0 && providerModelRows.length === 0 ? (
-                <p className="employee-provider-model-empty">{text.noSelectedModels}</p>
-              ) : null}
-              <div className="employee-provider-model-list">
-                {providerModelRows.map((row) => {
-                  const selectedProvider = providerConnectionsById.get(
-                    row.providerConnectionId
-                  );
-                  const providerSelectable = selectableProviderConnections.some(
-                    (providerConnection) => providerConnection.id === row.providerConnectionId
-                  );
-                  const modelOptions = selectedProvider
-                    ? getProviderConnectionModels(selectedProvider)
-                    : [];
-                  const selectedModelAvailable = modelOptions.includes(row.model);
-
-                  return (
-                    <div className="employee-provider-model-row" key={row.id}>
-                      <label className="employee-provider-model-field">
-                        <span>{text.providerIds}</span>
-                        <div className="employee-provider-model-select">
-                          {selectedProvider ? (
-                            <ProviderFamilyIcon
-                              className="employee-provider-model-icon"
-                              family={getProviderConnectionFamily(selectedProvider)}
-                              size={20}
-                            />
-                          ) : (
-                            <span className="employee-provider-model-icon" aria-hidden="true">
-                              -
-                            </span>
-                          )}
-                          <select
-                            aria-label={text.selectProvider}
-                            onChange={(event) =>
-                              changeProviderModelRowProvider(row.id, event.target.value)
-                            }
-                            value={row.providerConnectionId}
-                          >
-                            <option value="">{text.selectProvider}</option>
-                            {selectedProvider && !providerSelectable ? (
-                              <option value={selectedProvider.id}>
-                                {selectedProvider.displayName}
-                              </option>
-                            ) : null}
-                            {selectableProviderConnections.map((providerConnection) => (
-                              <option key={providerConnection.id} value={providerConnection.id}>
-                                {providerConnection.displayName}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-                      <label className="employee-provider-model-field">
-                        <span>{text.modelKeys}</span>
-                        <select
-                          aria-label={text.selectModel}
-                          disabled={!selectedProvider}
-                          onChange={(event) =>
-                            updateProviderModelRow(row.id, {
-                              model: event.target.value,
-                              providerConnectionId: row.providerConnectionId
-                            })
-                          }
-                          value={row.model}
-                        >
-                          <option value="">{text.selectModel}</option>
-                          {row.model && !selectedModelAvailable ? (
-                            <option value={row.model}>{row.model}</option>
-                          ) : null}
-                          {modelOptions.map((modelName) => {
-                            const usedByAnotherRow = providerModelRows.some(
-                              (candidate) =>
-                                candidate.id !== row.id &&
-                                candidate.providerConnectionId === row.providerConnectionId &&
-                                candidate.model === modelName
-                            );
-
-                            return (
-                              <option
-                                disabled={usedByAnotherRow}
-                                key={modelName}
-                                value={modelName}
-                              >
-                                {modelName}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </label>
-                      <Button
-                        aria-label={text.removeModel}
-                        className="employee-provider-model-remove"
-                        onClick={() =>
-                          setProviderModelRows((current) =>
-                            current.filter((candidate) => candidate.id !== row.id)
-                          )
-                        }
-                        size="icon"
-                        title={text.removeModel}
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </TabsContent>
-          </Tabs>
+          </div>
           <div className="modal-actions">
             <span className="application-budget-summary">
               {text.remaining}: {formatBudgetUsd(remainingBudgetUsd)}
@@ -1389,14 +1189,17 @@ export function ProjectEmployeeAssignmentSection({
             <label className="policy-field">
               <span>{text.selectDepartment}</span>
               <select
-                disabled={pendingAction !== null || tenantDepartments.length === 0}
+                disabled={
+                  pendingAction !== null ||
+                  (tenantDepartments.length === 0 && !hasUnassignedEmployees)
+                }
                 onChange={(event) => {
                   setAssignmentDepartment(event.target.value);
                   setCandidateEmployeeId("");
                 }}
                 value={assignmentDepartment}
               >
-                {tenantDepartments.length === 0 ? (
+                {tenantDepartments.length === 0 && !hasUnassignedEmployees ? (
                   <option value="">{text.noDepartments}</option>
                 ) : null}
                 {tenantDepartments.map((department) => (
@@ -1404,6 +1207,11 @@ export function ProjectEmployeeAssignmentSection({
                     {department}
                   </option>
                 ))}
+                {hasUnassignedEmployees ? (
+                  <option value={UNASSIGNED_DEPARTMENT_VALUE}>
+                    {text.unassignedDepartment}
+                  </option>
+                ) : null}
               </select>
             </label>
             <label className="policy-field">
@@ -1493,6 +1301,8 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     "project,department,email,name,employeeBudgetUsd,projectBudgetUsd\n"
   );
   const [createValues, setCreateValues] = useState<EmployeeCreateValues>(emptyCreateValues);
+  const [departmentEmployee, setDepartmentEmployee] = useState<EmployeeRecord | null>(null);
+  const [departmentValue, setDepartmentValue] = useState("");
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
   const [sortState, setSortState] = useState<{
     direction: EmployeeSortDirection;
@@ -1507,6 +1317,17 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     message: "",
     status: "idle"
   });
+  const tenantDepartments = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          employees
+            .map((employee) => employee.department?.trim())
+            .filter((department): department is string => Boolean(department))
+        )
+      ).sort((left, right) => left.localeCompare(right)),
+    [employees]
+  );
 
   const projectNamesByEmployeeId = useMemo(() => {
     const projectsById = new Map(projects.map((project) => [project.id, project.name]));
@@ -1637,9 +1458,13 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   }
 
   async function submitCreateEmployee() {
-    if (!createValues.email.trim() || !createValues.name.trim()) {
+    if (
+      !createValues.email.trim() ||
+      !createValues.name.trim() ||
+      !createValues.department.trim()
+    ) {
       setSubmitState({
-        message: locale === "ko" ? "이름과 이메일을 입력하세요." : "Name and email are required.",
+        message: text.createRequired,
         status: "error"
       });
       return;
@@ -1703,6 +1528,55 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     mergeEmployees([invitation.employee]);
     setLastInviteUrl(invitation.signupUrl);
     setSubmitState({ message: text.inviteSent, status: "success" });
+    setPendingAction(null);
+    router.refresh();
+  }
+
+  function openDepartmentDialog(employee: EmployeeRecord) {
+    setDepartmentEmployee(employee);
+    setDepartmentValue(employee.department?.trim() ?? "");
+    setSubmitState({ message: "", status: "idle" });
+  }
+
+  async function submitEmployeeDepartment() {
+    if (!departmentEmployee || !departmentValue.trim()) {
+      setSubmitState({ message: text.departmentRequired, status: "error" });
+      return;
+    }
+
+    setPendingAction(`department:${departmentEmployee.id}`);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/employees", {
+      body: JSON.stringify({
+        action: "update",
+        values: {
+          department: departmentValue.trim(),
+          employeeId: departmentEmployee.id,
+          tenantId: model.controlPlaneTenantId
+        }
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
+
+    if (!response.ok || !payload.employee) {
+      setSubmitState({
+        message: payload.error ?? "Employee department update failed.",
+        status: "error"
+      });
+      setPendingAction(null);
+      return;
+    }
+
+    mergeEmployees([payload.employee]);
+    setDepartmentEmployee(null);
+    setDepartmentValue("");
+    setSubmitState({
+      message: locale === "ko" ? "직원 부서를 저장했습니다." : "Employee department saved.",
+      status: "success"
+    });
     setPendingAction(null);
     router.refresh();
   }
@@ -1979,7 +1853,15 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
                         className="employee-list-cell employee-department-cell"
                         data-label={text.department}
                       >
-                        <p>{nullableText(employee.department, "-")}</p>
+                        <button
+                          aria-label={`${nullableText(employee.name, employee.email)} ${text.editDepartment}`}
+                          className="employee-department-edit-button"
+                          disabled={pendingAction !== null}
+                          onClick={() => openDepartmentDialog(employee)}
+                          type="button"
+                        >
+                          {nullableText(employee.department, text.editDepartment)}
+                        </button>
                       </div>
                       <div
                         className="employee-list-cell employee-project-cell"
@@ -2162,13 +2044,36 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
                     value={createValues.email}
                   />
                 </label>
+                <label className="policy-field employee-invite-department-field">
+                  <span>{text.department}</span>
+                  <input
+                    disabled={pendingAction !== null}
+                    list="employee-department-options"
+                    maxLength={120}
+                    onChange={(event) =>
+                      setCreateValues((current) => ({
+                        ...current,
+                        department: event.target.value
+                      }))
+                    }
+                    placeholder={text.departmentPlaceholder}
+                    type="text"
+                    value={createValues.department}
+                  />
+                </label>
+                <datalist id="employee-department-options">
+                  {tenantDepartments.map((department) => (
+                    <option key={department} value={department} />
+                  ))}
+                </datalist>
               </div>
               <div className="employee-actions">
                 <Button
                   disabled={
                     pendingAction !== null ||
                     createValues.email.trim().length === 0 ||
-                    createValues.name.trim().length === 0
+                    createValues.name.trim().length === 0 ||
+                    createValues.department.trim().length === 0
                   }
                   onClick={() => void submitCreateEmployee()}
                   type="button"
@@ -2179,6 +2084,65 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open && pendingAction !== `department:${departmentEmployee?.id ?? ""}`) {
+            setDepartmentEmployee(null);
+            setDepartmentValue("");
+          }
+        }}
+        open={departmentEmployee !== null}
+      >
+        <DialogContent className="employee-department-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              {departmentEmployee?.name?.trim() || departmentEmployee?.email || "-"}
+            </DialogTitle>
+          </DialogHeader>
+          {submitState.status === "error" && submitState.message ? (
+            <Alert variant="destructive">
+              <AlertDescription>{submitState.message}</AlertDescription>
+            </Alert>
+          ) : null}
+          <label className="policy-field">
+            <span>{text.department}</span>
+            <input
+              autoFocus
+              disabled={pendingAction !== null}
+              list="employee-department-edit-options"
+              maxLength={120}
+              onChange={(event) => setDepartmentValue(event.target.value)}
+              placeholder={text.departmentPlaceholder}
+              type="text"
+              value={departmentValue}
+            />
+          </label>
+          <datalist id="employee-department-edit-options">
+            {tenantDepartments.map((department) => (
+              <option key={department} value={department} />
+            ))}
+          </datalist>
+          <div className="modal-actions">
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => setDepartmentEmployee(null)}
+              type="button"
+              variant="outline"
+            >
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || departmentValue.trim().length === 0}
+              onClick={() => void submitEmployeeDepartment()}
+              type="button"
+            >
+              <Save aria-hidden="true" />
+              {pendingAction === `department:${departmentEmployee?.id ?? ""}` ? "..." : text.save}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </main>
@@ -2202,9 +2166,84 @@ function upsertAssignment(
   );
 }
 
+function CompactUnitStepper({
+  ariaLabel,
+  decimals = 0,
+  max,
+  min,
+  onValueChange,
+  step,
+  unit,
+  value
+}: CompactUnitStepperProps) {
+  function updateValue(nextValue: number) {
+    if (!Number.isFinite(nextValue)) {
+      return;
+    }
+    const clampedValue = Math.min(Math.max(nextValue, min), max);
+    onValueChange(Number(clampedValue.toFixed(decimals)));
+  }
+
+  function changeBy(direction: -1 | 1) {
+    updateValue(value + step * direction);
+  }
+
+  return (
+    <div aria-label={ariaLabel} className="employee-policy-unit-stepper" role="group">
+      <input
+        aria-label={ariaLabel}
+        aria-valuemax={max}
+        aria-valuemin={min}
+        aria-valuenow={value}
+        inputMode={decimals > 0 ? "decimal" : "numeric"}
+        onChange={(event) => {
+          const numericValue = Number(
+            event.target.value.replace(unit, "").replace(/[^0-9.-]/g, "")
+          );
+          updateValue(numericValue);
+        }}
+        onFocus={(event) => event.currentTarget.select()}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            changeBy(event.key === "ArrowUp" ? 1 : -1);
+          }
+        }}
+        role="spinbutton"
+        type="text"
+        value={`${formatCompactStepperValue(value, decimals)}${unit}`}
+      />
+      <span className="employee-policy-stepper-buttons">
+        <button
+          aria-label={`${ariaLabel} +${step}${unit}`}
+          disabled={value >= max}
+          onClick={() => changeBy(1)}
+          type="button"
+        >
+          <ChevronUp aria-hidden="true" />
+        </button>
+        <button
+          aria-label={`${ariaLabel} -${step}${unit}`}
+          disabled={value <= min}
+          onClick={() => changeBy(-1)}
+          type="button"
+        >
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function formatCompactStepperValue(value: number, decimals: number) {
+  if (decimals <= 0 || Number.isInteger(value)) {
+    return String(value);
+  }
+  return value.toFixed(decimals).replace(/\.?0+$/, "");
+}
+
 function getEmployeePolicyFormState(
-  assignment: ProjectEmployeeAssignmentRecord | undefined,
-  providerConnections: ProviderConnectionRecord[]
+  assignment: ProjectEmployeeAssignmentRecord | undefined
 ) {
   return {
     assignmentValues: {
@@ -2219,74 +2258,8 @@ function getEmployeePolicyFormState(
       ),
       rateLimitWindowSeconds: assignment?.policy.rateLimit.windowSeconds ?? 60,
       warningThresholdPercent: assignment?.warningThresholdPercent ?? 80
-    },
-    providerModelRows: buildEmployeeProviderModelRows(assignment, providerConnections)
-  };
-}
-
-function buildEmployeeProviderModelRows(
-  assignment: ProjectEmployeeAssignmentRecord | undefined,
-  providerConnections: ProviderConnectionRecord[]
-): EmployeeProviderModelRow[] {
-  const allowedProviderIds = uniqueStrings(
-    assignment?.policy.allowedProviderConnectionIds ?? []
-  );
-  const allowedModels = uniqueStrings(assignment?.policy.allowedModelKeys ?? []);
-  const allowedProviders = allowedProviderIds
-    .map((providerId) =>
-      providerConnections.find((providerConnection) => providerConnection.id === providerId)
-    )
-    .filter(
-      (providerConnection): providerConnection is ProviderConnectionRecord =>
-        Boolean(providerConnection)
-    );
-  const rows = allowedModels.map((modelName, index) => {
-    const matchingProvider =
-      allowedProviders.find((providerConnection) =>
-        getProviderConnectionModels(providerConnection).includes(modelName)
-      ) ??
-      (allowedProviders.length === 1 ? allowedProviders[0] : undefined) ??
-      providerConnections.find((providerConnection) =>
-        getProviderConnectionModels(providerConnection).includes(modelName)
-      );
-
-    return {
-      id: `saved-provider-model-${index}`,
-      model: modelName,
-      providerConnectionId: matchingProvider?.id ?? ""
-    };
-  });
-  const representedProviderIds = new Set(rows.map((row) => row.providerConnectionId));
-
-  for (const providerId of allowedProviderIds) {
-    if (!representedProviderIds.has(providerId)) {
-      rows.push({
-        id: `saved-provider-only-${rows.length}`,
-        model: "",
-        providerConnectionId: providerId
-      });
     }
-  }
-
-  return rows;
-}
-
-function getProviderConnectionModels(providerConnection: ProviderConnectionRecord): string[] {
-  const models = providerConnection.providerConfig?.models;
-
-  return Array.isArray(models)
-    ? uniqueStrings(
-        models.map((modelName) => (typeof modelName === "string" ? modelName : ""))
-      )
-    : [];
-}
-
-function providerModelKey(providerConnectionId: string, model: string) {
-  return `${providerConnectionId.trim()}::${model.trim()}`;
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+  };
 }
 
 function compareEmployeeName(left: EmployeeRecord, right: EmployeeRecord) {
@@ -2309,6 +2282,21 @@ function formatTokenCount(value: number, locale: Locale) {
   return new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", {
     maximumFractionDigits: 0
   }).format(Math.max(0, value));
+}
+
+function formatTokenLimit(
+  value: number,
+  locale: Locale,
+  enabled: boolean,
+  unlimitedLabel: string
+) {
+  if (!enabled || value <= 0) {
+    return unlimitedLabel;
+  }
+  if (value > 0 && value % 1000 === 0) {
+    return `${formatTokenCount(value / 1000, locale)}K`;
+  }
+  return formatTokenCount(value, locale);
 }
 
 function formatBudgetUsd(value: number) {
