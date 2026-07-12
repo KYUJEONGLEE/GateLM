@@ -86,7 +86,7 @@ export function AnalyticsEChart({
           return;
         }
 
-        const chart = runtime.init(container, null, { renderer: "canvas" });
+        const chart = runtime.init(container, null, { renderer: "svg" });
         chartRef.current = chart;
         chart.setOption(optionRef.current, true);
         setIsReady(true);
@@ -189,7 +189,7 @@ function loadAnalyticsEchartsRuntime() {
       components.GridComponent,
       components.LegendComponent,
       components.TooltipComponent,
-      renderers.CanvasRenderer
+      renderers.SVGRenderer
     ]);
 
     return core as unknown as EChartsRuntime;
