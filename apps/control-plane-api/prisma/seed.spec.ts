@@ -84,6 +84,25 @@ describe('Control Plane demo seed baseline', () => {
     expect(serialized).not.toContain('demo_only');
   });
 
+  it('supports the Control Plane maximum rate limit for an isolated performance snapshot', () => {
+    const runtimeConfig = buildDemoRuntimeConfigDocument('provider-demo-id', {
+      rateLimitLimit: 100000,
+    });
+
+    expect(runtimeConfig.rateLimit.limit).toBe(100000);
+  });
+
+  it.each([0, 100001, 1.5])(
+    'rejects an out-of-range demo rate limit: %s',
+    (rateLimitLimit) => {
+      expect(() =>
+        buildDemoRuntimeConfigDocument('provider-demo-id', {
+          rateLimitLimit,
+        }),
+      ).toThrow('Demo rate limit must be an integer from 1 to 100000.');
+    },
+  );
+
   it('can build an actual-provider main path without storing raw provider keys', () => {
     const runtimeConfig = buildDemoRuntimeConfigDocument(DEMO_MOCK_PROVIDER_ID, {
       providerMode: 'actual',
@@ -272,6 +291,83 @@ describe('Control Plane demo seed baseline', () => {
 
     expect(client.$transaction).toHaveBeenCalledTimes(1);
   });
+
+  it('publishes the configured rate limit for an isolated perf Mock seed', async () => {
+    const tx = createMockTransaction();
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await withEnv(
+      {
+        GATELM_DEPLOYMENT_ENV: 'perf',
+        GATELM_DEMO_PROVIDER_MODE: 'mock',
+        GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT: '100000',
+      },
+      async () => {
+        await seedDemoData(client as unknown as PrismaClient);
+      },
+    );
+
+    expect(tx.runtimeConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          document: expect.objectContaining({
+            rateLimit: expect.objectContaining({ limit: 100000 }),
+          }),
+        }),
+      }),
+    );
+    expect(tx.runtimeSnapshot.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          snapshotBody: expect.objectContaining({
+            policies: expect.objectContaining({
+              rateLimit: {
+                enabled: true,
+                scope: 'application',
+                windowSeconds: 60,
+                limit: 100000,
+              },
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    { deploymentEnv: 'development', providerMode: 'mock' },
+    { deploymentEnv: 'perf', providerMode: 'actual' },
+  ])(
+    'rejects the performance rate-limit override in $deploymentEnv/$providerMode mode',
+    async ({ deploymentEnv, providerMode }) => {
+      const tx = createMockTransaction();
+      const client = {
+        $transaction: jest.fn(
+          (callback: (transaction: typeof tx) => unknown) => callback(tx),
+        ),
+      };
+
+      await expect(
+        withEnv(
+          {
+            GATELM_DEPLOYMENT_ENV: deploymentEnv,
+            GATELM_DEMO_PROVIDER_MODE: providerMode,
+            GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT: '100000',
+          },
+          async () => {
+            await seedDemoData(client as unknown as PrismaClient);
+          },
+        ),
+      ).rejects.toThrow(
+        'GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT is allowed only for the isolated perf Mock seed.',
+      );
+      expect(client.$transaction).not.toHaveBeenCalled();
+    },
+  );
 
   it('connects the demo application to the mock provider in mock mode', async () => {
     const tx = createMockTransaction();

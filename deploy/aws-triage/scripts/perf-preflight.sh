@@ -11,6 +11,7 @@ perf_load_env
 perf_validate_env
 perf_validate_compose
 perf_assert_isolated_postgres
+perf_assert_runtime_rate_limit
 perf_wait_for_http \
   "Gateway readiness" \
   "http://127.0.0.1:${AWS_TRIAGE_GATEWAY_PORT}/readyz" \

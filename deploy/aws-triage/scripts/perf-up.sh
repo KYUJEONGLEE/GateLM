@@ -60,6 +60,7 @@ if ! perf_compose run --rm --no-deps \
   -e GATELM_DEPLOYMENT_ENV=perf \
   -e GATELM_DEMO_PROVIDER_MODE=mock \
   -e GATELM_DEMO_MOCK_PROVIDER_BASE_URL=http://mock-provider:8090 \
+  -e GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT="${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}" \
   control-plane-api node dist/prisma/seed.js >/dev/null 2>&1; then
   perf_fail "Mock bootstrap failed. Output was hidden to avoid credential disclosure."
 fi
