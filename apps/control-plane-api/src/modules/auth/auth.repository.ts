@@ -7,6 +7,13 @@ export class EmployeeInvitationNotFoundError extends Error {
   }
 }
 
+export class EmployeeInvitationExistingAccountError extends Error {
+  constructor() {
+    super('Employee invitation belongs to an existing account.');
+    this.name = 'EmployeeInvitationExistingAccountError';
+  }
+}
+
 export interface AuthUser {
   id: string;
   email: string;

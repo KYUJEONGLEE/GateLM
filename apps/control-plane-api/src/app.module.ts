@@ -17,6 +17,7 @@ import { ProjectAdminsModule } from './modules/project-admins/project-admins.mod
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
 import { TeamsModule } from './modules/teams/teams.module';
+import { TenantChatIdentityModule } from './modules/tenant-chat-identity/tenant-chat-identity.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     EmployeesModule,
     RuntimeConfigsModule,
     TeamsModule,
+    TenantChatIdentityModule,
     HealthModule,
   ],
 })

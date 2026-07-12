@@ -257,7 +257,6 @@ export interface EmployeeOrganizationCsvImportResponseDto extends EmployeeCsvImp
 export interface EmployeeInvitationResponseDto {
   employee: EmployeeResponseDto;
   expiresAt: string;
-  signupUrl: string;
 }
 
 export interface ProjectEmployeePolicyDto {
