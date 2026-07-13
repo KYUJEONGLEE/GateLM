@@ -2,13 +2,13 @@
 
 | Field | Value |
 |---|---|
-| Status | Active routing implementation contract |
+| Status | Active routing target contract; logistic/calibration artifacts pending |
 | Applies to | General Gateway category and difficulty classification hot path |
-| Canonical implementation | Go structs and deterministic local rules |
+| Canonical implementation | Go structs and deterministic local inference |
 | Active entrypoint | [`README.md`](README.md) |
 | Last verified | 2026-07-13 |
 
-이 문서는 일반 Gateway에서 앞으로 사용하는 category·difficulty 분류 구현 구조를 정의한다. Category와 difficulty의 의미, 허용 값, routing policy 연결은 [`contracts.md`](contracts.md)가 정의하고, 이 문서는 그 의미를 계산하는 canonical 내부 파이프라인을 정의한다.
+이 문서는 일반 Gateway에서 앞으로 사용하는 category·difficulty 분류 구현 구조를 정의한다. Category와 difficulty의 의미, 허용 값, routing policy 연결은 [`contracts.md`](contracts.md)가 정의하고, 이 문서는 그 의미를 계산하는 canonical 내부 파이프라인을 정의한다. Logistic Regression 입력 encoder의 exact v1 계약은 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가 정의한다.
 
 ## 1. Canonical Pipeline
 
@@ -56,17 +56,41 @@ Category classifier는 `PromptFeatures`로부터 네 non-general category 각각
 
 `DifficultyFeatures`에는 확정된 category의 feature pointer 하나만 채운다. 다른 category의 feature를 미리 계산하거나 보관하지 않는다.
 
-`DifficultyResult`는 내부 `ComplexityScore`와 `simple | complex` difficulty를 반환한다. `ComplexityScore`는 확률이나 confidence가 아니라 현재 `DifficultyFeatures`에서 관찰한 복잡성 근거의 상대적 강도이며 inclusive `0.0~1.0` 범위다. 공통 feature와 확정된 category 전용 feature의 정수 point, 의미는 있지만 simple 범위가 충분히 bounded되지 않은 요청의 risk point를 합산하고 최대점으로 cap한 뒤 마지막에만 정규화한다. 비었거나 의미 없는 입력은 `0.0`이다.
+`DifficultyFeatureNamesV1`과 `VectorizeDifficultyFeaturesV1`은 `difficulty-feature-vector.v1`의 고정 42차원 이름·순서·scaling·enum·zero-fill 계약을 구현한다. Vectorizer는 현재 rule-based runtime 판정에 연결하지 않으며 exact 계약은 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)를 따른다.
 
-Difficulty classifier는 이 score에 하나의 global threshold를 적용해 `simple | complex`를 결정한다. Category별 threshold, score와 별개인 boolean difficulty 판정 경로, runtime configuration으로 주입되는 threshold를 두지 않는다. 같은 `DifficultyFeatures`는 clock, randomness, network, 외부 LLM, embedding과 무관하게 항상 같은 score와 difficulty를 만든다.
+Artifact 승격 후 `DifficultyResult`가 가져야 할 canonical 내부 의미는 다음 두 값이다.
 
-현재 `difficulty_score_points_v1`은 공통 evidence unit 10점, 선택된 category evidence unit 10점, strong signal 10점, unboundedness risk 20점을 사용하고 총점을 100점으로 cap한다. `ComplexityScore = points / 100`이며 global threshold는 `0.30`이다. 배점과 threshold 선택은 다음 offline calibration 명령으로 재현하며 runtime 설정으로 바꾸지 않는다.
+- `ComplexityScore`: 최종 보정된 finite inclusive `0.0~1.0`의 complex 확률 추정값
+- `Difficulty`: `simple | complex`
 
-```powershell
-corepack pnpm run calibrate:v2.1-difficulty-score
+`ComplexityScore`만 result에 둔다. 선형 logit `z`, Logistic Regression이 출력한 미보정 확률 `sigmoid(z)`, calibrator 중간값, threshold와 feature contribution은 `DifficultyResult`, `PromptFeatures` 또는 `DifficultyFeatures`에 넣지 않는다. 비었거나 의미 없는 입력은 모델과 calibrator를 통과하지 않고 `ComplexityScore = 0.0`, `Difficulty = simple`로 반환한다. 이 `0.0`은 calibrated estimate가 아니라 기존 empty-input 동작을 보존하는 sentinel이다.
+
+Difficulty score의 target 계산은 다음 순서를 사용한다.
+
+```text
+DifficultyFeatures
+→ VectorizeDifficultyFeaturesV1
+→ difficulty-feature-vector.v1 []float64
+→ difficulty-logistic-v1 single global regularized Logistic Regression
+→ z = w·x + b
+→ raw probability = sigmoid(z)
+→ difficulty-calibration-v1 selected single global calibrator
+→ ComplexityScore
+→ difficulty-threshold-v1 global 0.5
+→ Difficulty
 ```
 
-Score 계산은 `DifficultyFeatures`만 입력받으며 provider ID, model ID, modelRef, tier, catalog metadata 또는 resolved target을 사용하지 않는다. 확정된 difficulty가 기존 routing matrix cell 선택에 사용될 수는 있지만 score 자체를 provider/model 선택 정보와 결합하거나 routing decision surface로 전달하지 않는다. Score는 API, DB, Event, Metrics, RuntimeSnapshot, routing policy, structured log, request log 또는 제품 diagnostics에 노출하지 않는다. 외부 surface에 score를 추가하려면 별도 contract proposal과 계약 변경이 필요하다.
+모든 category는 하나의 Logistic Regression, 하나의 calibrator와 하나의 threshold를 공유한다. Category별 model, calibrator 또는 threshold는 허용하지 않는다. 기존 공통 및 선택된 category의 `DifficultyFeatures`만 model input으로 사용하며 raw text, token, matched phrase, provider/model/modelRef/tier/catalog metadata, resolved target, 실제 가격, tenant budget 또는 별도 runtime 신호를 추가하지 않는다.
+
+정확한 feature 순서, 숫자 정규화, bucket/enum encoding과 category zero-fill은 `difficulty-feature-vector.v1`로 고정한다. Coefficient, intercept, regularization/solver 설정, model artifact hash와 calibrator parameter는 offline evidence 이후 별도의 immutable artifact version과 content hash로 고정한다. `difficulty-logistic-v1`과 `difficulty-calibration-v1`은 각각 model family와 calibrator 선택·검증 절차를 정의하는 policy version이며 아직 존재하지 않는 artifact가 구현됐음을 뜻하지 않는다.
+
+초기 global threshold policy는 `difficulty-threshold-v1 = 0.5`다. `ComplexityScore >= 0.5`이면 `complex`, 미만이면 `simple`이다. `0.5`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 향후 evidence가 다른 값을 지지하면 v1을 수정하지 않고 새 global threshold policy version을 만든다. Request, tenant, RuntimeConfig, RuntimeSnapshot, 환경변수 또는 runtime caller가 threshold를 덮어쓰지 못한다.
+
+Runtime inference는 `float64`, 고정 feature order/encoding, 고정 coefficient/intercept, 고정 sigmoid와 calibrator implementation을 사용한다. 판정 전에 표시용 반올림을 하지 않으며 같은 versioned artifact와 입력은 지원되는 Go runtime에서 같은 score와 difficulty를 만들어야 한다. 외부 LLM, embedding, network, clock, randomness, runtime 재학습 또는 자동 보정을 사용하지 않는다. `NaN`, infinity 또는 `0.0~1.0` 밖 값을 만들 수 있는 artifact는 승격하지 않는다. 이 계약은 다른 언어와 CPU 사이의 bit-for-bit 동일성을 약속하지 않는다.
+
+Calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이다. 개별 요청이 절대적으로 80% 확률로 complex임을 보장하지 않으며 dataset 구성, sample size, category 분포와 distribution drift에 영향을 받는다. Confidence, SLA 또는 개별 요청의 확정적 진실로 해석하지 않는다.
+
+현재 as-built에는 `difficulty-feature-vector.v1` encoder만 존재하며 model/calibrator artifact와 `DifficultyResult.ComplexityScore`는 없다. Vectorizer는 rule-based runtime에서 호출하지 않는다. Versioned model artifact, family-disjoint train/calibration/holdout evidence와 현재 rule-based baseline 대비 safety gate가 준비되기 전까지 현재 runtime behavior를 유지한다.
 
 `ModelCapabilityFeatures`의 input token estimate와 tool intent는 category/difficulty feature가 아니다. 별도 extractor와 struct로 유지하며 canonical classification pipeline에서는 호출하지 않는다.
 
@@ -79,6 +103,8 @@ Score 계산은 `DifficultyFeatures`만 입력받으며 provider ID, model ID, m
 - feature 추출을 위한 외부 LLM 호출
 - embedding 호출
 - 별도 네트워크 요청
+- clock 또는 randomness에 의존하는 score 계산
+- runtime model 학습 또는 calibrator 재학습
 - feature 객체의 JSON 변환과 재파싱
 
 정규화, 토큰화, 길이 계산은 `ExtractPromptFeatures`에서 한 번만 수행한다. Category 분류와 difficulty 분류는 같은 `PromptFeatures` 값을 공유한다.
@@ -106,29 +132,42 @@ Score 계산은 `DifficultyFeatures`만 입력받으며 provider ID, model ID, m
 - metric name 또는 label
 - fixture와 evaluation report
 
-`PromptFeatures`와 `DifficultyFeatures`에 JSON field를 추가하지 않는다. Complexity score는 domain result인 `DifficultyResult`에만 존재하며 offline evaluator가 안전한 예측값과 집계로 투영할 수 있다. 제품 진단에는 score, point breakdown, feature별 contribution을 추가하지 않는다. 기존 low-cardinality category score와 결과만 유지하고 prompt fragment, matched raw phrase/value, 정규화 문자열, token 또는 원문 파생 feature를 추가하지 않는다.
+`PromptFeatures`와 `DifficultyFeatures`에 JSON field를 추가하지 않는다. 향후 `DifficultyResult.ComplexityScore`를 구현할 때도 외부 JSON 직렬화에서 제외하고, approved offline evaluator만 별도 report DTO에 최종 score를 명시적으로 투영한다. 제품 API/response, DB, Event, Metrics, RuntimeConfig, RuntimeSnapshot, routing policy, structured/request log, invocation summary, provider-attempt, 비용 정산, cache key와 제품 diagnostics에는 score, raw probability, logit, calibrator material 또는 threshold를 추가하지 않는다.
+
+Offline evaluation은 synthetic 또는 안전하게 redacted된 approved data에서 sampleId, expected/actual category와 difficulty, 최종 `ComplexityScore`, policy/artifact provenance와 calibration 집계를 포함할 수 있다. Raw probability, logit, raw matched phrase, 정규화 문자열, token, 원문/encoded feature, feature별 coefficient contribution, provider/model/tier/catalog 정보, 실제 비용, raw prompt/response 또는 민감한 error detail은 offline report에도 추가하지 않는다.
 
 ## 6. Feature Decision And Tuning Boundary
 
-이 문서는 공통, category intent, 공통 난이도, category별 난이도 feature family와 내부 complexity score를 active 내부 구현 의미로 정의한다. 다음 항목은 여전히 별도 offline evidence와 변경 검토가 필요하다.
+이 문서는 공통, category intent, 공통 난이도, category별 난이도 feature family와 Logistic Regression·calibration·global threshold의 target 경계를 정의한다. 다음 항목은 여전히 별도 offline evidence와 artifact 승격이 필요하다.
 
-- point weight 변경
-- count/bucket 경계와 global threshold 조정
+- coefficient, intercept, regularization/solver 설정과 model artifact hash
+- versioned calibrator candidate 목록, tie tolerance, 단순성 순서와 선택된 parameter
+- family-disjoint train/calibration/holdout dataset과 split policy
 - 외부 계약으로 사용하는 `complexity_score`
-- score의 API, DB, event, metric 노출
+- score의 API, DB, Event, Metrics 또는 제품 diagnostics 노출
 
-내부 point와 threshold 변경은 synthetic 또는 안전하게 redacted된 offline 평가의 family-disjoint calibration/holdout으로 검증한다. Oracle-category 결과로 difficulty scorer를 조정하고 end-to-end 결과로 실제 pipeline 회귀를 확인하며, `complex -> simple` directional error를 우선한다. Score의 외부 노출은 이 구현 문서만으로 허용하지 않는다.
+`train`은 단일 Logistic Regression 학습에, `calibration`은 전역 calibrator 선택·학습에, untouched `holdout`은 final gate에만 사용한다. 같은 prompt family나 단순 변형을 split 사이에 나누지 않는다. Calibrator는 calibration split 내부의 deterministic family-grouped cross-validation에서 평균 log loss, 허용 오차 안의 Brier score, versioned 단순성 순서로 선택하며 identity calibrator를 baseline 후보에 포함한다. 선택 후 calibration 전체로 다시 fit하고 holdout을 본 뒤 model, encoder 또는 calibrator를 재선택하지 않는다.
+
+Holdout에서 candidate의 전체 및 각 category `complex -> simple` count/rate가 현재 rule-based baseline보다 증가하면 runtime으로 승격하지 않는다. 전체 및 category별 log loss, Brier score, reliability bin, directional error, oracle-category와 end-to-end 결과를 함께 보고한다. Score의 외부 노출은 이 구현 문서만으로 허용하지 않는다.
 
 ## 7. Acceptance
 
-- 기존 fixture의 category, diagnostics, difficulty 결과가 유지된다.
+- 이번 문서 변경만으로 현재 fixture, evaluator 또는 runtime difficulty 결과를 바꾸지 않는다.
 - `SimpleRouter`의 표준 경로는 공통 전처리를 한 번만 실행한다.
 - Category 결과가 확정되기 전에 category별 difficulty feature를 계산하지 않는다.
 - `DifficultyFeatures`에는 확정된 category의 전용 feature set 하나만 존재한다.
-- `ComplexityScore`는 finite한 `0.0~1.0` 값이며 하나의 global threshold가 difficulty를 결정한다.
-- 비었거나 의미 없는 입력은 `0.0 + simple`이고 의미 있지만 bounded되지 않은 요청은 fail-closed risk를 보존한다.
-- Score는 `DifficultyFeatures`만 사용하고 provider/model/routing target 정보를 사용하지 않는다.
+- `difficulty-feature-vector.v1`은 고정 순서와 encoding으로 항상 독립적인 42차원 `[]float64`를 반환한다.
+- 확정 category block만 값을 가지며 다른 category block은 모두 zero-fill한다.
+- Vectorizer 추가만으로 current rule-based runtime behavior를 변경하지 않는다.
+- Artifact 승격 후 `ComplexityScore`는 finite한 inclusive `0.0~1.0`의 최종 calibrated estimate로만 `DifficultyResult`에 존재한다.
+- Raw probability와 logit은 `DifficultyResult`, 제품 surface 또는 offline report에 노출되지 않는다.
+- 하나의 전역 Logistic Regression, 전역 calibrator와 전역 `0.5` threshold만 사용한다.
+- `ComplexityScore >= 0.5`이면 `complex`, 미만이면 `simple`이다.
+- 비었거나 의미 없는 입력은 sentinel `0.0 + simple`이다.
+- Score와 threshold는 runtime caller가 덮어쓰지 못하며 provider/model/routing target 또는 실제 비용 정보를 사용하지 않는다.
+- Versioned artifact와 family-disjoint train/calibration/holdout evidence가 없으면 current runtime을 변경하지 않는다.
+- Holdout에서 전체 및 category별 `complex -> simple` 오류가 current rule-based baseline보다 증가하면 승격하지 않는다.
 - Model capability feature는 category/difficulty 분류 입력에 섞지 않는다.
 - Product runtime과 evaluation CLI는 compatibility wrapper를 사용하지 않는다.
-- Raw matched phrase, 원문 파생 feature와 point breakdown은 제품 또는 offline score diagnostics에 추가하지 않는다.
+- Raw matched phrase, 정규화 문자열, token, 원문/encoded feature와 feature contribution은 제품 또는 offline diagnostics에 추가하지 않는다.
 - 외부 API, DB, Event, Metrics, RuntimeSnapshot, routing policy shape는 변경하지 않는다.

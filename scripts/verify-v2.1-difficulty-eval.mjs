@@ -8,8 +8,6 @@ const schemaPath = "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json
 const fixturePath = "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl";
 const activeSchemaVersion = "gatelm.difficulty-evaluation-record.v1";
 const activeDifficulties = ["simple", "complex"];
-const activeCategories = ["general", "code", "translation", "summarization", "reasoning"];
-const pilotDatasetVersion = "difficulty_eval_2026_07_13_pilot_500_v1";
 const requiredEvaluationFields = ["redactedPrompt", "expectedCategory", "expectedDifficulty", "language"];
 const sensitiveStringPattern =
   /(sk-[a-z0-9_-]{12,}|Bearer\s+[a-z0-9._-]{12,}|-----BEGIN\s+(RSA|OPENSSH|EC|PRIVATE)\s+KEY-----)/i;
@@ -137,86 +135,6 @@ function validateSchemaShape(schema, failures) {
   ) {
     failures.push(`${schemaPath}: expectedDifficulty enum must contain exactly simple,complex`);
   }
-
-  for (const scoreField of ["expectedComplexityScore", "complexityScore"]) {
-    if (scoreField in (schema?.properties ?? {})) {
-      failures.push(`${schemaPath}: dataset ground truth must not define ${scoreField}`);
-    }
-  }
-}
-
-function validatePilotProfile(records, failures) {
-  if (!records.some((record) => record?.datasetVersion === pilotDatasetVersion)) return;
-
-  if (records.length !== 500) {
-    failures.push(`${fixturePath}: pilot dataset must contain exactly 500 records, got ${records.length}`);
-  }
-
-  const sampleIds = new Set();
-  const prompts = new Set();
-  for (const record of records) {
-    if (record.datasetVersion !== pilotDatasetVersion) {
-      failures.push(`${fixturePath}: pilot dataset records must use datasetVersion=${pilotDatasetVersion}`);
-    }
-    if (sampleIds.has(record.sampleId)) {
-      failures.push(`${fixturePath}: duplicate sampleId ${record.sampleId}`);
-    }
-    sampleIds.add(record.sampleId);
-    if (prompts.has(record.redactedPrompt)) {
-      failures.push(`${fixturePath}: duplicate redactedPrompt detected`);
-    }
-    prompts.add(record.redactedPrompt);
-  }
-
-  for (const category of activeCategories) {
-    for (const difficulty of activeDifficulties) {
-      const cellRecords = records.filter(
-        (record) => record.expectedCategory === category && record.expectedDifficulty === difficulty,
-      );
-      const cell = `${category}/${difficulty}`;
-      if (cellRecords.length !== 50) {
-        failures.push(`${fixturePath}: ${cell} must contain exactly 50 records, got ${cellRecords.length}`);
-      }
-
-      const boundaryCount = cellRecords.filter((record) => record.sampleId?.includes("_boundary_")).length;
-      if (boundaryCount < 15) {
-        failures.push(`${fixturePath}: ${cell} must contain at least 15 boundary records, got ${boundaryCount}`);
-      }
-
-      const expectedLanguageCounts = { ko: 30, en: 15, mixed: 5 };
-      for (const [language, expectedCount] of Object.entries(expectedLanguageCounts)) {
-        const actualCount = cellRecords.filter((record) => record.language === language).length;
-        if (actualCount !== expectedCount) {
-          failures.push(
-            `${fixturePath}: ${cell} language=${language} must contain ${expectedCount} records, got ${actualCount}`,
-          );
-        }
-      }
-
-      const requiredProfiles = [
-        "clear",
-        "threshold",
-        "taskcontrast",
-        "constraintcontrast",
-        "categoryconfusion",
-        "negativecontext",
-        difficulty === "simple" ? "longsimple" : "shortcomplex",
-      ];
-      for (const profile of requiredProfiles) {
-        if (!cellRecords.some((record) => record.sampleId?.includes(`_${profile}_`))) {
-          failures.push(`${fixturePath}: ${cell} must include profile=${profile}`);
-        }
-      }
-
-      if (
-        cellRecords.some(
-          (record) => "expectedComplexityScore" in record || "complexityScore" in record,
-        )
-      ) {
-        failures.push(`${fixturePath}: ${cell} must not contain a ground-truth complexity score`);
-      }
-    }
-  }
 }
 
 export function verifyDifficultyEvaluationDataset(options = {}) {
@@ -234,17 +152,13 @@ export function verifyDifficultyEvaluationDataset(options = {}) {
     failures.push(`${fixturePath}: expected at least one JSONL record`);
   }
 
-  const records = [];
   lines.forEach((line, index) => {
     try {
-      const record = JSON.parse(line);
-      records.push(record);
-      validateRecord(schema, record, index + 1, failures);
+      validateRecord(schema, JSON.parse(line), index + 1, failures);
     } catch (error) {
       failures.push(`${fixturePath}: line ${index + 1}: invalid JSON (${error.message})`);
     }
   });
-  validatePilotProfile(records, failures);
 
   return failures;
 }

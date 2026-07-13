@@ -27,6 +27,7 @@
 | DOC-013 | Tenant Chat terminal replay에서 assistant content 복구 경계가 없다 | final SSE는 terminal facts만 포함하고 Gateway는 content를 저장하지 않아 Chat API가 ciphertext 저장 전에 장애가 나면 응답 본문을 복구할 계약이 없음 | encrypted final result handoff 또는 재처리 불변조건 확정 |
 | DOC-014 | `userId`별 quota override 의미는 있으나 실행 schema가 없다 | `contracts.md`는 audit 후 새 RuntimeSnapshot부터 override 적용을 요구하지만 RuntimeSnapshot에는 default quota만 있고 Gateway-owned period table을 Control Plane이 직접 수정할 수도 없음 | versioned user override schema, writer, audit, snapshot binding 및 Gateway materialization 규칙 추가 |
 | DOC-015 | primary realistic category fixture의 생성 provenance를 재현할 수 없다 | challenge/ambiguous fixture에는 checked-in generator가 있지만 `category-evaluation-dataset.fixture.jsonl`을 재생성하는 generator, seed 또는 manual review 기록은 확인되지 않음 | deterministic generator와 seed/version을 추가하거나 manual fixture라면 생성·검토 provenance를 명시 |
+| DOC-016 | Calibrated `ComplexityScore` target 계약은 확정됐지만 model/calibrator artifact와 승격 evidence가 없다 | `docs/current/implementation-status.md`의 `origin/dev @ e8152d87` baseline과 2026-07-13 local HEAD `273d36fe9` 기반 current worktree를 확인하면 42차원 `difficulty-feature-vector.v1` encoder는 존재하지만 `DifficultyResult`는 아직 difficulty만 반환하고 model/calibrator artifact가 없으며 10건 fixture는 contract smoke 범위임 | 별도 구현 PR에서 versioned model/calibrator artifact와 family-disjoint train/calibration/holdout evidence를 만들고, current rule-based baseline 대비 전체·category별 `complex -> simple` 비악화 holdout gate 전에는 runtime을 변경하지 않음 |
 
 ## Known Documentation Drift
 

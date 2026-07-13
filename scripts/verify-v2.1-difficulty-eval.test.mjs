@@ -20,20 +20,6 @@ test("difficulty verifier accepts a valid difficulty-only evaluation record", ()
   );
 });
 
-test("difficulty pilot profile rejects an incomplete 500-record dataset", () => {
-  withDataset(
-    difficultySchema(),
-    [difficultyRecord({ datasetVersion: "difficulty_eval_2026_07_13_pilot_500_v1" })],
-    ({ rootDir }) => {
-      const failures = verifyDifficultyEvaluationDataset({ rootDir });
-      assert.ok(
-        failures.some((failure) => failure.includes("must contain exactly 500 records")),
-        `incomplete pilot dataset was accepted: ${JSON.stringify(failures)}`,
-      );
-    },
-  );
-});
-
 test("difficulty schema allows exactly simple and complex labels", () => {
   const schema = difficultySchema();
   schema.properties.expectedDifficulty.enum = ["simple", "complex", "moderate"];
@@ -43,19 +29,6 @@ test("difficulty schema allows exactly simple and complex labels", () => {
     assert.ok(
       failures.some((failure) => failure.includes("expectedDifficulty") && failure.includes("simple,complex")),
       `expanded difficulty taxonomy was accepted: ${JSON.stringify(failures)}`,
-    );
-  });
-});
-
-test("difficulty ground truth cannot define a complexity score", () => {
-  const schema = difficultySchema();
-  schema.properties.expectedComplexityScore = { type: "number" };
-
-  withDataset(schema, [difficultyRecord()], ({ rootDir }) => {
-    const failures = verifyDifficultyEvaluationDataset({ rootDir });
-    assert.ok(
-      failures.some((failure) => failure.includes("must not define expectedComplexityScore")),
-      `ground-truth score field was accepted: ${JSON.stringify(failures)}`,
     );
   });
 });

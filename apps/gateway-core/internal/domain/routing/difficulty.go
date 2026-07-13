@@ -59,40 +59,7 @@ type DifficultyFeatures struct {
 }
 
 type DifficultyResult struct {
-	ComplexityScore float64
-	Difficulty      string
-}
-
-const (
-	difficultyScoreMaxPoints     = 100
-	difficultyScorePolicyVersion = "difficulty_score_points_v1"
-)
-
-// difficultyScorePolicy is intentionally package-private. Runtime callers do
-// not configure score weights or thresholds; offline calibration tests select
-// and pin one deterministic policy in code.
-type difficultyScorePolicy struct {
-	commonUnitPoints       int
-	categoryUnitPoints     int
-	strongSignalBonus      int
-	unboundedRiskPoints    int
-	complexThresholdPoints int
-}
-
-var defaultDifficultyScorePolicy = difficultyScorePolicy{
-	commonUnitPoints:       10,
-	categoryUnitPoints:     10,
-	strongSignalBonus:      10,
-	unboundedRiskPoints:    20,
-	complexThresholdPoints: 30,
-}
-
-func DifficultyScorePolicyVersion() string {
-	return difficultyScorePolicyVersion
-}
-
-func DifficultyScoreThreshold() float64 {
-	return normalizedDifficultyScore(defaultDifficultyScorePolicy.complexThresholdPoints)
+	Difficulty string
 }
 
 func ExtractDifficultyFeatures(features PromptFeatures, category string) DifficultyFeatures {
@@ -134,40 +101,18 @@ func NewRuleBasedDifficultyClassifier() RuleBasedDifficultyClassifier {
 }
 
 func (RuleBasedDifficultyClassifier) ClassifyFeatures(features DifficultyFeatures) DifficultyResult {
-	return classifyDifficultyWithPolicy(features, defaultDifficultyScorePolicy)
-}
-
-func classifyDifficultyWithPolicy(features DifficultyFeatures, policy difficultyScorePolicy) DifficultyResult {
-	score := complexityScoreWithPolicy(features, policy)
-	difficulty := DifficultySimple
-	if score >= normalizedDifficultyScore(policy.complexThresholdPoints) {
-		difficulty = DifficultyComplex
-	}
-	return DifficultyResult{
-		ComplexityScore: score,
-		Difficulty:      difficulty,
-	}
-}
-
-func complexityScoreWithPolicy(features DifficultyFeatures, policy difficultyScorePolicy) float64 {
 	if features.common.payloadSizeBucket == "empty" {
-		return 0
+		return DifficultyResult{Difficulty: DifficultySimple}
+	}
+	if hasCommonComplexity(features.common) || hasCategoryComplexity(features) {
+		return DifficultyResult{Difficulty: DifficultyComplex}
+	}
+	if hasBoundedSimpleEvidence(features) {
+		return DifficultyResult{Difficulty: DifficultySimple}
 	}
 
-	commonUnits, commonStrongSignals := commonDifficultyEvidence(features.common)
-	categoryUnits, categoryStrongSignals := categoryDifficultyEvidence(features)
-	points := commonUnits*policy.commonUnitPoints +
-		categoryUnits*policy.categoryUnitPoints +
-		(commonStrongSignals+categoryStrongSignals)*policy.strongSignalBonus
-	if !hasClearlyBoundedSimpleEvidence(features) {
-		points += policy.unboundedRiskPoints
-	}
-	return normalizedDifficultyScore(points)
-}
-
-func normalizedDifficultyScore(points int) float64 {
-	points = clampInt(points, 0, difficultyScoreMaxPoints)
-	return float64(points) / float64(difficultyScoreMaxPoints)
+	// Meaningful but insufficiently bounded requests fail closed to complex.
+	return DifficultyResult{Difficulty: DifficultyComplex}
 }
 
 // Classify is a compatibility wrapper.
@@ -378,141 +323,74 @@ func extractReasoningDifficultyFeatures(features PromptFeatures, common CommonDi
 	}
 }
 
-func commonDifficultyEvidence(features CommonDifficultyFeatures) (units int, strongSignals int) {
-	switch features.payloadSizeBucket {
-	case "large":
-		units += 3
-		strongSignals++
-	case "medium":
-		units++
+func hasCommonComplexity(features CommonDifficultyFeatures) bool {
+	if features.payloadSizeBucket == "large" || features.taskCount >= 3 || features.constraintCount >= 3 || features.scopeCount >= 4 || features.dependencyDepth >= 3 {
+		return true
 	}
-
-	units += clampInt(features.taskCount-1, 0, 3)
-	units += clampInt(features.constraintCount-1, 0, 3)
-	units += clampInt(features.scopeCount-1, 0, 3)
-	units += clampInt(features.dependencyDepth-1, 0, 3)
-	if features.taskCount >= 3 {
-		strongSignals++
+	moderateSignals := 0
+	if features.payloadSizeBucket == "medium" {
+		moderateSignals++
 	}
-	if features.constraintCount >= 3 {
-		strongSignals++
+	if features.taskCount >= 2 {
+		moderateSignals++
 	}
-	if features.scopeCount >= 4 {
-		strongSignals++
+	if features.constraintCount >= 2 {
+		moderateSignals++
 	}
-	if features.dependencyDepth >= 3 {
-		strongSignals++
+	if features.scopeCount >= 2 {
+		moderateSignals++
 	}
-	return units, strongSignals
+	if features.dependencyDepth >= 2 {
+		moderateSignals++
+	}
+	return moderateSignals >= 2
 }
 
-func categoryDifficultyEvidence(features DifficultyFeatures) (units int, strongSignals int) {
+func hasCategoryComplexity(features DifficultyFeatures) bool {
 	switch features.category {
 	case CategoryCode:
 		if features.code == nil {
-			return 0, 0
+			return false
 		}
-		if isComplexCodeOperation(features.code.codeOperationKind) {
-			units += 3
-			strongSignals++
-		}
-		units += clampInt(features.code.codeScopeBreadth-1, 0, 3)
-		units += 2 * clampInt(features.code.causalComplexity, 0, 3)
-		units += clampInt(features.code.engineeringConstraintCount, 0, 3)
-		if features.code.codeScopeBreadth >= 3 {
-			strongSignals++
-		}
-		if features.code.causalComplexity >= 1 {
-			strongSignals++
-		}
-		if features.code.engineeringConstraintCount >= 2 {
-			strongSignals++
-		}
+		return isComplexCodeOperation(features.code.codeOperationKind) ||
+			features.code.codeScopeBreadth >= 3 || features.code.causalComplexity >= 1 ||
+			features.code.engineeringConstraintCount >= 2
 	case CategoryTranslation:
 		if features.translation == nil {
-			return 0, 0
+			return false
 		}
-		units += clampInt(features.translation.translationScopeCount-1, 0, 3)
-		units += clampInt(features.translation.preservationConstraintCount, 0, 4)
-		units += clampInt(features.translation.domainTerminologyLevel, 0, 2)
-		units += clampInt(features.translation.localizationDegree, 0, 2)
-		if features.translation.translationScopeCount >= 2 {
-			strongSignals++
-		}
-		if features.translation.preservationConstraintCount >= 2 {
-			strongSignals++
-		}
-		if features.translation.domainTerminologyLevel >= 2 {
-			strongSignals++
-		}
-		if features.translation.localizationDegree >= 2 {
-			strongSignals++
-		}
+		return features.translation.translationScopeCount >= 2 ||
+			features.translation.preservationConstraintCount >= 2 ||
+			features.translation.domainTerminologyLevel >= 2 ||
+			features.translation.localizationDegree >= 2
 	case CategorySummarization:
 		if features.summarization == nil {
-			return 0, 0
+			return false
 		}
-		units += clampInt(features.summarization.sourceBreadth-1, 0, 3)
-		units += 2 * clampInt(features.summarization.synthesisLevel, 0, 2)
-		units += clampInt(features.summarization.facetCount-1, 0, 4)
-		if features.summarization.hasTraceabilityConstraints {
-			units += 3
-			strongSignals++
-		}
-		if features.summarization.sourceBreadth >= 3 {
-			strongSignals++
-		}
-		if features.summarization.synthesisLevel >= 2 {
-			strongSignals++
-		}
-		if features.summarization.facetCount >= 3 {
-			strongSignals++
-		}
+		return features.summarization.sourceBreadth >= 3 ||
+			features.summarization.synthesisLevel >= 2 ||
+			features.summarization.facetCount >= 3 ||
+			features.summarization.hasTraceabilityConstraints
 	case CategoryReasoning:
 		if features.reasoning == nil {
-			return 0, 0
+			return false
 		}
-		units += clampInt(features.reasoning.alternativeCount-1, 0, 3)
-		units += clampInt(features.reasoning.criteriaAndConstraintCount-1, 0, 4)
-		units += 2 * clampInt(features.reasoning.reasoningDepth-1, 0, 3)
-		units += clampInt(features.reasoning.uncertaintyScenarioCount, 0, 4)
-		if features.reasoning.alternativeCount >= 3 {
-			strongSignals++
-		}
-		if features.reasoning.criteriaAndConstraintCount >= 3 {
-			strongSignals++
-		}
-		if features.reasoning.reasoningDepth >= 2 {
-			strongSignals++
-		}
-		if features.reasoning.uncertaintyScenarioCount >= 2 {
-			strongSignals++
-		}
+		return features.reasoning.alternativeCount >= 3 ||
+			features.reasoning.criteriaAndConstraintCount >= 3 ||
+			features.reasoning.reasoningDepth >= 2 ||
+			features.reasoning.uncertaintyScenarioCount >= 2
 	default:
 		if features.general == nil {
-			return 0, 0
+			return false
 		}
-		units += clampInt(features.general.workflowDepth-1, 0, 3)
-		units += clampInt(features.general.branchOrExceptionCount, 0, 3)
-		units += clampInt(features.general.extractionBreadth-1, 0, 4)
-		if features.general.hasCrossSourceSynthesis {
-			units += 3
-			strongSignals++
-		}
-		if features.general.workflowDepth >= 2 {
-			strongSignals++
-		}
-		if features.general.branchOrExceptionCount >= 2 {
-			strongSignals++
-		}
-		if features.general.extractionBreadth >= 4 {
-			strongSignals++
-		}
+		return features.general.workflowDepth >= 2 ||
+			features.general.branchOrExceptionCount >= 2 ||
+			features.general.extractionBreadth >= 4 ||
+			features.general.hasCrossSourceSynthesis
 	}
-	return units, strongSignals
 }
 
-func hasClearlyBoundedSimpleEvidence(features DifficultyFeatures) bool {
+func hasBoundedSimpleEvidence(features DifficultyFeatures) bool {
 	common := features.common
 	if common.payloadSizeBucket != "small" || common.taskCount > 1 || common.constraintCount > 1 || common.scopeCount > 1 || common.dependencyDepth > 1 {
 		return false
@@ -559,14 +437,4 @@ func maxInt(left int, right int) int {
 		return left
 	}
 	return right
-}
-
-func clampInt(value int, minimum int, maximum int) int {
-	if value < minimum {
-		return minimum
-	}
-	if value > maximum {
-		return maximum
-	}
-	return value
 }

@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"gatelm/apps/gateway-core/internal/domain/routing"
 )
 
 func TestEvaluateReportIncludesSyntheticPromptText(t *testing.T) {
@@ -130,33 +128,21 @@ func TestEvaluateDifficultyReportIncludesCombinationDirectionalAndLatencyEvidenc
 		},
 	}
 
-	report := evaluateDifficulty("difficulty.jsonl", "rule_based_difficulty_classifier_v2", records, 2)
-	endToEnd := report.FullDataset.EndToEnd
-	if endToEnd.TotalSamples != 4 || endToEnd.CorrectSamples != 2 || endToEnd.IncorrectSamples != 2 || endToEnd.Accuracy != 0.5 {
-		t.Fatalf("unexpected difficulty summary: %#v", endToEnd)
+	report := evaluateDifficulty("difficulty.jsonl", "rule_based_difficulty_classifier_v1", records, 2)
+	if report.TotalSamples != 4 || report.CorrectSamples != 2 || report.IncorrectSamples != 2 || report.Accuracy != 0.5 {
+		t.Fatalf("unexpected difficulty summary: %#v", report)
 	}
-	if got := endToEnd.ByCategoryDifficulty["code"]["simple"]; got.Total != 1 || got.Correct != 0 || got.Incorrect != 1 {
+	if got := report.ByCategoryDifficulty["code"]["simple"]; got.Total != 1 || got.Correct != 0 || got.Incorrect != 1 {
 		t.Fatalf("unexpected code/simple stats: %#v", got)
 	}
-	if got := endToEnd.ByCategoryDifficulty["code"]["complex"]; got.Total != 1 || got.Correct != 1 || got.Incorrect != 0 {
+	if got := report.ByCategoryDifficulty["code"]["complex"]; got.Total != 1 || got.Correct != 1 || got.Incorrect != 0 {
 		t.Fatalf("unexpected code/complex stats: %#v", got)
 	}
-	if endToEnd.DirectionalErrors.SimpleExpectedSamples != 2 || endToEnd.DirectionalErrors.SimpleToComplexCount != 1 || endToEnd.DirectionalErrors.SimpleToComplexRate != 0.5 {
-		t.Fatalf("unexpected simple-to-complex evidence: %#v", endToEnd.DirectionalErrors)
+	if report.DirectionalErrors.SimpleExpectedSamples != 2 || report.DirectionalErrors.SimpleToComplexCount != 1 || report.DirectionalErrors.SimpleToComplexRate != 0.5 {
+		t.Fatalf("unexpected simple-to-complex evidence: %#v", report.DirectionalErrors)
 	}
-	if endToEnd.DirectionalErrors.ComplexExpectedSamples != 2 || endToEnd.DirectionalErrors.ComplexToSimpleCount != 1 || endToEnd.DirectionalErrors.ComplexToSimpleRate != 0.5 {
-		t.Fatalf("unexpected complex-to-simple evidence: %#v", endToEnd.DirectionalErrors)
-	}
-	if report.ScorePolicyVersion == "" || report.ComplexityThreshold != routing.DifficultyScoreThreshold() {
-		t.Fatalf("missing score policy metadata: %#v", report)
-	}
-	if report.FullDataset.OracleCategory.TotalSamples != 4 || report.Calibration.EndToEnd.TotalSamples != 4 || report.Holdout.EndToEnd.TotalSamples != 0 {
-		t.Fatalf("unexpected oracle/split evidence: %#v", report)
-	}
-	for _, sample := range endToEnd.Samples {
-		if sample.ComplexityScore < 0 || sample.ComplexityScore > 1 {
-			t.Fatalf("score escaped [0,1]: %#v", sample)
-		}
+	if report.DirectionalErrors.ComplexExpectedSamples != 2 || report.DirectionalErrors.ComplexToSimpleCount != 1 || report.DirectionalErrors.ComplexToSimpleRate != 0.5 {
+		t.Fatalf("unexpected complex-to-simple evidence: %#v", report.DirectionalErrors)
 	}
 	for name, latency := range map[string]latencyStats{
 		"category":   report.ClassificationLatency.Category,
@@ -173,14 +159,9 @@ func TestEvaluateDifficultyReportIncludesCombinationDirectionalAndLatencyEvidenc
 		t.Fatalf("marshalDifficultyReport returned error: %v", err)
 	}
 	output := string(payload)
-	for _, expectedField := range []string{`"scorePolicyVersion"`, `"complexityThreshold"`, `"oracleCategory"`, `"endToEnd"`, `"scoreBuckets"`, `"byExpectedDifficultyScore"`, `"complexityScore"`, `"simpleToComplexCount"`, `"complexToSimpleCount"`, `"classificationLatency"`} {
+	for _, expectedField := range []string{`"byCategoryDifficulty"`, `"simpleToComplexCount"`, `"complexToSimpleCount"`, `"classificationLatency"`} {
 		if !strings.Contains(output, expectedField) {
 			t.Fatalf("difficulty report is missing %s: %s", expectedField, output)
-		}
-	}
-	for _, forbiddenField := range []string{`"matchedPhrase"`, `"featureBreakdown"`, `"providerId"`, `"modelId"`, `"modelRef"`} {
-		if strings.Contains(output, forbiddenField) {
-			t.Fatalf("difficulty report exposed forbidden score diagnostics %s: %s", forbiddenField, output)
 		}
 	}
 }
@@ -250,7 +231,7 @@ func TestRoutingEvalCLIProducesDifficultyReport(t *testing.T) {
 	if err := json.Unmarshal(output, &report); err != nil {
 		t.Fatalf("decode difficulty CLI report: %v\n%s", err, output)
 	}
-	if report.FullDataset.EndToEnd.TotalSamples != 1 || report.FullDataset.EndToEnd.CorrectSamples != 1 || report.FullDataset.EndToEnd.Accuracy != 1 {
+	if report.TotalSamples != 1 || report.CorrectSamples != 1 || report.Accuracy != 1 {
 		t.Fatalf("unexpected difficulty CLI report: %#v", report)
 	}
 }
