@@ -57,27 +57,23 @@ type RouteCandidateStatus struct {
 }
 
 type SimpleRouter struct {
-	config               SimpleRouterConfig
-	categoryClassifier   RuleBasedCategoryClassifier
-	difficultyClassifier RuleBasedDifficultyClassifier
+	config           SimpleRouterConfig
+	promptClassifier RuleBasedPromptClassifier
 }
 
 func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
 	return &SimpleRouter{
-		config:               normalizeSimpleRouterConfig(config),
-		categoryClassifier:   NewRuleBasedCategoryClassifier(),
-		difficultyClassifier: NewRuleBasedDifficultyClassifier(),
+		config:           normalizeSimpleRouterConfig(config),
+		promptClassifier: NewRuleBasedPromptClassifier(),
 	}
 }
 
 func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
 	config := defaultSimpleRouterConfig()
-	categoryClassifier := NewRuleBasedCategoryClassifier()
-	difficultyClassifier := NewRuleBasedDifficultyClassifier()
+	promptClassifier := NewRuleBasedPromptClassifier()
 	if r != nil {
 		config = r.config
-		categoryClassifier = r.categoryClassifier
-		difficultyClassifier = r.difficultyClassifier
+		promptClassifier = r.promptClassifier
 	}
 	if req.Config != nil {
 		config = mergeSimpleRouterConfig(config, *req.Config)
@@ -88,10 +84,10 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if requestedModel == "" {
 		requestedModel = "auto"
 	}
-	signals := categoryClassifier.ExtractRoutingSignals(req.PromptText)
-	category := canonicalCategory(signals.Category)
-	difficulty := difficultyClassifier.Classify(req.PromptText, category)
-	diagnostics := signals.CategoryDiagnostics.WithSelectedCategory(category)
+	classification := promptClassifier.Classify(req.PromptText)
+	category := canonicalCategory(classification.Category.Category)
+	difficulty := canonicalDifficulty(classification.Difficulty.Difficulty)
+	diagnostics := classification.Category.Diagnostics.WithSelectedCategory(category)
 
 	material := DecisionMaterial{
 		Category:      category,

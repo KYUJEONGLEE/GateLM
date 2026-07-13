@@ -36,7 +36,8 @@ func TestRuleBasedCategoryClassifierV2UsesOnlyFiveCategories(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			actual := classifier.Classify(test.prompt)
+			features := ExtractPromptFeatures(test.prompt)
+			actual := classifier.ClassifyFeatures(features).Category
 			if !allowed[actual] {
 				t.Fatalf("classifier returned category outside v2 contract: %q", actual)
 			}
@@ -78,7 +79,9 @@ func TestRuleBasedDifficultyClassifierIsCategoryAware(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if actual := classifier.Classify(test.prompt, test.category); actual != test.difficulty {
+			features := ExtractPromptFeatures(test.prompt)
+			difficultyFeatures := ExtractDifficultyFeatures(features, test.category)
+			if actual := classifier.ClassifyFeatures(difficultyFeatures).Difficulty; actual != test.difficulty {
 				t.Fatalf("Classify(%q, %q) = %q, want %q", test.prompt, test.category, actual, test.difficulty)
 			}
 		})
@@ -90,7 +93,9 @@ func TestDifficultyClassifierTreatsContractPreservingTranslationAsComplex(t *tes
 
 	classifier := NewRuleBasedDifficultyClassifier()
 	prompt := "Translate the contract while preserving defined terms and internal references."
-	if actual := classifier.Classify(prompt, CategoryTranslation); actual != DifficultyComplex {
+	features := ExtractPromptFeatures(prompt)
+	difficultyFeatures := ExtractDifficultyFeatures(features, CategoryTranslation)
+	if actual := classifier.ClassifyFeatures(difficultyFeatures).Difficulty; actual != DifficultyComplex {
 		t.Fatalf("Classify(%q, %q) = %q, want %q", prompt, CategoryTranslation, actual, DifficultyComplex)
 	}
 }
@@ -100,7 +105,9 @@ func TestDifficultyClassifierTreatsUnresolvedMeetingActionSummaryAsComplex(t *te
 
 	classifier := NewRuleBasedDifficultyClassifier()
 	prompt := "Summarize the meeting notes by decisions, unresolved conflicts, and unassigned follow-up actions."
-	if actual := classifier.Classify(prompt, CategorySummarization); actual != DifficultyComplex {
+	features := ExtractPromptFeatures(prompt)
+	difficultyFeatures := ExtractDifficultyFeatures(features, CategorySummarization)
+	if actual := classifier.ClassifyFeatures(difficultyFeatures).Difficulty; actual != DifficultyComplex {
 		t.Fatalf("Classify(%q, %q) = %q, want %q", prompt, CategorySummarization, actual, DifficultyComplex)
 	}
 }
