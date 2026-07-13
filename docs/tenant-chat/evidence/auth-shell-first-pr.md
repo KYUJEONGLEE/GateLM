@@ -111,10 +111,10 @@ Rollback은 Chat Web/API와 신규 writer를 먼저 중지하고 Caddy/Dashboard
 ## 7. 후속 작업
 
 - conversation CRUD/SSE와 encrypted history
-- Gateway workload JWT, RuntimeSnapshot, provider 실행
-- usage ledger와 Dashboard usage
+- Gateway workload JWT와 tenant RuntimeSnapshot 기반은 병합됐으며, active contract에 맞춘 ownership/검증 경계 정렬이 남아 있다.
+- private completion endpoint와 provider/fallback 연결, terminal outbox, pending-unconfirmed, admission→Dashboard E2E
 - Terraform/ECS 및 실제 배포 topology
 - Semantic Cache
 - legacy customer-demo/Application 파일 물리 삭제
 
-사용자가 실제 UI를 확인하기 전에는 PR을 ready 또는 merge하지 않는다.
+자동 검증과 merge blocker 확인 뒤 이 PR을 먼저 병합한다. 사용자는 병합 commit SHA를 기준으로 desktop/mobile/auth UX를 확인하고, 그동안 후속 Gateway 계약 정렬과 integration 작업을 병렬로 진행한다.
