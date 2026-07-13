@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   compareProjectCreatedAtDescending,
   getProjectCreateActionLocation,
+  getProjectSettingsHref,
   isProjectVisibleInList
 } from "./project-management-state";
 
@@ -23,6 +24,24 @@ test("keeps DRAFT projects in the main list and excludes only ARCHIVED projects"
   expect(isProjectVisibleInList("DRAFT")).toBe(true);
   expect(isProjectVisibleInList("DISABLED")).toBe(true);
   expect(isProjectVisibleInList("ARCHIVED")).toBe(false);
+});
+
+test("opens policies only for active projects with a runtime application", () => {
+  expect(
+    getProjectSettingsHref("tenant-1", {
+      id: "project-1",
+      runtimeApplicationId: "application-1",
+      status: "ACTIVE"
+    })
+  ).toBe("/tenants/tenant-1/projects/project-1/policies");
+
+  expect(
+    getProjectSettingsHref("tenant-1", {
+      id: "project-1",
+      runtimeApplicationId: "application-1",
+      status: "DISABLED"
+    })
+  ).toBe("/tenants/tenant-1/projects/project-1");
 });
 
 test("sorts the newest project first", () => {
