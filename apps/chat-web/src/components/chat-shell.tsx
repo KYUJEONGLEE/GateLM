@@ -10,9 +10,25 @@ import type { ChatSession } from '@/lib/auth-types';
 import { api } from '@/lib/browser-api';
 
 export function ChatShell() {
-  const router = useRouter(); const [session, setSession] = useState<ChatSession | null>(null);
+  const router = useRouter();
+  const [session, setSession] = useState<ChatSession | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => { api<ChatSession>('/api/tenant-chat/auth/session').then((value) => { if (value.state !== 'authenticated') router.replace('/tenants'); else setSession(value); }).catch(() => router.replace('/login')); }, [router]);
+  useEffect(() => {
+    async function fetchSession() {
+      try {
+        const value = await api<ChatSession>('/api/tenant-chat/auth/session');
+        if (value.state !== 'authenticated') {
+          router.replace('/tenants');
+        } else {
+          setSession(value);
+        }
+      } catch {
+        router.replace('/login');
+      }
+    }
+
+    void fetchSession();
+  }, [router]);
   async function logout() { try { await api('/api/tenant-chat/auth/logout', { body: '{}', method: 'POST' }); } finally { router.replace('/login'); router.refresh(); } }
   if (!session?.selectedTenant) return <main className="empty-chat"><div className="info-box" role="status">GateLM Chat을 준비하는 중…</div></main>;
   const displayName = session.user.name || session.user.email.split('@')[0];
@@ -24,7 +40,7 @@ export function ChatShell() {
         <nav className="chat-nav"><Link className="nav-item active" href="/" aria-current="page"><MessageSquareText size={19} aria-hidden />새 대화</Link><span className="nav-item" aria-disabled><Settings2 size={19} aria-hidden />모델 연결 대기</span></nav>
       </div>
       <div className="sidebar-account">
-        <Badge><Building2 size={14} aria-hidden style={{ marginRight: 6 }} />{session.selectedTenant.name}</Badge>
+        <Badge><Building2 className="badge-leading-icon" size={14} aria-hidden />{session.selectedTenant.name}</Badge>
         <div><div className="account-name">{displayName}</div><div className="account-email">{session.user.email}</div></div>
         <Button variant="ghost" onClick={logout}><LogOut size={17} aria-hidden />로그아웃</Button>
       </div>

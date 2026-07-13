@@ -19,6 +19,73 @@ test("active routing contract accepts one complete 5 x 2 v2 policy", () => {
   }
 });
 
+test("active routing documentation declares the feature-based classification pipeline", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir);
+
+    assert.deepEqual(verifyRoutingContract({ rootDir }), []);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing documentation rejects a missing classification pipeline document", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-missing-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir);
+    rmSync(path.join(rootDir, "docs", "routing", "classification-pipeline.md"));
+
+    const failures = verifyRoutingContract({ rootDir });
+    assert.ok(
+      failures.some((failure) => failure.includes("classification-pipeline.md: file is missing")),
+      `missing classification pipeline document was accepted: ${JSON.stringify(failures)}`,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing documentation rejects an incomplete difficulty feature vector contract", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-feature-vector-incomplete-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir, {
+      featureVector: "difficulty-feature-vector.v1\nDimension\n`42`\nDifficultyFeatureNamesV1\nVectorizeDifficultyFeaturesV1",
+    });
+
+    const failures = verifyRoutingContract({ rootDir });
+    assert.ok(
+      failures.some((failure) => failure.includes("required v1 feature contract marker is missing")),
+      `incomplete difficulty feature vector contract was accepted: ${JSON.stringify(failures)}`,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing documentation rejects the retired direct-prompt classifier form", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-legacy-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir, {
+      contracts: `classification-pipeline.md
+category = CategoryClassifier(prompt)
+difficulty = ComplexityClassifier(prompt, category)`,
+    });
+
+    const failures = verifyRoutingContract({ rootDir });
+    assert.ok(
+      failures.some((failure) => failure.includes("retired direct-prompt classifier form")),
+      `retired direct-prompt classifier form was accepted: ${JSON.stringify(failures)}`,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("RuntimeSnapshot routing v2 rejects selected provider/model fields", () => {
   const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-runtime-routing-contract-"));
   try {
@@ -169,6 +236,69 @@ function writeContractFiles(
     JSON.stringify(runtimeFixture),
     "utf8",
   );
+}
+
+function writeRoutingDocumentation(rootDir, overrides = {}) {
+  const featureVectorNames = [
+    "payloadEmpty", "payloadSmall", "payloadMedium", "payloadLarge",
+    "taskCount", "constraintCount", "scopeCount", "dependencyDepth",
+    "categoryGeneral", "categoryCode", "categoryTranslation", "categorySummarization", "categoryReasoning",
+    "generalWorkflowDepth", "generalBranchOrExceptionCount", "generalExtractionBreadth", "generalHasCrossSourceSynthesis",
+    "codeOperationUnknown", "codeOperationSyntax", "codeOperationExample", "codeOperationSmallEdit", "codeOperationDebug",
+    "codeOperationRefactor", "codeOperationDesign", "codeOperationMigration", "codeOperationConcurrency", "codeOperationPerformance",
+    "codeScopeBreadth", "codeCausalComplexity", "codeEngineeringConstraintCount",
+    "translationScopeCount", "translationPreservationConstraintCount", "translationDomainTerminologyLevel", "translationLocalizationDegree",
+    "summarizationSourceBreadth", "summarizationSynthesisLevel", "summarizationFacetCount", "summarizationHasTraceabilityConstraints",
+    "reasoningAlternativeCount", "reasoningCriteriaAndConstraintCount", "reasoningDepth", "reasoningUncertaintyScenarioCount",
+  ];
+  const documents = {
+    "docs/routing/README.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md",
+    "docs/routing/contracts.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md",
+    "docs/routing/classification-pipeline.md": [
+      "Active routing target contract",
+      "ExtractPromptFeatures",
+      "PromptFeatures",
+      "CategoryResult",
+      "ExtractDifficultyFeatures",
+      "DifficultyFeatures",
+      "DifficultyResult",
+      "Go struct",
+      "compatibility wrapper",
+      "difficulty-feature-vector-v1.md",
+    ].join("\n"),
+    "docs/routing/difficulty-feature-vector-v1.md": [
+      "difficulty-feature-vector.v1",
+      "Dimension",
+      "`42`",
+      "DifficultyFeatureNamesV1",
+      "VectorizeDifficultyFeaturesV1",
+      "float64(clamp(value, 0, max)) / float64(max)",
+      "canonicalCategory",
+      "zero-fill",
+      "intercept",
+      ...featureVectorNames.map((name) => `\`${name}\``),
+    ].join("\n"),
+    "docs/current/README.md": "../routing/README.md",
+    "docs/current/source-of-truth.md": "../routing/README.md\n../routing/classification-pipeline.md",
+    "docs/v2.0.0/README.md": "Superseded by active routing contract",
+    "docs/v2.0.0/contracts.md": "Superseded by active routing contract",
+  };
+
+  if (overrides.contracts !== undefined) {
+    documents["docs/routing/contracts.md"] = overrides.contracts;
+  }
+  if (overrides.pipeline !== undefined) {
+    documents["docs/routing/classification-pipeline.md"] = overrides.pipeline;
+  }
+  if (overrides.featureVector !== undefined) {
+    documents["docs/routing/difficulty-feature-vector-v1.md"] = overrides.featureVector;
+  }
+
+  for (const [relativePath, content] of Object.entries(documents)) {
+    const absolutePath = path.join(rootDir, relativePath);
+    mkdirSync(path.dirname(absolutePath), { recursive: true });
+    writeFileSync(absolutePath, content, "utf8");
+  }
 }
 
 function validPolicy() {

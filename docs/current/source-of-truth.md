@@ -39,7 +39,7 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 - [`../tenant-chat/implementation-plan.md`](../tenant-chat/implementation-plan.md): 구현 순서와 acceptance
 - [`../tenant-chat/handoffs/employee-usage-integration.md`](../tenant-chat/handoffs/employee-usage-integration.md): Control Plane/Employee Usage 통합 경계
 
-이 scope는 제품 release SemVer를 선언하지 않는다. 기존 Project/Application Chat과 public `/v1` 경로는 inherited compatibility로 보존하며, Tenant Chat 구현 전까지 current as-built 기능으로 간주하지 않는다.
+이 scope는 제품 release SemVer를 선언하지 않는다. 기존 Project/Application Chat과 public `/v1` 경로는 inherited compatibility로 보존한다. Tenant Chat 구현은 `origin/dev`에 존재하며, 현재 as-built 범위와 아직 연결되지 않은 end-to-end 경계는 [`implementation-status.md`](implementation-status.md)에서 구분한다. 구현 존재만으로 contract acceptance, release 완료 또는 GA를 선언하지 않는다.
 
 ### General Gateway routing
 
@@ -47,6 +47,7 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 
 - [`../routing/README.md`](../routing/README.md): 범위와 artifact 진입점
 - [`../routing/contracts.md`](../routing/contracts.md): active 의미 계약
+- [`../routing/classification-pipeline.md`](../routing/classification-pipeline.md): category·difficulty 분류의 active 내부 구현 계약
 - [`../routing/schemas/routing-policy.schema.json`](../routing/schemas/routing-policy.schema.json): routing policy v2 schema
 - [`../routing/fixtures/routing-policy.fixture.json`](../routing/fixtures/routing-policy.fixture.json): safe Mock bootstrap fixture
 - [`../routing/schemas/runtime-snapshot-routing.schema.json`](../routing/schemas/runtime-snapshot-routing.schema.json): RuntimeSnapshot routing v2 schema
