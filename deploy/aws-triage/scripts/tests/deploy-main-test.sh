@@ -98,10 +98,10 @@ grep -Fq 'Public Web Console is not reachable from this host.' "${DEPLOY_SCRIPT}
   fail "Target deployment must validate the SHA fetched in the current command"
 [[ "$(grep -Fc 'rev-parse FETCH_HEAD' "${SSM_SCRIPT}")" == "1" ]] || \
   fail "SSM bootstrap must validate the SHA fetched in the current command"
-grep -F 'authentication-boundary-check' "${DEPLOY_SCRIPT}" | grep -Fq '|| true)' || \
-  fail "Gateway authentication failures must reach explicit status validation"
-grep -F '127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" | grep -Fq '|| true)' || \
-  fail "Tenant Chat authentication failures must reach explicit status validation"
+[[ "$(grep -Fc 'capture_http_status' "${DEPLOY_SCRIPT}")" == "3" ]] || \
+  fail "Authentication probes must use the shared status capture path"
+grep -Fq 'status="000"' "${DEPLOY_SCRIPT}" || \
+  fail "Empty HTTP status values must be normalized to 000"
 # Runtime services are captured once for rollback and checked once after cutover.
 # shellcheck disable=SC2016
 runtime_service_loops="$(grep -Fc 'for service in "${runtime_services[@]}"; do' "${DEPLOY_SCRIPT}")"

@@ -145,6 +145,14 @@ wait_for_http() {
   return 1
 }
 
+capture_http_status() {
+  local status
+
+  status="$(curl "$@" || true)"
+  [[ -n "${status}" ]] || status="000"
+  printf '%s' "${status}"
+}
+
 wait_for_postgres() {
   local attempts="${1:-30}"
   local delay_seconds="${2:-1}"
@@ -336,15 +344,15 @@ wait_for_http "public Web Console" "${public_url}" || \
 wait_for_http "public Tenant Chat" "${chat_url}/login" || \
   deploy_warn "Public Tenant Chat is not reachable from this host."
 
-gateway_auth_status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
+gateway_auth_status="$(capture_http_status --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
   -X POST "http://127.0.0.1:8080/v1/chat/completions" \
   -H 'Content-Type: application/json' \
-  --data '{"model":"deployment-check","messages":[{"role":"user","content":"authentication-boundary-check"}]}' || true)"
+  --data '{"model":"deployment-check","messages":[{"role":"user","content":"authentication-boundary-check"}]}')"
 [[ "${gateway_auth_status}" == "401" ]] || \
   deploy_fail "Unauthenticated Gateway request returned ${gateway_auth_status}, expected 401."
 
-chat_auth_status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
-  "http://127.0.0.1:3002/api/tenant-chat/auth/session" || true)"
+chat_auth_status="$(capture_http_status --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
+  "http://127.0.0.1:3002/api/tenant-chat/auth/session")"
 [[ "${chat_auth_status}" == "401" ]] || \
   deploy_fail "Unauthenticated Tenant Chat session returned ${chat_auth_status}, expected 401."
 
