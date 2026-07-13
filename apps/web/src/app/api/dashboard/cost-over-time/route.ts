@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getCurrentConsoleAuthForCookieHeader,
+  isProjectScopedForTenant,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getTenantChatCostSeries } from "@/lib/control-plane/tenant-chat-observability-client";
+import {
+  type DashboardSurface,
+  mergeCostOverTime,
+  toTenantChatCostOverTime
+} from "@/lib/dashboard/unified-dashboard";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
-import type { LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
+import {
+  getDashboardLiveRange,
+  type LiveDashboardRange
+} from "@/lib/gateway/live-dashboard-overview";
 
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams;
@@ -34,13 +44,52 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Project access denied" }, { status: 403 });
   }
 
-  const summary = await getLiveCostOverTime(tenantId, {
-    budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
-    budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
-    projectId: effectiveProjectId ?? requestedProjectId,
-    range: normalizeRange(query.get("range")),
-    resolvedBy: optionalQueryValue(query, "resolvedBy")
-  });
+  const range = normalizeRange(query.get("range"));
+  const projectScoped = isProjectScopedForTenant(auth, tenantId);
+  const requestedSurface = normalizeSurface(query.get("surface"));
+  const hasProjectFilters = Boolean(
+    effectiveProjectId ||
+    requestedProjectId ||
+    optionalQueryValue(query, "budgetScopeId") ||
+    optionalQueryValue(query, "budgetScopeType") ||
+    optionalQueryValue(query, "resolvedBy")
+  );
+  const surface: DashboardSurface =
+    projectScoped || hasProjectFilters
+      ? "project_application"
+      : requestedSurface;
+  const liveRange = getDashboardLiveRange(range);
+
+  const [projectApplicationSummary, tenantChatSeries] = await Promise.all([
+    surface === "tenant_chat"
+      ? Promise.resolve(undefined)
+      : getLiveCostOverTime(tenantId, {
+          budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
+          budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
+          projectId: effectiveProjectId ?? requestedProjectId,
+          range,
+          resolvedBy: optionalQueryValue(query, "resolvedBy")
+        }),
+    surface === "project_application"
+      ? Promise.resolve(undefined)
+      : getTenantChatCostSeries(
+          tenantId,
+          liveRange.from,
+          liveRange.to,
+          costBucketForRange(range)
+        )
+  ]);
+  const tenantChatSummary = tenantChatSeries
+    ? toTenantChatCostOverTime(tenantChatSeries)
+    : undefined;
+  const summary =
+    surface === "project_application"
+      ? projectApplicationSummary
+      : surface === "tenant_chat"
+        ? tenantChatSummary
+        : projectApplicationSummary && tenantChatSummary
+          ? mergeCostOverTime(projectApplicationSummary, tenantChatSummary)
+          : projectApplicationSummary ?? tenantChatSummary;
 
   if (!summary) {
     return NextResponse.json(
@@ -50,6 +99,21 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ data: summary });
+}
+
+function normalizeSurface(value: string | null): DashboardSurface {
+  if (value === "project_application" || value === "tenant_chat") {
+    return value;
+  }
+  return "all";
+}
+
+function costBucketForRange(range: LiveDashboardRange) {
+  if (range === "5m") return "7s" as const;
+  if (range === "15m") return "1m" as const;
+  if (range === "1h") return "5m" as const;
+  if (range === "1d") return "1h" as const;
+  return "1d" as const;
 }
 
 function optionalQueryValue(query: URLSearchParams, key: string) {

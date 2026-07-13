@@ -265,6 +265,10 @@ CREATE TABLE tenant_chat_provider_attempts (
     AND confirmed_cache_read_input_tokens >= 0
     AND confirmed_cache_read_input_tokens <= confirmed_input_tokens
     AND confirmed_cost_micro_usd >= 0
+  ),
+  CONSTRAINT tenant_chat_attempt_cache_read_price_check CHECK (
+    cache_read_input_micro_usd_per_million_tokens IS NULL
+    OR cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens
   )
 );
 

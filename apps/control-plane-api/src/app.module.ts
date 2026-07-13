@@ -19,6 +19,7 @@ import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.
 import { TeamsModule } from './modules/teams/teams.module';
 import { TenantChatIdentityModule } from './modules/tenant-chat-identity/tenant-chat-identity.module';
 import { TenantChatRuntimeModule } from './modules/tenant-chat-runtime/tenant-chat-runtime.module';
+import { TenantChatObservabilityModule } from './modules/tenant-chat-observability/tenant-chat-observability.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
@@ -42,6 +43,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     EmployeesModule,
     RuntimeConfigsModule,
     TenantChatRuntimeModule,
+    TenantChatObservabilityModule,
     TeamsModule,
     TenantChatIdentityModule,
     HealthModule,
