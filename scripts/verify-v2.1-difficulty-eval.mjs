@@ -13,6 +13,7 @@ const splitManifestPath = "docs/v2.1.0/fixtures/difficulty-training-split-manife
 const splitManifestSchemaPath =
   "docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json";
 const modelArtifactSchemaPath = "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json";
+const trainingPolicyPath = "scripts/routing_difficulty_model/training-policy.v1.json";
 const activeSchemaVersion = "gatelm.difficulty-evaluation-record.v1";
 const activeDifficulties = ["simple", "complex"];
 const requiredEvaluationFields = ["redactedPrompt", "expectedCategory", "expectedDifficulty", "language"];
@@ -190,7 +191,10 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   const manifest = readJson(rootDir, splitManifestPath, failures);
   const manifestSchema = readJson(rootDir, splitManifestSchemaPath, failures);
   const artifactSchema = readJson(rootDir, modelArtifactSchemaPath, failures);
-  if (!schema || fixtureText === null || !manifest || !manifestSchema || !artifactSchema) return failures;
+  const trainingPolicy = readJson(rootDir, trainingPolicyPath, failures);
+  if (!schema || fixtureText === null || !manifest || !manifestSchema || !artifactSchema || !trainingPolicy) {
+    return failures;
+  }
 
   validateSchemaShape(schema, failures);
   const lines = fixtureText.split(/\r?\n/).filter((line) => line.trim().length > 0);
@@ -298,13 +302,60 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   ) {
     failures.push(`${splitManifestSchemaPath}: closed v1 manifest schema is required`);
   }
+  const calibratorBranches = artifactSchema?.properties?.calibrator?.oneOf;
+  const calibratorFields = {
+    platt: ["type", "input", "coefficient", "intercept"],
+    isotonic: ["type", "input", "xThresholds", "yThresholds"],
+  };
+  const calibratorShapeIsCanonical =
+    Array.isArray(calibratorBranches) &&
+    calibratorBranches.length === 2 &&
+    calibratorBranches.every((branch) => {
+      const type = branch?.properties?.type?.const;
+      const expectedFields = calibratorFields[type];
+      return (
+        expectedFields !== undefined &&
+        branch.additionalProperties === false &&
+        JSON.stringify(Object.keys(branch.properties ?? {}).sort()) === JSON.stringify([...expectedFields].sort()) &&
+        JSON.stringify([...(branch.required ?? [])].sort()) === JSON.stringify([...expectedFields].sort())
+      );
+    }) &&
+    !Object.hasOwn(artifactSchema?.properties ?? {}, "calibratorType");
+  const isotonicBranch = calibratorBranches?.find(
+    (branch) => branch?.properties?.type?.const === "isotonic",
+  );
+  const isotonicStepShapeIsCanonical =
+    isotonicBranch?.properties?.xThresholds?.minItems === 1 &&
+    isotonicBranch?.properties?.yThresholds?.minItems === 1 &&
+    isotonicBranch?.properties?.xThresholds?.description?.includes("inclusive lower") &&
+    isotonicBranch?.properties?.xThresholds?.description?.includes("floor lookup") &&
+    isotonicBranch?.properties?.yThresholds?.description?.includes("PAVA block");
+  const calibrationPolicy = trainingPolicy?.calibration;
+  const isotonicPolicyIsCanonical =
+    JSON.stringify(calibrationPolicy?.candidates) === JSON.stringify(["platt", "isotonic"]) &&
+    JSON.stringify(calibrationPolicy?.simplicityOrder) === JSON.stringify(["platt", "isotonic"]) &&
+    calibrationPolicy?.tieTolerance === 0.000001 &&
+    JSON.stringify(calibrationPolicy?.isotonic) ===
+      JSON.stringify({
+        algorithm: "pava",
+        tieGrouping: "exact_float64",
+        weighting: "sample_count",
+        lookup: "inclusive_lower_floor",
+        outOfBounds: "clip",
+        smallBlockMerge: "disabled",
+      });
   if (
     artifactSchema?.properties?.schemaVersion?.const !== "gatelm.difficulty-model-artifact.v1" ||
     artifactSchema?.properties?.featureVersion?.const !== "difficulty-feature-vector.v1" ||
     artifactSchema?.properties?.threshold?.const !== 0.45 ||
-    artifactSchema.additionalProperties !== false
+    artifactSchema.additionalProperties !== false ||
+    !calibratorShapeIsCanonical ||
+    !isotonicStepShapeIsCanonical ||
+    !isotonicPolicyIsCanonical
   ) {
-    failures.push(`${modelArtifactSchemaPath}: closed v1 artifact schema with threshold 0.45 is required`);
+    failures.push(
+      `${modelArtifactSchemaPath} and ${trainingPolicyPath}: closed v1 artifact schema with threshold 0.45, nested Platt/Isotonic calibrators, and exact single-block PAVA floor-lookup policy is required`,
+    );
   }
   return failures;
 }

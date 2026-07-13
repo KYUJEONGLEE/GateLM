@@ -484,6 +484,8 @@ func stringPtr(value string) *string {
 
 func writeTestDifficultyArtifact(t *testing.T, bias float64) string {
 	t.Helper()
+	coefficient := 20.0
+	intercept := -10.0
 	artifact := difficultymodel.Artifact{
 		SchemaVersion:          difficultymodel.ArtifactSchemaVersion,
 		ArtifactVersion:        "difficulty-logistic-v1-test",
@@ -497,8 +499,10 @@ func writeTestDifficultyArtifact(t *testing.T, bias float64) string {
 		Weights:                make([]float64, routing.DifficultyFeatureVectorDimensionV1),
 		CalibrationVersion:     difficultymodel.CalibrationVersion,
 		Calibrator: difficultymodel.Calibrator{
-			Type:  "identity",
-			Input: "raw_probability",
+			Type:        "platt",
+			Input:       "raw_probability",
+			Coefficient: &coefficient,
+			Intercept:   &intercept,
 		},
 		ThresholdPolicyVersion: difficultymodel.ThresholdPolicyVersion,
 		Threshold:              difficultymodel.ThresholdValue,

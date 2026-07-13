@@ -42,7 +42,9 @@ redactedPrompt
 
 주 학습 vector는 실제 category 결과를 사용한다. `expectedCategory`는 category별 집계와 별도 oracle 분석에만 사용한다. Exporter는 hybrid classifier와 같은 precheck로 각 sample에 안전한 boolean `modelPath`를 붙인다. Logistic Regression 학습, calibrator 선택·fit과 model-path calibration holdout 집계는 `modelPath=true`인 표본만 사용한다. Empty/meaningless와 hard-complex sentinel 표본은 end-to-end shadow accuracy와 directional gate에서 별도로 평가하며 model calibration에 섞지 않는다. Exporter의 vector payload와 `modelPath`는 Python subprocess가 메모리에서 소비하며 fixture, report 또는 log로 저장하지 않는다.
 
-Python tooling은 [`../../scripts/routing_difficulty_model/`](../../scripts/routing_difficulty_model/)에 격리한다. Gateway와 AI service production dependency에는 NumPy나 scikit-learn을 추가하지 않는다. Versioned policy는 L2 Logistic Regression regularization group CV, identity/Platt/isotonic global calibrator 비교와 고정 `0.45` threshold를 선언한다.
+Python tooling은 [`../../scripts/routing_difficulty_model/`](../../scripts/routing_difficulty_model/)에 격리한다. Gateway와 AI service production dependency에는 NumPy나 scikit-learn을 추가하지 않는다. Versioned policy는 L2 Logistic Regression regularization group CV, Platt/isotonic global calibrator 비교와 고정 `0.45` threshold를 선언한다. 두 후보는 모두 `raw_probability`를 입력으로 쓰며 평균 log loss, `0.000001` 허용 오차 안의 평균 Brier score, Platt 우선 순서로 선택한다. 한 후보가 실패하면 다른 유효 후보를 사용할 수 있지만 둘 다 실패하면 학습을 실패시키며 identity 또는 무보정 fallback artifact를 만들지 않는다.
+
+Isotonic은 scikit-learn의 선형 interpolation predictor를 artifact 의미로 사용하지 않고 tooling의 작은 PAVA 구현으로 학습한다. Raw probability를 정렬하고 exact-equal 값만 먼저 묶어 sample count와 complex count를 계산한 뒤, 앞 block의 비율이 뒤 block보다 큰 동안 sample-count 가중 병합을 반복한다. `labelConfidence`, epsilon grouping, 고정 score bin과 자동 small-block 병합은 사용하지 않는다. Artifact에는 각 최종 block의 포함 하한과 complex 비율을 저장하며 single constant block도 유효하다. Runtime은 포함 하한 floor lookup과 양끝 clipping만 수행한다.
 
 ## Candidate Training Command
 
@@ -57,9 +59,43 @@ python -m venv .tmp\difficulty-training-venv
   --report-output .tmp\difficulty-training-report.json
 ```
 
-이 명령은 단일 전역 Logistic Regression을 train family로 학습하고, calibration family에서 단일 전역 calibrator를 선택·fit한 뒤 untouched holdout aggregate를 계산한다. Holdout 결과를 model/calibrator 재선택에 사용하지 않는다. Report에는 raw probability, logit, encoded vector 또는 feature contribution을 넣지 않는다.
+이 명령은 단일 전역 Logistic Regression을 train family로 학습하고, calibration family에서 단일 전역 calibrator를 선택한 뒤 선택된 후보만 calibration 전체로 한 번 fit하고 untouched holdout aggregate를 계산한다. Holdout 결과를 model/calibrator 재선택에 사용하지 않는다. Report에는 후보별 평균 log loss와 Brier score, Isotonic CV fold별 block count와 최소 block 표본 수, 선택된 Isotonic 전체 fit의 block count와 block sample count만 둘 수 있다. Raw probability, logit, score 경계, encoded vector 또는 feature contribution을 넣지 않는다.
 
 ## Artifact And Go Code Generation
+
+Artifact에는 모호한 최상위 `calibratorType`을 추가하지 않는다. 실제로 선택된 종류는 `calibrator.type`에 기록하고, 같은 `calibrator` 객체에는 해당 종류에 필요한 parameter만 둔다. Canonical calibration 부분은 다음 두 형태 중 하나다.
+
+Platt가 선택된 경우:
+
+```json
+{
+  "calibrationVersion": "difficulty-calibration-v1",
+  "calibrator": {
+    "type": "platt",
+    "input": "raw_probability",
+    "coefficient": 1.24,
+    "intercept": -0.31
+  },
+  "threshold": 0.45
+}
+```
+
+Isotonic이 선택된 경우:
+
+```json
+{
+  "calibrationVersion": "difficulty-calibration-v1",
+  "calibrator": {
+    "type": "isotonic",
+    "input": "raw_probability",
+    "xThresholds": [0.10, 0.20, 0.50],
+    "yThresholds": [0.0, 0.3333333333333333, 1.0]
+  },
+  "threshold": 0.45
+}
+```
+
+Isotonic의 `xThresholds[i]`는 block의 포함 하한이다. `xThresholds[i] <= raw_probability < xThresholds[i+1]`이면 `yThresholds[i]`를 반환하고 첫 경계 미만과 마지막 경계 이상은 양끝 값으로 clip한다. 배열은 길이가 같고 x는 strictly increasing, y는 non-decreasing이며 길이 1의 constant calibrator도 허용한다. Schema의 `oneOf`와 닫힌 객체 규칙은 Platt에 isotonic threshold가 섞이거나 Isotonic에 Platt coefficient가 섞이는 artifact를 거부한다. Code generation도 이 tagged union과 parameter를 검증하며, `calibratorType`과 identity calibrator를 거부한다.
 
 Candidate JSON은 [`../v2.1.0/schemas/difficulty-model-artifact.schema.json`](../v2.1.0/schemas/difficulty-model-artifact.schema.json)을 따른다. JSON은 offline provenance와 coefficient를 보존하는 교환 artifact이며 Gateway hot path에서 파싱하지 않는다.
 
@@ -91,7 +127,8 @@ Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + com
 - deterministic sentinel과 Logistic Regression `modelPath` 학습·calibration 분리
 - 작은 in-memory synthetic matrix의 Logistic Regression/calibrator fit
 - Python artifact hash와 Go code generator parity
-- stable sigmoid, Platt와 isotonic Go inference
+- stable sigmoid, Platt 공식과 포함 하한 Isotonic 계단 lookup의 Python-Go 공통 golden parity
+- PAVA exact-tie grouping, sample-count 가중 cascade merge, block 진단과 single-block inference
 - 잘못된 feature order/count, threshold, calibrator와 content hash의 codegen 거부
 - meaningless/hard-complex sentinel 우선순위와 remaining-request model path
 - opt-in shadow artifact load, runtime 비교, 긴 simple·짧은 complex segment와 민감 material 비노출

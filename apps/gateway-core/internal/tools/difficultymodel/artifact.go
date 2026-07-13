@@ -64,6 +64,17 @@ type Calibrator struct {
 }
 
 func ParseArtifact(payload []byte) (Artifact, error) {
+	var topLevelFields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &topLevelFields); err != nil {
+		return Artifact{}, fmt.Errorf("decode model artifact: %w", err)
+	}
+	if _, exists := topLevelFields["calibratorType"]; exists {
+		return Artifact{}, errors.New("model artifact must use nested calibrator.type, not calibratorType")
+	}
+	if err := validateCalibratorJSONShape(topLevelFields["calibrator"]); err != nil {
+		return Artifact{}, err
+	}
+
 	var artifact Artifact
 	decoder := json.NewDecoder(strings.NewReader(string(payload)))
 	if err := decoder.Decode(&artifact); err != nil {
@@ -73,6 +84,39 @@ func ParseArtifact(payload []byte) (Artifact, error) {
 		return Artifact{}, err
 	}
 	return artifact, nil
+}
+
+func validateCalibratorJSONShape(payload json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if len(payload) == 0 || json.Unmarshal(payload, &fields) != nil {
+		return errors.New("model artifact calibrator must be an object")
+	}
+	var kind string
+	if err := json.Unmarshal(fields["type"], &kind); err != nil {
+		return errors.New("model artifact calibrator type is required")
+	}
+	expected := map[string]struct{}{}
+	switch kind {
+	case "platt":
+		for _, name := range []string{"type", "input", "coefficient", "intercept"} {
+			expected[name] = struct{}{}
+		}
+	case "isotonic":
+		for _, name := range []string{"type", "input", "xThresholds", "yThresholds"} {
+			expected[name] = struct{}{}
+		}
+	default:
+		return fmt.Errorf("unsupported calibrator type %q", kind)
+	}
+	if len(fields) != len(expected) {
+		return fmt.Errorf("%s calibrator must contain only its canonical fields", kind)
+	}
+	for name := range expected {
+		if _, exists := fields[name]; !exists {
+			return fmt.Errorf("%s calibrator must contain only its canonical fields", kind)
+		}
+	}
+	return nil
 }
 
 func ValidateArtifact(artifact Artifact) error {
@@ -98,7 +142,7 @@ func ValidateArtifact(artifact Artifact) error {
 		return errors.New("model artifact bias is not finite")
 	}
 	if artifact.CalibrationVersion != CalibrationVersion || artifact.Calibrator.Input != "raw_probability" {
-		return errors.New("model artifact calibration identity mismatch")
+		return errors.New("model artifact calibration version or input mismatch")
 	}
 	if err := validateCalibrator(artifact.Calibrator); err != nil {
 		return err
@@ -118,10 +162,6 @@ func ValidateArtifact(artifact Artifact) error {
 
 func validateCalibrator(calibrator Calibrator) error {
 	switch calibrator.Type {
-	case "identity":
-		if calibrator.Coefficient != nil || calibrator.Intercept != nil || len(calibrator.XThresholds) != 0 || len(calibrator.YThresholds) != 0 {
-			return errors.New("identity calibrator must not contain parameters")
-		}
 	case "platt":
 		if calibrator.Coefficient == nil || calibrator.Intercept == nil || !finite(*calibrator.Coefficient) || !finite(*calibrator.Intercept) {
 			return errors.New("platt calibrator parameters are invalid")
@@ -130,7 +170,7 @@ func validateCalibrator(calibrator Calibrator) error {
 			return errors.New("platt calibrator must not contain isotonic thresholds")
 		}
 	case "isotonic":
-		if calibrator.Coefficient != nil || calibrator.Intercept != nil || len(calibrator.XThresholds) < 2 || len(calibrator.XThresholds) != len(calibrator.YThresholds) {
+		if calibrator.Coefficient != nil || calibrator.Intercept != nil || len(calibrator.XThresholds) < 1 || len(calibrator.XThresholds) != len(calibrator.YThresholds) {
 			return errors.New("isotonic calibrator thresholds are invalid")
 		}
 		for index := range calibrator.XThresholds {
@@ -232,8 +272,6 @@ func RenderGo(artifact Artifact, packageName string) ([]byte, error) {
 
 func calibratorConstant(kind string) string {
 	switch kind {
-	case "identity":
-		return "difficultyCalibratorIdentity"
 	case "platt":
 		return "difficultyCalibratorPlatt"
 	case "isotonic":

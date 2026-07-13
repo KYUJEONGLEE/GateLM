@@ -14,7 +14,7 @@ func TestDifficultyClassifierUsesDeterministicSentinelsBeforeModel(t *testing.T)
 		ContentHash:     "sha256:test",
 		Bias:            -100,
 		Weights:         make([]float64, DifficultyFeatureVectorDimensionV1),
-		Calibrator:      DifficultyCalibratorMaterial{Kind: string(difficultyCalibratorIdentity)},
+		Calibrator:      testPlattCalibratorMaterial(),
 		Threshold:       difficultyThresholdV1,
 	})
 
@@ -63,7 +63,7 @@ func TestDifficultyClassifierDoesNotApplyBoundedSimpleRuleAfterHardRules(t *test
 		ContentHash:     "sha256:test",
 		Bias:            100,
 		Weights:         make([]float64, DifficultyFeatureVectorDimensionV1),
-		Calibrator:      DifficultyCalibratorMaterial{Kind: string(difficultyCalibratorIdentity)},
+		Calibrator:      testPlattCalibratorMaterial(),
 		Threshold:       difficultyThresholdV1,
 	})
 
@@ -71,7 +71,7 @@ func TestDifficultyClassifierDoesNotApplyBoundedSimpleRuleAfterHardRules(t *test
 	if baseline := NewRuleBasedDifficultyClassifier().ClassifyFeatures(features); baseline.Difficulty != DifficultySimple {
 		t.Fatalf("test setup requires bounded-simple baseline, got %#v", baseline)
 	}
-	if actual := classifier.ClassifyFeatures(features); actual.ComplexityScore != 1 || actual.Difficulty != DifficultyComplex {
+	if actual := classifier.ClassifyFeatures(features); actual.ComplexityScore <= difficultyThresholdV1 || actual.Difficulty != DifficultyComplex {
 		t.Fatalf("hybrid classifier must defer bounded requests to the model, got %#v", actual)
 	}
 }
@@ -84,7 +84,7 @@ func TestNewDifficultyClassifierRejectsInvalidInferenceMaterial(t *testing.T) {
 		ContentHash:     "sha256:test",
 		Bias:            0,
 		Weights:         make([]float64, DifficultyFeatureVectorDimensionV1),
-		Calibrator:      DifficultyCalibratorMaterial{Kind: string(difficultyCalibratorIdentity)},
+		Calibrator:      testPlattCalibratorMaterial(),
 		Threshold:       difficultyThresholdV1,
 	}
 
@@ -122,6 +122,13 @@ func TestNewDifficultyClassifierRejectsInvalidInferenceMaterial(t *testing.T) {
 			wantError: "global 0.45",
 		},
 		{
+			name: "identity calibrator",
+			mutate: func(material *DifficultyClassifierMaterial) {
+				material.Calibrator = DifficultyCalibratorMaterial{Kind: "identity"}
+			},
+			wantError: "unsupported difficulty calibrator",
+		},
+		{
 			name: "unknown calibrator",
 			mutate: func(material *DifficultyClassifierMaterial) {
 				material.Calibrator.Kind = "category-specific"
@@ -150,4 +157,14 @@ func newTestDifficultyClassifier(t *testing.T, material DifficultyClassifierMate
 		t.Fatalf("NewDifficultyClassifier() returned error: %v", err)
 	}
 	return classifier
+}
+
+func testPlattCalibratorMaterial() DifficultyCalibratorMaterial {
+	coefficient := 20.0
+	intercept := -10.0
+	return DifficultyCalibratorMaterial{
+		Kind:             string(difficultyCalibratorPlatt),
+		PlattCoefficient: &coefficient,
+		PlattIntercept:   &intercept,
+	}
 }

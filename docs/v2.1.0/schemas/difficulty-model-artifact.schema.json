@@ -41,16 +41,8 @@
     },
     "calibrationVersion": { "const": "difficulty-calibration-v1" },
     "calibrator": {
+      "description": "The selected calibrator and only the parameters required by that calibrator. There is no top-level calibratorType field or identity fallback.",
       "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "type": { "const": "identity" },
-            "input": { "const": "raw_probability" }
-          },
-          "required": ["type", "input"]
-        },
         {
           "type": "object",
           "additionalProperties": false,
@@ -70,16 +62,32 @@
             "input": { "const": "raw_probability" },
             "xThresholds": {
               "type": "array",
-              "minItems": 2,
+              "description": "Strictly increasing inclusive lower raw_probability boundary for each PAVA block. Runtime uses floor lookup and clips outside the observed range.",
+              "minItems": 1,
               "items": { "type": "number", "minimum": 0, "maximum": 1 }
             },
             "yThresholds": {
               "type": "array",
-              "minItems": 2,
+              "description": "Monotonically non-decreasing complex-label ratio for the corresponding PAVA block.",
+              "minItems": 1,
               "items": { "type": "number", "minimum": 0, "maximum": 1 }
             }
           },
           "required": ["type", "input", "xThresholds", "yThresholds"]
+        }
+      ],
+      "examples": [
+        {
+          "type": "platt",
+          "input": "raw_probability",
+          "coefficient": 1.24,
+          "intercept": -0.31
+        },
+        {
+          "type": "isotonic",
+          "input": "raw_probability",
+          "xThresholds": [0.1, 0.2, 0.5],
+          "yThresholds": [0.0, 0.3333333333333333, 1.0]
         }
       ]
     },

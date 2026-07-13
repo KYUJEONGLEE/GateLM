@@ -6,7 +6,7 @@
 | Applies to | General Gateway category and difficulty classification hot path |
 | Canonical implementation | Go structs and deterministic local inference |
 | Active entrypoint | [`README.md`](README.md) |
-| Last verified | 2026-07-13 |
+| Last verified | 2026-07-14 |
 
 이 문서는 일반 Gateway에서 앞으로 사용하는 category·difficulty 분류 구현 구조를 정의한다. Category와 difficulty의 의미, 허용 값, routing policy 연결은 [`contracts.md`](contracts.md)가 정의하고, 이 문서는 그 의미를 계산하는 canonical 내부 파이프라인을 정의한다. Logistic Regression 입력 encoder의 exact v1 계약은 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가 정의한다.
 
@@ -88,6 +88,8 @@ remaining DifficultyFeatures
 
 정확한 feature 순서, 숫자 정규화, bucket/enum encoding과 category zero-fill은 `difficulty-feature-vector.v1`로 고정한다. Coefficient, intercept, regularization/solver 설정, model artifact hash와 calibrator parameter는 offline evidence 이후 별도의 immutable artifact version과 content hash로 고정한다. `difficulty-logistic-v1`과 `difficulty-calibration-v1`은 각각 model family와 calibrator 선택·검증 절차를 정의하는 policy version이며 아직 존재하지 않는 artifact가 구현됐음을 뜻하지 않는다.
 
+Platt와 Isotonic은 둘 다 Logistic Regression의 미보정 `raw_probability`를 입력으로 사용하고 연속 적용하지 않는다. Platt는 `sigmoid(coefficient × raw_probability + intercept)`를 계산한다. Isotonic은 exact-equal raw probability를 sample count로 묶은 뒤 인접 complex 비율 위반을 PAVA로 병합한다. Artifact의 `xThresholds`는 각 block의 포함 하한이며 runtime은 `xThresholds[i] <= raw_probability < xThresholds[i+1]`인 `yThresholds[i]`를 반환하는 계단형 floor lookup과 양끝 clipping을 사용한다. 선형 보간, 고정 score bin, epsilon grouping, label-confidence weighting과 자동 small-block 병합은 사용하지 않는다. PAVA가 하나의 constant block만 만들어도 유효하다.
+
 초기 global threshold policy는 `difficulty-threshold-v1 = 0.45`다. `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다. `0.45`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 향후 evidence가 다른 값을 지지하면 v1을 수정하지 않고 새 global threshold policy version을 만든다. Request, tenant, RuntimeConfig, RuntimeSnapshot, 환경변수 또는 runtime caller가 threshold를 덮어쓰지 못한다.
 
 Runtime inference는 `float64`, 고정 feature order/encoding, 고정 coefficient/intercept, 고정 sigmoid와 calibrator implementation을 사용한다. 판정 전에 표시용 반올림을 하지 않으며 같은 versioned artifact와 입력은 지원되는 Go runtime에서 같은 score와 difficulty를 만들어야 한다. 외부 LLM, embedding, network, clock, randomness, runtime 재학습 또는 자동 보정을 사용하지 않는다. `NaN`, infinity 또는 `0.0~1.0` 밖 값을 만들 수 있는 artifact는 승격하지 않는다. 이 계약은 다른 언어와 CPU 사이의 bit-for-bit 동일성을 약속하지 않는다.
@@ -150,7 +152,7 @@ Offline evaluation은 synthetic 또는 안전하게 redacted된 approved data에
 - 외부 계약으로 사용하는 `complexity_score`
 - score의 API, DB, Event, Metrics 또는 제품 diagnostics 노출
 
-`train`은 단일 Logistic Regression 학습에, `calibration`은 전역 calibrator 선택·학습에, untouched `holdout`은 final gate에만 사용한다. 같은 prompt family나 단순 변형을 split 사이에 나누지 않는다. Calibrator는 calibration split 내부의 deterministic family-grouped cross-validation에서 평균 log loss, 허용 오차 안의 Brier score, versioned 단순성 순서로 선택하며 identity calibrator를 baseline 후보에 포함한다. 선택 후 calibration 전체로 다시 fit하고 holdout을 본 뒤 model, encoder 또는 calibrator를 재선택하지 않는다.
+`train`은 단일 Logistic Regression 학습에, `calibration`은 전역 calibrator 선택·학습에, untouched `holdout`은 final gate에만 사용한다. 같은 prompt family나 단순 변형을 split 사이에 나누지 않는다. Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용한다. Calibration split 내부의 deterministic family-grouped cross-validation에서 평균 log loss를 먼저 비교하고 `0.000001` 허용 오차 안이면 평균 Brier score, 그래도 같으면 Platt 순서로 선택한다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보 하나만 calibration 전체로 한 번 다시 fit하고 holdout을 본 뒤 model, encoder 또는 calibrator를 재선택하지 않는다. Isotonic CV report에는 fold별 block count와 최소 block 표본 수만 두고, 선택된 Isotonic의 전체 calibration fit에는 block count와 block sample count만 둘 수 있다. Raw probability, logit과 score 경계는 report에 두지 않는다.
 
 Holdout에서 sentinel을 포함한 end-to-end candidate의 전체 및 각 category `complex -> simple` count/rate가 현재 rule-based baseline보다 증가하면 runtime으로 승격하지 않는다. Model path만의 전체 및 category별 log loss, Brier score와 reliability bin, sentinel을 포함한 directional error, oracle-category와 end-to-end 결과, 긴 simple과 짧은 complex segment를 함께 보고한다. Score의 외부 노출은 이 구현 문서만으로 허용하지 않는다.
 
@@ -166,6 +168,8 @@ Holdout에서 sentinel을 포함한 end-to-end candidate의 전체 및 각 categ
 - Hybrid `ComplexityScore`는 model path의 finite inclusive `0.0~1.0` calibrated estimate 또는 deterministic `0.0`/`1.0` sentinel로만 존재한다.
 - Raw probability와 logit은 `DifficultyResult`, 제품 surface 또는 offline report에 노출되지 않는다.
 - 하나의 전역 Logistic Regression, 전역 calibrator와 전역 `0.45` threshold만 사용한다.
+- Platt와 Isotonic을 calibration family group CV에서 비교하되 선택된 하나만 artifact와 inference에 둔다.
+- Isotonic은 포함 하한 기반 계단형 floor lookup이며 선형 보간하지 않고 single-block artifact도 허용한다.
 - `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다.
 - 비었거나 의미 없는 입력은 sentinel `0.0 + simple`이다.
 - 명백한 hard-complex 구조 evidence는 sentinel `1.0 + complex`다.

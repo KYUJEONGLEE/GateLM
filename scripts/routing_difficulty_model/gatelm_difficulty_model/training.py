@@ -10,6 +10,7 @@ from typing import Any, Callable
 ARTIFACT_SCHEMA_VERSION = "gatelm.difficulty-model-artifact.v1"
 CONTENT_HASH_ALGORITHM = "difficulty-model-inference-material.v1"
 THRESHOLD_POLICY_VERSION = "difficulty-threshold-v1"
+CALIBRATOR_CANDIDATES = ("platt", "isotonic")
 
 
 def _float_bits(value: float) -> str:
@@ -139,13 +140,10 @@ def _fit_calibrator(
     raw_probabilities: Any,
     labels: Any,
     config: dict[str, Any],
-) -> tuple[Callable[[Any], Any], dict[str, Any]]:
+) -> tuple[Callable[[Any], Any], dict[str, Any], dict[str, Any]]:
     import numpy as np
 
-    raw = np.asarray(raw_probabilities, dtype=float)
-    y = np.asarray(labels, dtype=int)
-    if kind == "identity":
-        return lambda values: np.asarray(values, dtype=float), {"type": "identity", "input": "raw_probability"}
+    raw, y = _calibration_arrays(raw_probabilities, labels)
     if kind == "platt":
         from sklearn.linear_model import LogisticRegression
 
@@ -160,24 +158,150 @@ def _fit_calibrator(
             "coefficient": float(platt.coef_[0][0]),
             "intercept": float(platt.intercept_[0]),
         }
-        return lambda values: platt.predict_proba(np.asarray(values).reshape(-1, 1))[:, 1], material
+        return (
+            lambda values: _apply_platt(
+                values,
+                material["coefficient"],
+                material["intercept"],
+            ),
+            material,
+            {},
+        )
     if kind == "isotonic":
-        from sklearn.isotonic import IsotonicRegression
-
-        isotonic = IsotonicRegression(out_of_bounds=config["isotonic"]["outOfBounds"]).fit(raw, y)
+        x_thresholds, y_thresholds, block_sample_counts = _fit_isotonic_pava(raw, y)
         material = {
             "type": "isotonic",
             "input": "raw_probability",
-            "xThresholds": [float(value) for value in isotonic.X_thresholds_],
-            "yThresholds": [float(value) for value in isotonic.y_thresholds_],
+            "xThresholds": x_thresholds,
+            "yThresholds": y_thresholds,
         }
-        return lambda values: isotonic.predict(np.asarray(values, dtype=float)), material
+        diagnostics = {
+            "blockCount": len(block_sample_counts),
+            "blockSampleCounts": block_sample_counts,
+            "minBlockSampleCount": min(block_sample_counts),
+        }
+        return (
+            lambda values: _apply_isotonic_blocks(values, x_thresholds, y_thresholds),
+            material,
+            diagnostics,
+        )
     raise ValueError(f"unsupported calibrator candidate {kind!r}")
+
+
+def _calibration_arrays(raw_probabilities: Any, labels: Any) -> tuple[Any, Any]:
+    import numpy as np
+
+    raw = np.asarray(raw_probabilities, dtype=float)
+    label_values = np.asarray(labels)
+    if raw.ndim != 1 or label_values.ndim != 1 or len(raw) == 0 or len(raw) != len(label_values):
+        raise ValueError("calibrator fit requires non-empty aligned one-dimensional inputs")
+    if not np.all(np.isfinite(raw)) or np.any(raw < 0) or np.any(raw > 1):
+        raise ValueError("calibrator raw probabilities must be finite inclusive probabilities")
+    if not np.all(np.isin(label_values, (0, 1))):
+        raise ValueError("calibrator labels must be binary")
+    return raw, label_values.astype(int)
+
+
+def _apply_platt(values: Any, coefficient: float, intercept: float) -> Any:
+    import numpy as np
+
+    raw = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(raw)) or not math.isfinite(coefficient) or not math.isfinite(intercept):
+        raise ValueError("Platt lookup requires finite input and parameters")
+    logits = coefficient * raw + intercept
+    calibrated = np.empty_like(logits, dtype=float)
+    non_negative = logits >= 0
+    calibrated[non_negative] = 1 / (1 + np.exp(-logits[non_negative]))
+    exponential = np.exp(logits[~non_negative])
+    calibrated[~non_negative] = exponential / (1 + exponential)
+    return calibrated
+
+
+def _fit_isotonic_pava(raw_probabilities: Any, labels: Any) -> tuple[list[float], list[float], list[int]]:
+    import numpy as np
+
+    raw, y = _calibration_arrays(raw_probabilities, labels)
+    order = np.argsort(raw, kind="stable")
+    grouped: list[dict[str, float | int]] = []
+    for index in order:
+        raw_value = float(raw[index])
+        label = int(y[index])
+        if grouped and raw_value == grouped[-1]["lowerBound"]:
+            grouped[-1]["sampleCount"] = int(grouped[-1]["sampleCount"]) + 1
+            grouped[-1]["positiveCount"] = int(grouped[-1]["positiveCount"]) + label
+            continue
+        grouped.append(
+            {
+                "lowerBound": raw_value,
+                "sampleCount": 1,
+                "positiveCount": label,
+            }
+        )
+
+    blocks: list[dict[str, float | int]] = []
+    for group in grouped:
+        blocks.append(dict(group))
+        while len(blocks) >= 2:
+            left = blocks[-2]
+            right = blocks[-1]
+            left_rate = int(left["positiveCount"]) / int(left["sampleCount"])
+            right_rate = int(right["positiveCount"]) / int(right["sampleCount"])
+            if left_rate <= right_rate:
+                break
+            blocks[-2:] = [
+                {
+                    "lowerBound": float(left["lowerBound"]),
+                    "sampleCount": int(left["sampleCount"]) + int(right["sampleCount"]),
+                    "positiveCount": int(left["positiveCount"]) + int(right["positiveCount"]),
+                }
+            ]
+
+    x_thresholds = [float(block["lowerBound"]) for block in blocks]
+    block_sample_counts = [int(block["sampleCount"]) for block in blocks]
+    y_thresholds = [
+        int(block["positiveCount"]) / int(block["sampleCount"])
+        for block in blocks
+    ]
+    return x_thresholds, y_thresholds, block_sample_counts
+
+
+def _apply_isotonic_blocks(values: Any, x_thresholds: list[float], y_thresholds: list[float]) -> Any:
+    import numpy as np
+
+    if len(x_thresholds) == 0 or len(x_thresholds) != len(y_thresholds):
+        raise ValueError("isotonic lookup requires aligned non-empty thresholds")
+    raw = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(raw)):
+        raise ValueError("isotonic lookup values must be finite")
+    x = np.asarray(x_thresholds, dtype=float)
+    y = np.asarray(y_thresholds, dtype=float)
+    indices = np.searchsorted(x, raw, side="right") - 1
+    return y[np.clip(indices, 0, len(x) - 1)]
+
+
+def _validate_calibration_config(config: dict[str, Any]) -> None:
+    expected = list(CALIBRATOR_CANDIDATES)
+    if config.get("candidates") != expected:
+        raise ValueError("calibration candidates must be exactly platt then isotonic")
+    if config.get("simplicityOrder") != expected:
+        raise ValueError("calibration simplicity order must prefer platt then isotonic")
+    isotonic = config.get("isotonic", {})
+    expected_isotonic = {
+        "algorithm": "pava",
+        "tieGrouping": "exact_float64",
+        "weighting": "sample_count",
+        "lookup": "inclusive_lower_floor",
+        "outOfBounds": "clip",
+        "smallBlockMerge": "disabled",
+    }
+    if isotonic != expected_isotonic:
+        raise ValueError("isotonic policy must use exact sample-weighted PAVA floor lookup without small-block merging")
 
 
 def _select_calibrator(raw: Any, y: Any, groups: Any, config: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     import numpy as np
 
+    _validate_calibration_config(config)
     splitter = _group_folds(groups, config["groupFolds"])
     simplicity = {name: index for index, name in enumerate(config["simplicityOrder"])}
     evaluations: list[dict[str, Any]] = []
@@ -185,15 +309,33 @@ def _select_calibrator(raw: Any, y: Any, groups: Any, config: dict[str, Any]) ->
     selected_metrics: dict[str, float] | None = None
     selected_tie: tuple[Any, ...] | None = None
     for kind in config["candidates"]:
-        fold_metrics = []
-        for fit_indices, validation_indices in splitter.split(raw, y, groups):
-            apply, _ = _fit_calibrator(kind, raw[fit_indices], y[fit_indices], config)
-            fold_metrics.append(_metrics(y[validation_indices], apply(raw[validation_indices])))
+        try:
+            fold_metrics = []
+            fold_diagnostics = []
+            for fit_indices, validation_indices in splitter.split(raw, y, groups):
+                apply, _, diagnostics = _fit_calibrator(kind, raw[fit_indices], y[fit_indices], config)
+                metrics = _metrics(y[validation_indices], apply(raw[validation_indices]))
+                if not all(math.isfinite(value) for value in metrics.values()):
+                    raise ValueError("calibrator validation metrics must be finite")
+                fold_metrics.append(metrics)
+                if kind == "isotonic":
+                    fold_diagnostics.append(
+                        {
+                            "blockCount": diagnostics["blockCount"],
+                            "minBlockSampleCount": diagnostics["minBlockSampleCount"],
+                        }
+                    )
+        except (ValueError, ArithmeticError):
+            evaluations.append({"type": kind, "status": "failed"})
+            continue
         candidate = {
             "type": kind,
+            "status": "valid",
             "logLoss": float(np.mean([item["logLoss"] for item in fold_metrics])),
             "brierScore": float(np.mean([item["brierScore"] for item in fold_metrics])),
         }
+        if kind == "isotonic":
+            candidate["foldDiagnostics"] = fold_diagnostics
         evaluations.append(candidate)
         score = {"logLoss": candidate["logLoss"], "brierScore": candidate["brierScore"]}
         tie = (simplicity[kind],)
@@ -202,8 +344,32 @@ def _select_calibrator(raw: Any, y: Any, groups: Any, config: dict[str, Any]) ->
             selected_metrics = score
             selected_tie = tie
     if selected_kind is None:
-        raise ValueError("calibrator selection produced no candidate")
+        raise ValueError("all configured calibrator candidates failed validation")
     return selected_kind, evaluations
+
+
+def _fit_selected_calibrator(
+    selected_kind: str,
+    evaluations: list[dict[str, Any]],
+    raw: Any,
+    y: Any,
+    config: dict[str, Any],
+) -> tuple[str, Callable[[Any], Any], dict[str, Any], dict[str, Any]]:
+    valid_fallbacks = [
+        evaluation["type"]
+        for evaluation in evaluations
+        if evaluation.get("status") == "valid" and evaluation["type"] != selected_kind
+    ]
+    for kind in [selected_kind, *valid_fallbacks]:
+        try:
+            apply, material, diagnostics = _fit_calibrator(kind, raw, y, config)
+        except (ValueError, ArithmeticError):
+            evaluation = next(item for item in evaluations if item["type"] == kind)
+            evaluation["status"] = "failed"
+            evaluation["failureStage"] = "final_fit"
+            continue
+        return kind, apply, material, diagnostics
+    raise ValueError("all configured calibrator candidates failed final fit")
 
 
 def _validate_vector_export(export: dict[str, Any], policy: dict[str, Any]) -> None:
@@ -237,6 +403,7 @@ def train_from_vector_export(
     import numpy as np
 
     _validate_vector_export(export, policy)
+    _validate_calibration_config(policy["calibration"])
     samples_by_split = {
         split: [sample for sample in export["samples"] if sample["split"] == split]
         for split in ("train", "calibration", "holdout")
@@ -268,8 +435,12 @@ def train_from_vector_export(
     calibrator_kind, calibration_evaluations = _select_calibrator(
         calibration_raw, calibration_y, calibration_groups, policy["calibration"]
     )
-    apply_calibrator, calibrator_material = _fit_calibrator(
-        calibrator_kind, calibration_raw, calibration_y, policy["calibration"]
+    calibrator_kind, apply_calibrator, calibrator_material, calibrator_diagnostics = _fit_selected_calibrator(
+        calibrator_kind,
+        calibration_evaluations,
+        calibration_raw,
+        calibration_y,
+        policy["calibration"],
     )
 
     artifact = {
@@ -309,6 +480,16 @@ def train_from_vector_export(
             "samples": len(indices),
             **_metrics(holdout_y[indices], holdout_scores[indices]),
         }
+    calibration_selection = {
+        "selectedType": calibrator_kind,
+        "candidates": calibration_evaluations,
+    }
+    if calibrator_kind == "isotonic":
+        calibration_selection["selectedFit"] = {
+            "blockCount": calibrator_diagnostics["blockCount"],
+            "blockSampleCounts": calibrator_diagnostics["blockSampleCounts"],
+        }
+
     report = {
         "schemaVersion": "gatelm.difficulty-training-report.v1",
         "artifactVersion": artifact_version,
@@ -331,10 +512,7 @@ def train_from_vector_export(
             "selectedC": selected_c,
             "candidates": regularization_evaluations,
         },
-        "calibrationSelection": {
-            "selectedType": calibrator_kind,
-            "candidates": calibration_evaluations,
-        },
+        "calibrationSelection": calibration_selection,
         "holdout": {
             "overall": {"samples": len(holdout_samples), **_metrics(holdout_y, holdout_scores)},
             "byExpectedCategory": by_category,

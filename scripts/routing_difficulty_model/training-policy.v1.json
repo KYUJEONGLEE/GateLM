@@ -17,19 +17,24 @@
   },
   "calibration": {
     "policyVersion": "difficulty-calibration-v1",
-    "candidates": ["identity", "platt", "isotonic"],
+    "candidates": ["platt", "isotonic"],
     "groupFolds": 5,
     "selectionMetric": "mean_log_loss",
     "tieTolerance": 0.000001,
     "tieBreakers": ["mean_brier_score", "simplicity_order"],
-    "simplicityOrder": ["identity", "platt", "isotonic"],
+    "simplicityOrder": ["platt", "isotonic"],
     "platt": {
       "solver": "lbfgs",
       "c": 1000000.0,
       "maxIterations": 2000
     },
     "isotonic": {
-      "outOfBounds": "clip"
+      "algorithm": "pava",
+      "tieGrouping": "exact_float64",
+      "weighting": "sample_count",
+      "lookup": "inclusive_lower_floor",
+      "outOfBounds": "clip",
+      "smallBlockMerge": "disabled"
     }
   },
   "threshold": {

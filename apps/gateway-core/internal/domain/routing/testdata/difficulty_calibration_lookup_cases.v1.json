@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "gatelm.difficulty-calibration-lookup-cases.v1",
+  "isotonic": {
+    "xThresholds": [0.2, 0.5, 0.8],
+    "yThresholds": [0.1, 0.4, 0.9],
+    "cases": [
+      { "name": "below first boundary", "input": 0.0, "expected": 0.1 },
+      { "name": "at first boundary", "input": 0.2, "expected": 0.1 },
+      { "name": "immediately below second boundary", "input": 0.49999999999999994, "expected": 0.1 },
+      { "name": "at second boundary", "input": 0.5, "expected": 0.4 },
+      { "name": "between boundaries without interpolation", "input": 0.65, "expected": 0.4 },
+      { "name": "immediately below third boundary", "input": 0.7999999999999999, "expected": 0.4 },
+      { "name": "at third boundary", "input": 0.8, "expected": 0.9 },
+      { "name": "above last boundary", "input": 1.0, "expected": 0.9 }
+    ]
+  },
+  "singleBlockIsotonic": {
+    "xThresholds": [0.35],
+    "yThresholds": [0.6],
+    "cases": [
+      { "name": "single block below", "input": 0.0, "expected": 0.6 },
+      { "name": "single block at boundary", "input": 0.35, "expected": 0.6 },
+      { "name": "single block above", "input": 1.0, "expected": 0.6 }
+    ]
+  },
+  "platt": {
+    "coefficient": 2.0,
+    "intercept": -1.0,
+    "cases": [
+      { "name": "platt lower endpoint", "input": 0.0, "expected": 0.2689414213699951 },
+      { "name": "platt midpoint", "input": 0.5, "expected": 0.5 },
+      { "name": "platt upper endpoint", "input": 1.0, "expected": 0.7310585786300049 }
+    ]
+  }
+}

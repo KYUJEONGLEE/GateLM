@@ -94,7 +94,137 @@ func TestValidateArtifactRejectsInvalidIsotonicMaterial(t *testing.T) {
 	}
 }
 
+func TestValidateArtifactAcceptsSingleBlockIsotonicMaterial(t *testing.T) {
+	t.Parallel()
+	artifact := validArtifact()
+	artifact.Calibrator = Calibrator{
+		Type:        "isotonic",
+		Input:       "raw_probability",
+		XThresholds: []float64{0.35},
+		YThresholds: []float64{0.6},
+	}
+	artifact.ContentHash = ContentHash(artifact)
+	if err := ValidateArtifact(artifact); err != nil {
+		t.Fatalf("single-block isotonic artifact was rejected: %v", err)
+	}
+	generated, err := RenderGo(artifact, "routing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(generated), "isotonicX: []float64{") ||
+		!strings.Contains(string(generated), "isotonicY: []float64{") {
+		t.Fatalf("generated Go is missing single-block isotonic material:\n%s", generated)
+	}
+}
+
+func TestValidateArtifactRejectsEmptyIsotonicMaterial(t *testing.T) {
+	t.Parallel()
+	artifact := validArtifact()
+	artifact.Calibrator = Calibrator{Type: "isotonic", Input: "raw_probability"}
+	artifact.ContentHash = ContentHash(artifact)
+	if err := ValidateArtifact(artifact); err == nil || !strings.Contains(err.Error(), "thresholds are invalid") {
+		t.Fatalf("empty isotonic material error = %v", err)
+	}
+}
+
+func TestValidateArtifactRejectsIdentityAndMixedCalibratorMaterial(t *testing.T) {
+	t.Parallel()
+	tests := map[string]Calibrator{
+		"identity": {
+			Type:  "identity",
+			Input: "raw_probability",
+		},
+		"platt with isotonic parameters": {
+			Type:        "platt",
+			Input:       "raw_probability",
+			Coefficient: float64Ptr(1.24),
+			Intercept:   float64Ptr(-0.31),
+			XThresholds: []float64{0, 1},
+			YThresholds: []float64{0.1, 0.9},
+		},
+		"isotonic with platt parameters": {
+			Type:        "isotonic",
+			Input:       "raw_probability",
+			Coefficient: float64Ptr(1.24),
+			XThresholds: []float64{0, 1},
+			YThresholds: []float64{0.1, 0.9},
+		},
+	}
+	for name, calibrator := range tests {
+		name := name
+		calibrator := calibrator
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			artifact := validArtifact()
+			artifact.Calibrator = calibrator
+			artifact.ContentHash = ContentHash(artifact)
+			if err := ValidateArtifact(artifact); err == nil {
+				t.Fatal("invalid calibrator material was accepted")
+			}
+		})
+	}
+}
+
+func TestParseArtifactRejectsTopLevelCalibratorType(t *testing.T) {
+	t.Parallel()
+	artifact := validArtifact()
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload = append(payload[:len(payload)-1], []byte(`,"calibratorType":"platt"}`)...)
+	if _, err := ParseArtifact(payload); err == nil || !strings.Contains(err.Error(), "nested calibrator.type") {
+		t.Fatalf("top-level calibratorType error = %v", err)
+	}
+}
+
+func TestParseArtifactRejectsNonCanonicalCalibratorFieldsEvenWhenEmpty(t *testing.T) {
+	t.Parallel()
+	tests := map[string]map[string]any{
+		"platt with empty isotonic field": {
+			"type":        "platt",
+			"input":       "raw_probability",
+			"coefficient": 1.24,
+			"intercept":   -0.31,
+			"xThresholds": []float64{},
+		},
+		"isotonic with null platt field": {
+			"type":        "isotonic",
+			"input":       "raw_probability",
+			"xThresholds": []float64{0.35},
+			"yThresholds": []float64{0.6},
+			"coefficient": nil,
+		},
+	}
+	for name, calibrator := range tests {
+		name := name
+		calibrator := calibrator
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			artifact := validArtifact()
+			payload, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var document map[string]any
+			if err := json.Unmarshal(payload, &document); err != nil {
+				t.Fatal(err)
+			}
+			document["calibrator"] = calibrator
+			payload, err = json.Marshal(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ParseArtifact(payload); err == nil || !strings.Contains(err.Error(), "canonical fields") {
+				t.Fatalf("non-canonical calibrator fields error = %v", err)
+			}
+		})
+	}
+}
+
 func validArtifact() Artifact {
+	coefficient := 1.25
+	intercept := -0.1
 	artifact := Artifact{
 		SchemaVersion:          ArtifactSchemaVersion,
 		ArtifactVersion:        "difficulty-logistic-v1-toy-test",
@@ -111,11 +241,16 @@ func validArtifact() Artifact {
 			GroupFolds:    2,
 			RandomSeed:    1729,
 		},
-		Bias:                   -0.25,
-		FeatureNames:           routing.DifficultyFeatureNamesV1(),
-		Weights:                make([]float64, routing.DifficultyFeatureVectorDimensionV1),
-		CalibrationVersion:     CalibrationVersion,
-		Calibrator:             Calibrator{Type: "identity", Input: "raw_probability"},
+		Bias:               -0.25,
+		FeatureNames:       routing.DifficultyFeatureNamesV1(),
+		Weights:            make([]float64, routing.DifficultyFeatureVectorDimensionV1),
+		CalibrationVersion: CalibrationVersion,
+		Calibrator: Calibrator{
+			Type:        "platt",
+			Input:       "raw_probability",
+			Coefficient: &coefficient,
+			Intercept:   &intercept,
+		},
 		ThresholdPolicyVersion: ThresholdPolicyVersion,
 		Threshold:              ThresholdValue,
 		ContentHashAlgorithm:   ContentHashAlgorithm,
@@ -125,4 +260,8 @@ func validArtifact() Artifact {
 	}
 	artifact.ContentHash = ContentHash(artifact)
 	return artifact
+}
+
+func float64Ptr(value float64) *float64 {
+	return &value
 }

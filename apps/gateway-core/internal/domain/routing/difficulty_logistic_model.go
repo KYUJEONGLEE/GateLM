@@ -9,7 +9,6 @@ import (
 type difficultyCalibratorKind string
 
 const (
-	difficultyCalibratorIdentity difficultyCalibratorKind = "identity"
 	difficultyCalibratorPlatt    difficultyCalibratorKind = "platt"
 	difficultyCalibratorIsotonic difficultyCalibratorKind = "isotonic"
 	difficultyThresholdV1                                 = 0.45
@@ -98,10 +97,6 @@ func newDifficultyLogisticModel(material DifficultyClassifierMaterial) (difficul
 func newDifficultyCalibrator(material DifficultyCalibratorMaterial) (difficultyCalibrator, error) {
 	calibrator := difficultyCalibrator{kind: difficultyCalibratorKind(material.Kind)}
 	switch calibrator.kind {
-	case difficultyCalibratorIdentity:
-		if material.PlattCoefficient != nil || material.PlattIntercept != nil || len(material.IsotonicX) != 0 || len(material.IsotonicY) != 0 {
-			return difficultyCalibrator{}, errors.New("identity difficulty calibrator must not contain parameters")
-		}
 	case difficultyCalibratorPlatt:
 		if material.PlattCoefficient == nil || material.PlattIntercept == nil ||
 			!finiteDifficultyFloat(*material.PlattCoefficient) || !finiteDifficultyFloat(*material.PlattIntercept) ||
@@ -111,7 +106,7 @@ func newDifficultyCalibrator(material DifficultyCalibratorMaterial) (difficultyC
 		calibrator.plattCoefficient = *material.PlattCoefficient
 		calibrator.plattIntercept = *material.PlattIntercept
 	case difficultyCalibratorIsotonic:
-		if material.PlattCoefficient != nil || material.PlattIntercept != nil || len(material.IsotonicX) < 2 || len(material.IsotonicX) != len(material.IsotonicY) {
+		if material.PlattCoefficient != nil || material.PlattIntercept != nil || len(material.IsotonicX) < 1 || len(material.IsotonicX) != len(material.IsotonicY) {
 			return difficultyCalibrator{}, errors.New("isotonic difficulty calibrator thresholds are invalid")
 		}
 		calibrator.isotonicX = append([]float64(nil), material.IsotonicX...)
@@ -171,30 +166,25 @@ func (calibrator difficultyCalibrator) calibrate(rawProbability float64) float64
 	case difficultyCalibratorPlatt:
 		return stableSigmoid(calibrator.plattCoefficient*rawProbability + calibrator.plattIntercept)
 	case difficultyCalibratorIsotonic:
-		return interpolateIsotonic(rawProbability, calibrator.isotonicX, calibrator.isotonicY)
+		return lookupIsotonic(rawProbability, calibrator.isotonicX, calibrator.isotonicY)
 	default:
-		return rawProbability
+		panic("difficulty calibrator kind must be validated before inference")
 	}
 }
 
-func interpolateIsotonic(value float64, x []float64, y []float64) float64 {
-	if value <= x[0] {
+func lookupIsotonic(value float64, x []float64, y []float64) float64 {
+	if value < x[0] {
 		return y[0]
 	}
-	last := len(x) - 1
-	if value >= x[last] {
-		return y[last]
-	}
 	left := 0
-	right := last
-	for right-left > 1 {
+	right := len(x)
+	for left < right {
 		middle := left + (right-left)/2
 		if value < x[middle] {
 			right = middle
 		} else {
-			left = middle
+			left = middle + 1
 		}
 	}
-	ratio := (value - x[left]) / (x[right] - x[left])
-	return y[left] + ratio*(y[right]-y[left])
+	return y[left-1]
 }
