@@ -651,6 +651,7 @@ function assertTenantChatExecutableContract() {
       "/internal/v1/tenant-chat/admissions": ["200", "201", "400", "401", "409", "429", "503"],
       "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
       "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
+      "/internal/v1/tenant-chat/usage-receipts": ["200", "400", "401", "409", "503"],
     };
     const errorStatus = new Map([
       ["CHAT_INVALID_REQUEST", "400"],
@@ -660,6 +661,7 @@ function assertTenantChatExecutableContract() {
       ["CHAT_TENANT_DISABLED", "403"],
       ["CHAT_MEMBERSHIP_DISABLED", "403"],
       ["CHAT_EMPLOYEE_DISABLED", "403"],
+      ["CHAT_SAFETY_BLOCKED", "403"],
       ["CHAT_QUOTA_HARD_LIMIT", "403"],
       ["CHAT_BUDGET_HARD_LIMIT", "403"],
       ["CHAT_POLICY_ACK_REQUIRED", "409"],
