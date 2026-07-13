@@ -968,6 +968,7 @@ model TenantChatUsageReservation {
   unconfirmedExposureMicroUsd BigInt    @default(0) @map("unconfirmed_exposure_micro_usd")
   ledgerVersion               BigInt    @default(0) @map("ledger_version")
   reservedAt                  DateTime  @map("reserved_at") @db.Timestamptz(6)
+  usagePendingAt              DateTime? @map("usage_pending_at") @db.Timestamptz(6)
   terminalAt                  DateTime? @map("terminal_at") @db.Timestamptz(6)
   createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

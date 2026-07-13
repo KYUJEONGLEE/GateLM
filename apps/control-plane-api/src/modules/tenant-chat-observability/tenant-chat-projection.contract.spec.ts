@@ -3,12 +3,16 @@ import { resolve } from 'node:path';
 
 import { validateTenantChatProjectionEvent } from './tenant-chat-projection.contract';
 import invocationTerminalEventSchema = require('./invocation-terminal-event.schema.json');
+import invocationTerminalEventV2Schema = require('./invocation-terminal-event-v2.schema.json');
 import usageSettlementEventSchema = require('./usage-settlement-event.schema.json');
+import usageSettlementEventV2Schema = require('./usage-settlement-event-v2.schema.json');
 
 describe('Tenant Chat projection event contract', () => {
   it.each([
     ['usage settlement', 'usage-settlement-event.schema.json', usageSettlementEventSchema],
     ['invocation terminal', 'invocation-terminal-event.schema.json', invocationTerminalEventSchema],
+    ['usage settlement v2', 'usage-settlement-event-v2.schema.json', usageSettlementEventV2Schema],
+    ['invocation terminal v2', 'invocation-terminal-event-v2.schema.json', invocationTerminalEventV2Schema],
   ])('executes the active %s schema without drift', (_label, fileName, runtimeSchema) => {
     const contractSchema = JSON.parse(
       readFileSync(
@@ -39,6 +43,18 @@ describe('Tenant Chat projection event contract', () => {
     expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
       'projection event schema validation failed',
     );
+  });
+
+  it('accepts a v2 late settlement with a negative unconfirmed delta', () => {
+    const payload = usageSettledEvent();
+    payload.schemaVersion = 2;
+    payload.quota.reservedTokensDelta = 0;
+    payload.quota.unconfirmedTokensDelta = -10;
+    payload.budget.reservedCostMicroUsdDelta = 0;
+    payload.budget.unconfirmedExposureMicroUsdDelta = -10;
+    Object.assign(payload, { lateUsage: true });
+
+    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
   });
 });
 

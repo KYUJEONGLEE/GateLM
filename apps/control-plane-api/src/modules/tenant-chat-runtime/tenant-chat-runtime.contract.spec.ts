@@ -44,7 +44,7 @@ describe('Tenant Chat runtime contract', () => {
       'sha256:C5SCy-tbYwbIrspYHZGb4qUwneWVrkNRiIdVf0iD6BE',
     );
     expect(computeTenantChatSnapshotDigest(snapshot)).toBe(
-      'sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M',
+      'sha256:bkdxdG94ChFSQxch7b_LGnstjbozBj4ngd3uWIRdD7c',
     );
     expect(() => validateTenantChatRuntimeSnapshot(snapshot)).not.toThrow();
   });
@@ -143,7 +143,7 @@ function contractSnapshotFixture(): TenantChatRuntimeSnapshotDocument {
   return {
     snapshotId: 'tenant_chat_snapshot_fixture_001',
     version: 12,
-    digest: 'sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M',
+    digest: 'sha256:bkdxdG94ChFSQxch7b_LGnstjbozBj4ngd3uWIRdD7c',
     tenantId: 'tenant_fixture_001',
     policyVersion: 8,
     employeeNoticeVersion: 3,
@@ -218,15 +218,26 @@ function contractSnapshotFixture(): TenantChatRuntimeSnapshotDocument {
         maxAttempts: 2,
         allowedReasons: ['provider_timeout', 'provider_error_pre_delta'],
       },
+      providerTokenRate: {
+        providers: [
+          { providerId: 'provider_fixture_001', limitTokens: 120000, windowSeconds: 60 },
+          { providerId: 'provider_fixture_002', limitTokens: 120000, windowSeconds: 60 },
+        ],
+      },
       cache: {
         strategy: 'exact',
         enabled: true,
         ttlSeconds: 300,
         maxEntriesPerUser: 100,
+        keySetId: 'tenant_chat_cache_keys_fixture_001',
       },
       safety: {
         enabled: true,
         policyDigest: 'sha256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC',
+        detectorSet: [
+          { detectorType: 'email', action: 'redact' },
+          { detectorType: 'api_key', action: 'block' },
+        ],
       },
       streaming: {
         enabled: true,

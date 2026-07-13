@@ -207,7 +207,14 @@ export class TenantChatProjectionService
   ): Promise<void> {
     const existing = await tx.tenantChatInvocationLog.findUnique({
       where: { requestId: event.requestId },
-      select: { projectedEventVersion: true, tenantId: true },
+      select: {
+        projectedEventVersion: true,
+        tenantId: true,
+        confirmedInputTokens: true,
+        confirmedOutputTokens: true,
+        confirmedTotalTokens: true,
+        confirmedCostMicroUsd: true,
+      },
     });
     if (existing) {
       if (existing.tenantId !== event.executionScope.tenantId) {
@@ -352,6 +359,26 @@ export class TenantChatProjectionService
     const budget = event.budget;
     const confirmedInputTokens = quota?.confirmedInputTokensDelta ?? 0;
     const confirmedOutputTokens = quota?.confirmedOutputTokensDelta ?? 0;
+    const confirmedTotalTokens =
+      quota?.confirmedTotalTokensDelta ??
+      confirmedInputTokens + confirmedOutputTokens;
+    const confirmedCostMicroUsd = budget?.confirmedCostMicroUsdDelta ?? 0;
+    const isLateUsageDelta =
+      event.schemaVersion === 2 &&
+      event.eventType === 'usage_settled' &&
+      event.lateUsage === true;
+    const projectedConfirmedInputTokens =
+      BigInt(confirmedInputTokens) +
+      (isLateUsageDelta ? existing?.confirmedInputTokens ?? 0n : 0n);
+    const projectedConfirmedOutputTokens =
+      BigInt(confirmedOutputTokens) +
+      (isLateUsageDelta ? existing?.confirmedOutputTokens ?? 0n : 0n);
+    const projectedConfirmedTotalTokens =
+      BigInt(confirmedTotalTokens) +
+      (isLateUsageDelta ? existing?.confirmedTotalTokens ?? 0n : 0n);
+    const projectedConfirmedCostMicroUsd =
+      BigInt(confirmedCostMicroUsd) +
+      (isLateUsageDelta ? existing?.confirmedCostMicroUsd ?? 0n : 0n);
     const snapshotDigest = runtimeSnapshot.digest;
     const pricingVersion = runtimePricingVersion;
 
@@ -373,15 +400,10 @@ export class TenantChatProjectionService
         effectiveProviderId: effectiveAttempt?.providerId,
         effectiveModelKey: effectiveAttempt?.modelKey,
         attemptCount: attempts.length,
-        confirmedInputTokens: BigInt(confirmedInputTokens),
-        confirmedOutputTokens: BigInt(confirmedOutputTokens),
-        confirmedTotalTokens: BigInt(
-          quota?.confirmedTotalTokensDelta ??
-            confirmedInputTokens + confirmedOutputTokens,
-        ),
-        confirmedCostMicroUsd: BigInt(
-          budget?.confirmedCostMicroUsdDelta ?? 0,
-        ),
+        confirmedInputTokens: projectedConfirmedInputTokens,
+        confirmedOutputTokens: projectedConfirmedOutputTokens,
+        confirmedTotalTokens: projectedConfirmedTotalTokens,
+        confirmedCostMicroUsd: projectedConfirmedCostMicroUsd,
         quotaState: quota?.state ?? event.quotaState ?? 'normal',
         budgetState: budget?.state ?? event.budgetState ?? 'normal',
         cacheOutcome: event.cacheOutcome ?? 'miss',
@@ -397,15 +419,10 @@ export class TenantChatProjectionService
         effectiveProviderId: effectiveAttempt?.providerId,
         effectiveModelKey: effectiveAttempt?.modelKey,
         attemptCount: attempts.length,
-        confirmedInputTokens: BigInt(confirmedInputTokens),
-        confirmedOutputTokens: BigInt(confirmedOutputTokens),
-        confirmedTotalTokens: BigInt(
-          quota?.confirmedTotalTokensDelta ??
-            confirmedInputTokens + confirmedOutputTokens,
-        ),
-        confirmedCostMicroUsd: BigInt(
-          budget?.confirmedCostMicroUsdDelta ?? 0,
-        ),
+        confirmedInputTokens: projectedConfirmedInputTokens,
+        confirmedOutputTokens: projectedConfirmedOutputTokens,
+        confirmedTotalTokens: projectedConfirmedTotalTokens,
+        confirmedCostMicroUsd: projectedConfirmedCostMicroUsd,
         quotaState: quota?.state ?? event.quotaState ?? 'normal',
         budgetState: budget?.state ?? event.budgetState ?? 'normal',
         cacheOutcome: event.cacheOutcome ?? 'miss',
@@ -516,7 +533,7 @@ function assertEnvelopeMatches(
   event: TenantChatProjectionEvent,
 ): void {
   if (
-    event.schemaVersion !== 1 ||
+    (event.schemaVersion !== 1 && event.schemaVersion !== 2) ||
     event.eventId !== row.eventId ||
     event.aggregateId !== row.aggregateId ||
     event.requestId !== row.aggregateId ||

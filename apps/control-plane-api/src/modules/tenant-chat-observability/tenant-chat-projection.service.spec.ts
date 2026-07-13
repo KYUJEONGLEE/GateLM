@@ -200,6 +200,37 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
+  it('accumulates only a v2 late usage settlement onto confirmed totals', async () => {
+    const row = lateSettledRow();
+    const harness = createHarness(row);
+    harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([
+      { eventVersion: 1n, publishedAt: new Date(), lastErrorCode: null },
+      { eventVersion: 2n, publishedAt: new Date(), lastErrorCode: null },
+    ]);
+    harness.tx.tenantChatInvocationLog.findUnique.mockResolvedValue({
+      projectedEventVersion: 2n,
+      tenantId,
+      confirmedInputTokens: 20n,
+      confirmedOutputTokens: 10n,
+      confirmedTotalTokens: 30n,
+      confirmedCostMicroUsd: 50n,
+    });
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          confirmedInputTokens: 24n,
+          confirmedOutputTokens: 12n,
+          confirmedTotalTokens: 36n,
+          confirmedCostMicroUsd: 60n,
+          projectedEventVersion: 3n,
+        }),
+      }),
+    );
+  });
+
   it('does not schedule another batch after module destruction', async () => {
     jest.useFakeTimers();
     const harness = createHarness(settledRow());
@@ -376,6 +407,30 @@ function settledRow() {
     lastErrorCode: null,
     createdAt: new Date('2026-07-12T12:00:02Z'),
   };
+}
+
+function lateSettledRow(): ReturnType<typeof settledRow> {
+  const row = settledRow();
+  row.eventVersion = 3n;
+  row.payload.schemaVersion = 2;
+  row.payload.eventVersion = 3;
+  row.payload.occurredAt = '2026-07-12T12:20:00Z';
+  row.payload.quota = {
+    state: 'normal',
+    reservedTokensDelta: 0,
+    confirmedInputTokensDelta: 4,
+    confirmedOutputTokensDelta: 2,
+    confirmedTotalTokensDelta: 6,
+    unconfirmedTokensDelta: -100,
+  };
+  row.payload.budget = {
+    state: 'normal',
+    reservedCostMicroUsdDelta: 0,
+    confirmedCostMicroUsdDelta: 10,
+    unconfirmedExposureMicroUsdDelta: -100,
+  };
+  Object.assign(row.payload, { lateUsage: true });
+  return row;
 }
 
 function terminalRow(): ReturnType<typeof settledRow> {
