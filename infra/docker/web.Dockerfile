@@ -18,12 +18,14 @@ FROM base AS deps
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
+COPY packages/web-bff/package.json packages/web-bff/package.json
 
 RUN pnpm install --frozen-lockfile --filter @gatelm/web...
 
 FROM deps AS builder
 
 COPY apps/web apps/web
+COPY packages/web-bff packages/web-bff
 COPY docs/v1.0.0/fixtures docs/v1.0.0/fixtures
 
 RUN pnpm --filter @gatelm/web build

@@ -1,0 +1,303 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GateLM Tenant Chat Auth API",
+    "version": "tenant-chat/v1",
+    "description": "Browser BFF, private Chat API, and private Control Plane identity boundary for Tenant Chat authentication."
+  },
+  "paths": {
+    "/api/tenant-chat/auth/login": {
+      "post": {
+        "summary": "Authenticate an existing account through the same-origin Chat Web BFF",
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordLogin" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "403": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/refresh": {
+      "post": {
+        "summary": "Rotate the refresh token and issue a new access JWT",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "409": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/logout": {
+      "post": {
+        "summary": "Revoke the current Chat session and clear Chat cookies",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ok" },
+          "401": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/session": {
+      "get": {
+        "summary": "Return the revalidated Chat session without exposing tokens",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "403": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/tenant": {
+      "post": {
+        "summary": "Select one active entitled tenant for the current session",
+        "requestBody": { "$ref": "#/components/requestBodies/TenantSelection" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "403": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/invitations/accept-password": {
+      "post": {
+        "summary": "Accept a valid invitation for a new account with a password",
+        "requestBody": { "$ref": "#/components/requestBodies/InvitationPasswordAcceptance" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "409": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/invitations/bind-existing": {
+      "post": {
+        "summary": "Bind a valid invitation after normal existing-account authentication",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthSession" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "409": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/invitations/resolve": {
+      "get": {
+        "summary": "Resolve the server-protected invitation intent without returning the invitation token",
+        "responses": {
+          "200": { "description": "Safe invitation and tenant summary" },
+          "409": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/google/start": { "$ref": "#/components/pathItems/BrowserMutation" },
+    "/api/tenant-chat/auth/google/continue": { "$ref": "#/components/pathItems/BrowserRedirect" },
+    "/auth/google/callback": { "$ref": "#/components/pathItems/BrowserRedirect" },
+    "/internal/v1/tenant-chat/auth/invitation-intents": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/invitations/resolve": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/invitations/accept-password": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/invitations/bind-existing": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/google/start": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/google/complete": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/session": { "$ref": "#/components/pathItems/PrivateChatRead" },
+    "/internal/v1/tenant-chat/auth/tenant": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/refresh": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/auth/logout": { "$ref": "#/components/pathItems/PrivateChatMutation" },
+    "/internal/v1/tenant-chat/identity/password": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
+    "/internal/v1/tenant-chat/identity/invitations/resolve": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
+    "/internal/v1/tenant-chat/identity/invitations/accept-password": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
+    "/internal/v1/tenant-chat/identity/invitations/bind-existing": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
+    "/internal/v1/tenant-chat/identity/google/start": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
+    "/internal/v1/tenant-chat/identity/google/complete": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
+    "/internal/v1/tenant-chat/identity/entitlements/{userId}": { "$ref": "#/components/pathItems/PrivateIdentityRead" },
+    "/internal/v1/tenant-chat/auth/password": {
+      "post": {
+        "summary": "Private Chat API password login",
+        "security": [{ "chatWebServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordLogin" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/InternalIssuedSession" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/identity/entitlements/{userId}/{tenantId}": {
+      "get": {
+        "summary": "Private Control Plane authoritative entitlement read",
+        "security": [{ "controlPlaneTenantChatServiceToken": [] }],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Entitlement" },
+          "403": { "$ref": "#/components/responses/SafeError" },
+          "404": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "pathItems": {
+      "BrowserMutation": {
+        "post": {
+          "summary": "Same-origin CSRF-protected browser auth mutation",
+          "responses": {
+            "200": { "description": "Safe browser response without access or refresh tokens" },
+            "303": { "description": "Allowlisted redirect" },
+            "400": { "$ref": "#/components/responses/SafeError" },
+            "403": { "$ref": "#/components/responses/SafeError" },
+            "503": { "$ref": "#/components/responses/SafeError" }
+          }
+        }
+      },
+      "BrowserRedirect": {
+        "get": {
+          "summary": "Consume protected OAuth state and redirect through an allowlisted location",
+          "responses": {
+            "303": { "description": "Allowlisted redirect with protected state cleared" }
+          }
+        }
+      },
+      "PrivateChatMutation": {
+        "post": {
+          "summary": "Private Chat API auth mutation",
+          "security": [{ "chatWebServiceToken": [] }],
+          "responses": {
+            "200": { "$ref": "#/components/responses/InternalIssuedSession" },
+            "400": { "$ref": "#/components/responses/SafeError" },
+            "401": { "$ref": "#/components/responses/SafeError" },
+            "403": { "$ref": "#/components/responses/SafeError" },
+            "409": { "$ref": "#/components/responses/SafeError" },
+            "503": { "$ref": "#/components/responses/SafeError" }
+          }
+        }
+      },
+      "PrivateChatRead": {
+        "get": {
+          "summary": "Private Chat API revalidated session read",
+          "security": [{ "chatWebServiceToken": [] }],
+          "responses": {
+            "200": { "$ref": "#/components/responses/AuthSession" },
+            "401": { "$ref": "#/components/responses/SafeError" },
+            "403": { "$ref": "#/components/responses/SafeError" },
+            "503": { "$ref": "#/components/responses/SafeError" }
+          }
+        }
+      },
+      "PrivateIdentityMutation": {
+        "post": {
+          "summary": "Private Control Plane identity mutation",
+          "security": [{ "controlPlaneTenantChatServiceToken": [] }],
+          "responses": {
+            "200": { "description": "Bounded identity or invitation data envelope" },
+            "400": { "$ref": "#/components/responses/SafeError" },
+            "401": { "$ref": "#/components/responses/SafeError" },
+            "403": { "$ref": "#/components/responses/SafeError" },
+            "409": { "$ref": "#/components/responses/SafeError" }
+          }
+        }
+      },
+      "PrivateIdentityRead": {
+        "get": {
+          "summary": "Private Control Plane authoritative entitlement read",
+          "security": [{ "controlPlaneTenantChatServiceToken": [] }],
+          "responses": {
+            "200": { "description": "Authoritative active identity and tenant entitlements" },
+            "403": { "$ref": "#/components/responses/SafeError" },
+            "404": { "$ref": "#/components/responses/SafeError" }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "chatWebServiceToken": { "type": "apiKey", "in": "header", "name": "X-GateLM-Chat-Web-Service-Token" },
+      "controlPlaneTenantChatServiceToken": { "type": "apiKey", "in": "header", "name": "X-GateLM-Tenant-Chat-Service-Token" }
+    },
+    "schemas": {
+      "SafeError": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "maxLength": 64 },
+          "message": { "type": "string", "maxLength": 240 },
+          "retryAfterSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "Ok": {
+        "type": "object",
+        "properties": { "ok": { "type": "boolean", "const": true } },
+        "required": ["ok"],
+        "additionalProperties": false
+      },
+      "PasswordLogin": {
+        "type": "object",
+        "properties": {
+          "email": { "type": "string", "format": "email", "maxLength": 254 },
+          "password": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "required": ["email", "password"],
+        "additionalProperties": false
+      },
+      "TenantSelection": {
+        "type": "object",
+        "properties": { "tenantId": { "type": "string", "format": "uuid" } },
+        "required": ["tenantId"],
+        "additionalProperties": false
+      },
+      "InvitationPasswordAcceptance": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "password": { "type": "string", "minLength": 8, "maxLength": 256 }
+        },
+        "required": ["name", "password"],
+        "additionalProperties": false
+      },
+      "InternalIssuedSession": {
+        "type": "object",
+        "description": "Private service-to-service response. Token values are immediately converted to host-only HttpOnly cookies and are never returned by the browser BFF.",
+        "properties": {
+          "accessToken": { "type": "string", "writeOnly": true, "minLength": 32, "maxLength": 8192 },
+          "refreshToken": { "type": "string", "writeOnly": true, "minLength": 32, "maxLength": 512 },
+          "accessExpiresAt": { "type": "string", "format": "date-time" },
+          "refreshExpiresAt": { "type": "string", "format": "date-time" },
+          "session": { "$ref": "../schemas/chat-auth-session.schema.json" }
+        },
+        "required": ["accessToken", "accessExpiresAt", "refreshExpiresAt", "session"],
+        "additionalProperties": false
+      },
+      "ChatAuthSession": { "$ref": "../schemas/chat-auth-session.schema.json" },
+      "ChatEntitlement": { "$ref": "../schemas/chat-entitlement.schema.json" }
+    },
+    "requestBodies": {
+      "PasswordLogin": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordLogin" } } }
+      },
+      "TenantSelection": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TenantSelection" } } }
+      },
+      "InvitationPasswordAcceptance": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InvitationPasswordAcceptance" } } }
+      }
+    },
+    "responses": {
+      "Ok": { "description": "Successful operation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ok" } } } },
+      "AuthSession": { "description": "Token-free public session metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatAuthSession" } } } },
+      "Entitlement": { "description": "Authoritative active entitlement", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatEntitlement" } } } },
+      "InternalIssuedSession": { "description": "Private issued session material", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InternalIssuedSession" } } } },
+      "SafeError": { "description": "Safe bounded error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SafeError" } } } }
+    }
+  }
+}

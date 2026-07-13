@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { getApplicationUrl } from "@/lib/application/application-origin";
+import { getChatUrl } from "@/lib/application/application-origin";
 
 export default function ApplicationPage() {
-  redirect(getApplicationUrl("/"));
+  redirect(getChatUrl("/"));
 }

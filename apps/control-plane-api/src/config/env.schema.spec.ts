@@ -93,6 +93,9 @@ describe('validateEnv', () => {
     expect(env.CONTROL_PLANE_INTERNAL_SERVICE_TOKEN).toBe(
       'prod-internal-token-1234567890abcdef123456',
     );
+    expect(env.TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN).toBe(
+      'prod-chat-service-token-1234567890abcdef',
+    );
   });
 
   function baseEnv() {
@@ -110,6 +113,8 @@ describe('validateEnv', () => {
       CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: 'false',
       CONTROL_PLANE_INTERNAL_SERVICE_TOKEN:
         'prod-internal-token-1234567890abcdef123456',
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:
+        'prod-chat-service-token-1234567890abcdef',
       NODE_ENV: 'production',
       SMTP_FROM: 'security@example.test',
       SMTP_HOST: 'smtp.example.test',

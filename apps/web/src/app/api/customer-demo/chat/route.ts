@@ -22,6 +22,7 @@ import type {
   CustomerDemoScenarioId,
   CustomerDemoSurface
 } from "@/lib/gateway/customer-demo-client";
+import { legacyCustomerDemoEnabled } from "@/lib/gateway/legacy-customer-demo";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -135,6 +136,9 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
 };
 
 export async function POST(request: Request) {
+  if (!legacyCustomerDemoEnabled()) {
+    return NextResponse.json({ error: "Legacy customer demo is disabled." }, { status: 404 });
+  }
   const payload = await readRequestPayload(request);
   const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
   const actorId = auth.userId ?? APPLICATION_END_USER_ID;

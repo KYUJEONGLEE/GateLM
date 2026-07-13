@@ -3,6 +3,9 @@ type RawEnv = Record<string, string | undefined>;
 interface ControlPlaneEnv {
   AUTH_EMAIL_TRANSPORT?: string;
   CONTROL_PLANE_INTERNAL_SERVICE_TOKEN?: string;
+  TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN?: string;
+  TENANT_CHAT_GOOGLE_REDIRECT_URI?: string;
+  TENANT_CHAT_WEB_ORIGIN?: string;
   CONTROL_PLANE_AUTH_COOKIE_SECURE?: string;
   CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY?: string;
   CONTROL_PLANE_AUTH_STATE_SECRET: string;
@@ -140,6 +143,10 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     config,
     'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN',
   );
+  const tenantChatServiceToken = readOptionalString(
+    config,
+    'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN',
+  );
   if (emailTransport === 'smtp') {
     requireString(config, 'SMTP_HOST');
     requireString(config, 'SMTP_FROM');
@@ -175,12 +182,26 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
         'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
       );
     }
+    if (
+      !tenantChatServiceToken ||
+      isWeakInternalServiceToken(tenantChatServiceToken)
+    ) {
+      throw new Error(
+        'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
+      );
+    }
   }
 
   return {
     ...config,
     AUTH_EMAIL_TRANSPORT: emailTransport,
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: internalServiceToken,
+    TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: tenantChatServiceToken,
+    TENANT_CHAT_GOOGLE_REDIRECT_URI:
+      config.TENANT_CHAT_GOOGLE_REDIRECT_URI ??
+      'http://chat.localhost:3002/api/tenant-chat/auth/google/callback',
+    TENANT_CHAT_WEB_ORIGIN:
+      config.TENANT_CHAT_WEB_ORIGIN ?? 'http://chat.localhost:3002',
     CONTROL_PLANE_PORT: readPort(config),
     CONTROL_PLANE_AUTH_COOKIE_SECURE:
       readBooleanString(config, 'CONTROL_PLANE_AUTH_COOKIE_SECURE') ?? 'false',

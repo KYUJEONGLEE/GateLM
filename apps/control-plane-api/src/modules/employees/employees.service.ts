@@ -654,7 +654,6 @@ export class EmployeesService {
     return {
       employee: this.toEmployeeResponse(updatedEmployee),
       expiresAt: expiresAt.toISOString(),
-      signupUrl,
     };
   }
 
@@ -1416,9 +1415,9 @@ export class EmployeesService {
   }
 
   private buildEmployeeSignupUrl(token: string): string {
-    const origin = this.config.getOrThrow<string>('CONTROL_PLANE_WEB_ORIGIN');
+    const origin = this.config.getOrThrow<string>('TENANT_CHAT_WEB_ORIGIN');
 
-    return `${origin.replace(/\/+$/, '')}/?employeeInvite=${encodeURIComponent(token)}`;
+    return `${origin.replace(/\/+$/, '')}/invitations/accept?token=${encodeURIComponent(token)}`;
   }
 
   private isRecordNotFoundError(

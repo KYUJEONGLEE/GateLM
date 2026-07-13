@@ -10,6 +10,7 @@ revision: `tenant-chat/v1`
 
 | 범위 | 기준 |
 |---|---|
+| Browser/session auth wire | [`openapi/chat-auth.openapi.json`](./openapi/chat-auth.openapi.json) |
 | Private Gateway wire contract | [`openapi/private-gateway.openapi.json`](./openapi/private-gateway.openapi.json) |
 | Usage DB record | [`db/tenant-chat-usage.sql`](./db/tenant-chat-usage.sql) |
 | RuntimeSnapshot | [`schemas/tenant-runtime-snapshot.schema.json`](./schemas/tenant-runtime-snapshot.schema.json) |
@@ -181,10 +182,14 @@ admitted -> reserved -> settled
 | invocation log | Gateway | outbox projector | Request Detail/Dashboard |
 | RuntimeConfig/Snapshot/pricing catalog | Control Plane | Control Plane publisher | Gateway, Chat API metadata reader |
 | User/Tenant/Membership/Employee entitlement | Control Plane/Auth | Auth/admin flows | Chat API entitlement resolver |
+| Tenant Chat session/refresh family | Chat API | Chat API auth service | Chat API auth service |
+| Browser auth cookie/CSRF boundary | Chat Web BFF | Chat Web BFF | Browser and Chat API proxy only |
 | conversation/message ciphertext | Chat API | Chat API only | Chat API only |
 | Workload JWT | Chat API | Chat API signer | Gateway verifier |
 
 Chat API는 8개 usage table을 직접 갱신하지 않는다. Gateway는 conversation ciphertext나 Employee record를 쓰지 않는다. 모든 usage record는 `tenant_id`를 가지며 writer query와 update predicate는 항상 tenant ID를 포함한다.
+
+Chat API는 Control Plane-owned identity table을 직접 읽지 않는다. session/refresh table만 직접 읽고 쓰며, identity authentication·invitation binding·entitlement는 전용 Tenant Chat service token으로 보호된 Control Plane private API를 사용한다. Gateway용 internal token은 이 mutation route에 허용하지 않는다.
 
 ## 9. 구현 및 연동 순서
 
