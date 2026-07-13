@@ -871,8 +871,8 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 
 .console-topbar-actions {
   position: absolute;
-  top: 24px;
-  right: 86px;
+  top: 16px;
+  right: 24px;
   z-index: 55;
   display: flex;
   align-items: center;
@@ -8442,7 +8442,8 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-screen .request-log-filter-control-status,
-.request-log-screen .request-log-filter-control-cache {
+.request-log-screen .request-log-filter-control-cache,
+.request-log-screen .request-log-filter-control-safety {
   flex-basis: 120px;
 }
 
@@ -20594,18 +20595,6 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
 
   html[data-presentation-mode="true"]
     .project-policy-general-tab.management-line-content
-    .project-detail-panel
-    .project-detail-form {
-    grid-template-columns:
-      minmax(220px, 1fr)
-      minmax(280px, 1.35fr)
-      minmax(180px, 0.7fr)
-      minmax(200px, 0.8fr);
-    gap: 18px;
-  }
-
-  html[data-presentation-mode="true"]
-    .project-policy-general-tab.management-line-content
     .project-employee-policy-fields {
     grid-template-columns: repeat(2, minmax(280px, 440px));
     max-width: 920px;
@@ -20673,5 +20662,62 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
     .project-detail-section {
     grid-template-columns: 260px minmax(0, 1fr);
     column-gap: 64px;
+  }
+
+  html[data-presentation-mode="true"]
+    .project-policy-general-tab.management-line-content
+    .project-detail-section {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
+  }
+
+  html[data-presentation-mode="true"]
+    .project-policy-general-tab.management-line-content
+    .project-detail-section
+    > .project-detail-general-content {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  html[data-presentation-mode="true"]
+    .project-policy-general-tab.management-line-content
+    .project-detail-panel
+    .project-detail-form {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  html[data-presentation-mode="true"]
+    .project-policy-general-tab.management-line-content
+    :is(
+      .project-general-name-field,
+      .project-general-description-field,
+      .project-general-meta-grid
+    ) {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    box-sizing: border-box;
+  }
+
+  html[data-presentation-mode="true"]
+    .project-policy-general-tab.management-line-content
+    .project-general-meta-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 24px;
+  }
+
+  html[data-presentation-mode="true"]
+    .project-policy-general-tab.management-line-content
+    :is(.project-general-budget-field, .project-general-status-field) {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    box-sizing: border-box;
   }
 }

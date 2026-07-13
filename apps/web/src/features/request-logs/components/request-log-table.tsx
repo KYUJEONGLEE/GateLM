@@ -13,6 +13,10 @@ import type { ReactNode } from "react";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import {
+  type RequestLogSafetyOutcomeFilter,
+  requestLogSafetyOutcomeFilters
+} from "@/lib/gateway/request-log-safety-filter";
+import {
   formatDisplayIdentifier,
   formatModelDisplayName
 } from "@/lib/formatting/display-identifiers";
@@ -61,6 +65,7 @@ export type RequestLogFilterState = {
   model: string;
   page: number;
   projectId: string;
+  safetyOutcome: "" | RequestLogSafetyOutcomeFilter;
   search: string;
   status: "" | LiveInvocationLogRecord["status"];
 };
@@ -90,6 +95,8 @@ const requestLogText: Record<
     previousPage: string;
     rangeEndLabel: string;
     refreshLabel: string;
+    safetyLabel: string;
+    safetyOptions: Record<RequestLogSafetyOutcomeFilter, string>;
     searchLabel: string;
     searchPlaceholder: string;
     statusLabel: string;
@@ -137,6 +144,13 @@ const requestLogText: Record<
     previousPage: "Previous",
     rangeEndLabel: "End of logs in this range",
     refreshLabel: "Refresh",
+    safetyLabel: "Safety",
+    safetyOptions: {
+      blocked: "Filtered / blocked",
+      not_checked: "Not checked",
+      passed: "Passed",
+      redacted: "Masked"
+    },
     searchLabel: "Search logs",
     searchPlaceholder: "Project, department, employee, model",
     statusLabel: "Status",
@@ -183,6 +197,13 @@ const requestLogText: Record<
     previousPage: "이전",
     rangeEndLabel: "현재 범위의 마지막 로그",
     refreshLabel: "새로고침",
+    safetyLabel: "마스킹 / 필터링",
+    safetyOptions: {
+      blocked: "필터링(차단)",
+      not_checked: "검사 안 함",
+      passed: "통과",
+      redacted: "마스킹"
+    },
     searchLabel: "로그 검색",
     searchPlaceholder: "프로젝트, 부서, 직원, 모델 검색",
     statusLabel: "상태",
@@ -315,6 +336,18 @@ export function RequestLogTable({
                     {requestLogCacheStatusFilters.map((cacheStatus) => (
                       <option key={cacheStatus} value={cacheStatus}>
                         {cacheStatus}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control request-log-filter-control-safety">
+                  <span>{text.safetyLabel}</span>
+                  <select defaultValue={filters.safetyOutcome} name="safetyOutcome">
+                    <option value="">{locale === "ko" ? "전체 보호 처리" : "All safety outcomes"}</option>
+                    {requestLogSafetyOutcomeFilters.map((outcome) => (
+                      <option key={outcome} value={outcome}>
+                        {text.safetyOptions[outcome]}
                       </option>
                     ))}
                   </select>
@@ -470,6 +503,7 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
   const query = new URLSearchParams();
   appendRequestLogQuery(query, "applicationId", filters.applicationId);
   appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
+  appendRequestLogQuery(query, "safetyOutcome", filters.safetyOutcome);
   if (filters.status) {
     query.set("status", filters.status);
   }
@@ -499,6 +533,7 @@ function requestLogPageHref(
   appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
   appendRequestLogQuery(query, "model", filters.model);
   appendRequestLogQuery(query, "projectId", filters.projectId);
+  appendRequestLogQuery(query, "safetyOutcome", filters.safetyOutcome);
   appendRequestLogQuery(query, "search", filters.search);
   appendRequestLogQuery(query, "status", filters.status);
   if (filters.created !== "24h") {

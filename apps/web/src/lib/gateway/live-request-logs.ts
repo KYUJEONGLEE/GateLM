@@ -12,6 +12,7 @@ import {
   type LiveInvocationLogRecord,
   normalizeRequestRouting
 } from "@/lib/gateway/live-observability-contract";
+import { matchesRequestLogSafetyOutcome } from "@/lib/gateway/request-log-safety-filter";
 
 type GatewayProjectLogsResponse = {
   data?: GatewayProjectLogItem[];
@@ -73,6 +74,7 @@ export type LiveGatewayRequestLogFilters = {
   projectIds?: string[];
   requestId?: string;
   resolvedBy?: string;
+  safetyOutcome?: string;
   status?: string;
   tenantId?: string;
   to?: string;
@@ -159,6 +161,7 @@ async function getLiveGatewayRequestLogsPayload(
   const records = flattenedRecords
     .filter((record) => matchesBudgetScopeFilter(record.budgetScope, filters))
     .filter((record) => matchesRequestedModelFilter(record, filters.requestedModel))
+    .filter((record) => matchesRequestLogSafetyOutcome(record, filters.safetyOutcome))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, finalLimit);
 
@@ -307,7 +310,8 @@ function hasInMemoryFilters(filters: LiveGatewayRequestLogFilters) {
     filters.budgetScopeType?.trim() ||
       filters.budgetScopeId?.trim() ||
       filters.resolvedBy?.trim() ||
-      filters.requestedModel?.trim()
+      filters.requestedModel?.trim() ||
+      filters.safetyOutcome?.trim()
   );
 }
 

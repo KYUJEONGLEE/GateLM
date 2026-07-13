@@ -7,6 +7,41 @@ import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 
 export type DashboardSurface = "all" | "project_application" | "tenant_chat";
 
+export function selectDashboardSurfaceOverview(
+  surface: DashboardSurface,
+  projectApplication: DashboardOverview | undefined,
+  tenantChat: DashboardOverview | undefined,
+  options: { tenantChatNotConfigured?: boolean } = {}
+): DashboardOverview | undefined {
+  if (surface === "project_application") {
+    return projectApplication;
+  }
+  if (surface === "tenant_chat") {
+    return tenantChat;
+  }
+  if (projectApplication && tenantChat) {
+    return mergeDashboardOverviews(projectApplication, tenantChat);
+  }
+  if (projectApplication && options.tenantChatNotConfigured) {
+    return { ...projectApplication, surface: "all" };
+  }
+  const partial = projectApplication ?? tenantChat;
+  return partial
+    ? {
+        ...partial,
+        surface: "all",
+        queryBudget: {
+          status: "partial",
+          maxRangeHours: partial.queryBudget?.maxRangeHours ?? 24,
+          maxBreakdownItems: partial.queryBudget?.maxBreakdownItems ?? 50,
+          guidance: projectApplication
+            ? "Tenant Chat aggregate is unavailable."
+            : "Project/Application aggregate is unavailable."
+        }
+      }
+    : undefined;
+}
+
 export function toTenantChatDashboardOverview(
   tenantId: string,
   dashboard: TenantChatDashboard

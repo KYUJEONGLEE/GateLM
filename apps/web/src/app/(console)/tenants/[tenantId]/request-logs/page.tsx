@@ -26,6 +26,7 @@ import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import type { EmployeeRecord } from "@/lib/control-plane/employees-types";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
+import { normalizeRequestLogSafetyOutcomeFilter } from "@/lib/gateway/request-log-safety-filter";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogsPageProps = {
@@ -43,6 +44,7 @@ type RequestLogsPageProps = {
     requestId?: string;
     search?: string;
     searchRequestId?: string;
+    safetyOutcome?: string;
     status?: string;
   }>;
 };
@@ -152,6 +154,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
   const applicationId = normalizeOptionalText(searchParams?.applicationId);
   const search = normalizeOptionalText(searchParams?.search ?? searchParams?.searchRequestId);
+  const safetyOutcome = normalizeRequestLogSafetyOutcomeFilter(searchParams?.safetyOutcome);
   const page = normalizePage(searchParams?.page);
   const { from, to } = createdRange(created);
 
@@ -163,6 +166,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       model,
       page,
       projectId,
+      safetyOutcome,
       search,
       status
     },
@@ -173,6 +177,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       limit: search || model ? 1000 : 100,
       projectId: projectId || undefined,
       requestedModel: model || undefined,
+      safetyOutcome: safetyOutcome || undefined,
       status: status || undefined,
       to
     }
