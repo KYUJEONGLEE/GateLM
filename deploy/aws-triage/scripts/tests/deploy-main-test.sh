@@ -190,7 +190,7 @@ if (!match) {
 }
 
 const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
-if (!remoteScript.startsWith("set -euo pipefail\n")) {
+if (!/^set -euo pipefail\r?\n/.test(remoteScript)) {
   throw new Error("Decoded deployment payload is not a Bash script");
 }
 if (!remoteScript.includes("deploy-main.sh")) {
