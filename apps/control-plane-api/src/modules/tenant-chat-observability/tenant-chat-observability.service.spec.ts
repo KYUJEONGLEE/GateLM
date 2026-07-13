@@ -80,6 +80,33 @@ describe('TenantChatObservabilityService', () => {
       ],
     });
   });
+
+  it('guards routing JSON before expanding provider breakdown routes', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw.mockResolvedValue([]);
+    prisma.tenantChatInvocationLog.groupBy.mockResolvedValue([]);
+    prisma.tenantChatInvocationOutbox.count.mockResolvedValue(0);
+    prisma.tenantChatActiveRuntimeSnapshot.findUnique.mockResolvedValue({
+      snapshot: { version: 1n, pricingVersion: 1n },
+    });
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    await service.getDashboard(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+    });
+
+    const sql = prisma.$queryRaw.mock.calls
+      .map(([query]) => (query as { sql?: string }).sql ?? '')
+      .join('\n');
+    expect(sql).toContain('WHEN jsonb_typeof(');
+    expect(sql).toContain(
+      "THEN snapshots.snapshot_body #> '{policies,routing,routes}'",
+    );
+    expect(sql).toContain("ELSE '[]'::jsonb");
+  });
 });
 
 function createPrisma() {
@@ -88,6 +115,13 @@ function createPrisma() {
     tenantChatInvocationLog: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
+      groupBy: jest.fn(),
+    },
+    tenantChatInvocationOutbox: {
+      count: jest.fn(),
+    },
+    tenantChatActiveRuntimeSnapshot: {
+      findUnique: jest.fn(),
     },
   };
 }

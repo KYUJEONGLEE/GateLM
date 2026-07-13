@@ -2,10 +2,8 @@ import "server-only";
 
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import { getTenantChatInvocations } from "@/lib/control-plane/tenant-chat-observability-client";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import type {
-  LiveRequestProvider,
   LiveRequestsPayload,
   LiveRequestStatusFilter
 } from "@/lib/gateway/live-requests-types";
@@ -35,7 +33,6 @@ export async function getTenantChatLiveRequests(
   );
   const rows = invocations
     .map((invocation) => {
-      const provider = normalizeProvider(invocation.providerId);
       const status = normalizeStatus(invocation.terminalOutcome);
       return {
         cacheStatus:
@@ -44,15 +41,17 @@ export async function getTenantChatLiveRequests(
             : invocation.cacheOutcome === "miss"
               ? "MISS" as const
               : "NONE" as const,
+        category: "general" as const,
         costUsd: invocation.confirmedCostMicroUsd / 1_000_000,
+        difficulty: "simple" as const,
         id: invocation.requestId,
         latencyMs: invocation.latencyMs,
-        model: formatModelDisplayName(invocation.modelKey, "Not routed"),
+        modelRef: null,
         projectId: "",
         projectName: "Tenant Chat",
-        provider,
-        providerLabel: providerLabel(provider),
+        requestedModel: invocation.modelKey ?? "auto",
         requestId: invocation.requestId,
+        routingReason: "tenant_chat",
         safetyAction:
           invocation.terminalOutcome === "safety_blocked"
             ? "BLOCKED" as const
@@ -69,13 +68,23 @@ export async function getTenantChatLiveRequests(
           (invocation.actorKind === "tenant_admin" ? "Tenant admin" : null)
       };
     })
-    .filter((row) => !filters.model || row.model === filters.model)
+    .filter(
+      (row) =>
+        !filters.model ||
+        row.requestedModel.trim().toLowerCase() === filters.model.trim().toLowerCase()
+    )
     .filter((row) => !filters.status || row.status === filters.status)
     .slice(0, 5);
 
   return {
     generatedAt: new Date().toISOString(),
-    modelOptions: [...new Set(rows.map((row) => row.model))],
+    requestedModelOptions: [
+      ...new Set(
+        rows
+          .map((row) => row.requestedModel)
+          .filter((model) => model !== "auto")
+      )
+    ],
     projectNameSource: "control-plane",
     rows
   };
@@ -90,31 +99,17 @@ export function mergeLiveRequestPayloads(
       projectApplication.generatedAt >= tenantChat.generatedAt
         ? projectApplication.generatedAt
         : tenantChat.generatedAt,
-    modelOptions: [
-      ...new Set([...projectApplication.modelOptions, ...tenantChat.modelOptions])
+    requestedModelOptions: [
+      ...new Set([
+        ...projectApplication.requestedModelOptions,
+        ...tenantChat.requestedModelOptions
+      ])
     ],
     projectNameSource: projectApplication.projectNameSource,
     rows: [...projectApplication.rows, ...tenantChat.rows]
       .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
       .slice(0, 5)
   };
-}
-
-function normalizeProvider(value: string | null): LiveRequestProvider {
-  const normalized = value?.toLowerCase() ?? "";
-  if (normalized.includes("openai")) return "openai";
-  if (normalized.includes("anthropic")) return "anthropic";
-  if (normalized.includes("google") || normalized.includes("gemini")) return "google";
-  if (normalized.includes("mock")) return "mock";
-  return "unknown";
-}
-
-function providerLabel(provider: LiveRequestProvider) {
-  if (provider === "openai") return "OpenAI";
-  if (provider === "anthropic") return "Anthropic";
-  if (provider === "google" || provider === "gemini") return "Google";
-  if (provider === "mock") return "Mock";
-  return "Unknown";
 }
 
 function normalizeStatus(outcome: string) {

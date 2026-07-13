@@ -292,7 +292,13 @@ export class TenantChatObservabilityService {
           LEFT JOIN LATERAL (
             SELECT candidate->>'tier' AS route_tier
             FROM jsonb_array_elements(
-              snapshots.snapshot_body #> '{policies,routing,routes}'
+              CASE
+                WHEN jsonb_typeof(
+                  snapshots.snapshot_body #> '{policies,routing,routes}'
+                ) = 'array'
+                  THEN snapshots.snapshot_body #> '{policies,routing,routes}'
+                ELSE '[]'::jsonb
+              END
             ) candidate
             WHERE candidate->>'providerId' = grouped.provider_id
               AND candidate->>'modelKey' = grouped.model_key

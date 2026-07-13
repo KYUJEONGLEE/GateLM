@@ -28,16 +28,16 @@ export function toTenantChatDashboardOverview(
     budget_blocked: dashboard.requests.budgetBlocked
   };
   const costByModel = dashboard.breakdowns.map((row) => ({
-    selectedProvider: row.providerId,
-    selectedModel: row.modelKey,
+    provider: row.providerId,
+    model: row.modelKey,
     requestCount: row.requestCount,
     totalTokens: 0,
     costMicroUsd: row.confirmedCostMicroUsd,
     costUsd: formatMicroUsd(row.confirmedCostMicroUsd)
   }));
   const byProviderModel = dashboard.breakdowns.map((row) => ({
-    selectedProvider: row.providerId,
-    selectedModel: row.modelKey,
+    provider: row.providerId,
+    model: row.modelKey,
     requestCount: row.requestCount,
     p95ProviderLatencyMs: dashboard.latency.providerP95Ms
   }));
@@ -91,12 +91,7 @@ export function toTenantChatDashboardOverview(
     p95LatencyMs: dashboard.latency.p95Ms,
     latencyBySurface: { tenantChatP95Ms: dashboard.latency.p95Ms },
     maskingActionCounts: {},
-    routingCountByModel: dashboard.breakdowns.map((row) => ({
-      selectedProvider: row.providerId,
-      selectedModel: row.modelKey,
-      routingReason: row.routeTier,
-      requestCount: row.requestCount
-    })),
+    routingSummaries: [],
     statusCounts,
     costByModel,
     costByProject: [],
@@ -217,10 +212,10 @@ export function mergeDashboardOverviews(
       projectApplicationP95Ms: projectApplication.p95LatencyMs,
       tenantChatP95Ms: tenantChat.p95LatencyMs
     },
-    routingCountByModel: mergeKeyedRows(
-      projectApplication.routingCountByModel,
-      tenantChat.routingCountByModel,
-      (row) => `${row.selectedProvider}\u0000${row.selectedModel}\u0000${row.routingReason}`,
+    routingSummaries: mergeKeyedRows(
+      projectApplication.routingSummaries,
+      tenantChat.routingSummaries,
+      (row) => `${row.category}\u0000${row.difficulty}\u0000${row.routingReason}`,
       "requestCount"
     ),
     statusCounts: mergeCountRecords(
@@ -258,7 +253,7 @@ export function mergeDashboardOverviews(
       byProviderModel: mergeKeyedRows(
         projectApplication.breakdowns?.byProviderModel ?? [],
         tenantChat.breakdowns?.byProviderModel ?? [],
-        (row) => `${row.selectedProvider}\u0000${row.selectedModel}`,
+        (row) => `${row.provider}\u0000${row.model}`,
         "requestCount"
       ),
       bySafetyOutcome: mergeOutcomeRows(
@@ -357,12 +352,12 @@ function mergeCostByModel(
 ) {
   const rows = new Map<string, DashboardOverview["costByModel"][number]>();
   for (const row of [...left, ...right]) {
-    const key = `${row.selectedProvider}\u0000${row.selectedModel}`;
+    const key = `${row.provider}\u0000${row.model}`;
     const existing = rows.get(key);
     const costMicroUsd = (existing?.costMicroUsd ?? 0) + row.costMicroUsd;
     rows.set(key, {
-      selectedProvider: row.selectedProvider,
-      selectedModel: row.selectedModel,
+      provider: row.provider,
+      model: row.model,
       requestCount: (existing?.requestCount ?? 0) + row.requestCount,
       totalTokens: (existing?.totalTokens ?? 0) + row.totalTokens,
       costMicroUsd,

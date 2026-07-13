@@ -166,7 +166,8 @@ async function getJson<T>(path: string): Promise<T | undefined> {
     return (await response.json()) as T;
   } catch (error) {
     console.error("Tenant Chat Control Plane request failed", {
-      errorType: error instanceof Error ? error.name : "UnknownError"
+      errorType: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error"
     });
     return undefined;
   }

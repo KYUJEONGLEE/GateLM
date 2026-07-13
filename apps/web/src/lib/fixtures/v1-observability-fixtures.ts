@@ -213,8 +213,8 @@ export type DashboardOverview = {
   };
   maskingActionCounts: Record<string, number>;
   routingSummaries: Array<{
-    category: string;
-    difficulty: string;
+    category: "general" | "code" | "translation" | "summarization" | "reasoning";
+    difficulty: "simple" | "complex";
     routingReason: string;
     requestCount: number;
   }>;
