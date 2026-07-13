@@ -44,7 +44,7 @@ func (s *ReservationStore) FinalizeLedgerless(
 	}
 	if state == "consumed" {
 		var count int
-		if err = tx.QueryRow(ctx, `
+		err = tx.QueryRow(ctx, `
 			SELECT count(*) FROM tenant_chat_invocation_outbox
 			WHERE tenant_id = $1::uuid AND aggregate_id = $2
 			  AND event_type = 'invocation_terminal' AND event_version = 1
@@ -52,8 +52,9 @@ func (s *ReservationStore) FinalizeLedgerless(
 			  AND COALESCE(payload->>'errorCode', '') = $4
 			  AND payload->>'cacheOutcome' = $5
 		`, requestContext.ExecutionScope.TenantID, requestContext.RequestID,
-			terminalOutcome, errorCode, cacheOutcome).Scan(&count); err != nil || count != 1 {
-			return false, tenantchat.ErrIdempotencyConflict
+			terminalOutcome, errorCode, cacheOutcome).Scan(&count)
+		if err = validateLedgerlessReplay(ctx, err, count); err != nil {
+			return false, err
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return false, tenantchat.ErrUsageGuardUnavailable
@@ -94,6 +95,19 @@ func (s *ReservationStore) FinalizeLedgerless(
 		return false, tenantchat.ErrUsageGuardUnavailable
 	}
 	return false, nil
+}
+
+func validateLedgerlessReplay(ctx context.Context, queryErr error, count int) error {
+	if queryErr != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	if count != 1 {
+		return tenantchat.ErrIdempotencyConflict
+	}
+	return nil
 }
 
 func ledgerlessTerminalPayload(
