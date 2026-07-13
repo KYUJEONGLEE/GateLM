@@ -1,4 +1,4 @@
-﻿name: ci
+name: ci
 
 on:
   pull_request:
@@ -16,27 +16,47 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
 
       - name: Setup pnpm
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           corepack enable
           corepack prepare pnpm@9.15.0 --activate
 
-      - name: Verify v2 documents
+      - name: Check changed files for whitespace errors
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+            if [[ "$base_sha" =~ ^0+$ ]]; then
+              base_sha="$(git hash-object -t tree /dev/null)"
+            fi
+          fi
+
+          git diff --check "$base_sha" "$head_sha"
+
+      - name: Verify current documentation
         run: pnpm verify:v2-docs
 
       - name: Block committed secret files
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           if find . \
             \( -name ".env" \
@@ -53,3 +73,138 @@ jobs:
           fi
 
           echo "Repository sanity check passed."
+
+  application-verification:
+    name: application verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Setup pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/gateway-core/go.mod
+          cache-dependency-path: apps/gateway-core/go.sum
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify repository and routing contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm verify:v2-final
+          pnpm verify:routing-contract
+          pnpm verify:v2.1-category-eval
+          pnpm verify:v2.1-difficulty-eval
+
+      - name: Verify operator web
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @gatelm/web lint
+          pnpm --filter @gatelm/web build
+
+      - name: Verify Tenant Chat API
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @gatelm/chat-api typecheck
+          pnpm --filter @gatelm/chat-api test -- --runInBand
+          pnpm --filter @gatelm/chat-api build
+
+      - name: Verify Tenant Chat web
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @gatelm/chat-web lint
+          pnpm --filter @gatelm/chat-web test
+          pnpm --filter @gatelm/chat-web typecheck
+          pnpm --filter @gatelm/chat-web build
+
+      - name: Verify legacy application
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @gatelm/application lint
+          pnpm --filter @gatelm/application typecheck
+          pnpm --filter @gatelm/application build
+
+  gateway-race:
+    name: gateway race and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/gateway-core/go.mod
+          cache-dependency-path: apps/gateway-core/go.sum
+
+      - name: Run Go vet
+        working-directory: apps/gateway-core
+        run: go vet ./...
+
+      - name: Run race detector
+        working-directory: apps/gateway-core
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+
+  release-packaging:
+    name: release packaging
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    needs: [repo-check, application-verification, gateway-race]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate deployment manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file deploy/aws-triage/.env.example \
+            -f deploy/aws-triage/docker-compose.yml \
+            config --quiet
+          docker compose \
+            --env-file deploy/selfhost/.env.example \
+            -f deploy/selfhost/docker-compose.yml \
+            config --quiet
+
+      - name: Build release images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file deploy/aws-triage/.env.example \
+            -f deploy/aws-triage/docker-compose.yml \
+            build \
+            control-plane-api \
+            gateway-core \
+            ai-service \
+            chat-api \
+            chat-web \
+            web

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -277,9 +278,9 @@ func TestChatCompletionsHandlerContinuesWhenAiSafetySidecarPasses(t *testing.T) 
 }
 
 func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarTimesOut(t *testing.T) {
-	sidecarCalls := 0
+	var sidecarCalls atomic.Int32
 	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sidecarCalls++
+		sidecarCalls.Add(1)
 		time.Sleep(50 * time.Millisecond)
 		writeTestJSON(t, w, http.StatusOK, map[string]any{
 			"contractVersion": "ai-safety-detector.v1",
@@ -322,8 +323,8 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarTimesOu
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if sidecarCalls != 1 || chatCalls != 1 {
-		t.Fatalf("expected one sidecar attempt and one provider call, got sidecar=%d provider=%d", sidecarCalls, chatCalls)
+	if got := sidecarCalls.Load(); got != 1 || chatCalls != 1 {
+		t.Fatalf("expected one sidecar attempt and one provider call, got sidecar=%d provider=%d", got, chatCalls)
 	}
 	if got := rr.Header().Get("X-GateLM-Masking-Action"); got != "redacted" {
 		t.Fatalf("expected local masking fallback to redact, got %q", got)
