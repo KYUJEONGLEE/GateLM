@@ -18911,7 +18911,6 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   background: var(--surface);
   box-shadow: 0 34px 90px rgba(2, 8, 23, 0.34);
   opacity: 1;
-  translate: none;
   transform: translate(-50%, -50%) scale(1);
   transform-origin: center;
   transition:
@@ -19045,7 +19044,6 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   background: var(--background);
   box-shadow: -28px 0 80px rgba(2, 8, 23, 0.24);
   opacity: 1;
-  translate: none;
   transform: translateX(0);
   transition:
     opacity 180ms ease,

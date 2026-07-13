@@ -9,6 +9,7 @@ import type { LiveRequestRow } from "../src/lib/gateway/live-requests-types";
 
 const tenantId = "tenant_demo_acme";
 const dashboardPath = `/tenants/${tenantId}/dashboard?range=1d`;
+const desktopViewport = { height: 1080, width: 1920 };
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 const controlPlaneBaseUrl = (
   process.env.GATELM_CONTROL_PLANE_BASE_URL ??
@@ -17,7 +18,7 @@ const controlPlaneBaseUrl = (
 ).replace(/\/+$/, "");
 
 test.beforeEach(async ({ context, page, request }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.setViewportSize(desktopViewport);
   const sessionCookie = await createConsoleSessionCookie(request);
   await context.addCookies([
     {
@@ -69,21 +70,35 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   await expect(compact).toBeVisible();
   await expect(compact.locator("tbody tr")).toHaveCount(4);
 
-  await compact.getByRole("button", { name: "Open Live Requests focus view" }).click();
+  await compact.getByRole("button", { name: "실시간 요청 확대 화면 열기" }).click();
 
   const focus = page.locator(".live-requests-focus-dialog");
   await expect(focus).toBeVisible();
   await expect
     .poll(async () => (await focus.boundingBox())?.width ?? 0)
     .toBeGreaterThanOrEqual(1795);
+  await expect
+    .poll(async () => {
+      const box = await focus.boundingBox();
+      return box
+        ? Math.abs(box.x + box.width / 2 - desktopViewport.width / 2)
+        : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThanOrEqual(2);
   const focusBox = await focus.boundingBox();
+  expect(focusBox).not.toBeNull();
   expect(focusBox?.width).toBeGreaterThanOrEqual(1795);
   expect(focusBox?.width).toBeLessThanOrEqual(1815);
   expect(focusBox?.height).toBeGreaterThanOrEqual(940);
   expect(focusBox?.height).toBeLessThanOrEqual(960);
+  expect(focusBox!.x).toBeGreaterThanOrEqual(0);
+  expect(focusBox!.y).toBeGreaterThanOrEqual(0);
+  expect(focusBox!.x + focusBox!.width).toBeLessThanOrEqual(desktopViewport.width);
+  expect(focusBox!.y + focusBox!.height).toBeLessThanOrEqual(desktopViewport.height);
+  await expect(focus).toHaveCSS("translate", "none");
 
   const targetDetail = focus.getByRole("button", {
-    name: "Open request detail req-live-1"
+    name: "요청 상세 열기 req-live-1"
   });
   await targetDetail.click();
 
@@ -101,7 +116,6 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   for (const label of [
     "요청 시각",
     "프로젝트",
-    "애플리케이션",
     "요청 모델",
     "최종 결과",
     "총 처리 시간",
@@ -114,22 +128,36 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   await expect(drawer.locator(".gateway-pipeline-flow-dot")).toHaveCount(1);
   await expect(drawer.locator('.gateway-pipeline[data-route="provider"]')).toHaveCount(1);
   await expect(drawer.locator('.gateway-pipeline[data-cache-outcome="miss"]')).toHaveCount(1);
-  await expect(drawer.locator(".gateway-pipeline-cache-label")).toHaveText("캐시 미스");
+  await expect(drawer.locator(".gateway-pipeline-cache-label")).toHaveCount(0);
   await expect(
     drawer.locator('.gateway-pipeline-stage[data-stage="cache"] .gateway-pipeline-status')
   ).toHaveText("미사용");
   await expect(drawer.getByText("Gateway Pipeline 이란?", { exact: true })).toHaveCount(0);
   await expect(drawer.locator(".gateway-pipeline-fallback")).toHaveCount(0);
 
+  await expect
+    .poll(async () => {
+      const box = await drawer.boundingBox();
+      return box
+        ? Math.abs(box.x + box.width - desktopViewport.width)
+        : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThanOrEqual(2);
   const drawerBox = await drawer.boundingBox();
+  expect(drawerBox).not.toBeNull();
   expect(drawerBox?.width).toBeGreaterThanOrEqual(1590);
   expect(drawerBox?.width).toBeLessThanOrEqual(1610);
+  expect(drawerBox!.x).toBeGreaterThanOrEqual(0);
+  expect(drawerBox!.y).toBeGreaterThanOrEqual(0);
+  expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(desktopViewport.width);
+  expect(drawerBox!.y + drawerBox!.height).toBeLessThanOrEqual(desktopViewport.height);
+  await expect(drawer).toHaveCSS("translate", "none");
 
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
   await expect(drawer).toBeHidden();
   await expect(targetDetail).toBeFocused();
 
-  await focus.getByRole("button", { name: "Close Live Requests focus view" }).click();
+  await focus.getByRole("button", { name: "실시간 요청 확대 화면 닫기" }).click();
   await expect(focus).toBeHidden();
   await expect(compact).toBeVisible();
 });
@@ -211,7 +239,7 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
   await page.goto(dashboardPath);
   await page
     .locator('.dashboard-live-requests-panel[data-live-view="compact"]')
-    .getByRole("button", { name: "Open Live Requests focus view" })
+    .getByRole("button", { name: "실시간 요청 확대 화면 열기" })
     .click();
 
   const focus = page.locator(".live-requests-focus-dialog");
@@ -223,7 +251,7 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
     await applyPendingRequests.click();
   }
 
-  await focus.getByRole("button", { name: "Open request detail req-live-2" }).click();
+  await focus.getByRole("button", { name: "요청 상세 열기 req-live-2" }).click();
   await expect(drawer.locator('.gateway-pipeline[data-route="cache"]')).toHaveCount(1);
   await expect(drawer.locator(".gateway-pipeline-cache-branch[data-active]")).toHaveCount(1);
   await expect(
@@ -232,7 +260,7 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
   await expect(drawer.locator(".gateway-pipeline-flow-dot")).toHaveCSS("opacity", "0");
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
 
-  await focus.getByRole("button", { name: "Open request detail req-live-3" }).click();
+  await focus.getByRole("button", { name: "요청 상세 열기 req-live-3" }).click();
   await expect(drawer.locator('.gateway-pipeline[data-route="stopped"]')).toHaveCount(1);
   await expect(
     drawer.locator('.gateway-pipeline-stage[data-stage="guardrails"][data-tone="error"]')
@@ -247,7 +275,7 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
   ).toBeVisible();
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
 
-  await focus.getByRole("button", { name: "Open request detail req-live-4" }).click();
+  await focus.getByRole("button", { name: "요청 상세 열기 req-live-4" }).click();
   await expect(drawer.locator('.gateway-pipeline[data-route="stopped"]')).toHaveCount(1);
   await expect(
     drawer.locator('.gateway-pipeline-stage[data-stage="guardrails"][data-tone="warning"]')
