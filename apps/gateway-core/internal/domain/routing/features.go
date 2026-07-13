@@ -216,7 +216,7 @@ func countRoutingScope(text string, meaningless bool) int {
 }
 
 func countRoutingDependencyDepth(text string) int {
-	return minInt(countDistinctPhrases(text, []string{
+	return minInt(countDistinctPhrasesIncludingBoundaries(text, []string{
 		" then ", " after ", " before ", " if ", " otherwise", "fallback", "step", "stage",
 		"그다음", "이후", "먼저", "실패 시", "경우", "단계", "순서", "복구 경로", "대체 경로",
 	}), 5)
@@ -272,6 +272,10 @@ func countDistinctPhrases(text string, phrases []string) int {
 		}
 	}
 	return count
+}
+
+func countDistinctPhrasesIncludingBoundaries(text string, phrases []string) int {
+	return countDistinctPhrases(" "+text+" ", phrases)
 }
 
 func minInt(left int, right int) int {

@@ -152,7 +152,7 @@ func extractGeneralDifficultyFeatures(features PromptFeatures, common CommonDiff
 	}))
 	return GeneralDifficultyFeatures{
 		workflowDepth: workflowDepth,
-		branchOrExceptionCount: minInt(countDistinctPhrases(text, []string{
+		branchOrExceptionCount: minInt(countDistinctPhrasesIncludingBoundaries(text, []string{
 			" if ", "unless", "otherwise", "exception", "failure", "fallback", "경우", "실패 시", "예외", "대체 경로", "복구",
 		}), 5),
 		extractionBreadth: minInt(countDistinctPhrases(text, []string{

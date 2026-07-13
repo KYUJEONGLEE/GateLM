@@ -108,6 +108,47 @@ func TestExtractPromptFeaturesDerivesExpandedCommonSignals(t *testing.T) {
 	}
 }
 
+func TestExtractPromptFeaturesCountsLeadingDependencyKeywords(t *testing.T) {
+	t.Parallel()
+
+	for _, prompt := range []string{
+		"if ready",
+		"then continue",
+		"after review",
+		"before release",
+		"otherwise stop",
+	} {
+		prompt := prompt
+		t.Run(prompt, func(t *testing.T) {
+			t.Parallel()
+			if actual := ExtractPromptFeatures(prompt).dependencyDepth; actual != 1 {
+				t.Fatalf("dependencyDepth for %q = %d, want 1", prompt, actual)
+			}
+		})
+	}
+}
+
+func TestGeneralDifficultyFeaturesCountLeadingIfOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, prompt := range []string{
+		"if ready",
+		"if ready, reconsider if needed",
+	} {
+		prompt := prompt
+		t.Run(prompt, func(t *testing.T) {
+			t.Parallel()
+			features := ExtractDifficultyFeatures(ExtractPromptFeatures(prompt), CategoryGeneral)
+			if features.general == nil {
+				t.Fatal("general difficulty features are nil")
+			}
+			if actual := features.general.branchOrExceptionCount; actual != 1 {
+				t.Fatalf("branchOrExceptionCount for %q = %d, want 1", prompt, actual)
+			}
+		})
+	}
+}
+
 func TestExtractPromptFeaturesSeparatesCodeFencePayload(t *testing.T) {
 	t.Parallel()
 
