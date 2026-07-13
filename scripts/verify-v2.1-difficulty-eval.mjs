@@ -301,10 +301,10 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   if (
     artifactSchema?.properties?.schemaVersion?.const !== "gatelm.difficulty-model-artifact.v1" ||
     artifactSchema?.properties?.featureVersion?.const !== "difficulty-feature-vector.v1" ||
-    artifactSchema?.properties?.threshold?.const !== 0.5 ||
+    artifactSchema?.properties?.threshold?.const !== 0.45 ||
     artifactSchema.additionalProperties !== false
   ) {
-    failures.push(`${modelArtifactSchemaPath}: closed v1 artifact schema with threshold 0.5 is required`);
+    failures.push(`${modelArtifactSchemaPath}: closed v1 artifact schema with threshold 0.45 is required`);
   }
   return failures;
 }

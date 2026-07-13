@@ -62,7 +62,7 @@ func TestValidateArtifactRejectsInferenceShapeDrift(t *testing.T) {
 			artifact.FeatureNames[0], artifact.FeatureNames[1] = artifact.FeatureNames[1], artifact.FeatureNames[0]
 		},
 		"weight count": func(artifact *Artifact) { artifact.Weights = artifact.Weights[:41] },
-		"threshold":    func(artifact *Artifact) { artifact.Threshold = 0.45 },
+		"threshold":    func(artifact *Artifact) { artifact.Threshold = 0.5 },
 		"content hash": func(artifact *Artifact) { artifact.ContentHash = "sha256:" + strings.Repeat("0", 64) },
 	}
 	for name, mutate := range tests {
@@ -117,7 +117,7 @@ func validArtifact() Artifact {
 		CalibrationVersion:     CalibrationVersion,
 		Calibrator:             Calibrator{Type: "identity", Input: "raw_probability"},
 		ThresholdPolicyVersion: ThresholdPolicyVersion,
-		Threshold:              0.5,
+		Threshold:              ThresholdValue,
 		ContentHashAlgorithm:   ContentHashAlgorithm,
 	}
 	for index := range artifact.Weights {

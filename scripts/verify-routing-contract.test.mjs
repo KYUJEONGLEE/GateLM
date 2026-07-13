@@ -66,6 +66,25 @@ test("active routing documentation rejects an incomplete difficulty feature vect
   }
 });
 
+test("active routing documentation rejects a stale 0.5 difficulty threshold", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-threshold-stale-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir);
+    const pipelinePath = path.join(rootDir, "docs", "routing", "classification-pipeline.md");
+    const stalePipeline = readFileSync(pipelinePath, "utf8").replaceAll("0.45", "0.5");
+    writeFileSync(pipelinePath, stalePipeline, "utf8");
+
+    const failures = verifyRoutingContract({ rootDir });
+    assert.ok(
+      failures.some((failure) => failure.includes("decision boundary must be 0.45")),
+      `stale 0.5 difficulty threshold was accepted: ${JSON.stringify(failures)}`,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("active routing documentation rejects the retired direct-prompt classifier form", () => {
   const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-legacy-"));
   try {
@@ -253,7 +272,7 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
   ];
   const documents = {
     "docs/routing/README.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md\ndifficulty-logistic-training.md",
-    "docs/routing/contracts.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md",
+    "docs/routing/contracts.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md\ndifficulty-threshold-v1 = 0.45\nComplexityScore >= 0.45",
     "docs/routing/classification-pipeline.md": [
       "Active routing target contract",
       "ExtractPromptFeatures",
@@ -265,6 +284,13 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
       "Go struct",
       "compatibility wrapper",
       "difficulty-feature-vector-v1.md",
+      "hard-complex",
+      "1.0 + complex",
+      "Bounded-simple",
+      "-difficulty-shadow-model-artifact",
+      "model path",
+      "difficulty-threshold-v1 = 0.45",
+      "ComplexityScore >= 0.45",
     ].join("\n"),
     "docs/routing/difficulty-feature-vector-v1.md": [
       "difficulty-feature-vector.v1",
@@ -278,7 +304,7 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
       "intercept",
       ...featureVectorNames.map((name) => `\`${name}\``),
     ].join("\n"),
-    "docs/routing/difficulty-logistic-training.md": "Offline tooling prepared",
+    "docs/routing/difficulty-logistic-training.md": "Offline tooling prepared\ndifficulty-threshold-v1 = 0.45",
     "docs/current/README.md": "../routing/README.md",
     "docs/current/source-of-truth.md": "../routing/README.md\n../routing/classification-pipeline.md",
     "docs/v2.0.0/README.md": "Superseded by active routing contract",

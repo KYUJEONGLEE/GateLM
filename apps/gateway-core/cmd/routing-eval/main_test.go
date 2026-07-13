@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/tools/difficultymodel"
 )
 
 func TestEvaluateReportIncludesSyntheticPromptText(t *testing.T) {
@@ -128,7 +131,7 @@ func TestEvaluateDifficultyReportIncludesCombinationDirectionalAndLatencyEvidenc
 		},
 	}
 
-	report := evaluateDifficulty("difficulty.jsonl", "rule_based_difficulty_classifier_v1", records, 2)
+	report := evaluateDifficulty("difficulty.jsonl", "rule_based_difficulty_classifier_v1", records, 2, nil)
 	if report.TotalSamples != 4 || report.CorrectSamples != 2 || report.IncorrectSamples != 2 || report.Accuracy != 0.5 {
 		t.Fatalf("unexpected difficulty summary: %#v", report)
 	}
@@ -162,6 +165,66 @@ func TestEvaluateDifficultyReportIncludesCombinationDirectionalAndLatencyEvidenc
 	for _, expectedField := range []string{`"byCategoryDifficulty"`, `"simpleToComplexCount"`, `"complexToSimpleCount"`, `"classificationLatency"`} {
 		if !strings.Contains(output, expectedField) {
 			t.Fatalf("difficulty report is missing %s: %s", expectedField, output)
+		}
+	}
+}
+
+func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) {
+	artifactPath := writeTestDifficultyArtifact(t, -100)
+	shadowOptions, err := loadDifficultyShadowOptions(artifactPath)
+	if err != nil {
+		t.Fatalf("loadDifficultyShadowOptions returned error: %v", err)
+	}
+	longSimplePrompt := strings.Repeat("Summarize this synthetic note briefly. ", 5)
+	records := []datasetRecord{
+		{
+			SampleID:           "long_simple",
+			RedactedPrompt:     stringPtr(longSimplePrompt),
+			ExpectedCategory:   routing.CategorySummarization,
+			ExpectedDifficulty: routing.DifficultySimple,
+		},
+		{
+			SampleID:           "short_hard_complex",
+			RedactedPrompt:     stringPtr("Debug a race condition."),
+			ExpectedCategory:   routing.CategoryCode,
+			ExpectedDifficulty: routing.DifficultyComplex,
+		},
+	}
+
+	report := evaluateDifficulty("difficulty-shadow.jsonl", defaultDifficultyClassifierVersion, records, 2, shadowOptions)
+	if report.Shadow == nil {
+		t.Fatal("shadow report is required when a model artifact is supplied")
+	}
+	if report.Shadow.ProductRuntimeChanged {
+		t.Fatal("offline shadow evaluation must not claim a product runtime change")
+	}
+	if report.Shadow.RuntimeComparison.ChangedSamples != 1 || report.Shadow.RuntimeComparison.RuntimeComplexToShadowSimple != 1 {
+		t.Fatalf("unexpected runtime comparison: %#v", report.Shadow.RuntimeComparison)
+	}
+	if !report.Shadow.RuntimeComparison.SafetyGatePassed {
+		t.Fatalf("expected complex-to-simple safety gate to pass: %#v", report.Shadow.RuntimeComparison)
+	}
+	if segment := report.Shadow.Segments.LongSimple; segment.Total != 1 || segment.RuntimeCorrect != 0 || segment.ShadowCorrect != 1 {
+		t.Fatalf("unexpected long-simple segment: %#v", segment)
+	}
+	if segment := report.Shadow.Segments.ShortComplex; segment.Total != 1 || segment.RuntimeCorrect != 1 || segment.ShadowCorrect != 1 {
+		t.Fatalf("unexpected short-complex segment: %#v", segment)
+	}
+	if report.Samples[0].ComplexityScore == nil || *report.Samples[0].ComplexityScore >= difficultymodel.ThresholdValue || report.Samples[0].ShadowDifficulty != routing.DifficultySimple {
+		t.Fatalf("expected model-path shadow result for long simple sample: %#v", report.Samples[0])
+	}
+	if report.Samples[1].ComplexityScore == nil || *report.Samples[1].ComplexityScore != 1 || report.Samples[1].ShadowDifficulty != routing.DifficultyComplex {
+		t.Fatalf("expected hard-complex sentinel for short sample: %#v", report.Samples[1])
+	}
+
+	payload, err := marshalDifficultyReport(report, false)
+	if err != nil {
+		t.Fatalf("marshalDifficultyReport returned error: %v", err)
+	}
+	output := string(payload)
+	for _, forbiddenField := range []string{`"rawProbability"`, `"logit"`, `"weights"`, `"featureContribution"`} {
+		if strings.Contains(output, forbiddenField) {
+			t.Fatalf("shadow report must not include %s: %s", forbiddenField, output)
 		}
 	}
 }
@@ -233,6 +296,36 @@ func TestRoutingEvalCLIProducesDifficultyReport(t *testing.T) {
 	}
 	if report.TotalSamples != 1 || report.CorrectSamples != 1 || report.Accuracy != 1 {
 		t.Fatalf("unexpected difficulty CLI report: %#v", report)
+	}
+}
+
+func TestRoutingEvalCLIProducesOptInDifficultyShadowReport(t *testing.T) {
+	datasetPath := filepath.Join(t.TempDir(), "difficulty_eval.jsonl")
+	payload := `{"schemaVersion":"gatelm.difficulty-evaluation-record.v1","sampleId":"difficulty_shadow_cli_001","redactedPrompt":"Explain OAuth briefly.","expectedCategory":"general","expectedDifficulty":"simple","language":"en"}` + "\n"
+	if err := os.WriteFile(datasetPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write difficulty CLI fixture: %v", err)
+	}
+	artifactPath := writeTestDifficultyArtifact(t, -100)
+
+	command := exec.Command(
+		"go", "run", ".",
+		"-evaluation-scope", "difficulty",
+		"-dataset", datasetPath,
+		"-difficulty-shadow-model-artifact", artifactPath,
+		"-latency-iterations", "1",
+		"-pretty=false",
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("difficulty shadow CLI failed: %v\n%s", err, output)
+	}
+
+	var report difficultyReport
+	if err := json.Unmarshal(output, &report); err != nil {
+		t.Fatalf("decode difficulty shadow CLI report: %v\n%s", err, output)
+	}
+	if report.Shadow == nil || report.Shadow.ProductRuntimeChanged || report.Shadow.ArtifactVersion != "difficulty-logistic-v1-test" {
+		t.Fatalf("unexpected difficulty shadow CLI report: %#v", report.Shadow)
 	}
 }
 
@@ -387,4 +480,38 @@ func TestLoadDatasetAllowsUnlabeledProbeRecords(t *testing.T) {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func writeTestDifficultyArtifact(t *testing.T, bias float64) string {
+	t.Helper()
+	artifact := difficultymodel.Artifact{
+		SchemaVersion:          difficultymodel.ArtifactSchemaVersion,
+		ArtifactVersion:        "difficulty-logistic-v1-test",
+		ModelVersion:           difficultymodel.ModelVersion,
+		FeatureVersion:         routing.DifficultyFeatureVectorVersionV1,
+		TrainingDatasetVersion: "difficulty-test-dataset.v1",
+		TrainingDatasetSHA256:  "sha256:test",
+		SplitPolicyVersion:     "difficulty-family-split.v1",
+		Bias:                   bias,
+		FeatureNames:           routing.DifficultyFeatureNamesV1(),
+		Weights:                make([]float64, routing.DifficultyFeatureVectorDimensionV1),
+		CalibrationVersion:     difficultymodel.CalibrationVersion,
+		Calibrator: difficultymodel.Calibrator{
+			Type:  "identity",
+			Input: "raw_probability",
+		},
+		ThresholdPolicyVersion: difficultymodel.ThresholdPolicyVersion,
+		Threshold:              difficultymodel.ThresholdValue,
+		ContentHashAlgorithm:   difficultymodel.ContentHashAlgorithm,
+	}
+	artifact.ContentHash = difficultymodel.ContentHash(artifact)
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal difficulty artifact: %v", err)
+	}
+	artifactPath := filepath.Join(t.TempDir(), "difficulty-model.json")
+	if err := os.WriteFile(artifactPath, payload, 0o644); err != nil {
+		t.Fatalf("write difficulty artifact: %v", err)
+	}
+	return artifactPath
 }

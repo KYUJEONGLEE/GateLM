@@ -67,6 +67,7 @@ type vectorExportSample struct {
 	ActualCategory     string    `json:"actualCategory"`
 	VectorCategory     string    `json:"vectorCategory"`
 	ExpectedDifficulty string    `json:"expectedDifficulty"`
+	ModelPath          bool      `json:"modelPath"`
 	Vector             []float64 `json:"vector"`
 }
 
@@ -184,6 +185,7 @@ func buildVectorExport(datasetPath string, manifestPath string, categorySource s
 			ActualCategory:     actualCategory,
 			VectorCategory:     vectorCategory,
 			ExpectedDifficulty: record.ExpectedDifficulty,
+			ModelPath:          routing.UsesDifficultyModelPath(difficultyFeatures),
 			Vector:             routing.VectorizeDifficultyFeaturesV1(difficultyFeatures),
 		})
 	}

@@ -105,9 +105,10 @@ class ToyTrainingTests(unittest.TestCase):
         export = toy_vector_export()
         artifact, report = train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
         self.assertEqual(len(artifact["weights"]), 42)
-        self.assertEqual(artifact["threshold"], 0.5)
+        self.assertEqual(artifact["threshold"], 0.45)
         self.assertIn(artifact["calibrator"]["type"], {"identity", "platt", "isotonic"})
         self.assertTrue(artifact["contentHash"].startswith("sha256:"))
+        self.assertEqual(report["modelPathSplitCounts"]["holdout"]["samples"], 4)
         self.assertFalse(report["runtimePromotionEvaluated"])
 
     def test_rejects_family_split_leakage(self) -> None:
@@ -115,6 +116,13 @@ class ToyTrainingTests(unittest.TestCase):
         export = toy_vector_export()
         export["samples"][0]["familyId"] = export["samples"][-1]["familyId"]
         with self.assertRaisesRegex(ValueError, "family leaked"):
+            train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
+
+    def test_rejects_missing_model_path_boundary(self) -> None:
+        policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
+        export = toy_vector_export()
+        export["samples"][0].pop("modelPath")
+        with self.assertRaisesRegex(ValueError, "boolean modelPath"):
             train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
 
 
@@ -139,6 +147,7 @@ def toy_vector_export() -> dict:
                         "actualCategory": "general",
                         "vectorCategory": "general",
                         "expectedDifficulty": "complex" if label else "simple",
+                        "modelPath": True,
                         "vector": vector,
                     }
                 )
@@ -178,7 +187,7 @@ def toy_artifact() -> dict:
         "calibrationVersion": "difficulty-calibration-v1",
         "calibrator": {"type": "identity", "input": "raw_probability"},
         "thresholdPolicyVersion": "difficulty-threshold-v1",
-        "threshold": 0.5,
+        "threshold": 0.45,
         "contentHashAlgorithm": "difficulty-model-inference-material.v1",
     }
 

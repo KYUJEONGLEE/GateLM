@@ -425,6 +425,20 @@ function validateDocumentation(rootDir, failures) {
     failures.push("docs/current/source-of-truth.md: classification pipeline authority link is missing");
   }
 
+  const thresholdPolicyMarker = "difficulty-threshold-v1 = 0.45";
+  const thresholdDecisionMarker = "ComplexityScore >= 0.45";
+  for (const relativePath of ["docs/routing/contracts.md", "docs/routing/classification-pipeline.md"]) {
+    if (!texts.get(relativePath)?.includes(thresholdPolicyMarker)) {
+      failures.push(`${relativePath}: global difficulty threshold policy must be 0.45`);
+    }
+    if (!texts.get(relativePath)?.includes(thresholdDecisionMarker)) {
+      failures.push(`${relativePath}: ComplexityScore decision boundary must be 0.45`);
+    }
+  }
+  if (!texts.get("docs/routing/difficulty-logistic-training.md")?.includes(thresholdPolicyMarker)) {
+    failures.push("docs/routing/difficulty-logistic-training.md: training threshold policy must be 0.45");
+  }
+
   const pipelinePath = "docs/routing/classification-pipeline.md";
   const pipeline = texts.get(pipelinePath) ?? "";
   for (const marker of [
@@ -437,6 +451,11 @@ function validateDocumentation(rootDir, failures) {
     "DifficultyResult",
     "Go struct",
     "compatibility wrapper",
+    "hard-complex",
+    "1.0 + complex",
+    "Bounded-simple",
+    "-difficulty-shadow-model-artifact",
+    "model path",
   ]) {
     if (!pipeline.includes(marker)) {
       failures.push(`${pipelinePath}: required canonical pipeline marker is missing: ${marker}`);

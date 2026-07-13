@@ -84,7 +84,7 @@
       ]
     },
     "thresholdPolicyVersion": { "const": "difficulty-threshold-v1" },
-    "threshold": { "const": 0.5 },
+    "threshold": { "const": 0.45 },
     "contentHashAlgorithm": { "const": "difficulty-model-inference-material.v1" },
     "contentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
   },

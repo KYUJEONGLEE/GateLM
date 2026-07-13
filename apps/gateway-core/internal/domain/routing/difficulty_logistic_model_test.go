@@ -26,7 +26,7 @@ func TestDifficultyLogisticModelInferenceAndCalibration(t *testing.T) {
 	t.Parallel()
 	model := difficultyLogisticModel{
 		bias:      0,
-		threshold: 0.5,
+		threshold: difficultyThresholdV1,
 		calibrator: difficultyCalibrator{
 			kind:      difficultyCalibratorIsotonic,
 			isotonicX: []float64{0, 0.5, 1},
@@ -57,5 +57,16 @@ func TestPlattCalibrationUsesRawProbability(t *testing.T) {
 	}
 	if actual := calibrator.calibrate(0.5); actual != 0.5 {
 		t.Fatalf("platt calibration = %v, want 0.5", actual)
+	}
+}
+
+func TestDifficultyFromScoreUsesGlobalThresholdV1(t *testing.T) {
+	t.Parallel()
+	if actual := difficultyFromScore(difficultyThresholdV1, difficultyThresholdV1); actual != DifficultyComplex {
+		t.Fatalf("score at global threshold = %q, want complex", actual)
+	}
+	belowThreshold := math.Nextafter(difficultyThresholdV1, 0)
+	if actual := difficultyFromScore(belowThreshold, difficultyThresholdV1); actual != DifficultySimple {
+		t.Fatalf("score below global threshold = %q, want simple", actual)
 	}
 }

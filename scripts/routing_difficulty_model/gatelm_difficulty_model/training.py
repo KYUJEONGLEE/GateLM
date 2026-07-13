@@ -222,6 +222,8 @@ def _validate_vector_export(export: dict[str, Any], policy: dict[str, Any]) -> N
     for sample in export.get("samples", []):
         if sample.get("label") not in (0, 1) or len(sample.get("vector", [])) != 42:
             raise ValueError("vector export sample has invalid label or vector dimension")
+        if not isinstance(sample.get("modelPath"), bool):
+            raise ValueError("vector export sample must declare boolean modelPath")
         family_splits[sample["familyId"]].add(sample["split"])
     if not family_splits or any(len(splits) != 1 for splits in family_splits.values()):
         raise ValueError("contrast family leaked across dataset splits")
@@ -241,6 +243,12 @@ def train_from_vector_export(
     }
     if any(not samples for samples in samples_by_split.values()):
         raise ValueError("train, calibration and holdout splits must all be non-empty")
+    model_samples_by_split = {
+        split: [sample for sample in samples if sample["modelPath"]]
+        for split, samples in samples_by_split.items()
+    }
+    if any(not samples for samples in model_samples_by_split.values()):
+        raise ValueError("model path must contain train, calibration and holdout samples")
 
     def arrays(samples: list[dict[str, Any]]) -> tuple[Any, Any, Any]:
         return (
@@ -249,13 +257,13 @@ def train_from_vector_export(
             np.asarray([sample["familyId"] for sample in samples], dtype=object),
         )
 
-    train_x, train_y, train_groups = arrays(samples_by_split["train"])
+    train_x, train_y, train_groups = arrays(model_samples_by_split["train"])
     selected_c, regularization_evaluations = _select_regularization(
         train_x, train_y, train_groups, policy["regularization"]
     )
     model = _fit_logistic(train_x, train_y, selected_c, policy["regularization"])
 
-    calibration_x, calibration_y, calibration_groups = arrays(samples_by_split["calibration"])
+    calibration_x, calibration_y, calibration_groups = arrays(model_samples_by_split["calibration"])
     calibration_raw = model.predict_proba(calibration_x)[:, 1]
     calibrator_kind, calibration_evaluations = _select_calibrator(
         calibration_raw, calibration_y, calibration_groups, policy["calibration"]
@@ -291,7 +299,7 @@ def train_from_vector_export(
     }
     artifact["contentHash"] = artifact_content_hash(artifact)
 
-    holdout_samples = samples_by_split["holdout"]
+    holdout_samples = model_samples_by_split["holdout"]
     holdout_x, holdout_y, _ = arrays(holdout_samples)
     holdout_scores = apply_calibrator(model.predict_proba(holdout_x)[:, 1])
     by_category: dict[str, dict[str, Any]] = {}
@@ -311,6 +319,13 @@ def train_from_vector_export(
                 "families": len({sample["familyId"] for sample in samples}),
             }
             for split, samples in samples_by_split.items()
+        },
+        "modelPathSplitCounts": {
+            split: {
+                "samples": len(samples),
+                "families": len({sample["familyId"] for sample in samples}),
+            }
+            for split, samples in model_samples_by_split.items()
         },
         "regularizationSelection": {
             "selectedC": selected_c,

@@ -20,6 +20,7 @@ const (
 	ModelVersion           = "difficulty-logistic-v1"
 	CalibrationVersion     = "difficulty-calibration-v1"
 	ThresholdPolicyVersion = "difficulty-threshold-v1"
+	ThresholdValue         = 0.45
 	ContentHashAlgorithm   = "difficulty-model-inference-material.v1"
 	GeneratedVariableName  = "generatedDifficultyLogisticModelV1"
 )
@@ -102,8 +103,8 @@ func ValidateArtifact(artifact Artifact) error {
 	if err := validateCalibrator(artifact.Calibrator); err != nil {
 		return err
 	}
-	if artifact.ThresholdPolicyVersion != ThresholdPolicyVersion || artifact.Threshold != 0.5 {
-		return errors.New("model artifact threshold policy must remain global 0.5")
+	if artifact.ThresholdPolicyVersion != ThresholdPolicyVersion || artifact.Threshold != ThresholdValue {
+		return errors.New("model artifact threshold policy must remain global 0.45")
 	}
 	if artifact.ContentHashAlgorithm != ContentHashAlgorithm {
 		return errors.New("model artifact content hash algorithm mismatch")

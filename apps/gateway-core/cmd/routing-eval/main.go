@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -11,8 +12,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/tools/difficultymodel"
 )
 
 const (
@@ -95,6 +98,59 @@ type difficultyReport struct {
 	ClassificationLatency classificationLatencyStats          `json:"classificationLatency"`
 	Failures              []difficultyEvaluationFailure       `json:"failures"`
 	Samples               []difficultyEvaluationSample        `json:"samples"`
+	Shadow                *difficultyShadowReport             `json:"shadow,omitempty"`
+}
+
+type difficultyShadowOptions struct {
+	Classifier             routing.DifficultyClassifier
+	ArtifactVersion        string
+	ModelVersion           string
+	CalibrationVersion     string
+	ThresholdPolicyVersion string
+	ContentHash            string
+}
+
+type difficultyShadowReport struct {
+	ClassifierName         string                              `json:"classifierName"`
+	ArtifactVersion        string                              `json:"artifactVersion"`
+	ModelVersion           string                              `json:"modelVersion"`
+	CalibrationVersion     string                              `json:"calibrationVersion"`
+	ThresholdPolicyVersion string                              `json:"thresholdPolicyVersion"`
+	ContentHash            string                              `json:"contentHash"`
+	ProductRuntimeChanged  bool                                `json:"productRuntimeChanged"`
+	CorrectSamples         int                                 `json:"correctSamples"`
+	IncorrectSamples       int                                 `json:"incorrectSamples"`
+	Accuracy               float64                             `json:"accuracy"`
+	ErrorRate              float64                             `json:"errorRate"`
+	ByCategoryDifficulty   map[string]map[string]categoryStats `json:"byCategoryDifficulty"`
+	DirectionalErrors      directionalErrorStats               `json:"directionalErrors"`
+	DifficultyLatency      latencyStats                        `json:"difficultyLatency"`
+	TotalLatency           latencyStats                        `json:"totalLatency"`
+	RuntimeComparison      difficultyRuntimeComparison         `json:"runtimeComparison"`
+	Segments               difficultyShadowSegments            `json:"segments"`
+}
+
+type difficultyRuntimeComparison struct {
+	ChangedSamples                       int             `json:"changedSamples"`
+	RuntimeSimpleToShadowComplex         int             `json:"runtimeSimpleToShadowComplex"`
+	RuntimeComplexToShadowSimple         int             `json:"runtimeComplexToShadowSimple"`
+	ComplexToSimpleNonIncreaseOverall    bool            `json:"complexToSimpleNonIncreaseOverall"`
+	ComplexToSimpleNonIncreaseByCategory map[string]bool `json:"complexToSimpleNonIncreaseByCategory"`
+	SafetyGatePassed                     bool            `json:"safetyGatePassed"`
+}
+
+type difficultyShadowSegments struct {
+	LongSimple   difficultySegmentComparison `json:"longSimple"`
+	ShortComplex difficultySegmentComparison `json:"shortComplex"`
+}
+
+type difficultySegmentComparison struct {
+	Definition      string  `json:"definition"`
+	Total           int     `json:"total"`
+	RuntimeCorrect  int     `json:"runtimeCorrect"`
+	ShadowCorrect   int     `json:"shadowCorrect"`
+	RuntimeAccuracy float64 `json:"runtimeAccuracy"`
+	ShadowAccuracy  float64 `json:"shadowAccuracy"`
 }
 
 type directionalErrorStats struct {
@@ -123,14 +179,18 @@ type difficultyEvaluationFailure struct {
 }
 
 type difficultyEvaluationSample struct {
-	SampleID           string `json:"sampleId"`
-	RedactedPrompt     string `json:"redactedPrompt"`
-	ExpectedCategory   string `json:"expectedCategory"`
-	ActualCategory     string `json:"actualCategory"`
-	ExpectedDifficulty string `json:"expectedDifficulty"`
-	ActualDifficulty   string `json:"actualDifficulty"`
-	CategoryMatched    bool   `json:"categoryMatched"`
-	Matched            bool   `json:"matched"`
+	SampleID           string   `json:"sampleId"`
+	RedactedPrompt     string   `json:"redactedPrompt"`
+	ExpectedCategory   string   `json:"expectedCategory"`
+	ActualCategory     string   `json:"actualCategory"`
+	ExpectedDifficulty string   `json:"expectedDifficulty"`
+	ActualDifficulty   string   `json:"actualDifficulty"`
+	CategoryMatched    bool     `json:"categoryMatched"`
+	Matched            bool     `json:"matched"`
+	ShadowDifficulty   string   `json:"shadowDifficulty,omitempty"`
+	ComplexityScore    *float64 `json:"complexityScore,omitempty"`
+	ShadowMatched      *bool    `json:"shadowMatched,omitempty"`
+	RuntimeChanged     *bool    `json:"runtimeChanged,omitempty"`
 }
 
 type evaluationFailure struct {
@@ -218,6 +278,7 @@ func main() {
 	mode := flag.String("mode", modeEvaluate, "routing report mode: evaluate or probe")
 	outputPath := flag.String("output", "", "optional report output path")
 	classifierVersion := flag.String("classifier-version", defaultClassifierVersion, "classifier version label for the report")
+	difficultyShadowModelArtifact := flag.String("difficulty-shadow-model-artifact", "", "optional validated model artifact for offline difficulty shadow comparison")
 	minAccuracy := flag.Float64("min-accuracy", 0, "optional minimum exact-match accuracy, from 0 to 1")
 	latencyIterations := flag.Int("latency-iterations", defaultLatencyIterations, "routing decision iterations per sample for latency measurement")
 	pretty := flag.Bool("pretty", true, "pretty-print JSON report")
@@ -256,6 +317,17 @@ func main() {
 		exitWithError(err)
 	}
 
+	var shadowOptions *difficultyShadowOptions
+	if strings.TrimSpace(*difficultyShadowModelArtifact) != "" {
+		if reportMode != modeEvaluate || reportScope != evaluationScopeDifficulty {
+			exitWithError(errors.New("-difficulty-shadow-model-artifact requires difficulty evaluation mode"))
+		}
+		shadowOptions, err = loadDifficultyShadowOptions(*difficultyShadowModelArtifact)
+		if err != nil {
+			exitWithError(err)
+		}
+	}
+
 	var payload []byte
 	switch reportMode {
 	case modeEvaluate:
@@ -264,7 +336,7 @@ func main() {
 			if version == defaultClassifierVersion {
 				version = defaultDifficultyClassifierVersion
 			}
-			evalReport := evaluateDifficulty(*datasetPath, version, records, *latencyIterations)
+			evalReport := evaluateDifficulty(*datasetPath, version, records, *latencyIterations, shadowOptions)
 			payload, err = marshalDifficultyReport(evalReport, *pretty)
 			if err != nil {
 				exitWithError(err)
@@ -401,6 +473,42 @@ func validateDifficultyRecords(records []datasetRecord) ([]datasetRecord, error)
 		}
 	}
 	return records, nil
+}
+
+func loadDifficultyShadowOptions(artifactPath string) (*difficultyShadowOptions, error) {
+	payload, err := os.ReadFile(artifactPath)
+	if err != nil {
+		return nil, fmt.Errorf("read difficulty shadow model artifact %q: %w", artifactPath, err)
+	}
+	artifact, err := difficultymodel.ParseArtifact(payload)
+	if err != nil {
+		return nil, fmt.Errorf("validate difficulty shadow model artifact %q: %w", artifactPath, err)
+	}
+	classifier, err := routing.NewDifficultyClassifier(routing.DifficultyClassifierMaterial{
+		ArtifactVersion: artifact.ArtifactVersion,
+		ContentHash:     artifact.ContentHash,
+		Bias:            artifact.Bias,
+		Weights:         artifact.Weights,
+		Calibrator: routing.DifficultyCalibratorMaterial{
+			Kind:             artifact.Calibrator.Type,
+			PlattCoefficient: artifact.Calibrator.Coefficient,
+			PlattIntercept:   artifact.Calibrator.Intercept,
+			IsotonicX:        artifact.Calibrator.XThresholds,
+			IsotonicY:        artifact.Calibrator.YThresholds,
+		},
+		Threshold: artifact.Threshold,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create difficulty shadow classifier: %w", err)
+	}
+	return &difficultyShadowOptions{
+		Classifier:             classifier,
+		ArtifactVersion:        artifact.ArtifactVersion,
+		ModelVersion:           artifact.ModelVersion,
+		CalibrationVersion:     artifact.CalibrationVersion,
+		ThresholdPolicyVersion: artifact.ThresholdPolicyVersion,
+		ContentHash:            artifact.ContentHash,
+	}, nil
 }
 
 func loadJSONLDataset(datasetPath string, payload string, requireExpectedLabels bool) ([]datasetRecord, error) {
@@ -553,7 +661,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 	return result
 }
 
-func evaluateDifficulty(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) difficultyReport {
+func evaluateDifficulty(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int, shadowOptions *difficultyShadowOptions) difficultyReport {
 	if latencyIterations <= 0 {
 		latencyIterations = 1
 	}
@@ -573,6 +681,33 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 	categoryLatencies := []float64{}
 	difficultyLatencies := []float64{}
 	totalLatencies := []float64{}
+	shadowDifficultyLatencies := []float64{}
+	shadowTotalLatencies := []float64{}
+	runtimeComplexToSimpleByCategory := map[string]int{}
+	shadowComplexToSimpleByCategory := map[string]int{}
+	if shadowOptions != nil {
+		result.Shadow = &difficultyShadowReport{
+			ClassifierName:         "hybrid_logistic_shadow_difficulty_classifier",
+			ArtifactVersion:        shadowOptions.ArtifactVersion,
+			ModelVersion:           shadowOptions.ModelVersion,
+			CalibrationVersion:     shadowOptions.CalibrationVersion,
+			ThresholdPolicyVersion: shadowOptions.ThresholdPolicyVersion,
+			ContentHash:            shadowOptions.ContentHash,
+			ProductRuntimeChanged:  false,
+			ByCategoryDifficulty:   map[string]map[string]categoryStats{},
+			RuntimeComparison: difficultyRuntimeComparison{
+				ComplexToSimpleNonIncreaseByCategory: map[string]bool{},
+			},
+			Segments: difficultyShadowSegments{
+				LongSimple: difficultySegmentComparison{
+					Definition: "expectedDifficulty=simple and redactedPrompt rune length > 120",
+				},
+				ShortComplex: difficultySegmentComparison{
+					Definition: "expectedDifficulty=complex and redactedPrompt rune length <= 120",
+				},
+			},
+		}
+	}
 	for _, record := range records {
 		expectedCategory := strings.TrimSpace(record.ExpectedCategory)
 		expectedDifficulty := strings.TrimSpace(record.ExpectedDifficulty)
@@ -588,7 +723,7 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		totalLatencies = append(totalLatencies, sampleTotalLatencies...)
 
 		matched := actualDifficulty == expectedDifficulty
-		result.Samples = append(result.Samples, difficultyEvaluationSample{
+		sample := difficultyEvaluationSample{
 			SampleID:           record.expectedID(),
 			RedactedPrompt:     prompt,
 			ExpectedCategory:   expectedCategory,
@@ -597,7 +732,80 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 			ActualDifficulty:   actualDifficulty,
 			CategoryMatched:    actualCategory == expectedCategory,
 			Matched:            matched,
-		})
+		}
+
+		if expectedDifficulty == routing.DifficultyComplex && actualDifficulty == routing.DifficultySimple {
+			runtimeComplexToSimpleByCategory[expectedCategory]++
+		}
+
+		if shadowOptions != nil {
+			shadowResult, sampleShadowDifficultyLatencies := classifyShadowDifficultyWithLatency(
+				shadowOptions.Classifier,
+				features,
+				actualCategory,
+				latencyIterations,
+			)
+			sampleShadowTotalLatencies := classifyShadowTotalWithLatency(shadowOptions.Classifier, prompt, latencyIterations)
+			shadowDifficultyLatencies = append(shadowDifficultyLatencies, sampleShadowDifficultyLatencies...)
+			shadowTotalLatencies = append(shadowTotalLatencies, sampleShadowTotalLatencies...)
+
+			shadowDifficulty := shadowResult.Difficulty
+			shadowMatched := shadowDifficulty == expectedDifficulty
+			runtimeChanged := shadowDifficulty != actualDifficulty
+			complexityScore := shadowResult.ComplexityScore
+			sample.ShadowDifficulty = shadowDifficulty
+			sample.ComplexityScore = &complexityScore
+			sample.ShadowMatched = &shadowMatched
+			sample.RuntimeChanged = &runtimeChanged
+
+			shadow := result.Shadow
+			if _, ok := shadow.ByCategoryDifficulty[expectedCategory]; !ok {
+				shadow.ByCategoryDifficulty[expectedCategory] = map[string]categoryStats{}
+			}
+			shadowStats := shadow.ByCategoryDifficulty[expectedCategory][expectedDifficulty]
+			shadowStats.Total++
+			if shadowMatched {
+				shadowStats.Correct++
+				shadow.CorrectSamples++
+			}
+			shadowStats.Incorrect = shadowStats.Total - shadowStats.Correct
+			shadowStats.Accuracy = ratio(shadowStats.Correct, shadowStats.Total)
+			shadowStats.IncorrectRate = ratio(shadowStats.Incorrect, shadowStats.Total)
+			shadow.ByCategoryDifficulty[expectedCategory][expectedDifficulty] = shadowStats
+
+			switch expectedDifficulty {
+			case routing.DifficultySimple:
+				shadow.DirectionalErrors.SimpleExpectedSamples++
+				if shadowDifficulty == routing.DifficultyComplex {
+					shadow.DirectionalErrors.SimpleToComplexCount++
+				}
+			case routing.DifficultyComplex:
+				shadow.DirectionalErrors.ComplexExpectedSamples++
+				if shadowDifficulty == routing.DifficultySimple {
+					shadow.DirectionalErrors.ComplexToSimpleCount++
+					shadowComplexToSimpleByCategory[expectedCategory]++
+				}
+			}
+
+			if runtimeChanged {
+				shadow.RuntimeComparison.ChangedSamples++
+				if actualDifficulty == routing.DifficultySimple {
+					shadow.RuntimeComparison.RuntimeSimpleToShadowComplex++
+				} else {
+					shadow.RuntimeComparison.RuntimeComplexToShadowSimple++
+				}
+			}
+
+			promptRuneLength := utf8.RuneCountInString(prompt)
+			if expectedDifficulty == routing.DifficultySimple && promptRuneLength > 120 {
+				updateDifficultySegment(&shadow.Segments.LongSimple, matched, shadowMatched)
+			}
+			if expectedDifficulty == routing.DifficultyComplex && promptRuneLength <= 120 {
+				updateDifficultySegment(&shadow.Segments.ShortComplex, matched, shadowMatched)
+			}
+		}
+
+		result.Samples = append(result.Samples, sample)
 
 		if _, ok := result.ByCategoryDifficulty[expectedCategory]; !ok {
 			result.ByCategoryDifficulty[expectedCategory] = map[string]categoryStats{}
@@ -653,6 +861,35 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		Difficulty: summarizeLatency(difficultyLatencies, latencyIterations),
 		Total:      summarizeLatency(totalLatencies, latencyIterations),
 	}
+	if result.Shadow != nil {
+		shadow := result.Shadow
+		shadow.IncorrectSamples = result.TotalSamples - shadow.CorrectSamples
+		shadow.Accuracy = ratio(shadow.CorrectSamples, result.TotalSamples)
+		shadow.ErrorRate = ratio(shadow.IncorrectSamples, result.TotalSamples)
+		shadow.DirectionalErrors.SimpleToComplexRate = ratio(
+			shadow.DirectionalErrors.SimpleToComplexCount,
+			shadow.DirectionalErrors.SimpleExpectedSamples,
+		)
+		shadow.DirectionalErrors.ComplexToSimpleRate = ratio(
+			shadow.DirectionalErrors.ComplexToSimpleCount,
+			shadow.DirectionalErrors.ComplexExpectedSamples,
+		)
+		shadow.DifficultyLatency = summarizeLatency(shadowDifficultyLatencies, latencyIterations)
+		shadow.TotalLatency = summarizeLatency(shadowTotalLatencies, latencyIterations)
+
+		shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall =
+			shadow.DirectionalErrors.ComplexToSimpleCount <= result.DirectionalErrors.ComplexToSimpleCount
+		shadow.RuntimeComparison.SafetyGatePassed = shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall
+		for category := range result.ByCategoryDifficulty {
+			passed := shadowComplexToSimpleByCategory[category] <= runtimeComplexToSimpleByCategory[category]
+			shadow.RuntimeComparison.ComplexToSimpleNonIncreaseByCategory[category] = passed
+			if !passed {
+				shadow.RuntimeComparison.SafetyGatePassed = false
+			}
+		}
+		finalizeDifficultySegment(&shadow.Segments.LongSimple)
+		finalizeDifficultySegment(&shadow.Segments.ShortComplex)
+	}
 	return result
 }
 
@@ -666,6 +903,47 @@ func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassif
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
 	return actual, latencies
+}
+
+func classifyShadowDifficultyWithLatency(classifier routing.DifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (routing.DifficultyResult, []float64) {
+	latencies := make([]float64, 0, iterations)
+	var actual routing.DifficultyResult
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
+		actual = classifier.ClassifyFeatures(difficultyFeatures)
+		latencies = append(latencies, durationMicros(time.Since(start)))
+	}
+	return actual, latencies
+}
+
+func classifyShadowTotalWithLatency(classifier routing.DifficultyClassifier, prompt string, iterations int) []float64 {
+	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
+	latencies := make([]float64, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		features := routing.ExtractPromptFeatures(prompt)
+		category := categoryClassifier.ClassifyFeatures(features).Category
+		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
+		_ = classifier.ClassifyFeatures(difficultyFeatures)
+		latencies = append(latencies, durationMicros(time.Since(start)))
+	}
+	return latencies
+}
+
+func updateDifficultySegment(segment *difficultySegmentComparison, runtimeMatched bool, shadowMatched bool) {
+	segment.Total++
+	if runtimeMatched {
+		segment.RuntimeCorrect++
+	}
+	if shadowMatched {
+		segment.ShadowCorrect++
+	}
+}
+
+func finalizeDifficultySegment(segment *difficultySegmentComparison) {
+	segment.RuntimeAccuracy = ratio(segment.RuntimeCorrect, segment.Total)
+	segment.ShadowAccuracy = ratio(segment.ShadowCorrect, segment.Total)
 }
 
 func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prompt string, iterations int) []float64 {

@@ -109,9 +109,9 @@ Report의 `accuracy`와 `errorRate`는 difficulty exact-match 기준이다. Cate
 
 ### 7.1 Probability Calibration And Promotion Evidence
 
-Artifact 승격 후 canonical 예측 score는 `difficulty-logistic-v1`의 단일 전역 regularized Logistic Regression이 출력한 미보정 `sigmoid(w·x+b)`에 `difficulty-calibration-v1`이 선택한 전역 calibrator를 적용한 inclusive `0.0~1.0`의 최종 `DifficultyResult.ComplexityScore`다. Raw logit, 미보정 probability와 calibrator 중간값은 report에 포함하지 않는다.
+Hybrid target의 canonical 예측 score는 세 경로를 가진다. Empty 또는 의미 없는 입력은 `0.0 + simple`, 명백한 hard-complex 구조 evidence는 `1.0 + complex` sentinel을 반환한다. 나머지 요청은 `difficulty-logistic-v1`의 단일 전역 regularized Logistic Regression이 출력한 미보정 `sigmoid(w·x+b)`에 `difficulty-calibration-v1`이 선택한 전역 calibrator를 적용한 inclusive `0.0~1.0`의 최종 `DifficultyResult.ComplexityScore`를 사용한다. Raw logit, 미보정 probability와 calibrator 중간값은 report에 포함하지 않는다.
 
-Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexityScore`, `expectedProbability`, `expectedRawScore` 또는 ground-truth probability를 schema와 fixture에 추가하지 않는다. Calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이지 개별 요청의 절대적 보장이 아니다. Dataset 구성, sample size, category 분포와 distribution drift를 함께 고려해야 한다.
+Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexityScore`, `expectedProbability`, `expectedRawScore` 또는 ground-truth probability를 schema와 fixture에 추가하지 않는다. Model path의 calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이지 개별 요청의 절대적 보장이 아니다. Dataset 구성, sample size, category 분포와 distribution drift를 함께 고려해야 한다. 두 sentinel은 calibration bin, log loss와 Brier score에서는 제외하고 end-to-end accuracy와 directional error에는 포함한다.
 
 Model과 calibration evidence는 prompt family 단위로 분리된 다음 세 split을 사용한다.
 
@@ -123,7 +123,7 @@ Model과 calibration evidence는 prompt family 단위로 분리된 다음 세 sp
 
 Calibrator candidate 목록, log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Identity calibrator를 baseline 후보에 포함하고 calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 versioned 순서상 더 단순한 후보를 고른다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
 
-초기 threshold policy는 모든 category가 공유하는 `difficulty-threshold-v1 = 0.5`다. `ComplexityScore >= 0.5`이면 `complex`, 미만이면 `simple`이다. `0.5`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 이후 evidence가 다른 값을 지지하면 v1을 변경하지 않고 새 global threshold policy version과 immutable artifact를 만든다. Category별 threshold, calibrator 또는 model은 평가 candidate로도 만들지 않는다.
+초기 threshold policy는 모든 category가 공유하는 `difficulty-threshold-v1 = 0.45`다. `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다. `0.45`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 이후 evidence가 다른 값을 지지하면 v1을 변경하지 않고 새 global threshold policy version과 immutable artifact를 만든다. Category별 threshold, calibrator 또는 model은 평가 candidate로도 만들지 않는다.
 
 Promotion report는 최소한 다음 provenance와 결과를 선언한다.
 
@@ -137,13 +137,15 @@ Promotion report는 최소한 다음 provenance와 결과를 선언한다.
 - train/calibration/holdout sample 및 family 수
 - 전체 및 category별 sample count, log loss와 Brier score
 - score bin별 평균 `ComplexityScore`와 실제 `complex` 비율
-- `0.5` 기준 전체 및 category별 directional error
+- `0.45` 기준 전체 및 category별 directional error
 - oracle-category와 end-to-end 결과
 - classification latency
+- `redactedPrompt` rune length가 120보다 큰 expected simple인 긴 simple segment
+- `redactedPrompt` rune length가 120 이하인 expected complex인 짧은 complex segment
 
 Untouched holdout에서 candidate의 전체 및 각 category `complex -> simple` count/rate가 현재 rule-based baseline보다 증가하면 runtime으로 승격하지 않는다. Score가 finite하지 않거나 `0.0~1.0` 밖이면 승격하지 않는다. Calibration 지표가 좋아도 이 safety gate를 우회할 수 없다.
 
-Approved offline report는 sampleId, 허용된 redactedPrompt, expected/actual category와 difficulty, 최종 `ComplexityScore`와 위 집계를 포함할 수 있다. Category별 집계는 calibration 품질과 회귀를 관찰하기 위한 evidence일 뿐 category별 정책을 만드는 근거가 아니다. Raw logit/probability, Category diagnostics, provider/model/modelRef/tier/catalog, resolved target, 실제 가격, tenant budget, raw matched phrase, 정규화 문자열, token, 원문/encoded feature, feature별 coefficient contribution, raw prompt/response 또는 민감한 error detail은 추가하지 않는다.
+Approved offline report는 sampleId, 허용된 redactedPrompt, expected/actual category와 difficulty, model-path score 또는 sentinel인 최종 `ComplexityScore`, current runtime과 shadow candidate 비교와 위 집계를 포함할 수 있다. Category별 집계는 calibration 품질과 회귀를 관찰하기 위한 evidence일 뿐 category별 정책을 만드는 근거가 아니다. Raw logit/probability, Category diagnostics, provider/model/modelRef/tier/catalog, resolved target, 실제 가격, tenant budget, raw matched phrase, 정규화 문자열, token, 원문/encoded feature, feature별 coefficient contribution, raw prompt/response 또는 민감한 error detail은 추가하지 않는다.
 
 ## 8. 검증
 
