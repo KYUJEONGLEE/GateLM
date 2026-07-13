@@ -9,6 +9,7 @@ export type LiveRequestStatusFilter = "" | "success" | "failed" | "blocked" | "r
 export type LiveRequestRow = {
   cacheStatus: LiveRequestCacheStatus;
   costUsd: number;
+  fallbackUsed?: boolean;
   id: string;
   latencyMs: number;
   model: string;

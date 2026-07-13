@@ -145,11 +145,13 @@ Chat API workload JWT
 
 - GateLM은 ordered outbox projector, `tenant_chat` invocation read model, tenant 관리자 조회 API와 Web Dashboard를 소유한다.
 - projector는 `TENANT_CHAT_PROJECTOR_ENABLED=true`일 때만 실행하며 기존 컨테이너에서는 기본 비활성화한다.
+- 이번 PR의 projector는 duplicate no-op, predecessor pending 지연, version gap 검출과 bounded retry까지 구현한 partial 범위다.
+- `lastErrorCode=DLQ_*` 표시는 실제 durable DLQ/incident record가 아니며 aggregate replay 요청도 아직 생성하지 않는다.
 - Chat API의 workload JWT 발급, 사용자 인증, 암호화 대화 저장, assistant final 저장과 SSE 처리는 구현하지 않는다.
 - Chat API contract test와 양쪽 end-to-end 연결은 Chat API endpoint가 전달된 뒤 공동 검증으로 수행한다.
 - 개인 quota hard block 제거와 economy-only 전환은 active contract revision이 필요한 별도 정책 변경으로 추적한다.
 
-### 7.1 완성할 흐름
+### 7.1 이번 PR에서 완성할 흐름
 
 ```text
 usage/terminal outbox
@@ -157,12 +159,13 @@ usage/terminal outbox
 -> tenant_chat invocation log
 -> user quota/tenant budget aggregate
 -> Dashboard/Request Detail
--> Chat API integration E2E
 ```
 
 ### 7.2 구현 범위
 
-- duplicate event no-op, version gap replay와 DLQ/incident 처리
+- paired event schema 전체 검증과 schema drift test
+- event와 admission/reservation/runtime provenance의 field-by-field 검증
+- duplicate event no-op, predecessor pending 지연, version gap 검출과 bounded retry marker
 - `surface=tenant_chat`, `executionScope.kind=tenant_chat` projection
 - user quota state와 tenant budget state 집계
 - confirmed token/cost, cache, route, provider, fallback, latency 집계
@@ -176,12 +179,19 @@ usage/terminal outbox
 
 ### 7.3 PR3 검증
 
-- event 중복·역순·gap 복구
+- event 중복·역순·gap 검출과 bounded retry
 - tenant isolation과 관리자 authorization
 - metric label의 tenant/user/employee/request/digest 금지
 - raw prompt/response/credential/provider error 비노출
-- admission부터 Dashboard까지 E2E
 - legacy Application Chat/public `/v1` 회귀
+
+### 7.4 후속 통합 범위
+
+- Owner: GateLM Gateway/projector workstream
+- durable aggregate replay 요청과 실제 DLQ/incident record를 active schema와 migration으로 정의한다.
+- version gap 재생 성공, 최대 재시도 후 incident 생성, operator 재처리와 read model 복구를 통합 테스트로 증명한다.
+- Gateway completion/provider와 Chat API client가 연결되면 `admission -> completion -> terminal/usage outbox -> projector -> Dashboard` 공동 E2E를 수행한다.
+- 위 조건이 완료되기 전에는 projector를 기본 활성화하거나 durable replay/DLQ 완료로 선언하지 않는다.
 
 ## 8. 계약 확인 필요 항목
 

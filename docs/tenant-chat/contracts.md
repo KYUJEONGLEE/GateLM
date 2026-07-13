@@ -31,9 +31,50 @@
 - `employee`: User, Tenant, TenantMembership, linked Employee가 모두 active여야 한다.
 - tenant admin도 employee와 동일하게 `(tenantId,userId,periodStart)` 개인 quota와 request/token rate를 적용받는다. Employee가 없다는 이유로 무제한이 되지 않는다.
 - tenant 기본 user quota는 admin/employee에 동일하게 적용한다. tenant admin은 userId별 override를 설정할 수 있지만 변경은 audit하고 새 RuntimeSnapshot부터 적용하며 tenant budget hard stop을 우회할 수 없다.
-- Chat API가 모든 새 browser/API 요청에서 위 상태와 session/device version을 authoritative DB read로 확인한다.
+- Chat API가 모든 새 browser/API 요청에서 session/device state는 자체 session DB에서, identity entitlement는 Control Plane private API의 authoritative read로 확인한다.
 - Gateway는 Employee DB를 다시 조회하거나 browser actor header를 해석하지 않는다. 유효한 workload JWT의 Chat API 결정을 신뢰하고 tenant snapshot/status, JWT scope/binding/replay만 검증한다.
 - 정지·logout·device revoke·password reset은 다음 Chat API 요청부터 거부한다. 이미 Provider로 전달된 in-flight 요청은 best-effort cancel하고, 완료되면 기존 safety/persistence 규칙을 적용한다.
+
+### 2.2 Browser auth와 session 계약
+
+Browser auth wire는 [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)를 따른다.
+
+- Browser는 `chat-web`의 same-origin BFF만 호출한다. `chat-api`와 Control Plane은 private service network에만 둔다.
+- Chat Web BFF는 `TENANT_CHAT_WEB_SERVICE_TOKEN`으로 Chat API를 인증한다. Chat API는 별도 `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`으로 Control Plane의 Tenant Chat identity endpoint만 호출한다. 기존 Gateway용 internal token 권한을 mutation으로 넓히지 않는다.
+- access token은 별도 signing key set으로 서명한 5분 JWT다. refresh token은 30일 opaque random token이며 PostgreSQL에는 hash만 저장한다.
+- refresh는 매번 rotate한다. consumed token 재사용이 발견되면 해당 family와 session을 모두 revoke하고 `sessionVersion`을 증가시킨다.
+- Chat API는 session table만 직접 소유·조회한다. User/Tenant/Membership/Employee identity는 Control Plane private entitlement API에서 authoritative하게 확인한다.
+- 보호 요청 시작 시 한 번 entitlement를 확인한다. Control Plane이 unavailable이면 safe `503 CHAT_ENTITLEMENT_UNAVAILABLE`로 fail closed하며 mutation을 retry하지 않는다.
+- access JWT claim은 `iss`, `aud`, `sub`, `sid`, `deviceIdHash`, optional selected `tenantId`, `actorKind`, optional `employeeId`, `sessionVersion`, `actorAuthzVersion`, `tenantAuthzVersion`, `iat`, `nbf`, `exp`, `jti`다. raw invitation/refresh/CSRF value는 포함하지 않는다.
+
+| Cookie | HttpOnly | SameSite | TTL/path |
+|---|---:|---|---|
+| `gatelm_chat_access` | yes | Lax | 5분, `/` |
+| `gatelm_chat_refresh` | yes | Strict | 30일, `/api/tenant-chat/auth` |
+| `gatelm_chat_csrf` | no | Strict | session bounded, `/` |
+| `gatelm_chat_oauth_state` | yes | Lax | 10분, Google callback path |
+| `gatelm_chat_invite_intent` | yes | Lax | 15분, `/` |
+
+- cookie는 host-only이고 `Domain`을 설정하지 않는다. production은 `Secure`, local origin은 `http://chat.localhost:3002`다.
+- state-changing BFF route는 exact `Origin`과 double-submit `X-GateLM-CSRF` header/cookie를 검증한다. OAuth callback은 CSRF 대신 one-time state를 검증한다.
+- auth/session response는 `Cache-Control: no-store`, invitation entry는 `Referrer-Policy: no-referrer`를 사용한다.
+
+### 2.3 Invitation과 Google binding
+
+- employee email link는 `TENANT_CHAT_WEB_ORIGIN`의 `/invitations/accept?token=...`을 사용한다. Project Admin invitation은 기존 Dashboard origin을 유지한다.
+- Chat Web은 entry token을 server-side 15분 invitation intent로 교환한 뒤 clean URL로 `303` redirect한다. token을 DOM, browser storage, public API response, structured log에 남기지 않는다.
+- 신규 account만 invitation acceptance에서 password를 만들 수 있다. 기존 account는 정상 password login 또는 Google 인증을 완료한 뒤 invitation을 bind한다.
+- acceptance transaction은 invitation row와 normalized email advisory lock을 획득하고 status/expiry/revoke/email을 재검사한 뒤 User/Membership/Employee를 atomic bind한다.
+- 기존 User의 `passwordHash`, `authProvider`, OAuth link는 invitation token만으로 변경하지 않는다.
+- Google callback은 protected state와 invitation intent를 확인하고 provider email 일치, invitation status/expiry/revoke를 다시 검사한 뒤 atomic bind한다.
+- 여러 active tenant가 있으면 session은 `tenant_selection_required`로 시작한다. tenant 선택 후 entitlement를 다시 확인하고 새 access JWT를 발급한다.
+
+Version ownership:
+
+- Control Plane은 `actorAuthzVersion`과 `tenantAuthzVersion`을 소유한다.
+- User status/password/OAuth identity, Membership role/status/delete, linked Employee status/link/delete 변경은 actor version을 증가시킨다.
+- Tenant status 변경은 tenant version을 증가시킨다.
+- Chat API는 session별 `sessionVersion`을 소유하며 logout, device revoke, refresh reuse detection에서 증가시킨다.
 
 ## 3. 제품 및 runtime 경계
 
@@ -77,7 +118,7 @@ Rules:
 Browser
 -> chat-web same-origin BFF
 -> chat-api access/session/CSRF validation
--> Control Plane-owned User/Tenant/Membership/Employee DB entitlement check
+-> Control Plane private User/Tenant/Membership/Employee entitlement API check
 -> employeeNoticeVersion acknowledgement check
 -> exact immutable tenant RuntimeSnapshot pin
 -> workload JWT(admission) 발급
@@ -291,6 +332,8 @@ Idempotency rules:
 | 400 | `CHAT_INVALID_REQUEST` | body/size/field validation 실패 |
 | 400 | `CHAT_SCOPE_FIELD_FORBIDDEN` | browser가 tenant/user/employee/quota/budget scope를 보냄 |
 | 401 | `CHAT_AUTH_REQUIRED` | user session 없음/만료 |
+| 401 | `CHAT_CSRF_INVALID` | exact Origin 또는 CSRF header/cookie 검증 실패 |
+| 401 | `CHAT_REFRESH_REUSED` | consumed refresh token 재사용; family/session revoke |
 | 401 | `CHAT_TOKEN_INVALID` | private route JWT 검증 실패; 외부에는 일반 service auth 실패로만 노출 |
 | 403 | `CHAT_USER_DISABLED` | User inactive |
 | 403 | `CHAT_TENANT_DISABLED` | Tenant inactive |
@@ -301,12 +344,18 @@ Idempotency rules:
 | 409 | `CHAT_POLICY_ACK_REQUIRED` | employee notice acknowledgement 필요 |
 | 409 | `CHAT_IDEMPOTENCY_CONFLICT` | 같은 key와 다른 binding |
 | 409 | `CHAT_ADMISSION_EXPIRED` | admission 30초 만료/consume됨 |
+| 409 | `CHAT_INVITATION_INVALID` | invitation intent가 없거나 token이 유효하지 않음 |
+| 409 | `CHAT_INVITATION_EXPIRED` | invitation 만료 |
+| 409 | `CHAT_INVITATION_REVOKED` | invitation 취소 또는 이미 consume됨 |
+| 409 | `CHAT_INVITATION_EMAIL_MISMATCH` | 인증 email과 invitation email 불일치 |
+| 409 | `CHAT_TENANT_SELECTION_REQUIRED` | active tenant 선택 필요 |
 | 429 | `CHAT_RATE_LIMITED` | request/token rate 초과 |
 | 429 | `CHAT_CONCURRENCY_LIMITED` | actor active admission/stream cap 초과 |
 | 502 | `CHAT_PROVIDER_FAILED` | eligible provider/fallback terminal failure |
 | 503 | `CHAT_RUNTIME_UNAVAILABLE` | active exact snapshot 없음/invalid/revoked |
 | 503 | `CHAT_USAGE_GUARD_UNAVAILABLE` | rate/quota consistency를 안전하게 판단할 수 없음 |
 | 503 | `CHAT_NO_ELIGIBLE_ROUTE` | policy에 실행 가능한 route 없음; publish validator가 선제 차단해야 함 |
+| 503 | `CHAT_ENTITLEMENT_UNAVAILABLE` | Control Plane entitlement를 안전하게 확인할 수 없음 |
 | 504 | `CHAT_PROVIDER_TIMEOUT` | provider hard timeout |
 
 ## 11. Dashboard와 metrics

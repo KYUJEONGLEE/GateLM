@@ -19,6 +19,7 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/application/package.json apps/application/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY packages/web-bff/package.json packages/web-bff/package.json
 
 RUN pnpm install --frozen-lockfile --filter @gatelm/application... --filter @gatelm/web...
 
@@ -26,6 +27,7 @@ FROM deps AS builder
 
 COPY apps/application apps/application
 COPY apps/web apps/web
+COPY packages/web-bff packages/web-bff
 COPY docs/v1.0.0/fixtures docs/v1.0.0/fixtures
 
 RUN pnpm --filter @gatelm/application build

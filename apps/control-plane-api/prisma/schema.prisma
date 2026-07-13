@@ -39,6 +39,7 @@ model Tenant {
   id             String         @id @default(uuid()) @db.Uuid
   name           String
   status         ResourceStatus @default(ACTIVE)
+  authzVersion   Int            @default(1)
   totalBudgetUsd Decimal?       @default(1000) @db.Decimal(12, 2)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -67,6 +68,7 @@ model Tenant {
   projectEmployeeAssignments      ProjectEmployeeAssignment[]
   conversations                   Conversation[]
   chatMessages                    ChatMessage[]
+  selectedTenantChatSessions      TenantChatSession[] @relation("TenantChatSelectedTenant")
   tenantChatPricingCatalogs       TenantChatPricingCatalog[]
   tenantChatRuntimeConfigs        TenantChatRuntimeConfig[]
   tenantChatRuntimeSnapshots      TenantChatRuntimeSnapshot[]
@@ -88,6 +90,7 @@ model User {
   name            String?
   passwordHash    String?
   authProvider    String    @default("local")
+  actorAuthzVersion Int     @default(1)
   status          String    @default("pending_email_verification")
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
@@ -104,6 +107,7 @@ model User {
   projectAdmins               ProjectAdmin[]
   sentProjectAdminInvitations ProjectAdminInvitation[]     @relation("ProjectAdminInvitationInviter")
   employees                   Employee[]
+  tenantChatSessions          TenantChatSession[]
   tenantChatRequestAdmissions TenantChatRequestAdmission[]
   tenantChatUserTokenPeriods  TenantChatUserTokenPeriod[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
@@ -146,6 +150,48 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
+model TenantChatSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  selectedTenantId String?   @db.Uuid
+  deviceIdHash     String
+  sessionVersion   Int       @default(1)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  revokeReason     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedTenant Tenant? @relation("TenantChatSelectedTenant", fields: [selectedTenantId], references: [id], onDelete: SetNull)
+  refreshTokens  TenantChatRefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@index([selectedTenantId, revokedAt])
+  @@index([expiresAt])
+  @@map("tenant_chat_sessions")
+}
+
+model TenantChatRefreshToken {
+  id                String    @id @default(uuid()) @db.Uuid
+  sessionId         String    @db.Uuid
+  familyId          String    @db.Uuid
+  tokenHash         String    @unique
+  parentTokenId     String?   @db.Uuid
+  replacedByTokenId String?   @db.Uuid
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  session TenantChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, familyId])
+  @@index([familyId, revokedAt])
+  @@index([expiresAt])
+  @@map("tenant_chat_refresh_tokens")
+}
+
 model OAuthAccount {
   id              String   @id @default(uuid()) @db.Uuid
   userId          String   @db.Uuid
@@ -177,7 +223,7 @@ model TenantMembership {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, userId])
+  @@unique([tenantId, userId])
   @@index([userId, status])
   @@index([tenantId, role, status])
   @@map("tenant_memberships")

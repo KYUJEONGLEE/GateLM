@@ -1,0 +1,10 @@
+{
+  "userId": "00000000-0000-4000-8000-000000000101",
+  "tenantId": "00000000-0000-4000-8000-000000000001",
+  "membershipId": "00000000-0000-4000-8000-000000000201",
+  "actorKind": "employee",
+  "employeeId": "00000000-0000-4000-8000-000000000301",
+  "actorAuthzVersion": 1,
+  "tenantAuthzVersion": 1,
+  "status": "active"
+}

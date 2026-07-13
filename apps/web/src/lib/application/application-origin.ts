@@ -1,14 +1,11 @@
-export function getApplicationOrigin() {
-  const configuredOrigin =
-    process.env.GATELM_APPLICATION_BASE_URL ??
-    process.env.NEXT_PUBLIC_GATELM_APPLICATION_BASE_URL ??
-    "http://localhost:3002";
+export function getChatOrigin() {
+  const configuredOrigin = process.env.GATELM_CHAT_WEB_ORIGIN ?? "http://chat.localhost:3002";
 
   return configuredOrigin.replace(/\/+$/, "");
 }
 
-export function getApplicationUrl(path = "/") {
+export function getChatUrl(path = "/") {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
-  return `${getApplicationOrigin()}${normalizedPath}`;
+  return `${getChatOrigin()}${normalizedPath}`;
 }

@@ -68,17 +68,33 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
-  const projectsModel = await getProjectsModel(effectiveTenantId);
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
-  const effectiveProjectId = resolveProjectIdForConsoleAuth({
-    auth,
-    projects: projectsModel.projects,
-    requestedProjectId: liveFilters.projectId,
-    routeTenantId: effectiveTenantId
-  });
+  const projectsPromise = getProjectsModel(effectiveTenantId);
+  let projectsModel: Awaited<ReturnType<typeof getProjectsModel>>;
+  let effectiveProjectId: string | null | undefined;
+  let overviewPromise: ReturnType<typeof getLiveDashboardOverview>;
 
-  if (effectiveProjectId === null) {
-    notFound();
+  if (projectScoped) {
+    projectsModel = await projectsPromise;
+    effectiveProjectId = resolveProjectIdForConsoleAuth({
+      auth,
+      projects: projectsModel.projects,
+      requestedProjectId: liveFilters.projectId,
+      routeTenantId: effectiveTenantId
+    });
+
+    if (effectiveProjectId === null) {
+      notFound();
+    }
+
+    overviewPromise = getLiveDashboardOverview(effectiveTenantId, {
+      ...liveFilters,
+      projectId: effectiveProjectId ?? liveFilters.projectId
+    });
+  } else {
+    effectiveProjectId = liveFilters.projectId;
+    overviewPromise = getLiveDashboardOverview(effectiveTenantId, liveFilters);
+    projectsModel = await projectsPromise;
   }
 
   const scopedLiveFilters = {
@@ -103,7 +119,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const [projectApplicationOverview, tenantChatDashboard] = await Promise.all([
     scopedDashboardFilters.surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters),
+      : overviewPromise,
     scopedDashboardFilters.surface === "project_application"
       ? Promise.resolve(undefined)
       : getTenantChatDashboard(effectiveTenantId, from, to)

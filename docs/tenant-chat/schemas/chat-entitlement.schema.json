@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/chat-entitlement.schema.json",
+  "title": "Tenant Chat Entitlement",
+  "type": "object",
+  "properties": {
+    "userId": { "type": "string", "format": "uuid" },
+    "tenantId": { "type": "string", "format": "uuid" },
+    "membershipId": { "type": "string", "format": "uuid" },
+    "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] },
+    "employeeId": { "type": ["string", "null"], "format": "uuid" },
+    "actorAuthzVersion": { "type": "integer", "minimum": 1 },
+    "tenantAuthzVersion": { "type": "integer", "minimum": 1 },
+    "status": { "type": "string", "const": "active" }
+  },
+  "required": [
+    "userId",
+    "tenantId",
+    "membershipId",
+    "actorKind",
+    "employeeId",
+    "actorAuthzVersion",
+    "tenantAuthzVersion",
+    "status"
+  ],
+  "additionalProperties": false
+}

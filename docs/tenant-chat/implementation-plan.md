@@ -34,7 +34,7 @@ admin demo tenant/policy/provider seed
 | PR | Branch | Base | Demo outcome |
 |---|---|---|---|
 | 01 | `codex/docs/tenant-chat-active-contract` | `dev` | active contract/schema/fixture/handoff와 실행 명세 확정 |
-| 02 | `codex/feat/tenant-chat-auth` | PR 01 | invite/login/tenant selection/access+refresh/session revoke |
+| 02 | `feat/tenant-chat-auth-shell` | PR 01 | invite/login/tenant selection/access+refresh/session revoke, Chat shell, legacy delivery alignment |
 | 03 | `codex/feat/tenant-chat-runtime` | PR 02 | tenant RuntimeConfig/Snapshot/publish, quota/cache/provider policy |
 | 04 | `codex/feat/tenant-chat-gateway` | PR 03 | private Gateway, workload JWT, rate, quota/budget ledger, provider/fallback |
 | 05 | `codex/feat/tenant-chat-api` | PR 04 | Chat API, EncryptedChatStore, conversation/SSE/history/retention |
@@ -42,7 +42,7 @@ admin demo tenant/policy/provider seed
 | 07 | `codex/feat/tenant-chat-web` | PR 06 | employee Chat Web/BFF, normal/economy/blocked UX, a11y |
 | 08 | `codex/feat/tenant-chat-demo` | PR 07 | Compose/self-host seed, E2E/browser/load/demo polishing |
 
-PR 02~08은 stacked draft로 개발할 수 있다. 선행 contract/schema를 소비하는 부분은 선행 PR 기준으로 검증한다. merge 전에 base를 승인된 최신 기준으로 바꾸고 diff를 다시 확인한다.
+PR 02는 실제 browser/session 계약 공백을 같은 PR의 첫 독립 contract commit에서 닫고 auth shell까지 vertical slice로 제공한다. PR 03~08은 stacked draft로 개발할 수 있다. 선행 contract/schema를 소비하는 부분은 선행 PR 기준으로 검증한다. merge 전에 base를 승인된 최신 기준으로 바꾸고 diff를 다시 확인한다.
 
 ## 4. Demo-critical scope
 

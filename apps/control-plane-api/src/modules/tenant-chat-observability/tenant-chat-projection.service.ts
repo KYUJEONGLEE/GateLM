@@ -14,9 +14,11 @@ import {
   TenantChatAttemptEvent,
   TenantChatProjectionEvent,
 } from './tenant-chat-observability.types';
+import { validateTenantChatProjectionEvent } from './tenant-chat-projection.contract';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const BINDING_DIGEST_PATTERN = /^hmac-sha256:[A-Za-z0-9_-]{43}$/;
 const FORBIDDEN_KEYS = new Set([
   'authorization',
   'body',
@@ -211,25 +213,38 @@ export class TenantChatProjectionService
       if (existing.tenantId !== event.executionScope.tenantId) {
         throw new ProjectionError('TENANT_SCOPE_MISMATCH');
       }
-      if (existing.projectedEventVersion >= BigInt(event.eventVersion)) {
-        return;
-      }
     }
 
     const [reservation, admission, runtimeSnapshot] = await Promise.all([
       tx.tenantChatUsageReservation.findUnique({
         where: { requestId: event.requestId },
         select: {
+          idempotencyKey: true,
           pricingVersion: true,
+          requestId: true,
+          reservationId: true,
           reservedAt: true,
           snapshotDigest: true,
           snapshotVersion: true,
           tenantId: true,
+          turnId: true,
+          userId: true,
         },
       }),
       tx.tenantChatRequestAdmission.findUnique({
         where: { requestId: event.requestId },
-        select: { createdAt: true, tenantId: true },
+        select: {
+          actorKind: true,
+          bindingDigest: true,
+          createdAt: true,
+          employeeId: true,
+          idempotencyKey: true,
+          requestId: true,
+          snapshotVersion: true,
+          tenantId: true,
+          turnId: true,
+          userId: true,
+        },
       }),
       tx.tenantChatRuntimeSnapshot.findUnique({
         where: {
@@ -242,43 +257,103 @@ export class TenantChatProjectionService
           digest: true,
           pricingVersion: true,
           tenantId: true,
+          version: true,
         },
       }),
     ]);
-    if (reservation?.tenantId && reservation.tenantId !== event.executionScope.tenantId) {
+    if (
+      reservation?.tenantId &&
+      reservation.tenantId !== event.executionScope.tenantId
+    ) {
       throw new ProjectionError('TENANT_SCOPE_MISMATCH');
     }
-    if (admission?.tenantId && admission.tenantId !== event.executionScope.tenantId) {
+    if (
+      admission?.tenantId &&
+      admission.tenantId !== event.executionScope.tenantId
+    ) {
       throw new ProjectionError('TENANT_SCOPE_MISMATCH');
     }
-    if (runtimeSnapshot?.tenantId && runtimeSnapshot.tenantId !== event.executionScope.tenantId) {
+    if (
+      runtimeSnapshot?.tenantId &&
+      runtimeSnapshot.tenantId !== event.executionScope.tenantId
+    ) {
       throw new ProjectionError('TENANT_SCOPE_MISMATCH');
     }
-    if (!reservation && event.eventType !== 'invocation_terminal') {
+    if (!admission || !runtimeSnapshot) {
       throw new ProjectionError('PROJECTION_SOURCE_UNAVAILABLE');
     }
-    if (!reservation && !runtimeSnapshot) {
-      throw new ProjectionError('PROJECTION_SOURCE_UNAVAILABLE');
+
+    const eventEmployeeId = event.executionScope.employeeId ?? null;
+    if (
+      admission.requestId !== event.requestId ||
+      admission.turnId !== event.turnId ||
+      admission.idempotencyKey !== event.idempotencyKey ||
+      admission.tenantId !== event.executionScope.tenantId ||
+      admission.userId !== event.executionScope.userId ||
+      admission.actorKind !== event.executionScope.actorKind ||
+      admission.employeeId !== eventEmployeeId ||
+      admission.snapshotVersion !== BigInt(event.snapshotVersion) ||
+      !BINDING_DIGEST_PATTERN.test(admission.bindingDigest) ||
+      runtimeSnapshot.tenantId !== event.executionScope.tenantId ||
+      runtimeSnapshot.version !== BigInt(event.snapshotVersion)
+    ) {
+      throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+    }
+
+    const runtimePricingVersion = Number(runtimeSnapshot.pricingVersion);
+    if (
+      !Number.isSafeInteger(runtimePricingVersion) ||
+      runtimePricingVersion < 1 ||
+      (event.pricingVersion !== undefined &&
+        event.pricingVersion !== runtimePricingVersion)
+    ) {
+      throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+    }
+
+    if (event.eventType === 'invocation_terminal') {
+      if (reservation) {
+        throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+      }
+    } else {
+      if (!reservation) {
+        throw new ProjectionError('PROJECTION_SOURCE_UNAVAILABLE');
+      }
+      if (
+        reservation.reservationId !== event.reservationId ||
+        reservation.requestId !== event.requestId ||
+        reservation.turnId !== event.turnId ||
+        reservation.idempotencyKey !== event.idempotencyKey ||
+        reservation.tenantId !== event.executionScope.tenantId ||
+        reservation.userId !== event.executionScope.userId ||
+        reservation.snapshotVersion !== BigInt(event.snapshotVersion) ||
+        reservation.snapshotDigest !== runtimeSnapshot.digest ||
+        reservation.pricingVersion !== runtimeSnapshot.pricingVersion ||
+        event.pricingVersion !== runtimePricingVersion
+      ) {
+        throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+      }
+    }
+
+    if (
+      existing?.projectedEventVersion !== undefined &&
+      existing.projectedEventVersion >= BigInt(event.eventVersion)
+    ) {
+      return;
     }
 
     const attempts = event.attempts ?? [];
     const effectiveAttempt = selectEffectiveAttempt(attempts);
     const occurredAt = new Date(event.occurredAt);
     const startedAt =
-      admission?.createdAt ??
+      admission.createdAt ??
       reservation?.reservedAt ??
       new Date(occurredAt.getTime() - (event.latencyMs ?? 0));
     const quota = event.quota;
     const budget = event.budget;
     const confirmedInputTokens = quota?.confirmedInputTokensDelta ?? 0;
     const confirmedOutputTokens = quota?.confirmedOutputTokensDelta ?? 0;
-    const snapshotDigest = reservation?.snapshotDigest ?? runtimeSnapshot?.digest;
-    const pricingVersion =
-      event.pricingVersion ??
-      Number(reservation?.pricingVersion ?? runtimeSnapshot?.pricingVersion);
-    if (!snapshotDigest || !Number.isSafeInteger(pricingVersion) || pricingVersion < 1) {
-      throw new ProjectionError('PROJECTION_SOURCE_UNAVAILABLE');
-    }
+    const snapshotDigest = runtimeSnapshot.digest;
+    const pricingVersion = runtimePricingVersion;
 
     await tx.tenantChatInvocationLog.upsert({
       where: { requestId: event.requestId },
@@ -386,6 +461,11 @@ class ProjectionError extends Error {
 
 function parseProjectionEvent(payload: Prisma.JsonValue): TenantChatProjectionEvent {
   rejectForbiddenData(payload);
+  try {
+    validateTenantChatProjectionEvent(payload);
+  } catch {
+    throw new ProjectionError('INVALID_EVENT_SCHEMA');
+  }
   if (!isRecord(payload)) {
     throw new ProjectionError('INVALID_EVENT_PAYLOAD');
   }

@@ -3,6 +3,7 @@
 import { Eye, Info, Maximize2, RotateCw, X } from "lucide-react";
 import Link from "next/link";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+import { projectPillTone } from "@/features/dashboard/live-requests-format";
 import type {
   LiveRequestRow,
   LiveRequestStatusFilter
@@ -54,8 +55,6 @@ const dateFormatter = new Intl.DateTimeFormat("en-CA", {
 });
 
 const integerFormatter = new Intl.NumberFormat("en-US");
-
-const projectPillToneCount = 6;
 
 export function LiveRequestsView({
   detailFocusRef,
@@ -337,24 +336,8 @@ function LiveProviderModel({ row }: { row: LiveRequestRow }) {
   );
 }
 
-export function projectPillTone(value: string | null | undefined) {
-  const seed = typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : "unknown-project";
-
-  return stableHash(seed) % projectPillToneCount;
-}
-
 function projectTitle(row: LiveRequestRow) {
   return row.projectId || row.projectName || "Unknown project";
-}
-
-function stableHash(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
 }
 
 function liveProviderFamily(provider: LiveRequestRow["provider"]) {

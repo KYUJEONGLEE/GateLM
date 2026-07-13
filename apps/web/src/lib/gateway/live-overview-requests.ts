@@ -112,6 +112,7 @@ function toLiveRequestRow(
   return {
     cacheStatus: normalizeCacheStatus(record.cacheStatus),
     costUsd: record.costMicroUsd / 1_000_000,
+    fallbackUsed: record.domainOutcomes?.fallback?.outcome === "success",
     id: record.requestId,
     latencyMs: record.latencyMs,
     model: formatModelDisplayName(record.selectedModel ?? record.requestedModel, "Unknown"),

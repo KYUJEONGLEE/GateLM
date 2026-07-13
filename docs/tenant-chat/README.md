@@ -24,13 +24,14 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 
 1. `docs/tenant-chat/contracts.md`
 2. `docs/tenant-chat/execution-contract.md`
-3. `docs/tenant-chat/openapi/private-gateway.openapi.json`
-4. `docs/tenant-chat/db/tenant-chat-usage.sql`
-5. `docs/tenant-chat/schemas/*.schema.json`
-6. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
-7. `docs/tenant-chat/implementation-plan.md`
-8. `docs/tenant-chat/handoffs/*.md`
-9. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
+3. `docs/tenant-chat/openapi/chat-auth.openapi.json`
+4. `docs/tenant-chat/openapi/private-gateway.openapi.json`
+5. `docs/tenant-chat/db/tenant-chat-usage.sql`
+6. `docs/tenant-chat/schemas/*.schema.json`
+7. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
+8. `docs/tenant-chat/implementation-plan.md`
+9. `docs/tenant-chat/handoffs/*.md`
+10. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
 
 `contracts.md`와 schema/fixture가 충돌하면 `contracts.md`를 먼저 고치고 schema/fixture를 함께 맞춘다. 로컬 PR packet은 구현 순서와 acceptance를 제공하지만 active contract를 덮어쓰지 않는다.
 
@@ -79,6 +80,7 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 
 - [Active contract](./contracts.md)
 - [Executable integration contract](./execution-contract.md)
+- [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)
 - [Private Gateway OpenAPI](./openapi/private-gateway.openapi.json)
 - [Tenant Chat usage DDL contract](./db/tenant-chat-usage.sql)
 - [Employee usage integration handoff](./handoffs/employee-usage-integration.md)
@@ -93,3 +95,6 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Pre-ledger terminal event schema](./schemas/invocation-terminal-event.schema.json)
 - [Dashboard aggregate schema](./schemas/dashboard-aggregate.schema.json)
 - [Confirmed cost series schema](./schemas/cost-series.schema.json)
+- [Chat auth session schema](./schemas/chat-auth-session.schema.json)
+- [Chat entitlement schema](./schemas/chat-entitlement.schema.json)
+- [Auth shell first PR verification evidence](./evidence/auth-shell-first-pr.md)

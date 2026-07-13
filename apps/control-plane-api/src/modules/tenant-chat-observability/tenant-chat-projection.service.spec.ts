@@ -143,11 +143,10 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
-  it('projects a pre-ledger terminal event without a reservation', async () => {
+  it('projects a pre-ledger terminal event from its admission without a reservation', async () => {
     const row = terminalRow();
     const harness = createHarness(row);
     harness.tx.tenantChatUsageReservation.findUnique.mockResolvedValue(null);
-    harness.tx.tenantChatRequestAdmission.findUnique.mockResolvedValue(null);
 
     await harness.service.runOnce();
 
@@ -158,6 +157,44 @@ describe('TenantChatProjectionService', () => {
           snapshotDigest: `sha256:${'a'.repeat(43)}`,
           pricingVersion: 5n,
           latencyMs: 12n,
+        }),
+      }),
+    );
+  });
+
+  it('fails closed when the event identity differs from its admission', async () => {
+    const harness = createHarness(settledRow());
+    harness.tx.tenantChatRequestAdmission.findUnique.mockResolvedValue({
+      ...admissionSource(),
+      userId: '00000000-0000-4000-8000-000000000999',
+    });
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).not.toHaveBeenCalled();
+    expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastErrorCode: 'PROJECTION_SOURCE_MISMATCH',
+        }),
+      }),
+    );
+  });
+
+  it('fails closed when reservation and runtime snapshot provenance differ', async () => {
+    const harness = createHarness(settledRow());
+    harness.tx.tenantChatUsageReservation.findUnique.mockResolvedValue({
+      ...reservationSource(),
+      snapshotDigest: `sha256:${'b'.repeat(43)}`,
+    });
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).not.toHaveBeenCalled();
+    expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastErrorCode: 'PROJECTION_SOURCE_MISMATCH',
         }),
       }),
     );
@@ -205,25 +242,17 @@ function createHarness(row: ReturnType<typeof settledRow>) {
       upsert: jest.fn().mockResolvedValue({}),
     },
     tenantChatUsageReservation: {
-      findUnique: jest.fn().mockResolvedValue({
-        pricingVersion: 5n,
-        reservedAt: new Date('2026-07-12T12:00:01Z'),
-        snapshotDigest: `sha256:${'a'.repeat(43)}`,
-        snapshotVersion: 12n,
-        tenantId,
-      }),
+      findUnique: jest.fn().mockResolvedValue(reservationSource()),
     },
     tenantChatRequestAdmission: {
-      findUnique: jest.fn().mockResolvedValue({
-        createdAt: new Date('2026-07-12T12:00:00Z'),
-        tenantId,
-      }),
+      findUnique: jest.fn().mockResolvedValue(admissionSource()),
     },
     tenantChatRuntimeSnapshot: {
       findUnique: jest.fn().mockResolvedValue({
         digest: `sha256:${'a'.repeat(43)}`,
         pricingVersion: 5n,
         tenantId,
+        version: 12n,
       }),
     },
   };
@@ -245,6 +274,36 @@ function createHarness(row: ReturnType<typeof settledRow>) {
   return {
     service: new TenantChatProjectionService(prisma, config),
     tx,
+  };
+}
+
+function reservationSource() {
+  return {
+    idempotencyKey: 'idempotency_projection_001',
+    pricingVersion: 5n,
+    requestId: 'request_projection_001',
+    reservationId: 'reservation_projection_001',
+    reservedAt: new Date('2026-07-12T12:00:01Z'),
+    snapshotDigest: `sha256:${'a'.repeat(43)}`,
+    snapshotVersion: 12n,
+    tenantId,
+    turnId: 'turn_projection_001',
+    userId,
+  };
+}
+
+function admissionSource() {
+  return {
+    actorKind: 'employee',
+    bindingDigest: `hmac-sha256:${'A'.repeat(43)}`,
+    createdAt: new Date('2026-07-12T12:00:00Z'),
+    employeeId,
+    idempotencyKey: 'idempotency_projection_001',
+    requestId: 'request_projection_001',
+    snapshotVersion: 12n,
+    tenantId,
+    turnId: 'turn_projection_001',
+    userId,
   };
 }
 

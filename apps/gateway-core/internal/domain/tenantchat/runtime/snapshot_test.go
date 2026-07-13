@@ -26,9 +26,13 @@ func TestEmbeddedSchemaMatchesContractDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read contract schema: %v", err)
 	}
-	if !bytes.Equal(contractSchema, snapshotSchemaDocument) {
+	if !bytes.Equal(normalizeLineEndings(contractSchema), normalizeLineEndings(snapshotSchemaDocument)) {
 		t.Fatal("embedded runtime snapshot schema drifted from docs/tenant-chat contract")
 	}
+}
+
+func normalizeLineEndings(document []byte) []byte {
+	return bytes.ReplaceAll(document, []byte("\r\n"), []byte("\n"))
 }
 
 func TestRuntimeSnapshotValidationVectors(t *testing.T) {

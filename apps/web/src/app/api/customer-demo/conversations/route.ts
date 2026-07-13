@@ -5,6 +5,7 @@ import {
 } from "@/lib/control-plane/conversations-client";
 import { resolveApplicationChatProfile } from "@/lib/gateway/application-chat-profiles";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
+import { legacyCustomerDemoEnabled } from "@/lib/gateway/legacy-customer-demo";
 
 type ConversationRequestPayload = {
   contextRetentionEnabled?: unknown;
@@ -17,6 +18,9 @@ type ConversationRequestPayload = {
 const APPLICATION_END_USER_ID = "customer_user_demo_live";
 
 export async function POST(request: Request) {
+  if (!legacyCustomerDemoEnabled()) {
+    return NextResponse.json({ error: "Legacy customer demo is disabled." }, { status: 404 });
+  }
   const payload = await readPayload(request);
   const profileResult = await getRequestProfile(payload.profileId);
 
@@ -48,6 +52,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (!legacyCustomerDemoEnabled()) {
+    return NextResponse.json({ error: "Legacy customer demo is disabled." }, { status: 404 });
+  }
   const payload = await readPayload(request);
   const profileResult = await getRequestProfile(payload.profileId);
 

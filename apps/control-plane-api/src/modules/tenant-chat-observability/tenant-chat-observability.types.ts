@@ -30,6 +30,8 @@ export interface TenantChatProjectionEvent {
   aggregateId: string;
   requestId: string;
   turnId: string;
+  idempotencyKey: string;
+  reservationId?: string;
   executionScope: {
     kind: 'tenant_chat';
     tenantId: string;
@@ -39,6 +41,7 @@ export interface TenantChatProjectionEvent {
   };
   snapshotVersion: number;
   pricingVersion?: number;
+  errorCode?: string;
   terminalOutcome?: string;
   quotaState?: string;
   budgetState?: string;
@@ -46,6 +49,7 @@ export interface TenantChatProjectionEvent {
   latencyMs?: number;
   quota?: {
     state: string;
+    reservedTokensDelta: number;
     confirmedInputTokensDelta: number;
     confirmedOutputTokensDelta: number;
     confirmedTotalTokensDelta: number;
@@ -53,6 +57,7 @@ export interface TenantChatProjectionEvent {
   };
   budget?: {
     state: string;
+    reservedCostMicroUsdDelta: number;
     confirmedCostMicroUsdDelta: number;
     unconfirmedExposureMicroUsdDelta: number;
   };

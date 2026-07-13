@@ -297,7 +297,7 @@ export function LiveRequestsCard({
           onOpenFocus={openFocusView}
           onOpenRequest={openRequestDetail}
           onStatusFilterChange={setStatusFilter}
-          rows={rows.slice(0, 5)}
+          rows={rows.slice(0, 4)}
           statusFilter={statusFilter}
           viewAllLogsHref={viewAllLogsHref}
         />
