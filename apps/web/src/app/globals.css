@@ -401,8 +401,7 @@ select {
 
 .console-sidebar-topbar {
   display: grid;
-  grid-template-rows: 44px 36px;
-  gap: 6px;
+  grid-template-rows: 44px;
   width: 100%;
   min-width: 0;
 }
@@ -415,27 +414,6 @@ select {
 
 .console-sidebar-topbar > .console-brand {
   height: 44px;
-}
-
-.console-sidebar-product-row {
-  display: flex;
-  min-width: 0;
-  min-height: 36px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.console-sidebar-product-label {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .gatelm-logo {
@@ -590,14 +568,6 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   justify-content: center;
 }
 
-.console-shell[data-sidebar-collapsed="true"] .console-sidebar-product-row {
-  justify-content: flex-end;
-}
-
-.console-shell[data-sidebar-collapsed="true"] .console-sidebar-product-label {
-  display: none;
-}
-
 @media (min-width: 1101px) {
   .console-shell[data-sidebar-collapsed="true"] .console-sidebar {
     overflow: visible;
@@ -619,7 +589,27 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
     border-top: 1px solid var(--sidebar-border);
   }
 
-  .console-shell[data-sidebar-collapsed="true"] .console-nav-link[data-static="true"] {
+  .console-shell[data-sidebar-collapsed="true"]
+    .console-nav-link[data-static="true"]:not([data-has-sidebar-toggle="true"]) {
+    display: none;
+  }
+
+  .console-shell[data-sidebar-collapsed="true"]
+    .console-nav-link[data-static="true"][data-has-sidebar-toggle="true"] {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .console-shell[data-sidebar-collapsed="true"]
+    .console-nav-link[data-static="true"][data-has-sidebar-toggle="true"]
+    > svg,
+  .console-shell[data-sidebar-collapsed="true"]
+    .console-nav-link[data-static="true"][data-has-sidebar-toggle="true"]
+    > span {
     display: none;
   }
 
@@ -748,6 +738,14 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 .console-nav-link[data-static="true"]:hover {
   background: transparent;
   color: var(--sidebar-foreground);
+}
+
+.console-nav-sidebar-toggle {
+  margin-left: auto;
+}
+
+.console-shell[data-sidebar-collapsed="true"] .console-nav-sidebar-toggle {
+  margin-left: 0;
 }
 
 .console-nav-link[data-active="true"] {
@@ -6503,8 +6501,23 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   box-shadow: none;
 }
 
+.management-line-content > .provider-line-panel {
+  display: block;
+  width: min(100%, 1584px);
+}
+
+.management-line-content > .provider-line-panel > .provider-panel-heading,
+.management-line-content > .provider-line-panel > .provider-card-list,
+.management-line-content > .provider-line-panel > .project-empty {
+  grid-column: 1;
+}
+
 .provider-line-panel .panel-heading {
-  margin-bottom: 6px;
+  margin-bottom: 0;
+}
+
+.provider-panel-heading + .provider-card-list {
+  margin-top: 36px;
 }
 
 .provider-panel-heading {
@@ -6516,7 +6529,8 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 
 .provider-panel-heading [data-slot="button"] {
   height: 42px;
-  margin-left: auto;
+  margin-left: 0;
+  justify-self: start;
   gap: 8px;
   padding-inline: 16px;
   font-size: calc(var(--font-size-base) + var(--global-font-lift));
@@ -6529,11 +6543,15 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 
 .provider-card-list {
   display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 14px;
 }
 
 .provider-card {
   display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 0;
   padding: 0;
   border: 1px solid var(--border);
@@ -20595,6 +20613,29 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
     > .credential-line-panel {
     grid-template-columns: 240px minmax(0, 1fr);
     column-gap: 64px;
+  }
+
+  html[data-presentation-mode="true"]
+    .management-line-content
+    > .provider-line-panel {
+    display: block;
+    width: 100%;
+    max-width: var(--presentation-content-width);
+  }
+
+  html[data-presentation-mode="true"]
+    .management-line-content
+    > .provider-line-panel
+    > .provider-panel-heading,
+  html[data-presentation-mode="true"]
+    .management-line-content
+    > .provider-line-panel
+    > .provider-card-list,
+  html[data-presentation-mode="true"]
+    .management-line-content
+    > .provider-line-panel
+    > .project-empty {
+    grid-column: 1;
   }
 
   html[data-presentation-mode="true"]
