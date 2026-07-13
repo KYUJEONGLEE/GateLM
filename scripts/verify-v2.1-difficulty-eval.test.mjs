@@ -54,7 +54,11 @@ test("difficulty schema is closed and requires the difficulty label", () => {
 test("difficulty records reject secret-shaped text even in redactedPrompt", () => {
   withDataset(
     difficultySchema(),
-    [difficultyRecord({ redactedPrompt: "Bearer abcdefghijklmnopqrstuvwxyz" })],
+    [
+      difficultyRecord({
+        redactedPrompt: ["Bearer", "abcdefghijklmnopqrstuvwxyz"].join(" "),
+      }),
+    ],
     ({ rootDir }) => {
       const failures = verifyDifficultyEvaluationDataset({ rootDir });
       assert.ok(

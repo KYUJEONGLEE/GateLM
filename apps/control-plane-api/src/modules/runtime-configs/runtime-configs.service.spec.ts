@@ -354,7 +354,7 @@ describe('RuntimeConfigsService', () => {
     );
   });
 
-  it('migrates only legacy defaultModel into all ten route cells', async () => {
+  it('normalizes legacy defaultModel for reads without persisting', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
     const current = activeRuntimeConfigDocument();
@@ -401,19 +401,8 @@ describe('RuntimeConfigsService', () => {
       'highQualityModel',
     );
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('fallbackModel');
-    expect(prisma.runtimeConfig.update).toHaveBeenCalledWith({
-      where: { id: '00000000-0000-4000-8000-000000000700' },
-      data: expect.objectContaining({
-        configHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-        document: expect.objectContaining({
-          schemaVersion: 'gatelm.active-runtime-config.v2',
-          routingPolicy: expect.objectContaining({
-            schemaVersion: 'gatelm.routing-policy.v2',
-            routes: routingRoutes(`${providerId}:mock-fast`),
-          }),
-        }),
-      }),
-    });
+    expect(result.item.configHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed stored v2 routing policy instead of treating it as legacy', async () => {

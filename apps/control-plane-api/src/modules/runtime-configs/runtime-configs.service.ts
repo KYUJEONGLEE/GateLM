@@ -206,7 +206,7 @@ export class RuntimeConfigsService {
       throw new NotFoundException('Runtime Config history item not found.');
     }
 
-    const migrated = await this.readOrMigrateRuntimeConfigDocument(runtimeConfig);
+    const migrated = this.readRuntimeConfigDocument(runtimeConfig);
     const { document } = migrated;
     this.assertNoForbiddenRuntimeConfigKeys(document);
 
@@ -451,7 +451,7 @@ export class RuntimeConfigsService {
     }
 
     const { runtimeConfig, document } =
-      await this.readOrMigrateRuntimeConfigDocument(storedRuntimeConfig);
+      this.readRuntimeConfigDocument(storedRuntimeConfig);
     await this.assertRuntimeConfigExecutable({
       applicationId,
       runtimeConfig,
@@ -555,7 +555,7 @@ export class RuntimeConfigsService {
     }
 
     const { document: draftDocument } =
-      await this.readOrMigrateRuntimeConfigDocument(draft);
+      this.readRuntimeConfigDocument(draft);
     const activeConfigVersion =
       dto.configVersion?.trim() || this.createPublishedConfigVersion(now);
     if (activeConfigVersion === draft.configVersion) {
@@ -660,7 +660,7 @@ export class RuntimeConfigsService {
     }
 
     const { document: targetDocument } =
-      await this.readOrMigrateRuntimeConfigDocument(target);
+      this.readRuntimeConfigDocument(target);
     const rollbackConfigVersion =
       dto.rollbackConfigVersion?.trim() ||
       this.createRollbackConfigVersion(target.configVersion, now);
@@ -1691,19 +1691,22 @@ export class RuntimeConfigsService {
       }
       return ROUTING_DIFFICULTIES.every((difficulty) => {
         const cell = categoryRoutes[difficulty];
-        return (
-          this.isRecord(cell) &&
-          Object.keys(cell).length === 1 &&
-          Array.isArray(cell.modelRefs) &&
-          cell.modelRefs.length > 0 &&
-          cell.modelRefs.every(
+        if (
+          !this.isRecord(cell) ||
+          Object.keys(cell).length !== 1 ||
+          !Array.isArray(cell.modelRefs) ||
+          cell.modelRefs.length === 0 ||
+          !cell.modelRefs.every(
             (ref) =>
               typeof ref === 'string' &&
               ref.trim().length > 0 &&
-              ref.length <= 240,
-          ) &&
-          new Set(cell.modelRefs).size === cell.modelRefs.length
-        );
+              ref.trim().length <= 240,
+          )
+        ) {
+          return false;
+        }
+        const normalizedRefs = cell.modelRefs.map((ref) => ref.trim());
+        return new Set(normalizedRefs).size === normalizedRefs.length;
       });
     });
   }
@@ -2768,14 +2771,14 @@ export class RuntimeConfigsService {
     };
   }
 
-  private async readOrMigrateRuntimeConfigDocument<
-    T extends { id: string; configHash: string; document: Prisma.JsonValue },
+  private readRuntimeConfigDocument<
+    T extends { configHash: string; document: Prisma.JsonValue },
   >(
     runtimeConfig: T,
-  ): Promise<{
+  ): {
     runtimeConfig: T;
     document: ActiveRuntimeConfigResponseDto;
-  }> {
+  } {
     const isV2 = this.isPersistedRoutingV2(runtimeConfig.document);
     if (this.declaresRoutingV2(runtimeConfig.document) && !isV2) {
       throw new ConflictException(
@@ -2798,14 +2801,6 @@ export class RuntimeConfigsService {
         }),
       ),
     };
-    await this.prisma.runtimeConfig.update({
-      where: { id: runtimeConfig.id },
-      data: {
-        configHash: migratedDocument.configHash,
-        document: this.toInputJsonObject(migratedDocument),
-      },
-    });
-
     return {
       runtimeConfig: {
         ...runtimeConfig,

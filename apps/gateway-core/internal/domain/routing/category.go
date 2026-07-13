@@ -129,19 +129,20 @@ func (d CategoryDiagnostics) HasData() bool {
 }
 
 func categoryScores(text string) []CategoryScore {
-	code := policyRuleScore(text, categoryPolicy.Rules[CategoryCode]) + weightedSignalScore(text,
+	tokens := routingTokenSet(text)
+	code := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode]) + weightedSignalScore(text,
 		[]string{"```", "stack trace", "syntax error", "race condition", "nil pointer", "compile error"},
 		[]string{"typescript", "javascript", "python", "golang", " go ", "sql", "function", "class", "api", "debug", "refactor", "code", "bug", "코드", "버그", "함수"},
 	)
-	translation := policyRuleScore(text, categoryPolicy.Rules[CategoryTranslation]) + weightedSignalScore(text,
+	translation := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryTranslation]) + weightedSignalScore(text,
 		[]string{"translate", "translation", "번역", "영어로", "한국어로", "일본어로", "중국어로"},
 		[]string{" to english", " to korean", " to japanese", " to chinese", "tone", "terminology"},
 	)
-	summarization := policyRuleScore(text, categoryPolicy.Rules[CategorySummarization]) + weightedSignalScore(text,
+	summarization := policyRuleScore(text, tokens, categoryPolicy.Rules[CategorySummarization]) + weightedSignalScore(text,
 		[]string{"summarize", "summary", "요약", "핵심 정리", "key points"},
 		[]string{"meeting notes", "report", "document", "결론", "결정사항"},
 	)
-	reasoning := policyRuleScore(text, categoryPolicy.Rules[CategoryReasoning]) + weightedSignalScore(text,
+	reasoning := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryReasoning]) + weightedSignalScore(text,
 		[]string{"compare", "tradeoff", "trade-off", "recommend", "evaluate", "analyze", "reason", "비교", "추천", "분석", "판단"},
 		[]string{"constraint", "option", "because", "if ", "plan", "우선순위", "장단점"},
 	)
@@ -156,7 +157,7 @@ func categoryScores(text string) []CategoryScore {
 	}
 }
 
-func policyRuleScore(text string, rule categoryRuleData) int {
+func policyRuleScore(text string, tokens map[string]struct{}, rule categoryRuleData) int {
 	if text == "" || hasAnyPhrase(text, rule.NegativeSignals) {
 		return 0
 	}
@@ -180,17 +181,17 @@ func policyRuleScore(text string, rule categoryRuleData) int {
 		}
 	}
 	for _, token := range rule.Tokens {
-		if containsRoutingToken(text, strings.ToLower(token)) {
+		if containsRoutingToken(tokens, strings.ToLower(token)) {
 			score += 2
 		}
 	}
-	if rule.RequiresToken != "" && !containsRoutingToken(text, strings.ToLower(rule.RequiresToken)) {
+	if rule.RequiresToken != "" && !containsRoutingToken(tokens, strings.ToLower(rule.RequiresToken)) {
 		return 0
 	}
 	if len(rule.RequiresAnyToken) > 0 {
 		matched := false
 		for _, token := range rule.RequiresAnyToken {
-			if containsRoutingToken(text, strings.ToLower(token)) {
+			if containsRoutingToken(tokens, strings.ToLower(token)) {
 				matched = true
 				break
 			}
@@ -209,16 +210,23 @@ func policyRuleScore(text string, rule categoryRuleData) int {
 	return score
 }
 
-func containsRoutingToken(text string, target string) bool {
+func routingTokenSet(text string) map[string]struct{} {
+	tokens := strings.FieldsFunc(text, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
+	})
+	result := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		result[token] = struct{}{}
+	}
+	return result
+}
+
+func containsRoutingToken(tokens map[string]struct{}, target string) bool {
 	if target == "" {
 		return false
 	}
-	for _, token := range strings.FieldsFunc(text, func(r rune) bool { return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_') }) {
-		if token == target {
-			return true
-		}
-	}
-	return false
+	_, exists := tokens[target]
+	return exists
 }
 
 func weightedSignalScore(text string, strong []string, soft []string) int {

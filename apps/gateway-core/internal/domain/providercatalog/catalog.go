@@ -146,7 +146,7 @@ func (c Catalog) ProviderByName(providerName string) (Provider, error) {
 // It deliberately does not split or interpret the reference string.
 func (c Catalog) ResolveModelRef(modelRef string) (Provider, Model, error) {
 	modelRef = strings.TrimSpace(modelRef)
-	for _, provider := range c.Normalize().Providers {
+	for _, provider := range c.Providers {
 		if !provider.Enabled {
 			continue
 		}

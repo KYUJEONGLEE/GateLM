@@ -259,12 +259,33 @@ func TestRoutingPolicyRejectsMalformedModelRefsWithoutRepair(t *testing.T) {
 	}
 }
 
-func TestExecutionSnapshotValidateRejectsMalformedRefsBeforeNormalization(t *testing.T) {
+func TestExecutionSnapshotValidateRejectsDuplicateRefsAfterNormalization(t *testing.T) {
 	snapshot := testActiveConfig().ExecutionSnapshot()
 	snapshot.Snapshot.RuntimeSnapshotVersion = 2
 	snapshot.RoutingPolicy.Routes.General.Simple.ModelRefs = append(snapshot.RoutingPolicy.Routes.General.Simple.ModelRefs, routing.MockBootstrapRef)
 	if err := snapshot.Validate(); !errors.Is(err, ErrInvalidRoutingPolicy) {
-		t.Fatalf("expected duplicate ref rejection before normalization, got %v", err)
+		t.Fatalf("expected duplicate ref rejection after normalization, got %v", err)
+	}
+}
+
+func TestActiveConfigValidateActiveNormalizesRoutingPolicyBeforeValidation(t *testing.T) {
+	config := testActiveConfig()
+	config.RoutingPolicy.Mode = " AUTO "
+	config.RoutingPolicy.BootstrapState = " mock_bootstrap "
+	config.RoutingPolicy.RoutingPolicyHash = " hash_routing_policy_test "
+	config.RoutingPolicy.Routes.General.Simple.ModelRefs = []string{" mock-balanced "}
+
+	if err := config.ValidateActive(); err != nil {
+		t.Fatalf("expected normalized routing policy to validate, got %v", err)
+	}
+}
+
+func TestExecutionSnapshotValidateChecksSchemaFallbackBeforeNormalization(t *testing.T) {
+	snapshot := testActiveConfig().ExecutionSnapshot()
+	snapshot.Snapshot.RuntimeSnapshotVersion = 0
+
+	if err := snapshot.Validate(); !errors.Is(err, ErrUnsupportedSnapshotSchema) {
+		t.Fatalf("expected unsupported snapshot schema before default normalization, got %v", err)
 	}
 }
 

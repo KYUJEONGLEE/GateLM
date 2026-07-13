@@ -1,6 +1,9 @@
 package providercatalog
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestFirstFallbackProviderSkipsExcludedPrimaryCandidate(t *testing.T) {
 	catalog := Catalog{
@@ -52,10 +55,10 @@ func TestCatalogNormalizeConvertsNilProviderModelsToEmptySlice(t *testing.T) {
 
 func TestCatalogResolveModelRefTreatsReferenceAsOpaque(t *testing.T) {
 	t.Parallel()
-	catalog := Catalog{Providers: []Provider{
+	catalog := (Catalog{Providers: []Provider{
 		{ProviderID: "provider-a", ProviderName: "provider-a-name", Enabled: true, Models: []Model{{ModelID: "catalog-model-a", ModelRef: "opaque:ref:with:colons", ModelName: "actual-model", Enabled: true}}},
 		{ProviderID: "provider-mock", ProviderName: "mock", Enabled: true, Models: []Model{{ModelID: "mock-balanced", ModelName: "mock-balanced", Enabled: true}}},
-	}}
+	}}).Normalize()
 
 	provider, model, err := catalog.ResolveModelRef("opaque:ref:with:colons")
 	if err != nil {
@@ -74,6 +77,24 @@ func TestCatalogResolveModelRefTreatsReferenceAsOpaque(t *testing.T) {
 	}
 	if provider.ProviderName != "mock" || model.ModelID != "mock-balanced" {
 		t.Fatalf("unexpected mock bootstrap target: provider=%#v model=%#v", provider, model)
+	}
+}
+
+func TestCatalogResolveModelRefDoesNotNormalizeCatalogDuringLookup(t *testing.T) {
+	t.Parallel()
+	catalog := Catalog{Providers: []Provider{{
+		ProviderID:   "provider-a",
+		ProviderName: "provider-a",
+		Enabled:      true,
+		Models:       []Model{{ModelID: "model-a", Enabled: true}},
+	}}}
+
+	_, _, err := catalog.ResolveModelRef("model-a")
+	if !errors.Is(err, ErrModelNotFound) {
+		t.Fatalf("lookup must use the pre-normalized catalog as-is, got %v", err)
+	}
+	if catalog.Providers[0].Models[0].ModelRef != "" {
+		t.Fatalf("lookup must not mutate modelRef through normalization: %#v", catalog.Providers[0].Models[0])
 	}
 }
 

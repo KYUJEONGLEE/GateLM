@@ -184,9 +184,6 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 }
 
 func (c ActiveConfig) ValidateActive() error {
-	if strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash) != "" && !IsValidRoutingPolicy(c.RoutingPolicy) {
-		return ErrInvalidRoutingPolicy
-	}
 	c = c.Normalize()
 	if c.TenantID == "" || c.ProjectID == "" || c.ApplicationID == "" {
 		return ErrMissingScope
@@ -349,8 +346,8 @@ func IsValidResponseCapturePolicy(policy ResponseCapturePolicy) bool {
 }
 
 func (s ExecutionSnapshot) Validate() error {
-	if strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash) != "" && !IsValidRoutingPolicy(s.RoutingPolicy) {
-		return ErrInvalidRoutingPolicy
+	if s.Snapshot.RuntimeSnapshotVersion <= 0 {
+		return ErrUnsupportedSnapshotSchema
 	}
 	s = s.Normalize(time.Time{}, "")
 	if s.TenantID == "" || s.ProjectID == "" || s.ApplicationID == "" {
@@ -361,9 +358,6 @@ func (s ExecutionSnapshot) Validate() error {
 	}
 	if err := s.SafetyPolicy.Validate(); err != nil {
 		return err
-	}
-	if s.Snapshot.RuntimeSnapshotVersion <= 0 {
-		return ErrUnsupportedSnapshotSchema
 	}
 	if !IsValidRoutingPolicy(s.RoutingPolicy) {
 		return ErrInvalidRoutingPolicy
@@ -561,18 +555,9 @@ func normalizeDifficultyRoutes(routes routing.DifficultyRoutes) routing.Difficul
 }
 
 func normalizeRouteCell(cell routing.RouteCell) routing.RouteCell {
-	seen := map[string]struct{}{}
-	refs := make([]string, 0, len(cell.ModelRefs))
-	for _, ref := range cell.ModelRefs {
-		ref = strings.TrimSpace(ref)
-		if ref == "" {
-			continue
-		}
-		if _, exists := seen[ref]; exists {
-			continue
-		}
-		seen[ref] = struct{}{}
-		refs = append(refs, ref)
+	refs := make([]string, len(cell.ModelRefs))
+	for i, ref := range cell.ModelRefs {
+		refs[i] = strings.TrimSpace(ref)
 	}
 	return routing.RouteCell{ModelRefs: refs}
 }
