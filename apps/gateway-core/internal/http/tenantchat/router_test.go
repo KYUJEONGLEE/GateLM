@@ -1,17 +1,22 @@
 package tenantchat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
+	"gatelm/apps/gateway-core/internal/domain/provider"
 	domain "gatelm/apps/gateway-core/internal/domain/tenantchat"
+	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 )
 
@@ -19,16 +24,20 @@ type fakeAuthenticator struct {
 	verified workloadauth.VerifiedToken
 	err      error
 	calls    int
+	phase    domain.Phase
+	payload  any
 }
 
 func (a *fakeAuthenticator) Authenticate(
 	_ context.Context,
 	_ string,
-	_ domain.Phase,
+	phase domain.Phase,
 	_ domain.RequestContext,
-	_ any,
+	payload any,
 ) (workloadauth.VerifiedToken, error) {
 	a.calls++
+	a.phase = phase
+	a.payload = payload
 	return a.verified, a.err
 }
 
@@ -37,6 +46,175 @@ type fakeAdmissionService struct {
 	cancel    domain.AdmissionCancellation
 	err       error
 	context   domain.RequestContext
+}
+
+type fakeCompletionService struct {
+	execution completionservice.Execution
+	err       error
+	request   domain.CompletionRequest
+}
+
+func (s *fakeCompletionService) Prepare(
+	_ context.Context,
+	request domain.CompletionRequest,
+) (completionservice.Execution, error) {
+	s.request = request
+	return s.execution, s.err
+}
+
+type fakeCompletionExecution struct {
+	events []domain.CompletionEvent
+	err    error
+	closed bool
+}
+
+func (e *fakeCompletionExecution) Relay(_ context.Context, emit completionservice.EventEmitter) error {
+	for _, event := range e.events {
+		if err := emit(event); err != nil {
+			return err
+		}
+	}
+	return e.err
+}
+
+func (e *fakeCompletionExecution) Close() { e.closed = true }
+
+func (e *fakeCompletionExecution) IsReplay() bool { return false }
+
+func TestCompletionReportsRelayFailureWithoutRawProviderDetail(t *testing.T) {
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+	}()
+
+	execution := &fakeCompletionExecution{err: provider.NewError(
+		provider.ErrorKindError,
+		provider.ErrorCodeProviderError,
+		errors.New("raw provider detail must not be logged"),
+	)}
+	request := domain.CompletionRequest{
+		Context: domain.RequestContext{Phase: domain.PhaseCompletion, RequestID: "request_relay_failure"},
+		Input: domain.CompletionInput{
+			Messages: []domain.EphemeralMessage{{Role: "user", Content: "안녕하세요"}}, Stream: true,
+		},
+	}
+	recorder := performJSONRequest(
+		t,
+		NewRouter(
+			&fakeAuthenticator{},
+			&fakeAdmissionService{},
+			64*1024,
+			WithCompletionService(&fakeCompletionService{execution: execution}),
+		),
+		"/internal/v1/tenant-chat/completions",
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("want started SSE response, got %d", recorder.Code)
+	}
+	if !strings.Contains(logs.String(), "request_id=request_relay_failure") ||
+		!strings.Contains(logs.String(), "error_code=CHAT_PROVIDER_FAILED") ||
+		strings.Contains(logs.String(), "raw provider detail") {
+		t.Fatalf("unexpected safe relay log: %s", logs.String())
+	}
+}
+
+func TestCompletionDoesNotReportClientCancellation(t *testing.T) {
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+	}()
+
+	request := domain.CompletionRequest{
+		Context: domain.RequestContext{Phase: domain.PhaseCompletion, RequestID: "request_client_cancel"},
+		Input: domain.CompletionInput{
+			Messages: []domain.EphemeralMessage{{Role: "user", Content: "안녕하세요"}}, Stream: true,
+		},
+	}
+	performJSONRequest(
+		t,
+		NewRouter(
+			&fakeAuthenticator{},
+			&fakeAdmissionService{},
+			64*1024,
+			WithCompletionService(&fakeCompletionService{
+				execution: &fakeCompletionExecution{err: context.Canceled},
+			}),
+		),
+		"/internal/v1/tenant-chat/completions",
+		request,
+	)
+
+	if logs.Len() != 0 {
+		t.Fatalf("client cancellation must not be reported as a relay failure: %s", logs.String())
+	}
+}
+
+func TestCompletionAuthenticatesBoundPayloadAndStreamsContractEvents(t *testing.T) {
+	auth := &fakeAuthenticator{}
+	replayed := false
+	modelKey := "model-standard"
+	execution := &fakeCompletionExecution{events: []domain.CompletionEvent{
+		{
+			Type: domain.CompletionEventDelta, SchemaVersion: 1,
+			RequestID: "request_completion_001", TurnID: "turn_completion_001",
+			Sequence: 1, Delta: "안녕하세요",
+		},
+		{
+			Type: domain.CompletionEventFinal, SchemaVersion: 1,
+			RequestID: "request_completion_001", TurnID: "turn_completion_001",
+			Sequence: 2, TerminalOutcome: "succeeded", EffectiveModelKey: &modelKey,
+			Usage: &domain.CompletionUsage{
+				InputTokens: 4, OutputTokens: 2, TotalTokens: 6, UsageQuality: "confirmed",
+			},
+			QuotaState: "normal", BudgetState: "normal", CacheOutcome: "off", Replayed: &replayed,
+		},
+	}}
+	completions := &fakeCompletionService{execution: execution}
+	request := domain.CompletionRequest{
+		Context: domain.RequestContext{
+			Phase: domain.PhaseCompletion, RequestID: "request_completion_001", TurnID: "turn_completion_001",
+		},
+		Input: domain.CompletionInput{
+			Messages: []domain.EphemeralMessage{{Role: "user", Content: "안녕하세요"}}, Stream: true,
+		},
+	}
+	recorder := performJSONRequest(
+		t,
+		NewRouter(auth, &fakeAdmissionService{}, 64*1024, WithCompletionService(completions)),
+		"/internal/v1/tenant-chat/completions",
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("want completion success, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if auth.phase != domain.PhaseCompletion || !reflect.DeepEqual(auth.payload, completions.request.Input) {
+		t.Fatalf("completion auth did not receive exact phase/payload: phase=%s payload=%#v", auth.phase, auth.payload)
+	}
+	if contentType := recorder.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
+		t.Fatalf("unexpected completion content type: %q", contentType)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, "event: tenant_chat.delta") ||
+		!strings.Contains(body, "event: tenant_chat.final") ||
+		!strings.Contains(body, `"replayed":false`) {
+		t.Fatalf("completion stream does not satisfy SSE contract: %s", body)
+	}
+	if !execution.closed {
+		t.Fatal("completion execution was not closed")
+	}
 }
 
 func (s *fakeAdmissionService) Admit(

@@ -341,15 +341,31 @@ func (r *openAIStreamReader) Next() (provider.ChatCompletionStreamEvent, error) 
 		}
 
 		var metadata struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
 			Usage *provider.Usage `json:"usage"`
 		}
 		if err := json.Unmarshal(raw, &metadata); err != nil {
 			return provider.ChatCompletionStreamEvent{}, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("decode provider streaming chunk metadata: %w", err))
 		}
 
+		var delta string
+		for _, choice := range metadata.Choices {
+			if choice.Delta.Content != "" {
+				delta = choice.Delta.Content
+				break
+			}
+		}
+		if metadata.Usage != nil && metadata.Usage.PromptTokensDetails != nil {
+			metadata.Usage.CacheReadInputTokens = metadata.Usage.PromptTokensDetails.CachedTokens
+		}
 		copied := append(json.RawMessage(nil), raw...)
 		return provider.ChatCompletionStreamEvent{
 			Data:  copied,
+			Delta: delta,
 			Usage: metadata.Usage,
 		}, nil
 	}

@@ -1,11 +1,14 @@
 package anthropic
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,6 +126,52 @@ func TestCreateChatCompletionMapsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestCreateChatCompletionStreamNormalizesAnthropicSSE(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Stream bool `json:"stream"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || !request.Stream {
+			t.Fatalf("expected streaming anthropic request: request=%+v err=%v", request, err)
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("unexpected accept header: %s", r.Header.Get("Accept"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: message_start\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream_001\",\"model\":\"claude-synthetic-sonnet\",\"usage\":{\"input_tokens\":5,\"cache_read_input_tokens\":2,\"output_tokens\":0}}}\n\n")
+		_, _ = io.WriteString(w, "event: content_block_delta\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕\"}}\n\n")
+		_, _ = io.WriteString(w, "event: message_delta\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}\n\n")
+		_, _ = io.WriteString(w, "event: message_stop\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer server.Close()
+
+	stream, err := NewAdapter(server.Client()).CreateChatCompletionStream(t.Context(), executionConfig(server.URL), provider.ChatCompletionRequest{
+		RequestID: "req_stream_001", Model: "claude-synthetic-sonnet",
+		Messages: []provider.ChatMessage{{Role: "user", Content: rawString(t, "hello")}},
+	})
+	if err != nil {
+		t.Fatalf("CreateChatCompletionStream returned error: %v", err)
+	}
+	defer stream.Close()
+	delta, err := stream.Next()
+	if err != nil || delta.Delta != "안녕" || !json.Valid(delta.Data) {
+		t.Fatalf("unexpected normalized delta: event=%+v err=%v", delta, err)
+	}
+	usage, err := stream.Next()
+	if err != nil || usage.Usage == nil || usage.Usage.PromptTokens != 7 ||
+		usage.Usage.CacheReadInputTokens != 2 || usage.Usage.CompletionTokens != 3 ||
+		usage.Usage.TotalTokens != 10 || !json.Valid(usage.Data) {
+		t.Fatalf("unexpected normalized usage: event=%+v err=%v", usage, err)
+	}
+	if _, err := stream.Next(); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected stream EOF, got %v", err)
+	}
+}
+
 func TestCreateChatCompletionRejectsWrongRequestFormat(t *testing.T) {
 	config := executionConfig("http://provider.test")
 	config.AdapterConfig.RequestFormat = providercatalog.RequestFormatOpenAIChatCompletions
@@ -215,6 +264,28 @@ func TestClassifyTransportErrorChecksReturnedError(t *testing.T) {
 				t.Fatalf("expected %s, got %s", tt.want, provider.ErrorKindOf(err))
 			}
 		})
+	}
+}
+
+func TestReadEventRemovesOnlyOneOptionalSpaceAfterDataPrefix(t *testing.T) {
+	reader := &anthropicStreamReader{reader: bufio.NewReader(strings.NewReader("data:  {\"type\":\"message_stop\"}\n\n"))}
+	_, payload, err := reader.readEvent()
+	if err != nil {
+		t.Fatalf("read SSE event: %v", err)
+	}
+	if string(payload) != " {\"type\":\"message_stop\"}" {
+		t.Fatalf("meaningful leading space was not preserved: %q", payload)
+	}
+}
+
+func TestClassifyAnthropicStreamReadErrorChecksReturnedError(t *testing.T) {
+	cancelled := classifyAnthropicStreamReadError(context.Background(), context.Canceled)
+	if !errors.Is(cancelled, context.Canceled) || provider.ErrorKindOf(cancelled) != provider.ErrorKindError {
+		t.Fatalf("returned cancellation was not preserved: %v", cancelled)
+	}
+	deadline := classifyAnthropicStreamReadError(context.Background(), context.DeadlineExceeded)
+	if !errors.Is(deadline, context.DeadlineExceeded) || provider.ErrorKindOf(deadline) != provider.ErrorKindTimeout {
+		t.Fatalf("returned deadline was not classified as timeout: %v", deadline)
 	}
 }
 

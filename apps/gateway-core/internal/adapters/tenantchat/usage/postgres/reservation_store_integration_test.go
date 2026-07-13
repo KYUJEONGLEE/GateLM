@@ -183,6 +183,143 @@ func TestFallbackSettlementIncludesEveryBillableAttemptIntegration(t *testing.T)
 	}
 }
 
+func TestFinalizeReleasedReturnsReservedExposureIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	admissionStore := admissionpostgres.NewStore(pool)
+	admissionContext := fixture.admissionContext()
+	admissionContext.RequestID = "released_request_001"
+	admissionContext.TurnID = "released_turn_001"
+	admissionContext.IdempotencyKey = "released_attempt_001"
+	admission, err := admissionStore.Create(context.Background(), admissionContext, tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create released admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.RequestID = admissionContext.RequestID
+	completionContext.TurnID = admissionContext.TurnID
+	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+	store := NewReservationStore(pool)
+	reservation, err := store.ConsumeAndReserve(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
+	if err != nil {
+		t.Fatalf("reserve released exposure: %v", err)
+	}
+	settlement, err := store.FinalizeReleased(
+		context.Background(), completionContext, reservation.ReservationID, "failed",
+	)
+	if err != nil {
+		t.Fatalf("release exposure: %v", err)
+	}
+	if settlement.State != "released" || settlement.LedgerVersion != 2 {
+		t.Fatalf("unexpected released settlement: %+v", settlement)
+	}
+	var reservationState string
+	var reservedTokens int64
+	var reservedCost int64
+	var eventType string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reservation.state, token_period.reserved_tokens, cost_period.reserved_cost_micro_usd,
+		       ledger.event_type
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_user_token_periods AS token_period
+		  ON token_period.tenant_id = reservation.tenant_id
+		 AND token_period.user_id = reservation.user_id
+		 AND token_period.period_start = reservation.user_period_start
+		JOIN tenant_chat_tenant_cost_periods AS cost_period
+		  ON cost_period.tenant_id = reservation.tenant_id
+		 AND cost_period.period_start = reservation.tenant_period_start
+		 AND cost_period.currency = reservation.currency
+		JOIN tenant_chat_usage_ledger_entries AS ledger
+		  ON ledger.request_id = reservation.request_id AND ledger.ledger_version = 2
+		WHERE reservation.reservation_id = $1::uuid
+	`, reservation.ReservationID).Scan(&reservationState, &reservedTokens, &reservedCost, &eventType); err != nil {
+		t.Fatalf("read released records: %v", err)
+	}
+	if reservationState != "released" || reservedTokens != 0 || reservedCost != 0 || eventType != "usage_released" {
+		t.Fatalf("released records mismatch: state=%s tokens=%d cost=%d event=%s", reservationState, reservedTokens, reservedCost, eventType)
+	}
+}
+
+func TestFinalizeUnconfirmedMovesExposureToIncidentHoldIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	admissionStore := admissionpostgres.NewStore(pool)
+	admissionContext := fixture.admissionContext()
+	admissionContext.RequestID = "unconfirmed_request_001"
+	admissionContext.TurnID = "unconfirmed_turn_001"
+	admissionContext.IdempotencyKey = "unconfirmed_attempt_001"
+	admission, err := admissionStore.Create(context.Background(), admissionContext, tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create unconfirmed admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.RequestID = admissionContext.RequestID
+	completionContext.TurnID = admissionContext.TurnID
+	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	store := NewReservationStore(pool)
+	reservation, err := store.ConsumeAndReserve(context.Background(), completionContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve unconfirmed exposure: %v", err)
+	}
+	if err := store.StartAttempt(
+		context.Background(), completionContext, snapshot,
+		reservation.ReservationID, reservation.Route, 1, "primary",
+	); err != nil {
+		t.Fatalf("start unconfirmed attempt: %v", err)
+	}
+	settlement, err := store.FinalizeUnconfirmed(
+		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
+	)
+	if err != nil {
+		t.Fatalf("mark exposure unconfirmed: %v", err)
+	}
+	if settlement.State != "unconfirmed" || settlement.UnconfirmedTokens != 200 ||
+		settlement.UnconfirmedExposureMicroUSD != 125 || settlement.LedgerVersion != 2 {
+		t.Fatalf("unexpected unconfirmed settlement: %+v", settlement)
+	}
+	var reservationState string
+	var reservedTokens int64
+	var unconfirmedTokens int64
+	var reservedCost int64
+	var unconfirmedCost int64
+	var usageQuality string
+	var outcome string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reservation.state, token_period.reserved_tokens, token_period.unconfirmed_tokens,
+		       cost_period.reserved_cost_micro_usd, cost_period.unconfirmed_exposure_micro_usd,
+		       attempt.usage_quality, attempt.outcome
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_user_token_periods AS token_period
+		  ON token_period.tenant_id = reservation.tenant_id
+		 AND token_period.user_id = reservation.user_id
+		 AND token_period.period_start = reservation.user_period_start
+		JOIN tenant_chat_tenant_cost_periods AS cost_period
+		  ON cost_period.tenant_id = reservation.tenant_id
+		 AND cost_period.period_start = reservation.tenant_period_start
+		 AND cost_period.currency = reservation.currency
+		JOIN tenant_chat_provider_attempts AS attempt
+		  ON attempt.reservation_id = reservation.reservation_id
+		 AND attempt.request_id = reservation.request_id
+		 AND attempt.tenant_id = reservation.tenant_id
+		WHERE reservation.reservation_id = $1::uuid AND attempt.attempt_no = 1
+	`, reservation.ReservationID).Scan(
+		&reservationState, &reservedTokens, &unconfirmedTokens, &reservedCost, &unconfirmedCost,
+		&usageQuality, &outcome,
+	); err != nil {
+		t.Fatalf("read unconfirmed records: %v", err)
+	}
+	if reservationState != "unconfirmed" || reservedTokens != 0 || unconfirmedTokens != 200 ||
+		reservedCost != 0 || unconfirmedCost != 125 || usageQuality != "pending_unconfirmed" || outcome != "timed_out" {
+		t.Fatalf(
+			"unconfirmed records mismatch: state=%s reservedTokens=%d unconfirmedTokens=%d reservedCost=%d unconfirmedCost=%d quality=%s outcome=%s",
+			reservationState, reservedTokens, unconfirmedTokens, reservedCost, unconfirmedCost, usageQuality, outcome,
+		)
+	}
+}
+
 type usageFixture struct {
 	tenantID   string
 	userID     string

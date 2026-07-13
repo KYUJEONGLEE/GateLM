@@ -85,15 +85,17 @@ type ProviderAttempt struct {
 }
 
 type UsageSettlement struct {
-	RequestID             string
-	ReservationID         string
-	State                 string
-	ConfirmedInputTokens  int64
-	ConfirmedOutputTokens int64
-	ConfirmedCostMicroUSD int64
-	QuotaState            string
-	BudgetState           string
-	LedgerVersion         int64
-	Attempts              []ProviderAttempt
-	Replayed              bool
+	RequestID                   string
+	ReservationID               string
+	State                       string
+	ConfirmedInputTokens        int64
+	ConfirmedOutputTokens       int64
+	ConfirmedCostMicroUSD       int64
+	UnconfirmedTokens           int64
+	UnconfirmedExposureMicroUSD int64
+	QuotaState                  string
+	BudgetState                 string
+	LedgerVersion               int64
+	Attempts                    []ProviderAttempt
+	Replayed                    bool
 }

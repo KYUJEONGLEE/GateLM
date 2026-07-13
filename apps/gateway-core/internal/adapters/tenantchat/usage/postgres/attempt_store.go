@@ -151,11 +151,11 @@ func (s *ReservationStore) topUpFallback(
 	if err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
-	projectedTokens := userPeriod.Confirmed + userPeriod.Reserved + additionalTokens
+	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + userPeriod.Reserved + additionalTokens
 	if projectedTokens < additionalTokens || projectedTokens > userPeriod.HardStop {
 		return tenantchat.ErrQuotaHardLimit
 	}
-	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Reserved + exposureCost
+	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + tenantPeriod.Reserved + exposureCost
 	if projectedCost < exposureCost || projectedCost > tenantPeriod.HardStop {
 		return tenantchat.ErrBudgetHardLimit
 	}
