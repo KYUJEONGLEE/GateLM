@@ -114,7 +114,7 @@ runtime_service_loops="$(grep -Fc 'for service in "${runtime_services[@]}"; do' 
   fail "Restart and OOM checks must be limited to recreated runtime services"
 # The generated remote script must retain these variables for the target shell.
 # shellcheck disable=SC2016
-grep -Fq 'bash \"\${script_path}\" \"\${deploy_sha}\"' "${SSM_SCRIPT}" || \
+grep -Fq 'bash "\${script_path}" "\${deploy_sha}"' "${SSM_SCRIPT}" || \
   fail "SSM bootstrap must invoke the temporary script through bash"
 
 tmp_dir="$(mktemp -d)"
@@ -192,6 +192,12 @@ if (!match) {
 const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
 if (!/^set -euo pipefail\r?\n/.test(remoteScript)) {
   throw new Error("Decoded deployment payload is not a Bash script");
+}
+if (remoteScript.includes('\\"')) {
+  throw new Error("Remote Bash arguments contain literal quote characters");
+}
+if (!remoteScript.includes('git -C "${repo}" fetch --no-tags origin main')) {
+  throw new Error("Repository path is not quoted for the remote Bash shell");
 }
 if (!remoteScript.includes("deploy-main.sh")) {
   throw new Error("Remote bootstrap does not load deploy-main.sh");
