@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
+	"gatelm/apps/gateway-core/internal/domain/provider"
 	domain "gatelm/apps/gateway-core/internal/domain/tenantchat"
+	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 )
 
@@ -28,17 +31,36 @@ type admissionService interface {
 	Cancel(ctx context.Context, requestContext domain.RequestContext) (domain.AdmissionCancellation, error)
 }
 
+type completionService interface {
+	Prepare(ctx context.Context, request domain.CompletionRequest) (completionservice.Execution, error)
+}
+
 type Handler struct {
 	auth         authenticator
 	admissions   admissionService
+	completions  completionService
 	maxBodyBytes int64
 }
 
-func NewRouter(auth authenticator, admissions admissionService, maxBodyBytes int64) http.Handler {
+type Option func(*Handler)
+
+func WithCompletionService(completions completionService) Option {
+	return func(handler *Handler) {
+		handler.completions = completions
+	}
+}
+
+func NewRouter(auth authenticator, admissions admissionService, maxBodyBytes int64, options ...Option) http.Handler {
 	handler := &Handler{auth: auth, admissions: admissions, maxBodyBytes: maxBodyBytes}
+	for _, option := range options {
+		if option != nil {
+			option(handler)
+		}
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions", handler.admit)
 	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions/{admissionId}/cancel", handler.cancel)
+	mux.HandleFunc("POST /internal/v1/tenant-chat/completions", handler.complete)
 	return mux
 }
 
@@ -108,6 +130,53 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
+	if _, ok := w.(http.Flusher); !ok {
+		writeError(w, http.StatusServiceUnavailable, "CHAT_USAGE_GUARD_UNAVAILABLE", "Tenant chat streaming is unavailable.", 1)
+		return
+	}
+	request := domain.CompletionRequest{}
+	if err := h.decodeJSON(w, r, &request); err != nil || domain.ValidateCompletionInput(request.Input) != nil {
+		writeError(w, http.StatusBadRequest, "CHAT_INVALID_REQUEST", "Invalid tenant chat request.", 0)
+		return
+	}
+	if _, err := h.auth.Authenticate(
+		r.Context(),
+		r.Header.Get("Authorization"),
+		domain.PhaseCompletion,
+		request.Context,
+		request.Input,
+	); err != nil {
+		writeAuthenticationError(w, err)
+		return
+	}
+	if h.completions == nil {
+		writeError(w, http.StatusServiceUnavailable, "CHAT_USAGE_GUARD_UNAVAILABLE", "Tenant chat completion is unavailable.", 1)
+		return
+	}
+	execution, err := h.completions.Prepare(r.Context(), request)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	defer execution.Close()
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("Idempotency-Replayed", "false")
+	w.WriteHeader(http.StatusOK)
+	w.(http.Flusher).Flush()
+	_ = execution.Relay(r.Context(), func(event domain.CompletionEvent) error {
+		if err := writeSSEEvent(w, event); err != nil {
+			return err
+		}
+		w.(http.Flusher).Flush()
+		return nil
+	})
+}
+
 func (h *Handler) decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 	if h == nil || h.auth == nil || h.admissions == nil || h.maxBodyBytes <= 0 ||
 		!strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
@@ -158,9 +227,45 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusTooManyRequests, "CHAT_RATE_LIMITED", "Tenant chat request rate is limited.", 1)
 	case errors.Is(err, domain.ErrConcurrencyLimited):
 		writeError(w, http.StatusTooManyRequests, "CHAT_CONCURRENCY_LIMITED", "Tenant chat active request limit was reached.", 1)
+	case errors.Is(err, domain.ErrQuotaHardLimit):
+		writeError(w, http.StatusForbidden, "CHAT_QUOTA_HARD_LIMIT", "Tenant chat user quota was reached.", 0)
+	case errors.Is(err, domain.ErrBudgetHardLimit):
+		writeError(w, http.StatusForbidden, "CHAT_BUDGET_HARD_LIMIT", "Tenant chat tenant budget was reached.", 0)
+	case errors.Is(err, domain.ErrNoEligibleRoute):
+		writeError(w, http.StatusServiceUnavailable, "CHAT_NO_ELIGIBLE_ROUTE", "Tenant chat has no eligible route.", 1)
+	case isProviderErrorKind(err, provider.ErrorKindTimeout):
+		writeError(w, http.StatusGatewayTimeout, "CHAT_PROVIDER_TIMEOUT", "Tenant chat provider timed out.", 0)
+	case isProviderError(err):
+		writeError(w, http.StatusBadGateway, "CHAT_PROVIDER_FAILED", "Tenant chat provider failed.", 0)
 	default:
 		writeError(w, http.StatusServiceUnavailable, "CHAT_USAGE_GUARD_UNAVAILABLE", "Tenant chat usage guard is unavailable.", 1)
 	}
+}
+
+func isProviderError(err error) bool {
+	var providerErr *provider.Error
+	return errors.As(err, &providerErr)
+}
+
+func isProviderErrorKind(err error, kind provider.ErrorKind) bool {
+	var providerErr *provider.Error
+	return errors.As(err, &providerErr) && providerErr.Kind == kind
+}
+
+func writeSSEEvent(w io.Writer, event domain.CompletionEvent) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(
+		w,
+		"id: %s:%d\nevent: %s\ndata: %s\n\n",
+		event.RequestID,
+		event.Sequence,
+		event.Type,
+		payload,
+	)
+	return err
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string, retryAfterSeconds int) {

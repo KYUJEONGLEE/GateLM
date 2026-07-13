@@ -37,7 +37,9 @@ import (
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
+	postgrestenantprovider "gatelm/apps/gateway-core/internal/adapters/tenantchat/provider/postgres"
 	postgrestentantruntime "gatelm/apps/gateway-core/internal/adapters/tenantchat/runtime/postgres"
+	postgrestenantusage "gatelm/apps/gateway-core/internal/adapters/tenantchat/usage/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
@@ -59,6 +61,7 @@ import (
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
+	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -250,14 +253,22 @@ func main() {
 			log.Fatalf("gateway-core tenant chat jti guard failed: %v", err)
 		}
 		tenantChatAuthenticator := requestauth.New(workloadVerifier, jtiConsumer)
+		tenantChatRuntime := postgrestentantruntime.NewReader(postgresPool)
+		tenantChatUsage := postgrestenantusage.NewReservationStore(postgresPool)
 		tenantChatAdmissions := admissionservice.New(
-			postgrestentantruntime.NewReader(postgresPool),
+			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
+		)
+		tenantChatCompletions := completionservice.New(
+			tenantChatRuntime,
+			tenantChatUsage,
+			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
 		)
 		tenantChatPrivateRouter := tenantchathttp.NewRouter(
 			tenantChatAuthenticator,
 			tenantChatAdmissions,
 			cfg.MaxRequestBodyBytes,
+			tenantchathttp.WithCompletionService(tenantChatCompletions),
 		)
 		tenantChatPrivateServer = app.NewServerAtAddress(
 			cfg.TenantChatPrivate.ListenAddress,
