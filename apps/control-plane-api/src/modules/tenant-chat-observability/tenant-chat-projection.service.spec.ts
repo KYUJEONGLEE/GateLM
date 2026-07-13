@@ -49,6 +49,49 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
+  it('defers a version whose predecessor is still pending without consuming an attempt', async () => {
+    const harness = createHarness(settledRow());
+    harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([
+      { eventVersion: 1n, publishedAt: null, lastErrorCode: null },
+    ]);
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).not.toHaveBeenCalled();
+    expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastErrorCode: 'EVENT_VERSION_PENDING',
+        }),
+      }),
+    );
+    expect(
+      harness.tx.tenantChatInvocationOutbox.update.mock.calls[0]?.[0].data,
+    ).not.toHaveProperty('deliveryAttempts');
+  });
+
+  it('counts a predecessor DLQ as a bounded projection failure', async () => {
+    const harness = createHarness(settledRow());
+    harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([
+      {
+        eventVersion: 1n,
+        publishedAt: null,
+        lastErrorCode: 'DLQ_PROJECTION_FAILED',
+      },
+    ]);
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          deliveryAttempts: 1,
+          lastErrorCode: 'EVENT_VERSION_BLOCKED',
+        }),
+      }),
+    );
+  });
+
   it('rejects an event whose tenant does not match its outbox envelope', async () => {
     const row = settledRow();
     row.payload.executionScope.tenantId =
@@ -119,14 +162,41 @@ describe('TenantChatProjectionService', () => {
       }),
     );
   });
+
+  it('does not schedule another batch after module destruction', async () => {
+    jest.useFakeTimers();
+    const harness = createHarness(settledRow());
+    let finishRun: ((value: number) => void) | undefined;
+    jest.spyOn(harness.service, 'runOnce').mockImplementation(
+      () => new Promise<number>((resolve) => {
+        finishRun = resolve;
+      }),
+    );
+
+    (
+      harness.service as unknown as { schedule: (delayMs: number) => void }
+    ).schedule(0);
+    jest.advanceTimersByTime(0);
+    harness.service.onModuleDestroy();
+    finishRun?.(0);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(jest.getTimerCount()).toBe(0);
+    jest.useRealTimers();
+  });
 });
 
 function createHarness(row: ReturnType<typeof settledRow>) {
   const tx = {
-    $queryRaw: jest.fn().mockResolvedValue([row]),
+    $queryRaw: jest.fn().mockResolvedValueOnce([row]).mockResolvedValue([]),
     tenantChatInvocationOutbox: {
       findMany: jest.fn().mockResolvedValue([
-        { eventVersion: 1n, publishedAt: new Date('2026-07-12T12:00:01Z') },
+        {
+          eventVersion: 1n,
+          publishedAt: new Date('2026-07-12T12:00:01Z'),
+          lastErrorCode: null,
+        },
       ]),
       update: jest.fn().mockResolvedValue({}),
     },

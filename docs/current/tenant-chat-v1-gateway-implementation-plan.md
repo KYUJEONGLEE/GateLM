@@ -167,7 +167,10 @@ usage/terminal outbox
 - user quota state와 tenant budget state 집계
 - confirmed token/cost, cache, route, provider, fallback, latency 집계
 - pending/unconfirmed exposure와 projection lag 표시
-- 기존 Application Chat과 discriminated union으로만 결합
+- 기존 Application Chat과 `surface=project_application|tenant_chat` discriminated union으로만 결합
+- 메인 Dashboard에서 전체·Project/Application·Tenant Chat 조회 모드 제공
+- confirmed cost 시계열을 같은 bucket으로 합산하고 부분 장애를 명시
+- `/tenant-chat`은 별도 UI 대신 기존 Dashboard의 Tenant Chat 모드로 연결
 - Compose secret/JWKS/private network wiring
 - Chat API contract test와 end-to-end 연결
 

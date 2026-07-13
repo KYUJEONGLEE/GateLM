@@ -322,7 +322,7 @@ Idempotency rules:
 
 - request total과 terminal outcome counts
 - active users count는 authorized DB aggregate에서만 제공하고 metric label로 만들지 않음
-- cache hit count/rate와 strategy
+- cache hit/miss/off/eligible count, hit rate와 strategy
 - rate/concurrency/safety blocks
 - quota state `normal|warning|economy|blocked` counts
 - budget state `normal|warning|economy|blocked`
@@ -337,6 +337,7 @@ Idempotency rules:
 - projection freshness/lag
 
 Paired [Dashboard schema](./schemas/dashboard-aggregate.schema.json)는 content-free aggregate만 허용한다.
+메인 Dashboard 비용 추이와 legacy union reader는 additive [cost series schema](./schemas/cost-series.schema.json)를 사용하며 confirmed cost만 포함한다.
 
 ## 12. Content storage와 diagnostics
 

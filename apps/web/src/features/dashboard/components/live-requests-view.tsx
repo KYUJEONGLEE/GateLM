@@ -256,16 +256,20 @@ export function LiveRequestsView({
                 </td>
                 <td>{formatLiveLatency(row.latencyMs)}</td>
                 <td>
-                  <button
-                    aria-label={"Open request detail " + row.requestId}
-                    className="dashboard-live-detail-button"
-                    onClick={() => onOpenRequest(row)}
-                    ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
-                    type="button"
-                  >
-                    <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
-                    <span>Detail</span>
-                  </button>
+                  {row.surface === "tenant_chat" ? (
+                    <span className="dashboard-live-muted-value">-</span>
+                  ) : (
+                    <button
+                      aria-label={"Open request detail " + row.requestId}
+                      className="dashboard-live-detail-button"
+                      onClick={() => onOpenRequest(row)}
+                      ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
+                      type="button"
+                    >
+                      <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
+                      <span>Detail</span>
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

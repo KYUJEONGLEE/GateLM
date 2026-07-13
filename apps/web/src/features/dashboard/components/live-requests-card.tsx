@@ -25,6 +25,7 @@ type LiveRequestsCardFilters = {
   projectId: string;
   range: string;
   resolvedBy: string;
+  surface: "all" | "project_application" | "tenant_chat";
   tenantId: string;
 };
 
@@ -55,6 +56,7 @@ export function LiveRequestsCard({
     projectId,
     range,
     resolvedBy,
+    surface,
     tenantId
   } = filters;
   const initialRows = normalizeLiveRequestRows(initialPayload?.rows);
@@ -90,6 +92,7 @@ export function LiveRequestsCard({
           projectId,
           range,
           resolvedBy,
+          surface,
           tenantId
         },
         statusFilter,
@@ -101,6 +104,7 @@ export function LiveRequestsCard({
       projectId,
       range,
       resolvedBy,
+      surface,
       tenantId,
       modelFilter,
       statusFilter
@@ -222,8 +226,8 @@ export function LiveRequestsCard({
   }, []);
 
   const viewAllLogsHref = useMemo(
-    () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId),
-    [modelFilter, projectId, range, statusFilter, tenantId]
+    () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId, surface),
+    [modelFilter, projectId, range, statusFilter, surface, tenantId]
   );
   const pendingCount = isFocusOpen
     ? countPendingLiveRequests(focusRows, historyRows)
@@ -370,6 +374,7 @@ function liveRequestsApiQuery(
   appendQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendQuery(query, "projectId", filters.projectId);
   appendQuery(query, "resolvedBy", filters.resolvedBy);
+  appendQuery(query, "surface", filters.surface);
   appendQuery(query, "status", status);
   appendQuery(query, "model", model);
 
@@ -381,8 +386,13 @@ function requestLogsHref(
   range: string,
   status: LiveRequestStatusFilter,
   model: string,
-  projectId?: string
+  projectId?: string,
+  surface: LiveRequestsCardFilters["surface"] = "project_application"
 ) {
+  if (surface === "tenant_chat") {
+    const query = new URLSearchParams({ range, surface });
+    return `/tenants/${tenantId}/dashboard?${query}`;
+  }
   const query = new URLSearchParams();
   const created = requestLogsCreatedRange(range);
 

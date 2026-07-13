@@ -121,6 +121,7 @@ function toLiveRequestRow(
     providerLabel: providerLabel(provider),
     requestId: record.requestId,
     safetyAction: normalizeSafetyAction(record),
+    surface: "project_application" as const,
     status: record.status,
     statusCode,
     statusLabel: statusLabel(statusCode, record.status),

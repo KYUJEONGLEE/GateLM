@@ -46,10 +46,45 @@ describe('TenantChatObservabilityService', () => {
       },
     });
   });
+
+  it('returns tenant-scoped confirmed cost series points', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        period_start: new Date('2026-07-12T12:00:00Z'),
+        request_count: 2n,
+        total_tokens: 300n,
+        confirmed_cost_micro_usd: 450n,
+      },
+    ]);
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getCostSeries(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+      bucket: '5m',
+    });
+
+    expect(result.data).toMatchObject({
+      surface: 'tenant_chat',
+      bucket: '5m',
+      points: [
+        {
+          periodStart: '2026-07-12T12:00:00.000Z',
+          requestCount: 2,
+          totalTokens: 300,
+          confirmedCostMicroUsd: 450,
+        },
+      ],
+    });
+  });
 });
 
 function createPrisma() {
   return {
+    $queryRaw: jest.fn(),
     tenantChatInvocationLog: {
       findFirst: jest.fn(),
       findMany: jest.fn(),

@@ -18,6 +18,7 @@ export type LiveRequestRow = {
   providerLabel: string;
   requestId: string;
   safetyAction: LiveRequestSafetyAction;
+  surface?: "project_application" | "tenant_chat";
   status: string;
   statusCode: number;
   statusLabel: string;

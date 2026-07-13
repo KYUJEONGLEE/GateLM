@@ -1,0 +1,15 @@
+{
+  "surface": "tenant_chat",
+  "from": "2026-07-12T12:00:00Z",
+  "to": "2026-07-12T13:00:00Z",
+  "bucket": "5m",
+  "generatedAt": "2026-07-12T13:00:01Z",
+  "points": [
+    {
+      "periodStart": "2026-07-12T12:00:00Z",
+      "requestCount": 20,
+      "totalTokens": 18000,
+      "confirmedCostMicroUsd": 135000
+    }
+  ]
+}

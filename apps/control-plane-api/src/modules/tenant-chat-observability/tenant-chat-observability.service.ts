@@ -10,6 +10,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
   ListTenantChatInvocationsQueryDto,
+  TenantChatCostSeriesQueryDto,
   TenantChatDashboardQueryDto,
 } from './dto/tenant-chat-observability.dto';
 import { TenantChatInvocationResponse } from './tenant-chat-observability.types';
@@ -79,6 +80,50 @@ export class TenantChatObservabilityService {
     return toInvocationResponse(row);
   }
 
+  async getCostSeries(tenantId: string, query: TenantChatCostSeriesQueryDto) {
+    const from = new Date(query.from);
+    const to = new Date(query.to);
+    const interval = costSeriesInterval(query.bucket);
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        period_start: Date;
+        request_count: bigint;
+        total_tokens: bigint;
+        confirmed_cost_micro_usd: bigint;
+      }>
+    >(Prisma.sql`
+      SELECT
+        date_bin(${interval}::interval, completed_at, ${from}) AS period_start,
+        count(*)::bigint AS request_count,
+        coalesce(sum(confirmed_total_tokens), 0)::bigint AS total_tokens,
+        coalesce(sum(confirmed_cost_micro_usd), 0)::bigint
+          AS confirmed_cost_micro_usd
+      FROM tenant_chat_invocation_logs
+      WHERE tenant_id = ${tenantId}::uuid
+        AND surface = 'tenant_chat'
+        AND execution_scope_kind = 'tenant_chat'
+        AND completed_at >= ${from}
+        AND completed_at < ${to}
+      GROUP BY period_start
+      ORDER BY period_start
+    `);
+    return {
+      data: {
+        surface: 'tenant_chat' as const,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        bucket: query.bucket,
+        generatedAt: new Date().toISOString(),
+        points: rows.map((row) => ({
+          periodStart: row.period_start.toISOString(),
+          requestCount: Number(row.request_count),
+          totalTokens: Number(row.total_tokens),
+          confirmedCostMicroUsd: Number(row.confirmed_cost_micro_usd),
+        })),
+      },
+    };
+  }
+
   async getDashboard(tenantId: string, query: TenantChatDashboardQueryDto) {
     const from = new Date(query.from);
     const to = new Date(query.to);
@@ -100,7 +145,11 @@ export class TenantChatObservabilityService {
             count(*) FILTER (WHERE terminal_outcome IN ('succeeded', 'cache_hit'))::bigint AS succeeded,
             count(*) FILTER (WHERE terminal_outcome IN ('failed', 'provider_failed', 'provider_timeout', 'runtime_unavailable', 'no_eligible_route'))::bigint AS failed,
             count(*) FILTER (WHERE terminal_outcome = 'cancelled')::bigint AS cancelled,
-            count(*) FILTER (WHERE terminal_outcome = 'cache_hit')::bigint AS cache_hits,
+            count(*) FILTER (
+              WHERE cache_outcome = 'hit' OR terminal_outcome = 'cache_hit'
+            )::bigint AS cache_hits,
+            count(*) FILTER (WHERE cache_outcome = 'miss')::bigint AS cache_misses,
+            count(*) FILTER (WHERE cache_outcome = 'off')::bigint AS cache_off,
             count(*) FILTER (WHERE terminal_outcome = 'rate_limited')::bigint AS rate_limited,
             count(*) FILTER (WHERE terminal_outcome = 'concurrency_limited')::bigint AS concurrency_limited,
             count(*) FILTER (WHERE terminal_outcome = 'safety_blocked')::bigint AS safety_blocked,
@@ -111,6 +160,7 @@ export class TenantChatObservabilityService {
             coalesce(sum(confirmed_output_tokens), 0)::bigint AS confirmed_output_tokens,
             coalesce(sum(confirmed_total_tokens), 0)::bigint AS confirmed_total_tokens,
             coalesce(sum(confirmed_cost_micro_usd), 0)::bigint AS confirmed_cost_micro_usd,
+            coalesce(avg(latency_ms), 0)::bigint AS average_ms,
             coalesce(percentile_disc(0.50) WITHIN GROUP (ORDER BY latency_ms), 0)::bigint AS p50_ms,
             coalesce(percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)::bigint AS p95_ms,
             coalesce(percentile_disc(0.99) WITHIN GROUP (ORDER BY latency_ms), 0)::bigint AS p99_ms,
@@ -198,39 +248,58 @@ export class TenantChatObservabilityService {
             confirmed_cost_micro_usd: bigint;
           }>
         >(Prisma.sql`
+          WITH grouped_attempts AS (
+            SELECT
+              attempts.provider_id,
+              attempts.model_key,
+              reservations.snapshot_version,
+              count(DISTINCT attempts.request_id)::bigint AS request_count,
+              count(*)::bigint AS attempt_count,
+              count(*) FILTER (
+                WHERE attempts.usage_quality = 'confirmed'
+              )::bigint AS billable_attempt_count,
+              count(*) FILTER (
+                WHERE attempts.kind = 'fallback' AND attempts.outcome = 'succeeded'
+              )::bigint AS fallback_success_count,
+              coalesce(sum(attempts.confirmed_cost_micro_usd), 0)::bigint
+                AS confirmed_cost_micro_usd
+            FROM tenant_chat_provider_attempts attempts
+            JOIN tenant_chat_usage_reservations reservations
+              ON reservations.reservation_id = attempts.reservation_id
+             AND reservations.request_id = attempts.request_id
+             AND reservations.tenant_id = attempts.tenant_id
+            WHERE attempts.tenant_id = ${tenantId}::uuid
+              AND attempts.completed_at >= ${from}
+              AND attempts.completed_at < ${to}
+            GROUP BY
+              attempts.provider_id,
+              attempts.model_key,
+              reservations.snapshot_version
+          )
           SELECT
-            attempts.provider_id,
-            attempts.model_key,
+            grouped.provider_id,
+            grouped.model_key,
             coalesce(route.route_tier, 'standard') AS route_tier,
-            count(DISTINCT attempts.request_id)::bigint AS request_count,
-            count(*)::bigint AS attempt_count,
-            count(*) FILTER (WHERE attempts.usage_quality = 'confirmed')::bigint AS billable_attempt_count,
-            count(*) FILTER (
-              WHERE attempts.kind = 'fallback' AND attempts.outcome = 'succeeded'
-            )::bigint AS fallback_success_count,
-            coalesce(sum(attempts.confirmed_cost_micro_usd), 0)::bigint AS confirmed_cost_micro_usd
-          FROM tenant_chat_provider_attempts attempts
-          JOIN tenant_chat_usage_reservations reservations
-            ON reservations.reservation_id = attempts.reservation_id
-           AND reservations.request_id = attempts.request_id
-           AND reservations.tenant_id = attempts.tenant_id
+            sum(grouped.request_count)::bigint AS request_count,
+            sum(grouped.attempt_count)::bigint AS attempt_count,
+            sum(grouped.billable_attempt_count)::bigint AS billable_attempt_count,
+            sum(grouped.fallback_success_count)::bigint AS fallback_success_count,
+            sum(grouped.confirmed_cost_micro_usd)::bigint AS confirmed_cost_micro_usd
+          FROM grouped_attempts grouped
           JOIN tenant_chat_runtime_snapshots snapshots
-            ON snapshots.tenant_id = reservations.tenant_id
-           AND snapshots.version = reservations.snapshot_version
+            ON snapshots.tenant_id = ${tenantId}::uuid
+           AND snapshots.version = grouped.snapshot_version
           LEFT JOIN LATERAL (
             SELECT candidate->>'tier' AS route_tier
             FROM jsonb_array_elements(
               snapshots.snapshot_body #> '{policies,routing,routes}'
             ) candidate
-            WHERE candidate->>'providerId' = attempts.provider_id
-              AND candidate->>'modelKey' = attempts.model_key
+            WHERE candidate->>'providerId' = grouped.provider_id
+              AND candidate->>'modelKey' = grouped.model_key
             LIMIT 1
           ) route ON true
-          WHERE attempts.tenant_id = ${tenantId}::uuid
-            AND attempts.completed_at >= ${from}
-            AND attempts.completed_at < ${to}
-          GROUP BY attempts.provider_id, attempts.model_key, route.route_tier
-          ORDER BY confirmed_cost_micro_usd DESC, attempts.provider_id, attempts.model_key
+          GROUP BY grouped.provider_id, grouped.model_key, route.route_tier
+          ORDER BY confirmed_cost_micro_usd DESC, grouped.provider_id, grouped.model_key
           LIMIT 100
         `),
         this.prisma.tenantChatInvocationOutbox.count({
@@ -249,6 +318,10 @@ export class TenantChatObservabilityService {
     const attemptRow = attemptAggregate[0] ?? {};
     const unconfirmedRow = unconfirmedAggregate[0] ?? {};
     const projectedAt = row.projected_at instanceof Date ? row.projected_at : null;
+    const cacheHits = numberFrom(row.cache_hits);
+    const cacheMisses = numberFrom(row.cache_misses);
+    const cacheOff = numberFrom(row.cache_off);
+    const cacheEligible = cacheHits + cacheMisses;
     const lagSeconds = projectedAt
       ? Math.max(0, Math.floor((Date.now() - projectedAt.getTime()) / 1000))
       : 0;
@@ -257,6 +330,14 @@ export class TenantChatObservabilityService {
         'Tenant Chat runtime provenance is unavailable.',
       );
     }
+    const fallbackProvenance = activeSnapshot
+      ? {
+          snapshotVersion: Number(activeSnapshot.snapshot.version),
+          pricingVersion: Number(activeSnapshot.snapshot.pricingVersion),
+          requestCount: 0,
+          confirmedCostMicroUsd: 0,
+        }
+      : null;
     const provenanceResponse =
       provenance.length > 0
         ? provenance.map((item) => ({
@@ -265,14 +346,9 @@ export class TenantChatObservabilityService {
             requestCount: Number(item.request_count),
             confirmedCostMicroUsd: Number(item.confirmed_cost_micro_usd),
           }))
-        : [
-            {
-              snapshotVersion: Number(activeSnapshot!.snapshot.version),
-              pricingVersion: Number(activeSnapshot!.snapshot.pricingVersion),
-              requestCount: 0,
-              confirmedCostMicroUsd: 0,
-            },
-          ];
+        : fallbackProvenance
+          ? [fallbackProvenance]
+          : [];
     return {
       data: {
         surface: 'tenant_chat' as const,
@@ -289,7 +365,11 @@ export class TenantChatObservabilityService {
           succeeded: numberFrom(row.succeeded),
           failed: numberFrom(row.failed),
           cancelled: numberFrom(row.cancelled),
-          cacheHits: numberFrom(row.cache_hits),
+          cacheHits,
+          cacheMisses,
+          cacheOff,
+          cacheEligible,
+          cacheHitRate: cacheEligible > 0 ? cacheHits / cacheEligible : 0,
           rateLimited: numberFrom(row.rate_limited),
           concurrencyLimited: numberFrom(row.concurrency_limited),
           safetyBlocked: numberFrom(row.safety_blocked),
@@ -314,6 +394,7 @@ export class TenantChatObservabilityService {
         },
         policyStates: buildPolicyStates(policyStates),
         latency: {
+          averageMs: numberFrom(row.average_ms),
           p50Ms: numberFrom(row.p50_ms),
           p95Ms: numberFrom(row.p95_ms),
           p99Ms: numberFrom(row.p99_ms),
@@ -369,6 +450,16 @@ function toInvocationResponse(
 
 function numberFrom(value: bigint | Date | null | undefined): number {
   return typeof value === 'bigint' ? Number(value) : 0;
+}
+
+function costSeriesInterval(bucket: TenantChatCostSeriesQueryDto['bucket']): string {
+  return {
+    '7s': '7 seconds',
+    '1m': '1 minute',
+    '5m': '5 minutes',
+    '1h': '1 hour',
+    '1d': '1 day',
+  }[bucket];
 }
 
 function buildPolicyStates(

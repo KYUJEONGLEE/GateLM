@@ -169,6 +169,7 @@ export type InvocationLogFixture = {
 };
 
 export type DashboardOverview = {
+  surface?: "all" | "project_application" | "tenant_chat";
   fixtureName: string;
   fixtureVersion: string;
   owner: string;
@@ -211,6 +212,10 @@ export type DashboardOverview = {
   savedCostUsd: string;
   averageLatencyMs: number;
   p95LatencyMs: number;
+  latencyBySurface?: {
+    projectApplicationP95Ms?: number;
+    tenantChatP95Ms?: number;
+  };
   maskingActionCounts: Record<string, number>;
   routingCountByModel: Array<{
     selectedProvider: string;

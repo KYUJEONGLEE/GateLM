@@ -12,6 +12,7 @@ import { DataEnvelope, ListEnvelope } from '@/common/types/envelope';
 
 import {
   ListTenantChatInvocationsQueryDto,
+  TenantChatCostSeriesQueryDto,
   TenantChatDashboardQueryDto,
 } from './dto/tenant-chat-observability.dto';
 import { TenantChatObservabilityService } from './tenant-chat-observability.service';
@@ -44,5 +45,13 @@ export class TenantChatObservabilityController {
     @Query() query: TenantChatDashboardQueryDto,
   ) {
     return this.service.getDashboard(tenantId, query);
+  }
+
+  @Get('cost-series')
+  getCostSeries(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Query() query: TenantChatCostSeriesQueryDto,
+  ) {
+    return this.service.getCostSeries(tenantId, query);
   }
 }

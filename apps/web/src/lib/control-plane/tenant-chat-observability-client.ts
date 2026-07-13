@@ -47,6 +47,10 @@ export type TenantChatDashboard = {
     failed: number;
     cancelled: number;
     cacheHits: number;
+    cacheMisses: number;
+    cacheOff: number;
+    cacheEligible: number;
+    cacheHitRate: number;
     rateLimited: number;
     concurrencyLimited: number;
     safetyBlocked: number;
@@ -70,11 +74,36 @@ export type TenantChatDashboard = {
     budget: Record<"normal" | "warning" | "economy" | "blocked", number>;
   };
   latency: {
+    averageMs: number;
     p50Ms: number;
     p95Ms: number;
     p99Ms: number;
     providerP95Ms: number;
   };
+  breakdowns: Array<{
+    providerId: string;
+    modelKey: string;
+    routeTier: "high_quality" | "standard" | "economy";
+    requestCount: number;
+    attemptCount: number;
+    billableAttemptCount: number;
+    fallbackSuccessCount: number;
+    confirmedCostMicroUsd: number;
+  }>;
+};
+
+export type TenantChatCostSeries = {
+  surface: "tenant_chat";
+  from: string;
+  to: string;
+  bucket: "7s" | "1m" | "5m" | "1h" | "1d";
+  generatedAt: string;
+  points: Array<{
+    periodStart: string;
+    requestCount: number;
+    totalTokens: number;
+    confirmedCostMicroUsd: number;
+  }>;
 };
 
 export async function getTenantChatDashboard(
@@ -93,17 +122,33 @@ export async function getTenantChatInvocations(
   tenantId: string,
   from: string,
   to: string,
-  limit = 20
+  limit = 20,
+  filters: { modelKey?: string; status?: string } = {}
 ): Promise<TenantChatInvocation[] | undefined> {
   const query = new URLSearchParams({
     from,
     limit: String(limit),
     to
   });
+  if (filters.modelKey) query.set("modelKey", filters.modelKey);
+  if (filters.status) query.set("status", filters.status);
   const payload = await getJson<{ data?: TenantChatInvocation[] }>(
     `/admin/v1/tenants/${encodeURIComponent(tenantId)}/tenant-chat/invocations?${query}`
   );
   return Array.isArray(payload?.data) ? payload.data : undefined;
+}
+
+export async function getTenantChatCostSeries(
+  tenantId: string,
+  from: string,
+  to: string,
+  bucket: TenantChatCostSeries["bucket"]
+): Promise<TenantChatCostSeries | undefined> {
+  const query = new URLSearchParams({ bucket, from, to });
+  const payload = await getJson<{ data?: TenantChatCostSeries }>(
+    `/admin/v1/tenants/${encodeURIComponent(tenantId)}/tenant-chat/cost-series?${query}`
+  );
+  return payload?.data?.surface === "tenant_chat" ? payload.data : undefined;
 }
 
 async function getJson<T>(path: string): Promise<T | undefined> {
@@ -113,10 +158,16 @@ async function getJson<T>(path: string): Promise<T | undefined> {
       headers: await buildControlPlaneHeaders()
     });
     if (!response.ok) {
+      console.error("Tenant Chat Control Plane request failed", {
+        status: response.status
+      });
       return undefined;
     }
     return (await response.json()) as T;
-  } catch {
+  } catch (error) {
+    console.error("Tenant Chat Control Plane request failed", {
+      errorType: error instanceof Error ? error.name : "UnknownError"
+    });
     return undefined;
   }
 }

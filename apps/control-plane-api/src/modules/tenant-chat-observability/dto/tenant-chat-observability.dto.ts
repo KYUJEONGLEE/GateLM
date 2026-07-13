@@ -62,3 +62,14 @@ export class TenantChatDashboardQueryDto {
   @IsIn(['tenant_chat'])
   surface?: 'tenant_chat';
 }
+
+export class TenantChatCostSeriesQueryDto {
+  @IsDateString()
+  from!: string;
+
+  @IsDateString()
+  to!: string;
+
+  @IsIn(['7s', '1m', '5m', '1h', '1d'])
+  bucket!: '7s' | '1m' | '5m' | '1h' | '1d';
+}

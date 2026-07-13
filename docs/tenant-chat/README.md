@@ -92,3 +92,4 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Usage settlement event schema](./schemas/usage-settlement-event.schema.json)
 - [Pre-ledger terminal event schema](./schemas/invocation-terminal-event.schema.json)
 - [Dashboard aggregate schema](./schemas/dashboard-aggregate.schema.json)
+- [Confirmed cost series schema](./schemas/cost-series.schema.json)

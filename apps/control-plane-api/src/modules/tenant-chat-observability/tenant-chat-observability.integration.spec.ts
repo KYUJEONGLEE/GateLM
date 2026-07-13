@@ -101,11 +101,26 @@ describeIntegration('Tenant Chat observability integration', () => {
     expect(dashboard.data.requests.billableAttempts).toBe(1);
     expect(dashboard.data.usage.confirmedTotalTokens).toBe(30);
     expect(dashboard.data.usage.confirmedCostMicroUsd).toBe(50);
+    expect(dashboard.data.requests.cacheEligible).toBe(1);
+    expect(dashboard.data.requests.cacheHitRate).toBe(0);
     expect(dashboard.data.breakdowns).toEqual([
       expect.objectContaining({
         providerId: 'provider_projection',
         modelKey: 'model_projection',
         routeTier: 'economy',
+      }),
+    ]);
+
+    const costSeries = await service.getCostSeries(tenantId, {
+      from: '2026-07-01T00:00:00Z',
+      to: '2026-08-01T00:00:00Z',
+      bucket: '1d',
+    });
+    expect(costSeries.data.points).toEqual([
+      expect.objectContaining({
+        requestCount: 1,
+        totalTokens: 30,
+        confirmedCostMicroUsd: 50,
       }),
     ]);
   });

@@ -39,6 +39,7 @@ export class TenantChatProjectionService
   private readonly logger = new Logger(TenantChatProjectionService.name);
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private destroyed = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -53,6 +54,7 @@ export class TenantChatProjectionService
   }
 
   onModuleDestroy(): void {
+    this.destroyed = true;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -65,16 +67,29 @@ export class TenantChatProjectionService
     }
     this.running = true;
     try {
-      return await this.prisma.$transaction(
-        async (tx) => this.processBatch(tx),
-        { timeout: 15000 },
-      );
+      const batchSize =
+        this.config.get<number>('TENANT_CHAT_PROJECTOR_BATCH_SIZE') ?? 50;
+      let processed = 0;
+      while (processed < batchSize) {
+        const claimed = await this.prisma.$transaction(
+          async (tx) => this.processNext(tx),
+          { timeout: 15000 },
+        );
+        if (!claimed) {
+          break;
+        }
+        processed += 1;
+      }
+      return processed;
     } finally {
       this.running = false;
     }
   }
 
   private schedule(delayMs: number): void {
+    if (this.destroyed) {
+      return;
+    }
     this.timer = setTimeout(async () => {
       try {
         await this.runOnce();
@@ -89,9 +104,7 @@ export class TenantChatProjectionService
     this.timer.unref();
   }
 
-  private async processBatch(tx: ProjectionTransaction): Promise<number> {
-    const batchSize =
-      this.config.get<number>('TENANT_CHAT_PROJECTOR_BATCH_SIZE') ?? 50;
+  private async processNext(tx: ProjectionTransaction): Promise<boolean> {
     const rows = await tx.$queryRaw<TenantChatInvocationOutbox[]>(Prisma.sql`
       SELECT
         event_id AS "eventId",
@@ -110,13 +123,14 @@ export class TenantChatProjectionService
       WHERE published_at IS NULL AND available_at <= now()
       ORDER BY created_at, event_version, event_id
       FOR UPDATE SKIP LOCKED
-      LIMIT ${batchSize}
+      LIMIT 1
     `);
-
-    for (const row of rows) {
-      await this.processRow(tx, row);
+    const row = rows[0];
+    if (!row) {
+      return false;
     }
-    return rows.length;
+    await this.processRow(tx, row);
+    return true;
   }
 
   private async processRow(
@@ -139,7 +153,12 @@ export class TenantChatProjectionService
         },
       });
     } catch (error) {
-      await this.recordFailure(tx, row, projectionErrorCode(error));
+      const code = projectionErrorCode(error);
+      if (code === 'EVENT_VERSION_PENDING') {
+        await this.deferPendingVersion(tx, row);
+      } else {
+        await this.recordFailure(tx, row, code);
+      }
     }
   }
 
@@ -155,18 +174,28 @@ export class TenantChatProjectionService
         aggregateId: row.aggregateId,
         eventVersion: { lt: row.eventVersion },
       },
-      select: { eventVersion: true, publishedAt: true },
+      select: {
+        eventVersion: true,
+        publishedAt: true,
+        lastErrorCode: true,
+      },
       orderBy: { eventVersion: 'asc' },
     });
-    const published = new Set(
-      earlier
-        .filter((candidate) => candidate.publishedAt !== null)
-        .map((candidate) => candidate.eventVersion.toString()),
+    const byVersion = new Map(
+      earlier.map((candidate) => [candidate.eventVersion.toString(), candidate]),
     );
     for (let version = 1n; version < row.eventVersion; version += 1n) {
-      if (!published.has(version.toString())) {
+      const candidate = byVersion.get(version.toString());
+      if (!candidate) {
         throw new ProjectionError('EVENT_VERSION_GAP');
       }
+      if (candidate.publishedAt) {
+        continue;
+      }
+      if (candidate.lastErrorCode?.startsWith('DLQ_')) {
+        throw new ProjectionError('EVENT_VERSION_BLOCKED');
+      }
+      throw new ProjectionError('EVENT_VERSION_PENDING');
     }
   }
 
@@ -243,6 +272,13 @@ export class TenantChatProjectionService
     const budget = event.budget;
     const confirmedInputTokens = quota?.confirmedInputTokensDelta ?? 0;
     const confirmedOutputTokens = quota?.confirmedOutputTokensDelta ?? 0;
+    const snapshotDigest = reservation?.snapshotDigest ?? runtimeSnapshot?.digest;
+    const pricingVersion =
+      event.pricingVersion ??
+      Number(reservation?.pricingVersion ?? runtimeSnapshot?.pricingVersion);
+    if (!snapshotDigest || !Number.isSafeInteger(pricingVersion) || pricingVersion < 1) {
+      throw new ProjectionError('PROJECTION_SOURCE_UNAVAILABLE');
+    }
 
     await tx.tenantChatInvocationLog.upsert({
       where: { requestId: event.requestId },
@@ -256,11 +292,8 @@ export class TenantChatProjectionService
         surface: 'tenant_chat',
         executionScopeKind: 'tenant_chat',
         snapshotVersion: BigInt(event.snapshotVersion),
-        snapshotDigest: reservation?.snapshotDigest ?? runtimeSnapshot!.digest,
-        pricingVersion: BigInt(
-          event.pricingVersion ??
-            Number(reservation?.pricingVersion ?? runtimeSnapshot!.pricingVersion),
-        ),
+        snapshotDigest,
+        pricingVersion: BigInt(pricingVersion),
         terminalOutcome: event.terminalOutcome ?? 'failed',
         effectiveProviderId: effectiveAttempt?.providerId,
         effectiveModelKey: effectiveAttempt?.modelKey,
@@ -327,6 +360,19 @@ export class TenantChatProjectionService
         availableAt: new Date(
           Date.now() + (deadLettered ? 24 * 60 * 60 * 1000 : retryDelay(nextAttempt)),
         ),
+      },
+    });
+  }
+
+  private async deferPendingVersion(
+    tx: ProjectionTransaction,
+    row: TenantChatInvocationOutbox,
+  ): Promise<void> {
+    await tx.tenantChatInvocationOutbox.update({
+      where: { eventId: row.eventId },
+      data: {
+        availableAt: new Date(Date.now() + 1000),
+        lastErrorCode: 'EVENT_VERSION_PENDING',
       },
     });
   }

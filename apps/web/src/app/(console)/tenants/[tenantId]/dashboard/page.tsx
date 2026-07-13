@@ -19,9 +19,16 @@ import {
   DashboardOverviewView
 } from "@/features/dashboard/components/dashboard-overview";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getTenantChatDashboard } from "@/lib/control-plane/tenant-chat-observability-client";
+import {
+  type DashboardSurface,
+  mergeDashboardOverviews,
+  toTenantChatDashboardOverview
+} from "@/lib/dashboard/unified-dashboard";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import {
   getLiveDashboardOverview,
+  getDashboardLiveRange,
   type LiveDashboardOverviewFilters
 } from "@/lib/gateway/live-dashboard-overview";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -38,6 +45,7 @@ type DashboardPageProps = {
     requestId?: string;
     range?: string;
     resolvedBy?: string;
+    surface?: string;
     tab?: string;
     view?: string;
   }>;
@@ -79,10 +87,35 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   };
   const scopedDashboardFilters = {
     ...dashboardFilters,
-    projectId: effectiveProjectId ?? dashboardFilters.projectId
+    projectId: effectiveProjectId ?? dashboardFilters.projectId,
+    surface:
+      projectScoped ||
+      effectiveProjectId ||
+      dashboardFilters.projectId ||
+      dashboardFilters.budgetScopeType ||
+      dashboardFilters.budgetScopeId ||
+      dashboardFilters.resolvedBy
+        ? "project_application" as const
+        : dashboardFilters.surface
   };
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
-  const overview = await getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters);
+  const { from, to } = getDashboardLiveRange(scopedLiveFilters.range);
+  const [projectApplicationOverview, tenantChatDashboard] = await Promise.all([
+    scopedDashboardFilters.surface === "tenant_chat"
+      ? Promise.resolve(undefined)
+      : getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters),
+    scopedDashboardFilters.surface === "project_application"
+      ? Promise.resolve(undefined)
+      : getTenantChatDashboard(effectiveTenantId, from, to)
+  ]);
+  const tenantChatOverview = tenantChatDashboard
+    ? toTenantChatDashboardOverview(effectiveTenantId, tenantChatDashboard)
+    : undefined;
+  const overview = selectSurfaceOverview(
+    scopedDashboardFilters.surface,
+    projectApplicationOverview,
+    tenantChatOverview
+  );
 
   if (!overview) {
     return (
@@ -109,6 +142,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
           <MonthToDateSpendValue
             fallbackMicroUsd={overview.totalCostMicroUsd}
             filters={scopedLiveFilters}
+            surface={scopedDashboardFilters.surface}
             tenantId={effectiveTenantId}
           />
         </Suspense>
@@ -124,21 +158,34 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 async function MonthToDateSpendValue({
   fallbackMicroUsd,
   filters,
+  surface,
   tenantId
 }: {
   fallbackMicroUsd: number;
   filters: LiveDashboardOverviewFilters;
+  surface: DashboardSurface;
   tenantId: string;
 }) {
   const monthToDateRange = getMonthToDateRange();
-  const summary = await getLiveCostOverTime(tenantId, {
-    ...filters,
-    from: monthToDateRange.from,
-    to: monthToDateRange.to
-  });
+  const [summary, tenantChat] = await Promise.all([
+    surface === "tenant_chat"
+      ? Promise.resolve(undefined)
+      : getLiveCostOverTime(tenantId, {
+          ...filters,
+          from: monthToDateRange.from,
+          to: monthToDateRange.to
+        }),
+    surface === "project_application"
+      ? Promise.resolve(undefined)
+      : getTenantChatDashboard(tenantId, monthToDateRange.from, monthToDateRange.to)
+  ]);
   const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
+  const totalMicroUsd =
+    (totalSpendUsd === undefined ? 0 : totalSpendUsd * 1_000_000) +
+    (tenantChat?.usage.confirmedCostMicroUsd ?? 0);
+  const hasCurrentData = summary !== undefined || tenantChat !== undefined;
 
-  return <>{formatDashboardMicroUsd(totalSpendUsd === undefined ? fallbackMicroUsd : totalSpendUsd * 1_000_000)}</>;
+  return <>{formatDashboardMicroUsd(hasCurrentData ? totalMicroUsd : fallbackMicroUsd)}</>;
 }
 
 function buildDashboardFilters(
@@ -148,11 +195,15 @@ function buildDashboardFilters(
   dashboardFilters: DashboardFilterState;
   liveFilters: LiveDashboardOverviewFilters;
 } {
-  const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
-  const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
-  const projectId = normalizeOptionalText(searchParams?.projectId);
+  const surface = normalizeDashboardSurface(searchParams?.surface);
+  const tenantChatOnly = surface === "tenant_chat";
+  const budgetScopeId = tenantChatOnly ? "" : normalizeOptionalText(searchParams?.budgetScopeId);
+  const budgetScopeType = tenantChatOnly
+    ? ""
+    : normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
+  const projectId = tenantChatOnly ? "" : normalizeOptionalText(searchParams?.projectId);
   const range = normalizeDashboardRange(searchParams?.range, preferredRange);
-  const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
+  const resolvedBy = tenantChatOnly ? "" : normalizeOptionalText(searchParams?.resolvedBy);
 
   return {
     dashboardFilters: {
@@ -160,7 +211,8 @@ function buildDashboardFilters(
       budgetScopeType,
       projectId,
       range,
-      resolvedBy
+      resolvedBy,
+      surface
     },
     liveFilters: {
       budgetScopeId: budgetScopeId || undefined,
@@ -170,6 +222,44 @@ function buildDashboardFilters(
       resolvedBy: resolvedBy || undefined
     }
   };
+}
+
+function normalizeDashboardSurface(value: string | undefined): DashboardSurface {
+  if (value === "project_application" || value === "tenant_chat") {
+    return value;
+  }
+  return "all";
+}
+
+function selectSurfaceOverview(
+  surface: DashboardSurface,
+  projectApplication: Awaited<ReturnType<typeof getLiveDashboardOverview>>,
+  tenantChat: ReturnType<typeof toTenantChatDashboardOverview> | undefined
+) {
+  if (surface === "project_application") {
+    return projectApplication;
+  }
+  if (surface === "tenant_chat") {
+    return tenantChat;
+  }
+  if (projectApplication && tenantChat) {
+    return mergeDashboardOverviews(projectApplication, tenantChat);
+  }
+  const partial = projectApplication ?? tenantChat;
+  return partial
+    ? {
+        ...partial,
+        surface: "all" as const,
+        queryBudget: {
+          status: "partial" as const,
+          maxRangeHours: partial.queryBudget?.maxRangeHours ?? 24,
+          maxBreakdownItems: partial.queryBudget?.maxBreakdownItems ?? 50,
+          guidance: projectApplication
+            ? "Tenant Chat aggregate is unavailable."
+            : "Project/Application aggregate is unavailable."
+        }
+      }
+    : undefined;
 }
 
 function normalizeDashboardRange(
