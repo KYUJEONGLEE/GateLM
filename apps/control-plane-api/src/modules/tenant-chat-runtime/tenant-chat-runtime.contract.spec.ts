@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
   computeTenantChatPricingDigest,
   computeTenantChatSnapshotDigest,
+  TenantChatRuntimeContractError,
   validateTenantChatRuntimeSnapshot,
 } from './tenant-chat-runtime.contract';
 import type { TenantChatRuntimeSnapshotDocument } from './tenant-chat-runtime.types';
@@ -69,6 +70,18 @@ describe('Tenant Chat runtime contract', () => {
     );
   });
 
+  it('rejects a cache-read input price above the regular input price', () => {
+    const snapshot = contractSnapshotFixture();
+    snapshot.pricing.routes[0]!.cacheReadInputMicroUsdPerMillionTokens =
+      snapshot.pricing.routes[0]!.inputMicroUsdPerMillionTokens + 1;
+    snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
+    snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+
+    expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
+      'cacheReadInputMicroUsdPerMillionTokens must not exceed regular input price',
+    );
+  });
+
   it.each(runtimeSnapshotValidationVectors.cases)(
     'enforces RuntimeSnapshot validation vector $id',
     ({ path, value, valid }) => {
@@ -83,7 +96,7 @@ describe('Tenant Chat runtime contract', () => {
       }
 
       expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
-        'RuntimeSnapshot schema validation failed',
+        TenantChatRuntimeContractError,
       );
     },
   );

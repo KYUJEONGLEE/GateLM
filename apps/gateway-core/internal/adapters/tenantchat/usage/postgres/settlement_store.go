@@ -188,6 +188,10 @@ func lockAttempt(
 }
 
 func confirmedAttemptCost(attempt settlementAttempt, usage tenantchat.ConfirmedUsage) (int64, error) {
+	if attempt.InputPrice < 0 || attempt.OutputPrice < 0 ||
+		(attempt.CacheReadPrice != nil && (*attempt.CacheReadPrice < 0 || *attempt.CacheReadPrice > attempt.InputPrice)) {
+		return 0, errors.New("invalid pinned settlement pricing")
+	}
 	regularInput := usage.InputTokens
 	cacheRead := int64(0)
 	cachePrice := attempt.InputPrice

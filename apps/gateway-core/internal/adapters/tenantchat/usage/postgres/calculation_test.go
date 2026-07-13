@@ -19,6 +19,31 @@ func TestReservationCostUsesCeilingIntegerArithmetic(t *testing.T) {
 	}
 }
 
+func TestConfirmedAttemptCostRejectsCacheReadPriceAboveRegularInput(t *testing.T) {
+	cacheReadPrice := int64(251_000)
+	_, err := confirmedAttemptCost(
+		settlementAttempt{InputPrice: 250_000, OutputPrice: 1_000_000, CacheReadPrice: &cacheReadPrice},
+		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10, CacheReadInputTokens: 50},
+	)
+	if err == nil {
+		t.Fatal("settlement accepted a cache-read input price above the regular input price")
+	}
+}
+
+func TestConfirmedAttemptCostUsesPinnedCacheReadDiscount(t *testing.T) {
+	cacheReadPrice := int64(25_000)
+	cost, err := confirmedAttemptCost(
+		settlementAttempt{InputPrice: 250_000, OutputPrice: 1_000_000, CacheReadPrice: &cacheReadPrice},
+		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10, CacheReadInputTokens: 50},
+	)
+	if err != nil {
+		t.Fatalf("calculate confirmed settlement cost: %v", err)
+	}
+	if cost != 25 {
+		t.Fatalf("want 25 micro USD, got %d", cost)
+	}
+}
+
 func TestCalendarMonthUsesIANAZoneBoundaries(t *testing.T) {
 	start, end, err := calendarMonth(time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC), "Asia/Seoul")
 	if err != nil {
