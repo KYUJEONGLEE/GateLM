@@ -31,7 +31,7 @@ type CompletionEvent struct {
 	Sequence          int              `json:"sequence"`
 	Delta             string           `json:"delta,omitempty"`
 	TerminalOutcome   string           `json:"terminalOutcome,omitempty"`
-	EffectiveModelKey *string          `json:"effectiveModelKey,omitempty"`
+	EffectiveModelKey *string          `json:"effectiveModelKey"`
 	Usage             *CompletionUsage `json:"usage,omitempty"`
 	QuotaState        string           `json:"quotaState,omitempty"`
 	BudgetState       string           `json:"budgetState,omitempty"`

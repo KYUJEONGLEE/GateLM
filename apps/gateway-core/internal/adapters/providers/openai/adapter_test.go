@@ -172,7 +172,7 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 		gotIncludeUsage = request.StreamOptions != nil && request.StreamOptions.IncludeUsage
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"안녕\"},\"finish_reason\":null}],\"usage\":null}\n\n"))
-		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":1}}}\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer server.Close()
@@ -205,7 +205,7 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 	if err != nil {
 		t.Fatalf("read usage stream event: %v", err)
 	}
-	if second.Usage == nil || second.Usage.TotalTokens != 5 {
+	if second.Usage == nil || second.Usage.TotalTokens != 5 || second.Usage.CacheReadInputTokens != 1 {
 		t.Fatalf("expected usage chunk, got %+v", second)
 	}
 	if _, err := stream.Next(); !errors.Is(err, io.EOF) {

@@ -79,6 +79,8 @@ func (e *fakeCompletionExecution) Relay(_ context.Context, emit completionservic
 
 func (e *fakeCompletionExecution) Close() { e.closed = true }
 
+func (e *fakeCompletionExecution) IsReplay() bool { return false }
+
 func TestCompletionReportsRelayFailureWithoutRawProviderDetail(t *testing.T) {
 	previousWriter := log.Writer()
 	previousFlags := log.Flags()

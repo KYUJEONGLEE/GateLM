@@ -359,6 +359,9 @@ func (r *openAIStreamReader) Next() (provider.ChatCompletionStreamEvent, error) 
 				break
 			}
 		}
+		if metadata.Usage != nil && metadata.Usage.PromptTokensDetails != nil {
+			metadata.Usage.CacheReadInputTokens = metadata.Usage.PromptTokensDetails.CachedTokens
+		}
 		copied := append(json.RawMessage(nil), raw...)
 		return provider.ChatCompletionStreamEvent{
 			Data:  copied,

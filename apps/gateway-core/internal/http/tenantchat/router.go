@@ -166,7 +166,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set("Idempotency-Replayed", "false")
+	w.Header().Set("Idempotency-Replayed", fmt.Sprintf("%t", execution.IsReplay()))
 	w.WriteHeader(http.StatusOK)
 	w.(http.Flusher).Flush()
 	err = execution.Relay(r.Context(), func(event domain.CompletionEvent) error {
