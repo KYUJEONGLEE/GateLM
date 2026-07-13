@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -137,7 +138,7 @@ func buildVectorExport(datasetPath string, manifestPath string, categorySource s
 		Samples:            make([]vectorExportSample, 0, 500),
 	}
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
-	scanner := bufio.NewScanner(strings.NewReader(string(datasetBytes)))
+	scanner := bufio.NewScanner(bytes.NewReader(datasetBytes))
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	seenFamilies := map[string]bool{}
 	for lineNumber := 1; scanner.Scan(); lineNumber++ {

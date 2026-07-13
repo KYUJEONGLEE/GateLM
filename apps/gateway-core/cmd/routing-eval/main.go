@@ -896,9 +896,9 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (string, []float64) {
 	latencies := make([]float64, 0, iterations)
 	actual := ""
+	difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
 		actual = classifier.ClassifyFeatures(difficultyFeatures).Difficulty
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
@@ -908,9 +908,9 @@ func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassif
 func classifyShadowDifficultyWithLatency(classifier routing.DifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (routing.DifficultyResult, []float64) {
 	latencies := make([]float64, 0, iterations)
 	var actual routing.DifficultyResult
+	difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
 		actual = classifier.ClassifyFeatures(difficultyFeatures)
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
