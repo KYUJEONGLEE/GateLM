@@ -8,6 +8,7 @@ import usageSettlementEventSchema = require('./usage-settlement-event.schema.jso
 const projectionEventAjv = new Ajv2020({
   allErrors: true,
   strict: true,
+  strictRequired: false,
   strictTypes: false,
 });
 addFormats(projectionEventAjv);
