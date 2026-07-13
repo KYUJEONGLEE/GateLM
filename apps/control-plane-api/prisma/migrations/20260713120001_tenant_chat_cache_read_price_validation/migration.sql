@@ -1,5 +1,5 @@
--- Preserve the historical Tenant Chat PR1 migration and move the active
--- cache-read pricing invariant forward without rewriting existing data.
+-- Validate separately so the ADD CONSTRAINT transaction releases its
+-- AccessExclusiveLock before PostgreSQL scans existing provider attempts.
 
 DO $tenant_chat_cache_read_price_preflight$
 BEGIN
@@ -33,8 +33,4 @@ END
 $tenant_chat_cache_read_price_preflight$;
 
 ALTER TABLE tenant_chat_provider_attempts
-  ADD CONSTRAINT tenant_chat_attempt_cache_read_price_check
-  CHECK (
-    cache_read_input_micro_usd_per_million_tokens IS NULL
-    OR cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens
-  ) NOT VALID;
+  VALIDATE CONSTRAINT tenant_chat_attempt_cache_read_price_check;
