@@ -7,6 +7,26 @@ describe('validateEnv', () => {
     expect(env.AUTH_EMAIL_TRANSPORT).toBe('dev_memory');
     expect(env.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY).toBe('true');
     expect(env.CONTROL_PLANE_ADMIN_AUTH_MODE).toBe('session_cookie');
+    expect(env.TENANT_CHAT_PROJECTOR_ENABLED).toBe('false');
+    expect(env.TENANT_CHAT_PROJECTOR_BATCH_SIZE).toBe(50);
+    expect(env.TENANT_CHAT_PROJECTOR_INTERVAL_MS).toBe(1000);
+    expect(env.TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS).toBe(5);
+  });
+
+  it('validates Tenant Chat projector bounds without changing ports', () => {
+    const env = validateEnv({
+      ...baseEnv(),
+      TENANT_CHAT_PROJECTOR_ENABLED: 'true',
+      TENANT_CHAT_PROJECTOR_BATCH_SIZE: '25',
+      TENANT_CHAT_PROJECTOR_INTERVAL_MS: '500',
+      TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS: '7',
+    });
+
+    expect(env.CONTROL_PLANE_PORT).toBe(3001);
+    expect(env.TENANT_CHAT_PROJECTOR_ENABLED).toBe('true');
+    expect(env.TENANT_CHAT_PROJECTOR_BATCH_SIZE).toBe(25);
+    expect(env.TENANT_CHAT_PROJECTOR_INTERVAL_MS).toBe(500);
+    expect(env.TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS).toBe(7);
   });
 
   it('does not treat a local AWS region setting as production-like by itself', () => {
@@ -93,6 +113,9 @@ describe('validateEnv', () => {
     expect(env.CONTROL_PLANE_INTERNAL_SERVICE_TOKEN).toBe(
       'prod-internal-token-1234567890abcdef123456',
     );
+    expect(env.TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN).toBe(
+      'prod-chat-service-token-1234567890abcdef',
+    );
   });
 
   function baseEnv() {
@@ -110,6 +133,8 @@ describe('validateEnv', () => {
       CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: 'false',
       CONTROL_PLANE_INTERNAL_SERVICE_TOKEN:
         'prod-internal-token-1234567890abcdef123456',
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:
+        'prod-chat-service-token-1234567890abcdef',
       NODE_ENV: 'production',
       SMTP_FROM: 'security@example.test',
       SMTP_HOST: 'smtp.example.test',

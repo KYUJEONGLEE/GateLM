@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/chat-auth-session.schema.json",
+  "title": "Tenant Chat Auth Session",
+  "type": "object",
+  "properties": {
+    "sessionId": { "type": "string", "format": "uuid" },
+    "state": { "type": "string", "enum": ["tenant_selection_required", "authenticated"] },
+    "sessionVersion": { "type": "integer", "minimum": 1 },
+    "accessExpiresAt": { "type": "string", "format": "date-time" },
+    "refreshExpiresAt": { "type": "string", "format": "date-time" },
+    "csrfRequired": { "type": "boolean", "const": true },
+    "user": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "name": { "type": ["string", "null"], "maxLength": 120 }
+      },
+      "required": ["id", "email", "name"],
+      "additionalProperties": false
+    },
+    "selectedTenant": {
+      "type": ["object", "null"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] },
+        "employeeId": { "type": ["string", "null"], "format": "uuid" }
+      },
+      "required": ["id", "name", "actorKind", "employeeId"],
+      "additionalProperties": false
+    },
+    "tenants": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] },
+          "employeeId": { "type": ["string", "null"], "format": "uuid" }
+        },
+        "required": ["id", "name", "actorKind", "employeeId"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "sessionId",
+    "state",
+    "sessionVersion",
+    "accessExpiresAt",
+    "refreshExpiresAt",
+    "csrfRequired",
+    "user",
+    "selectedTenant",
+    "tenants"
+  ],
+  "additionalProperties": false
+}

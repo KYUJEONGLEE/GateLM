@@ -19,13 +19,14 @@ export type ProjectMonthlyCost = {
   costMicroUsd: number;
   projectId: string;
   requestCount: number;
+  totalTokens: number;
 };
 
 export type ProjectMonthlyCostReport = {
   generatedAt: string | null;
   loadError: string | null;
   projectCosts: ProjectMonthlyCost[];
-  source: "gateway" | "unavailable";
+  source: "gateway" | "preview" | "unavailable";
 };
 
 type LiveCostReportResponse = {
@@ -50,6 +51,7 @@ type ProjectMonthlyCostResponseRow = {
   costMicroUsd?: number | string;
   projectId?: string;
   requestCount?: number | string;
+  totalTokens?: number | string;
 };
 
 export async function getLiveCostOverTime(
@@ -163,7 +165,8 @@ function toProjectMonthlyCost(row: ProjectMonthlyCostResponseRow): ProjectMonthl
   return {
     costMicroUsd: normalizeNonNegativeNumber(row.costMicroUsd),
     projectId,
-    requestCount: normalizeNonNegativeNumber(row.requestCount)
+    requestCount: normalizeNonNegativeNumber(row.requestCount),
+    totalTokens: normalizeNonNegativeNumber(row.totalTokens)
   };
 }
 

@@ -1,23 +1,29 @@
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
-import { getPreferredRuntimePolicyRouteModel } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
+  runtimeRoutingCategories,
+  runtimeRoutingDifficulties,
   type RuntimePolicyConfig,
   type RuntimePolicyDetector,
   type RuntimePolicyDraftValues,
-  type RuntimePolicyModelConfig
+  type RuntimePolicyModelConfig,
+  type RuntimePolicyRoutingDraft,
+  type RuntimePolicyRoutingRoutes
 } from "@/lib/control-plane/runtime-policy-types";
 
 import type { RoutingProviderOption } from "./runtime-policy-editor-types";
 
-export function getWritableRuntimePolicyDraftValues(
-  config: RuntimePolicyConfig,
-  providerConnections: ProviderConnectionRecord[]
+export function areRuntimePolicyDraftValuesEqual(
+  left: RuntimePolicyDraftValues,
+  right: RuntimePolicyDraftValues
 ) {
-  return normalizeDraftRoutingForProviderConnections(
-    getRuntimePolicyDraftValues(config),
-    providerConnections
-  );
+  return deepEqualPolicyValue(left, right);
+}
+
+export function getWritableRuntimePolicyDraftValues(
+  config: RuntimePolicyConfig
+) {
+  return getRuntimePolicyDraftValues(config);
 }
 
 export function groupRoutingModelsByProvider(
@@ -71,32 +77,24 @@ export function getSelectedRoutingProviderConnections(
   values: RuntimePolicyDraftValues,
   providerConnections: ProviderConnectionRecord[]
 ) {
-  const providerConnectionsByProvider = new Map(
-    providerConnections.map((providerConnection) => [
-      normalizePolicyText(providerConnection.provider),
-      providerConnection
-    ])
+  const selectedProviderIds = new Set(
+    getRoutingModelRefs(values.routingPolicy.routes)
+      .map((modelRef) => findProviderConnectionForModelRef(modelRef, providerConnections)?.id)
+      .filter((providerId): providerId is string => Boolean(providerId))
   );
 
-  return getSelectedRoutingProviderNames(values)
-    .map((provider) => providerConnectionsByProvider.get(provider))
-    .filter(
-      (providerConnection): providerConnection is ProviderConnectionRecord =>
-        Boolean(providerConnection && getProviderConnectionModels(providerConnection).length > 0)
-    );
+  return providerConnections.filter((connection) => selectedProviderIds.has(connection.id));
 }
 
-export function getSelectedRoutingProviderNames(values: RuntimePolicyDraftValues) {
+export function getSelectedRoutingProviderNames(
+  values: RuntimePolicyDraftValues,
+  providerConnections: ProviderConnectionRecord[] = []
+) {
   return Array.from(
     new Set(
-      [
-        values.routingDefaultProvider,
-        values.routingHighQualityProvider,
-        values.routingLowCostProvider,
-        values.routingFallbackProvider
-      ]
-        .map((provider) => normalizePolicyText(provider))
-        .filter(Boolean)
+      getSelectedRoutingProviderConnections(values, providerConnections).map(
+        (connection) => connection.provider
+      )
     )
   );
 }
@@ -123,123 +121,80 @@ export function mergeDraftValuesWithProviderConnections(
   };
 }
 
-export function hasRoutingModelSelection(
-  provider: string | null | undefined,
-  model: string | null | undefined,
-  modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>
+export function getRoutingModelRef(
+  providerConnection: Pick<ProviderConnectionRecord, "id">,
+  modelId: string
 ) {
-  const trimmedProvider = normalizePolicyText(provider);
-  const trimmedModel = normalizePolicyText(model);
+  return `${providerConnection.id}:${modelId.trim()}`;
+}
 
-  if (!trimmedProvider || !trimmedModel) {
-    return false;
-  }
+export function createMockBootstrapRoutingPolicy(): RuntimePolicyRoutingDraft {
+  return {
+    bootstrapState: "mock_bootstrap",
+    mode: "auto",
+    routes: Object.fromEntries(
+      runtimeRoutingCategories.map((category) => [
+        category,
+        Object.fromEntries(
+          runtimeRoutingDifficulties.map((difficulty) => [
+            difficulty,
+            { modelRefs: ["mock-balanced"] }
+          ])
+        )
+      ])
+    ) as RuntimePolicyRoutingRoutes
+  };
+}
 
-  return Boolean(
-    modelOptionsByProvider
-      .get(trimmedProvider)
-      ?.some(
-        (option) =>
-          normalizePolicyText(option.model) === trimmedModel && option.status === "active"
-      )
+export function hasCompleteRoutingMatrix(routes: RuntimePolicyRoutingRoutes) {
+  return runtimeRoutingCategories.every((category) =>
+    runtimeRoutingDifficulties.every((difficulty) => {
+      const modelRefs = routes[category]?.[difficulty]?.modelRefs;
+      return (
+        Array.isArray(modelRefs) &&
+        modelRefs.length > 0 &&
+        modelRefs.every((modelRef) => typeof modelRef === "string" && modelRef.trim())
+      );
+    })
   );
 }
 
-export function normalizeDraftRoutingForProviderConnections(
-  values: RuntimePolicyDraftValues,
+export function hasResolvableRoutingMatrix(
+  policy: RuntimePolicyRoutingDraft,
   providerConnections: ProviderConnectionRecord[]
-): RuntimePolicyDraftValues {
-  const modelOptionsByProvider = groupRoutingModelsByProvider(values.models, providerConnections);
-  const runtimeModels = getProviderConnectionRuntimeModels(providerConnections);
-  const firstActiveModel = runtimeModels.find((model) => model.status === "active") ?? runtimeModels[0];
-
-  if (!firstActiveModel) {
-    return values;
+) {
+  if (!hasCompleteRoutingMatrix(policy.routes)) {
+    return false;
   }
 
-  const defaultRouteAvailable = hasRoutingModelSelection(
-    values.routingDefaultProvider,
-    values.routingDefaultModel,
-    modelOptionsByProvider
+  return getRoutingModelRefs(policy.routes).every(
+    (modelRef) =>
+      modelRef === "mock-balanced" ||
+      Boolean(findProviderConnectionForModelRef(modelRef, providerConnections))
   );
-  const lowCostRouteAvailable = hasRoutingModelSelection(
-    values.routingLowCostProvider,
-    values.routingLowCostModel,
-    modelOptionsByProvider
-  );
-  const highQualityRouteAvailable = hasRoutingModelSelection(
-    values.routingHighQualityProvider,
-    values.routingHighQualityModel,
-    modelOptionsByProvider
-  );
-  const fallbackRouteAvailable = hasRoutingModelSelection(
-    values.routingFallbackProvider,
-    values.routingFallbackModel,
-    modelOptionsByProvider
-  );
+}
 
-  if (
-    defaultRouteAvailable &&
-    lowCostRouteAvailable &&
-    highQualityRouteAvailable &&
-    fallbackRouteAvailable
-  ) {
-    return values;
-  }
-
-  const normalizeRouteSelection = (
-    route: "default" | "fallback" | "highQuality" | "lowCost",
-    provider: string,
-    model: string,
-    isAvailable: boolean
-  ) => {
-    if (isAvailable) {
-      return { model, provider };
-    }
-
-    const providerWithModels = modelOptionsByProvider.has(provider) ? provider : firstActiveModel.provider;
-    return (
-      getPreferredRuntimePolicyRouteModel(runtimeModels, providerWithModels, route, firstActiveModel) ??
-      firstActiveModel
-    );
-  };
-
-  const defaultRoute = normalizeRouteSelection(
-    "default",
-    values.routingDefaultProvider,
-    values.routingDefaultModel,
-    defaultRouteAvailable
+export function getRoutingModelRefs(routes: RuntimePolicyRoutingRoutes) {
+  return Array.from(
+    new Set(
+      runtimeRoutingCategories.flatMap((category) =>
+        runtimeRoutingDifficulties.flatMap(
+          (difficulty) => routes[category][difficulty].modelRefs
+        )
+      )
+    )
   );
-  const fallbackRoute = normalizeRouteSelection(
-    "fallback",
-    values.routingFallbackProvider,
-    values.routingFallbackModel,
-    fallbackRouteAvailable
-  );
-  const highQualityRoute = normalizeRouteSelection(
-    "highQuality",
-    values.routingHighQualityProvider,
-    values.routingHighQualityModel,
-    highQualityRouteAvailable
-  );
-  const lowCostRoute = normalizeRouteSelection(
-    "lowCost",
-    values.routingLowCostProvider,
-    values.routingLowCostModel,
-    lowCostRouteAvailable
-  );
+}
 
-  return {
-    ...values,
-    routingDefaultModel: defaultRoute.model,
-    routingDefaultProvider: defaultRoute.provider,
-    routingFallbackModel: fallbackRoute.model,
-    routingFallbackProvider: fallbackRoute.provider,
-    routingHighQualityModel: highQualityRoute.model,
-    routingHighQualityProvider: highQualityRoute.provider,
-    routingLowCostModel: lowCostRoute.model,
-    routingLowCostProvider: lowCostRoute.provider
-  };
+export function findProviderConnectionForModelRef(
+  modelRef: string,
+  providerConnections: ProviderConnectionRecord[]
+) {
+  return providerConnections.find((connection) =>
+    getProviderConnectionModels(connection).some(
+      (modelId) => getRoutingModelRef(connection, modelId) === modelRef
+    )
+  );
 }
 
 export function parseBoundedInteger(value: string, min: number, max: number) {
@@ -434,4 +389,39 @@ function getProviderConfigString(
 
 function normalizePolicyText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function deepEqualPolicyValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => deepEqualPolicyValue(value, right[index]))
+    );
+  }
+
+  if (!isPolicyRecord(left) || !isPolicyRecord(right)) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(right, key) &&
+        deepEqualPolicyValue(left[key], right[key])
+    )
+  );
+}
+
+function isPolicyRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

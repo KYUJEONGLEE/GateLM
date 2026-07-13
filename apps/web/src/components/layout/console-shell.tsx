@@ -3,13 +3,17 @@
 import {
   Activity,
   Bell,
+  Building2,
   ChevronDown,
   CircleHelp,
   FolderKanban,
-  House,
+  Globe2,
   LayoutDashboard,
   LogOut,
-  Menu,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
   ScrollText,
   Settings as SettingsIcon,
@@ -18,7 +22,15 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { GateLMLogo } from "@/components/brand/gatelm-logo";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link";
+import {
+  getConsoleNavigationState,
+  type ConsoleSection,
+  type ManagementNavItem,
+  type MonitoringNavItem
+} from "@/components/layout/console-navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,11 +39,8 @@ import {
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
-type ConsoleSection = "monitoring" | "management";
 type ConsoleTheme = "light" | "dark";
 type NotificationSeverity = "critical" | "info" | "warning";
-type NotificationCategory = "Budget" | "Cache" | "Cost" | "Provider" | "Rate Limit" | "Safety" | "System";
-
 type CurrentUser = {
   avatarUrl?: string;
   displayName: string;
@@ -42,7 +51,7 @@ type CurrentUser = {
 };
 
 type AdminNotification = {
-  category: NotificationCategory;
+  category: string;
   createdAt: string;
   id: string;
   message: string;
@@ -51,14 +60,12 @@ type AdminNotification = {
   title: string;
 };
 
-export type ManagementNavItem =
-  | "api-keys"
-  | "app-tokens"
-  | "policies"
-  | "project"
-  | "provider"
-  | "teams";
-export type MonitoringNavItem = "alerts" | "analytics" | "live-logs" | "overview";
+type AdminNotificationSeed = Pick<AdminNotification, "id" | "severity"> & {
+  content: Record<
+    Locale,
+    Pick<AdminNotification, "category" | "createdAt" | "message" | "title">
+  >;
+};
 
 const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
   monitoring: LayoutDashboard,
@@ -68,6 +75,7 @@ const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
 const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
   "api-keys": SettingsIcon,
   "app-tokens": SettingsIcon,
+  employees: Users,
   alerts: Bell,
   analytics: Activity,
   "live-logs": ScrollText,
@@ -75,6 +83,7 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
   policies: ScrollText,
   project: FolderKanban,
   provider: Plug,
+  tenant: Building2,
   teams: Users
 };
 
@@ -86,12 +95,6 @@ type ConsoleShellProps = {
   currentUser: CurrentUser | null;
   locale: Locale;
   tenantId: string;
-};
-
-type ConsoleNavigationState = {
-  activeManagementItem?: ManagementNavItem;
-  activeMonitoringItem?: MonitoringNavItem;
-  activeSection: ConsoleSection;
 };
 
 type ChildNavigationItem = {
@@ -158,16 +161,32 @@ const navigationItems: Array<{
     children: [
       {
         labels: {
+          en: "Tenant",
+          ko: "테넌트"
+        },
+        item: "tenant",
+        path: (tenantId) => `/tenants/${tenantId}/tenants`
+      },
+      {
+        labels: {
           en: "Project",
-          ko: "Project"
+          ko: "프로젝트"
         },
         item: "project",
         path: (tenantId) => `/tenants/${tenantId}/projects`
       },
       {
         labels: {
+          en: "Employees",
+          ko: "직원"
+        },
+        item: "employees",
+        path: (tenantId) => `/tenants/${tenantId}/employees`
+      },
+      {
+        labels: {
           en: "Providers",
-          ko: "Provider"
+          ko: "프로바이더"
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
@@ -181,88 +200,196 @@ const shellText: Record<
   Locale,
   {
     collapseNavigation: string;
+    account: string;
+    accountActions: string;
     expandNavigation: string;
+    help: string;
     language: string;
     landing: string;
+    loggingOut: string;
+    logout: string;
+    markAllAsRead: string;
+    navigation: string;
+    notifications: string;
+    openUserProfile: string;
+    organization: string;
+    role: string;
+    sessionRequired: string;
     settings: string;
     light: string;
     dark: string;
+    presentationMode: string;
+    presentationModeOff: string;
+    presentationModeOn: string;
     theme: string;
     planned: string;
     tenant: string;
+    unread: string;
+    unreadNotification: string;
+    userProfile: string;
+    viewAllNotifications: string;
   }
 > = {
   en: {
+    account: "Account",
+    accountActions: "Console account actions",
     collapseNavigation: "Collapse navigation",
     expandNavigation: "Expand navigation",
     dark: "Dark",
-    language: "Console language",
+    help: "Help",
+    language: "Language",
     landing: "Landing",
     light: "Light",
+    loggingOut: "Logging out...",
+    logout: "Logout",
+    markAllAsRead: "Mark all as read",
+    navigation: "navigation",
+    notifications: "Notifications",
+    openUserProfile: "Open user profile menu",
+    organization: "Organization",
     planned: "planned",
-    settings: "Tenant settings",
+    presentationMode: "Expanded layout",
+    presentationModeOff: "Expand",
+    presentationModeOn: "Standard",
+    role: "Role",
+    sessionRequired: "Session required",
+    settings: "Settings",
     tenant: "tenant",
-    theme: "Theme"
+    theme: "Theme",
+    unread: "unread",
+    unreadNotification: "Unread notification",
+    userProfile: "User profile",
+    viewAllNotifications: "View all notifications"
   },
   ko: {
+    account: "계정",
+    accountActions: "콘솔 계정 메뉴",
     landing: "랜딩",
     collapseNavigation: "내비게이션 닫기",
     expandNavigation: "내비게이션 열기",
     dark: "다크",
-    language: "콘솔 언어",
+    help: "도움말",
+    language: "언어",
     light: "라이트",
+    loggingOut: "로그아웃 중...",
+    logout: "로그아웃",
+    markAllAsRead: "모두 읽음으로 표시",
+    navigation: "내비게이션",
+    notifications: "알림",
+    openUserProfile: "사용자 프로필 메뉴 열기",
+    organization: "조직",
     planned: "예정",
-    settings: "테넌트 설정",
+    presentationMode: "확장 보기",
+    presentationModeOff: "확장",
+    presentationModeOn: "기본",
+    role: "역할",
+    sessionRequired: "로그인 필요",
+    settings: "설정",
     tenant: "테넌트",
-    theme: "테마"
+    theme: "테마",
+    unread: "읽지 않음",
+    unreadNotification: "읽지 않은 알림",
+    userProfile: "사용자 프로필",
+    viewAllNotifications: "모든 알림 보기"
   }
 };
 
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
+const presentationModeStorageKey = "gatelm_console_presentation_mode";
 const notificationReadStorageKey = "gatelm_console_header_notification_read_ids";
 
 // No notification API exists yet; these are preview notifications for the console header demo.
-const previewNotificationSeeds: Array<Omit<AdminNotification, "read">> = [
+const previewNotificationSeeds: AdminNotificationSeed[] = [
   {
-    category: "Budget",
-    createdAt: "2m ago",
+    content: {
+      en: {
+        category: "Budget",
+        createdAt: "2m ago",
+        message: "Monthly budget usage is approaching the configured limit.",
+        title: "Budget warning"
+      },
+      ko: {
+        category: "예산",
+        createdAt: "2분 전",
+        message: "월간 예산 사용량이 설정된 한도에 가까워지고 있습니다.",
+        title: "예산 경고"
+      }
+    },
     id: "budget-usage-preview",
-    message: "Monthly budget usage is approaching the configured limit.",
-    severity: "warning",
-    title: "Budget warning"
+    severity: "warning"
   },
   {
-    category: "Provider",
-    createdAt: "5m ago",
+    content: {
+      en: {
+        category: "Provider",
+        createdAt: "5m ago",
+        message: "Recent gateway requests include provider-side 5xx errors.",
+        title: "Provider error"
+      },
+      ko: {
+        category: "프로바이더",
+        createdAt: "5분 전",
+        message: "최근 Gateway 요청에서 프로바이더 측 5xx 오류가 발생했습니다.",
+        title: "프로바이더 오류"
+      }
+    },
     id: "provider-error-preview",
-    message: "Recent gateway requests include provider-side 5xx errors.",
-    severity: "critical",
-    title: "Provider error"
+    severity: "critical"
   },
   {
-    category: "Safety",
-    createdAt: "8m ago",
+    content: {
+      en: {
+        category: "Safety",
+        createdAt: "8m ago",
+        message: "Secret-like prompt content was blocked by policy.",
+        title: "Safety block detected"
+      },
+      ko: {
+        category: "안전",
+        createdAt: "8분 전",
+        message: "비밀정보로 추정되는 프롬프트 내용이 정책에 의해 차단되었습니다.",
+        title: "안전 정책 차단 감지"
+      }
+    },
     id: "safety-block-preview",
-    message: "Secret-like prompt content was blocked by policy.",
-    severity: "warning",
-    title: "Safety block detected"
+    severity: "warning"
   },
   {
-    category: "Rate Limit",
-    createdAt: "14m ago",
+    content: {
+      en: {
+        category: "Rate Limit",
+        createdAt: "14m ago",
+        message: "A project is close to its current rate limit window.",
+        title: "Rate limit warning"
+      },
+      ko: {
+        category: "요청 제한",
+        createdAt: "14분 전",
+        message: "프로젝트 요청량이 현재 요청 제한에 가까워지고 있습니다.",
+        title: "요청 제한 경고"
+      }
+    },
     id: "rate-limit-preview",
-    message: "A project is close to its current rate limit window.",
-    severity: "info",
-    title: "Rate limit warning"
+    severity: "info"
   },
   {
-    category: "Cache",
-    createdAt: "22m ago",
+    content: {
+      en: {
+        category: "Cache",
+        createdAt: "22m ago",
+        message: "Cache hit rate is lower than expected for repeated traffic.",
+        title: "Cache opportunity"
+      },
+      ko: {
+        category: "캐시",
+        createdAt: "22분 전",
+        message: "반복 트래픽의 캐시 적중률이 예상보다 낮습니다.",
+        title: "캐시 개선 기회"
+      }
+    },
     id: "cache-opportunity-preview",
-    message: "Cache hit rate is lower than expected for repeated traffic.",
-    severity: "info",
-    title: "Cache opportunity"
+    severity: "info"
   }
 ];
 
@@ -289,14 +416,17 @@ export function ConsoleShell({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
+  const [isPresentationMode, setIsPresentationMode] = useState(false);
 
   const notifications = useMemo(
     () =>
       previewNotificationSeeds.map((notification) => ({
-        ...notification,
+        ...notification.content[locale],
+        id: notification.id,
+        severity: notification.severity,
         read: readNotificationIds.includes(notification.id)
       })),
-    [readNotificationIds]
+    [locale, readNotificationIds]
   );
   const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
 
@@ -316,6 +446,12 @@ export function ConsoleShell({
     const initialTheme = readStoredTheme() ?? readDocumentTheme();
     setTheme(initialTheme);
     applyTheme(initialTheme);
+  }, []);
+
+  useEffect(() => {
+    const initialPresentationMode = readStoredPresentationMode();
+    setIsPresentationMode(initialPresentationMode);
+    applyPresentationMode(initialPresentationMode);
   }, []);
 
   useEffect(() => {
@@ -343,6 +479,15 @@ export function ConsoleShell({
     setTheme(nextTheme);
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
+  }
+
+  function togglePresentationMode() {
+    setIsPresentationMode((current) => {
+      const next = !current;
+      applyPresentationMode(next);
+      writeStoredPresentationMode(next);
+      return next;
+    });
   }
 
   async function logout() {
@@ -380,10 +525,13 @@ export function ConsoleShell({
       if (child.disabled || !child.path) {
         return (
           <span
+            aria-label={childLabel}
             aria-disabled="true"
             className="console-subnav-link"
             data-disabled="true"
+            data-tooltip={childLabel}
             key={child.item}
+            title={childLabel}
           >
             <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
             <span>{childLabel}</span>
@@ -394,18 +542,22 @@ export function ConsoleShell({
       }
 
       return (
-        <Link
+        <IntentPrefetchLink
+          aria-label={childLabel}
           aria-current={isChildActive(child) ? "page" : undefined}
           className="console-subnav-link"
           data-active={isChildActive(child)}
+          data-tooltip={childLabel}
           href={child.path(tenantId)}
+          intentPrefetch={!isSidebarCollapsed}
           key={child.item}
           onClick={closeMobileNavigation}
+          title={childLabel}
         >
           <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
           <span>{childLabel}</span>
           {child.badge ? <span className="console-nav-badge">{child.badge}</span> : null}
-        </Link>
+        </IntentPrefetchLink>
       );
     });
   }
@@ -424,22 +576,14 @@ export function ConsoleShell({
           onClick={toggleSidebar}
           type="button"
         >
-          <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
+          {isMobileNavigationOpen ? (
+            <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
+          ) : (
+            <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
+          )}
         </button>
         <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
-          <span className="console-brand-mark">G</span>
-          <span className="console-brand-copy">
-            <strong>GateLM</strong>
-          </span>
-        </Link>
-        <Link
-          aria-label={text.landing}
-          className="console-mobile-landing-link"
-          href="/?view=landing"
-          title={text.landing}
-        >
-          <House aria-hidden="true" size={17} strokeWidth={2.4} />
-          <span>{text.landing}</span>
+          <GateLMLogo />
         </Link>
       </header>
       <button
@@ -451,35 +595,28 @@ export function ConsoleShell({
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
           <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
-            <span className="console-brand-mark">G</span>
-            <span className="console-brand-copy">
-              <strong>GateLM</strong>
-              <small>Web Console</small>
-            </span>
+            <GateLMLogo compact={isSidebarCollapsed} />
           </Link>
-          <button
-            aria-expanded={!isSidebarCollapsed}
-            aria-label={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
-            className="console-sidebar-toggle"
-            onClick={toggleSidebar}
-            title={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
-            type="button"
-          >
-            <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
-          </button>
+          <div className="console-sidebar-product-row">
+            <span className="console-sidebar-product-label">Web Console</span>
+            <button
+              aria-expanded={!isSidebarCollapsed}
+              aria-label={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
+              className="console-sidebar-toggle"
+              onClick={toggleSidebar}
+              title={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
+              type="button"
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
+              ) : (
+                <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
+              )}
+            </button>
+          </div>
         </div>
 
-        <Link
-          className="console-landing-link"
-          href="/?view=landing"
-          onClick={closeMobileNavigation}
-          title={text.landing}
-        >
-          <House aria-hidden="true" size={16} strokeWidth={2.4} />
-          <span>{text.landing}</span>
-        </Link>
-
-        <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
+        <nav className="console-nav">
           {navigationItems.map((item) => {
             const label = item.labels[locale];
             const SectionIcon = sectionIcons[item.section];
@@ -499,7 +636,7 @@ export function ConsoleShell({
                       <span>{label}</span>
                     </div>
 
-                    <div className="console-subnav" aria-label={`${label} navigation`}>
+                    <div className="console-subnav" aria-label={`${label} ${text.navigation}`}>
                       {renderSubnavItems(item.children)}
                     </div>
                   </div>
@@ -535,7 +672,7 @@ export function ConsoleShell({
                 </Link>
 
                 {item.children && item.section === resolvedActiveSection ? (
-                  <div className="console-subnav" aria-label={`${label} navigation`}>
+                  <div className="console-subnav" aria-label={`${label} ${text.navigation}`}>
                     {renderSubnavItems(item.children)}
                   </div>
                 ) : null}
@@ -552,66 +689,32 @@ export function ConsoleShell({
             }
 
             return (
-              <div className="console-subnav" aria-label={`${label} navigation`} key={item.section}>
+              <div
+                className="console-subnav"
+                aria-label={`${label} ${text.navigation}`}
+                key={item.section}
+              >
                 {renderSubnavItems(item.children)}
               </div>
             );
           })}
-        </div>
-        <div className="console-sidebar-tenant-wrap" aria-hidden={isSidebarCollapsed}>
-          <div className="console-sidebar-tenant">
-            <strong>{tenantLabel}</strong>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label={text.settings}
-                className="console-sidebar-settings-button"
-                title={text.settings}
-              >
-                <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                aria-label={text.settings}
-                className="console-sidebar-settings-popover"
-                sideOffset={8}
-              >
-                <div className="console-sidebar-settings-row">
-                  <span>{text.language}</span>
-                  <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-                </div>
-                <div className="console-sidebar-settings-row">
-                  <span>{text.theme}</span>
-                  <div className="theme-segmented-control" data-density="compact">
-                    <button
-                      data-active={theme === "light"}
-                      onClick={() => selectTheme("light")}
-                      type="button"
-                    >
-                      {text.light}
-                    </button>
-                    <button
-                      data-active={theme === "dark"}
-                      onClick={() => selectTheme("dark")}
-                      type="button"
-                    >
-                      {text.dark}
-                    </button>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
         </div>
       </aside>
 
       <div className="console-main">
         <ConsoleTopbarActions
           currentUser={currentUser}
+          isPresentationMode={isPresentationMode}
           isLoggingOut={isLoggingOut}
+          locale={locale}
           notifications={notifications}
           onLogout={logout}
           onMarkAllNotificationsRead={markAllNotificationsRead}
+          onSelectTheme={selectTheme}
+          onTogglePresentationMode={togglePresentationMode}
           tenantLabel={tenantLabel}
+          text={text}
+          theme={theme}
           unreadNotificationCount={unreadNotificationCount}
         />
         {children}
@@ -620,106 +723,44 @@ export function ConsoleShell({
   );
 }
 
-function getConsoleNavigationState(pathname: string | null): ConsoleNavigationState {
-  switch (getTenantConsoleRoute(pathname)) {
-    case "dashboard":
-      return {
-        activeMonitoringItem: "overview",
-        activeSection: "monitoring"
-      };
-    case "request-logs":
-    case "metrics":
-      return {
-        activeMonitoringItem: "live-logs",
-        activeSection: "monitoring"
-      };
-    case "analytics":
-      return {
-        activeMonitoringItem: "analytics",
-        activeSection: "monitoring"
-      };
-    case "alerts":
-      return {
-        activeMonitoringItem: "alerts",
-        activeSection: "monitoring"
-      };
-    case "health":
-      return {
-        activeSection: "monitoring"
-      };
-    case "api-keys":
-      return {
-        activeManagementItem: "api-keys",
-        activeSection: "management"
-      };
-    case "app-tokens":
-      return {
-        activeManagementItem: "app-tokens",
-        activeSection: "management"
-      };
-    case "policies":
-      return {
-        activeManagementItem: "policies",
-        activeSection: "management"
-      };
-    case "provider-connections":
-    case "model-catalog":
-      return {
-        activeManagementItem: "provider",
-        activeSection: "management"
-      };
-    case "teams":
-      return {
-        activeManagementItem: "teams",
-        activeSection: "management"
-      };
-    case "applications":
-    case "onboarding":
-    case "projects":
-      return {
-        activeManagementItem: "project",
-        activeSection: "management"
-      };
-    default:
-      return {
-        activeSection: "management"
-      };
-  }
-}
-
-function getTenantConsoleRoute(pathname: string | null) {
-  const segments = (pathname ?? "").split("/").filter(Boolean);
-  const tenantIndex = segments.indexOf("tenants");
-
-  return tenantIndex >= 0 ? segments[tenantIndex + 2] : undefined;
-}
-
 function ConsoleTopbarActions({
   currentUser,
+  isPresentationMode,
   isLoggingOut,
+  locale,
   notifications,
   onLogout,
   onMarkAllNotificationsRead,
+  onSelectTheme,
+  onTogglePresentationMode,
   tenantLabel,
+  text,
+  theme,
   unreadNotificationCount
 }: {
   currentUser: CurrentUser | null;
+  isPresentationMode: boolean;
   isLoggingOut: boolean;
+  locale: Locale;
   notifications: AdminNotification[];
   onLogout: () => Promise<void>;
   onMarkAllNotificationsRead: () => void;
+  onSelectTheme: (theme: ConsoleTheme) => void;
+  onTogglePresentationMode: () => void;
   tenantLabel: string;
+  text: (typeof shellText)[Locale];
+  theme: ConsoleTheme;
   unreadNotificationCount: number;
 }) {
-  const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel);
+  const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel, text);
   const initials = getUserInitials(displayUser.displayName);
 
   return (
-    <div className="console-topbar-actions" aria-label="Console account actions">
+    <div className="console-topbar-actions" aria-label={text.accountActions}>
       <button
-        aria-label="Help"
+        aria-label={text.help}
         className="console-topbar-icon-button"
-        title="Help"
+        title={text.help}
         type="button"
       >
         <CircleHelp aria-hidden="true" size={18} strokeWidth={2.2} />
@@ -727,9 +768,9 @@ function ConsoleTopbarActions({
 
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label={`${unreadNotificationCount} unread notifications`}
+          aria-label={`${text.notifications}: ${unreadNotificationCount} ${text.unread}`}
           className="console-topbar-icon-button console-notification-trigger"
-          title="Notifications"
+          title={text.notifications}
         >
           <Bell aria-hidden="true" size={18} strokeWidth={2.2} />
           {unreadNotificationCount > 0 ? (
@@ -740,21 +781,23 @@ function ConsoleTopbarActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          aria-label="Notifications"
+          aria-label={text.notifications}
           className="console-notification-popover"
           sideOffset={10}
         >
           <div className="console-notification-popover-header">
             <div>
-              <strong>Notifications</strong>
-              <span>{unreadNotificationCount} unread</span>
+              <strong>{text.notifications}</strong>
+              <span>
+                {unreadNotificationCount} {text.unread}
+              </span>
             </div>
             <button
               disabled={unreadNotificationCount === 0}
               onClick={onMarkAllNotificationsRead}
               type="button"
             >
-              Mark all as read
+              {text.markAllAsRead}
             </button>
           </div>
 
@@ -770,7 +813,7 @@ function ConsoleTopbarActions({
                 <div>
                   <div className="console-notification-row-title">
                     <strong>{notification.title}</strong>
-                    {!notification.read ? <span aria-label="Unread notification" /> : null}
+                    {!notification.read ? <span aria-label={text.unreadNotification} /> : null}
                   </div>
                   <p>{notification.message}</p>
                   <footer>
@@ -784,13 +827,13 @@ function ConsoleTopbarActions({
 
           {/* No notifications route exists yet. Keep this disabled until a backend/page is added. */}
           <button className="console-notification-view-all" disabled type="button">
-            View all notifications
+            {text.viewAllNotifications}
           </button>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <DropdownMenu>
-        <DropdownMenuTrigger className="console-user-trigger" aria-label="Open user profile menu">
+        <DropdownMenuTrigger className="console-user-trigger" aria-label={text.openUserProfile}>
           <span className="console-user-avatar" aria-hidden="true">
             {displayUser.avatarUrl ? (
               <span
@@ -809,7 +852,7 @@ function ConsoleTopbarActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          aria-label="User profile"
+          aria-label={text.userProfile}
           className="console-user-popover"
           sideOffset={10}
         >
@@ -832,21 +875,67 @@ function ConsoleTopbarActions({
 
           <dl className="console-user-meta">
             <div>
-              <dt>Role</dt>
+              <dt>{text.role}</dt>
               <dd>{displayUser.role}</dd>
             </div>
             <div>
-              <dt>Organization</dt>
+              <dt>{text.organization}</dt>
               <dd>{displayUser.tenantName ?? tenantLabel}</dd>
             </div>
           </dl>
 
-          <div className="console-user-menu-actions">
-            <button className="console-user-menu-action" disabled type="button">
+          <section className="console-user-settings" aria-label={text.settings}>
+            <header>
               <SettingsIcon aria-hidden="true" size={14} strokeWidth={2.2} />
-              <span>Settings</span>
-              <small>Not connected</small>
-            </button>
+              <strong>{text.settings}</strong>
+            </header>
+            <div className="console-user-settings-row">
+              <span className="console-language-icon" title={text.language}>
+                <Globe2 aria-hidden="true" size={18} strokeWidth={2.2} />
+              </span>
+              <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+            </div>
+            <div className="console-user-settings-row">
+              <span>{text.theme}</span>
+              <div className="theme-segmented-control" data-density="compact">
+                <button
+                  data-active={theme === "light"}
+                  onClick={() => onSelectTheme("light")}
+                  type="button"
+                >
+                  {text.light}
+                </button>
+                <button
+                  data-active={theme === "dark"}
+                  onClick={() => onSelectTheme("dark")}
+                  type="button"
+                >
+                  {text.dark}
+                </button>
+              </div>
+            </div>
+            <div className="console-user-settings-row">
+              <span>{text.presentationMode}</span>
+              <button
+                aria-pressed={isPresentationMode}
+                className="console-presentation-mode-button"
+                data-active={isPresentationMode}
+                onClick={onTogglePresentationMode}
+                type="button"
+              >
+                {isPresentationMode ? (
+                  <Minimize2 aria-hidden="true" size={15} strokeWidth={2.2} />
+                ) : (
+                  <Maximize2 aria-hidden="true" size={15} strokeWidth={2.2} />
+                )}
+                <span>
+                  {isPresentationMode ? text.presentationModeOn : text.presentationModeOff}
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <div className="console-user-menu-actions">
             <button
               className="console-user-menu-action"
               disabled={isLoggingOut}
@@ -856,7 +945,7 @@ function ConsoleTopbarActions({
               type="button"
             >
               <LogOut aria-hidden="true" size={14} strokeWidth={2.2} />
-              <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+              <span>{isLoggingOut ? text.loggingOut : text.logout}</span>
             </button>
           </div>
         </DropdownMenuContent>
@@ -865,11 +954,14 @@ function ConsoleTopbarActions({
   );
 }
 
-function buildPendingCurrentUser(tenantLabel: string): CurrentUser {
+function buildPendingCurrentUser(
+  tenantLabel: string,
+  text: (typeof shellText)[Locale]
+): CurrentUser {
   return {
-    displayName: "Account",
+    displayName: text.account,
     id: "session-loading",
-    role: "Session required",
+    role: text.sessionRequired,
     tenantName: tenantLabel
   };
 }
@@ -980,4 +1072,28 @@ function writeStoredTheme(theme: ConsoleTheme) {
   }
 
   window.localStorage.setItem(themeStorageKey, theme);
+}
+
+function applyPresentationMode(isEnabled: boolean) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.presentationMode = String(isEnabled);
+}
+
+function readStoredPresentationMode() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(presentationModeStorageKey) === "true";
+}
+
+function writeStoredPresentationMode(isEnabled: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(presentationModeStorageKey, String(isEnabled));
 }

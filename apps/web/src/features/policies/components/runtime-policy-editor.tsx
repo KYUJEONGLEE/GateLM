@@ -15,7 +15,6 @@ import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { getPreferredRuntimePolicyRouteModel } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -25,23 +24,18 @@ import type { Locale } from "@/lib/i18n/locale";
 import type {
   OneTimeApiKeyState,
   PolicySection,
-  RoutingPriorityRoute,
   RuntimePolicyEditorProps,
   RuntimePolicyEditorText,
   SubmitState
 } from "./runtime-policy-editor-types";
-import type { RuntimePolicyDetailModalProps } from "./runtime-policy-detail-modal";
 import {
-  getRoutingProviderOptions,
+  areRuntimePolicyDraftValuesEqual,
   getSelectedRoutingProviderConnections,
-  getSelectedRoutingProviderNames,
   getWritableRuntimePolicyDraftValues,
-  groupRoutingModelsByProvider,
-  hasRoutingModelSelection,
+  hasResolvableRoutingMatrix,
   mergeDraftValuesWithProviderConnections
 } from "./runtime-policy-editor-utils";
 import {
-  PolicyDetailModalFallback,
   PolicyPanelFallback,
   PolicyPanelFallbackGroup
 } from "./runtime-policy-panel-fallback";
@@ -65,29 +59,6 @@ const RuntimePolicyMovedBudgetContext = createContext<ReactNode>(null);
 
 export function RuntimePolicyMovedBudgetSlot() {
   return useContext(RuntimePolicyMovedBudgetContext);
-}
-
-function RuntimePolicyDetailLoadingFallback() {
-  return (
-    <section
-      aria-busy="true"
-      aria-labelledby="policy-detail-title"
-      aria-modal="true"
-      className="modal-panel policy-detail-modal"
-      onClick={(event) => event.stopPropagation()}
-      role="dialog"
-    >
-      <div className="panel-heading">
-        <h3 id="policy-detail-title">Policy details</h3>
-      </div>
-
-      <div className="policy-detail-layout">
-        <PolicyPanelFallback heading="Runtime snapshot" />
-        <PolicyPanelFallback heading="Provider catalog" />
-        <PolicyPanelFallback heading="History" wide />
-      </div>
-    </section>
-  );
 }
 
 const BudgetPolicyPanel = dynamic<BudgetPolicyPanelProps>(() =>
@@ -121,7 +92,7 @@ const RoutingPolicyPanel = dynamic<RoutingPolicyPanelProps>(() =>
     loading: () => (
       <PolicyPanelFallbackGroup
         panels={[
-          { heading: "Routing" },
+          { heading: "카테고리별 모델 설정" },
           { heading: "Advanced routing", lineCount: 1 },
           { heading: "Provider catalog" }
         ]}
@@ -149,24 +120,29 @@ const StreamingPolicyPanel = dynamic<StreamingPolicyPanelProps>(() =>
     loading: () => <PolicyPanelFallback heading="Streaming" />
   }
 );
-const RuntimePolicyDetailModal = dynamic<RuntimePolicyDetailModalProps>(() =>
-  import("./runtime-policy-detail-modal").then((module) => module.RuntimePolicyDetailModal),
-  {
-    loading: RuntimePolicyDetailLoadingFallback
-  }
-);
-
 function getPolicyTabId(section: PolicySection) {
   return `policy-tab-${section}`;
 }
 function getPolicyPanelId(section: PolicySection) {
   return `policy-panel-${section}`;
 }
+function getDefaultPolicySection(
+  hasGeneralSection: boolean,
+  hasEmployeeSection: boolean
+): PolicySection {
+  if (hasGeneralSection) {
+    return "general";
+  }
+
+  return hasEmployeeSection ? "employees" : "routing";
+}
 
 function getPolicySectionLabel(section: PolicySection, text: RuntimePolicyEditorText) {
   switch (section) {
     case "general":
       return text.general;
+    case "employees":
+      return text.employees;
     case "safety":
       return text.safetyTab;
     case "routing":
@@ -192,35 +168,50 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
       "Active API Key prepared. Store the plaintext now; it will not be displayed again.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
+    budgetPolicyEnabled: "Use budget policy",
+    budgetPolicyHint: "Controls what happens when the project budget is exceeded.",
     budgetTab: "Budget",
     budgetWarning: "Warning threshold",
+    blockAction: "Block",
     cache: "Exact cache",
     cacheEnabled: "Cache enabled",
+    cacheEnabledHint:
+      "Reuse completed responses for identical requests before a Provider call.",
+    cacheSettings: "Cache settings",
     cacheSection: "Cache",
     cacheTab: "Cache",
     cacheTtl: "TTL seconds",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
     completionPrice: "Completion micro USD",
-    defaultRoute: "Default route",
+    detectorNames: {
+      api_key: "API key",
+      authorization_header: "Authorization header",
+      email: "Email address",
+      jwt: "JWT",
+      organization_name: "Organization name",
+      person_name: "Person name",
+      phone_number: "Phone number",
+      postal_address: "Postal address",
+      private_key: "Private key",
+      resident_registration_number: "Resident registration number"
+    },
     detectors: "Safety detectors",
     detectorType: "Detector",
     close: "Close",
     details: "Details",
     disabled: "Disabled",
+    edit: "Edit",
     enabled: "Enabled",
-    fallbackRoute: "Fallback route",
+    employees: "Employees",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
     general: "General",
-    highQualityRoute: "High-quality route",
     jsonMode: "JSON",
     limit: "Limit",
-    lowCostRoute: "Low-cost route",
     logSafeCaptureHint:
       "Stores only the post-masking log-safe prompt in Request Detail when enabled.",
-    mandatoryProtection: "Mandatory sensitive data protection: always active",
-    mandatoryProtectionHint:
-      "API key, JWT, Authorization header, private key, and RRN stay protected regardless of PII masking settings.",
+    mandatoryProtection: "Sensitive data protection",
+    mandatoryProtectionHint: "These detectors cannot be disabled.",
     maxBucketTokens: "Max bucket tokens",
     mode: "Mode",
     model: "Model",
@@ -230,6 +221,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     policyDetails: "Policy details",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    privacyMasking: "Personal data masking",
     promptCapture: "Prompt capture",
     promptCaptureEnabled: "Log-safe capture",
     promptCaptureMaxChars: "Max characters",
@@ -246,11 +238,11 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     rateLimitInfo:
       "Rate limit prevents request bursts. Each request uses one token, and tokens refill every second by the configured amount. Tokens never accumulate above the max bucket size; when tokens run out, the request is blocked before the Provider call.",
     rateLimitTab: "Rate Limit",
+    redactAction: "Redact",
     refillRate: "Refill tokens / sec",
     remove: "Remove",
     rollback: "Rollback",
     routing: "Routing",
-    routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     responseCapture: "Response capture",
     responseCaptureHint:
@@ -260,7 +252,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     safetyTab: "Safety",
     issueApiKey: "Issue API Key",
     issuingApiKey: "Issuing...",
-    shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
     semanticCache: "Semantic cache",
@@ -275,101 +266,118 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     templateFallback:
       "This application does not have an active policy yet. Configure and publish this policy to enable the Gateway path.",
     title: "Policies",
-    tokens: "Context tokens"
+    tokens: "Context tokens",
+    unsavedChanges: "Unsaved changes"
   },
   ko: {
-    activeConfig: "Active config",
+    activeConfig: "활성 설정",
     activeApiKeyMissing:
-      "Runtime policy 저장과 게시에는 이 프로젝트의 active API Key가 필요합니다.",
+      "런타임 정책을 저장하고 게시하려면 이 프로젝트의 활성 API 키가 필요합니다.",
     apiKeyIssueFailed: "API Key 발급에 실패했습니다.",
     apiKeyIssued:
-      "Active API Key가 준비되었습니다. 원문은 지금 저장해야 하며 다시 표시되지 않습니다.",
-    budget: "Budget policy",
-    budgetEnforcement: "Enforcement",
-    budgetTab: "Budget",
-    budgetWarning: "Warning threshold",
-    cache: "Exact cache",
+      "활성 API 키가 준비되었습니다. 원문은 지금 저장해야 하며 다시 표시되지 않습니다.",
+    budget: "예산 정책",
+    budgetEnforcement: "초과 처리",
+    budgetPolicyEnabled: "예산 정책 사용",
+    budgetPolicyHint: "프로젝트 예산 초과 시 동작을 제어합니다.",
+    budgetTab: "예산",
+    budgetWarning: "경고 임계값",
+    blockAction: "차단",
+    cache: "정확 일치 캐시",
     cacheEnabled: "캐시 사용",
+    cacheEnabledHint:
+      "동일한 요청은 Provider 호출 전에 기존 응답을 재사용합니다.",
+    cacheSettings: "캐시 설정",
     cacheSection: "캐시",
-    cacheTab: "Cache",
+    cacheTab: "캐시",
     cacheTtl: "TTL 초",
-    catalogVersion: "Catalog version",
-    configVersion: "Config version",
-    completionPrice: "Completion micro USD",
-    defaultRoute: "Default route",
-    detectors: "Safety detector",
-    detectorType: "Detector",
+    catalogVersion: "카탈로그 버전",
+    configVersion: "설정 버전",
+    completionPrice: "출력 단가(마이크로 USD)",
+    detectorNames: {
+      api_key: "API 키",
+      authorization_header: "인증 헤더",
+      email: "이메일",
+      jwt: "JWT",
+      organization_name: "조직명",
+      person_name: "이름",
+      phone_number: "전화번호",
+      postal_address: "주소",
+      private_key: "개인 키",
+      resident_registration_number: "주민등록번호"
+    },
+    detectors: "안전 탐지 항목",
+    detectorType: "탐지 유형",
     close: "닫기",
     details: "상세보기",
     disabled: "비활성화",
+    edit: "편집",
     enabled: "사용",
-    fallbackRoute: "Fallback route",
-    fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
+    employees: "직원",
+    fixtureFallback: "Control Plane을 사용할 수 없어 예시 값을 표시 중입니다.",
     general: "일반",
-    highQualityRoute: "High-quality route",
     jsonMode: "JSON",
     limit: "한도",
-    lowCostRoute: "Low-cost route",
     logSafeCaptureHint:
-      "켜져 있을 때 Request Detail에 masking 이후 log-safe prompt만 저장합니다.",
-    mandatoryProtection: "중요 민감정보 보호: 항상 활성화",
-    mandatoryProtectionHint:
-      "API key, JWT, Authorization header, private key, 주민등록번호는 PII masking 설정과 관계없이 항상 보호됩니다.",
+      "켜져 있을 때 요청 상세에 마스킹 이후의 안전한 프롬프트만 저장합니다.",
+    mandatoryProtection: "중요 민감정보 보호",
+    mandatoryProtectionHint: "이 항목은 사용 중지할 수 없습니다.",
     maxBucketTokens: "최대 버킷 토큰",
     mode: "모드",
-    model: "Model",
-    models: "Models",
-    noProviderModels: "설정된 model 없음",
-    placeholder: "Placeholder",
+    model: "모델",
+    models: "모델",
+    noProviderModels: "설정된 모델 없음",
+    placeholder: "치환 문구",
     policyDetails: "정책 상세",
-    pricing: "Pricing rules",
-    pricingVersion: "Pricing version",
+    pricing: "가격 정책",
+    pricingVersion: "가격 정책 버전",
+    privacyMasking: "개인정보 마스킹",
     promptCapture: "프롬프트 캡처",
     promptCaptureEnabled: "로그 안전 캡처",
     promptCaptureMaxChars: "최대 글자 수",
-    promptPrice: "Prompt micro USD",
-    provider: "Provider",
+    promptPrice: "입력 단가(마이크로 USD)",
+    provider: "프로바이더",
     providerConnectionMissing:
-      "정책을 저장하거나 게시하려면 model이 설정된 provider를 하나 이상 연결해야 합니다.",
-    providerCount: "Providers",
-    providerCatalog: "Provider catalog",
-    publish: "Active config 게시",
+      "정책을 저장하거나 게시하려면 모델이 설정된 프로바이더를 하나 이상 연결해야 합니다.",
+    providerCount: "프로바이더",
+    providerCatalog: "프로바이더 카탈로그",
+    publish: "활성 설정 게시",
     publishedAt: "게시 시각",
-    history: "Runtime history",
-    rateLimit: "Rate limit",
+    history: "런타임 이력",
+    rateLimit: "요청 제한",
     rateLimitInfo:
-      "요청 폭주를 막기 위한 제한입니다. 요청 1건은 토큰 1개를 사용하고, 토큰은 매초 설정한 수만큼 다시 채워집니다. 최대 버킷 토큰 수를 넘어서 쌓이지 않으며, 토큰이 부족하면 Provider 호출 전에 차단됩니다.",
-    rateLimitTab: "Rate Limit",
+      "요청 폭주를 막기 위한 제한입니다. 요청 1건은 토큰 1개를 사용하고, 토큰은 매초 설정한 수만큼 다시 채워집니다. 최대 버킷 토큰 수를 넘어서 쌓이지 않으며, 토큰이 부족하면 프로바이더 호출 전에 차단됩니다.",
+    rateLimitTab: "요청 제한",
+    redactAction: "마스킹",
     refillRate: "초당 충전 토큰",
     remove: "삭제",
-    rollback: "Rollback",
-    routing: "Routing",
-    routingAdvanced: "Routing advanced",
-    runtimeSnapshot: "RuntimeSnapshot",
+    rollback: "되돌리기",
+    routing: "라우팅",
+    runtimeSnapshot: "런타임 스냅샷",
     responseCapture: "응답 캡처",
     responseCaptureHint:
-      "백엔드 정책은 게시 시 보존하지만, 이 콘솔에서는 raw response 원문을 표시하지 않습니다.",
+      "백엔드 정책은 게시 시 보존하지만, 이 콘솔에서는 응답 원문을 표시하지 않습니다.",
     responseCaptureMaxChars: "최대 글자 수",
-    saveDraft: "Draft 저장",
-    safetyTab: "Safety",
+    saveDraft: "임시 저장",
+    safetyTab: "안전",
     issueApiKey: "API Key 발급",
     issuingApiKey: "발급 중...",
-    shortPrompt: "Short prompt 기준",
-    snapshotState: "Snapshot state",
-    snapshotVersion: "Snapshot version",
-    semanticCache: "Semantic cache",
-    semanticCacheDisabled: "disabled",
-    semanticCacheEvidenceOnly: "evidence only",
+    snapshotState: "스냅샷 상태",
+    snapshotVersion: "스냅샷 버전",
+    semanticCache: "의미 기반 캐시",
+    semanticCacheDisabled: "비활성화",
+    semanticCacheEvidenceOnly: "증거 전용",
     semanticCacheNote:
-      "현재 Control Plane은 cache policy에서 semantic cache evidence mode를 파생합니다. 실시간 응답 경로는 아닙니다.",
-    streaming: "Streaming",
+      "현재 Control Plane은 캐시 정책에서 의미 기반 캐시 증거 모드를 파생합니다. 실시간 응답 경로는 아닙니다.",
+    streaming: "스트리밍",
     streamingNote:
-      "Streaming은 v2 thin slice입니다. request-side safety가 streaming 시작 전에 완료되고, stream=true 요청은 streaming cache 계약 전까지 Exact Cache를 우회합니다.",
-    streamingUnavailable: "활성 RuntimeSnapshot streaming 상태가 없습니다.",
+      "스트리밍은 v2 최소 범위 기능입니다. 요청 안전 검사가 스트리밍 시작 전에 완료되고, stream=true 요청은 스트리밍 캐시 계약 전까지 정확 일치 캐시를 우회합니다.",
+    streamingUnavailable: "활성 런타임 스냅샷의 스트리밍 상태가 없습니다.",
     templateFallback:
       "이 애플리케이션에는 아직 활성 정책이 없습니다. 정책을 설정하고 게시하면 Gateway 경로에 적용됩니다.",
     title: "정책",
-    tokens: "Context tokens"
+    tokens: "컨텍스트 토큰",
+    unsavedChanges: "저장되지 않은 변경사항"
   }
 };
 
@@ -392,8 +400,8 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
       return (
         <PolicyPanelFallbackGroup
           panels={[
-            { heading: text.routing },
-            { heading: text.routingAdvanced, lineCount: 1 },
+            { heading: "Auto routing", lineCount: 1 },
+            { heading: "카테고리 × 난이도 모델 설정" },
             { heading: text.providerCatalog }
           ]}
         />
@@ -403,13 +411,13 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
         <PolicyPanelFallbackGroup
           panels={[
             { heading: text.detectors, lineCount: 4, wide: true },
-            { heading: text.promptCapture },
-            { heading: text.responseCapture }
+            { heading: text.promptCapture }
           ]}
         />
       );
     case "streaming":
       return <PolicyPanelFallback heading={text.streaming} />;
+    case "employees":
     case "general":
       return null;
   }
@@ -418,6 +426,7 @@ export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
   children,
+  employeeSection,
   generalBudgetPanelPlacement = "afterChildren",
   generalFooter,
   hideStreamingTab = false,
@@ -428,6 +437,7 @@ export function RuntimePolicyEditor({
   const router = useRouter();
   const text = policyText[locale];
   const hasGeneralSection = Boolean(children || generalFooter);
+  const hasEmployeeSection = Boolean(employeeSection);
   const shouldMoveBudgetToGeneral = moveBudgetToGeneral && hasGeneralSection;
   const shouldRenderMovedBudgetInChildSlot =
     shouldMoveBudgetToGeneral && generalBudgetPanelPlacement === "childSlot";
@@ -437,164 +447,71 @@ export function RuntimePolicyEditor({
     apiKeyReadiness?.activeApiKeyCount ?? 1
   );
   const [draftValues, setDraftValues] = useState<RuntimePolicyDraftValues>(() =>
-    getWritableRuntimePolicyDraftValues(
-      model.activeConfig,
-      model.providerConnections.available
-    )
+    getWritableRuntimePolicyDraftValues(model.activeConfig)
+  );
+  const [savedDraftValues, setSavedDraftValues] = useState<RuntimePolicyDraftValues>(() =>
+    getWritableRuntimePolicyDraftValues(model.activeConfig)
   );
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
   });
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>(
-    hasGeneralSection ? "general" : "routing"
+    () => getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
   );
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   const visiblePolicySections = useMemo(
     () => {
       const policySectionsForContext = shouldMoveBudgetToGeneral
         ? policySections.filter((section) => section !== "budget")
         : policySections;
-      const sections: PolicySection[] = hasGeneralSection
-        ? ["general", ...policySectionsForContext]
-        : [...policySectionsForContext];
+      const sections: PolicySection[] = [];
+      if (hasGeneralSection) {
+        sections.push("general");
+      }
+      if (hasEmployeeSection) {
+        sections.push("employees");
+      }
+      sections.push(...policySectionsForContext);
 
       return hideStreamingTab
         ? sections.filter((section) => section !== "streaming")
         : sections;
     },
-    [hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
+    [hasEmployeeSection, hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
   );
   useEffect(() => {
-    if (!hasGeneralSection && activePolicySection === "general") {
-      setActivePolicySection("routing");
+    const activeSectionUnavailable =
+      (!hasGeneralSection && activePolicySection === "general") ||
+      (!hasEmployeeSection && activePolicySection === "employees") ||
+      (shouldMoveBudgetToGeneral && activePolicySection === "budget");
+
+    if (activeSectionUnavailable) {
+      setActivePolicySection(
+        getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
+      );
     }
-    if (shouldMoveBudgetToGeneral && activePolicySection === "budget") {
-      setActivePolicySection(hasGeneralSection ? "general" : "routing");
-    }
-  }, [activePolicySection, hasGeneralSection, shouldMoveBudgetToGeneral]);
+  }, [activePolicySection, hasEmployeeSection, hasGeneralSection, shouldMoveBudgetToGeneral]);
   useEffect(() => {
-    setDraftValues(
-      getWritableRuntimePolicyDraftValues(
-        model.activeConfig,
-        model.providerConnections.available
-      )
-    );
+    const nextDraftValues = getWritableRuntimePolicyDraftValues(model.activeConfig);
+    setDraftValues(nextDraftValues);
+    setSavedDraftValues(nextDraftValues);
   }, [model.activeConfig, model.applicationId, model.providerConnections.available]);
-  const displayConfig =
-    submitState.status === "success" && "runtimeConfig" in submitState
-      ? submitState.runtimeConfig
-      : model.activeConfig;
+  const hasUnsavedChanges = useMemo(
+    () => !areRuntimePolicyDraftValuesEqual(draftValues, savedDraftValues),
+    [draftValues, savedDraftValues]
+  );
   const hasActiveApiKey = activeApiKeyCount > 0;
-  const modelOptionsByProvider = useMemo(
-    () => groupRoutingModelsByProvider(draftValues.models, model.providerConnections.available),
-    [draftValues.models, model.providerConnections.available]
-  );
-  const routingProviderOptions = useMemo(
-    () =>
-      getRoutingProviderOptions(model.providerConnections.available, draftValues.models, [
-        draftValues.routingDefaultProvider,
-        draftValues.routingHighQualityProvider,
-        draftValues.routingLowCostProvider,
-        draftValues.routingFallbackProvider
-      ]),
-    [
-      draftValues.models,
-      draftValues.routingDefaultProvider,
-      draftValues.routingFallbackProvider,
-      draftValues.routingHighQualityProvider,
-      draftValues.routingLowCostProvider,
-      model.providerConnections.available
-    ]
-  );
-  const selectedRoutingProviderNames = getSelectedRoutingProviderNames(draftValues);
   const selectedRoutingProviderConnections = getSelectedRoutingProviderConnections(
     draftValues,
     model.providerConnections.available
   );
-  const hasRoutingCandidates =
-    routingProviderOptions.length > 0 &&
-    selectedRoutingProviderNames.length > 0 &&
-    selectedRoutingProviderConnections.length === selectedRoutingProviderNames.length &&
-    hasRoutingModelSelection(
-      draftValues.routingDefaultProvider,
-      draftValues.routingDefaultModel,
-      modelOptionsByProvider
-    ) &&
-    hasRoutingModelSelection(
-      draftValues.routingHighQualityProvider,
-      draftValues.routingHighQualityModel,
-      modelOptionsByProvider
-    ) &&
-    hasRoutingModelSelection(
-      draftValues.routingLowCostProvider,
-      draftValues.routingLowCostModel,
-      modelOptionsByProvider
-    ) &&
-    hasRoutingModelSelection(
-      draftValues.routingFallbackProvider,
-      draftValues.routingFallbackModel,
-      modelOptionsByProvider
-    );
-
-  function updateRoutingProvider(route: RoutingPriorityRoute, provider: string) {
-    setDraftValues((current) => {
-      const nextModel =
-        getPreferredRuntimePolicyRouteModel(current.models, provider, route)?.model ??
-        modelOptionsByProvider.get(provider)?.[0]?.model ??
-        "";
-
-      if (route === "default") {
-        return {
-          ...current,
-          routingDefaultModel: nextModel,
-          routingDefaultProvider: provider
-        };
-      }
-
-      return {
-        ...current,
-        ...(route === "highQuality"
-          ? {
-              routingHighQualityModel: nextModel,
-              routingHighQualityProvider: provider
-            }
-          : route === "lowCost"
-            ? {
-                routingLowCostModel: nextModel,
-                routingLowCostProvider: provider
-              }
-            : {
-                routingFallbackModel: nextModel,
-                routingFallbackProvider: provider
-              })
-      };
-    });
-  }
-
-  function updateRoutingModel(route: RoutingPriorityRoute, modelName: string) {
-    setDraftValues((current) => {
-      if (route === "default") {
-        return {
-          ...current,
-          routingDefaultModel: modelName
-        };
-      }
-
-      return {
-        ...current,
-        ...(route === "highQuality"
-          ? { routingHighQualityModel: modelName }
-          : route === "lowCost"
-            ? { routingLowCostModel: modelName }
-            : { routingFallbackModel: modelName })
-      };
-    });
-  }
+  const hasRoutingCandidates = hasResolvableRoutingMatrix(
+    draftValues.routingPolicy,
+    model.providerConnections.available
+  );
 
   async function submitPolicy(action: "save-draft" | "publish") {
     if (!hasActiveApiKey) {
@@ -616,46 +533,42 @@ export function RuntimePolicyEditor({
     setIsSubmitting(true);
     setSubmitState({ message: "", status: "idle" });
 
-    if (selectedRoutingProviderConnections.length !== selectedRoutingProviderNames.length) {
-      setSubmitState({
-        message: text.providerConnectionMissing,
-        status: "error"
+    if (selectedRoutingProviderConnections.length > 0) {
+      const providerConnectionResponse = await fetch("/api/control-plane/application-providers", {
+        body: JSON.stringify({
+          applicationId: model.applicationId,
+          providerConnectionIds: selectedRoutingProviderConnections.map(
+            (providerConnection) => providerConnection.id
+          )
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
       });
-      setIsSubmitting(false);
-      return;
+      const providerConnectionPayload = (await providerConnectionResponse
+        .json()
+        .catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!providerConnectionResponse.ok) {
+        setSubmitState({
+          message: providerConnectionPayload.error ?? "Application provider update failed.",
+          status: "error"
+        });
+        setIsSubmitting(false);
+        return;
+      }
     }
 
-    const providerConnectionResponse = await fetch("/api/control-plane/application-providers", {
-      body: JSON.stringify({
-        applicationId: model.applicationId,
-        providerConnectionIds: selectedRoutingProviderConnections.map(
-          (providerConnection) => providerConnection.id
-        )
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const providerConnectionPayload = (await providerConnectionResponse
-      .json()
-      .catch(() => ({}))) as {
-      error?: string;
-    };
-
-    if (!providerConnectionResponse.ok) {
-      setSubmitState({
-        message: providerConnectionPayload.error ?? "Application provider update failed.",
-        status: "error"
-      });
-      setIsSubmitting(false);
-      return;
-    }
-
-    const submitValues = mergeDraftValuesWithProviderConnections(
-      draftValues,
-      selectedRoutingProviderConnections
-    );
+    const submitValues =
+      selectedRoutingProviderConnections.length > 0
+        ? mergeDraftValuesWithProviderConnections(
+            draftValues,
+            selectedRoutingProviderConnections
+          )
+        : draftValues;
 
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
@@ -687,7 +600,9 @@ export function RuntimePolicyEditor({
       runtimeConfig: payload.runtimeConfig,
       status: "success"
     });
-    setDraftValues(getRuntimePolicyDraftValues(payload.runtimeConfig));
+    const nextDraftValues = getRuntimePolicyDraftValues(payload.runtimeConfig);
+    setDraftValues(nextDraftValues);
+    setSavedDraftValues(nextDraftValues);
     setIsSubmitting(false);
     if (action === "publish") {
       router.refresh();
@@ -740,44 +655,6 @@ export function RuntimePolicyEditor({
     });
     setIsIssuingApiKey(false);
     router.refresh();
-  }
-
-  async function rollbackPolicy(targetConfigVersion: string) {
-    setRollbackTarget(targetConfigVersion);
-    setSubmitState({ message: "", status: "idle" });
-
-    const response = await fetch("/api/control-plane/runtime-config", {
-      body: JSON.stringify({
-        action: "rollback",
-        applicationId: model.applicationId,
-        targetConfigVersion
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      runtimeConfig?: RuntimePolicyConfig;
-    };
-
-    if (!response.ok || !payload.runtimeConfig) {
-      setSubmitState({
-        message: payload.error ?? "Runtime policy rollback failed.",
-        status: "error"
-      });
-      setRollbackTarget(null);
-      return;
-    }
-
-    setSubmitState({
-      message: `Rolled back from ${targetConfigVersion}.`,
-      runtimeConfig: payload.runtimeConfig,
-      status: "success"
-    });
-    setDraftValues(getRuntimePolicyDraftValues(payload.runtimeConfig));
-    setRollbackTarget(null);
   }
 
   function renderBudgetPolicyPanel(projectPanel = false) {
@@ -859,17 +736,8 @@ export function RuntimePolicyEditor({
           <Suspense fallback={getPolicyPanelFallback("routing", text)}>
             <RoutingPolicyPanel
               draftValues={draftValues}
-              modelOptionsByProvider={modelOptionsByProvider}
-              onModelChange={updateRoutingModel}
-              onProviderChange={updateRoutingProvider}
-              onShortPromptChange={(value: number) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  routingShortPromptMaxChars: value
-                }))
-              }
+              onDraftValuesChange={setDraftValues}
               providerCatalog={model.providerCatalog}
-              providerOptions={routingProviderOptions}
               providers={model.activeConfig.providers}
               text={text}
             />
@@ -891,6 +759,8 @@ export function RuntimePolicyEditor({
             <StreamingPolicyPanel runtimeSnapshot={model.runtimeSnapshot} text={text} />
           </Suspense>
         );
+      case "employees":
+        return employeeSection;
       case "general":
         return null;
     }
@@ -902,28 +772,6 @@ export function RuntimePolicyEditor({
         <div>
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
           <h2>{text.title}</h2>
-        </div>
-        <div className="policy-actions">
-          <Button onClick={() => setIsDetailOpen(true)} type="button" variant="outline">
-            {text.details}
-          </Button>
-          <Button
-            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
-            onClick={() => void submitPolicy("save-draft")}
-            type="button"
-            variant="outline"
-          >
-            <Save aria-hidden="true" />
-            {text.saveDraft}
-          </Button>
-          <Button
-            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
-            onClick={() => void submitPolicy("publish")}
-            type="button"
-          >
-            <UploadCloud aria-hidden="true" />
-            {text.publish}
-          </Button>
         </div>
       </section>
 
@@ -976,26 +824,56 @@ export function RuntimePolicyEditor({
         </Alert>
       ) : null}
 
-      <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
-        {visiblePolicySections.map((section) => {
-          const label = getPolicySectionLabel(section, text);
-          const isActive = activePolicySection === section;
+      <div className="policy-section-toolbar">
+        <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
+          {visiblePolicySections.map((section) => {
+            const label = getPolicySectionLabel(section, text);
+            const isActive = activePolicySection === section;
 
-          return (
-            <button
-              aria-controls={getPolicyPanelId(section)}
-              aria-selected={isActive}
-              data-active={isActive}
-              id={getPolicyTabId(section)}
-              key={section}
-              onClick={() => setActivePolicySection(section)}
-              role="tab"
+            return (
+              <button
+                aria-controls={getPolicyPanelId(section)}
+                aria-selected={isActive}
+                data-active={isActive}
+                id={getPolicyTabId(section)}
+                key={section}
+                onClick={() => setActivePolicySection(section)}
+                role="tab"
+                type="button"
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {activePolicySection !== "employees" ? (
+          <div className="policy-actions">
+            <Button
+              aria-label={
+                hasUnsavedChanges
+                  ? `${text.saveDraft}: ${text.unsavedChanges}`
+                  : text.saveDraft
+              }
+              className="policy-draft-button"
+              data-unsaved={hasUnsavedChanges}
+              disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+              onClick={() => void submitPolicy("save-draft")}
+              type="button"
+              variant="outline"
+            >
+              <Save aria-hidden="true" />
+              {text.saveDraft}
+            </Button>
+            <Button
+              disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+              onClick={() => void submitPolicy("publish")}
               type="button"
             >
-              {label}
-            </button>
-          );
-        })}
+              <UploadCloud aria-hidden="true" />
+              {text.publish}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {hasGeneralSection && activePolicySection === "general" ? (
@@ -1019,29 +897,6 @@ export function RuntimePolicyEditor({
       ) : null}
 
       {renderActivePolicyPanel()}
-
-      {isDetailOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsDetailOpen(false)} role="presentation">
-          <Suspense
-            fallback={
-              <PolicyDetailModalFallback
-                onClose={() => setIsDetailOpen(false)}
-                text={text}
-              />
-            }
-          >
-            <RuntimePolicyDetailModal
-              displayConfig={displayConfig}
-              isSubmitting={isSubmitting}
-              model={model}
-              onClose={() => setIsDetailOpen(false)}
-              onRollback={(configVersion: string) => void rollbackPolicy(configVersion)}
-              rollbackTarget={rollbackTarget}
-              text={text}
-            />
-          </Suspense>
-        </div>
-      ) : null}
     </main>
   );
 }

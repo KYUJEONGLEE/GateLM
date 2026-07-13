@@ -5,7 +5,7 @@ import {
   ProjectDetailManagement
 } from "@/features/projects/components/project-management";
 import { ProjectGatewayApiKeySection } from "@/features/projects/components/project-gateway-api-key-section";
-import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
+import { ProjectEmployeeAssignment } from "@/features/employees/components/employee-control-management";
 import {
   getCurrentConsoleAuth,
   resolveConsoleTenantIdForAuth
@@ -13,7 +13,7 @@ import {
 import { getProjectApiKeysModel } from "@/lib/control-plane/api-keys-client";
 import { getProjectAdminsModel } from "@/lib/control-plane/project-admins-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { getProjectTeamsModel } from "@/lib/control-plane/teams-client";
+import { getEmployeeControlModel } from "@/lib/control-plane/employees-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ProjectDetailPageProps = {
@@ -37,9 +37,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     notFound();
   }
 
-  const [projectAdminsModel, projectTeamsModel, projectApiKeysModel] = await Promise.all([
+  const [projectAdminsModel, employeeControlModel, projectApiKeysModel] = await Promise.all([
     getProjectAdminsModel(effectiveTenantId, project.id),
-    getProjectTeamsModel(effectiveTenantId, project.id),
+    getEmployeeControlModel(effectiveTenantId),
     getProjectApiKeysModel(effectiveTenantId, project.id)
   ]);
 
@@ -60,7 +60,11 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         tenantId={effectiveTenantId}
       />
       <ProjectAdminManagement locale={locale} model={projectAdminsModel} />
-      <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />
+      <ProjectEmployeeAssignment
+        locale={locale}
+        model={employeeControlModel}
+        project={project}
+      />
       <ProjectGatewayApiKeySection
         locale={locale}
         model={projectApiKeysModel}

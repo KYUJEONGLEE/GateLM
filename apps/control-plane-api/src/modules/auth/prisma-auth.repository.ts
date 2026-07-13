@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
+  AuthEmployeeInvitation,
   AuthProjectAdmin,
   AuthProjectAdminInvitation,
   AuthRepository,
@@ -13,6 +14,8 @@ import {
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
+  EmployeeInvitationExistingAccountError,
+  EmployeeInvitationNotFoundError,
   EmailVerificationCode,
   OAuthAccount,
   OAuthAccountWithUser,
@@ -21,6 +24,100 @@ import {
 @Injectable()
 export class PrismaAuthRepository implements AuthRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async acceptEmployeeInvitation(input: {
+    acceptedAt: Date;
+    email: string;
+    name: string | null;
+    passwordHash: string;
+    tokenHash: string;
+  }): Promise<{
+    employeeInvitation: AuthEmployeeInvitation;
+    membership: AuthTenantMembership;
+    user: AuthUser;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      const employee = await tx.employee.findFirst({
+        include: {
+          tenant: true,
+        },
+        where: {
+          acceptedAt: null,
+          deletedAt: null,
+          email: input.email,
+          invitationExpiresAt: { gt: input.acceptedAt },
+          invitationRevokedAt: null,
+          invitationStatus: 'pending',
+          invitationTokenHash: input.tokenHash,
+        },
+      });
+      if (!employee) {
+        throw new EmployeeInvitationNotFoundError();
+      }
+
+      const existingUser = await tx.user.findFirst({
+        where: {
+          deletedAt: null,
+          email: input.email,
+        },
+      });
+      if (existingUser) {
+        throw new EmployeeInvitationExistingAccountError();
+      }
+      const user = await tx.user.create({
+        data: {
+          authProvider: 'local',
+          email: input.email,
+          emailVerifiedAt: input.acceptedAt,
+          name: input.name,
+          passwordHash: input.passwordHash,
+          status: 'active',
+        },
+      });
+
+      const membership = await tx.tenantMembership.create({
+        data: {
+          joinedAt: input.acceptedAt,
+          role: 'employee',
+          status: 'active',
+          tenantId: employee.tenantId,
+          userId: user.id,
+        },
+        include: { tenant: true },
+      });
+
+      const acceptedEmployee = await tx.employee.update({
+        data: {
+          acceptedAt: input.acceptedAt,
+          invitationExpiresAt: null,
+          invitationRevokedAt: null,
+          invitationStatus: 'accepted',
+          invitationTokenHash: null,
+          status: 'active',
+          userId: user.id,
+        },
+        include: {
+          tenant: true,
+        },
+        where: { id: employee.id },
+      });
+
+      return {
+        employeeInvitation: {
+          acceptedAt: acceptedEmployee.acceptedAt,
+          email: acceptedEmployee.email,
+          employeeId: acceptedEmployee.id,
+          expiresAt: employee.invitationExpiresAt ?? input.acceptedAt,
+          name: acceptedEmployee.name,
+          status: acceptedEmployee.invitationStatus,
+          tenant: acceptedEmployee.tenant,
+          tenantId: acceptedEmployee.tenantId,
+        },
+        membership,
+        user,
+      };
+    });
+  }
 
   async acceptProjectAdminInvitation(input: {
     acceptedAt: Date;

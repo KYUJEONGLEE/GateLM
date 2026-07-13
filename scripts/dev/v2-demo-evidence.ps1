@@ -62,14 +62,24 @@ function Invoke-GatewayChat {
     $statusCode = 0
   }
 
+  $gateLm = $null
+  if ($response -and $response.Content) {
+    try {
+      $gateLm = (ConvertFrom-Json -InputObject ([string]$response.Content)).gate_lm
+    } catch {
+      $gateLm = $null
+    }
+  }
+
   return [ordered]@{
     scenario = $Scenario
     requestId = $requestId
     httpStatus = $statusCode
     cacheStatus = HeaderValue $response "X-GateLM-Cache-Status"
     maskingAction = HeaderValue $response "X-GateLM-Masking-Action"
-    routedProvider = HeaderValue $response "X-GateLM-Routed-Provider"
-    routedModel = HeaderValue $response "X-GateLM-Routed-Model"
+    requestedModel = if ($gateLm) { [string]$gateLm.requestedModel } else { $null }
+    routingReason = if ($gateLm) { [string]$gateLm.routingReason } else { $null }
+    executionMode = if ($gateLm) { [string]$gateLm.executionMode } else { $null }
     contentType = HeaderValue $response "Content-Type"
     requestDetailUrl = "$GatewayBaseUrl/api/llm-requests/$requestId"
   }

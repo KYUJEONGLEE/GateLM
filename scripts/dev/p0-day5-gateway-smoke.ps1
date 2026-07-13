@@ -499,16 +499,17 @@ Invoke-SmokeCase -Name "safe request miss then cache hit without provider recall
     $script:SafeMissRequestId = Get-RequestId -Response $first
     $firstMeta = Get-GateLMMetadata -Response $first
     Assert-Equal -Name "first requested model" -Expected "auto" -Actual ([string]$firstMeta.requestedModel)
-    Assert-Equal -Name "first selected provider" -Expected "mock" -Actual ([string]$firstMeta.selectedProvider)
-    Assert-Equal -Name "first selected model" -Expected "mock-fast" -Actual ([string]$firstMeta.selectedModel)
-    Assert-Equal -Name "first routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstMeta.routingReason)
+    Assert-Equal -Name "first execution mode" -Expected "mock" -Actual ([string]$firstMeta.executionMode)
+    Assert-Equal -Name "first routing reason" -Expected "category_difficulty_matrix" -Actual ([string]$firstMeta.routingReason)
     Assert-Equal -Name "provider calls after first safe request" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $firstDetail = Wait-RequestDetail -RequestId $script:SafeMissRequestId
     Assert-Equal -Name "first detail status" -Expected "success" -Actual ([string]$firstDetail.data.status)
     Assert-Equal -Name "first detail cache status" -Expected "miss" -Actual ([string]$firstDetail.data.cache.cacheStatus)
-    Assert-Equal -Name "first detail selected model" -Expected "mock-fast" -Actual ([string]$firstDetail.data.selectedModel)
-    Assert-Equal -Name "first detail routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first detail category" -Expected "general" -Actual ([string]$firstDetail.data.routing.category)
+    Assert-Equal -Name "first detail difficulty" -Expected "simple" -Actual ([string]$firstDetail.data.routing.difficulty)
+    Assert-Equal -Name "first detail routing reason" -Expected "category_difficulty_matrix" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first detail provider attempt model" -Expected "mock-balanced" -Actual ([string]$firstDetail.data.providerAttempt.modelId)
     Assert-LogItem -RequestId $script:SafeMissRequestId -ExpectedStatus "success" -ExpectedCacheStatus "miss"
 
     $second = Invoke-GatewayChat -Prompt $prompt -Feature "day5-cache-demo"

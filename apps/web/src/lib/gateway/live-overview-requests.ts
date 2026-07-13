@@ -1,14 +1,14 @@
 import "server-only";
 
+import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type {
   LiveRequestCacheStatus,
-  LiveRequestProvider,
   LiveRequestsPayload,
   LiveRequestSafetyAction,
   LiveRequestStatusFilter
@@ -32,14 +32,16 @@ export type LiveOverviewRequestsOptions = {
 
 const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
 const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
-
 export async function getLiveOverviewRequests(
   tenantId: string,
   filters: LiveOverviewRequestsFilters = {},
   options: LiveOverviewRequestsOptions = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const liveRange = getDashboardLiveRange(filters.range);
-  const projectsModel = options.projects ? undefined : await getProjectsModel(tenantId);
+  const [projectsModel, employees] = await Promise.all([
+    options.projects ? Promise.resolve(undefined) : getProjectsModel(tenantId),
+    getTenantEmployees(tenantId)
+  ]);
   const projects = options.projects ?? projectsModel?.projects ?? [];
   const projectIds = options.projectIds ?? projects.map((project) => project.id).filter(Boolean);
   const records = await getLiveGatewayRequestLogs({
@@ -50,6 +52,7 @@ export async function getLiveOverviewRequests(
     projectId: filters.projectId,
     projectIds,
     resolvedBy: filters.resolvedBy,
+    requestedModel: filters.model,
     status: filters.status || undefined,
     tenantId,
     to: liveRange.to
@@ -60,16 +63,17 @@ export async function getLiveOverviewRequests(
   }
 
   const projectNames = buildProjectNameMap(projects);
-  const allRows = records.map((record) => toLiveRequestRow(record, projectNames));
+  const employeeNames = buildEmployeeNameMap(employees);
+  const allRows = records.map((record) => toLiveRequestRow(record, projectNames, employeeNames));
   const modelFilter = normalizeModelFilter(filters.model);
   const rows = allRows
-    .filter((row) => !modelFilter || normalizeModelFilter(row.model) === modelFilter)
+    .filter((row) => !modelFilter || normalizeModelFilter(row.requestedModel) === modelFilter)
     .slice(0, LIVE_REQUESTS_DISPLAY_LIMIT);
-  const modelOptions = buildModelOptions(allRows, filters.model);
+  const requestedModelOptions = buildModelOptions(allRows, filters.model);
 
   return {
     generatedAt: new Date().toISOString(),
-    modelOptions,
+    requestedModelOptions,
     projectNameSource: options.projectNameSource ?? projectsModel?.source ?? "control-plane",
     rows
   };
@@ -79,75 +83,65 @@ function buildProjectNameMap(projects: ProjectRecord[]) {
   return new Map(projects.map((project) => [project.id, project.name]));
 }
 
-function toLiveRequestRow(record: InvocationLogRecord, projectNames: Map<string, string>) {
+function buildEmployeeNameMap(
+  employees: Awaited<ReturnType<typeof getTenantEmployees>>
+) {
+  const names = new Map<string, string>();
+
+  employees.forEach((employee) => {
+    const name = employee.name?.trim() || employee.email;
+    [employee.id, employee.userId, employee.email].forEach((alias) => {
+      if (alias) {
+        names.set(alias.trim().toLocaleLowerCase(), name);
+      }
+    });
+  });
+
+  return names;
+}
+
+function toLiveRequestRow(
+  record: LiveInvocationLogRecord,
+  projectNames: Map<string, string>,
+  employeeNames: Map<string, string>
+) {
   const projectId = record.projectId;
-  const provider = normalizeProvider(record.selectedProvider ?? record.requestedProvider);
   const statusCode = record.httpStatus || statusToFallbackCode(record.status);
 
   return {
     cacheStatus: normalizeCacheStatus(record.cacheStatus),
+    category: record.category,
     costUsd: record.costMicroUsd / 1_000_000,
+    difficulty: record.difficulty,
+    fallbackUsed: record.domainOutcomes?.fallback?.outcome === "success",
     id: record.requestId,
     latencyMs: record.latencyMs,
-    model: formatModelDisplayName(record.selectedModel ?? record.requestedModel, "Unknown"),
+    modelRef: record.modelRef,
     projectId,
     projectName: projectNames.get(projectId) ?? formatDisplayIdentifier(projectId),
-    provider,
-    providerLabel: providerLabel(provider),
+    requestedModel: record.requestedModel ?? "auto",
     requestId: record.requestId,
+    routingReason: record.routingReason,
     safetyAction: normalizeSafetyAction(record),
+    surface: "project_application" as const,
     status: record.status,
     statusCode,
     statusLabel: statusLabel(statusCode, record.status),
     timestamp: record.createdAt,
     totalTokens: record.totalTokens,
-    userName: normalizeUserName(record.endUserId)
+    userName: normalizeUserName(record.endUserId, employeeNames)
   };
 }
 
-function normalizeUserName(value: string | null | undefined) {
+function normalizeUserName(
+  value: string | null | undefined,
+  employeeNames: Map<string, string>
+) {
   const normalized = value?.trim();
 
-  return normalized ? normalized : null;
-}
-
-function normalizeProvider(value: string | null | undefined): LiveRequestProvider {
-  const provider = (value ?? "").toLowerCase();
-
-  if (provider.includes("openai")) {
-    return "openai";
-  }
-
-  if (provider.includes("anthropic") || provider.includes("claude")) {
-    return "anthropic";
-  }
-
-  if (provider.includes("gemini")) {
-    return "gemini";
-  }
-
-  if (provider.includes("google")) {
-    return "google";
-  }
-
-  if (provider.includes("mock")) {
-    return "mock";
-  }
-
-  return "unknown";
-}
-
-function providerLabel(provider: LiveRequestProvider) {
-  const labels: Record<LiveRequestProvider, string> = {
-    anthropic: "Anthropic",
-    gemini: "Gemini",
-    google: "Google",
-    mock: "Mock",
-    openai: "OpenAI",
-    unknown: "Unknown"
-  };
-
-  return labels[provider];
+  return normalized
+    ? employeeNames.get(normalized.toLocaleLowerCase()) ?? normalized
+    : null;
 }
 
 function normalizeCacheStatus(value: string): LiveRequestCacheStatus {
@@ -168,7 +162,7 @@ function normalizeCacheStatus(value: string): LiveRequestCacheStatus {
   return "NONE";
 }
 
-function normalizeSafetyAction(record: InvocationLogRecord): LiveRequestSafetyAction {
+function normalizeSafetyAction(record: LiveInvocationLogRecord): LiveRequestSafetyAction {
   const action = record.maskingAction.toLowerCase();
   const outcome = record.domainOutcomes?.safety?.outcome?.toLowerCase() ?? "";
 
@@ -232,18 +226,18 @@ function statusLabel(statusCode: number, status: string) {
 }
 
 function buildModelOptions(
-  rows: Array<{ model: string }>,
-  selectedModel: string | undefined
+  rows: Array<{ requestedModel: string }>,
+  modelFilter: string | undefined
 ) {
   const models = new Set<string>();
 
-  if (selectedModel?.trim()) {
-    models.add(selectedModel.trim());
+  if (modelFilter?.trim()) {
+    models.add(modelFilter.trim());
   }
 
   rows.forEach((row) => {
-    if (row.model && row.model !== "Unknown") {
-      models.add(row.model);
+    if (row.requestedModel && row.requestedModel !== "auto") {
+      models.add(row.requestedModel);
     }
   });
 

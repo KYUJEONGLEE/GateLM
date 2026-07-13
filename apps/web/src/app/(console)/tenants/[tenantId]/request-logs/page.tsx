@@ -10,13 +10,12 @@ import {
 import { RequestLogDetailClient } from "@/features/request-logs/components/request-log-detail-client";
 import {
   type RequestLogCreatedFilter,
-  type RequestLogBudgetScopeOption,
+  type RequestLogEmployeeDisplay,
   type RequestLogFilterState,
   RequestLogTable,
   requestLogCreatedFilters,
   requestLogStatusFilters
 } from "@/features/request-logs/components/request-log-table";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import {
   getLiveGatewayRequestLogsWithMeta,
@@ -24,7 +23,9 @@ import {
   type LiveGatewayRequestLogFilters
 } from "@/lib/gateway/live-request-logs";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { getTenantEmployees } from "@/lib/control-plane/employees-client";
+import type { EmployeeRecord } from "@/lib/control-plane/employees-types";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogsPageProps = {
@@ -33,17 +34,14 @@ type RequestLogsPageProps = {
   }>;
   searchParams?: Promise<{
     applicationId?: string;
-    budgetScopeId?: string;
-    budgetScopeType?: string;
     cacheStatus?: string;
     created?: string;
     latest?: string;
     model?: string;
     page?: string;
     projectId?: string;
-    provider?: string;
     requestId?: string;
-    resolvedBy?: string;
+    search?: string;
     searchRequestId?: string;
     status?: string;
   }>;
@@ -60,7 +58,10 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
-  const projectsModel = await getProjectsModel(effectiveTenantId);
+  const [projectsModel, employees] = await Promise.all([
+    getProjectsModel(effectiveTenantId),
+    getTenantEmployees(effectiveTenantId)
+  ]);
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, effectiveTenantId) : undefined;
   const scopedProjectIds = allowedProjectIds ?? projectsModel.projects.map((project) => project.id).filter(Boolean);
@@ -90,17 +91,27 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     ...scopedLogFilters,
     tenantId: effectiveTenantId
   });
-  const records = logsResult?.records;
+  const rawRecords = logsResult?.records;
+  const employeeDirectory = buildRequestLogEmployeeDirectory(employees);
+  const projectNamesById = new Map(
+    visibleProjects.map((project) => [project.id, project.name] as const)
+  );
+  const records = rawRecords
+    ? filterRequestLogRecords(rawRecords, scopedFilters, projectNamesById, employeeDirectory)
+    : undefined;
   const latestSelectedRecord = shouldSelectLatestProjectRequest ? (records ?? [])[0] : undefined;
   const selectedRequestId = explicitSelectedRequestId || latestSelectedRecord?.requestId;
   const selectedRecord = selectedRequestId
     ? (records ?? []).find((record) => record.requestId === selectedRequestId) ?? latestSelectedRecord
     : undefined;
-  const optionRecordsForFilters = records ?? [];
-  const modelOptions = getModelOptions(optionRecordsForFilters, scopedFilters.model, logsResult?.filterOptions);
-  const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, scopedFilters, logsResult?.filterOptions);
-  const displayRecords = (records ?? []).map(toDisplayModelRecord);
-  const fallbackSelectedRecord = selectedRecord ? toDisplayModelRecord(selectedRecord) : undefined;
+  const optionRecordsForFilters = rawRecords ?? [];
+  const modelOptions = getModelOptions(
+    optionRecordsForFilters,
+    scopedFilters.model,
+    logsResult?.filterOptions
+  );
+  const displayRecords = records ?? [];
+  const fallbackSelectedRecord = selectedRecord;
 
   return (
     <RequestLogTable
@@ -116,9 +127,9 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         />
       }
       allowAllProjects={!projectScoped}
+      employeeDirectory={employeeDirectory}
       filters={scopedFilters}
       locale={locale}
-      budgetScopeOptions={budgetScopeOptions}
       modelOptions={modelOptions}
       projects={visibleProjects}
       records={displayRecords}
@@ -130,14 +141,6 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   );
 }
 
-function toDisplayModelRecord(record: InvocationLogRecord): InvocationLogRecord {
-  return {
-    ...record,
-    requestedModel: record.requestedModel ? formatModelDisplayName(record.requestedModel) : record.requestedModel,
-    selectedModel: record.selectedModel ? formatModelDisplayName(record.selectedModel) : record.selectedModel
-  };
-}
-
 function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["searchParams"]>): {
   filters: RequestLogFilterState;
   logFilters: LiveGatewayRequestLogFilters;
@@ -145,44 +148,31 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const created = normalizeCreatedFilter(searchParams?.created);
   const status = normalizeStatusFilter(searchParams?.status);
   const model = normalizeModelFilter(searchParams?.model);
-  const provider = normalizeOptionalText(searchParams?.provider);
   const projectId = normalizeOptionalText(searchParams?.projectId);
   const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
   const applicationId = normalizeOptionalText(searchParams?.applicationId);
-  const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
-  const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
-  const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
-  const requestId = normalizeOptionalText(searchParams?.searchRequestId);
+  const search = normalizeOptionalText(searchParams?.search ?? searchParams?.searchRequestId);
   const page = normalizePage(searchParams?.page);
   const { from, to } = createdRange(created);
 
   return {
     filters: {
       applicationId,
-      budgetScopeId,
-      budgetScopeType,
       cacheStatus,
       created,
       model,
       page,
       projectId,
-      provider,
-      requestId,
-      resolvedBy,
+      search,
       status
     },
     logFilters: {
       applicationId: applicationId || undefined,
-      budgetScopeId: budgetScopeId || undefined,
-      budgetScopeType: budgetScopeType || undefined,
       cacheStatus: cacheStatus || undefined,
       from,
-      limit: 100,
-      model: model || undefined,
+      limit: search || model ? 1000 : 100,
       projectId: projectId || undefined,
-      provider: provider || undefined,
-      requestId: requestId || undefined,
-      resolvedBy: resolvedBy || undefined,
+      requestedModel: model || undefined,
       status: status || undefined,
       to
     }
@@ -220,23 +210,12 @@ function normalizeCacheStatusFilter(value: string | undefined): RequestLogFilter
   return "";
 }
 
-function normalizeBudgetScopeTypeFilter(
-  value: string | undefined
-): RequestLogFilterState["budgetScopeType"] {
-  if (value === "application" || value === "project" || value === "team") {
-    return value;
-  }
-
-  return "";
-}
-
 function normalizeOptionalText(value: string | undefined) {
   return value?.trim() ?? "";
 }
 
 function normalizeModelFilter(value: string | undefined) {
-  const normalized = normalizeOptionalText(value);
-  return normalized ? formatModelDisplayName(normalized, "") : "";
+  return normalizeOptionalText(value);
 }
 
 function createdRange(created: RequestLogCreatedFilter) {
@@ -256,23 +235,23 @@ function createdRange(created: RequestLogCreatedFilter) {
 }
 
 function getModelOptions(
-  records: InvocationLogRecord[],
-  selectedModel: string,
+  records: LiveInvocationLogRecord[],
+  modelFilter: string,
   filterOptions: LiveGatewayRequestLogFilterOptions | undefined
 ) {
   const options = new Set<string>();
 
-  if (selectedModel) {
-    options.add(formatModelDisplayName(selectedModel, ""));
+  if (modelFilter) {
+    options.add(modelFilter);
   }
 
-  if (filterOptions?.models.length) {
-    filterOptions.models.forEach((model) => options.add(formatModelDisplayName(model, "")));
+  if (filterOptions?.requestedModels.length) {
+    filterOptions.requestedModels.forEach((model) => options.add(model));
   } else {
     records.forEach((record) => {
-      const model = record.selectedModel ?? record.requestedModel;
+      const model = record.requestedModel;
       if (model) {
-        options.add(formatModelDisplayName(model, ""));
+        options.add(model);
       }
     });
   }
@@ -280,52 +259,84 @@ function getModelOptions(
   return Array.from(options).sort((first, second) => first.localeCompare(second));
 }
 
-function getBudgetScopeOptions(
-  records: InvocationLogRecord[],
-  filters: RequestLogFilterState,
-  filterOptions: LiveGatewayRequestLogFilterOptions | undefined
-): RequestLogBudgetScopeOption[] {
-  const options = new Map<string, RequestLogBudgetScopeOption>();
+function buildRequestLogEmployeeDirectory(
+  employees: EmployeeRecord[]
+): Record<string, RequestLogEmployeeDisplay> {
+  const directory: Record<string, RequestLogEmployeeDisplay> = {};
 
-  if (filterOptions?.budgetScopes.length) {
-    filterOptions.budgetScopes.forEach((scope) => {
-      const scopeType = normalizeBudgetScopeTypeFilter(scope.budgetScopeType);
-      const scopeId = scope.budgetScopeId;
+  employees.forEach((employee) => {
+    const display: RequestLogEmployeeDisplay = {
+      department: employee.department?.trim() || null,
+      email: employee.email,
+      employeeId: employee.id,
+      name: employee.name?.trim() || employee.email,
+      userId: employee.userId
+    };
 
-      if (!scopeType || !scopeId) {
-        return;
+    [employee.id, employee.userId, employee.email].forEach((alias) => {
+      if (alias) {
+        directory[normalizeSearchValue(alias)] = display;
       }
-
-      options.set(`${scopeType}:${scopeId}`, {
-        budgetScopeId: scopeId,
-        budgetScopeType: scopeType
-      });
     });
-  } else {
-    records.forEach((record) => {
-      const scopeType = normalizeBudgetScopeTypeFilter(record.budgetScope.budgetScopeType);
-      const scopeId = record.budgetScope.budgetScopeId;
-
-      if (!scopeType || !scopeId) {
-        return;
-      }
-
-      options.set(`${scopeType}:${scopeId}`, {
-        budgetScopeId: scopeId,
-        budgetScopeType: scopeType
-      });
-    });
-  }
-
-  if (filters.budgetScopeId && filters.budgetScopeType) {
-    options.set(`${filters.budgetScopeType}:${filters.budgetScopeId}`, {
-      budgetScopeId: filters.budgetScopeId,
-      budgetScopeType: filters.budgetScopeType
-    });
-  }
-
-  return Array.from(options.values()).sort((first, second) => {
-    const typeOrder = first.budgetScopeType.localeCompare(second.budgetScopeType);
-    return typeOrder || first.budgetScopeId.localeCompare(second.budgetScopeId);
   });
+
+  return directory;
+}
+
+function filterRequestLogRecords(
+  records: LiveInvocationLogRecord[],
+  filters: RequestLogFilterState,
+  projectNamesById: Map<string, string>,
+  employeeDirectory: Record<string, RequestLogEmployeeDisplay>
+) {
+  const search = normalizeSearchValue(filters.search);
+
+  return records.filter((record) => {
+    const model = record.requestedModel ?? "";
+    if (filters.model && !valuesMatch(model, filters.model)) {
+      return false;
+    }
+
+    if (!search) {
+      return true;
+    }
+
+    const employee = record.endUserId
+      ? employeeDirectory[normalizeSearchValue(record.endUserId)]
+      : undefined;
+    const candidates = [
+      record.requestId,
+      record.traceId,
+      record.projectId,
+      projectNamesById.get(record.projectId),
+      record.applicationId,
+      record.endUserId,
+      employee?.employeeId,
+      employee?.userId,
+      employee?.name,
+      employee?.email,
+      employee?.department,
+      record.requestedModel,
+      record.category,
+      record.difficulty,
+      record.modelRef,
+      record.routingReason,
+      record.status,
+      record.cacheStatus,
+      JSON.stringify(record),
+      record.budgetScope.budgetScopeType,
+      record.budgetScope.budgetScopeId,
+      record.budgetScope.resolvedBy
+    ];
+
+    return candidates.some((value) => normalizeSearchValue(value).includes(search));
+  });
+}
+
+function valuesMatch(first: string, second: string) {
+  return normalizeSearchValue(first) === normalizeSearchValue(second);
+}
+
+function normalizeSearchValue(value: string | null | undefined) {
+  return value?.trim().toLocaleLowerCase() ?? "";
 }

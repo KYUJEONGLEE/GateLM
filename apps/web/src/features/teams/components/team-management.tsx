@@ -123,26 +123,26 @@ const teamText: Record<
     archive: "보관",
     assigned: "연결됨",
     attach: "연결",
-    attachedTeams: "Project 팀",
+    attachedTeams: "프로젝트 팀",
     create: "팀 생성",
     created: "생성",
     delete: "삭제",
     description: "설명",
     empty: "팀이 없습니다.",
-    fixtureFallback: "Control Plane을 사용할 수 없어 fixture 팀을 표시 중입니다.",
-    createDescription: "조직 단위 팀을 먼저 만들고 Project에 연결합니다.",
-    listDescription: "팀 상태와 Project 연결 수를 한 줄에서 관리합니다.",
+    fixtureFallback: "Control Plane을 사용할 수 없어 예시 팀을 표시 중입니다.",
+    createDescription: "조직 단위 팀을 먼저 만들고 프로젝트에 연결합니다.",
+    listDescription: "팀 상태와 프로젝트 연결 수를 한 줄에서 관리합니다.",
     management: "관리",
     name: "이름",
     noAssignableTeam: "연결할 수 있는 활성 팀이 없습니다.",
-    projectCount: "Project",
-    projectTeamsDescription: "이 Project를 사용할 수 있는 팀을 연결합니다.",
+    projectCount: "프로젝트",
+    projectTeamsDescription: "이 프로젝트를 사용할 수 있는 팀을 연결합니다.",
     remove: "제거",
     save: "저장",
     selectTeam: "팀 선택",
     cancel: "취소",
     status: "상태",
-    team: "Team",
+    team: "팀",
     title: "팀",
     updated: "수정"
   }
@@ -283,7 +283,6 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
     <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
         </div>
       </section>

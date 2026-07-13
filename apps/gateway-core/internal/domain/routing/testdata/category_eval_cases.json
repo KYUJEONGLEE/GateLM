@@ -17,17 +17,17 @@
   {
     "id": "ko_support_refund_order_cancel",
     "prompt": "주문 취소하고 환불받고 싶어요",
-    "expectedCategory": "support_refund"
+    "expectedCategory": "general"
   },
   {
     "id": "ko_support_refund_shipping_fee",
     "prompt": "반품하면 배송비도 환불되나요?",
-    "expectedCategory": "support_refund"
+    "expectedCategory": "general"
   },
   {
     "id": "ko_support_refund_payment_cancel",
     "prompt": "결제 취소가 가능한지 알려줘",
-    "expectedCategory": "support_refund"
+    "expectedCategory": "general"
   },
   {
     "id": "ko_code_typescript_error",
@@ -62,7 +62,7 @@
   {
     "id": "ko_extraction_json_order",
     "prompt": "주문 상태와 요청사항을 json 형태로 정리해줘",
-    "expectedCategory": "extraction_json"
+    "expectedCategory": "general"
   },
   {
     "id": "ko_reasoning_tradeoff",
@@ -72,16 +72,16 @@
   {
     "id": "unknown_empty",
     "prompt": "",
-    "expectedCategory": "unknown"
+    "expectedCategory": "general"
   },
   {
     "id": "unknown_whitespace",
     "prompt": "   ",
-    "expectedCategory": "unknown"
+    "expectedCategory": "general"
   },
   {
     "id": "unknown_missing_user_message",
-    "expectedCategory": "unknown"
+    "expectedCategory": "general"
   },
   {
     "id": "priority_refund_translation",

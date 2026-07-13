@@ -10,6 +10,7 @@ import {
   GOOGLE_OAUTH_CLIENT,
 } from './auth.tokens';
 import { hashPassword } from './auth.crypto';
+import { EmployeeInvitationNotFoundError } from './auth.repository';
 import { createInMemoryAuthRepository } from './testing/in-memory-auth-repository';
 
 describe('Auth HTTP API', () => {
@@ -17,6 +18,7 @@ describe('Auth HTTP API', () => {
   let repository: ReturnType<typeof createInMemoryAuthRepository>;
   let emailSender: {
     sent: Array<{ email: string; code: string }>;
+    sendEmployeeInvitationEmail: jest.Mock;
     sendProjectAdminInvitationEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
   };
@@ -38,6 +40,7 @@ describe('Auth HTTP API', () => {
     repository = createInMemoryAuthRepository();
     emailSender = {
       sent: [],
+      sendEmployeeInvitationEmail: jest.fn(async () => undefined),
       sendProjectAdminInvitationEmail: jest.fn(async () => undefined),
       sendVerificationEmail: jest.fn(async (message) => {
         emailSender.sent.push(message);
@@ -149,6 +152,38 @@ describe('Auth HTTP API', () => {
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
     expect(repository.dump().users).toHaveLength(0);
     expect(repository.dump().emailVerificationCodes).toHaveLength(0);
+  });
+
+  it('returns unauthorized when an employee invitation cannot be found', async () => {
+    jest
+      .spyOn(repository, 'acceptEmployeeInvitation')
+      .mockRejectedValueOnce(new EmployeeInvitationNotFoundError());
+
+    await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'employee@example.com',
+        employeeInviteToken: 'invalid-employee-invite-token',
+        name: 'Employee',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(401);
+  });
+
+  it('does not hide employee invitation storage errors as unauthorized', async () => {
+    jest
+      .spyOn(repository, 'acceptEmployeeInvitation')
+      .mockRejectedValueOnce(new Error('database unavailable'));
+
+    await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'employee@example.com',
+        employeeInviteToken: 'employee-invite-token',
+        name: 'Employee',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(500);
   });
 
   it('auto-verifies local dev signups without returning plaintext secrets', async () => {

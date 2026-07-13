@@ -1,5 +1,8 @@
 # GateLM v2.1.0 Self-host Implementation Tasks
 
+> [!NOTE]
+> **문서 상태: Versioned self-host task plan/reference.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 병합된 산출물과 남은 gap을 실제 코드에서 다시 확인한다.
+
 This document is the coding task plan for `docs/v2.1.0/implementation-plan.md`.
 
 `docs/v2.0.0/contracts.md` remains the source of truth for Gateway behavior, RuntimeSnapshot, Provider, Observability, API, DB, Event, Metrics, and Security-sensitive fields. v2.1.0 tasks must not redefine those contracts.
@@ -282,4 +285,3 @@ Every PR description should answer:
 - Which image(s), script(s), or compose service(s) changed?
 - Which fresh-install or smoke checks were run?
 - What is the rollback path?
-

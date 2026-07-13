@@ -68,9 +68,8 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 	safeMissResp := readinessDecodeChatCompletion(t, safeMiss)
 	if safeMiss.Code != http.StatusOK || safeMissResp.GateLM == nil ||
 		safeMissResp.GateLM.CacheStatus != invocationlog.CacheStatusMiss ||
-		safeMissResp.GateLM.SelectedProvider != "mock" ||
-		safeMissResp.GateLM.SelectedModel != "mock-fast" ||
-		safeMissResp.GateLM.RoutingReason != routing.ReasonSupportRefundLowCost {
+		safeMissResp.GateLM.ExecutionMode != "mock" ||
+		safeMissResp.GateLM.RoutingReason != routing.ReasonMatrixRoute {
 		t.Fatalf("unexpected safe miss response: status=%d gate_lm=%#v body=%s", safeMiss.Code, safeMissResp.GateLM, safeMiss.Body.String())
 	}
 	providerCallsAfterMiss := harness.provider.chatCallCount()
@@ -210,10 +209,6 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	t.Helper()
 
 	cfg := config.Config{
-		DefaultProvider:       "mock",
-		DefaultModel:          "mock-balanced",
-		LowCostModel:          "mock-fast",
-		HighQualityModel:      "mock-quality",
 		RoutingPolicyHash:     "hash_routing_policy_v1_readiness",
 		SecurityPolicyHash:    "hash_security_policy_v1_readiness",
 		RuntimeConfigHash:     "hash_runtime_config_v1_readiness",
@@ -243,7 +238,7 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	}
 	observability := &readinessObservabilityStore{}
 	registry := metrics.NewRegistry()
-	providerCatalog := readinessProviderCatalog(cfg)
+	providerCatalog := readinessProviderCatalog()
 	runtimeConfigProvider := staticruntimeconfig.NewProvider(runtimeconfig.ActiveConfig{
 		ConfigVersion: "runtime_config_v1_readiness",
 		ConfigHash:    cfg.RuntimeConfigHash,
@@ -271,16 +266,7 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: cfg.SecurityPolicyHash,
 		},
-		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:     "mock",
-			DefaultModel:        "mock-balanced",
-			LowCostProvider:     "mock",
-			LowCostModel:        "mock-fast",
-			FallbackProvider:    "mock",
-			FallbackModel:       "mock-balanced",
-			ShortPromptMaxChars: 300,
-			RoutingPolicyHash:   cfg.RoutingPolicyHash,
-		},
+		RoutingPolicy: runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash),
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:    true,
 			Type:       runtimeconfig.CacheTypeExact,
@@ -331,7 +317,7 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	return harness
 }
 
-func readinessProviderCatalog(cfg config.Config) providercatalog.Catalog {
+func readinessProviderCatalog() providercatalog.Catalog {
 	return providercatalog.Catalog{
 		CatalogID:      "provider_catalog_v1_readiness",
 		CatalogVersion: 1,
@@ -349,8 +335,8 @@ func readinessProviderCatalog(cfg config.Config) providercatalog.Catalog {
 				RequestFormat: providercatalog.RequestFormatMockChatCompletions,
 			},
 			Models: []providercatalog.Model{
-				readinessCatalogModel(cfg.LowCostModel, "Mock Fast", 10),
-				readinessCatalogModel(cfg.DefaultModel, "Mock Balanced", 20),
+				readinessCatalogModel("mock-fast", "Mock Fast", 10),
+				readinessCatalogModel(routing.MockBootstrapRef, "Mock Balanced", 20),
 			},
 		}},
 	}
@@ -694,8 +680,6 @@ func (s *readinessObservabilityStore) invocationLogs() []invocationlog.LlmInvoca
 			RequestedModel:        log.RequestedModel,
 			Provider:              log.Provider,
 			Model:                 log.Model,
-			SelectedProvider:      log.SelectedProvider,
-			SelectedModel:         log.SelectedModel,
 			RoutingReason:         log.RoutingReason,
 			PromptTokens:          int64(log.PromptTokens),
 			CompletionTokens:      int64(log.CompletionTokens),
@@ -808,7 +792,7 @@ func readinessExpectedMetricSamples() []string {
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="sensitive_data_blocked",http_status="403",method="POST",status="blocked"} 1`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`,
 		`gatelm_gateway_inflight_requests{endpoint="/v1/chat/completions",method="POST"} 0`,
-		`gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-fast",selected_provider="mock",status="success"} 2`,
+		`gatelm_provider_requests_total{error_code="none",http_status="200",model="mock-balanced",provider="mock",status="success"} 2`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success"} 2`,
 		`gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 2`,
@@ -928,13 +912,12 @@ func readinessSuccessSummary(rr *httptest.ResponseRecorder, resp provider.ChatCo
 	gateLM := map[string]any{}
 	if resp.GateLM != nil {
 		gateLM = map[string]any{
-			"requestId":        resp.GateLM.RequestID,
-			"requestedModel":   resp.GateLM.RequestedModel,
-			"selectedProvider": resp.GateLM.SelectedProvider,
-			"selectedModel":    resp.GateLM.SelectedModel,
-			"routingReason":    resp.GateLM.RoutingReason,
-			"cacheStatus":      resp.GateLM.CacheStatus,
-			"maskingAction":    resp.GateLM.MaskingAction,
+			"requestId":      resp.GateLM.RequestID,
+			"requestedModel": resp.GateLM.RequestedModel,
+			"executionMode":  resp.GateLM.ExecutionMode,
+			"routingReason":  resp.GateLM.RoutingReason,
+			"cacheStatus":    resp.GateLM.CacheStatus,
+			"maskingAction":  resp.GateLM.MaskingAction,
 		}
 	}
 	return map[string]any{

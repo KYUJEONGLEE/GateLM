@@ -92,10 +92,12 @@ func TestAdapterCreateChatCompletionUsesMaxCompletionTokensForGPT5Models(t *test
 	defer server.Close()
 
 	maxTokens := 16
+	temperature := 0.1
 	_, err := NewAdapter(server.Client()).CreateChatCompletion(context.Background(), executionConfig(server.URL), provider.ChatCompletionRequest{
-		RequestID: "request_test",
-		Model:     "gpt-5.4",
-		MaxTokens: &maxTokens,
+		RequestID:   "request_test",
+		Model:       "gpt-5.4",
+		MaxTokens:   &maxTokens,
+		Temperature: &temperature,
 		Messages: []provider.ChatMessage{{
 			Role:    "user",
 			Content: json.RawMessage(`"hello"`),
@@ -109,6 +111,9 @@ func TestAdapterCreateChatCompletionUsesMaxCompletionTokensForGPT5Models(t *test
 	}
 	if got := request["max_completion_tokens"]; got != float64(maxTokens) {
 		t.Fatalf("expected max_completion_tokens=%d, got %#v request=%#v", maxTokens, got, request)
+	}
+	if _, ok := request["temperature"]; ok {
+		t.Fatalf("gpt-5 family request must omit unsupported temperature: %#v", request)
 	}
 }
 
@@ -124,10 +129,12 @@ func TestAdapterCreateChatCompletionKeepsMaxTokensForGPT4OModels(t *testing.T) {
 	defer server.Close()
 
 	maxTokens := 16
+	temperature := 0.2
 	_, err := NewAdapter(server.Client()).CreateChatCompletion(context.Background(), executionConfig(server.URL), provider.ChatCompletionRequest{
-		RequestID: "request_test",
-		Model:     "gpt-4o-mini",
-		MaxTokens: &maxTokens,
+		RequestID:   "request_test",
+		Model:       "gpt-4o-mini",
+		MaxTokens:   &maxTokens,
+		Temperature: &temperature,
 		Messages: []provider.ChatMessage{{
 			Role:    "user",
 			Content: json.RawMessage(`"hello"`),
@@ -141,6 +148,9 @@ func TestAdapterCreateChatCompletionKeepsMaxTokensForGPT4OModels(t *testing.T) {
 	}
 	if _, ok := request["max_completion_tokens"]; ok {
 		t.Fatalf("gpt-4o family request must keep existing max_tokens behavior: %#v", request)
+	}
+	if got := request["temperature"]; got != temperature {
+		t.Fatalf("expected temperature=%v, got %#v request=%#v", temperature, got, request)
 	}
 }
 
@@ -162,7 +172,7 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 		gotIncludeUsage = request.StreamOptions != nil && request.StreamOptions.IncludeUsage
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"안녕\"},\"finish_reason\":null}],\"usage\":null}\n\n"))
-		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":1}}}\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer server.Close()
@@ -188,11 +198,14 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 	if first.Usage != nil || !json.Valid(first.Data) {
 		t.Fatalf("unexpected first event: %+v", first)
 	}
+	if first.Delta != "안녕" {
+		t.Fatalf("expected normalized stream delta, got %q", first.Delta)
+	}
 	second, err := stream.Next()
 	if err != nil {
 		t.Fatalf("read usage stream event: %v", err)
 	}
-	if second.Usage == nil || second.Usage.TotalTokens != 5 {
+	if second.Usage == nil || second.Usage.TotalTokens != 5 || second.Usage.CacheReadInputTokens != 1 {
 		t.Fatalf("expected usage chunk, got %+v", second)
 	}
 	if _, err := stream.Next(); !errors.Is(err, io.EOF) {

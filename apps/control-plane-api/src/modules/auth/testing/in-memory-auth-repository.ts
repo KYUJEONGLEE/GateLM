@@ -1,4 +1,5 @@
 import {
+  AuthEmployeeInvitation,
   AuthProject,
   AuthProjectAdmin,
   AuthProjectAdminInvitation,
@@ -106,6 +107,68 @@ export function createInMemoryAuthRepository(): AuthRepository & {
   }
 
   const repository: AuthRepository & { dump(): AuthRepositoryState } = {
+    async acceptEmployeeInvitation(input) {
+      let user = state.users.find(
+        (item) => item.email === input.email && item.deletedAt === null,
+      );
+      if (user) {
+        user.authProvider = 'local';
+        user.emailVerifiedAt = input.acceptedAt;
+        user.name = input.name ?? user.name;
+        user.passwordHash = input.passwordHash;
+        user.status = 'active';
+        user.updatedAt = input.acceptedAt;
+      } else {
+        user = await repository.createUser({
+          authProvider: 'local',
+          email: input.email,
+          emailVerifiedAt: input.acceptedAt,
+          name: input.name,
+          passwordHash: input.passwordHash,
+          status: 'active',
+        });
+      }
+
+      const tenant = ensureTenant('00000000-0000-4000-8000-000000000777');
+      let membership = state.tenantMemberships.find(
+        (item) => item.tenantId === tenant.id && item.userId === user.id,
+      );
+      if (membership) {
+        membership.deletedAt = null;
+        membership.joinedAt = input.acceptedAt;
+        membership.role = 'employee';
+        membership.status = 'active';
+        membership.updatedAt = input.acceptedAt;
+      } else {
+        membership = {
+          createdAt: input.acceptedAt,
+          deletedAt: null,
+          id: id(),
+          joinedAt: input.acceptedAt,
+          role: 'employee',
+          status: 'active',
+          tenant,
+          tenantId: tenant.id,
+          updatedAt: input.acceptedAt,
+          userId: user.id,
+        };
+        state.tenantMemberships.push(membership);
+      }
+
+      const employeeInvitation: AuthEmployeeInvitation = {
+        acceptedAt: input.acceptedAt,
+        email: input.email,
+        employeeId: id(),
+        expiresAt: input.acceptedAt,
+        name: input.name,
+        status: 'accepted',
+        tenant,
+        tenantId: tenant.id,
+      };
+
+      return { employeeInvitation, membership, user };
+    },
+
     async acceptProjectAdminInvitation(input) {
       const invitation = state.projectAdminInvitations.find(
         (item) =>

@@ -2,23 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
+import { RequestDetailDrawer } from "./request-detail-drawer";
+import { RequestLogDetailAside } from "./request-log-detail";
 import {
   REQUEST_LOG_DETAIL_CLOSE_EVENT,
   REQUEST_LOG_DETAIL_SELECT_EVENT
-} from "@/features/request-logs/components/request-log-detail-anchor";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+} from "./request-log-detail-anchor";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type { Locale } from "@/lib/i18n/locale";
 
 type RequestLogDetailClientProps = {
   initialProjectId?: string;
-  initialRecord?: InvocationLogRecord;
+  initialRecord?: LiveInvocationLogRecord;
   initialRequestId?: string;
   locale: Locale;
-  records: InvocationLogRecord[];
+  onClose?: () => void;
+  records?: LiveInvocationLogRecord[];
+  selectedProjectId?: string;
+  selectedRequestId?: string;
   tenantId: string;
   timezone: string;
+  variant?: "aside" | "drawer";
 };
 
 type DetailSelection = {
@@ -27,7 +31,22 @@ type DetailSelection = {
 };
 
 type DetailApiResponse = {
-  data?: InvocationLogRecord | null;
+  data?: LiveInvocationLogRecord | null;
+};
+
+type DetailLoadState = "idle" | "loading" | "ready" | "error";
+type DetailLoadError = "failed" | "not_found";
+
+const emptyRecords: LiveInvocationLogRecord[] = [];
+const detailLoadErrorText: Record<Locale, Record<DetailLoadError, string>> = {
+  en: {
+    failed: "Failed to load request detail.",
+    not_found: "Request detail was not found."
+  },
+  ko: {
+    failed: "요청 상세 정보를 불러오지 못했습니다.",
+    not_found: "요청 상세 정보를 찾을 수 없습니다."
+  }
 };
 
 export function RequestLogDetailClient({
@@ -35,25 +54,66 @@ export function RequestLogDetailClient({
   initialRecord,
   initialRequestId,
   locale,
-  records,
+  onClose,
+  records = emptyRecords,
+  selectedProjectId,
+  selectedRequestId,
   tenantId,
-  timezone
+  timezone,
+  variant = "aside"
 }: RequestLogDetailClientProps) {
   const searchParams = useSearchParams();
   const requestIdFromUrl = searchParams.get("requestId")?.trim() || undefined;
+  const initialSelectedRequestId =
+    variant === "drawer"
+      ? selectedRequestId
+      : initialRequestId ?? requestIdFromUrl;
   const [selection, setSelection] = useState<DetailSelection>({
-    projectId: initialProjectId,
-    requestId: initialRequestId ?? requestIdFromUrl
+    projectId:
+      variant === "drawer" ? selectedProjectId : initialProjectId,
+    requestId: initialSelectedRequestId
   });
-  const [detail, setDetail] = useState<InvocationLogRecord | undefined>(
+  const [detail, setDetail] = useState<LiveInvocationLogRecord | undefined>(
     initialRecord
   );
+  const [loadState, setLoadState] = useState<DetailLoadState>(
+    initialSelectedRequestId ? (initialRecord ? "ready" : "loading") : "idle"
+  );
+  const [loadError, setLoadError] = useState<DetailLoadError | null>(null);
 
   const recordsByRequestId = useMemo(() => {
     return new Map(records.map((record) => [record.requestId, record]));
   }, [records]);
 
   useEffect(() => {
+    if (variant !== "drawer") {
+      return;
+    }
+
+    const nextRequestId = selectedRequestId?.trim() || undefined;
+    const nextRecord = nextRequestId
+      ? recordsByRequestId.get(nextRequestId)
+      : undefined;
+
+    setSelection({
+      projectId: selectedProjectId?.trim() || nextRecord?.projectId,
+      requestId: nextRequestId
+    });
+    setDetail(nextRecord);
+    setLoadError(null);
+    setLoadState(nextRequestId ? (nextRecord ? "ready" : "loading") : "idle");
+  }, [
+    recordsByRequestId,
+    selectedProjectId,
+    selectedRequestId,
+    variant
+  ]);
+
+  useEffect(() => {
+    if (variant !== "aside") {
+      return;
+    }
+
     setSelection((current) => {
       const nextRequestId = requestIdFromUrl ?? initialRequestId;
 
@@ -66,18 +126,32 @@ export function RequestLogDetailClient({
         : undefined;
 
       setDetail(nextRecord);
+      setLoadError(null);
+      setLoadState(nextRequestId ? (nextRecord ? "ready" : "loading") : "idle");
 
       return {
         projectId: nextRecord?.projectId ?? initialProjectId,
         requestId: nextRequestId
       };
     });
-  }, [initialProjectId, initialRequestId, recordsByRequestId, requestIdFromUrl]);
+  }, [
+    initialProjectId,
+    initialRequestId,
+    recordsByRequestId,
+    requestIdFromUrl,
+    variant
+  ]);
 
   useEffect(() => {
+    if (variant !== "aside") {
+      return;
+    }
+
     function closeDetail() {
       setDetail(undefined);
       setSelection({});
+      setLoadError(null);
+      setLoadState("idle");
     }
 
     function selectDetail(event: Event) {
@@ -90,14 +164,19 @@ export function RequestLogDetailClient({
 
       const nextRecord = recordsByRequestId.get(requestId);
       setDetail(nextRecord);
+      setLoadError(null);
+      setLoadState(nextRecord ? "ready" : "loading");
       setSelection({
-        projectId: customEvent.detail?.projectId?.trim() || nextRecord?.projectId,
+        projectId:
+          customEvent.detail?.projectId?.trim() || nextRecord?.projectId,
         requestId
       });
     }
 
     function syncDetailFromHistory() {
-      const requestId = new URLSearchParams(window.location.search).get("requestId")?.trim();
+      const requestId = new URLSearchParams(window.location.search)
+        .get("requestId")
+        ?.trim();
 
       if (!requestId) {
         closeDetail();
@@ -106,6 +185,8 @@ export function RequestLogDetailClient({
 
       const nextRecord = recordsByRequestId.get(requestId);
       setDetail(nextRecord);
+      setLoadError(null);
+      setLoadState(nextRecord ? "ready" : "loading");
       setSelection({
         projectId: nextRecord?.projectId,
         requestId
@@ -121,11 +202,13 @@ export function RequestLogDetailClient({
       window.removeEventListener(REQUEST_LOG_DETAIL_SELECT_EVENT, selectDetail);
       window.removeEventListener("popstate", syncDetailFromHistory);
     };
-  }, [recordsByRequestId]);
+  }, [recordsByRequestId, variant]);
 
   useEffect(() => {
     if (!selection.requestId) {
       setDetail(undefined);
+      setLoadError(null);
+      setLoadState("idle");
       return;
     }
 
@@ -140,26 +223,55 @@ export function RequestLogDetailClient({
       query.set("projectId", selection.projectId);
     }
 
-    fetch(`/api/request-logs/detail?${query.toString()}`, {
+    setDetail(fallbackRecord);
+    setLoadError(null);
+    setLoadState(fallbackRecord ? "ready" : "loading");
+
+    fetch("/api/request-logs/detail?" + query.toString(), {
       cache: "no-store",
       signal: controller.signal
     })
-      .then((response) => (response.ok ? response.json() : undefined))
-      .then((payload: DetailApiResponse | undefined) => {
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Request detail returned status " + response.status);
+        }
+        return (await response.json()) as DetailApiResponse;
+      })
+      .then((payload) => {
         if (controller.signal.aborted) {
           return;
         }
 
-        setDetail(
-          payload?.data
-            ? toDisplayModelRecord(payload.data)
-            : fallbackRecord
-        );
+        if (payload.data) {
+          setDetail(payload.data);
+          setLoadState("ready");
+          return;
+        }
+
+        if (fallbackRecord) {
+          setDetail(fallbackRecord);
+          setLoadState("ready");
+          return;
+        }
+
+        setDetail(undefined);
+        setLoadError("not_found");
+        setLoadState("error");
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setDetail(fallbackRecord);
+        if (controller.signal.aborted) {
+          return;
         }
+
+        if (fallbackRecord) {
+          setDetail(fallbackRecord);
+          setLoadState("ready");
+          return;
+        }
+
+        setDetail(undefined);
+        setLoadError("failed");
+        setLoadState("error");
       });
 
     return () => {
@@ -167,9 +279,27 @@ export function RequestLogDetailClient({
     };
   }, [recordsByRequestId, selection.projectId, selection.requestId, tenantId]);
 
-  const record = detail ?? (
-    selection.requestId ? recordsByRequestId.get(selection.requestId) : undefined
-  );
+  const loadErrorMessage = loadError ? detailLoadErrorText[locale][loadError] : null;
+
+  const record =
+    detail ??
+    (selection.requestId
+      ? recordsByRequestId.get(selection.requestId)
+      : undefined);
+
+  if (variant === "drawer") {
+    return selection.requestId ? (
+      <RequestDetailDrawer
+        error={loadErrorMessage}
+        loadState={loadState}
+        locale={locale}
+        onClose={() => onClose?.()}
+        record={record}
+        requestId={selection.requestId}
+        timezone={timezone}
+      />
+    ) : null;
+  }
 
   if (!selection.requestId || !record) {
     return null;
@@ -183,16 +313,4 @@ export function RequestLogDetailClient({
       timezone={timezone}
     />
   );
-}
-
-function toDisplayModelRecord(record: InvocationLogRecord): InvocationLogRecord {
-  return {
-    ...record,
-    requestedModel: record.requestedModel
-      ? formatModelDisplayName(record.requestedModel)
-      : record.requestedModel,
-    selectedModel: record.selectedModel
-      ? formatModelDisplayName(record.selectedModel)
-      : record.selectedModel
-  };
 }

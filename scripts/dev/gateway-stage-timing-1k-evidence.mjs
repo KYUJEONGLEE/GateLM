@@ -16,16 +16,12 @@ const segments = [
   { key: "stress_5000_rules", labelKo: "룰 5000개", count: 400, stressRuleTotal: 5000 },
 ];
 const categories = {
-  code: { tier: "high_quality", model: "mock-smart", prompts: ["Go handler에서 request log writer가 느려지는 지점을 찾아서 리팩토링 방향을 설명해줘.", "SQL 쿼리 성능이 느린데 인덱스와 pagination 로직을 어떻게 고치면 좋을지 봐줘."] },
-  reasoning: { tier: "high_quality", model: "mock-smart", prompts: ["비용 절감과 응답 품질 중 무엇을 우선해야 하는지 조건별로 비교해서 결론을 내려줘.", "A안과 B안의 위험도를 비교하고 최종 추천안을 근거와 함께 정리해줘."] },
-  translation: { tier: "balanced", model: "mock-balanced", prompts: ["다음 공지문을 해외 고객이 이해하기 쉬운 영어 표현으로 번역해줘.", "이 한국어 릴리즈 노트를 자연스러운 영문 안내문으로 바꿔줘."] },
-  summarization: { tier: "balanced", model: "mock-balanced", prompts: ["긴 회의록에서 결정사항과 후속 작업만 요약해줘.", "여러 팀원의 의견을 읽고 공통 쟁점만 짧게 정리해줘."] },
-  extraction_json: { tier: "balanced", model: "mock-balanced", prompts: ["문장에서 고객명, 요청유형, 마감일을 찾아 JSON 필드로 추출해줘.", "아래 문의 내용을 key/value 형태의 JSON 객체로 구조화해줘."] },
-  support_refund: { tier: "low_cost", model: "mock-fast", prompts: ["고객이 결제 금액 환불을 문의했을 때 보낼 차분한 답변 문구를 작성해줘.", "구독 취소와 환불 가능 여부를 묻는 고객에게 안내 답변을 만들어줘."] },
-  general: { tier: "low_cost", model: "mock-fast", prompts: ["GateLM 사용 방법을 처음 보는 사람에게 쉽게 설명해줘.", "관리 콘솔 메뉴 위치를 간단히 안내해줘."] },
+  code: { prompts: ["Go handler에서 request log writer가 느려지는 지점을 찾아서 리팩토링 방향을 설명해줘.", "SQL 쿼리 성능이 느린데 인덱스와 pagination 로직을 어떻게 고치면 좋을지 봐줘."] },
+  reasoning: { prompts: ["비용 절감과 응답 품질 중 무엇을 우선해야 하는지 조건별로 비교해서 결론을 내려줘.", "A안과 B안의 위험도를 비교하고 최종 추천안을 근거와 함께 정리해줘."] },
+  translation: { prompts: ["다음 공지문을 해외 고객이 이해하기 쉬운 영어 표현으로 번역해줘.", "이 한국어 릴리즈 노트를 자연스러운 영문 안내문으로 바꿔줘."] },
+  summarization: { prompts: ["긴 회의록에서 결정사항과 후속 작업만 요약해줘.", "여러 팀원의 의견을 읽고 공통 쟁점만 짧게 정리해줘."] },
+  general: { prompts: ["GateLM 사용 방법을 처음 보는 사람에게 쉽게 설명해줘.", "관리 콘솔 메뉴 위치를 간단히 안내해줘."] },
 };
-const reasonToCategory = { category_code_high_quality: "code", category_reasoning_high_quality: "reasoning", category_translation_balanced: "translation", category_summarization_balanced: "summarization", category_extraction_json_balanced: "extraction_json", category_support_refund_low_cost: "support_refund", short_prompt_low_cost: "general", default_balanced: "general" };
-const modelToTier = { "mock-fast": "low_cost", "mock-balanced": "balanced", "mock-smart": "high_quality" };
 const opts = parseArgs(process.argv.slice(2));
 
 try { await main(opts); } catch (err) { console.error(`FAIL: ${err instanceof Error ? err.message : String(err)}`); process.exitCode = 1; }
@@ -74,7 +70,7 @@ async function startGateway(options, segment) {
   const logDir = path.join(repoRoot, ".tmp", "gateway-stage-timing-1k");
   const out = await fs.open(path.join(logDir, `${segment.key}.out.log`), "w");
   const err = await fs.open(path.join(logDir, `${segment.key}.err.log`), "w");
-  const envs = { ...process.env, DATABASE_URL: "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public", REDIS_URL: "redis://localhost:6379", GATEWAY_PORT: "8080", DEPLOYMENT_MODE: "demo", NODE_ENV: "development", RAW_RESPONSE_CAPTURE_ENABLED: "true", GATEWAY_RUNTIME_SNAPSHOT_MODE: "demo", GATEWAY_CONTROL_PLANE_BASE_URL: "", GATEWAY_AUTH_SOURCE: "demo", MOCK_PROVIDER_BASE_URL: options.mockProviderBaseUrl, GATEWAY_DEFAULT_PROVIDER: "mock", GATEWAY_DEFAULT_MODEL: "mock-balanced", GATEWAY_LOW_COST_MODEL: "mock-fast", GATEWAY_HIGH_QUALITY_MODEL: "mock-smart", GATEWAY_RATE_LIMIT_LIMIT: "200000", GATEWAY_ASYNC_LOG_ENABLED: "true", GATEWAY_ASYNC_LOG_QUEUE_SIZE: "8192", GATEWAY_ASYNC_LOG_WORKER_COUNT: "4", GATEWAY_PROMPT_CAPTURE_ENABLED: "true", GATEWAY_RESPONSE_CAPTURE_ENABLED: "true", GATEWAY_ROUTING_RULE_STRESS_TOTAL: String(segment.stressRuleTotal || 0) };
+  const envs = { ...process.env, DATABASE_URL: "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public", REDIS_URL: "redis://localhost:6379", GATEWAY_PORT: "8080", DEPLOYMENT_MODE: "demo", NODE_ENV: "development", RAW_RESPONSE_CAPTURE_ENABLED: "true", GATEWAY_RUNTIME_SNAPSHOT_MODE: "demo", GATEWAY_CONTROL_PLANE_BASE_URL: "", GATEWAY_AUTH_SOURCE: "demo", MOCK_PROVIDER_BASE_URL: options.mockProviderBaseUrl, GATEWAY_RATE_LIMIT_LIMIT: "200000", GATEWAY_ASYNC_LOG_ENABLED: "true", GATEWAY_ASYNC_LOG_QUEUE_SIZE: "8192", GATEWAY_ASYNC_LOG_WORKER_COUNT: "4", GATEWAY_PROMPT_CAPTURE_ENABLED: "true", GATEWAY_RESPONSE_CAPTURE_ENABLED: "true", GATEWAY_ROUTING_RULE_STRESS_TOTAL: String(segment.stressRuleTotal || 0) };
   const child = spawn(go, ["run", "./apps/gateway-core/cmd/gateway"], { cwd: repoRoot, env: envs, stdio: ["ignore", out.fd, err.fd], windowsHide: true });
   child.once("exit", () => { out.close().catch(() => {}); err.close().catch(() => {}); });
   await waitHealth(options.gatewayBaseUrl, child, path.join(logDir, `${segment.key}.err.log`));
@@ -121,11 +117,11 @@ function buildSamples(runId) {
     let prompt = `${cfg.prompts[Math.floor(i / keys.length) % cfg.prompts.length]} 답변은 짧고 명확하게 작성해줘. case=${i}`;
     let sensitive = i % 5 === 0;
     if (sensitive) prompt += ` 테스트용 연락처 test-user-${i}@example.invalid, 010-0000-${String(i % 10000).padStart(4, "0")}가 포함되어 있어.`;
-    let sample = { sampleId: `sample_${String(i + 1).padStart(4, "0")}`, index: i, runId, segment: segment.key, segmentLabelKo: segment.labelKo, stressRuleTotal: segment.stressRuleTotal, expectedCategory: category, expectedTier: cfg.tier, expectedModel: cfg.model, sensitive, duplicateOf: "", prompt, promptHash: hash(prompt) };
+    let sample = { sampleId: `sample_${String(i + 1).padStart(4, "0")}`, index: i, runId, segment: segment.key, segmentLabelKo: segment.labelKo, stressRuleTotal: segment.stressRuleTotal, expectedCategory: category, sensitive, duplicateOf: "", prompt, promptHash: hash(prompt) };
     if (!sensitive && i % 37 === 0) cacheSeeds.push(sample);
     if (i % 40 === 39 && cacheSeeds.length > 0) {
       const original = cacheSeeds[(i + cacheSeeds.length) % cacheSeeds.length];
-      sample = { ...sample, expectedCategory: original.expectedCategory, expectedTier: original.expectedTier, expectedModel: original.expectedModel, sensitive: original.sensitive, duplicateOf: original.sampleId, prompt: original.prompt, promptHash: original.promptHash };
+      sample = { ...sample, expectedCategory: original.expectedCategory, sensitive: original.sensitive, duplicateOf: original.sampleId, prompt: original.prompt, promptHash: original.promptHash };
     }
     samples.push(sample);
   }
@@ -142,8 +138,8 @@ async function invoke(options, sample, prefix) {
     const res = await fetch(`${options.gatewayBaseUrl}/v1/chat/completions`, { method: "POST", headers: { "content-type": "application/json; charset=utf-8", authorization: `Bearer ${options.apiKey}`, "x-gatelm-app-token": options.appToken, "x-gatelm-end-user-id": "stage-timing-evidence-user", "x-gatelm-feature-id": `stage_timing_${sample.segment}`, "x-gatelm-request-id": requestId }, body: JSON.stringify({ model: "auto", messages: [{ role: "user", content: sample.prompt }], temperature: 0, max_tokens: 80, stream: false }), signal: AbortSignal.timeout(options.requestTimeoutMs) });
     httpStatus = res.status; body = await res.text(); parsed = json(body);
   } catch (err) { error = safe(err instanceof Error ? err.message : String(err)); }
-  const gateLM = parsed?.gateLM ?? parsed?.gatelm ?? {};
-  return { sampleId: sample.sampleId, requestId, segment: sample.segment, httpStatus, durationMs: round(performance.now() - start), selectedModel: String(gateLM.selectedModel ?? parsed?.model ?? ""), routingReason: String(gateLM.routingReason ?? ""), cacheStatus: String(gateLM.cacheStatus ?? ""), error };
+  const gateLM = parsed?.gate_lm ?? {};
+  return { sampleId: sample.sampleId, requestId, segment: sample.segment, httpStatus, durationMs: round(performance.now() - start), routingReason: String(gateLM.routingReason ?? ""), executionMode: String(gateLM.executionMode ?? ""), cacheStatus: String(gateLM.cacheStatus ?? ""), error };
 }
 
 async function pool(items, concurrency, worker) {
@@ -163,7 +159,7 @@ async function pollLogs(options, prefix, expected) {
 }
 
 async function queryLogs(prefix) {
-  const sql = `select coalesce(json_agg(row_to_json(t) order by "requestId"), '[]'::json) from (select request_id as "requestId", status, http_status as "httpStatus", provider, model, selected_model as "selectedModel", routing_reason as "routingReason", cache_status as "cacheStatus", cache_type as "cacheType", masking_action as "maskingAction", masking_detected_types as "maskingDetectedTypes", redacted_prompt_preview as "redactedPromptPreview", latency_ms as "latencyMs", provider_latency_ms as "providerLatencyMs", metadata from p0_llm_invocation_logs where request_id like '${prefix.replace(/'/g, "''")}%' order by request_id) t;`;
+  const sql = `select coalesce(json_agg(row_to_json(t) order by "requestId"), '[]'::json) from (select request_id as "requestId", status, http_status as "httpStatus", provider as "providerAttemptProviderId", model as "providerAttemptModelId", routing_reason as "routingReason", cache_status as "cacheStatus", cache_type as "cacheType", masking_action as "maskingAction", masking_detected_types as "maskingDetectedTypes", redacted_prompt_preview as "redactedPromptPreview", latency_ms as "latencyMs", provider_latency_ms as "providerAttemptLatencyMs", metadata from p0_llm_invocation_logs where request_id like '${prefix.replace(/'/g, "''")}%' order by request_id) t;`;
   const { stdout } = await execFileAsync("docker", ["compose", "exec", "-T", "postgres", "psql", "-U", "gatelm", "-d", "gatelm", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql], { cwd: repoRoot, maxBuffer: 60 * 1024 * 1024 });
   return JSON.parse(stdout.trim() || "[]");
 }
@@ -172,21 +168,23 @@ function buildReport({ options, runId, prefix, startedAt, completedAt, samples, 
   const resultById = new Map(results.map((r) => [r.sampleId, r]));
   const logByRequestId = new Map(logs.map((l) => [l.requestId, l]));
   const enriched = samples.map((s) => enrich(s, resultById.get(s.sampleId), logByRequestId.get(`${prefix}${s.sampleId}`)));
-  return { schemaVersion: "gatelm.gateway-stage-timing-1k-evidence.v1", generatedAt: completedAt.toISOString(), runId, requestPrefix: prefix, input: { count: samples.length, concurrency: options.concurrency, provider: "mock", sensitiveTargetCount: 200, ruleStressSegments: segments, reportDir: options.reportDir, reportName: options.reportName }, timing: { startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), wallClockMs: completedAt - startedAt, client: timing(enriched) }, routing: routing(enriched), stageTimings: stageStats(enriched), segments: segmentStats(enriched), captures: captures(enriched), logs: { expected: samples.length, actual: logs.length, coverage: ratio(logs.length, samples.length), httpStatusCounts: dist(enriched, (x) => String(x.httpStatus || 0)) }, samples: enriched.map(publicSample), securityNote: "raw API key/App token/Provider key/Authorization header는 저장하지 않는다. prompt 샘플은 Gateway가 저장한 masking 이후 promptCapture만 표시한다." };
+  return { schemaVersion: "gatelm.gateway-stage-timing-1k-evidence.v2", generatedAt: completedAt.toISOString(), runId, requestPrefix: prefix, input: { count: samples.length, concurrency: options.concurrency, provider: "mock", sensitiveTargetCount: 200, ruleStressSegments: segments, reportDir: options.reportDir, reportName: options.reportName }, timing: { startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), wallClockMs: completedAt - startedAt, client: timing(enriched) }, routing: routing(enriched), providerAttempts: { providerIdDistribution: dist(enriched, (x) => x.providerAttemptProviderId || "unavailable"), modelIdDistribution: dist(enriched, (x) => x.providerAttemptModelId || "unavailable") }, stageTimings: stageStats(enriched), segments: segmentStats(enriched), captures: captures(enriched), logs: { expected: samples.length, actual: logs.length, coverage: ratio(logs.length, samples.length), httpStatusCounts: dist(enriched, (x) => String(x.httpStatus || 0)) }, samples: enriched.map(publicSample), securityNote: "raw API key/App token/Provider key/Authorization header는 저장하지 않는다. prompt 샘플은 Gateway가 저장한 masking 이후 promptCapture만 표시한다." };
 }
 
 function enrich(s, r, l) {
   const m = meta(l?.metadata);
   const routingReason = first(l?.routingReason, r?.routingReason);
-  const selectedModel = first(l?.selectedModel, r?.selectedModel, l?.model);
-  const actualCategory = first(m.promptCategory, reasonToCategory[routingReason], "unknown");
-  const actualTier = first(modelToTier[selectedModel], tierFromReason(routingReason), "unknown");
-  return { ...s, requestId: r?.requestId ?? "", httpStatus: r?.httpStatus ?? l?.httpStatus ?? 0, clientDurationMs: Number(r?.durationMs ?? 0), gatewayLatencyMs: num(l?.latencyMs), providerLatencyMs: num(l?.providerLatencyMs), gatewayWithoutProviderMs: Math.max(0, num(l?.latencyMs) - num(l?.providerLatencyMs)), logWritten: Boolean(l), status: l?.status ?? "", selectedModel, routingReason, actualCategory, actualTier, categoryCorrect: actualCategory === s.expectedCategory, tierCorrect: actualTier === s.expectedTier, modelCorrect: selectedModel === s.expectedModel, cacheStatus: first(l?.cacheStatus, r?.cacheStatus), cacheType: l?.cacheType ?? "", maskingAction: l?.maskingAction ?? "", redactedPromptPreview: safe(l?.redactedPromptPreview ?? ""), promptCapture: safe(m.promptCapture?.capturedPrompt ?? ""), responseCapture: safe(m.responseCapture?.capturedResponse ?? ""), stageTimings: normalizeStageTimings(m.stageTimings) };
+  const actualCategory = first(m.promptCategory, "general");
+  const actualDifficulty = first(m.promptDifficulty, "simple");
+  const executionMode = first(r?.executionMode, "not_reported");
+  const providerAttemptProviderId = first(m.providerAttempt?.providerId, l?.providerAttemptProviderId);
+  const providerAttemptModelId = first(m.providerAttempt?.modelId, l?.providerAttemptModelId);
+  return { ...s, requestId: r?.requestId ?? "", httpStatus: r?.httpStatus ?? l?.httpStatus ?? 0, clientDurationMs: Number(r?.durationMs ?? 0), gatewayLatencyMs: num(l?.latencyMs), providerLatencyMs: num(l?.providerAttemptLatencyMs), gatewayWithoutProviderMs: Math.max(0, num(l?.latencyMs) - num(l?.providerAttemptLatencyMs)), logWritten: Boolean(l), status: l?.status ?? "", routingReason, executionMode, actualCategory, actualDifficulty, providerAttemptProviderId, providerAttemptModelId, categoryCorrect: actualCategory === s.expectedCategory, cacheStatus: first(l?.cacheStatus, r?.cacheStatus), cacheType: l?.cacheType ?? "", maskingAction: l?.maskingAction ?? "", redactedPromptPreview: safe(l?.redactedPromptPreview ?? ""), promptCapture: safe(m.promptCapture?.capturedPrompt ?? ""), responseCapture: safe(m.responseCapture?.capturedResponse ?? ""), stageTimings: normalizeStageTimings(m.stageTimings) };
 }
 
 function routing(items) {
-  const total = items.length, c = items.filter((x) => x.categoryCorrect).length, t = items.filter((x) => x.tierCorrect).length, mo = items.filter((x) => x.modelCorrect).length;
-  return { total, categoryAccuracy: ratio(c, total), tierAccuracy: ratio(t, total), modelAccuracy: ratio(mo, total), categoryCorrect: c, categoryIncorrect: total - c, tierCorrect: t, tierIncorrect: total - t, modelCorrect: mo, modelIncorrect: total - mo, expectedCategoryDistribution: dist(items, (x) => x.expectedCategory), actualCategoryDistribution: dist(items, (x) => x.actualCategory), expectedTierDistribution: dist(items, (x) => x.expectedTier), actualTierDistribution: dist(items, (x) => x.actualTier), routingReasonDistribution: dist(items, (x) => x.routingReason || "unknown"), firstFailures: items.filter((x) => !x.categoryCorrect || !x.tierCorrect).slice(0, 20).map((x) => ({ sampleId: x.sampleId, requestId: x.requestId, segment: x.segment, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, expectedTier: x.expectedTier, actualTier: x.actualTier, selectedModel: x.selectedModel, routingReason: x.routingReason, promptHash: x.promptHash })) };
+  const total = items.length, c = items.filter((x) => x.categoryCorrect).length;
+  return { total, categoryAccuracy: ratio(c, total), categoryCorrect: c, categoryIncorrect: total - c, expectedCategoryDistribution: dist(items, (x) => x.expectedCategory), actualCategoryDistribution: dist(items, (x) => x.actualCategory), difficultyDistribution: dist(items, (x) => x.actualDifficulty), routingReasonDistribution: dist(items, (x) => x.routingReason || "unknown"), executionModeDistribution: dist(items, (x) => x.executionMode || "not_reported"), firstFailures: items.filter((x) => !x.categoryCorrect).slice(0, 20).map((x) => ({ sampleId: x.sampleId, requestId: x.requestId, segment: x.segment, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, actualDifficulty: x.actualDifficulty, routingReason: x.routingReason, executionMode: x.executionMode, promptHash: x.promptHash })) };
 }
 
 function timing(items) {
@@ -194,15 +192,15 @@ function timing(items) {
   return { avgClientMs: avg(client), p50ClientMs: pct(client, 50), p95ClientMs: pct(client, 95), maxClientMs: max(client), avgGatewayLatencyMs: avg(gw), p95GatewayLatencyMs: pct(gw, 95), avgGatewayWithoutProviderMs: avg(noProvider), p95GatewayWithoutProviderMs: pct(noProvider, 95), avgProviderLatencyMs: avg(provider), p95ProviderLatencyMs: pct(provider, 95) };
 }
 
-function segmentStats(items) { return segments.map((s) => { const xs = items.filter((x) => x.segment === s.key); return { segment: s.key, labelKo: s.labelKo, stressRuleTotal: s.stressRuleTotal, count: xs.length, categoryAccuracy: ratio(xs.filter((x) => x.categoryCorrect).length, xs.length), tierAccuracy: ratio(xs.filter((x) => x.tierCorrect).length, xs.length), avgGatewayWithoutProviderMs: avg(xs.map((x) => x.gatewayWithoutProviderMs)), p95GatewayWithoutProviderMs: pct(xs.map((x) => x.gatewayWithoutProviderMs), 95), stageTimings: stageStats(xs) }; }); }
+function segmentStats(items) { return segments.map((s) => { const xs = items.filter((x) => x.segment === s.key); return { segment: s.key, labelKo: s.labelKo, stressRuleTotal: s.stressRuleTotal, count: xs.length, categoryAccuracy: ratio(xs.filter((x) => x.categoryCorrect).length, xs.length), avgGatewayWithoutProviderMs: avg(xs.map((x) => x.gatewayWithoutProviderMs)), p95GatewayWithoutProviderMs: pct(xs.map((x) => x.gatewayWithoutProviderMs), 95), stageTimings: stageStats(xs) }; }); }
 function stageStats(items) { const by = {}; for (const x of items) for (const [stage, v] of Object.entries(x.stageTimings || {})) (by[stage] ??= []).push(Number(v.durationMs || 0)); return Object.fromEntries(Object.entries(by).sort(([a], [b]) => a.localeCompare(b)).map(([stage, values]) => [stage, { requests: values.length, avgDurationMs: avg(values), p50DurationMs: pct(values, 50), p95DurationMs: pct(values, 95), maxDurationMs: max(values) }])); }
 function captures(items) { const masked = items.filter((x) => x.maskingAction && x.maskingAction !== "none"), hits = items.filter((x) => x.cacheStatus === "hit"), pc = items.filter((x) => x.promptCapture), rc = items.filter((x) => x.responseCapture); return { sensitiveInputCount: items.filter((x) => x.sensitive).length, maskedOrBlockedCount: masked.length, promptCaptureCount: pc.length, responseCaptureCount: rc.length, exactCacheHitCount: hits.filter((x) => x.cacheType === "exact").length, maskingActionDistribution: dist(items, (x) => x.maskingAction || "none"), cacheStatusDistribution: dist(items, (x) => x.cacheStatus || "unknown"), promptResponseSamples: pc.filter((x) => x.responseCapture).slice(0, 5).map(sampleView), cacheHitSamples: hits.slice(0, 5).map(sampleView), maskingSamples: masked.slice(0, 5).map(sampleView) }; }
 function sampleView(x) { return { sampleId: x.sampleId, requestId: x.requestId, segment: x.segment, cacheStatus: x.cacheStatus, cacheType: x.cacheType, maskingAction: x.maskingAction, redactedPromptPreview: x.redactedPromptPreview, capturedPrompt: x.promptCapture, capturedResponse: x.responseCapture }; }
-function publicSample(x) { return { sampleId: x.sampleId, requestId: x.requestId, segment: x.segment, stressRuleTotal: x.stressRuleTotal, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, expectedTier: x.expectedTier, actualTier: x.actualTier, selectedModel: x.selectedModel, routingReason: x.routingReason, categoryCorrect: x.categoryCorrect, tierCorrect: x.tierCorrect, sensitive: x.sensitive, duplicateOf: x.duplicateOf, promptHash: x.promptHash, clientDurationMs: x.clientDurationMs, gatewayLatencyMs: x.gatewayLatencyMs, providerLatencyMs: x.providerLatencyMs, gatewayWithoutProviderMs: x.gatewayWithoutProviderMs, cacheStatus: x.cacheStatus, cacheType: x.cacheType, maskingAction: x.maskingAction, stageTimings: x.stageTimings }; }
+function publicSample(x) { return { sampleId: x.sampleId, requestId: x.requestId, segment: x.segment, stressRuleTotal: x.stressRuleTotal, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, actualDifficulty: x.actualDifficulty, routingReason: x.routingReason, executionMode: x.executionMode, categoryCorrect: x.categoryCorrect, providerAttemptProviderId: x.providerAttemptProviderId, providerAttemptModelId: x.providerAttemptModelId, sensitive: x.sensitive, duplicateOf: x.duplicateOf, promptHash: x.promptHash, clientDurationMs: x.clientDurationMs, gatewayLatencyMs: x.gatewayLatencyMs, providerLatencyMs: x.providerLatencyMs, gatewayWithoutProviderMs: x.gatewayWithoutProviderMs, cacheStatus: x.cacheStatus, cacheType: x.cacheType, maskingAction: x.maskingAction, stageTimings: x.stageTimings }; }
 
 async function writeReport(dir, report) { const reportName = report.input.reportName || "보고서"; const jsonPath = path.join(dir, `${reportName}.json`), mdPath = path.join(dir, `${reportName}.md`); await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"); await fs.writeFile(mdPath, md(report, jsonPath), "utf8"); }
 function md(r, jsonPath) {
-  const segmentRows = r.segments.map((s) => `| ${s.labelKo} | ${s.count} | ${s.stressRuleTotal || "current"} | ${percent(s.categoryAccuracy)} | ${percent(s.tierAccuracy)} | ${s.avgGatewayWithoutProviderMs}ms | ${s.p95GatewayWithoutProviderMs}ms |`).join("\n");
+  const segmentRows = r.segments.map((s) => `| ${s.labelKo} | ${s.count} | ${s.stressRuleTotal || "current"} | ${percent(s.categoryAccuracy)} | ${s.avgGatewayWithoutProviderMs}ms | ${s.p95GatewayWithoutProviderMs}ms |`).join("\n");
   const stageRows = Object.entries(r.stageTimings).map(([k, v]) => `| \`${k}\` | ${v.requests} | ${v.avgDurationMs} | ${v.p95DurationMs} | ${v.maxDurationMs} |`).join("\n") || "| - | - | - | - | - |";
   const capRows = r.captures.promptResponseSamples.map((x) => `| \`${x.requestId}\` | ${x.cacheStatus || "-"}/${x.cacheType || "-"} | ${x.maskingAction || "-"} | ${cell(x.capturedPrompt, 120)} | ${cell(x.capturedResponse, 80)} |`).join("\n") || "| - | - | - | - | - |";
   const hitRows = r.captures.cacheHitSamples.map((x) => `| \`${x.requestId}\` | ${x.cacheStatus}/${x.cacheType} | ${cell(x.capturedPrompt || x.redactedPromptPreview, 100)} |`).join("\n") || "| - | - | - |";
@@ -222,13 +220,13 @@ function md(r, jsonPath) {
 | DB 로그 수집률 | ${percent(r.logs.coverage)} |
 | requestId prefix | \`${r.requestPrefix}\` |
 
+\`routingReason\`, \`difficulty\`, \`executionMode\`는 routing 관찰값이다. 실제 provider/model은 별도 \`providerAttempts\` 실행 관찰값으로만 기록한다.
+
 ## 핵심 결과
 
 | 항목 | 결과 |
 |---|---:|
-| Routing category 정확도 | ${percent(r.routing.categoryAccuracy)} |
-| Routing tier 정확도 | ${percent(r.routing.tierAccuracy)} |
-| 선택 모델 정확도 | ${percent(r.routing.modelAccuracy)} |
+| Category 정확도 | ${percent(r.routing.categoryAccuracy)} |
 | 평균 client 왕복 시간 | ${r.timing.client.avgClientMs}ms |
 | P95 client 왕복 시간 | ${r.timing.client.p95ClientMs}ms |
 | 평균 gateway 내부 시간(provider 제외) | ${r.timing.client.avgGatewayWithoutProviderMs}ms |
@@ -241,8 +239,8 @@ function md(r, jsonPath) {
 
 ## 룰 개수 구간별 결과
 
-| 구간 | 요청 수 | stress rule total | category 정확도 | tier 정확도 | 평균 gateway 내부 시간(provider 제외) | P95 gateway 내부 시간(provider 제외) |
-|---|---:|---:|---:|---:|---:|---:|
+| 구간 | 요청 수 | stress rule total | category 정확도 | 평균 gateway 내부 시간(provider 제외) | P95 gateway 내부 시간(provider 제외) |
+|---|---:|---:|---:|---:|---:|
 ${segmentRows}
 
 ## 단계별 평균 시간
@@ -286,10 +284,9 @@ ${maskRows}
 `;
 }
 
-function printSummary(r) { console.log("\nRESULT"); console.log(`category accuracy: ${percent(r.routing.categoryAccuracy)}`); console.log(`tier accuracy: ${percent(r.routing.tierAccuracy)}`); console.log(`log coverage: ${percent(r.logs.coverage)} (${r.logs.actual}/${r.logs.expected})`); console.log(`avg gateway no provider: ${r.timing.client.avgGatewayWithoutProviderMs}ms`); console.log(`p95 gateway no provider: ${r.timing.client.p95GatewayWithoutProviderMs}ms`); console.log(`prompt captures: ${r.captures.promptCaptureCount}`); console.log(`response captures: ${r.captures.responseCaptureCount}`); console.log(`exact cache hits: ${r.captures.exactCacheHitCount}`); console.log(`report: ${path.join(r.input.reportDir, `${r.input.reportName || "보고서"}.md`)}`); }
+function printSummary(r) { console.log("\nRESULT"); console.log(`category accuracy: ${percent(r.routing.categoryAccuracy)}`); console.log(`log coverage: ${percent(r.logs.coverage)} (${r.logs.actual}/${r.logs.expected})`); console.log(`avg gateway no provider: ${r.timing.client.avgGatewayWithoutProviderMs}ms`); console.log(`p95 gateway no provider: ${r.timing.client.p95GatewayWithoutProviderMs}ms`); console.log(`prompt captures: ${r.captures.promptCaptureCount}`); console.log(`response captures: ${r.captures.responseCaptureCount}`); console.log(`exact cache hits: ${r.captures.exactCacheHitCount}`); console.log(`report: ${path.join(r.input.reportDir, `${r.input.reportName || "보고서"}.md`)}`); }
 function normalizeStageTimings(v) { if (!v || typeof v !== "object") return {}; return Object.fromEntries(Object.entries(v).map(([k, t]) => [k, { durationMs: round(Number(t?.durationMs || 0), 6), count: Number(t?.count || 0) }])); }
 function meta(v) { if (!v) return {}; if (typeof v === "string") return json(v) || {}; return v; }
-function tierFromReason(r) { if (r === "category_code_high_quality" || r === "category_reasoning_high_quality") return "high_quality"; if (r === "category_support_refund_low_cost" || r === "short_prompt_low_cost") return "low_cost"; return r ? "balanced" : "unknown"; }
 function dist(items, pick) { const m = {}; for (const x of items) { const k = String(pick(x) ?? "unknown"); m[k] = (m[k] || 0) + 1; } return Object.fromEntries(Object.entries(m).sort(([a], [b]) => a.localeCompare(b))); }
 function avg(v) { const a = v.filter(Number.isFinite); return a.length ? round(a.reduce((s, x) => s + x, 0) / a.length) : 0; }
 function pct(v, p) { const a = v.filter(Number.isFinite).sort((x, y) => x - y); if (!a.length) return 0; return round(a[Math.min(a.length - 1, Math.max(0, Math.ceil((p / 100) * a.length) - 1))]); }

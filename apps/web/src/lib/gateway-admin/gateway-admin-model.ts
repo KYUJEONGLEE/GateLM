@@ -5,11 +5,15 @@ import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import { getProviderConnectionsModel } from "@/lib/control-plane/provider-connections-client";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
-import type { DashboardOverview, InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { getDashboardLiveRange, getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import {
+  getDashboardLiveRange,
+  getLiveDashboardOverview,
+  type LiveDashboardOverview as DashboardOverview
+} from "@/lib/gateway/live-dashboard-overview";
 import { getGatewayHealthModel } from "@/lib/gateway/health-client";
 import type { GatewayHealthModel } from "@/lib/gateway/health-types";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
+import type { LiveInvocationLogRecord as InvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 
 export const gatewayAdminSections = [
   "overview",
@@ -36,14 +40,12 @@ export type GatewayAdminFilters = {
 };
 
 export type GatewayAdminProviderRow = {
-  averageLatencyMs: number | null;
   connectionStatus: ProviderConnectionRecord["status"] | "UNREGISTERED";
   costMicroUsd: number;
-  errorRate: number;
-  failedRequests: number;
   health: GatewayAdminHealthStatus;
   modelCount: number;
   models: string[];
+  p95LatencyMs: number | null;
   provider: string;
   requestCount: number;
   timeoutMs: number | null;
@@ -133,9 +135,8 @@ export async function getGatewayAdminModel(filters: GatewayAdminFilters): Promis
     getLiveGatewayRequestLogs({
       from: range.from,
       limit: 200,
-      model: filters.model,
+      requestedModel: filters.model,
       projectId: filters.projectId,
-      provider: filters.provider,
       status: filters.status,
       tenantId,
       to: range.to
@@ -160,7 +161,7 @@ export async function getGatewayAdminModel(filters: GatewayAdminFilters): Promis
     overview: overview ?? null,
     projectUsageRows: buildProjectUsageRows(projects, safeRecords),
     projects,
-    providerRows: buildProviderRows(providers, safeRecords),
+    providerRows: buildProviderRows(providers, overview),
     providers,
     range,
     recentErrors: safeRecords.filter(isProblemRecord).slice(0, 8),
@@ -204,39 +205,42 @@ function getDataWarnings({
 
 function buildProviderRows(
   providers: ProviderConnectionRecord[],
-  records: InvocationLogRecord[]
+  overview: DashboardOverview | undefined
 ): GatewayAdminProviderRow[] {
   const providerNames = new Set<string>();
+  const latencyRows = overview?.breakdowns?.byProviderModel ?? [];
+  const costRows = overview?.costByModel ?? [];
 
   for (const provider of providers) {
     providerNames.add(provider.provider);
   }
 
-  for (const record of records) {
-    if (record.selectedProvider) {
-      providerNames.add(record.selectedProvider);
-    }
+  for (const row of [...latencyRows, ...costRows]) {
+    providerNames.add(row.provider);
   }
 
   return [...providerNames]
     .sort((left, right) => left.localeCompare(right))
     .map((providerName) => {
       const provider = providers.find((item) => item.provider === providerName);
-      const providerRecords = records.filter((record) => record.selectedProvider === providerName);
-      const failedRequests = providerRecords.filter(isFailedRecord).length;
-      const requestCount = providerRecords.length;
-      const errorRate = safeRate(failedRequests, requestCount);
-      const models = getProviderModels(provider, providerRecords);
+      const providerLatencyRows = latencyRows.filter((row) => row.provider === providerName);
+      const providerCostRows = costRows.filter((row) => row.provider === providerName);
+      const requestCount = Math.max(
+        sum(providerLatencyRows.map((row) => row.requestCount)),
+        sum(providerCostRows.map((row) => row.requestCount))
+      );
+      const models = getProviderModels(
+        provider,
+        [...providerLatencyRows, ...providerCostRows].map((row) => row.model)
+      );
 
       return {
-        averageLatencyMs: average(providerRecords.map((record) => record.latencyMs)),
         connectionStatus: provider?.status ?? "UNREGISTERED",
-        costMicroUsd: sum(providerRecords.map((record) => record.costMicroUsd)),
-        errorRate,
-        failedRequests,
-        health: deriveHealth(requestCount, errorRate),
+        costMicroUsd: sum(providerCostRows.map((row) => row.costMicroUsd)),
+        health: deriveProviderConnectionHealth(provider?.status),
         modelCount: models.length,
         models,
+        p95LatencyMs: maximumOrNull(providerLatencyRows.map((row) => row.p95ProviderLatencyMs)),
         provider: providerName,
         requestCount,
         timeoutMs: provider?.timeoutMs ?? null
@@ -313,7 +317,7 @@ function buildTenantRow(
 
 function getProviderModels(
   provider: ProviderConnectionRecord | undefined,
-  records: InvocationLogRecord[]
+  aggregateModels: string[]
 ) {
   const configModels = provider?.providerConfig?.models;
   const models = new Set<string>();
@@ -326,8 +330,7 @@ function getProviderModels(
     }
   }
 
-  for (const record of records) {
-    const model = record.selectedModel ?? record.requestedModel;
+  for (const model of aggregateModels) {
     if (model) {
       models.add(model);
     }
@@ -336,19 +339,18 @@ function getProviderModels(
   return [...models].sort((left, right) => left.localeCompare(right));
 }
 
-function deriveHealth(requestCount: number, errorRate: number): GatewayAdminHealthStatus {
-  if (requestCount === 0) {
+function deriveProviderConnectionHealth(
+  status: ProviderConnectionRecord["status"] | undefined
+): GatewayAdminHealthStatus {
+  if (!status) {
     return "unknown";
   }
-
-  if (errorRate >= 0.2) {
+  if (status === "DISABLED") {
     return "down";
   }
-
-  if (errorRate >= 0.05) {
+  if (status === "DEGRADED") {
     return "degraded";
   }
-
   return "healthy";
 }
 
@@ -368,14 +370,14 @@ function safeRate(numerator: number, denominator: number) {
   return numerator / denominator;
 }
 
-function average(values: number[]) {
+function maximumOrNull(values: number[]) {
   const finiteValues = values.filter((value) => Number.isFinite(value));
 
   if (finiteValues.length === 0) {
     return null;
   }
 
-  return Math.round(sum(finiteValues) / finiteValues.length);
+  return Math.max(...finiteValues);
 }
 
 function sum(values: number[]) {

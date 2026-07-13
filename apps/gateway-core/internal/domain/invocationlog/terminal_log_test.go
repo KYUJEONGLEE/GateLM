@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -29,9 +30,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		RequestedModel:          "auto",
 		Provider:                "mock",
 		Model:                   "mock-fast",
-		SelectedProvider:        "mock",
-		SelectedModel:           "mock-fast",
-		RoutingReason:           "short_prompt_low_cost",
+		RoutingReason:           routing.ReasonMatrixRoute,
 		RoutingPolicyHash:       "route_p0_v1",
 		PromptTokens:            4,
 		CompletionTokens:        3,
@@ -95,7 +94,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected runtime snapshot metadata, got %+v", log.Metadata)
 	}
-	if runtimeSnapshot["runtimeSnapshotVersion"] != 1 || runtimeSnapshot["runtimeState"] != "snapshot_active" {
+	if runtimeSnapshot["runtimeSnapshotVersion"] != 2 || runtimeSnapshot["runtimeState"] != "snapshot_active" {
 		t.Fatalf("unexpected runtime snapshot metadata: %+v", runtimeSnapshot)
 	}
 	legacyHashes, ok := runtimeSnapshot["legacyHashes"].(map[string]string)
@@ -348,9 +347,9 @@ func TestBuildTerminalLogMapsExactCacheHitDomainOutcomes(t *testing.T) {
 		RequestID:         "request_cache_hit",
 		ApplicationID:     "app_demo",
 		RequestedModel:    "auto",
-		SelectedProvider:  "mock",
-		SelectedModel:     "mock-fast",
-		RoutingReason:     "short_prompt_low_cost",
+		Provider:          "mock",
+		Model:             "mock-fast",
+		RoutingReason:     routing.ReasonMatrixRoute,
 		Status:            StatusSuccess,
 		HTTPStatus:        200,
 		CacheStatus:       CacheStatusHit,
@@ -393,8 +392,8 @@ func TestBuildTerminalLogMapsPreRoutingExactCacheHitAsSkippedRouting(t *testing.
 		*log.DomainOutcomes.Routing.RoutingReason != "exact_cache_hit_provider_bypass" {
 		t.Fatalf("unexpected pre-routing cache hit reason: %+v", log.DomainOutcomes.Routing)
 	}
-	if log.DomainOutcomes.Provider.SelectedProvider != nil || log.DomainOutcomes.Provider.SelectedModel != nil {
-		t.Fatalf("pre-routing cache hit must not invent provider/model, got %+v", log.DomainOutcomes.Provider)
+	if log.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("pre-routing cache hit must not call provider, got %+v", log.DomainOutcomes.Provider)
 	}
 }
 
@@ -428,8 +427,8 @@ func TestBuildTerminalLogMapsStreamingFinalOutcomes(t *testing.T) {
 		ApplicationID:     "app_demo",
 		Stream:            true,
 		RequestedModel:    "auto",
-		SelectedProvider:  "mock",
-		SelectedModel:     "mock-fast",
+		Provider:          "mock",
+		Model:             "mock-fast",
 		Status:            StatusSuccess,
 		HTTPStatus:        200,
 		CacheStatus:       CacheStatusMiss,
@@ -640,5 +639,35 @@ func TestBuildTerminalLogStoresRoutingDiagnosticsMetadata(t *testing.T) {
 	}
 	if !diagnostics.Ambiguous || diagnostics.ScoreMargin != 1 || len(diagnostics.ScoreVector) != 2 {
 		t.Fatalf("unexpected routing diagnostics metadata: %#v", diagnostics)
+	}
+}
+
+func TestBuildTerminalLogStoresEmployeePolicyDecisionWithoutChangingBudgetScope(t *testing.T) {
+	startedAt := time.Date(2026, 7, 10, 1, 2, 3, 0, time.UTC)
+	decision := &employeepolicy.Decision{
+		EmployeeID:             "employee_demo",
+		QuotaOutcome:           employeepolicy.QuotaOutcomeExceeded,
+		QuotaReason:            employeepolicy.QuotaReasonExceededQualityGuard,
+		QuotaLimitMicroUSD:     1_000_000,
+		QuotaUsedMicroUSD:      1_100_000,
+		QuotaRemainingMicroUSD: -100_000,
+	}
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:              "request_employee_quota",
+		ApplicationID:          "app_demo",
+		EndUserID:              "employee_demo",
+		EmployeePolicyDecision: decision,
+		Status:                 StatusSuccess,
+		HTTPStatus:             200,
+		StartedAt:              startedAt,
+		CompletedAt:            startedAt.Add(10 * time.Millisecond),
+	})
+
+	metadataDecision, ok := log.Metadata["employeePolicyDecision"].(employeepolicy.Decision)
+	if !ok || metadataDecision.QuotaOutcome != employeepolicy.QuotaOutcomeExceeded {
+		t.Fatalf("expected employee policy metadata, got %#v", log.Metadata)
+	}
+	if log.BudgetScope.Type != budget.ScopeTypeApplication || log.BudgetScope.ID != "app_demo" {
+		t.Fatalf("employee quota must not create user budget scope, got %#v", log.BudgetScope)
 	}
 }

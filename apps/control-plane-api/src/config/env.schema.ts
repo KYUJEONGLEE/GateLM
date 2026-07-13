@@ -3,6 +3,9 @@ type RawEnv = Record<string, string | undefined>;
 interface ControlPlaneEnv {
   AUTH_EMAIL_TRANSPORT?: string;
   CONTROL_PLANE_INTERNAL_SERVICE_TOKEN?: string;
+  TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN?: string;
+  TENANT_CHAT_GOOGLE_REDIRECT_URI?: string;
+  TENANT_CHAT_WEB_ORIGIN?: string;
   CONTROL_PLANE_AUTH_COOKIE_SECURE?: string;
   CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY?: string;
   CONTROL_PLANE_AUTH_STATE_SECRET: string;
@@ -21,6 +24,10 @@ interface ControlPlaneEnv {
   SMTP_TLS_MODE?: string;
   SMTP_USER?: string;
   CONTROL_PLANE_ADMIN_AUTH_MODE: string;
+  TENANT_CHAT_PROJECTOR_BATCH_SIZE?: number;
+  TENANT_CHAT_PROJECTOR_ENABLED?: string;
+  TENANT_CHAT_PROJECTOR_INTERVAL_MS?: number;
+  TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS?: number;
 }
 
 type ValidatedControlPlaneEnv = Record<string, string | number | undefined> &
@@ -64,6 +71,25 @@ function readOptionalPort(env: RawEnv, key: keyof ControlPlaneEnv): number | und
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 1 || value > 65535) {
     throw new Error(`${key} must be an integer between 1 and 65535`);
+  }
+
+  return value;
+}
+
+function readOptionalInteger(
+  env: RawEnv,
+  key: keyof ControlPlaneEnv,
+  minimum: number,
+  maximum: number,
+): number | undefined {
+  const raw = env[key];
+  if (raw === undefined || raw.trim().length === 0) {
+    return undefined;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}`);
   }
 
   return value;
@@ -140,6 +166,10 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     config,
     'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN',
   );
+  const tenantChatServiceToken = readOptionalString(
+    config,
+    'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN',
+  );
   if (emailTransport === 'smtp') {
     requireString(config, 'SMTP_HOST');
     requireString(config, 'SMTP_FROM');
@@ -175,12 +205,26 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
         'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
       );
     }
+    if (
+      !tenantChatServiceToken ||
+      isWeakInternalServiceToken(tenantChatServiceToken)
+    ) {
+      throw new Error(
+        'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
+      );
+    }
   }
 
   return {
     ...config,
     AUTH_EMAIL_TRANSPORT: emailTransport,
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: internalServiceToken,
+    TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: tenantChatServiceToken,
+    TENANT_CHAT_GOOGLE_REDIRECT_URI:
+      config.TENANT_CHAT_GOOGLE_REDIRECT_URI ??
+      'http://chat.localhost:3002/api/tenant-chat/auth/google/callback',
+    TENANT_CHAT_WEB_ORIGIN:
+      config.TENANT_CHAT_WEB_ORIGIN ?? 'http://chat.localhost:3002',
     CONTROL_PLANE_PORT: readPort(config),
     CONTROL_PLANE_AUTH_COOKIE_SECURE:
       readBooleanString(config, 'CONTROL_PLANE_AUTH_COOKIE_SECURE') ?? 'false',
@@ -204,6 +248,25 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     SMTP_TLS_MODE: readSmtpTlsMode(config) ?? 'opportunistic',
     SMTP_USER: config.SMTP_USER,
     CONTROL_PLANE_ADMIN_AUTH_MODE: adminAuthMode,
+    TENANT_CHAT_PROJECTOR_BATCH_SIZE:
+      readOptionalInteger(config, 'TENANT_CHAT_PROJECTOR_BATCH_SIZE', 1, 500) ??
+      50,
+    TENANT_CHAT_PROJECTOR_ENABLED:
+      readBooleanString(config, 'TENANT_CHAT_PROJECTOR_ENABLED') ?? 'false',
+    TENANT_CHAT_PROJECTOR_INTERVAL_MS:
+      readOptionalInteger(
+        config,
+        'TENANT_CHAT_PROJECTOR_INTERVAL_MS',
+        100,
+        60000,
+      ) ?? 1000,
+    TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS:
+      readOptionalInteger(
+        config,
+        'TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS',
+        1,
+        100,
+      ) ?? 5,
   };
 }
 

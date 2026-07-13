@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/routing/schemas/runtime-snapshot-routing.schema.json",
+  "title": "GateLM RuntimeSnapshot Routing v2",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "manual"]
+    },
+    "bootstrapState": {
+      "type": "string",
+      "enum": ["mock_bootstrap", "configured"]
+    },
+    "routingPolicyHash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "routes": {
+      "$ref": "routing-policy.schema.json#/properties/routes"
+    }
+  },
+  "required": ["mode", "bootstrapState", "routingPolicyHash", "routes"]
+}

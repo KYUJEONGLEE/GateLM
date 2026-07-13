@@ -1,4 +1,5 @@
 import type { LiveRequestRow } from "@/lib/gateway/live-requests-types";
+import type { Locale } from "@/lib/i18n/locale";
 
 export type AiInsightMode = "fallback" | "live" | "mock";
 export type AiInsightLevel = "High" | "Low" | "Medium";
@@ -23,12 +24,15 @@ export type AiInsightsRequest = {
 
 export type AiInsightsRecentRequest = {
   cacheStatus?: string;
+  category?: string;
   costUsd?: number;
+  difficulty?: string;
   latencyMs?: number;
-  model?: string;
+  modelRef?: string;
   projectName?: string;
-  provider?: string;
   requestId: string;
+  requestedModel?: string;
+  routingReason?: string;
   safetyAction?: string;
   statusCode?: number;
   timestamp: string;
@@ -63,6 +67,7 @@ const insightPriorities = ["High", "Low", "Medium"] as const;
 
 type MockInsightOptions = {
   generatedAt?: string;
+  locale?: Locale;
   mode?: Extract<AiInsightMode, "fallback" | "mock">;
   notes?: string[];
 };
@@ -70,12 +75,15 @@ type MockInsightOptions = {
 export function toAiInsightsRecentRequests(rows: LiveRequestRow[] | undefined): AiInsightsRecentRequest[] {
   return (rows ?? []).slice(0, 5).map((row) => ({
     cacheStatus: row.cacheStatus,
+    category: row.category,
     costUsd: normalizeNonNegativeNumber(row.costUsd),
+    difficulty: row.difficulty,
     latencyMs: normalizeNonNegativeNumber(row.latencyMs),
-    model: row.model,
+    modelRef: row.modelRef ?? undefined,
     projectName: row.projectName,
-    provider: row.providerLabel,
     requestId: row.requestId,
+    requestedModel: row.requestedModel,
+    routingReason: row.routingReason ?? undefined,
     safetyAction: row.safetyAction,
     statusCode: normalizeNonNegativeNumber(row.statusCode),
     timestamp: row.timestamp,
@@ -114,6 +122,71 @@ export function buildMockAiInsights(
     : summary.cacheHitRate < 0.5
       ? "Medium"
       : "Low";
+
+  if (options.locale === "en") {
+    const englishScopeLabel = request.projectName
+      ? `${request.projectName} project`
+      : "All projects";
+
+    return {
+      generatedAt: options.generatedAt ?? new Date().toISOString(),
+      mode: options.mode ?? "mock",
+      notes: options.notes ?? ["Uses aggregate metrics and recent request summaries only. Raw prompts and responses are excluded."],
+      policyDraft: [
+        `Consider low-cost routing first for simple ${request.projectName ?? "support"} requests.`,
+        "Keep a fallback route available for provider errors.",
+        blockedRecentCount > 0
+          ? "Recent blocked requests were found. Keep the safety policy enabled and review detector summaries."
+          : "Keep request-side safety checks enabled for high-risk input patterns."
+      ],
+      recommendations: [
+        {
+          category: reliabilityRisk === "High" ? "Reliability" : "Routing",
+          priority: reliabilityRisk,
+          text: reliabilityRisk === "High"
+            ? "Review recent failed requests before increasing traffic."
+            : "Success is stable. Keep the current routing rules and review cost opportunities."
+        },
+        {
+          category: costRisk === "High" ? "Cost" : "Routing",
+          priority: costRisk,
+          text: costRisk === "High"
+            ? "Month-to-date cost is rising. Review the highest-cost models by project first."
+            : "Repeated simple requests may be candidates for low-cost routing."
+        },
+        {
+          category: cacheOpportunity === "High" ? "Cache" : "Safety",
+          priority: cacheOpportunity,
+          text: cacheOpportunity === "High"
+            ? "Cache hit rate is low. Separate repeated FAQ-style requests as exact-cache candidates."
+            : "Keep the current safety and cache policies while monitoring recent request distribution."
+        }
+      ],
+      signals: [
+        {
+          label: "Cost risk",
+          level: costRisk,
+          reason: `Month-to-date cost is $${summary.monthToDateSpendUsd.toFixed(2)}.`
+        },
+        {
+          label: "Latency risk",
+          level: latencyRisk,
+          reason: `Average ${Math.round(summary.avgLatencyMs)} ms, p95 ${Math.round(summary.p95LatencyMs ?? 0)} ms.`
+        },
+        {
+          label: "Reliability risk",
+          level: reliabilityRisk,
+          reason: `${(summary.successRate * 100).toFixed(1)}% success rate with ${failedRecentCount} recent 5xx requests.`
+        }
+      ],
+      summary: buildEnglishSummaryText({
+        failedRecentCount,
+        request,
+        scopeLabel: englishScopeLabel,
+        summary
+      })
+    };
+  }
 
   return {
     generatedAt: options.generatedAt ?? new Date().toISOString(),
@@ -173,6 +246,28 @@ export function buildMockAiInsights(
       summary
     })
   };
+}
+
+function buildEnglishSummaryText({
+  failedRecentCount,
+  request,
+  scopeLabel,
+  summary
+}: {
+  failedRecentCount: number;
+  request: AiInsightsRequest;
+  scopeLabel: string;
+  summary: ReturnType<typeof normalizeSummary>;
+}) {
+  if (summary.totalRequests <= 0) {
+    return `${scopeLabel} does not have enough request data yet. Send a few Gateway requests and analyze again.`;
+  }
+
+  if (summary.successRate < 0.95 || failedRecentCount > 0) {
+    return `Analyzed ${formatCompactNumber(summary.totalRequests)} requests for ${scopeLabel}. Review recent failures before increasing traffic.`;
+  }
+
+  return `Analyzed ${formatCompactNumber(summary.totalRequests)} requests for ${scopeLabel}. Traffic was generally stable over ${request.timeRange}; review cost and cache efficiency together.`;
 }
 
 export function isAiInsightResponse(value: unknown): value is AiInsightResponse {

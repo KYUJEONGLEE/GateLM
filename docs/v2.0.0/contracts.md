@@ -1,5 +1,11 @@
 # GateLM v2.0.0 Contracts
 
+> [!IMPORTANT]
+> **문서 상태: Historical behavior baseline.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 계약은 current 문서가 명시적으로 상속한 영역의 baseline compatibility에만 사용하며, 새 기능의 roadmap이나 구현 순서를 정의하지 않는다.
+
+> [!NOTE]
+> **Superseded by active routing contract:** 일반 Gateway routing의 category, difficulty, policy, RuntimeSnapshot routing, decision/response/summary field 의미는 [`../routing/contracts.md`](../routing/contracts.md)가 대체한다. 아래 원문은 historical baseline으로 보존한다.
+
 ## 1. Status
 
 이 문서는 GateLM v2.0.0 계약 기준 문서다.
@@ -214,6 +220,44 @@ Employee Browser
 |---|---|---|
 | Employee UI | response, requestId, simple status | raw token, detector detail, raw prompt/response, policy internals |
 | Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance, opt-in log-safe captured prompt | raw secret, raw prompt/response, provider raw error body |
+
+### 4.0.1 Employee Control Setup Surface
+
+Employee Control PR1은 Control Plane 관리 surface로 둔다. 이는 Gateway RuntimeSnapshot lookup key를 바꾸지 않는다.
+
+원칙:
+
+- CSV로 등록된 직원 레코드는 tenant-scoped Control Plane 관리 데이터다.
+- 직원 `userId` 연결은 초대 수락 이후의 인증 귀속 정보이며, `tenantId/projectId/applicationId` RuntimeSnapshot lookup key에 포함하지 않는다.
+- Project budget이 예산 소유자다. 직원별 월 한도는 Project budget 내부 배정 guard/read model이며 `budgetScopeType=user`를 만들지 않는다.
+- `department`는 직원 표시, 필터, 집계용 메타데이터이며 공식 budget scope가 아니다.
+- 직원별 Provider/Model 허용 값은 문자열/catalog reference로 저장한다. Provider/Model을 DB enum 또는 code enum으로 고정하지 않는다.
+- 직원 초대 토큰, 비밀번호 설정, Employee Chat login/session 연결은 PR2 범위다. PR1은 초대 발송 전 준비 상태만 표현한다.
+- Employee Control API/DB/UI는 raw prompt, raw response, Provider Key, API Key, App Token, Authorization header, actual secret을 저장하거나 노출하지 않는다.
+
+직원별 실행 정책 확장:
+
+- `project_employee_assignments.policy.rateLimit`은 `enabled`, `limit`, `windowSeconds`를 가진다. 이전 policy document에 이 object가 없으면 직원별 rate limit은 비활성화된 것으로 해석한다.
+- 직원별 rate limit key는 tenant, project, employee를 모두 포함해야 한다. 한 직원의 초과가 같은 Application을 사용하는 다른 직원의 bucket을 소진해서는 안 된다.
+- 개인 정책의 actor는 Project API Key를 보유한 고객사 backend가 인증된 사용자로부터 확정한 서버 헤더만 사용한다. Request body metadata의 `endUserId`는 표시/상관관계 용도이며 개인 정책 집행 근거가 아니다.
+- Gateway는 actor를 현재 tenant/project의 active ProjectEmployeeAssignment와 대조한 후 canonical `employeeId`로 요청을 귀속한다. 일치하지 않으면 기존 Application 정책을 유지한다.
+- 직원 월 사용액은 Project 내부에서 canonical `employeeId`로 귀속된 실제 요청 비용을 합산한다. 별도 `budgetScopeType=user`를 만들거나 Project/Application ledger에 같은 비용을 중복 기록하지 않는다.
+- `monthlyBudgetLimitMicroUsd=0`은 직원 quota 미설정이다. 양수 한도를 초과하기 전 경고 상태는 관측만 하고, 초과한 뒤에만 high-quality route를 제한한다.
+- 직원 quota 초과는 요청을 차단하지 않는다. Gateway는 요청을 계속 허용하고 published RuntimeSnapshot의 low-cost route를 선택한다.
+- 직원 rate limit 초과는 해당 직원 요청에만 `terminalStatus=rate_limited`, HTTP `429`를 적용한다.
+- 직원 quota/rate limit 초과에 대한 관리자 승인 요청, 개별 이메일, push 알림은 core 실행 경로에 포함하지 않는다.
+
+관리 API 후보:
+
+```text
+GET  /admin/v1/tenants/:tenantId/employees
+POST /admin/v1/tenants/:tenantId/employees
+POST /admin/v1/tenants/:tenantId/employees/import-csv
+PATCH /admin/v1/tenants/:tenantId/employees/:employeeId
+GET  /admin/v1/projects/:projectId/employees
+POST /admin/v1/projects/:projectId/employees/:employeeId
+DELETE /admin/v1/projects/:projectId/employees/:employeeId
+```
 
 ### 4.1 Chat Conversation And Session Context
 
@@ -979,6 +1023,7 @@ docs/v2.0.0/fixtures/
 최종 schema 파일:
 
 ```text
+chat-conversation.schema.json
 dashboard-overview.schema.json
 gateway-request-context.schema.json
 gateway-stage-outcomes.schema.json
@@ -992,6 +1037,7 @@ safety-domain-outcome.schema.json
 최종 fixture 파일은 같은 basename에 `.fixture.json` suffix를 사용한다.
 
 ```text
+chat-conversation.fixture.json
 dashboard-overview.fixture.json
 gateway-request-context.fixture.json
 gateway-stage-outcomes.fixture.json

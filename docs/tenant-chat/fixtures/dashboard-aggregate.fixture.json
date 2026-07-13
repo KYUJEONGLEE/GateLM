@@ -1,0 +1,80 @@
+{
+  "surface": "tenant_chat",
+  "from": "2026-07-01T00:00:00Z",
+  "to": "2026-08-01T00:00:00Z",
+  "freshness": {
+    "projectedAt": "2026-07-12T12:01:00Z",
+    "lagSeconds": 3,
+    "state": "fresh"
+  },
+  "requests": {
+    "total": 1200,
+    "activeUsers": 100,
+    "succeeded": 1120,
+    "failed": 20,
+    "cancelled": 2,
+    "cacheHits": 180,
+    "cacheMisses": 912,
+    "cacheOff": 0,
+    "cacheEligible": 1092,
+    "cacheHitRate": 0.16483516483516483,
+    "rateLimited": 14,
+    "concurrencyLimited": 4,
+    "safetyBlocked": 8,
+    "quotaBlocked": 4,
+    "budgetBlocked": 0,
+    "fallbackRequests": 32,
+    "fallbackSucceeded": 28,
+    "providerAttempts": 1052,
+    "billableAttempts": 1038
+  },
+  "usage": {
+    "confirmedInputTokens": 880000,
+    "confirmedOutputTokens": 420000,
+    "confirmedTotalTokens": 1300000,
+    "confirmedCostMicroUsd": 9800000,
+    "unconfirmedIncidentCount": 2,
+    "unconfirmedExposureMicroUsd": 18000
+  },
+  "policyStates": {
+    "quota": {
+      "normal": 78,
+      "warning": 14,
+      "economy": 6,
+      "blocked": 2
+    },
+    "budget": {
+      "normal": 1,
+      "warning": 0,
+      "economy": 0,
+      "blocked": 0
+    }
+  },
+  "latency": {
+    "averageMs": 910,
+    "p50Ms": 740,
+    "p95Ms": 2100,
+    "p99Ms": 4200,
+    "providerP95Ms": 1800
+  },
+  "provenance": [
+    {
+      "snapshotVersion": 12,
+      "pricingVersion": 5,
+      "requestCount": 1200,
+      "confirmedCostMicroUsd": 9800000
+    }
+  ],
+  "breakdowns": [
+    {
+      "providerId": "provider_fixture_primary",
+      "modelKey": "model_fixture_standard",
+      "routeTier": "standard",
+      "requestCount": 900,
+      "attemptCount": 930,
+      "billableAttemptCount": 920,
+      "fallbackSuccessCount": 20,
+      "confirmedCostMicroUsd": 7600000
+    }
+  ]
+}

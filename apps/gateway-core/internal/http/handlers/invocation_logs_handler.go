@@ -95,8 +95,8 @@ type projectLogsMetaResponse struct {
 }
 
 type requestLogFilterOptionsResponse struct {
-	Models       []string              `json:"models"`
-	BudgetScopes []budgetScopeResponse `json:"budgetScopes"`
+	RequestedModels []string              `json:"requestedModels"`
+	BudgetScopes    []budgetScopeResponse `json:"budgetScopes"`
 }
 
 type dashboardOverviewDataResponse struct {
@@ -201,36 +201,35 @@ type dashboardFilterResponse struct {
 }
 
 type dashboardTotalsResponse struct {
-	TotalRequests            int64                          `json:"totalRequests"`
-	SuccessfulRequests       int64                          `json:"successfulRequests"`
-	FailedRequests           int64                          `json:"failedRequests"`
-	BlockedRequests          int64                          `json:"blockedRequests"`
-	RateLimitedRequests      int64                          `json:"rateLimitedRequests"`
-	CancelledRequests        int64                          `json:"cancelledRequests"`
-	CacheHitRequests         int64                          `json:"cacheHitRequests"`
-	CacheEligibleRequests    int64                          `json:"cacheEligibleRequests"`
-	CacheHitRate             *float64                       `json:"cacheHitRate"`
-	ExactCacheHitRate        *float64                       `json:"exactCacheHitRate"`
-	FallbackSuccessCount     int64                          `json:"fallbackSuccessCount"`
-	BudgetDowngradedRequests int64                          `json:"budgetDowngradedRequests"`
-	PromptTokens             int64                          `json:"promptTokens"`
-	CompletionTokens         int64                          `json:"completionTokens"`
-	TotalTokens              int64                          `json:"totalTokens"`
-	TotalCostMicroUSD        int64                          `json:"totalCostMicroUsd"`
-	TotalCostUSD             string                         `json:"totalCostUsd"`
-	SavedCostMicroUSD        int64                          `json:"savedCostMicroUsd"`
-	SavedCostUSD             string                         `json:"savedCostUsd"`
-	AverageLatencyMs         *float64                       `json:"averageLatencyMs"`
-	P95LatencyMs             *float64                       `json:"p95LatencyMs"`
-	AverageResponseTimeMs    *float64                       `json:"averageResponseTimeMs"`
-	MaskingActionCounts      map[string]int64               `json:"maskingActionCounts"`
-	RoutingCountByModel      []routingCountByModelResponse  `json:"routingCountByModel"`
-	StatusCounts             map[string]int64               `json:"statusCounts"`
-	BudgetOutcomeCounts      map[string]int64               `json:"budgetOutcomeCounts"`
-	CostByProject            []projectBreakdownResponse     `json:"costByProject"`
-	CostByModel              []costByModelResponse          `json:"costByModel"`
-	CostByBudgetScope        []budgetScopeBreakdownResponse `json:"costByBudgetScope"`
-	BudgetScopeBreakdown     []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
+	TotalRequests         int64                          `json:"totalRequests"`
+	SuccessfulRequests    int64                          `json:"successfulRequests"`
+	FailedRequests        int64                          `json:"failedRequests"`
+	BlockedRequests       int64                          `json:"blockedRequests"`
+	RateLimitedRequests   int64                          `json:"rateLimitedRequests"`
+	CancelledRequests     int64                          `json:"cancelledRequests"`
+	CacheHitRequests      int64                          `json:"cacheHitRequests"`
+	CacheEligibleRequests int64                          `json:"cacheEligibleRequests"`
+	CacheHitRate          *float64                       `json:"cacheHitRate"`
+	ExactCacheHitRate     *float64                       `json:"exactCacheHitRate"`
+	FallbackSuccessCount  int64                          `json:"fallbackSuccessCount"`
+	PromptTokens          int64                          `json:"promptTokens"`
+	CompletionTokens      int64                          `json:"completionTokens"`
+	TotalTokens           int64                          `json:"totalTokens"`
+	TotalCostMicroUSD     int64                          `json:"totalCostMicroUsd"`
+	TotalCostUSD          string                         `json:"totalCostUsd"`
+	SavedCostMicroUSD     int64                          `json:"savedCostMicroUsd"`
+	SavedCostUSD          string                         `json:"savedCostUsd"`
+	AverageLatencyMs      *float64                       `json:"averageLatencyMs"`
+	P95LatencyMs          *float64                       `json:"p95LatencyMs"`
+	AverageResponseTimeMs *float64                       `json:"averageResponseTimeMs"`
+	MaskingActionCounts   map[string]int64               `json:"maskingActionCounts"`
+	RoutingCountByModel   []routingCountByModelResponse  `json:"routingSummaries"`
+	StatusCounts          map[string]int64               `json:"statusCounts"`
+	BudgetOutcomeCounts   map[string]int64               `json:"budgetOutcomeCounts"`
+	CostByProject         []projectBreakdownResponse     `json:"costByProject"`
+	CostByModel           []costByModelResponse          `json:"costByModel"`
+	CostByBudgetScope     []budgetScopeBreakdownResponse `json:"costByBudgetScope"`
+	BudgetScopeBreakdown  []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
 }
 
 type dashboardDataFreshnessResponse struct {
@@ -291,8 +290,8 @@ type applicationBreakdownResponse struct {
 }
 
 type providerModelBreakdownResponse struct {
-	SelectedProvider     string  `json:"selectedProvider"`
-	SelectedModel        string  `json:"selectedModel"`
+	Provider             string  `json:"provider"`
+	Model                string  `json:"model"`
 	RequestCount         int64   `json:"requestCount"`
 	P95ProviderLatencyMs float64 `json:"p95ProviderLatencyMs"`
 }
@@ -303,19 +302,19 @@ type outcomeBreakdownResponse struct {
 }
 
 type routingCountByModelResponse struct {
-	SelectedProvider string `json:"selectedProvider"`
-	SelectedModel    string `json:"selectedModel"`
-	RoutingReason    string `json:"routingReason"`
-	RequestCount     int64  `json:"requestCount"`
+	Category      string `json:"category"`
+	Difficulty    string `json:"difficulty"`
+	RoutingReason string `json:"routingReason"`
+	RequestCount  int64  `json:"requestCount"`
 }
 
 type costByModelResponse struct {
-	SelectedProvider string `json:"selectedProvider"`
-	SelectedModel    string `json:"selectedModel"`
-	RequestCount     int64  `json:"requestCount"`
-	TotalTokens      int64  `json:"totalTokens"`
-	CostMicroUSD     int64  `json:"costMicroUsd"`
-	CostUSD          string `json:"costUsd"`
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	RequestCount int64  `json:"requestCount"`
+	TotalTokens  int64  `json:"totalTokens"`
+	CostMicroUSD int64  `json:"costMicroUsd"`
+	CostUSD      string `json:"costUsd"`
 }
 
 type budgetScopeResponse struct {
@@ -362,11 +361,9 @@ type requestDetailDataResponse struct {
 	TerminalStatus  string                             `json:"terminalStatus"`
 	HTTPStatus      int                                `json:"httpStatus"`
 	DomainOutcomes  domainOutcomesResponse             `json:"domainOutcomes"`
-	Provider        string                             `json:"provider"`
-	Model           string                             `json:"model"`
 	RequestedModel  string                             `json:"requestedModel"`
-	SelectedModel   string                             `json:"selectedModel"`
 	ProviderCalled  bool                               `json:"providerCalled"`
+	ProviderAttempt *providerAttemptResponse           `json:"providerAttempt"`
 	Usage           usageResponse                      `json:"usage"`
 	UsageSummary    usageSummaryResponse               `json:"usageSummary"`
 	Cost            costResponse                       `json:"cost"`
@@ -381,6 +378,14 @@ type requestDetailDataResponse struct {
 	Error           detailErrorResponse                `json:"error"`
 	CreatedAt       time.Time                          `json:"createdAt"`
 	CompletedAt     *time.Time                         `json:"completedAt"`
+}
+
+type providerAttemptResponse struct {
+	ProviderID         string  `json:"providerId"`
+	ModelID            string  `json:"modelId"`
+	Outcome            string  `json:"outcome"`
+	LatencyMs          *int64  `json:"latencyMs"`
+	SanitizedErrorCode *string `json:"sanitizedErrorCode"`
 }
 
 type outcomeResponse struct {
@@ -451,10 +456,9 @@ type cacheResponse struct {
 type routingResponse struct {
 	RoutingReason          *string `json:"routingReason"`
 	RoutingRuleID          *string `json:"routingRuleId"`
-	SelectedProvider       *string `json:"selectedProvider"`
-	SelectedProviderID     *string `json:"selectedProviderId"`
-	SelectedModel          *string `json:"selectedModel"`
-	SelectedModelID        *string `json:"selectedModelId"`
+	Category               *string `json:"category"`
+	Difficulty             *string `json:"difficulty"`
+	ModelRef               *string `json:"modelRef"`
 	RoutingPolicyHash      *string `json:"routingPolicyHash"`
 	RoutingDecisionKeyHash *string `json:"routingDecisionKeyHash"`
 }
@@ -507,10 +511,10 @@ type requestLogListItemResponse struct {
 	ApplicationID    string                 `json:"applicationId"`
 	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
 	UserRef          *string                `json:"userRef,omitempty"`
-	Provider         string                 `json:"provider"`
-	Model            string                 `json:"model"`
 	RequestedModel   string                 `json:"requestedModel"`
-	SelectedModel    string                 `json:"selectedModel"`
+	Category         string                 `json:"category"`
+	Difficulty       string                 `json:"difficulty"`
+	ModelRef         string                 `json:"modelRef"`
 	Status           string                 `json:"status"`
 	TerminalStatus   string                 `json:"terminalStatus"`
 	DomainOutcomes   domainOutcomesResponse `json:"domainOutcomes"`
@@ -702,18 +706,18 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 
 	query := r.URL.Query()
 	return invocationlog.ProjectLogsFilter{
-		TenantID:      firstNonEmptyQueryValue(query.Get("tenantId"), h.TenantID),
-		ProjectID:     r.PathValue("projectId"),
-		From:          from,
-		To:            to,
-		Status:        query.Get("status"),
-		Provider:      query.Get("provider"),
-		Model:         query.Get("model"),
-		CacheStatus:   query.Get("cacheStatus"),
-		ApplicationID: query.Get("applicationId"),
-		BudgetScope:   budgetScopeFromQuery(query),
-		RequestID:     query.Get("requestId"),
-		Limit:         limit,
+		TenantID:       firstNonEmptyQueryValue(query.Get("tenantId"), h.TenantID),
+		ProjectID:      r.PathValue("projectId"),
+		From:           from,
+		To:             to,
+		Status:         query.Get("status"),
+		Provider:       query.Get("provider"),
+		RequestedModel: query.Get("requestedModel"),
+		CacheStatus:    query.Get("cacheStatus"),
+		ApplicationID:  query.Get("applicationId"),
+		BudgetScope:    budgetScopeFromQuery(query),
+		RequestID:      query.Get("requestId"),
+		Limit:          limit,
 	}, nil
 }
 
@@ -726,8 +730,8 @@ func (h ProjectLogsHandler) projectLogsMeta(r *http.Request, filter invocationlo
 	if !ok {
 		return &projectLogsMetaResponse{
 			FilterOptions: requestLogFilterOptionsResponse{
-				Models:       []string{},
-				BudgetScopes: []budgetScopeResponse{},
+				RequestedModels: []string{},
+				BudgetScopes:    []budgetScopeResponse{},
 			},
 		}, nil
 	}
@@ -797,36 +801,35 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 			ResolvedBy:      stringPointerOrNil(filter.BudgetScope.ResolvedBy),
 		},
 		Totals: dashboardTotalsResponse{
-			TotalRequests:            overview.TotalRequests,
-			SuccessfulRequests:       overview.SuccessfulRequests,
-			FailedRequests:           overview.FailedRequests,
-			BlockedRequests:          overview.BlockedRequests,
-			RateLimitedRequests:      overview.RateLimitedRequests,
-			CancelledRequests:        overview.CancelledRequests,
-			CacheHitRequests:         overview.CacheHitRequests,
-			CacheEligibleRequests:    overview.CacheEligibleRequests,
-			CacheHitRate:             overview.CacheHitRate,
-			ExactCacheHitRate:        overview.CacheHitRate,
-			FallbackSuccessCount:     overview.FallbackSuccessCount,
-			BudgetDowngradedRequests: overview.BudgetDowngradedRequests,
-			PromptTokens:             overview.PromptTokens,
-			CompletionTokens:         overview.CompletionTokens,
-			TotalTokens:              overview.TotalTokens,
-			TotalCostMicroUSD:        overview.TotalCostMicroUSD,
-			TotalCostUSD:             overview.TotalCostUSD,
-			SavedCostMicroUSD:        overview.SavedCostMicroUSD,
-			SavedCostUSD:             overview.SavedCostUSD,
-			AverageLatencyMs:         overview.AverageLatencyMs,
-			P95LatencyMs:             overview.P95LatencyMs,
-			AverageResponseTimeMs:    overview.AverageResponseTimeMs,
-			MaskingActionCounts:      copyInt64Map(overview.MaskingActionCounts),
-			RoutingCountByModel:      routingCountByModelResponses(overview.RoutingCountByModel),
-			StatusCounts:             copyInt64Map(overview.StatusCounts),
-			BudgetOutcomeCounts:      copyInt64Map(overview.BudgetOutcomeCounts),
-			CostByProject:            projectBreakdownResponses(overview.ProjectBreakdown),
-			CostByModel:              costByModelResponses(overview.CostByModel),
-			CostByBudgetScope:        budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
-			BudgetScopeBreakdown:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+			TotalRequests:         overview.TotalRequests,
+			SuccessfulRequests:    overview.SuccessfulRequests,
+			FailedRequests:        overview.FailedRequests,
+			BlockedRequests:       overview.BlockedRequests,
+			RateLimitedRequests:   overview.RateLimitedRequests,
+			CancelledRequests:     overview.CancelledRequests,
+			CacheHitRequests:      overview.CacheHitRequests,
+			CacheEligibleRequests: overview.CacheEligibleRequests,
+			CacheHitRate:          overview.CacheHitRate,
+			ExactCacheHitRate:     overview.CacheHitRate,
+			FallbackSuccessCount:  overview.FallbackSuccessCount,
+			PromptTokens:          overview.PromptTokens,
+			CompletionTokens:      overview.CompletionTokens,
+			TotalTokens:           overview.TotalTokens,
+			TotalCostMicroUSD:     overview.TotalCostMicroUSD,
+			TotalCostUSD:          overview.TotalCostUSD,
+			SavedCostMicroUSD:     overview.SavedCostMicroUSD,
+			SavedCostUSD:          overview.SavedCostUSD,
+			AverageLatencyMs:      overview.AverageLatencyMs,
+			P95LatencyMs:          overview.P95LatencyMs,
+			AverageResponseTimeMs: overview.AverageResponseTimeMs,
+			MaskingActionCounts:   copyInt64Map(overview.MaskingActionCounts),
+			RoutingCountByModel:   routingCountByModelResponses(overview.RoutingCountByModel),
+			StatusCounts:          copyInt64Map(overview.StatusCounts),
+			BudgetOutcomeCounts:   copyInt64Map(overview.BudgetOutcomeCounts),
+			CostByProject:         projectBreakdownResponses(overview.ProjectBreakdown),
+			CostByModel:           costByModelResponses(overview.CostByModel),
+			CostByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+			BudgetScopeBreakdown:  budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 		},
 		DataFreshness: dashboardDataFreshnessResponse{
 			Source:           overview.DataFreshness.Source,
@@ -885,11 +888,9 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		TerminalStatus:  detail.TerminalStatus,
 		HTTPStatus:      detail.HTTPStatus,
 		DomainOutcomes:  domainOutcomesResponseFromDomain(detail.DomainOutcomes),
-		Provider:        detail.Provider,
-		Model:           detail.Model,
 		RequestedModel:  detail.RequestedModel,
-		SelectedModel:   detail.SelectedModel,
 		ProviderCalled:  detail.ProviderCalled,
+		ProviderAttempt: providerAttemptResponseFromDomain(detail.ProviderAttempt),
 		Usage: usageResponse{
 			PromptTokens:     detail.Usage.PromptTokens,
 			CompletionTokens: detail.Usage.CompletionTokens,
@@ -928,10 +929,9 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		Routing: routingResponse{
 			RoutingReason:          stringPointerOrNil(detail.Routing.RoutingReason),
 			RoutingRuleID:          stringPointerOrNil(detail.Routing.RoutingRuleID),
-			SelectedProvider:       stringPointerOrNil(detail.Routing.SelectedProvider),
-			SelectedProviderID:     stringPointerOrNil(detail.Routing.SelectedProviderID),
-			SelectedModel:          stringPointerOrNil(detail.Routing.SelectedModel),
-			SelectedModelID:        stringPointerOrNil(detail.Routing.SelectedModelID),
+			Category:               stringPointerOrNil(detail.Routing.Category),
+			Difficulty:             stringPointerOrNil(detail.Routing.Difficulty),
+			ModelRef:               stringPointerOrNil(detail.Routing.ModelRef),
 			RoutingPolicyHash:      stringPointerOrNil(detail.Routing.RoutingPolicyHash),
 			RoutingDecisionKeyHash: stringPointerOrNil(detail.Routing.RoutingDecisionKeyHash),
 		},
@@ -960,6 +960,19 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		},
 		CreatedAt:   detail.CreatedAt,
 		CompletedAt: detail.CompletedAt,
+	}
+}
+
+func providerAttemptResponseFromDomain(attempt *invocationlog.ProviderAttemptFields) *providerAttemptResponse {
+	if attempt == nil {
+		return nil
+	}
+	return &providerAttemptResponse{
+		ProviderID:         attempt.ProviderID,
+		ModelID:            attempt.ModelID,
+		Outcome:            attempt.Outcome,
+		LatencyMs:          attempt.LatencyMs,
+		SanitizedErrorCode: attempt.SanitizedErrorCode,
 	}
 }
 
@@ -1047,10 +1060,10 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			ApplicationID:    item.ApplicationID,
 			BudgetScope:      budgetScopeResponseFromScope(item.BudgetScope, item.ApplicationID),
 			UserRef:          stringPointerOrNil(item.UserRef),
-			Provider:         item.Provider,
-			Model:            item.Model,
 			RequestedModel:   item.RequestedModel,
-			SelectedModel:    item.SelectedModel,
+			Category:         item.Category,
+			Difficulty:       item.Difficulty,
+			ModelRef:         item.ModelRef,
 			Status:           item.Status,
 			TerminalStatus:   item.TerminalStatus,
 			DomainOutcomes:   domainOutcomesResponseFromDomain(item.DomainOutcomes),
@@ -1072,7 +1085,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 }
 
 func requestLogFilterOptionsResponseFromDomain(options invocationlog.RequestLogFilterOptions) requestLogFilterOptionsResponse {
-	models := append(make([]string, 0, len(options.Models)), options.Models...)
+	requestedModels := append(make([]string, 0, len(options.RequestedModels)), options.RequestedModels...)
 	budgetScopes := make([]budgetScopeResponse, 0, len(options.BudgetScopes))
 	for _, scope := range options.BudgetScopes {
 		response := budgetScopeResponseFromScope(scope, "")
@@ -1082,8 +1095,8 @@ func requestLogFilterOptionsResponseFromDomain(options invocationlog.RequestLogF
 		budgetScopes = append(budgetScopes, response)
 	}
 	return requestLogFilterOptionsResponse{
-		Models:       models,
-		BudgetScopes: budgetScopes,
+		RequestedModels: requestedModels,
+		BudgetScopes:    budgetScopes,
 	}
 }
 
@@ -1184,8 +1197,8 @@ func providerModelBreakdownResponses(items []invocationlog.CostByModel, p95Provi
 	responses := make([]providerModelBreakdownResponse, 0, len(items))
 	for _, item := range items {
 		responses = append(responses, providerModelBreakdownResponse{
-			SelectedProvider:     item.SelectedProvider,
-			SelectedModel:        item.SelectedModel,
+			Provider:             item.Provider,
+			Model:                item.Model,
 			RequestCount:         item.RequestCount,
 			P95ProviderLatencyMs: p95,
 		})
@@ -1249,10 +1262,10 @@ func routingCountByModelResponses(items []invocationlog.RoutingCountByModel) []r
 	responses := make([]routingCountByModelResponse, 0, len(items))
 	for _, item := range items {
 		responses = append(responses, routingCountByModelResponse{
-			SelectedProvider: item.SelectedProvider,
-			SelectedModel:    item.SelectedModel,
-			RoutingReason:    item.RoutingReason,
-			RequestCount:     item.RequestCount,
+			Category:      item.Category,
+			Difficulty:    item.Difficulty,
+			RoutingReason: item.RoutingReason,
+			RequestCount:  item.RequestCount,
 		})
 	}
 	return responses
@@ -1262,12 +1275,12 @@ func costByModelResponses(items []invocationlog.CostByModel) []costByModelRespon
 	responses := make([]costByModelResponse, 0, len(items))
 	for _, item := range items {
 		responses = append(responses, costByModelResponse{
-			SelectedProvider: item.SelectedProvider,
-			SelectedModel:    item.SelectedModel,
-			RequestCount:     item.RequestCount,
-			TotalTokens:      item.TotalTokens,
-			CostMicroUSD:     item.CostMicroUSD,
-			CostUSD:          item.CostUSD,
+			Provider:     item.Provider,
+			Model:        item.Model,
+			RequestCount: item.RequestCount,
+			TotalTokens:  item.TotalTokens,
+			CostMicroUSD: item.CostMicroUSD,
+			CostUSD:      item.CostUSD,
 		})
 	}
 	return responses

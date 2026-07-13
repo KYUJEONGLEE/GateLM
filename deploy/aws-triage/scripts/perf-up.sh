@@ -91,9 +91,9 @@ perf_wait_for_service control-plane-api
 perf_wait_for_service gateway-core
 perf_wait_for_http \
   "Gateway readiness" \
-  "http://127.0.0.1:${AWS_TRIAGE_GATEWAY_PORT}/readyz"
+  "$(perf_gateway_host_base_url)/readyz"
 
 bash "${SCRIPT_DIR}/perf-preflight.sh"
 
-perf_log "Performance environment is ready at http://127.0.0.1:${AWS_TRIAGE_GATEWAY_PORT}."
+perf_log "Performance environment is ready at $(perf_gateway_host_base_url)."
 perf_log "The normal AWS project, database, and Provider credentials were not modified."

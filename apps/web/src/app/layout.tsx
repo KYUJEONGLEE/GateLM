@@ -7,12 +7,15 @@ export const metadata: Metadata = {
   description: "GateLM Web Console"
 };
 
-const themeInitScript = `
+const preferenceInitScript = `
 try {
   var theme = window.localStorage.getItem("gatelm_console_theme");
+  var presentationMode = window.localStorage.getItem("gatelm_console_presentation_mode");
   document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.presentationMode = presentationMode === "true" ? "true" : "false";
 } catch (error) {
   document.documentElement.dataset.theme = "light";
+  document.documentElement.dataset.presentationMode = "false";
 }
 `;
 
@@ -25,8 +28,8 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} className="font-sans" suppressHydrationWarning>
-      <body>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      <body suppressHydrationWarning>
+        <script dangerouslySetInnerHTML={{ __html: preferenceInitScript }} />
         {children}
       </body>
     </html>

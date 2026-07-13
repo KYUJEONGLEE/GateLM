@@ -27,8 +27,8 @@ type SemanticCacheBoundary struct {
 	ProjectID                  string `json:"projectId"`
 	ApplicationID              string `json:"applicationId"`
 	PromptCategory             string `json:"promptCategory"`
-	SelectedProviderID         string `json:"selectedProviderId"`
-	SelectedModelID            string `json:"selectedModelId"`
+	ProviderID                 string `json:"providerId"`
+	ModelID                    string `json:"modelId"`
 	ProviderCatalogContentHash string `json:"providerCatalogContentHash"`
 	RoutingPolicyHash          string `json:"routingPolicyHash"`
 	RoutingDecisionKeyHash     string `json:"routingDecisionKeyHash"`
@@ -109,8 +109,8 @@ func (b SemanticCacheBoundary) Normalize() SemanticCacheBoundary {
 		ProjectID:                  strings.TrimSpace(b.ProjectID),
 		ApplicationID:              strings.TrimSpace(b.ApplicationID),
 		PromptCategory:             strings.TrimSpace(b.PromptCategory),
-		SelectedProviderID:         strings.TrimSpace(b.SelectedProviderID),
-		SelectedModelID:            strings.TrimSpace(b.SelectedModelID),
+		ProviderID:                 strings.TrimSpace(b.ProviderID),
+		ModelID:                    strings.TrimSpace(b.ModelID),
 		ProviderCatalogContentHash: strings.TrimSpace(b.ProviderCatalogContentHash),
 		RoutingPolicyHash:          strings.TrimSpace(b.RoutingPolicyHash),
 		RoutingDecisionKeyHash:     strings.TrimSpace(b.RoutingDecisionKeyHash),
@@ -128,8 +128,8 @@ func (b SemanticCacheBoundary) Validate() error {
 		b.ProjectID == "" ||
 		b.ApplicationID == "" ||
 		b.PromptCategory == "" ||
-		b.SelectedProviderID == "" ||
-		b.SelectedModelID == "" ||
+		b.ProviderID == "" ||
+		b.ModelID == "" ||
 		b.ProviderCatalogContentHash == "" ||
 		b.RoutingPolicyHash == "" ||
 		b.RoutingDecisionKeyHash == "" ||

@@ -31,8 +31,6 @@ const DEFAULTS = {
 
 const CATEGORY_CONFIG = {
   code: {
-    expectedTier: "high_quality",
-    expectedReason: "category_code_high_quality",
     primary: [
       "Go handler에서 timeout이 날 때 retry 로직을 어떻게 고쳐야 할지",
       "PowerShell 스크립트가 특정 입력에서 깨질 때 원인을 추적하는 방법",
@@ -46,8 +44,6 @@ const CATEGORY_CONFIG = {
     ],
   },
   reasoning: {
-    expectedTier: "high_quality",
-    expectedReason: "category_reasoning_high_quality",
     primary: [
       "A안은 빠르고 B안은 안전할 때 어떤 선택이 덜 위험한지",
       "단기 비용과 장기 유지보수 중 무엇을 우선해야 하는지",
@@ -61,8 +57,6 @@ const CATEGORY_CONFIG = {
     ],
   },
   translation: {
-    expectedTier: "balanced",
-    expectedReason: "category_translation_balanced",
     primary: [
       "한국어 공지문을 해외 협력사가 오해하지 않게 자연스러운 영어 표현으로 바꾸는 일",
       "짧은 영문 릴리즈 노트를 제품 톤에 맞게 현지화하는 일",
@@ -76,8 +70,6 @@ const CATEGORY_CONFIG = {
     ],
   },
   summarization: {
-    expectedTier: "balanced",
-    expectedReason: "category_summarization_balanced",
     primary: [
       "긴 회의록에서 중요한 결정만 남겨 한 화면 분량으로 정리하는 일",
       "장문의 장애 회고 문서를 바쁜 사람이 읽을 수 있게 핵심만 압축하는 일",
@@ -90,39 +82,7 @@ const CATEGORY_CONFIG = {
       "환불 문의가 예시로 있어도 고객 응대 작성은 아니다",
     ],
   },
-  extraction_json: {
-    expectedTier: "balanced",
-    expectedReason: "category_extraction_json_balanced",
-    primary: [
-      "문장에서 필요한 정보를 찾아 필드와 값으로 나눠 JSON에 넣기 쉬운 형태로 만드는 일",
-      "고객 요청을 key/value 형태로 분리해 시스템 입력값처럼 정리하는 일",
-      "긴 안내문에서 입력 칸에 들어갈 값을 따로 뽑아 구조화하는 일",
-      "계약 문구에서 속성/값을 분리해 기계가 읽기 쉬운 객체로 만드는 일",
-    ],
-    distractors: [
-      "요약이라는 단어가 있어도 최종 목적은 필드 추출이다",
-      "영문 텍스트가 있어도 번역보다 구조화가 우선이다",
-      "결제 정보 예시가 있어도 환불 응대 요청은 아니다",
-    ],
-  },
-  support_refund: {
-    expectedTier: "low_cost",
-    expectedReason: "category_support_refund_low_cost",
-    primary: [
-      "고객이 결제 금액이 이상하다고 해서 차분한 첫 응대 문구를 만드는 일",
-      "구독을 멈추고 환불 가능 여부를 묻는 고객에게 안내하는 일",
-      "구매 후 취소와 영수증 재발급을 문의한 고객에게 답변하는 일",
-      "프로모션 환급이 안 됐다는 결제 관련 불만에 응대하는 일",
-    ],
-    distractors: [
-      "정책 판단이 아니라 고객지원 답변 작성이다",
-      "영어로 바꾸는 요청이 아니라 한국어 응대 문구가 목적이다",
-      "로그라는 단어가 있어도 개발 로그 분석 요청은 아니다",
-    ],
-  },
   general: {
-    expectedTier: "low_cost",
-    expectedReason: "short_prompt_low_cost",
     primary: [
       "GateLM 사용 방법을 처음 보는 사람에게 짧게 안내하는 일",
       "관리 콘솔 메뉴 위치를 간단히 설명하는 일",
@@ -135,30 +95,6 @@ const CATEGORY_CONFIG = {
       "구조화된 JSON 결과를 요구하지 않는다",
     ],
   },
-};
-
-const ROUTING_REASON_TO_CATEGORY = {
-  category_code_high_quality: "code",
-  category_reasoning_high_quality: "reasoning",
-  category_translation_balanced: "translation",
-  category_summarization_balanced: "summarization",
-  category_extraction_json_balanced: "extraction_json",
-  category_support_refund_low_cost: "support_refund",
-  short_prompt_low_cost: "general",
-  default_balanced: "general",
-  provider_health_fallback: "provider_health_fallback",
-  pinned: "pinned",
-};
-
-const ROUTING_REASON_TO_TIER = {
-  category_code_high_quality: "high_quality",
-  category_reasoning_high_quality: "high_quality",
-  category_translation_balanced: "balanced",
-  category_summarization_balanced: "balanced",
-  category_extraction_json_balanced: "balanced",
-  category_support_refund_low_cost: "low_cost",
-  short_prompt_low_cost: "low_cost",
-  default_balanced: "balanced",
 };
 
 const options = parseArgs(process.argv.slice(2));
@@ -363,8 +299,6 @@ function generateBlindSamples(count, runId) {
       index: i,
       sampleId: `blind_${String(i + 1).padStart(5, "0")}`,
       expectedCategory: category,
-      expectedTier: config.expectedTier,
-      expectedReason: config.expectedReason,
       prompt,
       promptHash: sha256(prompt),
     });
@@ -409,23 +343,16 @@ async function invokeGateway(opts, sample, requestPrefix) {
   const completed = performance.now();
   const gateLM = parsed?.gate_lm ?? {};
   const routingReason = String(gateLM.routingReason ?? "");
-  const actualCategory = ROUTING_REASON_TO_CATEGORY[routingReason] ?? "unknown";
-  const actualTier = ROUTING_REASON_TO_TIER[routingReason] ?? tierFromModel(String(gateLM.selectedModel ?? ""));
   return {
     sampleId: sample.sampleId,
     requestId,
     expectedCategory: sample.expectedCategory,
-    actualCategory,
-    expectedTier: sample.expectedTier,
-    actualTier,
-    expectedReason: sample.expectedReason,
     routingReason,
     httpStatus: response?.status ?? 0,
     ok: Boolean(response?.ok),
     durationMs: round(completed - started, 3),
     gatewayLatencyMs: Number.isFinite(Number(gateLM.latencyMs)) ? Number(gateLM.latencyMs) : null,
-    selectedProvider: String(gateLM.selectedProvider ?? ""),
-    selectedModel: String(gateLM.selectedModel ?? ""),
+    executionMode: String(gateLM.executionMode ?? ""),
     cacheStatus: String(gateLM.cacheStatus ?? response?.headers.get("x-gatelm-cache-status") ?? ""),
     maskingAction: String(gateLM.maskingAction ?? response?.headers.get("x-gatelm-masking-action") ?? ""),
     promptHash: sample.promptHash,
@@ -497,19 +424,30 @@ status_counts as (
   select coalesce(json_object_agg(status, count), '{}'::json) as value
   from (select status, count(*)::int as count from matched group by status) s
 ),
-model_counts as (
-  select coalesce(json_object_agg(selected_model, count), '{}'::json) as value
-  from (select coalesce(nullif(selected_model, ''), 'unknown') as selected_model, count(*)::int as count from matched group by 1) s
-),
 reason_counts as (
   select coalesce(json_object_agg(routing_reason, count), '{}'::json) as value
   from (select coalesce(nullif(routing_reason, ''), 'unknown') as routing_reason, count(*)::int as count from matched group by 1) s
+),
+routing_observations as (
+  select coalesce(
+    json_object_agg(
+      request_id,
+      json_build_object(
+        'category', coalesce(nullif(metadata ->> 'promptCategory', ''), 'general'),
+        'difficulty', coalesce(nullif(metadata ->> 'promptDifficulty', ''), 'simple'),
+        'providerAttemptProviderId', coalesce(nullif(metadata #>> '{providerAttempt,providerId}', ''), nullif(provider, '')),
+        'providerAttemptModelId', coalesce(nullif(metadata #>> '{providerAttempt,modelId}', ''), nullif(model, ''))
+      )
+    ),
+    '{}'::json
+  ) as value
+  from matched
 )
 select json_build_object(
   'total', (select count(*)::int from matched),
   'success', (select count(*)::int from matched where status = 'success'),
   'http200', (select count(*)::int from matched where http_status = 200),
-  'selectedModelPresent', (select count(*)::int from matched where coalesce(selected_model, '') <> ''),
+  'providerAttemptPresent', (select count(*)::int from matched where coalesce(metadata #>> '{providerAttempt,modelId}', model, '') <> ''),
   'routingReasonPresent', (select count(*)::int from matched where coalesce(routing_reason, '') <> ''),
   'loggingWritten', (select count(*)::int from matched where metadata #>> '{domainOutcomes,logging,requestLogWritten}' = 'true'),
   'loggingOutcomeWritten', (select count(*)::int from matched where metadata #>> '{domainOutcomes,logging,outcome}' = 'written'),
@@ -518,8 +456,8 @@ select json_build_object(
   'minCreatedAt', (select min(created_at) from matched),
   'maxCreatedAt', (select max(created_at) from matched),
   'statusCounts', (select value from status_counts),
-  'selectedModelCounts', (select value from model_counts),
-  'routingReasonCounts', (select value from reason_counts)
+  'routingReasonCounts', (select value from reason_counts),
+  'routingObservationsByRequestId', (select value from routing_observations)
 )::text;
 `;
   const { stdout } = await execFileAsync("docker", [
@@ -533,7 +471,7 @@ select json_build_object(
     "-tA",
     "-c",
     sql,
-  ]);
+  ], { maxBuffer: 10 * 1024 * 1024 });
   return JSON.parse(stdout.trim());
 }
 
@@ -571,18 +509,27 @@ async function readAsyncLogMetrics(gatewayBaseUrl) {
 
 function buildReport(input) {
   const { opts, runId, requestPrefix, startedAt, completedAt, samples, results, logSummary, metricBefore, metricAfter, metricDelta } = input;
-  const successfulResponses = results.filter((result) => result.ok);
-  const categoryCorrect = results.filter((result) => result.expectedCategory === result.actualCategory).length;
-  const tierCorrect = results.filter((result) => result.expectedTier === result.actualTier).length;
-  const durations = results.map((result) => result.durationMs).filter((value) => Number.isFinite(value));
-  const gatewayDurations = results
+  const { routingObservationsByRequestId = {}, ...reportLogSummary } = logSummary;
+  const categorizedResults = results.map((result) => {
+    const observation = routingObservationsByRequestId[result.requestId] ?? {};
+    return {
+      ...result,
+      actualCategory: String(observation.category ?? "general"),
+      actualDifficulty: String(observation.difficulty ?? "simple"),
+      providerAttemptProviderId: String(observation.providerAttemptProviderId ?? ""),
+      providerAttemptModelId: String(observation.providerAttemptModelId ?? ""),
+    };
+  });
+  const successfulResponses = categorizedResults.filter((result) => result.ok);
+  const categoryCorrect = categorizedResults.filter((result) => result.expectedCategory === result.actualCategory).length;
+  const durations = categorizedResults.map((result) => result.durationMs).filter((value) => Number.isFinite(value));
+  const gatewayDurations = categorizedResults
     .map((result) => result.gatewayLatencyMs)
     .filter((value) => Number.isFinite(value));
-  const failures = results.filter(
+  const failures = categorizedResults.filter(
     (result) =>
       !result.ok ||
-      result.expectedCategory !== result.actualCategory ||
-      result.expectedTier !== result.actualTier,
+      result.expectedCategory !== result.actualCategory,
   );
   const assertions = [
     {
@@ -619,7 +566,7 @@ function buildReport(input) {
     },
   ];
   return {
-    schemaVersion: "gatelm.routing-async-log-10k-e2e.v1",
+    schemaVersion: "gatelm.routing-async-log-10k-e2e.v2",
     generatedAt: new Date().toISOString(),
     runId,
     requestPrefix,
@@ -649,31 +596,30 @@ function buildReport(input) {
       categoryAccuracy: round(categoryCorrect / samples.length, 6),
       categoryCorrect,
       categoryIncorrect: samples.length - categoryCorrect,
-      tierAccuracy: round(tierCorrect / samples.length, 6),
-      tierCorrect,
-      tierIncorrect: samples.length - tierCorrect,
       expectedCategoryDistribution: distribution(samples, "expectedCategory"),
-      actualCategoryDistribution: distribution(results, "actualCategory"),
-      expectedTierDistribution: distribution(samples, "expectedTier"),
-      actualTierDistribution: distribution(results, "actualTier"),
-      routingReasonDistribution: distribution(results, "routingReason"),
-      selectedModelDistribution: distribution(results, "selectedModel"),
+      actualCategoryDistribution: distribution(categorizedResults, "actualCategory"),
+      difficultyDistribution: distribution(categorizedResults, "actualDifficulty"),
+      routingReasonDistribution: distribution(categorizedResults, "routingReason"),
+      executionModeDistribution: distribution(categorizedResults, "executionMode"),
       firstFailures: failures.slice(0, 30).map((failure) => ({
         sampleId: failure.sampleId,
         requestId: failure.requestId,
         expectedCategory: failure.expectedCategory,
         actualCategory: failure.actualCategory,
-        expectedTier: failure.expectedTier,
-        actualTier: failure.actualTier,
+        actualDifficulty: failure.actualDifficulty,
         routingReason: failure.routingReason,
-        selectedModel: failure.selectedModel,
+        executionMode: failure.executionMode,
         httpStatus: failure.httpStatus,
         safeErrorCode: failure.safeErrorCode,
         promptHash: failure.promptHash,
       })),
     },
+    providerAttempts: {
+      providerIdDistribution: distribution(categorizedResults, "providerAttemptProviderId"),
+      modelIdDistribution: distribution(categorizedResults, "providerAttemptModelId"),
+    },
     asyncLogging: {
-      logSummary,
+      logSummary: reportLogSummary,
       metricBefore,
       metricAfter,
       metricDelta,
@@ -727,8 +673,7 @@ function markdownReport(report, jsonPath) {
 |---|---:|
 | HTTP 성공 수 | ${report.assertions.find((item) => item.name === "all_http_requests_succeeded").actual} |
 | DB 로그 저장 수 | ${report.asyncLogging.logSummary.total} |
-| 라우팅 Category 정확도 | ${(report.routing.categoryAccuracy * 100).toFixed(2)}% |
-| 라우팅 Tier 정확도 | ${(report.routing.tierAccuracy * 100).toFixed(2)}% |
+| Category 정확도 | ${(report.routing.categoryAccuracy * 100).toFixed(2)}% |
 | 평균 요청 처리 시간(client) | ${report.timing.avgClientRequestMs}ms |
 | P95 요청 처리 시간(client) | ${report.timing.p95ClientRequestMs}ms |
 | 평균 Gateway latency | ${report.timing.avgGatewayLatencyMs}ms |
@@ -751,6 +696,8 @@ ${categoryRows}
 
 ## Routing Reason 분포
 
+\`routingReason\`, \`difficulty\`, \`executionMode\`는 routing 관찰값이다. 실제 provider/model은 별도 \`providerAttempts\` 실행 관찰값으로만 기록한다.
+
 | Routing Reason | 요청 수 |
 |---|---:|
 ${reasonRows}
@@ -762,7 +709,7 @@ ${reasonRows}
 | DB log total | ${report.asyncLogging.logSummary.total} |
 | DB success | ${report.asyncLogging.logSummary.success} |
 | DB http 200 | ${report.asyncLogging.logSummary.http200} |
-| selectedModel present | ${report.asyncLogging.logSummary.selectedModelPresent} |
+| providerAttempt present | ${report.asyncLogging.logSummary.providerAttemptPresent} |
 | routingReason present | ${report.asyncLogging.logSummary.routingReasonPresent} |
 | requestLogWritten=true | ${report.asyncLogging.logSummary.loggingWritten} |
 | logging.outcome=written | ${report.asyncLogging.logSummary.loggingOutcomeWritten} |
@@ -783,7 +730,6 @@ function printSummary(report) {
   console.log("RESULT");
   console.log("======");
   console.log(`category accuracy: ${(report.routing.categoryAccuracy * 100).toFixed(2)}%`);
-  console.log(`tier accuracy:     ${(report.routing.tierAccuracy * 100).toFixed(2)}%`);
   console.log(`db logs:           ${report.asyncLogging.logSummary.total}/${report.input.sampleCount}`);
   console.log(`avg client ms:     ${report.timing.avgClientRequestMs}`);
   console.log(`p95 client ms:     ${report.timing.p95ClientRequestMs}`);
@@ -878,19 +824,6 @@ async function fetchText(url) {
     throw new Error(`${url} failed with HTTP ${response.status}`);
   }
   return response.text();
-}
-
-function tierFromModel(model) {
-  if (model.includes("smart") || model.includes("high")) {
-    return "high_quality";
-  }
-  if (model.includes("fast") || model.includes("low")) {
-    return "low_cost";
-  }
-  if (model.trim() !== "") {
-    return "balanced";
-  }
-  return "unknown";
 }
 
 function distribution(items, key) {

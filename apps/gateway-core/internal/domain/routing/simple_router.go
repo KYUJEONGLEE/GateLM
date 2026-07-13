@@ -2,466 +2,294 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"strings"
-	"unicode/utf8"
 )
 
 const (
-	DefaultPolicyHash          = "route_p0_v1"
-	DefaultShortPromptMaxChars = 300
+	DefaultPolicyHash = "sha256:919261eed2c088bafd316ea0e7f6f8746c332f3ef7766cc5fa97dfe269aec91c"
+	MockBootstrapRef  = "mock-balanced"
 
-	ReasonShortPromptLowCost         = "short_prompt_low_cost"
-	ReasonDefaultBalanced            = "default_balanced"
-	ReasonPinned                     = "pinned"
-	ReasonCodeHighQuality            = "category_code_high_quality"
-	ReasonTranslationBalanced        = "category_translation_balanced"
-	ReasonSummarizationBalanced      = "category_summarization_balanced"
-	ReasonExtractionJSONBalanced     = "category_extraction_json_balanced"
-	ReasonSupportRefundLowCost       = "category_support_refund_low_cost"
-	ReasonReasoningHighQuality       = "category_reasoning_high_quality"
-	ReasonAmbiguousBalanced          = "category_ambiguous_balanced"
-	ReasonProviderHealthFallback     = "provider_health_fallback"
-	ReasonBudgetHighQualityDowngrade = "budget_downgraded_from_high_quality"
+	BootstrapStateMock       = "mock_bootstrap"
+	BootstrapStateConfigured = "configured"
 
-	RouteCandidateAvailable   = "available"
-	RouteCandidateDegraded    = "degraded"
-	RouteCandidateUnavailable = "unavailable"
+	ReasonMatrixRoute           = "category_difficulty_matrix"
+	ReasonManualModelRef        = "manual_model_ref"
+	ReasonOrderedHealthFallback = "ordered_model_ref_fallback"
+	RouteCandidateAvailable     = "available"
+	RouteCandidateDegraded      = "degraded"
+	RouteCandidateUnavailable   = "unavailable"
 )
 
+var (
+	ErrAutoRoutingDisabled = errors.New("auto_routing_disabled")
+	ErrNoRouteConfigured   = errors.New("routing route has no model references")
+)
+
+type RouteCell struct {
+	ModelRefs []string `json:"modelRefs"`
+}
+
+type DifficultyRoutes struct {
+	Simple  RouteCell `json:"simple"`
+	Complex RouteCell `json:"complex"`
+}
+
+type RoutingMatrix struct {
+	General       DifficultyRoutes `json:"general"`
+	Code          DifficultyRoutes `json:"code"`
+	Translation   DifficultyRoutes `json:"translation"`
+	Summarization DifficultyRoutes `json:"summarization"`
+	Reasoning     DifficultyRoutes `json:"reasoning"`
+}
+
 type SimpleRouterConfig struct {
-	DefaultProvider     string
-	DefaultModel        string
-	LowCostProvider     string
-	LowCostModel        string
-	HighQualityProvider string
-	HighQualityModel    string
-	PolicyHash          string
-	ShortPromptMaxChars int
-	CandidateStatuses   []RouteCandidateStatus
+	Mode              string                 `json:"mode"`
+	BootstrapState    string                 `json:"bootstrapState,omitempty"`
+	Routes            RoutingMatrix          `json:"routes"`
+	PolicyHash        string                 `json:"routingPolicyHash"`
+	CandidateStatuses []RouteCandidateStatus `json:"-"`
 }
 
 type RouteCandidateStatus struct {
-	Provider         string
-	Model            string
-	Tier             string
-	Status           string
-	FallbackPriority int
-	LatencyP95Ms     int
+	ModelRef string
+	Status   string
 }
 
 type SimpleRouter struct {
-	defaultProvider     string
-	defaultModel        string
-	lowCostProvider     string
-	lowCostModel        string
-	highQualityProvider string
-	highQualityModel    string
-	policyHash          string
-	shortPromptMaxChars int
-	candidateStatuses   []RouteCandidateStatus
-	classifier          RuleBasedCategoryClassifier
+	config               SimpleRouterConfig
+	categoryClassifier   RuleBasedCategoryClassifier
+	difficultyClassifier RuleBasedDifficultyClassifier
 }
 
 func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
-	normalized := normalizeSimpleRouterConfig(config)
 	return &SimpleRouter{
-		defaultProvider:     normalized.DefaultProvider,
-		defaultModel:        normalized.DefaultModel,
-		lowCostProvider:     normalized.LowCostProvider,
-		lowCostModel:        normalized.LowCostModel,
-		highQualityProvider: normalized.HighQualityProvider,
-		highQualityModel:    normalized.HighQualityModel,
-		policyHash:          normalized.PolicyHash,
-		shortPromptMaxChars: normalized.ShortPromptMaxChars,
-		candidateStatuses:   append([]RouteCandidateStatus(nil), normalized.CandidateStatuses...),
-		classifier:          NewRuleBasedCategoryClassifier(),
+		config:               normalizeSimpleRouterConfig(config),
+		categoryClassifier:   NewRuleBasedCategoryClassifier(),
+		difficultyClassifier: NewRuleBasedDifficultyClassifier(),
+	}
+}
+
+func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
+	config := defaultSimpleRouterConfig()
+	categoryClassifier := NewRuleBasedCategoryClassifier()
+	difficultyClassifier := NewRuleBasedDifficultyClassifier()
+	if r != nil {
+		config = r.config
+		categoryClassifier = r.categoryClassifier
+		difficultyClassifier = r.difficultyClassifier
+	}
+	if req.Config != nil {
+		config = mergeSimpleRouterConfig(config, *req.Config)
+	}
+	config = normalizeSimpleRouterConfig(config)
+
+	requestedModel := strings.TrimSpace(req.RequestedModel)
+	if requestedModel == "" {
+		requestedModel = "auto"
+	}
+	signals := categoryClassifier.ExtractRoutingSignals(req.PromptText)
+	category := canonicalCategory(signals.Category)
+	difficulty := difficultyClassifier.Classify(req.PromptText, category)
+	diagnostics := signals.CategoryDiagnostics.WithSelectedCategory(category)
+
+	material := DecisionMaterial{
+		Category:      category,
+		Difficulty:    difficulty,
+		Capability:    capabilityForCategory(category),
+		PolicyVariant: PolicyVariantDefault,
+	}
+	decision := Decision{
+		RequestedModel:      requestedModel,
+		PolicyHash:          config.PolicyHash,
+		CategoryDiagnostics: diagnostics,
+	}
+
+	if !strings.EqualFold(requestedModel, "auto") {
+		material.RoutingMode = RoutingModeManual
+		decision.ModelRef = requestedModel
+		decision.CandidateModelRefs = []string{requestedModel}
+		decision.RoutingReason = ReasonManualModelRef
+		decision.RoutingDecisionMaterial = material
+		decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(material)
+		return decision, nil
+	}
+
+	if config.Mode != RoutingPolicyModeAuto {
+		return Decision{}, ErrAutoRoutingDisabled
+	}
+	cell := config.Routes.Cell(category, difficulty)
+	candidates, usedHealthFallback := availableModelRefs(cell.ModelRefs, config.CandidateStatuses)
+	if len(candidates) == 0 {
+		return Decision{}, ErrNoRouteConfigured
+	}
+	material.RoutingMode = RoutingModeAuto
+	if usedHealthFallback {
+		material.PolicyVariant = PolicyVariantProviderHealthFallback
+		decision.RoutingReason = ReasonOrderedHealthFallback
+	} else {
+		decision.RoutingReason = ReasonMatrixRoute
+	}
+	decision.ModelRef = candidates[0]
+	decision.CandidateModelRefs = candidates
+	decision.RoutingDecisionMaterial = material
+	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(material)
+	return decision, nil
+}
+
+func (m RoutingMatrix) Cell(category string, difficulty string) RouteCell {
+	var routes DifficultyRoutes
+	switch canonicalCategory(category) {
+	case CategoryCode:
+		routes = m.Code
+	case CategoryTranslation:
+		routes = m.Translation
+	case CategorySummarization:
+		routes = m.Summarization
+	case CategoryReasoning:
+		routes = m.Reasoning
+	default:
+		routes = m.General
+	}
+	if canonicalDifficulty(difficulty) == DifficultyComplex {
+		return routes.Complex
+	}
+	return routes.Simple
+}
+
+func defaultSimpleRouterConfig() SimpleRouterConfig {
+	cell := RouteCell{ModelRefs: []string{MockBootstrapRef}}
+	routes := DifficultyRoutes{Simple: cell, Complex: cell}
+	return SimpleRouterConfig{
+		Mode:           RoutingPolicyModeAuto,
+		BootstrapState: BootstrapStateMock,
+		PolicyHash:     DefaultPolicyHash,
+		Routes: RoutingMatrix{
+			General:       routes,
+			Code:          routes,
+			Translation:   routes,
+			Summarization: routes,
+			Reasoning:     routes,
+		},
 	}
 }
 
 func normalizeSimpleRouterConfig(config SimpleRouterConfig) SimpleRouterConfig {
-	config = SimpleRouterConfig{
-		DefaultProvider:     strings.TrimSpace(config.DefaultProvider),
-		DefaultModel:        strings.TrimSpace(config.DefaultModel),
-		LowCostProvider:     strings.TrimSpace(config.LowCostProvider),
-		LowCostModel:        strings.TrimSpace(config.LowCostModel),
-		HighQualityProvider: strings.TrimSpace(config.HighQualityProvider),
-		HighQualityModel:    strings.TrimSpace(config.HighQualityModel),
-		PolicyHash:          strings.TrimSpace(config.PolicyHash),
-		ShortPromptMaxChars: config.ShortPromptMaxChars,
-		CandidateStatuses:   normalizeRouteCandidateStatuses(config.CandidateStatuses),
-	}
-
-	if config.DefaultProvider == "" {
-		config.DefaultProvider = "mock"
-	}
-	if config.DefaultModel == "" {
-		config.DefaultModel = "mock-balanced"
-	}
-	if config.LowCostModel == "" {
-		config.LowCostModel = "mock-fast"
-	}
-	if config.LowCostProvider == "" {
-		config.LowCostProvider = config.DefaultProvider
-	}
-	if config.HighQualityModel == "" {
-		config.HighQualityModel = "mock-smart"
-	}
-	if config.HighQualityProvider == "" {
-		config.HighQualityProvider = config.DefaultProvider
-	}
+	defaults := defaultSimpleRouterConfig()
+	config.Mode = canonicalRoutingMode(config.Mode)
+	config.BootstrapState = strings.TrimSpace(config.BootstrapState)
+	config.PolicyHash = strings.TrimSpace(config.PolicyHash)
 	if config.PolicyHash == "" {
-		config.PolicyHash = DefaultPolicyHash
+		config.PolicyHash = defaults.PolicyHash
 	}
-	if config.ShortPromptMaxChars <= 0 {
-		config.ShortPromptMaxChars = DefaultShortPromptMaxChars
-	}
-
+	config.Routes = normalizeRoutingMatrix(config.Routes, defaults.Routes)
+	config.CandidateStatuses = normalizeRouteCandidateStatuses(config.CandidateStatuses)
+	config.BootstrapState = inferBootstrapState(config.Routes)
 	return config
 }
 
 func mergeSimpleRouterConfig(base SimpleRouterConfig, override SimpleRouterConfig) SimpleRouterConfig {
-	merged := base
-	overrideDefaultProvider := strings.TrimSpace(override.DefaultProvider)
-	if overrideDefaultProvider != "" {
-		merged.DefaultProvider = overrideDefaultProvider
+	base = normalizeSimpleRouterConfig(base)
+	if strings.TrimSpace(override.Mode) != "" {
+		base.Mode = override.Mode
 	}
-	if strings.TrimSpace(override.DefaultModel) != "" {
-		merged.DefaultModel = override.DefaultModel
-	}
-	if strings.TrimSpace(override.LowCostProvider) != "" {
-		merged.LowCostProvider = override.LowCostProvider
-	} else if overrideDefaultProvider != "" {
-		merged.LowCostProvider = overrideDefaultProvider
-	}
-	if strings.TrimSpace(override.LowCostModel) != "" {
-		merged.LowCostModel = override.LowCostModel
-	}
-	if strings.TrimSpace(override.HighQualityProvider) != "" {
-		merged.HighQualityProvider = override.HighQualityProvider
-	} else if overrideDefaultProvider != "" {
-		merged.HighQualityProvider = overrideDefaultProvider
-	}
-	if strings.TrimSpace(override.HighQualityModel) != "" {
-		merged.HighQualityModel = override.HighQualityModel
+	if strings.TrimSpace(override.BootstrapState) != "" {
+		base.BootstrapState = override.BootstrapState
 	}
 	if strings.TrimSpace(override.PolicyHash) != "" {
-		merged.PolicyHash = override.PolicyHash
+		base.PolicyHash = override.PolicyHash
 	}
-	if override.ShortPromptMaxChars > 0 {
-		merged.ShortPromptMaxChars = override.ShortPromptMaxChars
-	}
+	base.Routes = normalizeRoutingMatrix(override.Routes, base.Routes)
 	if len(override.CandidateStatuses) > 0 {
-		merged.CandidateStatuses = append([]RouteCandidateStatus(nil), override.CandidateStatuses...)
+		base.CandidateStatuses = append([]RouteCandidateStatus(nil), override.CandidateStatuses...)
 	}
-	return normalizeSimpleRouterConfig(merged)
+	return normalizeSimpleRouterConfig(base)
 }
 
-func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
-	config := SimpleRouterConfig{}
-	classifier := NewRuleBasedCategoryClassifier()
-	if r != nil {
-		classifier = r.classifier
-		if classifier.compiled.policy.Rules == nil {
-			classifier = NewRuleBasedCategoryClassifier()
-		}
-		config = SimpleRouterConfig{
-			DefaultProvider:     r.defaultProvider,
-			DefaultModel:        r.defaultModel,
-			LowCostProvider:     r.lowCostProvider,
-			LowCostModel:        r.lowCostModel,
-			HighQualityProvider: r.highQualityProvider,
-			HighQualityModel:    r.highQualityModel,
-			PolicyHash:          r.policyHash,
-			ShortPromptMaxChars: r.shortPromptMaxChars,
-			CandidateStatuses:   append([]RouteCandidateStatus(nil), r.candidateStatuses...),
-		}
+func normalizeRoutingMatrix(matrix RoutingMatrix, fallback RoutingMatrix) RoutingMatrix {
+	return RoutingMatrix{
+		General:       normalizeDifficultyRoutes(matrix.General, fallback.General),
+		Code:          normalizeDifficultyRoutes(matrix.Code, fallback.Code),
+		Translation:   normalizeDifficultyRoutes(matrix.Translation, fallback.Translation),
+		Summarization: normalizeDifficultyRoutes(matrix.Summarization, fallback.Summarization),
+		Reasoning:     normalizeDifficultyRoutes(matrix.Reasoning, fallback.Reasoning),
 	}
-	config = normalizeSimpleRouterConfig(config)
-	if req.Config != nil {
-		config = mergeSimpleRouterConfig(config, *req.Config)
-	}
-
-	requestedModel := strings.TrimSpace(req.RequestedModel)
-	if requestedModel == "" {
-		requestedModel = config.DefaultModel
-	}
-	signals := classifier.ExtractRoutingSignals(req.PromptText)
-	category := signals.Category
-	diagnostics := routeDiagnosticsForCategory(category, signals.CategoryDiagnostics.WithSelectedCategory(category))
-	capability := capabilityForCategory(category)
-
-	decision := Decision{
-		RequestedModel:             requestedModel,
-		SelectedProvider:           config.DefaultProvider,
-		SelectedProviderCatalogKey: config.DefaultProvider,
-		PolicyHash:                 config.PolicyHash,
-		CategoryDiagnostics:        diagnostics,
-	}
-
-	if strings.EqualFold(requestedModel, "auto") {
-		selectedProvider, selectedModel, tier, reason := autoRouteForCategory(category, diagnostics, req.PromptText, config)
-		policyVariant := PolicyVariantDefault
-		if req.HighQualityRestricted {
-			selectedProvider, selectedModel, tier, reason, policyVariant = applyHighQualityBudgetGuard(selectedProvider, selectedModel, tier, reason, config)
-		}
-		var fallbackVariant string
-		selectedProvider, selectedModel, tier, reason, fallbackVariant = applyCandidateStatusFallback(selectedProvider, selectedModel, tier, reason, config)
-		if fallbackVariant != PolicyVariantDefault {
-			policyVariant = fallbackVariant
-		}
-		decision.SelectedProvider = selectedProvider
-		decision.SelectedProviderCatalogKey = selectedProvider
-		decision.SelectedModel = selectedModel
-		decision.SelectedModelID = selectedModel
-		decision.RoutingDecisionMaterial = DecisionMaterial{
-			RoutingMode:   RoutingModeAuto,
-			Category:      category,
-			Tier:          tier,
-			Capability:    capability,
-			PolicyVariant: policyVariant,
-		}
-		decision.RoutingReason = reason
-		decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
-		return decision, nil
-	}
-
-	decision.SelectedModel = requestedModel
-	decision.SelectedModelID = requestedModel
-	decision.RoutingDecisionMaterial = DecisionMaterial{
-		RoutingMode:   RoutingModePinned,
-		Category:      category,
-		Tier:          TierBalanced,
-		Capability:    capability,
-		PolicyVariant: PolicyVariantDefault,
-	}
-	decision.RoutingReason = ReasonPinned
-	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
-	return decision, nil
 }
 
-func autoRouteForCategory(category string, diagnostics CategoryDiagnostics, prompt string, config SimpleRouterConfig) (string, string, string, string) {
-	if diagnostics.Ambiguous {
-		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonAmbiguousBalanced
+func normalizeDifficultyRoutes(routes DifficultyRoutes, fallback DifficultyRoutes) DifficultyRoutes {
+	return DifficultyRoutes{
+		Simple:  normalizeRouteCell(routes.Simple, fallback.Simple),
+		Complex: normalizeRouteCell(routes.Complex, fallback.Complex),
 	}
-	switch canonicalCategory(category) {
-	case CategoryCode:
-		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
-	case CategoryReasoning:
-		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonReasoningHighQuality
-	case CategoryTranslation:
-		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonTranslationBalanced
-	case CategorySummarization:
-		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonSummarizationBalanced
-	case CategoryExtractionJSON:
-		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonExtractionJSONBalanced
-	case CategorySupportRefund:
-		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
-	case CategoryUnknown:
-		if strings.TrimSpace(prompt) != "" && utf8.RuneCountInString(prompt) <= config.ShortPromptMaxChars {
-			return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
-		}
-		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
-	}
-
-	if utf8.RuneCountInString(prompt) <= config.ShortPromptMaxChars {
-		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
-	}
-	return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
 }
 
-func categoryCertainForHighQuality(diagnostics CategoryDiagnostics) bool {
-	return diagnostics.Confidence == RoutingConfidenceHigh && !diagnostics.Ambiguous
+func normalizeRouteCell(cell RouteCell, fallback RouteCell) RouteCell {
+	refs := uniqueModelRefs(cell.ModelRefs)
+	if len(refs) == 0 {
+		refs = uniqueModelRefs(fallback.ModelRefs)
+	}
+	return RouteCell{ModelRefs: refs}
 }
 
-func routeDiagnosticsForCategory(category string, diagnostics CategoryDiagnostics) CategoryDiagnostics {
-	category = canonicalCategory(category)
-	if (category == CategoryCode || category == CategoryReasoning) && !categoryCertainForHighQuality(diagnostics) {
-		diagnostics.Ambiguous = true
-		diagnostics.Confidence = RoutingConfidenceLow
-		if diagnostics.AmbiguityReason == "" {
-			diagnostics.AmbiguityReason = AmbiguityReasonUncertain
-		}
+func uniqueModelRefs(values []string) []string {
+	if len(values) == 0 {
+		return nil
 	}
-	return diagnostics
-}
-
-func applyHighQualityBudgetGuard(provider string, model string, tier string, reason string, config SimpleRouterConfig) (string, string, string, string, string) {
-	if canonicalTier(tier) != TierHighQuality {
-		return provider, model, tier, reason, PolicyVariantDefault
-	}
-	fallback, ok := bestAvailableRouteCandidate(provider, model, config)
-	if !ok {
-		return provider, model, tier, reason, PolicyVariantDefault
-	}
-	return fallback.Provider, fallback.Model, fallback.Tier, ReasonBudgetHighQualityDowngrade, PolicyVariantBudgetQualityGuard
-}
-
-func applyCandidateStatusFallback(provider string, model string, tier string, reason string, config SimpleRouterConfig) (string, string, string, string, string) {
-	if !routeCandidateIsUnavailable(provider, model, config.CandidateStatuses) {
-		return provider, model, tier, reason, PolicyVariantDefault
-	}
-
-	fallback, ok := bestAvailableRouteCandidate(provider, model, config)
-	if !ok {
-		return provider, model, tier, reason, PolicyVariantDefault
-	}
-	return fallback.Provider, fallback.Model, fallback.Tier, ReasonProviderHealthFallback, PolicyVariantProviderHealthFallback
-}
-
-func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, config SimpleRouterConfig) (RouteCandidateStatus, bool) {
-	candidates := routeCandidatesForConfig(config)
-	var selected RouteCandidateStatus
-	found := false
-	for _, candidate := range candidates {
-		if sameRouteCandidate(candidate.Provider, candidate.Model, excludeProvider, excludeModel) {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
 			continue
 		}
-		if candidate.Status == RouteCandidateUnavailable {
+		if _, exists := seen[value]; exists {
 			continue
 		}
-		if !routeCandidateAllowedForHealthFallback(candidate.Tier) {
-			continue
-		}
-		if !found || routeCandidateLess(candidate, selected) {
-			selected = candidate
-			found = true
-		}
+		seen[value] = struct{}{}
+		result = append(result, value)
 	}
-	return selected, found
-}
-
-func routeCandidateAllowedForHealthFallback(candidateTier string) bool {
-	return canonicalTier(candidateTier) != TierHighQuality
-}
-
-func routeCandidatesForConfig(config SimpleRouterConfig) []RouteCandidateStatus {
-	config = normalizeSimpleRouterConfig(config)
-	candidates := []RouteCandidateStatus{
-		defaultRouteCandidate(config.DefaultProvider, config.DefaultModel, TierBalanced, 10),
-		defaultRouteCandidate(config.LowCostProvider, config.LowCostModel, TierLowCost, 20),
-		defaultRouteCandidate(config.HighQualityProvider, config.HighQualityModel, TierHighQuality, 30),
-	}
-
-	for i := range candidates {
-		if status, ok := routeCandidateStatusFor(candidates[i].Provider, candidates[i].Model, config.CandidateStatuses); ok {
-			candidates[i] = mergeRouteCandidateStatus(candidates[i], status)
-		}
-	}
-	return candidates
-}
-
-func defaultRouteCandidate(provider string, model string, tier string, fallbackPriority int) RouteCandidateStatus {
-	return RouteCandidateStatus{
-		Provider:         strings.TrimSpace(provider),
-		Model:            strings.TrimSpace(model),
-		Tier:             canonicalTier(tier),
-		Status:           RouteCandidateAvailable,
-		FallbackPriority: fallbackPriority,
-	}
-}
-
-func mergeRouteCandidateStatus(candidate RouteCandidateStatus, status RouteCandidateStatus) RouteCandidateStatus {
-	if status.Tier != "" {
-		candidate.Tier = status.Tier
-	}
-	if status.Status != "" {
-		candidate.Status = status.Status
-	}
-	if status.FallbackPriority > 0 {
-		candidate.FallbackPriority = status.FallbackPriority
-	}
-	if status.LatencyP95Ms > 0 {
-		candidate.LatencyP95Ms = status.LatencyP95Ms
-	}
-	return candidate
-}
-
-func routeCandidateIsUnavailable(provider string, model string, statuses []RouteCandidateStatus) bool {
-	status, ok := routeCandidateStatusFor(provider, model, statuses)
-	return ok && status.Status == RouteCandidateUnavailable
-}
-
-func routeCandidateStatusFor(provider string, model string, statuses []RouteCandidateStatus) (RouteCandidateStatus, bool) {
-	provider = strings.TrimSpace(provider)
-	model = strings.TrimSpace(model)
-	for _, status := range statuses {
-		if sameRouteCandidate(status.Provider, status.Model, provider, model) {
-			return status, true
-		}
-	}
-	return RouteCandidateStatus{}, false
-}
-
-func sameRouteCandidate(leftProvider string, leftModel string, rightProvider string, rightModel string) bool {
-	return strings.TrimSpace(leftProvider) == strings.TrimSpace(rightProvider) &&
-		strings.TrimSpace(leftModel) == strings.TrimSpace(rightModel)
-}
-
-func routeCandidateLess(left RouteCandidateStatus, right RouteCandidateStatus) bool {
-	leftStatus := routeCandidateStatusPriority(left.Status)
-	rightStatus := routeCandidateStatusPriority(right.Status)
-	if leftStatus != rightStatus {
-		return leftStatus < rightStatus
-	}
-	leftPriority := normalizedFallbackPriority(left.FallbackPriority)
-	rightPriority := normalizedFallbackPriority(right.FallbackPriority)
-	if leftPriority != rightPriority {
-		return leftPriority < rightPriority
-	}
-	leftLatency := normalizedLatencyP95(left.LatencyP95Ms)
-	rightLatency := normalizedLatencyP95(right.LatencyP95Ms)
-	if leftLatency != rightLatency {
-		return leftLatency < rightLatency
-	}
-	if left.Provider != right.Provider {
-		return left.Provider < right.Provider
-	}
-	return left.Model < right.Model
-}
-
-func routeCandidateStatusPriority(status string) int {
-	switch canonicalRouteCandidateStatus(status) {
-	case RouteCandidateAvailable:
-		return 1
-	case RouteCandidateDegraded:
-		return 2
-	default:
-		return 3
-	}
-}
-
-func normalizedFallbackPriority(value int) int {
-	if value <= 0 {
-		return 1000
-	}
-	return value
-}
-
-func normalizedLatencyP95(value int) int {
-	if value <= 0 {
-		return 1 << 30
-	}
-	return value
+	return result
 }
 
 func normalizeRouteCandidateStatuses(statuses []RouteCandidateStatus) []RouteCandidateStatus {
 	if len(statuses) == 0 {
 		return nil
 	}
-	normalized := make([]RouteCandidateStatus, 0, len(statuses))
-	for _, status := range statuses {
-		status.Provider = strings.TrimSpace(status.Provider)
-		status.Model = strings.TrimSpace(status.Model)
-		if status.Provider == "" || status.Model == "" {
+	result := make([]RouteCandidateStatus, 0, len(statuses))
+	for _, candidate := range statuses {
+		candidate.ModelRef = strings.TrimSpace(candidate.ModelRef)
+		if candidate.ModelRef == "" {
 			continue
 		}
-		if strings.TrimSpace(status.Tier) != "" {
-			status.Tier = canonicalTier(status.Tier)
-		}
-		status.Status = canonicalRouteCandidateStatus(status.Status)
-		normalized = append(normalized, status)
+		candidate.Status = canonicalRouteCandidateStatus(candidate.Status)
+		result = append(result, candidate)
 	}
-	return normalized
+	return result
+}
+
+func availableModelRefs(refs []string, statuses []RouteCandidateStatus) ([]string, bool) {
+	refs = uniqueModelRefs(refs)
+	result := make([]string, 0, len(refs))
+	removedPrimary := false
+	for index, ref := range refs {
+		if routeCandidateStatus(ref, statuses) == RouteCandidateUnavailable {
+			if index == 0 {
+				removedPrimary = true
+			}
+			continue
+		}
+		result = append(result, ref)
+	}
+	return result, removedPrimary
+}
+
+func routeCandidateStatus(modelRef string, statuses []RouteCandidateStatus) string {
+	for _, candidate := range statuses {
+		if strings.TrimSpace(candidate.ModelRef) == strings.TrimSpace(modelRef) {
+			return canonicalRouteCandidateStatus(candidate.Status)
+		}
+	}
+	return RouteCandidateAvailable
 }
 
 func canonicalRouteCandidateStatus(value string) string {
@@ -473,4 +301,17 @@ func canonicalRouteCandidateStatus(value string) string {
 	default:
 		return RouteCandidateAvailable
 	}
+}
+
+func inferBootstrapState(routes RoutingMatrix) string {
+	for _, category := range Categories {
+		for _, difficulty := range []string{DifficultySimple, DifficultyComplex} {
+			for _, ref := range routes.Cell(category, difficulty).ModelRefs {
+				if ref == MockBootstrapRef {
+					return BootstrapStateMock
+				}
+			}
+		}
+	}
+	return BootstrapStateConfigured
 }

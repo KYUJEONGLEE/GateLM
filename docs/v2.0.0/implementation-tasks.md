@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Implementation Tasks
 
+> [!IMPORTANT]
+> **문서 상태: Historical task breakdown.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 task 목록은 current 작업 지시나 전체 완료 증거가 아니다.
+
 This document is the coding task plan for `docs/v2.0.0/implementation-plan.md`.
 
 `contracts.md`, schemas, and fixtures are still the contract source of truth. This file names likely modules and files to touch so each PR can start quickly.
@@ -116,7 +119,7 @@ Likely files:
 | Gateway config | `apps/gateway-core/internal/config/config.go`, `apps/gateway-core/cmd/gateway/main.go` |
 | Control Plane provider catalog | `apps/control-plane-api/src/modules/provider-connections/**`, `apps/control-plane-api/src/modules/runtime-configs/**` |
 | Control Plane DB | `apps/control-plane-api/prisma/schema.prisma`, `apps/control-plane-api/prisma/migrations/**`, `db/migrations/004_create_provider_and_models.sql` |
-| Env examples | `apps/control-plane-api/.env.example`, Gateway env docs/config if present |
+| Env examples | root `.env.example`, Gateway env docs/config if present |
 | Docs/schema | `docs/v2.0.0/schemas/provider-catalog.schema.json`, `docs/v2.0.0/fixtures/provider-catalog.fixture.json` |
 
 Tasks:

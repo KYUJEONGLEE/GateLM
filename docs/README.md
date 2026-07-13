@@ -1,133 +1,113 @@
 # GateLM Documentation Guide
 
-이 문서는 팀원과 구현 에이전트가 GateLM 작업을 시작할 때 가장 먼저 읽는 문서다.
+이 문서는 GateLM 개발자와 구현 에이전트를 위한 문서 라우터다. 제품의 현재 계약을 이 파일에 복제하지 않고, 작업 범위에 맞는 active 문서와 historical baseline을 연결한다.
 
-GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비용, 정책, 로그, 관측을 중앙에서 관리하게 해주는 B2B LLM Gateway다.
+## 1. Start Here
 
-현재 구현 목표는 **v2.0.0 organization-based LLMOps Gateway MVP**다.
+현재 작업은 항상 다음 두 문서로 시작한다.
 
----
+1. [`docs/current/README.md`](current/README.md): 현재 문서 상태와 범위별 진입점
+2. [`docs/current/source-of-truth.md`](current/source-of-truth.md): 문서 권한, 충돌 처리, 계약 변경 규칙
 
-## 1. Reading Order And Source Of Truth
+필요할 때만 다음 문서를 추가로 읽는다.
 
-작업을 시작할 때는 먼저 `docs/README.md`를 읽는다.
+- [`docs/current/implementation-status.md`](current/implementation-status.md): 최신 `origin/dev` 기준 구현 사실
+- [`docs/current/documentation-gaps.md`](current/documentation-gaps.md): 확인된 불일치와 사람 결정이 필요한 항목
 
-문서끼리 충돌하면 아래 Source Of Truth 순서로 판단한다.
+일반 UI, 리팩터링, 버그 수정은 current 문서와 실제 코드/타입부터 확인한다. API, DB, Event, Metrics, 보안 필드의 의미를 바꾸는 작업만 해당 계약과 schema/fixture를 추가로 읽는다.
+
+## 2. Documentation Status
+
+| Path | Status | Authority | 사용 방법 |
+|---|---|---|---|
+| `docs/current/` | Active | 현재 문서 라우팅과 구현 스냅샷 | 모든 작업의 첫 진입점 |
+| `docs/tenant-chat/` | Active scoped contract | 신규 Tenant Chat API/DB/Event/Metrics/Security 계약 | Tenant Chat 작업에서 current router를 통해 사용 |
+| `docs/v2.1.0/` | Versioned scope | Self-host delivery와 Advanced Routing offline evidence | 해당 범위에서만 사용 |
+| `docs/v2.0.0/` | Historical baseline | 아직 대체되지 않은 행동 계약의 compatibility 기준 | current 문서가 연결할 때만 사용 |
+| `docs/v1.0.0/` | Historical compatibility | v1 호환성 및 과거 evidence | 회귀/이력 조사에만 사용 |
+| `docs/architecture/` | Supporting reference | 설계 배경 | 현재 코드와 계약으로 재검증 |
+| `docs/policies/` | Supporting policy | 코딩, 비용, PII 정책 | current 계약과 충돌 시 current 우선 |
+| `docs/testing/` | Design/evidence | 특정 시점의 실험, 테스트, 결과 | 날짜와 commit 범위를 확인 |
+| `docs/reference/` | Reference/draft | 장기 설계와 후보 계획 | 계약 권한 없음 |
+| `docs/archive/` | Archived | 과거 기록 | 현재 기준 선언에 사용 금지 |
+
+`current`는 새 계약을 복사해 두는 폴더가 아니다. 현재 어떤 versioned 문서가 어느 범위에서 유효한지 설명하는 안정적인 진입점이다.
+
+## 3. Source Of Truth Rules
+
+문서가 충돌하면 다음 순서를 적용한다.
+
+1. `docs/current/source-of-truth.md`의 상태와 범위 분류
+2. current 문서가 해당 범위에 지정한 active contract
+3. 해당 범위의 versioned contract와 schema/fixture
+4. 명시적으로 상속된 baseline compatibility
+5. architecture, policy, testing evidence, reference, archive
+
+코드와 테스트는 현재 구현을 확인하는 evidence다. 계약과 코드가 다르면 코드를 자동으로 계약으로 승격하거나 과거 계약으로 코드를 되돌리지 않는다. 차이를 기록하고 별도 계약 결정을 요청한다.
+
+## 4. Current Version Evidence
+
+저장소에는 서로 다른 버전 신호가 존재한다.
+
+- 공식 GitHub 최신 릴리스: `v0.0.1`
+- root package version: `0.0.0`
+- app package versions: 일부 `0.1.0`
+- 최신 versioned 문서: `docs/v2.1.0/`
+- 현재 개발 통합 브랜치: `dev`
+
+따라서 다음 개발 SemVer는 아직 문서로 확정하지 않는다. `docs/current/`는 공식 릴리스 번호가 아니라 `origin/dev` 기준 active development snapshot을 설명한다.
+
+## 5. Versioned Documentation
+
+### Tenant Chat active scope
+
+[`docs/tenant-chat/README.md`](tenant-chat/README.md)를 먼저 읽는다. 이 scope는 release SemVer와 독립된 `tenant-chat/v1` contract이며, 기존 Project/Application Chat과 분리된 신규 제품의 계약·schema·fixture·구현 계획·통합 handoff를 제공한다.
+
+독립 `chat-web`, `chat-api`, private Gateway, encrypted history와 usage ledger는 계약상 목표이며 현재 구현 사실은 `docs/current/implementation-status.md`에서 별도로 확인한다.
+
+### v2.1.0
+
+[`docs/v2.1.0/README.md`](v2.1.0/README.md)를 먼저 읽는다.
+
+v2.1.0 문서는 두 가지 범위를 포함한다.
+
+- Single-node Docker Compose self-host delivery
+- Advanced/category routing offline evaluation evidence
+
+이 폴더는 최근 UI, 직원 통제, 정책 관리 등 모든 post-v2 기능을 포괄하는 제품 계약이 아니다.
+
+### v2.0.0
+
+[`docs/v2.0.0/README.md`](v2.0.0/README.md)에서 문서별 상태를 확인한다.
+
+v2.0.0 workstream은 active가 아니며 문서는 historical baseline이다. 다음 항목은 아직 명시적으로 대체되지 않은 영역의 compatibility 검토에 사용한다.
 
 1. `docs/v2.0.0/contracts.md`
 2. `docs/v2.0.0/schemas/*.schema.json`
 3. `docs/v2.0.0/fixtures/*.fixture.json`
-4. `docs/v2.0.0/implementation-plan.md`
-5. `docs/v2.0.0/implementation-tasks.md`
 
-`contracts.md`는 API, DB, Event, Metrics, Security-sensitive field 판단의 최우선 기준이다.
+아래 구현 문서는 과거 plan/criteria이며 current 작업 목록이나 전체 완료 증거가 아니다.
 
-`implementation-plan.md`는 200줄 안팎의 상위 구현 계획서다.
+- `docs/v2.0.0/implementation-plan.md`
+- `docs/v2.0.0/implementation-tasks.md`
+- `docs/v2.0.0/implementation-pr-packets.md`
+- `docs/v2.0.0/acceptance-test-matrix.md`
+- `docs/v2.0.0/db-migration-plan.md`
 
-`implementation-tasks.md`는 실제 PR별 작업 위치와 검증 기준을 담은 코딩용 계획서다.
+## 6. Contract-Sensitive Work
 
-아래 3개 문서는 `implementation-tasks.md`를 실행 가능한 단위로 보강하는 실행 보조 문서다. 공식 계약이나 schema를 새로 확정하지 않으며, 충돌하면 Source Of Truth 순서를 따른다.
+다음 범위를 변경하면 current 문서에서 해당 계약을 찾고, 필요한 경우 baseline compatibility를 함께 확인한다.
 
-- `docs/v2.0.0/implementation-pr-packets.md`: PR별 실행 패킷
-- `docs/v2.0.0/acceptance-test-matrix.md`: PR별 acceptance/evidence matrix
-- `docs/v2.0.0/db-migration-plan.md`: DB migration 호환성 계획
-- `docs/v2.0.0/exact-cache-routing-aware-contract.md`: Exact Cache / Routing 팀 공유용 계약 요약
+- API route 또는 request/response field
+- DB table, column, enum, migration
+- Event payload 또는 version
+- Metrics name 또는 label
+- RuntimeSnapshot/RuntimeConfig 의미
+- Provider/Model catalog 및 credential 경계
+- Request Log/Detail/Dashboard outcome 의미
+- raw prompt/response, secret, 개인정보 등 Security-sensitive field
 
-Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
-
-- `docs/v2.0.0/p0-legacy-field-cleanup.md`: legacy field cleanup 참고 문서
-- `docs/v2.0.0/p0-contract-decisions.md`: 공식 계약이 아닌 팀 검토 목록
-
-v2.1.0 고도화/evidence 계약은 v2.0.0 계약을 대체하지 않는 보조 계약이다.
-
-- `docs/v2.1.0/category-evaluation-dataset-contract.md`: Advanced Routing 카테고리 평가셋 evidence 계약
-- `docs/v2.1.0/routing-performance-test-scenario.md`: Advanced Routing 정확도/레이턴시/비용 절감 evidence 시나리오
-- `docs/v2.1.0/routing-random-probe.md`: Advanced Routing 임의 입력 분류 분포 관찰 시나리오
-
-위 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
-
----
-
-## 2. Supporting References
-
-작업 범위에 따라 아래 문서를 추가로 확인한다.
-
-- 작업 범위에 해당하는 schema/fixture
-- 작업 범위에 해당하는 app/module 문서
-- `docs/architecture/*`
-- `docs/policies/*`
-- `docs/archive/*`
-
-역할별 토론 문서는 working draft다.
-
-최종 합의된 내용만 `contracts.md`, schema/fixture, implementation docs로 승격한다.
-
----
-
-## 3. v2.0.0 Goal
-
-v2.0.0 목표는 v1.0.0 baseline을 깨지 않으면서 조직 기반 LLMOps Gateway MVP를 완성하는 것이다.
-
-핵심 흐름:
-
-```text
-Customer App / Employee Chat
--> Gateway
--> RuntimeSnapshot policy
--> budget / safety / routing / exact cache
--> Actual Provider or Mock fallback
--> Request Log / Detail / Dashboard / Metrics / k6 evidence
-```
-
-v2.0.0에서 반드시 설명 가능해야 하는 것:
-
-- 어떤 tenant/project/application 요청인지
-- 어떤 RuntimeSnapshot이 실제 적용됐는지
-- 어떤 budget scope로 비용과 쿼터가 귀속됐는지
-- safety, budget, routing, exact cache, provider, fallback, streaming 결과가 무엇인지
-- Actual Provider가 성공했는지, Mock fallback이 사용됐는지
-- Request Detail, Dashboard, Metrics, k6가 같은 outcome을 보고 있는지
-
----
-
-## 4. v2.0.0 Main Scope
-
-| Area | Main path |
-|---|---|
-| Control Plane | RuntimeConfig validation/publish, RuntimeSnapshot, Provider/Model catalog, `credentialRef`, budget policy source |
-| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, routing, routing-aware exact cache, provider, fallback, streaming, logging outcomes |
-| Product Experience | Admin/Developer/Employee surfaces, Employee Chat through Application boundary, Request Detail, Dashboard, Demo Scenario Runner |
-| Safety | request-side safety outcome and sanitized evidence |
-| Observability | Gateway-produced outcomes, Request Log/Detail read model, Dashboard aggregate, metrics label guard, k6/query profile |
-| Provider | Actual Provider 1+ and model 2+ through Provider Adapter, with Mock fallback |
-
----
-
-## 5. Non-Goals For v2.0.0 Core
-
-- raw prompt/raw response storage opt-in
-- Semantic Cache live response path
-- token-level streaming logging
-- response-side safety scan main path
-- Employee Chat Provider direct call
-- Web Console user request Provider proxy
-- `department` budget scope
-- provider/model DB enum locking
-- mandatory ClickHouse/Redpanda adoption
-
----
-
-## 6. Team Ownership
-
-| Owner | Bounded context | Main output |
-|---|---|---|
-| 김규민 | Product Experience & Demo | Employee Chat, Request Detail UI, Dashboard UX, Demo Scenario Runner |
-| 재혁님 | Control Plane & Runtime Policy | RuntimeSnapshot publish path, Provider/Model catalog, `credentialRef`, budget policy source |
-| 이지섭 | Gateway Data Plane & Governance | Gateway pipeline, outcomes, Provider Adapter boundary, Mock fallback |
-| 이윤지 | AI Safety & Evaluation Lab | request-side safety outcome, sanitized detector summary, Semantic Cache evidence |
-| 이규정 | Observability, Data Platform & Performance | Request Log/Detail read model, Dashboard aggregate, metrics guard, k6/query profile |
-
----
+현재 계약이 없는 경우 구현부터 하지 않는다. `docs/current/documentation-gaps.md`에 후보를 기록하고 계약 문서 또는 문서 PR을 먼저 제안한다.
 
 ## 7. Security Rules
 
@@ -146,36 +126,25 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 
 실제 secret이나 개인정보처럼 보이는 값은 seed, test, snapshot, fixture에도 넣지 않는다.
 
----
+## 8. Verification
 
-## 8. Implementation Docs
-
-| Document | Purpose |
-|---|---|
-| `docs/v2.0.0/contracts.md` | 공식 계약 기준 |
-| `docs/v2.0.0/implementation-plan.md` | 상위 구현 계획 |
-| `docs/v2.0.0/implementation-tasks.md` | PR별 실제 작업 계획 |
-| `docs/v2.0.0/implementation-pr-packets.md` | PR별 실행 패킷 |
-| `docs/v2.0.0/acceptance-test-matrix.md` | PR별 acceptance/evidence matrix |
-| `docs/v2.0.0/db-migration-plan.md` | DB migration 호환성 계획 |
-| `docs/v2.0.0/schemas/` | JSON Schema |
-| `docs/v2.0.0/fixtures/` | 최소 fixture |
-| `docs/v2.0.0/p0-legacy-field-cleanup.md` | legacy field cleanup 기준 참고 문서 |
-| `docs/v2.0.0/p0-contract-decisions.md` | 공식 계약 전 팀 검토 목록 |
-| `docs/v2.1.0/category-evaluation-dataset-contract.md` | Advanced Routing 카테고리 평가셋 evidence 계약 |
-| `docs/v2.1.0/routing-performance-test-scenario.md` | Advanced Routing 정확도/레이턴시/비용 절감 evidence 시나리오 |
-| `docs/v2.1.0/routing-random-probe.md` | Advanced Routing 임의 입력 분류 분포 관찰 시나리오 |
-| `docs/archive/` | 과거 P0/v1 기록 |
-
-과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.
-
-## 9. Required Verification
-
-v2 문서, schema, fixture, entry 문서, Node/pnpm 기준을 바꾸면 아래 검증을 먼저 실행한다.
+문서와 진입점을 변경하면 다음을 실행한다.
 
 ```powershell
+git diff --check
 corepack pnpm run verify:v2-docs
-corepack pnpm run verify:v2-final
 ```
 
-이 검증은 `contracts.md` 우선순위, schema/fixture pairing, fixture validation, forbidden sensitive value shape, Provider/Model enum lock 방지, RuntimeSnapshot lookup key guardrail을 확인한다.
+v2.1 category evaluation 계약, schema 또는 fixture를 변경하면 다음도 실행한다.
+
+```powershell
+corepack pnpm run verify:v2.1-category-eval
+```
+
+v2.1 difficulty evaluation 계약, schema 또는 fixture를 변경하면 다음도 실행한다.
+
+```powershell
+corepack pnpm run verify:v2.1-difficulty-eval
+```
+
+`verify:v2-docs`는 current entrypoint, version status README, v2 baseline schema/fixture를 검증하지만 일반 Markdown 링크와 anchor를 전부 검사하지 않는다. 링크 검사는 별도로 수행하고 결과를 작업 보고에 남긴다.

@@ -1,5 +1,8 @@
 # GateLM v2.0.0 P0 legacy field cleanup
 
+> [!IMPORTANT]
+> **문서 상태: Historical cleanup inventory.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 현재 legacy 상태는 실제 코드와 타입으로 다시 확인한다.
+
 ## 1. 요약
 
 이 문서는 5명 역할별 inventory를 통합한 P0 legacy cleanup 합의 문서다. 기준은 `docs/v2.0.0/contracts.md`이며, 이 문서 자체는 코드/API/DB/schema/fixture 변경이 아니다.

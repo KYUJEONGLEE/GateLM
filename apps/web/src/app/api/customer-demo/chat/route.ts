@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCurrentConsoleAuthForCookieHeader } from "@/lib/auth/current-console-auth";
 import {
   createChatConversation,
   createChatConversationMessage,
@@ -21,6 +22,7 @@ import type {
   CustomerDemoScenarioId,
   CustomerDemoSurface
 } from "@/lib/gateway/customer-demo-client";
+import { legacyCustomerDemoEnabled } from "@/lib/gateway/legacy-customer-demo";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -75,6 +77,7 @@ type RequestProfileResult =
     };
 
 type GatewayCallOptions = {
+  actorId?: string;
   contextRetentionEnabled?: boolean;
   conversationId?: string | null;
   message?: string;
@@ -89,8 +92,6 @@ const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Cache-Status",
   "X-GateLM-Cache-Type",
   "X-GateLM-Masking-Action",
-  "X-GateLM-Routed-Provider",
-  "X-GateLM-Routed-Model",
   "X-GateLM-Estimated-Cost-Usd",
   "Content-Type"
 ];
@@ -135,7 +136,12 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
 };
 
 export async function POST(request: Request) {
+  if (!legacyCustomerDemoEnabled()) {
+    return NextResponse.json({ error: "Legacy customer demo is disabled." }, { status: 404 });
+  }
   const payload = await readRequestPayload(request);
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
+  const actorId = auth.userId ?? APPLICATION_END_USER_ID;
   const profileResult = await getRequestProfile(payload.profileId);
 
   if (!profileResult.ok) {
@@ -170,6 +176,7 @@ export async function POST(request: Request) {
 
   if (streamRequested && payload.surface === "application") {
     return streamLiveScenario({
+      actorId,
       model,
       payload,
       profile,
@@ -186,6 +193,7 @@ export async function POST(request: Request) {
       payload.surface,
       payload.conversationId,
       payload.contextRetentionEnabled,
+      actorId,
       payload.userName,
       profile
     );
@@ -206,12 +214,14 @@ export async function POST(request: Request) {
 }
 
 function streamLiveScenario({
+  actorId,
   model,
   payload,
   profile,
   scenario,
   scenarioId
 }: {
+  actorId: string;
   model: CustomerDemoModel;
   payload: Awaited<ReturnType<typeof readRequestPayload>>;
   profile: ResolvedApplicationChatProfile;
@@ -225,6 +235,7 @@ function streamLiveScenario({
       try {
         if (scenarioId === "cache-hit") {
           await callGateway("cache-hit", "warmup", {
+            actorId,
             message: payload.message,
             profile,
             surface: payload.surface,
@@ -236,6 +247,7 @@ function streamLiveScenario({
           scenarioId,
           "1",
           {
+            actorId,
             contextRetentionEnabled: payload.contextRetentionEnabled,
             conversationId: payload.conversationId,
             message: payload.message,
@@ -368,11 +380,13 @@ async function executeLiveScenario(
   surface: CustomerDemoSurface,
   conversationId: string | null,
   contextRetentionEnabled: boolean | undefined,
+  actorId: string,
   userName: string | undefined,
   profile: ResolvedApplicationChatProfile
 ) {
   if (scenarioId === "cache-hit") {
     await callGateway("cache-hit", "warmup", {
+      actorId,
       contextRetentionEnabled,
       conversationId,
       message,
@@ -381,6 +395,7 @@ async function executeLiveScenario(
       userName
     });
     return callGateway("cache-hit", "hit", {
+      actorId,
       contextRetentionEnabled,
       conversationId,
       message,
@@ -398,6 +413,7 @@ async function executeLiveScenario(
     // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
       latestResult = await callGateway("rate-limited", String(index + 1), {
+        actorId,
         contextRetentionEnabled,
         conversationId,
         message,
@@ -418,14 +434,15 @@ async function executeLiveScenario(
   }
 
   if (scenarioId === "provider-timeout") {
-    return executeProviderFailureScenario(scenarioId, "timeout", profile, userName);
+    return executeProviderFailureScenario(scenarioId, "timeout", profile, actorId, userName);
   }
 
   if (scenarioId === "provider-fallback") {
-    return executeProviderFailureScenario(scenarioId, "error", profile, userName);
+    return executeProviderFailureScenario(scenarioId, "error", profile, actorId, userName);
   }
 
   return callGateway(scenarioId, "1", {
+    actorId,
     contextRetentionEnabled,
     conversationId,
     message,
@@ -440,6 +457,7 @@ async function executeProviderFailureScenario(
   scenarioId: CustomerDemoScenarioId,
   mode: ProviderFailureMode,
   profile: ResolvedApplicationChatProfile,
+  actorId: string,
   userName: string | undefined
 ) {
   const config = getLiveGatewayConfig();
@@ -447,7 +465,7 @@ async function executeProviderFailureScenario(
   await configureProviderFailureControl(mode);
 
   try {
-    return await callGateway(scenarioId, mode, { profile, stream: false, userName });
+    return await callGateway(scenarioId, mode, { actorId, profile, stream: false, userName });
   } finally {
     await resetProviderFailureControl(config).catch(() => undefined);
   }
@@ -485,7 +503,7 @@ async function callGateway(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-End-User-Id": "customer_user_demo_live",
+      "X-GateLM-End-User-Id": options.actorId ?? APPLICATION_END_USER_ID,
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
     },
@@ -551,7 +569,7 @@ async function callGatewayStreaming(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-End-User-Id": "customer_user_demo_live",
+      "X-GateLM-End-User-Id": options.actorId ?? APPLICATION_END_USER_ID,
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
     },
@@ -653,7 +671,7 @@ async function callGatewayWithoutStreamingWithContext(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-End-User-Id": "customer_user_demo_live",
+      "X-GateLM-End-User-Id": options.actorId ?? APPLICATION_END_USER_ID,
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
     },

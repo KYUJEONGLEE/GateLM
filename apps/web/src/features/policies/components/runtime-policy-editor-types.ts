@@ -4,6 +4,7 @@ import type { BreadcrumbItem } from "@/components/ui/breadcrumb";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type {
   RuntimePolicyConfig,
+  RuntimePolicyDetector,
   RuntimePolicyDraftValues,
   RuntimePolicyModel
 } from "@/lib/control-plane/runtime-policy-types";
@@ -13,6 +14,7 @@ export type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
   breadcrumbItems?: BreadcrumbItem[];
   children?: ReactNode;
+  employeeSection?: ReactNode;
   generalFooter?: ReactNode;
   generalBudgetPanelPlacement?: "afterChildren" | "childSlot";
   hideStreamingTab?: boolean;
@@ -46,14 +48,13 @@ export type OneTimeApiKeyState = {
 
 export type PolicySection =
   | "general"
+  | "employees"
   | "safety"
   | "routing"
   | "budget"
   | "rateLimit"
   | "cache"
   | "streaming";
-
-export type RoutingPriorityRoute = "default" | "fallback" | "highQuality" | "lowCost";
 
 export type RoutingProviderOption = {
   displayName: string;
@@ -66,19 +67,6 @@ export type RuntimePolicyDraftValuesSetter = Dispatch<
   SetStateAction<RuntimePolicyDraftValues>
 >;
 
-export type RoutingPriorityRow = {
-  priority: string;
-  provider: string;
-  route: RoutingPriorityRoute;
-  selectedModel: string;
-};
-
-export type RoutingPriorityTableText = {
-  model: string;
-  noProviderModels: string;
-  provider: string;
-};
-
 export type RuntimePolicyEditorText = {
   activeApiKeyMissing: string;
   activeConfig: string;
@@ -86,10 +74,15 @@ export type RuntimePolicyEditorText = {
   apiKeyIssued: string;
   budget: string;
   budgetEnforcement: string;
+  budgetPolicyEnabled: string;
+  budgetPolicyHint: string;
   budgetTab: string;
   budgetWarning: string;
+  blockAction: string;
   cache: string;
   cacheEnabled: string;
+  cacheEnabledHint: string;
+  cacheSettings: string;
   cacheSection: string;
   cacheTab: string;
   cacheTtl: string;
@@ -97,23 +90,22 @@ export type RuntimePolicyEditorText = {
   close: string;
   completionPrice: string;
   configVersion: string;
-  defaultRoute: string;
   details: string;
+  detectorNames: Record<RuntimePolicyDetector["type"], string>;
   detectorType: string;
   detectors: string;
   disabled: string;
+  edit: string;
   enabled: string;
-  fallbackRoute: string;
+  employees: string;
   fixtureFallback: string;
   general: string;
   history: string;
-  highQualityRoute: string;
   issueApiKey: string;
   issuingApiKey: string;
   jsonMode: string;
   limit: string;
   logSafeCaptureHint: string;
-  lowCostRoute: string;
   mandatoryProtection: string;
   mandatoryProtectionHint: string;
   maxBucketTokens: string;
@@ -125,6 +117,7 @@ export type RuntimePolicyEditorText = {
   policyDetails: string;
   pricing: string;
   pricingVersion: string;
+  privacyMasking: string;
   promptCapture: string;
   promptCaptureEnabled: string;
   promptCaptureMaxChars: string;
@@ -138,6 +131,7 @@ export type RuntimePolicyEditorText = {
   rateLimit: string;
   rateLimitInfo: string;
   rateLimitTab: string;
+  redactAction: string;
   refillRate: string;
   remove: string;
   responseCapture: string;
@@ -145,7 +139,6 @@ export type RuntimePolicyEditorText = {
   responseCaptureMaxChars: string;
   rollback: string;
   routing: string;
-  routingAdvanced: string;
   runtimeSnapshot: string;
   safetyTab: string;
   saveDraft: string;
@@ -153,7 +146,6 @@ export type RuntimePolicyEditorText = {
   semanticCacheDisabled: string;
   semanticCacheEvidenceOnly: string;
   semanticCacheNote: string;
-  shortPrompt: string;
   snapshotState: string;
   snapshotVersion: string;
   streaming: string;
@@ -162,4 +154,5 @@ export type RuntimePolicyEditorText = {
   templateFallback: string;
   title: string;
   tokens: string;
+  unsavedChanges: string;
 };

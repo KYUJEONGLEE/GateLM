@@ -93,6 +93,32 @@ func TestTokenBucketLimiterUsesConfiguredKeyPrefix(t *testing.T) {
 	}
 }
 
+func TestTokenBucketLimiterUsesProjectEmployeeKey(t *testing.T) {
+	client := &fakeClient{result: []any{int64(1), "4", int64(0)}}
+	limiter := NewTokenBucketLimiter(client)
+
+	_, err := limiter.Check(context.Background(), ratelimit.Request{
+		TenantID:   testTenantID,
+		ProjectID:  testProjectID,
+		EmployeeID: "employee_demo",
+		Config: ratelimit.Config{
+			Enabled:       true,
+			Scope:         ratelimit.ScopeEmployee,
+			Algorithm:     ratelimit.AlgorithmTokenBucket,
+			WindowSeconds: 60,
+			Limit:         5,
+		},
+		Now: time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("expected employee bucket request, got %v", err)
+	}
+	wantSuffix := ":" + testTenantID + ":employee:" + testProjectID + ":employee_demo"
+	if len(client.keys) != 1 || !strings.HasSuffix(client.keys[0], wantSuffix) {
+		t.Fatalf("expected isolated project employee key suffix %q, got %#v", wantSuffix, client.keys)
+	}
+}
+
 func TestTokenBucketLimiterDoesNotTouchRedisWhenDisabled(t *testing.T) {
 	client := &fakeClient{}
 	limiter := NewTokenBucketLimiter(client)

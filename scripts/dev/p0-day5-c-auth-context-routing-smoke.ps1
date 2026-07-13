@@ -267,14 +267,12 @@ function Assert-RoutingMetadata {
     param(
         [Parameter(Mandatory = $true)]$Response,
         [Parameter(Mandatory = $true)][string]$ExpectedRequestedModel,
-        [Parameter(Mandatory = $true)][string]$ExpectedSelectedModel,
-        [Parameter(Mandatory = $true)][string]$ExpectedRoutingReason
+        [Parameter(Mandatory = $true)][string]$ExpectedRoutingReason,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutionMode
     )
 
     Assert-Equal -Name "chat HTTP" -Expected 200 -Actual $Response.StatusCode
     Assert-NotEmpty -Name "X-GateLM-Request-Id" -Value (Get-HeaderValue -Response $Response -Name "X-GateLM-Request-Id")
-    Assert-Equal -Name "routed provider header" -Expected $ExpectedProvider -Actual (Get-HeaderValue -Response $Response -Name "X-GateLM-Routed-Provider")
-    Assert-Equal -Name "routed model header" -Expected $ExpectedSelectedModel -Actual (Get-HeaderValue -Response $Response -Name "X-GateLM-Routed-Model")
 
     $json = Convert-JsonBody -Body $Response.Body
     $gateLm = Get-SafeProperty -Object $json -Name "gate_lm"
@@ -286,9 +284,8 @@ function Assert-RoutingMetadata {
     Assert-Equal -Name "project context" -Expected $ExpectedProjectId -Actual ([string](Get-SafeProperty -Object $gateLm -Name "projectId"))
     Assert-Equal -Name "application context" -Expected $ExpectedApplicationId -Actual ([string](Get-SafeProperty -Object $gateLm -Name "applicationId"))
     Assert-Equal -Name "requested model" -Expected $ExpectedRequestedModel -Actual ([string](Get-SafeProperty -Object $gateLm -Name "requestedModel"))
-    Assert-Equal -Name "selected provider" -Expected $ExpectedProvider -Actual ([string](Get-SafeProperty -Object $gateLm -Name "selectedProvider"))
-    Assert-Equal -Name "selected model" -Expected $ExpectedSelectedModel -Actual ([string](Get-SafeProperty -Object $gateLm -Name "selectedModel"))
     Assert-Equal -Name "routing reason" -Expected $ExpectedRoutingReason -Actual ([string](Get-SafeProperty -Object $gateLm -Name "routingReason"))
+    Assert-Equal -Name "execution mode" -Expected $ExpectedExecutionMode -Actual ([string](Get-SafeProperty -Object $gateLm -Name "executionMode"))
 }
 
 function Invoke-SmokeCase {
@@ -319,9 +316,6 @@ $InvalidAppToken = Get-EnvOrDefault -Name "GATELM_INVALID_APP_TOKEN" -DefaultVal
 $ExpectedTenantId = Get-EnvOrDefault -Name "GATELM_DEMO_TENANT_ID" -DefaultValue "00000000-0000-4000-8000-000000000100"
 $ExpectedProjectId = Get-EnvOrDefault -Name "GATELM_DEMO_PROJECT_ID" -DefaultValue "00000000-0000-4000-8000-000000000200"
 $ExpectedApplicationId = Get-EnvOrDefault -Name "GATELM_DEMO_APPLICATION_ID" -DefaultValue "00000000-0000-4000-8000-000000000300"
-$ExpectedProvider = Get-EnvOrDefault -Name "GATEWAY_DEFAULT_PROVIDER" -DefaultValue "mock"
-$ExpectedLowCostModel = Get-EnvOrDefault -Name "GATEWAY_LOW_COST_MODEL" -DefaultValue "mock-fast"
-$ExpectedDefaultModel = Get-EnvOrDefault -Name "GATEWAY_DEFAULT_MODEL" -DefaultValue "mock-balanced"
 $ExpectedPinnedModel = Get-EnvOrDefault -Name "GATEWAY_PINNED_TEST_MODEL" -DefaultValue "mock-smart"
 $RunId = Get-Date -Format "yyyyMMddHHmmssfff"
 $Failures = 0
@@ -340,18 +334,18 @@ Invoke-SmokeCase -Name "valid auth context and short auto routing" -Action {
     Assert-RoutingMetadata `
         -Response $response `
         -ExpectedRequestedModel "auto" `
-        -ExpectedSelectedModel $ExpectedLowCostModel `
-        -ExpectedRoutingReason "short_prompt_low_cost"
+        -ExpectedRoutingReason "category_difficulty_matrix" `
+        -ExpectedExecutionMode "mock"
 }
 
-Invoke-SmokeCase -Name "long auto routing uses default model" -Action {
+Invoke-SmokeCase -Name "long auto routing uses category difficulty matrix" -Action {
     $longPrompt = "Summarize this day5 C long routing smoke $RunId. " + ("a" * 320)
     $response = Invoke-GatewayChat -Prompt $longPrompt -Model "auto" -Feature "day5-routing-demo"
     Assert-RoutingMetadata `
         -Response $response `
         -ExpectedRequestedModel "auto" `
-        -ExpectedSelectedModel $ExpectedDefaultModel `
-        -ExpectedRoutingReason "default_balanced"
+        -ExpectedRoutingReason "category_difficulty_matrix" `
+        -ExpectedExecutionMode "mock"
 }
 
 Invoke-SmokeCase -Name "explicit model is pinned" -Action {
@@ -360,8 +354,8 @@ Invoke-SmokeCase -Name "explicit model is pinned" -Action {
     Assert-RoutingMetadata `
         -Response $response `
         -ExpectedRequestedModel $ExpectedPinnedModel `
-        -ExpectedSelectedModel $ExpectedPinnedModel `
-        -ExpectedRoutingReason "pinned"
+        -ExpectedRoutingReason "pinned" `
+        -ExpectedExecutionMode "mock"
 }
 
 Invoke-SmokeCase -Name "invalid API key stops before provider" -Action {

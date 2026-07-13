@@ -31,8 +31,6 @@ const safeMetricLabels = new Set([
   "method",
   "operation",
   "rate_limit_allowed",
-  "selected_model",
-  "selected_provider",
   "status"
 ]);
 

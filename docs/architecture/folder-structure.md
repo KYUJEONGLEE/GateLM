@@ -1450,7 +1450,6 @@ client/
 ```text
 .env.example                         # root 공통 예시
 apps/web/.env.example
-apps/control-plane-api/.env.example
 apps/gateway-core/.env.example
 apps/ai-service/.env.example
 apps/worker/.env.example

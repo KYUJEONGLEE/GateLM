@@ -31,13 +31,15 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			PromptText:     promptText,
 		},
 		Identity: request.IdentityContext{
-			TenantID:      reqCtx.TenantID,
-			ProjectID:     reqCtx.ProjectID,
-			ApplicationID: reqCtx.ApplicationID,
-			APIKeyID:      reqCtx.APIKeyID,
-			AppTokenID:    reqCtx.AppTokenID,
-			EndUserID:     reqCtx.EndUserID,
-			FeatureID:     reqCtx.FeatureID,
+			TenantID:       reqCtx.TenantID,
+			ProjectID:      reqCtx.ProjectID,
+			ApplicationID:  reqCtx.ApplicationID,
+			APIKeyID:       reqCtx.APIKeyID,
+			AppTokenID:     reqCtx.AppTokenID,
+			TrustedActorID: reqCtx.TrustedActorID,
+			EmployeeID:     reqCtx.EmployeeID,
+			EndUserID:      reqCtx.EndUserID,
+			FeatureID:      reqCtx.FeatureID,
 		},
 		Budget: budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID),
 		Runtime: request.RuntimeContext{
@@ -46,6 +48,8 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			RoutingPolicyHash:  reqCtx.RoutingPolicyHash,
 			Snapshot:           reqCtx.RuntimeSnapshot,
 			SafetyPolicy:       reqCtx.RuntimeSafetyPolicy,
+			EmployeePolicy:     reqCtx.RuntimeEmployeePolicy,
+			HasEmployeePolicy:  reqCtx.HasRuntimeEmployeePolicy,
 			RateLimitConfig:    reqCtx.RuntimeRateLimit,
 			HasRateLimitConfig: reqCtx.HasRuntimeRateLimit,
 			BudgetPolicy:       reqCtx.RuntimeBudgetPolicy,
@@ -60,8 +64,9 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			HasResponseCapture: reqCtx.HasRuntimeResponseCapture,
 		},
 		Governance: request.GovernanceContext{
-			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
-			BudgetDecision:    reqCtx.BudgetDecision.Clone(),
+			RateLimitDecision:      reqCtx.RateLimitDecision.Clone(),
+			BudgetDecision:         reqCtx.BudgetDecision.Clone(),
+			EmployeePolicyDecision: reqCtx.EmployeePolicyDecision.Clone(),
 		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
@@ -73,17 +78,13 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
 		},
 		Routing: request.RoutingContext{
-			RequestedModel:             reqCtx.RequestedModel,
-			SelectedProvider:           reqCtx.SelectedProvider,
-			SelectedProviderID:         reqCtx.SelectedProviderID,
-			SelectedProviderCatalogKey: reqCtx.SelectedProviderCatalogKey,
-			SelectedModel:              reqCtx.SelectedModel,
-			SelectedModelID:            reqCtx.SelectedModelID,
-			ProviderCatalogContentHash: reqCtx.ProviderCatalogContentHash,
-			RoutingDecisionKeyHash:     reqCtx.RoutingDecisionKeyHash,
-			RoutingDecisionMaterial:    map[string]string{"category": reqCtx.PromptCategory},
-			RoutingReason:              reqCtx.RoutingReason,
-			RoutingPolicyHash:          reqCtx.RoutingPolicyHash,
+			RequestedModel:          reqCtx.RequestedModel,
+			ModelRef:                reqCtx.ModelRef,
+			CandidateModelRefs:      append([]string(nil), reqCtx.CandidateModelRefs...),
+			RoutingDecisionKeyHash:  reqCtx.RoutingDecisionKeyHash,
+			RoutingDecisionMaterial: map[string]string{"category": reqCtx.PromptCategory, "difficulty": reqCtx.PromptDifficulty},
+			RoutingReason:           reqCtx.RoutingReason,
+			RoutingPolicyHash:       reqCtx.RoutingPolicyHash,
 		},
 		Cache: request.CacheContext{
 			CacheStatus:         reqCtx.CacheStatus,
@@ -116,6 +117,8 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.BudgetScope = budget.NormalizeScope(gatewayCtx.Budget, reqCtx.ApplicationID)
 	reqCtx.APIKeyID = gatewayCtx.Identity.APIKeyID
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
+	reqCtx.TrustedActorID = gatewayCtx.Identity.TrustedActorID
+	reqCtx.EmployeeID = gatewayCtx.Identity.EmployeeID
 	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID
 	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
 
@@ -124,6 +127,10 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	}
 	if gatewayCtx.Runtime.SecurityPolicyHash != "" {
 		reqCtx.SecurityPolicyHash = gatewayCtx.Runtime.SecurityPolicyHash
+	}
+	if gatewayCtx.Runtime.HasEmployeePolicy {
+		reqCtx.RuntimeEmployeePolicy = gatewayCtx.Runtime.EmployeePolicy
+		reqCtx.HasRuntimeEmployeePolicy = true
 	}
 	if gatewayCtx.Runtime.SafetyPolicy.SecurityPolicyHash != "" || len(gatewayCtx.Runtime.SafetyPolicy.DetectorSet) > 0 {
 		reqCtx.RuntimeSafetyPolicy = gatewayCtx.Runtime.SafetyPolicy
@@ -165,6 +172,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Governance.BudgetDecision != nil {
 		reqCtx.BudgetDecision = gatewayCtx.Governance.BudgetDecision.Clone()
 	}
+	if gatewayCtx.Governance.EmployeePolicyDecision != nil {
+		reqCtx.EmployeePolicyDecision = gatewayCtx.Governance.EmployeePolicyDecision.Clone()
+	}
 
 	if gatewayCtx.Masking.Action != "" {
 		reqCtx.MaskingAction = gatewayCtx.Masking.Action
@@ -191,29 +201,20 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Routing.RequestedModel != "" {
 		reqCtx.RequestedModel = gatewayCtx.Routing.RequestedModel
 	}
-	if gatewayCtx.Routing.SelectedProvider != "" {
-		reqCtx.SelectedProvider = gatewayCtx.Routing.SelectedProvider
+	if gatewayCtx.Routing.ModelRef != "" {
+		reqCtx.ModelRef = gatewayCtx.Routing.ModelRef
 	}
-	if gatewayCtx.Routing.SelectedProviderID != "" {
-		reqCtx.SelectedProviderID = gatewayCtx.Routing.SelectedProviderID
-	}
-	if gatewayCtx.Routing.SelectedProviderCatalogKey != "" {
-		reqCtx.SelectedProviderCatalogKey = gatewayCtx.Routing.SelectedProviderCatalogKey
-	}
-	if gatewayCtx.Routing.SelectedModel != "" {
-		reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
-	}
-	if gatewayCtx.Routing.SelectedModelID != "" {
-		reqCtx.SelectedModelID = gatewayCtx.Routing.SelectedModelID
-	}
-	if gatewayCtx.Routing.ProviderCatalogContentHash != "" {
-		reqCtx.ProviderCatalogContentHash = gatewayCtx.Routing.ProviderCatalogContentHash
+	if gatewayCtx.Routing.CandidateModelRefs != nil {
+		reqCtx.CandidateModelRefs = append([]string(nil), gatewayCtx.Routing.CandidateModelRefs...)
 	}
 	if gatewayCtx.Routing.RoutingDecisionKeyHash != "" {
 		reqCtx.RoutingDecisionKeyHash = gatewayCtx.Routing.RoutingDecisionKeyHash
 	}
 	if category := gatewayCtx.Routing.RoutingDecisionMaterial["category"]; category != "" {
 		reqCtx.PromptCategory = category
+	}
+	if difficulty := gatewayCtx.Routing.RoutingDecisionMaterial["difficulty"]; difficulty != "" {
+		reqCtx.PromptDifficulty = difficulty
 	}
 	if gatewayCtx.Routing.RoutingReason != "" {
 		reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason

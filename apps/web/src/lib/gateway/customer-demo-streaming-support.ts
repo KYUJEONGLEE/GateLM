@@ -1,21 +1,23 @@
 import type { RuntimePolicyConfig } from "@/lib/control-plane/runtime-policy-types";
 
 export function runtimePolicySupportsApplicationChatStreaming(config: RuntimePolicyConfig) {
-  const routingProviders = new Set(
-    [
-      config.routingPolicy.lowCostProvider,
-      config.routingPolicy.defaultProvider,
-      config.routingPolicy.fallbackProvider,
-      config.routingPolicy.highQualityProvider ?? ""
-    ]
-      .map((provider) => provider.trim())
-      .filter(Boolean)
+  const activeModelRefs = new Set(
+    Object.values(config.routingPolicy.routes).flatMap((categoryRoutes) =>
+      Object.values(categoryRoutes).flatMap((cell) => cell.modelRefs)
+    )
+  );
+  const routingProviders = config.providers.filter((provider) =>
+    provider.models.some((modelId) =>
+      activeModelRefs.has(
+        provider.provider === "mock" && modelId === "mock-balanced"
+          ? "mock-balanced"
+          : `${provider.providerId}:${modelId}`
+      )
+    )
   );
 
   for (const provider of routingProviders) {
-    const providerConfig = config.providers?.find((item) => item.provider === provider);
-
-    if (isAnthropicProvider(provider, providerConfig)) {
+    if (isAnthropicProvider(provider.provider, provider)) {
       return false;
     }
   }

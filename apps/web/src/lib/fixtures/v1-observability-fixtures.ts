@@ -1,5 +1,5 @@
-import dashboardOverviewFixture from "../../../../../docs/v1.0.0/fixtures/dashboard-overview.fixture.json";
-import invocationLogFixture from "../../../../../docs/v1.0.0/fixtures/invocation-log.fixture.json";
+// Shared observability view types. Despite the historical filename, this module
+// has no runtime dependency on v1 fixtures and exposes only the active routing shape.
 
 export type LegacyRuntimeHashes = {
   configHash: string;
@@ -85,6 +85,7 @@ export type InvocationLogRecord = {
   traceId: string;
   tenantId: string;
   projectId: string;
+  projectName?: string | null;
   applicationId: string;
   budgetScope: BudgetScope;
   apiKeyId: string;
@@ -98,11 +99,18 @@ export type InvocationLogRecord = {
   requestBodyHash: string;
   promptHash: string;
   redactedPromptPreview: string | null;
-  requestedProvider: string | null;
   requestedModel: string | null;
-  selectedProvider: string | null;
-  selectedModel: string | null;
+  category: string;
+  difficulty: string;
+  modelRef: string | null;
   routingReason: string | null;
+  providerAttempt: {
+    providerId: string;
+    modelId: string;
+    outcome: string;
+    latencyMs: number | null;
+    sanitizedErrorCode: string | null;
+  } | null;
   cacheStatus: string;
   cacheType: string;
   cacheDecisionReason?: string | null;
@@ -111,7 +119,6 @@ export type InvocationLogRecord = {
   maskingAction: "none" | "redacted" | "blocked";
   maskingDetectedTypes: string[];
   maskingDetectedCount: number;
-  promptCategory?: string | null;
   providerCalled?: boolean;
   rateLimitDecision: RateLimitDecision;
   promptTokens: number;
@@ -156,18 +163,8 @@ export type InvocationLogRecord = {
   };
 };
 
-export type InvocationLogFixture = {
-  fixtureName: string;
-  fixtureVersion: string;
-  owner: string;
-  producer: string[];
-  consumers: string[];
-  sourceOfTruth: string[];
-  notes: string[];
-  records: InvocationLogRecord[];
-};
-
 export type DashboardOverview = {
+  surface?: "all" | "project_application" | "tenant_chat";
   fixtureName: string;
   fixtureVersion: string;
   owner: string;
@@ -210,17 +207,21 @@ export type DashboardOverview = {
   savedCostUsd: string;
   averageLatencyMs: number;
   p95LatencyMs: number;
+  latencyBySurface?: {
+    projectApplicationP95Ms?: number;
+    tenantChatP95Ms?: number;
+  };
   maskingActionCounts: Record<string, number>;
-  routingCountByModel: Array<{
-    selectedProvider: string;
-    selectedModel: string;
+  routingSummaries: Array<{
+    category: "general" | "code" | "translation" | "summarization" | "reasoning";
+    difficulty: "simple" | "complex";
     routingReason: string;
     requestCount: number;
   }>;
   statusCounts: Record<string, number>;
   costByModel: Array<{
-    selectedProvider: string;
-    selectedModel: string;
+    provider: string;
+    model: string;
     requestCount: number;
     totalTokens: number;
     costMicroUsd: number;
@@ -265,8 +266,8 @@ export type DashboardOverview = {
       estimatedCostMicroUsd: number;
     }>;
     byProviderModel?: Array<{
-      selectedProvider: string;
-      selectedModel: string;
+      provider: string;
+      model: string;
       requestCount: number;
       p95ProviderLatencyMs: number;
     }>;
@@ -277,155 +278,3 @@ export type DashboardOverview = {
   };
   notes: string[];
 };
-
-export function getDashboardOverview(): DashboardOverview {
-  return normalizeDashboardOverview(dashboardOverviewFixture as unknown as DashboardOverview);
-}
-
-export function getInvocationLogFixture(): InvocationLogFixture {
-  return invocationLogFixture as unknown as InvocationLogFixture;
-}
-
-export function getInvocationRecords(): InvocationLogRecord[] {
-	return getInvocationLogFixture().records.map(normalizeInvocationRecord).sort((left, right) =>
-		right.createdAt.localeCompare(left.createdAt)
-	);
-}
-
-export function getInvocationRecord(requestId: string): InvocationLogRecord | undefined {
-	const record = getInvocationLogFixture().records.find((item) => item.requestId === requestId);
-	return record ? normalizeInvocationRecord(record) : undefined;
-}
-
-function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
-	const status = normalizeLegacyBridgeStatus(record.status);
-	const terminalStatus = normalizeLegacyBridgeStatus(record.terminalStatus ?? status);
-	const budgetScope = normalizeBudgetScope(record.budgetScope, record.applicationId);
-	const runtime = normalizeRuntimeMetadataBridge(record.metadata?.runtime, record.createdAt);
-	const domainOutcomes = record.domainOutcomes ?? legacyDomainOutcomes(record, terminalStatus);
-	if (status === record.status && terminalStatus === record.terminalStatus && budgetScope === record.budgetScope && runtime === record.metadata?.runtime && domainOutcomes === record.domainOutcomes) {
-		return record;
-	}
-	return { ...record, budgetScope, domainOutcomes, metadata: { runtime }, status, terminalStatus };
-}
-
-// v1 fixture compatibility bridge: legacy status values are normalized to v2 terminal status values.
-function normalizeLegacyBridgeStatus(status: string): InvocationLogRecord["status"] {
-	if (
-		status === "success" ||
-		status === "blocked" ||
-		status === "rate_limited" ||
-		status === "failed" ||
-		status === "cancelled"
-	) {
-		return status;
-	}
-	if (status === "cache_hit") {
-		return "success";
-	}
-	return "failed";
-}
-
-function normalizeDashboardOverview(overview: DashboardOverview): DashboardOverview {
-	const applicationId = overview.filters.applicationId;
-	return {
-		...overview,
-		filters: {
-			...overview.filters,
-			budgetScopeType: overview.filters.budgetScopeType ?? "application",
-			budgetScopeId: overview.filters.budgetScopeId ?? applicationId,
-			resolvedBy: overview.filters.resolvedBy ?? "default_application"
-		}
-	};
-}
-
-// v1 fixture compatibility bridge: legacy runtime hashes stay under legacyHashes, not primary provenance.
-function normalizeRuntimeMetadataBridge(value: unknown, createdAt: string): RuntimeMetadata {
-	const runtime = toRecord(value);
-	const snapshot = toRecord(runtime.runtimeSnapshot);
-	const legacyHashes = normalizeLegacyHashes(snapshot.legacyHashes ?? runtime.legacyHashes ?? runtime);
-	return {
-		runtimeSnapshot: {
-			runtimeSnapshotId: stringOr(snapshot.runtimeSnapshotId, "runtime_snapshot_compat"),
-			runtimeSnapshotVersion: integerOr(snapshot.runtimeSnapshotVersion, 1),
-			contentHash: stringOr(snapshot.contentHash, legacyHashes.configHash),
-			runtimeState: normalizeActualRuntimeStateBridge(snapshot.runtimeState),
-			publishedAt: stringOr(snapshot.publishedAt, createdAt),
-			publishedBy: stringOr(snapshot.publishedBy, "runtime_config_compat"),
-			gatewayInstanceId: stringOr(snapshot.gatewayInstanceId, "gateway_web_compat"),
-			legacyHashes
-		}
-	};
-}
-
-function normalizeLegacyHashes(value: unknown): LegacyRuntimeHashes {
-	const record = toRecord(value);
-	return {
-		configHash: stringOr(record.configHash, "not-exposed"),
-		securityPolicyHash: stringOr(record.securityPolicyHash, "not-exposed"),
-		routingPolicyHash: stringOr(record.routingPolicyHash, "not-exposed")
-	};
-}
-
-function normalizeActualRuntimeStateBridge(value: unknown): RuntimeSnapshotState {
-	if (
-		value === "snapshot_active" ||
-		value === "last_known_safe_used" ||
-		value === "stale_snapshot_used"
-	) {
-		return value;
-	}
-	return "snapshot_active";
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function stringOr(value: unknown, fallback: string): string {
-	return typeof value === "string" && value.trim() ? value : fallback;
-}
-
-function integerOr(value: unknown, fallback: number): number {
-	return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
-}
-
-function normalizeBudgetScope(scope: BudgetScope | undefined, applicationId: string): BudgetScope {
-	if (
-		scope?.budgetScopeType &&
-		scope.budgetScopeId &&
-		scope.resolvedBy
-	) {
-		return scope;
-	}
-	return {
-		budgetScopeType: "application",
-		budgetScopeId: applicationId,
-		resolvedBy: "default_application"
-	};
-}
-
-function legacyDomainOutcomes(record: InvocationLogRecord, terminalStatus: TerminalStatus): DomainOutcomes {
-	const cacheOutcome = record.cacheStatus === "hit" || record.cacheStatus === "miss" || record.cacheStatus === "error"
-		? record.cacheStatus
-		: record.cacheStatus === "bypass" ? "bypassed" : "not_used";
-	const safetyOutcome = record.maskingAction === "blocked" || record.maskingAction === "redacted"
-		? record.maskingAction
-		: "passed";
-	const providerOutcome = record.providerLatencyMs === null || terminalStatus === "blocked" || terminalStatus === "rate_limited"
-		? "not_called"
-		: terminalStatus === "failed" ? "error" : "success";
-	return {
-		auth: { outcome: "passed" },
-		runtime: { outcome: record.metadata?.runtime?.runtimeSnapshot?.runtimeState ?? "not_checked" },
-		rateLimit: { outcome: terminalStatus === "rate_limited" ? "rate_limited" : "not_checked" },
-		budget: { outcome: "allowed" },
-		safety: { outcome: safetyOutcome },
-		routing: { outcome: record.selectedProvider || record.selectedModel ? "selected" : "not_checked" },
-		cache: { outcome: cacheOutcome },
-		provider: { outcome: providerOutcome, code: providerOutcome === "error" ? record.errorCode : null },
-		fallback: { outcome: "not_called" },
-		streaming: { outcome: record.stream ? terminalStatus === "cancelled" ? "cancelled" : "completed" : "not_streaming" },
-		logging: { outcome: "written" }
-	};
-}

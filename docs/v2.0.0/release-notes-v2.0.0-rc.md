@@ -1,5 +1,8 @@
 # GateLM v2.0.0 RC Release Notes Draft
 
+> [!IMPORTANT]
+> **문서 상태: Historical unfinished RC draft.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 문서는 공식 v2.0.0 tag 또는 current release 상태를 증명하지 않는다.
+
 ## Status
 
 Candidate status: not tagged yet.

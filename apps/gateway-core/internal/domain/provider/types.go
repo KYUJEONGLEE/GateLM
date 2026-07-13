@@ -41,6 +41,7 @@ type ChatCompletionResponse struct {
 
 type ChatCompletionStreamEvent struct {
 	Data  json.RawMessage
+	Delta string
 	Usage *Usage
 }
 
@@ -51,9 +52,15 @@ type ChatChoice struct {
 }
 
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens         int                  `json:"prompt_tokens"`
+	CompletionTokens     int                  `json:"completion_tokens"`
+	TotalTokens          int                  `json:"total_tokens"`
+	PromptTokensDetails  *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+	CacheReadInputTokens int                  `json:"-"`
+}
+
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
 }
 
 type GateLMMetadata struct {
@@ -62,8 +69,10 @@ type GateLMMetadata struct {
 	ProjectID        string `json:"projectId,omitempty"`
 	ApplicationID    string `json:"applicationId,omitempty"`
 	RequestedModel   string `json:"requestedModel"`
-	SelectedProvider string `json:"selectedProvider"`
-	SelectedModel    string `json:"selectedModel"`
+	ExecutionMode    string `json:"executionMode,omitempty"`
+	Category         string `json:"category,omitempty"`
+	Difficulty       string `json:"difficulty,omitempty"`
+	ModelRef         string `json:"modelRef,omitempty"`
 	TerminalStatus   string `json:"terminalStatus,omitempty"`
 	DomainOutcomes   any    `json:"domainOutcomes,omitempty"`
 	CacheStatus      string `json:"cacheStatus"`

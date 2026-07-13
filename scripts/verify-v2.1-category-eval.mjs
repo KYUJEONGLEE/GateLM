@@ -5,7 +5,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const defaultRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const schemaPath = "docs/v2.1.0/schemas/category-evaluation-record.schema.json";
-const fixturePath = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl";
+const historicalV1SchemaPath = "docs/v2.1.0/schemas/category-evaluation-record.v1.schema.json";
+const fixturePaths = [
+  "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl",
+  "docs/v2.1.0/fixtures/category-evaluation-challenge.fixture.jsonl",
+  "docs/v2.1.0/fixtures/category-evaluation-ambiguous.fixture.jsonl",
+];
+const activeSchemaVersion = "gatelm.category-evaluation-record.v2";
+const activeCategories = ["general", "code", "translation", "summarization", "reasoning"];
 
 const requiredTopLevelSchemaFields = [
   "$schema",
@@ -139,7 +146,7 @@ function validateProperty(schema, value, jsonPath, failures) {
   }
 }
 
-function validateSourceConsentLabelCombination(record, lineNumber, failures) {
+function validateSourceConsentLabelCombination(record, fixturePath, lineNumber, failures) {
   const prefix = `${fixturePath}: line ${lineNumber}`;
 
   if (record.source === "synthetic_fixture") {
@@ -157,7 +164,7 @@ function validateSourceConsentLabelCombination(record, lineNumber, failures) {
   }
 }
 
-function validateRecord(schema, record, lineNumber, failures) {
+function validateRecord(schema, record, fixturePath, lineNumber, failures) {
   const properties = schema.properties ?? {};
   const allowedKeys = new Set(Object.keys(properties));
   const prefix = `${fixturePath}: line ${lineNumber}`;
@@ -188,7 +195,7 @@ function validateRecord(schema, record, lineNumber, failures) {
     validateProperty(properties[key], value, `${prefix}.${key}`, failures);
   }
 
-  validateSourceConsentLabelCombination(record, lineNumber, failures);
+  validateSourceConsentLabelCombination(record, fixturePath, lineNumber, failures);
 }
 
 function validateSchemaShape(schema, failures) {
@@ -228,6 +235,29 @@ function validateSchemaShape(schema, failures) {
     failures.push(`${schemaPath}: redactedPrompt.maxLength must be 65536`);
   }
 
+  if (schema.properties?.schemaVersion?.const !== activeSchemaVersion) {
+    failures.push(`${schemaPath}: schemaVersion const must be ${activeSchemaVersion}`);
+  }
+
+  if (schema.properties && "expectedTier" in schema.properties) {
+    failures.push(`${schemaPath}: expectedTier must not be declared in the active category-only schema`);
+  }
+
+  if (Array.isArray(schema.required) && schema.required.includes("expectedTier")) {
+    failures.push(`${schemaPath}: expectedTier must not be required by the active category-only schema`);
+  }
+
+  const categoryEnum = schema.properties?.expectedCategory?.enum;
+  if (
+    !Array.isArray(categoryEnum) ||
+    categoryEnum.length !== activeCategories.length ||
+    !activeCategories.every((category) => categoryEnum.includes(category))
+  ) {
+    failures.push(
+      `${schemaPath}: expectedCategory enum must contain exactly five active categories (${activeCategories.join(",")})`,
+    );
+  }
+
   if (!Array.isArray(schema.allOf) || schema.allOf.length < 1) {
     failures.push(`${schemaPath}: expected source/consentType/labelSource allOf constraints`);
   }
@@ -238,29 +268,35 @@ export function verifyCategoryEvaluationDataset(options = {}) {
   const failures = [];
   const schema = readJson(rootDir, schemaPath, failures);
 
+  if (!existsSync(toAbsolute(rootDir, historicalV1SchemaPath))) {
+    failures.push(`${historicalV1SchemaPath}: historical snapshot file is missing`);
+  }
+
   validateSchemaShape(schema, failures);
 
-  const fixtureText = readText(rootDir, fixturePath, failures);
-  if (fixtureText === null) {
-    return failures;
-  }
+  for (const fixturePath of fixturePaths) {
+    const fixtureText = readText(rootDir, fixturePath, failures);
+    if (fixtureText === null) {
+      continue;
+    }
 
-  const lines = fixtureText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const lines = fixtureText.split(/\r?\n/).filter((line) => line.trim().length > 0);
 
-  if (lines.length === 0) {
-    failures.push(`${fixturePath}: expected at least one JSONL record`);
-  }
+    if (lines.length === 0) {
+      failures.push(`${fixturePath}: expected at least one JSONL record`);
+    }
 
-  if (schema) {
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-      try {
-        const record = JSON.parse(line);
-        validateRecord(schema, record, lineNumber, failures);
-      } catch (error) {
-        failures.push(`${fixturePath}: line ${lineNumber}: invalid JSON (${error.message})`);
-      }
-    });
+    if (schema) {
+      lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+        try {
+          const record = JSON.parse(line);
+          validateRecord(schema, record, fixturePath, lineNumber, failures);
+        } catch (error) {
+          failures.push(`${fixturePath}: line ${lineNumber}: invalid JSON (${error.message})`);
+        }
+      });
+    }
   }
 
   return failures;

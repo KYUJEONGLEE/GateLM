@@ -14,7 +14,7 @@ perf_assert_isolated_postgres
 perf_assert_runtime_rate_limit
 perf_wait_for_http \
   "Gateway readiness" \
-  "http://127.0.0.1:${AWS_TRIAGE_GATEWAY_PORT}/readyz" \
+  "$(perf_gateway_host_base_url)/readyz" \
   15
 perf_assert_no_live_provider_credentials
 

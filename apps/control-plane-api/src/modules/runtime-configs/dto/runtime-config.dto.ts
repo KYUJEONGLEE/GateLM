@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDefined,
   IsIn,
   IsInt,
   IsISO8601,
@@ -49,6 +50,20 @@ export type ModelStatusDto = 'active' | 'disabled';
 export type RuntimeConfigCredentialType = 'api_key' | 'app_token';
 export type RuntimeConfigSafetyDetectorType =
   (typeof RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES)[number];
+export const RUNTIME_CONFIG_ROUTING_CATEGORIES = [
+  'general',
+  'code',
+  'translation',
+  'summarization',
+  'reasoning',
+] as const;
+export type RuntimeConfigRoutingCategory =
+  (typeof RUNTIME_CONFIG_ROUTING_CATEGORIES)[number];
+export type RuntimeConfigRoutingDifficulty = 'simple' | 'complex';
+export type RuntimeConfigRoutingMode = 'auto' | 'manual';
+export type RuntimeConfigRoutingBootstrapState =
+  | 'mock_bootstrap'
+  | 'configured';
 
 export class RuntimeConfigRateLimitDto {
   @IsOptional()
@@ -79,9 +94,6 @@ export class RuntimeConfigBudgetPolicyDto {
   @Max(100)
   warningThresholdPercent?: number;
 
-  @IsOptional()
-  @IsBoolean()
-  restrictHighQualityOnBudgetRisk?: boolean;
 }
 
 export class RuntimeConfigCachePolicyDto {
@@ -131,61 +143,62 @@ export class RuntimeConfigResponseCapturePolicyDto {
   maxChars?: number;
 }
 
+export class RuntimeConfigRoutingCellDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(240, { each: true })
+  modelRefs!: string[];
+}
+
+export class RuntimeConfigRoutingDifficultyRoutesDto {
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingCellDto)
+  simple!: RuntimeConfigRoutingCellDto;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingCellDto)
+  complex!: RuntimeConfigRoutingCellDto;
+}
+
+export class RuntimeConfigRoutingRoutesDto {
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingDifficultyRoutesDto)
+  general!: RuntimeConfigRoutingDifficultyRoutesDto;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingDifficultyRoutesDto)
+  code!: RuntimeConfigRoutingDifficultyRoutesDto;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingDifficultyRoutesDto)
+  translation!: RuntimeConfigRoutingDifficultyRoutesDto;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingDifficultyRoutesDto)
+  summarization!: RuntimeConfigRoutingDifficultyRoutesDto;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingDifficultyRoutesDto)
+  reasoning!: RuntimeConfigRoutingDifficultyRoutesDto;
+}
+
 export class RuntimeConfigRoutingPolicyDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  defaultProvider?: string;
+  @IsIn(['auto', 'manual'])
+  mode!: RuntimeConfigRoutingMode;
 
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  defaultModel?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  lowCostProvider?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  lowCostModel?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  highQualityProvider?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  highQualityModel?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  fallbackProvider?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  fallbackModel?: string;
-
-  @Type(() => Number)
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(100000)
-  shortPromptMaxChars?: number;
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeConfigRoutingRoutesDto)
+  routes!: RuntimeConfigRoutingRoutesDto;
 }
 
 export class RuntimeConfigSafetyDetectorDto {
@@ -469,7 +482,6 @@ export interface RuntimeConfigBudgetPolicyResponseDto {
   enabled: boolean;
   enforcementMode: 'warn' | 'block' | 'disabled';
   warningThresholdPercent: number;
-  restrictHighQualityOnBudgetRisk: boolean;
 }
 
 export interface RuntimeConfigSafetyDetectorResponseDto {
@@ -508,17 +520,10 @@ export interface RuntimeConfigResponseCapturePolicyResponseDto {
 }
 
 export interface RuntimeConfigRoutingPolicyResponseDto {
-  type: 'simple';
-  autoModel: 'auto';
-  defaultProvider: string;
-  defaultModel: string;
-  lowCostProvider: string;
-  lowCostModel: string;
-  highQualityProvider?: string;
-  highQualityModel?: string;
-  fallbackProvider: string;
-  fallbackModel: string;
-  shortPromptMaxChars: number;
+  schemaVersion: 'gatelm.routing-policy.v2';
+  mode: RuntimeConfigRoutingMode;
+  bootstrapState: RuntimeConfigRoutingBootstrapState;
+  routes: RuntimeConfigRoutingRoutesDto;
   routingPolicyHash: string;
 }
 
@@ -555,7 +560,7 @@ export interface RuntimeConfigCostingDto {
 }
 
 export interface ActiveRuntimeConfigResponseDto {
-  schemaVersion: 'gatelm.active-runtime-config.v1';
+  schemaVersion: 'gatelm.active-runtime-config.v2';
   configVersion: string;
   configHash: string;
   configHashAlgorithm: 'sha256(canonical_json(runtimeConfig_without_configHash))';
@@ -577,12 +582,6 @@ export interface ActiveRuntimeConfigResponseDto {
   appToken: RuntimeConfigCredentialRefDto | null;
   providers: RuntimeConfigProviderDto[];
   models: RuntimeConfigModelResponseDto[];
-  defaultProvider: string;
-  defaultModel: string;
-  lowCostProvider: string;
-  lowCostModel: string;
-  fallbackProvider: string;
-  fallbackModel: string;
   rateLimit: RuntimeConfigRateLimitResponseDto;
   budgetPolicy: RuntimeConfigBudgetPolicyResponseDto;
   safetyPolicy: RuntimeConfigSafetyPolicyResponseDto;
@@ -643,6 +642,7 @@ export interface ProviderCatalogModelRoutingDto {
 
 export interface ProviderCatalogModelDto {
   modelId: string;
+  modelRef: string;
   modelName: string;
   displayName?: string;
   enabled: boolean;
@@ -684,14 +684,9 @@ export interface RuntimeSnapshotSafetyPolicyDto {
 }
 
 export interface RuntimeSnapshotRoutingPolicyDto {
-  autoModelEnabled: boolean;
-  defaultRequestedModel: string;
-  defaultProvider: string;
-  defaultModel: string;
-  lowCostProvider: string;
-  lowCostModel: string;
-  highQualityProvider?: string;
-  highQualityModel?: string;
+  mode: RuntimeConfigRoutingMode;
+  bootstrapState: RuntimeConfigRoutingBootstrapState;
+  routes: RuntimeConfigRoutingRoutesDto;
   routingPolicyHash: string;
 }
 
@@ -724,14 +719,6 @@ export interface RuntimeSnapshotBudgetPolicyDto {
   enabled: boolean;
   enforcementMode: 'warn' | 'block' | 'disabled';
   warningThresholdPercent: number;
-  restrictHighQualityOnBudgetRisk: boolean;
-}
-
-export interface RuntimeSnapshotFallbackPolicyDto {
-  enabled: boolean;
-  fallbackProvider?: string;
-  fallbackModel?: string;
-  allowedReasons?: Array<'provider_timeout' | 'provider_error'>;
 }
 
 export interface RuntimeSnapshotStreamingPolicyDto {
@@ -747,7 +734,6 @@ export interface RuntimeSnapshotPoliciesDto {
   responseCapture: RuntimeSnapshotResponseCapturePolicyDto;
   rateLimit: RuntimeSnapshotRateLimitPolicyDto;
   budget: RuntimeSnapshotBudgetPolicyDto;
-  fallback: RuntimeSnapshotFallbackPolicyDto;
   streaming: RuntimeSnapshotStreamingPolicyDto;
 }
 
@@ -758,6 +744,7 @@ export interface RuntimeSnapshotLegacyHashesDto {
 }
 
 export interface RuntimeSnapshotResponseDto {
+  schemaVersion: 'gatelm.runtime-snapshot.v2';
   runtimeSnapshotId: string;
   runtimeSnapshotVersion: number;
   contentHash: string;

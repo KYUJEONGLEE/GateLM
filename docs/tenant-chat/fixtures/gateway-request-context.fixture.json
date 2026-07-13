@@ -1,0 +1,39 @@
+{
+  "surface": "tenant_chat",
+  "phase": "completion",
+  "requestId": "request_fixture_001",
+  "turnId": "turn_fixture_001",
+  "idempotencyKey": "turn_fixture_001_attempt_1",
+  "admissionId": "admission_fixture_001",
+  "executionScope": {
+    "kind": "tenant_chat",
+    "tenantId": "tenant_fixture_001",
+    "actor": {
+      "userId": "user_fixture_001",
+      "actorKind": "employee",
+      "employeeId": "employee_fixture_001"
+    },
+    "quotaScope": {
+      "type": "user",
+      "id": "user_fixture_001"
+    },
+    "budgetScope": {
+      "type": "tenant",
+      "id": "tenant_fixture_001"
+    }
+  },
+  "snapshot": {
+    "version": 12,
+    "digest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+    "policyVersion": 8,
+    "employeeNoticeVersion": 3,
+    "pricingVersion": 5
+  },
+  "bindingDigest": "hmac-sha256:wip0OBmQCUFausq7QgVoOecQB22pauanKV0FDKS3Zlc",
+  "usageIntent": {
+    "estimatedInputTokens": 640,
+    "maxOutputTokens": 1024,
+    "requestedTier": "auto",
+    "cacheStrategy": "exact"
+  }
+}

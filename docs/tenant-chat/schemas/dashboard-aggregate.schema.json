@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v1/dashboard-aggregate.schema.json",
+  "title": "Tenant Chat dashboard aggregate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "surface",
+    "from",
+    "to",
+    "freshness",
+    "requests",
+    "usage",
+    "policyStates",
+    "latency",
+    "provenance",
+    "breakdowns"
+  ],
+  "properties": {
+    "surface": { "const": "tenant_chat" },
+    "from": { "type": "string", "format": "date-time" },
+    "to": { "type": "string", "format": "date-time" },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectedAt", "lagSeconds", "state"],
+      "properties": {
+        "projectedAt": { "type": "string", "format": "date-time" },
+        "lagSeconds": { "type": "integer", "minimum": 0 },
+        "state": { "type": "string", "enum": ["fresh", "stale", "partial"] }
+      }
+    },
+    "requests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "activeUsers",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "cacheHits",
+        "cacheMisses",
+        "cacheOff",
+        "cacheEligible",
+        "cacheHitRate",
+        "rateLimited",
+        "concurrencyLimited",
+        "safetyBlocked",
+        "quotaBlocked",
+        "budgetBlocked",
+        "fallbackRequests",
+        "fallbackSucceeded",
+        "providerAttempts",
+        "billableAttempts"
+      ],
+      "properties": {
+        "total": { "$ref": "#/$defs/count" },
+        "activeUsers": { "$ref": "#/$defs/count" },
+        "succeeded": { "$ref": "#/$defs/count" },
+        "failed": { "$ref": "#/$defs/count" },
+        "cancelled": { "$ref": "#/$defs/count" },
+        "cacheHits": { "$ref": "#/$defs/count" },
+        "cacheMisses": { "$ref": "#/$defs/count" },
+        "cacheOff": { "$ref": "#/$defs/count" },
+        "cacheEligible": { "$ref": "#/$defs/count" },
+        "cacheHitRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rateLimited": { "$ref": "#/$defs/count" },
+        "concurrencyLimited": { "$ref": "#/$defs/count" },
+        "safetyBlocked": { "$ref": "#/$defs/count" },
+        "quotaBlocked": { "$ref": "#/$defs/count" },
+        "budgetBlocked": { "$ref": "#/$defs/count" },
+        "fallbackRequests": { "$ref": "#/$defs/count" },
+        "fallbackSucceeded": { "$ref": "#/$defs/count" },
+        "providerAttempts": { "$ref": "#/$defs/count" },
+        "billableAttempts": { "$ref": "#/$defs/count" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmedInputTokens",
+        "confirmedOutputTokens",
+        "confirmedTotalTokens",
+        "confirmedCostMicroUsd",
+        "unconfirmedIncidentCount",
+        "unconfirmedExposureMicroUsd"
+      ],
+      "properties": {
+        "confirmedInputTokens": { "$ref": "#/$defs/count" },
+        "confirmedOutputTokens": { "$ref": "#/$defs/count" },
+        "confirmedTotalTokens": { "$ref": "#/$defs/count" },
+        "confirmedCostMicroUsd": { "$ref": "#/$defs/count" },
+        "unconfirmedIncidentCount": { "$ref": "#/$defs/count" },
+        "unconfirmedExposureMicroUsd": { "$ref": "#/$defs/count" }
+      }
+    },
+    "policyStates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quota", "budget"],
+      "properties": {
+        "quota": { "$ref": "#/$defs/stateCounts" },
+        "budget": { "$ref": "#/$defs/stateCounts" }
+      }
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["averageMs", "p50Ms", "p95Ms", "p99Ms", "providerP95Ms"],
+      "properties": {
+        "averageMs": { "$ref": "#/$defs/count" },
+        "p50Ms": { "$ref": "#/$defs/count" },
+        "p95Ms": { "$ref": "#/$defs/count" },
+        "p99Ms": { "$ref": "#/$defs/count" },
+        "providerP95Ms": { "$ref": "#/$defs/count" }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshotVersion", "pricingVersion", "requestCount", "confirmedCostMicroUsd"],
+        "properties": {
+          "snapshotVersion": { "type": "integer", "minimum": 1 },
+          "pricingVersion": { "type": "integer", "minimum": 1 },
+          "requestCount": { "$ref": "#/$defs/count" },
+          "confirmedCostMicroUsd": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "breakdowns": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["providerId", "modelKey", "routeTier", "requestCount", "attemptCount", "billableAttemptCount", "fallbackSuccessCount", "confirmedCostMicroUsd"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "modelKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "routeTier": { "type": "string", "enum": ["high_quality", "standard", "economy"] },
+          "requestCount": { "$ref": "#/$defs/count" },
+          "attemptCount": { "$ref": "#/$defs/count" },
+          "billableAttemptCount": { "$ref": "#/$defs/count" },
+          "fallbackSuccessCount": { "$ref": "#/$defs/count" },
+          "confirmedCostMicroUsd": { "$ref": "#/$defs/count" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "stateCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["normal", "warning", "economy", "blocked"],
+      "properties": {
+        "normal": { "$ref": "#/$defs/count" },
+        "warning": { "$ref": "#/$defs/count" },
+        "economy": { "$ref": "#/$defs/count" },
+        "blocked": { "$ref": "#/$defs/count" }
+      }
+    }
+  }
+}

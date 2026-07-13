@@ -1,9 +1,38 @@
 package config
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/routing"
 )
+
+func TestGatewayConfigDoesNotExposeRetiredRoutingTargetFields(t *testing.T) {
+	configType := reflect.TypeOf(Config{})
+	for _, fieldName := range []string{
+		"DefaultProvider",
+		"DefaultModel",
+		"LowCostModel",
+		"HighQualityModel",
+	} {
+		if _, exists := configType.FieldByName(fieldName); exists {
+			t.Errorf("retired routing target field %s must not be exposed by gateway config", fieldName)
+		}
+	}
+}
+
+func TestLoadUsesCanonicalV2RoutingPolicyHashByDefault(t *testing.T) {
+	t.Setenv("GATEWAY_ROUTING_POLICY_HASH", "")
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.RoutingPolicyHash != routing.DefaultPolicyHash {
+		t.Fatalf("unexpected default routing policy hash: %q", cfg.RoutingPolicyHash)
+	}
+}
 
 var aiSafetySidecarEnvKeys = []string{
 	"GATEWAY_AI_SAFETY_SIDECAR_ENABLED",
@@ -24,6 +53,52 @@ var providerCatalogCacheEnvKeys = []string{
 	"GATEWAY_PROVIDER_CATALOG_CACHE_ENABLED",
 	"GATEWAY_PROVIDER_CATALOG_CACHE_TTL_MS",
 	"GATEWAY_PROVIDER_CATALOG_CACHE_STALE_TTL_MS",
+}
+
+var asyncLogEnvKeys = []string{
+	"GATEWAY_ASYNC_LOG_ENABLED",
+	"GATEWAY_ASYNC_LOG_QUEUE_SIZE",
+	"GATEWAY_ASYNC_LOG_WORKER_COUNT",
+	"GATEWAY_ASYNC_LOG_BATCH_SIZE",
+	"GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS",
+	"GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS",
+	"GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS",
+}
+
+var databasePerformanceEnvKeys = []string{
+	"DATABASE_URL",
+	"GATEWAY_LOG_DATABASE_URL",
+	"GATEWAY_DATABASE_MAX_CONNS",
+	"GATEWAY_DATABASE_MIN_CONNS",
+	"GATEWAY_DATABASE_MAX_CONN_LIFETIME_MS",
+	"GATEWAY_DATABASE_MAX_CONN_IDLE_TIME_MS",
+	"GATEWAY_DATABASE_HEALTH_CHECK_PERIOD_MS",
+	"GATEWAY_LOG_DATABASE_MAX_CONNS",
+	"GATEWAY_LOG_DATABASE_MIN_CONNS",
+	"GATEWAY_LOG_DATABASE_MAX_CONN_LIFETIME_MS",
+	"GATEWAY_LOG_DATABASE_MAX_CONN_IDLE_TIME_MS",
+	"GATEWAY_LOG_DATABASE_HEALTH_CHECK_PERIOD_MS",
+	"GATEWAY_AUTH_CACHE_ENABLED",
+	"GATEWAY_AUTH_CACHE_TTL_MS",
+	"GATEWAY_AUTH_CACHE_MAX_ENTRIES",
+	"GATEWAY_AUTH_CACHE_KEY_SECRET",
+	"GATEWAY_PRICING_CACHE_ENABLED",
+	"GATEWAY_PRICING_CACHE_TTL_MS",
+	"GATEWAY_PRICING_CACHE_MAX_ENTRIES",
+	"GATEWAY_EXACT_CACHE_KEY_SECRET",
+}
+
+var providerTransportEnvKeys = []string{
+	"GATEWAY_PROVIDER_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_MAX_IDLE_CONNS",
+	"GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST",
+	"GATEWAY_PROVIDER_MAX_CONNS_PER_HOST",
+	"GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_DIAL_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS",
+	"GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS",
+	"GATEWAY_PROVIDER_EXPECT_CONTINUE_TIMEOUT_MS",
 }
 
 var rawResponseCaptureEnvKeys = []string{
@@ -58,6 +133,27 @@ func resetRuntimeSnapshotCacheEnv(t *testing.T) {
 func resetProviderCatalogCacheEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range providerCatalogCacheEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetAsyncLogEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range asyncLogEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetDatabasePerformanceEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range databasePerformanceEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetProviderTransportEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range providerTransportEnvKeys {
 		t.Setenv(key, "")
 	}
 }
@@ -202,6 +298,181 @@ func TestProviderCatalogCacheConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if cfg.ProviderCatalogCache.StaleTTL != 30*time.Second {
 		t.Fatalf("unexpected provider catalog stale TTL: %s", cfg.ProviderCatalogCache.StaleTTL)
+	}
+}
+
+func TestAsyncLogBatchConfigDefaults(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	resetAsyncLogEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.AsyncLogQueueSize != 1024 || cfg.AsyncLogWorkerCount != 2 {
+		t.Fatalf("unexpected async log queue defaults: size=%d workers=%d", cfg.AsyncLogQueueSize, cfg.AsyncLogWorkerCount)
+	}
+	if cfg.AsyncLogBatchSize != 100 {
+		t.Fatalf("unexpected async log batch size: %d", cfg.AsyncLogBatchSize)
+	}
+	if cfg.AsyncLogBatchFlushInterval != 10*time.Millisecond {
+		t.Fatalf("unexpected async log batch flush interval: %s", cfg.AsyncLogBatchFlushInterval)
+	}
+}
+
+func TestAsyncLogBatchConfigLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	resetAsyncLogEnv(t)
+	t.Setenv("GATEWAY_ASYNC_LOG_QUEUE_SIZE", "10000")
+	t.Setenv("GATEWAY_ASYNC_LOG_WORKER_COUNT", "4")
+	t.Setenv("GATEWAY_ASYNC_LOG_BATCH_SIZE", "250")
+	t.Setenv("GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS", "25")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.AsyncLogQueueSize != 10000 || cfg.AsyncLogWorkerCount != 4 {
+		t.Fatalf("unexpected async log queue config: size=%d workers=%d", cfg.AsyncLogQueueSize, cfg.AsyncLogWorkerCount)
+	}
+	if cfg.AsyncLogBatchSize != 250 || cfg.AsyncLogBatchFlushInterval != 25*time.Millisecond {
+		t.Fatalf("unexpected async log batch config: size=%d flush=%s", cfg.AsyncLogBatchSize, cfg.AsyncLogBatchFlushInterval)
+	}
+}
+
+func TestDatabasePerformanceConfigDefaults(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.DatabasePool.MaxConns != 16 || cfg.DatabasePool.MinConns != 2 {
+		t.Fatalf("unexpected primary pool defaults: %+v", cfg.DatabasePool)
+	}
+	if cfg.LogDatabaseURL != cfg.DatabaseURL {
+		t.Fatal("log database should default to the primary database URL")
+	}
+	if cfg.LogDatabasePool.MaxConns != 4 || cfg.LogDatabasePool.MinConns != 2 {
+		t.Fatalf("unexpected log pool defaults: %+v", cfg.LogDatabasePool)
+	}
+	if cfg.AuthCache.Enabled || cfg.PricingCache.Enabled {
+		t.Fatal("DB read caches must require an explicit opt-in")
+	}
+	if cfg.AuthCache.TTL != time.Second || cfg.PricingCache.TTL != 5*time.Second {
+		t.Fatalf("unexpected cache TTL defaults: auth=%s pricing=%s", cfg.AuthCache.TTL, cfg.PricingCache.TTL)
+	}
+}
+
+func TestDatabasePerformanceConfigLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+	t.Setenv("DATABASE_URL", "postgresql://primary.example/gatelm?schema=public")
+	t.Setenv("GATEWAY_LOG_DATABASE_URL", "postgresql://logs.example/gatelm?schema=public")
+	t.Setenv("GATEWAY_DATABASE_MAX_CONNS", "24")
+	t.Setenv("GATEWAY_DATABASE_MIN_CONNS", "4")
+	t.Setenv("GATEWAY_LOG_DATABASE_MAX_CONNS", "8")
+	t.Setenv("GATEWAY_LOG_DATABASE_MIN_CONNS", "3")
+	t.Setenv("GATEWAY_AUTH_CACHE_ENABLED", "true")
+	t.Setenv("GATEWAY_AUTH_CACHE_TTL_MS", "1500")
+	t.Setenv("GATEWAY_AUTH_CACHE_MAX_ENTRIES", "2048")
+	t.Setenv("GATEWAY_AUTH_CACHE_KEY_SECRET", "auth-cache-test-key-material")
+	t.Setenv("GATEWAY_PRICING_CACHE_ENABLED", "true")
+	t.Setenv("GATEWAY_PRICING_CACHE_TTL_MS", "7500")
+	t.Setenv("GATEWAY_PRICING_CACHE_MAX_ENTRIES", "512")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.DatabasePool.MaxConns != 24 || cfg.DatabasePool.MinConns != 4 {
+		t.Fatalf("unexpected primary pool config: %+v", cfg.DatabasePool)
+	}
+	if cfg.LogDatabasePool.MaxConns != 8 || cfg.LogDatabasePool.MinConns != 3 {
+		t.Fatalf("unexpected log pool config: %+v", cfg.LogDatabasePool)
+	}
+	if !cfg.AuthCache.Enabled || cfg.AuthCache.TTL != 1500*time.Millisecond || cfg.AuthCache.MaxEntries != 2048 {
+		t.Fatalf("unexpected auth cache config: enabled=%t ttl=%s maxEntries=%d", cfg.AuthCache.Enabled, cfg.AuthCache.TTL, cfg.AuthCache.MaxEntries)
+	}
+	if !cfg.PricingCache.Enabled || cfg.PricingCache.TTL != 7500*time.Millisecond || cfg.PricingCache.MaxEntries != 512 {
+		t.Fatalf("unexpected pricing cache config: %+v", cfg.PricingCache)
+	}
+}
+
+func TestDatabasePerformanceConfigRejectsPoolMinAboveMax(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+	t.Setenv("GATEWAY_DATABASE_MAX_CONNS", "2")
+	t.Setenv("GATEWAY_DATABASE_MIN_CONNS", "3")
+
+	_, err := LoadWithError()
+	if err == nil || !strings.Contains(err.Error(), "database min connections") {
+		t.Fatalf("expected invalid primary pool error, got %v", err)
+	}
+}
+
+func TestProviderTransportConfigDefaults(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetProviderTransportEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	transport := cfg.ProviderTransport
+	if transport.MaxIdleConns != 512 || transport.MaxIdleConnsPerHost != 256 || transport.MaxConnsPerHost != 256 {
+		t.Fatalf("unexpected provider connection defaults: totalIdle=%d hostIdle=%d hostMax=%d", transport.MaxIdleConns, transport.MaxIdleConnsPerHost, transport.MaxConnsPerHost)
+	}
+	if transport.ResponseHeaderTimeout != cfg.ProviderTimeout {
+		t.Fatalf("response header timeout should follow provider timeout: header=%s provider=%s", transport.ResponseHeaderTimeout, cfg.ProviderTimeout)
+	}
+}
+
+func TestProviderTransportConfigLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetProviderTransportEnv(t)
+	t.Setenv("GATEWAY_PROVIDER_TIMEOUT_MS", "60000")
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS", "1024")
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST", "512")
+	t.Setenv("GATEWAY_PROVIDER_MAX_CONNS_PER_HOST", "768")
+	t.Setenv("GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS", "120000")
+	t.Setenv("GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS", "45000")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	transport := cfg.ProviderTransport
+	if cfg.ProviderTimeout != 60*time.Second || transport.ResponseHeaderTimeout != 45*time.Second {
+		t.Fatalf("unexpected provider timeouts: request=%s header=%s", cfg.ProviderTimeout, transport.ResponseHeaderTimeout)
+	}
+	if transport.MaxIdleConns != 1024 || transport.MaxIdleConnsPerHost != 512 || transport.MaxConnsPerHost != 768 {
+		t.Fatalf("unexpected provider limits: totalIdle=%d hostIdle=%d hostMax=%d", transport.MaxIdleConns, transport.MaxIdleConnsPerHost, transport.MaxConnsPerHost)
+	}
+}
+
+func TestProviderTransportConfigRejectsIdlePerHostAboveTotal(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetProviderTransportEnv(t)
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS", "10")
+	t.Setenv("GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST", "11")
+
+	_, err := LoadWithError()
+	if err == nil || !strings.Contains(err.Error(), "per host cannot exceed total") {
+		t.Fatalf("expected invalid provider idle connection error, got %v", err)
 	}
 }
 

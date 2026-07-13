@@ -704,6 +704,12 @@ function writeStoredTheme(theme: ConsoleTheme) {
 }
 
 function formatGeneratedByModel(modelName: string, locale: Locale) {
+  if (modelName === "mock") {
+    return locale === "ko" ? "Mock 실행" : "Mock execution";
+  }
+  if (modelName === "provider") {
+    return locale === "ko" ? "Provider 실행" : "Provider execution";
+  }
   const displayName = formatModelDisplayName(modelName, locale);
 
   return locale === "ko" ? `${displayName}로 생성됨` : `Generated with ${displayName}`;
@@ -711,18 +717,8 @@ function formatGeneratedByModel(modelName: string, locale: Locale) {
 
 function getGeneratedByModel(exchange: CustomerDemoExchange) {
   return firstDisplayableModel(
-    getResponseHeader(exchange, "X-GateLM-Routed-Model"),
-    getNestedString(exchange.response.body, ["gate_lm", "selectedModel"]),
-    getNestedString(exchange.response.body, ["gate_lm", "routedModel"]),
-    getNestedString(exchange.response.body, ["model"]),
-    exchange.request.body.model
+    getNestedString(exchange.response.body, ["gate_lm", "executionMode"])
   );
-}
-
-function getResponseHeader(exchange: CustomerDemoExchange, name: string) {
-  const targetName = name.toLowerCase();
-
-  return exchange.response.headers.find((header) => header.name.toLowerCase() === targetName)?.value;
 }
 
 function firstDisplayableModel(...values: Array<string | undefined>) {

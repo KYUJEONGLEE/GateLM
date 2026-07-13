@@ -3,6 +3,7 @@ package asyncwriter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -12,15 +13,17 @@ import (
 )
 
 const (
-	defaultQueueSize    = 1024
-	defaultWorkerCount  = 2
-	defaultWriteTimeout = 2 * time.Second
-	operationTerminal   = "terminal"
-	statusSuccess       = "success"
-	statusError         = "error"
-	statusPanic         = "panic"
-	statusQueueFull     = "queue_full"
-	statusClosed        = "closed"
+	defaultQueueSize     = 1024
+	defaultWorkerCount   = 2
+	defaultBatchSize     = 100
+	defaultFlushInterval = 10 * time.Millisecond
+	defaultWriteTimeout  = 2 * time.Second
+	operationTerminal    = "terminal"
+	statusSuccess        = "success"
+	statusError          = "error"
+	statusPanic          = "panic"
+	statusQueueFull      = "queue_full"
+	statusClosed         = "closed"
 )
 
 var (
@@ -31,21 +34,25 @@ var (
 type TerminalLogWriterConfig struct {
 	QueueSize       int
 	WorkerCount     int
+	BatchSize       int
+	FlushInterval   time.Duration
 	WriteTimeout    time.Duration
 	MetricsRegistry *metrics.Registry
 }
 
 type TerminalLogWriter struct {
-	delegate     invocationlog.TerminalLogWriter
-	queue        chan invocationlog.TerminalLog
-	workerCount  int
-	writeTimeout time.Duration
-	registry     *metrics.Registry
-	done         chan struct{}
-	wg           sync.WaitGroup
-	mu           sync.RWMutex
-	closed       bool
-	closeOnce    sync.Once
+	delegate      invocationlog.TerminalLogWriter
+	queue         chan invocationlog.TerminalLog
+	workerCount   int
+	batchSize     int
+	flushInterval time.Duration
+	writeTimeout  time.Duration
+	registry      *metrics.Registry
+	done          chan struct{}
+	wg            sync.WaitGroup
+	mu            sync.RWMutex
+	closed        bool
+	closeOnce     sync.Once
 }
 
 func NewTerminalLogWriter(delegate invocationlog.TerminalLogWriter, cfg TerminalLogWriterConfig) *TerminalLogWriter {
@@ -60,17 +67,27 @@ func NewTerminalLogWriter(delegate invocationlog.TerminalLogWriter, cfg Terminal
 	if workerCount <= 0 {
 		workerCount = defaultWorkerCount
 	}
+	batchSize := cfg.BatchSize
+	if batchSize <= 0 {
+		batchSize = defaultBatchSize
+	}
+	flushInterval := cfg.FlushInterval
+	if flushInterval <= 0 {
+		flushInterval = defaultFlushInterval
+	}
 	writeTimeout := cfg.WriteTimeout
 	if writeTimeout <= 0 {
 		writeTimeout = defaultWriteTimeout
 	}
 	writer := &TerminalLogWriter{
-		delegate:     delegate,
-		queue:        make(chan invocationlog.TerminalLog, queueSize),
-		workerCount:  workerCount,
-		writeTimeout: writeTimeout,
-		registry:     cfg.MetricsRegistry,
-		done:         make(chan struct{}),
+		delegate:      delegate,
+		queue:         make(chan invocationlog.TerminalLog, queueSize),
+		workerCount:   workerCount,
+		batchSize:     batchSize,
+		flushInterval: flushInterval,
+		writeTimeout:  writeTimeout,
+		registry:      cfg.MetricsRegistry,
+		done:          make(chan struct{}),
 	}
 	writer.recordQueueDepth()
 	for i := 0; i < writer.workerCount; i++ {
@@ -130,13 +147,85 @@ func (w *TerminalLogWriter) Close(ctx context.Context) error {
 
 func (w *TerminalLogWriter) runWorker(workerID int) {
 	defer w.wg.Done()
-	for entry := range w.queue {
+	batch := make([]invocationlog.TerminalLog, 0, w.batchSize)
+	for {
+		entry, ok := <-w.queue
+		if !ok {
+			return
+		}
 		w.recordQueueDepth()
-		w.persist(workerID, entry)
+		batch = append(batch[:0], entry)
+		queueClosed := false
+
+		if w.batchSize > 1 {
+			timer := time.NewTimer(w.flushInterval)
+		collect:
+			for len(batch) < w.batchSize {
+				select {
+				case next, open := <-w.queue:
+					if !open {
+						queueClosed = true
+						break collect
+					}
+					batch = append(batch, next)
+					w.recordQueueDepth()
+				case <-timer.C:
+					break collect
+				}
+			}
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		}
+
+		w.persistBatch(workerID, batch)
+		if queueClosed {
+			return
+		}
 	}
 }
 
-func (w *TerminalLogWriter) persist(workerID int, entry invocationlog.TerminalLog) {
+func (w *TerminalLogWriter) persistBatch(workerID int, batch []invocationlog.TerminalLog) {
+	if len(batch) == 0 {
+		return
+	}
+	if len(batch) > 1 {
+		if delegate, ok := w.delegate.(invocationlog.TerminalLogBatchWriter); ok {
+			startedAt := time.Now()
+			if err := w.writeBatch(delegate, batch); err == nil {
+				w.recordPersistBatch(statusSuccess, time.Since(startedAt), len(batch))
+				return
+			} else {
+				log.Printf("async terminal invocation log batch persist failed worker_id=%d batch_size=%d cause=%q; retrying individually", workerID, len(batch), err.Error())
+			}
+		}
+	}
+
+	for _, entry := range batch {
+		w.persistOne(workerID, entry)
+	}
+}
+
+func (w *TerminalLogWriter) writeBatch(delegate invocationlog.TerminalLogBatchWriter, batch []invocationlog.TerminalLog) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("batch delegate panic: %v", recovered)
+		}
+	}()
+
+	ctx := context.Background()
+	cancel := func() {}
+	if w.writeTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, w.writeTimeout)
+	}
+	defer cancel()
+	return delegate.WriteTerminalLogs(ctx, batch)
+}
+
+func (w *TerminalLogWriter) persistOne(workerID int, entry invocationlog.TerminalLog) {
 	startedAt := time.Now()
 	status := statusSuccess
 	defer func() {
@@ -172,14 +261,18 @@ func (w *TerminalLogWriter) recordEnqueue(status string, duration time.Duration)
 }
 
 func (w *TerminalLogWriter) recordPersist(status string, duration time.Duration) {
+	w.recordPersistBatch(status, duration, 1)
+}
+
+func (w *TerminalLogWriter) recordPersistBatch(status string, duration time.Duration, recordCount int) {
 	if w.registry == nil {
 		return
 	}
-	w.registry.AsyncLogPersist(metrics.AsyncLogEvent{
+	w.registry.AsyncLogPersistBatch(metrics.AsyncLogEvent{
 		Operation:       operationTerminal,
 		Status:          status,
 		DurationSeconds: duration.Seconds(),
-	})
+	}, recordCount)
 }
 
 func (w *TerminalLogWriter) recordDrop(status string) {

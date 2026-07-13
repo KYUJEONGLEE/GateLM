@@ -47,6 +47,36 @@ func TestResolverLoadsProviderCatalogByRuntimeSnapshotRef(t *testing.T) {
 	}
 }
 
+func TestResolverPreservesDistinctControlPlaneModelRef(t *testing.T) {
+	ref := testCatalogRef()
+	response := testProviderCatalogResponse(ref, catalogTestApplicationID)
+	response.Providers[0].ProviderID = "provider_mock_builtin"
+	response.Providers[0].ProviderName = "mock"
+	response.Providers[0].Models = []providercatalog.Model{{
+		ModelID:   "provider_mock_builtin:mock-balanced",
+		ModelRef:  "mock-balanced",
+		ModelName: "mock-balanced",
+		Enabled:   true,
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProviderCatalog(t, w, response)
+	}))
+	defer server.Close()
+
+	resolver := NewResolver(server.URL, server.Client())
+	catalog, err := resolver.GetCatalog(context.Background(), ref, providercatalog.Scope{ApplicationID: catalogTestApplicationID})
+	if err != nil {
+		t.Fatalf("expected provider catalog, got %v", err)
+	}
+	provider, model, err := catalog.ResolveModelRef("mock-balanced")
+	if err != nil {
+		t.Fatalf("expected opaque mock modelRef resolution, got %v", err)
+	}
+	if provider.ProviderID != "provider_mock_builtin" || model.ModelID != "provider_mock_builtin:mock-balanced" || model.ModelRef != "mock-balanced" || model.ModelName != "mock-balanced" {
+		t.Fatalf("unexpected distinct catalog model identity: provider=%#v model=%#v", provider, model)
+	}
+}
+
 func TestResolverSendsInternalServiceToken(t *testing.T) {
 	const token = "gateway-internal-token-for-test"
 	ref := testCatalogRef()
@@ -192,6 +222,7 @@ func testProviderCatalogResponse(ref providercatalog.Reference, applicationID st
 				Models: []providercatalog.Model{
 					{
 						ModelID:     "provider_openai_main:gpt-test-low",
+						ModelRef:    "provider_openai_main:gpt-test-low",
 						ModelName:   "gpt-test-low",
 						DisplayName: "GPT Test Low",
 						Enabled:     true,

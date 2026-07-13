@@ -84,11 +84,12 @@ type SafetyOutcome struct {
 }
 
 type RoutingOutcome struct {
-	Outcome          string  `json:"outcome"`
-	RequestedModel   *string `json:"requestedModel"`
-	SelectedProvider *string `json:"selectedProvider"`
-	SelectedModel    *string `json:"selectedModel"`
-	RoutingReason    *string `json:"routingReason"`
+	Outcome        string  `json:"outcome"`
+	RequestedModel *string `json:"requestedModel"`
+	Category       *string `json:"category"`
+	Difficulty     *string `json:"difficulty"`
+	ModelRef       *string `json:"modelRef"`
+	RoutingReason  *string `json:"routingReason"`
 }
 
 type CacheOutcome struct {
@@ -99,16 +100,13 @@ type CacheOutcome struct {
 
 type ProviderOutcome struct {
 	Outcome            string  `json:"outcome"`
-	SelectedProvider   *string `json:"selectedProvider"`
-	SelectedModel      *string `json:"selectedModel"`
 	LatencyMs          *int64  `json:"latencyMs"`
 	SanitizedErrorCode *string `json:"sanitizedErrorCode"`
 }
 
 type FallbackOutcome struct {
-	Outcome          string  `json:"outcome"`
-	FallbackProvider *string `json:"fallbackProvider"`
-	Reason           *string `json:"reason"`
+	Outcome string  `json:"outcome"`
+	Reason  *string `json:"reason"`
 }
 
 type StreamingOutcome struct {
@@ -210,11 +208,12 @@ func DomainOutcomesForInvocationLog(log LlmInvocationLog) DomainOutcomes {
 		RateLimitDecision:       nil,
 		Stream:                  log.Stream,
 		RequestedModel:          log.RequestedModel,
+		ModelRef:                log.ModelRef,
 		Provider:                log.Provider,
 		Model:                   log.Model,
-		SelectedProvider:        log.SelectedProvider,
-		SelectedModel:           log.SelectedModel,
 		RoutingReason:           log.RoutingReason,
+		PromptCategory:          log.PromptCategory,
+		PromptDifficulty:        log.PromptDifficulty,
 		ProviderLatencyMs:       log.ProviderLatencyMs,
 		Status:                  log.Status,
 		HTTPStatus:              log.HTTPStatus,
@@ -414,7 +413,7 @@ func routingOutcome(log TerminalLog) RoutingOutcome {
 	if isPreRoutingTerminal(log) {
 		return RoutingOutcome{Outcome: "not_checked"}
 	}
-	if strings.TrimSpace(log.SelectedProvider) == "" && strings.TrimSpace(log.SelectedModel) == "" {
+	if strings.TrimSpace(log.RoutingDecisionKeyHash) == "" && strings.TrimSpace(log.RoutingReason) == "" {
 		routingReason := log.RoutingReason
 		if strings.TrimSpace(routingReason) == "" && log.CacheStatus == CacheStatusHit {
 			routingReason = "exact_cache_hit_provider_bypass"
@@ -422,15 +421,19 @@ func routingOutcome(log TerminalLog) RoutingOutcome {
 		return RoutingOutcome{
 			Outcome:        "skipped",
 			RequestedModel: stringPointer(log.RequestedModel),
+			Category:       stringPointer(log.PromptCategory),
+			Difficulty:     stringPointer(log.PromptDifficulty),
+			ModelRef:       stringPointer(log.ModelRef),
 			RoutingReason:  stringPointer(routingReason),
 		}
 	}
 	return RoutingOutcome{
-		Outcome:          "selected",
-		RequestedModel:   stringPointer(log.RequestedModel),
-		SelectedProvider: stringPointer(firstNonEmptyString(log.SelectedProvider, log.Provider)),
-		SelectedModel:    stringPointer(firstNonEmptyString(log.SelectedModel, log.Model)),
-		RoutingReason:    stringPointer(log.RoutingReason),
+		Outcome:        "selected",
+		RequestedModel: stringPointer(log.RequestedModel),
+		Category:       stringPointer(log.PromptCategory),
+		Difficulty:     stringPointer(log.PromptDifficulty),
+		ModelRef:       stringPointer(log.ModelRef),
+		RoutingReason:  stringPointer(log.RoutingReason),
 	}
 }
 
@@ -460,11 +463,7 @@ func cacheOutcome(cacheStatus string, cacheType string, cacheHitRequestID string
 }
 
 func providerOutcome(log TerminalLog) ProviderOutcome {
-	selectedProvider := firstNonEmptyString(log.SelectedProvider, log.Provider)
-	selectedModel := firstNonEmptyString(log.SelectedModel, log.Model)
 	base := ProviderOutcome{
-		SelectedProvider:   stringPointer(selectedProvider),
-		SelectedModel:      stringPointer(selectedModel),
 		LatencyMs:          log.ProviderLatencyMs,
 		SanitizedErrorCode: nil,
 	}
@@ -531,13 +530,16 @@ func streamingOutcome(stream bool, status string, errorCode string) StreamingOut
 }
 
 func providerWasNotCalled(log TerminalLog) bool {
+	if log.ProviderCalled {
+		return false
+	}
 	if log.CacheStatus == CacheStatusHit {
 		return true
 	}
 	if log.Status == StatusBlocked || log.Status == StatusRateLimited || log.Status == StatusCancelled {
 		return true
 	}
-	if strings.TrimSpace(log.SelectedProvider) == "" && strings.TrimSpace(log.Provider) == "" && log.ProviderLatencyMs == nil {
+	if strings.TrimSpace(log.Provider) == "" && strings.TrimSpace(log.Model) == "" && log.ProviderLatencyMs == nil {
 		return true
 	}
 	return false

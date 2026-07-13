@@ -14,10 +14,12 @@ import {
   toAiInsightsRecentRequests
 } from "@/lib/dashboard/ai-insights-types";
 import type { LiveRequestRow } from "@/lib/gateway/live-requests-types";
+import type { Locale } from "@/lib/i18n/locale";
 
 export type AiInsightsPanelProps = {
   averageLatencyMs: number;
   cacheHitRate: number;
+  locale: Locale;
   monthToDateSpendMicroUsd: number;
   p95LatencyMs?: number;
   projectId: string | null;
@@ -29,25 +31,65 @@ export type AiInsightsPanelProps = {
   totalRequests: number;
 };
 
-const insightLevelLabels: Record<AiInsightLevel, string> = {
-  High: "높음",
-  Low: "낮음",
-  Medium: "보통"
+const insightLevelLabels: Record<Locale, Record<AiInsightLevel, string>> = {
+  en: { High: "High", Low: "Low", Medium: "Medium" },
+  ko: { High: "높음", Low: "낮음", Medium: "보통" }
 };
 
-const recommendationCategoryLabels: Record<AiInsightCategory, string> = {
-  Cache: "캐시",
-  Cost: "비용",
-  Reliability: "안정성",
-  Routing: "라우팅",
-  Safety: "안전"
+const recommendationCategoryLabels: Record<Locale, Record<AiInsightCategory, string>> = {
+  en: { Cache: "Cache", Cost: "Cost", Reliability: "Reliability", Routing: "Routing", Safety: "Safety" },
+  ko: { Cache: "캐시", Cost: "비용", Reliability: "안정성", Routing: "라우팅", Safety: "안전" }
 };
 
-const recommendationPriorityLabels: Record<AiInsightPriority, string> = {
-  High: "높음",
-  Low: "낮음",
-  Medium: "보통"
+const recommendationPriorityLabels: Record<Locale, Record<AiInsightPriority, string>> = {
+  en: { High: "High", Low: "Low", Medium: "Medium" },
+  ko: { High: "높음", Low: "낮음", Medium: "보통" }
 };
+
+const aiInsightsText = {
+  en: {
+    analyze: "Analyze",
+    analyzing: "Analyzing...",
+    aria: "AI insights",
+    empty: "Not enough data to analyze yet",
+    emptyBody: "Send a few Gateway requests to generate AI insights.",
+    emptySteps: [
+      "Send test requests through the Gateway.",
+      "Review the Live Requests section after generating traffic.",
+      "Refresh insights once recent requests are available."
+    ],
+    error: "AI analysis is unavailable. Showing a safe fallback.",
+    keySignals: "Key signals",
+    pending: "Waiting for analysis",
+    policyDraft: "Policy draft suggestions",
+    recommendations: "Recommended actions",
+    subtitle: "Operational analysis from aggregate metrics",
+    summary: "Summary",
+    timeUnavailable: "Analysis time unavailable",
+    title: "AI insights"
+  },
+  ko: {
+    analyze: "분석",
+    analyzing: "분석 중...",
+    aria: "AI 인사이트",
+    empty: "아직 분석할 데이터가 부족합니다",
+    emptyBody: "Gateway 요청을 몇 개 보내면 AI 인사이트를 생성할 수 있습니다.",
+    emptySteps: [
+      "Gateway로 테스트 요청을 보내세요.",
+      "트래픽 생성 후 실시간 요청 영역을 확인하세요.",
+      "최근 요청이 쌓이면 분석 버튼으로 인사이트를 갱신하세요."
+    ],
+    error: "AI 분석을 불러오지 못해 안전한 대체 인사이트를 표시합니다.",
+    keySignals: "핵심 신호",
+    pending: "분석 대기",
+    policyDraft: "정책 초안 제안",
+    recommendations: "권장 조치",
+    subtitle: "집계 지표 기반 운영 분석",
+    summary: "요약",
+    timeUnavailable: "분석 시각 없음",
+    title: "AI 인사이트"
+  }
+} satisfies Record<Locale, unknown>;
 
 const modeLabels: Record<AiInsightMode, string> = {
   fallback: "FALLBACK",
@@ -58,6 +100,7 @@ const modeLabels: Record<AiInsightMode, string> = {
 export function AiInsightsPanel({
   averageLatencyMs,
   cacheHitRate,
+  locale,
   monthToDateSpendMicroUsd,
   p95LatencyMs,
   projectId,
@@ -68,6 +111,7 @@ export function AiInsightsPanel({
   tenantId,
   totalRequests
 }: AiInsightsPanelProps) {
+  const text = aiInsightsText[locale];
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -102,16 +146,16 @@ export function AiInsightsPanel({
     ]
   );
   const initialPreview = useMemo(
-    () => buildMockAiInsights(analysisRequest, { generatedAt: "" }),
-    [analysisRequest]
+    () => buildMockAiInsights(analysisRequest, { generatedAt: "", locale }),
+    [analysisRequest, locale]
   );
   const [insight, setInsight] = useState<AiInsightResponse>(() => initialPreview);
 
   useEffect(() => {
-    setInsight(buildMockAiInsights(analysisRequest));
+    setInsight(buildMockAiInsights(analysisRequest, { locale }));
     setError(null);
     abortRef.current?.abort();
-  }, [analysisRequest]);
+  }, [analysisRequest, locale]);
 
   useEffect(() => {
     return () => {
@@ -152,10 +196,11 @@ export function AiInsightsPanel({
         return;
       }
 
-      setError("AI 분석을 불러오지 못해 안전한 fallback을 표시합니다.");
+      setError(text.error);
       setInsight(
         buildMockAiInsights(analysisRequest, {
           generatedAt: new Date().toISOString(),
+          locale,
           mode: "fallback",
           notes: ["AI Insights endpoint failed. Showing client-side fallback insight."]
         })
@@ -172,15 +217,15 @@ export function AiInsightsPanel({
   }
 
   return (
-    <section className="dashboard-ai-insights-panel" aria-label="AI 인사이트">
+    <section className="dashboard-ai-insights-panel" aria-label={text.aria}>
       <div className="dashboard-ai-insights-header">
         <div>
           <span className="dashboard-ai-insights-eyebrow">
             <Sparkles aria-hidden="true" size={15} strokeWidth={2.3} />
             Gateway AI
           </span>
-          <h2>AI 인사이트</h2>
-          <p>집계 지표 기반 운영 분석</p>
+          <h2>{text.title}</h2>
+          <p>{text.subtitle}</p>
         </div>
         <span className="dashboard-ai-insights-badge" data-mode={insight.mode}>
           {modeLabels[insight.mode]}
@@ -194,24 +239,24 @@ export function AiInsightsPanel({
         type="button"
       >
         <RefreshCw aria-hidden="true" data-spinning={isAnalyzing} size={15} strokeWidth={2.3} />
-        <span>{isAnalyzing ? "분석 중..." : "분석"}</span>
+        <span>{isAnalyzing ? text.analyzing : text.analyze}</span>
       </button>
 
       {totalRequests <= 0 ? (
-        <AiInsightsEmptyState generatedAt={insight.generatedAt} />
+        <AiInsightsEmptyState generatedAt={insight.generatedAt} locale={locale} />
       ) : (
         <div className="dashboard-ai-insights-content">
           {error ? <div className="dashboard-ai-insights-warning">{error}</div> : null}
 
-          <section className="dashboard-ai-insights-summary" aria-label="AI 인사이트 요약">
-            <h3>요약</h3>
+          <section className="dashboard-ai-insights-summary" aria-label={`${text.title} ${text.summary}`}>
+            <h3>{text.summary}</h3>
             <p>{insight.summary}</p>
           </section>
 
-          <section className="dashboard-ai-insights-section" aria-label="핵심 신호">
+          <section className="dashboard-ai-insights-section" aria-label={text.keySignals}>
             <div className="dashboard-ai-insights-section-title">
-              <h3>핵심 신호</h3>
-              <span>{formatRangeDisplayLabel(rangeLabel)}</span>
+              <h3>{text.keySignals}</h3>
+              <span>{formatRangeDisplayLabel(rangeLabel, locale)}</span>
             </div>
             <div className="dashboard-ai-signal-list">
               {insight.signals.map((signal) => (
@@ -219,23 +264,23 @@ export function AiInsightsPanel({
                   <span title={signal.reason ? `${signal.label}: ${signal.reason}` : signal.label}>
                     {signal.label}
                   </span>
-                  <strong data-level={signal.level}>{insightLevelLabels[signal.level]}</strong>
+                  <strong data-level={signal.level}>{insightLevelLabels[locale][signal.level]}</strong>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="dashboard-ai-insights-section" aria-label="권장 조치">
-            <h3>권장 조치</h3>
+          <section className="dashboard-ai-insights-section" aria-label={text.recommendations}>
+            <h3>{text.recommendations}</h3>
             <ol className="dashboard-ai-recommendation-list">
               {insight.recommendations.map((recommendation) => (
                 <li key={`${recommendation.category}-${recommendation.text}`}>
                   <span data-category={recommendation.category}>
-                    {recommendationCategoryLabels[recommendation.category]}
+                    {recommendationCategoryLabels[locale][recommendation.category]}
                   </span>
                   <p>
                     <strong data-priority={recommendation.priority}>
-                      {recommendationPriorityLabels[recommendation.priority]}
+                      {recommendationPriorityLabels[locale][recommendation.priority]}
                     </strong>
                     {recommendation.text}
                   </p>
@@ -244,8 +289,8 @@ export function AiInsightsPanel({
             </ol>
           </section>
 
-          <section className="dashboard-ai-policy-draft" aria-label="정책 초안 제안">
-            <h3>정책 초안 제안</h3>
+          <section className="dashboard-ai-policy-draft" aria-label={text.policyDraft}>
+            <h3>{text.policyDraft}</h3>
             <ul>
               {insight.policyDraft.map((item) => (
                 <li key={item}>{item}</li>
@@ -256,54 +301,72 @@ export function AiInsightsPanel({
       )}
 
       <footer className="dashboard-ai-insights-footer">
-        <span>{footerModeText(insight.mode)}</span>
-        <GeneratedAtTime generatedAt={insight.generatedAt} />
+        <span>{footerModeText(insight.mode, locale)}</span>
+        <GeneratedAtTime generatedAt={insight.generatedAt} locale={locale} />
       </footer>
     </section>
   );
 }
 
-function AiInsightsEmptyState({ generatedAt }: { generatedAt: string }) {
+function AiInsightsEmptyState({
+  generatedAt,
+  locale
+}: {
+  generatedAt: string;
+  locale: Locale;
+}) {
+  const text = aiInsightsText[locale];
+
   return (
     <div className="dashboard-ai-insights-empty">
-      <strong>아직 분석할 데이터가 부족합니다</strong>
-      <p>Gateway 요청을 몇 개 보내면 AI 인사이트를 생성할 수 있습니다.</p>
+      <strong>{text.empty}</strong>
+      <p>{text.emptyBody}</p>
       <ul>
-        <li>Gateway로 테스트 요청을 보내세요.</li>
-        <li>트래픽 생성 후 Live Requests 영역을 확인하세요.</li>
-        <li>최근 요청이 쌓이면 분석 버튼으로 인사이트를 갱신하세요.</li>
+        {text.emptySteps.map((step) => <li key={step}>{step}</li>)}
       </ul>
-      <GeneratedAtTime generatedAt={generatedAt} />
+      <GeneratedAtTime generatedAt={generatedAt} locale={locale} />
     </div>
   );
 }
 
-function GeneratedAtTime({ generatedAt }: { generatedAt: string }) {
+function GeneratedAtTime({
+  generatedAt,
+  locale
+}: {
+  generatedAt: string;
+  locale: Locale;
+}) {
+  const text = aiInsightsText[locale];
+
   if (!generatedAt) {
-    return <span>분석 대기</span>;
+    return <span>{text.pending}</span>;
   }
 
   const date = new Date(generatedAt);
   if (Number.isNaN(date.getTime())) {
-    return <span>분석 시각 없음</span>;
+    return <span>{text.timeUnavailable}</span>;
   }
 
-  return <time dateTime={generatedAt}>{formatGeneratedAt(date)}</time>;
+  return <time dateTime={generatedAt}>{formatGeneratedAt(date, locale)}</time>;
 }
 
-function footerModeText(mode: AiInsightMode) {
+function footerModeText(mode: AiInsightMode, locale: Locale) {
   if (mode === "live") {
-    return "실제 AI 분석";
+    return locale === "ko" ? "실제 AI 분석" : "Live AI analysis";
   }
 
   if (mode === "fallback") {
-    return "fallback 인사이트";
+    return locale === "ko" ? "대체 인사이트" : "Fallback insight";
   }
 
-  return "mock preview";
+  return locale === "ko" ? "예시 미리보기" : "Mock preview";
 }
 
-function formatRangeDisplayLabel(value: string) {
+function formatRangeDisplayLabel(value: string, locale: Locale) {
+  if (locale === "en") {
+    return value;
+  }
+
   if (value === "Last 5 minutes") {
     return "최근 5분";
   }
@@ -327,8 +390,8 @@ function formatRangeDisplayLabel(value: string) {
   return value;
 }
 
-function formatGeneratedAt(value: Date) {
-  return new Intl.DateTimeFormat("ko-KR", {
+function formatGeneratedAt(value: Date, locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

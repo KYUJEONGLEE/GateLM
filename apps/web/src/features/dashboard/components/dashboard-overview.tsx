@@ -1,13 +1,11 @@
 import {
   Activity,
   CheckCircle2,
-  Clock3,
   DollarSign,
   RotateCcw
 } from "lucide-react";
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
-import { AiInsightsPanel } from "@/features/dashboard/components/ai-insights-panel";
+import type { ReactNode } from "react";
 import { CostOverTimeCard } from "@/features/dashboard/components/cost-over-time-card";
 import { DashboardAutoRefresh } from "@/features/dashboard/components/dashboard-auto-refresh";
 import {
@@ -23,8 +21,9 @@ import {
   type ProviderModelUsageRow
 } from "@/features/dashboard/components/provider-model-usage-card";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { DashboardOverview, InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
+import type { LiveDashboardOverview as DashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import type { LiveInvocationLogRecord as InvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type { LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
 import {
   formatBudgetScopeDisplayName,
@@ -66,6 +65,7 @@ export type DashboardFilterState = {
   projectId: string;
   range: DashboardRange;
   resolvedBy: string;
+  surface: "all" | "project_application" | "tenant_chat";
 };
 
 const dashboardTabs: DashboardVisibleTab[] = ["requests", "cache", "routing", "safety", "limits"];
@@ -79,6 +79,18 @@ const dashboardText: Record<
     actionRequestLogs: string;
     backToOverview: string;
     costByModel: string;
+    dashboardFilters: string;
+    dataAsOf: string;
+    keyMetrics: string;
+    kpi: {
+      monthCost: string;
+      monthCostDetail: string;
+      successRate: string;
+      successful: string;
+      totalRequests: string;
+    };
+    overviewWorkspace: string;
+    refreshDashboard: string;
     metrics: {
       averageLatency: string;
       averageP95Latency: string;
@@ -123,7 +135,7 @@ const dashboardText: Record<
     budgetScopeBreakdown: string;
     queryBudget: string;
     rateLimitEvidence: string;
-    routingByModel: string;
+    routingSummary: string;
     statusDistribution: string;
     tabs: Record<DashboardTab, string>;
     title: string;
@@ -133,6 +145,8 @@ const dashboardText: Record<
     actionRequestLogs: "Open request logs",
     backToOverview: "Back to overview",
     costByModel: "Cost by model",
+    dashboardFilters: "Dashboard filters",
+    dataAsOf: "Data as of",
     filter: {
       apply: "Apply",
       budgetScopeId: "Policy ID",
@@ -173,11 +187,21 @@ const dashboardText: Record<
       totalRequests: "Total requests",
       totalTokens: "Total tokens"
     },
+    keyMetrics: "Dashboard key metrics",
+    kpi: {
+      monthCost: "Month-to-date cost",
+      monthCostDetail: "Live accumulated cost for this month",
+      successRate: "Success rate",
+      successful: "successful",
+      totalRequests: "Total requests"
+    },
+    overviewWorkspace: "Dashboard overview workspace",
+    refreshDashboard: "Refresh dashboard",
     maskingActions: "Masking actions",
     budgetScopeBreakdown: "Project policy/budget breakdown",
     queryBudget: "Query budget",
     rateLimitEvidence: "Rate limit evidence",
-    routingByModel: "Routing by model",
+    routingSummary: "Routing by category and difficulty",
     statusDistribution: "Status distribution",
     tabs: {
       overview: "Overview",
@@ -191,8 +215,10 @@ const dashboardText: Record<
   },
   ko: {
     actionRequestLogs: "요청 로그 열기",
-    backToOverview: "Overview로 돌아가기",
+    backToOverview: "개요로 돌아가기",
     costByModel: "모델별 비용",
+    dashboardFilters: "대시보드 필터",
+    dataAsOf: "데이터 기준 시각",
     filter: {
       apply: "적용",
       budgetScopeId: "Policy ID",
@@ -233,11 +259,21 @@ const dashboardText: Record<
       totalRequests: "총 요청",
       totalTokens: "총 토큰"
     },
+    keyMetrics: "대시보드 핵심 지표",
+    kpi: {
+      monthCost: "이번 달 누적 비용",
+      monthCostDetail: "이번 달 실시간 누적 비용",
+      successRate: "성공률",
+      successful: "성공",
+      totalRequests: "총 요청"
+    },
+    overviewWorkspace: "대시보드 개요 영역",
+    refreshDashboard: "대시보드 새로고침",
     maskingActions: "마스킹 동작",
     budgetScopeBreakdown: "Project 정책/예산 집계",
     queryBudget: "Query budget",
     rateLimitEvidence: "Rate limit 증거",
-    routingByModel: "모델별 라우팅",
+    routingSummary: "카테고리·난이도별 라우팅",
     statusDistribution: "상태 분포",
     tabs: {
       overview: "Overview",
@@ -272,44 +308,38 @@ export function DashboardOverviewView({
   const dataAsOf = formatDashboardDataAsOf(
     overview.dataFreshness.lastLogCreatedAt ||
       overview.dataFreshness.generatedAt ||
-      overview.range.to
+      overview.range.to,
+    locale
   );
-  const selectedProject = filters.projectId
-    ? projects.find((project) => project.id === filters.projectId)
-    : null;
   const kpiCards = [
     {
-      detail: `${formatInteger(overview.totalRequests)}건 · ${kpiRangeLabel(filters.range)}`,
+      detail: `${formatInteger(overview.totalRequests)} ${locale === "ko" ? "건" : "requests"} · ${rangeLabel(filters.range, locale)}`,
       icon: <Activity aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "총 요청",
+      label: text.kpi.totalRequests,
       tone: "blue",
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)}건 성공`,
+      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful} · ${text.metrics.averageLatency} ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
       icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "성공률",
+      label: text.kpi.successRate,
       tone: "green",
       value: formatPercent(successRate)
     },
     {
-      detail: `p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
-      icon: <Clock3 aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "평균 지연 시간",
-      tone: "violet",
-      value: formatLatency(Math.round(overview.averageLatencyMs))
-    },
-    {
-      detail: "이번 달 실시간 누적 비용",
+      detail: text.kpi.monthCostDetail,
       icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "이번 달 누적 비용",
+      label: text.kpi.monthCost,
       tone: "orange",
       value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
 
   return (
-    <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
+    <main
+      className="console-content dashboard-overview-content"
+      data-motion={suppressContentMotion ? "none" : undefined}
+    >
       <DashboardRangePreferenceSync range={filters.range} />
       <DashboardAutoRefresh />
       <section className="dashboard-main-header">
@@ -317,7 +347,7 @@ export function DashboardOverviewView({
           <h1>{text.title}</h1>
         </div>
         <Link
-          aria-label="Refresh dashboard"
+          aria-label={text.refreshDashboard}
           className="dashboard-refresh-link"
           href={dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })}
         >
@@ -325,27 +355,34 @@ export function DashboardOverviewView({
         </Link>
       </section>
 
-      <section className="dashboard-summary-bar" aria-label="Dashboard filters">
+      <section className="dashboard-summary-bar" aria-label={text.dashboardFilters}>
         <DashboardFilterForm
           actionPath={`/tenants/${overview.filters.tenantId}/dashboard`}
           allowAllProjects={allowAllProjects}
+          allowTenantChat={allowAllProjects}
           applyLabel={text.filter.apply}
           filters={filters}
+          locale={locale}
           projects={projects}
           rangeOptions={dashboardRanges.map((range) => ({
-            label: rangeLabel(range),
+            label: rangeLabel(range, locale),
             value: range
           }))}
         />
+        {overview.queryBudget?.status === "partial" && overview.queryBudget.guidance ? (
+          <div className="dashboard-source-warning" role="status">
+            {overview.queryBudget.guidance}
+          </div>
+        ) : null}
         <div className="dashboard-data-freshness">
-          <span>Data as of</span>
+          <span>{text.dataAsOf}</span>
           <strong>{dataAsOf}</strong>
         </div>
       </section>
 
-      <section className="dashboard-overview-workspace" aria-label="Dashboard overview workspace">
+      <section className="dashboard-overview-workspace" aria-label={text.overviewWorkspace}>
         <div className="dashboard-main-panel">
-          <div className="dashboard-kpi-grid" aria-label="Dashboard key metrics">
+          <div className="dashboard-kpi-grid" aria-label={text.keyMetrics}>
             {kpiCards.map((card) => (
               <article className="dashboard-kpi-card" data-tone={card.tone} key={card.label}>
                 <div className="dashboard-kpi-card-header">
@@ -364,17 +401,10 @@ export function DashboardOverviewView({
                 tenantId: overview.filters.tenantId
               }}
               initialSummary={costOverTime}
-              rangeLabel={rangeLabel(filters.range)}
+              locale={locale}
+              rangeLabel={rangeLabel(filters.range, locale)}
             />
-            {filters.projectId === "" ? (
-              <ProjectSpendByCostChart
-                overview={overview}
-                projects={projects}
-                rangeLabel={rangeLabel(filters.range)}
-              />
-            ) : (
-              <ProviderModelUsageCard rows={buildProviderModelUsageRows(overview)} />
-            )}
+            <ProviderModelUsageCard locale={locale} rows={buildProviderModelUsageRows(overview)} />
           </div>
           <LiveRequestsCard
             filters={{
@@ -382,23 +412,9 @@ export function DashboardOverviewView({
               tenantId: overview.filters.tenantId
             }}
             initialPayload={liveRequests}
+            locale={locale}
           />
         </div>
-        <aside className="dashboard-ai-panel" aria-label="AI analysis workspace">
-          <AiInsightsPanel
-            averageLatencyMs={overview.averageLatencyMs}
-            cacheHitRate={overview.exactCacheHitRate ?? overview.cacheHitRate}
-            monthToDateSpendMicroUsd={monthToDate.totalCostMicroUsd}
-            p95LatencyMs={overview.p95LatencyMs}
-            projectId={filters.projectId || null}
-            projectName={selectedProject?.name ?? null}
-            rangeLabel={rangeLabel(filters.range)}
-            recentRequests={liveRequests?.rows}
-            successRate={successRate}
-            tenantId={overview.filters.tenantId}
-            totalRequests={overview.totalRequests}
-          />
-        </aside>
       </section>
 
       {detailPanel}
@@ -414,57 +430,37 @@ function ratio(numerator: number, denominator: number) {
   return numerator / denominator;
 }
 
-function formatDashboardDataAsOf(value: string) {
+function formatDashboardDataAsOf(value: string, locale: Locale) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Seoul"
   }).format(date);
 }
 
-function rangeLabel(range: DashboardRange) {
+function rangeLabel(range: DashboardRange, locale: Locale) {
   if (range === "5m") {
-    return "Last 5 minutes";
+    return locale === "ko" ? "최근 5분" : "Last 5 minutes";
   }
 
   if (range === "15m") {
-    return "Last 15 minutes";
+    return locale === "ko" ? "최근 15분" : "Last 15 minutes";
   }
 
   if (range === "1h") {
-    return "Last hour";
+    return locale === "ko" ? "최근 1시간" : "Last hour";
   }
 
   if (range === "1d") {
-    return "Last 24 hours";
+    return locale === "ko" ? "최근 24시간" : "Last 24 hours";
   }
 
-  return "Last 7 days";
-}
-
-function kpiRangeLabel(range: DashboardRange) {
-  if (range === "5m") {
-    return "최근 5분";
-  }
-
-  if (range === "15m") {
-    return "최근 15분";
-  }
-
-  if (range === "1h") {
-    return "최근 1시간";
-  }
-
-  if (range === "1d") {
-    return "최근 24시간";
-  }
-
-  return "최근 7일";
+  return locale === "ko" ? "최근 7일" : "Last 7 days";
 }
 
 function formatMicroUsd(value: number) {
@@ -478,91 +474,20 @@ function formatMicroUsd(value: number) {
   }).format(dollars);
 }
 
-function ProjectSpendByCostChart({
-  overview,
-  projects,
-  rangeLabel
-}: {
-  overview: DashboardOverview;
-  projects: ProjectRecord[];
-  rangeLabel: string;
-}) {
-  const rows = buildProjectSpendRows(overview, projects);
-  const maxCost = Math.max(...rows.map((row) => row.costMicroUsd), 0);
-
-  return (
-    <section className="dashboard-project-spend-panel" aria-label="Project spend by cost">
-      <div className="dashboard-project-spend-header">
-        <div>
-          <h2>Project Spend by Cost</h2>
-          <p>프로젝트별 발생 비용 기준</p>
-        </div>
-        <span>{rangeLabel}</span>
-      </div>
-      {rows.length > 0 ? (
-        <div className="dashboard-project-spend-table">
-          <div className="dashboard-project-spend-row dashboard-project-spend-row-head">
-            <span>Project</span>
-            <span>Cost</span>
-            <span>%</span>
-          </div>
-          {rows.map((row) => (
-            <div className="dashboard-project-spend-row" key={row.projectId}>
-              <strong>{row.projectName}</strong>
-              <div className="dashboard-project-spend-bar-track">
-                <span
-                  className="dashboard-project-spend-bar"
-                  style={{
-                    "--project-spend-width": `${maxCost > 0 ? Math.max((row.costMicroUsd / maxCost) * 100, 2) : 2}%`
-                  } as CSSProperties}
-                />
-              </div>
-              <span className="dashboard-project-spend-cost">{formatMicroUsd(row.costMicroUsd)}</span>
-              <span className="dashboard-project-spend-percent">{formatPercent(row.share)}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="dashboard-project-spend-empty">No project cost data yet</div>
-      )}
-    </section>
-  );
-}
-
-function buildProjectSpendRows(overview: DashboardOverview, projects: ProjectRecord[]) {
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
-  const sourceRows = overview.costByProject ?? [];
-  const totalCost = sourceRows.reduce((sum, row) => sum + Math.max(row.costMicroUsd, 0), 0);
-
-  return sourceRows
-    .filter((row) => row.requestCount > 0 || row.costMicroUsd > 0)
-    .map((row) => ({
-      costMicroUsd: Math.max(row.costMicroUsd, 0),
-      projectId: row.projectId,
-      projectName: projectNames.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
-      share: totalCost > 0 ? Math.max(row.costMicroUsd, 0) / totalCost : 0
-    }))
-    .sort((left, right) => right.costMicroUsd - left.costMicroUsd);
-}
-
 function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModelUsageRow[] {
   const rows = overview.breakdowns?.byProviderModel?.length
     ? overview.breakdowns.byProviderModel.map((row) => ({
-        model: row.selectedModel,
-        provider: row.selectedProvider,
+        model: row.model,
+        provider: row.provider,
         requestCount: row.requestCount
       }))
     : overview.costByModel.length
       ? overview.costByModel.map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
+          model: row.model,
+          provider: row.provider,
           requestCount: row.requestCount
         }))
-      : overview.routingCountByModel.map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
-          requestCount: row.requestCount
-        }));
+      : [];
   const rowMap = new Map<string, ProviderModelUsageRow>();
 
   for (const row of rows) {
@@ -659,15 +584,8 @@ function DashboardOverviewLegacyView({
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">dashboard</p>
           <h2>{text.title}</h2>
         </div>
-        <Link
-          className="primary-link"
-          href={`/tenants/${overview.filters.tenantId}/request-logs`}
-        >
-          {text.actionRequestLogs}
-        </Link>
       </section>
 
       <DashboardTabs
@@ -810,6 +728,12 @@ function DashboardTabs({
           text={text}
         />
       </div>
+      <Link
+        className="primary-link dashboard-request-log-link"
+        href={`/tenants/${overview.filters.tenantId}/request-logs`}
+      >
+        {text.actionRequestLogs}
+      </Link>
     </section>
   );
 }
@@ -832,6 +756,7 @@ function DashboardFilterBar({
     >
       {activeTab !== "overview" ? <input name="tab" type="hidden" value={activeTab} /> : null}
       <input name="range" type="hidden" value={filters.range} />
+      <input name="surface" type="hidden" value={filters.surface} />
       <label className="request-log-filter-control">
         <input
           aria-label={text.filter.projectId}
@@ -895,6 +820,7 @@ function dashboardHref(
   appendDashboardQuery(query, "budgetScopeId", filters.budgetScopeId);
   appendDashboardQuery(query, "resolvedBy", filters.resolvedBy);
   appendDashboardQuery(query, "range", filters.range);
+  appendDashboardQuery(query, "surface", filters.surface);
   appendDashboardQuery(query, "motion", extra?.motion ?? "");
   appendDashboardQuery(query, "requestId", extra?.requestId ?? "");
 
@@ -1212,7 +1138,7 @@ function RecentRequestList({
             </Link>
             <small>
               {record.status} / {record.cacheStatus} /{" "}
-              {formatModelDisplayName(record.selectedModel ?? record.requestedModel)}
+              {formatModelDisplayName(record.requestedModel)} / {record.category} / {record.difficulty} / {record.modelRef ?? "-"}
             </small>
           </span>
           <strong>{formatLatency(record.latencyMs)}</strong>
@@ -1254,8 +1180,8 @@ function ProviderP95Panel({ overview }: { overview: DashboardOverview }) {
       </div>
       <div className="compact-list">
         {rows.map((row) => (
-          <div className="compact-row" key={`${row.selectedProvider}-${row.selectedModel}`}>
-            <span>{row.selectedProvider}/{formatModelDisplayName(row.selectedModel)}</span>
+          <div className="compact-row" key={`${row.provider}-${row.model}`}>
+            <span>{row.provider}/{formatModelDisplayName(row.model)}</span>
             <strong>{formatLatency(row.p95ProviderLatencyMs)}</strong>
           </div>
         ))}
@@ -1294,23 +1220,23 @@ function RoutingTable({ overview, text }: { overview: DashboardOverview; text: D
   return (
     <article className="console-panel wide-panel">
       <div className="panel-heading">
-        <h3>{text.routingByModel}</h3>
+        <h3>{text.routingSummary}</h3>
       </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Provider</th>
-              <th>Model</th>
+              <th>Category</th>
+              <th>Difficulty</th>
               <th>Reason</th>
               <th>Requests</th>
             </tr>
           </thead>
           <tbody>
-            {overview.routingCountByModel.map((row) => (
-              <tr key={`${row.selectedProvider}-${row.selectedModel}-${row.routingReason}`}>
-                <td>{row.selectedProvider}</td>
-                <td>{formatModelDisplayName(row.selectedModel)}</td>
+            {overview.routingSummaries.map((row) => (
+              <tr key={`${row.category}-${row.difficulty}-${row.routingReason}`}>
+                <td>{row.category}</td>
+                <td>{row.difficulty}</td>
                 <td>{row.routingReason}</td>
                 <td>{formatInteger(row.requestCount)}</td>
               </tr>
@@ -1341,9 +1267,9 @@ function CostByModelTable({ overview, text }: { overview: DashboardOverview; tex
           </thead>
           <tbody>
             {overview.costByModel.map((row) => (
-              <tr key={`${row.selectedProvider}-${row.selectedModel}`}>
-                <td>{row.selectedProvider}</td>
-                <td>{formatModelDisplayName(row.selectedModel)}</td>
+              <tr key={`${row.provider}-${row.model}`}>
+                <td>{row.provider}</td>
+                <td>{formatModelDisplayName(row.model)}</td>
                 <td>{formatInteger(row.requestCount)}</td>
                 <td>{formatInteger(row.totalTokens)}</td>
                 <td>{formatUsd(row.costUsd)}</td>
@@ -1662,18 +1588,17 @@ function distributeTotal(total: number, shape: number[], shapeTotal: number) {
 }
 
 function getTopModelShareRows(overview: DashboardOverview) {
-  const sourceRows = overview.routingCountByModel.length
-    ? overview.routingCountByModel
+  const sourceRows = overview.costByModel.length
+    ? overview.costByModel
     : (overview.breakdowns?.byProviderModel ?? []).map((row) => ({
+        model: row.model,
         requestCount: row.requestCount,
-        routingReason: "selected",
-        selectedModel: row.selectedModel,
-        selectedProvider: row.selectedProvider
+        provider: row.provider
       }));
   const sortedRows = [...sourceRows].sort((left, right) => right.requestCount - left.requestCount);
   const topRows = sortedRows.slice(0, 3).map((row, index) => ({
     color: chartColors[index] ?? chartColors[0],
-    label: compactModelLabel(row.selectedModel),
+    label: compactModelLabel(row.model),
     value: row.requestCount
   }));
   const otherCount = sortedRows.slice(3).reduce((sum, row) => sum + row.requestCount, 0);

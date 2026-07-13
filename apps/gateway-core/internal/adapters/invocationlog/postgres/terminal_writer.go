@@ -10,6 +10,8 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type TerminalLogDefaults struct {
@@ -19,13 +21,25 @@ type TerminalLogDefaults struct {
 }
 
 type TerminalLogWriter struct {
-	db Execer
+	db      Execer
+	batchDB batchSender
+}
+
+type batchSender interface {
+	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
+}
+
+type terminalLogStatement struct {
+	query     string
+	arguments []any
 }
 
 func NewTerminalLogWriter(db Execer, defaults TerminalLogDefaults) *TerminalLogWriter {
 	_ = defaults
+	batchDB, _ := db.(batchSender)
 	return &TerminalLogWriter{
-		db: db,
+		db:      db,
+		batchDB: batchDB,
 	}
 }
 
@@ -33,68 +47,112 @@ func (w *TerminalLogWriter) WriteTerminalLog(ctx context.Context, log invocation
 	if w == nil || w.db == nil {
 		return errors.New("terminal log writer requires a database executor")
 	}
+	statements, err := w.statements(log)
+	if err != nil {
+		return err
+	}
+	for _, statement := range statements {
+		if _, err := w.db.Exec(ctx, statement.query, statement.arguments...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *TerminalLogWriter) WriteTerminalLogs(ctx context.Context, logs []invocationlog.TerminalLog) error {
+	if w == nil || w.db == nil {
+		return errors.New("terminal log writer requires a database executor")
+	}
+	if len(logs) == 0 {
+		return nil
+	}
+	if w.batchDB == nil {
+		for _, entry := range logs {
+			if err := w.WriteTerminalLog(ctx, entry); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	batch := &pgx.Batch{}
+	for index, entry := range logs {
+		statements, err := w.statements(entry)
+		if err != nil {
+			return fmt.Errorf("build terminal log batch item %d: %w", index, err)
+		}
+		for _, statement := range statements {
+			batch.Queue(statement.query, statement.arguments...)
+		}
+	}
+
+	results := w.batchDB.SendBatch(ctx, batch)
+	return results.Close()
+}
+
+func (w *TerminalLogWriter) statements(log invocationlog.TerminalLog) ([]terminalLogStatement, error) {
 
 	record, err := w.record(log)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = w.db.Exec(ctx, insertTerminalLogSQL,
-		record.ID,
-		record.RequestID,
-		record.TraceID,
-		record.TenantID,
-		record.ProjectID,
-		nullableUUID(record.ApplicationID),
-		nullableUUID(record.APIKeyID),
-		nullableUUID(record.AppTokenID),
-		nullableText(record.EndUserID),
-		nullableText(record.FeatureID),
-		record.Endpoint,
-		record.Method,
-		record.Source,
-		record.Stream,
-		nullableText(record.RequestedProvider),
-		nullableText(record.RequestedModel),
-		record.Provider,
-		record.Model,
-		nullableText(record.SelectedProvider),
-		nullableText(record.SelectedModel),
-		nullableText(record.RoutingReason),
-		record.PromptTokens,
-		record.CompletionTokens,
-		record.TotalTokens,
-		record.CostMicroUSD,
-		record.SavedCostMicroUSD,
-		record.LatencyMs,
-		nullableInt64(record.ProviderLatencyMs),
-		record.Status,
-		record.HTTPStatus,
-		nullableText(record.ErrorCode),
-		nullableText(record.ErrorMessage),
-		nullableText(record.ErrorStage),
-		record.CacheStatus,
-		record.CacheType,
-		nullableText(record.CacheKeyHash),
-		nullableText(record.CacheHitRequestID),
-		record.MaskingAction,
-		record.MaskingDetectedTypesJSON,
-		record.MaskingDetectedCount,
-		record.RequestBodyHash,
-		record.PromptHash,
-		nullableText(record.RedactedPromptPreview),
-		record.MetadataJSON,
-		record.CreatedAt,
-		record.CompletedAt,
-	)
+	statements := []terminalLogStatement{{
+		query: insertTerminalLogSQL,
+		arguments: []any{
+			record.ID,
+			record.RequestID,
+			record.TraceID,
+			record.TenantID,
+			record.ProjectID,
+			nullableUUID(record.ApplicationID),
+			nullableUUID(record.APIKeyID),
+			nullableUUID(record.AppTokenID),
+			nullableText(record.EndUserID),
+			nullableText(record.FeatureID),
+			record.Endpoint,
+			record.Method,
+			record.Source,
+			record.Stream,
+			nullableText(record.RequestedProvider),
+			nullableText(record.RequestedModel),
+			record.Provider,
+			record.Model,
+			nullableText(record.RoutingReason),
+			record.PromptTokens,
+			record.CompletionTokens,
+			record.TotalTokens,
+			record.CostMicroUSD,
+			record.SavedCostMicroUSD,
+			record.LatencyMs,
+			nullableInt64(record.ProviderLatencyMs),
+			record.Status,
+			record.HTTPStatus,
+			nullableText(record.ErrorCode),
+			nullableText(record.ErrorMessage),
+			nullableText(record.ErrorStage),
+			record.CacheStatus,
+			record.CacheType,
+			nullableText(record.CacheKeyHash),
+			nullableText(record.CacheHitRequestID),
+			record.MaskingAction,
+			record.MaskingDetectedTypesJSON,
+			record.MaskingDetectedCount,
+			record.RequestBodyHash,
+			record.PromptHash,
+			nullableText(record.RedactedPromptPreview),
+			record.MetadataJSON,
+			record.CreatedAt,
+			record.CompletedAt,
+		},
+	}}
+	notificationStatements, err := w.budgetNotificationStatements(record, log.BudgetDecision)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := w.writeBudgetNotificationEvents(ctx, record, log.BudgetDecision); err != nil {
-		return err
-	}
+	statements = append(statements, notificationStatements...)
 	if record.CostMicroUSD <= 0 {
-		return nil
+		return statements, nil
 	}
 
 	completedAt := record.CompletedAt
@@ -103,19 +161,22 @@ func (w *TerminalLogWriter) WriteTerminalLog(ctx context.Context, log invocation
 	}
 	completedAt = completedAt.UTC()
 	monthStart := time.Date(completedAt.Year(), completedAt.Month(), 1, 0, 0, 0, 0, time.UTC)
-	_, err = w.db.Exec(ctx, upsertBudgetLedgerEntrySQL,
-		record.RequestID,
-		record.TenantID,
-		record.ProjectID,
-		nullableUUID(record.ApplicationID),
-		record.BudgetScope.Type,
-		record.BudgetScope.ID,
-		monthStart,
-		record.CostMicroUSD,
-		record.CreatedAt,
-		completedAt,
-	)
-	return err
+	statements = append(statements, terminalLogStatement{
+		query: upsertBudgetLedgerEntrySQL,
+		arguments: []any{
+			record.RequestID,
+			record.TenantID,
+			record.ProjectID,
+			nullableUUID(record.ApplicationID),
+			record.BudgetScope.Type,
+			record.BudgetScope.ID,
+			monthStart,
+			record.CostMicroUSD,
+			record.CreatedAt,
+			completedAt,
+		},
+	})
+	return statements, nil
 }
 
 type terminalLogRecord struct {
@@ -137,8 +198,6 @@ type terminalLogRecord struct {
 	RequestedModel           string
 	Provider                 string
 	Model                    string
-	SelectedProvider         string
-	SelectedModel            string
 	RoutingReason            string
 	PromptTokens             int
 	CompletionTokens         int
@@ -233,8 +292,6 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		RequestedModel:           strings.TrimSpace(log.RequestedModel),
 		Provider:                 strings.TrimSpace(log.Provider),
 		Model:                    strings.TrimSpace(log.Model),
-		SelectedProvider:         strings.TrimSpace(log.SelectedProvider),
-		SelectedModel:            strings.TrimSpace(log.SelectedModel),
 		RoutingReason:            strings.TrimSpace(log.RoutingReason),
 		PromptTokens:             log.PromptTokens,
 		CompletionTokens:         log.CompletionTokens,
@@ -271,20 +328,20 @@ type budgetNotificationRecipient struct {
 	Role      string
 }
 
-func (w *TerminalLogWriter) writeBudgetNotificationEvents(ctx context.Context, record terminalLogRecord, decision *budget.Decision) error {
+func (w *TerminalLogWriter) budgetNotificationStatements(record terminalLogRecord, decision *budget.Decision) ([]terminalLogStatement, error) {
 	if decision == nil {
-		return nil
+		return nil, nil
 	}
 	severity, eventType, ok := budgetNotificationSeverity(decision.Outcome)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	scope := budget.NormalizeScope(decision.Scope, record.ApplicationID)
 	if strings.TrimSpace(scope.Type) == "" || strings.TrimSpace(scope.ID) == "" {
 		scope = budget.NormalizeScope(record.BudgetScope, record.ApplicationID)
 	}
 	if strings.TrimSpace(scope.Type) == "" || strings.TrimSpace(scope.ID) == "" {
-		return nil
+		return nil, nil
 	}
 
 	completedAt := record.CompletedAt
@@ -295,7 +352,7 @@ func (w *TerminalLogWriter) writeBudgetNotificationEvents(ctx context.Context, r
 	monthStart := time.Date(completedAt.Year(), completedAt.Month(), 1, 0, 0, 0, 0, time.UTC)
 	recipients := budgetNotificationRecipients(record, scope.Type)
 	if len(recipients) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	metadata, err := json.Marshal(map[string]any{
@@ -305,36 +362,37 @@ func (w *TerminalLogWriter) writeBudgetNotificationEvents(ctx context.Context, r
 		"warningThresholdPct": decision.WarningThresholdPercent,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	statements := make([]terminalLogStatement, 0, len(recipients))
 	for _, recipient := range recipients {
 		eventKey := budgetNotificationEventKey(record.TenantID, scope, monthStart, severity, recipient)
-		_, err := w.db.Exec(ctx, upsertNotificationEventSQL,
-			record.TenantID,
-			nullableUUID(record.ProjectID),
-			budgetNotificationApplicationID(record, scope.Type),
-			scope.Type,
-			scope.ID,
-			eventType,
-			severity,
-			recipient.ScopeType,
-			recipient.ScopeID,
-			recipient.Role,
-			eventKey,
-			nullableNonNegativeInt64(decision.LimitMicroUSD),
-			nullableNonNegativeInt64(decision.UsedMicroUSD),
-			decision.RemainingMicroUSD,
-			decision.UsagePercent,
-			nullableText(record.RequestID),
-			monthStart,
-			metadata,
-		)
-		if err != nil {
-			return err
-		}
+		statements = append(statements, terminalLogStatement{
+			query: upsertNotificationEventSQL,
+			arguments: []any{
+				record.TenantID,
+				nullableUUID(record.ProjectID),
+				budgetNotificationApplicationID(record, scope.Type),
+				scope.Type,
+				scope.ID,
+				eventType,
+				severity,
+				recipient.ScopeType,
+				recipient.ScopeID,
+				recipient.Role,
+				eventKey,
+				nullableNonNegativeInt64(decision.LimitMicroUSD),
+				nullableNonNegativeInt64(decision.UsedMicroUSD),
+				decision.RemainingMicroUSD,
+				decision.UsagePercent,
+				nullableText(record.RequestID),
+				monthStart,
+				metadata,
+			},
+		})
 	}
-	return nil
+	return statements, nil
 }
 
 func budgetNotificationSeverity(outcome string) (string, string, bool) {
@@ -413,8 +471,6 @@ insert into p0_llm_invocation_logs (
   requested_model,
   provider,
   model,
-  selected_provider,
-  selected_model,
   routing_reason,
   prompt_tokens,
   completion_tokens,
@@ -446,7 +502,7 @@ insert into p0_llm_invocation_logs (
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44, $45, $46
+  $41, $42, $43, $44
 )
 on conflict (request_id) do nothing`
 

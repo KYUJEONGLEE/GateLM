@@ -119,7 +119,7 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 }
 
 func validateRequest(config ratelimit.Config, tenantID string, scopeID string) error {
-	if config.Scope != ratelimit.ScopeApplication && config.Scope != ratelimit.ScopeProject {
+	if config.Scope != ratelimit.ScopeApplication && config.Scope != ratelimit.ScopeProject && config.Scope != ratelimit.ScopeEmployee {
 		return fmt.Errorf("%w: unsupported scope %q", ErrMissingConfig, config.Scope)
 	}
 	if config.Algorithm != ratelimit.AlgorithmFixedWindow {

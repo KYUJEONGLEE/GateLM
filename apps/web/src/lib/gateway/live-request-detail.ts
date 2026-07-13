@@ -3,13 +3,16 @@ import "server-only";
 import type {
   DomainOutcome,
   DomainOutcomes,
-  InvocationLogRecord,
   RuntimeSnapshotProvenance,
   TerminalStatus
 } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  type LiveInvocationLogRecord,
+  normalizeProviderAttempt,
+  normalizeRequestDetailRouting
+} from "@/lib/gateway/live-observability-contract";
 
 type GatewayRequestDetailResponse = {
   data?: {
@@ -21,7 +24,6 @@ type GatewayRequestDetailResponse = {
       cacheKeyHash?: string | null;
       cacheStatus?: string;
       cacheType?: string;
-      promptCategory?: string | null;
     };
     completedAt?: string | null;
     cost?: {
@@ -52,7 +54,6 @@ type GatewayRequestDetailResponse = {
       mandatoryProtectedTypes?: string[];
       redactedPromptPreview?: string | null;
     };
-    model?: string;
     promptCapture?: {
       capturedPrompt?: string | null;
       enabled?: boolean;
@@ -62,18 +63,24 @@ type GatewayRequestDetailResponse = {
       visibility?: "admin_request_detail";
     };
     projectId?: string;
-    provider?: string;
+    providerAttempt?: {
+      providerId?: string;
+      modelId?: string;
+      outcome?: string;
+      latencyMs?: number | null;
+      sanitizedErrorCode?: string | null;
+    } | null;
     providerCalled?: boolean;
     requestedModel?: string;
     requestId?: string;
     routing?: {
+      category?: string | null;
+      difficulty?: string | null;
+      modelRef?: string | null;
       routingReason?: string | null;
-      selectedModel?: string | null;
-      selectedProvider?: string | null;
     };
     runtimeSnapshot?: RuntimeSnapshotProvenance | null;
-    selectedModel?: string;
-    status?: InvocationLogRecord["status"];
+    status?: LiveInvocationLogRecord["status"];
     terminalStatus?: TerminalStatus;
     tenantId?: string;
     traceId?: string;
@@ -117,7 +124,7 @@ export async function getLiveGatewayRequestDetail(
     projectId?: string;
     tenantId?: string;
   } = {}
-): Promise<InvocationLogRecord | undefined> {
+): Promise<LiveInvocationLogRecord | undefined> {
   const config = getLiveGatewayConfig();
   const query = new URLSearchParams();
 
@@ -166,7 +173,7 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
+function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): LiveInvocationLogRecord {
   const createdAt = data.createdAt ?? new Date().toISOString();
   const completedAt = data.completedAt ?? createdAt;
   const status = normalizeLegacyBridgeStatus(data.terminalStatus ?? data.status);
@@ -192,6 +199,8 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     estimatedCostMicroUsd: data.usageSummary?.estimatedCostMicroUsd ?? data.cost?.costMicroUsd ?? 0,
     savedCostMicroUsd: data.usageSummary?.savedCostMicroUsd ?? (cacheStatus === "hit" ? data.cost?.costMicroUsd ?? 0 : 0)
   };
+  const routing = normalizeRequestDetailRouting(data.requestedModel, data.routing);
+  const providerAttempt = normalizeProviderAttempt(data.providerAttempt);
 
   return {
     requestId: data.requestId ?? "",
@@ -211,11 +220,12 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     requestBodyHash: "not-exposed-by-live-detail",
     promptHash: "not-exposed-by-live-detail",
     redactedPromptPreview: data.masking?.redactedPromptPreview ?? null,
-    requestedProvider: null,
-    requestedModel: formatOptionalModelName(data.requestedModel),
-    selectedProvider: data.routing?.selectedProvider ?? data.provider ?? null,
-    selectedModel: formatOptionalModelName(data.routing?.selectedModel ?? data.selectedModel ?? data.model),
-    routingReason: data.routing?.routingReason ?? null,
+    requestedModel: routing.requestedModel,
+    category: routing.category,
+    difficulty: routing.difficulty,
+    modelRef: routing.modelRef,
+    routingReason: routing.routingReason,
+    providerAttempt,
     cacheStatus,
     cacheType: data.cache?.cacheType ?? "none",
     cacheDecisionReason: data.cache?.cacheDecisionReason ?? null,
@@ -224,8 +234,7 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     maskingAction,
     maskingDetectedTypes: data.masking?.maskingDetectedTypes ?? [],
     maskingDetectedCount: data.masking?.maskingDetectedCount ?? 0,
-    promptCategory: data.cache?.promptCategory ?? null,
-    providerCalled: data.providerCalled ?? domainOutcomes.provider.outcome !== "not_called",
+    providerCalled: data.providerCalled ?? providerAttempt !== null,
     rateLimitDecision: {
       allowed: status !== "rate_limited",
       scope: budgetScope.budgetScopeType,
@@ -286,10 +295,6 @@ function normalizePromptCapture(
     truncated: value?.truncated ?? false,
     visibility: value?.visibility ?? "admin_request_detail"
   } as const;
-}
-
-function formatOptionalModelName(value: string | undefined | null) {
-  return value ? formatModelDisplayName(value, "") || null : null;
 }
 
 function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {
@@ -393,7 +398,7 @@ function legacyDomainOutcomes(
 }
 
 // Live Gateway detail payloads may still carry legacy status names; normalize them for the v2-facing read model.
-function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRecord["status"] {
+function normalizeLegacyBridgeStatus(value: string | undefined): LiveInvocationLogRecord["status"] {
 	if (
 		value === "success" ||
 		value === "blocked" ||

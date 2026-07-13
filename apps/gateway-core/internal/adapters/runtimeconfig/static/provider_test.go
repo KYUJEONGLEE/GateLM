@@ -81,16 +81,7 @@ func testActiveConfig() runtimeconfig.ActiveConfig {
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",
 		},
-		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:     "mock",
-			DefaultModel:        "mock-balanced",
-			LowCostProvider:     "mock",
-			LowCostModel:        "mock-fast",
-			FallbackProvider:    "mock",
-			FallbackModel:       "mock-balanced",
-			ShortPromptMaxChars: 500,
-			RoutingPolicyHash:   "hash_routing_policy_test",
-		},
+		RoutingPolicy: runtimeconfig.BootstrapRoutingPolicy("hash_routing_policy_test"),
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:    true,
 			Type:       runtimeconfig.CacheTypeExact,

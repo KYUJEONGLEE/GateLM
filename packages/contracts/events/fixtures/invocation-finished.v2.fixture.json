@@ -1,0 +1,70 @@
+{
+  "eventId": "event-invocation-v2-fixture",
+  "eventType": "invocation.completed",
+  "eventVersion": 2,
+  "occurredAt": "2026-07-13T00:00:01Z",
+  "request": {
+    "schemaVersion": 2,
+    "requestId": "request-invocation-v2-fixture",
+    "traceId": "trace-invocation-v2-fixture",
+    "tenantId": "tenant-fixture",
+    "projectId": "project-fixture",
+    "applicationId": "application-fixture",
+    "apiKeyId": null,
+    "appTokenId": null,
+    "endpoint": "/v1/chat/completions",
+    "method": "POST",
+    "source": "internal",
+    "stream": false,
+    "requestBodyHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "promptHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "requestedModel": "auto",
+    "routing": {
+      "category": "general",
+      "difficulty": "simple",
+      "modelRef": "mock-balanced",
+      "routingReason": "category_difficulty_matrix",
+      "routingRuleId": null
+    },
+    "promptTokens": 4,
+    "completionTokens": 6,
+    "totalTokens": 10,
+    "costMicroUsd": 0,
+    "costUsd": "0.000000",
+    "currency": "USD",
+    "latencyMs": 12,
+    "status": "success",
+    "httpStatus": 200,
+    "errorCode": null,
+    "errorMessage": null,
+    "cacheStatus": "miss",
+    "cacheType": "exact",
+    "maskingAction": "none",
+    "maskingDetectedTypes": [],
+    "maskingDetectedCount": 0,
+    "createdAt": "2026-07-13T00:00:00Z",
+    "completedAt": "2026-07-13T00:00:01Z",
+    "metadata": {}
+  },
+  "providerAttempts": [
+    {
+      "attempt": 1,
+      "providerId": "provider-mock",
+      "modelId": "mock-balanced",
+      "executionMode": "mock",
+      "outcome": "success",
+      "latencyMs": 8,
+      "sanitizedErrorCode": null
+    }
+  ],
+  "costSettlement": {
+    "providerId": "provider-mock",
+    "modelId": "mock-balanced",
+    "promptTokens": 4,
+    "completionTokens": 6,
+    "totalTokens": 10,
+    "costMicroUsd": 0,
+    "costUsd": "0.000000",
+    "currency": "USD"
+  }
+}

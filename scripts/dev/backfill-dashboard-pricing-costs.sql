@@ -1,27 +1,28 @@
+-- provider/model are provider-attempt execution facts used only for cost settlement.
 with candidate_logs as (
   select
     l.*,
     array_remove(array[
-      nullif(btrim(l.selected_provider), ''),
+      nullif(btrim(l.provider), ''),
       case
-        when btrim(l.selected_provider) like '%-main'
-          then nullif(regexp_replace(btrim(l.selected_provider), '-main$', ''), '')
+        when btrim(l.provider) like '%-main'
+          then nullif(regexp_replace(btrim(l.provider), '-main$', ''), '')
         else null
       end,
       case
-        when btrim(l.selected_provider) <> ''
-          and btrim(l.selected_provider) not like '%-main'
-          and btrim(l.selected_provider) !~ '[:/_]'
-          and btrim(l.selected_provider) !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-          then btrim(l.selected_provider) || '-main'
+        when btrim(l.provider) <> ''
+          and btrim(l.provider) not like '%-main'
+          and btrim(l.provider) !~ '[:/_]'
+          and btrim(l.provider) !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          then btrim(l.provider) || '-main'
         else null
       end
     ], null) as provider_keys,
     array_remove(array[
-      nullif(btrim(l.selected_model), ''),
+      nullif(btrim(l.model), ''),
       case
-        when strpos(btrim(l.selected_model), ':') > 0
-          then nullif(substring(btrim(l.selected_model) from '[^:]+$'), '')
+        when strpos(btrim(l.model), ':') > 0
+          then nullif(substring(btrim(l.model) from '[^:]+$'), '')
         else null
       end
     ], null) as model_keys

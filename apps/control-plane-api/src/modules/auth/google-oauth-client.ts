@@ -13,8 +13,8 @@ export interface GoogleOAuthProfile {
 }
 
 export interface GoogleOAuthClient {
-  buildAuthorizationUrl(state: string): string;
-  exchangeCode(code: string): Promise<GoogleOAuthTokenResult>;
+  buildAuthorizationUrl(state: string, redirectUri?: string): string;
+  exchangeCode(code: string, redirectUri?: string): Promise<GoogleOAuthTokenResult>;
   getProfile(accessToken: string): Promise<GoogleOAuthProfile>;
 }
 
@@ -35,7 +35,7 @@ const GOOGLE_OAUTH_TIMEOUT_MS = 10_000;
 export class GoogleOAuthHttpClient implements GoogleOAuthClient {
   constructor(private readonly config: ConfigService) {}
 
-  buildAuthorizationUrl(state: string): string {
+  buildAuthorizationUrl(state: string, redirectUri?: string): string {
     const clientId = this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID');
     if (!clientId) {
       throw new Error('Google OAuth client id is not configured.');
@@ -43,7 +43,7 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
 
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     url.searchParams.set('client_id', clientId);
-    url.searchParams.set('redirect_uri', this.redirectUri());
+    url.searchParams.set('redirect_uri', redirectUri ?? this.redirectUri());
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', 'openid email profile');
     url.searchParams.set('state', state);
@@ -53,7 +53,7 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
     return url.toString();
   }
 
-  async exchangeCode(code: string): Promise<GoogleOAuthTokenResult> {
+  async exchangeCode(code: string, redirectUri?: string): Promise<GoogleOAuthTokenResult> {
     const clientId = this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID');
     const clientSecret = this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET');
 
@@ -67,7 +67,7 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
         client_secret: clientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: this.redirectUri(),
+        redirect_uri: redirectUri ?? this.redirectUri(),
       }),
       headers: {
         'content-type': 'application/x-www-form-urlencoded',

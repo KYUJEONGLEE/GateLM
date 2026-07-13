@@ -3,6 +3,7 @@ package asyncwriter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -42,6 +43,120 @@ func TestTerminalLogWriterFlushesQueuedLogsOnClose(t *testing.T) {
 	assertAsyncMetricsContains(t, output, `gatelm_async_log_enqueue_total{operation="terminal",status="success"} 2`)
 	assertAsyncMetricsContains(t, output, `gatelm_async_log_persist_total{operation="terminal",status="success"} 2`)
 	assertAsyncMetricsContains(t, output, `gatelm_async_log_queue_depth{operation="terminal"} 0`)
+}
+
+func TestTerminalLogWriterPersistsFullBatchWithOneDelegateCall(t *testing.T) {
+	delegate := &recordingBatchTerminalLogWriter{}
+	registry := metrics.NewRegistry()
+	writer := NewTerminalLogWriter(delegate, TerminalLogWriterConfig{
+		QueueSize:       3,
+		WorkerCount:     1,
+		BatchSize:       3,
+		FlushInterval:   time.Second,
+		WriteTimeout:    time.Second,
+		MetricsRegistry: registry,
+	})
+
+	for index := 1; index <= 3; index++ {
+		entry := invocationlog.TerminalLog{
+			RequestID: fmt.Sprintf("request_async_batch_%d", index),
+			Status:    invocationlog.StatusSuccess,
+		}
+		if err := writer.WriteTerminalLog(context.Background(), entry); err != nil {
+			t.Fatalf("enqueue batch item %d: %v", index, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := writer.Close(ctx); err != nil {
+		t.Fatalf("close async writer: %v", err)
+	}
+
+	if got := delegate.batchCount(); got != 1 {
+		t.Fatalf("expected one batch delegate call, got %d", got)
+	}
+	if got := delegate.singleCount(); got != 0 {
+		t.Fatalf("expected no single delegate calls, got %d", got)
+	}
+	if got := delegate.recordCount(); got != 3 {
+		t.Fatalf("expected 3 batched records, got %d", got)
+	}
+	output := registry.RenderPrometheus()
+	assertAsyncMetricsContains(t, output, `gatelm_async_log_persist_total{operation="terminal",status="success"} 3`)
+	assertAsyncMetricsContains(t, output, `gatelm_async_log_persist_duration_seconds_count{operation="terminal",status="success"} 1`)
+}
+
+func TestTerminalLogWriterFlushesPartialBatchAfterInterval(t *testing.T) {
+	delegate := &recordingBatchTerminalLogWriter{batchDone: make(chan struct{}, 1)}
+	writer := NewTerminalLogWriter(delegate, TerminalLogWriterConfig{
+		QueueSize:     2,
+		WorkerCount:   1,
+		BatchSize:     10,
+		FlushInterval: 10 * time.Millisecond,
+		WriteTimeout:  time.Second,
+	})
+
+	for index := 1; index <= 2; index++ {
+		if err := writer.WriteTerminalLog(context.Background(), invocationlog.TerminalLog{
+			RequestID: fmt.Sprintf("request_async_partial_%d", index),
+			Status:    invocationlog.StatusSuccess,
+		}); err != nil {
+			t.Fatalf("enqueue partial batch item %d: %v", index, err)
+		}
+	}
+
+	select {
+	case <-delegate.batchDone:
+	case <-time.After(time.Second):
+		t.Fatal("partial batch was not flushed after the configured interval")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := writer.Close(ctx); err != nil {
+		t.Fatalf("close async writer: %v", err)
+	}
+	if got := delegate.recordCount(); got != 2 {
+		t.Fatalf("expected 2 partial-batch records, got %d", got)
+	}
+}
+
+func TestTerminalLogWriterRetriesFailedBatchIndividually(t *testing.T) {
+	delegate := &recordingBatchTerminalLogWriter{batchErr: errors.New("synthetic batch failure")}
+	registry := metrics.NewRegistry()
+	writer := NewTerminalLogWriter(delegate, TerminalLogWriterConfig{
+		QueueSize:       2,
+		WorkerCount:     1,
+		BatchSize:       2,
+		FlushInterval:   time.Second,
+		WriteTimeout:    time.Second,
+		MetricsRegistry: registry,
+	})
+
+	for index := 1; index <= 2; index++ {
+		if err := writer.WriteTerminalLog(context.Background(), invocationlog.TerminalLog{
+			RequestID: fmt.Sprintf("request_async_retry_%d", index),
+			Status:    invocationlog.StatusSuccess,
+		}); err != nil {
+			t.Fatalf("enqueue retry item %d: %v", index, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := writer.Close(ctx); err != nil {
+		t.Fatalf("close async writer: %v", err)
+	}
+
+	if got := delegate.batchCount(); got != 1 {
+		t.Fatalf("expected one failed batch call, got %d", got)
+	}
+	if got := delegate.singleCount(); got != 2 {
+		t.Fatalf("expected two individual retries, got %d", got)
+	}
+	output := registry.RenderPrometheus()
+	assertAsyncMetricsContains(t, output, `gatelm_async_log_persist_total{operation="terminal",status="success"} 2`)
 }
 
 func TestTerminalLogWriterDropsWhenQueueIsFull(t *testing.T) {
@@ -137,6 +252,57 @@ func TestTerminalLogWriterRejectsAfterClose(t *testing.T) {
 type recordingTerminalLogWriter struct {
 	mu   sync.Mutex
 	logs []invocationlog.TerminalLog
+}
+
+type recordingBatchTerminalLogWriter struct {
+	mu         sync.Mutex
+	batches    [][]invocationlog.TerminalLog
+	singleLogs []invocationlog.TerminalLog
+	batchErr   error
+	batchDone  chan struct{}
+}
+
+func (w *recordingBatchTerminalLogWriter) WriteTerminalLog(_ context.Context, entry invocationlog.TerminalLog) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.singleLogs = append(w.singleLogs, entry)
+	return nil
+}
+
+func (w *recordingBatchTerminalLogWriter) WriteTerminalLogs(_ context.Context, entries []invocationlog.TerminalLog) error {
+	w.mu.Lock()
+	w.batches = append(w.batches, append([]invocationlog.TerminalLog(nil), entries...))
+	err := w.batchErr
+	w.mu.Unlock()
+	if w.batchDone != nil {
+		select {
+		case w.batchDone <- struct{}{}:
+		default:
+		}
+	}
+	return err
+}
+
+func (w *recordingBatchTerminalLogWriter) batchCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.batches)
+}
+
+func (w *recordingBatchTerminalLogWriter) singleCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.singleLogs)
+}
+
+func (w *recordingBatchTerminalLogWriter) recordCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	total := len(w.singleLogs)
+	for _, batch := range w.batches {
+		total += len(batch)
+	}
+	return total
 }
 
 func (w *recordingTerminalLogWriter) WriteTerminalLog(_ context.Context, log invocationlog.TerminalLog) error {

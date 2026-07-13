@@ -4,6 +4,7 @@ import { LogIn, LogOut, Route, Send, UserPlus } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
+import { GateLMLogo } from "@/components/brand/gatelm-logo";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { Locale } from "@/lib/i18n/locale";
 import type { WebConsoleAuthPanelProps } from "./web-console-auth-panel";
@@ -53,12 +54,24 @@ type AcceptedProjectInvitation = {
   tenantName?: string | null;
 };
 
+type AcceptedEmployeeInvitation = {
+  acceptedAt?: string | null;
+  email: string;
+  employeeId: string;
+  expiresAt: string;
+  name?: string | null;
+  status: string;
+  tenantId: string;
+  tenantName?: string | null;
+};
+
 type AuthAccessRecord = {
   status?: string;
   tenantId?: string | null;
 };
 
 type AuthResponseData = {
+  acceptedEmployeeInvitation?: AcceptedEmployeeInvitation;
   acceptedProjectInvitation?: AcceptedProjectInvitation;
   memberships?: AuthAccessRecord[];
   projectAdmins?: AuthAccessRecord[];
@@ -565,6 +578,7 @@ export function WebConsoleInitView({
   const [dashboardTenantId, setDashboardTenantId] = useState<string | null>(
     initialDashboardTenantIdForAuth
   );
+  const [employeeInviteToken, setEmployeeInviteToken] = useState<string | null>(null);
   const [projectInviteToken, setProjectInviteToken] = useState<string | null>(null);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
@@ -583,8 +597,15 @@ export function WebConsoleInitView({
       setIsAuthPanelOpen(true);
     }
     const projectInvite = params.get("projectInvite") ?? params.get("invite");
+    const employeeInvite = params.get("employeeInvite");
     if (projectInvite) {
       setProjectInviteToken(projectInvite);
+      setAuthMode("signup");
+      setSignupStep("account");
+      setIsAuthPanelOpen(true);
+    }
+    if (employeeInvite) {
+      setEmployeeInviteToken(employeeInvite);
       setAuthMode("signup");
       setSignupStep("account");
       setIsAuthPanelOpen(true);
@@ -592,8 +613,8 @@ export function WebConsoleInitView({
 
     const hasLandingViewParam = params.get("view") === "landing";
     const shouldStayOnLanding =
-      Boolean(projectInvite) || hasLandingViewParam || hasStayOnLandingHistoryState();
-    if (hasLandingViewParam || projectInvite) {
+      Boolean(projectInvite || employeeInvite) || hasLandingViewParam || hasStayOnLandingHistoryState();
+    if (hasLandingViewParam || projectInvite || employeeInvite) {
       replaceLandingUrl();
     }
 
@@ -647,7 +668,7 @@ export function WebConsoleInitView({
           return;
         }
 
-        if (sessionKind === "onboarding" && !restoredTenantId && !projectInvite) {
+        if (sessionKind === "onboarding" && !restoredTenantId && !projectInvite && !employeeInvite) {
           setAuthMode("signup");
           setSignupStep("organization");
           setIsAuthPanelOpen(true);
@@ -757,9 +778,17 @@ export function WebConsoleInitView({
           email,
           name: readFormString(formData, "name"),
           password: readFormString(formData, "password"),
+          ...(employeeInviteToken ? { employeeInviteToken } : {}),
           ...(projectInviteToken ? { projectInviteToken } : {})
         });
         setSignupEmail(email);
+        const acceptedEmployeeInvitation = result.data?.acceptedEmployeeInvitation;
+        if (acceptedEmployeeInvitation) {
+          setDashboardTenantId(acceptedEmployeeInvitation.tenantId);
+          setAuthNotice("Employee account activated.");
+          setSignupStep("ready");
+          return;
+        }
         const acceptedInvitation = result.data?.acceptedProjectInvitation;
         if (acceptedInvitation) {
           setDashboardTenantId(acceptedInvitation.tenantId);
@@ -781,6 +810,7 @@ export function WebConsoleInitView({
         const result = await postAuth("email/verify", {
           code: readFormString(formData, "verificationCode"),
           email: signupEmail,
+          ...(employeeInviteToken ? { employeeInviteToken } : {}),
           ...(projectInviteToken ? { projectInviteToken } : {})
         });
         const acceptedInvitation = result.data?.acceptedProjectInvitation;
@@ -843,8 +873,7 @@ export function WebConsoleInitView({
       <nav className="landing-topbar" aria-label="GateLM landing navigation">
         <div className="landing-brand-cluster">
           <Link className="landing-brand" href="/" aria-label="GateLM home">
-            <span className="landing-brand-mark">G</span>
-            <strong>GateLM</strong>
+            <GateLMLogo surface="light" />
           </Link>
           {authStatus === "authenticated" ? (
             <Link className="landing-auth-button landing-gateway-request-button" href="/application">
@@ -925,7 +954,7 @@ export function WebConsoleInitView({
           authError={authError}
           authMode={authMode}
           authNotice={authNotice}
-          isProjectInviteSignup={Boolean(projectInviteToken)}
+          isProjectInviteSignup={Boolean(projectInviteToken || employeeInviteToken)}
           isSubmitting={isAuthSubmitting}
           signupStep={signupStep}
           text={text}
@@ -983,6 +1012,7 @@ function GatewayScene({ text }: { text: (typeof initText)[Locale]["scene"] }) {
 
 type AuthPostResponse = {
   data?: {
+    acceptedEmployeeInvitation?: AcceptedEmployeeInvitation;
     acceptedProjectInvitation?: AcceptedProjectInvitation;
     session?: {
       kind?: string;

@@ -97,6 +97,11 @@ export function OnboardingIntegrationGuide({
   const text = integrationText[locale];
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
   const gatewayEndpoint = `${gatewayBaseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
+  const hasSelectedModel = Boolean(selectedModelKey.trim());
+  const providerSetupRequired =
+    locale === "ko"
+      ? "Provider를 등록한 후 모델을 선택하면 테스트 요청을 사용할 수 있습니다."
+      : "Register a Provider and select a model to enable the test request.";
   const latestRequestHref = getLatestRequestHref(tenantId, project);
   const projectPolicyHref = project?.id
     ? `/tenants/${tenantId}/projects/${project.id}/policies`
@@ -175,30 +180,36 @@ export function OnboardingIntegrationGuide({
           </GuideStep>
 
           <GuideStep number={4} title={text.test}>
-            <div className="integration-code-block">
-              <div>
-                <span>Gateway request</span>
-                <button
-                  aria-label="Copy Gateway request"
-                  onClick={() =>
-                    void copyValue(
-                      "gateway-request",
-                      getGatewayRequest(gatewayEndpoint, selectedModelKey)
-                    )
-                  }
-                  type="button"
-                >
-                  {copiedTarget === "gateway-request" ? (
-                    <Check aria-hidden="true" />
-                  ) : (
-                    <Copy aria-hidden="true" />
-                  )}
-                </button>
+            {hasSelectedModel ? (
+              <div className="integration-code-block">
+                <div>
+                  <span>Gateway request</span>
+                  <button
+                    aria-label="Copy Gateway request"
+                    onClick={() =>
+                      void copyValue(
+                        "gateway-request",
+                        getGatewayRequest(gatewayEndpoint)
+                      )
+                    }
+                    type="button"
+                  >
+                    {copiedTarget === "gateway-request" ? (
+                      <Check aria-hidden="true" />
+                    ) : (
+                      <Copy aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                <pre>
+                  <code>{getGatewayRequest(gatewayEndpoint)}</code>
+                </pre>
               </div>
-              <pre>
-                <code>{getGatewayRequest(gatewayEndpoint, selectedModelKey)}</code>
-              </pre>
-            </div>
+            ) : (
+              <div className="integration-guide-step-copy">
+                <p>{providerSetupRequired}</p>
+              </div>
+            )}
           </GuideStep>
         </section>
 
@@ -224,7 +235,7 @@ export function OnboardingIntegrationGuide({
               </div>
               <div>
                 <dt>{text.model}</dt>
-                <dd>{selectedModelKey || "auto"}</dd>
+                <dd>{hasSelectedModel ? "auto (routing policy)" : providerSetupRequired}</dd>
               </div>
               <div>
                 <dt>{text.createdAt}</dt>
@@ -297,14 +308,12 @@ function GuideCopyRow({
   );
 }
 
-function getGatewayRequest(gatewayEndpoint: string, selectedModelKey: string) {
-  const model = selectedModelKey.split("::")[1] || "auto";
-
+function getGatewayRequest(gatewayEndpoint: string) {
   return [
     `curl -X POST ${gatewayEndpoint} \\`,
     `  -H "Authorization: Bearer ${projectApiKeyPlaceholder}" \\`,
     `  -H "Content-Type: application/json" \\`,
-    `  -d '{"model":"${model}","messages":[{"role":"user","content":"<USER_MESSAGE>"}]}'`
+    `  -d '{"model":"auto","messages":[{"role":"user","content":"<USER_MESSAGE>"}]}'`
   ].join("\n");
 }
 
