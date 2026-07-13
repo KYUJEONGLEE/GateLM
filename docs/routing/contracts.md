@@ -20,14 +20,21 @@ Tenant Chat의 별도 tier와 Provider Catalog의 `routing.costTier` metadata는
 
 ## 2. Classification Pipeline
 
-라우팅 분류는 외부 LLM을 호출하지 않는 deterministic rule-based 두 단계다.
+라우팅 분류는 외부 LLM을 호출하지 않는 deterministic rule-based 두 단계다. 내부 구현의 active 구조는 [`classification-pipeline.md`](classification-pipeline.md)가 정의한다.
 
 ```text
-category = CategoryClassifier(prompt)
-difficulty = ComplexityClassifier(prompt, category)
+Prompt
+→ ExtractPromptFeatures
+→ PromptFeatures
+→ CategoryClassifier
+→ CategoryResult
+→ ExtractDifficultyFeatures(PromptFeatures, CategoryResult.Category)
+→ DifficultyFeatures
+→ DifficultyClassifier
+→ DifficultyResult
 ```
 
-난이도 판정은 먼저 확정된 category를 반드시 참고한다. prompt 길이는 보조 신호일 뿐 단독 판정 기준이 아니다.
+공통 전처리는 한 번만 실행한다. 난이도 판정은 먼저 확정된 category를 반드시 참고하고, 해당 category의 난이도 feature만 선택적으로 계산한다. Prompt 길이는 보조 신호일 뿐 단독 판정 기준이 아니다. 기존 prompt 직접 분류 메서드는 compatibility wrapper일 뿐 제품 런타임과 신규 평가 코드의 표준 진입점이 아니다.
 
 ### 2.1 Category
 

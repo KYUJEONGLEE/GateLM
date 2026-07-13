@@ -19,6 +19,55 @@ test("active routing contract accepts one complete 5 x 2 v2 policy", () => {
   }
 });
 
+test("active routing documentation declares the feature-based classification pipeline", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir);
+
+    assert.deepEqual(verifyRoutingContract({ rootDir }), []);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing documentation rejects a missing classification pipeline document", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-missing-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir);
+    rmSync(path.join(rootDir, "docs", "routing", "classification-pipeline.md"));
+
+    const failures = verifyRoutingContract({ rootDir });
+    assert.ok(
+      failures.some((failure) => failure.includes("classification-pipeline.md: file is missing")),
+      `missing classification pipeline document was accepted: ${JSON.stringify(failures)}`,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing documentation rejects the retired direct-prompt classifier form", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-legacy-"));
+  try {
+    writeContractFiles(rootDir, validSchema(), validPolicy());
+    writeRoutingDocumentation(rootDir, {
+      contracts: `classification-pipeline.md
+category = CategoryClassifier(prompt)
+difficulty = ComplexityClassifier(prompt, category)`,
+    });
+
+    const failures = verifyRoutingContract({ rootDir });
+    assert.ok(
+      failures.some((failure) => failure.includes("retired direct-prompt classifier form")),
+      `retired direct-prompt classifier form was accepted: ${JSON.stringify(failures)}`,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("RuntimeSnapshot routing v2 rejects selected provider/model fields", () => {
   const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-runtime-routing-contract-"));
   try {
@@ -169,6 +218,41 @@ function writeContractFiles(
     JSON.stringify(runtimeFixture),
     "utf8",
   );
+}
+
+function writeRoutingDocumentation(rootDir, overrides = {}) {
+  const documents = {
+    "docs/routing/README.md": "classification-pipeline.md",
+    "docs/routing/contracts.md": "classification-pipeline.md",
+    "docs/routing/classification-pipeline.md": [
+      "Active routing implementation contract",
+      "ExtractPromptFeatures",
+      "PromptFeatures",
+      "CategoryResult",
+      "ExtractDifficultyFeatures",
+      "DifficultyFeatures",
+      "DifficultyResult",
+      "Go struct",
+      "compatibility wrapper",
+    ].join("\n"),
+    "docs/current/README.md": "../routing/README.md",
+    "docs/current/source-of-truth.md": "../routing/README.md\n../routing/classification-pipeline.md",
+    "docs/v2.0.0/README.md": "Superseded by active routing contract",
+    "docs/v2.0.0/contracts.md": "Superseded by active routing contract",
+  };
+
+  if (overrides.contracts !== undefined) {
+    documents["docs/routing/contracts.md"] = overrides.contracts;
+  }
+  if (overrides.pipeline !== undefined) {
+    documents["docs/routing/classification-pipeline.md"] = overrides.pipeline;
+  }
+
+  for (const [relativePath, content] of Object.entries(documents)) {
+    const absolutePath = path.join(rootDir, relativePath);
+    mkdirSync(path.dirname(absolutePath), { recursive: true });
+    writeFileSync(absolutePath, content, "utf8");
+  }
 }
 
 function validPolicy() {

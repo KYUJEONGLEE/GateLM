@@ -4,11 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
-
-const maxCategoryScanBytes = 4096
 
 //go:embed category_policy.json
 var categoryPolicyJSON []byte
@@ -42,6 +38,24 @@ func loadCategoryPolicy() categoryPolicyData {
 
 type RuleBasedCategoryClassifier struct{}
 
+type CategoryResult struct {
+	Category    string
+	Diagnostics CategoryDiagnostics
+}
+
+type PromptClassificationResult struct {
+	Category   CategoryResult
+	Difficulty DifficultyResult
+}
+
+type RuleBasedPromptClassifier struct {
+	categoryClassifier   RuleBasedCategoryClassifier
+	difficultyClassifier RuleBasedDifficultyClassifier
+}
+
+// RoutingSignals is the legacy combined category signal projection.
+//
+// Deprecated: use PromptFeatures and CategoryResult in new code.
 type RoutingSignals struct {
 	PromptLength        int
 	HasCodeSignal       bool
@@ -52,25 +66,67 @@ type RoutingSignals struct {
 	CategoryDiagnostics CategoryDiagnostics
 }
 
+func NewRuleBasedPromptClassifier() RuleBasedPromptClassifier {
+	return RuleBasedPromptClassifier{
+		categoryClassifier:   NewRuleBasedCategoryClassifier(),
+		difficultyClassifier: NewRuleBasedDifficultyClassifier(),
+	}
+}
+
+// Classify is the canonical prompt classification entrypoint. Common prompt
+// preprocessing runs once before category-aware difficulty extraction.
+func (classifier RuleBasedPromptClassifier) Classify(prompt string) PromptClassificationResult {
+	features := ExtractPromptFeatures(prompt)
+	return classifier.ClassifyFeatures(features)
+}
+
+func (classifier RuleBasedPromptClassifier) ClassifyFeatures(features PromptFeatures) PromptClassificationResult {
+	categoryResult := classifier.categoryClassifier.ClassifyFeatures(features)
+	difficultyFeatures := ExtractDifficultyFeatures(features, categoryResult.Category)
+	difficultyResult := classifier.difficultyClassifier.ClassifyFeatures(difficultyFeatures)
+	return PromptClassificationResult{
+		Category:   categoryResult,
+		Difficulty: difficultyResult,
+	}
+}
+
 func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
 	return RuleBasedCategoryClassifier{}
 }
 
-func (RuleBasedCategoryClassifier) Classify(prompt string) string {
-	return ExtractRoutingSignals(prompt).Category
+// Classify is a compatibility wrapper.
+//
+// Deprecated: new runtime and evaluation code must call ClassifyFeatures with
+// one shared PromptFeatures value.
+func (classifier RuleBasedCategoryClassifier) Classify(prompt string) string {
+	return classifier.ClassifyFeatures(ExtractPromptFeatures(prompt)).Category
 }
 
-func (RuleBasedCategoryClassifier) ExtractRoutingSignals(prompt string) RoutingSignals {
-	return ExtractRoutingSignals(prompt)
+// ExtractRoutingSignals returns the legacy combined signal projection.
+//
+// Deprecated: use ExtractPromptFeatures and ClassifyFeatures in new code.
+func (classifier RuleBasedCategoryClassifier) ExtractRoutingSignals(prompt string) RoutingSignals {
+	features := ExtractPromptFeatures(prompt)
+	return routingSignalsFrom(features, classifier.ClassifyFeatures(features))
 }
 
-func (RuleBasedCategoryClassifier) Diagnose(prompt string) CategoryDiagnostics {
-	return ExtractRoutingSignals(prompt).CategoryDiagnostics
+// Diagnose is a compatibility wrapper around feature-based classification.
+//
+// Deprecated: use ExtractPromptFeatures and ClassifyFeatures in new code.
+func (classifier RuleBasedCategoryClassifier) Diagnose(prompt string) CategoryDiagnostics {
+	return classifier.ClassifyFeatures(ExtractPromptFeatures(prompt)).Diagnostics
 }
 
+// ExtractRoutingSignals is a compatibility wrapper for legacy internal callers.
+//
+// Deprecated: use ExtractPromptFeatures and ClassifyFeatures in new code.
 func ExtractRoutingSignals(prompt string) RoutingSignals {
-	normalized := normalizeRoutingText(prompt, maxCategoryScanBytes)
-	scores := categoryScores(normalized)
+	classifier := NewRuleBasedCategoryClassifier()
+	return classifier.ExtractRoutingSignals(prompt)
+}
+
+func (RuleBasedCategoryClassifier) ClassifyFeatures(features PromptFeatures) CategoryResult {
+	scores := categoryScores(features)
 	top, second := topTwoCategoryScores(scores)
 	category := CategoryGeneral
 	if top.Score > 0 {
@@ -102,14 +158,22 @@ func ExtractRoutingSignals(prompt string) RoutingSignals {
 		diagnostics.AmbiguityReason = AmbiguityReasonLowScore
 	}
 
+	return CategoryResult{
+		Category:    category,
+		Diagnostics: diagnostics,
+	}
+}
+
+func routingSignalsFrom(features PromptFeatures, result CategoryResult) RoutingSignals {
+	scores := result.Diagnostics.ScoreVector
 	return RoutingSignals{
-		PromptLength:        utf8.RuneCountInString(prompt),
+		PromptLength:        features.promptRuneLength,
 		HasCodeSignal:       scoreForCategory(scores, CategoryCode) > 0,
 		WantsTranslation:    scoreForCategory(scores, CategoryTranslation) > 0,
 		WantsSummarization:  scoreForCategory(scores, CategorySummarization) > 0,
 		NeedsReasoning:      scoreForCategory(scores, CategoryReasoning) > 0,
-		Category:            category,
-		CategoryDiagnostics: diagnostics,
+		Category:            result.Category,
+		CategoryDiagnostics: result.Diagnostics,
 	}
 }
 
@@ -128,8 +192,9 @@ func (d CategoryDiagnostics) HasData() bool {
 	return d.SelectedCategory != "" || d.TopCategory != "" || len(d.ScoreVector) > 0 || d.Confidence != ""
 }
 
-func categoryScores(text string) []CategoryScore {
-	tokens := routingTokenSet(text)
+func categoryScores(features PromptFeatures) []CategoryScore {
+	text := features.normalizedText
+	tokens := features.tokens
 	code := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode]) + weightedSignalScore(text,
 		[]string{"```", "stack trace", "syntax error", "race condition", "nil pointer", "compile error"},
 		[]string{"typescript", "javascript", "python", "golang", " go ", "sql", "function", "class", "api", "debug", "refactor", "code", "bug", "코드", "버그", "함수"},
@@ -210,25 +275,6 @@ func policyRuleScore(text string, tokens map[string]struct{}, rule categoryRuleD
 	return score
 }
 
-func routingTokenSet(text string) map[string]struct{} {
-	tokens := strings.FieldsFunc(text, func(r rune) bool {
-		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
-	})
-	result := make(map[string]struct{}, len(tokens))
-	for _, token := range tokens {
-		result[token] = struct{}{}
-	}
-	return result
-}
-
-func containsRoutingToken(tokens map[string]struct{}, target string) bool {
-	if target == "" {
-		return false
-	}
-	_, exists := tokens[target]
-	return exists
-}
-
 func weightedSignalScore(text string, strong []string, soft []string) int {
 	if text == "" {
 		return 0
@@ -273,108 +319,6 @@ func scoreForCategory(scores []CategoryScore, category string) int {
 	return 0
 }
 
-func normalizeRoutingText(prompt string, maxBytes int) string {
-	prompt = strings.TrimSpace(strings.ToLower(prompt))
-	if maxBytes > 0 && len(prompt) > maxBytes {
-		prompt = prompt[:maxBytes]
-		for !utf8.ValidString(prompt) && len(prompt) > 0 {
-			prompt = prompt[:len(prompt)-1]
-		}
-	}
-	return strings.Join(strings.Fields(prompt), " ")
-}
-
-type RuleBasedDifficultyClassifier struct{}
-
-func NewRuleBasedDifficultyClassifier() RuleBasedDifficultyClassifier {
-	return RuleBasedDifficultyClassifier{}
-}
-
-// Classify uses the selected category as part of its rule set. Length is only
-// an auxiliary signal; a long direct request can still be simple.
-func (RuleBasedDifficultyClassifier) Classify(prompt string, category string) string {
-	text := normalizeRoutingText(prompt, maxCategoryScanBytes)
-	if isMeaninglessRoutingText(text) {
-		return DifficultySimple
-	}
-
-	category = canonicalCategory(category)
-	if hasAnyPhrase(text, genericComplexSignals()) || hasAnyPhrase(text, categoryComplexSignals(category)) {
-		return DifficultyComplex
-	}
-	if hasAnyPhrase(text, categorySimpleSignals(category)) {
-		return DifficultySimple
-	}
-
-	// Short, single-clause questions are clear enough to be simple. Meaningful
-	// but otherwise uncertain requests deliberately fail closed to complex.
-	if len(strings.Fields(text)) <= 9 && singleClause(text) {
-		return DifficultySimple
-	}
-	return DifficultyComplex
-}
-
-func isMeaninglessRoutingText(text string) bool {
-	if text == "" {
-		return true
-	}
-	meaningful := 0
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			meaningful++
-		}
-	}
-	if meaningful == 0 {
-		return true
-	}
-	switch text {
-	case "test", "n/a", "na", "[redacted]", "[masked]":
-		return true
-	default:
-		return false
-	}
-}
-
-func genericComplexSignals() []string {
-	return []string{
-		"multiple constraints", "several constraints", "tradeoff", "trade-off",
-		"compare three", "compare four", "multi-step", "multiple steps",
-		"across multiple", "end-to-end", "root cause", "rollout plan",
-		"five constraints", "six constraints", "four options", "three plans",
-		"investigate", "best approach",
-	}
-}
-
-func categoryComplexSignals(category string) []string {
-	switch category {
-	case CategoryCode:
-		return []string{"debug", "architecture", "refactor", "performance", "race condition", "multi-file", "multiple files", "distributed", "migration", "디버깅", "아키텍처", "리팩터링", "성능", "경쟁 상태", "여러 파일", "분산 시스템", "마이그레이션", "교착", "원인", "수정안"}
-	case CategoryTranslation:
-		return []string{"terminology", "defined terms", "modal verb", "cross-reference", "cross reference", "internal reference", "formal tone", "informal tone", "preserving tone", "preserve tone", "formatting", "table", "legal", "localize", "전문 용어", "전문용어", "법률 용어", "존댓말", "반말", "말투", "형식", "표", "현지화"}
-	case CategorySummarization:
-		return []string{"multiple documents", "three documents", "multi-document", "comparative", "disagreement", "unresolved conflict", "unassigned follow-up", "citations", "structured table", "long report", "여러 문서", "세 문서", "다중 문서", "비교 요약", "충돌점", "충돌 지점", "담당자 없는 후속 조치", "인용", "근거", "구조화된 표", "표로", "긴 보고서"}
-	case CategoryReasoning:
-		return []string{"evaluate", "options", "constraints", "tradeoff", "justify", "recommendation", "scenario", "prioritize", "평가", "대안", "제약", "트레이드오프", "근거", "추천안", "시나리오", "우선순위", "비용", "위험", "일정"}
-	default:
-		return []string{"compare", "plan", "constraints", "tradeoff", "alternatives", "strategy"}
-	}
-}
-
-func categorySimpleSignals(category string) []string {
-	switch category {
-	case CategoryCode:
-		return []string{"syntax", "one function", "small edit", "single api", "what does", "example"}
-	case CategoryTranslation:
-		return []string{"translate", "번역"}
-	case CategorySummarization:
-		return []string{"key points", "brief summary", "summarize", "요약"}
-	case CategoryReasoning:
-		return []string{"should i", "if ", "which one"}
-	default:
-		return []string{"explain", "what is", "how do i", "briefly", "single"}
-	}
-}
-
 func hasAnyPhrase(text string, phrases []string) bool {
 	for _, phrase := range phrases {
 		if strings.Contains(text, phrase) {
@@ -382,13 +326,6 @@ func hasAnyPhrase(text string, phrases []string) bool {
 		}
 	}
 	return false
-}
-
-func singleClause(text string) bool {
-	return strings.Count(text, ",") == 0 &&
-		strings.Count(text, ";") == 0 &&
-		!strings.Contains(text, " and ") &&
-		!strings.Contains(text, " then ")
 }
 
 func capabilityForCategory(category string) string {
