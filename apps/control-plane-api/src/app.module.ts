@@ -18,6 +18,7 @@ import { ProviderConnectionsModule } from './modules/provider-connections/provid
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { TenantChatRuntimeModule } from './modules/tenant-chat-runtime/tenant-chat-runtime.module';
+import { TenantChatObservabilityModule } from './modules/tenant-chat-observability/tenant-chat-observability.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
@@ -41,6 +42,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     EmployeesModule,
     RuntimeConfigsModule,
     TenantChatRuntimeModule,
+    TenantChatObservabilityModule,
     TeamsModule,
     HealthModule,
   ],

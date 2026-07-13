@@ -141,6 +141,14 @@ Chat API workload JWT
 
 ## 7. PR3 - Projection, Dashboard And Integration
 
+### 7.0 구현 상태와 소유권 경계
+
+- GateLM은 ordered outbox projector, `tenant_chat` invocation read model, tenant 관리자 조회 API와 Web Dashboard를 소유한다.
+- projector는 `TENANT_CHAT_PROJECTOR_ENABLED=true`일 때만 실행하며 기존 컨테이너에서는 기본 비활성화한다.
+- Chat API의 workload JWT 발급, 사용자 인증, 암호화 대화 저장, assistant final 저장과 SSE 처리는 구현하지 않는다.
+- Chat API contract test와 양쪽 end-to-end 연결은 Chat API endpoint가 전달된 뒤 공동 검증으로 수행한다.
+- 개인 quota hard block 제거와 economy-only 전환은 active contract revision이 필요한 별도 정책 변경으로 추적한다.
+
 ### 7.1 완성할 흐름
 
 ```text

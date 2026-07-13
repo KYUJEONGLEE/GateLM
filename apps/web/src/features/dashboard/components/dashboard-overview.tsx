@@ -336,6 +336,12 @@ export function DashboardOverviewView({
             value: range
           }))}
         />
+        <Link
+          className="tenant-chat-dashboard-link"
+          href={`/tenants/${overview.filters.tenantId}/tenant-chat`}
+        >
+          Tenant Chat
+        </Link>
         <div className="dashboard-data-freshness">
           <span>Data as of</span>
           <strong>{dataAsOf}</strong>
