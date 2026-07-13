@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getCurrentConsoleAuthForCookieHeader,
+  isProjectScopedForTenant,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import {
+  getTenantChatLiveRequests,
+  mergeLiveRequestPayloads
+} from "@/lib/dashboard/tenant-chat-live-requests";
+import type { DashboardSurface } from "@/lib/dashboard/unified-dashboard";
 import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
 import type { LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import type { LiveRequestStatusFilter } from "@/lib/gateway/live-requests-types";
@@ -33,29 +39,65 @@ export async function GET(request: NextRequest) {
   }
 
   const projects = projectsModel.projects;
-  const payload = await getLiveOverviewRequests(
-    tenantId,
-    {
-      budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
-      budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
-      model: optionalQueryValue(query, "model"),
-      projectId: effectiveProjectId ?? requestedProjectId,
-      range: normalizeRange(query.get("range")),
-      resolvedBy: optionalQueryValue(query, "resolvedBy"),
-      status: normalizeStatus(query.get("status"))
-    },
-    {
-      projectIds: projects.map((project) => project.id).filter(Boolean),
-      projectNameSource: projectsModel.source,
-      projects
-    }
+  const range = normalizeRange(query.get("range"));
+  const status = normalizeStatus(query.get("status"));
+  const model = optionalQueryValue(query, "model");
+  const hasProjectFilters = Boolean(
+    effectiveProjectId ||
+    requestedProjectId ||
+    optionalQueryValue(query, "budgetScopeId") ||
+    optionalQueryValue(query, "budgetScopeType") ||
+    optionalQueryValue(query, "resolvedBy")
   );
+  const surface: DashboardSurface =
+    isProjectScopedForTenant(auth, tenantId) || hasProjectFilters
+      ? "project_application"
+      : normalizeSurface(query.get("surface"));
+  const [projectApplicationPayload, tenantChatPayload] = await Promise.all([
+    surface === "tenant_chat"
+      ? Promise.resolve(undefined)
+      : getLiveOverviewRequests(
+          tenantId,
+          {
+            budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
+            budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
+            model,
+            projectId: effectiveProjectId ?? requestedProjectId,
+            range,
+            resolvedBy: optionalQueryValue(query, "resolvedBy"),
+            status
+          },
+          {
+            projectIds: projects.map((project) => project.id).filter(Boolean),
+            projectNameSource: projectsModel.source,
+            projects
+          }
+        ),
+    surface === "project_application"
+      ? Promise.resolve(undefined)
+      : getTenantChatLiveRequests(tenantId, { model, range, status })
+  ]);
+  const payload =
+    surface === "project_application"
+      ? projectApplicationPayload
+      : surface === "tenant_chat"
+        ? tenantChatPayload
+        : projectApplicationPayload && tenantChatPayload
+          ? mergeLiveRequestPayloads(projectApplicationPayload, tenantChatPayload)
+          : projectApplicationPayload ?? tenantChatPayload;
 
   if (!payload) {
     return NextResponse.json({ error: "Failed to load live requests" }, { status: 502 });
   }
 
   return NextResponse.json({ data: payload });
+}
+
+function normalizeSurface(value: string | null): DashboardSurface {
+  if (value === "project_application" || value === "tenant_chat") {
+    return value;
+  }
+  return "all";
 }
 
 function optionalQueryValue(query: URLSearchParams, key: string) {

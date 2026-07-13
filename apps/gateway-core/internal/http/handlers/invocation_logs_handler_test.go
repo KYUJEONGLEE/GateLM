@@ -14,6 +14,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
@@ -26,10 +27,7 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 			ProjectID:        "project_demo",
 			ApplicationID:    "app_demo",
 			UserRef:          "Yoonji",
-			Provider:         "mock",
-			Model:            "mock-fast",
 			RequestedModel:   "auto",
-			SelectedModel:    "mock-fast",
 			Status:           invocationlog.StatusSuccess,
 			HTTPStatus:       http.StatusOK,
 			PromptTokens:     32,
@@ -40,7 +38,7 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 			LatencyMs:        132,
 			CacheStatus:      invocationlog.CacheStatusMiss,
 			CacheType:        invocationlog.CacheTypeExact,
-			RoutingReason:    "short_prompt_low_cost",
+			RoutingReason:    routing.ReasonMatrixRoute,
 			MaskingAction:    "none",
 			CreatedAt:        createdAt,
 		}},
@@ -74,7 +72,7 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 		t.Fatalf("expected one item, got %d", len(response.Data))
 	}
 	item := response.Data[0]
-	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
+	if item.RequestID != "request_001" || item.RequestedModel != "auto" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected response item: %+v", item)
 	}
 	if item.UserRef == nil || *item.UserRef != "Yoonji" {
@@ -120,7 +118,7 @@ func TestProjectLogsHandlerUsesTenantQueryOverride(t *testing.T) {
 func TestProjectLogsHandlerIncludesFilterOptionsMetaWhenRequested(t *testing.T) {
 	reader := &recordingProjectLogsReader{
 		filterOptions: invocationlog.RequestLogFilterOptions{
-			Models: []string{"gpt-4.1-mini", "mock-fast"},
+			RequestedModels: []string{"auto", "mock-fast"},
 			BudgetScopes: []budget.Scope{{
 				Type:       "application",
 				ID:         "app_demo",
@@ -151,8 +149,8 @@ func TestProjectLogsHandlerIncludesFilterOptionsMetaWhenRequested(t *testing.T) 
 	if response.Meta == nil {
 		t.Fatalf("expected meta filter options in response: %s", rr.Body.String())
 	}
-	if got := response.Meta.FilterOptions.Models; len(got) != 2 || got[0] != "gpt-4.1-mini" || got[1] != "mock-fast" {
-		t.Fatalf("unexpected model options: %#v", got)
+	if got := response.Meta.FilterOptions.RequestedModels; len(got) != 2 || got[0] != "auto" || got[1] != "mock-fast" {
+		t.Fatalf("unexpected requested model options: %#v", got)
 	}
 	if got := response.Meta.FilterOptions.BudgetScopes; len(got) != 1 ||
 		got[0].BudgetScopeType != "application" ||
@@ -193,8 +191,8 @@ func TestProjectLogsHandlerSerializesEmptyFilterOptionsAsArrays(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	if strings.Contains(body, `"models":null`) || !strings.Contains(body, `"models":[]`) {
-		t.Fatalf("expected empty model options to serialize as [], got: %s", body)
+	if strings.Contains(body, `"requestedModels":null`) || !strings.Contains(body, `"requestedModels":[]`) {
+		t.Fatalf("expected empty requested model options to serialize as [], got: %s", body)
 	}
 	if strings.Contains(body, `"budgetScopes":null`) || !strings.Contains(body, `"budgetScopes":[]`) {
 		t.Fatalf("expected empty budget scope options to serialize as [], got: %s", body)
@@ -331,10 +329,7 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 			ApplicationID:  "app_demo",
 			Status:         invocationlog.StatusSuccess,
 			HTTPStatus:     http.StatusOK,
-			Provider:       "mock",
-			Model:          "mock-fast",
 			RequestedModel: "auto",
-			SelectedModel:  "mock-fast",
 			Usage: invocationlog.UsageFields{
 				PromptTokens:     32,
 				CompletionTokens: 24,
@@ -356,9 +351,9 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				CacheHitRequestID: "",
 			},
 			Routing: invocationlog.RoutingFields{
-				RoutingReason:    "short_prompt_low_cost",
-				SelectedProvider: "mock",
-				SelectedModel:    "mock-fast",
+				RoutingReason: "category_difficulty_matrix",
+				Category:      "general",
+				Difficulty:    "simple",
 			},
 			Masking: invocationlog.MaskingFields{
 				MaskingAction:         "redacted",
@@ -424,7 +419,7 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	if err := json.NewDecoder(strings.NewReader(body)).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Data.RequestID != "request_001" || response.Data.Routing.SelectedModel == nil || *response.Data.Routing.SelectedModel != "mock-fast" {
+	if response.Data.RequestID != "request_001" || response.Data.Routing.Category == nil || *response.Data.Routing.Category != "general" {
 		t.Fatalf("unexpected detail response: %+v", response.Data)
 	}
 	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_1]." {
@@ -496,6 +491,49 @@ func TestRequestDetailHandlerUsesTenantProjectQueryOverride(t *testing.T) {
 	}
 	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" || reader.filter.RequestID != "request_live" {
 		t.Fatalf("expected query tenant/project and path request scope, got %+v", reader.filter)
+	}
+}
+
+func TestRequestDetailHandlerSerializesNoCallProviderAttemptAsNull(t *testing.T) {
+	handler := RequestDetailHandler{
+		Reader: &recordingRequestDetailReader{detail: invocationlog.RequestDetail{
+			RequestID:       "request_cache_hit_no_call",
+			TenantID:        "tenant_demo",
+			ProjectID:       "project_demo",
+			Status:          invocationlog.StatusSuccess,
+			HTTPStatus:      http.StatusOK,
+			RequestedModel:  "auto",
+			ProviderCalled:  false,
+			ProviderAttempt: nil,
+			Cache:           invocationlog.CacheFields{CacheStatus: invocationlog.CacheStatusHit, CacheType: invocationlog.CacheTypeExact},
+			Masking:         invocationlog.MaskingFields{MaskingAction: "none"},
+		}},
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/llm-requests/request_cache_hit_no_call", nil)
+	req.SetPathValue("requestId", "request_cache_hit_no_call")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var envelope map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode detail response: %v", err)
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing detail data: %#v", envelope)
+	}
+	attempt, exists := data["providerAttempt"]
+	if !exists || attempt != nil {
+		t.Fatalf("no-call detail must contain providerAttempt:null, got %#v", data)
+	}
+	if called, ok := data["providerCalled"].(bool); !ok || called {
+		t.Fatalf("no-call detail must expose providerCalled:false, got %#v", data["providerCalled"])
 	}
 }
 
@@ -591,10 +629,10 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				"blocked":  1,
 			},
 			RoutingCountByModel: []invocationlog.RoutingCountByModel{{
-				SelectedProvider: "mock",
-				SelectedModel:    "mock-fast",
-				RoutingReason:    "short_prompt_low_cost",
-				RequestCount:     3,
+				Category:      "general",
+				Difficulty:    "simple",
+				RoutingReason: "category_difficulty_matrix",
+				RequestCount:  3,
 			}},
 			StatusCounts: map[string]int64{
 				invocationlog.StatusSuccess:     3,
@@ -603,12 +641,12 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				invocationlog.StatusFailed:      1,
 			},
 			CostByModel: []invocationlog.CostByModel{{
-				SelectedProvider: "mock",
-				SelectedModel:    "mock-fast",
-				RequestCount:     3,
-				TotalTokens:      193,
-				CostMicroUSD:     256,
-				CostUSD:          "0.000256",
+				Provider:     "mock",
+				Model:        "mock-fast",
+				RequestCount: 3,
+				TotalTokens:  193,
+				CostMicroUSD: 256,
+				CostUSD:      "0.000256",
 			}},
 			ProjectBreakdown: []invocationlog.ProjectBreakdown{{
 				ProjectID:        "project_demo",
@@ -672,7 +710,7 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	if response.Data.Totals.StatusCounts[invocationlog.StatusRateLimited] != 1 || response.Data.Totals.MaskingActionCounts["blocked"] != 1 {
 		t.Fatalf("unexpected rollup counts: status=%+v masking=%+v", response.Data.Totals.StatusCounts, response.Data.Totals.MaskingActionCounts)
 	}
-	if len(response.Data.Totals.RoutingCountByModel) != 1 || response.Data.Totals.RoutingCountByModel[0].SelectedModel != "mock-fast" {
+	if len(response.Data.Totals.RoutingCountByModel) != 1 || response.Data.Totals.RoutingCountByModel[0].Category != "general" {
 		t.Fatalf("unexpected routing count by model: %+v", response.Data.Totals.RoutingCountByModel)
 	}
 	if len(response.Data.Totals.CostByModel) != 1 || response.Data.Totals.CostByModel[0].CostUSD != "0.000256" {

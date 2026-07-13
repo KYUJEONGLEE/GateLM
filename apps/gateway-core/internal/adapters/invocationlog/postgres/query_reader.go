@@ -112,7 +112,7 @@ func (r *QueryReader) ListProjectLogFilterOptions(ctx context.Context, filter in
 			return invocationlog.RequestLogFilterOptions{}, err
 		}
 		switch optionType {
-		case "model":
+		case "requested_model":
 			value := strings.TrimSpace(nullableString(model))
 			if value != "" {
 				modelSet[value] = struct{}{}
@@ -154,8 +154,8 @@ func (r *QueryReader) ListProjectLogFilterOptions(ctx context.Context, filter in
 	})
 
 	return invocationlog.RequestLogFilterOptions{
-		Models:       models,
-		BudgetScopes: budgetScopes,
+		RequestedModels: models,
+		BudgetScopes:    budgetScopes,
 	}, nil
 }
 
@@ -203,7 +203,6 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var cacheHitRequests int64
 	var cacheEligibleRequests int64
 	var fallbackSuccessRequests int64
-	var budgetDowngradedRequests int64
 	var promptTokens int64
 	var completionTokens int64
 	var totalTokens int64
@@ -237,7 +236,6 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&cacheHitRequests,
 		&cacheEligibleRequests,
 		&fallbackSuccessRequests,
-		&budgetDowngradedRequests,
 		&promptTokens,
 		&completionTokens,
 		&totalTokens,
@@ -333,7 +331,6 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		CacheHitRequests:            cacheHitRequests,
 		CacheEligibleRequests:       cacheEligibleRequests,
 		FallbackSuccessCount:        fallbackSuccessRequests,
-		BudgetDowngradedRequests:    budgetDowngradedRequests,
 		PromptTokens:                promptTokens,
 		CompletionTokens:            completionTokens,
 		TotalTokens:                 totalTokens,
@@ -774,7 +771,7 @@ func (r *QueryReader) queryCostReportModelBreakdown(ctx context.Context, filter 
 	items := []invocationlog.CostReportModelBreakdown{}
 	for rows.Next() {
 		var item invocationlog.CostReportModelBreakdown
-		if err := rows.Scan(&item.SelectedProvider, &item.SelectedModel, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
+		if err := rows.Scan(&item.Provider, &item.Model, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
 			return nil, err
 		}
 		item.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.CostMicroUSD)
@@ -874,8 +871,8 @@ func buildCostReportModelBreakdownQuery(filter invocationlog.CostReportFilter) (
 	query := fmt.Sprintf(`
 with filtered as (
   select
-    coalesce(nullif(selected_provider, ''), nullif(provider, '')) as selected_provider_key,
-    coalesce(nullif(selected_model, ''), nullif(model, '')) as selected_model_key,
+    nullif(provider, '') as provider_key,
+    nullif(model, '') as model_key,
     prompt_tokens,
     completion_tokens,
     total_tokens,
@@ -885,8 +882,8 @@ with filtered as (
   where %s
 )
 select
-  selected_provider_key,
-  selected_model_key,
+  provider_key,
+  model_key,
   count(*)::bigint as request_count,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
@@ -894,9 +891,9 @@ select
   coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
   coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
 from filtered
-where selected_provider_key is not null and selected_model_key is not null
+where provider_key is not null and model_key is not null
 group by 1, 2
-order by cost_micro_usd desc, selected_provider_key, selected_model_key
+order by cost_micro_usd desc, provider_key, model_key
 limit 100`, whereSQL)
 	return query, args
 }
@@ -946,8 +943,8 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 	addOptionalUUIDWhere("tenant_id", filter.TenantID)
 	addOptionalUUIDWhere("project_id", filter.ProjectID)
 	addOptionalUUIDWhere("application_id", filter.ApplicationID)
-	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
-	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
+	addOptionalWhere("provider", filter.Provider)
+	addOptionalWhere("model", filter.Model)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
 	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
 	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
@@ -1166,8 +1163,8 @@ func buildAnalyticsPerformanceWhere(filter invocationlog.AnalyticsPerformanceFil
 
 	addOptionalUUIDWhere("tenant_id", filter.TenantID)
 	addOptionalUUIDWhere("project_id", filter.ProjectID)
-	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
-	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
+	addOptionalWhere("provider", filter.Provider)
+	addOptionalWhere("model", filter.Model)
 
 	return strings.Join(where, " and "), args
 }
@@ -1177,8 +1174,8 @@ func analyticsPerformanceFilteredCTE(whereSQL string) string {
   select
     request_id,
     project_id::text as project_id,
-    coalesce(nullif(selected_provider, ''), nullif(provider, '')) as provider_key,
-    coalesce(nullif(selected_model, ''), nullif(model, '')) as model_key,
+    nullif(provider, '') as provider_key,
+    nullif(model, '') as model_key,
     %s as terminal_status,
     http_status,
     latency_ms,
@@ -1253,7 +1250,7 @@ func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []an
 
 	addOptionalWhere(terminalStatusSQL, filter.Status)
 	addOptionalWhere("provider", filter.Provider)
-	addOptionalWhere("model", filter.Model)
+	addOptionalWhere("requested_model", filter.RequestedModel)
 	addOptionalWhere("cache_status", filter.CacheStatus)
 	addOptionalUUIDWhere("application_id", filter.ApplicationID)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
@@ -1276,7 +1273,6 @@ select
   provider,
   model,
   requested_model,
-  selected_model,
   %s as status,
   http_status,
   prompt_tokens,
@@ -1301,7 +1297,7 @@ limit $%d`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, term
 func normalizeProjectLogFilterOptionsFilter(filter invocationlog.ProjectLogsFilter) (invocationlog.ProjectLogsFilter, error) {
 	filter.Status = ""
 	filter.Provider = ""
-	filter.Model = ""
+	filter.RequestedModel = ""
 	filter.CacheStatus = ""
 	filter.ApplicationID = ""
 	filter.BudgetScope = budget.Scope{}
@@ -1323,17 +1319,17 @@ func buildProjectLogFilterOptionsQuery(filter invocationlog.ProjectLogsFilter) (
 	query := fmt.Sprintf(`
 with filtered as (
   select
-    coalesce(nullif(selected_model, ''), nullif(model, ''), nullif(requested_model, '')) as model_option,
+    nullif(requested_model, '') as requested_model_option,
     %s as budget_scope_type,
     %s as budget_scope_id,
     %s as budget_scope_resolved_by
   from p0_llm_invocation_logs
   where %s
 ),
-model_options as (
-  select distinct model_option
+requested_model_options as (
+  select distinct requested_model_option
   from filtered
-  where coalesce(nullif(model_option, ''), '') <> ''
+  where coalesce(nullif(requested_model_option, ''), '') <> ''
 ),
 budget_scope_options as (
   select distinct budget_scope_type, budget_scope_id, budget_scope_resolved_by
@@ -1341,21 +1337,21 @@ budget_scope_options as (
   where coalesce(nullif(budget_scope_id, ''), '') <> ''
 )
 select
-  'model' as option_type,
-  model_option,
+  'requested_model' as option_type,
+  requested_model_option,
   null::text as budget_scope_type,
   null::text as budget_scope_id,
   null::text as budget_scope_resolved_by
-from model_options
+from requested_model_options
 union all
 select
   'budget_scope' as option_type,
-  null::text as model_option,
+  null::text as requested_model_option,
   budget_scope_type,
   budget_scope_id,
   budget_scope_resolved_by
 from budget_scope_options
-order by option_type, model_option, budget_scope_type, budget_scope_id, budget_scope_resolved_by`,
+order by option_type, requested_model_option, budget_scope_type, budget_scope_id, budget_scope_resolved_by`,
 		budgetScopeTypeSQL,
 		budgetScopeIDSQL,
 		budgetScopeResolvedBySQL,
@@ -1413,12 +1409,11 @@ with filtered as (
     masking_action,
     provider,
     model,
-    selected_provider,
-    selected_model,
     routing_reason,
     %s as budget_scope_type,
     %s as budget_scope_id,
     %s as budget_scope_resolved_by,
+    metadata,
     created_at
   from p0_llm_invocation_logs
   where %s
@@ -1433,7 +1428,6 @@ select
   count(*) filter (where cache_outcome = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
   count(*) filter (where cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_eligible_requests,
   count(*) filter (where fallback_outcome = 'success')::bigint as fallback_success_requests,
-  count(*) filter (where routing_reason = 'budget_downgraded_from_high_quality')::bigint as budget_downgraded_requests,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
@@ -1495,41 +1489,49 @@ select
   ), '{}'::jsonb) as budget_outcome_counts,
   coalesce((
     select jsonb_agg(jsonb_build_object(
-      'selectedProvider', selected_provider_key,
-      'selectedModel', selected_model_key,
+      'category', category_key,
+      'difficulty', difficulty_key,
       'routingReason', routing_reason_key,
       'requestCount', request_count
-    ) order by request_count desc, selected_provider_key, selected_model_key, routing_reason_key)
+    ) order by request_count desc, category_key, difficulty_key, routing_reason_key)
     from (
       select
-        coalesce(nullif(selected_provider, ''), nullif(provider, '')) as selected_provider_key,
-        coalesce(nullif(selected_model, ''), nullif(model, '')) as selected_model_key,
+        case lower(coalesce(nullif(metadata->>'promptCategory', ''), 'general'))
+          when 'code' then 'code'
+          when 'translation' then 'translation'
+          when 'summarization' then 'summarization'
+          when 'reasoning' then 'reasoning'
+          else 'general'
+        end as category_key,
+        case lower(coalesce(nullif(metadata->>'promptDifficulty', ''), 'simple'))
+          when 'complex' then 'complex'
+          else 'simple'
+        end as difficulty_key,
         coalesce(nullif(routing_reason, ''), '') as routing_reason_key,
         count(*)::bigint as request_count
       from filtered
       group by 1, 2, 3
     ) routing_rollup
-    where selected_provider_key is not null and selected_model_key is not null
   ), '[]'::jsonb) as routing_count_by_model,
   coalesce((
     select jsonb_agg(jsonb_build_object(
-      'selectedProvider', selected_provider_key,
-      'selectedModel', selected_model_key,
+      'provider', provider_key,
+      'model', model_key,
       'requestCount', request_count,
       'totalTokens', total_tokens,
       'costMicroUsd', cost_micro_usd
-    ) order by cost_micro_usd desc, selected_provider_key, selected_model_key)
+    ) order by cost_micro_usd desc, provider_key, model_key)
     from (
       select
-        coalesce(nullif(selected_provider, ''), nullif(provider, '')) as selected_provider_key,
-        coalesce(nullif(selected_model, ''), nullif(model, '')) as selected_model_key,
+        nullif(provider, '') as provider_key,
+        nullif(model, '') as model_key,
         count(*)::bigint as request_count,
         coalesce(sum(total_tokens), 0)::bigint as total_tokens,
         coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
       from filtered
       group by 1, 2
     ) cost_rollup
-    where selected_provider_key is not null and selected_model_key is not null
+    where provider_key is not null and model_key is not null
   ), '[]'::jsonb) as cost_by_model,
   coalesce((
     select jsonb_agg(jsonb_build_object(
@@ -1610,8 +1612,6 @@ select
   provider,
   model,
   requested_model,
-  selected_provider,
-  selected_model,
   routing_reason,
   prompt_tokens,
   completion_tokens,
@@ -1686,7 +1686,6 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var budgetScopeID sql.NullString
 	var budgetScopeResolvedBy sql.NullString
 	var requestedModel sql.NullString
-	var selectedModel sql.NullString
 	var routingReason sql.NullString
 	var metadataJSON []byte
 	if err := rows.Scan(
@@ -1700,7 +1699,6 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.Provider,
 		&log.Model,
 		&requestedModel,
-		&selectedModel,
 		&log.Status,
 		&log.HTTPStatus,
 		&log.PromptTokens,
@@ -1726,7 +1724,6 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		ResolvedBy: nullableString(budgetScopeResolvedBy),
 	}, log.ApplicationID)
 	log.RequestedModel = nullableString(requestedModel)
-	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
 	var err error
 	applyInvocationMetadataFields(&log, metadataJSON)
@@ -1748,8 +1745,6 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	var budgetScopeID sql.NullString
 	var budgetScopeResolvedBy sql.NullString
 	var requestedModel sql.NullString
-	var selectedProvider sql.NullString
-	var selectedModel sql.NullString
 	var routingReason sql.NullString
 	var providerLatencyMs sql.NullInt64
 	var cacheKeyHash sql.NullString
@@ -1776,8 +1771,6 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 		&log.Provider,
 		&log.Model,
 		&requestedModel,
-		&selectedProvider,
-		&selectedModel,
 		&routingReason,
 		&log.PromptTokens,
 		&log.CompletionTokens,
@@ -1815,8 +1808,6 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 		ResolvedBy: nullableString(budgetScopeResolvedBy),
 	}, log.ApplicationID)
 	log.RequestedModel = nullableString(requestedModel)
-	log.SelectedProvider = nullableString(selectedProvider)
-	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
 	log.ProviderLatencyMs = nullableInt64Pointer(providerLatencyMs)
 	log.CacheKeyHash = nullableString(cacheKeyHash)
@@ -1896,11 +1887,12 @@ type invocationMetadataJSON struct {
 	StageOutcomes               *gatewayStageOutcomesMetadataJSON `json:"stageOutcomes"`
 	CacheDecisionReason         string                            `json:"cacheDecisionReason"`
 	ProviderCalled              bool                              `json:"providerCalled"`
-	SelectedProviderID          string                            `json:"selectedProviderId"`
-	SelectedModelID             string                            `json:"selectedModelId"`
+	ProviderAttempt             *providerAttemptMetadataJSON      `json:"providerAttempt"`
+	ModelRef                    string                            `json:"modelRef"`
 	RoutingPolicyHash           string                            `json:"routingPolicyHash"`
 	RoutingDecisionKeyHash      string                            `json:"routingDecisionKeyHash"`
 	PromptCategory              string                            `json:"promptCategory"`
+	PromptDifficulty            string                            `json:"promptDifficulty"`
 	SemanticCacheHit            bool                              `json:"semanticCacheHit"`
 	SemanticSimilarity          float64                           `json:"semanticSimilarity"`
 	SemanticMatchedRequestID    string                            `json:"semanticMatchedRequestId"`
@@ -1910,6 +1902,11 @@ type invocationMetadataJSON struct {
 	EmbeddingProvider           string                            `json:"embeddingProvider"`
 	PromptCapture               *promptCaptureMetadataJSON        `json:"promptCapture"`
 	ResponseCapture             *responseCaptureMetadataJSON      `json:"responseCapture"`
+}
+
+type providerAttemptMetadataJSON struct {
+	ProviderID string `json:"providerId"`
+	ModelID    string `json:"modelId"`
 }
 
 type promptCaptureMetadataJSON struct {
@@ -1968,11 +1965,12 @@ func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []by
 	if metadata.ProviderCalled {
 		log.ProviderCalled = true
 	}
-	if strings.TrimSpace(metadata.SelectedProviderID) != "" {
-		log.SelectedProviderID = strings.TrimSpace(metadata.SelectedProviderID)
+	if metadata.ProviderAttempt != nil {
+		log.ProviderID = strings.TrimSpace(metadata.ProviderAttempt.ProviderID)
+		log.ModelID = strings.TrimSpace(metadata.ProviderAttempt.ModelID)
 	}
-	if strings.TrimSpace(metadata.SelectedModelID) != "" {
-		log.SelectedModelID = strings.TrimSpace(metadata.SelectedModelID)
+	if strings.TrimSpace(metadata.ModelRef) != "" {
+		log.ModelRef = strings.TrimSpace(metadata.ModelRef)
 	}
 	if routingPolicyHash := routingPolicyHashFromMetadata(metadata); routingPolicyHash != "" {
 		log.RoutingPolicyHash = routingPolicyHash
@@ -1982,6 +1980,9 @@ func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []by
 	}
 	if strings.TrimSpace(metadata.PromptCategory) != "" {
 		log.PromptCategory = strings.TrimSpace(metadata.PromptCategory)
+	}
+	if strings.TrimSpace(metadata.PromptDifficulty) != "" {
+		log.PromptDifficulty = strings.TrimSpace(metadata.PromptDifficulty)
 	}
 	log.SemanticCacheHit = metadata.SemanticCacheHit
 	if metadata.SemanticSimilarity > 0 {
@@ -2175,6 +2176,10 @@ func decodeRoutingCountByModelJSON(raw []byte) ([]invocationlog.RoutingCountByMo
 	}
 	if values == nil {
 		return []invocationlog.RoutingCountByModel{}, nil
+	}
+	for index := range values {
+		values[index].Category = invocationlog.CanonicalRoutingCategory(values[index].Category)
+		values[index].Difficulty = invocationlog.CanonicalRoutingDifficulty(values[index].Difficulty)
 	}
 	return values, nil
 }

@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { buildAnalyticsV5Evidence } from "./analytics-v5-evidence";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 
 test("builds v5 presentation evidence from sanitized Gateway logs", () => {
   const base = {
@@ -8,10 +7,10 @@ test("builds v5 presentation evidence from sanitized Gateway logs", () => {
     costMicroUsd: 0,
     createdAt: "2026-07-12T00:00:00.000Z",
     latencyMs: 0,
+    modelRef: "model_base",
     requestedModel: "auto",
-    routingReason: null,
-    selectedModel: "model_base"
-  } as InvocationLogRecord;
+    routingReason: null
+  };
   const records = [
     {
       ...base,
@@ -19,8 +18,8 @@ test("builds v5 presentation evidence from sanitized Gateway logs", () => {
       costMicroUsd: 3200,
       createdAt: "2026-07-12T00:05:00.000Z",
       latencyMs: 100,
-      routingReason: "category_reasoning_high_quality",
-      selectedModel: "45b00743-22a8-4bbd-8458-c2feef8134d7:gpt-4o"
+      modelRef: "45b00743-22a8-4bbd-8458-c2feef8134d7:gpt-4o",
+      routingReason: "category_difficulty_matrix"
     },
     {
       ...base,
@@ -28,8 +27,8 @@ test("builds v5 presentation evidence from sanitized Gateway logs", () => {
       costMicroUsd: 800,
       createdAt: "2026-07-12T00:20:00.000Z",
       latencyMs: 200,
-      routingReason: "short_prompt_low_cost",
-      selectedModel: "45b00743-22a8-4bbd-8458-c2feef8134d7:gpt-4o-mini"
+      modelRef: "45b00743-22a8-4bbd-8458-c2feef8134d7:gpt-4o-mini",
+      routingReason: "category_difficulty_matrix"
     },
     {
       ...base,
@@ -37,8 +36,8 @@ test("builds v5 presentation evidence from sanitized Gateway logs", () => {
       costMicroUsd: 900,
       createdAt: "2026-07-12T00:40:00.000Z",
       latencyMs: 500,
-      routingReason: "budget_downgraded_from_high_quality",
-      selectedModel: "85a773b1-a477-4647-933e-f563cf30298c:gpt-4o-mini"
+      modelRef: "85a773b1-a477-4647-933e-f563cf30298c:gpt-4o-mini",
+      routingReason: "category_difficulty_matrix"
     }
   ];
 

@@ -43,8 +43,6 @@ func TestChatCompletionsHandlerRateLimitAllowsThenBlocksBeforeProviderCost(t *te
 	}
 	handler := ChatCompletionsHandler{
 		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:         "mock-balanced",
-		DefaultProvider:      "mock",
 		RateLimitPipeline:    newTestRateLimitPipeline(limiter),
 		ExactCacheKeyBuilder: keyBuilder,
 		ExactCacheStore:      cacheStore,
@@ -113,8 +111,6 @@ func TestChatCompletionsHandlerDoesNotExposeRawPromptToRateLimitPipeline(t *test
 	rateLimitPipeline := &recordingRateLimitPipeline{}
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		RateLimitPipeline: rateLimitPipeline,
 	}
 	withTestAuth(&handler)
@@ -164,8 +160,6 @@ func TestChatCompletionsRateLimitStageDemo(t *testing.T) {
 	}
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		RateLimitPipeline: newTestRateLimitPipeline(limiter),
 	}
 	withTestAuth(&handler)
@@ -184,12 +178,12 @@ func TestChatCompletionsRateLimitStageDemo(t *testing.T) {
 	}
 
 	t.Logf("\n[Input #1]\nPOST /v1/chat/completions\nAuthorization: Bearer <redacted>\nX-GateLM-App-Token: <redacted>\n%s", compactJSON(t, chatCompletionBody("Write a short refund response.")))
-	t.Logf("\n[Output #1]\nHTTP %d\nX-GateLM-Request-Id: %s\nX-GateLM-Cache-Status: %s\nbody.gate_lm.cacheStatus: %s\nbody.gate_lm.selectedProvider: %s\nProvider 호출 횟수: %d",
+	t.Logf("\n[Output #1]\nHTTP %d\nX-GateLM-Request-Id: %s\nX-GateLM-Cache-Status: %s\nbody.gate_lm.cacheStatus: %s\nbody.gate_lm.executionMode: %s\nProvider 호출 횟수: %d",
 		firstRR.Code,
 		firstRR.Header().Get("X-GateLM-Request-Id"),
 		firstRR.Header().Get("X-GateLM-Cache-Status"),
 		firstResp.GateLM.CacheStatus,
-		firstResp.GateLM.SelectedProvider,
+		firstResp.GateLM.ExecutionMode,
 		providerCallsAfterFirst,
 	)
 	t.Logf("\n[Input #2]\nPOST /v1/chat/completions\nAuthorization: Bearer <redacted>\nX-GateLM-App-Token: <redacted>\n%s", compactJSON(t, chatCompletionBody("Write a short refund response.")))

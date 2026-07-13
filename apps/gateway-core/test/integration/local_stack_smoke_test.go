@@ -83,9 +83,8 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	safeMiss := postChat(t, client, cfg, ids["safeMiss"], safePrompt)
 	requireHTTPStatus(t, safeMiss.http, http.StatusOK)
 	requireEqual(t, safeMiss.gateLM.CacheStatus, "miss", "safe miss cache status")
-	requireEqual(t, safeMiss.gateLM.SelectedProvider, "mock", "safe miss selected provider")
-	requireEqual(t, safeMiss.gateLM.SelectedModel, "mock-fast", "safe miss selected model")
-	requireEqual(t, safeMiss.gateLM.RoutingReason, "short_prompt_low_cost", "safe miss routing reason")
+	requireEqual(t, safeMiss.gateLM.ExecutionMode, "mock", "safe miss execution mode")
+	requireEqual(t, safeMiss.gateLM.RoutingReason, "category_difficulty_matrix", "safe miss routing reason")
 	afterSafeMissCalls := mockProviderTotalCalls(t, client, cfg)
 	requireEqual(t, afterSafeMissCalls-beforeCalls, 1, "safe miss provider call increment")
 
@@ -100,11 +99,10 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 			"X-GateLM-Routed-Model":    safeMiss.http.header.Get("X-GateLM-Routed-Model"),
 		},
 		"body.gate_lm": map[string]any{
-			"cacheStatus":      safeMiss.gateLM.CacheStatus,
-			"selectedProvider": safeMiss.gateLM.SelectedProvider,
-			"selectedModel":    safeMiss.gateLM.SelectedModel,
-			"routingReason":    safeMiss.gateLM.RoutingReason,
-			"maskingAction":    safeMiss.gateLM.MaskingAction,
+			"cacheStatus":   safeMiss.gateLM.CacheStatus,
+			"executionMode": safeMiss.gateLM.ExecutionMode,
+			"routingReason": safeMiss.gateLM.RoutingReason,
+			"maskingAction": safeMiss.gateLM.MaskingAction,
 		},
 		"mockProvider": map[string]any{
 			"totalCallsBefore": beforeCalls,
@@ -125,7 +123,7 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 		"httpStatus": cacheHit.http.statusCode,
 		"body.gate_lm": map[string]any{
 			"cacheStatus":                   cacheHit.gateLM.CacheStatus,
-			"selectedModel":                 cacheHit.gateLM.SelectedModel,
+			"executionMode":                 cacheHit.gateLM.ExecutionMode,
 			"cacheHitRequestIdEvidence":     "Request Detail에서 확인",
 			"clientResponseRawPromptStored": false,
 		},
@@ -252,7 +250,7 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="sensitive_data_blocked",http_status="403",method="POST",status="blocked"} 1`)
 	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`)
 	requireContains(t, metricsText, `gatelm_provider_requests_total`)
-	requireContains(t, metricsText, `selected_model="mock-fast"`)
+	requireContains(t, metricsText, `model="mock-balanced"`)
 	requireContains(t, metricsText, `gatelm_cache_operations_total`)
 	requireContains(t, metricsText, `cache_status="hit"`)
 	requireContains(t, metricsText, `gatelm_rate_limit_decisions_total`)
@@ -439,8 +437,7 @@ type gateLMMetadata struct {
 	CacheType         string `json:"cacheType"`
 	CacheHitRequestID string `json:"cacheHitRequestId"`
 	MaskingAction     string `json:"maskingAction"`
-	SelectedProvider  string `json:"selectedProvider"`
-	SelectedModel     string `json:"selectedModel"`
+	ExecutionMode     string `json:"executionMode"`
 	RoutingReason     string `json:"routingReason"`
 }
 
@@ -573,7 +570,6 @@ type requestLogItem struct {
 	CacheType     string `json:"cacheType"`
 	RoutingReason string `json:"routingReason"`
 	MaskingAction string `json:"maskingAction"`
-	SelectedModel string `json:"selectedModel"`
 }
 
 func getProjectLogs(t *testing.T, client *http.Client, cfg localStackSmokeConfig, from time.Time, to time.Time) projectLogsResponse {
@@ -612,10 +608,15 @@ type requestDetailResponse struct {
 			MaskingAction string `json:"maskingAction"`
 		} `json:"masking"`
 		Routing struct {
-			SelectedProvider *string `json:"selectedProvider"`
-			SelectedModel    *string `json:"selectedModel"`
-			RoutingReason    *string `json:"routingReason"`
+			Category      *string `json:"category"`
+			Difficulty    *string `json:"difficulty"`
+			RoutingReason *string `json:"routingReason"`
 		} `json:"routing"`
+		ProviderAttempt struct {
+			ProviderID *string `json:"providerId"`
+			ModelID    *string `json:"modelId"`
+			Outcome    string  `json:"outcome"`
+		} `json:"providerAttempt"`
 	} `json:"data"`
 }
 
@@ -712,7 +713,6 @@ func compactLogItems(logs []requestLogItem) []map[string]any {
 			"cacheStatus":   item.CacheStatus,
 			"maskingAction": item.MaskingAction,
 			"routingReason": item.RoutingReason,
-			"selectedModel": item.SelectedModel,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {

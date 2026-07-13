@@ -15,7 +15,6 @@ import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { getPreferredRuntimePolicyRouteModel } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -25,19 +24,15 @@ import type { Locale } from "@/lib/i18n/locale";
 import type {
   OneTimeApiKeyState,
   PolicySection,
-  RoutingPriorityRoute,
   RuntimePolicyEditorProps,
   RuntimePolicyEditorText,
   SubmitState
 } from "./runtime-policy-editor-types";
 import {
   areRuntimePolicyDraftValuesEqual,
-  getRoutingProviderOptions,
   getSelectedRoutingProviderConnections,
-  getSelectedRoutingProviderNames,
   getWritableRuntimePolicyDraftValues,
-  groupRoutingModelsByProvider,
-  hasRoutingModelSelection,
+  hasResolvableRoutingMatrix,
   mergeDraftValuesWithProviderConnections
 } from "./runtime-policy-editor-utils";
 import {
@@ -97,7 +92,7 @@ const RoutingPolicyPanel = dynamic<RoutingPolicyPanelProps>(() =>
     loading: () => (
       <PolicyPanelFallbackGroup
         panels={[
-          { heading: "Routing" },
+          { heading: "카테고리별 모델 설정" },
           { heading: "Advanced routing", lineCount: 1 },
           { heading: "Provider catalog" }
         ]}
@@ -189,7 +184,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     catalogVersion: "Catalog version",
     configVersion: "Config version",
     completionPrice: "Completion micro USD",
-    defaultRoute: "Default route",
     detectorNames: {
       api_key: "API key",
       authorization_header: "Authorization header",
@@ -210,13 +204,10 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     edit: "Edit",
     enabled: "Enabled",
     employees: "Employees",
-    fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
     general: "General",
-    highQualityRoute: "High-quality route",
     jsonMode: "JSON",
     limit: "Limit",
-    lowCostRoute: "Low-cost route",
     logSafeCaptureHint:
       "Stores only the post-masking log-safe prompt in Request Detail when enabled.",
     mandatoryProtection: "Sensitive data protection",
@@ -252,7 +243,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     remove: "Remove",
     rollback: "Rollback",
     routing: "Routing",
-    routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     responseCapture: "Response capture",
     responseCaptureHint:
@@ -262,7 +252,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     safetyTab: "Safety",
     issueApiKey: "Issue API Key",
     issuingApiKey: "Issuing...",
-    shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
     semanticCache: "Semantic cache",
@@ -305,7 +294,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     catalogVersion: "카탈로그 버전",
     configVersion: "설정 버전",
     completionPrice: "출력 단가(마이크로 USD)",
-    defaultRoute: "기본 경로",
     detectorNames: {
       api_key: "API 키",
       authorization_header: "인증 헤더",
@@ -326,13 +314,10 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     edit: "편집",
     enabled: "사용",
     employees: "직원",
-    fallbackRoute: "대체 경로",
     fixtureFallback: "Control Plane을 사용할 수 없어 예시 값을 표시 중입니다.",
     general: "일반",
-    highQualityRoute: "고품질 경로",
     jsonMode: "JSON",
     limit: "한도",
-    lowCostRoute: "저비용 경로",
     logSafeCaptureHint:
       "켜져 있을 때 요청 상세에 마스킹 이후의 안전한 프롬프트만 저장합니다.",
     mandatoryProtection: "중요 민감정보 보호",
@@ -348,7 +333,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     pricingVersion: "가격 정책 버전",
     privacyMasking: "개인정보 마스킹",
     promptCapture: "프롬프트 캡처",
-    promptCaptureEnabled: "안전 로그 캡처",
+    promptCaptureEnabled: "로그 안전 캡처",
     promptCaptureMaxChars: "최대 글자 수",
     promptPrice: "입력 단가(마이크로 USD)",
     provider: "프로바이더",
@@ -368,7 +353,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     remove: "삭제",
     rollback: "되돌리기",
     routing: "라우팅",
-    routingAdvanced: "고급 라우팅",
     runtimeSnapshot: "런타임 스냅샷",
     responseCapture: "응답 캡처",
     responseCaptureHint:
@@ -378,7 +362,6 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     safetyTab: "안전",
     issueApiKey: "API Key 발급",
     issuingApiKey: "발급 중...",
-    shortPrompt: "짧은 요청 기준",
     snapshotState: "스냅샷 상태",
     snapshotVersion: "스냅샷 버전",
     semanticCache: "의미 기반 캐시",
@@ -417,8 +400,8 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
       return (
         <PolicyPanelFallbackGroup
           panels={[
-            { heading: text.routing },
-            { heading: text.routingAdvanced, lineCount: 1 },
+            { heading: "Auto routing", lineCount: 1 },
+            { heading: "카테고리 × 난이도 모델 설정" },
             { heading: text.providerCatalog }
           ]}
         />
@@ -464,16 +447,10 @@ export function RuntimePolicyEditor({
     apiKeyReadiness?.activeApiKeyCount ?? 1
   );
   const [draftValues, setDraftValues] = useState<RuntimePolicyDraftValues>(() =>
-    getWritableRuntimePolicyDraftValues(
-      model.activeConfig,
-      model.providerConnections.available
-    )
+    getWritableRuntimePolicyDraftValues(model.activeConfig)
   );
   const [savedDraftValues, setSavedDraftValues] = useState<RuntimePolicyDraftValues>(() =>
-    getWritableRuntimePolicyDraftValues(
-      model.activeConfig,
-      model.providerConnections.available
-    )
+    getWritableRuntimePolicyDraftValues(model.activeConfig)
   );
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
@@ -518,10 +495,7 @@ export function RuntimePolicyEditor({
     }
   }, [activePolicySection, hasEmployeeSection, hasGeneralSection, shouldMoveBudgetToGeneral]);
   useEffect(() => {
-    const nextDraftValues = getWritableRuntimePolicyDraftValues(
-      model.activeConfig,
-      model.providerConnections.available
-    );
+    const nextDraftValues = getWritableRuntimePolicyDraftValues(model.activeConfig);
     setDraftValues(nextDraftValues);
     setSavedDraftValues(nextDraftValues);
   }, [model.activeConfig, model.applicationId, model.providerConnections.available]);
@@ -530,111 +504,14 @@ export function RuntimePolicyEditor({
     [draftValues, savedDraftValues]
   );
   const hasActiveApiKey = activeApiKeyCount > 0;
-  const modelOptionsByProvider = useMemo(
-    () => groupRoutingModelsByProvider(draftValues.models, model.providerConnections.available),
-    [draftValues.models, model.providerConnections.available]
-  );
-  const routingProviderOptions = useMemo(
-    () =>
-      getRoutingProviderOptions(model.providerConnections.available, draftValues.models, [
-        draftValues.routingDefaultProvider,
-        draftValues.routingHighQualityProvider,
-        draftValues.routingLowCostProvider,
-        draftValues.routingFallbackProvider
-      ]),
-    [
-      draftValues.models,
-      draftValues.routingDefaultProvider,
-      draftValues.routingFallbackProvider,
-      draftValues.routingHighQualityProvider,
-      draftValues.routingLowCostProvider,
-      model.providerConnections.available
-    ]
-  );
-  const selectedRoutingProviderNames = getSelectedRoutingProviderNames(draftValues);
   const selectedRoutingProviderConnections = getSelectedRoutingProviderConnections(
     draftValues,
     model.providerConnections.available
   );
-  const hasRoutingCandidates =
-    routingProviderOptions.length > 0 &&
-    selectedRoutingProviderNames.length > 0 &&
-    selectedRoutingProviderConnections.length === selectedRoutingProviderNames.length &&
-    hasRoutingModelSelection(
-      draftValues.routingDefaultProvider,
-      draftValues.routingDefaultModel,
-      modelOptionsByProvider
-    ) &&
-    hasRoutingModelSelection(
-      draftValues.routingHighQualityProvider,
-      draftValues.routingHighQualityModel,
-      modelOptionsByProvider
-    ) &&
-    hasRoutingModelSelection(
-      draftValues.routingLowCostProvider,
-      draftValues.routingLowCostModel,
-      modelOptionsByProvider
-    ) &&
-    hasRoutingModelSelection(
-      draftValues.routingFallbackProvider,
-      draftValues.routingFallbackModel,
-      modelOptionsByProvider
-    );
-
-  function updateRoutingProvider(route: RoutingPriorityRoute, provider: string) {
-    setDraftValues((current) => {
-      const nextModel =
-        getPreferredRuntimePolicyRouteModel(current.models, provider, route)?.model ??
-        modelOptionsByProvider.get(provider)?.[0]?.model ??
-        "";
-
-      if (route === "default") {
-        return {
-          ...current,
-          routingDefaultModel: nextModel,
-          routingDefaultProvider: provider
-        };
-      }
-
-      return {
-        ...current,
-        ...(route === "highQuality"
-          ? {
-              routingHighQualityModel: nextModel,
-              routingHighQualityProvider: provider
-            }
-          : route === "lowCost"
-            ? {
-                routingLowCostModel: nextModel,
-                routingLowCostProvider: provider
-              }
-            : {
-                routingFallbackModel: nextModel,
-                routingFallbackProvider: provider
-              })
-      };
-    });
-  }
-
-  function updateRoutingModel(route: RoutingPriorityRoute, modelName: string) {
-    setDraftValues((current) => {
-      if (route === "default") {
-        return {
-          ...current,
-          routingDefaultModel: modelName
-        };
-      }
-
-      return {
-        ...current,
-        ...(route === "highQuality"
-          ? { routingHighQualityModel: modelName }
-          : route === "lowCost"
-            ? { routingLowCostModel: modelName }
-            : { routingFallbackModel: modelName })
-      };
-    });
-  }
+  const hasRoutingCandidates = hasResolvableRoutingMatrix(
+    draftValues.routingPolicy,
+    model.providerConnections.available
+  );
 
   async function submitPolicy(action: "save-draft" | "publish") {
     if (!hasActiveApiKey) {
@@ -656,46 +533,42 @@ export function RuntimePolicyEditor({
     setIsSubmitting(true);
     setSubmitState({ message: "", status: "idle" });
 
-    if (selectedRoutingProviderConnections.length !== selectedRoutingProviderNames.length) {
-      setSubmitState({
-        message: text.providerConnectionMissing,
-        status: "error"
+    if (selectedRoutingProviderConnections.length > 0) {
+      const providerConnectionResponse = await fetch("/api/control-plane/application-providers", {
+        body: JSON.stringify({
+          applicationId: model.applicationId,
+          providerConnectionIds: selectedRoutingProviderConnections.map(
+            (providerConnection) => providerConnection.id
+          )
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
       });
-      setIsSubmitting(false);
-      return;
+      const providerConnectionPayload = (await providerConnectionResponse
+        .json()
+        .catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!providerConnectionResponse.ok) {
+        setSubmitState({
+          message: providerConnectionPayload.error ?? "Application provider update failed.",
+          status: "error"
+        });
+        setIsSubmitting(false);
+        return;
+      }
     }
 
-    const providerConnectionResponse = await fetch("/api/control-plane/application-providers", {
-      body: JSON.stringify({
-        applicationId: model.applicationId,
-        providerConnectionIds: selectedRoutingProviderConnections.map(
-          (providerConnection) => providerConnection.id
-        )
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const providerConnectionPayload = (await providerConnectionResponse
-      .json()
-      .catch(() => ({}))) as {
-      error?: string;
-    };
-
-    if (!providerConnectionResponse.ok) {
-      setSubmitState({
-        message: providerConnectionPayload.error ?? "Application provider update failed.",
-        status: "error"
-      });
-      setIsSubmitting(false);
-      return;
-    }
-
-    const submitValues = mergeDraftValuesWithProviderConnections(
-      draftValues,
-      selectedRoutingProviderConnections
-    );
+    const submitValues =
+      selectedRoutingProviderConnections.length > 0
+        ? mergeDraftValuesWithProviderConnections(
+            draftValues,
+            selectedRoutingProviderConnections
+          )
+        : draftValues;
 
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
@@ -863,17 +736,8 @@ export function RuntimePolicyEditor({
           <Suspense fallback={getPolicyPanelFallback("routing", text)}>
             <RoutingPolicyPanel
               draftValues={draftValues}
-              modelOptionsByProvider={modelOptionsByProvider}
-              onModelChange={updateRoutingModel}
-              onProviderChange={updateRoutingProvider}
-              onShortPromptChange={(value: number) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  routingShortPromptMaxChars: value
-                }))
-              }
+              onDraftValuesChange={setDraftValues}
               providerCatalog={model.providerCatalog}
-              providerOptions={routingProviderOptions}
               providers={model.activeConfig.providers}
               text={text}
             />
@@ -903,7 +767,7 @@ export function RuntimePolicyEditor({
   }
 
   return (
-    <main className="console-content policy-console-content">
+    <main className="console-content">
       <section className="dashboard-hero">
         <div>
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}

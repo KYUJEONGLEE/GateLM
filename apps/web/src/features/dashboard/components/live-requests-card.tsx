@@ -25,6 +25,7 @@ type LiveRequestsCardFilters = {
   projectId: string;
   range: string;
   resolvedBy: string;
+  surface: "all" | "project_application" | "tenant_chat";
   tenantId: string;
 };
 
@@ -55,6 +56,7 @@ export function LiveRequestsCard({
     projectId,
     range,
     resolvedBy,
+    surface,
     tenantId
   } = filters;
   const initialRows = normalizeLiveRequestRows(initialPayload?.rows);
@@ -62,7 +64,7 @@ export function LiveRequestsCard({
   const [historyRows, setHistoryRows] = useState<LiveRequestRow[]>(initialRows);
   const [focusRows, setFocusRows] = useState<LiveRequestRow[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>(() =>
-    normalizeModelOptions(initialPayload?.modelOptions)
+    normalizeModelOptions(initialPayload?.requestedModelOptions)
   );
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
@@ -90,6 +92,7 @@ export function LiveRequestsCard({
           projectId,
           range,
           resolvedBy,
+          surface,
           tenantId
         },
         statusFilter,
@@ -101,6 +104,7 @@ export function LiveRequestsCard({
       projectId,
       range,
       resolvedBy,
+      surface,
       tenantId,
       modelFilter,
       statusFilter
@@ -162,7 +166,7 @@ export function LiveRequestsCard({
             })
           );
         }
-        setModelOptions(mergeModelOptions(payload.data.modelOptions, modelFilter));
+        setModelOptions(mergeModelOptions(payload.data.requestedModelOptions, modelFilter));
         setError(null);
       } catch (fetchError) {
         if (controller.signal.aborted) {
@@ -222,8 +226,8 @@ export function LiveRequestsCard({
   }, []);
 
   const viewAllLogsHref = useMemo(
-    () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId),
-    [modelFilter, projectId, range, statusFilter, tenantId]
+    () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId, surface),
+    [modelFilter, projectId, range, statusFilter, surface, tenantId]
   );
   const pendingCount = isFocusOpen
     ? countPendingLiveRequests(focusRows, historyRows)
@@ -373,6 +377,7 @@ function liveRequestsApiQuery(
   appendQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendQuery(query, "projectId", filters.projectId);
   appendQuery(query, "resolvedBy", filters.resolvedBy);
+  appendQuery(query, "surface", filters.surface);
   appendQuery(query, "status", status);
   appendQuery(query, "model", model);
 
@@ -384,8 +389,13 @@ function requestLogsHref(
   range: string,
   status: LiveRequestStatusFilter,
   model: string,
-  projectId?: string
+  projectId?: string,
+  surface: LiveRequestsCardFilters["surface"] = "project_application"
 ) {
+  if (surface === "tenant_chat") {
+    const query = new URLSearchParams({ range, surface });
+    return `/tenants/${tenantId}/dashboard?${query}`;
+  }
   const query = new URLSearchParams();
   const created = requestLogsCreatedRange(range);
 
@@ -420,10 +430,10 @@ function requestLogsCreatedRange(range: string) {
   return "24h";
 }
 
-function mergeModelOptions(options: string[] | undefined, selectedModel: string) {
+function mergeModelOptions(options: string[] | undefined, modelFilter: string) {
   const merged = new Set(normalizeModelOptions(options));
-  if (selectedModel.trim()) {
-    merged.add(selectedModel.trim());
+  if (modelFilter.trim()) {
+    merged.add(modelFilter.trim());
   }
   return Array.from(merged).sort((first, second) => first.localeCompare(second));
 }

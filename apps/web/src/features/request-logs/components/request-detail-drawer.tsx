@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { RequestLogDetailPanel } from "./request-log-detail";
 import { RequestIdCopyButton } from "./request-id-copy-button";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -19,7 +19,7 @@ type RequestDetailDrawerProps = {
   locale: Locale;
   loadState: "idle" | "loading" | "ready" | "error";
   onClose: () => void;
-  record?: InvocationLogRecord;
+  record?: LiveInvocationLogRecord;
   requestId: string;
   timezone: string;
 };

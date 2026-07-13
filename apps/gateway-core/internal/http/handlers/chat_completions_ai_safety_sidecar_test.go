@@ -72,9 +72,7 @@ func TestChatCompletionsHandlerBlocksWhenAiSafetySidecarBlocks(t *testing.T) {
 	chatCalls := 0
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
 		MaskingEngine: aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 			Local:       maskdomain.NewP0Engine(),
 			EndpointURL: sidecar.URL + "/internal/ai-safety/v1/detect",
@@ -173,8 +171,6 @@ func TestChatCompletionsHandlerUsesAiSafetySidecarRedactedPrompt(t *testing.T) {
 			calls:    &chatCalls,
 			requests: &providerRequests,
 		}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MaskingEngine: aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 			Local:       maskdomain.NewP0Engine(),
 			EndpointURL: sidecar.URL,
@@ -251,8 +247,6 @@ func TestChatCompletionsHandlerContinuesWhenAiSafetySidecarPasses(t *testing.T) 
 			calls:    &chatCalls,
 			requests: &providerRequests,
 		}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MaskingEngine: aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 			Local:       maskdomain.NewP0Engine(),
 			EndpointURL: sidecar.URL,
@@ -309,8 +303,6 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarTimesOu
 			calls:    &chatCalls,
 			requests: &providerRequests,
 		}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MaskingEngine: aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 			Local:       maskdomain.NewP0Engine(),
 			EndpointURL: sidecar.URL,
@@ -357,8 +349,6 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarReturns
 			calls:    &chatCalls,
 			requests: &providerRequests,
 		}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MaskingEngine: aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 			Local:       maskdomain.NewP0Engine(),
 			EndpointURL: sidecar.URL,

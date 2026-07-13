@@ -4,7 +4,7 @@
 |---|---|
 | Status | Active |
 | Authority | 문서 상태, 읽기 순서, 계약 변경 절차 |
-| Last verified | 2026-07-12 |
+| Last verified | 2026-07-13 |
 
 ## 1. Authority Model
 
@@ -41,6 +41,18 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 
 이 scope는 제품 release SemVer를 선언하지 않는다. 기존 Project/Application Chat과 public `/v1` 경로는 inherited compatibility로 보존하며, Tenant Chat 구현 전까지 current as-built 기능으로 간주하지 않는다.
 
+### General Gateway routing
+
+일반 Gateway의 category × difficulty 정책, auto/manual 요청 의미, RuntimeSnapshot routing, routing outcome과 provider-attempt 경계는 다음 active scoped contract를 사용한다.
+
+- [`../routing/README.md`](../routing/README.md): 범위와 artifact 진입점
+- [`../routing/contracts.md`](../routing/contracts.md): active 의미 계약
+- [`../routing/schemas/routing-policy.schema.json`](../routing/schemas/routing-policy.schema.json): routing policy v2 schema
+- [`../routing/fixtures/routing-policy.fixture.json`](../routing/fixtures/routing-policy.fixture.json): safe Mock bootstrap fixture
+- [`../routing/schemas/runtime-snapshot-routing.schema.json`](../routing/schemas/runtime-snapshot-routing.schema.json): RuntimeSnapshot routing v2 schema
+
+이 범위에서는 v2.0.0의 legacy category → tier → model, routingPolicy provider/model field, `selectedProvider`/`selectedModel` 계약을 상속하지 않는다. Tenant Chat의 별도 tier와 Provider Catalog의 `routing.costTier`는 이 scope 밖이다.
+
 ### Self-host delivery
 
 다음 v2.1.0 문서는 역할을 구분해서 사용한다.
@@ -59,6 +71,8 @@ plan/task/acceptance는 current backlog나 완료 evidence가 아니다. 실제 
 
 - [`../v2.1.0/category-evaluation-dataset-contract.md`](../v2.1.0/category-evaluation-dataset-contract.md)
 - [`../v2.1.0/schemas/category-evaluation-record.schema.json`](../v2.1.0/schemas/category-evaluation-record.schema.json)
+- [`../v2.1.0/difficulty-evaluation-dataset-contract.md`](../v2.1.0/difficulty-evaluation-dataset-contract.md)
+- [`../v2.1.0/schemas/difficulty-evaluation-record.schema.json`](../v2.1.0/schemas/difficulty-evaluation-record.schema.json)
 - `../v2.1.0/fixtures/*.fixture.jsonl`
 - [`../v2.1.0/routing-advanced-plan.md`](../v2.1.0/routing-advanced-plan.md)
 - [`../v2.1.0/routing-performance-test-scenario.md`](../v2.1.0/routing-performance-test-scenario.md)

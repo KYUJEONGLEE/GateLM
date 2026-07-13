@@ -293,7 +293,8 @@
 }
 
 .analytics-v5-model-flow-chart,
-.analytics-v5-routing-tier-chart,
+.analytics-v5-model-share-chart,
+.analytics-v5-routing-difficulty-chart,
 .analytics-v5-project-usage-chart {
   width: 100%;
   height: 284px;
@@ -381,7 +382,7 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
     height: 265px;
   }
 
-  .analytics-v5-routing-tier-chart,
+  .analytics-v5-routing-difficulty-chart,
   .analytics-v5-project-usage-chart {
     height: 270px;
   }

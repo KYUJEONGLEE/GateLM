@@ -3,13 +3,15 @@ import "server-only";
 import type {
   DomainOutcome,
   DomainOutcomes,
-  InvocationLogRecord,
   TerminalStatus
 } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  type LiveInvocationLogRecord,
+  normalizeRequestRouting
+} from "@/lib/gateway/live-observability-contract";
 
 type GatewayProjectLogsResponse = {
   data?: GatewayProjectLogItem[];
@@ -23,21 +25,21 @@ type GatewayProjectLogItem = {
   budgetScope?: GatewayBudgetScope;
   cacheStatus?: string;
   cacheType?: string;
+  category?: string;
   completionTokens?: number;
   costMicroUsd?: number;
   createdAt?: string;
+  difficulty?: string;
   domainOutcomes?: GatewayDomainOutcomes;
   httpStatus?: number;
   latencyMs?: number;
   maskingAction?: string;
-  model?: string;
+  modelRef?: string;
   projectId?: string;
   promptTokens?: number;
-  provider?: string;
   requestId?: string;
   requestedModel?: string;
   routingReason?: string;
-  selectedModel?: string;
   status?: string;
   terminalStatus?: string;
   totalTokens?: number;
@@ -52,7 +54,7 @@ type GatewayBudgetScope = {
 
 type GatewayProjectLogFilterOptions = {
   budgetScopes?: GatewayBudgetScope[];
-  models?: string[];
+  requestedModels?: string[];
 };
 
 type GatewayDomainOutcomes = Partial<
@@ -66,10 +68,9 @@ export type LiveGatewayRequestLogFilters = {
   cacheStatus?: string;
   from?: string;
   limit?: number;
-  model?: string;
+  requestedModel?: string;
   projectId?: string;
   projectIds?: string[];
-  provider?: string;
   requestId?: string;
   resolvedBy?: string;
   status?: string;
@@ -85,17 +86,17 @@ export type LiveGatewayRequestLogBudgetScopeOption = {
 
 export type LiveGatewayRequestLogFilterOptions = {
   budgetScopes: LiveGatewayRequestLogBudgetScopeOption[];
-  models: string[];
+  requestedModels: string[];
 };
 
 export type LiveGatewayRequestLogsWithMeta = {
   filterOptions: LiveGatewayRequestLogFilterOptions;
-  records: InvocationLogRecord[];
+  records: LiveInvocationLogRecord[];
 };
 
 type ProjectLogsFetchResult = {
   filterOptions: LiveGatewayRequestLogFilterOptions;
-  records: InvocationLogRecord[];
+  records: LiveInvocationLogRecord[];
 };
 
 const LIVE_RANGE_HOURS = 24;
@@ -105,7 +106,7 @@ const IN_MEMORY_FILTER_FETCH_LIMIT = 1000;
 
 export async function getLiveGatewayRequestLogs(
   filters: LiveGatewayRequestLogFilters = {}
-): Promise<InvocationLogRecord[] | undefined> {
+): Promise<LiveInvocationLogRecord[] | undefined> {
   const result = await getLiveGatewayRequestLogsPayload(filters, false);
   return result?.records;
 }
@@ -136,7 +137,7 @@ async function getLiveGatewayRequestLogsPayload(
   appendOptionalQuery(query, "applicationId", filters.applicationId);
   appendOptionalQuery(query, "cacheStatus", filters.cacheStatus);
   appendOptionalQuery(query, "status", filters.status);
-  appendOptionalQuery(query, "provider", filters.provider);
+  appendOptionalQuery(query, "requestedModel", filters.requestedModel);
   appendOptionalQuery(query, "requestId", filters.requestId);
   if (includeFilterOptions) {
     query.set("includeFilterOptions", "true");
@@ -157,7 +158,7 @@ async function getLiveGatewayRequestLogsPayload(
 
   const records = flattenedRecords
     .filter((record) => matchesBudgetScopeFilter(record.budgetScope, filters))
-    .filter((record) => matchesModelFilter(record, filters.model))
+    .filter((record) => matchesRequestedModelFilter(record, filters.requestedModel))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, finalLimit);
 
@@ -224,20 +225,20 @@ function normalizeGatewayFilterOptions(
         resolvedBy: scope.resolvedBy?.trim() || undefined
       }))
       .filter((scope) => scope.budgetScopeId && scope.budgetScopeType),
-    models: (value?.models ?? []).map((model) => model.trim()).filter(Boolean)
+    requestedModels: (value?.requestedModels ?? []).map((model) => model.trim()).filter(Boolean)
   };
 }
 
 function mergeProjectLogFilterOptions(
   options: Array<LiveGatewayRequestLogFilterOptions | undefined>
 ): LiveGatewayRequestLogFilterOptions {
-  const models = new Set<string>();
+  const requestedModels = new Set<string>();
   const budgetScopes = new Map<string, LiveGatewayRequestLogBudgetScopeOption>();
 
   options.forEach((option) => {
-    option?.models.forEach((model) => {
+    option?.requestedModels.forEach((model) => {
       if (model) {
-        models.add(model);
+        requestedModels.add(model);
       }
     });
     option?.budgetScopes.forEach((scope) => {
@@ -257,7 +258,7 @@ function mergeProjectLogFilterOptions(
       const idOrder = first.budgetScopeId.localeCompare(second.budgetScopeId);
       return typeOrder || idOrder || (first.resolvedBy ?? "").localeCompare(second.resolvedBy ?? "");
     }),
-    models: Array.from(models).sort((first, second) => first.localeCompare(second))
+    requestedModels: Array.from(requestedModels).sort((first, second) => first.localeCompare(second))
   };
 }
 
@@ -306,12 +307,12 @@ function hasInMemoryFilters(filters: LiveGatewayRequestLogFilters) {
     filters.budgetScopeType?.trim() ||
       filters.budgetScopeId?.trim() ||
       filters.resolvedBy?.trim() ||
-      filters.model?.trim()
+      filters.requestedModel?.trim()
   );
 }
 
 function matchesBudgetScopeFilter(
-  scope: InvocationLogRecord["budgetScope"],
+  scope: LiveInvocationLogRecord["budgetScope"],
   filters: LiveGatewayRequestLogFilters
 ) {
   const budgetScopeType = filters.budgetScopeType?.trim();
@@ -333,7 +334,7 @@ function matchesBudgetScopeFilter(
   return true;
 }
 
-function matchesModelFilter(record: InvocationLogRecord, modelFilter: string | undefined) {
+function matchesRequestedModelFilter(record: LiveInvocationLogRecord, modelFilter: string | undefined) {
   const model = modelFilter?.trim();
 
   if (!model) {
@@ -342,9 +343,7 @@ function matchesModelFilter(record: InvocationLogRecord, modelFilter: string | u
 
   const normalizedModel = model.toLowerCase();
 
-  return [record.selectedModel, record.requestedModel].some(
-    (candidate) => candidate?.toLowerCase() === normalizedModel
-  );
+  return record.requestedModel?.toLowerCase() === normalizedModel;
 }
 
 function getLiveRange() {
@@ -367,11 +366,7 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function formatOptionalModelName(value: string | undefined | null) {
-  return value ? formatModelDisplayName(value, "") || null : null;
-}
-
-function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): InvocationLogRecord {
+function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): LiveInvocationLogRecord {
   const requestId = item.requestId ?? "";
   const createdAt = item.createdAt ?? new Date().toISOString();
   const cacheStatus = item.cacheStatus ?? "bypass";
@@ -388,6 +383,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     rawMaskingAction === "none"
       ? maskingActionFromSafetyOutcome(domainOutcomes.safety.outcome)
       : rawMaskingAction;
+  const routing = normalizeRequestRouting(item);
 
   return {
     requestId,
@@ -407,11 +403,12 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     requestBodyHash: "not-exposed-by-live-list",
     promptHash: "not-exposed-by-live-list",
     redactedPromptPreview: null,
-    requestedProvider: null,
-    requestedModel: formatOptionalModelName(item.requestedModel),
-    selectedProvider: item.provider || null,
-    selectedModel: formatOptionalModelName(item.selectedModel || item.model),
-    routingReason: item.routingReason || null,
+    requestedModel: routing.requestedModel,
+    category: routing.category,
+    difficulty: routing.difficulty,
+    modelRef: routing.modelRef,
+    routingReason: routing.routingReason,
+    providerAttempt: null,
     cacheStatus,
     cacheType: item.cacheType ?? "none",
     cacheDecisionReason: null,
@@ -420,7 +417,6 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     maskingAction,
     maskingDetectedTypes: [],
     maskingDetectedCount: 0,
-    promptCategory: null,
     providerCalled: domainOutcomes.provider.outcome !== "not_called",
     rateLimitDecision: {
       allowed: status !== "rate_limited",
@@ -527,7 +523,7 @@ function normalizeDomainOutcome(
 function legacyDomainOutcomes(
   status: TerminalStatus,
   cacheStatus: string,
-  maskingAction: InvocationLogRecord["maskingAction"]
+  maskingAction: LiveInvocationLogRecord["maskingAction"]
 ): DomainOutcomes {
   const cacheOutcome =
     cacheStatus === "hit" || cacheStatus === "miss" || cacheStatus === "error"
@@ -559,7 +555,7 @@ function legacyDomainOutcomes(
   };
 }
 
-function maskingActionFromSafetyOutcome(outcome: string): InvocationLogRecord["maskingAction"] {
+function maskingActionFromSafetyOutcome(outcome: string): LiveInvocationLogRecord["maskingAction"] {
   if (outcome === "redacted" || outcome === "blocked") {
     return outcome;
   }
@@ -568,7 +564,7 @@ function maskingActionFromSafetyOutcome(outcome: string): InvocationLogRecord["m
 }
 
 // Live Gateway list payloads may still carry legacy status names; normalize them for the v2-facing read model.
-function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRecord["status"] {
+function normalizeLegacyBridgeStatus(value: string | undefined): LiveInvocationLogRecord["status"] {
 	if (
 		value === "success" ||
 		value === "blocked" ||
@@ -588,7 +584,7 @@ function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRe
 	return "failed";
 }
 
-function normalizeMaskingAction(value: string | undefined): InvocationLogRecord["maskingAction"] {
+function normalizeMaskingAction(value: string | undefined): LiveInvocationLogRecord["maskingAction"] {
   if (value === "none" || value === "redacted" || value === "blocked") {
     return value;
   }

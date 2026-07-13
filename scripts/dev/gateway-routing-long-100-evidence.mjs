@@ -22,26 +22,7 @@ const requestTimeoutMs = Number(process.env.GATEWAY_LONG_PROMPT_100_TIMEOUT_MS |
 const logPollTimeoutMs = Number(process.env.GATEWAY_LONG_PROMPT_100_LOG_POLL_TIMEOUT_MS || "90000");
 const logPollIntervalMs = 1000;
 
-const reasonToCategory = {
-  category_code_high_quality: "code",
-  category_reasoning_high_quality: "reasoning",
-  category_translation_balanced: "translation",
-  category_summarization_balanced: "summarization",
-  category_extraction_json_balanced: "extraction_json",
-  category_support_refund_low_cost: "support_refund",
-  short_prompt_low_cost: "general",
-  default_balanced: "general",
-};
-const modelToTier = { "mock-fast": "low_cost", "mock-balanced": "balanced", "mock-smart": "high_quality" };
-const categoryMeta = {
-  code: { tier: "high_quality", model: "mock-smart" },
-  reasoning: { tier: "high_quality", model: "mock-smart" },
-  translation: { tier: "balanced", model: "mock-balanced" },
-  summarization: { tier: "balanced", model: "mock-balanced" },
-  extraction_json: { tier: "balanced", model: "mock-balanced" },
-  support_refund: { tier: "low_cost", model: "mock-fast" },
-  general: { tier: "balanced", model: "mock-balanced" },
-};
+const categories = ["general", "code", "translation", "summarization", "reasoning"];
 
 try {
   await main();
@@ -109,10 +90,6 @@ async function startGateway() {
     GATEWAY_CONTROL_PLANE_BASE_URL: "",
     GATEWAY_AUTH_SOURCE: "demo",
     MOCK_PROVIDER_BASE_URL: mockProviderBaseUrl,
-    GATEWAY_DEFAULT_PROVIDER: "mock",
-    GATEWAY_DEFAULT_MODEL: "mock-balanced",
-    GATEWAY_LOW_COST_MODEL: "mock-fast",
-    GATEWAY_HIGH_QUALITY_MODEL: "mock-smart",
     GATEWAY_RATE_LIMIT_LIMIT: "200000",
     GATEWAY_ASYNC_LOG_ENABLED: "true",
     GATEWAY_ASYNC_LOG_QUEUE_SIZE: "8192",
@@ -160,17 +137,13 @@ async function resolveGo() {
 }
 
 function buildSamples(runId) {
-  const categories = ["code", "reasoning", "translation", "summarization", "extraction_json", "support_refund", "general"];
   return Array.from({ length: 100 }, (_, i) => {
     const category = categories[i % categories.length];
     const prompt = makeLongPrompt(category, i);
-    const meta = categoryMeta[category];
     return {
       sampleId: `long_${String(i + 1).padStart(3, "0")}`,
       runId,
       expectedCategory: category,
-      expectedTier: meta.tier,
-      expectedModel: meta.model,
       containsSensitiveSynthetic: i % 5 === 0,
       prompt,
       promptBytes: Buffer.byteLength(prompt, "utf8"),
@@ -190,7 +163,7 @@ function makeLongPrompt(category, index) {
     `아래에는 실제 사용자 요청처럼 배경 설명이 길게 이어진다. 초반 문단만 보면 단순한 운영 상담처럼 보일 수 있고, 중간에는 정책, 대시보드, 장애, 예산, 팀 협업 이야기가 섞인다. 이 때문에 라우팅은 앞부분의 단서만 보고 성급하게 판단하면 틀릴 수 있다.`,
     `현재 시스템은 raw prompt를 저장하지 않는 방향을 기본으로 하고, 필요할 때도 opt-in과 redaction을 전제로 한다. provider key, authorization header, app token, raw response 같은 값은 문서나 fixture에 남기면 안 된다. 이 문단은 보안 규칙 설명일 뿐 최종 요청은 아니다.`,
     `고객사는 주로 비용을 줄이고 싶어하지만, 개발자는 디버깅 가능한 로그와 재현 가능한 테스트를 원한다. 관리자는 정책을 화면에서 바꾸고 배포하고 롤백할 수 있어야 하며, Gateway는 publish된 RuntimeSnapshot만 신뢰해야 한다.`,
-    `이제부터 나오는 마지막 요청만 실제 의도다. 앞의 배경은 혼선을 주기 위한 컨텍스트이며, 라우팅은 이 뒷부분까지 읽고 적절한 카테고리와 모델 tier를 골라야 한다.`,
+    `이제부터 나오는 마지막 요청만 실제 의도다. 앞의 배경은 혼선을 주기 위한 컨텍스트이며, 분류기는 이 뒷부분까지 읽고 적절한 카테고리를 찾아야 한다.`,
   ];
   const middle = repeatNoise(index);
   return `${backgroundParts.join("\n\n")}\n\n${middle}\n\n${purposeFor(category, index)}`;
@@ -217,10 +190,6 @@ function purposeFor(category, index) {
       return `마지막 요청: 아래 운영 공지를 해외 고객사에게 보낼 수 있게 자연스러운 영어 비즈니스 문장으로 번역해줘. 의미는 유지하되 너무 직역하지 말아줘. case=${index}`;
     case "summarization":
       return `마지막 요청: 위 회의 내용을 결정사항, 남은 이슈, 다음 액션 아이템으로 나누어 짧게 요약해줘. 중복 문장은 합쳐줘. case=${index}`;
-    case "extraction_json":
-      return `마지막 요청: 위 내용에서 tenantId, projectId, applicationId, providerName, selectedModel, cacheStatus, routingReason 후보를 찾아 JSON 객체로만 추출해줘. 값이 없으면 null로 둬. case=${index}`;
-    case "support_refund":
-      return `마지막 요청: 구독 취소와 환불 가능 여부를 묻는 고객에게 보낼 답변을 작성해줘. 과도한 약속은 하지 말고, 확인 절차와 예상 소요 시간을 안내해줘. case=${index}`;
     default:
       return `마지막 요청: GateLM Gateway가 무엇이고 왜 필요한지 처음 보는 비개발자에게 쉽게 설명해줘. 비유를 하나만 사용하고 너무 길게 쓰지 말아줘. case=${index}`;
   }
@@ -251,14 +220,14 @@ async function invoke(sample, prefix) {
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
-  const gateLM = parsed?.gateLM ?? parsed?.gatelm ?? {};
+  const gateLM = parsed?.gate_lm ?? {};
   return {
     sampleId: sample.sampleId,
     requestId,
     httpStatus,
     clientDurationMs: round(performance.now() - started, 6),
-    selectedModel: String(gateLM.selectedModel ?? parsed?.model ?? ""),
     routingReason: String(gateLM.routingReason ?? ""),
+    executionMode: String(gateLM.executionMode ?? ""),
     cacheStatus: String(gateLM.cacheStatus ?? ""),
     error,
   };
@@ -290,7 +259,7 @@ async function pollLogs(prefix, expected) {
 
 async function queryLogs(prefix) {
   const escapedPrefix = prefix.replace(/'/g, "''");
-  const sql = `select coalesce(json_agg(row_to_json(t) order by "requestId"), '[]'::json) from (select request_id as "requestId", status, http_status as "httpStatus", provider, model, selected_model as "selectedModel", routing_reason as "routingReason", cache_status as "cacheStatus", cache_type as "cacheType", masking_action as "maskingAction", masking_detected_types as "maskingDetectedTypes", redacted_prompt_preview as "redactedPromptPreview", latency_ms as "latencyMs", provider_latency_ms as "providerLatencyMs", metadata from p0_llm_invocation_logs where request_id like '${escapedPrefix}%' order by request_id) t;`;
+  const sql = `select coalesce(json_agg(row_to_json(t) order by "requestId"), '[]'::json) from (select request_id as "requestId", status, http_status as "httpStatus", provider as "providerAttemptProviderId", model as "providerAttemptModelId", routing_reason as "routingReason", cache_status as "cacheStatus", cache_type as "cacheType", masking_action as "maskingAction", masking_detected_types as "maskingDetectedTypes", redacted_prompt_preview as "redactedPromptPreview", latency_ms as "latencyMs", provider_latency_ms as "providerAttemptLatencyMs", metadata from p0_llm_invocation_logs where request_id like '${escapedPrefix}%' order by request_id) t;`;
   const { stdout } = await execFileAsync("docker", ["compose", "exec", "-T", "postgres", "psql", "-U", "gatelm", "-d", "gatelm", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql], { cwd: repoRoot, maxBuffer: 80 * 1024 * 1024 });
   return JSON.parse(stdout.trim() || "[]");
 }
@@ -300,7 +269,7 @@ function buildReport({ runId, prefix, samples, results, logs, startedAt, complet
   const logByRequestId = new Map(logs.map((x) => [x.requestId, x]));
   const enriched = samples.map((sample) => enrich(sample, resultById.get(sample.sampleId), logByRequestId.get(`${prefix}${sample.sampleId}`)));
   return {
-    schemaVersion: "gatelm.long-prompt-routing-evidence.v1",
+    schemaVersion: "gatelm.long-prompt-routing-evidence.v2",
     generatedAt: completedAt.toISOString(),
     runId,
     requestPrefix: prefix,
@@ -318,6 +287,10 @@ function buildReport({ runId, prefix, samples, results, logs, startedAt, complet
       client: timing(enriched),
     },
     routing: routing(enriched),
+    providerAttempts: {
+      providerIdDistribution: dist(enriched, (x) => x.providerAttemptProviderId || "unavailable"),
+      modelIdDistribution: dist(enriched, (x) => x.providerAttemptModelId || "unavailable"),
+    },
     stageTimings: stageStats(enriched),
     logs: { expected: samples.length, actual: logs.length, coverage: ratio(logs.length, samples.length), httpStatusCounts: dist(enriched, (x) => String(x.httpStatus || 0)) },
     promptShape: promptShape(enriched),
@@ -327,10 +300,12 @@ function buildReport({ runId, prefix, samples, results, logs, startedAt, complet
 
 function enrich(sample, result, log) {
   const metadata = parseMetadata(log?.metadata);
-  const selectedModel = first(log?.selectedModel, result?.selectedModel, log?.model);
   const routingReason = first(log?.routingReason, result?.routingReason);
-  const actualCategory = first(metadata.promptCategory, reasonToCategory[routingReason], "unknown");
-  const actualTier = first(modelToTier[selectedModel], tierFromReason(routingReason), "unknown");
+  const actualCategory = first(metadata.promptCategory, "general");
+  const actualDifficulty = first(metadata.promptDifficulty, "simple");
+  const executionMode = first(result?.executionMode, "not_reported");
+  const providerAttemptProviderId = first(metadata.providerAttempt?.providerId, log?.providerAttemptProviderId);
+  const providerAttemptModelId = first(metadata.providerAttempt?.modelId, log?.providerAttemptModelId);
   const stageTimings = normalizeStageTimings(metadata.stageTimings);
   return {
     ...sample,
@@ -339,19 +314,19 @@ function enrich(sample, result, log) {
     clientDurationMs: Number(result?.clientDurationMs || 0),
     logWritten: Boolean(log),
     status: log?.status || "",
-    selectedModel,
     routingReason,
+    executionMode,
     actualCategory,
-    actualTier,
+    actualDifficulty,
+    providerAttemptProviderId,
+    providerAttemptModelId,
     categoryCorrect: actualCategory === sample.expectedCategory,
-    tierCorrect: actualTier === sample.expectedTier,
-    modelCorrect: selectedModel === sample.expectedModel,
     cacheStatus: first(log?.cacheStatus, result?.cacheStatus),
     cacheType: log?.cacheType || "",
     maskingAction: log?.maskingAction || "",
     latencyMs: Number(log?.latencyMs || 0),
-    providerLatencyMs: Number(log?.providerLatencyMs || 0),
-    gatewayWithoutProviderMs: Math.max(0, Number(log?.latencyMs || 0) - Number(log?.providerLatencyMs || 0)),
+    providerLatencyMs: Number(log?.providerAttemptLatencyMs || 0),
+    gatewayWithoutProviderMs: Math.max(0, Number(log?.latencyMs || 0) - Number(log?.providerAttemptLatencyMs || 0)),
     stageTimings,
   };
 }
@@ -361,18 +336,16 @@ function routing(items) {
   return {
     total,
     categoryAccuracy: ratio(items.filter((x) => x.categoryCorrect).length, total),
-    tierAccuracy: ratio(items.filter((x) => x.tierCorrect).length, total),
-    modelAccuracy: ratio(items.filter((x) => x.modelCorrect).length, total),
     expectedCategoryDistribution: dist(items, (x) => x.expectedCategory),
     actualCategoryDistribution: dist(items, (x) => x.actualCategory),
-    expectedTierDistribution: dist(items, (x) => x.expectedTier),
-    actualTierDistribution: dist(items, (x) => x.actualTier),
+    difficultyDistribution: dist(items, (x) => x.actualDifficulty),
     routingReasonDistribution: dist(items, (x) => x.routingReason || "unknown"),
-    perCategory: Object.fromEntries(Object.keys(categoryMeta).map((category) => {
+    executionModeDistribution: dist(items, (x) => x.executionMode || "not_reported"),
+    perCategory: Object.fromEntries(categories.map((category) => {
       const xs = items.filter((x) => x.expectedCategory === category);
-      return [category, { total: xs.length, categoryAccuracy: ratio(xs.filter((x) => x.categoryCorrect).length, xs.length), tierAccuracy: ratio(xs.filter((x) => x.tierCorrect).length, xs.length), actualDistribution: dist(xs, (x) => x.actualCategory) }];
+      return [category, { total: xs.length, categoryAccuracy: ratio(xs.filter((x) => x.categoryCorrect).length, xs.length), actualDistribution: dist(xs, (x) => x.actualCategory) }];
     })),
-    failures: items.filter((x) => !x.categoryCorrect || !x.tierCorrect).map((x) => ({ sampleId: x.sampleId, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, expectedTier: x.expectedTier, actualTier: x.actualTier, selectedModel: x.selectedModel, routingReason: x.routingReason, promptBytes: x.promptBytes, expectedPurposePositionBytes: x.expectedPurposePositionBytes, requestId: x.requestId })),
+    failures: items.filter((x) => !x.categoryCorrect).map((x) => ({ sampleId: x.sampleId, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, actualDifficulty: x.actualDifficulty, routingReason: x.routingReason, executionMode: x.executionMode, promptBytes: x.promptBytes, expectedPurposePositionBytes: x.expectedPurposePositionBytes, requestId: x.requestId })),
   };
 }
 
@@ -424,8 +397,8 @@ function promptShape(items) {
 
 function markdown(r) {
   const stageRows = Object.entries(r.stageTimings).map(([stage, v]) => `| \`${stage}\` | ${v.requests} | ${fmt(v.avgMs)}ms | ${fmt(v.p50Ms)}ms | ${fmt(v.p95Ms)}ms | ${fmt(v.maxMs)}ms | ${fmt(v.avgMicros)}μs | ${fmt(v.p95Micros)}μs |`).join("\n");
-  const categoryRows = Object.entries(r.routing.perCategory).map(([category, v]) => `| ${category} | ${v.total} | ${percent(v.categoryAccuracy)} | ${percent(v.tierAccuracy)} | ${JSON.stringify(v.actualDistribution)} |`).join("\n");
-  const failureRows = r.routing.failures.slice(0, 30).map((x) => `| ${x.sampleId} | ${x.expectedCategory} | ${x.actualCategory} | ${x.expectedTier} | ${x.actualTier} | ${x.promptBytes} | ${x.expectedPurposePositionBytes} | ${x.routingReason} |`).join("\n") || "| - | - | - | - | - | - | - | - |";
+  const categoryRows = Object.entries(r.routing.perCategory).map(([category, v]) => `| ${category} | ${v.total} | ${percent(v.categoryAccuracy)} | ${JSON.stringify(v.actualDistribution)} |`).join("\n");
+  const failureRows = r.routing.failures.slice(0, 30).map((x) => `| ${x.sampleId} | ${x.expectedCategory} | ${x.actualCategory} | ${x.actualDifficulty} | ${x.routingReason} | ${x.executionMode} | ${x.promptBytes} | ${x.expectedPurposePositionBytes} |`).join("\n") || "| - | - | - | - | - | - | - | - |";
   return `# GateLM 긴 프롬프트 100건 라우팅/지연시간 테스트 보고서 3
 
 작성 시각: ${r.generatedAt}  
@@ -436,7 +409,7 @@ runId: \`${r.runId}\`
 
 실제 서비스에서 사용자가 항상 첫 문장에 목적을 명확히 쓰지는 않는다는 가정으로 테스트했다. 그래서 100개의 프롬프트를 모두 길고 복잡하게 만들고, 최종 목적은 뒤쪽의 \`마지막 요청\` 부분에 배치했다.
 
-이번 테스트는 OpenAI 비용을 피하기 위해 mock provider를 사용했다. 따라서 실제 LLM 응답 생성 시간은 측정 대상이 아니고, Gateway 내부 단계별 처리 시간과 라우팅 판단 정확도를 확인하는 목적이다.
+이번 테스트는 OpenAI 비용을 피하기 위해 mock provider를 사용했다. 따라서 실제 LLM 응답 생성 시간은 측정 대상이 아니고, Gateway 내부 단계별 처리 시간과 category 분류 정확도를 확인하는 목적이다.
 
 ## 2. 테스트 조건
 
@@ -455,19 +428,19 @@ runId: \`${r.runId}\`
 | synthetic 민감정보 포함 샘플 | ${r.promptShape.syntheticSensitiveCount}개 |
 | DB log 저장 | ${r.logs.actual} / ${r.logs.expected} |
 
-## 3. 라우팅 정확도
+\`routingReason\`, \`difficulty\`, \`executionMode\`는 routing 관찰값이다. 실제 provider/model은 별도 \`providerAttempts\` 실행 관찰값으로만 기록한다.
+
+## 3. Category 분류 정확도
 
 | 항목 | 결과 |
 |---|---:|
 | Category 정확도 | ${percent(r.routing.categoryAccuracy)} |
-| Tier 정확도 | ${percent(r.routing.tierAccuracy)} |
-| Model 정확도 | ${percent(r.routing.modelAccuracy)} |
 | 실패 수 | ${r.routing.failures.length} / ${r.routing.total} |
 
 ## 4. 카테고리별 정확도
 
-| expected category | 샘플 수 | category 정확도 | tier 정확도 | 실제 분류 분포 |
-|---|---:|---:|---:|---|
+| expected category | 샘플 수 | category 정확도 | 실제 분류 분포 |
+|---|---:|---:|---|
 ${categoryRows}
 
 ## 5. 주요 지연시간
@@ -491,15 +464,15 @@ ${stageRows}
 
 프롬프트 원문은 보고서에 저장하지 않고, sampleId와 목적 위치만 남겼다. 전체 상세는 JSON의 실패 목록을 보면 된다.
 
-| sampleId | expected | actual | expected tier | actual tier | prompt bytes | 목적 시작 bytes | routing reason |
-|---|---|---|---|---|---:|---:|---|
+| sampleId | expected | actual | difficulty | routingReason | executionMode | prompt bytes | 목적 시작 bytes |
+|---|---|---|---|---|---|---:|---:|
 ${failureRows}
 
 ## 8. 해석
 
 - 이번 테스트는 이전보다 더 실제적인 긴 프롬프트 형태다.
-- 목적이 뒤쪽에 있어도 현재 라우팅이 끝까지 읽는 것은 아니다. 현재 category scan은 앞쪽 제한이 있기 때문에, 목적이 늦게 나오면 general/low_cost로 떨어질 수 있다.
-- 그래서 이 테스트의 정확도는 “긴 프롬프트에서 현재 룰 기반 라우팅이 얼마나 버티는지”를 보는 값이다.
+- 목적이 뒤쪽에 있어도 현재 category scan이 끝까지 읽는 것은 아니다. 앞쪽 제한 때문에 목적이 늦게 나오면 general로 분류될 수 있다.
+- 그래서 이 테스트의 정확도는 “긴 프롬프트에서 현재 룰 기반 category 분류가 얼마나 버티는지”를 보는 값이다.
 - Semantic cache embedding이나 모델 기반 PII 검사는 이번 테스트에서 켜지지 않았다.
 - 실제 출시 환경에서 embedding/model 기반 검사를 켜면 별도 stage를 추가해 다시 측정해야 한다.
 `;
@@ -511,12 +484,12 @@ function publicSample(x) {
     requestId: x.requestId,
     expectedCategory: x.expectedCategory,
     actualCategory: x.actualCategory,
-    expectedTier: x.expectedTier,
-    actualTier: x.actualTier,
-    selectedModel: x.selectedModel,
+    actualDifficulty: x.actualDifficulty,
     routingReason: x.routingReason,
+    executionMode: x.executionMode,
     categoryCorrect: x.categoryCorrect,
-    tierCorrect: x.tierCorrect,
+    providerAttemptProviderId: x.providerAttemptProviderId,
+    providerAttemptModelId: x.providerAttemptModelId,
     promptBytes: x.promptBytes,
     promptRunes: x.promptRunes,
     expectedPurposePositionBytes: x.expectedPurposePositionBytes,
@@ -541,7 +514,6 @@ function normalizeStageTimings(value) {
 function parseMetadata(v) { if (!v) return {}; if (typeof v === "string") return safeJSON(v) || {}; return v; }
 function safeJSON(s) { try { return JSON.parse(s); } catch { return null; } }
 function first(...values) { for (const value of values) if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim(); return ""; }
-function tierFromReason(reason) { if (reason === "category_code_high_quality" || reason === "category_reasoning_high_quality") return "high_quality"; if (reason === "category_support_refund_low_cost" || reason === "short_prompt_low_cost") return "low_cost"; return reason ? "balanced" : "unknown"; }
 function dist(items, pick) { const m = {}; for (const item of items) { const key = String(pick(item) ?? "unknown"); m[key] = (m[key] || 0) + 1; } return Object.fromEntries(Object.entries(m).sort(([a], [b]) => a.localeCompare(b))); }
 function avg(values) { const a = values.filter(Number.isFinite); return a.length ? a.reduce((sum, v) => sum + v, 0) / a.length : 0; }
 function max(values) { const a = values.filter(Number.isFinite); return a.length ? Math.max(...a) : 0; }
@@ -555,7 +527,6 @@ function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 function printSummary(r) {
   console.log("\nRESULT");
   console.log(`category accuracy: ${percent(r.routing.categoryAccuracy)}`);
-  console.log(`tier accuracy: ${percent(r.routing.tierAccuracy)}`);
   console.log(`logs: ${r.logs.actual}/${r.logs.expected}`);
   console.log(`client avg/p95: ${fmt(r.timing.client.avgClientMs)}ms / ${fmt(r.timing.client.p95ClientMs)}ms`);
   console.log(`gateway without provider avg/p95: ${fmt(r.timing.client.avgGatewayWithoutProviderMs)}ms / ${fmt(r.timing.client.p95GatewayWithoutProviderMs)}ms`);

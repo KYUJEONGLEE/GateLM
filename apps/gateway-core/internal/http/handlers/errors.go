@@ -8,6 +8,7 @@ import (
 
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -27,8 +28,6 @@ type gatewayError struct {
 type gatewayHeaderValues struct {
 	RequestID        string
 	CacheStatus      string
-	RoutedProvider   string
-	RoutedModel      string
 	MaskingAction    string
 	EstimatedCostUSD string
 }
@@ -70,6 +69,10 @@ func terminalStatusForGatewayError(status int, code string) string {
 }
 
 func writeGatewayDomainError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) bool {
+	if errors.Is(err, routing.ErrAutoRoutingDisabled) {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "auto_routing_disabled", "Auto routing is disabled for this application.", "decide_model_route")
+		return true
+	}
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		return false
@@ -104,8 +107,6 @@ func setGatewayHeaderValues(w http.ResponseWriter, headers gatewayHeaderValues) 
 		w.Header().Set(middleware.RequestIDHeader, headers.RequestID)
 	}
 	w.Header().Set("X-GateLM-Cache-Status", headers.CacheStatus)
-	w.Header().Set("X-GateLM-Routed-Provider", headers.RoutedProvider)
-	w.Header().Set("X-GateLM-Routed-Model", headers.RoutedModel)
 	w.Header().Set("X-GateLM-Masking-Action", headers.MaskingAction)
 	w.Header().Set("X-GateLM-Estimated-Cost-Usd", headers.EstimatedCostUSD)
 }
@@ -118,12 +119,6 @@ func gatewayHeaderValuesFromContext(reqCtx *pipeline.RequestContext) gatewayHead
 	headers := defaultGatewayHeaderValues(reqCtx.RequestID)
 	if reqCtx.CacheStatus != "" {
 		headers.CacheStatus = reqCtx.CacheStatus
-	}
-	if reqCtx.SelectedProvider != "" {
-		headers.RoutedProvider = reqCtx.SelectedProvider
-	}
-	if reqCtx.SelectedModel != "" {
-		headers.RoutedModel = reqCtx.SelectedModel
 	}
 	if reqCtx.MaskingAction != "" {
 		headers.MaskingAction = reqCtx.MaskingAction

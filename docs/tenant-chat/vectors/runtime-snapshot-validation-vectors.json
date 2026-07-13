@@ -4,10 +4,10 @@
   "baseFixture": "../fixtures/tenant-runtime-snapshot.fixture.json",
   "cases": [
     {
-      "id": "provider-cache-read-above-input-is-valid",
+      "id": "provider-cache-read-above-input-is-invalid",
       "path": "pricing.routes.0.cacheReadInputMicroUsdPerMillionTokens",
       "value": 500000,
-      "valid": true
+      "valid": false
     },
     {
       "id": "additional-property-is-invalid",

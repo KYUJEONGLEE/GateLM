@@ -5,7 +5,7 @@ import {
   AnalyticsV5ModelShareChart,
   AnalyticsV5ModelTrafficChart,
   AnalyticsV5ProjectUsageChart,
-  AnalyticsV5RoutingTierChart
+  AnalyticsV5RoutingDifficultyChart
 } from "@/features/analytics/components/analytics-v5-charts";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
@@ -48,18 +48,16 @@ export function AnalyticsV5Overview({
     ? {
         projects: "프로젝트별 사용량",
         projectsSub: "프로젝트에 귀속된 요청과 비용",
-        balanced: "균형",
+        complex: "복합 요청",
         cost: "전체 AI 비용",
         costSub: "선택 기간의 실제 Provider 비용",
         empty: "선택한 기간에 표시할 데이터가 없습니다",
-        highQuality: "고품질",
-        lowCost: "저비용 라우팅",
-        lowCostSub: "정책이 선택한 모델 등급 비교",
+        complexSub: "난이도 분류가 complex로 판정한 요청 비중",
         modelShare: "모델 트래픽 비중",
         modelTrend: "모델별 요청 흐름",
         modelTrendSub: "라우팅 정책 적용 후 시간대별 요청 추이",
-        routing: "모델 등급별 라우팅",
-        routingSub: "고품질·균형·저비용 경로의 실제 요청 비중",
+        routing: "난이도별 라우팅",
+        routingSub: "simple과 complex 분류의 실제 요청 비중",
         policyEvents: "정책 결과",
         requests: "전체 요청",
         requestsSub: "Gateway가 기록한 전체 트래픽",
@@ -69,18 +67,16 @@ export function AnalyticsV5Overview({
     : {
         projects: "Usage by project",
         projectsSub: "Requests and cost attributed to projects",
-        balanced: "Balanced",
+        complex: "Complex requests",
         cost: "Total AI spend",
         costSub: "Observed Provider spend for the selected range",
         empty: "No data for the selected range",
-        highQuality: "High quality",
-        lowCost: "Low-cost routing",
-        lowCostSub: "Compare model tiers selected by policy",
+        complexSub: "Share of requests classified as complex",
         modelShare: "Model traffic share",
         modelTrend: "Requests by model",
         modelTrendSub: "Traffic over time after routing policy",
-        routing: "Routing by model tier",
-        routingSub: "Observed high-quality, balanced, and low-cost routing share",
+        routing: "Routing by difficulty",
+        routingSub: "Observed simple and complex classification share",
         policyEvents: "Policy outcomes",
         requests: "Total requests",
         requestsSub: "All traffic recorded by the Gateway",
@@ -96,9 +92,9 @@ export function AnalyticsV5Overview({
     requestCount: row.value
   }));
   const policyRows = model.impact.outcomes.filter((row) => row.value > 0);
-  const routingTierRows = model.impact.routingTiers;
-  const routedRequests = routingTierRows.reduce((sum, row) => sum + row.value, 0);
-  const lowCostRequests = valueById(routingTierRows, "low_cost");
+  const routingDifficultyRows = model.impact.routingDifficulties;
+  const routedRequests = routingDifficultyRows.reduce((sum, row) => sum + row.value, 0);
+  const complexRequests = valueById(routingDifficultyRows, "complex");
 
   return (
     <section className="analytics-v5-overview">
@@ -126,12 +122,12 @@ export function AnalyticsV5Overview({
           <small>{text.requestsSub}</small>
         </article>
         <article className="analytics-v5-metric analytics-v5-response-metric">
-          <span>{text.lowCost}</span>
+          <span>{text.complex}</span>
           <div>
-            <strong>{formatPercent(safeRatio(lowCostRequests, routedRequests))}</strong>
-            <em>{formatInteger(lowCostRequests)}</em>
+            <strong>{formatPercent(safeRatio(complexRequests, routedRequests))}</strong>
+            <em>{formatInteger(complexRequests)}</em>
           </div>
-          <small>{text.lowCostSub}</small>
+          <small>{text.complexSub}</small>
         </article>
       </section>
 
@@ -162,11 +158,11 @@ export function AnalyticsV5Overview({
 
       <div className="analytics-v5-secondary-grid">
         <AnalyticsV5Surface subtitle={text.routingSub} title={text.routing}>
-          {routingTierRows.length ? (
-            <AnalyticsV5RoutingTierChart
+          {routingDifficultyRows.length ? (
+            <AnalyticsV5RoutingDifficultyChart
               ariaLabel={text.routing}
               locale={locale}
-              rows={routingTierRows}
+              rows={routingDifficultyRows}
             />
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,51 +16,51 @@ import (
 )
 
 const (
-	defaultClassifierName    = "rule_based_category_classifier"
-	defaultClassifierVersion = "rule_based_category_classifier_v1"
-	defaultDatasetPath       = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
-	defaultProbeDatasetPath  = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
-	defaultLatencyIterations = 20
-
-	tierCostLowCost     = 1
-	tierCostBalanced    = 3
-	tierCostHighQuality = 10
+	defaultClassifierName              = "rule_based_category_classifier"
+	defaultClassifierVersion           = "rule_based_category_classifier_v1"
+	defaultDifficultyClassifierName    = "rule_based_category_aware_difficulty_classifier"
+	defaultDifficultyClassifierVersion = "rule_based_difficulty_classifier_v1"
+	defaultDatasetPath                 = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
+	defaultDifficultyDatasetPath       = "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl"
+	defaultProbeDatasetPath            = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
+	defaultLatencyIterations           = 20
+	categoryRecordV2                   = "gatelm.category-evaluation-record.v2"
+	difficultyRecordV1                 = "gatelm.difficulty-evaluation-record.v1"
 
 	modeEvaluate = "evaluate"
 	modeProbe    = "probe"
+
+	evaluationScopeCategory   = "category"
+	evaluationScopeDifficulty = "difficulty"
 )
 
 type datasetRecord struct {
-	SampleID         string  `json:"sampleId"`
-	LegacyID         string  `json:"id"`
-	RedactedPrompt   *string `json:"redactedPrompt"`
-	Prompt           *string `json:"prompt"`
-	ExpectedCategory string  `json:"expectedCategory"`
-	ExpectedTier     string  `json:"expectedTier"`
+	SchemaVersion      string  `json:"schemaVersion"`
+	SampleID           string  `json:"sampleId"`
+	LegacyID           string  `json:"id"`
+	RedactedPrompt     *string `json:"redactedPrompt"`
+	Prompt             *string `json:"prompt"`
+	ExpectedCategory   string  `json:"expectedCategory"`
+	ExpectedDifficulty string  `json:"expectedDifficulty"`
+	Language           string  `json:"language"`
+	ExpectedTier       *string `json:"expectedTier"`
 }
 
 type report struct {
-	SummaryKo            evaluationSummaryKo       `json:"한글요약"`
-	DatasetPath          string                    `json:"datasetPath"`
-	ClassifierName       string                    `json:"classifierName"`
-	ClassifierVersion    string                    `json:"classifierVersion"`
-	TotalSamples         int                       `json:"totalSamples"`
-	CorrectSamples       int                       `json:"correctSamples"`
-	IncorrectSamples     int                       `json:"incorrectSamples"`
-	Accuracy             float64                   `json:"accuracy"`
-	ErrorRate            float64                   `json:"errorRate"`
-	TierLabeledSamples   int                       `json:"tierLabeledSamples"`
-	TierCorrectSamples   int                       `json:"tierCorrectSamples"`
-	TierIncorrectSamples int                       `json:"tierIncorrectSamples"`
-	TierAccuracy         float64                   `json:"tierAccuracy"`
-	TierErrorRate        float64                   `json:"tierErrorRate"`
-	ByCategory           map[string]categoryStats  `json:"byCategory"`
-	ByTier               map[string]categoryStats  `json:"byTier"`
-	ConfusionMatrix      map[string]map[string]int `json:"confusionMatrix"`
-	Latency              latencyStats              `json:"latency"`
-	CostEstimate         costEstimate              `json:"costEstimate"`
-	Failures             []evaluationFailure       `json:"failures"`
-	Samples              []evaluationSample        `json:"samples"`
+	SummaryKo         evaluationSummaryKo       `json:"한글요약"`
+	DatasetPath       string                    `json:"datasetPath"`
+	ClassifierName    string                    `json:"classifierName"`
+	ClassifierVersion string                    `json:"classifierVersion"`
+	TotalSamples      int                       `json:"totalSamples"`
+	CorrectSamples    int                       `json:"correctSamples"`
+	IncorrectSamples  int                       `json:"incorrectSamples"`
+	Accuracy          float64                   `json:"accuracy"`
+	ErrorRate         float64                   `json:"errorRate"`
+	ByCategory        map[string]categoryStats  `json:"byCategory"`
+	ConfusionMatrix   map[string]map[string]int `json:"confusionMatrix"`
+	Latency           latencyStats              `json:"latency"`
+	Failures          []evaluationFailure       `json:"failures"`
+	Samples           []evaluationSample        `json:"samples"`
 }
 
 type categoryStats struct {
@@ -82,13 +81,56 @@ type latencyStats struct {
 	MaxMicros  float64 `json:"maxMicros"`
 }
 
-type costEstimate struct {
-	BaselineTier      string             `json:"baselineTier"`
-	BaselineCostUnits float64            `json:"baselineCostUnits"`
-	ActualCostUnits   float64            `json:"actualCostUnits"`
-	SavedCostUnits    float64            `json:"savedCostUnits"`
-	SavingRate        float64            `json:"savingRate"`
-	UnitRates         map[string]float64 `json:"unitRates"`
+type difficultyReport struct {
+	DatasetPath           string                              `json:"datasetPath"`
+	ClassifierName        string                              `json:"classifierName"`
+	ClassifierVersion     string                              `json:"classifierVersion"`
+	TotalSamples          int                                 `json:"totalSamples"`
+	CorrectSamples        int                                 `json:"correctSamples"`
+	IncorrectSamples      int                                 `json:"incorrectSamples"`
+	Accuracy              float64                             `json:"accuracy"`
+	ErrorRate             float64                             `json:"errorRate"`
+	ByCategoryDifficulty  map[string]map[string]categoryStats `json:"byCategoryDifficulty"`
+	DirectionalErrors     directionalErrorStats               `json:"directionalErrors"`
+	ClassificationLatency classificationLatencyStats          `json:"classificationLatency"`
+	Failures              []difficultyEvaluationFailure       `json:"failures"`
+	Samples               []difficultyEvaluationSample        `json:"samples"`
+}
+
+type directionalErrorStats struct {
+	SimpleExpectedSamples  int     `json:"simpleExpectedSamples"`
+	SimpleToComplexCount   int     `json:"simpleToComplexCount"`
+	SimpleToComplexRate    float64 `json:"simpleToComplexRate"`
+	ComplexExpectedSamples int     `json:"complexExpectedSamples"`
+	ComplexToSimpleCount   int     `json:"complexToSimpleCount"`
+	ComplexToSimpleRate    float64 `json:"complexToSimpleRate"`
+}
+
+type classificationLatencyStats struct {
+	Unit       string       `json:"unit"`
+	Category   latencyStats `json:"category"`
+	Difficulty latencyStats `json:"difficulty"`
+	Total      latencyStats `json:"total"`
+}
+
+type difficultyEvaluationFailure struct {
+	SampleID           string `json:"sampleId"`
+	RedactedPrompt     string `json:"redactedPrompt,omitempty"`
+	ExpectedCategory   string `json:"expectedCategory"`
+	ActualCategory     string `json:"actualCategory"`
+	ExpectedDifficulty string `json:"expectedDifficulty"`
+	ActualDifficulty   string `json:"actualDifficulty"`
+}
+
+type difficultyEvaluationSample struct {
+	SampleID           string `json:"sampleId"`
+	RedactedPrompt     string `json:"redactedPrompt"`
+	ExpectedCategory   string `json:"expectedCategory"`
+	ActualCategory     string `json:"actualCategory"`
+	ExpectedDifficulty string `json:"expectedDifficulty"`
+	ActualDifficulty   string `json:"actualDifficulty"`
+	CategoryMatched    bool   `json:"categoryMatched"`
+	Matched            bool   `json:"matched"`
 }
 
 type evaluationFailure struct {
@@ -96,8 +138,6 @@ type evaluationFailure struct {
 	RedactedPrompt   string `json:"redactedPrompt,omitempty"`
 	ExpectedCategory string `json:"expectedCategory"`
 	ActualCategory   string `json:"actualCategory"`
-	ExpectedTier     string `json:"expectedTier,omitempty"`
-	ActualTier       string `json:"actualTier,omitempty"`
 }
 
 type evaluationSample struct {
@@ -107,12 +147,6 @@ type evaluationSample struct {
 	ExpectedCategoryKo  string                      `json:"expectedCategoryKo"`
 	ActualCategory      string                      `json:"actualCategory"`
 	ActualCategoryKo    string                      `json:"actualCategoryKo"`
-	ExpectedTier        string                      `json:"expectedTier,omitempty"`
-	ExpectedTierKo      string                      `json:"expectedTierKo,omitempty"`
-	ActualTier          string                      `json:"actualTier"`
-	ActualTierKo        string                      `json:"actualTierKo"`
-	RoutingReason       string                      `json:"routingReason"`
-	RoutingReasonKo     string                      `json:"routingReasonKo"`
 	CategoryDiagnostics routing.CategoryDiagnostics `json:"categoryDiagnostics,omitempty"`
 	Matched             bool                        `json:"matched"`
 }
@@ -125,10 +159,7 @@ type probeReport struct {
 	ClassifierVersion string               `json:"classifierVersion"`
 	TotalSamples      int                  `json:"totalSamples"`
 	ByCategory        map[string]probeStat `json:"byCategory"`
-	ByTier            map[string]probeStat `json:"byTier"`
-	RoutingReasons    map[string]int       `json:"routingReasons"`
 	Latency           latencyStats         `json:"latency"`
-	CostEstimate      costEstimate         `json:"costEstimate"`
 	Samples           []probeSample        `json:"samples"`
 }
 
@@ -143,10 +174,6 @@ type probeSample struct {
 	RedactedPrompt      string                      `json:"redactedPrompt"`
 	Category            string                      `json:"category"`
 	CategoryKo          string                      `json:"categoryKo"`
-	Tier                string                      `json:"tier"`
-	TierKo              string                      `json:"tierKo"`
-	RoutingReason       string                      `json:"routingReason"`
-	RoutingReasonKo     string                      `json:"routingReasonKo"`
 	CategoryDiagnostics routing.CategoryDiagnostics `json:"categoryDiagnostics,omitempty"`
 }
 
@@ -157,14 +184,10 @@ type evaluationSummaryKo struct {
 	TotalSamples         int                 `json:"전체샘플수"`
 	CategoryAccuracy     float64             `json:"카테고리정확도"`
 	CategoryErrorRate    float64             `json:"카테고리오답률"`
-	TierAccuracy         float64             `json:"티어정확도"`
-	TierErrorRate        float64             `json:"티어오답률"`
 	AvgLatencyMicros     float64             `json:"평균지연시간Micros"`
 	P95LatencyMicros     float64             `json:"P95지연시간Micros"`
-	CostSavingRate       float64             `json:"예상비용절감률"`
 	FailureCount         int                 `json:"실패수"`
 	CategoryDistribution []koreanStatSummary `json:"카테고리별결과"`
-	TierDistribution     []koreanStatSummary `json:"티어별결과"`
 	HowToRead            string              `json:"읽는법"`
 }
 
@@ -175,9 +198,7 @@ type probeSummaryKo struct {
 	TotalSamples         int                 `json:"전체샘플수"`
 	AvgLatencyMicros     float64             `json:"평균지연시간Micros"`
 	P95LatencyMicros     float64             `json:"P95지연시간Micros"`
-	CostSavingRate       float64             `json:"예상비용절감률"`
 	CategoryDistribution []koreanStatSummary `json:"카테고리분포"`
-	TierDistribution     []koreanStatSummary `json:"티어분포"`
 	HowToRead            string              `json:"읽는법"`
 }
 
@@ -193,11 +214,11 @@ type koreanStatSummary struct {
 
 func main() {
 	datasetPath := flag.String("dataset", defaultDatasetPath, "category evaluation dataset path (.jsonl or .json)")
+	evaluationScope := flag.String("evaluation-scope", evaluationScopeCategory, "evaluation scope: category or difficulty")
 	mode := flag.String("mode", modeEvaluate, "routing report mode: evaluate or probe")
 	outputPath := flag.String("output", "", "optional report output path")
 	classifierVersion := flag.String("classifier-version", defaultClassifierVersion, "classifier version label for the report")
 	minAccuracy := flag.Float64("min-accuracy", 0, "optional minimum exact-match accuracy, from 0 to 1")
-	minTierAccuracy := flag.Float64("min-tier-accuracy", 0, "optional minimum tier exact-match accuracy, from 0 to 1")
 	latencyIterations := flag.Int("latency-iterations", defaultLatencyIterations, "routing decision iterations per sample for latency measurement")
 	pretty := flag.Bool("pretty", true, "pretty-print JSON report")
 	flag.Parse()
@@ -209,9 +230,28 @@ func main() {
 	if *datasetPath == defaultDatasetPath && reportMode == modeProbe {
 		*datasetPath = defaultProbeDatasetPath
 	}
+	reportScope := strings.TrimSpace(*evaluationScope)
+	if reportScope == "" {
+		reportScope = evaluationScopeCategory
+	}
+	if *datasetPath == defaultDatasetPath && reportScope == evaluationScopeDifficulty {
+		*datasetPath = defaultDifficultyDatasetPath
+	}
 
-	requireExpectedLabels := reportMode != modeProbe
-	records, err := loadDataset(*datasetPath, requireExpectedLabels)
+	var records []datasetRecord
+	var err error
+	switch reportScope {
+	case evaluationScopeCategory:
+		requireExpectedLabels := reportMode != modeProbe
+		records, err = loadDataset(*datasetPath, requireExpectedLabels)
+	case evaluationScopeDifficulty:
+		if reportMode != modeEvaluate {
+			exitWithError(fmt.Errorf("difficulty evaluation supports mode %q only", modeEvaluate))
+		}
+		records, err = loadDifficultyDataset(*datasetPath)
+	default:
+		exitWithError(fmt.Errorf("unsupported evaluation scope %q; expected %q or %q", reportScope, evaluationScopeCategory, evaluationScopeDifficulty))
+	}
 	if err != nil {
 		exitWithError(err)
 	}
@@ -219,16 +259,28 @@ func main() {
 	var payload []byte
 	switch reportMode {
 	case modeEvaluate:
-		evalReport := evaluate(*datasetPath, *classifierVersion, records, *latencyIterations)
-		payload, err = marshalReport(evalReport, *pretty)
-		if err != nil {
-			exitWithError(err)
-		}
-		if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
-			exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
-		}
-		if *minTierAccuracy > 0 && evalReport.TierLabeledSamples > 0 && evalReport.TierAccuracy < *minTierAccuracy {
-			exitWithError(fmt.Errorf("tier accuracy %.4f is below minimum %.4f", evalReport.TierAccuracy, *minTierAccuracy))
+		if reportScope == evaluationScopeDifficulty {
+			version := *classifierVersion
+			if version == defaultClassifierVersion {
+				version = defaultDifficultyClassifierVersion
+			}
+			evalReport := evaluateDifficulty(*datasetPath, version, records, *latencyIterations)
+			payload, err = marshalDifficultyReport(evalReport, *pretty)
+			if err != nil {
+				exitWithError(err)
+			}
+			if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
+				exitWithError(fmt.Errorf("difficulty accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
+			}
+		} else {
+			evalReport := evaluate(*datasetPath, *classifierVersion, records, *latencyIterations)
+			payload, err = marshalReport(evalReport, *pretty)
+			if err != nil {
+				exitWithError(err)
+			}
+			if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
+				exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
+			}
 		}
 	case modeProbe:
 		probeReport := probe(*datasetPath, *classifierVersion, records, *latencyIterations)
@@ -274,6 +326,83 @@ func loadDataset(datasetPath string, requireExpectedLabels bool) ([]datasetRecor
 	return loadJSONLDataset(datasetPath, trimmed, requireExpectedLabels)
 }
 
+func loadDifficultyDataset(datasetPath string) ([]datasetRecord, error) {
+	payload, err := os.ReadFile(datasetPath)
+	if err != nil {
+		return nil, fmt.Errorf("read difficulty dataset %q: %w", datasetPath, err)
+	}
+
+	trimmed := strings.TrimPrefix(strings.TrimSpace(string(payload)), "\ufeff")
+	if trimmed == "" {
+		return nil, fmt.Errorf("difficulty dataset %q is empty", datasetPath)
+	}
+
+	if strings.HasPrefix(trimmed, "[") {
+		var records []datasetRecord
+		if err := json.Unmarshal([]byte(trimmed), &records); err != nil {
+			return nil, fmt.Errorf("decode difficulty JSON dataset %q: %w", datasetPath, err)
+		}
+		return validateDifficultyRecords(records)
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(trimmed))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	records := []datasetRecord{}
+	lineNumber := 0
+	for scanner.Scan() {
+		lineNumber++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var record datasetRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			return nil, fmt.Errorf("decode difficulty JSONL dataset %q line %d: %w", datasetPath, lineNumber, err)
+		}
+		records = append(records, record)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read difficulty JSONL dataset %q: %w", datasetPath, err)
+	}
+	return validateDifficultyRecords(records)
+}
+
+func validateDifficultyRecords(records []datasetRecord) ([]datasetRecord, error) {
+	if len(records) == 0 {
+		return nil, fmt.Errorf("difficulty dataset has no records")
+	}
+
+	for index, record := range records {
+		if strings.TrimSpace(record.SampleID) == "" {
+			return nil, fmt.Errorf("record %d: sampleId is required", index+1)
+		}
+		if record.RedactedPrompt == nil {
+			return nil, fmt.Errorf("record %d: redactedPrompt is required; legacy prompt is not allowed", index+1)
+		}
+		if strings.TrimSpace(record.LegacyID) != "" || record.Prompt != nil {
+			return nil, fmt.Errorf("record %d: legacy id/prompt is not allowed", index+1)
+		}
+		if strings.TrimSpace(record.SchemaVersion) != difficultyRecordV1 {
+			return nil, fmt.Errorf("record %d: unsupported schemaVersion %q", index+1, record.SchemaVersion)
+		}
+		if !isV2Category(record.ExpectedCategory) {
+			return nil, fmt.Errorf("record %d: unsupported expectedCategory %q", index+1, record.ExpectedCategory)
+		}
+		switch strings.TrimSpace(record.ExpectedDifficulty) {
+		case routing.DifficultySimple, routing.DifficultyComplex:
+		default:
+			return nil, fmt.Errorf("record %d: unsupported expectedDifficulty %q", index+1, record.ExpectedDifficulty)
+		}
+		if strings.TrimSpace(record.Language) == "" {
+			return nil, fmt.Errorf("record %d: language is required", index+1)
+		}
+		if record.ExpectedTier != nil {
+			return nil, fmt.Errorf("record %d: expectedTier is not allowed for %s", index+1, difficultyRecordV1)
+		}
+	}
+	return records, nil
+}
+
 func loadJSONLDataset(datasetPath string, payload string, requireExpectedLabels bool) ([]datasetRecord, error) {
 	scanner := bufio.NewScanner(strings.NewReader(payload))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -306,44 +435,78 @@ func validateRecords(records []datasetRecord, requireExpectedLabels bool) ([]dat
 	}
 
 	for index, record := range records {
+		if requireExpectedLabels {
+			if strings.TrimSpace(record.SampleID) == "" {
+				return nil, fmt.Errorf("record %d: sampleId is required", index+1)
+			}
+			if record.RedactedPrompt == nil {
+				return nil, fmt.Errorf("record %d: redactedPrompt is required; legacy prompt is not allowed", index+1)
+			}
+			if strings.TrimSpace(record.LegacyID) != "" {
+				return nil, fmt.Errorf("record %d: legacy id is not allowed", index+1)
+			}
+			if record.Prompt != nil {
+				return nil, fmt.Errorf("record %d: legacy prompt is not allowed; use redactedPrompt", index+1)
+			}
+		}
 		if strings.TrimSpace(record.expectedID()) == "" {
 			return nil, fmt.Errorf("record %d: sampleId or id is required", index+1)
 		}
+		if requireExpectedLabels {
+			schemaVersion := strings.TrimSpace(record.SchemaVersion)
+			if schemaVersion == "" {
+				return nil, fmt.Errorf("record %d: schemaVersion is required", index+1)
+			}
+			if schemaVersion != categoryRecordV2 {
+				return nil, fmt.Errorf("record %d: unsupported schemaVersion %q", index+1, schemaVersion)
+			}
+		}
 		if requireExpectedLabels && strings.TrimSpace(record.ExpectedCategory) == "" {
 			return nil, fmt.Errorf("record %d: expectedCategory is required", index+1)
+		}
+		if requireExpectedLabels && record.ExpectedTier != nil {
+			return nil, fmt.Errorf("record %d: expectedTier is not allowed for %s", index+1, categoryRecordV2)
+		}
+		if requireExpectedLabels && strings.TrimSpace(record.ExpectedDifficulty) != "" {
+			return nil, fmt.Errorf("record %d: expectedDifficulty is not allowed for %s", index+1, categoryRecordV2)
+		}
+		if requireExpectedLabels && !isV2Category(record.ExpectedCategory) {
+			return nil, fmt.Errorf("record %d: unsupported expectedCategory %q", index+1, record.ExpectedCategory)
 		}
 	}
 
 	return records, nil
 }
 
+func isV2Category(category string) bool {
+	switch strings.TrimSpace(category) {
+	case routing.CategoryGeneral, routing.CategoryCode, routing.CategoryTranslation, routing.CategorySummarization, routing.CategoryReasoning:
+		return true
+	default:
+		return false
+	}
+}
+
 func evaluate(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) report {
 	if latencyIterations <= 0 {
 		latencyIterations = 1
 	}
-	router := routing.NewSimpleRouter(routing.SimpleRouterConfig{})
+	classifier := routing.NewRuleBasedCategoryClassifier()
 	result := report{
 		DatasetPath:       datasetPath,
 		ClassifierName:    defaultClassifierName,
 		ClassifierVersion: classifierVersion,
 		TotalSamples:      len(records),
 		ByCategory:        map[string]categoryStats{},
-		ByTier:            map[string]categoryStats{},
 		ConfusionMatrix:   map[string]map[string]int{},
 		Failures:          []evaluationFailure{},
-		CostEstimate: costEstimate{
-			BaselineTier: routing.TierHighQuality,
-			UnitRates:    tierCostUnits(),
-		},
 	}
 
 	latencies := []float64{}
 	for _, record := range records {
 		expected := strings.TrimSpace(record.ExpectedCategory)
-		expectedTier := strings.TrimSpace(record.ExpectedTier)
-		decision, sampleLatencies := decideWithLatency(router, record.promptText(), latencyIterations)
-		actual := decision.RoutingDecisionMaterial.Category
-		actualTier := decision.RoutingDecisionMaterial.Tier
+		signals, sampleLatencies := classifyWithLatency(classifier, record.promptText(), latencyIterations)
+		actual := signals.Category
 		latencies = append(latencies, sampleLatencies...)
 		result.Samples = append(result.Samples, evaluationSample{
 			SampleID:            record.expectedID(),
@@ -352,14 +515,8 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 			ExpectedCategoryKo:  categoryLabelKo(expected),
 			ActualCategory:      actual,
 			ActualCategoryKo:    categoryLabelKo(actual),
-			ExpectedTier:        expectedTier,
-			ExpectedTierKo:      tierLabelKo(expectedTier),
-			ActualTier:          actualTier,
-			ActualTierKo:        tierLabelKo(actualTier),
-			RoutingReason:       decision.RoutingReason,
-			RoutingReasonKo:     routingReasonLabelKo(decision.RoutingReason),
-			CategoryDiagnostics: decision.CategoryDiagnostics,
-			Matched:             actual == expected && (expectedTier == "" || actualTier == expectedTier),
+			CategoryDiagnostics: signals.CategoryDiagnostics.WithSelectedCategory(actual),
+			Matched:             actual == expected,
 		})
 
 		stats := result.ByCategory[expected]
@@ -374,8 +531,6 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 				RedactedPrompt:   record.promptText(),
 				ExpectedCategory: expected,
 				ActualCategory:   actual,
-				ExpectedTier:     expectedTier,
-				ActualTier:       actualTier,
 			})
 		}
 		stats.Incorrect = stats.Total - stats.Correct
@@ -383,60 +538,167 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 		stats.IncorrectRate = ratio(stats.Incorrect, stats.Total)
 		result.ByCategory[expected] = stats
 
-		if expectedTier != "" {
-			tierStats := result.ByTier[expectedTier]
-			tierStats.LabelKo = tierLabelKo(expectedTier)
-			tierStats.Total++
-			result.TierLabeledSamples++
-			if actualTier == expectedTier {
-				tierStats.Correct++
-				result.TierCorrectSamples++
-			} else if actual == expected {
-				result.Failures = append(result.Failures, evaluationFailure{
-					SampleID:         record.expectedID(),
-					RedactedPrompt:   record.promptText(),
-					ExpectedCategory: expected,
-					ActualCategory:   actual,
-					ExpectedTier:     expectedTier,
-					ActualTier:       actualTier,
-				})
-			}
-			tierStats.Incorrect = tierStats.Total - tierStats.Correct
-			tierStats.Accuracy = ratio(tierStats.Correct, tierStats.Total)
-			tierStats.IncorrectRate = ratio(tierStats.Incorrect, tierStats.Total)
-			result.ByTier[expectedTier] = tierStats
-		}
-
 		if _, ok := result.ConfusionMatrix[expected]; !ok {
 			result.ConfusionMatrix[expected] = map[string]int{}
 		}
 		result.ConfusionMatrix[expected][actual]++
-
-		result.CostEstimate.BaselineCostUnits += tierCostUnit(routing.TierHighQuality)
-		result.CostEstimate.ActualCostUnits += tierCostUnit(actualTier)
 	}
 
 	result.IncorrectSamples = result.TotalSamples - result.CorrectSamples
 	result.Accuracy = ratio(result.CorrectSamples, result.TotalSamples)
 	result.ErrorRate = ratio(result.IncorrectSamples, result.TotalSamples)
-	result.TierIncorrectSamples = result.TierLabeledSamples - result.TierCorrectSamples
-	result.TierAccuracy = ratio(result.TierCorrectSamples, result.TierLabeledSamples)
-	result.TierErrorRate = ratio(result.TierIncorrectSamples, result.TierLabeledSamples)
 	result.Latency = summarizeLatency(latencies, latencyIterations)
-	result.CostEstimate.BaselineCostUnits = round4(result.CostEstimate.BaselineCostUnits)
-	result.CostEstimate.ActualCostUnits = round4(result.CostEstimate.ActualCostUnits)
-	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
-	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
 	sortFailures(result.Failures)
 	result.SummaryKo = buildEvaluationSummaryKo(result)
 	return result
+}
+
+func evaluateDifficulty(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) difficultyReport {
+	if latencyIterations <= 0 {
+		latencyIterations = 1
+	}
+	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
+	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
+	result := difficultyReport{
+		DatasetPath:          datasetPath,
+		ClassifierName:       defaultDifficultyClassifierName,
+		ClassifierVersion:    classifierVersion,
+		TotalSamples:         len(records),
+		ByCategoryDifficulty: map[string]map[string]categoryStats{},
+		Failures:             []difficultyEvaluationFailure{},
+		Samples:              []difficultyEvaluationSample{},
+	}
+
+	categoryLatencies := []float64{}
+	difficultyLatencies := []float64{}
+	totalLatencies := []float64{}
+	for _, record := range records {
+		expectedCategory := strings.TrimSpace(record.ExpectedCategory)
+		expectedDifficulty := strings.TrimSpace(record.ExpectedDifficulty)
+		prompt := record.promptText()
+
+		categorySignals, sampleCategoryLatencies := classifyWithLatency(categoryClassifier, prompt, latencyIterations)
+		actualCategory := categorySignals.Category
+		actualDifficulty, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, prompt, actualCategory, latencyIterations)
+		sampleTotalLatencies := classifyTotalWithLatency(categoryClassifier, difficultyClassifier, prompt, latencyIterations)
+		categoryLatencies = append(categoryLatencies, sampleCategoryLatencies...)
+		difficultyLatencies = append(difficultyLatencies, sampleDifficultyLatencies...)
+		totalLatencies = append(totalLatencies, sampleTotalLatencies...)
+
+		matched := actualDifficulty == expectedDifficulty
+		result.Samples = append(result.Samples, difficultyEvaluationSample{
+			SampleID:           record.expectedID(),
+			RedactedPrompt:     prompt,
+			ExpectedCategory:   expectedCategory,
+			ActualCategory:     actualCategory,
+			ExpectedDifficulty: expectedDifficulty,
+			ActualDifficulty:   actualDifficulty,
+			CategoryMatched:    actualCategory == expectedCategory,
+			Matched:            matched,
+		})
+
+		if _, ok := result.ByCategoryDifficulty[expectedCategory]; !ok {
+			result.ByCategoryDifficulty[expectedCategory] = map[string]categoryStats{}
+		}
+		stats := result.ByCategoryDifficulty[expectedCategory][expectedDifficulty]
+		stats.Total++
+		if matched {
+			stats.Correct++
+			result.CorrectSamples++
+		} else {
+			result.Failures = append(result.Failures, difficultyEvaluationFailure{
+				SampleID:           record.expectedID(),
+				RedactedPrompt:     prompt,
+				ExpectedCategory:   expectedCategory,
+				ActualCategory:     actualCategory,
+				ExpectedDifficulty: expectedDifficulty,
+				ActualDifficulty:   actualDifficulty,
+			})
+		}
+		stats.Incorrect = stats.Total - stats.Correct
+		stats.Accuracy = ratio(stats.Correct, stats.Total)
+		stats.IncorrectRate = ratio(stats.Incorrect, stats.Total)
+		result.ByCategoryDifficulty[expectedCategory][expectedDifficulty] = stats
+
+		switch expectedDifficulty {
+		case routing.DifficultySimple:
+			result.DirectionalErrors.SimpleExpectedSamples++
+			if actualDifficulty == routing.DifficultyComplex {
+				result.DirectionalErrors.SimpleToComplexCount++
+			}
+		case routing.DifficultyComplex:
+			result.DirectionalErrors.ComplexExpectedSamples++
+			if actualDifficulty == routing.DifficultySimple {
+				result.DirectionalErrors.ComplexToSimpleCount++
+			}
+		}
+	}
+
+	result.IncorrectSamples = result.TotalSamples - result.CorrectSamples
+	result.Accuracy = ratio(result.CorrectSamples, result.TotalSamples)
+	result.ErrorRate = ratio(result.IncorrectSamples, result.TotalSamples)
+	result.DirectionalErrors.SimpleToComplexRate = ratio(
+		result.DirectionalErrors.SimpleToComplexCount,
+		result.DirectionalErrors.SimpleExpectedSamples,
+	)
+	result.DirectionalErrors.ComplexToSimpleRate = ratio(
+		result.DirectionalErrors.ComplexToSimpleCount,
+		result.DirectionalErrors.ComplexExpectedSamples,
+	)
+	result.ClassificationLatency = classificationLatencyStats{
+		Unit:       "microseconds",
+		Category:   summarizeLatency(categoryLatencies, latencyIterations),
+		Difficulty: summarizeLatency(difficultyLatencies, latencyIterations),
+		Total:      summarizeLatency(totalLatencies, latencyIterations),
+	}
+	return result
+}
+
+func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, prompt string, category string, iterations int) (string, []float64) {
+	latencies := make([]float64, 0, iterations)
+	actual := ""
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		actual = classifier.Classify(prompt, category)
+		latencies = append(latencies, durationMicros(time.Since(start)))
+	}
+	return actual, latencies
+}
+
+func classifyTotalWithLatency(categoryClassifier routing.RuleBasedCategoryClassifier, difficultyClassifier routing.RuleBasedDifficultyClassifier, prompt string, iterations int) []float64 {
+	latencies := make([]float64, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		category := categoryClassifier.Classify(prompt)
+		_ = difficultyClassifier.Classify(prompt, category)
+		latencies = append(latencies, durationMicros(time.Since(start)))
+	}
+	return latencies
+}
+
+func marshalDifficultyReport(result difficultyReport, pretty bool) ([]byte, error) {
+	if pretty {
+		return json.MarshalIndent(result, "", "  ")
+	}
+	return json.Marshal(result)
+}
+
+func classifyWithLatency(classifier routing.RuleBasedCategoryClassifier, prompt string, iterations int) (routing.RoutingSignals, []float64) {
+	latencies := make([]float64, 0, iterations)
+	var signals routing.RoutingSignals
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		signals = classifier.ExtractRoutingSignals(prompt)
+		latencies = append(latencies, durationMicros(time.Since(start)))
+	}
+	return signals, latencies
 }
 
 func probe(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) probeReport {
 	if latencyIterations <= 0 {
 		latencyIterations = 1
 	}
-	router := routing.NewSimpleRouter(routing.SimpleRouterConfig{})
+	classifier := routing.NewRuleBasedCategoryClassifier()
 	result := probeReport{
 		Mode:              modeProbe,
 		DatasetPath:       datasetPath,
@@ -444,20 +706,13 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 		ClassifierVersion: classifierVersion,
 		TotalSamples:      len(records),
 		ByCategory:        map[string]probeStat{},
-		ByTier:            map[string]probeStat{},
-		RoutingReasons:    map[string]int{},
 		Samples:           []probeSample{},
-		CostEstimate: costEstimate{
-			BaselineTier: routing.TierHighQuality,
-			UnitRates:    tierCostUnits(),
-		},
 	}
 
 	latencies := []float64{}
 	for _, record := range records {
-		decision, sampleLatencies := decideWithLatency(router, record.promptText(), latencyIterations)
-		category := decision.RoutingDecisionMaterial.Category
-		tier := decision.RoutingDecisionMaterial.Tier
+		signals, sampleLatencies := classifyWithLatency(classifier, record.promptText(), latencyIterations)
+		category := signals.Category
 		latencies = append(latencies, sampleLatencies...)
 
 		categoryStat := result.ByCategory[category]
@@ -465,56 +720,20 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 		categoryStat.Total++
 		result.ByCategory[category] = categoryStat
 
-		tierStat := result.ByTier[tier]
-		tierStat.LabelKo = tierLabelKo(tier)
-		tierStat.Total++
-		result.ByTier[tier] = tierStat
-
-		result.RoutingReasons[decision.RoutingReason]++
-		result.CostEstimate.BaselineCostUnits += tierCostUnit(routing.TierHighQuality)
-		result.CostEstimate.ActualCostUnits += tierCostUnit(tier)
 		result.Samples = append(result.Samples, probeSample{
 			SampleID:            record.expectedID(),
 			RedactedPrompt:      record.promptText(),
 			Category:            category,
 			CategoryKo:          categoryLabelKo(category),
-			Tier:                tier,
-			TierKo:              tierLabelKo(tier),
-			RoutingReason:       decision.RoutingReason,
-			RoutingReasonKo:     routingReasonLabelKo(decision.RoutingReason),
-			CategoryDiagnostics: decision.CategoryDiagnostics,
+			CategoryDiagnostics: signals.CategoryDiagnostics.WithSelectedCategory(category),
 		})
 	}
 
 	result.ByCategory = finalizeProbeStats(result.ByCategory, result.TotalSamples)
-	result.ByTier = finalizeProbeStats(result.ByTier, result.TotalSamples)
 	result.Latency = summarizeLatency(latencies, latencyIterations)
-	result.CostEstimate.BaselineCostUnits = round4(result.CostEstimate.BaselineCostUnits)
-	result.CostEstimate.ActualCostUnits = round4(result.CostEstimate.ActualCostUnits)
-	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
-	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
 	sortProbeSamples(result.Samples)
 	result.SummaryKo = buildProbeSummaryKo(result)
 	return result
-}
-
-func decideWithLatency(router *routing.SimpleRouter, prompt string, iterations int) (routing.Decision, []float64) {
-	latencies := make([]float64, 0, iterations)
-	var decision routing.Decision
-	for i := 0; i < iterations; i++ {
-		start := time.Now()
-		nextDecision, err := router.DecideRoute(context.Background(), routing.Request{
-			RequestedModel: "auto",
-			PromptText:     prompt,
-		})
-		if err != nil {
-			exitWithError(fmt.Errorf("routing decision failed: %w", err))
-		}
-		elapsed := time.Since(start)
-		latencies = append(latencies, durationMicros(elapsed))
-		decision = nextDecision
-	}
-	return decision, latencies
 }
 
 func (r datasetRecord) expectedID() string {
@@ -599,59 +818,32 @@ func percentile(sortedValues []float64, p float64) float64 {
 	return sortedValues[index]
 }
 
-func tierCostUnits() map[string]float64 {
-	return map[string]float64{
-		routing.TierLowCost:     tierCostLowCost,
-		routing.TierBalanced:    tierCostBalanced,
-		routing.TierHighQuality: tierCostHighQuality,
-	}
-}
-
-func tierCostUnit(tier string) float64 {
-	switch tier {
-	case routing.TierLowCost:
-		return tierCostLowCost
-	case routing.TierBalanced:
-		return tierCostBalanced
-	case routing.TierHighQuality:
-		return tierCostHighQuality
-	default:
-		return tierCostBalanced
-	}
-}
-
 func buildEvaluationSummaryKo(result report) evaluationSummaryKo {
 	return evaluationSummaryKo{
-		Title:                "라우팅 정답 평가 리포트",
-		Purpose:              "정답이 있는 한국어 평가셋으로 category와 tier가 기대대로 맞는지 확인한다.",
+		Title:                "카테고리 분류 정답 평가 리포트",
+		Purpose:              "정답이 있는 평가셋으로 category 분류가 기대대로 맞는지 확인한다.",
 		DatasetPath:          result.DatasetPath,
 		TotalSamples:         result.TotalSamples,
 		CategoryAccuracy:     result.Accuracy,
 		CategoryErrorRate:    result.ErrorRate,
-		TierAccuracy:         result.TierAccuracy,
-		TierErrorRate:        result.TierErrorRate,
 		AvgLatencyMicros:     result.Latency.AvgMicros,
 		P95LatencyMicros:     result.Latency.P95Micros,
-		CostSavingRate:       result.CostEstimate.SavingRate,
 		FailureCount:         len(result.Failures),
 		CategoryDistribution: summarizeCategoryStatsKo(result.ByCategory),
-		TierDistribution:     summarizeCategoryStatsKo(result.ByTier),
-		HowToRead:            "정확도는 정답 라벨과 라우팅 결과가 일치한 비율이고, 실패수는 사람이 룰 또는 평가셋을 보정해야 할 후보 수다.",
+		HowToRead:            "정확도는 정답 category와 분류 결과가 일치한 비율이고, 실패수는 사람이 분류 규칙 또는 평가셋을 보정해야 할 후보 수다.",
 	}
 }
 
 func buildProbeSummaryKo(result probeReport) probeSummaryKo {
 	return probeSummaryKo{
-		Title:                "라우팅 분포 관찰 리포트",
-		Purpose:              "정답이 없는 한국어 샘플이 현재 룰에서 어떤 category와 tier로 분산되는지 확인한다.",
+		Title:                "카테고리 분포 관찰 리포트",
+		Purpose:              "정답이 없는 샘플이 현재 분류 규칙에서 어떤 category로 분산되는지 확인한다.",
 		DatasetPath:          result.DatasetPath,
 		TotalSamples:         result.TotalSamples,
 		AvgLatencyMicros:     result.Latency.AvgMicros,
 		P95LatencyMicros:     result.Latency.P95Micros,
-		CostSavingRate:       result.CostEstimate.SavingRate,
 		CategoryDistribution: summarizeProbeStatsKo(result.ByCategory),
-		TierDistribution:     summarizeProbeStatsKo(result.ByTier),
-		HowToRead:            "정답률을 보는 리포트가 아니라 general 쏠림, high_quality 과다 사용, 비용 절감 방향을 관찰하는 리포트다.",
+		HowToRead:            "정답률을 보는 리포트가 아니라 category 분포와 general 쏠림을 관찰하는 리포트다.",
 	}
 }
 
@@ -667,7 +859,7 @@ func summarizeCategoryStatsKo(stats map[string]categoryStats) []koreanStatSummar
 		stat := stats[key]
 		label := stat.LabelKo
 		if label == "" {
-			label = labelKoForRoutingValue(key)
+			label = categoryLabelKo(key)
 		}
 		summaries = append(summaries, koreanStatSummary{
 			Key:       key,
@@ -693,7 +885,7 @@ func summarizeProbeStatsKo(stats map[string]probeStat) []koreanStatSummary {
 		stat := stats[key]
 		label := stat.LabelKo
 		if label == "" {
-			label = labelKoForRoutingValue(key)
+			label = categoryLabelKo(key)
 		}
 		summaries = append(summaries, koreanStatSummary{
 			Key:     key,
@@ -703,13 +895,6 @@ func summarizeProbeStatsKo(stats map[string]probeStat) []koreanStatSummary {
 		})
 	}
 	return summaries
-}
-
-func labelKoForRoutingValue(value string) string {
-	if label := categoryLabelKo(value); label != value {
-		return label
-	}
-	return tierLabelKo(value)
 }
 
 func categoryLabelKo(category string) string {
@@ -722,58 +907,10 @@ func categoryLabelKo(category string) string {
 		return "번역"
 	case routing.CategorySummarization:
 		return "요약"
-	case routing.CategoryExtractionJSON:
-		return "정보 추출/JSON"
-	case routing.CategorySupportRefund:
-		return "환불/결제/고객지원"
 	case routing.CategoryReasoning:
 		return "비교/판단/추론"
-	case routing.CategoryUnknown:
-		return "분류 불가"
 	default:
 		return category
-	}
-}
-
-func tierLabelKo(tier string) string {
-	switch tier {
-	case routing.TierLowCost:
-		return "저비용"
-	case routing.TierBalanced:
-		return "균형"
-	case routing.TierHighQuality:
-		return "고품질"
-	default:
-		return tier
-	}
-}
-
-func routingReasonLabelKo(reason string) string {
-	switch reason {
-	case routing.ReasonShortPromptLowCost:
-		return "짧은 일반 요청이라 저비용 티어 선택"
-	case routing.ReasonCodeHighQuality:
-		return "코드/개발 요청이라 고품질 티어 선택"
-	case routing.ReasonTranslationBalanced:
-		return "번역 요청이라 균형 티어 선택"
-	case routing.ReasonSummarizationBalanced:
-		return "요약 요청이라 균형 티어 선택"
-	case routing.ReasonExtractionJSONBalanced:
-		return "정보 추출/JSON 요청이라 균형 티어 선택"
-	case routing.ReasonSupportRefundLowCost:
-		return "환불/결제/고객지원 요청이라 저비용 티어 선택"
-	case routing.ReasonReasoningHighQuality:
-		return "비교/판단/추론 요청이라 고품질 티어 선택"
-	case routing.ReasonDefaultBalanced:
-		return "기본 라우팅 규칙으로 균형 티어 선택"
-	case routing.ReasonPinned:
-		return "사용자가 명시한 모델 선택"
-	case routing.ReasonProviderHealthFallback:
-		return "기존 후보 상태를 보고 대체 후보 선택"
-	case routing.ReasonAmbiguousBalanced:
-		return "카테고리 점수 차이가 작거나 확신이 낮아 균형 모델 선택"
-	default:
-		return reason
 	}
 }
 

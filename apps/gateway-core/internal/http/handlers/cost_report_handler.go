@@ -103,8 +103,8 @@ type costReportApplicationBreakdownResponse struct {
 }
 
 type costReportModelBreakdownResponse struct {
-	SelectedProvider  string `json:"selectedProvider"`
-	SelectedModel     string `json:"selectedModel"`
+	Provider          string `json:"provider"`
+	Model             string `json:"model"`
 	RequestCount      int64  `json:"requestCount"`
 	PromptTokens      int64  `json:"promptTokens"`
 	CompletionTokens  int64  `json:"completionTokens"`
@@ -285,8 +285,8 @@ func costReportModelBreakdowns(items []invocationlog.CostReportModelBreakdown) [
 	responses := make([]costReportModelBreakdownResponse, 0, len(items))
 	for _, item := range items {
 		responses = append(responses, costReportModelBreakdownResponse{
-			SelectedProvider:  item.SelectedProvider,
-			SelectedModel:     item.SelectedModel,
+			Provider:          item.Provider,
+			Model:             item.Model,
 			RequestCount:      item.RequestCount,
 			PromptTokens:      item.PromptTokens,
 			CompletionTokens:  item.CompletionTokens,

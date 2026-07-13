@@ -1,11 +1,11 @@
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 
 export function StatusBadge({
   label,
   status
 }: {
   label?: string;
-  status: InvocationLogRecord["status"];
+  status: LiveInvocationLogRecord["status"];
 }) {
   return (
     <span className="status-badge" data-status={status}>

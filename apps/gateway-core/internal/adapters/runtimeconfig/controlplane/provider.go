@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,12 +16,14 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 const (
 	internalServiceTokenHeader  = "X-GateLM-Control-Plane-Internal-Token"
 	maxRuntimeSnapshotBodyBytes = 1 << 20
+	runtimeSnapshotSchemaV2     = "gatelm.runtime-snapshot.v2"
 )
 
 type Provider struct {
@@ -143,6 +146,7 @@ func isTransientStatus(status int) bool {
 }
 
 type runtimeSnapshotResponse struct {
+	SchemaVersion          string                     `json:"schemaVersion"`
 	RuntimeSnapshotID      string                     `json:"runtimeSnapshotId"`
 	RuntimeSnapshotVersion int                        `json:"runtimeSnapshotVersion"`
 	ContentHash            string                     `json:"contentHash"`
@@ -175,7 +179,6 @@ type runtimeSnapshotPolicies struct {
 	Cache           runtimeSnapshotCachePolicy           `json:"cache"`
 	RateLimit       runtimeSnapshotRateLimitPolicy       `json:"rateLimit"`
 	Budget          runtimeSnapshotBudgetPolicy          `json:"budget"`
-	Fallback        runtimeSnapshotFallbackPolicy        `json:"fallback"`
 	PromptCapture   runtimeSnapshotPromptCapturePolicy   `json:"promptCapture"`
 	ResponseCapture runtimeSnapshotResponseCapturePolicy `json:"responseCapture"`
 }
@@ -191,13 +194,60 @@ type runtimeSnapshotDetectorPolicy struct {
 }
 
 type runtimeSnapshotRoutingPolicy struct {
-	DefaultProvider     string `json:"defaultProvider"`
-	DefaultModel        string `json:"defaultModel"`
-	LowCostProvider     string `json:"lowCostProvider"`
-	LowCostModel        string `json:"lowCostModel"`
-	HighQualityProvider string `json:"highQualityProvider"`
-	HighQualityModel    string `json:"highQualityModel"`
-	RoutingPolicyHash   string `json:"routingPolicyHash"`
+	Mode              string                `json:"mode"`
+	BootstrapState    string                `json:"bootstrapState"`
+	Routes            routing.RoutingMatrix `json:"routes"`
+	RoutingPolicyHash string                `json:"routingPolicyHash"`
+}
+
+type strictRuntimeSnapshotRouteCell struct {
+	ModelRefs []string `json:"modelRefs"`
+}
+
+type strictRuntimeSnapshotDifficultyRoutes struct {
+	Simple  strictRuntimeSnapshotRouteCell `json:"simple"`
+	Complex strictRuntimeSnapshotRouteCell `json:"complex"`
+}
+
+type strictRuntimeSnapshotRoutingMatrix struct {
+	General       strictRuntimeSnapshotDifficultyRoutes `json:"general"`
+	Code          strictRuntimeSnapshotDifficultyRoutes `json:"code"`
+	Translation   strictRuntimeSnapshotDifficultyRoutes `json:"translation"`
+	Summarization strictRuntimeSnapshotDifficultyRoutes `json:"summarization"`
+	Reasoning     strictRuntimeSnapshotDifficultyRoutes `json:"reasoning"`
+}
+
+func (p *runtimeSnapshotRoutingPolicy) UnmarshalJSON(payload []byte) error {
+	var raw struct {
+		Mode              string                             `json:"mode"`
+		BootstrapState    string                             `json:"bootstrapState"`
+		Routes            strictRuntimeSnapshotRoutingMatrix `json:"routes"`
+		RoutingPolicyHash string                             `json:"routingPolicyHash"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&raw); err != nil {
+		return err
+	}
+	cell := func(value strictRuntimeSnapshotRouteCell) routing.RouteCell {
+		return routing.RouteCell{ModelRefs: append([]string(nil), value.ModelRefs...)}
+	}
+	difficulties := func(value strictRuntimeSnapshotDifficultyRoutes) routing.DifficultyRoutes {
+		return routing.DifficultyRoutes{Simple: cell(value.Simple), Complex: cell(value.Complex)}
+	}
+	*p = runtimeSnapshotRoutingPolicy{
+		Mode:           raw.Mode,
+		BootstrapState: raw.BootstrapState,
+		Routes: routing.RoutingMatrix{
+			General:       difficulties(raw.Routes.General),
+			Code:          difficulties(raw.Routes.Code),
+			Translation:   difficulties(raw.Routes.Translation),
+			Summarization: difficulties(raw.Routes.Summarization),
+			Reasoning:     difficulties(raw.Routes.Reasoning),
+		},
+		RoutingPolicyHash: raw.RoutingPolicyHash,
+	}
+	return nil
 }
 
 type runtimeSnapshotCachePolicy struct {
@@ -213,15 +263,9 @@ type runtimeSnapshotRateLimitPolicy struct {
 }
 
 type runtimeSnapshotBudgetPolicy struct {
-	Enabled                         bool   `json:"enabled"`
-	EnforcementMode                 string `json:"enforcementMode"`
-	WarningThresholdPercent         int    `json:"warningThresholdPercent"`
-	RestrictHighQualityOnBudgetRisk *bool  `json:"restrictHighQualityOnBudgetRisk,omitempty"`
-}
-
-type runtimeSnapshotFallbackPolicy struct {
-	FallbackProvider string `json:"fallbackProvider"`
-	FallbackModel    string `json:"fallbackModel"`
+	Enabled                 bool   `json:"enabled"`
+	EnforcementMode         string `json:"enforcementMode"`
+	WarningThresholdPercent int    `json:"warningThresholdPercent"`
 }
 
 type runtimeSnapshotPromptCapturePolicy struct {
@@ -237,6 +281,9 @@ type runtimeSnapshotResponseCapturePolicy struct {
 }
 
 func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimeconfig.ExecutionSnapshot, error) {
+	if strings.TrimSpace(r.SchemaVersion) != runtimeSnapshotSchemaV2 || r.RuntimeSnapshotVersion <= 0 {
+		return runtimeconfig.ExecutionSnapshot{}, runtimeconfig.ErrUnsupportedSnapshotSchema
+	}
 	actual := newLookupKey(r.LookupKey.TenantID, r.LookupKey.ProjectID, r.LookupKey.ApplicationID)
 	if actual != expected {
 		return runtimeconfig.ExecutionSnapshot{}, fmt.Errorf("%w: runtime snapshot lookup key mismatch", runtimeconfig.ErrScopeMismatch)
@@ -244,20 +291,14 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 
 	configHash := firstNonEmpty(r.LegacyHashes.ConfigHash, r.ContentHash)
 	securityPolicyHash := firstNonEmpty(r.Policies.Safety.PolicyHash, r.LegacyHashes.SecurityPolicyHash)
-	routingPolicyHash := firstNonEmpty(r.Policies.Routing.RoutingPolicyHash, r.LegacyHashes.RoutingPolicyHash)
+	routingPolicyHash := strings.TrimSpace(r.Policies.Routing.RoutingPolicyHash)
+	if !runtimeconfig.IsCanonicalRoutingPolicyHash(routingPolicyHash) {
+		return runtimeconfig.ExecutionSnapshot{}, runtimeconfig.ErrInvalidRoutingPolicy
+	}
 	cacheType := ""
 	if r.Policies.Cache.ExactCacheEnabled {
 		cacheType = runtimeconfig.CacheTypeExact
 	}
-
-	defaultProvider := strings.TrimSpace(r.Policies.Routing.DefaultProvider)
-	defaultModel := strings.TrimSpace(r.Policies.Routing.DefaultModel)
-	lowCostProvider := firstNonEmpty(r.Policies.Routing.LowCostProvider, defaultProvider)
-	lowCostModel := firstNonEmpty(r.Policies.Routing.LowCostModel, defaultModel)
-	highQualityProvider := firstNonEmpty(r.Policies.Routing.HighQualityProvider, defaultProvider)
-	highQualityModel := firstNonEmpty(r.Policies.Routing.HighQualityModel, defaultModel)
-	fallbackProvider := firstNonEmpty(r.Policies.Fallback.FallbackProvider, defaultProvider)
-	fallbackModel := firstNonEmpty(r.Policies.Fallback.FallbackModel, defaultModel)
 
 	detectorSet := make([]runtimeconfig.DetectorPolicy, 0, len(r.Policies.Safety.DetectorSet))
 	for _, detector := range r.Policies.Safety.DetectorSet {
@@ -267,7 +308,7 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 		})
 	}
 
-	return runtimeconfig.ExecutionSnapshot{
+	snapshot := runtimeconfig.ExecutionSnapshot{
 		ConfigHash:    configHash,
 		TenantID:      actual.tenantID,
 		ProjectID:     actual.projectID,
@@ -296,25 +337,19 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Limit:         r.Policies.RateLimit.Limit,
 		},
 		BudgetPolicy: budget.Policy{
-			Enabled:                         r.Policies.Budget.Enabled,
-			EnforcementMode:                 r.Policies.Budget.EnforcementMode,
-			WarningThresholdPercent:         r.Policies.Budget.WarningThresholdPercent,
-			RestrictHighQualityOnBudgetRisk: r.Policies.Budget.RestrictHighQualityOnBudgetRisk,
+			Enabled:                 r.Policies.Budget.Enabled,
+			EnforcementMode:         r.Policies.Budget.EnforcementMode,
+			WarningThresholdPercent: r.Policies.Budget.WarningThresholdPercent,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: securityPolicyHash,
 			DetectorSet:        detectorSet,
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:     defaultProvider,
-			DefaultModel:        defaultModel,
-			LowCostProvider:     lowCostProvider,
-			LowCostModel:        lowCostModel,
-			HighQualityProvider: highQualityProvider,
-			HighQualityModel:    highQualityModel,
-			FallbackProvider:    fallbackProvider,
-			FallbackModel:       fallbackModel,
-			RoutingPolicyHash:   routingPolicyHash,
+			Mode:              r.Policies.Routing.Mode,
+			BootstrapState:    r.Policies.Routing.BootstrapState,
+			Routes:            r.Policies.Routing.Routes,
+			RoutingPolicyHash: routingPolicyHash,
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:         r.Policies.Cache.ExactCacheEnabled,
@@ -331,7 +366,11 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Mode:     r.Policies.ResponseCapture.Mode,
 			MaxChars: r.Policies.ResponseCapture.MaxChars,
 		}),
-	}, nil
+	}
+	if !runtimeconfig.IsValidRoutingPolicy(snapshot.RoutingPolicy) {
+		return runtimeconfig.ExecutionSnapshot{}, runtimeconfig.ErrInvalidRoutingPolicy
+	}
+	return snapshot, nil
 }
 
 func firstNonEmpty(values ...string) string {

@@ -2,8 +2,8 @@
 
 import { Eye, Info, Maximize2, RotateCw, X } from "lucide-react";
 import Link from "next/link";
-import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { projectPillTone } from "@/features/dashboard/live-requests-format";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type {
   LiveRequestRow,
   LiveRequestStatusFilter
@@ -182,7 +182,7 @@ export function LiveRequestsView({
             <option value="">{text.allModels}</option>
             {modelOptions.map((model) => (
               <option key={model} value={model}>
-                {model}
+                {formatModelDisplayName(model)}
               </option>
             ))}
           </select>
@@ -235,7 +235,7 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "시각" : "Time"}</th>
               <th scope="col">{locale === "ko" ? "사용자" : "User"}</th>
               <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
-              <th scope="col">{locale === "ko" ? "프로바이더 / 모델" : "Provider / Model"}</th>
+              <th scope="col">{locale === "ko" ? "라우팅" : "Routing"}</th>
               <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
               <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Results"}</th>
               <th scope="col">{locale === "ko" ? "지연 시간" : "Latency"}</th>
@@ -291,7 +291,7 @@ export function LiveRequestsView({
                   </span>
                 </td>
                 <td>
-                  <LiveProviderModel row={row} />
+                  <LiveRequestRouting row={row} />
                 </td>
                 <td>
                   <span
@@ -306,16 +306,20 @@ export function LiveRequestsView({
                 </td>
                 <td>{formatLiveLatency(row.latencyMs)}</td>
                 <td>
-                  <button
-                    aria-label={text.openDetail + " " + row.requestId}
-                    className="dashboard-live-detail-button"
-                    onClick={() => onOpenRequest(row)}
-                    ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
-                    type="button"
-                  >
-                    <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
-                    <span>{text.detail}</span>
-                  </button>
+                  {row.surface === "tenant_chat" ? (
+                    <span className="dashboard-live-muted-value">-</span>
+                  ) : (
+                    <button
+                      aria-label={text.openDetail + " " + row.requestId}
+                      className="dashboard-live-detail-button"
+                      onClick={() => onOpenRequest(row)}
+                      ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
+                      type="button"
+                    >
+                      <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
+                      <span>{text.detail}</span>
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -364,20 +368,17 @@ function PolicyBadges({ row }: { row: LiveRequestRow }) {
   );
 }
 
-function LiveProviderModel({ row }: { row: LiveRequestRow }) {
+function LiveRequestRouting({ row }: { row: LiveRequestRow }) {
+  const model = formatModelDisplayName(row.requestedModel, "auto");
+  const routingLabel = `${row.category} / ${row.difficulty} / ${row.modelRef ?? "no-model-ref"} / ${row.routingReason ?? "not-set"}`;
   return (
     <span
       className="dashboard-live-provider-model"
-      title={row.providerLabel + " · " + row.model}
+      title={routingLabel + " · " + model}
     >
-      <ProviderFamilyIcon
-        className="dashboard-live-provider-icon"
-        family={liveProviderFamily(row.provider)}
-        size={24}
-      />
       <span className="dashboard-live-provider-copy">
-        <strong>{row.model}</strong>
-        <small>{row.providerLabel}</small>
+        <strong>{model}</strong>
+        <small>{row.category} / {row.difficulty} / {row.modelRef ?? "-"}</small>
       </span>
     </span>
   );
@@ -401,20 +402,6 @@ function localizedStatusLabel(row: LiveRequestRow, locale: Locale) {
 
   return labels[row.status] ?? row.statusLabel;
 }
-
-function liveProviderFamily(provider: LiveRequestRow["provider"]) {
-  if (provider === "anthropic") {
-    return "claude";
-  }
-  if (provider === "gemini" || provider === "google") {
-    return "gemini";
-  }
-  if (provider === "mock") {
-    return "mock";
-  }
-  return provider === "openai" ? "openai" : "new-provider";
-}
-
 function statusTone(row: LiveRequestRow) {
   if (row.statusCode >= 500 || row.status === "failed") {
     return "error";

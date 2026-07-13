@@ -174,7 +174,6 @@ export function RuntimePolicyDetailModal({
     </section>
   );
 }
-
 function RuntimeSnapshotDetail({ snapshot, text }: RuntimeSnapshotDetailProps) {
   return (
     <div className="runtime-snapshot-detail">
@@ -234,18 +233,8 @@ function RuntimeSnapshotDetail({ snapshot, text }: RuntimeSnapshotDetailProps) {
         <div>
           <dt>{text.routing}</dt>
           <dd>
-            {snapshot.policies.routing.defaultProvider}:{snapshot.policies.routing.defaultModel} /{" "}
-            {snapshot.policies.routing.defaultRequestedModel} / auto{" "}
-            {formatEnabled(snapshot.policies.routing.autoModelEnabled)}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.fallbackRoute}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.fallback.enabled)} /{" "}
-            {snapshot.policies.fallback.fallbackProvider ?? "none"}:
-            {snapshot.policies.fallback.fallbackModel ?? "none"} / reasons{" "}
-            {formatList(snapshot.policies.fallback.allowedReasons)}
+            {snapshot.policies.routing.mode} / {snapshot.policies.routing.bootstrapState} / 10{" "}
+            category-difficulty cells
           </dd>
         </div>
         <div>
@@ -346,8 +335,4 @@ function formatDetectorSet(detectorSet: RuntimePolicySnapshot["policies"]["safet
   return detectorSet
     .map((detector) => `${detector.detectorType}:${detector.action}`)
     .join(", ");
-}
-
-function formatList(values: string[] | undefined) {
-  return values && values.length > 0 ? values.join(", ") : "none";
 }

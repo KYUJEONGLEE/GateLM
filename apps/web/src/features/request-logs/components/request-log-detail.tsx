@@ -13,12 +13,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { GatewayPipeline } from "./gateway-pipeline";
 import { RequestIdCopyButton } from "./request-id-copy-button";
 import { RequestLogDetailDismissLink } from "./request-log-detail-dismiss-link";
 import { StatusBadge } from "./request-log-status-badge";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import {
   formatBudgetScopeDisplayName,
   formatDisplayIdentifier
@@ -31,7 +30,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type RequestLogDetailProps = {
   locale: Locale;
-  record: InvocationLogRecord;
+  record: LiveInvocationLogRecord;
   tenantId: string;
   timezone: string;
 };
@@ -280,10 +279,11 @@ export function RequestLogDetailPanel({
           <DetailRows
             rows={[
               [detailLabel(locale, "Outcome", "결과"), localizedOutcome(domainOutcomes?.routing?.outcome, locale, text.none)],
-              [detailLabel(locale, "Selected provider", "선택된 프로바이더"), nullableText(record.selectedProvider, text.none)],
-              [detailLabel(locale, "Selected model", "선택된 모델"), nullableText(record.selectedModel, text.none)],
+              [detailLabel(locale, "Requested model", "요청 모델"), nullableText(record.requestedModel, text.none)],
+              [detailLabel(locale, "Model ref", "모델 참조"), nullableText(record.modelRef, text.none)],
               [detailLabel(locale, "Routing reason", "라우팅 근거"), localizedCode(record.routingReason, locale, text.none)],
-              [detailLabel(locale, "Prompt category", "프롬프트 분류"), localizedCode(record.promptCategory, locale, text.none)]
+              [detailLabel(locale, "Category", "카테고리"), localizedCode(record.category, locale, text.none)],
+              [detailLabel(locale, "Difficulty", "난이도"), localizedCode(record.difficulty, locale, text.none)]
             ]}
           />
         </DetailAccordion>
@@ -327,6 +327,11 @@ export function RequestLogDetailPanel({
                   : record.providerCalled ? text.yes : text.no
               ],
               [detailLabel(locale, "Provider outcome", "프로바이더 결과"), localizedOutcome(domainOutcomes?.provider?.outcome, locale, text.none)],
+              [detailLabel(locale, "Provider ID", "프로바이더 ID"), nullableText(record.providerAttempt?.providerId, text.none)],
+              [detailLabel(locale, "Model ID", "모델 ID"), nullableText(record.providerAttempt?.modelId, text.none)],
+              [detailLabel(locale, "Attempt outcome", "시도 결과"), localizedOutcome(record.providerAttempt?.outcome, locale, text.none)],
+              [detailLabel(locale, "Attempt latency", "시도 지연 시간"), formatDetailLatency(record.providerAttempt?.latencyMs ?? null, locale)],
+              [detailLabel(locale, "Sanitized error code", "정제된 오류 코드"), nullableText(record.providerAttempt?.sanitizedErrorCode, text.none)],
               [detailLabel(locale, "Fallback outcome", "대체 경로 결과"), localizedOutcome(domainOutcomes?.fallback?.outcome, locale, text.none)],
               [detailLabel(locale, "Streaming", "스트리밍"), localizedOutcome(domainOutcomes?.streaming?.outcome, locale, text.none)],
               [detailLabel(locale, "Logging", "로그 기록"), localizedOutcome(domainOutcomes?.logging?.outcome, locale, text.none)],
@@ -402,11 +407,10 @@ function RequestSummary({
   timezone
 }: {
   locale: Locale;
-  record: InvocationLogRecord;
+  record: LiveInvocationLogRecord;
   timezone: string;
 }) {
-  const provider = record.selectedProvider ?? record.requestedProvider;
-  const model = record.selectedModel ?? record.requestedModel;
+  const model = record.requestedModel;
 
   return (
     <section
@@ -471,18 +475,12 @@ function RequestSummary({
         />
         <SummaryMetric
           icon={<Boxes aria-hidden="true" />}
-          label={locale === "ko" ? "프로바이더 / 모델" : "Provider / Model"}
+          label={locale === "ko" ? "요청 모델" : "Requested model"}
           value={
             <span className="request-detail-summary-provider">
-              <ProviderFamilyIcon
-                className="request-detail-provider-icon"
-                family={providerFamily(provider)}
-                size={28}
-              />
               <span>
-                <strong>
-                  {model ?? "-"}
-                </strong>
+                <strong>{model ?? "auto"}</strong>
+                <small>{record.category} / {record.difficulty}</small>
               </span>
             </span>
           }
@@ -555,21 +553,6 @@ function DetailRows({ rows }: { rows: DetailRow[] }) {
   );
 }
 
-function providerFamily(provider: string | null) {
-  const normalized = provider?.toLowerCase() ?? "";
-
-  if (normalized.includes("anthropic") || normalized.includes("claude")) {
-    return "claude";
-  }
-  if (normalized.includes("gemini") || normalized.includes("google")) {
-    return "gemini";
-  }
-  if (normalized.includes("mock")) {
-    return "mock";
-  }
-  return normalized.includes("openai") ? "openai" : "new-provider";
-}
-
 function detailLabel(locale: Locale, english: string, korean: string) {
   return locale === "ko" ? korean : english;
 }
@@ -638,7 +621,7 @@ function summaryIdentifier(value: string | null | undefined) {
   return formatDisplayIdentifier(normalized);
 }
 
-function requestStatusLabel(record: InvocationLogRecord, locale: Locale) {
+function requestStatusLabel(record: LiveInvocationLogRecord, locale: Locale) {
   if (record.httpStatus >= 200 && record.httpStatus < 300) {
     return `${record.httpStatus} OK`;
   }
@@ -654,7 +637,7 @@ function requestStatusLabel(record: InvocationLogRecord, locale: Locale) {
   return String(record.httpStatus);
 }
 
-function requestSummaryTone(record: InvocationLogRecord) {
+function requestSummaryTone(record: LiveInvocationLogRecord) {
   if (record.httpStatus >= 200 && record.httpStatus < 300) {
     return "success";
   }
@@ -671,7 +654,6 @@ const koreanCodeLabels: Record<string, string> = {
   account_number: "계좌번호",
   api_key: "API 키",
   application: "애플리케이션",
-  balanced: "균형 우선",
   coding: "코딩",
   default_application: "기본 애플리케이션",
   default_project: "기본 프로젝트",
@@ -681,9 +663,7 @@ const koreanCodeLabels: Record<string, string> = {
   explicit_application: "지정 애플리케이션",
   general: "일반",
   latency: "응답 속도 우선",
-  low_cost: "비용 우선",
   low_latency: "응답 속도 우선",
-  lowest_cost: "최저 비용 우선",
   none: "사용 안 함",
   phone: "전화번호",
   phone_number: "전화번호",
@@ -727,7 +707,7 @@ function localizedCode(
     : displayValue;
 }
 
-function formatBudgetAttribution(record: InvocationLogRecord, locale: Locale) {
+function formatBudgetAttribution(record: LiveInvocationLogRecord, locale: Locale) {
   if (locale === "en") {
     return formatBudgetScopeDisplayName(record.budgetScope);
   }
@@ -740,7 +720,7 @@ function formatBudgetAttribution(record: InvocationLogRecord, locale: Locale) {
   return scopeId ? `${type}: ${formatDisplayIdentifier(scopeId)}` : type;
 }
 
-function formatCacheResult(record: InvocationLogRecord, locale: Locale) {
+function formatCacheResult(record: LiveInvocationLogRecord, locale: Locale) {
   if (locale === "en") {
     return `${record.cacheType}: ${record.cacheStatus}`;
   }

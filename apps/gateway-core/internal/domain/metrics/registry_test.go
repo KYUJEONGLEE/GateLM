@@ -36,16 +36,16 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	}, 1)
 	registry.StreamStarted("mock", "mock-balanced")
 	registry.StreamTimeToFirstToken(StreamTimeToFirstToken{
-		SelectedProvider: "mock",
-		SelectedModel:    "mock-balanced",
-		DurationSeconds:  0.125,
+		Provider:        "mock",
+		Model:           "mock-balanced",
+		DurationSeconds: 0.125,
 	})
 	registry.StreamFinished(StreamRelay{
-		SelectedProvider: "mock",
-		SelectedModel:    "mock-balanced",
-		Outcome:          "completed",
-		ErrorCode:        "none",
-		DurationSeconds:  1.25,
+		Provider:        "mock",
+		Model:           "mock-balanced",
+		Outcome:         "completed",
+		ErrorCode:       "none",
+		DurationSeconds: 1.25,
 	})
 
 	first := registry.RenderPrometheus()
@@ -63,10 +63,10 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_sum{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 0.02`)
 	assertMetricsContains(t, first, `gatelm_gateway_stage_duration_seconds_count{stage="pii_masking",status="success"} 1`)
 	assertMetricsContains(t, first, `gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success\nwith \"quote\""} 1`)
-	assertMetricsContains(t, first, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
-	assertMetricsContains(t, first, `gatelm_stream_relay_total{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
-	assertMetricsContains(t, first, `gatelm_stream_duration_seconds_count{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
-	assertMetricsContains(t, first, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"} 1`)
+	assertMetricsContains(t, first, `gatelm_streams_active{model="mock-balanced",provider="mock"} 0`)
+	assertMetricsContains(t, first, `gatelm_stream_relay_total{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
+	assertMetricsContains(t, first, `gatelm_stream_duration_seconds_count{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
+	assertMetricsContains(t, first, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
 	assertMetricsDoesNotContainForbiddenLabels(t, first)
 }
 

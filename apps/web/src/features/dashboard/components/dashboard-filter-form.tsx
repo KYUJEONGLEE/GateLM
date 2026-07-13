@@ -1,8 +1,8 @@
 "use client";
 
-import { Building2, Calendar } from "lucide-react";
+import { Building2, Calendar, Layers3 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useTransition } from "react";
+import { type FormEvent, useState, useTransition } from "react";
 import type {
   DashboardFilterState,
   DashboardRange
@@ -18,6 +18,7 @@ type DashboardRangeOption = {
 type DashboardFilterFormProps = {
   actionPath: string;
   allowAllProjects?: boolean;
+  allowTenantChat?: boolean;
   applyLabel: string;
   filters: DashboardFilterState;
   locale: Locale;
@@ -28,6 +29,7 @@ type DashboardFilterFormProps = {
 export function DashboardFilterForm({
   actionPath,
   allowAllProjects = true,
+  allowTenantChat = true,
   applyLabel,
   filters,
   locale,
@@ -36,6 +38,7 @@ export function DashboardFilterForm({
 }: DashboardFilterFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [surface, setSurface] = useState(filters.surface);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,6 +47,7 @@ export function DashboardFilterForm({
     const query = new URLSearchParams();
 
     setQueryParam(query, "range", formData.get("range"));
+    setQueryParam(query, "surface", formData.get("surface"));
     setQueryParam(query, "projectId", formData.get("projectId"));
     setQueryParam(query, "budgetScopeType", formData.get("budgetScopeType"));
     setQueryParam(query, "budgetScopeId", formData.get("budgetScopeId"));
@@ -74,10 +78,35 @@ export function DashboardFilterForm({
         </div>
       </label>
       <label>
+        <span>{locale === "ko" ? "사용 범위" : "Usage source"}</span>
+        <div className="dashboard-filter-input">
+          <Layers3 aria-hidden="true" size={16} strokeWidth={2.1} />
+          <select
+            name="surface"
+            onChange={(event) => setSurface(event.target.value as DashboardFilterState["surface"])}
+            value={surface}
+          >
+            {allowTenantChat ? (
+              <option value="all">{locale === "ko" ? "전체 사용량" : "All usage"}</option>
+            ) : null}
+            <option value="project_application">
+              {locale === "ko" ? "프로젝트 / 앱" : "Projects / Apps"}
+            </option>
+            {allowTenantChat ? (
+              <option value="tenant_chat">{locale === "ko" ? "테넌트 채팅" : "Tenant Chat"}</option>
+            ) : null}
+          </select>
+        </div>
+      </label>
+      <label>
         <span>{locale === "ko" ? "프로젝트" : "Project"}</span>
         <div className="dashboard-filter-input">
           <Building2 aria-hidden="true" size={16} strokeWidth={2.1} />
-          <select defaultValue={filters.projectId} name="projectId">
+          <select
+            defaultValue={filters.projectId}
+            disabled={surface === "tenant_chat"}
+            name="projectId"
+          >
             {allowAllProjects ? (
               <option value="">{locale === "ko" ? "전체 프로젝트" : "All projects"}</option>
             ) : null}

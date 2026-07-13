@@ -7,10 +7,7 @@ import type {
   CustomerDemoRequest,
   CustomerDemoScenarioId
 } from "@/lib/gateway/customer-demo-client";
-import {
-  getInvocationLogFixture,
-  type InvocationLogRecord
-} from "@/lib/fixtures/v1-observability-fixtures";
+import { normalizeRoutingCategory } from "@/lib/gateway/live-observability-contract";
 
 type RuntimeConfigFixture = {
   runtimeConfig: {
@@ -46,6 +43,34 @@ type ScenarioConfig = {
   recordId: string;
   scenarioId: CustomerDemoScenarioId;
   title: string;
+};
+
+type CustomerDemoFixtureRecord = {
+  applicationId: string;
+  cacheStatus: string;
+  cacheType: string;
+  completionTokens: number;
+  costMicroUsd: number;
+  createdAt: string;
+  endUserId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  featureId: string | null;
+  httpStatus: number;
+  latencyMs: number;
+  maskingAction: "none" | "redacted" | "blocked";
+  maskingDetectedTypes: string[];
+  projectId: string;
+  promptCategory: string;
+  promptTokens: number;
+  providerLatencyMs: number | null;
+  requestId: string;
+  requestedModel: string;
+  routingReason: string | null;
+  status: string;
+  stream: boolean;
+  tenantId: string;
+  totalTokens: number;
 };
 
 const scenarioConfigs: ScenarioConfig[] = [
@@ -120,7 +145,7 @@ function buildRequestHeaders({
   record
 }: {
   apiKey: CredentialListItem;
-  record: InvocationLogRecord;
+  record: CustomerDemoFixtureRecord;
 }): CustomerDemoHeader[] {
   return [
     {
@@ -142,7 +167,7 @@ function buildRequestHeaders({
   ];
 }
 
-function buildResponseHeaders(record: InvocationLogRecord): CustomerDemoHeader[] {
+function buildResponseHeaders(record: CustomerDemoFixtureRecord): CustomerDemoHeader[] {
   return [
     {
       name: "X-GateLM-Request-Id",
@@ -161,12 +186,8 @@ function buildResponseHeaders(record: InvocationLogRecord): CustomerDemoHeader[]
       value: record.maskingAction
     },
     {
-      name: "X-GateLM-Routed-Provider",
-      value: record.selectedProvider ?? "not-routed"
-    },
-    {
-      name: "X-GateLM-Routed-Model",
-      value: record.selectedModel ?? "not-routed"
+      name: "X-GateLM-Execution-Mode",
+      value: record.httpStatus < 400 ? "mock" : "not-executed"
     },
     {
       name: "X-GateLM-Estimated-Cost-Usd",
@@ -177,7 +198,7 @@ function buildResponseHeaders(record: InvocationLogRecord): CustomerDemoHeader[]
 
 function buildRequestBody(
   config: ScenarioConfig,
-  record: InvocationLogRecord
+  record: CustomerDemoFixtureRecord
 ): CustomerDemoRequest["body"] {
   return {
     model: record.requestedModel ?? "auto",
@@ -207,7 +228,7 @@ function buildRequestBody(
   };
 }
 
-function buildResponseBody(config: ScenarioConfig, record: InvocationLogRecord) {
+function buildResponseBody(config: ScenarioConfig, record: CustomerDemoFixtureRecord) {
   if (record.httpStatus >= 400) {
     return {
       error: {
@@ -224,7 +245,7 @@ function buildResponseBody(config: ScenarioConfig, record: InvocationLogRecord) 
     id: `chatcmpl_${record.requestId}`,
     object: "chat.completion",
     created: Math.floor(Date.parse(record.createdAt) / 1000),
-    model: record.selectedModel ?? record.requestedModel ?? "auto",
+    model: record.requestedModel ?? "auto",
     choices: [
       {
         index: 0,
@@ -246,8 +267,10 @@ function buildResponseBody(config: ScenarioConfig, record: InvocationLogRecord) 
       projectId: record.projectId,
       applicationId: record.applicationId,
       requestedModel: record.requestedModel,
-      selectedProvider: record.selectedProvider,
-      selectedModel: record.selectedModel,
+      category: normalizeRoutingCategory(record.promptCategory),
+      difficulty: "simple",
+      modelRef: null,
+      executionMode: "mock",
       cacheStatus: record.cacheStatus,
       routingReason: record.routingReason,
       maskingAction: record.maskingAction,
@@ -264,7 +287,7 @@ function buildExchange({
 }: {
   apiKey: CredentialListItem;
   config: ScenarioConfig;
-  record: InvocationLogRecord;
+  record: CustomerDemoFixtureRecord;
 }): CustomerDemoExchange {
   const request: CustomerDemoRequest = {
     endpoint: "/v1/chat/completions",
@@ -307,19 +330,16 @@ function buildExchange({
 export function getCustomerDemoModel(): CustomerDemoModel {
   const runtime = runtimeConfigFixture as RuntimeConfigFixture;
   const credentials = credentialLifecycleFixture as CredentialLifecycleFixture;
-  const records = getInvocationLogFixture().records;
+  const records = scenarioConfigs.map((config, index) =>
+    buildFixtureRecord(config, runtime.runtimeConfig, index)
+  );
 
   return {
     applicationId: runtime.runtimeConfig.applicationId,
     integrationMode: "fixture",
     projectId: runtime.runtimeConfig.projectId,
-    scenarios: scenarioConfigs.map((config) => {
-      const record = records.find((item) => item.requestId === config.recordId);
-
-      if (!record) {
-        throw new Error(`Missing customer demo invocation fixture: ${config.recordId}`);
-      }
-
+    scenarios: scenarioConfigs.map((config, index) => {
+      const record = records[index];
       return buildExchange({
         apiKey: credentials.credentialLifecycle.apiKey.listItemExample,
         config,
@@ -329,4 +349,102 @@ export function getCustomerDemoModel(): CustomerDemoModel {
     surface: "demo",
     tenantId: runtime.runtimeConfig.tenantId
   };
+}
+
+function buildFixtureRecord(
+  config: ScenarioConfig,
+  runtime: RuntimeConfigFixture["runtimeConfig"],
+  index: number
+): CustomerDemoFixtureRecord {
+  const terminal = fixtureTerminalState(config.scenarioId);
+  const promptTokens = terminal.httpStatus < 400 ? 24 : 0;
+  const completionTokens = terminal.httpStatus < 400 ? 16 : 0;
+
+  return {
+    applicationId: runtime.applicationId,
+    cacheStatus: terminal.cacheStatus,
+    cacheType: terminal.cacheStatus === "hit" || terminal.cacheStatus === "miss" ? "exact" : "none",
+    completionTokens,
+    costMicroUsd: terminal.providerLatencyMs === null ? 0 : 1,
+    createdAt: new Date(Date.UTC(2026, 6, 13, 0, index, 0)).toISOString(),
+    endUserId: "customer_fixture_user",
+    errorCode: terminal.errorCode,
+    errorMessage: terminal.errorMessage,
+    featureId: "support-reply",
+    httpStatus: terminal.httpStatus,
+    latencyMs: terminal.providerLatencyMs ?? 12,
+    maskingAction: terminal.maskingAction,
+    maskingDetectedTypes: terminal.maskingAction === "redacted" ? ["email"] : [],
+    projectId: runtime.projectId,
+    promptCategory: "general",
+    promptTokens,
+    providerLatencyMs: terminal.providerLatencyMs,
+    requestId: config.recordId,
+    requestedModel: "auto",
+    routingReason:
+      terminal.httpStatus < 400
+        ? terminal.cacheStatus === "hit"
+          ? "exact_cache_hit_provider_bypass"
+          : "category_difficulty_matrix"
+        : null,
+    status: terminal.status,
+    stream: false,
+    tenantId: runtime.tenantId,
+    totalTokens: promptTokens + completionTokens
+  };
+}
+
+function fixtureTerminalState(scenarioId: CustomerDemoScenarioId) {
+  switch (scenarioId) {
+    case "blocked":
+      return {
+        cacheStatus: "bypass",
+        errorCode: "sensitive_data_blocked",
+        errorMessage: "Request blocked by GateLM security policy.",
+        httpStatus: 403,
+        maskingAction: "blocked" as const,
+        providerLatencyMs: null,
+        status: "blocked"
+      };
+    case "cache-hit":
+      return {
+        cacheStatus: "hit",
+        errorCode: null,
+        errorMessage: null,
+        httpStatus: 200,
+        maskingAction: "none" as const,
+        providerLatencyMs: null,
+        status: "success"
+      };
+    case "rate-limited":
+      return {
+        cacheStatus: "bypass",
+        errorCode: "rate_limit_exceeded",
+        errorMessage: "Application rate limit exceeded.",
+        httpStatus: 429,
+        maskingAction: "none" as const,
+        providerLatencyMs: null,
+        status: "rate_limited"
+      };
+    case "redacted":
+      return {
+        cacheStatus: "miss",
+        errorCode: null,
+        errorMessage: null,
+        httpStatus: 200,
+        maskingAction: "redacted" as const,
+        providerLatencyMs: 91,
+        status: "success"
+      };
+    default:
+      return {
+        cacheStatus: "miss",
+        errorCode: null,
+        errorMessage: null,
+        httpStatus: 200,
+        maskingAction: "none" as const,
+        providerLatencyMs: 84,
+        status: "success"
+      };
+  }
 }

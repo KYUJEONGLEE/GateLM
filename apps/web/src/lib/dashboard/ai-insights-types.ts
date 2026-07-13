@@ -24,12 +24,15 @@ export type AiInsightsRequest = {
 
 export type AiInsightsRecentRequest = {
   cacheStatus?: string;
+  category?: string;
   costUsd?: number;
+  difficulty?: string;
   latencyMs?: number;
-  model?: string;
+  modelRef?: string;
   projectName?: string;
-  provider?: string;
   requestId: string;
+  requestedModel?: string;
+  routingReason?: string;
   safetyAction?: string;
   statusCode?: number;
   timestamp: string;
@@ -72,12 +75,15 @@ type MockInsightOptions = {
 export function toAiInsightsRecentRequests(rows: LiveRequestRow[] | undefined): AiInsightsRecentRequest[] {
   return (rows ?? []).slice(0, 5).map((row) => ({
     cacheStatus: row.cacheStatus,
+    category: row.category,
     costUsd: normalizeNonNegativeNumber(row.costUsd),
+    difficulty: row.difficulty,
     latencyMs: normalizeNonNegativeNumber(row.latencyMs),
-    model: row.model,
+    modelRef: row.modelRef ?? undefined,
     projectName: row.projectName,
-    provider: row.providerLabel,
     requestId: row.requestId,
+    requestedModel: row.requestedModel,
+    routingReason: row.routingReason ?? undefined,
     safetyAction: row.safetyAction,
     statusCode: normalizeNonNegativeNumber(row.statusCode),
     timestamp: row.timestamp,

@@ -58,16 +58,24 @@ type RequestContext struct {
 
 	RequestedProvider          string
 	RequestedModel             string
-	SelectedProvider           string
-	SelectedProviderID         string
-	SelectedProviderCatalogKey string
-	SelectedModel              string
-	SelectedModelID            string
+	ModelRef                   string
+	CandidateModelRefs         []string
+	ResolvedTarget             routing.ResolvedTarget
+	ResolvedProviderName       string
+	ResolvedAdapterType        string
+	ResolvedProviderCatalogKey string
+	ResolvedCatalogHash        string
+	Provider                   string
+	ProviderID                 string
+	ProviderCatalogKey         string
+	Model                      string
+	ModelID                    string
 	ProviderCatalogContentHash string
 	RoutingReason              string
 	RoutingPolicyHash          string
 	RoutingDecisionKeyHash     string
 	PromptCategory             string
+	PromptDifficulty           string
 	CategoryDiagnostics        routing.CategoryDiagnostics
 
 	MaskingAction           string
@@ -116,9 +124,8 @@ type RequestContext struct {
 	SemanticCacheClassifierReasonCode   string
 	SemanticCacheClassifierModelVersion string
 
-	Provider          string
-	Model             string
-	ProviderLatencyMs int64
+	ProviderLatencyMs      int64
+	ProviderAttemptStarted bool
 
 	PromptTokens      int
 	CompletionTokens  int
