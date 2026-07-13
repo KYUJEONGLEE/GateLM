@@ -7,6 +7,7 @@ import {
   DialogDescription,
   DialogTitle
 } from "@/components/ui/dialog";
+import type { Locale } from "@/lib/i18n/locale";
 
 export type FocusOriginRect = {
   height: number;
@@ -19,6 +20,7 @@ export type FocusOriginRect = {
 
 type LiveRequestsFocusDialogProps = {
   children: ReactNode;
+  locale: Locale;
   onClose: () => void;
   open: boolean;
   origin: FocusOriginRect | null;
@@ -26,6 +28,7 @@ type LiveRequestsFocusDialogProps = {
 
 export function LiveRequestsFocusDialog({
   children,
+  locale,
   onClose,
   open,
   origin
@@ -45,9 +48,13 @@ export function LiveRequestsFocusDialog({
         className="live-requests-focus-dialog"
         showClose={false}
       >
-        <DialogTitle className="sr-only">Live Requests focus view</DialogTitle>
+        <DialogTitle className="sr-only">
+          {locale === "ko" ? "실시간 요청 확대 화면" : "Live Requests focus view"}
+        </DialogTitle>
         <DialogDescription className="sr-only">
-          실시간 요청 목록의 행 순서를 고정하고 상세 정보를 확인합니다.
+          {locale === "ko"
+            ? "실시간 요청 목록의 행 순서를 고정하고 상세 정보를 확인합니다."
+            : "Freeze the live request row order and inspect request details."}
         </DialogDescription>
         {children}
       </DialogContent>

@@ -245,7 +245,11 @@ export function RequestLogDetailClient({
         }
 
         setDetail(undefined);
-        setLoadError("요청 상세 정보를 찾을 수 없습니다.");
+        setLoadError(
+          locale === "ko"
+            ? "요청 상세 정보를 찾을 수 없습니다."
+            : "Request detail was not found."
+        );
         setLoadState("error");
       })
       .catch(() => {
@@ -260,14 +264,18 @@ export function RequestLogDetailClient({
         }
 
         setDetail(undefined);
-        setLoadError("요청 상세 정보를 불러오지 못했습니다.");
+        setLoadError(
+          locale === "ko"
+            ? "요청 상세 정보를 불러오지 못했습니다."
+            : "Failed to load request detail."
+        );
         setLoadState("error");
       });
 
     return () => {
       controller.abort();
     };
-  }, [recordsByRequestId, selection.projectId, selection.requestId, tenantId]);
+  }, [locale, recordsByRequestId, selection.projectId, selection.requestId, tenantId]);
 
   const record =
     detail ??

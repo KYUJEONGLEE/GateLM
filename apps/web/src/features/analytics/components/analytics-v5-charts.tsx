@@ -191,7 +191,7 @@ export function AnalyticsV5RoutingTierChart({
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 420,
-      grid: { bottom: 24, containLabel: false, left: 148, right: 112, top: 18 },
+      grid: { bottom: 24, containLabel: false, left: 112, right: 88, top: 18 },
       tooltip: analyticsTooltip(locale === "ko" ? "건" : " requests", theme),
       xAxis: {
         axisLabel: { color: theme.axis, fontSize: 14, fontWeight: 700, formatter: compactAxisNumber },

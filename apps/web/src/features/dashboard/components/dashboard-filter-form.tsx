@@ -8,6 +8,7 @@ import type {
   DashboardRange
 } from "@/features/dashboard/components/dashboard-overview";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import type { Locale } from "@/lib/i18n/locale";
 
 type DashboardRangeOption = {
   label: string;
@@ -19,6 +20,7 @@ type DashboardFilterFormProps = {
   allowAllProjects?: boolean;
   applyLabel: string;
   filters: DashboardFilterState;
+  locale: Locale;
   projects: ProjectRecord[];
   rangeOptions: DashboardRangeOption[];
 };
@@ -28,6 +30,7 @@ export function DashboardFilterForm({
   allowAllProjects = true,
   applyLabel,
   filters,
+  locale,
   projects,
   rangeOptions
 }: DashboardFilterFormProps) {
@@ -58,7 +61,7 @@ export function DashboardFilterForm({
   return (
     <form className="dashboard-summary-form" onSubmit={handleSubmit}>
       <label>
-        <span>Time range</span>
+        <span>{locale === "ko" ? "시간 범위" : "Time range"}</span>
         <div className="dashboard-filter-input">
           <Calendar aria-hidden="true" size={16} strokeWidth={2.1} />
           <select defaultValue={filters.range} name="range">
@@ -71,11 +74,13 @@ export function DashboardFilterForm({
         </div>
       </label>
       <label>
-        <span>Project</span>
+        <span>{locale === "ko" ? "프로젝트" : "Project"}</span>
         <div className="dashboard-filter-input">
           <Building2 aria-hidden="true" size={16} strokeWidth={2.1} />
           <select defaultValue={filters.projectId} name="projectId">
-            {allowAllProjects ? <option value="">All projects</option> : null}
+            {allowAllProjects ? (
+              <option value="">{locale === "ko" ? "전체 프로젝트" : "All projects"}</option>
+            ) : null}
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}

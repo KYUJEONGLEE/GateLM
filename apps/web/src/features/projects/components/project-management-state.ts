@@ -1,7 +1,24 @@
 export type ProjectCreateActionLocation = "empty" | "toolbar" | null;
 
+type ProjectSettingsTarget = {
+  id: string;
+  runtimeApplicationId: string | null;
+  status: string;
+};
+
 export function isProjectVisibleInList(status: string) {
   return status !== "ARCHIVED";
+}
+
+export function getProjectSettingsHref(
+  tenantId: string,
+  project: ProjectSettingsTarget
+) {
+  const projectHref = `/tenants/${tenantId}/projects/${project.id}`;
+
+  return project.status === "ACTIVE" && project.runtimeApplicationId
+    ? `${projectHref}/policies`
+    : projectHref;
 }
 
 export function compareProjectCreatedAtDescending(

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 186 48" width="186" height="48">
+  <g transform="translate(0,3) scale(0.5)"><mask id="notch"><rect width="104" height="84" fill="white"/><rect x="58" y="32" width="26" height="20" fill="black"/></mask>
+  <circle cx="40" cy="42" r="33.5" fill="none" stroke="#0F172A" stroke-width="13" mask="url(#notch)"/>
+  <path d="M46 36 H104 V48 H46 A6 6 0 0 1 46 36 Z" fill="#10B981"/></g>
+  <text x="62" y="35" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700"><tspan fill="#0F172A">Gate</tspan><tspan fill="#10B981">LM</tspan></text>
+</svg>

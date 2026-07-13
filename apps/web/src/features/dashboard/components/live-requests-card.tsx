@@ -169,7 +169,7 @@ export function LiveRequestsCard({
           return;
         }
 
-        setError("Failed to load live requests");
+        setError(locale === "ko" ? "실시간 요청을 불러오지 못했습니다" : "Failed to load live requests");
         console.warn("Failed to load live requests", fetchError);
       } finally {
         if (abortRef.current === controller) {
@@ -179,7 +179,7 @@ export function LiveRequestsCard({
         }
       }
     },
-    [modelFilter, range, requestQueryString]
+    [locale, modelFilter, range, requestQueryString]
   );
 
   useEffect(() => {
@@ -286,6 +286,7 @@ export function LiveRequestsCard({
         <LiveRequestsView
           error={error}
           isLoading={isLoading}
+          locale={locale}
           mode="compact"
           modelFilter={modelFilter}
           modelOptions={modelOptions}
@@ -300,6 +301,7 @@ export function LiveRequestsCard({
       </div>
 
       <LiveRequestsFocusDialog
+        locale={locale}
         onClose={closeFocusView}
         open={isFocusOpen}
         origin={focusOrigin}
@@ -309,6 +311,7 @@ export function LiveRequestsCard({
           detailFocusRequestId={detailFocusRequestId}
           error={error}
           isLoading={isLoading}
+          locale={locale}
           mode="focus"
           modelFilter={modelFilter}
           modelOptions={modelOptions}

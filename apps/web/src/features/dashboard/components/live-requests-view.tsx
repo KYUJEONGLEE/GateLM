@@ -8,12 +8,14 @@ import type {
   LiveRequestRow,
   LiveRequestStatusFilter
 } from "@/lib/gateway/live-requests-types";
+import type { Locale } from "@/lib/i18n/locale";
 
 type LiveRequestsViewProps = {
   detailFocusRef?: (element: HTMLButtonElement | null) => void;
   detailFocusRequestId?: string;
   error: string | null;
   isLoading: boolean;
+  locale: Locale;
   mode: "compact" | "focus";
   modelFilter: string;
   modelOptions: string[];
@@ -29,14 +31,6 @@ type LiveRequestsViewProps = {
   statusFilter: LiveRequestStatusFilter;
   viewAllLogsHref: string;
 };
-
-const statusFilters: Array<{ label: string; value: LiveRequestStatusFilter }> = [
-  { label: "All Status", value: "" },
-  { label: "success", value: "success" },
-  { label: "failed", value: "failed" },
-  { label: "blocked", value: "blocked" },
-  { label: "rate_limited", value: "rate_limited" }
-];
 
 const timeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
@@ -61,6 +55,7 @@ export function LiveRequestsView({
   detailFocusRequestId,
   error,
   isLoading,
+  locale,
   mode,
   modelFilter,
   modelOptions,
@@ -77,22 +72,78 @@ export function LiveRequestsView({
   viewAllLogsHref
 }: LiveRequestsViewProps) {
   const isFocus = mode === "focus";
+  const text = locale === "ko"
+    ? {
+        allModels: "전체 모델",
+        allStatus: "전체 상태",
+        closeFocus: "실시간 요청 확대 화면 닫기",
+        detail: "상세",
+        filterModel: "모델로 실시간 요청 필터링",
+        filterStatus: "상태로 실시간 요청 필터링",
+        focusAria: "실시간 요청 확대 화면",
+        frozen: "행 순서 고정",
+        lastRefresh: "마지막 정상 조회 결과를 표시 중입니다",
+        live: "실시간",
+        loading: "실시간 요청을 불러오는 중",
+        noRequests: "선택한 필터에 해당하는 최근 요청이 없습니다",
+        openDetail: "요청 상세 열기",
+        openFocus: "실시간 요청 확대 화면 열기",
+        panelAria: "실시간 요청",
+        pendingPrefix: "새 요청",
+        pendingSuffix: "건 반영",
+        pendingStatus: "건이 대기 중입니다.",
+        requests: "건 표시",
+        title: "실시간 요청",
+        viewAll: "전체 로그 보기",
+        waiting: "새 요청은 반영할 때까지 보류됩니다."
+      }
+    : {
+        allModels: "All Models",
+        allStatus: "All Status",
+        closeFocus: "Close Live Requests focus view",
+        detail: "Detail",
+        filterModel: "Filter live requests by model",
+        filterStatus: "Filter live requests by status",
+        focusAria: "Live Requests focus view",
+        frozen: "row order frozen",
+        lastRefresh: "Showing last successful refresh",
+        live: "Live",
+        loading: "Loading live requests",
+        noRequests: "No recent requests for selected filters",
+        openDetail: "Open request detail",
+        openFocus: "Open Live Requests focus view",
+        panelAria: "Live Requests",
+        pendingPrefix: "Apply",
+        pendingSuffix: "new requests",
+        pendingStatus: "new requests are waiting.",
+        requests: "requests",
+        title: "Live Requests",
+        viewAll: "View all logs",
+        waiting: "New requests are held until you apply them."
+      };
+  const statusFilters: Array<{ label: string; value: LiveRequestStatusFilter }> = [
+    { label: text.allStatus, value: "" },
+    { label: locale === "ko" ? "성공" : "Success", value: "success" },
+    { label: locale === "ko" ? "실패" : "Failed", value: "failed" },
+    { label: locale === "ko" ? "차단" : "Blocked", value: "blocked" },
+    { label: locale === "ko" ? "요청 제한" : "Rate limited", value: "rate_limited" }
+  ];
 
   return (
     <section
-      aria-label={isFocus ? "Live Requests focus view" : "Live Requests"}
+      aria-label={isFocus ? text.focusAria : text.panelAria}
       className="dashboard-live-requests-panel"
       data-live-view={mode}
     >
       <div className="dashboard-live-requests-header">
         <div className="dashboard-live-heading-wrap">
           <div className="dashboard-live-requests-title">
-            <h2>Live Requests</h2>
+            <h2>{text.title}</h2>
             <Info aria-hidden="true" size={16} strokeWidth={2.1} />
           </div>
           <span className="dashboard-live-presence">
             <span aria-hidden="true" />
-            Live
+            {text.live}
           </span>
           {isFocus && pendingCount > 0 ? (
             <button
@@ -100,18 +151,18 @@ export function LiveRequestsView({
               onClick={onApplyPending}
               type="button"
             >
-              새 요청 {integerFormatter.format(pendingCount)}건 반영
+              {text.pendingPrefix} {integerFormatter.format(pendingCount)} {text.pendingSuffix}
             </button>
           ) : null}
           <span aria-live="polite" className="sr-only" role="status">
             {isFocus && pendingCount > 0
-              ? "새 요청 " + pendingCount + "건이 대기 중입니다."
+              ? pendingCount + " " + text.pendingStatus
               : ""}
           </span>
         </div>
         <div className="dashboard-live-requests-actions">
           <select
-            aria-label="Filter live requests by status"
+            aria-label={text.filterStatus}
             onChange={(event) =>
               onStatusFilterChange(event.target.value as LiveRequestStatusFilter)
             }
@@ -124,11 +175,11 @@ export function LiveRequestsView({
             ))}
           </select>
           <select
-            aria-label="Filter live requests by model"
+            aria-label={text.filterModel}
             onChange={(event) => onModelFilterChange(event.target.value)}
             value={modelFilter}
           >
-            <option value="">All Models</option>
+            <option value="">{text.allModels}</option>
             {modelOptions.map((model) => (
               <option key={model} value={model}>
                 {model}
@@ -136,11 +187,11 @@ export function LiveRequestsView({
             ))}
           </select>
           <Link className="dashboard-live-requests-view-all" href={viewAllLogsHref}>
-            View all logs
+            {text.viewAll}
           </Link>
           {isFocus ? (
             <button
-              aria-label="Close Live Requests focus view"
+              aria-label={text.closeFocus}
               className="dashboard-live-focus-button"
               onClick={onCloseFocus}
               type="button"
@@ -149,7 +200,7 @@ export function LiveRequestsView({
             </button>
           ) : (
             <button
-              aria-label="Open Live Requests focus view"
+              aria-label={text.openFocus}
               className="dashboard-live-focus-button"
               onClick={onOpenFocus}
               type="button"
@@ -163,7 +214,7 @@ export function LiveRequestsView({
       {error ? (
         <div className="dashboard-live-requests-error" role="status">
           <span>{error}</span>
-          {rows.length > 0 ? <small>Showing last successful refresh</small> : null}
+          {rows.length > 0 ? <small>{text.lastRefresh}</small> : null}
         </div>
       ) : null}
 
@@ -181,14 +232,14 @@ export function LiveRequestsView({
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">Time</th>
-              <th scope="col">User</th>
-              <th scope="col">Project</th>
-              <th scope="col">Provider / Model</th>
-              <th scope="col">Status</th>
-              <th scope="col">Policy Results</th>
-              <th scope="col">Latency</th>
-              <th scope="col">Detail</th>
+              <th scope="col">{locale === "ko" ? "시각" : "Time"}</th>
+              <th scope="col">{locale === "ko" ? "사용자" : "User"}</th>
+              <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
+              <th scope="col">{locale === "ko" ? "프로바이더 / 모델" : "Provider / Model"}</th>
+              <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
+              <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Results"}</th>
+              <th scope="col">{locale === "ko" ? "지연 시간" : "Latency"}</th>
+              <th scope="col">{text.detail}</th>
             </tr>
           </thead>
           <tbody>
@@ -196,14 +247,14 @@ export function LiveRequestsView({
               <tr>
                 <td className="dashboard-live-requests-state" colSpan={8}>
                   <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
-                  Loading live requests
+                  {text.loading}
                 </td>
               </tr>
             ) : null}
             {!isLoading && rows.length === 0 ? (
               <tr>
                 <td className="dashboard-live-requests-state" colSpan={8}>
-                  No recent requests for selected filters
+                  {text.noRequests}
                 </td>
               </tr>
             ) : null}
@@ -247,7 +298,7 @@ export function LiveRequestsView({
                     className="dashboard-live-status-badge"
                     data-status-tone={statusTone(row)}
                   >
-                    {row.statusLabel}
+                    {localizedStatusLabel(row, locale)}
                   </span>
                 </td>
                 <td>
@@ -256,14 +307,14 @@ export function LiveRequestsView({
                 <td>{formatLiveLatency(row.latencyMs)}</td>
                 <td>
                   <button
-                    aria-label={"Open request detail " + row.requestId}
+                    aria-label={text.openDetail + " " + row.requestId}
                     className="dashboard-live-detail-button"
                     onClick={() => onOpenRequest(row)}
                     ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
                     type="button"
                   >
                     <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
-                    <span>Detail</span>
+                    <span>{text.detail}</span>
                   </button>
                 </td>
               </tr>
@@ -275,10 +326,10 @@ export function LiveRequestsView({
       <div className="dashboard-live-requests-footer">
         <span>
           {isFocus
-            ? "Showing " + integerFormatter.format(rows.length) + " observed recent requests · row order frozen"
-            : "Showing latest " + integerFormatter.format(rows.length) + " requests"}
+            ? integerFormatter.format(rows.length) + " " + text.requests + " · " + text.frozen
+            : integerFormatter.format(rows.length) + " " + text.requests}
         </span>
-        {isFocus ? <small>New requests are held until you apply them.</small> : null}
+        {isFocus ? <small>{text.waiting}</small> : null}
       </div>
     </section>
   );
@@ -334,6 +385,21 @@ function LiveProviderModel({ row }: { row: LiveRequestRow }) {
 
 function projectTitle(row: LiveRequestRow) {
   return row.projectId || row.projectName || "Unknown project";
+}
+
+function localizedStatusLabel(row: LiveRequestRow, locale: Locale) {
+  if (locale !== "ko") {
+    return row.statusLabel;
+  }
+
+  const labels: Record<LiveRequestRow["status"], string> = {
+    blocked: "차단",
+    failed: "실패",
+    rate_limited: "요청 제한",
+    success: "성공"
+  };
+
+  return labels[row.status] ?? row.statusLabel;
 }
 
 function liveProviderFamily(provider: LiveRequestRow["provider"]) {

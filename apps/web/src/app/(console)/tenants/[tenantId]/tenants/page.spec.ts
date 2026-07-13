@@ -7,7 +7,7 @@ const pageSourceUrl = new URL("./page.tsx", import.meta.url);
 test("tenant routing page keeps the requested copy contract", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
-  expect(pageSource).toContain("Tenant 관리");
+  expect(pageSource).toContain("테넌트 관리");
   expect(pageSource).toContain("Auto routing");
   expect(pageSource).toContain("카테고리별 모델 설정");
   expect(pageSource).toContain("추천 모델 자동 설정");
@@ -15,8 +15,8 @@ test("tenant routing page keeps the requested copy contract", async () => {
   expect(pageSource).toContain("data-save-confirmed");
   expect(pageSource).toContain('"저장됨"');
   expect(pageSource).toContain("고성능 모델");
-  expect(pageSource).toContain("Fallback 모델 설정");
-  expect(pageSource).toContain("Auto routing OFF 시 기본 모델");
+  expect(pageSource).toContain("대체 모델");
+  expect(pageSource).toContain("자동 라우팅을 끈 경우의 기본 모델");
   expect(pageSource).not.toContain("자동 분류");
   expect(pageSource).not.toContain("분류되지 않은 요청");
   expect(pageSource).not.toContain("분류 기준");
