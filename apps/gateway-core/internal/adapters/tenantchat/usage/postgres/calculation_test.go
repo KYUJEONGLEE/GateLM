@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -16,6 +17,21 @@ func TestReservationCostUsesCeilingIntegerArithmetic(t *testing.T) {
 	}
 	if cost != 2 {
 		t.Fatalf("want 2 micro USD, got %d", cost)
+	}
+}
+
+func TestValidateTerminalWritePreservesContextAndDatabaseErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := validateTerminalWrite(ctx, "update fixture", errors.New("driver error"), 0); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancelled context, got %v", err)
+	}
+	databaseErr := errors.New("database unavailable")
+	if err := validateTerminalWrite(context.Background(), "update fixture", databaseErr, 0); !errors.Is(err, databaseErr) {
+		t.Fatalf("expected wrapped database error, got %v", err)
+	}
+	if err := validateTerminalWrite(context.Background(), "update fixture", nil, 0); err == nil {
+		t.Fatal("expected no-rows error")
 	}
 }
 

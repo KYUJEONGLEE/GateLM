@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
@@ -242,8 +242,8 @@ func persistReleased(
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid
 		  AND state = 'reserved' AND ledger_version = $5
 	`, reservationID, requestContext.ExecutionScope.TenantID, eventVersion, now, reservation.LedgerVersion)
-	if err != nil || tag.RowsAffected() != 1 {
-		return errors.New("release tenant chat reservation")
+	if err := validateTerminalWrite(ctx, "release tenant chat reservation", err, tag.RowsAffected()); err != nil {
+		return err
 	}
 	if err = insertTerminalLedger(ctx, tx, requestContext, reservationID, reservation, eventID, eventVersion, "usage_released", false, now); err != nil {
 		return err
@@ -285,8 +285,8 @@ func persistUnconfirmed(
 		  AND state = 'reserved' AND ledger_version = $7
 	`, reservationID, requestContext.ExecutionScope.TenantID, reservation.ReservedTokens,
 		reservation.ReservedCostMicroUSD, eventVersion, now, reservation.LedgerVersion)
-	if err != nil || tag.RowsAffected() != 1 {
-		return errors.New("mark tenant chat reservation unconfirmed")
+	if err := validateTerminalWrite(ctx, "mark tenant chat reservation unconfirmed", err, tag.RowsAffected()); err != nil {
+		return err
 	}
 	if err = insertTerminalLedger(ctx, tx, requestContext, reservationID, reservation, eventID, eventVersion, "usage_unconfirmed", true, now); err != nil {
 		return err
@@ -328,8 +328,8 @@ func releasePeriodBalances(
 		  AND reserved_tokens >= $4
 	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID,
 		userPeriod.Start, reservation.ReservedTokens, unconfirmedTokens, quotaState, now)
-	if err != nil || tag.RowsAffected() != 1 {
-		return errors.New("release tenant chat token period")
+	if err := validateTerminalWrite(ctx, "release tenant chat token period", err, tag.RowsAffected()); err != nil {
+		return err
 	}
 	tag, err = tx.Exec(ctx, `
 		UPDATE tenant_chat_tenant_cost_periods
@@ -340,8 +340,21 @@ func releasePeriodBalances(
 		  AND reserved_cost_micro_usd >= $3
 	`, requestContext.ExecutionScope.TenantID, tenantPeriod.Start,
 		reservation.ReservedCostMicroUSD, unconfirmedCost, budgetState, now)
-	if err != nil || tag.RowsAffected() != 1 {
-		return errors.New("release tenant chat cost period")
+	if err := validateTerminalWrite(ctx, "release tenant chat cost period", err, tag.RowsAffected()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateTerminalWrite(ctx context.Context, operation string, err error, rowsAffected int64) error {
+	if err != nil {
+		if ctx != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	if rowsAffected != 1 {
+		return fmt.Errorf("%s: no rows affected", operation)
 	}
 	return nil
 }

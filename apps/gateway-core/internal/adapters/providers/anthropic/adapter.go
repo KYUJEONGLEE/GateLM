@@ -331,7 +331,11 @@ func (r *anthropicStreamReader) readEvent() (string, json.RawMessage, error) {
 		if strings.HasPrefix(line, "event:") {
 			eventName = strings.TrimSpace(line[len("event:"):])
 		} else if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimLeft(line[len("data:"):], " "))
+			dataPayload := line[len("data:"):]
+			if strings.HasPrefix(dataPayload, " ") {
+				dataPayload = dataPayload[1:]
+			}
+			dataLines = append(dataLines, dataPayload)
 		}
 		if errors.Is(err, io.EOF) {
 			if len(dataLines) == 0 {
@@ -380,11 +384,11 @@ func (r *anthropicStreamReader) normalizedChunk(delta string, stopReason string,
 }
 
 func classifyAnthropicStreamReadError(ctx context.Context, err error) error {
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, ctxErr)
-		}
-		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctxErr)
+	if errors.Is(err, context.Canceled) || (ctx != nil && errors.Is(ctx.Err(), context.Canceled)) {
+		return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, context.Canceled)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || (ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, context.DeadlineExceeded)
 	}
 	return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
 }

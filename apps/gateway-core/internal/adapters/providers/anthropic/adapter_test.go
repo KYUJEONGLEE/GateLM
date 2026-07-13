@@ -1,12 +1,14 @@
 package anthropic
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,6 +264,28 @@ func TestClassifyTransportErrorChecksReturnedError(t *testing.T) {
 				t.Fatalf("expected %s, got %s", tt.want, provider.ErrorKindOf(err))
 			}
 		})
+	}
+}
+
+func TestReadEventRemovesOnlyOneOptionalSpaceAfterDataPrefix(t *testing.T) {
+	reader := &anthropicStreamReader{reader: bufio.NewReader(strings.NewReader("data:  {\"type\":\"message_stop\"}\n\n"))}
+	_, payload, err := reader.readEvent()
+	if err != nil {
+		t.Fatalf("read SSE event: %v", err)
+	}
+	if string(payload) != " {\"type\":\"message_stop\"}" {
+		t.Fatalf("meaningful leading space was not preserved: %q", payload)
+	}
+}
+
+func TestClassifyAnthropicStreamReadErrorChecksReturnedError(t *testing.T) {
+	cancelled := classifyAnthropicStreamReadError(context.Background(), context.Canceled)
+	if !errors.Is(cancelled, context.Canceled) || provider.ErrorKindOf(cancelled) != provider.ErrorKindError {
+		t.Fatalf("returned cancellation was not preserved: %v", cancelled)
+	}
+	deadline := classifyAnthropicStreamReadError(context.Background(), context.DeadlineExceeded)
+	if !errors.Is(deadline, context.DeadlineExceeded) || provider.ErrorKindOf(deadline) != provider.ErrorKindTimeout {
+		t.Fatalf("returned deadline was not classified as timeout: %v", deadline)
 	}
 }
 

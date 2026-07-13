@@ -178,6 +178,19 @@ func TestServiceFallsBackBeforeDeltaAndSettlesAllConfirmedAttempts(t *testing.T)
 	}
 }
 
+func TestPreparedExecutionDoesNotFallbackAfterClientCancellation(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Fallback = tenantruntime.FallbackPolicy{
+		Enabled: true, RouteIDs: []string{"route_economy"}, MaxAttempts: 2,
+		AllowedReasons: []string{"provider_error_pre_delta"},
+	}
+	execution := &PreparedExecution{snapshot: snapshot, attemptNo: 1}
+	err := provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, context.Canceled)
+	if execution.canFallback(err) {
+		t.Fatal("client cancellation must not trigger a fallback attempt")
+	}
+}
+
 func TestServiceReplaysTerminalSettlementWithoutProviderCall(t *testing.T) {
 	usage := &fakeUsageAccounting{
 		reservation: tenantchat.UsageReservation{

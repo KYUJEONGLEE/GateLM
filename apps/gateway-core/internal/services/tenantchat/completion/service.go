@@ -395,6 +395,9 @@ func (e *PreparedExecution) openFallback(ctx context.Context, route tenantchat.S
 }
 
 func (e *PreparedExecution) canFallback(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
 	reason := fallbackReason(err)
 	if reason == "" || !e.snapshot.Policies.Fallback.Enabled || e.attemptNo >= e.snapshot.Policies.Fallback.MaxAttempts {
 		return false
