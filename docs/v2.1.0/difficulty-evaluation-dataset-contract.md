@@ -82,6 +82,10 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 이 10개 fixture는 schema, enum, provenance와 기본 evaluation wiring을 검증할 뿐 model 학습, calibrator 선택 또는 threshold 최적화 dataset이 아니다. 이 fixture만으로 encoder/model/calibrator artifact를 만들거나 active runtime을 바꾸면 안 된다.
 
+[`fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl)은 별도로 재생 가능한 synthetic training pilot이다. 다섯 category × 두 difficulty cell에 각각 50건을 두어 총 500건이며 simple/complex는 각 250건이다. `reviewerNote`가 선언하듯 사람이 승인한 production training evidence가 아니라 `human review pending` 상태다. [`../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs`](../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs)로 결정론적으로 다시 생성한다.
+
+[`fixtures/difficulty-training-split-manifest.v1.json`](fixtures/difficulty-training-split-manifest.v1.json)은 `difficulty-family-split.v1`을 고정한다. Family key는 `sampleId`의 `{category}/{fNN}`이며 `expectedDifficulty`와 `vNN`을 제외한다. 따라서 같은 family의 simple/complex contrast와 모든 variant는 train/calibration/holdout 중 하나에만 속한다. Manifest는 train 15 family/300건, calibration 5 family/100건, holdout 5 family/100건과 dataset SHA-256을 고정한다. 이 pilot과 tooling의 존재만으로 runtime promotion을 허용하지 않는다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.
@@ -115,7 +119,7 @@ Model과 calibration evidence는 prompt family 단위로 분리된 다음 세 sp
 - `calibration`: 단일 전역 calibrator 후보 비교, 선택과 최종 fit
 - `holdout`: 모든 선택이 끝난 뒤 final gate
 
-같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
+같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. `difficulty-family-split.v1`에서는 difficulty label을 family key에서 제외해 cross-label contrast 누출도 금지한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
 
 Calibrator candidate 목록, log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Identity calibrator를 baseline 후보에 포함하고 calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 versioned 순서상 더 단순한 후보를 고른다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
 

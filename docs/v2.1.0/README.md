@@ -31,6 +31,10 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `difficulty-evaluation-dataset-contract.md` | Synthetic/redacted difficulty evaluation contract |
 | `schemas/difficulty-evaluation-record.schema.json` | Difficulty-only evaluation record schema |
 | `fixtures/difficulty-evaluation-dataset.fixture.jsonl` | Difficulty evaluation fixture |
+| `fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl` | Human-review-pending synthetic difficulty training pilot |
+| `schemas/difficulty-training-split-manifest.schema.json` | Cross-label family-disjoint split manifest schema |
+| `fixtures/difficulty-training-split-manifest.v1.json` | 500건 pilot의 versioned family split manifest |
+| `schemas/difficulty-model-artifact.schema.json` | Offline Logistic Regression·calibrator candidate artifact schema |
 | `routing-advanced-plan.md` | Evaluation-based routing plan |
 | `routing-performance-test-scenario.md` | Performance evidence scenario |
 | `routing-random-probe.md` | Unlabeled synthetic distribution probe |

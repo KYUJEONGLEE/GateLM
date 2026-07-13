@@ -20,7 +20,7 @@ Tenant Chat의 별도 tier와 Provider Catalog의 `routing.costTier` metadata는
 
 ## 2. Classification Pipeline
 
-라우팅 분류는 외부 LLM을 호출하지 않는 deterministic local 두 단계다. Category는 기존 rule-based classifier를 유지하고, difficulty의 active target contract는 단일 전역 regularized Logistic Regression과 전역 calibrator를 사용한다. 내부 구현 구조와 artifact 승격 경계는 [`classification-pipeline.md`](classification-pipeline.md)가, exact encoder는 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가 정의한다.
+라우팅 분류는 외부 LLM을 호출하지 않는 deterministic local 두 단계다. Category는 기존 rule-based classifier를 유지하고, difficulty의 active target contract는 단일 전역 regularized Logistic Regression과 전역 calibrator를 사용한다. 내부 구현 구조와 artifact 승격 경계는 [`classification-pipeline.md`](classification-pipeline.md)가, exact encoder는 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가, 아직 승격되지 않은 offline 학습·codegen 준비 경계는 [`difficulty-logistic-training.md`](difficulty-logistic-training.md)가 정의한다.
 
 ```text
 Prompt

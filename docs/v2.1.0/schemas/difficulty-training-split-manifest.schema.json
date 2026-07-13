@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json",
+  "title": "GateLM Difficulty Training Split Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "gatelm.difficulty-training-split-manifest.v1"
+    },
+    "datasetVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "datasetSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "splitPolicyVersion": {
+      "const": "difficulty-family-split.v1"
+    },
+    "familyRuleVersion": {
+      "const": "difficulty-sample-family.v1"
+    },
+    "familyRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sampleIdPattern": { "type": "string", "minLength": 1 },
+        "familyKey": { "const": "{category}/{fNN}" },
+        "excludes": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "expectedDifficulty" },
+            { "const": "vNN" }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "required": ["sampleIdPattern", "familyKey", "excludes"]
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "samples": { "const": 500 },
+        "families": { "const": 25 }
+      },
+      "required": ["samples", "families"]
+    },
+    "splitCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "train": { "$ref": "#/$defs/splitCountTrain" },
+        "calibration": { "$ref": "#/$defs/splitCountEvaluation" },
+        "holdout": { "$ref": "#/$defs/splitCountEvaluation" }
+      },
+      "required": ["train", "calibration", "holdout"]
+    },
+    "families": {
+      "type": "array",
+      "minItems": 25,
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "familyId": {
+            "type": "string",
+            "pattern": "^(general|code|translation|summarization|reasoning)/f[0-9]{2}$"
+          },
+          "split": {
+            "enum": ["train", "calibration", "holdout"]
+          }
+        },
+        "required": ["familyId", "split"]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "datasetVersion",
+    "datasetSha256",
+    "splitPolicyVersion",
+    "familyRuleVersion",
+    "familyRule",
+    "totals",
+    "splitCounts",
+    "families"
+  ],
+  "$defs": {
+    "splitCountTrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "families": { "const": 15 },
+        "samples": { "const": 300 }
+      },
+      "required": ["families", "samples"]
+    },
+    "splitCountEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "families": { "const": 5 },
+        "samples": { "const": 100 }
+      },
+      "required": ["families", "samples"]
+    }
+  }
+}

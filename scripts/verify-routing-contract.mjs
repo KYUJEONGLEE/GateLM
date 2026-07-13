@@ -380,6 +380,7 @@ function validateDocumentation(rootDir, failures) {
     "docs/routing/contracts.md",
     "docs/routing/classification-pipeline.md",
     "docs/routing/difficulty-feature-vector-v1.md",
+    "docs/routing/difficulty-logistic-training.md",
     "docs/current/README.md",
     "docs/current/source-of-truth.md",
     "docs/v2.0.0/README.md",
@@ -407,6 +408,9 @@ function validateDocumentation(rootDir, failures) {
   }
   if (!texts.get("docs/routing/README.md")?.includes("difficulty-feature-vector-v1.md")) {
     failures.push("docs/routing/README.md: difficulty feature vector v1 link is missing");
+  }
+  if (!texts.get("docs/routing/README.md")?.includes("difficulty-logistic-training.md")) {
+    failures.push("docs/routing/README.md: difficulty Logistic training boundary link is missing");
   }
   if (!texts.get("docs/routing/contracts.md")?.includes("classification-pipeline.md")) {
     failures.push("docs/routing/contracts.md: classification pipeline contract link is missing");

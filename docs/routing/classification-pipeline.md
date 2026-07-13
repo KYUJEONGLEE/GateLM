@@ -90,7 +90,7 @@ Runtime inference는 `float64`, 고정 feature order/encoding, 고정 coefficien
 
 Calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이다. 개별 요청이 절대적으로 80% 확률로 complex임을 보장하지 않으며 dataset 구성, sample size, category 분포와 distribution drift에 영향을 받는다. Confidence, SLA 또는 개별 요청의 확정적 진실로 해석하지 않는다.
 
-현재 as-built에는 `difficulty-feature-vector.v1` encoder만 존재하며 model/calibrator artifact와 `DifficultyResult.ComplexityScore`는 없다. Vectorizer는 rule-based runtime에서 호출하지 않는다. Versioned model artifact, family-disjoint train/calibration/holdout evidence와 현재 rule-based baseline 대비 safety gate가 준비되기 전까지 현재 runtime behavior를 유지한다.
+현재 as-built에는 `difficulty-feature-vector.v1` encoder와 [`difficulty-logistic-training.md`](difficulty-logistic-training.md)의 비활성 offline 준비 tooling이 존재한다. Tooling은 500건 synthetic pilot 재생성, family-disjoint manifest, canonical Go vector export, Python Logistic Regression·calibrator fit, JSON artifact 검증·Go code generation과 package-private inference math를 제공한다. 실제 500건 학습은 실행하지 않았고 model/calibrator artifact와 `DifficultyResult.ComplexityScore`는 여전히 없다. Vectorizer와 비활성 inference는 rule-based runtime에서 호출하지 않는다. Versioned model artifact, family-disjoint train/calibration/holdout evidence와 현재 rule-based baseline 대비 safety gate가 준비되기 전까지 현재 runtime behavior를 유지한다.
 
 `ModelCapabilityFeatures`의 input token estimate와 tool intent는 category/difficulty feature가 아니다. 별도 extractor와 struct로 유지하며 canonical classification pipeline에서는 호출하지 않는다.
 
@@ -140,9 +140,9 @@ Offline evaluation은 synthetic 또는 안전하게 redacted된 approved data에
 
 이 문서는 공통, category intent, 공통 난이도, category별 난이도 feature family와 Logistic Regression·calibration·global threshold의 target 경계를 정의한다. 다음 항목은 여전히 별도 offline evidence와 artifact 승격이 필요하다.
 
-- coefficient, intercept, regularization/solver 설정과 model artifact hash
-- versioned calibrator candidate 목록, tie tolerance, 단순성 순서와 선택된 parameter
-- family-disjoint train/calibration/holdout dataset과 split policy
+- 실제 evidence run에서 선택된 coefficient, intercept, regularization 강도와 model artifact hash
+- 실제 evidence run에서 선택된 calibrator와 parameter
+- synthetic pilot의 human review 또는 별도 승인된 학습 dataset
 - 외부 계약으로 사용하는 `complexity_score`
 - score의 API, DB, Event, Metrics 또는 제품 diagnostics 노출
 

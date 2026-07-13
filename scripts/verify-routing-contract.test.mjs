@@ -252,7 +252,7 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
     "reasoningAlternativeCount", "reasoningCriteriaAndConstraintCount", "reasoningDepth", "reasoningUncertaintyScenarioCount",
   ];
   const documents = {
-    "docs/routing/README.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md",
+    "docs/routing/README.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md\ndifficulty-logistic-training.md",
     "docs/routing/contracts.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md",
     "docs/routing/classification-pipeline.md": [
       "Active routing target contract",
@@ -278,6 +278,7 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
       "intercept",
       ...featureVectorNames.map((name) => `\`${name}\``),
     ].join("\n"),
+    "docs/routing/difficulty-logistic-training.md": "Offline tooling prepared",
     "docs/current/README.md": "../routing/README.md",
     "docs/current/source-of-truth.md": "../routing/README.md\n../routing/classification-pipeline.md",
     "docs/v2.0.0/README.md": "Superseded by active routing contract",
