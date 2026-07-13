@@ -270,7 +270,6 @@ Resources:
             DeleteOnTermination: false
             Encrypted: true
             Iops: 3000
-            Throughput: 125
             VolumeSize: 24
             VolumeType: gp3
       UserData: !Base64
@@ -324,7 +323,6 @@ Resources:
             DeleteOnTermination: false
             Encrypted: true
             Iops: 3000
-            Throughput: 125
             VolumeSize: 30
             VolumeType: gp3
       UserData: !Base64
@@ -378,7 +376,6 @@ Resources:
             DeleteOnTermination: false
             Encrypted: true
             Iops: 3000
-            Throughput: 125
             VolumeSize: 40
             VolumeType: gp3
       UserData: !Base64
@@ -432,7 +429,6 @@ Resources:
             DeleteOnTermination: false
             Encrypted: true
             Iops: 3000
-            Throughput: 125
             VolumeSize: 24
             VolumeType: gp3
       UserData: !Base64
