@@ -26,6 +26,24 @@ type categoryRuleData struct {
 	EnableSQLPattern bool     `json:"enableSQLPattern"`
 }
 
+// CategoryIntentFeatures is the shared score decomposition used for every
+// non-general category. General remains the fallback when no category reaches
+// its evidence threshold.
+type CategoryIntentFeatures struct {
+	actionScore             int
+	objectFitScore          int
+	structuralEvidenceScore int
+	intentPairScore         int
+	negativeContextScore    int
+}
+
+type CategoryFeatures struct {
+	code          CategoryIntentFeatures
+	translation   CategoryIntentFeatures
+	summarization CategoryIntentFeatures
+	reasoning     CategoryIntentFeatures
+}
+
 var categoryPolicy = loadCategoryPolicy()
 
 func loadCategoryPolicy() categoryPolicyData {
@@ -195,22 +213,23 @@ func (d CategoryDiagnostics) HasData() bool {
 func categoryScores(features PromptFeatures) []CategoryScore {
 	text := features.normalizedText
 	tokens := features.tokens
-	code := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode]) + weightedSignalScore(text,
+	intentFeatures := extractCategoryFeatures(features)
+	code := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode])+weightedSignalScore(text,
 		[]string{"```", "stack trace", "syntax error", "race condition", "nil pointer", "compile error"},
 		[]string{"typescript", "javascript", "python", "golang", " go ", "sql", "function", "class", "api", "debug", "refactor", "code", "bug", "코드", "버그", "함수"},
-	)
-	translation := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryTranslation]) + weightedSignalScore(text,
+	), intentFeatures.code)
+	translation := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryTranslation])+weightedSignalScore(text,
 		[]string{"translate", "translation", "번역", "영어로", "한국어로", "일본어로", "중국어로"},
 		[]string{" to english", " to korean", " to japanese", " to chinese", "tone", "terminology"},
-	)
-	summarization := policyRuleScore(text, tokens, categoryPolicy.Rules[CategorySummarization]) + weightedSignalScore(text,
+	), intentFeatures.translation)
+	summarization := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategorySummarization])+weightedSignalScore(text,
 		[]string{"summarize", "summary", "요약", "핵심 정리", "key points"},
 		[]string{"meeting notes", "report", "document", "결론", "결정사항"},
-	)
-	reasoning := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryReasoning]) + weightedSignalScore(text,
+	), intentFeatures.summarization)
+	reasoning := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryReasoning])+weightedSignalScore(text,
 		[]string{"compare", "tradeoff", "trade-off", "recommend", "evaluate", "analyze", "reason", "비교", "추천", "분석", "판단"},
 		[]string{"constraint", "option", "because", "if ", "plan", "우선순위", "장단점"},
-	)
+	), intentFeatures.reasoning)
 
 	// Translation and summarization are explicit output intents and win ties.
 	return []CategoryScore{
@@ -220,6 +239,126 @@ func categoryScores(features PromptFeatures) []CategoryScore {
 		{Category: CategoryReasoning, Score: reasoning, Matched: reasoning > 0},
 		{Category: CategoryGeneral, Score: 0, Matched: true},
 	}
+}
+
+func extractCategoryFeatures(features PromptFeatures) CategoryFeatures {
+	return CategoryFeatures{
+		code:          extractCategoryIntentFeatures(features, CategoryCode),
+		translation:   extractCategoryIntentFeatures(features, CategoryTranslation),
+		summarization: extractCategoryIntentFeatures(features, CategorySummarization),
+		reasoning:     extractCategoryIntentFeatures(features, CategoryReasoning),
+	}
+}
+
+func extractCategoryIntentFeatures(features PromptFeatures, category string) CategoryIntentFeatures {
+	text := features.instructionText
+	if text == "" {
+		text = features.normalizedText
+	}
+	actionScore := minInt(countDistinctPhrases(text, categoryActionPhrases(category))*2, 6)
+	objectFitScore := minInt(countDistinctPhrases(text, categoryObjectPhrases(category)), 4)
+	structuralEvidenceScore := categoryStructuralEvidenceScore(features, category)
+	intentPairScore := 0
+	if actionScore > 0 && objectFitScore > 0 {
+		intentPairScore = 3
+	} else if actionScore > 0 && structuralEvidenceScore > 0 {
+		intentPairScore = 2
+	}
+	negativeContextScore := minInt(countDistinctPhrases(text, categoryNegativeContextPhrases(category))*3, 6)
+	return CategoryIntentFeatures{
+		actionScore:             actionScore,
+		objectFitScore:          objectFitScore,
+		structuralEvidenceScore: structuralEvidenceScore,
+		intentPairScore:         intentPairScore,
+		negativeContextScore:    negativeContextScore,
+	}
+}
+
+func categoryIntentAdjustedScore(base int, features CategoryIntentFeatures) int {
+	if features.negativeContextScore > 0 {
+		return 0
+	}
+
+	bonus := features.intentPairScore + minInt(features.structuralEvidenceScore, 2)
+	if base > 0 {
+		return base + bonus
+	}
+	if features.intentPairScore > 0 {
+		return features.actionScore + features.objectFitScore + bonus
+	}
+	return 0
+}
+
+func categoryActionPhrases(category string) []string {
+	switch category {
+	case CategoryCode:
+		return []string{"fix", "debug", "refactor", "implement", "compile", "find the cause", "write code", "수정", "고쳐", "디버깅", "리팩터", "구현", "컴파일", "원인을", "버그를 찾아"}
+	case CategoryTranslation:
+		return []string{"translate", "translation", "localize", "into korean", "into english", "to korean", "to english", "번역", "영문화", "현지화", "영어로", "한국어로", "일본어로", "중국어로"}
+	case CategorySummarization:
+		return []string{"summarize", "summary", "condense", "shorten", "key points", "요약", "압축", "줄여", "핵심만", "요점", "짧게 정리", "추려"}
+	case CategoryReasoning:
+		return []string{"compare", "recommend", "evaluate", "decide", "prioritize", "tradeoff", "trade-off", "비교", "추천", "평가", "판단", "결정", "우선순위", "장단점", "트레이드오프"}
+	default:
+		return nil
+	}
+}
+
+func categoryObjectPhrases(category string) []string {
+	switch category {
+	case CategoryCode:
+		return []string{"code", "function", "class", "api", "sql", "stack trace", "exception", "test failure", "typescript", "javascript", "python", "golang", "코드", "함수", "에러", "오류", "버그", "테스트 실패", "타입스크립트", "자바스크립트", "파이썬"}
+	case CategoryTranslation:
+		return []string{"sentence", "paragraph", "document", "email", "notice", "source text", "korean", "english", "japanese", "chinese", "문장", "문단", "문서", "메일", "안내문", "공지", "원문", "한국어", "영어", "일본어", "중국어"}
+	case CategorySummarization:
+		return []string{"report", "document", "meeting notes", "record", "article", "conversation", "policy", "보고서", "문서", "회의록", "기록", "대화", "정책", "공지", "메모"}
+	case CategoryReasoning:
+		return []string{"option", "alternative", "plan", "strategy", "criteria", "constraint", "cost", "risk", "schedule", "대안", "방식", "계획", "전략", "기준", "제약", "비용", "위험", "일정"}
+	default:
+		return nil
+	}
+}
+
+func categoryNegativeContextPhrases(category string) []string {
+	phrases := append([]string(nil), categoryPolicy.Rules[category].NegativeSignals...)
+	switch category {
+	case CategoryCode:
+		return append(phrases, "api key", "api 키", "api response example", "api 응답 예시", "payment error", "결제 오류")
+	case CategoryTranslation:
+		return append(phrases, "language menu", "translation setting")
+	case CategorySummarization:
+		return append(phrases, "summary page", "json output", "json 형태")
+	case CategoryReasoning:
+		return append(phrases, "comparison page", "priority field", "우선순위 필드", "json output", "json 형태")
+	default:
+		return phrases
+	}
+}
+
+func categoryStructuralEvidenceScore(features PromptFeatures, category string) int {
+	text := features.normalizedText
+	switch category {
+	case CategoryCode:
+		score := 0
+		if features.hasCodeFence {
+			score += 3
+		}
+		if hasAnyPhrase(text, []string{"stack trace", "syntax error", "compile error", "select * from", "insert into", "update ", "package main", "func ", "스택 트레이스", "컴파일 에러"}) {
+			score += 2
+		}
+		return minInt(score, 4)
+	case CategoryTranslation:
+		return minInt(countDistinctPhrases(text, []string{"to korean", "to english", "to japanese", "to chinese", "into korean", "into english", "영어로", "한국어로", "일본어로", "중국어로", "영문화"})*2, 4)
+	case CategorySummarization:
+		if hasAnyPhrase(text, []string{"meeting notes", "long report", "multiple documents", "회의록", "긴 보고서", "여러 문서", "세 문서"}) {
+			return 2
+		}
+	case CategoryReasoning:
+		if features.scopeCount >= 2 && hasAnyPhrase(text, []string{"option", "alternative", "plan", "strategy", "대안", "방식", "계획", "전략"}) {
+			return 2
+		}
+	}
+	return 0
 }
 
 func policyRuleScore(text string, tokens map[string]struct{}, rule categoryRuleData) int {
