@@ -50,6 +50,77 @@ const dateFormatter = new Intl.DateTimeFormat("en-CA", {
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 
+const liveRequestsText = {
+  en: {
+    allModels: "All Models",
+    allStatus: "All Status",
+    closeFocus: "Close Live Requests focus view",
+    detail: "Detail",
+    filterModel: "Filter live requests by model",
+    filterStatus: "Filter live requests by status",
+    focusAria: "Live Requests focus view",
+    frozen: "row order frozen",
+    lastRefresh: "Showing last successful refresh",
+    live: "Live",
+    loading: "Loading live requests",
+    noRequests: "No recent requests for selected filters",
+    openDetail: "Open request detail",
+    openFocus: "Open Live Requests focus view",
+    panelAria: "Live Requests",
+    pendingPrefix: "Apply",
+    pendingSuffix: "new requests",
+    pendingStatus: "new requests are waiting.",
+    requests: "requests",
+    title: "Live Requests",
+    viewAll: "View all logs",
+    waiting: "New requests are held until you apply them."
+  },
+  ko: {
+    allModels: "전체 모델",
+    allStatus: "전체 상태",
+    closeFocus: "실시간 요청 확대 화면 닫기",
+    detail: "상세",
+    filterModel: "모델로 실시간 요청 필터링",
+    filterStatus: "상태로 실시간 요청 필터링",
+    focusAria: "실시간 요청 확대 화면",
+    frozen: "행 순서 고정",
+    lastRefresh: "마지막 정상 조회 결과를 표시 중입니다",
+    live: "실시간",
+    loading: "실시간 요청을 불러오는 중",
+    noRequests: "선택한 필터에 해당하는 최근 요청이 없습니다",
+    openDetail: "요청 상세 열기",
+    openFocus: "실시간 요청 확대 화면 열기",
+    panelAria: "실시간 요청",
+    pendingPrefix: "새 요청",
+    pendingSuffix: "건 반영",
+    pendingStatus: "건이 대기 중입니다.",
+    requests: "건 표시",
+    title: "실시간 요청",
+    viewAll: "전체 로그 보기",
+    waiting: "새 요청은 반영할 때까지 보류됩니다."
+  }
+} as const;
+
+const liveRequestStatusFilters: Record<
+  Locale,
+  Array<{ label: string; value: LiveRequestStatusFilter }>
+> = {
+  en: [
+    { label: "All Status", value: "" },
+    { label: "Success", value: "success" },
+    { label: "Failed", value: "failed" },
+    { label: "Blocked", value: "blocked" },
+    { label: "Rate limited", value: "rate_limited" }
+  ],
+  ko: [
+    { label: "전체 상태", value: "" },
+    { label: "성공", value: "success" },
+    { label: "실패", value: "failed" },
+    { label: "차단", value: "blocked" },
+    { label: "요청 제한", value: "rate_limited" }
+  ]
+};
+
 export function LiveRequestsView({
   detailFocusRef,
   detailFocusRequestId,
@@ -72,62 +143,8 @@ export function LiveRequestsView({
   viewAllLogsHref
 }: LiveRequestsViewProps) {
   const isFocus = mode === "focus";
-  const text = locale === "ko"
-    ? {
-        allModels: "전체 모델",
-        allStatus: "전체 상태",
-        closeFocus: "실시간 요청 확대 화면 닫기",
-        detail: "상세",
-        filterModel: "모델로 실시간 요청 필터링",
-        filterStatus: "상태로 실시간 요청 필터링",
-        focusAria: "실시간 요청 확대 화면",
-        frozen: "행 순서 고정",
-        lastRefresh: "마지막 정상 조회 결과를 표시 중입니다",
-        live: "실시간",
-        loading: "실시간 요청을 불러오는 중",
-        noRequests: "선택한 필터에 해당하는 최근 요청이 없습니다",
-        openDetail: "요청 상세 열기",
-        openFocus: "실시간 요청 확대 화면 열기",
-        panelAria: "실시간 요청",
-        pendingPrefix: "새 요청",
-        pendingSuffix: "건 반영",
-        pendingStatus: "건이 대기 중입니다.",
-        requests: "건 표시",
-        title: "실시간 요청",
-        viewAll: "전체 로그 보기",
-        waiting: "새 요청은 반영할 때까지 보류됩니다."
-      }
-    : {
-        allModels: "All Models",
-        allStatus: "All Status",
-        closeFocus: "Close Live Requests focus view",
-        detail: "Detail",
-        filterModel: "Filter live requests by model",
-        filterStatus: "Filter live requests by status",
-        focusAria: "Live Requests focus view",
-        frozen: "row order frozen",
-        lastRefresh: "Showing last successful refresh",
-        live: "Live",
-        loading: "Loading live requests",
-        noRequests: "No recent requests for selected filters",
-        openDetail: "Open request detail",
-        openFocus: "Open Live Requests focus view",
-        panelAria: "Live Requests",
-        pendingPrefix: "Apply",
-        pendingSuffix: "new requests",
-        pendingStatus: "new requests are waiting.",
-        requests: "requests",
-        title: "Live Requests",
-        viewAll: "View all logs",
-        waiting: "New requests are held until you apply them."
-      };
-  const statusFilters: Array<{ label: string; value: LiveRequestStatusFilter }> = [
-    { label: text.allStatus, value: "" },
-    { label: locale === "ko" ? "성공" : "Success", value: "success" },
-    { label: locale === "ko" ? "실패" : "Failed", value: "failed" },
-    { label: locale === "ko" ? "차단" : "Blocked", value: "blocked" },
-    { label: locale === "ko" ? "요청 제한" : "Rate limited", value: "rate_limited" }
-  ];
+  const text = liveRequestsText[locale];
+  const statusFilters = liveRequestStatusFilters[locale];
 
   return (
     <section

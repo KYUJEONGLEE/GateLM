@@ -45,6 +45,13 @@ type SelectedRequest = {
   requestId: string;
 };
 
+type LiveRequestsError = "load_failed";
+
+const liveRequestsErrorText: Record<Locale, Record<LiveRequestsError, string>> = {
+  en: { load_failed: "Failed to load live requests" },
+  ko: { load_failed: "실시간 요청을 불러오지 못했습니다" }
+};
+
 export function LiveRequestsCard({
   filters,
   initialPayload,
@@ -69,7 +76,7 @@ export function LiveRequestsCard({
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
   const [isLoading, setIsLoading] = useState(!initialPayload);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LiveRequestsError | null>(null);
   const [isFocusOpen, setIsFocusOpen] = useState(false);
   const [focusOrigin, setFocusOrigin] = useState<FocusOriginRect | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null);
@@ -173,7 +180,7 @@ export function LiveRequestsCard({
           return;
         }
 
-        setError(locale === "ko" ? "실시간 요청을 불러오지 못했습니다" : "Failed to load live requests");
+        setError("load_failed");
         console.warn("Failed to load live requests", fetchError);
       } finally {
         if (abortRef.current === controller) {
@@ -183,7 +190,7 @@ export function LiveRequestsCard({
         }
       }
     },
-    [locale, modelFilter, range, requestQueryString]
+    [modelFilter, range, requestQueryString]
   );
 
   useEffect(() => {
@@ -232,6 +239,7 @@ export function LiveRequestsCard({
   const pendingCount = isFocusOpen
     ? countPendingLiveRequests(focusRows, historyRows)
     : 0;
+  const errorMessage = error ? liveRequestsErrorText[locale][error] : null;
 
   function openFocusView() {
     focusTriggerRef.current =
@@ -288,7 +296,7 @@ export function LiveRequestsCard({
     <>
       <div className="dashboard-live-requests-slot" ref={cardRef}>
         <LiveRequestsView
-          error={error}
+          error={errorMessage}
           isLoading={isLoading}
           locale={locale}
           mode="compact"
@@ -313,7 +321,7 @@ export function LiveRequestsCard({
         <LiveRequestsView
           detailFocusRef={bindDetailReturnButton}
           detailFocusRequestId={detailFocusRequestId}
-          error={error}
+          error={errorMessage}
           isLoading={isLoading}
           locale={locale}
           mode="focus"

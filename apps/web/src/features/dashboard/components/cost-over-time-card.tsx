@@ -30,35 +30,38 @@ type CostOverTimeCardProps = {
 
 type CostOverTimeStatus = "loading" | "success" | "error";
 
+const costOverTimeText = {
+  en: {
+    aria: "Cost over time",
+    average: "Average",
+    chartAria: "Cost over time chart",
+    empty: "No cost data for selected range",
+    error: "Failed to load cost data",
+    loading: "Loading cost data",
+    spend: "Spend (USD)",
+    subtitle: "Hourly cost trend",
+    title: "Cost Over Time"
+  },
+  ko: {
+    aria: "시간별 비용",
+    average: "평균",
+    chartAria: "시간별 비용 차트",
+    empty: "선택한 기간에 비용 데이터가 없습니다",
+    error: "비용 데이터를 불러오지 못했습니다",
+    loading: "비용 데이터 불러오는 중",
+    spend: "사용 비용(USD)",
+    subtitle: "시간별 비용 추이",
+    title: "시간별 비용"
+  }
+} as const;
+
 export function CostOverTimeCard({
   filters,
   initialSummary,
   locale,
   rangeLabel
 }: CostOverTimeCardProps) {
-  const text = locale === "ko"
-    ? {
-        aria: "시간별 비용",
-        average: "평균",
-        chartAria: "시간별 비용 차트",
-        empty: "선택한 기간에 비용 데이터가 없습니다",
-        error: "비용 데이터를 불러오지 못했습니다",
-        loading: "비용 데이터 불러오는 중",
-        spend: "사용 비용(USD)",
-        subtitle: "시간별 비용 추이",
-        title: "시간별 비용"
-      }
-    : {
-        aria: "Cost over time",
-        average: "Average",
-        chartAria: "Cost over time chart",
-        empty: "No cost data for selected range",
-        error: "Failed to load cost data",
-        loading: "Loading cost data",
-        spend: "Spend (USD)",
-        subtitle: "Hourly cost trend",
-        title: "Cost Over Time"
-      };
+  const text = costOverTimeText[locale];
   const {
     budgetScopeId,
     budgetScopeType,
