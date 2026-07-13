@@ -259,7 +259,8 @@ async function invokeGatewayChat(options, runId) {
       stream: false,
     }),
   });
-  await response.arrayBuffer();
+  const bodyText = await response.text();
+  const gateLM = gateLMMetadata(bodyText);
   return {
     requestId,
     promptFingerprint: shortHash(prompt),
@@ -267,9 +268,18 @@ async function invokeGatewayChat(options, runId) {
     ok: response.ok,
     cacheStatus: response.headers.get("x-gatelm-cache-status") ?? "",
     maskingAction: response.headers.get("x-gatelm-masking-action") ?? "",
-    routedProvider: response.headers.get("x-gatelm-routed-provider") ?? "",
-    routedModel: response.headers.get("x-gatelm-routed-model") ?? "",
+    requestedModel: String(gateLM.requestedModel ?? ""),
+    routingReason: String(gateLM.routingReason ?? ""),
+    executionMode: String(gateLM.executionMode ?? ""),
   };
+}
+
+function gateLMMetadata(bodyText) {
+  try {
+    return JSON.parse(bodyText)?.gate_lm ?? {};
+  } catch {
+    return {};
+  }
 }
 
 async function prometheusQuery(prometheusBaseUrl, query) {

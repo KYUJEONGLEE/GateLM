@@ -3,6 +3,7 @@ import { createHash, createHmac } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
+import { verifyDifficultyEvaluationDataset } from "./verify-v2.1-difficulty-eval.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -70,6 +71,8 @@ const versionedV21Docs = [
   "docs/v2.1.0/production-images.md",
   "docs/v2.1.0/category-evaluation-dataset-contract.md",
   "docs/v2.1.0/schemas/category-evaluation-record.schema.json",
+  "docs/v2.1.0/difficulty-evaluation-dataset-contract.md",
+  "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json",
   "docs/v2.1.0/routing-advanced-plan.md",
   "docs/v2.1.0/routing-performance-test-scenario.md",
   "docs/v2.1.0/routing-random-probe.md",
@@ -216,6 +219,8 @@ function assertDocumentationRouting() {
     "production-images.md",
     "category-evaluation-dataset-contract.md",
     "schemas/category-evaluation-record.schema.json",
+    "difficulty-evaluation-dataset-contract.md",
+    "schemas/difficulty-evaluation-record.schema.json",
     "routing-advanced-plan.md",
     "routing-performance-test-scenario.md",
     "routing-random-probe.md",
@@ -964,6 +969,9 @@ function main() {
   assertRuntimeSnapshotGuardrails();
   assertTenantChatExecutableContract();
   for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
+    fail(failure);
+  }
+  for (const failure of verifyDifficultyEvaluationDataset({ rootDir })) {
     fail(failure);
   }
 

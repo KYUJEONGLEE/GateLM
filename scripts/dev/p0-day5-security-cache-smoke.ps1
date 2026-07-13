@@ -597,7 +597,7 @@ Invoke-SmokeCase -Name "day5 safe request miss then cache hit" -Body {
     Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "success" -ExpectedCacheStatus "hit"
 }
 
-Invoke-SmokeCase -Name "day5 model auto short prompt routes to mock-fast" -Body {
+Invoke-SmokeCase -Name "day5 model auto uses the category difficulty matrix" -Body {
     Reset-MockStats
     $response = Invoke-GatewayChat -Prompt "Summarize campaign ROI for day5 $RunId." -Feature "day5-routing-demo"
     Assert-Equal -Name "routing HTTP" -Expected 200 -Actual $response.StatusCode
@@ -606,10 +606,11 @@ Invoke-SmokeCase -Name "day5 model auto short prompt routes to mock-fast" -Body 
 
     $detail = Wait-RequestDetail -RequestId $script:RoutingRequestId
     Assert-Equal -Name "routing requested model" -Expected "auto" -Actual ([string]$detail.data.requestedModel)
-    Assert-Equal -Name "routing selected provider" -Expected "mock" -Actual ([string]$detail.data.routing.selectedProvider)
-    Assert-Equal -Name "routing selected model" -Expected "mock-fast" -Actual ([string]$detail.data.selectedModel)
-    Assert-Equal -Name "routing nested selected model" -Expected "mock-fast" -Actual ([string]$detail.data.routing.selectedModel)
-    Assert-Equal -Name "routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$detail.data.routing.routingReason)
+    Assert-Equal -Name "routing category" -Expected "summarization" -Actual ([string]$detail.data.routing.category)
+    Assert-Equal -Name "routing difficulty" -Expected "simple" -Actual ([string]$detail.data.routing.difficulty)
+    Assert-Equal -Name "routing reason" -Expected "category_difficulty_matrix" -Actual ([string]$detail.data.routing.routingReason)
+    Assert-Equal -Name "routing provider attempt" -Expected "mock" -Actual ([string]$detail.data.providerAttempt.providerId)
+    Assert-Equal -Name "routing provider attempt model" -Expected "mock-balanced" -Actual ([string]$detail.data.providerAttempt.modelId)
     Assert-LogItem -RequestId $script:RoutingRequestId -ExpectedStatus "success" -ExpectedCacheStatus ([string]$detail.data.cache.cacheStatus)
 }
 

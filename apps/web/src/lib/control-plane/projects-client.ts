@@ -11,7 +11,7 @@ import {
 } from "@/lib/control-plane/control-plane-request";
 import { getOnboardingRuntimeSelectionError } from "@/lib/control-plane/onboarding-runtime-readiness";
 import {
-  publishRuntimePolicyModelSelectionForApplication
+  publishRuntimePolicyBootstrapForApplication
 } from "@/lib/control-plane/runtime-policy-client";
 import { setApplicationProviderConnections } from "@/lib/control-plane/provider-connections-client";
 import type {
@@ -146,7 +146,7 @@ export async function createProject(
       };
     }
 
-    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+    const runtimePolicy = await publishRuntimePolicyBootstrapForApplication(
       runtimeApplicationId,
       values.selectedModelKey,
       {
@@ -160,7 +160,7 @@ export async function createProject(
       ? result
       : {
           ...result,
-          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+          policyError: runtimePolicy.error ?? "Runtime Policy bootstrap publish failed."
         };
   } catch {
     return {
@@ -233,7 +233,7 @@ export async function updateProject(
       }
     }
 
-    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+    const runtimePolicy = await publishRuntimePolicyBootstrapForApplication(
       runtimeApplicationId,
       values.selectedModelKey,
       {
@@ -247,7 +247,7 @@ export async function updateProject(
       ? result
       : {
           ...result,
-          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+          policyError: runtimePolicy.error ?? "Runtime Policy bootstrap publish failed."
         };
   } catch {
     return {

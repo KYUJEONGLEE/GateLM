@@ -66,14 +66,14 @@ func TestRuntimeConfigProviderDemo(t *testing.T) {
 		t.Fatalf("expected runtime routing policy hash, got %#v", gatewayCtx.Routing)
 	}
 
-	t.Logf("\n[Output]\nstage: %s\nGatewayContext.runtime.configHash: %s\nGatewayContext.runtime.securityPolicyHash: %s\nGatewayContext.runtime.routingPolicyHash: %s\nRateLimit stage received limit: %d\nRouting selectedProvider: %s\nRouting selectedModel: %s\nRouting reason: %s\nRouting policyHash: %s",
+	t.Logf("\n[Output]\nstage: %s\nGatewayContext.runtime.configHash: %s\nGatewayContext.runtime.securityPolicyHash: %s\nGatewayContext.runtime.routingPolicyHash: %s\nRateLimit stage received limit: %d\nRouting category: %s\nRouting difficulty: %s\nRouting reason: %s\nRouting policyHash: %s",
 		StageName,
 		gatewayCtx.Runtime.ConfigHash,
 		gatewayCtx.Runtime.SecurityPolicyHash,
 		gatewayCtx.Runtime.RoutingPolicyHash,
 		limiter.request.Config.Limit,
-		gatewayCtx.Routing.SelectedProvider,
-		gatewayCtx.Routing.SelectedModel,
+		gatewayCtx.Routing.RoutingDecisionMaterial["category"],
+		gatewayCtx.Routing.RoutingDecisionMaterial["difficulty"],
 		gatewayCtx.Routing.RoutingReason,
 		gatewayCtx.Routing.RoutingPolicyHash,
 	)
@@ -174,16 +174,7 @@ func demoActiveConfig() runtimeconfig.ActiveConfig {
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_demo",
 		},
-		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:     "mock",
-			DefaultModel:        "mock-balanced",
-			LowCostProvider:     "mock",
-			LowCostModel:        "mock-fast",
-			FallbackProvider:    "mock",
-			FallbackModel:       "mock-balanced",
-			ShortPromptMaxChars: 500,
-			RoutingPolicyHash:   "hash_routing_policy_demo",
-		},
+		RoutingPolicy: runtimeconfig.BootstrapRoutingPolicy("hash_routing_policy_demo"),
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:    true,
 			Type:       runtimeconfig.CacheTypeExact,

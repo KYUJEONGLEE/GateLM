@@ -189,7 +189,7 @@ export function OnboardingIntegrationGuide({
                     onClick={() =>
                       void copyValue(
                         "gateway-request",
-                        getGatewayRequest(gatewayEndpoint, selectedModelKey)
+                        getGatewayRequest(gatewayEndpoint)
                       )
                     }
                     type="button"
@@ -202,7 +202,7 @@ export function OnboardingIntegrationGuide({
                   </button>
                 </div>
                 <pre>
-                  <code>{getGatewayRequest(gatewayEndpoint, selectedModelKey)}</code>
+                  <code>{getGatewayRequest(gatewayEndpoint)}</code>
                 </pre>
               </div>
             ) : (
@@ -235,7 +235,7 @@ export function OnboardingIntegrationGuide({
               </div>
               <div>
                 <dt>{text.model}</dt>
-                <dd>{selectedModelKey || providerSetupRequired}</dd>
+                <dd>{hasSelectedModel ? "auto (routing policy)" : providerSetupRequired}</dd>
               </div>
               <div>
                 <dt>{text.createdAt}</dt>
@@ -308,14 +308,12 @@ function GuideCopyRow({
   );
 }
 
-function getGatewayRequest(gatewayEndpoint: string, selectedModelKey: string) {
-  const model = selectedModelKey.split("::")[1] ?? "";
-
+function getGatewayRequest(gatewayEndpoint: string) {
   return [
     `curl -X POST ${gatewayEndpoint} \\`,
     `  -H "Authorization: Bearer ${projectApiKeyPlaceholder}" \\`,
     `  -H "Content-Type: application/json" \\`,
-    `  -d '{"model":"${model}","messages":[{"role":"user","content":"<USER_MESSAGE>"}]}'`
+    `  -d '{"model":"auto","messages":[{"role":"user","content":"<USER_MESSAGE>"}]}'`
   ].join("\n");
 }
 

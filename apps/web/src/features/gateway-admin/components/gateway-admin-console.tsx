@@ -13,7 +13,7 @@
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord as InvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import {
   type GatewayAdminModel,
   type GatewayAdminRange,
@@ -276,8 +276,8 @@ function GatewayAdminProviders({ model }: { model: GatewayAdminModel }) {
       </section>
       <section className="console-panel">
         <div className="panel-heading">
-          <h2>Derived provider health</h2>
-          <small>Computed from recent safe traffic, not from active provider probing.</small>
+          <h2>Provider status and attempt aggregates</h2>
+          <small>Connection health comes from the provider catalog; request volume and latency come from provider-attempt aggregates.</small>
         </div>
         <div className="table-wrap">
           <table className={`data-table ${styles.table}`}>
@@ -287,8 +287,7 @@ function GatewayAdminProviders({ model }: { model: GatewayAdminModel }) {
                 <th>Health</th>
                 <th>Connection</th>
                 <th>Requests</th>
-                <th>Error rate</th>
-                <th>Latency</th>
+                <th>P95 latency</th>
                 <th>Models</th>
               </tr>
             </thead>
@@ -301,12 +300,11 @@ function GatewayAdminProviders({ model }: { model: GatewayAdminModel }) {
                   </td>
                   <td>{row.connectionStatus}</td>
                   <td>{formatInteger(row.requestCount)}</td>
-                  <td>{formatPercent(row.errorRate)}</td>
-                  <td>{formatLatency(row.averageLatencyMs)}</td>
+                  <td>{formatLatency(row.p95LatencyMs)}</td>
                   <td>{row.models.length ? row.models.map((modelName) => formatModelDisplayName(modelName)).join(", ") : "none"}</td>
                 </tr>
               ))}
-              {model.providerRows.length === 0 ? <EmptyTableRow colSpan={7} /> : null}
+              {model.providerRows.length === 0 ? <EmptyTableRow colSpan={6} /> : null}
             </tbody>
           </table>
         </div>
@@ -495,7 +493,7 @@ function RecentIncidentList({ records }: { records: InvocationLogRecord[] }) {
           <span>
             {formatDisplayIdentifier(record.requestId)}
             <small>
-              {formatDateTime(record.createdAt)} / {record.selectedProvider ?? "not-routed"}
+              {formatDateTime(record.createdAt)} / {record.category} / {record.difficulty} / {record.modelRef ?? "-"}
             </small>
           </span>
           <StatusBadge status={record.status}>{record.status}</StatusBadge>
@@ -542,24 +540,12 @@ function TenantTable({ model }: { model: GatewayAdminModel }) {
 }
 
 function TrafficFilterBar({ model }: { model: GatewayAdminModel }) {
-  const providers = unique(model.providerRows.map((row) => row.provider));
-  const models = unique(model.records.flatMap((record) => [record.selectedModel, record.requestedModel]).filter(Boolean));
+  const models = unique(model.records.map((record) => record.requestedModel).filter(Boolean));
 
   return (
     <form action="/admin/gateway/traffic" className={styles.filterBar}>
       <input name="range" type="hidden" value={model.filters.range} />
       {model.filters.projectId ? <input name="projectId" type="hidden" value={model.filters.projectId} /> : null}
-      <label>
-        <span>Provider</span>
-        <select defaultValue={model.filters.provider ?? ""} name="provider">
-          <option value="">All</option>
-          {providers.map((provider) => (
-            <option key={provider} value={provider}>
-              {provider}
-            </option>
-          ))}
-        </select>
-      </label>
       <label>
         <span>Model</span>
         <select defaultValue={model.filters.model ?? ""} name="model">
@@ -598,7 +584,7 @@ function RequestLogTable({ records }: { records: InvocationLogRecord[] }) {
             <th>Request</th>
             <th>Created</th>
             <th>Project</th>
-            <th>Provider / Model</th>
+            <th>Routing</th>
             <th>Status</th>
             <th>Latency</th>
             <th>Tokens</th>
@@ -613,8 +599,8 @@ function RequestLogTable({ records }: { records: InvocationLogRecord[] }) {
               <td>{formatDateTime(record.createdAt, DEFAULT_DISPLAY_TIMEZONE)}</td>
               <td>{formatDisplayIdentifier(record.projectId)}</td>
               <td>
-                <strong>{record.selectedProvider ?? "not-routed"}</strong>
-                <small>{formatModelDisplayName(record.selectedModel ?? record.requestedModel ?? "not-selected")}</small>
+                <strong>{formatModelDisplayName(record.requestedModel ?? "auto")}</strong>
+                <small>{record.category} / {record.difficulty} / {record.modelRef ?? "-"} / {record.routingReason ?? "not-set"}</small>
               </td>
               <td>
                 <StatusBadge status={record.status}>{record.status}</StatusBadge>

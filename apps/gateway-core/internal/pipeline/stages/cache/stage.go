@@ -26,8 +26,8 @@ type Request struct {
 	TenantID                 string
 	ProjectID                string
 	ApplicationID            string
-	SelectedProvider         string
-	SelectedModel            string
+	Provider                 string
+	Model                    string
 	SecurityPolicyVersionID  string
 	RoutingPolicyVersionID   string
 	CachePolicyHash          string

@@ -3,8 +3,6 @@ package routingstage
 import (
 	"context"
 
-	"gatelm/apps/gateway-core/internal/domain/budget"
-	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 )
@@ -31,8 +29,6 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	routeReq := routing.Request{
 		RequestedModel: gatewayCtx.Request.RequestedModel,
 		PromptText:     gatewayCtx.Request.PromptText,
-		HighQualityRestricted: budget.RestrictsHighQuality(gatewayCtx.Governance.BudgetDecision) ||
-			employeepolicy.RestrictsHighQuality(gatewayCtx.Governance.EmployeePolicyDecision),
 	}
 	if gatewayCtx.Runtime.HasRoutingPolicy {
 		config := gatewayCtx.Runtime.RoutingPolicy.SimpleRouterConfig()
@@ -45,17 +41,13 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	}
 
 	gatewayCtx.Routing.RequestedModel = decision.RequestedModel
-	gatewayCtx.Routing.SelectedProvider = decision.SelectedProvider
-	gatewayCtx.Routing.SelectedProviderID = decision.SelectedProviderID
-	gatewayCtx.Routing.SelectedProviderCatalogKey = decision.SelectedProviderCatalogKey
-	gatewayCtx.Routing.SelectedModel = decision.SelectedModel
-	gatewayCtx.Routing.SelectedModelID = decision.SelectedModelID
-	gatewayCtx.Routing.ProviderCatalogContentHash = decision.ProviderCatalogContentHash
+	gatewayCtx.Routing.ModelRef = decision.ModelRef
+	gatewayCtx.Routing.CandidateModelRefs = append([]string(nil), decision.CandidateModelRefs...)
 	gatewayCtx.Routing.RoutingDecisionKeyHash = decision.RoutingDecisionKeyHash
 	gatewayCtx.Routing.RoutingDecisionMaterial = map[string]string{
 		"routingMode":   decision.RoutingDecisionMaterial.RoutingMode,
 		"category":      decision.RoutingDecisionMaterial.Category,
-		"tier":          decision.RoutingDecisionMaterial.Tier,
+		"difficulty":    decision.RoutingDecisionMaterial.Difficulty,
 		"capability":    decision.RoutingDecisionMaterial.Capability,
 		"policyVariant": decision.RoutingDecisionMaterial.PolicyVariant,
 	}

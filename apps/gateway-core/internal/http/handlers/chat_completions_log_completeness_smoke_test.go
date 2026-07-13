@@ -252,8 +252,6 @@ func logSmokeRateLimitedRequest(t *testing.T, logWriter *recordingTerminalLogWri
 	}
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		RateLimitPipeline: newTestRateLimitPipeline(limiter),
 		TerminalLogWriter: logWriter,
 	}
@@ -266,9 +264,7 @@ func logSmokeProviderErrorRequest(t *testing.T, logWriter *recordingTerminalLogW
 	t.Helper()
 
 	handler := ChatCompletionsHandler{
-		Providers:         provider.NewRegistry("nil-provider", nilProviderAdapter{}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "nil-provider",
+		Providers:         provider.NewRegistry("mock", nilProviderAdapter{}),
 		TerminalLogWriter: logWriter,
 	}
 	withTestAuth(&handler)
@@ -309,8 +305,6 @@ func logSmokeInvocationLogs(terminalLogs []invocationlog.TerminalLog) []invocati
 			RequestedModel:        log.RequestedModel,
 			Provider:              log.Provider,
 			Model:                 log.Model,
-			SelectedProvider:      log.SelectedProvider,
-			SelectedModel:         log.SelectedModel,
 			RoutingReason:         log.RoutingReason,
 			PromptTokens:          int64(log.PromptTokens),
 			CompletionTokens:      int64(log.CompletionTokens),
@@ -390,21 +384,19 @@ func logSmokeLogDetailOutput(t *testing.T, item invocationlog.RequestLogListItem
 
 	return demoJSON(t, map[string]any{
 		"requestLogListItem": map[string]any{
-			"requestId":        item.RequestID,
-			"projectId":        item.ProjectID,
-			"applicationId":    item.ApplicationID,
-			"status":           item.Status,
-			"httpStatus":       item.HTTPStatus,
-			"requestedModel":   item.RequestedModel,
-			"selectedProvider": item.Provider,
-			"selectedModel":    item.SelectedModel,
-			"cacheStatus":      item.CacheStatus,
-			"cacheType":        item.CacheType,
-			"maskingAction":    item.MaskingAction,
-			"routingReason":    item.RoutingReason,
-			"totalTokens":      item.TotalTokens,
-			"costMicroUsd":     item.CostMicroUSD,
-			"latencyMs":        item.LatencyMs,
+			"requestId":      item.RequestID,
+			"projectId":      item.ProjectID,
+			"applicationId":  item.ApplicationID,
+			"status":         item.Status,
+			"httpStatus":     item.HTTPStatus,
+			"requestedModel": item.RequestedModel,
+			"cacheStatus":    item.CacheStatus,
+			"cacheType":      item.CacheType,
+			"maskingAction":  item.MaskingAction,
+			"routingReason":  item.RoutingReason,
+			"totalTokens":    item.TotalTokens,
+			"costMicroUsd":   item.CostMicroUSD,
+			"latencyMs":      item.LatencyMs,
 		},
 		"requestDetail": map[string]any{
 			"identity": map[string]any{
@@ -429,10 +421,11 @@ func logSmokeLogDetailOutput(t *testing.T, item invocationlog.RequestLogListItem
 				"redactedPromptPreview": logSmokePreviewForOutput(detail.Masking.RedactedPromptPreview, detail.Masking.MaskingAction),
 			},
 			"routing": map[string]any{
-				"selectedProvider": detail.Routing.SelectedProvider,
-				"selectedModel":    detail.Routing.SelectedModel,
-				"routingReason":    detail.Routing.RoutingReason,
+				"category":      detail.Routing.Category,
+				"difficulty":    detail.Routing.Difficulty,
+				"routingReason": detail.Routing.RoutingReason,
 			},
+			"providerAttempt": logSmokeProviderAttempt(detail.ProviderAttempt),
 			"error": map[string]any{
 				"errorCode":  detail.Error.ErrorCode,
 				"errorStage": detail.Error.ErrorStage,
@@ -445,6 +438,19 @@ func logSmokeLogDetailOutput(t *testing.T, item invocationlog.RequestLogListItem
 		},
 		"dashboardContribution": logSmokeDashboardContribution(detail.Status),
 	})
+}
+
+func logSmokeProviderAttempt(attempt *invocationlog.ProviderAttemptFields) any {
+	if attempt == nil {
+		return nil
+	}
+	return map[string]any{
+		"providerId":         attempt.ProviderID,
+		"modelId":            attempt.ModelID,
+		"outcome":            attempt.Outcome,
+		"latencyMs":          logSmokeOptionalInt64(attempt.LatencyMs),
+		"sanitizedErrorCode": attempt.SanitizedErrorCode,
+	}
 }
 
 func logSmokeDashboardOutput(t *testing.T, overview invocationlog.DashboardOverviewFields) string {

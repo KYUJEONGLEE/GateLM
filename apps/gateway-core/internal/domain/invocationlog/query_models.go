@@ -28,18 +28,18 @@ type Reader interface {
 }
 
 type ProjectLogsFilter struct {
-	TenantID      string
-	ProjectID     string
-	From          time.Time
-	To            time.Time
-	Status        string
-	Provider      string
-	Model         string
-	CacheStatus   string
-	ApplicationID string
-	BudgetScope   budget.Scope
-	RequestID     string
-	Limit         int
+	TenantID       string
+	ProjectID      string
+	From           time.Time
+	To             time.Time
+	Status         string
+	Provider       string
+	RequestedModel string
+	CacheStatus    string
+	ApplicationID  string
+	BudgetScope    budget.Scope
+	RequestID      string
+	Limit          int
 }
 
 type RequestDetailFilter struct {
@@ -97,8 +97,6 @@ type LlmInvocationLog struct {
 	RequestedModel              string
 	Provider                    string
 	Model                       string
-	SelectedProvider            string
-	SelectedModel               string
 	RoutingReason               string
 	RoutingRuleID               string
 	PromptTokens                int64
@@ -121,9 +119,11 @@ type LlmInvocationLog struct {
 	CacheHitRequestID           string
 	CacheDecisionReason         string
 	PromptCategory              string
+	PromptDifficulty            string
+	ModelRef                    string
 	ProviderCalled              bool
-	SelectedProviderID          string
-	SelectedModelID             string
+	ProviderID                  string
+	ModelID                     string
 	RoutingPolicyHash           string
 	RoutingDecisionKeyHash      string
 	SemanticCacheHit            bool
@@ -152,10 +152,10 @@ type RequestLogListItem struct {
 	ApplicationID    string
 	BudgetScope      budget.Scope
 	UserRef          string
-	Provider         string
-	Model            string
 	RequestedModel   string
-	SelectedModel    string
+	Category         string
+	Difficulty       string
+	ModelRef         string
 	Status           string
 	TerminalStatus   string
 	DomainOutcomes   DomainOutcomes
@@ -174,8 +174,8 @@ type RequestLogListItem struct {
 }
 
 type RequestLogFilterOptions struct {
-	Models       []string
-	BudgetScopes []budget.Scope
+	RequestedModels []string
+	BudgetScopes    []budget.Scope
 }
 
 type RequestDetail struct {
@@ -189,11 +189,9 @@ type RequestDetail struct {
 	TerminalStatus  string
 	DomainOutcomes  DomainOutcomes
 	HTTPStatus      int
-	Provider        string
-	Model           string
 	RequestedModel  string
-	SelectedModel   string
 	ProviderCalled  bool
+	ProviderAttempt *ProviderAttemptFields
 	Usage           UsageFields
 	UsageSummary    UsageSummaryFields
 	Cost            CostFields
@@ -248,10 +246,9 @@ type CacheFields struct {
 type RoutingFields struct {
 	RoutingReason          string
 	RoutingRuleID          string
-	SelectedProvider       string
-	SelectedProviderID     string
-	SelectedModel          string
-	SelectedModelID        string
+	Category               string
+	Difficulty             string
+	ModelRef               string
 	RoutingPolicyHash      string
 	RoutingDecisionKeyHash string
 }
@@ -295,10 +292,10 @@ type SafetySummaryFields struct {
 }
 
 type RoutingCountByModel struct {
-	SelectedProvider string
-	SelectedModel    string
-	RoutingReason    string
-	RequestCount     int64
+	Category      string
+	Difficulty    string
+	RoutingReason string
+	RequestCount  int64
 }
 
 type ApplicationBreakdown struct {
@@ -318,12 +315,12 @@ type ProjectBreakdown struct {
 	CostUSD          string
 }
 type CostByModel struct {
-	SelectedProvider string
-	SelectedModel    string
-	RequestCount     int64
-	TotalTokens      int64
-	CostMicroUSD     int64
-	CostUSD          string
+	Provider     string
+	Model        string
+	RequestCount int64
+	TotalTokens  int64
+	CostMicroUSD int64
+	CostUSD      string
 }
 
 type BudgetScopeBreakdown struct {
@@ -389,8 +386,8 @@ type CostReportApplicationBreakdown struct {
 }
 
 type CostReportModelBreakdown struct {
-	SelectedProvider  string
-	SelectedModel     string
+	Provider          string
+	Model             string
 	RequestCount      int64
 	PromptTokens      int64
 	CompletionTokens  int64
@@ -514,41 +511,40 @@ type DashboardPerformance struct {
 }
 
 type DashboardOverviewFields struct {
-	TotalRequests            int64
-	SuccessfulRequests       int64
-	FailedRequests           int64
-	BlockedRequests          int64
-	RateLimitedRequests      int64
-	CancelledRequests        int64
-	CacheHitRequests         int64
-	CacheEligibleRequests    int64
-	CacheHitRate             *float64
-	FallbackSuccessCount     int64
-	PromptTokens             int64
-	CompletionTokens         int64
-	TotalTokens              int64
-	TotalCostMicroUSD        int64
-	TotalCostUSD             string
-	SavedCostMicroUSD        int64
-	SavedCostUSD             string
-	AverageLatencyMs         *float64
-	P95LatencyMs             *float64
-	AverageResponseTimeMs    *float64
-	MaskingActionCounts      map[string]int64
-	RoutingCountByModel      []RoutingCountByModel
-	StatusCounts             map[string]int64
-	SafetyOutcomeCounts      map[string]int64
-	CacheOutcomeCounts       map[string]int64
-	FallbackOutcomeCounts    map[string]int64
-	BudgetOutcomeCounts      map[string]int64
-	BudgetDowngradedRequests int64
-	ProjectBreakdown         []ProjectBreakdown
-	ApplicationBreakdown     []ApplicationBreakdown
-	CostByModel              []CostByModel
-	BudgetScopeBreakdown     []BudgetScopeBreakdown
-	DataFreshness            DashboardDataFreshness
-	QueryBudget              DashboardQueryBudget
-	Performance              DashboardPerformance
+	TotalRequests         int64
+	SuccessfulRequests    int64
+	FailedRequests        int64
+	BlockedRequests       int64
+	RateLimitedRequests   int64
+	CancelledRequests     int64
+	CacheHitRequests      int64
+	CacheEligibleRequests int64
+	CacheHitRate          *float64
+	FallbackSuccessCount  int64
+	PromptTokens          int64
+	CompletionTokens      int64
+	TotalTokens           int64
+	TotalCostMicroUSD     int64
+	TotalCostUSD          string
+	SavedCostMicroUSD     int64
+	SavedCostUSD          string
+	AverageLatencyMs      *float64
+	P95LatencyMs          *float64
+	AverageResponseTimeMs *float64
+	MaskingActionCounts   map[string]int64
+	RoutingCountByModel   []RoutingCountByModel
+	StatusCounts          map[string]int64
+	SafetyOutcomeCounts   map[string]int64
+	CacheOutcomeCounts    map[string]int64
+	FallbackOutcomeCounts map[string]int64
+	BudgetOutcomeCounts   map[string]int64
+	ProjectBreakdown      []ProjectBreakdown
+	ApplicationBreakdown  []ApplicationBreakdown
+	CostByModel           []CostByModel
+	BudgetScopeBreakdown  []BudgetScopeBreakdown
+	DataFreshness         DashboardDataFreshness
+	QueryBudget           DashboardQueryBudget
+	Performance           DashboardPerformance
 }
 
 type DashboardOverviewAggregate struct {
@@ -579,7 +575,6 @@ type DashboardOverviewAggregate struct {
 	CacheOutcomeCounts          map[string]int64
 	FallbackOutcomeCounts       map[string]int64
 	BudgetOutcomeCounts         map[string]int64
-	BudgetDowngradedRequests    int64
 	ProjectBreakdown            []ProjectBreakdown
 	ApplicationBreakdown        []ApplicationBreakdown
 	CostByModel                 []CostByModel
@@ -592,6 +587,20 @@ type dashboardModelKey struct {
 	provider string
 	model    string
 	reason   string
+}
+
+type ProviderAttemptFields struct {
+	ProviderID         string
+	ModelID            string
+	Outcome            string
+	LatencyMs          *int64
+	SanitizedErrorCode *string
+}
+
+type dashboardRoutingKey struct {
+	category   string
+	difficulty string
+	reason     string
 }
 
 type budgetScopeKey struct {
@@ -613,7 +622,7 @@ func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, er
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
 	filter.Status = strings.TrimSpace(filter.Status)
 	filter.Provider = strings.TrimSpace(filter.Provider)
-	filter.Model = strings.TrimSpace(filter.Model)
+	filter.RequestedModel = strings.TrimSpace(filter.RequestedModel)
 	filter.CacheStatus = strings.TrimSpace(filter.CacheStatus)
 	filter.ApplicationID = strings.TrimSpace(filter.ApplicationID)
 	filter.RequestID = strings.TrimSpace(filter.RequestID)
@@ -792,10 +801,10 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		ApplicationID:    log.ApplicationID,
 		BudgetScope:      budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
 		UserRef:          log.EndUserID,
-		Provider:         log.Provider,
-		Model:            log.Model,
 		RequestedModel:   log.RequestedModel,
-		SelectedModel:    log.SelectedModel,
+		Category:         CanonicalRoutingCategory(log.PromptCategory),
+		Difficulty:       CanonicalRoutingDifficulty(log.PromptDifficulty),
+		ModelRef:         log.ModelRef,
 		Status:           log.Status,
 		TerminalStatus:   terminalStatus,
 		DomainOutcomes:   domainOutcomes,
@@ -817,6 +826,17 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 	terminalStatus := NormalizeTerminalStatus(firstNonEmptyString(log.TerminalStatus, log.Status))
 	domainOutcomes := NormalizeDomainOutcomes(log)
+	providerCalled := requestDetailProviderCalled(log)
+	var providerAttempt *ProviderAttemptFields
+	if providerCalled {
+		providerAttempt = &ProviderAttemptFields{
+			ProviderID:         firstNonEmptyString(log.ProviderID, log.Provider),
+			ModelID:            firstNonEmptyString(log.ModelID, log.Model),
+			Outcome:            domainOutcomes.Provider.Outcome,
+			LatencyMs:          log.ProviderLatencyMs,
+			SanitizedErrorCode: domainOutcomes.Provider.SanitizedErrorCode,
+		}
+	}
 	latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs)
 	safetySummary := SafetySummaryFields{
 		Outcome:                 domainOutcomes.Safety.Outcome,
@@ -827,21 +847,19 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		MaskingAction:           defaultString(log.MaskingAction, "none"),
 	}
 	return RequestDetail{
-		RequestID:      log.RequestID,
-		TraceID:        log.TraceID,
-		TenantID:       log.TenantID,
-		ProjectID:      log.ProjectID,
-		ApplicationID:  log.ApplicationID,
-		BudgetScope:    budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
-		Status:         log.Status,
-		TerminalStatus: terminalStatus,
-		DomainOutcomes: domainOutcomes,
-		HTTPStatus:     log.HTTPStatus,
-		Provider:       log.Provider,
-		Model:          log.Model,
-		RequestedModel: log.RequestedModel,
-		SelectedModel:  log.SelectedModel,
-		ProviderCalled: requestDetailProviderCalled(log),
+		RequestID:       log.RequestID,
+		TraceID:         log.TraceID,
+		TenantID:        log.TenantID,
+		ProjectID:       log.ProjectID,
+		ApplicationID:   log.ApplicationID,
+		BudgetScope:     budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
+		Status:          log.Status,
+		TerminalStatus:  terminalStatus,
+		DomainOutcomes:  domainOutcomes,
+		HTTPStatus:      log.HTTPStatus,
+		RequestedModel:  log.RequestedModel,
+		ProviderCalled:  providerCalled,
+		ProviderAttempt: providerAttempt,
 		Usage: UsageFields{
 			PromptTokens:     log.PromptTokens,
 			CompletionTokens: log.CompletionTokens,
@@ -878,15 +896,14 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 			SemanticCachePolicyVersion:  log.SemanticCachePolicyVersion,
 			SemanticCacheDecisionReason: log.SemanticCacheDecisionReason,
 			EmbeddingProvider:           log.EmbeddingProvider,
-			PromptCategory:              log.PromptCategory,
+			PromptCategory:              CanonicalRoutingCategory(log.PromptCategory),
 		},
 		Routing: RoutingFields{
 			RoutingReason:          log.RoutingReason,
 			RoutingRuleID:          log.RoutingRuleID,
-			SelectedProvider:       log.SelectedProvider,
-			SelectedProviderID:     log.SelectedProviderID,
-			SelectedModel:          log.SelectedModel,
-			SelectedModelID:        log.SelectedModelID,
+			Category:               CanonicalRoutingCategory(log.PromptCategory),
+			Difficulty:             CanonicalRoutingDifficulty(log.PromptDifficulty),
+			ModelRef:               log.ModelRef,
 			RoutingPolicyHash:      log.RoutingPolicyHash,
 			RoutingDecisionKeyHash: log.RoutingDecisionKeyHash,
 		},
@@ -964,7 +981,7 @@ func requestDetailProviderCalled(log LlmInvocationLog) bool {
 	if log.ProviderLatencyMs != nil {
 		return true
 	}
-	return strings.TrimSpace(log.Provider) != "" || strings.TrimSpace(log.SelectedProvider) != ""
+	return strings.TrimSpace(log.Provider) != "" || strings.TrimSpace(log.Model) != "" || strings.TrimSpace(log.ProviderID) != "" || strings.TrimSpace(log.ModelID) != ""
 }
 
 func runtimeSnapshotPointer(snapshot runtimeconfig.RuntimeSnapshotProvenance, createdAt time.Time) *runtimeconfig.RuntimeSnapshotProvenance {
@@ -1073,7 +1090,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		FallbackOutcomeCounts: defaultFallbackOutcomeCounts(),
 		BudgetOutcomeCounts:   defaultBudgetOutcomeCounts(),
 	}
-	routingCounts := map[dashboardModelKey]int64{}
+	routingCounts := map[dashboardRoutingKey]int64{}
 	costCounts := map[dashboardModelKey]CostByModel{}
 	budgetCounts := map[budgetScopeKey]BudgetScopeBreakdown{}
 	applicationCounts := map[applicationKey]ApplicationBreakdown{}
@@ -1091,9 +1108,6 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		incrementCount(aggregate.CacheOutcomeCounts, domainOutcomes.Cache.Outcome)
 		incrementCount(aggregate.FallbackOutcomeCounts, domainOutcomes.Fallback.Outcome)
 		incrementCount(aggregate.BudgetOutcomeCounts, domainOutcomes.Budget.Outcome)
-		if strings.TrimSpace(log.RoutingReason) == routing.ReasonBudgetHighQualityDowngrade {
-			aggregate.BudgetDowngradedRequests++
-		}
 		if isSuccessfulStatus(terminalStatus) {
 			aggregate.SuccessfulRequests++
 		}
@@ -1165,15 +1179,15 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 			maxCreatedAt = log.CreatedAt
 		}
 
-		selectedProvider := firstNonEmptyString(log.SelectedProvider, log.Provider)
-		selectedModel := firstNonEmptyString(log.SelectedModel, log.Model)
-		if selectedProvider != "" && selectedModel != "" {
-			routingKey := dashboardModelKey{provider: selectedProvider, model: selectedModel, reason: log.RoutingReason}
-			routingCounts[routingKey]++
-			costKey := dashboardModelKey{provider: selectedProvider, model: selectedModel}
+		routingKey := dashboardRoutingKey{category: CanonicalRoutingCategory(log.PromptCategory), difficulty: CanonicalRoutingDifficulty(log.PromptDifficulty), reason: log.RoutingReason}
+		routingCounts[routingKey]++
+		providerName := strings.TrimSpace(log.Provider)
+		modelID := strings.TrimSpace(log.Model)
+		if providerName != "" && modelID != "" {
+			costKey := dashboardModelKey{provider: providerName, model: modelID}
 			cost := costCounts[costKey]
-			cost.SelectedProvider = selectedProvider
-			cost.SelectedModel = selectedModel
+			cost.Provider = providerName
+			cost.Model = modelID
 			cost.RequestCount++
 			cost.TotalTokens += log.TotalTokens
 			cost.CostMicroUSD += log.CostMicroUSD
@@ -1214,37 +1228,36 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) DashboardOverviewFields {
 	generatedAt := generatedAtOrNow(aggregate.GeneratedAt)
 	overview := DashboardOverviewFields{
-		TotalRequests:            aggregate.TotalRequests,
-		SuccessfulRequests:       aggregate.SuccessfulRequests,
-		FailedRequests:           aggregate.FailedRequests,
-		BlockedRequests:          aggregate.BlockedRequests,
-		RateLimitedRequests:      aggregate.RateLimitedRequests,
-		CancelledRequests:        aggregate.CancelledRequests,
-		CacheHitRequests:         aggregate.CacheHitRequests,
-		CacheEligibleRequests:    aggregate.CacheEligibleRequests,
-		FallbackSuccessCount:     aggregate.FallbackSuccessCount,
-		PromptTokens:             aggregate.PromptTokens,
-		CompletionTokens:         aggregate.CompletionTokens,
-		TotalTokens:              aggregate.TotalTokens,
-		TotalCostMicroUSD:        aggregate.TotalCostMicroUSD,
-		TotalCostUSD:             FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
-		SavedCostMicroUSD:        aggregate.SavedCostMicroUSD,
-		SavedCostUSD:             FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
-		AverageLatencyMs:         aggregate.AverageLatencyMs,
-		P95LatencyMs:             aggregate.P95LatencyMs,
-		AverageResponseTimeMs:    aggregate.AverageLatencyMs,
-		MaskingActionCounts:      mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
-		RoutingCountByModel:      append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
-		StatusCounts:             mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
-		SafetyOutcomeCounts:      mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
-		CacheOutcomeCounts:       mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
-		FallbackOutcomeCounts:    mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
-		BudgetOutcomeCounts:      mergeDefaultCounts(defaultBudgetOutcomeCounts(), aggregate.BudgetOutcomeCounts),
-		BudgetDowngradedRequests: aggregate.BudgetDowngradedRequests,
-		ProjectBreakdown:         normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
-		ApplicationBreakdown:     normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
-		CostByModel:              normalizedCostByModel(aggregate.CostByModel),
-		BudgetScopeBreakdown:     normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
+		TotalRequests:         aggregate.TotalRequests,
+		SuccessfulRequests:    aggregate.SuccessfulRequests,
+		FailedRequests:        aggregate.FailedRequests,
+		BlockedRequests:       aggregate.BlockedRequests,
+		RateLimitedRequests:   aggregate.RateLimitedRequests,
+		CancelledRequests:     aggregate.CancelledRequests,
+		CacheHitRequests:      aggregate.CacheHitRequests,
+		CacheEligibleRequests: aggregate.CacheEligibleRequests,
+		FallbackSuccessCount:  aggregate.FallbackSuccessCount,
+		PromptTokens:          aggregate.PromptTokens,
+		CompletionTokens:      aggregate.CompletionTokens,
+		TotalTokens:           aggregate.TotalTokens,
+		TotalCostMicroUSD:     aggregate.TotalCostMicroUSD,
+		TotalCostUSD:          FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
+		SavedCostMicroUSD:     aggregate.SavedCostMicroUSD,
+		SavedCostUSD:          FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
+		AverageLatencyMs:      aggregate.AverageLatencyMs,
+		P95LatencyMs:          aggregate.P95LatencyMs,
+		AverageResponseTimeMs: aggregate.AverageLatencyMs,
+		MaskingActionCounts:   mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
+		RoutingCountByModel:   normalizedRoutingCounts(aggregate.RoutingCountByModel),
+		StatusCounts:          mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
+		SafetyOutcomeCounts:   mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
+		CacheOutcomeCounts:    mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
+		FallbackOutcomeCounts: mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
+		BudgetOutcomeCounts:   mergeDefaultCounts(defaultBudgetOutcomeCounts(), aggregate.BudgetOutcomeCounts),
+		ProjectBreakdown:      normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
+		ApplicationBreakdown:  normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
+		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
+		BudgetScopeBreakdown:  normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
 		DataFreshness: DashboardDataFreshness{
 			Source:           "postgresql_request_log",
 			RecordCount:      aggregate.TotalRequests,
@@ -1470,29 +1483,64 @@ func percentileDiscInt64(values []int64, percentile float64) float64 {
 	return float64(ordered[rank])
 }
 
-func routingCountsFromMap(counts map[dashboardModelKey]int64) []RoutingCountByModel {
+func routingCountsFromMap(counts map[dashboardRoutingKey]int64) []RoutingCountByModel {
 	items := make([]RoutingCountByModel, 0, len(counts))
 	for key, count := range counts {
 		items = append(items, RoutingCountByModel{
-			SelectedProvider: key.provider,
-			SelectedModel:    key.model,
-			RoutingReason:    key.reason,
-			RequestCount:     count,
+			Category:      key.category,
+			Difficulty:    key.difficulty,
+			RoutingReason: key.reason,
+			RequestCount:  count,
 		})
 	}
 	sort.Slice(items, func(i int, j int) bool {
 		if items[i].RequestCount != items[j].RequestCount {
 			return items[i].RequestCount > items[j].RequestCount
 		}
-		if items[i].SelectedProvider != items[j].SelectedProvider {
-			return items[i].SelectedProvider < items[j].SelectedProvider
+		if items[i].Category != items[j].Category {
+			return items[i].Category < items[j].Category
 		}
-		if items[i].SelectedModel != items[j].SelectedModel {
-			return items[i].SelectedModel < items[j].SelectedModel
+		if items[i].Difficulty != items[j].Difficulty {
+			return items[i].Difficulty < items[j].Difficulty
 		}
 		return items[i].RoutingReason < items[j].RoutingReason
 	})
 	return items
+}
+
+func CanonicalRoutingCategory(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case routing.CategoryCode:
+		return routing.CategoryCode
+	case routing.CategoryTranslation:
+		return routing.CategoryTranslation
+	case routing.CategorySummarization:
+		return routing.CategorySummarization
+	case routing.CategoryReasoning:
+		return routing.CategoryReasoning
+	default:
+		return routing.CategoryGeneral
+	}
+}
+
+func CanonicalRoutingDifficulty(value string) string {
+	if strings.TrimSpace(strings.ToLower(value)) == routing.DifficultyComplex {
+		return routing.DifficultyComplex
+	}
+	return routing.DifficultySimple
+}
+
+func normalizedRoutingCounts(items []RoutingCountByModel) []RoutingCountByModel {
+	counts := make(map[dashboardRoutingKey]int64, len(items))
+	for _, item := range items {
+		key := dashboardRoutingKey{
+			category:   CanonicalRoutingCategory(item.Category),
+			difficulty: CanonicalRoutingDifficulty(item.Difficulty),
+			reason:     strings.TrimSpace(item.RoutingReason),
+		}
+		counts[key] += item.RequestCount
+	}
+	return routingCountsFromMap(counts)
 }
 
 func costCountsFromMap(counts map[dashboardModelKey]CostByModel) []CostByModel {
@@ -1512,10 +1560,10 @@ func normalizedCostByModel(items []CostByModel) []CostByModel {
 		if normalized[i].CostMicroUSD != normalized[j].CostMicroUSD {
 			return normalized[i].CostMicroUSD > normalized[j].CostMicroUSD
 		}
-		if normalized[i].SelectedProvider != normalized[j].SelectedProvider {
-			return normalized[i].SelectedProvider < normalized[j].SelectedProvider
+		if normalized[i].Provider != normalized[j].Provider {
+			return normalized[i].Provider < normalized[j].Provider
 		}
-		return normalized[i].SelectedModel < normalized[j].SelectedModel
+		return normalized[i].Model < normalized[j].Model
 	})
 	return normalized
 }

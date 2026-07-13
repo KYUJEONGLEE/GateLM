@@ -21,8 +21,6 @@ func TestChatCompletionsHandlerRecordsMetricsForSafeRequest(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		TerminalLogWriter: logWriter,
 		MetricsRegistry:   registry,
 	}
@@ -47,7 +45,7 @@ func TestChatCompletionsHandlerRecordsMetricsForSafeRequest(t *testing.T) {
 	output := registry.RenderPrometheus()
 	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_gateway_inflight_requests{endpoint="/v1/chat/completions",method="POST"} 0`)
-	assertHandlerMetricsContains(t, output, `gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-balanced",selected_provider="mock",status="success"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_provider_requests_total{error_code="none",http_status="200",model="mock-balanced",provider="mock",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_masking_actions_total{masking_action="none"} 1`)
@@ -60,8 +58,6 @@ func TestChatCompletionsHandlerRecordsCacheHitWithoutProviderMetricIncrease(t *t
 	registry := metrics.NewRegistry()
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MetricsRegistry: registry,
 	}
 	withTestAuth(&handler)
@@ -81,7 +77,7 @@ func TestChatCompletionsHandlerRecordsCacheHitWithoutProviderMetricIncrease(t *t
 
 	output := registry.RenderPrometheus()
 	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 2`)
-	assertHandlerMetricsContains(t, output, `gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-balanced",selected_provider="mock",status="success"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_provider_requests_total{error_code="none",http_status="200",model="mock-balanced",provider="mock",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`)
 }
 
@@ -92,8 +88,6 @@ func TestChatCompletionsHandlerRecordsBlockedMetricsBeforeProviderAndCache(t *te
 	cacheStore := &recordingExactCacheStore{}
 	handler := ChatCompletionsHandler{
 		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:         "mock-balanced",
-		DefaultProvider:      "mock",
 		ExactCacheStore:      cacheStore,
 		ExactCacheKeyBuilder: keyBuilder,
 		MetricsRegistry:      registry,
@@ -138,8 +132,6 @@ func TestChatCompletionsHandlerRecordsRateLimitedMetricsBeforeProviderAndCache(t
 	}
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		RateLimitPipeline: newTestRateLimitPipeline(limiter),
 		MetricsRegistry:   registry,
 	}
@@ -169,8 +161,6 @@ func TestChatCompletionsHandlerRecordsLogWriteErrors(t *testing.T) {
 	registry := metrics.NewRegistry()
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		TerminalLogWriter: &recordingTerminalLogWriter{err: errors.New("log store unavailable")},
 		MetricsRegistry:   registry,
 	}
@@ -200,8 +190,6 @@ func TestChatCompletionsHandlerRecordsStreamingObservabilityMetrics(t *testing.T
 	}
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock", streamingAdapter),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MetricsRegistry: registry,
 	}
 	withTestAuth(&handler)
@@ -216,10 +204,10 @@ func TestChatCompletionsHandlerRecordsStreamingObservabilityMetrics(t *testing.T
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	output := registry.RenderPrometheus()
-	assertHandlerMetricsContains(t, output, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
-	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
-	assertHandlerMetricsContains(t, output, `gatelm_stream_duration_seconds_count{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
-	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_streams_active{model="mock-balanced",provider="mock"} 0`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_duration_seconds_count{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
 	assertHandlerMetricsHasNoForbiddenLabels(t, output)
 }
 
@@ -233,8 +221,6 @@ func TestChatCompletionsHandlerRecordsInterruptedStreamingMetricsWithoutTTFTBefo
 	}
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock", streamingAdapter),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MetricsRegistry: registry,
 	}
 	withTestAuth(&handler)
@@ -246,9 +232,9 @@ func TestChatCompletionsHandlerRecordsInterruptedStreamingMetricsWithoutTTFTBefo
 	handler.ServeHTTP(rr, req)
 
 	output := registry.RenderPrometheus()
-	assertHandlerMetricsContains(t, output, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
-	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="provider_error",selected_model="mock-balanced",selected_provider="mock",stream_outcome="interrupted"} 1`)
-	assertHandlerMetricsNotContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"}`)
+	assertHandlerMetricsContains(t, output, `gatelm_streams_active{model="mock-balanced",provider="mock"} 0`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="provider_error",model="mock-balanced",provider="mock",stream_outcome="interrupted"} 1`)
+	assertHandlerMetricsNotContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"}`)
 	assertHandlerMetricsHasNoForbiddenLabels(t, output)
 }
 
@@ -262,8 +248,6 @@ func TestChatCompletionsHandlerRecordsCancelledStreamingMetrics(t *testing.T) {
 	}
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock", streamingAdapter),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
 		MetricsRegistry: registry,
 	}
 	withTestAuth(&handler)
@@ -275,9 +259,9 @@ func TestChatCompletionsHandlerRecordsCancelledStreamingMetrics(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	output := registry.RenderPrometheus()
-	assertHandlerMetricsContains(t, output, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
-	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="internal_error",selected_model="mock-balanced",selected_provider="mock",stream_outcome="cancelled"} 1`)
-	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_streams_active{model="mock-balanced",provider="mock"} 0`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="internal_error",model="mock-balanced",provider="mock",stream_outcome="cancelled"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
 	assertHandlerMetricsHasNoForbiddenLabels(t, output)
 }
 
@@ -326,8 +310,6 @@ func TestChatCompletionsHandlerRecordsAuthFailureLogWriteErrors(t *testing.T) {
 	registry := metrics.NewRegistry()
 	handler := ChatCompletionsHandler{
 		Providers:               provider.NewRegistry("mock", recordingProviderAdapter{}),
-		DefaultModel:            "mock-balanced",
-		DefaultProvider:         "mock",
 		APIKeyAuthenticator:     failingAPIKeyAuthenticator{err: auth.ErrInvalidAPIKey},
 		AppTokenValidator:       newTestCredentialStore(),
 		AuthFailureLogWriter:    failingAuthFailureLogWriter{err: errors.New("auth log store unavailable")},

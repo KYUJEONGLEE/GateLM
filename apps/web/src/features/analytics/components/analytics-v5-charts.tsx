@@ -15,10 +15,9 @@ import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performanc
 import type { Locale } from "@/lib/i18n/locale";
 
 const palette = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#94a3b8"];
-const routingTierColors: Record<string, string> = {
-  balanced: "#f59e0b",
-  high_quality: "#3b82f6",
-  low_cost: "#10b981",
+const routingDifficultyColors: Record<string, string> = {
+  complex: "#3b82f6",
+  simple: "#10b981",
   other: "#94a3b8"
 };
 
@@ -163,7 +162,7 @@ export function AnalyticsV5ModelShareChart({
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-model-share-chart" option={option} />;
 }
 
-export function AnalyticsV5RoutingTierChart({
+export function AnalyticsV5RoutingDifficultyChart({
   ariaLabel,
   locale,
   rows
@@ -195,7 +194,7 @@ export function AnalyticsV5RoutingTierChart({
         axisLabel: { color: theme.label, fontSize: 16, fontWeight: 800 },
         axisLine: { show: false },
         axisTick: { show: false },
-        data: visibleRows.map((row) => routingTierLabel(row.id, locale)),
+        data: visibleRows.map((row) => routingDifficultyLabel(row.id, locale)),
         inverse: true,
         type: "category"
       },
@@ -205,7 +204,7 @@ export function AnalyticsV5RoutingTierChart({
           data: visibleRows.map((row) => ({
             itemStyle: {
               borderRadius: [0, 5, 5, 0],
-              color: routingTierColors[row.id] ?? routingTierColors.other
+              color: routingDifficultyColors[row.id] ?? routingDifficultyColors.other
             },
             share: safeRatio(row.value, total),
             value: row.value
@@ -226,7 +225,7 @@ export function AnalyticsV5RoutingTierChart({
     [locale, theme, total, visibleRows]
   );
 
-  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-routing-tier-chart" option={option} />;
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-routing-difficulty-chart" option={option} />;
 }
 
 export function AnalyticsV5ProjectUsageChart({
@@ -312,10 +311,10 @@ function formatBucket(value: string, range: LiveAnalyticsRange, locale: Locale) 
   }).format(date);
 }
 
-function routingTierLabel(id: string, locale: Locale) {
+function routingDifficultyLabel(id: string, locale: Locale) {
   const labels = locale === "ko"
-    ? { balanced: "균형", high_quality: "고품질", low_cost: "저비용", other: "기타" }
-    : { balanced: "Balanced", high_quality: "High quality", low_cost: "Low cost", other: "Other" };
+    ? { complex: "복합", simple: "단순", other: "기타" }
+    : { complex: "Complex", simple: "Simple", other: "Other" };
   return labels[id as keyof typeof labels] ?? id;
 }
 

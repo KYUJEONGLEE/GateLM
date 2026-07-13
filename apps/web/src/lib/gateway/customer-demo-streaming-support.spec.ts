@@ -60,7 +60,7 @@ function runtimePolicyConfig(
         credentialPreview: null,
         displayName: "OpenAI Compatible",
         failureMode: "fail_open_to_fallback",
-        models: [],
+        models: ["model-main"],
         provider,
         providerId: "provider-test",
         resolver: "environment",
@@ -80,15 +80,23 @@ function runtimePolicyConfig(
       windowSeconds: 60
     },
     routingPolicy: {
-      defaultModel: "model-main",
-      defaultProvider: provider,
-      fallbackModel: "model-main",
-      fallbackProvider: provider,
-      lowCostModel: "model-main",
-      lowCostProvider: provider,
-      routingPolicyHash: "sha256:routing",
-      shortPromptMaxChars: 800
+      bootstrapState: provider === "mock" ? "mock_bootstrap" : "configured",
+      mode: "auto",
+      routes: Object.fromEntries(
+        ["general", "code", "translation", "summarization", "reasoning"].map(
+          (category) => [
+            category,
+            {
+              complex: { modelRefs: ["provider-test:model-main"] },
+              simple: { modelRefs: ["provider-test:model-main"] }
+            }
+          ]
+        )
+      ) as RuntimePolicyConfig["routingPolicy"]["routes"],
+      routingPolicyHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      schemaVersion: "gatelm.routing-policy.v2"
     },
+    schemaVersion: "gatelm.active-runtime-config.v2",
     tenantId: "00000000-0000-4000-8000-000000000100"
   };
 }

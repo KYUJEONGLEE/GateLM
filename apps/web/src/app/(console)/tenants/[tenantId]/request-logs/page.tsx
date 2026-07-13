@@ -16,7 +16,6 @@ import {
   requestLogCreatedFilters,
   requestLogStatusFilters
 } from "@/features/request-logs/components/request-log-table";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import {
   getLiveGatewayRequestLogsWithMeta,
@@ -26,7 +25,7 @@ import {
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import type { EmployeeRecord } from "@/lib/control-plane/employees-types";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogsPageProps = {
@@ -41,7 +40,6 @@ type RequestLogsPageProps = {
     model?: string;
     page?: string;
     projectId?: string;
-    provider?: string;
     requestId?: string;
     search?: string;
     searchRequestId?: string;
@@ -107,15 +105,13 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     ? (records ?? []).find((record) => record.requestId === selectedRequestId) ?? latestSelectedRecord
     : undefined;
   const optionRecordsForFilters = rawRecords ?? [];
-  const providerOptions = getProviderOptions(optionRecordsForFilters, scopedFilters.provider);
   const modelOptions = getModelOptions(
     optionRecordsForFilters,
     scopedFilters.model,
-    scopedFilters.provider,
     logsResult?.filterOptions
   );
-  const displayRecords = (records ?? []).map(toDisplayModelRecord);
-  const fallbackSelectedRecord = selectedRecord ? toDisplayModelRecord(selectedRecord) : undefined;
+  const displayRecords = records ?? [];
+  const fallbackSelectedRecord = selectedRecord;
 
   return (
     <RequestLogTable
@@ -136,7 +132,6 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
       locale={locale}
       modelOptions={modelOptions}
       projects={visibleProjects}
-      providerOptions={providerOptions}
       records={displayRecords}
       selectedRequestId={selectedRequestId || undefined}
       sourceState={records ? "ready" : "unavailable"}
@@ -146,14 +141,6 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   );
 }
 
-function toDisplayModelRecord(record: InvocationLogRecord): InvocationLogRecord {
-  return {
-    ...record,
-    requestedModel: record.requestedModel ? formatModelDisplayName(record.requestedModel) : record.requestedModel,
-    selectedModel: record.selectedModel ? formatModelDisplayName(record.selectedModel) : record.selectedModel
-  };
-}
-
 function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["searchParams"]>): {
   filters: RequestLogFilterState;
   logFilters: LiveGatewayRequestLogFilters;
@@ -161,7 +148,6 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const created = normalizeCreatedFilter(searchParams?.created);
   const status = normalizeStatusFilter(searchParams?.status);
   const model = normalizeModelFilter(searchParams?.model);
-  const provider = normalizeOptionalText(searchParams?.provider);
   const projectId = normalizeOptionalText(searchParams?.projectId);
   const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
   const applicationId = normalizeOptionalText(searchParams?.applicationId);
@@ -177,7 +163,6 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       model,
       page,
       projectId,
-      provider,
       search,
       status
     },
@@ -185,8 +170,9 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       applicationId: applicationId || undefined,
       cacheStatus: cacheStatus || undefined,
       from,
-      limit: search || model || provider ? 1000 : 100,
+      limit: search || model ? 1000 : 100,
       projectId: projectId || undefined,
+      requestedModel: model || undefined,
       status: status || undefined,
       to
     }
@@ -229,8 +215,7 @@ function normalizeOptionalText(value: string | undefined) {
 }
 
 function normalizeModelFilter(value: string | undefined) {
-  const normalized = normalizeOptionalText(value);
-  return normalized ? formatModelDisplayName(normalized, "") : "";
+  return normalizeOptionalText(value);
 }
 
 function createdRange(created: RequestLogCreatedFilter) {
@@ -250,56 +235,26 @@ function createdRange(created: RequestLogCreatedFilter) {
 }
 
 function getModelOptions(
-  records: InvocationLogRecord[],
-  selectedModel: string,
-  selectedProvider: string,
+  records: LiveInvocationLogRecord[],
+  modelFilter: string,
   filterOptions: LiveGatewayRequestLogFilterOptions | undefined
 ) {
   const options = new Set<string>();
 
-  if (selectedModel) {
-    options.add(formatModelDisplayName(selectedModel, ""));
+  if (modelFilter) {
+    options.add(modelFilter);
   }
 
-  if (selectedProvider) {
-    records
-      .filter((record) => valuesMatch(getRecordProvider(record), selectedProvider))
-      .forEach((record) => {
-        const model = record.selectedModel ?? record.requestedModel;
-        if (model) {
-          options.add(formatModelDisplayName(model, ""));
-        }
-      });
-  } else if (filterOptions?.models.length) {
-    filterOptions.models.forEach((model) => options.add(formatModelDisplayName(model, "")));
+  if (filterOptions?.requestedModels.length) {
+    filterOptions.requestedModels.forEach((model) => options.add(model));
   } else {
     records.forEach((record) => {
-      const model = record.selectedModel ?? record.requestedModel;
+      const model = record.requestedModel;
       if (model) {
-        options.add(formatModelDisplayName(model, ""));
+        options.add(model);
       }
     });
   }
-
-  return Array.from(options).sort((first, second) => first.localeCompare(second));
-}
-
-function getProviderOptions(
-  records: InvocationLogRecord[],
-  selectedProvider: string
-) {
-  const options = new Set<string>();
-
-  if (selectedProvider) {
-    options.add(selectedProvider);
-  }
-
-  records.forEach((record) => {
-    const provider = getRecordProvider(record);
-    if (provider) {
-      options.add(provider);
-    }
-  });
 
   return Array.from(options).sort((first, second) => first.localeCompare(second));
 }
@@ -329,7 +284,7 @@ function buildRequestLogEmployeeDirectory(
 }
 
 function filterRequestLogRecords(
-  records: InvocationLogRecord[],
+  records: LiveInvocationLogRecord[],
   filters: RequestLogFilterState,
   projectNamesById: Map<string, string>,
   employeeDirectory: Record<string, RequestLogEmployeeDisplay>
@@ -337,12 +292,8 @@ function filterRequestLogRecords(
   const search = normalizeSearchValue(filters.search);
 
   return records.filter((record) => {
-    if (filters.provider && !valuesMatch(getRecordProvider(record), filters.provider)) {
-      return false;
-    }
-
-    const model = record.selectedModel ?? record.requestedModel ?? "";
-    if (filters.model && !valuesMatch(formatModelDisplayName(model, ""), filters.model)) {
+    const model = record.requestedModel ?? "";
+    if (filters.model && !valuesMatch(model, filters.model)) {
       return false;
     }
 
@@ -365,10 +316,11 @@ function filterRequestLogRecords(
       employee?.name,
       employee?.email,
       employee?.department,
-      record.requestedProvider,
-      record.selectedProvider,
       record.requestedModel,
-      record.selectedModel,
+      record.category,
+      record.difficulty,
+      record.modelRef,
+      record.routingReason,
       record.status,
       record.cacheStatus,
       JSON.stringify(record),
@@ -379,10 +331,6 @@ function filterRequestLogRecords(
 
     return candidates.some((value) => normalizeSearchValue(value).includes(search));
   });
-}
-
-function getRecordProvider(record: InvocationLogRecord) {
-  return record.selectedProvider ?? record.requestedProvider ?? "";
 }
 
 function valuesMatch(first: string, second: string) {

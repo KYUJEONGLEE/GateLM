@@ -11,9 +11,11 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
-import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
+import {
+  formatDisplayIdentifier,
+  formatModelDisplayName
+} from "@/lib/formatting/display-identifiers";
 import {
   formatInteger,
   formatLatency
@@ -34,8 +36,7 @@ type RequestLogTableProps = {
   locale: Locale;
   modelOptions: string[];
   projects?: ProjectRecord[];
-  providerOptions: string[];
-  records: InvocationLogRecord[];
+  records: LiveInvocationLogRecord[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
   tenantId: string;
@@ -49,7 +50,7 @@ export const requestLogStatusFilters = [
   "rate_limited",
   "failed",
   "cancelled"
-] as const satisfies readonly InvocationLogRecord["status"][];
+] as const satisfies readonly LiveInvocationLogRecord["status"][];
 export const requestLogCacheStatusFilters = ["hit", "miss", "bypass"] as const;
 
 export type RequestLogCreatedFilter = (typeof requestLogCreatedFilters)[number];
@@ -60,9 +61,8 @@ export type RequestLogFilterState = {
   model: string;
   page: number;
   projectId: string;
-  provider: string;
   search: string;
-  status: "" | InvocationLogRecord["status"];
+  status: "" | LiveInvocationLogRecord["status"];
 };
 
 export type RequestLogEmployeeDisplay = {
@@ -77,7 +77,6 @@ const requestLogText: Record<
   Locale,
   {
     allModels: string;
-    allProviders: string;
     allCacheStatuses: string;
     cacheLabel: string;
     allStatuses: string;
@@ -89,7 +88,6 @@ const requestLogText: Record<
     nextPage: string;
     pageSummary: string;
     previousPage: string;
-    providerLabel: string;
     rangeEndLabel: string;
     refreshLabel: string;
     searchLabel: string;
@@ -122,7 +120,6 @@ const requestLogText: Record<
   en: {
     allCacheStatuses: "All cache states",
     allModels: "All models",
-    allProviders: "All providers",
     allStatuses: "All statuses",
     cacheLabel: "Cache",
     createdLabel: "Created",
@@ -138,7 +135,6 @@ const requestLogText: Record<
     nextPage: "Next",
     pageSummary: "Showing {start}-{end} of {total}",
     previousPage: "Previous",
-    providerLabel: "Provider",
     rangeEndLabel: "End of logs in this range",
     refreshLabel: "Refresh",
     searchLabel: "Search logs",
@@ -170,7 +166,6 @@ const requestLogText: Record<
   ko: {
     allCacheStatuses: "전체 캐시 상태",
     allModels: "전체 모델",
-    allProviders: "전체 Provider",
     allStatuses: "전체 상태",
     cacheLabel: "Cache",
     createdLabel: "생성 시각",
@@ -186,7 +181,6 @@ const requestLogText: Record<
     nextPage: "다음",
     pageSummary: "{total}개 중 {start}-{end}개 표시",
     previousPage: "이전",
-    providerLabel: "Provider",
     rangeEndLabel: "현재 범위의 마지막 로그",
     refreshLabel: "새로고침",
     searchLabel: "로그 검색",
@@ -225,7 +219,6 @@ export function RequestLogTable({
   locale,
   modelOptions,
   projects = [],
-  providerOptions = [],
   records,
   selectedRequestId,
   sourceState,
@@ -292,25 +285,13 @@ export function RequestLogTable({
                   </select>
                 </label>
 
-                <label className="request-log-filter-control request-log-filter-control-provider">
-                  <span>Provider</span>
-                  <select defaultValue={filters.provider} name="provider">
-                    <option value="">{text.allProviders}</option>
-                    {providerOptions.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {provider}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
                 <label className="request-log-filter-control request-log-filter-control-model">
                   <span>{text.modelLabel}</span>
                   <select defaultValue={filters.model} name="model">
                     <option value="">{text.allModels}</option>
                     {modelOptions.map((model) => (
                       <option key={model} value={model}>
-                        {model}
+                        {formatModelDisplayName(model)}
                       </option>
                     ))}
                   </select>
@@ -448,10 +429,7 @@ export function RequestLogTable({
                           </span>
                         </td>
                         <td>
-                          <ProviderModelCell
-                            model={record.selectedModel ?? record.requestedModel}
-                            provider={record.selectedProvider ?? record.requestedProvider}
-                          />
+                          <RequestRoutingCell record={record} />
                         </td>
                         <td>
                           <StatusBadge label={formatHttpStatus(record)} status={record.status} />
@@ -502,7 +480,6 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
   if (filters.page > 1) {
     query.set("page", String(filters.page));
   }
-  appendRequestLogQuery(query, "provider", filters.provider);
   appendRequestLogQuery(query, "projectId", filters.projectId);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
@@ -521,7 +498,6 @@ function requestLogPageHref(
   appendRequestLogQuery(query, "applicationId", filters.applicationId);
   appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
   appendRequestLogQuery(query, "model", filters.model);
-  appendRequestLogQuery(query, "provider", filters.provider);
   appendRequestLogQuery(query, "projectId", filters.projectId);
   appendRequestLogQuery(query, "search", filters.search);
   appendRequestLogQuery(query, "status", filters.status);
@@ -541,79 +517,16 @@ function appendRequestLogQuery(query: URLSearchParams, key: string, value: strin
   }
 }
 
-function ProviderModelCell({
-  model,
-  provider
-}: {
-  model: string | null | undefined;
-  provider: string | null | undefined;
-}) {
-  const normalized = normalizeProvider(provider);
-  const providerName = providerLabel(normalized, provider);
-  const modelName = model?.trim() || "not routed";
+function RequestRoutingCell({ record }: { record: LiveInvocationLogRecord }) {
+  const modelName = formatModelDisplayName(record.requestedModel, "auto");
+  const providerName = `${record.category} / ${record.difficulty} / ${record.modelRef ?? "no-model-ref"} / ${record.routingReason ?? "not-set"}`;
 
   return (
     <span className="request-log-provider-model" title={`${providerName} · ${modelName}`}>
-      <ProviderFamilyIcon
-        className="request-log-provider-icon"
-        family={providerFamily(normalized)}
-        size={24}
-      />
       <strong>{modelName}</strong>
+      <small>{record.category} / {record.difficulty} / {record.modelRef ?? "-"}</small>
     </span>
   );
-}
-
-function normalizeProvider(provider: string | null | undefined) {
-  const normalized = provider?.trim().toLowerCase() ?? "";
-
-  if (normalized.includes("openai")) {
-    return "openai";
-  }
-  if (normalized.includes("anthropic") || normalized.includes("claude")) {
-    return "anthropic";
-  }
-  if (normalized.includes("gemini") || normalized.includes("google")) {
-    return "gemini";
-  }
-  if (normalized.includes("mock")) {
-    return "mock";
-  }
-
-  return "unknown";
-}
-
-function providerLabel(normalized: string, provider: string | null | undefined) {
-  if (normalized === "openai") {
-    return "OpenAI";
-  }
-  if (normalized === "anthropic") {
-    return "Anthropic";
-  }
-  if (normalized === "gemini") {
-    return "Gemini";
-  }
-  if (normalized === "mock") {
-    return "Mock";
-  }
-
-  return provider?.trim() ? formatDisplayIdentifier(provider) : "Unknown";
-}
-
-function providerFamily(provider: string) {
-  if (provider === "anthropic") {
-    return "claude";
-  }
-
-  if (provider === "gemini") {
-    return "gemini";
-  }
-
-  if (provider === "mock") {
-    return "mock";
-  }
-
-  return provider === "openai" ? "openai" : "new-provider";
 }
 
 function projectTone(value: string) {
@@ -629,7 +542,7 @@ function stableHash(value: string) {
 }
 
 function buildRequestLogSummaryItems(
-  records: InvocationLogRecord[],
+  records: LiveInvocationLogRecord[],
   text: (typeof requestLogText)[Locale]["summary"]
 ) {
   const summary = records.reduce(
@@ -721,7 +634,7 @@ function formatMicroUsd(value: number) {
   }).format(dollars);
 }
 
-function formatHttpStatus(record: InvocationLogRecord) {
+function formatHttpStatus(record: LiveInvocationLogRecord) {
   if (record.httpStatus >= 200 && record.httpStatus < 300) {
     return `${record.httpStatus} OK`;
   }

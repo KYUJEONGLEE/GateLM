@@ -425,8 +425,10 @@ Invoke-DemoCase -Name "safe request first pass then exact cache hit" -Body {
     $firstDetail = Wait-RequestDetail -RequestId $script:SafeMissRequestId
     Assert-Equal -Name "first detail status" -Expected "success" -Actual ([string]$firstDetail.data.status)
     Assert-Equal -Name "first detail cache status" -Expected "miss" -Actual ([string]$firstDetail.data.cache.cacheStatus)
-    Assert-Equal -Name "first selected model" -Expected "mock-fast" -Actual ([string]$firstDetail.data.selectedModel)
-    Assert-Equal -Name "first routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first routing category" -Expected "summarization" -Actual ([string]$firstDetail.data.routing.category)
+    Assert-Equal -Name "first routing difficulty" -Expected "simple" -Actual ([string]$firstDetail.data.routing.difficulty)
+    Assert-Equal -Name "first routing reason" -Expected "category_difficulty_matrix" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first provider attempt model" -Expected "mock-balanced" -Actual ([string]$firstDetail.data.providerAttempt.modelId)
     Assert-LogItem -RequestId $script:SafeMissRequestId -ExpectedStatus "success" -ExpectedCacheStatus "miss"
 
     $second = Invoke-GatewayChat -Prompt $prompt -Feature "day5-cache-demo"
@@ -442,7 +444,7 @@ Invoke-DemoCase -Name "safe request first pass then exact cache hit" -Body {
     Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "success" -ExpectedCacheStatus "hit"
 }
 
-Invoke-DemoCase -Name "model auto short prompt routes to mock-fast" -Body {
+Invoke-DemoCase -Name "model auto uses the category difficulty matrix" -Body {
     Reset-MockStats
     $prompt = "Give one short campaign insight for day5 routing $RunId."
 
@@ -453,8 +455,10 @@ Invoke-DemoCase -Name "model auto short prompt routes to mock-fast" -Body {
 
     $detail = Wait-RequestDetail -RequestId $script:RoutingRequestId
     Assert-Equal -Name "routing requested model" -Expected "auto" -Actual ([string]$detail.data.requestedModel)
-    Assert-Equal -Name "routing selected model" -Expected "mock-fast" -Actual ([string]$detail.data.selectedModel)
-    Assert-Equal -Name "routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$detail.data.routing.routingReason)
+    Assert-Equal -Name "routing category" -Expected "general" -Actual ([string]$detail.data.routing.category)
+    Assert-Equal -Name "routing difficulty" -Expected "simple" -Actual ([string]$detail.data.routing.difficulty)
+    Assert-Equal -Name "routing reason" -Expected "category_difficulty_matrix" -Actual ([string]$detail.data.routing.routingReason)
+    Assert-Equal -Name "routing provider attempt model" -Expected "mock-balanced" -Actual ([string]$detail.data.providerAttempt.modelId)
     Assert-LogItem -RequestId $script:RoutingRequestId -ExpectedStatus "success" -ExpectedCacheStatus ([string]$detail.data.cache.cacheStatus)
 }
 

@@ -62,8 +62,10 @@ type GateLMMetadata struct {
 	ProjectID        string `json:"projectId,omitempty"`
 	ApplicationID    string `json:"applicationId,omitempty"`
 	RequestedModel   string `json:"requestedModel"`
-	SelectedProvider string `json:"selectedProvider"`
-	SelectedModel    string `json:"selectedModel"`
+	ExecutionMode    string `json:"executionMode,omitempty"`
+	Category         string `json:"category,omitempty"`
+	Difficulty       string `json:"difficulty,omitempty"`
+	ModelRef         string `json:"modelRef,omitempty"`
 	TerminalStatus   string `json:"terminalStatus,omitempty"`
 	DomainOutcomes   any    `json:"domainOutcomes,omitempty"`
 	CacheStatus      string `json:"cacheStatus"`

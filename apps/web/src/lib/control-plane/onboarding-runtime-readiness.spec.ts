@@ -38,11 +38,11 @@ test("exposes only active tenant-level Provider models", () => {
   );
 
   expect(options.map((option) => option.value)).toEqual([
-    "openai::gpt-4o-mini",
-    "openai::gpt-4o"
+    "provider-openai:gpt-4o-mini",
+    "provider-openai:gpt-4o"
   ]);
   expect(
-    getSelectedOnboardingRuntimeModel(options, "openai::gpt-4o", tenantId)
+    getSelectedOnboardingRuntimeModel(options, "provider-openai:gpt-4o", tenantId)
   ).toMatchObject({ providerConnectionId: "provider-openai" });
 });
 
@@ -50,7 +50,7 @@ test("rejects onboarding activation without a Provider attachment and model", ()
   expect(
     getOnboardingRuntimeSelectionError({
       providerConnectionIds: [],
-      selectedModelKey: "openai::gpt-4o-mini"
+      selectedModelKey: "provider-openai:gpt-4o-mini"
     })
   ).toBe(ONBOARDING_RUNTIME_PROVIDER_REQUIRED);
   expect(
@@ -62,7 +62,7 @@ test("rejects onboarding activation without a Provider attachment and model", ()
   expect(
     getOnboardingRuntimeSelectionError({
       providerConnectionIds: ["provider-openai"],
-      selectedModelKey: "openai::gpt-4o-mini"
+      selectedModelKey: "provider-openai:gpt-4o-mini"
     })
   ).toBeNull();
   expect(getOnboardingRuntimeSelectionError({})).toBeNull();

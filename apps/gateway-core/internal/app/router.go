@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
@@ -182,14 +183,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		terminalLogWriter = invocationlog.NoopTerminalLogWriter{}
 	}
 
-	simpleRouter := routingdomain.NewSimpleRouter(routingdomain.SimpleRouterConfig{
-		DefaultProvider:     cfg.DefaultProvider,
-		DefaultModel:        cfg.DefaultModel,
-		LowCostModel:        cfg.LowCostModel,
-		HighQualityModel:    cfg.HighQualityModel,
-		PolicyHash:          cfg.RoutingPolicyHash,
-		ShortPromptMaxChars: cfg.ShortPromptMaxChars,
-	})
+	simpleRouter := routingdomain.NewSimpleRouter(runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash).SimpleRouterConfig())
 	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
 	if routerOptions.PreProviderPipeline != nil {
 		preProviderPipeline = routerOptions.PreProviderPipeline
@@ -302,8 +296,6 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		Providers:                            providers,
 		ProviderCatalogResolver:              routerOptions.ProviderCatalogs,
 		CredentialResolver:                   routerOptions.Credentials,
-		DefaultModel:                         cfg.DefaultModel,
-		DefaultProvider:                      cfg.DefaultProvider,
 		MaxRequestBodyBytes:                  cfg.MaxRequestBodyBytes,
 		APIKeyAuthenticator:                  apiKeyAuthenticator,
 		AppTokenValidator:                    appTokenValidator,

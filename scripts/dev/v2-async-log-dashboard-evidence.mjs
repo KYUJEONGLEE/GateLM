@@ -252,6 +252,7 @@ async function invokeGatewayChat(options, runId, scenario) {
   });
 
   const bodyText = await response.text();
+  const gateLM = gateLMMetadata(bodyText);
   return {
     scenario,
     requestId,
@@ -262,11 +263,20 @@ async function invokeGatewayChat(options, runId, scenario) {
     ok: response.ok,
     cacheStatus: response.headers.get("x-gatelm-cache-status") ?? "",
     maskingAction: response.headers.get("x-gatelm-masking-action") ?? "",
-    routedProvider: response.headers.get("x-gatelm-routed-provider") ?? "",
-    routedModel: response.headers.get("x-gatelm-routed-model") ?? "",
+    requestedModel: String(gateLM.requestedModel ?? ""),
+    routingReason: String(gateLM.routingReason ?? ""),
+    executionMode: String(gateLM.executionMode ?? ""),
     contentType: response.headers.get("content-type") ?? "",
     safeErrorCode: safeErrorCode(bodyText),
   };
+}
+
+function gateLMMetadata(bodyText) {
+  try {
+    return JSON.parse(bodyText)?.gate_lm ?? {};
+  } catch {
+    return {};
+  }
 }
 
 function dashboardRange(startedAt, windowMinutes) {

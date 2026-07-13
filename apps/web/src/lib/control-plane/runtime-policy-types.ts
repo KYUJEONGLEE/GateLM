@@ -62,6 +62,47 @@ export type RuntimePolicyBudgetPolicy = {
   warningThresholdPercent: number;
 };
 
+export const runtimeRoutingCategories = [
+  "general",
+  "code",
+  "translation",
+  "summarization",
+  "reasoning"
+] as const;
+
+export const runtimeRoutingDifficulties = ["simple", "complex"] as const;
+
+export function isRuntimeRoutingPolicyHash(value: unknown): value is string {
+  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
+}
+
+export type RuntimeRoutingCategory = (typeof runtimeRoutingCategories)[number];
+export type RuntimeRoutingDifficulty = (typeof runtimeRoutingDifficulties)[number];
+
+export type RuntimePolicyRouteCell = {
+  modelRefs: string[];
+};
+
+export type RuntimePolicyRoutingRoutes = Record<
+  RuntimeRoutingCategory,
+  Record<RuntimeRoutingDifficulty, RuntimePolicyRouteCell>
+>;
+
+export type RuntimePolicyRoutingDraft = {
+  bootstrapState: "mock_bootstrap" | "configured";
+  mode: "auto" | "manual";
+  routes: RuntimePolicyRoutingRoutes;
+};
+
+export type RuntimePolicyRoutingPolicy = RuntimePolicyRoutingDraft & {
+  schemaVersion: "gatelm.routing-policy.v2";
+  routingPolicyHash: string;
+};
+
+export type RuntimePolicySnapshotRoutingPolicy = RuntimePolicyRoutingDraft & {
+  routingPolicyHash: string;
+};
+
 export type RuntimePolicyPromptCapturePolicy = {
   enabled: boolean;
   maxChars: number;
@@ -75,6 +116,7 @@ export type RuntimePolicyResponseCapturePolicy = {
 };
 
 export type RuntimePolicyConfig = {
+  schemaVersion: "gatelm.active-runtime-config.v2";
   applicationId: string;
   budgetPolicy?: RuntimePolicyBudgetPolicy;
   cachePolicy: {
@@ -100,18 +142,7 @@ export type RuntimePolicyConfig = {
     scope: "application";
     windowSeconds: number;
   };
-  routingPolicy: {
-    defaultModel: string;
-    defaultProvider: string;
-    fallbackModel: string;
-    fallbackProvider: string;
-    highQualityModel?: string;
-    highQualityProvider?: string;
-    lowCostModel: string;
-    lowCostProvider: string;
-    routingPolicyHash: string;
-    shortPromptMaxChars: number;
-  };
+  routingPolicy: RuntimePolicyRoutingPolicy;
   safetyPolicy?: {
     detectors?: RuntimePolicyDetector[];
     mode?: "rule_based";
@@ -142,6 +173,7 @@ export type RuntimePolicyHistoryDetailSummary = {
 };
 
 export type RuntimePolicySnapshot = {
+  schemaVersion: "gatelm.runtime-snapshot.v2";
   budgetResolution: {
     budgetScopeId: string;
     budgetScopeType: "application" | "project" | "team";
@@ -168,29 +200,13 @@ export type RuntimePolicySnapshot = {
     };
     promptCapture?: RuntimePolicyPromptCapturePolicy;
     responseCapture?: RuntimePolicyResponseCapturePolicy;
-    fallback: {
-      allowedReasons?: string[];
-      enabled: boolean;
-      fallbackModel?: string;
-      fallbackProvider?: string;
-    };
     rateLimit: {
       enabled: boolean;
       limit: number;
       scope: string;
       windowSeconds: number;
     };
-    routing: {
-      autoModelEnabled: boolean;
-      defaultModel: string;
-      defaultProvider: string;
-      defaultRequestedModel: string;
-      highQualityModel?: string;
-      highQualityProvider?: string;
-      lowCostModel?: string;
-      lowCostProvider?: string;
-      routingPolicyHash: string;
-    };
+    routing: RuntimePolicySnapshotRoutingPolicy;
     safety: {
       detectorSet?: Array<{
         action: string;
@@ -245,15 +261,7 @@ export type RuntimePolicyDraftValues = {
   rateLimitLimit: number;
   rateLimitRefillTokensPerSecond: number;
   rateLimitWindowSeconds: number;
-  routingDefaultModel: string;
-  routingDefaultProvider: string;
-  routingFallbackModel: string;
-  routingFallbackProvider: string;
-  routingHighQualityModel: string;
-  routingHighQualityProvider: string;
-  routingLowCostModel: string;
-  routingLowCostProvider: string;
-  routingShortPromptMaxChars: number;
+  routingPolicy: RuntimePolicyRoutingDraft;
 };
 
 export type RuntimePolicyModel = {
@@ -385,17 +393,34 @@ export function getRuntimePolicyDraftValues(
       config.rateLimit.windowSeconds
     ),
     rateLimitWindowSeconds: config.rateLimit.windowSeconds,
-    routingDefaultModel: config.routingPolicy.defaultModel,
-    routingDefaultProvider: config.routingPolicy.defaultProvider,
-    routingFallbackModel: config.routingPolicy.fallbackModel,
-    routingFallbackProvider: config.routingPolicy.fallbackProvider,
-    routingHighQualityModel:
-      config.routingPolicy.highQualityModel || config.routingPolicy.defaultModel,
-    routingHighQualityProvider:
-      config.routingPolicy.highQualityProvider || config.routingPolicy.defaultProvider,
-    routingLowCostModel: config.routingPolicy.lowCostModel,
-    routingLowCostProvider: config.routingPolicy.lowCostProvider,
-    routingShortPromptMaxChars: config.routingPolicy.shortPromptMaxChars
+    routingPolicy: {
+      bootstrapState: config.routingPolicy.bootstrapState,
+      mode: config.routingPolicy.mode,
+      routes: cloneRuntimePolicyRoutingRoutes(config.routingPolicy.routes)
+    }
+  };
+}
+
+export function cloneRuntimePolicyRoutingRoutes(
+  routes: RuntimePolicyRoutingRoutes
+): RuntimePolicyRoutingRoutes {
+  return Object.fromEntries(
+    runtimeRoutingCategories.map((category) => [
+      category,
+      Object.fromEntries(
+        runtimeRoutingDifficulties.map((difficulty) => [
+          difficulty,
+          { modelRefs: [...routes[category][difficulty].modelRefs] }
+        ])
+      )
+    ])
+  ) as RuntimePolicyRoutingRoutes;
+}
+
+export function toRuntimePolicyRoutingWriteInput(policy: RuntimePolicyRoutingDraft) {
+  return {
+    mode: policy.mode,
+    routes: cloneRuntimePolicyRoutingRoutes(policy.routes)
   };
 }
 

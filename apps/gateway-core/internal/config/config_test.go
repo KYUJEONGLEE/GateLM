@@ -1,10 +1,38 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/routing"
 )
+
+func TestGatewayConfigDoesNotExposeRetiredRoutingTargetFields(t *testing.T) {
+	configType := reflect.TypeOf(Config{})
+	for _, fieldName := range []string{
+		"DefaultProvider",
+		"DefaultModel",
+		"LowCostModel",
+		"HighQualityModel",
+	} {
+		if _, exists := configType.FieldByName(fieldName); exists {
+			t.Errorf("retired routing target field %s must not be exposed by gateway config", fieldName)
+		}
+	}
+}
+
+func TestLoadUsesCanonicalV2RoutingPolicyHashByDefault(t *testing.T) {
+	t.Setenv("GATEWAY_ROUTING_POLICY_HASH", "")
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.RoutingPolicyHash != routing.DefaultPolicyHash {
+		t.Fatalf("unexpected default routing policy hash: %q", cfg.RoutingPolicyHash)
+	}
+}
 
 var aiSafetySidecarEnvKeys = []string{
 	"GATEWAY_AI_SAFETY_SIDECAR_ENABLED",

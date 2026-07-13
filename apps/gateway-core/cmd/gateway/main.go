@@ -49,6 +49,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	tenantchathttp "gatelm/apps/gateway-core/internal/http/tenantchat"
@@ -473,18 +474,7 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: cfg.SecurityPolicyHash,
 		},
-		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:     cfg.DefaultProvider,
-			DefaultModel:        cfg.DefaultModel,
-			LowCostProvider:     cfg.DefaultProvider,
-			LowCostModel:        cfg.LowCostModel,
-			HighQualityProvider: cfg.DefaultProvider,
-			HighQualityModel:    cfg.HighQualityModel,
-			FallbackProvider:    cfg.DefaultProvider,
-			FallbackModel:       cfg.DefaultModel,
-			ShortPromptMaxChars: cfg.ShortPromptMaxChars,
-			RoutingPolicyHash:   cfg.RoutingPolicyHash,
-		},
+		RoutingPolicy: runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash),
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:         true,
 			Type:            runtimeconfig.CacheTypeExact,
@@ -557,11 +547,7 @@ func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {
 					RequestFormat: providercatalog.RequestFormatMockChatCompletions,
 				},
 				FallbackEligible: true,
-				Models: []providercatalog.Model{
-					mockCatalogModel(cfg.LowCostModel, "Mock Low Cost", 10),
-					mockCatalogModel(cfg.DefaultModel, "Mock Fallback Chat Model", 20),
-					mockCatalogModel(cfg.HighQualityModel, "Mock High Quality", 30),
-				},
+				Models:           []providercatalog.Model{mockBootstrapCatalogModel(cfg.MockProviderID)},
 			},
 		},
 	}
@@ -570,7 +556,8 @@ func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {
 func buildOpenAIStaticCatalogModels(cfg config.Config) []providercatalog.Model {
 	models := []providercatalog.Model{
 		{
-			ModelID:     cfg.OpenAILowCostModelID,
+			ModelID:     staticModelRef(cfg.OpenAIProviderID, cfg.OpenAILowCostModelName),
+			ModelRef:    staticModelRef(cfg.OpenAIProviderID, cfg.OpenAILowCostModelName),
 			ModelName:   cfg.OpenAILowCostModelName,
 			DisplayName: "OpenAI Low Cost",
 			Enabled:     true,
@@ -587,7 +574,8 @@ func buildOpenAIStaticCatalogModels(cfg config.Config) []providercatalog.Model {
 			},
 		},
 		{
-			ModelID:     cfg.OpenAIBalancedModelID,
+			ModelID:     staticModelRef(cfg.OpenAIProviderID, cfg.OpenAIBalancedModelName),
+			ModelRef:    staticModelRef(cfg.OpenAIProviderID, cfg.OpenAIBalancedModelName),
 			ModelName:   cfg.OpenAIBalancedModelName,
 			DisplayName: "OpenAI Balanced",
 			Enabled:     true,
@@ -620,6 +608,7 @@ func buildOpenAIStaticCatalogModels(cfg config.Config) []providercatalog.Model {
 		modelID := strings.TrimSpace(cfg.OpenAIProviderID) + ":" + modelName
 		models = append(models, providercatalog.Model{
 			ModelID:     modelID,
+			ModelRef:    modelID,
 			ModelName:   modelName,
 			DisplayName: openAIModelDisplayName(modelName),
 			Enabled:     true,
@@ -649,11 +638,16 @@ func openAIModelDisplayName(modelName string) string {
 	return "OpenAI " + modelName
 }
 
-func mockCatalogModel(modelID string, displayName string, fallbackPriority int) providercatalog.Model {
+func staticModelRef(providerID string, modelID string) string {
+	return strings.TrimSpace(providerID) + ":" + strings.TrimSpace(modelID)
+}
+
+func mockBootstrapCatalogModel(providerID string) providercatalog.Model {
 	return providercatalog.Model{
-		ModelID:     modelID,
-		ModelName:   modelID,
-		DisplayName: displayName,
+		ModelID:     staticModelRef(providerID, routingdomain.MockBootstrapRef),
+		ModelRef:    routingdomain.MockBootstrapRef,
+		ModelName:   routingdomain.MockBootstrapRef,
+		DisplayName: "Mock Bootstrap Model",
 		Enabled:     true,
 		Capabilities: providercatalog.ModelCapabilities{
 			StreamingSupported: true,
@@ -663,8 +657,8 @@ func mockCatalogModel(modelID string, displayName string, fallbackPriority int) 
 		},
 		Routing: providercatalog.ModelRouting{
 			AutoRoutingEligible: false,
-			CostTier:            "low",
-			FallbackPriority:    fallbackPriority,
+			CostTier:            "balanced",
+			FallbackPriority:    0,
 		},
 	}
 }

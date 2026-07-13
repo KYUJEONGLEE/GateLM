@@ -1,5 +1,5 @@
-import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import type { LiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
 
 export type AnalyticsDataState = "live" | "partial" | "stale" | "unavailable";
 
@@ -36,7 +36,7 @@ export type AnalyticsReadModel = {
     protectedRequestRate: number;
     protectedRequests: number;
     requestDisposition: AnalyticsValueRow[];
-    routingTiers: AnalyticsValueRow[];
+    routingDifficulties: AnalyticsValueRow[];
     savedCostMicroUsd: number;
     spendAvoidanceRate: number;
   };
@@ -61,7 +61,7 @@ export type AnalyticsReadModel = {
 };
 
 export function buildAnalyticsReadModel(
-  overview: DashboardOverview | undefined
+  overview: LiveDashboardOverview | undefined
 ): AnalyticsReadModel {
   if (!overview) {
     return emptyAnalyticsReadModel();
@@ -70,13 +70,13 @@ export function buildAnalyticsReadModel(
   const modelMix = aggregateModelRows(
     overview.breakdowns?.byProviderModel?.length
       ? overview.breakdowns.byProviderModel.map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
+          model: row.model,
+          provider: row.provider,
           value: row.requestCount
         }))
-      : (overview.routingCountByModel ?? []).map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
+      : (overview.costByModel ?? []).map((row) => ({
+          model: row.model,
+          provider: row.provider,
           value: row.requestCount
         }))
   );
@@ -130,8 +130,8 @@ export function buildAnalyticsReadModel(
       avoidedSpendRate: safeRatio(overview.savedCostMicroUsd, addressableSpend),
       costByModel: aggregateModelRows(
         (overview.costByModel ?? []).map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
+          model: row.model,
+          provider: row.provider,
           value: row.costMicroUsd
         }))
       ),
@@ -172,7 +172,7 @@ export function buildAnalyticsReadModel(
         { id: "cache", label: "CACHE SERVED", value: cacheHitRequests },
         { id: "guardrail", label: "STOPPED BEFORE PROVIDER", value: blockedRequests + rateLimitedRequests }
       ],
-      routingTiers: routingTierRows(overview),
+      routingDifficulties: routingDifficultyRows(overview),
       savedCostMicroUsd: overview.savedCostMicroUsd,
       spendAvoidanceRate: safeRatio(overview.savedCostMicroUsd, addressableSpend)
     },
@@ -261,7 +261,7 @@ function emptyAnalyticsReadModel(): AnalyticsReadModel {
         { id: "cache", label: "CACHE SERVED", value: 0 },
         { id: "guardrail", label: "STOPPED BEFORE PROVIDER", value: 0 }
       ],
-      routingTiers: [],
+      routingDifficulties: [],
       savedCostMicroUsd: 0,
       spendAvoidanceRate: 0
     },
@@ -308,47 +308,27 @@ function aggregateModelRows(
     .sort((left, right) => right.value - left.value);
 }
 
-function routingTierRows(overview: DashboardOverview): AnalyticsValueRow[] {
+function routingDifficultyRows(overview: LiveDashboardOverview): AnalyticsValueRow[] {
   const totals = new Map([
-    ["high_quality", 0],
-    ["balanced", 0],
-    ["low_cost", 0],
-    ["other", 0]
+    ["simple", 0],
+    ["complex", 0]
   ]);
 
-  (overview.routingCountByModel ?? []).forEach((row) => {
-    const tier = classifyRoutingTier(row.routingReason);
-    totals.set(tier, (totals.get(tier) ?? 0) + Math.max(0, row.requestCount));
+  overview.routingSummaries.forEach((row) => {
+    totals.set(row.difficulty, (totals.get(row.difficulty) ?? 0) + Math.max(0, row.requestCount));
   });
 
   const labels: Record<string, string> = {
-    balanced: "BALANCED",
-    high_quality: "HIGH QUALITY",
-    low_cost: "LOW COST",
-    other: "OTHER"
+    simple: "SIMPLE",
+    complex: "COMPLEX"
   };
 
-  return ["high_quality", "balanced", "low_cost", "other"]
+  return ["simple", "complex"]
     .map((id) => ({ id, label: labels[id] ?? id.toUpperCase(), value: totals.get(id) ?? 0 }))
     .filter((row) => row.value > 0);
 }
 
-function classifyRoutingTier(routingReason: string) {
-  const reason = routingReason.trim().toLowerCase();
-
-  if (reason.includes("low_cost") || reason.includes("downgraded_from_high_quality")) {
-    return "low_cost";
-  }
-  if (reason.includes("high_quality")) {
-    return "high_quality";
-  }
-  if (reason.includes("balanced") || reason.includes("default")) {
-    return "balanced";
-  }
-  return "other";
-}
-
-function terminalOutcomeRows(overview: DashboardOverview): AnalyticsValueRow[] {
+function terminalOutcomeRows(overview: LiveDashboardOverview): AnalyticsValueRow[] {
   const rows = overview.breakdowns?.byTerminalStatus?.length
     ? overview.breakdowns.byTerminalStatus.map((row) => ({
         id: row.outcome,
@@ -390,7 +370,7 @@ function normalizeOutcome(value: string) {
 }
 
 function normalizeDataState(
-  status: NonNullable<DashboardOverview["queryBudget"]>["status"] | undefined
+  status: NonNullable<LiveDashboardOverview["queryBudget"]>["status"] | undefined
 ): AnalyticsDataState {
   if (status === "partial" || status === "too_broad") {
     return "partial";

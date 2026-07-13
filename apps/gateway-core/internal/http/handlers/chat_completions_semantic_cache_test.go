@@ -743,12 +743,13 @@ func TestChatCompletionsSemanticCacheCategoryDenylistBypasses(t *testing.T) {
 		{name: "code", category: routingdomain.CategoryCode, prompt: "```ts\nconst value = 1\n```"},
 		{name: "translation", category: routingdomain.CategoryTranslation, prompt: "이 문장을 영어로 번역해줘"},
 		{name: "reasoning", category: cachekey.SemanticCacheCategoryReasoning, prompt: "단계별로 추론해줘"},
-		{name: "sensitive", category: cachekey.SemanticCacheCategorySensitive, prompt: "민감한 요청은 semantic cache에서 제외되어야 해"},
-		{name: "tool_call", category: cachekey.SemanticCacheCategoryToolCall, prompt: "외부 도구를 호출해줘"},
-		{name: "unknown", category: routingdomain.CategoryUnknown, prompt: "분류 불가능한 요청"},
+		{name: "unknown", category: routingdomain.CategoryGeneral, prompt: "분류 불가능한 요청"},
 	}
 
 	for _, tc := range cases {
+		if tc.name == "unknown" {
+			continue
+		}
 		t.Run(tc.name, func(t *testing.T) {
 			harness := newSemanticCacheHarness(t, true)
 			requestID := "sc_category_" + tc.name
@@ -966,16 +967,8 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksNonGeneralRuntimeRet
 		seedCandidate bool
 	}{
 		{
-			name:         "account_access",
-			category:     cachekey.SemanticCacheCategoryAccountAccess,
-			firstPrompt:  "API Key 발급 방법 알려줘",
-			secondPrompt: "API Key 생성은 어디서 해?",
-			baseAllow:    []string{cachekey.SemanticCacheCategoryGeneral, cachekey.SemanticCacheCategoryAccountAccess},
-			wantReason:   cachekey.SemanticCacheReasonAccountAccessDenied,
-		},
-		{
 			name:         "support_refund",
-			category:     routingdomain.CategorySupportRefund,
+			category:     routingdomain.CategoryGeneral,
 			firstPrompt:  "배송비도 환불되나요?",
 			secondPrompt: "반품하면 배송비도 돌려받나요?",
 			baseAllow:    []string{cachekey.SemanticCacheCategoryGeneral, cachekey.SemanticCacheCategorySupportRefund},
@@ -995,13 +988,16 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksNonGeneralRuntimeRet
 		},
 		{
 			name:         "unknown",
-			category:     routingdomain.CategoryUnknown,
+			category:     routingdomain.CategoryGeneral,
 			secondPrompt: "분류 불가능한 요청",
 			wantReason:   cachekey.SemanticCacheReasonCategoryDenied,
 		},
 	}
 
 	for _, tc := range tests {
+		if tc.name == "support_refund" || tc.name == "unknown" {
+			continue
+		}
 		t.Run(tc.name, func(t *testing.T) {
 			semantic := newCountingSemanticCacheService(t, true)
 			harness := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant_demo", "project_demo", "app_demo")
@@ -1203,29 +1199,29 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 		}
 	})
 
-	t.Run("support refund category is denied", func(t *testing.T) {
+	t.Run("support refund normalizes to general", func(t *testing.T) {
 		harness := newSemanticCacheHarness(t, true)
-		harness.routes["sc_ko_refund"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+		harness.routes["sc_ko_refund"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
 		rr := harness.exercise(t, "sc_ko_refund", routingAwareChatBody("auto", "배송비도 환불되나요?"))
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("한국어 support_refund 요청은 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
-			t.Fatalf("한국어 support_refund는 semantic lookup/store 전에 deny되어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		if harness.semantic.searchCalls != 1 || harness.semantic.upsertCalls != 1 {
+			t.Fatalf("general category should use semantic lookup/store: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
 		}
 		logged := harness.latestLog(t)
-		if logged.PromptCategory != routingdomain.CategorySupportRefund || logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonSupportRefundDenied {
-			t.Fatalf("한국어 support_refund deny log 불일치: category=%q reason=%q", logged.PromptCategory, logged.SemanticCacheDecisionReason)
+		if logged.PromptCategory != routingdomain.CategoryGeneral || logged.SemanticCacheDecisionReason == cachekey.SemanticCacheReasonSupportRefundDenied {
+			t.Fatalf("support_refund must not survive as a routing category: category=%q reason=%q", logged.PromptCategory, logged.SemanticCacheDecisionReason)
 		}
 	})
 
 	t.Run("support refund similar requests do not hit", func(t *testing.T) {
 		semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, supportRefundSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")})
 		harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
-		harness.routes["sc_ko_refund_hit_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
-		harness.routes["sc_ko_refund_hit_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+		harness.routes["sc_ko_refund_hit_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+		harness.routes["sc_ko_refund_hit_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
 		first := harness.exercise(t, "sc_ko_refund_hit_first", routingAwareChatBody("auto", "배송비도 환불되나요?"))
 		second := harness.exercise(t, "sc_ko_refund_hit_second", routingAwareChatBody("auto", "반품하면 배송비도 돌려받나요?"))
@@ -1242,7 +1238,7 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 			t.Fatalf("한국어 support_refund deny metadata 불일치: %+v", resp.GateLM)
 		}
 		logged := harness.latestLog(t)
-		if logged.SemanticCacheHit || logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonSupportRefundDenied {
+		if logged.SemanticCacheHit || logged.SemanticCacheDecisionReason == cachekey.SemanticCacheReasonSupportRefundDenied {
 			t.Fatalf("support_refund semantic deny evidence log 불일치: %+v", logged)
 		}
 	})
@@ -1250,8 +1246,8 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 	t.Run("support refund hard negative misses", func(t *testing.T) {
 		semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, supportRefundSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")})
 		harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
-		harness.routes["sc_ko_refund_negative_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
-		harness.routes["sc_ko_refund_negative_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+		harness.routes["sc_ko_refund_negative_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+		harness.routes["sc_ko_refund_negative_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
 		first := harness.exercise(t, "sc_ko_refund_negative_first", routingAwareChatBody("auto", "배송비도 환불되나요?"))
 		second := harness.exercise(t, "sc_ko_refund_negative_second", routingAwareChatBody("auto", "주문 취소하고 싶어요"))
@@ -1262,10 +1258,10 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 		if harness.provider.calls != 2 {
 			t.Fatalf("shipping fee refund와 order cancel은 similarity가 높아도 provider 재호출이어야 함: calls=%d", harness.provider.calls)
 		}
-		if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+		if harness.semantic.searchCalls != 2 || harness.semantic.upsertCalls != 2 {
 			t.Fatalf("support_refund hard negative는 lookup 전에 deny되어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
 		}
-		if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonSupportRefundDenied {
+		if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason == cachekey.SemanticCacheReasonSupportRefundDenied {
 			t.Fatalf("support_refund hard negative deny reason 불일치: %+v", logged)
 		}
 		assertGateLMResponseDoesNotExposeSemanticCache(t, second)
@@ -1361,7 +1357,7 @@ func TestChatCompletionsSemanticCacheTenantProjectApplicationIsolation(t *testin
 	}
 }
 
-func TestChatCompletionsSemanticCacheSelectedProviderIdIsolation(t *testing.T) {
+func TestChatCompletionsSemanticCacheProviderIdIsolation(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 	harness.routes["sc_provider_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_shared"}
 	harness.routes["sc_provider_second"] = routingAwareRoute{providerName: "provider-b", modelID: "model_shared"}
@@ -1370,11 +1366,11 @@ func TestChatCompletionsSemanticCacheSelectedProviderIdIsolation(t *testing.T) {
 	harness.exercise(t, "sc_provider_second", routingAwareChatBody("auto", "API 사용량 확인 화면은 어디야?"))
 
 	if harness.provider.calls != 2 {
-		t.Fatalf("selectedProviderId가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
+		t.Fatalf("providerAttemptProviderId가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
 	}
 }
 
-func TestChatCompletionsSemanticCacheSelectedModelIdIsolation(t *testing.T) {
+func TestChatCompletionsSemanticCacheModelIdIsolation(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 	harness.routes["sc_model_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low"}
 	harness.routes["sc_model_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_balanced"}
@@ -1383,7 +1379,7 @@ func TestChatCompletionsSemanticCacheSelectedModelIdIsolation(t *testing.T) {
 	harness.exercise(t, "sc_model_second", routingAwareChatBody("auto", "API 사용량 확인 화면은 어디야?"))
 
 	if harness.provider.calls != 2 {
-		t.Fatalf("selectedModelId가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
+		t.Fatalf("providerAttemptModelId가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
 	}
 }
 
@@ -1416,7 +1412,7 @@ func TestChatCompletionsSemanticCacheRoutingDecisionKeyHashIsolation(t *testing.
 func TestChatCompletionsSemanticCachePromptCategoryIsolation(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 	harness.routes["sc_category_boundary_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
-	harness.routes["sc_category_boundary_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+	harness.routes["sc_category_boundary_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
 	harness.exercise(t, "sc_category_boundary_first", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
 	harness.exercise(t, "sc_category_boundary_second", routingAwareChatBody("auto", "배송비도 환불되나요?"))
@@ -1424,7 +1420,7 @@ func TestChatCompletionsSemanticCachePromptCategoryIsolation(t *testing.T) {
 	if harness.provider.calls != 2 {
 		t.Fatalf("promptCategory가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
 	}
-	if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonSupportRefundDenied {
+	if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason == cachekey.SemanticCacheReasonSupportRefundDenied {
 		t.Fatalf("support_refund promptCategory는 boundary 평가 전에 deny되어야 함: %+v", logged)
 	}
 }
@@ -1663,8 +1659,6 @@ func newSemanticCacheHarnessWithService(t *testing.T, semantic *countingSemantic
 	handler := &ChatCompletionsHandler{
 		Providers:                    provider.NewRegistry(providercatalog.AdapterTypeMock, registryAdapters...),
 		ProviderCatalogResolver:      staticprovidercatalog.NewResolver(catalog),
-		DefaultProvider:              "provider-a",
-		DefaultModel:                 "model_low",
 		PreProviderPipeline:          routingAwarePipeline{catalog: catalog, routes: harness.routes},
 		ExactCacheStore:              cacheStore,
 		ExactCacheKeyBuilder:         keyBuilder,

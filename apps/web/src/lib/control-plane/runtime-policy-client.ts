@@ -1,6 +1,5 @@
 import "server-only";
 
-import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl,
@@ -15,8 +14,13 @@ import {
   listApplicationProviderConnections,
   listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
-import { applyInitialRuntimePolicyModelSelection } from "@/lib/control-plane/runtime-policy-model-selection";
-import { getRuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
+import {
+  getRuntimePolicyDraftValues,
+  isRuntimeRoutingPolicyHash,
+  runtimeRoutingCategories,
+  runtimeRoutingDifficulties,
+  toRuntimePolicyRoutingWriteInput
+} from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type {
   RuntimePolicyConfig,
@@ -26,14 +30,11 @@ import type {
   RuntimePolicyModelConfig,
   RuntimePolicyPricingRule,
   RuntimePolicyProviderCatalogSummary,
+  RuntimePolicyRoutingRoutes,
   RuntimePolicySnapshot,
   RuntimePolicyModel,
   RuntimePolicyProvider
 } from "@/lib/control-plane/runtime-policy-types";
-
-type RuntimeConfigFixture = {
-  runtimeConfig: RuntimePolicyConfig;
-};
 
 type RuntimeConfigHistoryResponse = {
   items?: unknown;
@@ -497,16 +498,16 @@ export async function getRuntimePolicyConfigForApplication(
   return activeConfig.ok ? activeConfig.data : null;
 }
 
-export async function publishRuntimePolicyModelSelectionForApplication(
+export async function publishRuntimePolicyBootstrapForApplication(
   applicationId: string,
-  selectedModelKey: string,
+  selectedModelRef: string,
   options: {
     cookieHeader?: string | null;
     routeTenantId?: string;
     warningThresholdPercent?: number;
   } = {}
 ): Promise<{ error?: string; ok: boolean }> {
-  const selected = parseRuntimePolicyModelKey(selectedModelKey);
+  const selected = parseRuntimePolicyModelRef(selectedModelRef);
 
   if (!selected) {
     return {
@@ -537,9 +538,15 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const selectedModel = activeConfig.models.find(
-    (model) => model.provider === selected.provider && model.model === selected.model
+  const selectedProvider = activeConfig.providers.find(
+    (provider) => provider.providerId === selected.providerId
   );
+  const selectedModel = selectedProvider
+    ? activeConfig.models.find(
+        (model) =>
+          model.provider === selectedProvider.provider && model.model === selected.modelId
+      )
+    : null;
 
   if (!selectedModel) {
     return {
@@ -549,9 +556,11 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   }
 
   const draftValues = getRuntimePolicyDraftValues(activeConfig);
-  const nextValues = applyInitialRuntimePolicyModelSelection(draftValues, selectedModel, {
-    warningThresholdPercent: options.warningThresholdPercent
-  });
+  const nextValues = {
+    ...draftValues,
+    budgetWarningThresholdPercent:
+      options.warningThresholdPercent ?? draftValues.budgetWarningThresholdPercent
+  };
   const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
   const draft = await writeRuntimeConfig("draft", nextValues, {
     applicationId,
@@ -681,8 +690,89 @@ export async function rollbackRuntimePolicy(
   }
 }
 
-function getFixtureRuntimeConfig() {
-  return (runtimeConfigFixture as RuntimeConfigFixture).runtimeConfig;
+function getFixtureRuntimeConfig(): RuntimePolicyConfig {
+  const routes = Object.fromEntries(
+    runtimeRoutingCategories.map((category) => [
+      category,
+      Object.fromEntries(
+        runtimeRoutingDifficulties.map((difficulty) => [
+          difficulty,
+          { modelRefs: ["mock-balanced"] }
+        ])
+      )
+    ])
+  ) as RuntimePolicyRoutingRoutes;
+  const now = "2026-07-13T00:00:00.000Z";
+
+  return {
+    applicationId: "app_runtime_policy_template",
+    budgetPolicy: {
+      enabled: false,
+      enforcementMode: "disabled",
+      warningThresholdPercent: 80
+    },
+    cachePolicy: { enabled: true, ttlSeconds: 300, type: "exact" },
+    configHash: "",
+    configVersion: RUNTIME_POLICY_DRAFT_CONFIG_VERSION,
+    effectiveAt: now,
+    generatedAt: now,
+    models: [
+      {
+        contextWindowTokens: 8192,
+        displayName: "Mock Balanced",
+        model: "mock-balanced",
+        provider: "mock",
+        status: "active",
+        supportsJsonMode: false,
+        supportsStreaming: false
+      }
+    ],
+    pricingRules: [
+      {
+        completionTokenMicroUsd: 0,
+        model: "mock-balanced",
+        pricingVersion: "mock-v1",
+        promptTokenMicroUsd: 0,
+        provider: "mock"
+      }
+    ],
+    promptCapturePolicy: { enabled: false, maxChars: 8000, mode: "disabled" },
+    providers: [
+      {
+        baseUrl: "http://mock-provider:4010",
+        credentialPreview: null,
+        displayName: "Mock Provider",
+        failureMode: "fail_closed",
+        models: ["mock-balanced"],
+        provider: "mock",
+        providerId: "00000000-0000-4000-8000-000000000001",
+        resolver: "none",
+        secretRef: null,
+        status: "active",
+        timeoutMs: 30000
+      }
+    ],
+    publishState: "draft",
+    publishedAt: "",
+    rateLimit: {
+      algorithm: "fixed_window",
+      enabled: true,
+      limit: 60,
+      scope: "application",
+      windowSeconds: 60
+    },
+    responseCapturePolicy: { enabled: false, maxChars: 8000, mode: "disabled" },
+    routingPolicy: {
+      bootstrapState: "mock_bootstrap",
+      mode: "auto",
+      routes,
+      schemaVersion: "gatelm.routing-policy.v2",
+      routingPolicyHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    safetyPolicy: { detectors: [], mode: "rule_based", securityPolicyHash: "" },
+    schemaVersion: "gatelm.active-runtime-config.v2",
+    tenantId: "tenant_runtime_policy_template"
+  };
 }
 
 function makeRuntimePolicyConfigTemplate(
@@ -706,7 +796,7 @@ function makeRuntimePolicyConfigTemplate(
   const pricingRules = models.map((model) =>
     toRuntimePolicyPricingRule(fallbackConfig, model.provider, model.model)
   );
-  const mergedConfig = mergeProviderConnectionCandidates(
+  return mergeProviderConnectionCandidates(
     {
       ...fallbackConfig,
       applicationId,
@@ -723,40 +813,6 @@ function makeRuntimePolicyConfigTemplate(
     },
     []
   );
-  const preferredModel =
-    mergedConfig.models.find((model) => model.status === "active") ?? mergedConfig.models[0];
-
-  if (!preferredModel) {
-    return {
-      ...mergedConfig,
-      routingPolicy: {
-        ...mergedConfig.routingPolicy,
-        defaultModel: "",
-        defaultProvider: "",
-        fallbackModel: "",
-        fallbackProvider: "",
-        highQualityModel: "",
-        highQualityProvider: "",
-        lowCostModel: "",
-        lowCostProvider: ""
-      }
-    };
-  }
-
-  return {
-    ...mergedConfig,
-    routingPolicy: {
-      ...mergedConfig.routingPolicy,
-      defaultModel: preferredModel.model,
-      defaultProvider: preferredModel.provider,
-      fallbackModel: preferredModel.model,
-      fallbackProvider: preferredModel.provider,
-      highQualityModel: preferredModel.model,
-      highQualityProvider: preferredModel.provider,
-      lowCostModel: preferredModel.model,
-      lowCostProvider: preferredModel.provider
-    }
-  };
 }
 
 function getRuntimePolicyDraftConfigVersion(
@@ -960,17 +1016,18 @@ function createApplicationRuntimeDraftVersion(applicationId: string) {
   return `draft_${applicationId.replaceAll("-", "_")}_${Date.now()}`;
 }
 
-function parseRuntimePolicyModelKey(value: string) {
-  const [provider, ...modelParts] = value.split("::");
-  const model = modelParts.join("::");
+function parseRuntimePolicyModelRef(value: string) {
+  const separatorIndex = value.indexOf(":");
+  const providerId = separatorIndex > 0 ? value.slice(0, separatorIndex).trim() : "";
+  const modelId = separatorIndex > 0 ? value.slice(separatorIndex + 1).trim() : "";
 
-  if (!provider?.trim() || !model.trim()) {
+  if (!providerId || !modelId) {
     return null;
   }
 
   return {
-    model: model.trim(),
-    provider: provider.trim()
+    modelId,
+    providerId
   };
 }
 
@@ -1005,17 +1062,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
       enabled: values.rateLimitEnabled,
       limit: values.rateLimitLimit
     },
-    routingPolicy: {
-      defaultModel: values.routingDefaultModel,
-      defaultProvider: values.routingDefaultProvider,
-      fallbackModel: values.routingFallbackModel,
-      fallbackProvider: values.routingFallbackProvider,
-      highQualityModel: values.routingHighQualityModel,
-      highQualityProvider: values.routingHighQualityProvider,
-      lowCostModel: values.routingLowCostModel,
-      lowCostProvider: values.routingLowCostProvider,
-      shortPromptMaxChars: values.routingShortPromptMaxChars
-    },
+    routingPolicy: toRuntimePolicyRoutingWriteInput(values.routingPolicy),
     safetyPolicy: {
       detectors: values.detectors.map((detector) => ({
         action: isMandatorySafetyDetector(detector.type) ? "block" : detector.action,
@@ -1209,7 +1256,67 @@ function getRuntimeConfigFromPayload(payload: unknown): RuntimePolicyConfig | nu
     return null;
   }
 
+  const config = runtimeConfig as Record<string, unknown>;
+
+  if (
+    config.schemaVersion !== "gatelm.active-runtime-config.v2" ||
+    !isRuntimeRoutingPolicy(config.routingPolicy)
+  ) {
+    return null;
+  }
+
   return runtimeConfig as RuntimePolicyConfig;
+}
+
+function isRuntimeRoutingPolicy(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const policy = value as Record<string, unknown>;
+
+  if (
+    Object.keys(policy).length !== 5 ||
+    policy.schemaVersion !== "gatelm.routing-policy.v2" ||
+    (policy.mode !== "auto" && policy.mode !== "manual") ||
+    (policy.bootstrapState !== "mock_bootstrap" && policy.bootstrapState !== "configured") ||
+    !isRuntimeRoutingPolicyHash(policy.routingPolicyHash) ||
+    !policy.routes ||
+    typeof policy.routes !== "object"
+  ) {
+    return false;
+  }
+
+  const routes = policy.routes as Record<string, unknown>;
+
+  return Object.keys(routes).length === runtimeRoutingCategories.length && runtimeRoutingCategories.every((category) => {
+    const categoryRoutes = routes[category];
+
+    if (!categoryRoutes || typeof categoryRoutes !== "object") {
+      return false;
+    }
+
+    const difficultyRoutes = categoryRoutes as Record<string, unknown>;
+
+    return Object.keys(difficultyRoutes).length === runtimeRoutingDifficulties.length && runtimeRoutingDifficulties.every((difficulty) => {
+      const cell = difficultyRoutes[difficulty];
+      const modelRefs =
+        cell && typeof cell === "object"
+          ? (cell as Record<string, unknown>).modelRefs
+          : null;
+
+      return Boolean(
+        cell &&
+          typeof cell === "object" &&
+          Object.keys(cell as Record<string, unknown>).length === 1 &&
+          Array.isArray(modelRefs) &&
+          modelRefs.length > 0 &&
+          modelRefs.every(
+            (modelRef) => typeof modelRef === "string" && modelRef.trim()
+          )
+      );
+    });
+  });
 }
 
 function getRuntimeConfigHistoryItems(payload: RuntimeConfigHistoryResponse) {
@@ -1286,6 +1393,7 @@ function getRuntimeSnapshotFromPayload(payload: unknown): RuntimePolicySnapshot 
   const snapshot = payload as Partial<RuntimePolicySnapshot>;
 
   if (
+    snapshot.schemaVersion !== "gatelm.runtime-snapshot.v2" ||
     typeof snapshot.runtimeSnapshotId !== "string" ||
     typeof snapshot.runtimeSnapshotVersion !== "number" ||
     typeof snapshot.contentHash !== "string" ||
@@ -1296,12 +1404,29 @@ function getRuntimeSnapshotFromPayload(payload: unknown): RuntimePolicySnapshot 
     !snapshot.lookupKey ||
     !snapshot.budgetResolution ||
     !snapshot.providerCatalogRef ||
-    !snapshot.policies
+    !snapshot.policies ||
+    !isRuntimeSnapshotRoutingPolicy(snapshot.policies.routing)
   ) {
     return null;
   }
 
   return snapshot as RuntimePolicySnapshot;
+}
+
+function isRuntimeSnapshotRoutingPolicy(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const policy = value as Record<string, unknown>;
+
+  return (
+    Object.keys(policy).length === 4 &&
+    isRuntimeRoutingPolicy({
+      ...policy,
+      schemaVersion: "gatelm.routing-policy.v2"
+    })
+  );
 }
 
 function getProviderCatalogSummaryFromPayload(

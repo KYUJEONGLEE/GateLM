@@ -64,14 +64,6 @@ export type AdminOnboardingModel = {
     modelCount: number;
     models: AdminProviderModel[];
   };
-  modelSelection: {
-    defaultProvider: string;
-    defaultModel: string;
-    lowCostProvider: string;
-    lowCostModel: string;
-    fallbackProvider: string;
-    fallbackModel: string;
-  };
   apiKey: {
     issueResponse: CredentialIssueResponse;
     listItem: CredentialListItem;
@@ -141,12 +133,6 @@ type RuntimeConfigFixture = {
       type: string;
     };
     routingPolicy?: {
-      defaultProvider?: string;
-      defaultModel?: string;
-      lowCostProvider?: string;
-      lowCostModel?: string;
-      fallbackProvider?: string;
-      fallbackModel?: string;
       routingPolicyHash: string;
     };
   };
@@ -277,14 +263,6 @@ export function getAdminOnboardingModel(
       credentialPreview: provider.credentialPreview ?? unconfiguredProvider.credentialPreview,
       modelCount: providerModels.length || provider.models?.length || unconfiguredProvider.models.length,
       models: providerModels
-    },
-    modelSelection: {
-      defaultProvider: runtimeConfig.routingPolicy?.defaultProvider ?? provider.provider ?? "unconfigured",
-      defaultModel: runtimeConfig.routingPolicy?.defaultModel ?? providerModels[0]?.model ?? "unconfigured",
-      lowCostProvider: runtimeConfig.routingPolicy?.lowCostProvider ?? provider.provider ?? "unconfigured",
-      lowCostModel: runtimeConfig.routingPolicy?.lowCostModel ?? providerModels[0]?.model ?? "unconfigured",
-      fallbackProvider: runtimeConfig.routingPolicy?.fallbackProvider ?? provider.provider ?? "unconfigured",
-      fallbackModel: runtimeConfig.routingPolicy?.fallbackModel ?? providerModels[0]?.model ?? "unconfigured"
     },
     apiKey: {
       issueResponse: sanitizeCredentialIssueResponse(

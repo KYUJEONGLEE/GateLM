@@ -3,7 +3,6 @@
     [string]$ReportDir = "reports/routing-eval",
     [int]$LatencyIterations = 100,
     [double]$MinAccuracy = 0,
-    [double]$MinTierAccuracy = 0,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$RemainingArgs
 )
@@ -49,9 +48,7 @@ try {
         "-latency-iterations",
         "$LatencyIterations",
         "-min-accuracy",
-        "$MinAccuracy",
-        "-min-tier-accuracy",
-        "$MinTierAccuracy"
+        "$MinAccuracy"
     ) + $RemainingArgs
 
     & go @EvalArgs
@@ -64,19 +61,16 @@ try {
     $Report = Get-Content -LiteralPath $ReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
     ""
-    "GateLM v2.1 라우팅 정답 평가 리포트"
-    "===================================="
+    "GateLM v2.1 카테고리 분류 정답 평가 리포트"
+    "=========================================="
     "데이터셋:             $($Report.datasetPath)"
     "전체 샘플 수:         $($Report.totalSamples)"
     "카테고리 정확도:      $($Report.accuracy)"
     "카테고리 오답률:      $($Report.errorRate)"
-    "티어 정확도:          $($Report.tierAccuracy)"
-    "티어 오답률:          $($Report.tierErrorRate)"
     "평균 지연시간(μs):    $($Report.latency.avgMicros)"
     "P50 지연시간(μs):     $($Report.latency.p50Micros)"
     "P95 지연시간(μs):     $($Report.latency.p95Micros)"
     "최대 지연시간(μs):    $($Report.latency.maxMicros)"
-    "예상 비용 절감률:     $($Report.costEstimate.savingRate)"
     "실패 수:              $($Report.failures.Count)"
     ""
     "카테고리별 결과:"
@@ -85,23 +79,22 @@ try {
         if ([string]::IsNullOrWhiteSpace($Label)) {
             $Label = $Category.Name
         }
-        "  - $Label [$($Category.Name)]: 전체 $($Category.Value.total), 정답 $($Category.Value.correct), 오답 $($Category.Value.incorrect), 정확도 $($Category.Value.accuracy)"
+        "  - $Label [$($Category.Name)]: 전체 $($Category.Value.total), 정답 $($Category.Value.correct), 오답 $($Category.Value.incorrect), 정확도 $($Category.Value.accuracy), 오답률 $($Category.Value.incorrectRate)"
     }
-    "티어별 결과:"
-    foreach ($Tier in ($Report.byTier.PSObject.Properties | Sort-Object Name)) {
-        $Label = $Tier.Value.labelKo
-        if ([string]::IsNullOrWhiteSpace($Label)) {
-            $Label = $Tier.Name
+    ""
+    "카테고리 혼동 행렬 (예상 -> 실제):"
+    foreach ($Expected in ($Report.confusionMatrix.PSObject.Properties | Sort-Object Name)) {
+        "  - $($Expected.Name):"
+        foreach ($Actual in ($Expected.Value.PSObject.Properties | Sort-Object Name)) {
+            "      $($Actual.Name): $($Actual.Value)"
         }
-        "  - $Label [$($Tier.Name)]: 전체 $($Tier.Value.total), 정답 $($Tier.Value.correct), 오답 $($Tier.Value.incorrect), 정확도 $($Tier.Value.accuracy)"
     }
     ""
     "샘플 판단 예시(최대 10개):"
     foreach ($Sample in ($Report.samples | Select-Object -First 10)) {
         "  - $($Sample.sampleId): $($Sample.redactedPrompt)"
-        "    예상: $($Sample.expectedCategoryKo) [$($Sample.expectedCategory)] / $($Sample.expectedTierKo) [$($Sample.expectedTier)]"
-        "    실제: $($Sample.actualCategoryKo) [$($Sample.actualCategory)] / $($Sample.actualTierKo) [$($Sample.actualTier)]"
-        "    이유: $($Sample.routingReasonKo) [$($Sample.routingReason)]"
+        "    예상: $($Sample.expectedCategoryKo) [$($Sample.expectedCategory)]"
+        "    실제: $($Sample.actualCategoryKo) [$($Sample.actualCategory)]"
     }
     ""
     "리포트 파일:          $ReportPath"

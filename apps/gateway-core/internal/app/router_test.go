@@ -44,10 +44,7 @@ func TestNewRouterWiresAuthBeforeProviderCall(t *testing.T) {
 		identity: routerTestValidAppTokenIdentity(),
 	}
 	authFailureWriter := &routerTestAuthFailureLogWriter{}
-	router := NewRouter(config.Config{
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
-	}, registry, nil, WithGatewayAuth(apiAuth, appValidator), WithAuthFailureLogWriter(authFailureWriter))
+	router := NewRouter(config.Config{}, registry, nil, WithGatewayAuth(apiAuth, appValidator), WithAuthFailureLogWriter(authFailureWriter))
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
@@ -110,9 +107,6 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 		identity: routerTestValidAppTokenIdentity(),
 	}
 	router := NewRouter(config.Config{
-		DefaultProvider:     "mock",
-		DefaultModel:        "mock-balanced",
-		LowCostModel:        "mock-fast",
 		RoutingPolicyHash:   "route_p0_v1",
 		ShortPromptMaxChars: 300,
 		DemoTenantID:        "tenant_demo",
@@ -134,14 +128,11 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if providerRequest.Model != "mock-fast" {
-		t.Fatalf("expected provider request to use mock-fast, got %s", providerRequest.Model)
+	if providerRequest.Model != "mock-balanced" {
+		t.Fatalf("expected provider request to use mock-balanced, got %s", providerRequest.Model)
 	}
-	if rr.Header().Get("X-GateLM-Routed-Provider") != "mock" {
-		t.Fatalf("expected routed provider mock, got %s", rr.Header().Get("X-GateLM-Routed-Provider"))
-	}
-	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
-		t.Fatalf("expected routed model mock-fast, got %s", rr.Header().Get("X-GateLM-Routed-Model"))
+	if rr.Header().Get("X-GateLM-Routed-Provider") != "" || rr.Header().Get("X-GateLM-Routed-Model") != "" {
+		t.Fatalf("resolved target must not be exposed in response headers: %#v", rr.Header())
 	}
 
 	var resp provider.ChatCompletionResponse
@@ -154,11 +145,11 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	if resp.GateLM.RequestedModel != "auto" {
 		t.Fatalf("expected requestedModel auto, got %s", resp.GateLM.RequestedModel)
 	}
-	if resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-fast" {
-		t.Fatalf("unexpected selected route: %#v", resp.GateLM)
+	if resp.GateLM.ExecutionMode != "mock" {
+		t.Fatalf("unexpected execution mode: %#v", resp.GateLM)
 	}
-	if resp.GateLM.RoutingReason != routing.ReasonSupportRefundLowCost {
-		t.Fatalf("expected %s, got %s", routing.ReasonSupportRefundLowCost, resp.GateLM.RoutingReason)
+	if resp.GateLM.RoutingReason != routing.ReasonMatrixRoute {
+		t.Fatalf("expected %s, got %s", routing.ReasonMatrixRoute, resp.GateLM.RoutingReason)
 	}
 }
 
@@ -183,10 +174,7 @@ func TestNewRouterIgnoresLegacyAppTokenValidator(t *testing.T) {
 		err: gatewayerrors.InvalidAppToken("validate_app_token"),
 	}
 	authFailureWriter := &routerTestAuthFailureLogWriter{}
-	router := NewRouter(config.Config{
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
-	}, registry, nil, WithGatewayAuth(apiAuth, appValidator), WithAuthFailureLogWriter(authFailureWriter))
+	router := NewRouter(config.Config{}, registry, nil, WithGatewayAuth(apiAuth, appValidator), WithAuthFailureLogWriter(authFailureWriter))
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
@@ -231,10 +219,7 @@ func TestNewRouterPersistsInvalidAuthThroughPostgresWriter(t *testing.T) {
 		ProjectID:     "00000000-0000-4000-8000-000000000200",
 		ApplicationID: "00000000-0000-4000-8000-000000000300",
 	})
-	router := NewRouter(config.Config{
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
-	}, registry, nil,
+	router := NewRouter(config.Config{}, registry, nil,
 		WithGatewayAuth(
 			&routerTestAPIKeyAuthenticator{err: gatewayerrors.InvalidAPIKey("authenticate_api_key")},
 			&routerTestAppTokenValidator{identity: routerTestValidAppTokenIdentity()},
@@ -289,8 +274,8 @@ func TestNewRouterWiresPreProviderPipeline(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode provider request: %v", err)
 		}
-		if req.Model != "mock-fast" {
-			t.Fatalf("expected routed model mock-fast, got %s", req.Model)
+		if req.Model != routing.MockBootstrapRef {
+			t.Fatalf("expected routed mock bootstrap model, got %s", req.Model)
 		}
 
 		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{
@@ -305,17 +290,14 @@ func TestNewRouterWiresPreProviderPipeline(t *testing.T) {
 	registry := provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client()))
 	preflight := &routerTestGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
-			gatewayCtx.Routing.SelectedProvider = "mock"
-			gatewayCtx.Routing.SelectedModel = "mock-fast"
-			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Routing.ModelRef = routing.MockBootstrapRef
+			gatewayCtx.Routing.CandidateModelRefs = []string{routing.MockBootstrapRef}
+			gatewayCtx.Routing.RoutingReason = routing.ReasonMatrixRoute
 			gatewayCtx.Cache.CacheStatus = "miss"
 			gatewayCtx.Cache.CacheType = "exact"
 		},
 	}
-	router := NewRouter(config.Config{
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
-	}, registry, nil,
+	router := NewRouter(config.Config{}, registry, nil,
 		WithGatewayAuth(
 			&routerTestAPIKeyAuthenticator{identity: routerTestValidAPIKeyIdentity()},
 			&routerTestAppTokenValidator{identity: routerTestValidAppTokenIdentity()},
@@ -343,8 +325,8 @@ func TestNewRouterWiresPreProviderPipeline(t *testing.T) {
 	if chatCalls != 1 {
 		t.Fatalf("expected provider to be called once, got %d", chatCalls)
 	}
-	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
-		t.Fatalf("unexpected routed model header: %s", rr.Header().Get("X-GateLM-Routed-Model"))
+	if rr.Header().Get("X-GateLM-Routed-Provider") != "" || rr.Header().Get("X-GateLM-Routed-Model") != "" {
+		t.Fatalf("resolved target must not be exposed in response headers: %#v", rr.Header())
 	}
 	if rr.Header().Get("X-GateLM-Cache-Status") != "miss" {
 		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
@@ -362,13 +344,10 @@ func TestNewRouterWiresProjectLogsWithDemoTenantScope(t *testing.T) {
 			CacheType:      invocationlog.CacheTypeExact,
 			MaskingAction:  "none",
 			RequestedModel: "auto",
-			SelectedModel:  "mock-fast",
 		}},
 	}
 	router := NewRouter(config.Config{
-		DemoTenantID:    "tenant_demo",
-		DefaultProvider: "mock",
-		DefaultModel:    "mock-balanced",
+		DemoTenantID: "tenant_demo",
 	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
@@ -396,10 +375,13 @@ func TestNewRouterWiresRequestDetailWithDemoTenantProjectScope(t *testing.T) {
 			ProjectID:      "project_demo",
 			Status:         invocationlog.StatusSuccess,
 			HTTPStatus:     http.StatusOK,
-			Provider:       "mock",
-			Model:          "mock-fast",
 			RequestedModel: "auto",
-			SelectedModel:  "mock-fast",
+			ProviderCalled: true,
+			ProviderAttempt: &invocationlog.ProviderAttemptFields{
+				ProviderID: "mock",
+				ModelID:    "mock-fast",
+				Outcome:    "success",
+			},
 			Cache: invocationlog.CacheFields{
 				CacheStatus: invocationlog.CacheStatusMiss,
 				CacheType:   invocationlog.CacheTypeExact,
@@ -408,10 +390,8 @@ func TestNewRouterWiresRequestDetailWithDemoTenantProjectScope(t *testing.T) {
 		},
 	}
 	router := NewRouter(config.Config{
-		DemoTenantID:    "tenant_demo",
-		DemoProjectID:   "project_demo",
-		DefaultProvider: "mock",
-		DefaultModel:    "mock-balanced",
+		DemoTenantID:  "tenant_demo",
+		DemoProjectID: "project_demo",
 	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/llm-requests/request_001", nil)
@@ -442,9 +422,7 @@ func TestNewRouterWiresDashboardOverviewWithDemoTenantScope(t *testing.T) {
 		},
 	}
 	router := NewRouter(config.Config{
-		DemoTenantID:    "tenant_demo",
-		DefaultProvider: "mock",
-		DefaultModel:    "mock-balanced",
+		DemoTenantID: "tenant_demo",
 	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/overview?projectId=project_demo&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
@@ -474,9 +452,7 @@ func TestNewRouterWiresAnalyticsPerformanceWithDemoTenantScope(t *testing.T) {
 		},
 	}
 	router := NewRouter(config.Config{
-		DemoTenantID:    "tenant_demo",
-		DefaultProvider: "mock",
-		DefaultModel:    "mock-balanced",
+		DemoTenantID: "tenant_demo",
 	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?projectId=project_demo&provider=mock&model=mock-balanced&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
@@ -498,10 +474,7 @@ func TestNewRouterWiresAnalyticsPerformanceWithDemoTenantScope(t *testing.T) {
 func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
 	registry := metrics.NewRegistry()
 	registry.MaskingAction("none")
-	router := NewRouter(config.Config{
-		DefaultProvider: "mock",
-		DefaultModel:    "mock-balanced",
-	}, provider.NewRegistry("mock"), nil, WithMetrics(registry))
+	router := NewRouter(config.Config{}, provider.NewRegistry("mock"), nil, WithMetrics(registry))
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rr := httptest.NewRecorder()
@@ -531,8 +504,6 @@ func TestNewRouterPanicsWhenSemanticIntentPolicyPathInvalid(t *testing.T) {
 	}()
 
 	_ = NewRouter(config.Config{
-		DefaultProvider: "mock",
-		DefaultModel:    "mock-balanced",
 		SemanticCache: config.SemanticCacheConfig{
 			Enabled:           true,
 			Store:             config.SemanticCacheStoreInMemory,

@@ -78,17 +78,13 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
 		},
 		Routing: request.RoutingContext{
-			RequestedModel:             reqCtx.RequestedModel,
-			SelectedProvider:           reqCtx.SelectedProvider,
-			SelectedProviderID:         reqCtx.SelectedProviderID,
-			SelectedProviderCatalogKey: reqCtx.SelectedProviderCatalogKey,
-			SelectedModel:              reqCtx.SelectedModel,
-			SelectedModelID:            reqCtx.SelectedModelID,
-			ProviderCatalogContentHash: reqCtx.ProviderCatalogContentHash,
-			RoutingDecisionKeyHash:     reqCtx.RoutingDecisionKeyHash,
-			RoutingDecisionMaterial:    map[string]string{"category": reqCtx.PromptCategory},
-			RoutingReason:              reqCtx.RoutingReason,
-			RoutingPolicyHash:          reqCtx.RoutingPolicyHash,
+			RequestedModel:          reqCtx.RequestedModel,
+			ModelRef:                reqCtx.ModelRef,
+			CandidateModelRefs:      append([]string(nil), reqCtx.CandidateModelRefs...),
+			RoutingDecisionKeyHash:  reqCtx.RoutingDecisionKeyHash,
+			RoutingDecisionMaterial: map[string]string{"category": reqCtx.PromptCategory, "difficulty": reqCtx.PromptDifficulty},
+			RoutingReason:           reqCtx.RoutingReason,
+			RoutingPolicyHash:       reqCtx.RoutingPolicyHash,
 		},
 		Cache: request.CacheContext{
 			CacheStatus:         reqCtx.CacheStatus,
@@ -205,29 +201,20 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Routing.RequestedModel != "" {
 		reqCtx.RequestedModel = gatewayCtx.Routing.RequestedModel
 	}
-	if gatewayCtx.Routing.SelectedProvider != "" {
-		reqCtx.SelectedProvider = gatewayCtx.Routing.SelectedProvider
+	if gatewayCtx.Routing.ModelRef != "" {
+		reqCtx.ModelRef = gatewayCtx.Routing.ModelRef
 	}
-	if gatewayCtx.Routing.SelectedProviderID != "" {
-		reqCtx.SelectedProviderID = gatewayCtx.Routing.SelectedProviderID
-	}
-	if gatewayCtx.Routing.SelectedProviderCatalogKey != "" {
-		reqCtx.SelectedProviderCatalogKey = gatewayCtx.Routing.SelectedProviderCatalogKey
-	}
-	if gatewayCtx.Routing.SelectedModel != "" {
-		reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
-	}
-	if gatewayCtx.Routing.SelectedModelID != "" {
-		reqCtx.SelectedModelID = gatewayCtx.Routing.SelectedModelID
-	}
-	if gatewayCtx.Routing.ProviderCatalogContentHash != "" {
-		reqCtx.ProviderCatalogContentHash = gatewayCtx.Routing.ProviderCatalogContentHash
+	if gatewayCtx.Routing.CandidateModelRefs != nil {
+		reqCtx.CandidateModelRefs = append([]string(nil), gatewayCtx.Routing.CandidateModelRefs...)
 	}
 	if gatewayCtx.Routing.RoutingDecisionKeyHash != "" {
 		reqCtx.RoutingDecisionKeyHash = gatewayCtx.Routing.RoutingDecisionKeyHash
 	}
 	if category := gatewayCtx.Routing.RoutingDecisionMaterial["category"]; category != "" {
 		reqCtx.PromptCategory = category
+	}
+	if difficulty := gatewayCtx.Routing.RoutingDecisionMaterial["difficulty"]; difficulty != "" {
+		reqCtx.PromptDifficulty = difficulty
 	}
 	if gatewayCtx.Routing.RoutingReason != "" {
 		reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason

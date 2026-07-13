@@ -26,8 +26,6 @@ func TestChatCompletionsHandlerAuthSafetyRejectsInvalidAPIKeyBeforeProviderCall(
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
 	}
@@ -61,8 +59,6 @@ func TestChatCompletionsHandlerRejectsMissingAuthorizationBeforeProviderCall(t *
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
 	}
@@ -97,8 +93,6 @@ func TestChatCompletionsHandlerAuthSafetyIgnoresLegacyAppTokenValidatorBeforePro
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
 	}
@@ -134,8 +128,6 @@ func TestChatCompletionsHandlerAcceptsProjectAPIKeyWithoutAppToken(t *testing.T)
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
 	}
@@ -177,8 +169,6 @@ func TestChatCompletionsHandlerAuthSafetyRejectsScopeMismatchBeforeProviderCall(
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
 		ExpectedProjectID:   "project_demo",
@@ -213,8 +203,6 @@ func TestChatCompletionsHandlerCallsProviderWithValidAuth(t *testing.T) {
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
 	}

@@ -26,13 +26,18 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | Document | Role |
 |---|---|
 | `category-evaluation-dataset-contract.md` | Synthetic/redacted category evaluation contract |
-| `schemas/category-evaluation-record.schema.json` | Evaluation record schema |
-| `fixtures/*.fixture.jsonl` | Offline evaluation/probe fixtures |
+| `schemas/category-evaluation-record.schema.json` | Category-only evaluation record schema |
+| `fixtures/category-evaluation-*.fixture.jsonl` | Category evaluation/probe fixtures |
+| `difficulty-evaluation-dataset-contract.md` | Synthetic/redacted difficulty evaluation contract |
+| `schemas/difficulty-evaluation-record.schema.json` | Difficulty-only evaluation record schema |
+| `fixtures/difficulty-evaluation-dataset.fixture.jsonl` | Difficulty evaluation fixture |
 | `routing-advanced-plan.md` | Evaluation-based routing plan |
 | `routing-performance-test-scenario.md` | Performance evidence scenario |
 | `routing-random-probe.md` | Unlabeled synthetic distribution probe |
 
 이 범위는 Gateway hot path의 API/DB/Event/Metrics 계약을 새로 정의하지 않는다.
+
+일반 Gateway hot path의 현재 category × difficulty 라우팅 계약은 [`../routing/README.md`](../routing/README.md)를 따른다. Offline category와 difficulty record는 서로 다른 schema/fixture/verifier를 사용한다. category evaluation v1 schema가 남아 있더라도 non-active historical snapshot이며 verifier/evaluator 입력으로 허용하지 않는다.
 
 ## Inherited Compatibility
 

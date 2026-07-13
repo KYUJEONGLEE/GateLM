@@ -62,7 +62,7 @@ export function LiveRequestsCard({
   const [historyRows, setHistoryRows] = useState<LiveRequestRow[]>(initialRows);
   const [focusRows, setFocusRows] = useState<LiveRequestRow[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>(() =>
-    normalizeModelOptions(initialPayload?.modelOptions)
+    normalizeModelOptions(initialPayload?.requestedModelOptions)
   );
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
@@ -162,7 +162,7 @@ export function LiveRequestsCard({
             })
           );
         }
-        setModelOptions(mergeModelOptions(payload.data.modelOptions, modelFilter));
+        setModelOptions(mergeModelOptions(payload.data.requestedModelOptions, modelFilter));
         setError(null);
       } catch (fetchError) {
         if (controller.signal.aborted) {
@@ -417,10 +417,10 @@ function requestLogsCreatedRange(range: string) {
   return "24h";
 }
 
-function mergeModelOptions(options: string[] | undefined, selectedModel: string) {
+function mergeModelOptions(options: string[] | undefined, modelFilter: string) {
   const merged = new Set(normalizeModelOptions(options));
-  if (selectedModel.trim()) {
-    merged.add(selectedModel.trim());
+  if (modelFilter.trim()) {
+    merged.add(modelFilter.trim());
   }
   return Array.from(merged).sort((first, second) => first.localeCompare(second));
 }

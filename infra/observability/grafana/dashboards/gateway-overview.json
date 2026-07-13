@@ -66,7 +66,7 @@
       "id": 4,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
       "targets": [
-        { "expr": "sum by (selected_provider, selected_model, status) (rate(gatelm_provider_requests_total[1m]))", "legendFormat": "{{selected_provider}}/{{selected_model}} {{status}}", "refId": "A" }
+        { "expr": "sum by (provider, model, status) (rate(gatelm_provider_requests_total[1m]))", "legendFormat": "{{provider}}/{{model}} {{status}}", "refId": "A" }
       ],
       "title": "Provider Request Rate",
       "type": "timeseries"
@@ -175,7 +175,7 @@
       "id": 13,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
       "targets": [
-        { "expr": "sum by (selected_provider, selected_model) (gatelm_streams_active)", "legendFormat": "{{selected_provider}}/{{selected_model}}", "refId": "A" }
+        { "expr": "sum by (provider, model) (gatelm_streams_active)", "legendFormat": "{{provider}}/{{model}}", "refId": "A" }
       ],
       "title": "Active Streams",
       "type": "timeseries"

@@ -5,7 +5,7 @@ const outputPath = path.resolve(
   "docs/v2.1.0/fixtures/category-evaluation-ambiguous.fixture.jsonl",
 );
 
-const datasetVersion = "category_eval_2026_07_03_ko_1000_ambiguous_synthetic";
+const datasetVersion = "category_eval_2026_07_13_ko_1000_ambiguous_category_only";
 const createdAt = "2026-07-03T00:00:00Z";
 
 const targets = [
@@ -13,22 +13,11 @@ const targets = [
   ["code", 140],
   ["translation", 120],
   ["summarization", 130],
-  ["extraction_json", 120],
-  ["support_refund", 100],
+  ["structured_output", 120],
+  ["customer_support", 100],
   ["reasoning", 150],
-  ["unknown", 40],
+  ["unclassified", 40],
 ];
-
-const tierByCategory = {
-  general: "low_cost",
-  code: "high_quality",
-  translation: "balanced",
-  summarization: "balanced",
-  extraction_json: "balanced",
-  support_refund: "low_cost",
-  reasoning: "high_quality",
-  unknown: "balanced",
-};
 
 const templates = {
   general: [
@@ -79,7 +68,7 @@ const templates = {
     "{subject}에서 우리가 결정한 것만 추려줘.",
     "{subject} 전체 내용을 슬랙 공유용으로 압축해줘.",
   ],
-  extraction_json: [
+  structured_output: [
     "{subject}에서 담당자, 상태, 다음 액션만 열로 나눠줘.",
     "{subject} 내용을 시스템 입력용 필드와 값으로 분리해줘.",
     "{subject}를 엑셀에 붙이기 쉽게 항목별로 나눠줘.",
@@ -91,7 +80,7 @@ const templates = {
     "{subject}를 검토 체크리스트 필드로 바꿔줘.",
     "{subject}에서 필요한 값만 뽑아서 등록 양식에 넣기 쉽게 만들어줘.",
   ],
-  support_refund: [
+  customer_support: [
     "고객이 {subject} 때문에 돈이 다시 들어오는지 물어봤어.",
     "{subject} 후 비용이 청구됐다는 문의에 답해야 해.",
     "{subject}를 없던 일로 하고 싶다는 요청이 들어왔어.",
@@ -115,7 +104,7 @@ const templates = {
     "{subject}의 장단점이 섞여 있어서 고민돼. 추천해줘.",
     "{subject} 중 하나만 남겨야 한다면 무엇이 더 타당해?",
   ],
-  unknown: [
+  unclassified: [
     "",
     "   ",
     "????",
@@ -178,7 +167,7 @@ const subjects = {
     "릴리즈 노트",
     "회의 메모",
   ],
-  extraction_json: [
+  structured_output: [
     "장애 티켓",
     "고객 문의",
     "배포 체크리스트",
@@ -190,7 +179,7 @@ const subjects = {
     "검토 메모",
     "업무 요청",
   ],
-  support_refund: [
+  customer_support: [
     "주문 취소",
     "배송 지연",
     "구독 해지",
@@ -214,7 +203,7 @@ const subjects = {
     "문서 보강과 코드 보강",
     "데모 완성도와 운영 안정성",
   ],
-  unknown: [""],
+  unclassified: [""],
 };
 
 const objects = [
@@ -234,7 +223,7 @@ function fill(template, category, index) {
   const subjectList = subjects[category] ?? subjects.general;
   const subject = subjectList[index % subjectList.length];
   const object = objects[(index * 7) % objects.length];
-  const suffix = category === "unknown" ? "" : ` 샘플 ${String(index + 1).padStart(4, "0")}.`;
+  const suffix = category === "unclassified" ? "" : ` 샘플 ${String(index + 1).padStart(4, "0")}.`;
   return template
     .replaceAll("{subject}", subject)
     .replaceAll("{module}", subject)
@@ -245,20 +234,22 @@ function record(category, index) {
   const templateList = templates[category];
   const template = templateList[index % templateList.length];
   const redactedPrompt = fill(template, category, index);
+  const expectedCategory = ["structured_output", "customer_support", "unclassified"].includes(category)
+    ? "general"
+    : category;
   return {
-    schemaVersion: "gatelm.category-evaluation-record.v1",
+    schemaVersion: "gatelm.category-evaluation-record.v2",
     datasetVersion,
     sampleId: `ambiguous_${category}_${String(index + 1).padStart(4, "0")}`,
     redactedPrompt,
-    expectedCategory: category,
-    expectedTier: tierByCategory[category],
+    expectedCategory,
     labelSource: "synthetic_fixture",
     consentType: "synthetic",
     source: "synthetic_fixture",
-    language: category === "unknown" ? "unknown" : "ko",
+    language: category === "unclassified" ? "unknown" : "ko",
     redactionVersion: "rule_based_redaction_v1",
     createdAt,
-    labelConfidence: category === "unknown" ? 0.95 : 0.86,
+    labelConfidence: category === "unclassified" ? 0.95 : 0.86,
     reviewerNote: "Ambiguous synthetic routing stress sample.",
   };
 }

@@ -96,17 +96,17 @@ func TestBuildProjectLogFilterOptionsQueryUsesOnlyTenantProjectTimeScope(t *test
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
 	normalized, err := normalizeProjectLogFilterOptionsFilter(invocationlog.ProjectLogsFilter{
-		TenantID:      testTenantID,
-		ProjectID:     testProjectID,
-		ApplicationID: testApplicationID,
-		From:          from,
-		To:            to,
-		Status:        invocationlog.StatusSuccess,
-		Provider:      "openai",
-		Model:         "gpt-4.1-mini",
-		CacheStatus:   invocationlog.CacheStatusHit,
-		RequestID:     "request_001",
-		Limit:         100,
+		TenantID:       testTenantID,
+		ProjectID:      testProjectID,
+		ApplicationID:  testApplicationID,
+		From:           from,
+		To:             to,
+		Status:         invocationlog.StatusSuccess,
+		Provider:       "openai",
+		RequestedModel: "gpt-4.1-mini",
+		CacheStatus:    invocationlog.CacheStatusHit,
+		RequestID:      "request_001",
+		Limit:          100,
 	})
 	if err != nil {
 		t.Fatalf("normalize filter options filter: %v", err)
@@ -118,7 +118,7 @@ func TestBuildProjectLogFilterOptionsQueryUsesOnlyTenantProjectTimeScope(t *test
 		"project_id = $2",
 		"created_at >= $3",
 		"created_at < $4",
-		"model_options",
+		"requested_model_options",
 		"budget_scope_options",
 	} {
 		if !strings.Contains(query, expected) {
@@ -152,14 +152,14 @@ func TestQueryReaderListProjectLogFilterOptionsScansRows(t *testing.T) {
 		rows: &fakeRows{
 			values: [][]any{
 				{
-					"model",
+					"requested_model",
 					sql.NullString{String: "mock-fast", Valid: true},
 					sql.NullString{},
 					sql.NullString{},
 					sql.NullString{},
 				},
 				{
-					"model",
+					"requested_model",
 					sql.NullString{String: "gpt-4.1-mini", Valid: true},
 					sql.NullString{},
 					sql.NullString{},
@@ -178,22 +178,22 @@ func TestQueryReaderListProjectLogFilterOptionsScansRows(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	options, err := reader.ListProjectLogFilterOptions(context.Background(), invocationlog.ProjectLogsFilter{
-		TenantID:    testTenantID,
-		ProjectID:   testProjectID,
-		From:        from,
-		To:          to,
-		Status:      invocationlog.StatusSuccess,
-		Provider:    "openai",
-		Model:       "ignored-by-options-query",
-		CacheStatus: invocationlog.CacheStatusHit,
-		RequestID:   "request_001",
-		Limit:       100,
+		TenantID:       testTenantID,
+		ProjectID:      testProjectID,
+		From:           from,
+		To:             to,
+		Status:         invocationlog.StatusSuccess,
+		Provider:       "openai",
+		RequestedModel: "ignored-by-options-query",
+		CacheStatus:    invocationlog.CacheStatusHit,
+		RequestID:      "request_001",
+		Limit:          100,
 	})
 	if err != nil {
 		t.Fatalf("expected filter options to succeed, got %v", err)
 	}
-	if len(options.Models) != 2 || options.Models[0] != "gpt-4.1-mini" || options.Models[1] != "mock-fast" {
-		t.Fatalf("unexpected models: %#v", options.Models)
+	if len(options.RequestedModels) != 2 || options.RequestedModels[0] != "gpt-4.1-mini" || options.RequestedModels[1] != "mock-fast" {
+		t.Fatalf("unexpected requested models: %#v", options.RequestedModels)
 	}
 	if len(options.BudgetScopes) != 1 ||
 		options.BudgetScopes[0].Type != "application" ||
@@ -223,7 +223,6 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				"mock",
 				"mock-fast",
 				sql.NullString{String: "auto", Valid: true},
-				sql.NullString{String: "mock-fast", Valid: true},
 				invocationlog.StatusSuccess,
 				200,
 				int64(32),
@@ -233,7 +232,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				int64(132),
 				invocationlog.CacheStatusMiss,
 				invocationlog.CacheTypeExact,
-				sql.NullString{String: "low_cost", Valid: true},
+				sql.NullString{String: "category_difficulty_matrix", Valid: true},
 				"none",
 				createdAt,
 				[]byte(`{}`),
@@ -256,7 +255,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 		t.Fatalf("expected one list item, got %d", len(items))
 	}
 	item := items[0]
-	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
+	if item.RequestID != "request_001" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
 	}
 	if item.UserRef != "Yoonji" {
@@ -300,9 +299,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			"mock",
 			"mock-fast",
 			sql.NullString{String: "auto", Valid: true},
-			sql.NullString{String: "mock", Valid: true},
-			sql.NullString{String: "mock-fast", Valid: true},
-			sql.NullString{String: "low_cost", Valid: true},
+			sql.NullString{String: "category_difficulty_matrix", Valid: true},
 			int64(32),
 			int64(24),
 			int64(56),
@@ -322,7 +319,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
-			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_1]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"providerAttempt":{"providerId":"mock","modelId":"mock-fast"},"promptCategory":"general","promptDifficulty":"simple","domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_1]."},"routing":{"outcome":"selected","requestedModel":"auto","routingReason":"category_difficulty_matrix"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
 		}},
 	}
 
@@ -338,8 +335,11 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	if detail.Masking.MaskingAction != "redacted" || len(detail.Masking.MaskingDetectedTypes) != 1 || detail.Masking.MaskingDetectedTypes[0] != "email" {
 		t.Fatalf("unexpected masking detail: %+v", detail.Masking)
 	}
-	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.SelectedProvider != "mock" {
+	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.Category != "general" {
 		t.Fatalf("unexpected cache/routing detail: %+v %+v", detail.Cache, detail.Routing)
+	}
+	if detail.ProviderAttempt == nil || detail.ProviderAttempt.ProviderID != "mock" || detail.ProviderAttempt.ModelID != "mock-fast" || detail.ProviderAttempt.Outcome != "success" {
+		t.Fatalf("unexpected provider attempt detail: %+v", detail.ProviderAttempt)
 	}
 	if detail.BudgetScope.Type != "application" || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope detail: %+v", detail.BudgetScope)
@@ -452,7 +452,6 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(1),
 			int64(3),
 			int64(1),
-			int64(2),
 			int64(13),
 			int64(20),
 			int64(33),
@@ -470,8 +469,8 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			[]byte(`{"hit":1,"miss":2,"bypassed":3}`),
 			[]byte(`{"success":1,"not_called":5}`),
 			[]byte(`{"allowed":3,"warned":1,"degraded":2}`),
-			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
-			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			[]byte(`[{"category":"general","difficulty":"simple","routingReason":"category_difficulty_matrix","requestCount":2}]`),
+			[]byte(`[{"provider":"mock","model":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
 			[]byte(`[{"projectId":"project_demo","requestCount":6,"promptTokens":13,"completionTokens":20,"totalTokens":33,"costMicroUsd":100}]`),
 			[]byte(`[{"applicationId":"app_demo","requestCount":6,"costMicroUsd":100}]`),
 			[]byte(`[{"budgetScopeType":"team","budgetScopeId":"team_demo","resolvedBy":"control_plane_rule","requestCount":6,"costMicroUsd":100}]`),
@@ -510,8 +509,8 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if overview.SafetyOutcomeCounts["blocked"] != 1 || overview.CacheOutcomeCounts["hit"] != 1 || overview.FallbackOutcomeCounts["success"] != 1 {
 		t.Fatalf("unexpected outcome counts: safety=%+v cache=%+v fallback=%+v", overview.SafetyOutcomeCounts, overview.CacheOutcomeCounts, overview.FallbackOutcomeCounts)
 	}
-	if overview.BudgetOutcomeCounts["degraded"] != 2 || overview.BudgetOutcomeCounts["warned"] != 1 || overview.BudgetDowngradedRequests != 2 {
-		t.Fatalf("unexpected budget outcome counts: counts=%+v downgraded=%d", overview.BudgetOutcomeCounts, overview.BudgetDowngradedRequests)
+	if overview.BudgetOutcomeCounts["degraded"] != 2 || overview.BudgetOutcomeCounts["warned"] != 1 {
+		t.Fatalf("unexpected budget outcome counts: counts=%+v", overview.BudgetOutcomeCounts)
 	}
 	if overview.Performance.P95GatewayInternalLatencyMs == nil || !floatEquals(*overview.Performance.P95GatewayInternalLatencyMs, 20) ||
 		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {
@@ -523,7 +522,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if len(overview.ApplicationBreakdown) != 1 || overview.ApplicationBreakdown[0].ApplicationID != "app_demo" {
 		t.Fatalf("unexpected application breakdown: %+v", overview.ApplicationBreakdown)
 	}
-	if len(overview.RoutingCountByModel) != 1 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
+	if len(overview.RoutingCountByModel) != 1 || overview.RoutingCountByModel[0].RequestCount != 2 {
 		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
 	}
 	if len(overview.CostByModel) != 1 || overview.CostByModel[0].CostUSD != "0.000100" {
@@ -685,8 +684,8 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 		"from p0_llm_invocation_logs",
 		"tenant_id = $3",
 		"project_id = $4",
-		"coalesce(nullif(selected_provider, ''), nullif(provider, '')) = $5",
-		"coalesce(nullif(selected_model, ''), nullif(model, '')) = $6",
+		"provider = $5",
+		"model = $6",
 		"percentile_disc(0.95)",
 		"provider_key",
 		"model_key",

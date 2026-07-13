@@ -1,5 +1,8 @@
 # GateLM v2.0.0 Documentation Status
 
+> [!NOTE]
+> **Superseded by active routing contract:** 일반 Gateway 라우팅 의미는 [`../routing/README.md`](../routing/README.md)가 대체한다. 이 주석은 historical 원문을 수정하거나 삭제하지 않는다.
+
 | Field | Value |
 |---|---|
 | Status | Historical baseline |

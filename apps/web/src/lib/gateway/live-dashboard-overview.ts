@@ -3,6 +3,14 @@ import "server-only";
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  type DashboardRoutingSummary,
+  type ModelCostRow,
+  type ProviderModelAggregate,
+  normalizeDashboardRoutingSummaries,
+  normalizeModelCostRows,
+  normalizeProviderModelAggregates
+} from "@/lib/gateway/live-observability-contract";
 import { getAlignedLiveTimeRange } from "@/lib/gateway/time-series-range";
 
 type LiveDashboardOverviewResponse = {
@@ -33,10 +41,10 @@ type LiveDashboardOverviewResponse = {
       byCacheOutcome?: Array<{ outcome?: string; requestCount?: number }>;
       byFallbackOutcome?: Array<{ outcome?: string; requestCount?: number }>;
       byProviderModel?: Array<{
+        model?: string;
         p95ProviderLatencyMs?: number;
+        provider?: string;
         requestCount?: number;
-        selectedModel?: string;
-        selectedProvider?: string;
       }>;
       bySafetyOutcome?: Array<{ outcome?: string; requestCount?: number }>;
       byTerminalStatus?: Array<{ outcome?: string; requestCount?: number }>;
@@ -96,9 +104,9 @@ type LiveDashboardOverviewResponse = {
       costByModel?: Array<{
         costMicroUsd?: number;
         costUsd?: string;
+        model?: string;
+        provider?: string;
         requestCount?: number;
-        selectedModel?: string;
-        selectedProvider?: string;
         totalTokens?: number;
       }>;
       costByProject?: Array<{
@@ -121,11 +129,11 @@ type LiveDashboardOverviewResponse = {
       rateLimitedRequests?: number;
       rateLimitedCount?: number;
       requestCount?: number;
-      routingCountByModel?: Array<{
+      routingSummaries?: Array<{
+        category?: string;
+        difficulty?: string;
         requestCount?: number;
         routingReason?: string;
-        selectedModel?: string;
-        selectedProvider?: string;
       }>;
       savedCostMicroUsd?: number;
       savedCostUsd?: string;
@@ -152,10 +160,31 @@ export type LiveDashboardOverviewFilters = {
   to?: string;
 };
 
+type LiveDashboardBreakdowns = Omit<
+  NonNullable<DashboardOverview["breakdowns"]>,
+  "byProviderModel"
+> & {
+  byProviderModel?: ProviderModelAggregate[];
+};
+
+type RetainedDashboardOverviewKey = {
+  [Key in keyof DashboardOverview]-?: Key extends `${string}CountByModel`
+    ? never
+    : Key extends "costByModel" | "breakdowns"
+      ? never
+      : Key;
+}[keyof DashboardOverview];
+
+export type LiveDashboardOverview = Pick<DashboardOverview, RetainedDashboardOverviewKey> & {
+  routingSummaries: DashboardRoutingSummary[];
+  costByModel: ModelCostRow[];
+  breakdowns?: LiveDashboardBreakdowns;
+};
+
 export async function getLiveDashboardOverview(
   tenantId: string,
   filters: LiveDashboardOverviewFilters = {}
-): Promise<DashboardOverview | undefined> {
+): Promise<LiveDashboardOverview | undefined> {
   const config = getLiveGatewayConfig();
   const liveRange =
     filters.from && filters.to
@@ -217,7 +246,7 @@ function toDashboardOverview(
   tenantId: string,
   fallbackFrom: string,
   fallbackTo: string
-): DashboardOverview {
+): LiveDashboardOverview {
   const totals = data.totals ?? {};
   const freshness = data.dataFreshness ?? {};
   const v2Freshness = data.freshness;
@@ -236,12 +265,12 @@ function toDashboardOverview(
 
   return {
     fixtureName: "live-dashboard-overview",
-    fixtureVersion: "gateway-live",
+    fixtureVersion: "routing-v2",
     owner: "product-experience-demo",
     producer: "gateway-data-plane-governance",
     consumers: ["product-experience-demo"],
     sourceOfTruth: [
-      "docs/v1.0.0/contracts.md",
+      "docs/routing/contracts.md",
       "GET /api/dashboard/overview"
     ],
     range: {
@@ -281,21 +310,9 @@ function toDashboardOverview(
     averageLatencyMs: totals.averageLatencyMs ?? totals.averageResponseTimeMs ?? 0,
     p95LatencyMs: totals.p95LatencyMs ?? 0,
     maskingActionCounts: totals.maskingActionCounts ?? {},
-    routingCountByModel: (totals.routingCountByModel ?? []).map((row) => ({
-      selectedProvider: row.selectedProvider ?? "not-routed",
-      selectedModel: row.selectedModel ?? "not-routed",
-      routingReason: row.routingReason ?? "not-set",
-      requestCount: row.requestCount ?? 0
-    })),
+    routingSummaries: normalizeDashboardRoutingSummaries(totals.routingSummaries),
     statusCounts,
-    costByModel: (totals.costByModel ?? []).map((row) => ({
-      selectedProvider: row.selectedProvider ?? "not-routed",
-      selectedModel: row.selectedModel ?? "not-routed",
-      requestCount: row.requestCount ?? 0,
-      totalTokens: row.totalTokens ?? 0,
-      costMicroUsd: row.costMicroUsd ?? 0,
-      costUsd: row.costUsd ?? formatMicroUsd(row.costMicroUsd ?? 0)
-    })),
+    costByModel: normalizeModelCostRows(totals.costByModel),
     costByProject: normalizeProjectCostRows(totals.costByProject ?? data.breakdowns?.byProject),
     requestIds: [],
     dataFreshness: {
@@ -320,7 +337,7 @@ function toDashboardOverview(
     breakdowns: {
       byApplication: normalizeApplicationRows(data.breakdowns?.byApplication),
       byBudgetScope: normalizeBudgetScopeRows(data.breakdowns?.byBudgetScope),
-      byProviderModel: normalizeProviderModelRows(data.breakdowns?.byProviderModel),
+      byProviderModel: normalizeProviderModelAggregates(data.breakdowns?.byProviderModel),
       bySafetyOutcome: normalizeOutcomeRows(data.breakdowns?.bySafetyOutcome),
       byCacheOutcome: normalizeOutcomeRows(data.breakdowns?.byCacheOutcome),
       byFallbackOutcome: normalizeOutcomeRows(data.breakdowns?.byFallbackOutcome),
@@ -399,24 +416,6 @@ function normalizeBudgetScopeRows(
     resolvedBy: row.resolvedBy ?? "default_application",
     requestCount: row.requestCount ?? 0,
     estimatedCostMicroUsd: row.estimatedCostMicroUsd ?? row.costMicroUsd ?? 0
-  }));
-}
-
-function normalizeProviderModelRows(
-  rows:
-    | Array<{
-        p95ProviderLatencyMs?: number;
-        requestCount?: number;
-        selectedModel?: string;
-        selectedProvider?: string;
-      }>
-    | undefined
-) {
-  return (rows ?? []).map((row) => ({
-    selectedProvider: row.selectedProvider ?? "not-routed",
-    selectedModel: row.selectedModel ?? "not-routed",
-    requestCount: row.requestCount ?? 0,
-    p95ProviderLatencyMs: row.p95ProviderLatencyMs ?? 0
   }));
 }
 
