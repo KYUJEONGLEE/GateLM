@@ -9,6 +9,7 @@ import (
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -130,13 +131,13 @@ func TestBuildOpenAIStaticCatalogModelsAddsManualExtraModels(t *testing.T) {
 	if len(models) != 4 {
 		t.Fatalf("expected low, balanced, and two unique extra models, got %#v", models)
 	}
-	if models[0].ModelName != "gpt-4o-mini" || !models[0].Routing.AutoRoutingEligible || models[0].Routing.CostTier != "low" {
+	if models[0].ModelID != "provider_openai_main:gpt-4o-mini" || models[0].ModelRef != "provider_openai_main:gpt-4o-mini" || models[0].ModelName != "gpt-4o-mini" || !models[0].Routing.AutoRoutingEligible || models[0].Routing.CostTier != "low" {
 		t.Fatalf("low-cost model routing changed: %#v", models[0])
 	}
-	if models[1].ModelName != "gpt-4o" || !models[1].Routing.AutoRoutingEligible || models[1].Routing.CostTier != "balanced" {
+	if models[1].ModelID != "provider_openai_main:gpt-4o" || models[1].ModelRef != "provider_openai_main:gpt-4o" || models[1].ModelName != "gpt-4o" || !models[1].Routing.AutoRoutingEligible || models[1].Routing.CostTier != "balanced" {
 		t.Fatalf("balanced model routing changed: %#v", models[1])
 	}
-	if models[2].ModelID != "provider_openai_main:gpt-5.4-mini" || models[2].ModelName != "gpt-5.4-mini" {
+	if models[2].ModelID != "provider_openai_main:gpt-5.4-mini" || models[2].ModelRef != "provider_openai_main:gpt-5.4-mini" || models[2].ModelName != "gpt-5.4-mini" {
 		t.Fatalf("unexpected first extra model: %#v", models[2])
 	}
 	if models[2].Routing.AutoRoutingEligible {
@@ -144,6 +145,29 @@ func TestBuildOpenAIStaticCatalogModelsAddsManualExtraModels(t *testing.T) {
 	}
 	if !models[2].Capabilities.StreamingSupported || !models[2].Capabilities.SupportsJSONMode {
 		t.Fatalf("extra OpenAI model capabilities were not set: %#v", models[2].Capabilities)
+	}
+}
+
+func TestBuildStaticProviderCatalogUsesExplicitMockBootstrapOnly(t *testing.T) {
+	catalog := buildStaticProviderCatalog(config.Config{
+		ProviderCatalogID:      "catalog-test",
+		ProviderCatalogVersion: 1,
+		ProviderCatalogHash:    "sha256:catalog-test",
+		OpenAIProviderID:       "provider-openai",
+		OpenAIProviderName:     "openai",
+		MockProviderID:         "provider-mock",
+		MockProviderName:       "mock",
+	})
+
+	provider, model, err := catalog.ResolveModelRef(routing.MockBootstrapRef)
+	if err != nil {
+		t.Fatalf("resolve mock bootstrap: %v", err)
+	}
+	if provider.ProviderID != "provider-mock" || model.ModelID != "provider-mock:mock-balanced" || model.ModelRef != routing.MockBootstrapRef || model.ModelName != routing.MockBootstrapRef {
+		t.Fatalf("unexpected explicit mock bootstrap target: provider=%#v model=%#v", provider, model)
+	}
+	if len(catalog.Providers[1].Models) != 1 {
+		t.Fatalf("legacy tier model settings must not populate the mock catalog: %#v", catalog.Providers[1].Models)
 	}
 }
 

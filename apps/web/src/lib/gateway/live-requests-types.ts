@@ -1,5 +1,3 @@
-export type LiveRequestProvider = "openai" | "anthropic" | "google" | "gemini" | "mock" | "unknown";
-
 export type LiveRequestCacheStatus = "HIT" | "MISS" | "BYPASS" | "NONE";
 
 export type LiveRequestSafetyAction = "MASKED" | "BLOCKED" | "REDACTED" | "NONE";
@@ -8,15 +6,17 @@ export type LiveRequestStatusFilter = "" | "success" | "failed" | "blocked" | "r
 
 export type LiveRequestRow = {
   cacheStatus: LiveRequestCacheStatus;
+  category: "general" | "code" | "translation" | "summarization" | "reasoning";
   costUsd: number;
+  difficulty: "simple" | "complex";
   id: string;
   latencyMs: number;
-  model: string;
+  modelRef: string | null;
   projectId: string;
   projectName: string;
-  provider: LiveRequestProvider;
-  providerLabel: string;
+  requestedModel: string;
   requestId: string;
+  routingReason: string | null;
   safetyAction: LiveRequestSafetyAction;
   status: string;
   statusCode: number;
@@ -28,7 +28,7 @@ export type LiveRequestRow = {
 
 export type LiveRequestsPayload = {
   generatedAt: string;
-  modelOptions: string[];
+  requestedModelOptions: string[];
   projectNameSource: "control-plane" | "fixture";
   rows: LiveRequestRow[];
 };

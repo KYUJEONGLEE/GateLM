@@ -5,7 +5,7 @@
 | Status | Active documentation entrypoint |
 | Applies to | 현재 GateLM 개발 작업 |
 | Development baseline | `origin/dev` |
-| Last verified | 2026-07-12 |
+| Last verified | 2026-07-13 |
 | Version policy | 다음 개발 SemVer 미확정 |
 
 이 폴더는 GateLM의 새 계약을 복제하는 장소가 아니다. 현재 어떤 문서가 어느 범위에서 유효한지 알려주는 안정적인 진입점이다.
@@ -25,6 +25,7 @@
 | 작업 범위 | 먼저 읽을 문서 | 상태 |
 |---|---|---|
 | 일반 UI, 리팩터링, 버그 수정 | current 문서와 실제 코드/타입 | Active |
+| 일반 Gateway 라우팅, RuntimeSnapshot routing | [`../routing/README.md`](../routing/README.md) | Active scoped contract |
 | 신규 Tenant Chat Product | [`../tenant-chat/README.md`](../tenant-chat/README.md) | Active scoped contract; implementation pending |
 | Self-host 설치와 이미지 | [`../v2.1.0/README.md`](../v2.1.0/README.md) | Latest versioned scope |
 | Advanced Routing offline 평가 | [`../v2.1.0/README.md`](../v2.1.0/README.md) | Versioned evidence scope |
@@ -38,6 +39,7 @@
 
 - `v2.0.0`: 닫힌 historical workstream의 행동 계약 baseline 및 과거 plan/criteria
 - `v2.1.0`: 저장소에 존재하는 최신 versioned 범위. Self-host와 Advanced Routing evidence를 다룸
+- `routing/v2`: 일반 Gateway category × difficulty 라우팅의 active scoped contract
 - `tenant-chat/v1`: release SemVer와 독립된 신규 Tenant Chat active scoped contract. 구현 상태는 별도로 확인
 - `origin/dev`: 현재 통합 중인 unreleased development snapshot
 - `v0.0.1`: 공식 GitHub 최신 릴리스

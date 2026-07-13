@@ -4,7 +4,7 @@
 |---|---|
 | Status | Active issue register |
 | Authority | 확인된 문서/구현 불일치와 결정 대기 항목 |
-| Last verified | 2026-07-11 |
+| Last verified | 2026-07-13 |
 
 이 문서는 후보를 계약으로 승격하지 않는다. 확실한 불일치를 기록하고, 사람 결정이 필요한 항목을 구현 작업과 분리한다.
 
@@ -22,6 +22,7 @@
 | DOC-008 | 일반 Markdown link checker가 없다 | `verify:v2-docs`는 schema/fixture와 literal entry path만 검사 | CI에 Markdown relative link/anchor 검사 추가 여부 결정 |
 | DOC-009 | 여러 architecture/policy/reference/archive 문서가 v1을 현재 기준으로 표기한다 | 파일 상단의 과거 상태 문구와 active router가 충돌 | 문서별 재검증 후 status metadata 추가 또는 archive 이동 |
 | DOC-010 | docs verification 명령 이름이 v2에 고정돼 있다 | verifier는 current entrypoint도 검사하도록 갱신됐지만 package/CI 명령은 `verify:v2-docs`로 남음 | 후속 PR에서 중립적인 `verify:docs` alias/rename을 추가할지 결정 |
+| DOC-011 | primary realistic category fixture의 생성 provenance를 재현할 수 없다 | challenge/ambiguous fixture에는 checked-in generator가 있지만 `category-evaluation-dataset.fixture.jsonl`을 재생성하는 generator, seed 또는 manual review 기록은 확인되지 않음 | deterministic generator와 seed/version을 추가하거나 manual fixture라면 생성·검토 provenance를 명시 |
 
 ## Known Documentation Drift
 

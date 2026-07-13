@@ -11,6 +11,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
@@ -136,8 +137,6 @@ func newMetricsHandoffHarness(t *testing.T, registry *metrics.Registry, logWrite
 			calls:    &providerCalls,
 			requests: &providerRequests,
 		}),
-		DefaultModel:         "mock-balanced",
-		DefaultProvider:      "mock",
 		ExactCacheStore:      cacheStore,
 		ExactCacheKeyBuilder: keyBuilder,
 		CachePolicyHash:      "cache_policy_metrics_handoff_smoke",
@@ -177,8 +176,6 @@ func metricsHandoffRateLimitedRequest(t *testing.T, registry *metrics.Registry, 
 	}
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
 		RateLimitPipeline: newTestRateLimitPipeline(limiter),
 		TerminalLogWriter: logWriter,
 		MetricsRegistry:   registry,
@@ -193,9 +190,7 @@ func metricsHandoffProviderErrorRequest(t *testing.T, registry *metrics.Registry
 
 	var providerCalls int64
 	handler := ChatCompletionsHandler{
-		Providers:         provider.NewRegistry("nil-provider", metricsHandoffNilProviderAdapter{calls: &providerCalls}),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "nil-provider",
+		Providers:         provider.NewRegistry("mock", metricsHandoffNilProviderAdapter{calls: &providerCalls}),
 		TerminalLogWriter: logWriter,
 		MetricsRegistry:   registry,
 	}
@@ -237,8 +232,8 @@ func metricsHandoffExpectedSamples() []string {
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="provider_error",http_status="502",method="POST",status="failed"} 1`,
 		`gatelm_gateway_inflight_requests{endpoint="/v1/chat/completions",method="POST"} 0`,
-		`gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-fast",selected_provider="mock",status="success"} 2`,
-		`gatelm_provider_requests_total{error_code="provider_error",http_status="502",selected_model="mock-fast",selected_provider="nil-provider",status="failed"} 1`,
+		`gatelm_provider_requests_total{error_code="none",http_status="200",model="mock-balanced",provider="mock",status="success"} 2`,
+		`gatelm_provider_requests_total{error_code="provider_error",http_status="502",model="mock-balanced",provider="mock",status="failed"} 1`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success"} 3`,
 		`gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 2`,
@@ -364,13 +359,12 @@ func metricsHandoffSuccessSummary(rr *httptest.ResponseRecorder, resp provider.C
 	gateLM := map[string]any{}
 	if resp.GateLM != nil {
 		gateLM = map[string]any{
-			"requestId":        resp.GateLM.RequestID,
-			"requestedModel":   resp.GateLM.RequestedModel,
-			"selectedProvider": resp.GateLM.SelectedProvider,
-			"selectedModel":    resp.GateLM.SelectedModel,
-			"routingReason":    resp.GateLM.RoutingReason,
-			"cacheStatus":      resp.GateLM.CacheStatus,
-			"maskingAction":    resp.GateLM.MaskingAction,
+			"requestId":      resp.GateLM.RequestID,
+			"requestedModel": resp.GateLM.RequestedModel,
+			"executionMode":  resp.GateLM.ExecutionMode,
+			"routingReason":  resp.GateLM.RoutingReason,
+			"cacheStatus":    resp.GateLM.CacheStatus,
+			"maskingAction":  resp.GateLM.MaskingAction,
 		}
 	}
 	return map[string]any{
@@ -454,7 +448,7 @@ type metricsHandoffNilProviderAdapter struct {
 }
 
 func (a metricsHandoffNilProviderAdapter) AdapterType() string {
-	return "nil-provider"
+	return providercatalog.AdapterTypeMock
 }
 
 func (a metricsHandoffNilProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {

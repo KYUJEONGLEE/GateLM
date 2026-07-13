@@ -2,126 +2,62 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   BrainCircuit,
   Check,
   Code2,
   FileText,
   Languages,
   MessageSquareMore,
-  RefreshCcw,
-  Sparkles
+  Plus,
+  Trash2,
+  TriangleAlert
 } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
-import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 
 const tenantManagementSections = [
-  { id: "budget", label: "예산" },
-  { id: "routing", label: "라우팅" }
+  { id: "budget", label: "Budget" },
+  { id: "routing", label: "Routing" }
 ] as const;
 
-const providerCatalog = [
-  {
-    displayName: "OpenAI",
-    family: "openai",
-    models: ["GPT-4o", "GPT-4o mini", "GPT-4.1"],
-    provider: "openai"
-  },
-  {
-    displayName: "Anthropic",
-    family: "claude",
-    models: ["Claude Opus", "Claude Sonnet", "Claude Haiku"],
-    provider: "anthropic"
-  },
-  {
-    displayName: "Google",
-    family: "gemini",
-    models: ["Gemini Pro", "Gemini Flash"],
-    provider: "google"
-  }
-] satisfies ProviderCatalogEntry[];
+const routingCategories = [
+  { icon: MessageSquareMore, id: "general", label: "General" },
+  { icon: Code2, id: "code", label: "Code" },
+  { icon: Languages, id: "translation", label: "Translation" },
+  { icon: FileText, id: "summarization", label: "Summarization" },
+  { icon: BrainCircuit, id: "reasoning", label: "Reasoning" }
+] as const;
 
-const recommendedRoutingRows: RoutingCategoryRow[] = [
-  {
-    defaultRoute: { model: "GPT-4o", provider: "openai" },
-    highQualityRoute: { model: "Claude Sonnet", provider: "anthropic" },
-    icon: MessageSquareMore,
-    id: "general-chat",
-    label: "일반 채팅"
-  },
-  {
-    defaultRoute: { model: "Claude Opus", provider: "anthropic" },
-    highQualityRoute: { model: "GPT-4o", provider: "openai" },
-    icon: Code2,
-    id: "code-generation",
-    label: "코드 생성"
-  },
-  {
-    defaultRoute: { model: "Gemini Pro", provider: "google" },
-    highQualityRoute: { model: "GPT-4o", provider: "openai" },
-    icon: Languages,
-    id: "translation",
-    label: "번역"
-  },
-  {
-    defaultRoute: { model: "Gemini Flash", provider: "google" },
-    highQualityRoute: { model: "GPT-4o mini", provider: "openai" },
-    icon: FileText,
-    id: "summary-document",
-    label: "요약 / 문서"
-  },
-  {
-    defaultRoute: { model: "Claude Sonnet", provider: "anthropic" },
-    highQualityRoute: { model: "Claude Opus", provider: "anthropic" },
-    icon: BrainCircuit,
-    id: "reasoning",
-    label: "추론"
-  }
-];
+const routingDifficulties = [
+  { id: "simple", label: "Simple" },
+  { id: "complex", label: "Complex" }
+] as const;
 
-const initialFallbackRoute: RoutingModelSelection = {
-  model: "GPT-4o mini",
-  provider: "openai"
-};
+const modelRefOptions = [
+  "mock-balanced",
+  "openai:gpt-4o",
+  "openai:gpt-4o-mini",
+  "anthropic:claude-sonnet",
+  "anthropic:claude-haiku",
+  "google:gemini-pro",
+  "google:gemini-flash"
+] as const;
 
-const initialOffDefaultRoute: RoutingModelSelection = {
-  model: "GPT-4o",
-  provider: "openai"
-};
-
-const routingRouteKeys = ["defaultRoute", "highQualityRoute"] as const;
-const recommendationHighlightDurationMs = 1600;
+const mockBootstrapModelRef = "mock-balanced";
 const saveConfirmationDurationMs = 1800;
 
 type TenantManagementSection = (typeof tenantManagementSections)[number]["id"];
-type RoutingRouteKey = "defaultRoute" | "highQualityRoute";
-
-type ProviderCatalogEntry = {
-  displayName: string;
-  family: string;
-  models: string[];
-  provider: string;
-};
-
-type RoutingModelSelection = {
-  model: string;
-  provider: string;
-};
-
-type RoutingCategoryRow = {
-  defaultRoute: RoutingModelSelection;
-  highQualityRoute: RoutingModelSelection;
-  icon: typeof MessageSquareMore;
-  id: string;
-  label: string;
-};
+type RoutingCategory = (typeof routingCategories)[number]["id"];
+type RoutingDifficulty = (typeof routingDifficulties)[number]["id"];
+type RoutingMode = "auto" | "manual";
+type RoutingCell = { modelRefs: string[] };
+type RoutingMatrix = Record<RoutingCategory, Record<RoutingDifficulty, RoutingCell>>;
 
 type TenantRoutingSettings = {
-  fallbackRoute: RoutingModelSelection;
-  hasInitializedAutoRouting: boolean;
-  isRoutingEnabled: boolean;
-  offDefaultRoute: RoutingModelSelection;
-  routingRows: RoutingCategoryRow[];
+  mode: RoutingMode;
+  routes: RoutingMatrix;
 };
 
 function getTenantManagementTabId(section: TenantManagementSection) {
@@ -132,61 +68,80 @@ function getTenantManagementPanelId(section: TenantManagementSection) {
   return `tenant-management-panel-${section}`;
 }
 
-function getProvider(provider: string) {
-  return providerCatalog.find((entry) => entry.provider === provider) ?? providerCatalog[0];
+function createMockBootstrapCell(): RoutingCell {
+  return { modelRefs: [mockBootstrapModelRef] };
 }
 
-function createRecommendedRoutingRows(): RoutingCategoryRow[] {
-  return cloneRoutingRows(recommendedRoutingRows);
+function createMockBootstrapMatrix(): RoutingMatrix {
+  return {
+    code: {
+      complex: createMockBootstrapCell(),
+      simple: createMockBootstrapCell()
+    },
+    general: {
+      complex: createMockBootstrapCell(),
+      simple: createMockBootstrapCell()
+    },
+    reasoning: {
+      complex: createMockBootstrapCell(),
+      simple: createMockBootstrapCell()
+    },
+    summarization: {
+      complex: createMockBootstrapCell(),
+      simple: createMockBootstrapCell()
+    },
+    translation: {
+      complex: createMockBootstrapCell(),
+      simple: createMockBootstrapCell()
+    }
+  };
 }
 
-function cloneRoutingRows(rows: RoutingCategoryRow[]): RoutingCategoryRow[] {
-  return rows.map((row) => ({
-    ...row,
-    defaultRoute: { ...row.defaultRoute },
-    highQualityRoute: { ...row.highQualityRoute }
-  }));
-}
-
-function createRoutingRowsFromDefault(
-  defaultRoute: RoutingModelSelection
-): RoutingCategoryRow[] {
-  return recommendedRoutingRows.map((row) => ({
-    ...row,
-    defaultRoute: { ...defaultRoute },
-    highQualityRoute: { ...defaultRoute }
-  }));
-}
-
-function getRoutingRouteId(rowId: string, routeKey: RoutingRouteKey) {
-  return `${rowId}:${routeKey}`;
-}
-
-function isSameRoutingSelection(
-  current: RoutingModelSelection,
-  next: RoutingModelSelection
-) {
-  return current.provider === next.provider && current.model === next.model;
+function cloneRoutingMatrix(matrix: RoutingMatrix): RoutingMatrix {
+  return {
+    code: {
+      complex: { modelRefs: [...matrix.code.complex.modelRefs] },
+      simple: { modelRefs: [...matrix.code.simple.modelRefs] }
+    },
+    general: {
+      complex: { modelRefs: [...matrix.general.complex.modelRefs] },
+      simple: { modelRefs: [...matrix.general.simple.modelRefs] }
+    },
+    reasoning: {
+      complex: { modelRefs: [...matrix.reasoning.complex.modelRefs] },
+      simple: { modelRefs: [...matrix.reasoning.simple.modelRefs] }
+    },
+    summarization: {
+      complex: { modelRefs: [...matrix.summarization.complex.modelRefs] },
+      simple: { modelRefs: [...matrix.summarization.simple.modelRefs] }
+    },
+    translation: {
+      complex: { modelRefs: [...matrix.translation.complex.modelRefs] },
+      simple: { modelRefs: [...matrix.translation.simple.modelRefs] }
+    }
+  };
 }
 
 function createInitialTenantRoutingSettings(): TenantRoutingSettings {
   return {
-    fallbackRoute: { ...initialFallbackRoute },
-    hasInitializedAutoRouting: false,
-    isRoutingEnabled: false,
-    offDefaultRoute: { ...initialOffDefaultRoute },
-    routingRows: createRoutingRowsFromDefault(initialOffDefaultRoute)
+    mode: "auto",
+    routes: createMockBootstrapMatrix()
   };
 }
 
 function cloneTenantRoutingSettings(settings: TenantRoutingSettings): TenantRoutingSettings {
   return {
-    fallbackRoute: { ...settings.fallbackRoute },
-    hasInitializedAutoRouting: settings.hasInitializedAutoRouting,
-    isRoutingEnabled: settings.isRoutingEnabled,
-    offDefaultRoute: { ...settings.offDefaultRoute },
-    routingRows: cloneRoutingRows(settings.routingRows)
+    mode: settings.mode,
+    routes: cloneRoutingMatrix(settings.routes)
   };
+}
+
+function matrixUsesMockModels(matrix: RoutingMatrix) {
+  return routingCategories.some(({ id: category }) =>
+    routingDifficulties.some(({ id: difficulty }) =>
+      matrix[category][difficulty].modelRefs.some((modelRef) => modelRef.startsWith("mock-"))
+    )
+  );
 }
 
 export default function TenantsPage() {
@@ -198,13 +153,13 @@ export default function TenantsPage() {
   return (
     <main className="console-content management-line-content tenant-management-content">
       <header className="project-page-header">
-        <h2>Tenant 관리</h2>
+        <h2>Tenant management</h2>
       </header>
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div
+          aria-label="Tenant management sections"
           className="policy-section-tabs tenant-management-tabs"
-          aria-label="Tenant 관리 섹션"
           role="tablist"
         >
           {tenantManagementSections.map((section) => {
@@ -239,7 +194,14 @@ export default function TenantsPage() {
             initialSettings={savedRoutingSettings}
             onSave={(settings) => setSavedRoutingSettings(cloneTenantRoutingSettings(settings))}
           />
-        ) : null}
+        ) : (
+          <section className="tenant-routing-enable-card" aria-labelledby="tenant-budget-title">
+            <div>
+              <h3 id="tenant-budget-title">Budget</h3>
+              <p>Tenant budget settings are managed separately from routing.</p>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
@@ -252,44 +214,23 @@ function TenantRoutingPanel({
   initialSettings: TenantRoutingSettings;
   onSave: (settings: TenantRoutingSettings) => void;
 }) {
-  const hasInitializedAutoRouting = useRef(initialSettings.hasInitializedAutoRouting);
-  const recommendationHighlightTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveConfirmationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [fallbackRoute, setFallbackRoute] = useState<RoutingModelSelection>(() => ({
-    ...initialSettings.fallbackRoute
-  }));
-  const [highlightedRouteIds, setHighlightedRouteIds] = useState<ReadonlySet<string>>(
-    () => new Set()
-  );
-  const [isRoutingEnabled, setIsRoutingEnabled] = useState(initialSettings.isRoutingEnabled);
   const [isSaveConfirmed, setIsSaveConfirmed] = useState(false);
-  const [offDefaultRoute, setOffDefaultRoute] = useState<RoutingModelSelection>(() => ({
-    ...initialSettings.offDefaultRoute
-  }));
-  const [routingRows, setRoutingRows] = useState<RoutingCategoryRow[]>(() =>
-    cloneRoutingRows(initialSettings.routingRows)
+  const [mode, setMode] = useState<RoutingMode>(initialSettings.mode);
+  const [routingMatrix, setRoutingMatrix] = useState<RoutingMatrix>(() =>
+    cloneRoutingMatrix(initialSettings.routes)
   );
   const [statusMessage, setStatusMessage] = useState("");
+  const usesMockModels = matrixUsesMockModels(routingMatrix);
 
   useEffect(
     () => () => {
-      if (recommendationHighlightTimeout.current) {
-        clearTimeout(recommendationHighlightTimeout.current);
-      }
       if (saveConfirmationTimeout.current) {
         clearTimeout(saveConfirmationTimeout.current);
       }
     },
     []
   );
-
-  function clearRecommendationHighlight() {
-    if (recommendationHighlightTimeout.current) {
-      clearTimeout(recommendationHighlightTimeout.current);
-      recommendationHighlightTimeout.current = null;
-    }
-    setHighlightedRouteIds(new Set());
-  }
 
   function clearSaveConfirmation() {
     if (saveConfirmationTimeout.current) {
@@ -299,16 +240,87 @@ function TenantRoutingPanel({
     setIsSaveConfirmed(false);
   }
 
+  function updateCell(
+    category: RoutingCategory,
+    difficulty: RoutingDifficulty,
+    update: (modelRefs: string[]) => string[]
+  ) {
+    clearSaveConfirmation();
+    setRoutingMatrix((current) => ({
+      ...current,
+      [category]: {
+        ...current[category],
+        [difficulty]: {
+          modelRefs: update([...current[category][difficulty].modelRefs])
+        }
+      }
+    }));
+    setStatusMessage("");
+  }
+
+  function updateModelRef(
+    category: RoutingCategory,
+    difficulty: RoutingDifficulty,
+    index: number,
+    modelRef: string
+  ) {
+    updateCell(category, difficulty, (modelRefs) => {
+      modelRefs[index] = modelRef;
+      return modelRefs;
+    });
+  }
+
+  function addFallback(category: RoutingCategory, difficulty: RoutingDifficulty) {
+    updateCell(category, difficulty, (modelRefs) => {
+      const nextModelRef =
+        modelRefOptions.find(
+          (modelRef) => !modelRef.startsWith("mock-") && !modelRefs.includes(modelRef)
+        ) ?? modelRefOptions.find((modelRef) => !modelRefs.includes(modelRef));
+
+      return nextModelRef ? [...modelRefs, nextModelRef] : modelRefs;
+    });
+  }
+
+  function moveModelRef(
+    category: RoutingCategory,
+    difficulty: RoutingDifficulty,
+    index: number,
+    direction: -1 | 1
+  ) {
+    updateCell(category, difficulty, (modelRefs) => {
+      const destination = index + direction;
+      if (destination < 0 || destination >= modelRefs.length) {
+        return modelRefs;
+      }
+      [modelRefs[index], modelRefs[destination]] = [modelRefs[destination], modelRefs[index]];
+      return modelRefs;
+    });
+  }
+
+  function removeModelRef(
+    category: RoutingCategory,
+    difficulty: RoutingDifficulty,
+    index: number
+  ) {
+    updateCell(category, difficulty, (modelRefs) =>
+      modelRefs.length === 1 ? modelRefs : modelRefs.filter((_, itemIndex) => itemIndex !== index)
+    );
+  }
+
+  function changeMode(autoRoutingEnabled: boolean) {
+    clearSaveConfirmation();
+    setMode(autoRoutingEnabled ? "auto" : "manual");
+    setStatusMessage(
+      autoRoutingEnabled
+        ? "Auto routing enabled. The saved routing matrix is active."
+        : "Manual mode selected. The Auto routing matrix is preserved."
+    );
+  }
+
   function saveRoutingSettings() {
     clearSaveConfirmation();
-    onSave({
-      fallbackRoute: { ...fallbackRoute },
-      hasInitializedAutoRouting: hasInitializedAutoRouting.current,
-      isRoutingEnabled,
-      offDefaultRoute: { ...offDefaultRoute },
-      routingRows: cloneRoutingRows(routingRows)
-    });
-    setStatusMessage("변경사항을 저장했습니다.");
+    onSave({ mode, routes: cloneRoutingMatrix(routingMatrix) });
+    setStatusMessage("Routing settings saved.");
     saveConfirmationTimeout.current = setTimeout(() => {
       setIsSaveConfirmed(true);
       saveConfirmationTimeout.current = setTimeout(() => {
@@ -318,151 +330,17 @@ function TenantRoutingPanel({
     }, 0);
   }
 
-  function changeRoutingEnabled(checked: boolean) {
-    clearRecommendationHighlight();
-    clearSaveConfirmation();
-    setIsRoutingEnabled(checked);
-
-    if (checked && !hasInitializedAutoRouting.current) {
-      setRoutingRows(createRoutingRowsFromDefault(offDefaultRoute));
-      hasInitializedAutoRouting.current = true;
-      setStatusMessage("OFF 기본 모델을 모든 카테고리와 난이도에 복사했습니다.");
-      return;
-    }
-
-    setStatusMessage("");
-  }
-
-  function applyRecommendedRouting() {
-    clearSaveConfirmation();
-    const recommendedRows = createRecommendedRoutingRows();
-    const routeIdsToHighlight = new Set<string>();
-    let changedRouteCount = 0;
-
-    for (const recommendedRow of recommendedRows) {
-      const currentRow = routingRows.find((row) => row.id === recommendedRow.id);
-
-      for (const routeKey of routingRouteKeys) {
-        routeIdsToHighlight.add(getRoutingRouteId(recommendedRow.id, routeKey));
-        if (
-          !currentRow ||
-          !isSameRoutingSelection(currentRow[routeKey], recommendedRow[routeKey])
-        ) {
-          changedRouteCount += 1;
-        }
-      }
-    }
-
-    clearRecommendationHighlight();
-    setRoutingRows(recommendedRows);
-    setHighlightedRouteIds(routeIdsToHighlight);
-
-    if (changedRouteCount === 0) {
-      setStatusMessage("추천 모델 설정을 다시 적용했습니다.");
-    } else {
-      setStatusMessage(`${changedRouteCount}개 모델 설정을 추천 모델로 변경했습니다.`);
-    }
-
-    recommendationHighlightTimeout.current = setTimeout(() => {
-      setHighlightedRouteIds(new Set());
-      recommendationHighlightTimeout.current = null;
-    }, recommendationHighlightDurationMs);
-  }
-
-  function updateProvider(rowId: string, routeKey: RoutingRouteKey, provider: string) {
-    const nextProvider = getProvider(provider);
-
-    clearRecommendationHighlight();
-    clearSaveConfirmation();
-    setRoutingRows((currentRows) =>
-      currentRows.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              [routeKey]: {
-                model: nextProvider.models[0] ?? "",
-                provider: nextProvider.provider
-              }
-            }
-          : row
-      )
-    );
-    setStatusMessage("");
-  }
-
-  function updateModel(rowId: string, routeKey: RoutingRouteKey, model: string) {
-    clearRecommendationHighlight();
-    clearSaveConfirmation();
-    setRoutingRows((currentRows) =>
-      currentRows.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              [routeKey]: {
-                ...row[routeKey],
-                model
-              }
-            }
-          : row
-      )
-    );
-    setStatusMessage("");
-  }
-
-  function updateFallbackProvider(provider: string) {
-    const nextProvider = getProvider(provider);
-
-    clearSaveConfirmation();
-    setFallbackRoute({
-      model: nextProvider.models[0] ?? "",
-      provider: nextProvider.provider
-    });
-    setStatusMessage("");
-  }
-
-  function updateFallbackModel(model: string) {
-    clearSaveConfirmation();
-    setFallbackRoute((current) => ({ ...current, model }));
-    setStatusMessage("");
-  }
-
-  function updateOffDefaultProvider(provider: string) {
-    const nextProvider = getProvider(provider);
-
-    clearSaveConfirmation();
-    setOffDefaultRoute({
-      model: nextProvider.models[0] ?? "",
-      provider: nextProvider.provider
-    });
-    setStatusMessage("");
-  }
-
-  function updateOffDefaultModel(model: string) {
-    clearSaveConfirmation();
-    setOffDefaultRoute((current) => ({ ...current, model }));
-    setStatusMessage("");
-  }
-
   function resetRoutingSettings() {
-    clearRecommendationHighlight();
     clearSaveConfirmation();
-
-    if (isRoutingEnabled) {
-      setRoutingRows(createRoutingRowsFromDefault(offDefaultRoute));
-      setStatusMessage("모든 카테고리 모델을 OFF 기본 모델로 초기화했습니다.");
-      return;
-    }
-
-    hasInitializedAutoRouting.current = false;
-    setFallbackRoute({ ...initialFallbackRoute });
-    setOffDefaultRoute({ ...initialOffDefaultRoute });
-    setRoutingRows(createRoutingRowsFromDefault(initialOffDefaultRoute));
-    setStatusMessage("라우팅 설정을 초기화했습니다.");
+    setMode("auto");
+    setRoutingMatrix(createMockBootstrapMatrix());
+    setStatusMessage("Routing settings reset to the guarded mock bootstrap configuration.");
   }
 
   return (
     <form
       className="tenant-routing-panel"
+      data-bootstrap-state={usesMockModels ? "mock_bootstrap" : "configured"}
       onSubmit={(event) => {
         event.preventDefault();
         saveRoutingSettings();
@@ -471,100 +349,99 @@ function TenantRoutingPanel({
       <section className="tenant-routing-enable-card" aria-labelledby="tenant-auto-routing-title">
         <div>
           <h3 id="tenant-auto-routing-title">Auto routing</h3>
-          <p>Rule base로 요청 카테고리를 판별해 지정 모델로 라우팅합니다.</p>
+          <p>
+            Auto classifies category first, then evaluates difficulty with that category context.
+          </p>
         </div>
         <div className="tenant-routing-switch-control">
           <Switch
             aria-label="Auto routing"
-            checked={isRoutingEnabled}
+            checked={mode === "auto"}
             className="tenant-routing-switch"
-            onCheckedChange={changeRoutingEnabled}
+            onCheckedChange={changeMode}
           />
-          <span>{isRoutingEnabled ? "ON" : "OFF"}</span>
+          <span>{mode === "auto" ? "Auto" : "Manual"}</span>
         </div>
       </section>
 
-      {isRoutingEnabled ? (
+      {usesMockModels ? (
+        <div className="tenant-routing-mock-warning" role="alert">
+          <TriangleAlert aria-hidden="true" />
+          <div>
+            <strong>Mock routing is active.</strong>
+            <span>
+              Replace every <code>mock-balanced</code> entry with a real modelRef to clear this
+              warning.
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {mode === "auto" ? (
         <section className="tenant-routing-model-card" aria-labelledby="tenant-routing-model-title">
           <header className="tenant-routing-model-heading">
             <div className="tenant-routing-model-heading-copy">
-              <h3 id="tenant-routing-model-title">카테고리별 모델 설정</h3>
-              <p>각 카테고리에 사용할 기본 모델과 고성능 모델을 선택하세요.</p>
+              <h3 id="tenant-routing-model-title">Category × difficulty routing matrix</h3>
+              <p>
+                Each cell is an ordered modelRef list. The first entry is primary; the remaining
+                entries are attempted as fallbacks in order. Uncategorized requests use General.
+              </p>
             </div>
-            <button
-              className="secondary-button tenant-routing-recommend-button"
-              onClick={applyRecommendedRouting}
-              type="button"
-            >
-              <Sparkles aria-hidden="true" />
-              추천 모델 자동 설정
-            </button>
           </header>
 
-          <div className="tenant-routing-table" role="table" aria-label="카테고리별 모델 설정">
+          <div
+            aria-label="Category by difficulty modelRef matrix"
+            className="tenant-routing-table"
+            role="table"
+          >
             <div className="tenant-routing-table-head" role="row">
-              <span role="columnheader">카테고리</span>
-              <span role="columnheader">기본 모델</span>
-              <span role="columnheader">고성능 모델</span>
+              <span role="columnheader">Category</span>
+              <span role="columnheader">Simple</span>
+              <span role="columnheader">Complex</span>
             </div>
-            {routingRows.map((row) => {
-              const CategoryIcon = row.icon;
+            {routingCategories.map((category) => {
+              const CategoryIcon = category.icon;
 
               return (
-                <div className="tenant-routing-table-row" key={row.id} role="row">
+                <div className="tenant-routing-table-row" key={category.id} role="row">
                   <div className="tenant-routing-category" role="rowheader">
                     <CategoryIcon aria-hidden="true" />
-                    <span>{row.label}</span>
+                    <span>{category.label}</span>
                   </div>
-                  <RoutingModelControls
-                    categoryLabel={row.label}
-                    disabled={false}
-                    highlighted={highlightedRouteIds.has(
-                      getRoutingRouteId(row.id, "defaultRoute")
-                    )}
-                    label="기본 모델"
-                    onModelChange={(model) => updateModel(row.id, "defaultRoute", model)}
-                    onProviderChange={(provider) =>
-                      updateProvider(row.id, "defaultRoute", provider)
-                    }
-                    selection={row.defaultRoute}
-                  />
-                  <RoutingModelControls
-                    categoryLabel={row.label}
-                    disabled={false}
-                    highlighted={highlightedRouteIds.has(
-                      getRoutingRouteId(row.id, "highQualityRoute")
-                    )}
-                    label="고성능 모델"
-                    onModelChange={(model) => updateModel(row.id, "highQualityRoute", model)}
-                    onProviderChange={(provider) =>
-                      updateProvider(row.id, "highQualityRoute", provider)
-                    }
-                    selection={row.highQualityRoute}
-                  />
+                  {routingDifficulties.map((difficulty) => (
+                    <RoutingCellEditor
+                      category={category.id}
+                      categoryLabel={category.label}
+                      difficulty={difficulty.id}
+                      difficultyLabel={difficulty.label}
+                      key={difficulty.id}
+                      modelRefs={routingMatrix[category.id][difficulty.id].modelRefs}
+                      onAdd={() => addFallback(category.id, difficulty.id)}
+                      onChange={(index, modelRef) =>
+                        updateModelRef(category.id, difficulty.id, index, modelRef)
+                      }
+                      onMove={(index, direction) =>
+                        moveModelRef(category.id, difficulty.id, index, direction)
+                      }
+                      onRemove={(index) => removeModelRef(category.id, difficulty.id, index)}
+                    />
+                  ))}
                 </div>
               );
             })}
           </div>
         </section>
       ) : (
-        <section
-          className="tenant-routing-off-default-card"
-          aria-labelledby="tenant-routing-off-default-title"
-        >
-          <header className="tenant-routing-off-default-heading">
-            <h3 id="tenant-routing-off-default-title">Auto routing OFF 시 기본 모델</h3>
-            <p>카테고리를 분류하지 않고 모든 요청을 이 모델로 전달합니다.</p>
+        <section className="tenant-routing-model-card" aria-labelledby="tenant-manual-routing-title">
+          <header className="tenant-routing-model-heading">
+            <div className="tenant-routing-model-heading-copy">
+              <h3 id="tenant-manual-routing-title">Manual model selection</h3>
+              <p>
+                Callers must send an explicit modelRef. Manual mode has no default-model mapping;
+                the complete Auto routing matrix stays saved for the next time Auto is enabled.
+              </p>
+            </div>
           </header>
-          <StandaloneModelControls
-            disabled={false}
-            groupLabel="Auto routing OFF 시 기본 모델 설정 컨트롤"
-            modelAriaLabel="Auto routing OFF 기본 모델 선택"
-            onModelChange={updateOffDefaultModel}
-            onProviderChange={updateOffDefaultProvider}
-            providerAriaLabel="Auto routing OFF 기본 Provider"
-            selection={offDefaultRoute}
-          />
         </section>
       )}
 
@@ -574,7 +451,7 @@ function TenantRoutingPanel({
           onClick={resetRoutingSettings}
           type="button"
         >
-          초기화
+          Reset
         </button>
         <button
           className="primary-button tenant-routing-save-button"
@@ -582,34 +459,9 @@ function TenantRoutingPanel({
           type="submit"
         >
           {isSaveConfirmed ? <Check aria-hidden="true" /> : null}
-          {isSaveConfirmed ? "저장됨" : "변경사항 저장"}
+          {isSaveConfirmed ? "Saved" : "Save changes"}
         </button>
       </div>
-
-      <div className="tenant-routing-section-divider" aria-hidden="true" />
-
-      <section
-        className="tenant-routing-fallback-card"
-        aria-labelledby="tenant-routing-fallback-title"
-      >
-        <header className="tenant-routing-fallback-heading">
-          <span className="tenant-routing-fallback-kicker">
-            <RefreshCcw aria-hidden="true" />
-            장애 시 자동 전환
-          </span>
-          <h3 id="tenant-routing-fallback-title">Fallback 모델 설정</h3>
-          <p>기본 모델과 고성능 모델을 사용할 수 없을 때 호출할 대체 모델입니다.</p>
-        </header>
-        <StandaloneModelControls
-          disabled={false}
-          groupLabel="Fallback 모델 설정 컨트롤"
-          modelAriaLabel="Fallback 모델 선택"
-          onModelChange={updateFallbackModel}
-          onProviderChange={updateFallbackProvider}
-          providerAriaLabel="Fallback Provider"
-          selection={fallbackRoute}
-        />
-      </section>
 
       <p className="sr-only" aria-atomic="true" aria-live="polite" role="status">
         {statusMessage}
@@ -618,141 +470,100 @@ function TenantRoutingPanel({
   );
 }
 
-function RoutingModelControls({
+function RoutingCellEditor({
+  category,
   categoryLabel,
-  disabled,
-  highlighted,
-  label,
-  onModelChange,
-  onProviderChange,
-  selection
+  difficulty,
+  difficultyLabel,
+  modelRefs,
+  onAdd,
+  onChange,
+  onMove,
+  onRemove
 }: {
+  category: RoutingCategory;
   categoryLabel: string;
-  disabled: boolean;
-  highlighted: boolean;
-  label: string;
-  onModelChange: (model: string) => void;
-  onProviderChange: (provider: string) => void;
-  selection: RoutingModelSelection;
+  difficulty: RoutingDifficulty;
+  difficultyLabel: string;
+  modelRefs: string[];
+  onAdd: () => void;
+  onChange: (index: number, modelRef: string) => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onRemove: (index: number) => void;
 }) {
-  const selectedProvider = getProvider(selection.provider);
+  const canAddFallback = modelRefOptions.some((modelRef) => !modelRefs.includes(modelRef));
 
   return (
     <div
-      className="tenant-routing-route"
-      data-column-label={label}
-      data-recommendation-highlighted={highlighted ? "true" : undefined}
+      className="tenant-routing-route tenant-routing-model-ref-cell"
+      data-column-label={difficultyLabel}
+      data-route-cell={`${category}:${difficulty}`}
       role="cell"
     >
-      <div className="tenant-routing-model-selectors">
-        <label className="tenant-routing-provider-control">
-          <span className="sr-only">
-            {categoryLabel} {label} 제공자
-          </span>
-          <ProviderFamilyIcon
-            className="tenant-routing-provider-icon"
-            family={selectedProvider.family}
-            size={22}
-          />
-          <select
-            aria-label={`${categoryLabel} ${label} 제공자`}
-            disabled={disabled}
-            onChange={(event) => onProviderChange(event.target.value)}
-            value={selection.provider}
-          >
-            {providerCatalog.map((provider) => (
-              <option key={provider.provider} value={provider.provider}>
-                {provider.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="tenant-routing-model-control">
-          <span className="sr-only">
-            {categoryLabel} {label} 모델
-          </span>
-          <select
-            aria-label={`${categoryLabel} ${label} 모델`}
-            disabled={disabled}
-            onChange={(event) => onModelChange(event.target.value)}
-            value={selection.model}
-          >
-            {selectedProvider.models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </div>
-  );
-}
+      <ol className="tenant-routing-model-ref-list">
+        {modelRefs.map((modelRef, index) => {
+          const positionLabel = index === 0 ? "primary" : `fallback ${index}`;
+          const accessiblePositionLabel = `${categoryLabel} ${difficultyLabel} ${positionLabel}`;
 
-function StandaloneModelControls({
-  disabled,
-  groupLabel,
-  modelAriaLabel,
-  onModelChange,
-  onProviderChange,
-  providerAriaLabel,
-  selection
-}: {
-  disabled: boolean;
-  groupLabel: string;
-  modelAriaLabel: string;
-  onModelChange: (model: string) => void;
-  onProviderChange: (provider: string) => void;
-  providerAriaLabel: string;
-  selection: RoutingModelSelection;
-}) {
-  const selectedProvider = getProvider(selection.provider);
-
-  return (
-    <div
-      className="tenant-routing-standalone-controls"
-      role="group"
-      aria-label={groupLabel}
-    >
-      <label className="tenant-routing-standalone-field">
-        <span>Provider</span>
-        <span className="tenant-routing-provider-control">
-          <ProviderFamilyIcon
-            className="tenant-routing-provider-icon"
-            family={selectedProvider.family}
-            size={22}
-          />
-          <select
-            aria-label={providerAriaLabel}
-            disabled={disabled}
-            onChange={(event) => onProviderChange(event.target.value)}
-            value={selection.provider}
-          >
-            {providerCatalog.map((provider) => (
-              <option key={provider.provider} value={provider.provider}>
-                {provider.displayName}
-              </option>
-            ))}
-          </select>
-        </span>
-      </label>
-      <label className="tenant-routing-standalone-field">
-        <span>모델</span>
-        <span className="tenant-routing-model-control">
-          <select
-            aria-label={modelAriaLabel}
-            disabled={disabled}
-            onChange={(event) => onModelChange(event.target.value)}
-            value={selection.model}
-          >
-            {selectedProvider.models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-        </span>
-      </label>
+          return (
+            <li className="tenant-routing-model-ref-item" key={`${index}:${modelRef}`}>
+              <span aria-hidden="true" className="tenant-routing-model-ref-rank">
+                {index + 1}
+              </span>
+              <label className="tenant-routing-model-ref-control">
+                <span className="sr-only">{accessiblePositionLabel} modelRef</span>
+                <select
+                  aria-label={`${accessiblePositionLabel} modelRef`}
+                  onChange={(event) => onChange(index, event.target.value)}
+                  value={modelRef}
+                >
+                  {modelRefOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="tenant-routing-model-ref-actions">
+                <button
+                  aria-label={`Move ${accessiblePositionLabel} up`}
+                  disabled={index === 0}
+                  onClick={() => onMove(index, -1)}
+                  type="button"
+                >
+                  <ArrowUp aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={`Move ${accessiblePositionLabel} down`}
+                  disabled={index === modelRefs.length - 1}
+                  onClick={() => onMove(index, 1)}
+                  type="button"
+                >
+                  <ArrowDown aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={`Remove ${accessiblePositionLabel}`}
+                  disabled={modelRefs.length === 1}
+                  onClick={() => onRemove(index)}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <button
+        aria-label={`Add fallback modelRef to ${categoryLabel} ${difficultyLabel}`}
+        className="secondary-button tenant-routing-model-ref-add"
+        disabled={!canAddFallback}
+        onClick={onAdd}
+        type="button"
+      >
+        <Plus aria-hidden="true" />
+        Add fallback
+      </button>
     </div>
   );
 }

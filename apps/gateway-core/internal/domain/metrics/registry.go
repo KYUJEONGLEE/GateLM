@@ -102,8 +102,8 @@ var allowedLabels = map[string]struct{}{
 	"cache_type":         {},
 	"masking_action":     {},
 	"rate_limit_allowed": {},
-	"selected_provider":  {},
-	"selected_model":     {},
+	"provider":           {},
+	"model":              {},
 	"operation":          {},
 	"stream_outcome":     {},
 }

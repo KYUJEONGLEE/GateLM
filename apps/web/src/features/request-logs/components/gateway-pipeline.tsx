@@ -12,7 +12,7 @@ import {
   buildGatewayPipelineModel,
   type GatewayPipelineStageId
 } from "@/features/request-logs/gateway-pipeline-model";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type { Locale } from "@/lib/i18n/locale";
 
 const stageIcons: Record<
@@ -136,7 +136,7 @@ export function GatewayPipeline({
   record
 }: {
   locale: Locale;
-  record: InvocationLogRecord;
+  record: LiveInvocationLogRecord;
 }) {
   const model = buildGatewayPipelineModel(record);
   const cacheStage = model.stages.find((pipelineStage) => pipelineStage.id === "cache");

@@ -1,4 +1,4 @@
-export const INVOCATION_SCHEMA_VERSION = 1;
+export const INVOCATION_SCHEMA_VERSION = 2;
 
 export type InvocationStatus =
   | "success"
@@ -21,6 +21,20 @@ export type RequestSource =
   | "chat_ui"
   | "developer_tool"
   | "internal";
+
+export type RoutingCategory =
+  | "general"
+  | "code"
+  | "translation"
+  | "summarization"
+  | "reasoning";
+export type RoutingDifficulty = "simple" | "complex";
+export type ProviderAttemptOutcome =
+  | "success"
+  | "timeout"
+  | "error"
+  | "unauthorized"
+  | "cancelled";
 
 export const STATUS_TO_EVENT_TYPE: Record<
   InvocationStatus,
@@ -51,14 +65,48 @@ export const FORBIDDEN_LOG_FIELD_NAMES = [
 export interface InvocationFinishedPayload {
   eventId: string;
   eventType: InvocationEventType;
-  eventVersion: 1;
+  eventVersion: 2;
   occurredAt: string;
   request: LlmRequestLog;
+  providerAttempts: ProviderAttemptRecord[];
+  costSettlement: CostSettlementRecord | null;
+}
+
+/** Routing summary never exposes a resolved provider/model target. */
+export interface InvocationRoutingSummary {
+  category: RoutingCategory;
+  difficulty: RoutingDifficulty;
+  modelRef: string | null;
+  routingReason: string | null;
+  routingRuleId: string | null;
+}
+
+/** Actual provider/model identity is confined to the provider-attempt boundary. */
+export interface ProviderAttemptRecord {
+  attempt: number;
+  providerId: string;
+  modelId: string;
+  executionMode: "provider" | "mock";
+  outcome: ProviderAttemptOutcome;
+  latencyMs: number | null;
+  sanitizedErrorCode: string | null;
+}
+
+/** Actual provider/model identity is also allowed on the cost-settlement record. */
+export interface CostSettlementRecord {
+  providerId: string | null;
+  modelId: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costMicroUsd: number;
+  costUsd: string;
+  currency: "USD" | string;
 }
 
 /** 요청 로그 레코드. */
 export interface LlmRequestLog {
-  schemaVersion: 1;
+  schemaVersion: 2;
   requestId: string;
   traceId: string;
   tenantId: string;
@@ -77,14 +125,8 @@ export interface LlmRequestLog {
   promptHash: string;
   redactedPromptPreview?: string | null;
 
-  requestedProvider?: string | null;
   requestedModel: string | null;
-  provider: string;
-  model: string;
-  selectedProvider: string | null;
-  selectedModel: string | null;
-  routingReason?: string | null;
-  routingRuleId?: string | null;
+  routing: InvocationRoutingSummary;
 
   promptTokens: number;
   completionTokens: number;
@@ -94,7 +136,6 @@ export interface LlmRequestLog {
   savedCostMicroUsd?: number;
   currency: "USD" | string;
   latencyMs: number;
-  providerLatencyMs?: number | null;
 
   status: InvocationStatus;
   httpStatus: number;
@@ -124,10 +165,10 @@ export interface RequestLogListItem {
   requestId: string;
   projectId: string;
   applicationId: string | null;
-  provider: string;
-  model: string;
   requestedModel: string | null;
-  selectedModel: string | null;
+  category: RoutingCategory;
+  difficulty: RoutingDifficulty;
+  modelRef: string | null;
   status: InvocationStatus;
   httpStatus: number;
   promptTokens: number;
@@ -152,10 +193,7 @@ export interface RequestDetailResponseData {
   applicationId: string | null;
   status: InvocationStatus;
   httpStatus: number;
-  provider: string;
-  model: string;
   requestedModel: string | null;
-  selectedModel: string | null;
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -168,7 +206,6 @@ export interface RequestDetailResponseData {
   };
   latency: {
     latencyMs: number;
-    providerLatencyMs: number | null;
   };
   cache: {
     cacheStatus: CacheStatus;
@@ -177,11 +214,14 @@ export interface RequestDetailResponseData {
     cacheHitRequestId: string | null;
   };
   routing: {
+    category: RoutingCategory;
+    difficulty: RoutingDifficulty;
+    modelRef: string | null;
     routingReason: string | null;
     routingRuleId: string | null;
-    selectedProvider: string | null;
-    selectedModel: string | null;
   };
+  providerAttempts: ProviderAttemptRecord[];
+  costSettlement: CostSettlementRecord | null;
   masking: {
     maskingAction: MaskingAction;
     maskingDetectedTypes: string[];
@@ -214,10 +254,10 @@ export const REQUEST_LOG_LIST_FIELDS = [
   "requestId",
   "projectId",
   "applicationId",
-  "provider",
-  "model",
   "requestedModel",
-  "selectedModel",
+  "category",
+  "difficulty",
+  "modelRef",
   "status",
   "httpStatus",
   "promptTokens",
@@ -260,10 +300,10 @@ export function toRequestLogListItem(
     requestId: log.requestId,
     projectId: log.projectId,
     applicationId: log.applicationId,
-    provider: log.provider,
-    model: log.model,
     requestedModel: log.requestedModel,
-    selectedModel: log.selectedModel,
+    category: log.routing.category,
+    difficulty: log.routing.difficulty,
+    modelRef: log.routing.modelRef,
     status: log.status,
     httpStatus: log.httpStatus,
     promptTokens: log.promptTokens,
@@ -274,7 +314,7 @@ export function toRequestLogListItem(
     latencyMs: log.latencyMs,
     cacheStatus: log.cacheStatus,
     cacheType: log.cacheType,
-    routingReason: log.routingReason ?? null,
+    routingReason: log.routing.routingReason,
     maskingAction: log.maskingAction,
     createdAt: log.createdAt,
   };
@@ -283,6 +323,8 @@ export function toRequestLogListItem(
 /** 요청 로그 -> 상세 응답. */
 export function toRequestDetailResponseData(
   log: LlmRequestLog,
+  providerAttempts: ProviderAttemptRecord[] = [],
+  costSettlement: CostSettlementRecord | null = null,
 ): RequestDetailResponseData {
   return {
     requestId: log.requestId,
@@ -292,10 +334,7 @@ export function toRequestDetailResponseData(
     applicationId: log.applicationId,
     status: log.status,
     httpStatus: log.httpStatus,
-    provider: log.provider,
-    model: log.model,
     requestedModel: log.requestedModel,
-    selectedModel: log.selectedModel,
     usage: {
       promptTokens: log.promptTokens,
       completionTokens: log.completionTokens,
@@ -308,7 +347,6 @@ export function toRequestDetailResponseData(
     },
     latency: {
       latencyMs: log.latencyMs,
-      providerLatencyMs: log.providerLatencyMs ?? null,
     },
     cache: {
       cacheStatus: log.cacheStatus,
@@ -317,11 +355,14 @@ export function toRequestDetailResponseData(
       cacheHitRequestId: log.cacheHitRequestId ?? null,
     },
     routing: {
-      routingReason: log.routingReason ?? null,
-      routingRuleId: log.routingRuleId ?? null,
-      selectedProvider: log.selectedProvider,
-      selectedModel: log.selectedModel,
+      category: log.routing.category,
+      difficulty: log.routing.difficulty,
+      modelRef: log.routing.modelRef,
+      routingReason: log.routing.routingReason,
+      routingRuleId: log.routing.routingRuleId,
     },
+    providerAttempts: providerAttempts.map((attempt) => ({ ...attempt })),
+    costSettlement: costSettlement ? { ...costSettlement } : null,
     masking: {
       maskingAction: log.maskingAction,
       maskingDetectedTypes: log.maskingDetectedTypes,

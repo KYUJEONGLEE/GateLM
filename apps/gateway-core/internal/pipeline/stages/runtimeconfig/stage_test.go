@@ -35,7 +35,7 @@ func TestStageLoadsActiveRuntimeConfigIntoGatewayContext(t *testing.T) {
 		gatewayCtx.Routing.RoutingPolicyHash != "hash_routing_policy_test" {
 		t.Fatalf("unexpected routing policy hash: %#v %#v", gatewayCtx.Runtime, gatewayCtx.Routing)
 	}
-	if gatewayCtx.Runtime.Snapshot.RuntimeSnapshotVersion != 1 ||
+	if gatewayCtx.Runtime.Snapshot.RuntimeSnapshotVersion != 2 ||
 		gatewayCtx.Runtime.Snapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
 		gatewayCtx.Runtime.Snapshot.LegacyHashes.ConfigHash != "hash_runtime_config_test" {
 		t.Fatalf("unexpected runtime snapshot provenance: %#v", gatewayCtx.Runtime.Snapshot)
@@ -138,16 +138,7 @@ func testActiveConfig() runtimeconfig.ActiveConfig {
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",
 		},
-		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:     "mock",
-			DefaultModel:        "mock-balanced",
-			LowCostProvider:     "mock",
-			LowCostModel:        "mock-fast",
-			FallbackProvider:    "mock",
-			FallbackModel:       "mock-balanced",
-			ShortPromptMaxChars: 500,
-			RoutingPolicyHash:   "hash_routing_policy_test",
-		},
+		RoutingPolicy: runtimeconfig.BootstrapRoutingPolicy("hash_routing_policy_test"),
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:    true,
 			Type:       runtimeconfig.CacheTypeExact,

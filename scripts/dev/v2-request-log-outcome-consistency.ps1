@@ -262,7 +262,8 @@ if ($DescribeOnly) {
     Write-Host "- Request Detail lookup with tenantId/projectId/requestId."
     Write-Host "- Project Logs lookup with the same tenantId/projectId/requestId."
     Write-Host "- Dashboard Overview lookup with the same tenantId/projectId time range."
-    Write-Host "- Cross-check terminalStatus, provider, model, token, cost, and domain outcomes."
+    Write-Host "- Cross-check terminalStatus, category, difficulty, routingReason, token, cost, and domain outcomes."
+    Write-Host "- Treat providerAttempt provider/model as execution evidence, never as a routing selection."
     Write-Host "- Verify responses do not expose raw prompt, raw response, credentials, or secret hashes."
     exit 0
 }
@@ -305,10 +306,14 @@ $listItem = $items | Where-Object { $_.requestId -eq $RequestId } | Select-Objec
 Assert-True ($null -ne $listItem) "Project Logs response did not include requestId=$RequestId."
 
 Assert-SameString ([string]$detail.terminalStatus) ([string]$listItem.terminalStatus) "terminalStatus detail/list"
-Assert-SameString ([string]$detail.provider) ([string]$listItem.provider) "provider detail/list"
-Assert-SameString ([string]$detail.model) ([string]$listItem.model) "model detail/list"
 Assert-SameString ([string]$detail.requestedModel) ([string]$listItem.requestedModel) "requestedModel detail/list"
-Assert-SameString ([string]$detail.selectedModel) ([string]$listItem.selectedModel) "selectedModel detail/list"
+Assert-SameString ([string]$detail.routing.category) ([string]$listItem.category) "category detail/list"
+Assert-SameString ([string]$detail.routing.difficulty) ([string]$listItem.difficulty) "difficulty detail/list"
+Assert-SameString ([string]$detail.routing.routingReason) ([string]$listItem.routingReason) "routingReason detail/list"
+if ([bool]$detail.providerCalled) {
+    Assert-Value $detail.providerAttempt.providerId "Request Detail providerAttempt.providerId is empty."
+    Assert-Value $detail.providerAttempt.modelId "Request Detail providerAttempt.modelId is empty."
+}
 Assert-True ([int64]$detail.usage.promptTokens -eq [int64]$listItem.promptTokens) "promptTokens detail/list mismatch."
 Assert-True ([int64]$detail.usage.completionTokens -eq [int64]$listItem.completionTokens) "completionTokens detail/list mismatch."
 Assert-True ([int64]$detail.usage.totalTokens -eq [int64]$listItem.totalTokens) "totalTokens detail/list mismatch."
@@ -345,8 +350,21 @@ $report = [ordered]@{
         runtimeSnapshotId = $detail.runtimeSnapshot.runtimeSnapshotId
         runtimeSnapshotVersion = $detail.runtimeSnapshot.runtimeSnapshotVersion
         contentHash = $detail.runtimeSnapshot.contentHash
-        provider = $detail.provider
-        model = $detail.model
+        routing = [ordered]@{
+            category = $detail.routing.category
+            difficulty = $detail.routing.difficulty
+            routingReason = $detail.routing.routingReason
+        }
+        providerAttempt = if ($null -eq $detail.providerAttempt) {
+            $null
+        } else {
+            [ordered]@{
+                providerId = $detail.providerAttempt.providerId
+                modelId = $detail.providerAttempt.modelId
+                outcome = $detail.providerAttempt.outcome
+                latencyMs = $detail.providerAttempt.latencyMs
+            }
+        }
         dashboardTotalRequests = $dashboard.totals.totalRequests
     }
     domainOutcomes = Select-SafeOutcomeSummary -DomainOutcomes $detail.domainOutcomes

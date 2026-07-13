@@ -2,7 +2,7 @@
 
 import { Eye, Info, Maximize2, RotateCw, X } from "lucide-react";
 import Link from "next/link";
-import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type {
   LiveRequestRow,
   LiveRequestStatusFilter
@@ -132,7 +132,7 @@ export function LiveRequestsView({
             <option value="">All Models</option>
             {modelOptions.map((model) => (
               <option key={model} value={model}>
-                {model}
+                {formatModelDisplayName(model)}
               </option>
             ))}
           </select>
@@ -185,7 +185,7 @@ export function LiveRequestsView({
               <th scope="col">Time</th>
               <th scope="col">User</th>
               <th scope="col">Project</th>
-              <th scope="col">Provider / Model</th>
+              <th scope="col">Routing</th>
               <th scope="col">Status</th>
               <th scope="col">Policy Results</th>
               <th scope="col">Latency</th>
@@ -241,7 +241,7 @@ export function LiveRequestsView({
                   </span>
                 </td>
                 <td>
-                  <LiveProviderModel row={row} />
+                  <LiveRequestRouting row={row} />
                 </td>
                 <td>
                   <span
@@ -314,20 +314,17 @@ function PolicyBadges({ row }: { row: LiveRequestRow }) {
   );
 }
 
-function LiveProviderModel({ row }: { row: LiveRequestRow }) {
+function LiveRequestRouting({ row }: { row: LiveRequestRow }) {
+  const model = formatModelDisplayName(row.requestedModel, "auto");
+  const routingLabel = `${row.category} / ${row.difficulty} / ${row.modelRef ?? "no-model-ref"} / ${row.routingReason ?? "not-set"}`;
   return (
     <span
       className="dashboard-live-provider-model"
-      title={row.providerLabel + " · " + row.model}
+      title={routingLabel + " · " + model}
     >
-      <ProviderFamilyIcon
-        className="dashboard-live-provider-icon"
-        family={liveProviderFamily(row.provider)}
-        size={24}
-      />
       <span className="dashboard-live-provider-copy">
-        <strong>{row.model}</strong>
-        <small>{row.providerLabel}</small>
+        <strong>{model}</strong>
+        <small>{row.category} / {row.difficulty} / {row.modelRef ?? "-"}</small>
       </span>
     </span>
   );
@@ -351,19 +348,6 @@ function stableHash(value: string) {
     hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
   }
   return hash;
-}
-
-function liveProviderFamily(provider: LiveRequestRow["provider"]) {
-  if (provider === "anthropic") {
-    return "claude";
-  }
-  if (provider === "gemini" || provider === "google") {
-    return "gemini";
-  }
-  if (provider === "mock") {
-    return "mock";
-  }
-  return provider === "openai" ? "openai" : "new-provider";
 }
 
 function statusTone(row: LiveRequestRow) {

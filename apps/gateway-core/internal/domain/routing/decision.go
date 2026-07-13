@@ -8,31 +8,37 @@ import (
 )
 
 type Request struct {
-	RequestedModel        string
-	PromptText            string
-	Config                *SimpleRouterConfig
-	HighQualityRestricted bool
+	RequestedModel string
+	PromptText     string
+	Config         *SimpleRouterConfig
 }
 
+// Decision is the routing-policy result. It intentionally contains only an
+// opaque model reference. Provider and concrete model identifiers are resolved
+// at the provider-attempt boundary, after routing has completed.
 type Decision struct {
-	RequestedModel             string
-	SelectedProvider           string
-	SelectedProviderID         string
-	SelectedProviderCatalogKey string
-	SelectedModel              string
-	SelectedModelID            string
-	ProviderCatalogContentHash string
-	RoutingDecisionKeyHash     string
-	RoutingDecisionMaterial    DecisionMaterial
-	RoutingReason              string
-	PolicyHash                 string
-	CategoryDiagnostics        CategoryDiagnostics
+	RequestedModel          string
+	ModelRef                string
+	CandidateModelRefs      []string
+	RoutingDecisionKeyHash  string
+	RoutingDecisionMaterial DecisionMaterial
+	RoutingReason           string
+	PolicyHash              string
+	CategoryDiagnostics     CategoryDiagnostics
+}
+
+// ResolvedTarget is an internal execution-boundary value. It is populated only
+// after an opaque modelRef has been resolved through the provider catalog and
+// must never be copied into a routing decision or routing summary contract.
+type ResolvedTarget struct {
+	ProviderID string
+	ModelID    string
 }
 
 type DecisionMaterial struct {
 	RoutingMode   string `json:"routingMode"`
 	Category      string `json:"category"`
-	Tier          string `json:"tier"`
+	Difficulty    string `json:"difficulty"`
 	Capability    string `json:"capability"`
 	PolicyVariant string `json:"policyVariant"`
 }
@@ -58,31 +64,28 @@ type CategoryScore struct {
 
 const (
 	RoutingModeAuto   = "auto"
-	RoutingModePinned = "pinned"
+	RoutingModeManual = "manual"
 
-	CategoryUnknown        = "unknown"
-	CategoryGeneral        = "general"
-	CategoryCode           = "code"
-	CategoryTranslation    = "translation"
-	CategorySummarization  = "summarization"
-	CategoryExtractionJSON = "extraction_json"
-	CategorySupportRefund  = "support_refund"
-	CategoryReasoning      = "reasoning"
+	RoutingPolicyModeAuto   = RoutingModeAuto
+	RoutingPolicyModeManual = RoutingModeManual
 
-	TierLowCost     = "low_cost"
-	TierBalanced    = "balanced"
-	TierHighQuality = "high_quality"
+	CategoryGeneral       = "general"
+	CategoryCode          = "code"
+	CategoryTranslation   = "translation"
+	CategorySummarization = "summarization"
+	CategoryReasoning     = "reasoning"
+
+	DifficultySimple  = "simple"
+	DifficultyComplex = "complex"
 
 	CapabilityChat          = "chat"
 	CapabilityReasoning     = "reasoning"
 	CapabilityCode          = "code"
 	CapabilityTranslation   = "translation"
 	CapabilitySummarization = "summarization"
-	CapabilityJSON          = "json"
 
 	PolicyVariantDefault                = "default"
 	PolicyVariantProviderHealthFallback = "provider_health_fallback"
-	PolicyVariantBudgetQualityGuard     = "budget_quality_guard"
 
 	RoutingConfidenceHigh   = "high"
 	RoutingConfidenceMedium = "medium"
@@ -90,15 +93,21 @@ const (
 
 	AmbiguityReasonLowScore  = "low_score"
 	AmbiguityReasonLowMargin = "low_margin"
-	AmbiguityReasonRiskPair  = "risk_pair"
-	AmbiguityReasonUncertain = "uncertain_high_quality"
 )
+
+var Categories = [...]string{
+	CategoryGeneral,
+	CategoryCode,
+	CategoryTranslation,
+	CategorySummarization,
+	CategoryReasoning,
+}
 
 func CanonicalDecisionMaterial(material DecisionMaterial) DecisionMaterial {
 	return DecisionMaterial{
 		RoutingMode:   canonicalRoutingMode(material.RoutingMode),
 		Category:      canonicalCategory(material.Category),
-		Tier:          canonicalTier(material.Tier),
+		Difficulty:    canonicalDifficulty(material.Difficulty),
 		Capability:    canonicalCapability(material.Capability),
 		PolicyVariant: canonicalPolicyVariant(material.PolicyVariant),
 	}
@@ -115,51 +124,50 @@ func DecisionKeyHash(material DecisionMaterial) (string, error) {
 }
 
 func canonicalRoutingMode(value string) string {
-	value = strings.TrimSpace(value)
-	switch value {
-	case RoutingModeAuto, RoutingModePinned:
-		return value
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case RoutingModeManual:
+		return RoutingModeManual
 	default:
 		return RoutingModeAuto
 	}
 }
 
+// canonicalCategory is intentionally closed over the five v2 categories.
+// Every removed, unknown, or missing category is folded into general.
 func canonicalCategory(value string) string {
-	value = strings.TrimSpace(value)
-	switch value {
-	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySummarization, CategoryExtractionJSON, CategorySupportRefund, CategoryReasoning, CategoryUnknown:
-		return value
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case CategoryCode:
+		return CategoryCode
+	case CategoryTranslation:
+		return CategoryTranslation
+	case CategorySummarization:
+		return CategorySummarization
+	case CategoryReasoning:
+		return CategoryReasoning
 	default:
-		return CategoryUnknown
+		return CategoryGeneral
 	}
 }
 
-func canonicalTier(value string) string {
-	value = strings.TrimSpace(value)
-	switch value {
-	case TierLowCost, TierBalanced, TierHighQuality:
-		return value
-	default:
-		return TierBalanced
+func canonicalDifficulty(value string) string {
+	if strings.TrimSpace(strings.ToLower(value)) == DifficultyComplex {
+		return DifficultyComplex
 	}
+	return DifficultySimple
 }
 
 func canonicalCapability(value string) string {
-	value = strings.TrimSpace(value)
-	switch value {
-	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation, CapabilitySummarization, CapabilityJSON:
-		return value
+	switch strings.TrimSpace(value) {
+	case CapabilityReasoning, CapabilityCode, CapabilityTranslation, CapabilitySummarization:
+		return strings.TrimSpace(value)
 	default:
 		return CapabilityChat
 	}
 }
 
 func canonicalPolicyVariant(value string) string {
-	value = strings.TrimSpace(value)
-	switch value {
-	case PolicyVariantDefault, PolicyVariantProviderHealthFallback, PolicyVariantBudgetQualityGuard:
-		return value
-	default:
-		return PolicyVariantDefault
+	if strings.TrimSpace(value) == PolicyVariantProviderHealthFallback {
+		return PolicyVariantProviderHealthFallback
 	}
+	return PolicyVariantDefault
 }

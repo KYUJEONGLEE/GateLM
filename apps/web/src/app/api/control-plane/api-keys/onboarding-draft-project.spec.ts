@@ -19,7 +19,7 @@ test("creates a DRAFT project and issues the API key against that project", asyn
       project: {
         description: "Draft only",
         name: "Onboarding project",
-        selectedModelKey: "openai::gpt-4o-mini",
+        selectedModelKey: "provider-openai:gpt-4o-mini",
         status: "ACTIVE",
         totalBudgetUsd: 120,
         warningThresholdPercent: 75

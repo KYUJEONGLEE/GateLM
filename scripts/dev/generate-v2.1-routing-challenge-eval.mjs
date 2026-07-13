@@ -5,7 +5,7 @@ const outputPath = path.resolve(
   "docs/v2.1.0/fixtures/category-evaluation-challenge.fixture.jsonl",
 );
 
-const datasetVersion = "category_eval_2026_07_03_ko_1000_challenge_synthetic";
+const datasetVersion = "category_eval_2026_07_13_ko_1000_challenge_category_only";
 const createdAt = "2026-07-03T00:00:00Z";
 
 const targets = [
@@ -13,22 +13,11 @@ const targets = [
   ["code", 150],
   ["translation", 120],
   ["summarization", 130],
-  ["extraction_json", 120],
-  ["support_refund", 110],
+  ["structured_output", 120],
+  ["customer_support", 110],
   ["reasoning", 150],
-  ["unknown", 30],
+  ["unclassified", 30],
 ];
-
-const tierByCategory = {
-  general: "low_cost",
-  code: "high_quality",
-  translation: "balanced",
-  summarization: "balanced",
-  extraction_json: "balanced",
-  support_refund: "low_cost",
-  reasoning: "high_quality",
-  unknown: "balanced",
-};
 
 const subjects = {
   general: [
@@ -79,7 +68,7 @@ const subjects = {
     "기획 초안",
     "멘토 코멘트",
   ],
-  extraction_json: [
+  structured_output: [
     "지원 요청",
     "정산 메일",
     "배포 점검표",
@@ -91,7 +80,7 @@ const subjects = {
     "검토 의견",
     "운영 체크리스트",
   ],
-  support_refund: [
+  customer_support: [
     "배송 누락",
     "부분 반품",
     "구독 종료",
@@ -115,7 +104,7 @@ const subjects = {
     "세밀한 정책과 쉬운 운영",
     "릴리즈 일정과 품질 기준",
   ],
-  unknown: ["unclassifiable synthetic input"],
+  unclassified: ["unclassifiable synthetic input"],
 };
 
 const templates = {
@@ -167,7 +156,7 @@ const templates = {
     "{subject}를 회의 시작 전에 읽을 수 있는 길이로 줄여줘.",
     "{subject}의 핵심 주장만 남기고 나머지는 걷어내줘.",
   ],
-  extraction_json: [
+  structured_output: [
     "{subject}에서 이름, 상태, 날짜만 칸으로 나눠줘.",
     "{subject}를 입력 폼에 옮기기 좋게 항목과 값으로 나눠줘.",
     "{subject}에서 금액과 사유와 처리 상태만 뽑아줘.",
@@ -179,7 +168,7 @@ const templates = {
     "{subject}에서 번호, 제목, 상태만 따로 정리해줘.",
     "{subject}를 체크리스트 열로 바꿔서 보여줘.",
   ],
-  support_refund: [
+  customer_support: [
     "{subject} 때문에 고객이 낸 돈을 돌려받을 수 있는지 물었어.",
     "{subject} 후 청구가 남아 있다는 문의에 답해야 해.",
     "{subject} 상태에서 주문을 취소한 것처럼 처리할 수 있어?",
@@ -203,7 +192,7 @@ const templates = {
     "{subject}를 오늘 결정해야 한다면 어떤 순서로 생각해야 해?",
     "{subject}의 절충안을 만들 수 있는지 판단해줘.",
   ],
-  unknown: [
+  unclassified: [
     "...",
     "???",
     "////",
@@ -218,27 +207,29 @@ const templates = {
 function fill(template, category, index) {
   const subjectList = subjects[category] ?? subjects.general;
   const subject = subjectList[index % subjectList.length];
-  const suffix = category === "unknown" ? "" : ` 챌린지 ${String(index + 1).padStart(4, "0")}.`;
+  const suffix = category === "unclassified" ? "" : ` 챌린지 ${String(index + 1).padStart(4, "0")}.`;
   return template.replaceAll("{subject}", subject) + suffix;
 }
 
 function record(category, index) {
   const templateList = templates[category];
   const template = templateList[index % templateList.length];
+  const expectedCategory = ["structured_output", "customer_support", "unclassified"].includes(category)
+    ? "general"
+    : category;
   return {
-    schemaVersion: "gatelm.category-evaluation-record.v1",
+    schemaVersion: "gatelm.category-evaluation-record.v2",
     datasetVersion,
     sampleId: `challenge_${category}_${String(index + 1).padStart(4, "0")}`,
     redactedPrompt: fill(template, category, index),
-    expectedCategory: category,
-    expectedTier: tierByCategory[category],
+    expectedCategory,
     labelSource: "synthetic_fixture",
     consentType: "synthetic",
     source: "synthetic_fixture",
-    language: category === "unknown" ? "unknown" : "ko",
+    language: category === "unclassified" ? "unknown" : "ko",
     redactionVersion: "rule_based_redaction_v1",
     createdAt,
-    labelConfidence: category === "unknown" ? 0.95 : 0.82,
+    labelConfidence: category === "unclassified" ? 0.95 : 0.82,
     reviewerNote: "Synthetic challenge routing sample with ambiguous wording.",
   };
 }

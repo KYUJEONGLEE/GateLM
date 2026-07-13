@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,10 +19,22 @@ import (
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
+	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/ports"
 )
 
-func TestChatCompletionsExactCacheRoutingAwareDifferentSelectedProviderMustMiss(t *testing.T) {
+func TestRoutingDecisionMaterialFallbackUsesDifficultyWithoutTier(t *testing.T) {
+	material := routingDecisionMaterialFromRequestContext(&pipeline.RequestContext{
+		RequestedModel: "auto",
+		RoutingReason:  routingdomain.ReasonMatrixRoute,
+	})
+
+	if material.Difficulty != routingdomain.DifficultySimple {
+		t.Fatalf("request context must use simple difficulty fallback, got %#v", material)
+	}
+}
+
+func TestChatCompletionsExactCacheRoutingAwareDifferentProviderMustMiss(t *testing.T) {
 	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-provider"))
 	harness.routes = map[string]routingAwareRoute{
 		"request_provider_a": {providerName: "provider-a", modelID: "model_shared"},
@@ -42,7 +55,7 @@ func TestChatCompletionsExactCacheRoutingAwareDifferentSelectedProviderMustMiss(
 	}
 }
 
-func TestChatCompletionsExactCacheRoutingAwareDifferentSelectedModelMustMiss(t *testing.T) {
+func TestChatCompletionsExactCacheRoutingAwareDifferentModelMustMiss(t *testing.T) {
 	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-model"))
 	harness.routes = map[string]routingAwareRoute{
 		"request_model_low":      {providerName: "provider-a", modelID: "model_low"},
@@ -139,6 +152,45 @@ func TestChatCompletionsExactCacheRoutingAwareDifferentRequestParamsMustMiss(t *
 	}
 }
 
+func TestChatCompletionsExactCacheHitHasNoProviderAttempt(t *testing.T) {
+	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-no-call"))
+	harness.routes = map[string]routingAwareRoute{
+		"request_no_call_warmup": {providerName: "provider-a", modelID: "model_low"},
+		"request_no_call_hit":    {providerName: "provider-a", modelID: "model_low"},
+	}
+
+	first := harness.exercise(t, "request_no_call_warmup", routingAwareChatBody("auto", "same prompt"))
+	second := harness.exercise(t, "request_no_call_hit", routingAwareChatBody("auto", "same prompt"))
+	if first.Code != http.StatusOK || second.Code != http.StatusOK || second.Header().Get("X-GateLM-Cache-Status") != "hit" {
+		t.Fatalf("expected warmup then cache hit: first=%d second=%d cache=%q body=%s", first.Code, second.Code, second.Header().Get("X-GateLM-Cache-Status"), second.Body.String())
+	}
+	if len(harness.logWriter.logs) != 2 {
+		t.Fatalf("expected two terminal logs, got %d", len(harness.logWriter.logs))
+	}
+	logged := harness.logWriter.logs[1]
+	if logged.ProviderCalled || logged.Provider != "" || logged.ProviderID != "" || logged.Model != "" || logged.ModelID != "" || logged.ProviderLatencyMs != nil {
+		t.Fatalf("cache hit must not synthesize a provider attempt: %+v", logged)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("cache hit provider outcome must be not_called: %+v", logged.DomainOutcomes.Provider)
+	}
+	if _, exists := logged.Metadata["providerAttempt"]; exists {
+		t.Fatalf("cache hit metadata must not contain providerAttempt: %+v", logged.Metadata)
+	}
+	var response provider.ChatCompletionResponse
+	if err := json.NewDecoder(second.Body).Decode(&response); err != nil {
+		t.Fatalf("decode cache hit response: %v", err)
+	}
+	if response.Model != "auto" || response.GateLM == nil || response.GateLM.ProviderCalled {
+		t.Fatalf("cache hit public response must retain requested model and no-call state: %#v", response)
+	}
+	for _, forbidden := range []string{"provider-a-low", "provider_id_a", "selectedProvider", "selectedModel"} {
+		if strings.Contains(second.Body.String(), forbidden) {
+			t.Fatalf("cache hit response leaked resolved target %q: %s", forbidden, second.Body.String())
+		}
+	}
+}
+
 func TestChatCompletionsExactCacheRoutingAwareStreamMissLooksUpAndStores(t *testing.T) {
 	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-stream"))
 	harness.routes = map[string]routingAwareRoute{
@@ -200,6 +252,8 @@ func TestChatCompletionsExactCacheRoutingAwareRepeatedStreamUsesExactCache(t *te
 		!strings.Contains(second.Body.String(), `"content":"response"`) {
 		t.Fatalf("stream cache hit response가 SSE payload를 포함해야 한다. body=%s", second.Body.String())
 	}
+	assertRoutingAwarePublicStream(t, first.Body.String(), true)
+	assertRoutingAwarePublicStream(t, second.Body.String(), false)
 }
 
 func TestChatCompletionsExactCacheRoutingAwareStreamCanUseExistingExactCache(t *testing.T) {
@@ -259,8 +313,6 @@ func TestChatCompletionsExactCacheRoutingAwareFallbackSuccessDoesNotStore(t *tes
 	handler := &ChatCompletionsHandler{
 		Providers:               provider.NewRegistry(providercatalog.AdapterTypeMock, primary, fallback),
 		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
-		DefaultProvider:         "provider-a",
-		DefaultModel:            "model_low",
 		PreProviderPipeline:     routingAwarePipeline{catalog: catalog, routes: routes},
 		ExactCacheStore:         cacheStore,
 		ExactCacheKeyBuilder:    keyBuilder,
@@ -370,12 +422,41 @@ func TestChatCompletionsExactCacheRoutingAwareKeyMaterialDoesNotStoreRawPromptOr
 	}
 }
 
+func assertRoutingAwarePublicStream(t *testing.T, body string, providerCalled bool) {
+	t.Helper()
+	for _, forbidden := range []string{
+		"provider-a-low",
+		"provider_id_a",
+		"selectedProvider",
+		"selectedModel",
+		"terminalStatus",
+		"domainOutcomes",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("public stream leaked forbidden resolved target/outcome %q: %s", forbidden, body)
+		}
+	}
+	for _, expected := range []string{
+		`"model":"auto"`,
+		`"category":"general"`,
+		`"difficulty":"simple"`,
+		`"modelRef":"provider-a:model_low"`,
+		`"routingReason":"routing_aware_test"`,
+		fmt.Sprintf(`"providerCalled":%t`, providerCalled),
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("public stream is missing safe routing metadata %q: %s", expected, body)
+		}
+	}
+}
+
 type routingAwareHarness struct {
 	handler    *ChatCompletionsHandler
 	catalog    providercatalog.Catalog
 	provider   *routingAwareProviderAdapter
 	cacheStore *routingAwareMemoryStore
 	keyBuilder *routingAwareRecordingExactKeyBuilder
+	logWriter  *recordingTerminalLogWriter
 	routes     map[string]routingAwareRoute
 }
 
@@ -385,23 +466,23 @@ func newRoutingAwareCacheHarness(t *testing.T, catalog providercatalog.Catalog) 
 	providerAdapter := &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
 	cacheStore := &routingAwareMemoryStore{entries: map[string]ports.CacheEntry{}}
 	keyBuilder := &routingAwareRecordingExactKeyBuilder{delegate: cachekey.NewExactKeyBuilder([]byte("routing-aware-cache-key-secret"))}
+	logWriter := &recordingTerminalLogWriter{}
 	harness := &routingAwareHarness{
 		catalog:    catalog,
 		provider:   providerAdapter,
 		cacheStore: cacheStore,
 		keyBuilder: keyBuilder,
+		logWriter:  logWriter,
 		routes:     map[string]routingAwareRoute{},
 	}
 	handler := &ChatCompletionsHandler{
 		Providers:               provider.NewRegistry(providercatalog.AdapterTypeMock, providerAdapter),
 		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
-		DefaultProvider:         "provider-a",
-		DefaultModel:            "model_low",
 		PreProviderPipeline:     routingAwarePipeline{catalog: catalog, routes: harness.routes},
 		ExactCacheStore:         cacheStore,
 		ExactCacheKeyBuilder:    keyBuilder,
 		CachePolicyHash:         "cache_policy_routing_aware_test",
-		TerminalLogWriter:       &recordingTerminalLogWriter{},
+		TerminalLogWriter:       logWriter,
 	}
 	withTestAuth(handler)
 	harness.handler = handler
@@ -459,7 +540,7 @@ func (p routingAwarePipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 	material := routingdomain.DecisionMaterial{
 		RoutingMode:   routingdomain.RoutingModeAuto,
 		Category:      route.category,
-		Tier:          routingdomain.TierBalanced,
+		Difficulty:    routingdomain.DifficultySimple,
 		Capability:    routingdomain.CapabilityChat,
 		PolicyVariant: routingdomain.PolicyVariantDefault,
 	}
@@ -468,27 +549,24 @@ func (p routingAwarePipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 	}
 	gatewayCtx.Runtime.Snapshot = runtimeconfig.RuntimeSnapshotProvenance{
 		RuntimeSnapshotID:      "runtime_snapshot_routing_aware_test",
-		RuntimeSnapshotVersion: 1,
+		RuntimeSnapshotVersion: 2,
 		ContentHash:            "sha256:runtime-routing-aware-test",
 		RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
 		ProviderCatalogRef:     p.catalog.Reference(),
 	}
-	gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.RoutingPolicy{
-		FallbackProvider:  "provider-b",
-		FallbackModel:     "model_low",
-		RoutingPolicyHash: route.routingPolicyHash,
-	}
+	gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.BootstrapRoutingPolicy(route.routingPolicyHash)
 	gatewayCtx.Runtime.HasRoutingPolicy = true
 	gatewayCtx.Routing.RequestedModel = gatewayCtx.Request.RequestedModel
-	gatewayCtx.Routing.SelectedProvider = route.providerName
-	gatewayCtx.Routing.SelectedModel = route.modelID
+	modelRef := route.providerName + ":" + route.modelID
+	gatewayCtx.Routing.ModelRef = modelRef
+	gatewayCtx.Routing.CandidateModelRefs = []string{modelRef, "provider-b:model_low"}
 	gatewayCtx.Routing.RoutingReason = route.reason
 	gatewayCtx.Routing.RoutingPolicyHash = route.routingPolicyHash
 	gatewayCtx.Routing.RoutingDecisionKeyHash = route.decisionHash
 	gatewayCtx.Routing.RoutingDecisionMaterial = map[string]string{
 		"routingMode":   material.RoutingMode,
 		"category":      material.Category,
-		"tier":          material.Tier,
+		"difficulty":    material.Difficulty,
 		"capability":    material.Capability,
 		"policyVariant": material.PolicyVariant,
 	}
@@ -628,7 +706,7 @@ func routingAwareCatalogProvider(providerID string, providerName string, adapter
 		CredentialRequired: false,
 		Models: []providercatalog.Model{
 			{
-				ModelID:   "model_shared",
+				ModelID:   providerName + ":model_shared",
 				ModelName: lowModelName,
 				Enabled:   true,
 				Capabilities: providercatalog.ModelCapabilities{
@@ -636,7 +714,7 @@ func routingAwareCatalogProvider(providerID string, providerName string, adapter
 				},
 			},
 			{
-				ModelID:   "model_low",
+				ModelID:   providerName + ":model_low",
 				ModelName: lowModelName,
 				Enabled:   true,
 				Capabilities: providercatalog.ModelCapabilities{
@@ -644,7 +722,7 @@ func routingAwareCatalogProvider(providerID string, providerName string, adapter
 				},
 			},
 			{
-				ModelID:   "model_balanced",
+				ModelID:   providerName + ":model_balanced",
 				ModelName: providerName + "-balanced",
 				Enabled:   true,
 				Capabilities: providercatalog.ModelCapabilities{

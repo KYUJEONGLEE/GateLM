@@ -826,9 +826,10 @@ INDEX_HTML = r"""<!doctype html>
       const rows = [
         ["Request ID", `<span class="request-id">${escapeHtml(detail.requestId)}</span>`],
         ["Status", `${badge(detail.status, statusKind)} ${badge(String(detail.httpStatus))}`],
-        ["Provider", plainCell(detail.provider)],
         ["Requested model", plainCell(detail.requestedModel)],
-        ["Selected model", plainCell(detail.selectedModel)],
+        ["Routing model ref", plainCell(detail.routing?.modelRef)],
+        ["Provider attempt", `${plainCell(detail.providerAttempt?.providerId)} / ${plainCell(detail.providerAttempt?.modelId)}`],
+        ["Provider attempt outcome", plainCell(detail.providerAttempt?.outcome)],
         ["Cache", `${plainCell(detail.cache?.cacheStatus)} / ${plainCell(detail.cache?.cacheType)}`],
         ["Cache hit source", plainCell(detail.cache?.cacheHitRequestId)],
         ["Routing reason", plainCell(detail.routing?.routingReason)],

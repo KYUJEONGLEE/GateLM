@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { buildGatewayPipelineModel } from "./gateway-pipeline-model";
-import type {
-  DomainOutcomes,
-  InvocationLogRecord
-} from "@/lib/fixtures/v1-observability-fixtures";
+import type { DomainOutcomes } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 
 test("maps a successful provider call without inventing adapter success", () => {
   const model = buildGatewayPipelineModel(record());
@@ -151,6 +149,7 @@ test("preserves an unknown provider call state instead of claiming a call", () =
     record({
       domainOutcomes: outcomes({ provider: "future_outcome" }),
       providerCalled: undefined,
+      providerAttempt: null,
       providerLatencyMs: null
     })
   );
@@ -293,7 +292,7 @@ function outcomes(
   };
 }
 
-function record(overrides: Partial<InvocationLogRecord> = {}): InvocationLogRecord {
+function record(overrides: Partial<LiveInvocationLogRecord> = {}): LiveInvocationLogRecord {
   return {
     apiKeyId: "not-exposed",
     appTokenId: "not-exposed",
@@ -307,11 +306,13 @@ function record(overrides: Partial<InvocationLogRecord> = {}): InvocationLogReco
     cacheKeyHash: null,
     cacheStatus: "miss",
     cacheType: "exact",
+    category: "general",
     completedAt: "2026-07-11T00:00:01.000Z",
     completionTokens: 20,
     costMicroUsd: 100,
     createdAt: "2026-07-11T00:00:00.000Z",
     domainOutcomes: outcomes(),
+    difficulty: "simple",
     endUserId: null,
     endpoint: "/v1/chat/completions",
     errorCode: null,
@@ -329,9 +330,17 @@ function record(overrides: Partial<InvocationLogRecord> = {}): InvocationLogReco
       }
     },
     method: "POST",
+    modelRef: "catalog:general-simple",
     projectId: "project-id",
     promptHash: "not-exposed",
     promptTokens: 10,
+    providerAttempt: {
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+      outcome: "succeeded",
+      latencyMs: 900,
+      sanitizedErrorCode: null
+    },
     providerCalled: true,
     providerLatencyMs: 900,
     rateLimitDecision: {
@@ -350,12 +359,9 @@ function record(overrides: Partial<InvocationLogRecord> = {}): InvocationLogReco
     redactedPromptPreview: null,
     requestBodyHash: "not-exposed",
     requestedModel: "gpt-4o-mini",
-    requestedProvider: "openai",
     requestId: "request-id",
     routingReason: "standard",
     savedCostMicroUsd: 0,
-    selectedModel: "gpt-4o-mini",
-    selectedProvider: "openai",
     source: "test",
     status: "success",
     stream: false,

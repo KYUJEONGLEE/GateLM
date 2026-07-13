@@ -9,7 +9,11 @@ import {
   revalidateControlPlaneRead,
   runtimePolicyApplicationReadCacheTag
 } from "@/lib/control-plane/read-cache";
-import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
+import {
+  runtimeRoutingCategories,
+  runtimeRoutingDifficulties,
+  type RuntimePolicyDraftValues
+} from "@/lib/control-plane/runtime-policy-types";
 
 type RequestPayload = {
   action?: unknown;
@@ -121,19 +125,81 @@ function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraft
     record.promptCaptureMaxChars <= 20000 &&
     typeof record.rateLimitEnabled === "boolean" &&
     Number.isInteger(record.rateLimitLimit) &&
-    typeof record.routingDefaultModel === "string" &&
-    typeof record.routingDefaultProvider === "string" &&
-    typeof record.routingFallbackModel === "string" &&
-    typeof record.routingFallbackProvider === "string" &&
-    typeof record.routingHighQualityModel === "string" &&
-    typeof record.routingHighQualityProvider === "string" &&
-    typeof record.routingLowCostModel === "string" &&
-    typeof record.routingLowCostProvider === "string" &&
-    Number.isInteger(record.routingShortPromptMaxChars) &&
+    isRoutingPolicyDraft(record.routingPolicy) &&
+    !hasLegacyRoutingFields(record as Record<string, unknown>) &&
     record.detectors.every(isDetector) &&
     record.models.every(isModelConfig) &&
     record.pricingRules.every(isPricingRule)
   );
+}
+
+function isRoutingPolicyDraft(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const policy = value as Record<string, unknown>;
+
+  if (
+    Object.keys(policy).length !== 3 ||
+    (policy.mode !== "auto" && policy.mode !== "manual") ||
+    (policy.bootstrapState !== "mock_bootstrap" && policy.bootstrapState !== "configured") ||
+    !policy.routes ||
+    typeof policy.routes !== "object"
+  ) {
+    return false;
+  }
+
+  const routes = policy.routes as Record<string, unknown>;
+
+  return (
+    Object.keys(routes).length === runtimeRoutingCategories.length &&
+    runtimeRoutingCategories.every((category) => {
+      const categoryRoutes = routes[category];
+
+      if (!categoryRoutes || typeof categoryRoutes !== "object") {
+        return false;
+      }
+
+      const difficultyRoutes = categoryRoutes as Record<string, unknown>;
+
+      return (
+        Object.keys(difficultyRoutes).length === runtimeRoutingDifficulties.length &&
+        runtimeRoutingDifficulties.every((difficulty) => {
+          const cell = difficultyRoutes[difficulty];
+          const modelRefs =
+            cell && typeof cell === "object"
+              ? (cell as Record<string, unknown>).modelRefs
+              : null;
+
+          return Boolean(
+            cell &&
+              typeof cell === "object" &&
+              Object.keys(cell as Record<string, unknown>).length === 1 &&
+              Array.isArray(modelRefs) &&
+              modelRefs.length > 0 &&
+              modelRefs.every(
+                (modelRef) => typeof modelRef === "string" && modelRef.trim()
+              )
+          );
+        })
+      );
+    })
+  );
+}
+
+function hasLegacyRoutingFields(record: Record<string, unknown>) {
+  return [
+    "routingDefaultModel",
+    "routingDefaultProvider",
+    "routingFallbackModel",
+    "routingFallbackProvider",
+    "routingHighQualityModel",
+    "routingHighQualityProvider",
+    "routingLowCostModel",
+    "routingLowCostProvider",
+    "routingShortPromptMaxChars"
+  ].some((field) => field in record);
 }
 
 function isDetector(value: unknown) {

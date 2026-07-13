@@ -11,13 +11,15 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 const (
-	testTenantID      = "00000000-0000-4000-8000-000000000100"
-	testProjectID     = "00000000-0000-4000-8000-000000000200"
-	testApplicationID = "00000000-0000-4000-8000-000000000300"
+	testTenantID          = "00000000-0000-4000-8000-000000000100"
+	testProjectID         = "00000000-0000-4000-8000-000000000200"
+	testApplicationID     = "00000000-0000-4000-8000-000000000300"
+	testRoutingPolicyHash = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
 func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
@@ -52,17 +54,12 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 		snapshot.BudgetPolicy.WarningThresholdPercent != 75 {
 		t.Fatalf("unexpected budget policy: %+v", snapshot.BudgetPolicy)
 	}
-	if snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk == nil || !*snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk {
-		t.Fatalf("expected budget high quality restriction to default on, got %+v", snapshot.BudgetPolicy)
-	}
-	if snapshot.RoutingPolicy.DefaultProvider != "openai-main" || snapshot.RoutingPolicy.DefaultModel != "gpt-test-low" {
+	if snapshot.RoutingPolicy.Mode != routing.RoutingPolicyModeAuto || snapshot.RoutingPolicy.BootstrapState != routing.BootstrapStateConfigured {
 		t.Fatalf("unexpected routing policy: %+v", snapshot.RoutingPolicy)
 	}
-	if snapshot.RoutingPolicy.LowCostProvider != "openai-low" || snapshot.RoutingPolicy.LowCostModel != "gpt-test-mini" {
-		t.Fatalf("expected low-cost routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
-	}
-	if snapshot.RoutingPolicy.HighQualityProvider != "openai-premium" || snapshot.RoutingPolicy.HighQualityModel != "gpt-test-smart" {
-		t.Fatalf("expected high-quality routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
+	refs := snapshot.RoutingPolicy.Routes.Code.Complex.ModelRefs
+	if len(refs) != 2 || refs[0] != "provider-openai:gpt-test-smart" || refs[1] != "provider-openai:gpt-test-low" {
+		t.Fatalf("expected ordered model refs to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
 	}
 	if !snapshot.PromptCapture.Enabled ||
 		snapshot.PromptCapture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
@@ -92,26 +89,6 @@ func TestProviderSendsInternalServiceToken(t *testing.T) {
 	}
 }
 
-func TestProviderMapsBudgetHighQualityRestrictionToggle(t *testing.T) {
-	restrictHighQuality := false
-	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
-	response.Policies.Budget.RestrictHighQualityOnBudgetRisk = &restrictHighQuality
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeRuntimeSnapshot(t, w, response)
-	}))
-	defer server.Close()
-
-	provider := NewProvider(server.URL, server.Client())
-	snapshot, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
-	if err != nil {
-		t.Fatalf("expected runtime snapshot, got %v", err)
-	}
-
-	if snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk == nil || *snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk {
-		t.Fatalf("expected budget high quality restriction to be disabled, got %+v", snapshot.BudgetPolicy)
-	}
-}
-
 func TestProviderRejectsRuntimeSnapshotLookupKeyMismatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeRuntimeSnapshot(t, w, testRuntimeSnapshotResponse(testProviderCatalogRef(), "00000000-0000-4000-8000-999999999999"))
@@ -122,6 +99,153 @@ func TestProviderRejectsRuntimeSnapshotLookupKeyMismatch(t *testing.T) {
 	_, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
 	if !errors.Is(err, runtimeconfig.ErrScopeMismatch) {
 		t.Fatalf("expected scope mismatch, got %v", err)
+	}
+}
+
+func TestProviderRejectsRuntimeSnapshotV1(t *testing.T) {
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.SchemaVersion = "gatelm.runtime-snapshot.v1"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	_, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if !errors.Is(err, runtimeconfig.ErrUnsupportedSnapshotSchema) {
+		t.Fatalf("expected v1 hard cutover rejection, got %v", err)
+	}
+}
+
+func TestProviderAcceptsMonotonicRuntimeSnapshotVersion(t *testing.T) {
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.RuntimeSnapshotVersion = 17
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	snapshot, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if err != nil {
+		t.Fatalf("expected monotonic snapshot version to be accepted, got %v", err)
+	}
+	if snapshot.Snapshot.RuntimeSnapshotVersion != 17 {
+		t.Fatalf("unexpected runtime snapshot version: %d", snapshot.Snapshot.RuntimeSnapshotVersion)
+	}
+}
+
+func TestProviderRejectsMissingRuntimeSnapshotSchema(t *testing.T) {
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.SchemaVersion = ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	_, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if !errors.Is(err, runtimeconfig.ErrUnsupportedSnapshotSchema) {
+		t.Fatalf("expected missing schema rejection, got %v", err)
+	}
+}
+
+func TestProviderDoesNotRestoreRoutingHashFromLegacyHashes(t *testing.T) {
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.Policies.Routing.RoutingPolicyHash = ""
+	response.LegacyHashes.RoutingPolicyHash = "legacy_hash_must_not_be_used"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	_, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if !errors.Is(err, runtimeconfig.ErrMissingRuntimeHash) && !errors.Is(err, runtimeconfig.ErrInvalidRoutingPolicy) {
+		t.Fatalf("expected missing active routing hash rejection, got %v", err)
+	}
+}
+
+func TestProviderRejectsNonCanonicalRoutingPolicyHash(t *testing.T) {
+	for _, invalidHash := range []string{
+		"hash_routing_policy_live",
+		"sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"sha256:abc",
+	} {
+		t.Run(invalidHash, func(t *testing.T) {
+			response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+			response.Policies.Routing.RoutingPolicyHash = invalidHash
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeRuntimeSnapshot(t, w, response)
+			}))
+			defer server.Close()
+
+			provider := NewProvider(server.URL, server.Client())
+			_, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+			if !errors.Is(err, runtimeconfig.ErrInvalidRoutingPolicy) {
+				t.Fatalf("expected non-canonical routing hash rejection, got %v", err)
+			}
+		})
+	}
+}
+
+func TestProviderRejectsUnknownOrLegacyRoutingFields(t *testing.T) {
+	for name, mutate := range map[string]func(map[string]any){
+		"extra_category": func(routingPolicy map[string]any) {
+			routes := routingPolicy["routes"].(map[string]any)
+			routes["unknown"] = routes["general"]
+		},
+		"extra_difficulty": func(routingPolicy map[string]any) {
+			routes := routingPolicy["routes"].(map[string]any)
+			general := routes["general"].(map[string]any)
+			general["default"] = general["simple"]
+		},
+		"legacy_tier_field": func(routingPolicy map[string]any) {
+			routingPolicy["lowCostModel"] = "legacy-model"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+			payload, err := json.Marshal(response)
+			if err != nil {
+				t.Fatalf("marshal snapshot: %v", err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(payload, &body); err != nil {
+				t.Fatalf("decode snapshot map: %v", err)
+			}
+			policies := body["policies"].(map[string]any)
+			routingPolicy := policies["routing"].(map[string]any)
+			mutate(routingPolicy)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if err := json.NewEncoder(w).Encode(body); err != nil {
+					t.Fatalf("encode mutated snapshot: %v", err)
+				}
+			}))
+			defer server.Close()
+
+			provider := NewProvider(server.URL, server.Client())
+			if _, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID); err == nil {
+				t.Fatal("expected strict routing snapshot rejection")
+			}
+		})
+	}
+}
+
+func TestProviderRejectsIncompleteRoutingMatrix(t *testing.T) {
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.Policies.Routing.Routes.Reasoning.Complex.ModelRefs = nil
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	_, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if !errors.Is(err, runtimeconfig.ErrInvalidRoutingPolicy) {
+		t.Fatalf("expected incomplete 5x2 matrix rejection, got %v", err)
 	}
 }
 
@@ -175,8 +299,9 @@ func testProviderCatalogRef() providercatalog.Reference {
 
 func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID string) runtimeSnapshotResponse {
 	return runtimeSnapshotResponse{
+		SchemaVersion:          runtimeSnapshotSchemaV2,
 		RuntimeSnapshotID:      "runtime_snapshot_live_test",
-		RuntimeSnapshotVersion: 1,
+		RuntimeSnapshotVersion: 2,
 		ContentHash:            "hash_runtime_snapshot_live",
 		RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
 		PublishedAt:            time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC),
@@ -198,13 +323,10 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				PolicyHash: "hash_security_policy_live",
 			},
 			Routing: runtimeSnapshotRoutingPolicy{
-				DefaultProvider:     "openai-main",
-				DefaultModel:        "gpt-test-low",
-				LowCostProvider:     "openai-low",
-				LowCostModel:        "gpt-test-mini",
-				HighQualityProvider: "openai-premium",
-				HighQualityModel:    "gpt-test-smart",
-				RoutingPolicyHash:   "hash_routing_policy_live",
+				Mode:              routing.RoutingPolicyModeAuto,
+				BootstrapState:    routing.BootstrapStateConfigured,
+				Routes:            testRoutingMatrix(),
+				RoutingPolicyHash: testRoutingPolicyHash,
 			},
 			Cache: runtimeSnapshotCachePolicy{
 				ExactCacheEnabled: true,
@@ -231,10 +353,6 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				EnforcementMode:         budget.EnforcementModeBlock,
 				WarningThresholdPercent: 75,
 			},
-			Fallback: runtimeSnapshotFallbackPolicy{
-				FallbackProvider: "mock-fallback",
-				FallbackModel:    "mock-fallback-model",
-			},
 		},
 		LegacyHashes: runtimeconfig.LegacyHashes{
 			ConfigHash:         "hash_runtime_snapshot_live",
@@ -242,4 +360,15 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 			RoutingPolicyHash:  "hash_routing_policy_live",
 		},
 	}
+}
+
+func testRoutingMatrix() routing.RoutingMatrix {
+	cell := func(ref string) routing.RouteCell { return routing.RouteCell{ModelRefs: []string{ref}} }
+	difficulties := routing.DifficultyRoutes{Simple: cell("provider-openai:gpt-test-low"), Complex: cell("provider-openai:gpt-test-low")}
+	matrix := routing.RoutingMatrix{
+		General: difficulties, Code: difficulties, Translation: difficulties,
+		Summarization: difficulties, Reasoning: difficulties,
+	}
+	matrix.Code.Complex.ModelRefs = []string{"provider-openai:gpt-test-smart", "provider-openai:gpt-test-low"}
+	return matrix
 }

@@ -21,12 +21,12 @@ type GatewayStageDuration struct {
 }
 
 type ProviderRequest struct {
-	SelectedProvider string
-	SelectedModel    string
-	Status           string
-	HTTPStatus       int
-	ErrorCode        string
-	DurationSeconds  float64
+	Provider        string
+	Model           string
+	Status          string
+	HTTPStatus      int
+	ErrorCode       string
+	DurationSeconds float64
 }
 
 type CacheOperation struct {
@@ -49,17 +49,17 @@ type LogWrite struct {
 }
 
 type StreamRelay struct {
-	SelectedProvider string
-	SelectedModel    string
-	Outcome          string
-	ErrorCode        string
-	DurationSeconds  float64
+	Provider        string
+	Model           string
+	Outcome         string
+	ErrorCode       string
+	DurationSeconds float64
 }
 
 type StreamTimeToFirstToken struct {
-	SelectedProvider string
-	SelectedModel    string
-	DurationSeconds  float64
+	Provider        string
+	Model           string
+	DurationSeconds float64
 }
 
 func (r *Registry) GatewayRequestStarted(endpoint string, method string) {
@@ -95,8 +95,8 @@ func (r *Registry) GatewayStageDuration(duration GatewayStageDuration) {
 
 func (r *Registry) ProviderRequest(request ProviderRequest) {
 	labels := []Label{
-		{Name: "selected_provider", Value: request.SelectedProvider},
-		{Name: "selected_model", Value: request.SelectedModel},
+		{Name: "provider", Value: request.Provider},
+		{Name: "model", Value: request.Model},
 		{Name: "status", Value: normalizeStatus(request.Status)},
 		{Name: "http_status", Value: httpStatusLabel(request.HTTPStatus)},
 		{Name: "error_code", Value: defaultLabelValue(request.ErrorCode)},
@@ -164,12 +164,12 @@ func (r *Registry) AsyncLogPersist(event AsyncLogEvent) {
 	r.AddCounter(AsyncLogPersistTotal, labels, 1)
 	r.ObserveHistogram(AsyncLogPersistDurationSeconds, labels, event.DurationSeconds)
 }
-func (r *Registry) StreamStarted(selectedProvider string, selectedModel string) {
-	r.AddGauge(StreamsActive, streamBaseLabels(selectedProvider, selectedModel), 1)
+func (r *Registry) StreamStarted(provider string, model string) {
+	r.AddGauge(StreamsActive, streamBaseLabels(provider, model), 1)
 }
 
 func (r *Registry) StreamFinished(relay StreamRelay) {
-	baseLabels := streamBaseLabels(relay.SelectedProvider, relay.SelectedModel)
+	baseLabels := streamBaseLabels(relay.Provider, relay.Model)
 	relayLabels := append(baseLabels,
 		Label{Name: "stream_outcome", Value: normalizeStreamOutcome(relay.Outcome)},
 		Label{Name: "error_code", Value: defaultLabelValue(relay.ErrorCode)},
@@ -182,7 +182,7 @@ func (r *Registry) StreamFinished(relay StreamRelay) {
 func (r *Registry) StreamTimeToFirstToken(ttft StreamTimeToFirstToken) {
 	r.ObserveHistogram(
 		StreamTimeToFirstTokenSeconds,
-		streamBaseLabels(ttft.SelectedProvider, ttft.SelectedModel),
+		streamBaseLabels(ttft.Provider, ttft.Model),
 		ttft.DurationSeconds,
 	)
 }
@@ -220,10 +220,10 @@ func asyncLogLabels(operation string, status string) []Label {
 		{Name: "status", Value: defaultLabelValue(status)},
 	}
 }
-func streamBaseLabels(selectedProvider string, selectedModel string) []Label {
+func streamBaseLabels(provider string, model string) []Label {
 	return []Label{
-		{Name: "selected_provider", Value: selectedProvider},
-		{Name: "selected_model", Value: selectedModel},
+		{Name: "provider", Value: provider},
+		{Name: "model", Value: model},
 	}
 }
 

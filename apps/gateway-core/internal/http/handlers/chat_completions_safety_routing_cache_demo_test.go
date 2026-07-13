@@ -36,7 +36,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	if first.Header().Get("X-GateLM-Cache-Status") != "miss" || firstResp.GateLM.CacheStatus != "miss" {
 		t.Fatalf("expected first safe request to miss exact cache, header=%q gate_lm=%#v", first.Header().Get("X-GateLM-Cache-Status"), firstResp.GateLM)
 	}
-	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "category_support_refund_low_cost" {
+	if firstResp.GateLM.ExecutionMode != "mock" || firstResp.GateLM.RoutingReason != "category_difficulty_matrix" {
 		t.Fatalf("unexpected model=auto routing result: %#v", firstResp.GateLM)
 	}
 	if *demo.providerCalls != 1 || demo.cacheStore.setCalls != 1 || demo.cacheStore.getCalls != 1 {
@@ -50,8 +50,9 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 		firstMaterial.MaskingPolicyHash != "hash_security_policy_phase3_demo" ||
 		firstMaterial.RoutingPolicyHash != "hash_routing_policy_phase3_demo" ||
 		firstMaterial.RequestedModel != "auto" ||
-		firstMaterial.ProviderCatalogStableKey != "mock" ||
-		firstMaterial.ModelID != "mock-fast" ||
+		firstMaterial.ProviderID != "mock" ||
+		firstMaterial.ProviderCatalogStableKey != "" ||
+		firstMaterial.ModelID != "mock-balanced" ||
 		firstMaterial.NormalizedMaskedRequestBodyHash == "" ||
 		firstMaterial.RoutingDecisionKeyHash == "" {
 		t.Fatalf("unexpected exact cache key material: %#v", firstMaterial)
@@ -245,8 +246,6 @@ func newPhase3DemoHarness(t *testing.T, cachePolicy runtimeconfig.CachePolicy) p
 			calls:    &providerCalls,
 			requests: &providerRequests,
 		}),
-		DefaultModel:         "mock-balanced",
-		DefaultProvider:      "mock",
 		ExactCacheStore:      cacheStore,
 		ExactCacheKeyBuilder: keyBuilder,
 		CachePolicyHash:      "cache_policy_phase3_demo",
@@ -268,17 +267,8 @@ func newPhase3DemoHarness(t *testing.T, cachePolicy runtimeconfig.CachePolicy) p
 			SafetyPolicy: runtimeconfig.SafetyPolicy{
 				SecurityPolicyHash: "hash_security_policy_phase3_demo",
 			},
-			RoutingPolicy: runtimeconfig.RoutingPolicy{
-				DefaultProvider:     "mock",
-				DefaultModel:        "mock-balanced",
-				LowCostProvider:     "mock",
-				LowCostModel:        "mock-fast",
-				FallbackProvider:    "mock",
-				FallbackModel:       "mock-balanced",
-				ShortPromptMaxChars: 300,
-				RoutingPolicyHash:   "hash_routing_policy_phase3_demo",
-			},
-			CachePolicy: cachePolicy,
+			RoutingPolicy: runtimeconfig.BootstrapRoutingPolicy("hash_routing_policy_phase3_demo"),
+			CachePolicy:   cachePolicy,
 		}))),
 	}
 	withTestAuth(handler)
@@ -339,13 +329,12 @@ func demoSuccessHTTPOutput(t *testing.T, rr *httptest.ResponseRecorder, resp pro
 	gateLM := map[string]any{}
 	if resp.GateLM != nil {
 		gateLM = map[string]any{
-			"requestId":        resp.GateLM.RequestID,
-			"requestedModel":   resp.GateLM.RequestedModel,
-			"selectedProvider": resp.GateLM.SelectedProvider,
-			"selectedModel":    resp.GateLM.SelectedModel,
-			"routingReason":    resp.GateLM.RoutingReason,
-			"cacheStatus":      resp.GateLM.CacheStatus,
-			"maskingAction":    resp.GateLM.MaskingAction,
+			"requestId":      resp.GateLM.RequestID,
+			"requestedModel": resp.GateLM.RequestedModel,
+			"executionMode":  resp.GateLM.ExecutionMode,
+			"routingReason":  resp.GateLM.RoutingReason,
+			"cacheStatus":    resp.GateLM.CacheStatus,
+			"maskingAction":  resp.GateLM.MaskingAction,
 		}
 	}
 

@@ -22,8 +22,9 @@ import {
   type ProviderModelUsageRow
 } from "@/features/dashboard/components/provider-model-usage-card";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { DashboardOverview, InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
+import type { LiveDashboardOverview as DashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import type { LiveInvocationLogRecord as InvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type { LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
 import {
   formatBudgetScopeDisplayName,
@@ -122,7 +123,7 @@ const dashboardText: Record<
     budgetScopeBreakdown: string;
     queryBudget: string;
     rateLimitEvidence: string;
-    routingByModel: string;
+    routingSummary: string;
     statusDistribution: string;
     tabs: Record<DashboardTab, string>;
     title: string;
@@ -176,7 +177,7 @@ const dashboardText: Record<
     budgetScopeBreakdown: "Project policy/budget breakdown",
     queryBudget: "Query budget",
     rateLimitEvidence: "Rate limit evidence",
-    routingByModel: "Routing by model",
+    routingSummary: "Routing by category and difficulty",
     statusDistribution: "Status distribution",
     tabs: {
       overview: "Overview",
@@ -236,7 +237,7 @@ const dashboardText: Record<
     budgetScopeBreakdown: "Project 정책/예산 집계",
     queryBudget: "Query budget",
     rateLimitEvidence: "Rate limit 증거",
-    routingByModel: "모델별 라우팅",
+    routingSummary: "카테고리·난이도별 라우팅",
     statusDistribution: "상태 분포",
     tabs: {
       overview: "Overview",
@@ -458,21 +459,17 @@ function formatMicroUsd(value: number) {
 function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModelUsageRow[] {
   const rows = overview.breakdowns?.byProviderModel?.length
     ? overview.breakdowns.byProviderModel.map((row) => ({
-        model: row.selectedModel,
-        provider: row.selectedProvider,
+        model: row.model,
+        provider: row.provider,
         requestCount: row.requestCount
       }))
     : overview.costByModel.length
       ? overview.costByModel.map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
+          model: row.model,
+          provider: row.provider,
           requestCount: row.requestCount
         }))
-      : overview.routingCountByModel.map((row) => ({
-          model: row.selectedModel,
-          provider: row.selectedProvider,
-          requestCount: row.requestCount
-        }));
+      : [];
   const rowMap = new Map<string, ProviderModelUsageRow>();
 
   for (const row of rows) {
@@ -1121,7 +1118,7 @@ function RecentRequestList({
             </Link>
             <small>
               {record.status} / {record.cacheStatus} /{" "}
-              {formatModelDisplayName(record.selectedModel ?? record.requestedModel)}
+              {formatModelDisplayName(record.requestedModel)} / {record.category} / {record.difficulty} / {record.modelRef ?? "-"}
             </small>
           </span>
           <strong>{formatLatency(record.latencyMs)}</strong>
@@ -1163,8 +1160,8 @@ function ProviderP95Panel({ overview }: { overview: DashboardOverview }) {
       </div>
       <div className="compact-list">
         {rows.map((row) => (
-          <div className="compact-row" key={`${row.selectedProvider}-${row.selectedModel}`}>
-            <span>{row.selectedProvider}/{formatModelDisplayName(row.selectedModel)}</span>
+          <div className="compact-row" key={`${row.provider}-${row.model}`}>
+            <span>{row.provider}/{formatModelDisplayName(row.model)}</span>
             <strong>{formatLatency(row.p95ProviderLatencyMs)}</strong>
           </div>
         ))}
@@ -1203,23 +1200,23 @@ function RoutingTable({ overview, text }: { overview: DashboardOverview; text: D
   return (
     <article className="console-panel wide-panel">
       <div className="panel-heading">
-        <h3>{text.routingByModel}</h3>
+        <h3>{text.routingSummary}</h3>
       </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Provider</th>
-              <th>Model</th>
+              <th>Category</th>
+              <th>Difficulty</th>
               <th>Reason</th>
               <th>Requests</th>
             </tr>
           </thead>
           <tbody>
-            {overview.routingCountByModel.map((row) => (
-              <tr key={`${row.selectedProvider}-${row.selectedModel}-${row.routingReason}`}>
-                <td>{row.selectedProvider}</td>
-                <td>{formatModelDisplayName(row.selectedModel)}</td>
+            {overview.routingSummaries.map((row) => (
+              <tr key={`${row.category}-${row.difficulty}-${row.routingReason}`}>
+                <td>{row.category}</td>
+                <td>{row.difficulty}</td>
                 <td>{row.routingReason}</td>
                 <td>{formatInteger(row.requestCount)}</td>
               </tr>
@@ -1250,9 +1247,9 @@ function CostByModelTable({ overview, text }: { overview: DashboardOverview; tex
           </thead>
           <tbody>
             {overview.costByModel.map((row) => (
-              <tr key={`${row.selectedProvider}-${row.selectedModel}`}>
-                <td>{row.selectedProvider}</td>
-                <td>{formatModelDisplayName(row.selectedModel)}</td>
+              <tr key={`${row.provider}-${row.model}`}>
+                <td>{row.provider}</td>
+                <td>{formatModelDisplayName(row.model)}</td>
                 <td>{formatInteger(row.requestCount)}</td>
                 <td>{formatInteger(row.totalTokens)}</td>
                 <td>{formatUsd(row.costUsd)}</td>
@@ -1571,18 +1568,17 @@ function distributeTotal(total: number, shape: number[], shapeTotal: number) {
 }
 
 function getTopModelShareRows(overview: DashboardOverview) {
-  const sourceRows = overview.routingCountByModel.length
-    ? overview.routingCountByModel
+  const sourceRows = overview.costByModel.length
+    ? overview.costByModel
     : (overview.breakdowns?.byProviderModel ?? []).map((row) => ({
+        model: row.model,
         requestCount: row.requestCount,
-        routingReason: "selected",
-        selectedModel: row.selectedModel,
-        selectedProvider: row.selectedProvider
+        provider: row.provider
       }));
   const sortedRows = [...sourceRows].sort((left, right) => right.requestCount - left.requestCount);
   const topRows = sortedRows.slice(0, 3).map((row, index) => ({
     color: chartColors[index] ?? chartColors[0],
-    label: compactModelLabel(row.selectedModel),
+    label: compactModelLabel(row.model),
     value: row.requestCount
   }));
   const otherCount = sortedRows.slice(3).reduce((sum, row) => sum + row.requestCount, 0);

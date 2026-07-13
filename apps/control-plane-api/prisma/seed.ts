@@ -25,7 +25,7 @@ export const DEMO_API_KEY_ID = '00000000-0000-4000-8000-000000000400';
 export const DEMO_APP_TOKEN_ID = '00000000-0000-4000-8000-000000000500';
 export const DEMO_MOCK_PROVIDER_ID = '00000000-0000-4000-8000-000000000600';
 export const DEMO_OPENAI_PROVIDER_ID = '00000000-0000-4000-8000-000000000601';
-export const DEMO_RUNTIME_CONFIG_VERSION = 'runtime_config_v1_demo_001';
+export const DEMO_RUNTIME_CONFIG_VERSION = 'runtime_config_v2_demo_001';
 
 const DEMO_PROVIDER = 'mock';
 const DEMO_PROVIDER_BASE_URL = 'http://mock-provider:8090';
@@ -150,17 +150,7 @@ export function buildDemoRuntimeConfigDocument(
   const appTokenPrefix = options.appTokenPrefix ?? 'gat_app_';
   const appTokenLast4 = options.appTokenLast4 ?? '4tK2';
   const safetyPolicy = buildSafetyPolicy();
-  const routingPolicy =
-    providerMode === 'actual'
-      ? buildRoutingPolicy({
-          defaultProvider: DEMO_OPENAI_PROVIDER,
-          defaultModel: openAIBalancedModel,
-          lowCostProvider: DEMO_OPENAI_PROVIDER,
-          lowCostModel: openAILowCostModel,
-          fallbackProvider: DEMO_PROVIDER,
-          fallbackModel: 'mock-balanced',
-        })
-      : buildRoutingPolicy();
+  const routingPolicy = buildRoutingPolicy();
   const providers =
     providerMode === 'actual'
       ? [
@@ -264,7 +254,7 @@ export function buildDemoRuntimeConfigDocument(
           }),
         ];
   const documentWithoutHash: ActiveRuntimeConfigResponseDto = {
-    schemaVersion: 'gatelm.active-runtime-config.v1',
+    schemaVersion: 'gatelm.active-runtime-config.v2',
     configVersion: DEMO_RUNTIME_CONFIG_VERSION,
     configHash: '',
     configHashAlgorithm: CONFIG_HASH_ALGORITHM,
@@ -304,12 +294,6 @@ export function buildDemoRuntimeConfigDocument(
     },
     providers,
     models,
-    defaultProvider: routingPolicy.defaultProvider,
-    defaultModel: routingPolicy.defaultModel,
-    lowCostProvider: routingPolicy.lowCostProvider,
-    lowCostModel: routingPolicy.lowCostModel,
-    fallbackProvider: routingPolicy.fallbackProvider,
-    fallbackModel: routingPolicy.fallbackModel,
     rateLimit: {
       enabled: true,
       scope: 'application',
@@ -321,7 +305,6 @@ export function buildDemoRuntimeConfigDocument(
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
-      restrictHighQualityOnBudgetRisk: true,
     },
     safetyPolicy,
     cachePolicy: {
@@ -372,8 +355,7 @@ export function buildDemoRuntimeConfigDocument(
         'tenantId',
         'projectId',
         'applicationId',
-        'selectedProvider',
-        'selectedModel',
+        'resolvedModelRef',
         'normalizedRedactedPrompt',
         'securityPolicyHash',
         'routingPolicyHash',
@@ -954,6 +936,7 @@ function buildDemoRuntimeSnapshot(
     document,
   );
   const snapshotWithoutContentHash = {
+    schemaVersion: 'gatelm.runtime-snapshot.v2',
     runtimeSnapshotId: runtimeConfig.id,
     runtimeSnapshotVersion,
     contentHash: undefined,
@@ -996,19 +979,9 @@ function buildDemoRuntimeSnapshot(
         })),
       },
       routing: {
-        autoModelEnabled: true,
-        defaultRequestedModel: document.routingPolicy.autoModel,
-        defaultProvider: document.routingPolicy.defaultProvider,
-        defaultModel: document.routingPolicy.defaultModel,
-        lowCostProvider: document.routingPolicy.lowCostProvider,
-        lowCostModel: document.routingPolicy.lowCostModel,
-        ...(document.routingPolicy.highQualityProvider &&
-        document.routingPolicy.highQualityModel
-          ? {
-              highQualityProvider: document.routingPolicy.highQualityProvider,
-              highQualityModel: document.routingPolicy.highQualityModel,
-            }
-          : {}),
+        mode: document.routingPolicy.mode,
+        bootstrapState: document.routingPolicy.bootstrapState,
+        routes: document.routingPolicy.routes,
         routingPolicyHash: document.routingPolicy.routingPolicyHash,
       },
       cache: {
@@ -1038,14 +1011,6 @@ function buildDemoRuntimeSnapshot(
         enabled: document.budgetPolicy.enabled,
         enforcementMode: document.budgetPolicy.enforcementMode,
         warningThresholdPercent: document.budgetPolicy.warningThresholdPercent,
-        restrictHighQualityOnBudgetRisk:
-          document.budgetPolicy.restrictHighQualityOnBudgetRisk,
-      },
-      fallback: {
-        enabled: true,
-        fallbackProvider: document.routingPolicy.fallbackProvider,
-        fallbackModel: document.routingPolicy.fallbackModel,
-        allowedReasons: ['provider_timeout', 'provider_error'],
       },
       streaming: {
         enabled: document.models.some((model) => model.supportsStreaming),
@@ -1099,8 +1064,16 @@ function buildDemoProviderCatalog(
         fallbackEligible: provider.failureMode === 'fail_open_to_fallback',
         models: document.models
           .filter((model) => model.provider === provider.provider)
-          .map((model) => ({
-            modelId: `${provider.providerId}:${model.model}`,
+          .map((model) => {
+            const modelId = `${provider.providerId}:${model.model}`;
+            const modelRef =
+              provider.provider === DEMO_PROVIDER &&
+              model.model === 'mock-balanced'
+                ? 'mock-balanced'
+                : modelId;
+            return {
+            modelId,
+            modelRef,
             modelName: model.model,
             displayName: model.displayName,
             enabled: model.status === 'active',
@@ -1111,11 +1084,12 @@ function buildDemoProviderCatalog(
               maxOutputTokens: toMaxOutputTokens(model),
             },
             routing: {
-              autoRoutingEligible: isModelSelectedForRouting(model, document),
-              costTier: toModelCostTier(model, document),
-              fallbackPriority: toModelFallbackPriority(model, document),
+              autoRoutingEligible: isModelSelectedForRouting(modelRef, document),
+              costTier: 'balanced' as const,
+              fallbackPriority: toModelFallbackPriority(modelRef, document),
             },
-          })),
+          };
+          }),
       })),
   };
   if (catalogBodyWithoutHash.providers.length === 0) {
@@ -1194,78 +1168,29 @@ function toMaxOutputTokens(
   );
 }
 
-function toModelCostTier(
-  model: ActiveRuntimeConfigResponseDto['models'][number],
-  document: ActiveRuntimeConfigResponseDto,
-): 'low' | 'balanced' | 'premium' {
-  if (!document.routingPolicy) {
-    return 'balanced';
-  }
-
-  if (
-    model.provider === document.routingPolicy.lowCostProvider &&
-    model.model === document.routingPolicy.lowCostModel
-  ) {
-    return 'low';
-  }
-
-  return 'balanced';
-}
-
 function isModelSelectedForRouting(
-  model: ActiveRuntimeConfigResponseDto['models'][number],
+  modelRef: string,
   document: ActiveRuntimeConfigResponseDto,
 ): boolean {
-  if (model.status !== 'active') {
-    return false;
-  }
-
-  if (!document.routingPolicy) {
-    return true;
-  }
-
-  return (
-    (model.provider === document.routingPolicy.lowCostProvider &&
-      model.model === document.routingPolicy.lowCostModel) ||
-    (model.provider === document.routingPolicy.defaultProvider &&
-      model.model === document.routingPolicy.defaultModel) ||
-    (document.routingPolicy.highQualityProvider !== undefined &&
-      document.routingPolicy.highQualityModel !== undefined &&
-      model.provider === document.routingPolicy.highQualityProvider &&
-      model.model === document.routingPolicy.highQualityModel) ||
-    (model.provider === document.routingPolicy.fallbackProvider &&
-      model.model === document.routingPolicy.fallbackModel)
-  );
+  return routingModelRefs(document.routingPolicy.routes).includes(modelRef);
 }
 
 function toModelFallbackPriority(
-  model: ActiveRuntimeConfigResponseDto['models'][number],
+  modelRef: string,
   document: ActiveRuntimeConfigResponseDto,
 ): number {
-  if (!document.routingPolicy) {
-    return 100;
-  }
-
-  if (
-    model.provider === document.routingPolicy.lowCostProvider &&
-    model.model === document.routingPolicy.lowCostModel
-  ) {
-    return 0;
-  }
-  if (
-    model.provider === document.routingPolicy.defaultProvider &&
-    model.model === document.routingPolicy.defaultModel
-  ) {
-    return 1;
-  }
-  if (
-    model.provider === document.routingPolicy.fallbackProvider &&
-    model.model === document.routingPolicy.fallbackModel
-  ) {
-    return 10;
-  }
-
-  return 5;
+  const categories = Object.values(document.routingPolicy.routes) as Array<{
+    simple: { modelRefs: string[] };
+    complex: { modelRefs: string[] };
+  }>;
+  const indexes = categories
+    .flatMap((category) =>
+      [category.simple, category.complex].map((cell) =>
+        cell.modelRefs.indexOf(modelRef),
+      ),
+    )
+    .filter((index) => index >= 0);
+  return indexes.length > 0 ? Math.min(...indexes) : 100;
 }
 
 function toRuntimeSnapshotVersion(
@@ -1714,33 +1639,57 @@ function buildPricingRule(args: {
   };
 }
 
-function buildRoutingPolicy(
-  overrides: Partial<{
-    defaultProvider: string;
-    defaultModel: string;
-    lowCostProvider: string;
-    lowCostModel: string;
-    fallbackProvider: string;
-    fallbackModel: string;
-    shortPromptMaxChars: number;
-  }> = {},
-): ActiveRuntimeConfigResponseDto['routingPolicy'] {
+function buildRoutingPolicy(): ActiveRuntimeConfigResponseDto['routingPolicy'] {
+  const modelRef = 'mock-balanced';
+  const bootstrapState = 'mock_bootstrap';
+  const routes = {
+    general: {
+      simple: { modelRefs: [modelRef] },
+      complex: { modelRefs: [modelRef] },
+    },
+    code: {
+      simple: { modelRefs: [modelRef] },
+      complex: { modelRefs: [modelRef] },
+    },
+    translation: {
+      simple: { modelRefs: [modelRef] },
+      complex: { modelRefs: [modelRef] },
+    },
+    summarization: {
+      simple: { modelRefs: [modelRef] },
+      complex: { modelRefs: [modelRef] },
+    },
+    reasoning: {
+      simple: { modelRefs: [modelRef] },
+      complex: { modelRefs: [modelRef] },
+    },
+  };
   const routingPolicyWithoutHash = {
-    type: 'simple',
-    autoModel: 'auto',
-    defaultProvider: overrides.defaultProvider ?? DEMO_PROVIDER,
-    defaultModel: overrides.defaultModel ?? 'mock-balanced',
-    lowCostProvider: overrides.lowCostProvider ?? DEMO_PROVIDER,
-    lowCostModel: overrides.lowCostModel ?? 'mock-fast',
-    fallbackProvider: overrides.fallbackProvider ?? DEMO_PROVIDER,
-    fallbackModel: overrides.fallbackModel ?? 'mock-balanced',
-    shortPromptMaxChars: overrides.shortPromptMaxChars ?? 500,
+    schemaVersion: 'gatelm.routing-policy.v2',
+    mode: 'auto',
+    bootstrapState,
+    routes,
   } as const;
 
   return {
     ...routingPolicyWithoutHash,
-    routingPolicyHash: sha256(canonicalJson(routingPolicyWithoutHash)),
+    routingPolicyHash: `sha256:${sha256(
+      canonicalJson(routingPolicyWithoutHash),
+    )}`,
   };
+}
+
+function routingModelRefs(
+  routes: ActiveRuntimeConfigResponseDto['routingPolicy']['routes'],
+): string[] {
+  const categories = Object.values(routes) as Array<{
+    simple: { modelRefs: string[] };
+    complex: { modelRefs: string[] };
+  }>;
+  return categories.flatMap((category) => [
+    ...category.simple.modelRefs,
+    ...category.complex.modelRefs,
+  ]);
 }
 
 function demoProviderConfig(): Prisma.InputJsonObject {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 )
 
 const (
@@ -64,10 +65,6 @@ type Config struct {
 	ProviderCatalogCache                   ProviderCatalogCacheConfig
 	AuthSource                             string
 	MockProviderBaseURL                    string
-	DefaultProvider                        string
-	DefaultModel                           string
-	LowCostModel                           string
-	HighQualityModel                       string
 	ProviderCatalogID                      string
 	ProviderCatalogVersion                 int
 	ProviderCatalogHash                    string
@@ -209,10 +206,6 @@ func LoadWithError() (Config, error) {
 		},
 		AuthSource:                             envString("GATEWAY_AUTH_SOURCE", "database"),
 		MockProviderBaseURL:                    envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
-		DefaultProvider:                        envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
-		DefaultModel:                           envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
-		LowCostModel:                           envString("GATEWAY_LOW_COST_MODEL", "mock-fast"),
-		HighQualityModel:                       envString("GATEWAY_HIGH_QUALITY_MODEL", "mock-smart"),
 		ProviderCatalogID:                      envString("GATEWAY_PROVIDER_CATALOG_ID", "provider_catalog_local_static"),
 		ProviderCatalogVersion:                 envInt("GATEWAY_PROVIDER_CATALOG_VERSION", 1),
 		ProviderCatalogHash:                    envString("GATEWAY_PROVIDER_CATALOG_HASH", "sha256:provider-catalog-local-static"),
@@ -232,7 +225,7 @@ func LoadWithError() (Config, error) {
 		ProviderCredentialEncryptionKeyVersion: envString("GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION", envString("PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION", "v1")),
 		RuntimeConfigHash:                      envString("GATEWAY_RUNTIME_CONFIG_HASH", "hash_runtime_config_v1_local"),
 		SecurityPolicyHash:                     envString("GATEWAY_SECURITY_POLICY_HASH", "hash_security_policy_v1_local"),
-		RoutingPolicyHash:                      envString("GATEWAY_ROUTING_POLICY_HASH", "hash_routing_policy_v1_local"),
+		RoutingPolicyHash:                      envString("GATEWAY_ROUTING_POLICY_HASH", routing.DefaultPolicyHash),
 		CachePolicyHash:                        envString("GATEWAY_CACHE_POLICY_HASH", "cache_p0_v1"),
 		ShortPromptMaxChars:                    envInt("GATEWAY_SHORT_PROMPT_MAX_CHARS", 300),
 		DemoAPIKey:                             envString("GATELM_DEMO_API_KEY", "glm_api_test_redacted"),

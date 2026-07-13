@@ -53,13 +53,15 @@ describe('Control Plane demo seed baseline', () => {
     const second = buildDemoRuntimeConfigDocument('provider-demo-id');
 
     expect(first).toEqual(second);
-    expect(first.schemaVersion).toBe('gatelm.active-runtime-config.v1');
+    expect(first.schemaVersion).toBe('gatelm.active-runtime-config.v2');
     expect(first.configVersion).toBe(DEMO_RUNTIME_CONFIG_VERSION);
     expect(first.publishState).toBe('active');
     expect(first.applicationId).toBe(DEMO_APPLICATION_ID);
     expect(first.configHash).toMatch(/^[a-f0-9]{64}$/);
     expect(first.safetyPolicy.securityPolicyHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(first.routingPolicy.routingPolicyHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.routingPolicy.routingPolicyHash).toMatch(
+      /^sha256:[a-f0-9]{64}$/,
+    );
     expect(first.providers[0]?.models).toEqual([
       'mock-fast',
       'mock-balanced',
@@ -98,9 +100,15 @@ describe('Control Plane demo seed baseline', () => {
     );
     const serialized = JSON.stringify(runtimeConfig);
 
-    expect(runtimeConfig.defaultProvider).toBe('openai-main');
-    expect(runtimeConfig.lowCostProvider).toBe('openai-main');
-    expect(runtimeConfig.fallbackProvider).toBe('mock');
+    expect(runtimeConfig.routingPolicy.mode).toBe('auto');
+    expect(runtimeConfig.routingPolicy.bootstrapState).toBe('mock_bootstrap');
+    expect(
+      Object.values(runtimeConfig.routingPolicy.routes).flatMap((route) => [
+        ...route.simple.modelRefs,
+        ...route.complex.modelRefs,
+      ]),
+    ).toEqual(Array(10).fill('mock-balanced'));
+    expect(runtimeConfig).not.toHaveProperty('defaultProvider');
     expect(openAIProvider).toMatchObject({
       providerId: DEMO_OPENAI_PROVIDER_ID,
       adapterType: 'openai_compatible',
@@ -344,8 +352,12 @@ describe('Control Plane demo seed baseline', () => {
       expect.objectContaining({
         create: expect.objectContaining({
           document: expect.objectContaining({
-            defaultProvider: 'openai-main',
-            fallbackProvider: 'mock',
+            schemaVersion: 'gatelm.active-runtime-config.v2',
+            routingPolicy: expect.objectContaining({
+              schemaVersion: 'gatelm.routing-policy.v2',
+              mode: 'auto',
+              bootstrapState: 'mock_bootstrap',
+            }),
           }),
         }),
       }),

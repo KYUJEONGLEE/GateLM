@@ -7,7 +7,7 @@
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "gatelm.category-evaluation-record.v1"
+      "const": "gatelm.category-evaluation-record.v2"
     },
     "datasetVersion": {
       "type": "string",
@@ -35,20 +35,8 @@
         "code",
         "translation",
         "summarization",
-        "extraction_json",
-        "support_refund",
-        "reasoning",
-        "unknown"
+        "reasoning"
       ]
-    },
-    "expectedTier": {
-      "type": "string",
-      "enum": [
-        "low_cost",
-        "balanced",
-        "high_quality"
-      ],
-      "description": "Expected routing tier for offline evaluation. This is an evidence label, not a RuntimeConfig or RuntimeSnapshot field."
     },
     "labelSource": {
       "type": "string",
@@ -107,7 +95,6 @@
     "sampleId",
     "redactedPrompt",
     "expectedCategory",
-    "expectedTier",
     "labelSource",
     "consentType",
     "source",

@@ -1,7 +1,5 @@
-import type {
-  DomainOutcome,
-  InvocationLogRecord
-} from "@/lib/fixtures/v1-observability-fixtures";
+import type { DomainOutcome } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 
 export type GatewayPipelineStageId =
   | "request"
@@ -101,7 +99,7 @@ const providerReachedOutcomes = new Set([
 ]);
 
 export function buildGatewayPipelineModel(
-  record: InvocationLogRecord
+  record: LiveInvocationLogRecord
 ): GatewayPipelineModel {
   const outcomes = record.domainOutcomes;
   const authOutcome = normalizedOutcome(outcomes?.auth);
@@ -234,7 +232,7 @@ function authenticationStage(
   };
 }
 
-function guardrailsStage(record: InvocationLogRecord): GatewayPipelineStage {
+function guardrailsStage(record: LiveInvocationLogRecord): GatewayPipelineStage {
   const rateLimit = normalizedOutcome(record.domainOutcomes?.rateLimit);
   const budget = normalizedOutcome(record.domainOutcomes?.budget);
   const safety = normalizedOutcome(record.domainOutcomes?.safety);
@@ -282,13 +280,17 @@ function guardrailsStage(record: InvocationLogRecord): GatewayPipelineStage {
 }
 
 function decisionStage(
-  record: InvocationLogRecord,
+  record: LiveInvocationLogRecord,
   routingOutcome: string
 ): GatewayPipelineStage {
   const tone = outcomeTone(routingOutcome);
-  const description =
-    routingDescription(record.routingReason) ||
-    (tone === "success" ? "표준 라우팅 수행" : "라우팅 결과를 확인할 수 없습니다.");
+  const classification = [record.category, record.difficulty, record.modelRef]
+    .filter(Boolean)
+    .join(" / ");
+  const reason = routingDescription(record.routingReason);
+  const description = reason
+    ? `${classification} · ${reason}`
+    : classification;
 
   return {
     description,
@@ -334,7 +336,7 @@ function cacheStage(cacheOutcome: string): GatewayPipelineStage {
 }
 
 function adapterStage(
-  record: InvocationLogRecord,
+  record: LiveInvocationLogRecord,
   callState: ProviderCallState
 ): GatewayPipelineStage {
   const errorStage = record.errorStage?.toLowerCase() ?? "";
@@ -353,7 +355,7 @@ function adapterStage(
 }
 
 function providerStage(
-  record: InvocationLogRecord,
+  record: LiveInvocationLogRecord,
   providerOutcome: string,
   callState: ProviderCallState
 ): GatewayPipelineStage {
@@ -375,7 +377,7 @@ function providerStage(
     description = "호출 생략";
   }
 
-  const providerIdentity = [record.selectedProvider, record.selectedModel]
+  const providerIdentity = [record.providerAttempt?.providerId, record.providerAttempt?.modelId]
     .filter(Boolean)
     .join(" / ");
 
@@ -390,7 +392,7 @@ function providerStage(
 }
 
 function providerCallState(
-  record: InvocationLogRecord,
+  record: LiveInvocationLogRecord,
   providerOutcome: string
 ): ProviderCallState {
   if (skippedOutcomes.has(providerOutcome) || providerOutcome === "not_called") {
@@ -403,6 +405,7 @@ function providerCallState(
     return "not_called";
   }
   if (
+    record.providerAttempt !== null ||
     record.providerCalled === true ||
     record.providerLatencyMs !== null
   ) {

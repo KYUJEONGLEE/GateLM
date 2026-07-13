@@ -186,8 +186,13 @@ function New-EvidenceItem {
         provider = [ordered]@{
             providerOutcome = if ($providerOutcome) { [string]$providerOutcome } else { $null }
             fallbackOutcome = if ($fallbackOutcome) { [string]$fallbackOutcome } else { $null }
-            routedProvider = Get-NestedProperty -Value $Json -Path @("responseHeaders", "routedProvider")
-            routedModel = Get-NestedProperty -Value $Json -Path @("responseHeaders", "routedModel")
+            providerAttemptProviderId = Get-NestedProperty -Value $Json -Path @("providerAttempt", "providerId")
+            providerAttemptModelId = Get-NestedProperty -Value $Json -Path @("providerAttempt", "modelId")
+        }
+        routing = [ordered]@{
+            category = Get-NestedProperty -Value $Json -Path @("routing", "category")
+            difficulty = Get-NestedProperty -Value $Json -Path @("routing", "difficulty")
+            routingReason = Get-NestedProperty -Value $Json -Path @("routing", "routingReason")
         }
         assertions = $Assertions
     }

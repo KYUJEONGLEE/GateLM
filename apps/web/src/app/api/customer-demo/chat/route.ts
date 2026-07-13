@@ -91,8 +91,6 @@ const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Cache-Status",
   "X-GateLM-Cache-Type",
   "X-GateLM-Masking-Action",
-  "X-GateLM-Routed-Provider",
-  "X-GateLM-Routed-Model",
   "X-GateLM-Estimated-Cost-Usd",
   "Content-Type"
 ];

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
@@ -34,14 +35,16 @@ const (
 )
 
 var (
-	ErrMissingScope             = errors.New("runtime config scope is missing")
-	ErrScopeMismatch            = errors.New("runtime config scope mismatch")
-	ErrMissingCredentialBinding = errors.New("runtime config credential binding is missing")
-	ErrInactiveConfig           = errors.New("runtime config is not active")
-	ErrMissingRuntimeHash       = errors.New("runtime config hash is missing")
-	ErrInvalidPromptCapture     = errors.New("runtime config prompt capture policy is invalid")
-	ErrInvalidResponseCapture   = errors.New("runtime config response capture policy is invalid")
-	ErrInvalidSafetyPolicy      = errors.New("runtime config safety policy is invalid")
+	ErrMissingScope              = errors.New("runtime config scope is missing")
+	ErrScopeMismatch             = errors.New("runtime config scope mismatch")
+	ErrMissingCredentialBinding  = errors.New("runtime config credential binding is missing")
+	ErrInactiveConfig            = errors.New("runtime config is not active")
+	ErrMissingRuntimeHash        = errors.New("runtime config hash is missing")
+	ErrInvalidPromptCapture      = errors.New("runtime config prompt capture policy is invalid")
+	ErrInvalidResponseCapture    = errors.New("runtime config response capture policy is invalid")
+	ErrInvalidSafetyPolicy       = errors.New("runtime config safety policy is invalid")
+	ErrInvalidRoutingPolicy      = errors.New("runtime config routing policy is invalid")
+	ErrUnsupportedSnapshotSchema = errors.New("runtime snapshot schema is not supported")
 )
 
 type Provider interface {
@@ -130,16 +133,10 @@ const (
 )
 
 type RoutingPolicy struct {
-	DefaultProvider     string
-	DefaultModel        string
-	LowCostProvider     string
-	LowCostModel        string
-	HighQualityProvider string
-	HighQualityModel    string
-	FallbackProvider    string
-	FallbackModel       string
-	ShortPromptMaxChars int
-	RoutingPolicyHash   string
+	Mode              string
+	BootstrapState    string
+	Routes            routing.RoutingMatrix
+	RoutingPolicyHash string
 }
 
 type CachePolicy struct {
@@ -178,15 +175,7 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.RateLimit = ratelimit.NormalizeConfig(c.RateLimit)
 	c.BudgetPolicy = budget.NormalizePolicy(c.BudgetPolicy)
 	c.SafetyPolicy = c.SafetyPolicy.Normalize()
-	c.RoutingPolicy.DefaultProvider = strings.TrimSpace(c.RoutingPolicy.DefaultProvider)
-	c.RoutingPolicy.DefaultModel = strings.TrimSpace(c.RoutingPolicy.DefaultModel)
-	c.RoutingPolicy.LowCostProvider = strings.TrimSpace(c.RoutingPolicy.LowCostProvider)
-	c.RoutingPolicy.LowCostModel = strings.TrimSpace(c.RoutingPolicy.LowCostModel)
-	c.RoutingPolicy.HighQualityProvider = strings.TrimSpace(c.RoutingPolicy.HighQualityProvider)
-	c.RoutingPolicy.HighQualityModel = strings.TrimSpace(c.RoutingPolicy.HighQualityModel)
-	c.RoutingPolicy.FallbackProvider = strings.TrimSpace(c.RoutingPolicy.FallbackProvider)
-	c.RoutingPolicy.FallbackModel = strings.TrimSpace(c.RoutingPolicy.FallbackModel)
-	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
+	c.RoutingPolicy = NormalizeRoutingPolicy(c.RoutingPolicy)
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
 	c.CachePolicy.CachePolicyHash = strings.TrimSpace(c.CachePolicy.CachePolicyHash)
 	c.PromptCapture = NormalizePromptCapturePolicy(c.PromptCapture)
@@ -195,6 +184,9 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 }
 
 func (c ActiveConfig) ValidateActive() error {
+	if strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash) != "" && !IsValidRoutingPolicy(c.RoutingPolicy) {
+		return ErrInvalidRoutingPolicy
+	}
 	c = c.Normalize()
 	if c.TenantID == "" || c.ProjectID == "" || c.ApplicationID == "" {
 		return ErrMissingScope
@@ -207,6 +199,9 @@ func (c ActiveConfig) ValidateActive() error {
 	}
 	if err := c.SafetyPolicy.Validate(); err != nil {
 		return err
+	}
+	if !IsValidRoutingPolicy(c.RoutingPolicy) {
+		return ErrInvalidRoutingPolicy
 	}
 	if c.PublishState != PublishStateActive ||
 		c.TenantStatus != StatusActive ||
@@ -262,15 +257,7 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.RateLimit = ratelimit.NormalizeConfig(s.RateLimit)
 	s.BudgetPolicy = budget.NormalizePolicy(s.BudgetPolicy)
 	s.SafetyPolicy = s.SafetyPolicy.Normalize()
-	s.RoutingPolicy.DefaultProvider = strings.TrimSpace(s.RoutingPolicy.DefaultProvider)
-	s.RoutingPolicy.DefaultModel = strings.TrimSpace(s.RoutingPolicy.DefaultModel)
-	s.RoutingPolicy.LowCostProvider = strings.TrimSpace(s.RoutingPolicy.LowCostProvider)
-	s.RoutingPolicy.LowCostModel = strings.TrimSpace(s.RoutingPolicy.LowCostModel)
-	s.RoutingPolicy.HighQualityProvider = strings.TrimSpace(s.RoutingPolicy.HighQualityProvider)
-	s.RoutingPolicy.HighQualityModel = strings.TrimSpace(s.RoutingPolicy.HighQualityModel)
-	s.RoutingPolicy.FallbackProvider = strings.TrimSpace(s.RoutingPolicy.FallbackProvider)
-	s.RoutingPolicy.FallbackModel = strings.TrimSpace(s.RoutingPolicy.FallbackModel)
-	s.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash)
+	s.RoutingPolicy = NormalizeRoutingPolicy(s.RoutingPolicy)
 	s.CachePolicy.Type = strings.TrimSpace(s.CachePolicy.Type)
 	s.CachePolicy.CachePolicyHash = strings.TrimSpace(s.CachePolicy.CachePolicyHash)
 	s.PromptCapture = NormalizePromptCapturePolicy(s.PromptCapture)
@@ -362,6 +349,9 @@ func IsValidResponseCapturePolicy(policy ResponseCapturePolicy) bool {
 }
 
 func (s ExecutionSnapshot) Validate() error {
+	if strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash) != "" && !IsValidRoutingPolicy(s.RoutingPolicy) {
+		return ErrInvalidRoutingPolicy
+	}
 	s = s.Normalize(time.Time{}, "")
 	if s.TenantID == "" || s.ProjectID == "" || s.ApplicationID == "" {
 		return ErrMissingScope
@@ -371,6 +361,12 @@ func (s ExecutionSnapshot) Validate() error {
 	}
 	if err := s.SafetyPolicy.Validate(); err != nil {
 		return err
+	}
+	if s.Snapshot.RuntimeSnapshotVersion <= 0 {
+		return ErrUnsupportedSnapshotSchema
+	}
+	if !IsValidRoutingPolicy(s.RoutingPolicy) {
+		return ErrInvalidRoutingPolicy
 	}
 	if !IsValidPromptCapturePolicy(s.PromptCapture) {
 		return ErrInvalidPromptCapture
@@ -468,18 +464,117 @@ func (s ExecutionSnapshot) MatchesScope(tenantID string, projectID string, appli
 }
 
 func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
-	highQualityProvider := firstNonEmptyString(p.HighQualityProvider, p.DefaultProvider)
-	highQualityModel := firstNonEmptyString(p.HighQualityModel, p.DefaultModel)
 	return routing.SimpleRouterConfig{
-		DefaultProvider:     p.DefaultProvider,
-		DefaultModel:        p.DefaultModel,
-		LowCostProvider:     firstNonEmptyString(p.LowCostProvider, p.DefaultProvider),
-		LowCostModel:        p.LowCostModel,
-		HighQualityProvider: highQualityProvider,
-		HighQualityModel:    highQualityModel,
-		PolicyHash:          p.RoutingPolicyHash,
-		ShortPromptMaxChars: p.ShortPromptMaxChars,
+		Mode:           p.Mode,
+		BootstrapState: p.BootstrapState,
+		Routes:         p.Routes,
+		PolicyHash:     p.RoutingPolicyHash,
 	}
+}
+
+func BootstrapRoutingPolicy(policyHash string) RoutingPolicy {
+	cell := routing.RouteCell{ModelRefs: []string{routing.MockBootstrapRef}}
+	difficulties := routing.DifficultyRoutes{Simple: cell, Complex: cell}
+	return RoutingPolicy{
+		Mode:           routing.RoutingPolicyModeAuto,
+		BootstrapState: routing.BootstrapStateMock,
+		Routes: routing.RoutingMatrix{
+			General: difficulties, Code: difficulties, Translation: difficulties,
+			Summarization: difficulties, Reasoning: difficulties,
+		},
+		RoutingPolicyHash: strings.TrimSpace(policyHash),
+	}
+}
+
+func NormalizeRoutingPolicy(policy RoutingPolicy) RoutingPolicy {
+	policy.Mode = strings.TrimSpace(strings.ToLower(policy.Mode))
+	policy.BootstrapState = strings.TrimSpace(policy.BootstrapState)
+	policy.RoutingPolicyHash = strings.TrimSpace(policy.RoutingPolicyHash)
+	policy.Routes = normalizeRoutingMatrix(policy.Routes)
+	return policy
+}
+
+func IsValidRoutingPolicy(policy RoutingPolicy) bool {
+	mode := strings.TrimSpace(strings.ToLower(policy.Mode))
+	bootstrapState := strings.TrimSpace(policy.BootstrapState)
+	if mode != routing.RoutingPolicyModeAuto && mode != routing.RoutingPolicyModeManual {
+		return false
+	}
+	if strings.TrimSpace(policy.RoutingPolicyHash) == "" {
+		return false
+	}
+	hasMockRef := false
+	for _, category := range routing.Categories {
+		for _, difficulty := range []string{routing.DifficultySimple, routing.DifficultyComplex} {
+			cell := policy.Routes.Cell(category, difficulty)
+			if len(cell.ModelRefs) == 0 {
+				return false
+			}
+			seen := make(map[string]struct{}, len(cell.ModelRefs))
+			for _, modelRef := range cell.ModelRefs {
+				trimmed := strings.TrimSpace(modelRef)
+				if trimmed == "" || trimmed != modelRef || utf8.RuneCountInString(trimmed) > 240 {
+					return false
+				}
+				if _, exists := seen[trimmed]; exists {
+					return false
+				}
+				seen[trimmed] = struct{}{}
+				if trimmed == routing.MockBootstrapRef {
+					hasMockRef = true
+				}
+			}
+		}
+	}
+	if hasMockRef {
+		return bootstrapState == routing.BootstrapStateMock
+	}
+	return bootstrapState == routing.BootstrapStateConfigured
+}
+
+// IsCanonicalRoutingPolicyHash validates the active v2 contract form. Legacy
+// compatibility hashes remain opaque elsewhere and are intentionally not
+// passed through this validator.
+func IsCanonicalRoutingPolicyHash(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, char := range value[len("sha256:"):] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeRoutingMatrix(matrix routing.RoutingMatrix) routing.RoutingMatrix {
+	return routing.RoutingMatrix{
+		General: normalizeDifficultyRoutes(matrix.General), Code: normalizeDifficultyRoutes(matrix.Code),
+		Translation: normalizeDifficultyRoutes(matrix.Translation), Summarization: normalizeDifficultyRoutes(matrix.Summarization),
+		Reasoning: normalizeDifficultyRoutes(matrix.Reasoning),
+	}
+}
+
+func normalizeDifficultyRoutes(routes routing.DifficultyRoutes) routing.DifficultyRoutes {
+	return routing.DifficultyRoutes{Simple: normalizeRouteCell(routes.Simple), Complex: normalizeRouteCell(routes.Complex)}
+}
+
+func normalizeRouteCell(cell routing.RouteCell) routing.RouteCell {
+	seen := map[string]struct{}{}
+	refs := make([]string, 0, len(cell.ModelRefs))
+	for _, ref := range cell.ModelRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if _, exists := seen[ref]; exists {
+			continue
+		}
+		seen[ref] = struct{}{}
+		refs = append(refs, ref)
+	}
+	return routing.RouteCell{ModelRefs: refs}
 }
 
 func (c ActiveConfig) RuntimeSnapshotProvenance(publishedAt time.Time, gatewayInstanceID string) RuntimeSnapshotProvenance {
@@ -499,7 +594,7 @@ func (p RuntimeSnapshotProvenance) Normalize(config ActiveConfig, publishedAt ti
 		p.RuntimeSnapshotID = firstNonEmptyString(config.ConfigVersion, "runtime_snapshot_compat")
 	}
 	if p.RuntimeSnapshotVersion <= 0 {
-		p.RuntimeSnapshotVersion = 1
+		p.RuntimeSnapshotVersion = 2
 	}
 	if p.ContentHash == "" {
 		p.ContentHash = firstNonEmptyString(config.ConfigHash, p.LegacyHashes.ConfigHash)

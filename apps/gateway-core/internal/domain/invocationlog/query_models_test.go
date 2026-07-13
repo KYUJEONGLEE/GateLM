@@ -21,7 +21,6 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 		Provider:              "mock",
 		Model:                 "mock-fast",
 		RequestedModel:        "auto",
-		SelectedModel:         "mock-fast",
 		Status:                StatusSuccess,
 		HTTPStatus:            200,
 		PromptTokens:          32,
@@ -31,7 +30,7 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 		LatencyMs:             132,
 		CacheStatus:           CacheStatusMiss,
 		CacheType:             CacheTypeExact,
-		RoutingReason:         "low_cost",
+		RoutingReason:         routing.ReasonMatrixRoute,
 		MaskingAction:         "redacted",
 		RedactedPromptPreview: "Send a reply to [EMAIL_1].",
 		MaskingDetectedTypes:  []string{"email"},
@@ -72,9 +71,7 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 		Provider:              "mock",
 		Model:                 "mock-fast",
 		RequestedModel:        "auto",
-		SelectedProvider:      "mock",
-		SelectedModel:         "mock-fast",
-		RoutingReason:         "low_cost",
+		RoutingReason:         routing.ReasonMatrixRoute,
 		PromptTokens:          32,
 		CompletionTokens:      24,
 		TotalTokens:           56,
@@ -118,7 +115,7 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	if detail.Cost.CostUSD != "0.000001" || detail.Cost.Currency != CurrencyUSD {
 		t.Fatalf("unexpected detail cost: %+v", detail.Cost)
 	}
-	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.RoutingReason != "low_cost" {
+	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.RoutingReason != routing.ReasonMatrixRoute {
 		t.Fatalf("unexpected cache/routing detail: %+v %+v", detail.Cache, detail.Routing)
 	}
 	if detail.Masking.RedactedPromptPreview != "Write a short refund response." {
@@ -142,6 +139,44 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	}
 }
 
+func TestReadModelsCanonicalizeRetiredRoutingCategoriesAndDifficulty(t *testing.T) {
+	for _, legacyCategory := range []string{"support_refund", "extraction_json", "unknown", "", "missing-category"} {
+		log := LlmInvocationLog{
+			RequestID:        "request_legacy_category",
+			RequestedModel:   "auto",
+			PromptCategory:   legacyCategory,
+			PromptDifficulty: "legacy-tier",
+			RoutingReason:    routing.ReasonMatrixRoute,
+		}
+		item := ToRequestLogListItem(log)
+		detail := ToRequestDetail(log)
+		if item.Category != routing.CategoryGeneral || item.Difficulty != routing.DifficultySimple {
+			t.Fatalf("list must canonicalize %q to general/simple: %+v", legacyCategory, item)
+		}
+		if detail.Routing.Category != routing.CategoryGeneral || detail.Routing.Difficulty != routing.DifficultySimple {
+			t.Fatalf("detail must canonicalize %q to general/simple: %+v", legacyCategory, detail.Routing)
+		}
+	}
+}
+
+func TestDashboardMergesRetiredRoutingCategoriesIntoGeneral(t *testing.T) {
+	logs := []LlmInvocationLog{
+		{PromptCategory: "support_refund", PromptDifficulty: "simple", RoutingReason: routing.ReasonMatrixRoute},
+		{PromptCategory: "extraction_json", PromptDifficulty: "simple", RoutingReason: routing.ReasonMatrixRoute},
+		{PromptCategory: "unknown", PromptDifficulty: "simple", RoutingReason: routing.ReasonMatrixRoute},
+		{PromptCategory: "", PromptDifficulty: "legacy-tier", RoutingReason: routing.ReasonMatrixRoute},
+	}
+
+	overview := BuildDashboardOverview(logs)
+	if len(overview.RoutingCountByModel) != 1 {
+		t.Fatalf("retired categories must merge into one dashboard bucket: %+v", overview.RoutingCountByModel)
+	}
+	item := overview.RoutingCountByModel[0]
+	if item.Category != routing.CategoryGeneral || item.Difficulty != routing.DifficultySimple || item.RequestCount != 4 {
+		t.Fatalf("unexpected merged routing bucket: %+v", item)
+	}
+}
+
 func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	createdAt := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
 	logs := []LlmInvocationLog{
@@ -155,7 +190,7 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 				ResolvedBy: budget.ResolvedByControlPlaneRule,
 			},
 			PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
-			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: routing.ReasonBudgetHighQualityDowngrade,
+			LatencyMs: 100, Provider: "mock", Model: "mock-fast", RoutingReason: routing.ReasonMatrixRoute,
 			MaskingAction: "none", DomainOutcomes: DomainOutcomes{Budget: BudgetOutcome{Outcome: budget.OutcomeWarned}}, CreatedAt: createdAt,
 		},
 		{
@@ -163,14 +198,14 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 			ProjectID:         "project_alpha",
 			ApplicationID:     "app_demo",
 			BudgetScope:       budget.Scope{Type: budget.ScopeTypeTeam, ID: "team_demo", ResolvedBy: budget.ResolvedByControlPlaneRule},
-			SavedCostMicroUSD: 50, LatencyMs: 20, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
+			SavedCostMicroUSD: 50, LatencyMs: 20, Provider: "mock", Model: "mock-fast", RoutingReason: routing.ReasonMatrixRoute,
 			MaskingAction: "none", CreatedAt: createdAt.Add(time.Second),
 		},
 		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "blocked", CreatedAt: createdAt.Add(2 * time.Second)},
 		{
 			Status: StatusFailed, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
 			ProjectID:    "project_beta",
-			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, SelectedProvider: "mock", SelectedModel: "mock-balanced",
+			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, Provider: "mock", Model: "mock-balanced",
 			MaskingAction: "redacted", CreatedAt: createdAt.Add(3 * time.Second),
 		},
 		{Status: StatusRateLimited, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "none", CreatedAt: createdAt.Add(4 * time.Second)},
@@ -203,13 +238,18 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if overview.MaskingActionCounts["none"] != 4 || overview.MaskingActionCounts["redacted"] != 1 || overview.MaskingActionCounts["blocked"] != 1 {
 		t.Fatalf("unexpected masking counts: %+v", overview.MaskingActionCounts)
 	}
-	if overview.BudgetOutcomeCounts[budget.OutcomeWarned] != 1 || overview.BudgetDowngradedRequests != 1 {
-		t.Fatalf("unexpected budget outcome counts: counts=%+v downgraded=%d", overview.BudgetOutcomeCounts, overview.BudgetDowngradedRequests)
+	if overview.BudgetOutcomeCounts[budget.OutcomeWarned] != 1 || overview.BudgetOutcomeCounts[budget.OutcomeNotChecked] != 5 {
+		t.Fatalf("unexpected budget outcome counts: counts=%+v", overview.BudgetOutcomeCounts)
 	}
-	if len(overview.RoutingCountByModel) != 3 || overview.RoutingCountByModel[1].RoutingReason != routing.ReasonBudgetHighQualityDowngrade {
-		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
+	if len(overview.RoutingCountByModel) != 2 ||
+		overview.RoutingCountByModel[0].Category != routing.CategoryGeneral ||
+		overview.RoutingCountByModel[0].Difficulty != routing.DifficultySimple ||
+		overview.RoutingCountByModel[0].RequestCount != 4 ||
+		overview.RoutingCountByModel[1].RoutingReason != routing.ReasonMatrixRoute ||
+		overview.RoutingCountByModel[1].RequestCount != 2 {
+		t.Fatalf("unexpected routing outcome counts: %+v", overview.RoutingCountByModel)
 	}
-	if len(overview.CostByModel) != 2 || overview.CostByModel[0].SelectedModel != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {
+	if len(overview.CostByModel) != 2 || overview.CostByModel[0].Model != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
 	}
 	if len(overview.ProjectBreakdown) != 2 || overview.ProjectBreakdown[0].ProjectID != "project_alpha" || overview.ProjectBreakdown[0].RequestCount != 2 || overview.ProjectBreakdown[0].CostUSD != "0.000100" {

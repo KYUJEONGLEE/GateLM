@@ -1,6 +1,5 @@
 import { expect, type APIRequestContext, type Page, test } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 
 const policyPath = "/tenants/tenant_demo_acme/policies";
 const projectsPath = "/tenants/tenant_demo_acme/projects";
@@ -45,13 +44,8 @@ type JsonRecord = Record<string, unknown>;
 
 let fixtureRuntimeConfig: JsonRecord;
 
-test.beforeAll(async () => {
-  const fixtureUrl = new URL(
-    "../../../docs/v1.0.0/fixtures/runtime-config.fixture.json",
-    import.meta.url
-  );
-  const fixture = asRecord(JSON.parse(await readFile(fixtureUrl, "utf8")));
-  fixtureRuntimeConfig = asRecord(fixture.runtimeConfig);
+test.beforeAll(() => {
+  fixtureRuntimeConfig = createRuntimeConfigFixture();
 });
 
 test.beforeEach(async ({ context, request }) => {
@@ -66,6 +60,52 @@ test.beforeEach(async ({ context, request }) => {
   ]);
 });
 
+test("routing matrix persists and manual mode keeps the saved ten cells", async ({ page }) => {
+  const runtimeConfigPosts = await prepareRuntimeConfigPostRoute(page);
+  await page.goto(policyPath);
+
+  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
+  const categoryModelTable = routingPanel.getByRole("table", {
+    exact: true,
+    name: "카테고리 난이도 모델 설정"
+  });
+  const categoryLabels = ["일반", "코드", "번역", "요약", "추론"];
+
+  await expect(categoryModelTable).toBeVisible();
+  await expect(categoryModelTable.getByRole("columnheader")).toHaveText([
+    "카테고리",
+    "Simple",
+    "Complex"
+  ]);
+  await expect(categoryModelTable.getByRole("rowheader")).toHaveText(categoryLabels);
+
+  for (const categoryLabel of categoryLabels) {
+    for (const difficulty of ["simple", "complex"]) {
+      await expect(
+        routingPanel.getByLabel(`${categoryLabel} ${difficulty} primary`, { exact: true })
+      ).toBeVisible();
+    }
+  }
+
+  await routingPanel.getByRole("switch", { exact: true, name: "Auto routing" }).click();
+  await expect(categoryModelTable).toHaveCount(0);
+  await expect(routingPanel.getByText(/model: "auto"/)).toBeVisible();
+
+  await page.getByRole("button", { exact: true, name: "Save draft" }).click();
+  await expect.poll(() => runtimeConfigPosts.length).toBe(1);
+  const savedValues = asRecord(runtimeConfigPosts[0]?.values);
+  const savedRoutingPolicy = asRecord(savedValues.routingPolicy);
+  expect(savedRoutingPolicy.mode).toBe("manual");
+  expect(savedRoutingPolicy.defaultModel).toBeUndefined();
+  expect(savedRoutingPolicy.highQualityModel).toBeUndefined();
+
+  await routingPanel.getByRole("switch", { exact: true, name: "Auto routing" }).click();
+  await expect(categoryModelTable).toBeVisible();
+  await expect(routingPanel.getByLabel("일반 simple primary", { exact: true })).toHaveValue(
+    "mock-balanced"
+  );
+});
+
 test("policy editor exposes category tabs and category panels", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);
   await page.goto(policyPath);
@@ -76,7 +116,9 @@ test("policy editor exposes category tabs and category panels", async ({ page })
   await expect(page.getByRole("tab")).toHaveText([...policyTabs]);
 
   await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
-  await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
+  await expect(
+    page.getByRole("table", { exact: true, name: "카테고리 난이도 모델 설정" })
+  ).toBeVisible();
 
   await page.getByRole("tab", { exact: true, name: "Safety" }).click();
   await expect(page.getByRole("tabpanel", { exact: true, name: "Safety" })).toBeVisible();
@@ -88,7 +130,9 @@ test("lazy policy tab panel mounts only for active tab and shows loading fallbac
   await prepareRuntimeConfigPostRoute(page);
   await delayRuntimePolicyLazyChunk(page, "safety-panel");
   await page.goto(policyPath);
-  await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
+  await expect(
+    page.getByRole("table", { exact: true, name: "카테고리 난이도 모델 설정" })
+  ).toBeVisible();
   await expect(page.locator("#policy-panel-routing")).toHaveCount(1);
   await expect(page.locator("#policy-panel-safety")).toHaveCount(0);
 
@@ -122,7 +166,9 @@ test("policy detail modal lazy-loads only after click and shows modal fallback",
   });
 
   await page.goto(policyPath);
-  await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
+  await expect(
+    page.getByRole("table", { exact: true, name: "카테고리 난이도 모델 설정" })
+  ).toBeVisible();
   expect(detailChunkRequests).toHaveLength(0);
 
   await page.getByRole("button", { exact: true, name: "Details" }).click();
@@ -428,6 +474,7 @@ async function delayRuntimePolicyLazyChunk(page: Page, fileFragment: string) {
 
 function createRuntimeConfigResponse(payload: JsonRecord) {
   const values = asRecord(payload.values);
+  const submittedRoutingPolicy = asRecord(values.routingPolicy);
   const now = new Date("2026-07-06T00:00:00.000Z").toISOString();
   const action = getString(payload, "action", "save-draft");
 
@@ -472,14 +519,11 @@ function createRuntimeConfigResponse(payload: JsonRecord) {
       mode: getBoolean(values, "responseCaptureEnabled", false) ? "raw_full" : "disabled"
     },
     routingPolicy: {
-      defaultModel: getString(values, "routingDefaultModel", ""),
-      defaultProvider: getString(values, "routingDefaultProvider", ""),
-      fallbackModel: getString(values, "routingFallbackModel", ""),
-      fallbackProvider: getString(values, "routingFallbackProvider", ""),
-      lowCostModel: getString(values, "routingLowCostModel", ""),
-      lowCostProvider: getString(values, "routingLowCostProvider", ""),
-      routingPolicyHash: "sha256:playwright-routing-policy",
-      shortPromptMaxChars: getNumber(values, "routingShortPromptMaxChars", 2000)
+      bootstrapState: getString(submittedRoutingPolicy, "bootstrapState", "mock_bootstrap"),
+      mode: getString(submittedRoutingPolicy, "mode", "auto"),
+      routes: submittedRoutingPolicy.routes ?? createRoutingRoutes(),
+      routingPolicyHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      schemaVersion: "gatelm.routing-policy.v2"
     },
     safetyPolicy: {
       detectors: getArray(values, "detectors"),
@@ -487,6 +531,88 @@ function createRuntimeConfigResponse(payload: JsonRecord) {
       securityPolicyHash: "sha256:playwright-security-policy"
     }
   };
+}
+
+function createRuntimeConfigFixture(): JsonRecord {
+  const now = "2026-07-13T00:00:00.000Z";
+
+  return {
+    applicationId: "app_customer_demo",
+    budgetPolicy: {
+      enabled: false,
+      enforcementMode: "disabled",
+      warningThresholdPercent: 80
+    },
+    cachePolicy: { enabled: true, ttlSeconds: 300, type: "exact" },
+    configHash: "sha256:playwright-config",
+    configVersion: "runtime_config_playwright",
+    effectiveAt: now,
+    generatedAt: now,
+    models: [
+      {
+        contextWindowTokens: 8192,
+        displayName: "Mock Balanced",
+        model: "mock-balanced",
+        provider: "mock",
+        status: "active",
+        supportsJsonMode: false,
+        supportsStreaming: false
+      }
+    ],
+    pricingRules: [],
+    providers: [
+      {
+        baseUrl: "http://mock-provider:4010",
+        credentialPreview: null,
+        displayName: "Mock Provider",
+        failureMode: "fail_closed",
+        models: ["mock-balanced"],
+        provider: "mock",
+        providerId: "00000000-0000-4000-8000-000000000001",
+        resolver: "none",
+        secretRef: null,
+        status: "active",
+        timeoutMs: 30000
+      }
+    ],
+    publishState: "draft",
+    publishedAt: "",
+    rateLimit: {
+      algorithm: "fixed_window",
+      enabled: true,
+      limit: 60,
+      scope: "application",
+      windowSeconds: 60
+    },
+    routingPolicy: createRoutingPolicyResponse("auto"),
+    safetyPolicy: { detectors: [], mode: "rule_based", securityPolicyHash: "" },
+    schemaVersion: "gatelm.active-runtime-config.v2",
+    tenantId: "tenant_demo_acme"
+  };
+}
+
+function createRoutingPolicyResponse(mode: "auto" | "manual") {
+  return {
+    bootstrapState: "mock_bootstrap",
+    mode,
+    routes: createRoutingRoutes(),
+    routingPolicyHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    schemaVersion: "gatelm.routing-policy.v2"
+  };
+}
+
+function createRoutingRoutes() {
+  return Object.fromEntries(
+    ["general", "code", "translation", "summarization", "reasoning"].map(
+      (category) => [
+        category,
+        {
+          complex: { modelRefs: ["mock-balanced"] },
+          simple: { modelRefs: ["mock-balanced"] }
+        }
+      ]
+    )
+  );
 }
 
 function asRecord(value: unknown): JsonRecord {

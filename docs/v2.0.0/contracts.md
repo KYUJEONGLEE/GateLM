@@ -3,6 +3,9 @@
 > [!IMPORTANT]
 > **문서 상태: Historical behavior baseline.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 계약은 current 문서가 명시적으로 상속한 영역의 baseline compatibility에만 사용하며, 새 기능의 roadmap이나 구현 순서를 정의하지 않는다.
 
+> [!NOTE]
+> **Superseded by active routing contract:** 일반 Gateway routing의 category, difficulty, policy, RuntimeSnapshot routing, decision/response/summary field 의미는 [`../routing/contracts.md`](../routing/contracts.md)가 대체한다. 아래 원문은 historical baseline으로 보존한다.
+
 ## 1. Status
 
 이 문서는 GateLM v2.0.0 계약 기준 문서다.

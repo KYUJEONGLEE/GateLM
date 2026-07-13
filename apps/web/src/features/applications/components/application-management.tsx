@@ -28,11 +28,11 @@ type ApplicationManagementProps = {
 };
 
 type ApplicationPolicySummary = {
-  defaultModel: string;
-  defaultProvider: string;
+  bootstrapState: "mock_bootstrap" | "configured";
   modelCount: number;
   publishedAt: string;
   publishState: string;
+  routingMode: "auto" | "manual";
 };
 
 type SubmitState = {
@@ -526,7 +526,7 @@ export function ApplicationManagement({
                           </Badge>
                           {policySummary ? (
                             <small className="project-muted">
-                              {policySummary.defaultProvider}:{policySummary.defaultModel}
+                              {policySummary.routingMode} / {policySummary.bootstrapState}
                             </small>
                           ) : null}
                           {policySummary ? (

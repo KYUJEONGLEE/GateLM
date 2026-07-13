@@ -21,32 +21,9 @@ const requestTimeoutMs = positiveInt(process.env.GATEWAY_OPENAI_STREAM_20_TIMEOU
 const logPollTimeoutMs = positiveInt(process.env.GATEWAY_OPENAI_STREAM_20_LOG_POLL_TIMEOUT_MS, 90000);
 const logPollIntervalMs = 1000;
 const maxTokens = positiveInt(process.env.GATEWAY_OPENAI_STREAM_20_MAX_TOKENS, 32);
+const openAIProviderId = process.env.GATEWAY_OPENAI_PROVIDER_ID || "provider_openai_main";
 const openAIModelName = process.env.GATEWAY_OPENAI_STREAM_20_MODEL || "gpt-4o-mini";
-
-const reasonToCategory = {
-  category_code_high_quality: "code",
-  category_reasoning_high_quality: "reasoning",
-  category_translation_balanced: "translation",
-  category_summarization_balanced: "summarization",
-  category_extraction_json_balanced: "extraction_json",
-  category_support_refund_low_cost: "support_refund",
-  short_prompt_low_cost: "general",
-  default_balanced: "general",
-};
-const modelToTier = {
-  "openai-low-cost": "low_cost",
-  "openai-balanced": "high_quality",
-  "gpt-4o-mini": "low_cost",
-};
-const categoryMeta = {
-  code: { tier: "high_quality", model: "openai-balanced" },
-  reasoning: { tier: "high_quality", model: "openai-balanced" },
-  translation: { tier: "balanced", model: "openai-balanced" },
-  summarization: { tier: "balanced", model: "openai-balanced" },
-  extraction_json: { tier: "balanced", model: "openai-balanced" },
-  support_refund: { tier: "low_cost", model: "openai-low-cost" },
-  general: { tier: "low_cost", model: "openai-low-cost" },
-};
+const openAIModelRef = process.env.GATEWAY_OPENAI_STREAM_20_MODEL_REF || `${openAIProviderId}:${openAIModelName}`;
 
 try {
   await main();
@@ -72,6 +49,7 @@ async function main() {
   console.log(`samples=${samples.length}`);
   console.log(`gateway=${gatewayBaseUrl}`);
   console.log(`providerModel=${openAIModelName}`);
+  console.log(`modelRef=${openAIModelRef}`);
 
   await bootstrap();
   await resetRedis();
@@ -140,12 +118,8 @@ async function startGateway() {
     GATEWAY_CONTROL_PLANE_BASE_URL: "",
     GATEWAY_AUTH_SOURCE: "demo",
     MOCK_PROVIDER_BASE_URL: mockProviderBaseUrl,
-    GATEWAY_DEFAULT_PROVIDER: "openai-main",
-    GATEWAY_DEFAULT_MODEL: "openai-balanced",
-    GATEWAY_LOW_COST_MODEL: "openai-low-cost",
-    GATEWAY_HIGH_QUALITY_MODEL: "openai-balanced",
-    GATEWAY_OPENAI_LOW_COST_MODEL_NAME: openAIModelName,
-    GATEWAY_OPENAI_BALANCED_MODEL_NAME: openAIModelName,
+    GATEWAY_OPENAI_PROVIDER_ID: openAIProviderId,
+    GATEWAY_OPENAI_EXTRA_MODELS: openAIModelName,
     GATEWAY_RATE_LIMIT_LIMIT: "200000",
     GATEWAY_ASYNC_LOG_ENABLED: "true",
     GATEWAY_ASYNC_LOG_QUEUE_SIZE: "8192",
@@ -197,16 +171,13 @@ async function resolveGo() {
 }
 
 function buildSamples(runId) {
-  const categories = ["code", "reasoning", "translation", "summarization", "extraction_json", "support_refund", "general"];
+  const categories = ["general", "code", "translation", "summarization", "reasoning"];
   return Array.from({ length: 20 }, (_, i) => {
     const category = categories[i % categories.length];
     const prompt = makeLongPrompt(category, i, runId);
-    const meta = categoryMeta[category];
     return {
       sampleId: `openai_${String(i + 1).padStart(2, "0")}`,
       expectedCategory: category,
-      expectedTier: meta.tier,
-      expectedModel: meta.model,
       prompt,
       promptBytes: Buffer.byteLength(prompt, "utf8"),
       promptHash: `sha256:${crypto.createHash("sha256").update(prompt).digest("hex")}`,
@@ -235,10 +206,6 @@ function purposeFor(category, index) {
       return `마지막 요청: 다음 공지 문장을 자연스러운 영어 비즈니스 문장으로 번역해줘. '정책 변경은 오늘 오후 6시에 배포되며 기존 요청은 영향을 받지 않습니다.' case=${index}`;
     case "summarization":
       return `마지막 요청: 위 배경을 운영 회의 공유용으로 핵심 3줄만 요약해줘. case=${index}`;
-    case "extraction_json":
-      return `마지막 요청: 위 내용에서 tenantId, projectId, selectedProvider, selectedModel, routingReason 필드를 JSON 형태로 추출해줘. 없는 값은 null로 둬. case=${index}`;
-    case "support_refund":
-      return `마지막 요청: 환불 가능 여부를 묻는 고객에게 보낼 정중한 답변을 작성해줘. 확정 보상은 약속하지 말고 확인 절차를 안내해줘. case=${index}`;
     default:
       return `마지막 요청: GateLM Gateway가 무엇을 하는 서비스인지 처음 보는 사람에게 쉽게 설명해줘. case=${index}`;
   }
@@ -251,8 +218,8 @@ async function invokeStreaming(sample, prefix) {
   let firstTokenMs = 0;
   let completedMs = 0;
   let httpStatus = 0;
-  let selectedModel = "";
   let routingReason = "";
+  let executionMode = "";
   let cacheStatus = "";
   let tokenChunkCount = 0;
   let error = "";
@@ -269,12 +236,11 @@ async function invokeStreaming(sample, prefix) {
         "x-gatelm-feature-id": "openai-stream-routing-evidence",
         "x-gatelm-request-id": requestId,
       },
-      body: JSON.stringify({ model: "auto", messages: [{ role: "user", content: sample.prompt }], temperature: 0, max_tokens: maxTokens, stream: true }),
+      body: JSON.stringify({ model: openAIModelRef, messages: [{ role: "user", content: sample.prompt }], temperature: 0, max_tokens: maxTokens, stream: true }),
       signal: controller.signal,
     });
     firstByteMs = performance.now() - started;
     httpStatus = response.status;
-    selectedModel = response.headers.get("x-gatelm-routed-model") || "";
     cacheStatus = response.headers.get("x-gatelm-cache-status") || "";
     if (!response.body) throw new Error("stream response has no body");
     const reader = response.body.getReader();
@@ -295,10 +261,10 @@ async function invokeStreaming(sample, prefix) {
           tokenChunkCount++;
           if (!firstTokenMs) firstTokenMs = now - started;
         }
-        const gateLM = chunk?.gateLM ?? chunk?.gatelm;
+        const gateLM = chunk?.gate_lm;
         if (gateLM) {
-          selectedModel = selectedModel || String(gateLM.selectedModel || "");
           routingReason = routingReason || String(gateLM.routingReason || "");
+          executionMode = executionMode || String(gateLM.executionMode || "");
         }
       }
     }
@@ -316,8 +282,8 @@ async function invokeStreaming(sample, prefix) {
     firstByteMs: round(firstByteMs, 6),
     firstTokenMs: round(firstTokenMs, 6),
     completedMs: round(completedMs, 6),
-    selectedModel,
     routingReason,
+    executionMode,
     cacheStatus,
     tokenChunkCount,
     error,
@@ -354,7 +320,7 @@ async function pollLogs(prefix, expected) {
 
 async function queryLogs(prefix) {
   const escapedPrefix = prefix.replace(/'/g, "''");
-  const sql = `select coalesce(json_agg(row_to_json(t) order by "requestId"), '[]'::json) from (select request_id as "requestId", status, http_status as "httpStatus", provider, model, selected_model as "selectedModel", routing_reason as "routingReason", cache_status as "cacheStatus", cache_type as "cacheType", masking_action as "maskingAction", latency_ms as "latencyMs", provider_latency_ms as "providerLatencyMs", metadata from p0_llm_invocation_logs where request_id like '${escapedPrefix}%' order by request_id) t;`;
+  const sql = `select coalesce(json_agg(row_to_json(t) order by "requestId"), '[]'::json) from (select request_id as "requestId", status, http_status as "httpStatus", provider as "providerAttemptProviderId", model as "providerAttemptModelId", routing_reason as "routingReason", cache_status as "cacheStatus", cache_type as "cacheType", masking_action as "maskingAction", latency_ms as "latencyMs", provider_latency_ms as "providerAttemptLatencyMs", metadata from p0_llm_invocation_logs where request_id like '${escapedPrefix}%' order by request_id) t;`;
   const { stdout } = await execFileAsync("docker", ["compose", "exec", "-T", "postgres", "psql", "-U", "gatelm", "-d", "gatelm", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql], { cwd: repoRoot, maxBuffer: 80 * 1024 * 1024 });
   return JSON.parse(stdout.trim() || "[]");
 }
@@ -364,13 +330,17 @@ function buildReport({ runId, prefix, samples, results, logs, startedAt, complet
   const logByRequestId = new Map(logs.map((x) => [x.requestId, x]));
   const enriched = samples.map((sample) => enrich(sample, resultById.get(sample.sampleId), logByRequestId.get(`${prefix}${sample.sampleId}`)));
   return {
-    schemaVersion: "gatelm.openai-stream-20-evidence.v1",
+    schemaVersion: "gatelm.openai-stream-20-evidence.v2",
     generatedAt: completedAt.toISOString(),
     runId,
     requestPrefix: prefix,
-    input: { count: samples.length, provider: "openai-compatible", providerModelName: openAIModelName, stream: true, maxTokens, semanticCacheEnabled: false, note: "Both low-cost and balanced OpenAI catalog models are mapped to gpt-4o-mini by default to control test cost." },
+    input: { count: samples.length, provider: "openai-compatible", modelRef: openAIModelRef, stream: true, maxTokens, semanticCacheEnabled: false },
     timing: { startedAt: startedAt.toISOString(), completedAt: completedAt.toISOString(), wallClockMs: completedAt - startedAt, client: timing(enriched) },
     routing: routing(enriched),
+    providerAttempts: {
+      providerIdDistribution: dist(enriched, (x) => x.providerAttemptProviderId || "unavailable"),
+      modelIdDistribution: dist(enriched, (x) => x.providerAttemptModelId || "unavailable"),
+    },
     stageTimings: stageStats(enriched),
     logs: { expected: samples.length, actual: logs.length, coverage: ratio(logs.length, samples.length), httpStatusCounts: dist(enriched, (x) => String(x.httpStatus || 0)) },
     samples: enriched.map(publicSample),
@@ -379,10 +349,12 @@ function buildReport({ runId, prefix, samples, results, logs, startedAt, complet
 
 function enrich(sample, result, log) {
   const metadata = parseMetadata(log?.metadata);
-  const selectedModel = first(log?.selectedModel, result?.selectedModel, log?.model);
   const routingReason = first(log?.routingReason, result?.routingReason);
-  const actualCategory = first(metadata.promptCategory, reasonToCategory[routingReason], "unknown");
-  const actualTier = first(modelToTier[selectedModel], tierFromReason(routingReason), "unknown");
+  const actualCategory = first(metadata.promptCategory, "general");
+  const actualDifficulty = first(metadata.promptDifficulty, "simple");
+  const executionMode = first(result?.executionMode, "not_reported");
+  const providerAttemptProviderId = first(metadata.providerAttempt?.providerId, log?.providerAttemptProviderId);
+  const providerAttemptModelId = first(metadata.providerAttempt?.modelId, log?.providerAttemptModelId);
   const stageTimings = normalizeStageTimings(metadata.stageTimings);
   return {
     ...sample,
@@ -390,19 +362,19 @@ function enrich(sample, result, log) {
     httpStatus: Number(result?.httpStatus || log?.httpStatus || 0),
     logWritten: Boolean(log),
     status: log?.status || "",
-    selectedModel,
     routingReason,
+    executionMode,
     actualCategory,
-    actualTier,
+    actualDifficulty,
+    providerAttemptProviderId,
+    providerAttemptModelId,
     categoryCorrect: actualCategory === sample.expectedCategory,
-    tierCorrect: actualTier === sample.expectedTier,
-    modelCorrect: selectedModel === sample.expectedModel,
     cacheStatus: first(log?.cacheStatus, result?.cacheStatus),
     cacheType: log?.cacheType || "",
     maskingAction: log?.maskingAction || "",
     latencyMs: Number(log?.latencyMs || 0),
-    providerLatencyMs: Number(log?.providerLatencyMs || 0),
-    gatewayWithoutProviderMs: Math.max(0, Number(log?.latencyMs || 0) - Number(log?.providerLatencyMs || 0)),
+    providerLatencyMs: Number(log?.providerAttemptLatencyMs || 0),
+    gatewayWithoutProviderMs: Math.max(0, Number(log?.latencyMs || 0) - Number(log?.providerAttemptLatencyMs || 0)),
     firstByteMs: Number(result?.firstByteMs || 0),
     firstTokenMs: Number(result?.firstTokenMs || 0),
     completedMs: Number(result?.completedMs || 0),
@@ -415,19 +387,15 @@ function enrich(sample, result, log) {
 function routing(items) {
   const total = items.length;
   const categoryCorrect = items.filter((x) => x.categoryCorrect).length;
-  const tierCorrect = items.filter((x) => x.tierCorrect).length;
-  const modelCorrect = items.filter((x) => x.modelCorrect).length;
   return {
     total,
     categoryAccuracy: ratio(categoryCorrect, total),
-    tierAccuracy: ratio(tierCorrect, total),
-    modelAccuracy: ratio(modelCorrect, total),
     expectedCategoryDistribution: dist(items, (x) => x.expectedCategory),
     actualCategoryDistribution: dist(items, (x) => x.actualCategory),
-    expectedTierDistribution: dist(items, (x) => x.expectedTier),
-    actualTierDistribution: dist(items, (x) => x.actualTier),
+    difficultyDistribution: dist(items, (x) => x.actualDifficulty),
     routingReasonDistribution: dist(items, (x) => x.routingReason || "unknown"),
-    failures: items.filter((x) => !x.categoryCorrect || !x.tierCorrect).map((x) => ({ sampleId: x.sampleId, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, expectedTier: x.expectedTier, actualTier: x.actualTier, selectedModel: x.selectedModel, routingReason: x.routingReason, requestId: x.requestId })),
+    executionModeDistribution: dist(items, (x) => x.executionMode || "not_reported"),
+    failures: items.filter((x) => !x.categoryCorrect).map((x) => ({ sampleId: x.sampleId, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, actualDifficulty: x.actualDifficulty, routingReason: x.routingReason, executionMode: x.executionMode, requestId: x.requestId })),
   };
 }
 
@@ -462,8 +430,8 @@ function stageStats(items) {
 
 function markdown(r) {
   const stageRows = Object.entries(r.stageTimings).map(([stage, v]) => `| \`${stage}\` | ${v.requests} | ${fmt(v.avgMs)}ms | ${fmt(v.p50Ms)}ms | ${fmt(v.p95Ms)}ms | ${fmt(v.maxMs)}ms | ${fmt(v.avgMicros)}μs | ${fmt(v.p95Micros)}μs |`).join("\n") || "| - | - | - | - | - | - | - | - |";
-  const failRows = r.routing.failures.map((x) => `| ${x.sampleId} | ${x.expectedCategory} | ${x.actualCategory} | ${x.expectedTier} | ${x.actualTier} | ${x.selectedModel} | ${x.routingReason} |`).join("\n") || "| - | - | - | - | - | - | - |";
-  const sampleRows = r.samples.map((x) => `| ${x.sampleId} | ${x.httpStatus} | ${x.expectedCategory} | ${x.actualCategory} | ${x.selectedModel} | ${fmt(x.firstTokenMs)}ms | ${fmt(x.completedMs)}ms | ${x.cacheStatus || "-"} |`).join("\n");
+  const failRows = r.routing.failures.map((x) => `| ${x.sampleId} | ${x.expectedCategory} | ${x.actualCategory} | ${x.actualDifficulty} | ${x.routingReason} | ${x.executionMode} |`).join("\n") || "| - | - | - | - | - | - |";
+  const sampleRows = r.samples.map((x) => `| ${x.sampleId} | ${x.httpStatus} | ${x.expectedCategory} | ${x.actualCategory} | ${x.actualDifficulty} | ${x.routingReason} | ${x.executionMode} | ${x.providerAttemptModelId || "-"} | ${fmt(x.firstTokenMs)}ms | ${fmt(x.completedMs)}ms | ${x.cacheStatus || "-"} |`).join("\n");
   return `# 보고서4 - OpenAI 실제 스트리밍 20건 라우팅/지연시간 측정
 
 작성 시각: ${r.generatedAt}  
@@ -472,7 +440,7 @@ runId: \`${r.runId}\`
 
 ## 1. 목적
 
-앞 1024 bytes + 뒤 1024 bytes를 같은 가중치로 보고, \`마지막 요청\`, \`요약해줘\`, \`번역해줘\` 같은 명시적 요청 표현에만 보너스를 주도록 라우팅 룰을 보완했다. 그 뒤 실제 OpenAI-compatible provider 경로로 20개 요청을 보내 라우팅 정확도, Gateway 단계별 시간, 스트리밍 첫 토큰 도착 시간을 측정했다.
+앞 1024 bytes + 뒤 1024 bytes를 같은 가중치로 보고, \`마지막 요청\`, \`요약해줘\`, \`번역해줘\` 같은 명시적 요청 표현에만 보너스를 주도록 category 분류 룰을 보완했다. 그 뒤 실제 OpenAI-compatible provider 경로로 20개 요청을 보내 category 정확도, Gateway 단계별 시간, 스트리밍 첫 토큰 도착 시간을 측정했다.
 
 ## 2. 테스트 조건
 
@@ -480,7 +448,7 @@ runId: \`${r.runId}\`
 |---|---:|
 | 요청 수 | ${r.input.count} |
 | Provider | OpenAI-compatible |
-| 실제 provider modelName | \`${r.input.providerModelName}\` |
+| 명시적 modelRef | \`${r.input.modelRef}\` |
 | Gateway 요청 | \`stream=true\` |
 | max_tokens | ${r.input.maxTokens} |
 | Semantic Cache | 꺼짐 |
@@ -488,15 +456,13 @@ runId: \`${r.runId}\`
 | 로그 저장 | DB \`p0_llm_invocation_logs\` 기준 |
 | DB 로그 수집 | ${r.logs.actual} / ${r.logs.expected} |
 
-비용을 줄이기 위해 low-cost와 balanced catalog modelName은 모두 기본적으로 \`gpt-4o-mini\`로 매핑했다. 라우팅 정확도는 provider modelName이 아니라 Gateway의 selectedModel ID 기준으로 계산했다.
+\`routingReason\`, \`difficulty\`, \`executionMode\`는 routing 관찰값이다. 실제 provider/model은 별도 \`providerAttempts\` 실행 관찰값으로만 기록한다.
 
-## 3. 라우팅 정확도
+## 3. Category 분류 정확도
 
 | 항목 | 결과 |
 |---|---:|
 | Category 정확도 | ${percent(r.routing.categoryAccuracy)} |
-| Tier 정확도 | ${percent(r.routing.tierAccuracy)} |
-| Model ID 정확도 | ${percent(r.routing.modelAccuracy)} |
 | 실패 수 | ${r.routing.failures.length} / ${r.routing.total} |
 
 ## 4. 스트리밍/지연시간 요약
@@ -518,14 +484,14 @@ ${stageRows}
 
 ## 6. 요청별 요약
 
-| sampleId | HTTP | expected | actual | selectedModel | 첫 token | 완료 | cache |
-|---|---:|---|---|---|---:|---:|---|
+| sampleId | HTTP | expected | actual | difficulty | routingReason | executionMode | providerAttempt model | first token | complete | cache |
+|---|---:|---|---|---|---|---|---|---:|---:|---|
 ${sampleRows}
 
 ## 7. 오분류 목록
 
-| sampleId | expected | actual | expected tier | actual tier | selectedModel | routingReason |
-|---|---|---|---|---|---|---|
+| sampleId | expected | actual | difficulty | routingReason | executionMode |
+|---|---|---|---|---|---|
 ${failRows}
 
 ## 8. 해석
@@ -533,20 +499,19 @@ ${failRows}
 - 이번 테스트는 mock provider가 아니라 실제 OpenAI-compatible provider를 통과했다.
 - 스트리밍 첫 토큰 시간은 클라이언트가 Gateway SSE 응답에서 첫 \`delta.content\`를 받은 시점이다.
 - \`stageTimings\`는 Gateway가 DB log metadata에 남긴 내부 단계별 시간이다.
-- Semantic Cache embedding/model 호출은 꺼져 있으므로, 이 보고서는 라우팅 룰과 OpenAI provider 왕복 중심의 측정이다.
+- Semantic Cache embedding/model 호출은 꺼져 있으므로, 이 보고서는 category 분류와 OpenAI provider 왕복 중심의 측정이다.
 - prompt/response 원문은 보고서에 저장하지 않고 sampleId와 hash 중심으로만 남겼다.
 `;
 }
 
 function publicSample(x) {
-  return { sampleId: x.sampleId, requestId: x.requestId, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, expectedTier: x.expectedTier, actualTier: x.actualTier, selectedModel: x.selectedModel, routingReason: x.routingReason, categoryCorrect: x.categoryCorrect, tierCorrect: x.tierCorrect, promptBytes: x.promptBytes, promptHash: x.promptHash, httpStatus: x.httpStatus, firstByteMs: x.firstByteMs, firstTokenMs: x.firstTokenMs, completedMs: x.completedMs, tokenChunkCount: x.tokenChunkCount, latencyMs: x.latencyMs, providerLatencyMs: x.providerLatencyMs, gatewayWithoutProviderMs: x.gatewayWithoutProviderMs, cacheStatus: x.cacheStatus, cacheType: x.cacheType, maskingAction: x.maskingAction, stageTimings: x.stageTimings, error: x.error };
+  return { sampleId: x.sampleId, requestId: x.requestId, expectedCategory: x.expectedCategory, actualCategory: x.actualCategory, actualDifficulty: x.actualDifficulty, routingReason: x.routingReason, executionMode: x.executionMode, categoryCorrect: x.categoryCorrect, providerAttemptProviderId: x.providerAttemptProviderId, providerAttemptModelId: x.providerAttemptModelId, promptBytes: x.promptBytes, promptHash: x.promptHash, httpStatus: x.httpStatus, firstByteMs: x.firstByteMs, firstTokenMs: x.firstTokenMs, completedMs: x.completedMs, tokenChunkCount: x.tokenChunkCount, latencyMs: x.latencyMs, providerLatencyMs: x.providerLatencyMs, gatewayWithoutProviderMs: x.gatewayWithoutProviderMs, cacheStatus: x.cacheStatus, cacheType: x.cacheType, maskingAction: x.maskingAction, stageTimings: x.stageTimings, error: x.error };
 }
 
 function parseMetadata(v) { if (!v) return {}; if (typeof v === "string") return safeJSON(v) || {}; return v; }
 function normalizeStageTimings(value) { if (!value || typeof value !== "object") return {}; return Object.fromEntries(Object.entries(value).map(([stage, timing]) => [stage, { durationMs: Number(timing?.durationMs || 0), count: Number(timing?.count || 0) }])); }
 function safeJSON(s) { try { return JSON.parse(s); } catch { return null; } }
 function first(...values) { for (const value of values) if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim(); return ""; }
-function tierFromReason(reason) { if (reason === "category_code_high_quality" || reason === "category_reasoning_high_quality") return "high_quality"; if (reason === "category_support_refund_low_cost" || reason === "short_prompt_low_cost") return "low_cost"; return reason ? "balanced" : "unknown"; }
 function dist(items, pick) { const m = {}; for (const item of items) { const key = String(pick(item) ?? "unknown"); m[key] = (m[key] || 0) + 1; } return Object.fromEntries(Object.entries(m).sort(([a], [b]) => a.localeCompare(b))); }
 function avg(values) { const a = values.filter(Number.isFinite); return a.length ? a.reduce((sum, v) => sum + v, 0) / a.length : 0; }
 function max(values) { const a = values.filter(Number.isFinite); return a.length ? Math.max(...a) : 0; }
@@ -562,7 +527,6 @@ function databaseURL() { return process.env.DATABASE_URL || "postgresql://gatelm
 function printSummary(r) {
   console.log("\nRESULT");
   console.log(`category accuracy: ${percent(r.routing.categoryAccuracy)}`);
-  console.log(`tier accuracy: ${percent(r.routing.tierAccuracy)}`);
   console.log(`logs: ${r.logs.actual}/${r.logs.expected}`);
   console.log(`first token avg/p95: ${fmt(r.timing.client.avgFirstTokenMs)}ms / ${fmt(r.timing.client.p95FirstTokenMs)}ms`);
   const route = r.stageTimings.decide_model_route || {};

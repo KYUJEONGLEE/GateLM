@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/routing/schemas/routing-policy.schema.json",
+  "title": "GateLM Routing Policy v2",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "gatelm.routing-policy.v2"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "manual"]
+    },
+    "bootstrapState": {
+      "type": "string",
+      "enum": ["mock_bootstrap", "configured"]
+    },
+    "routingPolicyHash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "routes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "general": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simple": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            },
+            "complex": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            }
+          },
+          "required": ["simple", "complex"]
+        },
+        "code": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simple": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            },
+            "complex": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            }
+          },
+          "required": ["simple", "complex"]
+        },
+        "translation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simple": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            },
+            "complex": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            }
+          },
+          "required": ["simple", "complex"]
+        },
+        "summarization": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simple": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            },
+            "complex": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            }
+          },
+          "required": ["simple", "complex"]
+        },
+        "reasoning": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simple": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            },
+            "complex": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "modelRefs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              },
+              "required": ["modelRefs"]
+            }
+          },
+          "required": ["simple", "complex"]
+        }
+      },
+      "required": ["general", "code", "translation", "summarization", "reasoning"]
+    }
+  },
+  "required": ["schemaVersion", "mode", "bootstrapState", "routingPolicyHash", "routes"]
+}

@@ -60,15 +60,14 @@ try {
     $Report = Get-Content -LiteralPath $ReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
     ""
-    "GateLM v2.1 라우팅 분포 관찰 리포트"
-    "===================================="
+    "GateLM v2.1 카테고리 분포 관찰 리포트"
+    "======================================"
     "데이터셋:             $($Report.datasetPath)"
     "전체 샘플 수:         $($Report.totalSamples)"
     "평균 지연시간(μs):    $($Report.latency.avgMicros)"
     "P50 지연시간(μs):     $($Report.latency.p50Micros)"
     "P95 지연시간(μs):     $($Report.latency.p95Micros)"
     "최대 지연시간(μs):    $($Report.latency.maxMicros)"
-    "예상 비용 절감률:     $($Report.costEstimate.savingRate)"
     ""
     "카테고리 분포:"
     foreach ($Category in ($Report.byCategory.PSObject.Properties | Sort-Object Name)) {
@@ -78,20 +77,10 @@ try {
         }
         "  - $Label [$($Category.Name)]: $($Category.Value.total)개, 비율 $($Category.Value.rate)"
     }
-    "티어 분포:"
-    foreach ($Tier in ($Report.byTier.PSObject.Properties | Sort-Object Name)) {
-        $Label = $Tier.Value.labelKo
-        if ([string]::IsNullOrWhiteSpace($Label)) {
-            $Label = $Tier.Name
-        }
-        "  - $Label [$($Tier.Name)]: $($Tier.Value.total)개, 비율 $($Tier.Value.rate)"
-    }
-    ""
     "샘플 판단 예시(최대 10개):"
     foreach ($Sample in ($Report.samples | Select-Object -First 10)) {
         "  - $($Sample.sampleId): $($Sample.redactedPrompt)"
-        "    판단: $($Sample.categoryKo) [$($Sample.category)] / $($Sample.tierKo) [$($Sample.tier)]"
-        "    이유: $($Sample.routingReasonKo) [$($Sample.routingReason)]"
+        "    카테고리: $($Sample.categoryKo) [$($Sample.category)]"
     }
     ""
     "리포트 파일:          $ReportPath"
