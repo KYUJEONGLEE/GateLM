@@ -35,6 +35,11 @@ for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}"; do
   bash -n "${file}"
 done
 
+bootstrap_probe="$(printf '%s' 'set -euo pipefail; printf probe-ok' | base64 | tr -d '\n')"
+probe_output="$(sh -c "printf '%s' '${bootstrap_probe}' | base64 --decode | bash")"
+[[ "${probe_output}" == "probe-ok" ]] || \
+  fail "The POSIX shell wrapper did not hand the payload to bash"
+
 assert_fails_with \
   "A full 40-character lowercase Git SHA is required" \
   bash "${DEPLOY_SCRIPT}" invalid-sha
@@ -164,11 +169,36 @@ bash "${SSM_SCRIPT}" \
   https://chat.gatelm.co.kr >/dev/null
 
 grep -Fq "AWS-RunShellScript" "${fake_log}" || fail "SSM document was not sent"
-if ! grep -Fq "deploy-main.sh" "${fake_log}"; then
-  cat "${fake_log}" >&2
-  fail "Remote bootstrap does not load deploy-main.sh"
-fi
-grep -Fq "0000000000000000000000000000000000000000" "${fake_log}" || \
-  fail "Deployment SHA was not sent"
+node - "${fake_log}" <<'NODE'
+const fs = require("node:fs");
+const logPath = process.argv[2];
+const lines = fs.readFileSync(logPath, "utf8").split(/\r?\n/);
+const parametersLine = lines.find((line) => line.startsWith('{"commands":'));
+
+if (!parametersLine) {
+  throw new Error("SSM parameters JSON was not sent");
+}
+
+const parameters = JSON.parse(parametersLine);
+const command = parameters.commands?.[0];
+const match = command?.match(
+  /^printf '%s' '([A-Za-z0-9+/=]+)' \| base64 --decode \| bash$/,
+);
+
+if (!match) {
+  throw new Error("SSM command is not a POSIX-safe Bash bootstrap");
+}
+
+const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
+if (!/^set -euo pipefail\r?\n/.test(remoteScript)) {
+  throw new Error("Decoded deployment payload is not a Bash script");
+}
+if (!remoteScript.includes("deploy-main.sh")) {
+  throw new Error("Remote bootstrap does not load deploy-main.sh");
+}
+if (!remoteScript.includes("0000000000000000000000000000000000000000")) {
+  throw new Error("Deployment SHA was not sent");
+}
+NODE
 
 printf '%s\n' "[deploy-main-test] all checks passed"
