@@ -37,7 +37,6 @@ import (
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
-	postgresentitlement "gatelm/apps/gateway-core/internal/adapters/tenantchat/entitlement/postgres"
 	postgrestentantruntime "gatelm/apps/gateway-core/internal/adapters/tenantchat/runtime/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/app"
@@ -251,7 +250,6 @@ func main() {
 		}
 		tenantChatAuthenticator := requestauth.New(workloadVerifier, jtiConsumer)
 		tenantChatAdmissions := admissionservice.New(
-			postgresentitlement.NewChecker(postgresPool),
 			postgrestentantruntime.NewReader(postgresPool),
 			postgresadmission.NewStore(postgresPool),
 		)

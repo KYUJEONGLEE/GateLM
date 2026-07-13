@@ -24,7 +24,7 @@ type authenticator interface {
 }
 
 type admissionService interface {
-	Admit(ctx context.Context, requestContext domain.RequestContext, claims workloadauth.Claims) (domain.Admission, error)
+	Admit(ctx context.Context, requestContext domain.RequestContext) (domain.Admission, error)
 	Cancel(ctx context.Context, requestContext domain.RequestContext) (domain.AdmissionCancellation, error)
 }
 
@@ -48,7 +48,7 @@ func (h *Handler) admit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "CHAT_INVALID_REQUEST", "Invalid tenant chat request.", 0)
 		return
 	}
-	verified, err := h.auth.Authenticate(
+	_, err := h.auth.Authenticate(
 		r.Context(),
 		r.Header.Get("Authorization"),
 		domain.PhaseAdmission,
@@ -59,7 +59,7 @@ func (h *Handler) admit(w http.ResponseWriter, r *http.Request) {
 		writeAuthenticationError(w, err)
 		return
 	}
-	result, err := h.admissions.Admit(r.Context(), request.Context, verified.Claims)
+	result, err := h.admissions.Admit(r.Context(), request.Context)
 	if err != nil {
 		writeServiceError(w, err)
 		return
@@ -142,14 +142,14 @@ func writeAuthenticationError(w http.ResponseWriter, err error) {
 
 func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, domain.ErrUserDisabled):
-		writeError(w, http.StatusForbidden, "CHAT_USER_DISABLED", "Tenant chat user is disabled.", 0)
+	case errors.Is(err, context.Canceled):
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		writeError(w, http.StatusServiceUnavailable, "CHAT_RUNTIME_UNAVAILABLE", "Tenant chat runtime is unavailable.", 1)
 	case errors.Is(err, domain.ErrTenantDisabled):
 		writeError(w, http.StatusForbidden, "CHAT_TENANT_DISABLED", "Tenant is disabled.", 0)
-	case errors.Is(err, domain.ErrMembershipDisabled):
-		writeError(w, http.StatusForbidden, "CHAT_MEMBERSHIP_DISABLED", "Tenant membership is disabled.", 0)
-	case errors.Is(err, domain.ErrEmployeeDisabled):
-		writeError(w, http.StatusForbidden, "CHAT_EMPLOYEE_DISABLED", "Employee access is disabled.", 0)
+	case errors.Is(err, domain.ErrRuntimeUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "CHAT_RUNTIME_UNAVAILABLE", "Tenant chat runtime is unavailable.", 1)
 	case errors.Is(err, domain.ErrIdempotencyConflict):
 		writeError(w, http.StatusConflict, "CHAT_IDEMPOTENCY_CONFLICT", "Idempotency key conflicts with an existing request.", 0)
 	case errors.Is(err, domain.ErrAdmissionExpired):
