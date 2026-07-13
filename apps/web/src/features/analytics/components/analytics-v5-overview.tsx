@@ -146,7 +146,7 @@ export function AnalyticsV5Overview({
 
       <div className="analytics-v5-primary-grid">
         <AnalyticsV5Surface subtitle={text.modelTrendSub} title={text.modelTrend}>
-          {evidence?.modelTraffic.series.some((series) => series.total > 0) ? (
+          {evidence?.modelTraffic?.series?.some((series) => series.total > 0) ? (
             <AnalyticsV5ModelTrafficChart
               ariaLabel={text.modelTrend}
               evidence={evidence}

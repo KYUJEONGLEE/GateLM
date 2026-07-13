@@ -198,3 +198,43 @@ test("keeps unavailable analytics explicit without synthetic values", () => {
     totalRequests: 0
   });
 });
+
+test("tolerates partial legacy aggregate collections", () => {
+  const overview = {
+    blockedRequests: 0,
+    cacheEligibleRequests: 0,
+    cacheHitRate: 0,
+    cacheHitRequests: 0,
+    completionTokens: 0,
+    dataFreshness: {
+      generatedAt: "2026-07-12T00:00:00.000Z",
+      lastLogCreatedAt: null,
+      recordCount: 0,
+      source: "gateway-postgresql"
+    },
+    exactCacheHitRate: 0,
+    failedRequests: 0,
+    fallbackSuccessCount: 0,
+    maskingActionCounts: {},
+    promptTokens: 0,
+    range: {
+      from: "2026-07-11T00:00:00.000Z",
+      grain: "hour",
+      timezone: "UTC",
+      to: "2026-07-12T00:00:00.000Z"
+    },
+    rateLimitedRequests: 0,
+    savedCostMicroUsd: 0,
+    successfulRequests: 0,
+    totalCostMicroUsd: 0,
+    totalRequests: 0,
+    totalTokens: 0
+  } as unknown as DashboardOverview;
+
+  const model = buildAnalyticsReadModel(overview);
+
+  expect(model.impact.modelMix).toEqual([]);
+  expect(model.impact.routingTiers).toEqual([]);
+  expect(model.cost.costByModel).toEqual([]);
+  expect(model.reliability.terminalOutcomes).toEqual([]);
+});

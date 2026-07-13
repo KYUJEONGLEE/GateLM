@@ -293,7 +293,7 @@ export function AnalyticsUsagePanel({
       <div className="analytics-v3-workspace">
         <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.trendSub} title={text.trend}>
           <ChartOrEmpty
-            hasData={Boolean(performance?.latencyDistribution.some((point) => point.requests > 0))}
+            hasData={Boolean(performance?.latencyDistribution?.some((point) => point.requests > 0))}
             locale={locale}
           >
             <AnalyticsRequestVolumeChart ariaLabel={text.trend} points={performance?.latencyDistribution ?? []} />
@@ -475,7 +475,7 @@ export function AnalyticsPerformancePanel({
 
       <div className="analytics-v3-workspace">
         <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.latencySub} title={text.latency}>
-          <ChartOrEmpty hasData={Boolean(performance?.latencyDistribution.some(hasLatencyPoint))} locale={locale}>
+          <ChartOrEmpty hasData={Boolean(performance?.latencyDistribution?.some(hasLatencyPoint))} locale={locale}>
             <AnalyticsLatencyTrendChart ariaLabel={text.latency} points={performance?.latencyDistribution ?? []} />
           </ChartOrEmpty>
         </AnalysisSurface>
@@ -887,7 +887,7 @@ function StatusBadge({ code, status }: { code: number; status: string }) {
 }
 
 function ReliabilityBadge({ record }: { record: InvocationLogRecord }) {
-  const fallbackOutcome = record.domainOutcomes?.fallback.outcome?.toLowerCase();
+  const fallbackOutcome = record.domainOutcomes?.fallback?.outcome?.toLowerCase();
   const status = record.terminalStatus ?? record.status;
 
   if (fallbackOutcome === "success") {
@@ -903,7 +903,7 @@ function ReliabilityBadge({ record }: { record: InvocationLogRecord }) {
 }
 
 function isReliabilityEvidence(record: InvocationLogRecord) {
-  const fallbackOutcome = record.domainOutcomes?.fallback.outcome?.toLowerCase();
+  const fallbackOutcome = record.domainOutcomes?.fallback?.outcome?.toLowerCase();
   const status = record.terminalStatus ?? record.status;
   return status === "failed" || status === "cancelled" || fallbackOutcome === "success" || fallbackOutcome === "failed";
 }

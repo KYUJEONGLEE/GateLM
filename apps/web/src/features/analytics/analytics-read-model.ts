@@ -74,7 +74,7 @@ export function buildAnalyticsReadModel(
           provider: row.selectedProvider,
           value: row.requestCount
         }))
-      : overview.routingCountByModel.map((row) => ({
+      : (overview.routingCountByModel ?? []).map((row) => ({
           model: row.selectedModel,
           provider: row.selectedProvider,
           value: row.requestCount
@@ -129,7 +129,7 @@ export function buildAnalyticsReadModel(
     cost: {
       avoidedSpendRate: safeRatio(overview.savedCostMicroUsd, addressableSpend),
       costByModel: aggregateModelRows(
-        overview.costByModel.map((row) => ({
+        (overview.costByModel ?? []).map((row) => ({
           model: row.selectedModel,
           provider: row.selectedProvider,
           value: row.costMicroUsd
@@ -316,7 +316,7 @@ function routingTierRows(overview: DashboardOverview): AnalyticsValueRow[] {
     ["other", 0]
   ]);
 
-  overview.routingCountByModel.forEach((row) => {
+  (overview.routingCountByModel ?? []).forEach((row) => {
     const tier = classifyRoutingTier(row.routingReason);
     totals.set(tier, (totals.get(tier) ?? 0) + Math.max(0, row.requestCount));
   });
@@ -355,7 +355,7 @@ function terminalOutcomeRows(overview: DashboardOverview): AnalyticsValueRow[] {
         label: normalizeOutcome(row.outcome).replaceAll("_", " ").toUpperCase(),
         value: row.requestCount
       }))
-    : Object.entries(overview.statusCounts).map(([outcome, requestCount]) => ({
+    : Object.entries(overview.statusCounts ?? {}).map(([outcome, requestCount]) => ({
         id: outcome,
         label: normalizeOutcome(outcome).replaceAll("_", " ").toUpperCase(),
         value: requestCount
