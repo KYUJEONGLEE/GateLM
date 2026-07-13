@@ -78,7 +78,22 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 ## 6. Fixture Provenance
 
-[`fixtures/difficulty-evaluation-dataset.fixture.jsonl`](fixtures/difficulty-evaluation-dataset.fixture.jsonl)은 2026-07-13에 작성한 synthetic fixture다. 다섯 active category 각각에 `simple`, `complex` 한 건씩을 두어 총 10개 record로 구성한다. 실제 고객 prompt를 사용하지 않는다.
+[`fixtures/difficulty-evaluation-dataset.fixture.jsonl`](fixtures/difficulty-evaluation-dataset.fixture.jsonl)은 2026-07-13에 작성한 500개 synthetic pilot fixture다. 실제 고객 prompt를 사용하지 않으며 모든 record는 사람 검수 전 상태를 provenance와 `reviewerNote`에 명시한다.
+
+- 다섯 active category × `simple | complex`의 10개 셀을 각각 50개로 구성한다.
+- 각 셀은 `ko` 30개, `en` 15개, `mixed` 5개다.
+- 각 셀의 20개(40%)는 길지만 단순한 요청, 짧지만 복합적인 요청, 다중 제약 같은 boundary case다.
+- 각 셀은 명확한 label, threshold 인접 사례, 작업 하나만 추가한 contrast pair, 제약 하나만 추가한 contrast pair, category 혼동 유도 사례, 메뉴명·설정명 negative context를 모두 포함한다.
+- `simple` 셀에는 긴 문장이지만 단일 작업인 `longsimple`, `complex` 셀에는 짧지만 의존·제약이 깊은 `shortcomplex` profile을 포함한다.
+- 같은 문장 구조의 변형은 `sampleId`의 `fNN` family와 `vNN` variant로 식별하여 이후 dataset split에서 family 단위로 이동할 수 있게 한다.
+- 중복 `sampleId`와 중복 `redactedPrompt`는 verifier가 거부한다.
+- 정답 label은 `expectedDifficulty`뿐이며 `expectedCategory`는 5 × 2 셀 집계를 위한 category 문맥이다. 사람이 만든 `expectedComplexityScore`나 `complexityScore`는 schema와 verifier가 허용하지 않는다.
+
+Fixture는 다음 명령으로 결정론적으로 다시 생성할 수 있다.
+
+```powershell
+corepack pnpm run generate:v2.1-difficulty-eval
+```
 
 ## 7. Evaluation Report
 
@@ -99,7 +114,24 @@ Report의 `accuracy`와 `errorRate`는 difficulty exact-match 기준이다. Cate
 
 `classificationLatency`의 단위는 microseconds이며 category, difficulty, 두 분류를 연속 실행한 total의 avg/p50/p95/max를 각각 제공한다. 이 시간에는 fixture parsing, 파일 I/O, report 직렬화를 포함하지 않는다.
 
-실패와 sample 진단에는 sampleId, 허용된 redactedPrompt, expected/actual category와 difficulty 같은 low-cardinality 결과만 포함한다. Category diagnostics, provider/model/tier, raw prompt, raw response 또는 error detail을 추가하지 않는다.
+Complexity score calibration은 `sampleId`의 category, expected difficulty, `fNN`을 묶은 family 단위로 수행한다. 동일 family의 `vNN` variant는 calibration과 holdout에 나뉘지 않는다. 각 category × expected difficulty cell의 다섯 family를 SHA-256 순으로 정렬하고 가장 낮은 한 family를 holdout으로 선택해 400 calibration / 100 holdout sample을 결정론적으로 재현한다.
+
+Report는 두 difficulty 결과를 분리한다.
+
+- `oracleCategory`: dataset의 `expectedCategory`로 `DifficultyFeatures`를 만들어 category classifier 오류와 분리한 score calibration 결과
+- `endToEnd`: 실제 category classifier 결과로 `DifficultyFeatures`를 만들어 runtime pipeline 회귀를 확인한 결과
+
+Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `ComplexityScore`는 `DifficultyResult`에서 읽은 예측값이며 threshold, score bucket, expected difficulty별 score 분포, calibration/holdout directional error를 offline report에 포함할 수 있다. Ground-truth score를 fixture나 schema에 추가하지 않는다.
+
+Candidate point/threshold는 calibration split에서 변경 전 accuracy와 `complex -> simple` directional error를 악화시키지 않아야 한다. 통과한 candidate는 `complex -> simple` 최소화, accuracy 최대화, `simple -> complex` 최소화, 더 낮은 threshold 순으로 결정론적으로 선택한다. 선택이 끝난 뒤에만 oracle-category와 end-to-end holdout을 열어 변경 전 accuracy와 `complex -> simple` error가 회귀하지 않았는지 final gate로 확인하며, holdout 결과를 candidate 재선택에 사용하지 않는다.
+
+현재 point와 threshold calibration은 다음 명령으로 재현한다.
+
+```powershell
+corepack pnpm run calibrate:v2.1-difficulty-score
+```
+
+실패와 sample 진단에는 sampleId, 허용된 redactedPrompt, expected/actual category와 difficulty, 예측 complexity score 같은 안전한 결과만 포함한다. Score 진단에는 Category diagnostics, provider/model/tier, raw matched phrase, 정규화 문자열, token, 원문 파생 feature, feature별 point breakdown, raw prompt, raw response 또는 error detail을 추가하지 않는다.
 
 ## 8. 검증
 
@@ -121,3 +153,4 @@ Difficulty verifier는 schema identity, 필수 필드, `simple | complex` enum, 
 - provider/model/tier 선택 평가
 - Gateway API, DB, Event, Metrics 계약 변경
 - RuntimeConfig/RuntimeSnapshot 정책 변경
+- 외부 API 또는 제품 diagnostics의 complexity score 노출

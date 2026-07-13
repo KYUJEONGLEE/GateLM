@@ -376,6 +376,10 @@ function validateDocumentation(rootDir, failures) {
     "ExtractDifficultyFeatures",
     "DifficultyFeatures",
     "DifficultyResult",
+    "ComplexityScore",
+    "0.0~1.0",
+    "global threshold",
+    "API, DB, Event, Metrics, RuntimeSnapshot",
     "Go struct",
     "compatibility wrapper",
   ]) {

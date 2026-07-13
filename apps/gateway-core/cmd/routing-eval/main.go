@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,7 +20,7 @@ const (
 	defaultClassifierName              = "rule_based_category_classifier"
 	defaultClassifierVersion           = "rule_based_category_classifier_v1"
 	defaultDifficultyClassifierName    = "rule_based_category_aware_difficulty_classifier"
-	defaultDifficultyClassifierVersion = "rule_based_difficulty_classifier_v1"
+	defaultDifficultyClassifierVersion = "rule_based_difficulty_classifier_v2"
 	defaultDatasetPath                 = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
 	defaultDifficultyDatasetPath       = "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl"
 	defaultProbeDatasetPath            = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
@@ -82,19 +83,53 @@ type latencyStats struct {
 }
 
 type difficultyReport struct {
-	DatasetPath           string                              `json:"datasetPath"`
-	ClassifierName        string                              `json:"classifierName"`
-	ClassifierVersion     string                              `json:"classifierVersion"`
-	TotalSamples          int                                 `json:"totalSamples"`
-	CorrectSamples        int                                 `json:"correctSamples"`
-	IncorrectSamples      int                                 `json:"incorrectSamples"`
-	Accuracy              float64                             `json:"accuracy"`
-	ErrorRate             float64                             `json:"errorRate"`
-	ByCategoryDifficulty  map[string]map[string]categoryStats `json:"byCategoryDifficulty"`
-	DirectionalErrors     directionalErrorStats               `json:"directionalErrors"`
-	ClassificationLatency classificationLatencyStats          `json:"classificationLatency"`
-	Failures              []difficultyEvaluationFailure       `json:"failures"`
-	Samples               []difficultyEvaluationSample        `json:"samples"`
+	DatasetPath           string                     `json:"datasetPath"`
+	ClassifierName        string                     `json:"classifierName"`
+	ClassifierVersion     string                     `json:"classifierVersion"`
+	ScorePolicyVersion    string                     `json:"scorePolicyVersion"`
+	ComplexityThreshold   float64                    `json:"complexityThreshold"`
+	Split                 difficultySplitSummary     `json:"split"`
+	FullDataset           difficultyEvaluationPair   `json:"fullDataset"`
+	Calibration           difficultyEvaluationPair   `json:"calibration"`
+	Holdout               difficultyEvaluationPair   `json:"holdout"`
+	ClassificationLatency classificationLatencyStats `json:"classificationLatency"`
+}
+
+type difficultyEvaluationPair struct {
+	OracleCategory difficultyEvaluationResult `json:"oracleCategory"`
+	EndToEnd       difficultyEvaluationResult `json:"endToEnd"`
+}
+
+type difficultyEvaluationResult struct {
+	TotalSamples              int                                 `json:"totalSamples"`
+	CorrectSamples            int                                 `json:"correctSamples"`
+	IncorrectSamples          int                                 `json:"incorrectSamples"`
+	Accuracy                  float64                             `json:"accuracy"`
+	ErrorRate                 float64                             `json:"errorRate"`
+	ByCategoryDifficulty      map[string]map[string]categoryStats `json:"byCategoryDifficulty"`
+	DirectionalErrors         directionalErrorStats               `json:"directionalErrors"`
+	ScoreBuckets              map[string]int                      `json:"scoreBuckets"`
+	ByExpectedDifficultyScore map[string]scoreDistributionStats   `json:"byExpectedDifficultyScore"`
+	Failures                  []difficultyEvaluationFailure       `json:"failures"`
+	Samples                   []difficultyEvaluationSample        `json:"samples"`
+}
+
+type difficultySplitSummary struct {
+	Algorithm           string `json:"algorithm"`
+	FamilyKeyRule       string `json:"familyKeyRule"`
+	CalibrationSamples  int    `json:"calibrationSamples"`
+	HoldoutSamples      int    `json:"holdoutSamples"`
+	CalibrationFamilies int    `json:"calibrationFamilies"`
+	HoldoutFamilies     int    `json:"holdoutFamilies"`
+}
+
+type scoreDistributionStats struct {
+	Count int     `json:"count"`
+	Min   float64 `json:"min"`
+	Avg   float64 `json:"avg"`
+	P50   float64 `json:"p50"`
+	P95   float64 `json:"p95"`
+	Max   float64 `json:"max"`
 }
 
 type directionalErrorStats struct {
@@ -114,23 +149,25 @@ type classificationLatencyStats struct {
 }
 
 type difficultyEvaluationFailure struct {
-	SampleID           string `json:"sampleId"`
-	RedactedPrompt     string `json:"redactedPrompt,omitempty"`
-	ExpectedCategory   string `json:"expectedCategory"`
-	ActualCategory     string `json:"actualCategory"`
-	ExpectedDifficulty string `json:"expectedDifficulty"`
-	ActualDifficulty   string `json:"actualDifficulty"`
+	SampleID           string  `json:"sampleId"`
+	RedactedPrompt     string  `json:"redactedPrompt,omitempty"`
+	ExpectedCategory   string  `json:"expectedCategory"`
+	ActualCategory     string  `json:"actualCategory"`
+	ExpectedDifficulty string  `json:"expectedDifficulty"`
+	ActualDifficulty   string  `json:"actualDifficulty"`
+	ComplexityScore    float64 `json:"complexityScore"`
 }
 
 type difficultyEvaluationSample struct {
-	SampleID           string `json:"sampleId"`
-	RedactedPrompt     string `json:"redactedPrompt"`
-	ExpectedCategory   string `json:"expectedCategory"`
-	ActualCategory     string `json:"actualCategory"`
-	ExpectedDifficulty string `json:"expectedDifficulty"`
-	ActualDifficulty   string `json:"actualDifficulty"`
-	CategoryMatched    bool   `json:"categoryMatched"`
-	Matched            bool   `json:"matched"`
+	SampleID           string  `json:"sampleId"`
+	RedactedPrompt     string  `json:"redactedPrompt"`
+	ExpectedCategory   string  `json:"expectedCategory"`
+	ActualCategory     string  `json:"actualCategory"`
+	ExpectedDifficulty string  `json:"expectedDifficulty"`
+	ActualDifficulty   string  `json:"actualDifficulty"`
+	ComplexityScore    float64 `json:"complexityScore"`
+	CategoryMatched    bool    `json:"categoryMatched"`
+	Matched            bool    `json:"matched"`
 }
 
 type evaluationFailure struct {
@@ -269,8 +306,8 @@ func main() {
 			if err != nil {
 				exitWithError(err)
 			}
-			if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
-				exitWithError(fmt.Errorf("difficulty accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
+			if *minAccuracy > 0 && evalReport.FullDataset.EndToEnd.Accuracy < *minAccuracy {
+				exitWithError(fmt.Errorf("difficulty accuracy %.4f is below minimum %.4f", evalReport.FullDataset.EndToEnd.Accuracy, *minAccuracy))
 			}
 		} else {
 			evalReport := evaluate(*datasetPath, *classifierVersion, records, *latencyIterations)
@@ -557,47 +594,74 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 	if latencyIterations <= 0 {
 		latencyIterations = 1
 	}
+	calibrationRecords, holdoutRecords, split := splitDifficultyRecords(records)
+	result := difficultyReport{
+		DatasetPath:         datasetPath,
+		ClassifierName:      defaultDifficultyClassifierName,
+		ClassifierVersion:   classifierVersion,
+		ScorePolicyVersion:  routing.DifficultyScorePolicyVersion(),
+		ComplexityThreshold: routing.DifficultyScoreThreshold(),
+		Split:               split,
+		FullDataset:         evaluateDifficultyPair(records, true),
+		Calibration:         evaluateDifficultyPair(calibrationRecords, false),
+		Holdout:             evaluateDifficultyPair(holdoutRecords, false),
+	}
+	result.ClassificationLatency = measureDifficultyLatency(records, latencyIterations)
+	return result
+}
+
+func evaluateDifficultyPair(records []datasetRecord, includeSamples bool) difficultyEvaluationPair {
+	return difficultyEvaluationPair{
+		OracleCategory: evaluateDifficultyRecords(records, true, includeSamples),
+		EndToEnd:       evaluateDifficultyRecords(records, false, includeSamples),
+	}
+}
+
+func evaluateDifficultyRecords(records []datasetRecord, oracleCategory bool, includeSamples bool) difficultyEvaluationResult {
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
 	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
-	promptClassifier := routing.NewRuleBasedPromptClassifier()
-	result := difficultyReport{
-		DatasetPath:          datasetPath,
-		ClassifierName:       defaultDifficultyClassifierName,
-		ClassifierVersion:    classifierVersion,
-		TotalSamples:         len(records),
-		ByCategoryDifficulty: map[string]map[string]categoryStats{},
-		Failures:             []difficultyEvaluationFailure{},
-		Samples:              []difficultyEvaluationSample{},
+	result := difficultyEvaluationResult{
+		TotalSamples:              len(records),
+		ByCategoryDifficulty:      map[string]map[string]categoryStats{},
+		ScoreBuckets:              emptyDifficultyScoreBuckets(),
+		ByExpectedDifficultyScore: map[string]scoreDistributionStats{},
+		Failures:                  []difficultyEvaluationFailure{},
+		Samples:                   []difficultyEvaluationSample{},
 	}
+	scoresByExpectedDifficulty := map[string][]float64{}
 
-	categoryLatencies := []float64{}
-	difficultyLatencies := []float64{}
-	totalLatencies := []float64{}
 	for _, record := range records {
 		expectedCategory := strings.TrimSpace(record.ExpectedCategory)
 		expectedDifficulty := strings.TrimSpace(record.ExpectedDifficulty)
 		prompt := record.promptText()
 
-		categoryResult, sampleCategoryLatencies := classifyCategoryWithLatency(categoryClassifier, prompt, latencyIterations)
-		actualCategory := categoryResult.Category
 		features := routing.ExtractPromptFeatures(prompt)
-		actualDifficulty, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, features, actualCategory, latencyIterations)
-		sampleTotalLatencies := classifyTotalWithLatency(promptClassifier, prompt, latencyIterations)
-		categoryLatencies = append(categoryLatencies, sampleCategoryLatencies...)
-		difficultyLatencies = append(difficultyLatencies, sampleDifficultyLatencies...)
-		totalLatencies = append(totalLatencies, sampleTotalLatencies...)
+		actualCategory := categoryClassifier.ClassifyFeatures(features).Category
+		difficultyCategory := actualCategory
+		if oracleCategory {
+			difficultyCategory = expectedCategory
+		}
+		difficultyFeatures := routing.ExtractDifficultyFeatures(features, difficultyCategory)
+		difficultyResult := difficultyClassifier.ClassifyFeatures(difficultyFeatures)
+		actualDifficulty := difficultyResult.Difficulty
+		complexityScore := round4(difficultyResult.ComplexityScore)
+		scoresByExpectedDifficulty[expectedDifficulty] = append(scoresByExpectedDifficulty[expectedDifficulty], complexityScore)
+		result.ScoreBuckets[difficultyScoreBucket(complexityScore)]++
 
 		matched := actualDifficulty == expectedDifficulty
-		result.Samples = append(result.Samples, difficultyEvaluationSample{
-			SampleID:           record.expectedID(),
-			RedactedPrompt:     prompt,
-			ExpectedCategory:   expectedCategory,
-			ActualCategory:     actualCategory,
-			ExpectedDifficulty: expectedDifficulty,
-			ActualDifficulty:   actualDifficulty,
-			CategoryMatched:    actualCategory == expectedCategory,
-			Matched:            matched,
-		})
+		if includeSamples {
+			result.Samples = append(result.Samples, difficultyEvaluationSample{
+				SampleID:           record.expectedID(),
+				RedactedPrompt:     prompt,
+				ExpectedCategory:   expectedCategory,
+				ActualCategory:     actualCategory,
+				ExpectedDifficulty: expectedDifficulty,
+				ActualDifficulty:   actualDifficulty,
+				ComplexityScore:    complexityScore,
+				CategoryMatched:    actualCategory == expectedCategory,
+				Matched:            matched,
+			})
+		}
 
 		if _, ok := result.ByCategoryDifficulty[expectedCategory]; !ok {
 			result.ByCategoryDifficulty[expectedCategory] = map[string]categoryStats{}
@@ -615,6 +679,7 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 				ActualCategory:     actualCategory,
 				ExpectedDifficulty: expectedDifficulty,
 				ActualDifficulty:   actualDifficulty,
+				ComplexityScore:    complexityScore,
 			})
 		}
 		stats.Incorrect = stats.Total - stats.Correct
@@ -647,25 +712,160 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		result.DirectionalErrors.ComplexToSimpleCount,
 		result.DirectionalErrors.ComplexExpectedSamples,
 	)
-	result.ClassificationLatency = classificationLatencyStats{
+	for _, difficulty := range []string{routing.DifficultySimple, routing.DifficultyComplex} {
+		result.ByExpectedDifficultyScore[difficulty] = summarizeScores(scoresByExpectedDifficulty[difficulty])
+	}
+	sort.Slice(result.Failures, func(left int, right int) bool {
+		return result.Failures[left].SampleID < result.Failures[right].SampleID
+	})
+	return result
+}
+
+func measureDifficultyLatency(records []datasetRecord, latencyIterations int) classificationLatencyStats {
+	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
+	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
+	promptClassifier := routing.NewRuleBasedPromptClassifier()
+	categoryLatencies := []float64{}
+	difficultyLatencies := []float64{}
+	totalLatencies := []float64{}
+	for _, record := range records {
+		prompt := record.promptText()
+		categoryResult, sampleCategoryLatencies := classifyCategoryWithLatency(categoryClassifier, prompt, latencyIterations)
+		features := routing.ExtractPromptFeatures(prompt)
+		_, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, features, categoryResult.Category, latencyIterations)
+		sampleTotalLatencies := classifyTotalWithLatency(promptClassifier, prompt, latencyIterations)
+		categoryLatencies = append(categoryLatencies, sampleCategoryLatencies...)
+		difficultyLatencies = append(difficultyLatencies, sampleDifficultyLatencies...)
+		totalLatencies = append(totalLatencies, sampleTotalLatencies...)
+	}
+	return classificationLatencyStats{
 		Unit:       "microseconds",
 		Category:   summarizeLatency(categoryLatencies, latencyIterations),
 		Difficulty: summarizeLatency(difficultyLatencies, latencyIterations),
 		Total:      summarizeLatency(totalLatencies, latencyIterations),
 	}
-	return result
 }
 
-func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (string, []float64) {
+func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (routing.DifficultyResult, []float64) {
 	latencies := make([]float64, 0, iterations)
-	actual := ""
+	var actual routing.DifficultyResult
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
 		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
-		actual = classifier.ClassifyFeatures(difficultyFeatures).Difficulty
+		actual = classifier.ClassifyFeatures(difficultyFeatures)
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
 	return actual, latencies
+}
+
+func splitDifficultyRecords(records []datasetRecord) ([]datasetRecord, []datasetRecord, difficultySplitSummary) {
+	familiesByCell := map[string]map[string]bool{}
+	for _, record := range records {
+		cell := strings.TrimSpace(record.ExpectedCategory) + "/" + strings.TrimSpace(record.ExpectedDifficulty)
+		if familiesByCell[cell] == nil {
+			familiesByCell[cell] = map[string]bool{}
+		}
+		familiesByCell[cell][difficultyFamilyKey(record.expectedID())] = true
+	}
+
+	holdoutFamilies := map[string]bool{}
+	allFamilies := map[string]bool{}
+	for _, familySet := range familiesByCell {
+		families := make([]string, 0, len(familySet))
+		for family := range familySet {
+			families = append(families, family)
+			allFamilies[family] = true
+		}
+		sort.Slice(families, func(left int, right int) bool {
+			leftHash := sha256.Sum256([]byte(families[left]))
+			rightHash := sha256.Sum256([]byte(families[right]))
+			return string(leftHash[:]) < string(rightHash[:])
+		})
+		holdoutCount := 0
+		if len(families) >= 5 {
+			holdoutCount = len(families) / 5
+		}
+		for index := 0; index < holdoutCount; index++ {
+			holdoutFamilies[families[index]] = true
+		}
+	}
+
+	calibration := make([]datasetRecord, 0, len(records))
+	holdout := make([]datasetRecord, 0, len(records)/5)
+	calibrationFamilies := map[string]bool{}
+	for _, record := range records {
+		family := difficultyFamilyKey(record.expectedID())
+		if holdoutFamilies[family] {
+			holdout = append(holdout, record)
+		} else {
+			calibration = append(calibration, record)
+			calibrationFamilies[family] = true
+		}
+	}
+	return calibration, holdout, difficultySplitSummary{
+		Algorithm:           "sha256-lowest-20-percent-per-category-difficulty-cell-v1",
+		FamilyKeyRule:       "expectedCategory/expectedDifficulty/fNN; vNN variants stay together",
+		CalibrationSamples:  len(calibration),
+		HoldoutSamples:      len(holdout),
+		CalibrationFamilies: len(calibrationFamilies),
+		HoldoutFamilies:     len(allFamilies) - len(calibrationFamilies),
+	}
+}
+
+func difficultyFamilyKey(sampleID string) string {
+	parts := strings.Split(sampleID, "_")
+	if len(parts) >= 7 {
+		return strings.Join([]string{parts[1], parts[2], parts[len(parts)-2]}, "/")
+	}
+	if index := strings.LastIndex(sampleID, "_v"); index >= 0 {
+		return sampleID[:index]
+	}
+	return sampleID
+}
+
+func emptyDifficultyScoreBuckets() map[string]int {
+	return map[string]int{
+		"0.0-0.2": 0,
+		"0.2-0.4": 0,
+		"0.4-0.6": 0,
+		"0.6-0.8": 0,
+		"0.8-1.0": 0,
+	}
+}
+
+func difficultyScoreBucket(score float64) string {
+	switch {
+	case score < 0.2:
+		return "0.0-0.2"
+	case score < 0.4:
+		return "0.2-0.4"
+	case score < 0.6:
+		return "0.4-0.6"
+	case score < 0.8:
+		return "0.6-0.8"
+	default:
+		return "0.8-1.0"
+	}
+}
+
+func summarizeScores(scores []float64) scoreDistributionStats {
+	if len(scores) == 0 {
+		return scoreDistributionStats{}
+	}
+	values := append([]float64(nil), scores...)
+	sort.Float64s(values)
+	total := 0.0
+	for _, score := range values {
+		total += score
+	}
+	return scoreDistributionStats{
+		Count: len(values),
+		Min:   round4(values[0]),
+		Avg:   round4(total / float64(len(values))),
+		P50:   round4(percentile(values, 0.50)),
+		P95:   round4(percentile(values, 0.95)),
+		Max:   round4(values[len(values)-1]),
+	}
 }
 
 func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prompt string, iterations int) []float64 {
