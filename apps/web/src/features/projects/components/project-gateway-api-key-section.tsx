@@ -73,23 +73,23 @@ const gatewayApiKeyText: Record<
     title: "Gateway API Key"
   },
   ko: {
-    activeKey: "대표 active key",
-    confirmRotate: "기존 키는 즉시 revoke되고 새 키 원문은 한 번만 표시됩니다.",
+    activeKey: "대표 활성 키",
+    confirmRotate: "기존 키는 즉시 폐기되고 새 키 원문은 한 번만 표시됩니다.",
     created: "생성",
-    credential: "Credential",
+    credential: "인증 정보",
     expiresAt: "만료",
-    fixtureFallback: "Control Plane을 사용할 수 없어 Gateway API Key metadata를 불러올 수 없습니다.",
+    fixtureFallback: "Control Plane을 사용할 수 없어 Gateway API 키 정보를 불러올 수 없습니다.",
     issue: "새 키 발급",
-    issueFailed: "Gateway API Key 발급에 실패했습니다.",
-    issued: "Gateway API Key가 발급되었습니다.",
+    issueFailed: "Gateway API 키 발급에 실패했습니다.",
+    issued: "Gateway API 키가 발급되었습니다.",
     lastUsed: "마지막 사용",
-    noActiveKey: "이 Project에 active Gateway API Key가 없습니다.",
+    noActiveKey: "이 프로젝트에 활성 Gateway API 키가 없습니다.",
     rotate: "키 재발급",
-    rotateFailed: "Gateway API Key 재발급에 실패했습니다.",
-    rotated: "Gateway API Key가 재발급되었습니다.",
-    scopes: "Scopes",
+    rotateFailed: "Gateway API 키 재발급에 실패했습니다.",
+    rotated: "Gateway API 키가 재발급되었습니다.",
+    scopes: "권한 범위",
     status: "상태",
-    title: "Gateway API Key"
+    title: "Gateway API 키"
   }
 };
 

@@ -118,7 +118,11 @@ export function RequestDetailDrawer({
                   ? "요청 상세 정보를 불러올 수 없습니다"
                   : "Request detail unavailable"}
               </strong>
-              <span>{error ?? "요청 상세 정보를 불러오지 못했습니다."}</span>
+              <span>
+                {error ?? (locale === "ko"
+                  ? "요청 상세 정보를 불러오지 못했습니다."
+                  : "Failed to load request detail.")}
+              </span>
             </div>
           ) : null}
           {record ? (

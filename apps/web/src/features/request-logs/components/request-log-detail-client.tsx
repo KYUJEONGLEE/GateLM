@@ -35,8 +35,19 @@ type DetailApiResponse = {
 };
 
 type DetailLoadState = "idle" | "loading" | "ready" | "error";
+type DetailLoadError = "failed" | "not_found";
 
 const emptyRecords: LiveInvocationLogRecord[] = [];
+const detailLoadErrorText: Record<Locale, Record<DetailLoadError, string>> = {
+  en: {
+    failed: "Failed to load request detail.",
+    not_found: "Request detail was not found."
+  },
+  ko: {
+    failed: "요청 상세 정보를 불러오지 못했습니다.",
+    not_found: "요청 상세 정보를 찾을 수 없습니다."
+  }
+};
 
 export function RequestLogDetailClient({
   initialProjectId,
@@ -68,7 +79,7 @@ export function RequestLogDetailClient({
   const [loadState, setLoadState] = useState<DetailLoadState>(
     initialSelectedRequestId ? (initialRecord ? "ready" : "loading") : "idle"
   );
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<DetailLoadError | null>(null);
 
   const recordsByRequestId = useMemo(() => {
     return new Map(records.map((record) => [record.requestId, record]));
@@ -244,7 +255,7 @@ export function RequestLogDetailClient({
         }
 
         setDetail(undefined);
-        setLoadError("요청 상세 정보를 찾을 수 없습니다.");
+        setLoadError("not_found");
         setLoadState("error");
       })
       .catch(() => {
@@ -259,7 +270,7 @@ export function RequestLogDetailClient({
         }
 
         setDetail(undefined);
-        setLoadError("요청 상세 정보를 불러오지 못했습니다.");
+        setLoadError("failed");
         setLoadState("error");
       });
 
@@ -267,6 +278,8 @@ export function RequestLogDetailClient({
       controller.abort();
     };
   }, [recordsByRequestId, selection.projectId, selection.requestId, tenantId]);
+
+  const loadErrorMessage = loadError ? detailLoadErrorText[locale][loadError] : null;
 
   const record =
     detail ??
@@ -277,7 +290,7 @@ export function RequestLogDetailClient({
   if (variant === "drawer") {
     return selection.requestId ? (
       <RequestDetailDrawer
-        error={loadError}
+        error={loadErrorMessage}
         loadState={loadState}
         locale={locale}
         onClose={() => onClose?.()}

@@ -30,4 +30,3 @@ func TestCategoryEvalFixtureUsesOnlyActiveV2Categories(t *testing.T) {
 		}
 	}
 }
-

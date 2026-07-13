@@ -4,6 +4,7 @@ import { LogIn, LogOut, Route, Send, UserPlus } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
+import { GateLMLogo } from "@/components/brand/gatelm-logo";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { Locale } from "@/lib/i18n/locale";
 import type { WebConsoleAuthPanelProps } from "./web-console-auth-panel";
@@ -872,8 +873,7 @@ export function WebConsoleInitView({
       <nav className="landing-topbar" aria-label="GateLM landing navigation">
         <div className="landing-brand-cluster">
           <Link className="landing-brand" href="/" aria-label="GateLM home">
-            <span className="landing-brand-mark">G</span>
-            <strong>GateLM</strong>
+            <GateLMLogo surface="light" />
           </Link>
           {authStatus === "authenticated" ? (
             <Link className="landing-auth-button landing-gateway-request-button" href="/application">

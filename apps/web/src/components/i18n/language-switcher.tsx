@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import {
@@ -15,6 +16,10 @@ type LanguageSwitcherProps = {
 };
 
 const cookieMaxAgeSeconds = 60 * 60 * 24 * 365;
+const localeActionLabels: Record<Locale, string> = {
+  en: "Switch console language to English",
+  ko: "콘솔 언어를 한국어로 변경"
+};
 
 export function LanguageSwitcher({ ariaLabel, locale }: LanguageSwitcherProps) {
   const router = useRouter();
@@ -34,20 +39,26 @@ export function LanguageSwitcher({ ariaLabel, locale }: LanguageSwitcherProps) {
   }
 
   return (
-    <div className="language-switcher" aria-label={ariaLabel}>
-      {supportedLocales.map((item) => (
-        <button
-          aria-pressed={item === locale}
-          className="language-option"
-          data-active={item === locale}
-          disabled={isPending}
-          key={item}
-          onClick={() => selectLocale(item)}
-          type="button"
-        >
-          {localeLabels[item]}
-        </button>
-      ))}
+    <div className="language-switcher" aria-label={ariaLabel} role="group">
+      {supportedLocales.map((item) => {
+        const isActive = item === locale;
+
+        return (
+          <button
+            aria-label={localeActionLabels[item]}
+            aria-pressed={isActive}
+            className="language-option"
+            data-active={isActive}
+            disabled={isPending}
+            key={item}
+            onClick={() => selectLocale(item)}
+            type="button"
+          >
+            <span>{localeLabels[item]}</span>
+            {isActive ? <Check aria-hidden="true" className="language-option-check" /> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

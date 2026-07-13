@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DashboardCostOverTimeEChart } from "@/features/dashboard/components/dashboard-echarts";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
+import type { Locale } from "@/lib/i18n/locale";
 
 const COST_OVER_TIME_POLLING_INTERVAL_MS = 3000;
 const COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS = 10000;
@@ -23,16 +24,44 @@ type CostOverTimeCardFilters = {
 type CostOverTimeCardProps = {
   filters: CostOverTimeCardFilters;
   initialSummary?: CostOverTimeSummary;
+  locale: Locale;
   rangeLabel: string;
 };
 
 type CostOverTimeStatus = "loading" | "success" | "error";
 
+const costOverTimeText = {
+  en: {
+    aria: "Cost over time",
+    average: "Average",
+    chartAria: "Cost over time chart",
+    empty: "No cost data for selected range",
+    error: "Failed to load cost data",
+    loading: "Loading cost data",
+    spend: "Spend (USD)",
+    subtitle: "Hourly cost trend",
+    title: "Cost Over Time"
+  },
+  ko: {
+    aria: "시간별 비용",
+    average: "평균",
+    chartAria: "시간별 비용 차트",
+    empty: "선택한 기간에 비용 데이터가 없습니다",
+    error: "비용 데이터를 불러오지 못했습니다",
+    loading: "비용 데이터 불러오는 중",
+    spend: "사용 비용(USD)",
+    subtitle: "시간별 비용 추이",
+    title: "시간별 비용"
+  }
+} as const;
+
 export function CostOverTimeCard({
   filters,
   initialSummary,
+  locale,
   rangeLabel
 }: CostOverTimeCardProps) {
+  const text = costOverTimeText[locale];
   const {
     budgetScopeId,
     budgetScopeType,
@@ -201,31 +230,31 @@ export function CostOverTimeCard({
   }, [normalizedInitialSummary, queryString]);
 
   return (
-    <section className="dashboard-cost-over-time-panel" aria-label="Cost over time">
+    <section className="dashboard-cost-over-time-panel" aria-label={text.aria}>
       <div className="dashboard-cost-over-time-header">
         <div>
-          <h2>Cost Over Time</h2>
-          <p>시간별 비용 추이</p>
+          <h2>{text.title}</h2>
+          <p>{text.subtitle}</p>
         </div>
-        <span>{formatCostGranularity(summary)}</span>
+        <span>{formatCostGranularity(summary, locale)}</span>
       </div>
       <div className="dashboard-cost-over-time-legend">
-        <span data-kind="spend">Spend (USD)</span>
-        <span data-kind="average">Average: {formatUsd(summary?.averageSpendUsd ?? 0)}</span>
+        <span data-kind="spend">{text.spend}</span>
+        <span data-kind="average">{text.average}: {formatUsd(summary?.averageSpendUsd ?? 0)}</span>
         <strong>{rangeLabel}</strong>
       </div>
       {status === "loading" && !summary ? (
-        <div className="dashboard-cost-over-time-skeleton" aria-label="Loading cost data" />
+        <div className="dashboard-cost-over-time-skeleton" aria-label={text.loading} />
       ) : status === "error" && !summary ? (
-        <div className="dashboard-cost-over-time-state">Failed to load cost data</div>
+        <div className="dashboard-cost-over-time-state">{text.error}</div>
       ) : hasCostData && summary ? (
         <DashboardCostOverTimeEChart
-          ariaLabel="Cost over time chart"
+          ariaLabel={text.chartAria}
           averageSpendUsd={summary.averageSpendUsd}
           points={summary.points}
         />
       ) : (
-        <div className="dashboard-cost-over-time-state">No cost data for selected range</div>
+        <div className="dashboard-cost-over-time-state">{text.empty}</div>
       )}
     </section>
   );
@@ -262,12 +291,16 @@ function formatUsd(value: number) {
   }).format(Number.isFinite(value) ? value : 0);
 }
 
-function formatCostGranularity(summary: CostOverTimeSummary | undefined) {
+function formatCostGranularity(summary: CostOverTimeSummary | undefined, locale: Locale) {
   if (summary?.bucketInterval === "7s") {
-    return "7-second";
+    return locale === "ko" ? "7초 단위" : "7-second";
   }
 
-  return summary?.period === "day" ? "Daily" : "Hourly";
+  if (summary?.period === "day") {
+    return locale === "ko" ? "일간" : "Daily";
+  }
+
+  return locale === "ko" ? "시간별" : "Hourly";
 }
 
 function normalizeCostOverTimeSummary(summary: CostOverTimeSummary | undefined): CostOverTimeSummary | undefined {
