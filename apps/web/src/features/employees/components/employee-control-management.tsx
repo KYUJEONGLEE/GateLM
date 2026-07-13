@@ -124,7 +124,6 @@ const employeeText: Record<
     import: string;
     imported: string;
     invitation: string;
-    inviteLink: string;
     inviteAll: string;
     inviteResend: string;
     inviteSend: string;
@@ -166,17 +165,16 @@ const employeeText: Record<
     disable: "Disable",
     editDepartment: "Edit department",
     email: "Email",
-    employeeAddTitle: "Individual invite",
+    employeeAddTitle: "Individual Chat invite",
     employees: "Employees",
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     import: "Import",
     imported: "Imported",
-    invitation: "Invite",
-    inviteLink: "Invitation link",
-    inviteAll: "Invite all",
-    inviteResend: "Resend",
-    inviteSend: "Send invite",
-    inviteSent: "Invitation email sent.",
+    invitation: "Chat invite",
+    inviteAll: "Send Chat invites",
+    inviteResend: "Resend Chat invite",
+    inviteSend: "Send Chat invite",
+    inviteSent: "Chat invitation email sent.",
     name: "Name",
     next: "Next",
     noAssignments: "No project employees.",
@@ -213,17 +211,16 @@ const employeeText: Record<
     disable: "비활성화",
     editDepartment: "부서 설정",
     email: "이메일",
-    employeeAddTitle: "개별 초대",
+    employeeAddTitle: "개별 Chat 초대",
     employees: "직원",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
     import: "등록",
     imported: "등록됨",
-    invitation: "초대",
-    inviteLink: "초대 링크",
-    inviteAll: "일괄 초대",
-    inviteResend: "재발송",
-    inviteSend: "초대 메일 보내기",
-    inviteSent: "초대 메일을 발송했습니다.",
+    invitation: "Chat 초대",
+    inviteAll: "Chat 초대 일괄 발송",
+    inviteResend: "Chat 초대 재발송",
+    inviteSend: "Chat 초대 보내기",
+    inviteSent: "Chat 초대 메일을 발송했습니다.",
     name: "이름",
     next: "다음",
     noAssignments: "Project에 배정된 직원이 없습니다.",
@@ -1300,7 +1297,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   const [createValues, setCreateValues] = useState<EmployeeCreateValues>(emptyCreateValues);
   const [departmentEmployee, setDepartmentEmployee] = useState<EmployeeRecord | null>(null);
   const [departmentValue, setDepartmentValue] = useState("");
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
   const [sortState, setSortState] = useState<{
     direction: EmployeeSortDirection;
     field: EmployeeSortField;
@@ -1414,7 +1410,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
 
     setPendingAction("importCsv");
     setSubmitState({ message: "", status: "idle" });
-    setLastInviteUrl(null);
 
     const response = await fetch("/api/control-plane/employees", {
       body: JSON.stringify({
@@ -1503,7 +1498,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
 
     mergeEmployees([invitation.employee]);
     setCreateValues(emptyCreateValues);
-    setLastInviteUrl(invitation.signupUrl);
     setPageIndex(0);
     setSubmitState({ message: text.inviteSent, status: "success" });
     setPendingAction(null);
@@ -1514,7 +1508,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   async function sendInviteForEmployee(employee: EmployeeRecord) {
     setPendingAction(`invite:${employee.id}`);
     setSubmitState({ message: "", status: "idle" });
-    setLastInviteUrl(null);
 
     const invitation = await requestEmployeeInvitation(employee.id);
     if (!invitation) {
@@ -1523,7 +1516,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     }
 
     mergeEmployees([invitation.employee]);
-    setLastInviteUrl(invitation.signupUrl);
     setSubmitState({ message: text.inviteSent, status: "success" });
     setPendingAction(null);
     router.refresh();
@@ -1593,7 +1585,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
 
     setPendingAction("inviteAll");
     setSubmitState({ message: "", status: "idle" });
-    setLastInviteUrl(null);
 
     const invitations: EmployeeInvitationResult[] = [];
     let failedCount = 0;
@@ -1701,7 +1692,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   function openEmployeeAddDialog() {
     setAddMethod("csv");
     setSubmitState({ message: "", status: "idle" });
-    setLastInviteUrl(null);
     setIsAddDialogOpen(true);
   }
 
@@ -1771,14 +1761,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
       ) : null}
-      {!isAddDialogOpen && lastInviteUrl ? (
-        <Alert variant="success">
-          <AlertDescription>
-            {text.inviteLink}: <a href={lastInviteUrl}>{lastInviteUrl}</a>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       <section className="employee-list-section">
         <div className="employee-list-toolbar employee-list-actions">
           <Button

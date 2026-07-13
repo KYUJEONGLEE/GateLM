@@ -14,6 +14,7 @@ import {
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
+  EmployeeInvitationExistingAccountError,
   EmployeeInvitationNotFoundError,
   EmailVerificationCode,
   OAuthAccount,
@@ -60,60 +61,30 @@ export class PrismaAuthRepository implements AuthRepository {
           email: input.email,
         },
       });
-      const user = existingUser
-        ? await tx.user.update({
-            data: {
-              authProvider: 'local',
-              emailVerifiedAt: input.acceptedAt,
-              name: input.name ?? existingUser.name,
-              passwordHash: input.passwordHash,
-              status: 'active',
-            },
-            where: { id: existingUser.id },
-          })
-        : await tx.user.create({
-            data: {
-              authProvider: 'local',
-              email: input.email,
-              emailVerifiedAt: input.acceptedAt,
-              name: input.name,
-              passwordHash: input.passwordHash,
-              status: 'active',
-            },
-          });
+      if (existingUser) {
+        throw new EmployeeInvitationExistingAccountError();
+      }
+      const user = await tx.user.create({
+        data: {
+          authProvider: 'local',
+          email: input.email,
+          emailVerifiedAt: input.acceptedAt,
+          name: input.name,
+          passwordHash: input.passwordHash,
+          status: 'active',
+        },
+      });
 
-      const existingMembership = await tx.tenantMembership.findFirst({
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        where: {
+      const membership = await tx.tenantMembership.create({
+        data: {
+          joinedAt: input.acceptedAt,
+          role: 'employee',
+          status: 'active',
           tenantId: employee.tenantId,
           userId: user.id,
         },
+        include: { tenant: true },
       });
-      const membership = existingMembership
-        ? await tx.tenantMembership.update({
-            data: {
-              deletedAt: null,
-              joinedAt: input.acceptedAt,
-              role: 'employee',
-              status: 'active',
-            },
-            include: {
-              tenant: true,
-            },
-            where: { id: existingMembership.id },
-          })
-        : await tx.tenantMembership.create({
-            data: {
-              joinedAt: input.acceptedAt,
-              role: 'employee',
-              status: 'active',
-              tenantId: employee.tenantId,
-              userId: user.id,
-            },
-            include: {
-              tenant: true,
-            },
-          });
 
       const acceptedEmployee = await tx.employee.update({
         data: {

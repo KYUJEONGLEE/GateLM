@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { projectPillTone } from "./components/live-requests-view";
+import { projectPillTone } from "./live-requests-format";
 
 test("returns a stable project pill tone when project identifiers are missing", () => {
   const missingTone = projectPillTone(undefined);

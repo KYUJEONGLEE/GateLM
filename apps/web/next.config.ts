@@ -9,6 +9,7 @@ const useStandaloneOutput =
 const nextConfig: NextConfig = {
   ...(useStandaloneOutput ? { output: "standalone" as const } : {}),
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
+  transpilePackages: ["@gatelm/web-bff"],
   reactStrictMode: true
 };
 

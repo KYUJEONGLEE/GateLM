@@ -14,7 +14,7 @@
 Browser
 -> chat-web BFF
 -> chat-api user access/session/CSRF 검증
--> DB에서 User/Tenant/Membership/Employee entitlement 검증
+-> Control Plane private API에서 User/Tenant/Membership/Employee entitlement 검증
 -> employeeNoticeVersion ack 검증
 -> tenant-only RuntimeSnapshot exact pin
 -> POST private Gateway /admissions + workload JWT
@@ -139,7 +139,7 @@ Machine-readable shape: `../schemas/gateway-request-context.schema.json`.
 | Component | Owns | Does not own |
 |---|---|---|
 | Control Plane DB | User, Tenant, Membership, Employee status/link/version | per-request Provider execution |
-| Chat API | 매 요청 authoritative entitlement/session check, workload JWT 발급 | browser scope 신뢰 |
+| Chat API | 자체 session check와 매 요청 Control Plane entitlement 호출, workload JWT 발급 | browser scope 신뢰, Control Plane identity table 직접 조회 |
 | Gateway | workload JWT, phase/body/admission/snapshot/replay 검증 | Employee 재조회/정규화, user login |
 
 Rules:

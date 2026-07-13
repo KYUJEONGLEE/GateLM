@@ -1,0 +1,27 @@
+{
+  "sessionId": "00000000-0000-4000-8000-000000000501",
+  "state": "authenticated",
+  "sessionVersion": 1,
+  "accessExpiresAt": "2026-07-13T00:05:00.000Z",
+  "refreshExpiresAt": "2026-08-12T00:00:00.000Z",
+  "csrfRequired": true,
+  "user": {
+    "id": "00000000-0000-4000-8000-000000000101",
+    "email": "employee@example.test",
+    "name": "Demo Employee"
+  },
+  "selectedTenant": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "name": "Demo Tenant",
+    "actorKind": "employee",
+    "employeeId": "00000000-0000-4000-8000-000000000301"
+  },
+  "tenants": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "Demo Tenant",
+      "actorKind": "employee",
+      "employeeId": "00000000-0000-4000-8000-000000000301"
+    }
+  ]
+}

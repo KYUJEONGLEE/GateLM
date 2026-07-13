@@ -17,6 +17,7 @@ import { ProjectAdminsModule } from './modules/project-admins/project-admins.mod
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
 import { TeamsModule } from './modules/teams/teams.module';
+import { TenantChatIdentityModule } from './modules/tenant-chat-identity/tenant-chat-identity.module';
 import { TenantChatRuntimeModule } from './modules/tenant-chat-runtime/tenant-chat-runtime.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
@@ -42,6 +43,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     RuntimeConfigsModule,
     TenantChatRuntimeModule,
     TeamsModule,
+    TenantChatIdentityModule,
     HealthModule,
   ],
 })

@@ -25,6 +25,7 @@ import {
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
+  EmployeeInvitationExistingAccountError,
   EmployeeInvitationNotFoundError,
 } from './auth.repository';
 import { AUTH_REPOSITORY, EMAIL_SENDER, GOOGLE_OAUTH_CLIENT } from './auth.tokens';
@@ -161,6 +162,11 @@ export class AuthService {
           tokenHash: hashSecret(dto.employeeInviteToken),
         });
       } catch (error) {
+        if (error instanceof EmployeeInvitationExistingAccountError) {
+          throw new ConflictException(
+            'Sign in to the existing account before accepting this employee invitation.',
+          );
+        }
         if (error instanceof EmployeeInvitationNotFoundError) {
           throw new UnauthorizedException('Invalid or expired employee invitation.');
         }
