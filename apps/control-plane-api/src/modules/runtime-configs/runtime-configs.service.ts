@@ -1377,14 +1377,21 @@ export class RuntimeConfigsService {
     const providerNames = new Set(
       providers.map((provider) => provider.provider),
     );
+    const hasRegisteredMockProvider = providerNames.has(
+      BUILTIN_MOCK_PROVIDER_NAME,
+    );
 
     if (dtoModels?.length) {
       const modelKeys = new Set<string>();
       for (const model of dtoModels) {
-        const isBuiltinMockModel =
+        const isInjectedBuiltinMockModel =
+          !hasRegisteredMockProvider &&
           model.provider === BUILTIN_MOCK_PROVIDER_NAME &&
           model.model === BUILTIN_MOCK_MODEL_REF;
-        if (!isBuiltinMockModel && !providerNames.has(model.provider)) {
+        if (
+          !isInjectedBuiltinMockModel &&
+          !providerNames.has(model.provider)
+        ) {
           throw new ConflictException(
             'Runtime Config model provider is not registered.',
           );
@@ -1402,6 +1409,7 @@ export class RuntimeConfigsService {
       const models = dtoModels
         .filter(
           (model) =>
+            hasRegisteredMockProvider ||
             model.provider !== BUILTIN_MOCK_PROVIDER_NAME ||
             model.model !== BUILTIN_MOCK_MODEL_REF,
         )

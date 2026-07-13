@@ -304,6 +304,51 @@ describe('RuntimeConfigsService', () => {
     );
   });
 
+  it('preserves custom mock-balanced settings for a registered mock provider', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {
+      models: [
+        {
+          provider: 'mock',
+          model: 'mock-balanced',
+          displayName: 'Custom Mock Balanced',
+          status: 'active',
+          contextWindowTokens: 32768,
+          supportsStreaming: true,
+          supportsJsonMode: true,
+        },
+      ],
+      routingPolicy: {
+        mode: 'auto',
+        routes: routingRoutes('mock-balanced'),
+      },
+    });
+
+    expect(result.runtimeConfig.models).toEqual([
+      {
+        provider: 'mock',
+        model: 'mock-balanced',
+        displayName: 'Custom Mock Balanced',
+        status: 'active',
+        contextWindowTokens: 32768,
+        supportsStreaming: true,
+        supportsJsonMode: true,
+      },
+    ]);
+    expect(result.runtimeConfig.providers).toContainEqual(
+      expect.objectContaining({
+        provider: 'mock',
+        models: ['mock-balanced'],
+      }),
+    );
+  });
+
   it('publishes a resolvable built-in mock target when a tenant only has real providers', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
