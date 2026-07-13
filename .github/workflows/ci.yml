@@ -74,6 +74,10 @@ jobs:
 
           echo "Repository sanity check passed."
 
+      - name: Verify production deployment automation
+        shell: bash
+        run: bash deploy/aws-triage/scripts/tests/deploy-main-test.sh
+
   application-verification:
     name: application verification
     runs-on: ubuntu-latest
