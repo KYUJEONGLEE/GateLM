@@ -28,11 +28,12 @@ export async function GET() {
     setIssuedCookies(response, issued);
     return response;
   } catch (error) {
+    const known = error instanceof UpstreamResponseError;
     const response = NextResponse.json(
-      error instanceof UpstreamResponseError ? error.payload : { code: 'CHAT_AUTH_REQUIRED', message: '로그인이 필요합니다.' },
-      { headers: { 'cache-control': 'no-store' }, status: error instanceof UpstreamResponseError ? error.status : 401 },
+      known ? error.payload : { code: 'CHAT_INTERNAL_ERROR', message: '요청을 처리하지 못했습니다.' },
+      { headers: { 'cache-control': 'no-store' }, status: known ? error.status : 500 },
     );
-    clearAuthCookies(response);
+    if (known && (error.status === 401 || error.status === 403)) clearAuthCookies(response);
     return response;
   }
 }

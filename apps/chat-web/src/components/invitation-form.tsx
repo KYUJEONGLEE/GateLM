@@ -11,7 +11,10 @@ import { api, startGoogle } from '@/lib/browser-api';
 export function InvitationForm() {
   const router = useRouter(); const params = useSearchParams();
   const [invite, setInvite] = useState<InvitationSummary | null>(null);
-  const [error, setError] = useState(params.get('error') === 'invalid' ? '초대 링크가 올바르지 않거나 만료되었습니다.' : '');
+  const entryError = params.get('error');
+  const [error, setError] = useState(entryError === 'invalid'
+    ? '초대 링크가 올바르지 않거나 만료되었습니다.'
+    : entryError === 'unavailable' ? '초대 확인 서비스에 잠시 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.' : '');
   const [busy, setBusy] = useState(true);
   useEffect(() => { api<InvitationSummary>('/api/tenant-chat/invitations/resolve').then(setInvite).catch((reason) => setError(reason instanceof Error ? reason.message : '초대를 확인하지 못했습니다.')).finally(() => setBusy(false)); }, []);
 

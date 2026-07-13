@@ -136,7 +136,10 @@ export class SessionService {
     if (!existing || existing.expiresAt <= new Date() || existing.session.expiresAt <= new Date()) {
       this.fail(HttpStatus.UNAUTHORIZED, 'CHAT_AUTH_REQUIRED', 'The Chat session has expired.');
     }
-    if (existing.consumedAt || existing.revokedAt || existing.session.revokedAt) {
+    if (existing.session.revokedAt) {
+      this.fail(HttpStatus.UNAUTHORIZED, 'CHAT_AUTH_REQUIRED', 'The Chat session has been revoked.');
+    }
+    if (existing.consumedAt || existing.revokedAt) {
       await this.revokeForReuse(existing.familyId, existing.sessionId);
       this.fail(
         HttpStatus.UNAUTHORIZED,
@@ -382,8 +385,8 @@ export class SessionService {
         where: { familyId, revokedAt: null },
         data: { revokedAt: now },
       }),
-      this.prisma.tenantChatSession.update({
-        where: { id: sessionId },
+      this.prisma.tenantChatSession.updateMany({
+        where: { id: sessionId, revokedAt: null },
         data: {
           revokeReason: 'refresh_reuse',
           revokedAt: now,

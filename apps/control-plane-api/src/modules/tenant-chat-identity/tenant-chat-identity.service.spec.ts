@@ -58,4 +58,42 @@ describe('TenantChatIdentityService', () => {
       status: 503,
     });
   });
+
+  it('loads employee entitlements in one bounded query', async () => {
+    const memberships = [
+      {
+        createdAt: new Date('2026-01-01T00:00:00.000Z'), deletedAt: null, id: 'membership-a', role: 'employee', status: 'active',
+        tenant: { authzVersion: 2, id: 'tenant-a', name: '조직 A', status: 'ACTIVE' }, tenantId: 'tenant-a', userId: 'user-id',
+      },
+      {
+        createdAt: new Date('2026-01-02T00:00:00.000Z'), deletedAt: null, id: 'membership-b', role: 'employee', status: 'active',
+        tenant: { authzVersion: 3, id: 'tenant-b', name: '조직 B', status: 'ACTIVE' }, tenantId: 'tenant-b', userId: 'user-id',
+      },
+      {
+        createdAt: new Date('2026-01-03T00:00:00.000Z'), deletedAt: null, id: 'membership-c', role: 'tenant_admin', status: 'active',
+        tenant: { authzVersion: 4, id: 'tenant-c', name: '조직 C', status: 'ACTIVE' }, tenantId: 'tenant-c', userId: 'user-id',
+      },
+    ];
+    const employeeFindMany = jest.fn().mockResolvedValue([
+      { id: 'employee-a', tenantId: 'tenant-a' },
+      { id: 'employee-b', tenantId: 'tenant-b' },
+    ]);
+    const prisma = {
+      employee: { findMany: employeeFindMany },
+      tenantMembership: { findMany: jest.fn().mockResolvedValue(memberships) },
+      user: { findUnique: jest.fn().mockResolvedValue({ actorAuthzVersion: 5, deletedAt: null, email: 'user@example.test', id: 'user-id', name: '사용자', status: 'active' }) },
+    };
+
+    const result = await makeService(prisma).getEntitlements('user-id');
+
+    expect(employeeFindMany).toHaveBeenCalledTimes(1);
+    expect(employeeFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ tenantId: { in: ['tenant-a', 'tenant-b'] }, userId: 'user-id' }),
+    }));
+    expect(result.tenants).toEqual(expect.arrayContaining([
+      expect.objectContaining({ actorKind: 'employee', employeeId: 'employee-a', tenantId: 'tenant-a' }),
+      expect.objectContaining({ actorKind: 'employee', employeeId: 'employee-b', tenantId: 'tenant-b' }),
+      expect.objectContaining({ actorKind: 'tenant_admin', employeeId: null, tenantId: 'tenant-c' }),
+    ]));
+  });
 });

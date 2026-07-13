@@ -72,7 +72,7 @@ describe('SessionService', () => {
         findUnique: jest.fn().mockResolvedValue(refreshRow),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      tenantChatSession: { findUnique: jest.fn().mockResolvedValue(session), update: jest.fn().mockResolvedValue(session) },
+      tenantChatSession: { findUnique: jest.fn().mockResolvedValue(session), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     prisma.$transaction = jest.fn(async (value: unknown) => {
       if (Array.isArray(value)) return Promise.all(value);
@@ -87,6 +87,37 @@ describe('SessionService', () => {
     const sessions = service(prisma, controlPlane);
     expect((await sessions.refresh('first-refresh-token')).refreshToken).toBeDefined();
     await expect(sessions.refresh('first-refresh-token')).rejects.toBeInstanceOf(HttpException);
-    expect(prisma.tenantChatSession.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ revokeReason: 'refresh_reuse' }) }));
+    expect(prisma.tenantChatSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ revokeReason: 'refresh_reuse' }),
+      where: { id: session.id, revokedAt: null },
+    }));
+  });
+
+  it('preserves the original reason when a session was already revoked', async () => {
+    const revokedSession = { ...session, revokeReason: 'logout', revokedAt: now };
+    const prisma = {
+      tenantChatRefreshToken: {
+        findUnique: jest.fn().mockResolvedValue({
+          consumedAt: null,
+          expiresAt: future,
+          familyId: '00000000-0000-4000-8000-000000000070',
+          id: '00000000-0000-4000-8000-000000000071',
+          revokedAt: now,
+          session: revokedSession,
+          sessionId: session.id,
+        }),
+        updateMany: jest.fn(),
+      },
+      tenantChatSession: { updateMany: jest.fn() },
+    };
+    const controlPlane = { entitlements: jest.fn() };
+
+    await expect(service(prisma, controlPlane).refresh('revoked-refresh-token')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CHAT_AUTH_REQUIRED' }),
+      status: 401,
+    });
+    expect(prisma.tenantChatSession.updateMany).not.toHaveBeenCalled();
+    expect(prisma.tenantChatRefreshToken.updateMany).not.toHaveBeenCalled();
+    expect(controlPlane.entitlements).not.toHaveBeenCalled();
   });
 });

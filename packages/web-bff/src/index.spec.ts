@@ -1,4 +1,4 @@
-import { assertCsrf, assertSameOrigin, proxyHttp, readJsonBody, UpstreamResponseError } from './index';
+import { assertCsrf, assertSameOrigin, callJson, proxyHttp, readJsonBody, UpstreamResponseError } from './index';
 
 describe('web BFF security helpers', () => {
   it('requires exact origin and matching double-submit CSRF', () => {
@@ -41,6 +41,25 @@ describe('web BFF security helpers', () => {
       });
       expect(response.status).toBe(413);
       expect(response.headers.get('cache-control')).toBe('no-store');
+    } finally { global.fetch = originalFetch; }
+  });
+
+  it('maps an upstream timeout to a retryable service error', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockImplementation((_url, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+    try {
+      await expect(callJson({
+        method: 'GET',
+        serviceHeaderName: 'x-service-token',
+        serviceToken: 'test-token',
+        timeoutMs: 1,
+        url: 'https://upstream.example.test/session',
+      })).rejects.toMatchObject({
+        payload: expect.objectContaining({ code: 'CHAT_UPSTREAM_UNAVAILABLE' }),
+        status: 503,
+      });
     } finally { global.fetch = originalFetch; }
   });
 });

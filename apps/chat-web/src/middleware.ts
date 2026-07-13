@@ -17,24 +17,31 @@ export async function middleware(request: NextRequest) {
         },
         method: 'POST',
         redirect: 'manual',
+        signal: AbortSignal.timeout(2_000),
       });
       const payload = await response.json() as { intent?: unknown };
-      if (!response.ok || typeof payload.intent !== 'string') throw new Error('invalid');
+      if (!response.ok || typeof payload.intent !== 'string') {
+        return invitationErrorRedirect(request, cleanUrl, response.status >= 500 ? 'unavailable' : 'invalid');
+      }
       const redirect = NextResponse.redirect(cleanUrl, 303);
       redirect.cookies.set(INVITATION_COOKIE, payload.intent, shortCookie(15 * 60));
       ensureCsrf(request, redirect);
       return redirect;
     } catch {
-      cleanUrl.searchParams.set('error', 'invalid');
-      const redirect = NextResponse.redirect(cleanUrl, 303);
-      ensureCsrf(request, redirect);
-      return redirect;
+      return invitationErrorRedirect(request, cleanUrl, 'unavailable');
     }
   }
 
   const response = NextResponse.next();
   ensureCsrf(request, response);
   return response;
+}
+
+function invitationErrorRedirect(request: NextRequest, cleanUrl: URL, error: 'invalid' | 'unavailable') {
+  cleanUrl.searchParams.set('error', error);
+  const redirect = NextResponse.redirect(cleanUrl, 303);
+  ensureCsrf(request, redirect);
+  return redirect;
 }
 
 function ensureCsrf(request: NextRequest, response: NextResponse) {

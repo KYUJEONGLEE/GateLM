@@ -278,21 +278,30 @@ export class TenantChatIdentityService {
       include: { tenant: true },
       orderBy: { createdAt: 'asc' },
     });
+    const employeeTenantIds = memberships
+      .filter((membership) => membership.role !== 'tenant_admin' && membership.tenant.status === 'ACTIVE')
+      .map((membership) => membership.tenantId);
+    const employees = employeeTenantIds.length > 0
+      ? await db.employee.findMany({
+          where: {
+            deletedAt: null,
+            status: 'active',
+            tenantId: { in: employeeTenantIds },
+            userId,
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, tenantId: true },
+        })
+      : [];
+    const employeesByTenantId = new Map<string, (typeof employees)[number]>();
+    for (const employee of employees) {
+      if (!employeesByTenantId.has(employee.tenantId)) employeesByTenantId.set(employee.tenantId, employee);
+    }
     const result: Array<Record<string, unknown>> = [];
     for (const membership of memberships) {
       if (membership.tenant.status !== 'ACTIVE') continue;
       const actorKind = membership.role === 'tenant_admin' ? 'tenant_admin' : 'employee';
-      const employee =
-        actorKind === 'employee'
-          ? await db.employee.findFirst({
-              where: {
-                deletedAt: null,
-                status: 'active',
-                tenantId: membership.tenantId,
-                userId,
-              },
-            })
-          : null;
+      const employee = actorKind === 'employee' ? employeesByTenantId.get(membership.tenantId) : undefined;
       if (actorKind === 'employee' && !employee) continue;
       result.push({
         actorAuthzVersion: actor.actorAuthzVersion,
