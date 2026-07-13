@@ -210,7 +210,7 @@ const shellText: Record<
     landing: "Landing",
     light: "Light",
     planned: "planned",
-    settings: "Tenant settings",
+    settings: "Settings",
     tenant: "tenant",
     theme: "Theme"
   },
@@ -222,7 +222,7 @@ const shellText: Record<
     language: "콘솔 언어",
     light: "라이트",
     planned: "예정",
-    settings: "테넌트 설정",
+    settings: "설정",
     tenant: "테넌트",
     theme: "테마"
   }
@@ -390,10 +390,13 @@ export function ConsoleShell({
       if (child.disabled || !child.path) {
         return (
           <span
+            aria-label={childLabel}
             aria-disabled="true"
             className="console-subnav-link"
             data-disabled="true"
+            data-tooltip={childLabel}
             key={child.item}
+            title={childLabel}
           >
             <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
             <span>{childLabel}</span>
@@ -405,12 +408,16 @@ export function ConsoleShell({
 
       return (
         <IntentPrefetchLink
+          aria-label={childLabel}
           aria-current={isChildActive(child) ? "page" : undefined}
           className="console-subnav-link"
           data-active={isChildActive(child)}
+          data-tooltip={childLabel}
           href={child.path(tenantId)}
+          intentPrefetch={!isSidebarCollapsed}
           key={child.item}
           onClick={closeMobileNavigation}
+          title={childLabel}
         >
           <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
           <span>{childLabel}</span>
@@ -480,7 +487,9 @@ export function ConsoleShell({
         </div>
 
         <Link
+          aria-label={text.landing}
           className="console-landing-link"
+          data-tooltip={text.landing}
           href="/?view=landing"
           onClick={closeMobileNavigation}
           title={text.landing}
@@ -489,7 +498,7 @@ export function ConsoleShell({
           <span>{text.landing}</span>
         </Link>
 
-        <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
+        <nav className="console-nav">
           {navigationItems.map((item) => {
             const label = item.labels[locale];
             const SectionIcon = sectionIcons[item.section];
@@ -568,61 +577,20 @@ export function ConsoleShell({
             );
           })}
         </div>
-        <div className="console-sidebar-tenant-wrap" aria-hidden={isSidebarCollapsed}>
-          <div className="console-sidebar-tenant">
-            <strong>{tenantLabel}</strong>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label={text.settings}
-                className="console-sidebar-settings-button"
-                title={text.settings}
-              >
-                <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                aria-label={text.settings}
-                className="console-sidebar-settings-popover"
-                side="top"
-                sideOffset={8}
-              >
-                <div className="console-sidebar-settings-row">
-                  <span>{text.language}</span>
-                  <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-                </div>
-                <div className="console-sidebar-settings-row">
-                  <span>{text.theme}</span>
-                  <div className="theme-segmented-control" data-density="compact">
-                    <button
-                      data-active={theme === "light"}
-                      onClick={() => selectTheme("light")}
-                      type="button"
-                    >
-                      {text.light}
-                    </button>
-                    <button
-                      data-active={theme === "dark"}
-                      onClick={() => selectTheme("dark")}
-                      type="button"
-                    >
-                      {text.dark}
-                    </button>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
       </aside>
 
       <div className="console-main">
         <ConsoleTopbarActions
           currentUser={currentUser}
           isLoggingOut={isLoggingOut}
+          locale={locale}
           notifications={notifications}
           onLogout={logout}
           onMarkAllNotificationsRead={markAllNotificationsRead}
+          onSelectTheme={selectTheme}
           tenantLabel={tenantLabel}
+          text={text}
+          theme={theme}
           unreadNotificationCount={unreadNotificationCount}
         />
         {children}
@@ -634,18 +602,26 @@ export function ConsoleShell({
 function ConsoleTopbarActions({
   currentUser,
   isLoggingOut,
+  locale,
   notifications,
   onLogout,
   onMarkAllNotificationsRead,
+  onSelectTheme,
   tenantLabel,
+  text,
+  theme,
   unreadNotificationCount
 }: {
   currentUser: CurrentUser | null;
   isLoggingOut: boolean;
+  locale: Locale;
   notifications: AdminNotification[];
   onLogout: () => Promise<void>;
   onMarkAllNotificationsRead: () => void;
+  onSelectTheme: (theme: ConsoleTheme) => void;
   tenantLabel: string;
+  text: (typeof shellText)[Locale];
+  theme: ConsoleTheme;
   unreadNotificationCount: number;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel);
@@ -778,12 +754,37 @@ function ConsoleTopbarActions({
             </div>
           </dl>
 
-          <div className="console-user-menu-actions">
-            <button className="console-user-menu-action" disabled type="button">
+          <section className="console-user-settings" aria-label={text.settings}>
+            <header>
               <SettingsIcon aria-hidden="true" size={14} strokeWidth={2.2} />
-              <span>Settings</span>
-              <small>Not connected</small>
-            </button>
+              <strong>{text.settings}</strong>
+            </header>
+            <div className="console-user-settings-row">
+              <span>{text.language}</span>
+              <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+            </div>
+            <div className="console-user-settings-row">
+              <span>{text.theme}</span>
+              <div className="theme-segmented-control" data-density="compact">
+                <button
+                  data-active={theme === "light"}
+                  onClick={() => onSelectTheme("light")}
+                  type="button"
+                >
+                  {text.light}
+                </button>
+                <button
+                  data-active={theme === "dark"}
+                  onClick={() => onSelectTheme("dark")}
+                  type="button"
+                >
+                  {text.dark}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <div className="console-user-menu-actions">
             <button
               className="console-user-menu-action"
               disabled={isLoggingOut}

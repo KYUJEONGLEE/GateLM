@@ -293,11 +293,16 @@
 }
 
 .analytics-v5-model-flow-chart,
-.analytics-v5-model-share-chart,
 .analytics-v5-routing-tier-chart,
 .analytics-v5-project-usage-chart {
   width: 100%;
   height: 284px;
+  margin-top: 8px;
+}
+
+.analytics-v5-model-share-chart {
+  width: 100%;
+  height: 310px;
   margin-top: 8px;
 }
 

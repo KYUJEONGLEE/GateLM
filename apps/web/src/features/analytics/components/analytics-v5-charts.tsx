@@ -21,6 +21,7 @@ const routingTierColors: Record<string, string> = {
   low_cost: "#10b981",
   other: "#94a3b8"
 };
+const MODEL_LEGEND_MAX_LENGTH = 22;
 
 export type AnalyticsV5ProjectUsageRow = {
   costMicroUsd: number;
@@ -61,12 +62,16 @@ export function AnalyticsV5ModelTrafficChart({
       grid: { bottom: 38, left: 64, right: 24, top: 62 },
       legend: {
         data: seriesRows.map((series) => series.displayLabel),
+        formatter: truncateModelLegendLabel,
         icon: "roundRect",
-        itemHeight: 9,
-        itemWidth: 18,
+        itemGap: 18,
+        itemHeight: 11,
+        itemWidth: 22,
         left: 0,
-        textStyle: { color: theme.label, fontSize: 14, fontWeight: 700 },
-        top: 4
+        right: 0,
+        textStyle: { color: theme.label, fontSize: 17, fontWeight: 750 },
+        top: 4,
+        type: "scroll"
       },
       tooltip: analyticsTooltip(" requests", theme),
       xAxis: {
@@ -129,11 +134,15 @@ export function AnalyticsV5ModelShareChart({
       color: palette,
       legend: {
         bottom: 0,
+        formatter: truncateModelLegendLabel,
         icon: "circle",
-        itemHeight: 8,
-        itemWidth: 8,
+        itemGap: 16,
+        itemHeight: 12,
+        itemWidth: 12,
         left: "center",
-        textStyle: { color: theme.label, fontSize: 13, fontWeight: 700 }
+        right: 0,
+        textStyle: { color: theme.label, fontSize: 19, fontWeight: 750 },
+        type: "scroll"
       },
       series: [
         {
@@ -148,7 +157,8 @@ export function AnalyticsV5ModelShareChart({
             borderWidth: 3
           },
           label: { show: false },
-          radius: ["48%", "72%"],
+          center: ["50%", "45%"],
+          radius: ["50%", "78%"],
           type: "pie"
         }
       ],
@@ -227,6 +237,14 @@ export function AnalyticsV5RoutingTierChart({
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-routing-tier-chart" option={option} />;
+}
+
+function truncateModelLegendLabel(value: string) {
+  if (value.length <= MODEL_LEGEND_MAX_LENGTH) {
+    return value;
+  }
+
+  return `${value.slice(0, MODEL_LEGEND_MAX_LENGTH - 3)}...`;
 }
 
 export function AnalyticsV5ProjectUsageChart({

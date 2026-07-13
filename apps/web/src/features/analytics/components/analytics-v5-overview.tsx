@@ -56,7 +56,6 @@ export function AnalyticsV5Overview({
         lowCost: "저비용 라우팅",
         lowCostSub: "정책이 선택한 모델 등급 비교",
         modelShare: "모델 트래픽 비중",
-        modelShareSub: "실제 선택 모델 기준",
         modelTrend: "모델별 요청 흐름",
         modelTrendSub: "라우팅 정책 적용 후 시간대별 요청 추이",
         routing: "모델 등급별 라우팅",
@@ -78,7 +77,6 @@ export function AnalyticsV5Overview({
         lowCost: "Low-cost routing",
         lowCostSub: "Compare model tiers selected by policy",
         modelShare: "Model traffic share",
-        modelShareSub: "Based on models actually selected",
         modelTrend: "Requests by model",
         modelTrendSub: "Traffic over time after routing policy",
         routing: "Routing by model tier",
@@ -155,7 +153,7 @@ export function AnalyticsV5Overview({
             />
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>
-        <AnalyticsV5Surface subtitle={text.modelShareSub} title={text.modelShare}>
+        <AnalyticsV5Surface title={text.modelShare}>
           {modelRows.some((row) => row.value > 0) ? (
             <AnalyticsV5ModelShareChart ariaLabel={text.modelShare} rows={modelRows} />
           ) : <AnalyticsV5Empty label={text.empty} />}
@@ -193,14 +191,14 @@ function AnalyticsV5Surface({
   title
 }: {
   children: ReactNode;
-  subtitle: string;
+  subtitle?: string;
   title: string;
 }) {
   return (
     <section className="analytics-v5-surface">
       <header>
         <h3>{title}</h3>
-        <p>{subtitle}</p>
+        {subtitle ? <p>{subtitle}</p> : null}
       </header>
       {children}
     </section>
