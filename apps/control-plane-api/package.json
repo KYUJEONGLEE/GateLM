@@ -9,6 +9,7 @@
     "start": "node dist/src/main.js",
     "prebuild": "node ../../scripts/dev/ensure-control-plane-prisma-client.mjs",
     "build": "nest build",
+    "smoke:tenant-chat-runtime": "ts-node -r tsconfig-paths/register src/tenant-chat-runtime-smoke.ts",
     "pretypecheck": "node ../../scripts/dev/ensure-control-plane-prisma-client.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretest": "node ../../scripts/dev/ensure-control-plane-prisma-client.mjs",

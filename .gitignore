@@ -41,5 +41,6 @@ Thumbs.db
 desktop.ini
 
 .cache/
+.secrets/
 .tmp/
 .playwright-cli/
