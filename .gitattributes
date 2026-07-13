@@ -1,0 +1,2 @@
+# Hash-pinned datasets must retain their repository bytes on every platform.
+docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl text eol=lf
