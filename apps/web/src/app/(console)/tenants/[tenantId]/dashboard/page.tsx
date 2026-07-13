@@ -60,17 +60,33 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
-  const projectsModel = await getProjectsModel(effectiveTenantId);
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
-  const effectiveProjectId = resolveProjectIdForConsoleAuth({
-    auth,
-    projects: projectsModel.projects,
-    requestedProjectId: liveFilters.projectId,
-    routeTenantId: effectiveTenantId
-  });
+  const projectsPromise = getProjectsModel(effectiveTenantId);
+  let projectsModel: Awaited<ReturnType<typeof getProjectsModel>>;
+  let effectiveProjectId: string | null | undefined;
+  let overviewPromise: ReturnType<typeof getLiveDashboardOverview>;
 
-  if (effectiveProjectId === null) {
-    notFound();
+  if (projectScoped) {
+    projectsModel = await projectsPromise;
+    effectiveProjectId = resolveProjectIdForConsoleAuth({
+      auth,
+      projects: projectsModel.projects,
+      requestedProjectId: liveFilters.projectId,
+      routeTenantId: effectiveTenantId
+    });
+
+    if (effectiveProjectId === null) {
+      notFound();
+    }
+
+    overviewPromise = getLiveDashboardOverview(effectiveTenantId, {
+      ...liveFilters,
+      projectId: effectiveProjectId ?? liveFilters.projectId
+    });
+  } else {
+    effectiveProjectId = liveFilters.projectId;
+    overviewPromise = getLiveDashboardOverview(effectiveTenantId, liveFilters);
+    projectsModel = await projectsPromise;
   }
 
   const scopedLiveFilters = {
@@ -82,7 +98,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     projectId: effectiveProjectId ?? dashboardFilters.projectId
   };
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
-  const overview = await getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters);
+  const overview = await overviewPromise;
 
   if (!overview) {
     return (
