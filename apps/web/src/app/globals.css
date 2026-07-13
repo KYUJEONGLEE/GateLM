@@ -1656,6 +1656,7 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   display: inline-grid;
   width: 42px;
   height: 42px;
+  margin-top: 24px;
   flex: 0 0 auto;
   place-items: center;
   background: var(--surface);
@@ -2947,7 +2948,28 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   border: 1px solid var(--project-pill-border, color-mix(in srgb, var(--brand-blue) 24%, transparent));
   background: var(--project-pill-bg, color-mix(in srgb, var(--brand-blue) 12%, var(--surface-subtle)));
   color: var(--project-pill-text, var(--brand-blue));
+  text-decoration: none;
   text-overflow: ellipsis;
+}
+
+.dashboard-live-project-pill[href] {
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.dashboard-live-project-pill[href]:hover {
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.dashboard-live-project-pill[href]:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .dashboard-live-provider-model {
@@ -4917,28 +4939,41 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 .project-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: min(100%, 1380px);
+  width: 100%;
   gap: 22px;
 }
 
 .project-card {
+  --project-card-accent: var(--accent-strong);
+  --project-card-accent-border: color-mix(in srgb, var(--accent-strong) 38%, var(--border));
   display: grid;
+  grid-template-rows: auto 1fr;
   min-width: 0;
-  min-height: 270px;
-  gap: 22px;
-  padding: 24px;
-  background:
-    linear-gradient(180deg, rgba(16, 163, 127, 0.035), transparent 42%),
-    var(--surface);
+  min-height: 300px;
+  gap: 38px;
+  padding: 34px 38px 30px;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: inherit;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .project-card:hover {
+  border-color: var(--project-card-accent-border);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--foreground) 7%, transparent);
   text-decoration: none;
+  transform: translateY(-2px);
+}
+
+.project-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--project-card-accent) 34%, transparent);
+  outline-offset: 3px;
 }
 
 .project-card[data-budget-state="alert"] {
@@ -4949,11 +4984,12 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   border-color: var(--warning-border);
 }
 
-.project-card-title-row {
+.project-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 18px;
+  min-width: 0;
 }
 
 .project-card-title {
@@ -4963,7 +4999,9 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-budget-badge {
@@ -4971,10 +5009,10 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   align-items: center;
   justify-content: center;
   height: auto;
-  min-height: 28px;
+  min-height: 30px;
   flex: 0 0 auto;
   overflow: visible;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
   font-size: calc(var(--font-size-md) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
@@ -4984,7 +5022,7 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 
 .project-budget-badge[data-budget-state="operational"] {
   border-color: var(--success-border);
-  background: var(--success-soft);
+  background: color-mix(in srgb, var(--success-soft) 38%, transparent);
   color: var(--success-text);
 }
 
@@ -5009,7 +5047,7 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 .project-card-usage {
   display: grid;
   align-self: end;
-  gap: 10px;
+  gap: 20px;
 }
 
 .project-usage-summary {
@@ -5023,38 +5061,59 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 .project-usage-cost {
   display: block;
   color: var(--text-muted);
-  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .project-usage-value {
   display: block;
-  margin-top: 2px;
+  margin-top: 8px;
   color: var(--foreground);
-  font-size: calc(var(--font-size-3xl) + var(--global-font-lift));
+  font-size: calc(2.8rem + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-tight);
+  line-height: 1;
 }
 
 .project-usage-cost {
-  color: var(--foreground);
+  color: var(--text-muted);
   font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  letter-spacing: 0;
   text-align: right;
+  text-transform: none;
 }
 
 .project-usage-track {
   position: relative;
   overflow: hidden;
-  height: 8px;
-  background: var(--surface-subtle);
+  height: 9px;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   border-radius: 999px;
 }
 
 .project-usage-fill {
   display: block;
   height: 100%;
-  background: var(--accent-strong);
+  background: var(--project-card-accent);
   border-radius: inherit;
+  transition: width 220ms ease;
+}
+
+.project-card-footer-label {
+  width: fit-content;
+  margin-top: 12px;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-snug);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+.project-card:hover .project-card-footer-label {
+  color: var(--project-card-accent);
 }
 
 .project-card[data-budget-state="warning"] .project-usage-fill {
@@ -5063,44 +5122,6 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 
 .project-card[data-budget-state="alert"] .project-usage-fill {
   background: var(--danger);
-}
-
-.project-card-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
-  align-self: end;
-}
-
-.project-card-actions .project-list-action-link {
-  justify-content: flex-start;
-  width: fit-content;
-  max-width: 100%;
-  min-height: auto;
-  padding: 0;
-  background: transparent;
-  border-color: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  color: var(--foreground);
-  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-tight);
-  text-align: left;
-  white-space: normal;
-}
-
-.project-card-actions .project-list-action-link:hover:not(:disabled) {
-  background: transparent;
-  color: var(--foreground);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-
-.project-card-actions .project-list-action-link svg {
-  width: 0.9em;
-  height: 0.9em;
 }
 
 .project-table-field {
@@ -6493,12 +6514,9 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   gap: 14px;
 }
 
-.provider-panel-heading h3 {
-  font-size: calc(calc(var(--font-size-xl) * 1.35) + var(--global-font-lift));
-}
-
 .provider-panel-heading [data-slot="button"] {
   height: 42px;
+  margin-left: auto;
   gap: 8px;
   padding-inline: 16px;
   font-size: calc(var(--font-size-base) + var(--global-font-lift));
@@ -13368,8 +13386,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .project-sort-control,
-  .project-sort-buttons,
-  .project-card-actions {
+  .project-sort-buttons {
     width: 100%;
   }
 
@@ -13389,10 +13406,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .project-card-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .project-card-actions {
     grid-template-columns: 1fr;
   }
 
@@ -16341,7 +16354,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     minmax(112px, 0.72fr)
     minmax(160px, 1fr)
     minmax(210px, 1.35fr)
-    minmax(190px, 1.05fr);
+    minmax(280px, 1.35fr);
   align-items: center;
 }
 
@@ -16391,19 +16404,21 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .employee-invitation-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
   min-width: 0;
   align-items: center;
+  gap: 8px;
+  padding-right: 8px;
 }
 
 .employee-invitation-header .employee-list-sort-button {
-  flex: 1 1 auto;
   padding-right: 6px;
 }
 
 .employee-invite-all-button {
-  min-width: 78px;
-  margin-right: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .employee-list {
@@ -16446,14 +16461,31 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .employee-invitation-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding-right: 8px;
-  padding-left: 10px;
+  padding-left: 14px;
 }
 
-.employee-invitation-cell button {
+.employee-invitation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  align-items: center;
+  gap: 8px;
+}
+
+.employee-invitation-actions .badge {
+  justify-self: start;
+}
+
+.employee-invitation-actions .employee-invitation-status {
+  min-height: 26px;
+  padding: 3px 10px;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.employee-invitation-actions button {
+  width: 100%;
   min-height: 32px;
   gap: 6px;
   padding: 0 10px;
@@ -17203,6 +17235,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     align-items: start;
   }
 
+  .employee-invitation-actions {
+    min-width: 0;
+  }
+
   .employee-list-cell::before {
     content: attr(data-label);
     color: var(--text-muted);
@@ -17292,6 +17328,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .employee-rate-limit-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-invitation-actions {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -3,6 +3,8 @@ import "server-only";
 import { getControlPlaneBaseUrl } from "@/lib/control-plane/control-plane-config";
 import { buildControlPlaneHeaders } from "@/lib/control-plane/control-plane-request";
 
+const tenantChatRuntimeUnavailableMessage = "Tenant Chat runtime provenance is unavailable.";
+
 export type TenantChatInvocation = {
   requestId: string;
   surface: "tenant_chat";
@@ -120,7 +122,7 @@ export async function getTenantChatDashboard(
   }
   if (
     result.status === 503 &&
-    result.errorMessage === "Tenant Chat runtime provenance is unavailable."
+    result.errorMessage === tenantChatRuntimeUnavailableMessage
   ) {
     return null;
   }
@@ -174,11 +176,18 @@ async function getJson<T>(path: string): Promise<ControlPlaneJsonResult<T>> {
     });
     if (!response.ok) {
       const errorPayload = (await response.json().catch(() => undefined)) as unknown;
-      console.error("Tenant Chat Control Plane request failed", {
-        status: response.status
-      });
+      const errorMessage = readErrorMessage(errorPayload);
+      const expectedRuntimeUnavailable =
+        response.status === 503 && errorMessage === tenantChatRuntimeUnavailableMessage;
+
+      if (!expectedRuntimeUnavailable) {
+        console.warn("Tenant Chat Control Plane request unavailable", {
+          status: response.status
+        });
+      }
+
       return {
-        errorMessage: readErrorMessage(errorPayload),
+        errorMessage,
         status: response.status
       };
     }
@@ -187,7 +196,7 @@ async function getJson<T>(path: string): Promise<ControlPlaneJsonResult<T>> {
       status: response.status
     };
   } catch (error) {
-    console.error("Tenant Chat Control Plane request failed", {
+    console.warn("Tenant Chat Control Plane request unavailable", {
       errorType: error instanceof Error ? error.name : "UnknownError",
       errorMessage: error instanceof Error ? error.message : "Unknown error"
     });
@@ -199,7 +208,20 @@ function readErrorMessage(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  const error = (value as { error?: unknown }).error;
+
+  const record = value as { error?: unknown; message?: unknown };
+  if (typeof record.message === "string") {
+    return record.message;
+  }
+
+  if (Array.isArray(record.message)) {
+    const message = record.message.find((item): item is string => typeof item === "string");
+    if (message) {
+      return message;
+    }
+  }
+
+  const error = record.error;
   if (!error || typeof error !== "object") {
     return undefined;
   }

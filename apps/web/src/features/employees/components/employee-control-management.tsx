@@ -1858,24 +1858,29 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
                         className="employee-list-cell employee-invitation-cell"
                         data-label={text.invitation}
                       >
-                        <Badge variant="outline">
-                          {formatInvitationStatus(employee.invitationStatus, locale)}
-                        </Badge>
-                        {employee.invitationStatus !== "accepted" ? (
-                          <Button
-                            disabled={pendingAction !== null}
-                            onClick={() => void sendInviteForEmployee(employee)}
-                            type="button"
-                            variant="outline"
+                        <div className="employee-invitation-actions">
+                          <Badge
+                            className="employee-invitation-status"
+                            variant={invitationStatusVariant(employee.invitationStatus)}
                           >
-                            <UserPlus aria-hidden="true" />
-                            {pendingAction === `invite:${employee.id}`
-                              ? "..."
-                              : employee.invitationStatus === "pending"
-                                ? text.inviteResend
-                                : text.inviteSend}
-                          </Button>
-                        ) : null}
+                            {formatInvitationStatus(employee.invitationStatus, locale)}
+                          </Badge>
+                          {employee.invitationStatus !== "accepted" ? (
+                            <Button
+                              disabled={pendingAction !== null}
+                              onClick={() => void sendInviteForEmployee(employee)}
+                              type="button"
+                              variant="outline"
+                            >
+                              <UserPlus aria-hidden="true" />
+                              {pendingAction === `invite:${employee.id}`
+                                ? "..."
+                                : employee.invitationStatus === "pending"
+                                  ? text.inviteResend
+                                  : text.inviteSend}
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </article>
                   );
@@ -2315,4 +2320,17 @@ function formatInvitationStatus(status: EmployeeRecord["invitationStatus"], loca
   };
 
   return labels[status][locale];
+}
+
+function invitationStatusVariant(status: EmployeeRecord["invitationStatus"]) {
+  if (status === "accepted") {
+    return "success" as const;
+  }
+  if (status === "pending") {
+    return "warning" as const;
+  }
+  if (status === "revoked") {
+    return "destructive" as const;
+  }
+  return "neutral" as const;
 }

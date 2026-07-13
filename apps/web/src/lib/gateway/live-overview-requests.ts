@@ -30,7 +30,7 @@ export type LiveOverviewRequestsOptions = {
   projects?: ProjectRecord[];
 };
 
-const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
+const LIVE_REQUESTS_DISPLAY_LIMIT = 9;
 const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
 export async function getLiveOverviewRequests(
   tenantId: string,

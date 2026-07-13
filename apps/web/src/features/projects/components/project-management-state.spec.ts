@@ -26,22 +26,18 @@ test("keeps DRAFT projects in the main list and excludes only ARCHIVED projects"
   expect(isProjectVisibleInList("ARCHIVED")).toBe(false);
 });
 
-test("opens policies only for active projects with a runtime application", () => {
+test("opens the project policy workspace for every project state", () => {
   expect(
     getProjectSettingsHref("tenant-1", {
-      id: "project-1",
-      runtimeApplicationId: "application-1",
-      status: "ACTIVE"
+      id: "project-1"
     })
   ).toBe("/tenants/tenant-1/projects/project-1/policies");
 
   expect(
     getProjectSettingsHref("tenant-1", {
-      id: "project-1",
-      runtimeApplicationId: "application-1",
-      status: "DISABLED"
+      id: "project-1"
     })
-  ).toBe("/tenants/tenant-1/projects/project-1");
+  ).toBe("/tenants/tenant-1/projects/project-1/policies");
 });
 
 test("sorts the newest project first", () => {
