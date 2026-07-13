@@ -82,6 +82,10 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 이 10개 fixture는 schema, enum, provenance와 기본 evaluation wiring을 검증할 뿐 model 학습, calibrator 선택 또는 threshold 최적화 dataset이 아니다. 이 fixture만으로 encoder/model/calibrator artifact를 만들거나 active runtime을 바꾸면 안 된다.
 
+[`fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl)은 별도로 재생 가능한 synthetic training pilot이다. 다섯 category × 두 difficulty cell에 각각 50건을 두어 총 500건이며 simple/complex는 각 250건이다. `reviewerNote`가 선언하듯 사람이 승인한 production training evidence가 아니라 `human review pending` 상태다. [`../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs`](../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs)로 결정론적으로 다시 생성한다.
+
+[`fixtures/difficulty-training-split-manifest.v1.json`](fixtures/difficulty-training-split-manifest.v1.json)은 `difficulty-family-split.v1`을 고정한다. Family key는 `sampleId`의 `{category}/{fNN}`이며 `expectedDifficulty`와 `vNN`을 제외한다. 따라서 같은 family의 simple/complex contrast와 모든 variant는 train/calibration/holdout 중 하나에만 속한다. Manifest는 train 15 family/300건, calibration 5 family/100건, holdout 5 family/100건과 dataset SHA-256을 고정한다. 이 pilot과 tooling의 존재만으로 runtime promotion을 허용하지 않는다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.
@@ -105,9 +109,9 @@ Report의 `accuracy`와 `errorRate`는 difficulty exact-match 기준이다. Cate
 
 ### 7.1 Probability Calibration And Promotion Evidence
 
-Artifact 승격 후 canonical 예측 score는 `difficulty-logistic-v1`의 단일 전역 regularized Logistic Regression이 출력한 미보정 `sigmoid(w·x+b)`에 `difficulty-calibration-v1`이 선택한 전역 calibrator를 적용한 inclusive `0.0~1.0`의 최종 `DifficultyResult.ComplexityScore`다. Raw logit, 미보정 probability와 calibrator 중간값은 report에 포함하지 않는다.
+Hybrid target의 canonical 예측 score는 세 경로를 가진다. Empty 또는 의미 없는 입력은 `0.0 + simple`, 명백한 hard-complex 구조 evidence는 `1.0 + complex` sentinel을 반환한다. 나머지 요청은 `difficulty-logistic-v1`의 단일 전역 regularized Logistic Regression이 출력한 미보정 `sigmoid(w·x+b)`에 `difficulty-calibration-v1`이 선택한 전역 calibrator를 적용한 inclusive `0.0~1.0`의 최종 `DifficultyResult.ComplexityScore`를 사용한다. Raw logit, 미보정 probability와 calibrator 중간값은 report에 포함하지 않는다.
 
-Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexityScore`, `expectedProbability`, `expectedRawScore` 또는 ground-truth probability를 schema와 fixture에 추가하지 않는다. Calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이지 개별 요청의 절대적 보장이 아니다. Dataset 구성, sample size, category 분포와 distribution drift를 함께 고려해야 한다.
+Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexityScore`, `expectedProbability`, `expectedRawScore` 또는 ground-truth probability를 schema와 fixture에 추가하지 않는다. Model path의 calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이지 개별 요청의 절대적 보장이 아니다. Dataset 구성, sample size, category 분포와 distribution drift를 함께 고려해야 한다. 두 sentinel은 calibration bin, log loss와 Brier score에서는 제외하고 end-to-end accuracy와 directional error에는 포함한다.
 
 Model과 calibration evidence는 prompt family 단위로 분리된 다음 세 split을 사용한다.
 
@@ -115,11 +119,13 @@ Model과 calibration evidence는 prompt family 단위로 분리된 다음 세 sp
 - `calibration`: 단일 전역 calibrator 후보 비교, 선택과 최종 fit
 - `holdout`: 모든 선택이 끝난 뒤 final gate
 
-같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
+같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. `difficulty-family-split.v1`에서는 difficulty label을 family key에서 제외해 cross-label contrast 누출도 금지한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
 
-Calibrator candidate 목록, log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Identity calibrator를 baseline 후보에 포함하고 calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 versioned 순서상 더 단순한 후보를 고른다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
+Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용하며 log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 Platt를 고른다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
 
-초기 threshold policy는 모든 category가 공유하는 `difficulty-threshold-v1 = 0.5`다. `ComplexityScore >= 0.5`이면 `complex`, 미만이면 `simple`이다. `0.5`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 이후 evidence가 다른 값을 지지하면 v1을 변경하지 않고 새 global threshold policy version과 immutable artifact를 만든다. Category별 threshold, calibrator 또는 model은 평가 candidate로도 만들지 않는다.
+두 후보의 입력은 모두 Logistic Regression의 미보정 `raw_probability`다. Isotonic은 exact-equal score를 동일 가중 sample count로 먼저 묶고, complex 비율이 감소하는 인접 block을 PAVA로 병합한다. Artifact의 x 경계는 각 block의 포함 하한이며 runtime은 floor lookup과 양끝 clipping만 사용하고 선형 보간하지 않는다. Single constant block도 유효하다. Score 반올림, epsilon grouping, 고정 interval, `labelConfidence` weighting과 사후 small-block 자동 병합은 사용하지 않는다. 과세분화는 group-CV 회귀와 fold별 block count·최소 block 표본 수로 확인하며, 선택된 Isotonic 전체 fit의 block sample count를 aggregate report에 둘 수 있다. Raw probability, logit과 실제 score 경계는 report에 넣지 않는다.
+
+초기 threshold policy는 모든 category가 공유하는 `difficulty-threshold-v1 = 0.45`다. `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다. `0.45`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 이후 evidence가 다른 값을 지지하면 v1을 변경하지 않고 새 global threshold policy version과 immutable artifact를 만든다. Category별 threshold, calibrator 또는 model은 평가 candidate로도 만들지 않는다.
 
 Promotion report는 최소한 다음 provenance와 결과를 선언한다.
 
@@ -133,13 +139,15 @@ Promotion report는 최소한 다음 provenance와 결과를 선언한다.
 - train/calibration/holdout sample 및 family 수
 - 전체 및 category별 sample count, log loss와 Brier score
 - score bin별 평균 `ComplexityScore`와 실제 `complex` 비율
-- `0.5` 기준 전체 및 category별 directional error
+- `0.45` 기준 전체 및 category별 directional error
 - oracle-category와 end-to-end 결과
 - classification latency
+- `redactedPrompt` rune length가 120보다 큰 expected simple인 긴 simple segment
+- `redactedPrompt` rune length가 120 이하인 expected complex인 짧은 complex segment
 
 Untouched holdout에서 candidate의 전체 및 각 category `complex -> simple` count/rate가 현재 rule-based baseline보다 증가하면 runtime으로 승격하지 않는다. Score가 finite하지 않거나 `0.0~1.0` 밖이면 승격하지 않는다. Calibration 지표가 좋아도 이 safety gate를 우회할 수 없다.
 
-Approved offline report는 sampleId, 허용된 redactedPrompt, expected/actual category와 difficulty, 최종 `ComplexityScore`와 위 집계를 포함할 수 있다. Category별 집계는 calibration 품질과 회귀를 관찰하기 위한 evidence일 뿐 category별 정책을 만드는 근거가 아니다. Raw logit/probability, Category diagnostics, provider/model/modelRef/tier/catalog, resolved target, 실제 가격, tenant budget, raw matched phrase, 정규화 문자열, token, 원문/encoded feature, feature별 coefficient contribution, raw prompt/response 또는 민감한 error detail은 추가하지 않는다.
+Approved offline report는 sampleId, 허용된 redactedPrompt, expected/actual category와 difficulty, model-path score 또는 sentinel인 최종 `ComplexityScore`, current runtime과 shadow candidate 비교와 위 집계를 포함할 수 있다. Category별 집계는 calibration 품질과 회귀를 관찰하기 위한 evidence일 뿐 category별 정책을 만드는 근거가 아니다. Raw logit/probability, Category diagnostics, provider/model/modelRef/tier/catalog, resolved target, 실제 가격, tenant budget, raw matched phrase, 정규화 문자열, token, 원문/encoded feature, feature별 coefficient contribution, raw prompt/response 또는 민감한 error detail은 추가하지 않는다.
 
 ## 8. 검증
 

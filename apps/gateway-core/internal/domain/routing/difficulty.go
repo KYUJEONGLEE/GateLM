@@ -59,7 +59,82 @@ type DifficultyFeatures struct {
 }
 
 type DifficultyResult struct {
-	Difficulty string
+	ComplexityScore float64
+	Difficulty      string
+}
+
+// DifficultyClassifier applies the inactive hybrid difficulty policy used by
+// offline and shadow evaluation. Product runtime continues to use
+// RuleBasedDifficultyClassifier until the promotion gates pass.
+type DifficultyClassifier struct {
+	vectorizer func(DifficultyFeatures) []float64
+	model      *difficultyLogisticModel
+	calibrator difficultyCalibrator
+	threshold  float64
+}
+
+func NewDifficultyClassifier(material DifficultyClassifierMaterial) (DifficultyClassifier, error) {
+	model, err := newDifficultyLogisticModel(material)
+	if err != nil {
+		return DifficultyClassifier{}, err
+	}
+	return newDifficultyClassifier(model), nil
+}
+
+func newDifficultyClassifier(model difficultyLogisticModel) DifficultyClassifier {
+	return DifficultyClassifier{
+		vectorizer: VectorizeDifficultyFeaturesV1,
+		model:      &model,
+		calibrator: model.calibrator,
+		threshold:  model.threshold,
+	}
+}
+
+func (classifier DifficultyClassifier) ClassifyFeatures(features DifficultyFeatures) DifficultyResult {
+	if isMeaninglessDifficultyInput(features) {
+		return DifficultyResult{
+			ComplexityScore: 0,
+			Difficulty:      DifficultySimple,
+		}
+	}
+
+	if hasHardComplexEvidence(features) {
+		return DifficultyResult{
+			ComplexityScore: 1,
+			Difficulty:      DifficultyComplex,
+		}
+	}
+
+	vector := classifier.vectorizer(features)
+	rawScore := classifier.model.score(vector)
+	calibratedScore := classifier.calibrator.calibrate(rawScore)
+
+	return DifficultyResult{
+		ComplexityScore: calibratedScore,
+		Difficulty:      difficultyFromScore(calibratedScore, classifier.threshold),
+	}
+}
+
+func difficultyFromScore(score float64, threshold float64) string {
+	if score >= threshold {
+		return DifficultyComplex
+	}
+	return DifficultySimple
+}
+
+func isMeaninglessDifficultyInput(features DifficultyFeatures) bool {
+	return features.common.payloadSizeBucket == "empty"
+}
+
+func hasHardComplexEvidence(features DifficultyFeatures) bool {
+	return hasCommonComplexity(features.common) || hasCategoryComplexity(features)
+}
+
+// UsesDifficultyModelPath is exposed only for approved offline training and
+// evaluation tooling so calibration data follows the same deterministic
+// bypass boundary as DifficultyClassifier.
+func UsesDifficultyModelPath(features DifficultyFeatures) bool {
+	return !isMeaninglessDifficultyInput(features) && !hasHardComplexEvidence(features)
 }
 
 func ExtractDifficultyFeatures(features PromptFeatures, category string) DifficultyFeatures {
@@ -101,10 +176,10 @@ func NewRuleBasedDifficultyClassifier() RuleBasedDifficultyClassifier {
 }
 
 func (RuleBasedDifficultyClassifier) ClassifyFeatures(features DifficultyFeatures) DifficultyResult {
-	if features.common.payloadSizeBucket == "empty" {
+	if isMeaninglessDifficultyInput(features) {
 		return DifficultyResult{Difficulty: DifficultySimple}
 	}
-	if hasCommonComplexity(features.common) || hasCategoryComplexity(features) {
+	if hasHardComplexEvidence(features) {
 		return DifficultyResult{Difficulty: DifficultyComplex}
 	}
 	if hasBoundedSimpleEvidence(features) {

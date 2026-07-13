@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "gatelm.difficulty-training-split-manifest.v1",
+  "datasetVersion": "difficulty_eval_2026_07_13_pilot_500_v1",
+  "datasetSha256": "278be4bcf7764ed760b8f5e67858bf1587ad53a41d0bec71652f0b73b2ca8bc8",
+  "splitPolicyVersion": "difficulty-family-split.v1",
+  "familyRuleVersion": "difficulty-sample-family.v1",
+  "familyRule": {
+    "sampleIdPattern": "^difficulty_(general|code|translation|summarization|reasoning)_(simple|complex)_.+_(f\\d{2})_v\\d{2}$",
+    "familyKey": "{category}/{fNN}",
+    "excludes": [
+      "expectedDifficulty",
+      "vNN"
+    ]
+  },
+  "totals": {
+    "samples": 500,
+    "families": 25
+  },
+  "splitCounts": {
+    "train": {
+      "families": 15,
+      "samples": 300
+    },
+    "calibration": {
+      "families": 5,
+      "samples": 100
+    },
+    "holdout": {
+      "families": 5,
+      "samples": 100
+    }
+  },
+  "families": [
+    {
+      "familyId": "code/f01",
+      "split": "train"
+    },
+    {
+      "familyId": "code/f02",
+      "split": "calibration"
+    },
+    {
+      "familyId": "code/f03",
+      "split": "train"
+    },
+    {
+      "familyId": "code/f04",
+      "split": "train"
+    },
+    {
+      "familyId": "code/f05",
+      "split": "holdout"
+    },
+    {
+      "familyId": "general/f01",
+      "split": "train"
+    },
+    {
+      "familyId": "general/f02",
+      "split": "holdout"
+    },
+    {
+      "familyId": "general/f03",
+      "split": "calibration"
+    },
+    {
+      "familyId": "general/f04",
+      "split": "train"
+    },
+    {
+      "familyId": "general/f05",
+      "split": "train"
+    },
+    {
+      "familyId": "reasoning/f01",
+      "split": "train"
+    },
+    {
+      "familyId": "reasoning/f02",
+      "split": "train"
+    },
+    {
+      "familyId": "reasoning/f03",
+      "split": "calibration"
+    },
+    {
+      "familyId": "reasoning/f04",
+      "split": "holdout"
+    },
+    {
+      "familyId": "reasoning/f05",
+      "split": "train"
+    },
+    {
+      "familyId": "summarization/f01",
+      "split": "train"
+    },
+    {
+      "familyId": "summarization/f02",
+      "split": "train"
+    },
+    {
+      "familyId": "summarization/f03",
+      "split": "holdout"
+    },
+    {
+      "familyId": "summarization/f04",
+      "split": "train"
+    },
+    {
+      "familyId": "summarization/f05",
+      "split": "calibration"
+    },
+    {
+      "familyId": "translation/f01",
+      "split": "calibration"
+    },
+    {
+      "familyId": "translation/f02",
+      "split": "train"
+    },
+    {
+      "familyId": "translation/f03",
+      "split": "holdout"
+    },
+    {
+      "familyId": "translation/f04",
+      "split": "train"
+    },
+    {
+      "familyId": "translation/f05",
+      "split": "train"
+    }
+  ]
+}

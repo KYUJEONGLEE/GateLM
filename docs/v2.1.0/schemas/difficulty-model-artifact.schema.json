@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-model-artifact.schema.json",
+  "title": "GateLM Difficulty Logistic Model Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "gatelm.difficulty-model-artifact.v1" },
+    "artifactVersion": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "modelVersion": { "const": "difficulty-logistic-v1" },
+    "featureVersion": { "const": "difficulty-feature-vector.v1" },
+    "trainingDatasetVersion": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "trainingDatasetSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "splitPolicyVersion": { "const": "difficulty-family-split.v1" },
+    "regularization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policyVersion": { "const": "difficulty-logistic-training.v1" },
+        "penalty": { "const": "l2" },
+        "solver": { "type": "string", "minLength": 1 },
+        "selectedC": { "type": "number", "exclusiveMinimum": 0 },
+        "groupFolds": { "type": "integer", "minimum": 2 },
+        "randomSeed": { "type": "integer" }
+      },
+      "required": ["policyVersion", "penalty", "solver", "selectedC", "groupFolds", "randomSeed"]
+    },
+    "bias": { "type": "number" },
+    "featureNames": {
+      "type": "array",
+      "minItems": 42,
+      "maxItems": 42,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "weights": {
+      "type": "array",
+      "minItems": 42,
+      "maxItems": 42,
+      "items": { "type": "number" }
+    },
+    "calibrationVersion": { "const": "difficulty-calibration-v1" },
+    "calibrator": {
+      "description": "The selected calibrator and only the parameters required by that calibrator. There is no top-level calibratorType field or identity fallback.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "platt" },
+            "input": { "const": "raw_probability" },
+            "coefficient": { "type": "number" },
+            "intercept": { "type": "number" }
+          },
+          "required": ["type", "input", "coefficient", "intercept"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "isotonic" },
+            "input": { "const": "raw_probability" },
+            "xThresholds": {
+              "type": "array",
+              "description": "Strictly increasing inclusive lower raw_probability boundary for each PAVA block. Runtime uses floor lookup and clips outside the observed range.",
+              "minItems": 1,
+              "items": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "yThresholds": {
+              "type": "array",
+              "description": "Monotonically non-decreasing complex-label ratio for the corresponding PAVA block.",
+              "minItems": 1,
+              "items": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          "required": ["type", "input", "xThresholds", "yThresholds"]
+        }
+      ],
+      "examples": [
+        {
+          "type": "platt",
+          "input": "raw_probability",
+          "coefficient": 1.24,
+          "intercept": -0.31
+        },
+        {
+          "type": "isotonic",
+          "input": "raw_probability",
+          "xThresholds": [0.1, 0.2, 0.5],
+          "yThresholds": [0.0, 0.3333333333333333, 1.0]
+        }
+      ]
+    },
+    "thresholdPolicyVersion": { "const": "difficulty-threshold-v1" },
+    "threshold": { "const": 0.45 },
+    "contentHashAlgorithm": { "const": "difficulty-model-inference-material.v1" },
+    "contentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "required": [
+    "schemaVersion",
+    "artifactVersion",
+    "modelVersion",
+    "featureVersion",
+    "trainingDatasetVersion",
+    "trainingDatasetSha256",
+    "splitPolicyVersion",
+    "regularization",
+    "bias",
+    "featureNames",
+    "weights",
+    "calibrationVersion",
+    "calibrator",
+    "thresholdPolicyVersion",
+    "threshold",
+    "contentHashAlgorithm",
+    "contentHash"
+  ]
+}
