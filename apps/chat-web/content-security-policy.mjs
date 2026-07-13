@@ -1,21 +1,17 @@
-const DIRECTIVES = [
-  "default-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "font-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-];
-
-export function createContentSecurityPolicy(environment = process.env.NODE_ENV) {
-  const scriptSources = ["'self'", "'unsafe-inline'"];
-  if (environment === 'development') scriptSources.push("'unsafe-eval'");
+export function createContentSecurityPolicy(environment) {
+  const scriptSrc = environment === 'development'
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'";
 
   return [
-    DIRECTIVES[0],
-    `script-src ${scriptSources.join(' ')}`,
-    ...DIRECTIVES.slice(1),
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
   ].join('; ');
 }

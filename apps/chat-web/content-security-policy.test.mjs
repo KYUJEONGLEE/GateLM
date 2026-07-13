@@ -24,7 +24,7 @@ test('production CSP never permits unsafe-eval', () => {
   assert.doesNotMatch(policy, /(?:^|\s)'unsafe-eval'(?:\s|;|$)/u);
 });
 
-test('unknown environments use the production-safe CSP', () => {
+test('non-development environments use the production-safe CSP', () => {
   assert.equal(createContentSecurityPolicy('test'), productionPolicy);
   assert.equal(createContentSecurityPolicy(undefined), productionPolicy);
 });

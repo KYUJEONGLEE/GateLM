@@ -1,1 +1,1 @@
-export function createContentSecurityPolicy(environment?: string): string;
+export function createContentSecurityPolicy(environment: string | undefined): string;
