@@ -99,7 +99,9 @@ const onboardingText: Record<
     issueApiKeyPending: string;
     next: string;
     noTeams: string;
+    projectSavedPolicyIncomplete: string;
     previous: string;
+    retryPolicySetup: string;
     saveNext: string;
     saveToProjects: string;
     savingProject: string;
@@ -119,7 +121,9 @@ const onboardingText: Record<
     issueApiKeyPending: "Issue a live API Key. The plaintext appears once.",
     next: "Next",
     noTeams: "No active teams available.",
+    projectSavedPolicyIncomplete: "Project saved / policy setup incomplete.",
     previous: "Previous",
+    retryPolicySetup: "Retry policy setup",
     saveNext: "Save and continue",
     saveToProjects: "Create project",
     savingProject: "Creating project...",
@@ -138,7 +142,9 @@ const onboardingText: Record<
     issueApiKeyPending: "실제 API Key를 발급하고 원문을 한 번만 표시합니다.",
     next: "다음",
     noTeams: "No active teams available.",
+    projectSavedPolicyIncomplete: "프로젝트 저장 완료 / 정책 설정 미완료.",
     previous: "이전",
+    retryPolicySetup: "정책 설정 다시 시도",
     saveNext: "저장 후 다음",
     saveToProjects: "프로젝트 생성",
     savingProject: "API key 발급 중",
@@ -165,7 +171,7 @@ type ProjectSetupState = {
 
 type ProjectCompletionState = {
   error: string;
-  status: "complete" | "error" | "idle" | "saving";
+  status: "complete" | "error" | "idle" | "partial" | "saving";
 };
 
 type ApiKeyIssuePayload = {
@@ -493,9 +499,9 @@ export function AdminOnboardingFlow({
       });
       const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
 
-      if (!response.ok || !payload.project || payload.policyError) {
+      if (!response.ok || !payload.project) {
         setProjectCompletionState({
-          error: payload.policyError ?? payload.error ?? text.createProjectError,
+          error: payload.error ?? text.createProjectError,
           status: "error"
         });
         return false;
@@ -506,6 +512,15 @@ export function AdminOnboardingFlow({
         error: "",
         project: payload.project ?? current.project
       }));
+
+      if (payload.policyError) {
+        setProjectCompletionState({
+          error: `${text.projectSavedPolicyIncomplete} ${payload.policyError}`,
+          status: "partial"
+        });
+        return false;
+      }
+
       setProjectCompletionState({ error: "", status: "complete" });
       return true;
     } catch {
@@ -535,6 +550,10 @@ export function AdminOnboardingFlow({
 
     if (activeFlowStepId === "provider") {
       return text.saveNext;
+    }
+
+    if (projectCompletionState.status === "partial") {
+      return text.retryPolicySetup;
     }
 
     return text.saveToProjects;
@@ -739,7 +758,7 @@ function renderStepContent({
           onProviderSaved={onProviderSaved}
         />
         {projectCompletionState.error ? (
-          <Alert variant="destructive">
+          <Alert variant={projectCompletionState.status === "partial" ? "warning" : "destructive"}>
             <AlertDescription>{projectCompletionState.error}</AlertDescription>
           </Alert>
         ) : null}
@@ -750,7 +769,7 @@ function renderStepContent({
   return (
     <div className="onboarding-stack">
       {projectCompletionState.error ? (
-        <Alert variant="destructive">
+        <Alert variant={projectCompletionState.status === "partial" ? "warning" : "destructive"}>
           <AlertDescription>{projectCompletionState.error}</AlertDescription>
         </Alert>
       ) : null}

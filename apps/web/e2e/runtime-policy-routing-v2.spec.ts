@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 
 import type { ProviderConnectionRecord } from "../src/lib/control-plane/provider-connections-types";
 import {
+  createRuntimePolicyRoleRoutes,
+  getRuntimePolicyModelRoleConversion,
+  getRuntimePolicyModelRoles,
   isRuntimeRoutingPolicyHash,
   toRuntimePolicyRoutingWriteInput
 } from "../src/lib/control-plane/runtime-policy-types";
@@ -67,6 +70,53 @@ test("routing model refs use provider ids and selected connections are deduplica
       [first, second]
     ).map((connection) => connection.id)
   ).toEqual(["provider-a", "provider-b"]);
+});
+
+test("global Simple and Complex roles project to all ten cells with one fallback", () => {
+  const routes = createRuntimePolicyRoleRoutes({
+    complexModelRef: "provider-b:premium",
+    fallbackModelRef: "provider-c:backup",
+    simpleModelRef: "provider-a:cheap"
+  });
+
+  expect(getRuntimePolicyModelRoles(routes)).toEqual({
+    complexModelRef: "provider-b:premium",
+    fallbackModelRef: "provider-c:backup",
+    simpleModelRef: "provider-a:cheap"
+  });
+  expect(routes.general.simple.modelRefs).toEqual([
+    "provider-a:cheap",
+    "provider-c:backup"
+  ]);
+  expect(routes.reasoning.complex.modelRefs).toEqual([
+    "provider-b:premium",
+    "provider-c:backup"
+  ]);
+});
+
+test("Simple and Complex may use the same model while fallback stays distinct", () => {
+  const routes = createRuntimePolicyRoleRoutes({
+    complexModelRef: "provider-a:balanced",
+    fallbackModelRef: "provider-b:backup",
+    simpleModelRef: "provider-a:balanced"
+  });
+
+  expect(getRuntimePolicyModelRoles(routes)).not.toBeNull();
+  expect(routes.code.simple.modelRefs).toEqual(routes.code.complex.modelRefs);
+});
+
+test("legacy conversion uses general primaries and drops non-uniform fallback", () => {
+  const policy = createMockBootstrapRoutingPolicy();
+  policy.routes.general.simple.modelRefs = ["provider-a:cheap", "provider-c:backup"];
+  policy.routes.general.complex.modelRefs = ["provider-b:premium", "provider-c:backup"];
+  policy.routes.code.simple.modelRefs = ["provider-d:category", "provider-e:other-backup"];
+
+  expect(getRuntimePolicyModelRoles(policy.routes)).toBeNull();
+  expect(getRuntimePolicyModelRoleConversion(policy.routes)).toEqual({
+    complexModelRef: "provider-b:premium",
+    fallbackModelRef: null,
+    simpleModelRef: "provider-a:cheap"
+  });
 });
 
 test("an empty route cell makes the matrix invalid", () => {
