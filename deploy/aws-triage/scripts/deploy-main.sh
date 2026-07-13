@@ -249,7 +249,7 @@ tracked_changes="$(git -C "${repo_dir}" status --porcelain --untracked-files=no)
 
 git -C "${repo_dir}" fetch --no-tags origin main
 resolved_target="$(git -C "${repo_dir}" rev-parse "${target_sha}^{commit}")"
-origin_main="$(git -C "${repo_dir}" rev-parse origin/main)"
+origin_main="$(git -C "${repo_dir}" rev-parse FETCH_HEAD)"
 [[ "${resolved_target}" == "${target_sha}" ]] || deploy_fail "Target SHA could not be resolved exactly."
 [[ "${origin_main}" == "${target_sha}" ]] || \
   deploy_fail "Target SHA is stale; origin/main is ${origin_main}."
@@ -339,12 +339,12 @@ wait_for_http "public Tenant Chat" "${chat_url}/login" || \
 gateway_auth_status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
   -X POST "http://127.0.0.1:8080/v1/chat/completions" \
   -H 'Content-Type: application/json' \
-  --data '{"model":"deployment-check","messages":[{"role":"user","content":"authentication-boundary-check"}]}')"
+  --data '{"model":"deployment-check","messages":[{"role":"user","content":"authentication-boundary-check"}]}' || true)"
 [[ "${gateway_auth_status}" == "401" ]] || \
   deploy_fail "Unauthenticated Gateway request returned ${gateway_auth_status}, expected 401."
 
 chat_auth_status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
-  "http://127.0.0.1:3002/api/tenant-chat/auth/session")"
+  "http://127.0.0.1:3002/api/tenant-chat/auth/session" || true)"
 [[ "${chat_auth_status}" == "401" ]] || \
   deploy_fail "Unauthenticated Tenant Chat session returned ${chat_auth_status}, expected 401."
 

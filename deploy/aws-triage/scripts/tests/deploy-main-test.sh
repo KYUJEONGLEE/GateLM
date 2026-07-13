@@ -94,6 +94,14 @@ grep -Fq 'http://127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}"
   fail "Tenant Chat authentication boundary must be verified through loopback"
 grep -Fq 'Public Web Console is not reachable from this host.' "${DEPLOY_SCRIPT}" || \
   fail "Public reachability failures must remain non-fatal on the target host"
+[[ "$(grep -Fc 'rev-parse FETCH_HEAD' "${DEPLOY_SCRIPT}")" == "1" ]] || \
+  fail "Target deployment must validate the SHA fetched in the current command"
+[[ "$(grep -Fc 'rev-parse FETCH_HEAD' "${SSM_SCRIPT}")" == "1" ]] || \
+  fail "SSM bootstrap must validate the SHA fetched in the current command"
+grep -F 'authentication-boundary-check' "${DEPLOY_SCRIPT}" | grep -Fq '|| true)' || \
+  fail "Gateway authentication failures must reach explicit status validation"
+grep -F '127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" | grep -Fq '|| true)' || \
+  fail "Tenant Chat authentication failures must reach explicit status validation"
 # Runtime services are captured once for rollback and checked once after cutover.
 # shellcheck disable=SC2016
 runtime_service_loops="$(grep -Fc 'for service in "${runtime_services[@]}"; do' "${DEPLOY_SCRIPT}")"

@@ -59,7 +59,7 @@ script_path=\$(mktemp /tmp/gatelm-deploy-main.XXXXXX)
 cleanup() { rm -f \"\${script_path}\"; }
 trap cleanup EXIT
 sudo -u ubuntu git -C \"\${repo}\" fetch --no-tags origin main
-actual_sha=\$(sudo -u ubuntu git -C \"\${repo}\" rev-parse origin/main)
+actual_sha=\$(sudo -u ubuntu git -C \"\${repo}\" rev-parse FETCH_HEAD)
 if [[ \"\${actual_sha}\" != \"\${deploy_sha}\" ]]; then
   echo \"[GateLM CD] ERROR: origin/main moved to \${actual_sha}.\" >&2
   exit 1
