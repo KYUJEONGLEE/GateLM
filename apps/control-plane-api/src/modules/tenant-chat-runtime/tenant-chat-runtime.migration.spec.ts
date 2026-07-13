@@ -18,10 +18,10 @@ const ACTIVE_USAGE_DDL_PATH = resolve(
   '../../../../../docs/tenant-chat/db/tenant-chat-usage.sql',
 );
 
-const SAFE_PREFLIGHT_MESSAGES = [
-  'Tenant Chat cache-read price preflight failed: provider attempt data violates the active pricing contract.',
-  'Tenant Chat cache-read price preflight failed: an active RuntimeSnapshot violates the active pricing contract.',
-];
+const PROVIDER_ATTEMPT_PREFLIGHT_MESSAGE =
+  'Tenant Chat cache-read price preflight failed: provider attempt data violates the active pricing contract.';
+const ACTIVE_SNAPSHOT_PREFLIGHT_MESSAGE =
+  'Tenant Chat cache-read price preflight failed: an active RuntimeSnapshot violates the active pricing contract.';
 
 describe('Tenant Chat migrations', () => {
   const historicalSql = readFileSync(HISTORICAL_MIGRATION_PATH, 'utf8');
@@ -110,27 +110,29 @@ describe('Tenant Chat migrations', () => {
     expect(activeUsageDdl).not.toContain('NOT VALID');
   });
 
-  it('repeats the same safe preflight immediately before validation', () => {
-    expect(extractPreflight(cacheReadPriceValidationSql)).toBe(
-      extractPreflight(cacheReadPriceAddSql),
+  it('runs both shared-data preflights before ADD', () => {
+    expect(cacheReadPriceAddSql).toContain('FROM tenant_chat_provider_attempts');
+    expect(cacheReadPriceAddSql).toContain('FROM tenant_chat_active_runtime_snapshots');
+    expect(cacheReadPriceAddSql).toContain('jsonb_path_exists');
+    expect(cacheReadPriceAddSql).toContain(`ERRCODE = '23514'`);
+    expect(cacheReadPriceAddSql.indexOf('RAISE EXCEPTION')).toBeLessThan(
+      cacheReadPriceAddSql.indexOf('ADD CONSTRAINT'),
     );
   });
 
-  it.each([
-    ['ADD', cacheReadPriceAddSql, 'ADD CONSTRAINT'],
-    ['VALIDATE', cacheReadPriceValidationSql, 'VALIDATE CONSTRAINT'],
-  ])(
-    'runs provider-attempt and active RuntimeSnapshot preflight before %s',
-    (_phase, sourceSql, ddlMarker) => {
-      expect(sourceSql).toContain('FROM tenant_chat_provider_attempts');
-      expect(sourceSql).toContain('FROM tenant_chat_active_runtime_snapshots');
-      expect(sourceSql).toContain('jsonb_path_exists');
-      expect(sourceSql).toContain(`ERRCODE = '23514'`);
-      expect(sourceSql.indexOf('RAISE EXCEPTION')).toBeLessThan(
-        sourceSql.indexOf(ddlMarker),
-      );
-    },
-  );
+  it('avoids a provider-attempt rescan but keeps the active snapshot guard before VALIDATE', () => {
+    expect(cacheReadPriceValidationSql).not.toContain(
+      'FROM tenant_chat_provider_attempts',
+    );
+    expect(cacheReadPriceValidationSql).toContain(
+      'FROM tenant_chat_active_runtime_snapshots',
+    );
+    expect(cacheReadPriceValidationSql).toContain('jsonb_path_exists');
+    expect(cacheReadPriceValidationSql).toContain(`ERRCODE = '23514'`);
+    expect(cacheReadPriceValidationSql.indexOf('RAISE EXCEPTION')).toBeLessThan(
+      cacheReadPriceValidationSql.lastIndexOf('VALIDATE CONSTRAINT'),
+    );
+  });
 
   it.each([
     ['ADD', cacheReadPriceAddSql],
@@ -140,27 +142,25 @@ describe('Tenant Chat migrations', () => {
   });
 
   it.each([
-    ['ADD', cacheReadPriceAddSql],
-    ['VALIDATE', cacheReadPriceValidationSql],
-  ])('uses fixed, identifier-free preflight messages in %s', (_phase, sourceSql) => {
-    const messages = [...sourceSql.matchAll(/MESSAGE\s*=\s*'([^']+)'/g)].map(
-      ([, message]) => message,
-    );
+    [
+      'ADD',
+      cacheReadPriceAddSql,
+      [PROVIDER_ATTEMPT_PREFLIGHT_MESSAGE, ACTIVE_SNAPSHOT_PREFLIGHT_MESSAGE],
+    ],
+    ['VALIDATE', cacheReadPriceValidationSql, [ACTIVE_SNAPSHOT_PREFLIGHT_MESSAGE]],
+  ])(
+    'uses fixed, identifier-free preflight messages in %s',
+    (_phase, sourceSql, expectedMessages) => {
+      const messages = [...sourceSql.matchAll(/MESSAGE\s*=\s*'([^']+)'/g)].map(
+        ([, message]) => message,
+      );
 
-    expect(messages).toEqual(SAFE_PREFLIGHT_MESSAGES);
-    expect(sourceSql).not.toContain('violation_examples');
-    expect(sourceSql).not.toMatch(/MESSAGE\s*=\s*format/i);
-  });
-});
-
-function extractPreflight(value: string): string {
-  const match = value.match(
-    /DO \$tenant_chat_cache_read_price_preflight\$[\s\S]*?\$tenant_chat_cache_read_price_preflight\$;/,
+      expect(messages).toEqual(expectedMessages);
+      expect(sourceSql).not.toContain('violation_examples');
+      expect(sourceSql).not.toMatch(/MESSAGE\s*=\s*format/i);
+    },
   );
-
-  expect(match).not.toBeNull();
-  return compactWhitespace(match?.[0] ?? '');
-}
+});
 
 function compactWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
