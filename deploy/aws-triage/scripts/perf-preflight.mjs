@@ -35,15 +35,13 @@ if (chatResponse.status !== 200) {
 const chatBody = await safeJson(chatResponse);
 const metadata = chatBody.gate_lm ?? {};
 assertEqual(metadata.requestId, requestId, "response requestId");
-assertEqual(metadata.selectedProvider, "mock", "response selectedProvider");
-assertMockModel(metadata.selectedModel, "response selectedModel");
+assertMockModelRef(metadata.modelRef, "response modelRef");
 assertEqual(metadata.providerCalled, true, "response providerCalled");
 
 const detail = await waitForRequestDetail(requestId);
 assertEqual(detail.terminalStatus, "success", "detail terminalStatus");
 assertEqual(detail.providerCalled, true, "detail providerCalled");
-assertEqual(detail.routing?.selectedProvider, "mock", "detail selectedProvider");
-assertMockModel(detail.routing?.selectedModel, "detail selectedModel");
+assertMockModelRef(detail.routing?.modelRef, "detail modelRef");
 assertEqual(detail.domainOutcomes?.provider?.outcome, "success", "provider outcome");
 assertEqual(detail.domainOutcomes?.fallback?.outcome, "not_needed", "fallback outcome");
 
@@ -53,7 +51,7 @@ if (!detail.runtimeSnapshot?.runtimeSnapshotId) {
 assertRuntimeState(detail.runtimeSnapshot.runtimeState);
 
 console.log(
-  `PREFLIGHT_OK selectedProvider=mock selectedModel=${metadata.selectedModel} ` +
+  `PREFLIGHT_OK modelRef=${metadata.modelRef} ` +
     `runtimeState=${detail.runtimeSnapshot.runtimeState}`,
 );
 
@@ -96,7 +94,7 @@ function assertEqual(actual, expected, label) {
   }
 }
 
-function assertMockModel(value, label) {
+function assertMockModelRef(value, label) {
   const catalogModel =
     typeof value === "string" ? value.split(":").at(-1) ?? "" : "";
   if (!catalogModel.startsWith("mock-")) {

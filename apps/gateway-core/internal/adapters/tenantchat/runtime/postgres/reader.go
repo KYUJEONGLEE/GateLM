@@ -30,22 +30,40 @@ func (r *Reader) Resolve(ctx context.Context, requestContext tenantchat.RequestC
 		return tenantruntime.Snapshot{}, ErrSnapshotUnavailable
 	}
 	var document []byte
+	var tenantStatus string
 	err := r.db.QueryRow(ctx, `
-		SELECT snapshot.snapshot_body
-		FROM tenant_chat_active_runtime_snapshots AS active
-		JOIN tenant_chat_runtime_snapshots AS snapshot
+		SELECT tenant.status::text, snapshot.snapshot_body
+		FROM tenants AS tenant
+		LEFT JOIN tenant_chat_active_runtime_snapshots AS active
+		  ON active.tenant_id = tenant.id
+		LEFT JOIN tenant_chat_runtime_snapshots AS snapshot
 		  ON snapshot.snapshot_id = active.snapshot_id
 		 AND snapshot.tenant_id = active.tenant_id
-		WHERE active.tenant_id = $1::uuid
-		  AND snapshot.version = $2
-		  AND snapshot.digest = $3
+		 AND snapshot.version = $2
+		 AND snapshot.digest = $3
+		WHERE tenant.id = $1::uuid
 		LIMIT 1
 	`,
 		requestContext.ExecutionScope.TenantID,
 		requestContext.Snapshot.Version,
 		requestContext.Snapshot.Digest,
-	).Scan(&document)
+	).Scan(&tenantStatus, &document)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return tenantruntime.Snapshot{}, err
+		}
+		if contextErr := ctx.Err(); contextErr != nil {
+			return tenantruntime.Snapshot{}, contextErr
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tenantruntime.Snapshot{}, tenantchat.ErrTenantDisabled
+		}
+		return tenantruntime.Snapshot{}, ErrSnapshotUnavailable
+	}
+	if tenantStatus != "ACTIVE" {
+		return tenantruntime.Snapshot{}, tenantchat.ErrTenantDisabled
+	}
+	if len(document) == 0 {
 		return tenantruntime.Snapshot{}, ErrSnapshotUnavailable
 	}
 	snapshot, err := tenantruntime.ParseSnapshot(document)

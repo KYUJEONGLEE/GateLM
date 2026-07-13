@@ -72,12 +72,13 @@ type AdapterConfig struct {
 }
 
 type Model struct {
-	ModelID      string
-	ModelName    string
-	DisplayName  string
-	Enabled      bool
-	Capabilities ModelCapabilities
-	Routing      ModelRouting
+	ModelID      string            `json:"modelId"`
+	ModelRef     string            `json:"modelRef"`
+	ModelName    string            `json:"modelName"`
+	DisplayName  string            `json:"displayName"`
+	Enabled      bool              `json:"enabled"`
+	Capabilities ModelCapabilities `json:"capabilities"`
+	Routing      ModelRouting      `json:"routing"`
 }
 
 type ModelCapabilities struct {
@@ -139,6 +140,27 @@ func (c Catalog) ProviderByName(providerName string) (Provider, error) {
 		}
 	}
 	return Provider{}, ErrProviderNotFound
+}
+
+// ResolveModelRef resolves an opaque model reference through the catalog.
+// It deliberately does not split or interpret the reference string.
+func (c Catalog) ResolveModelRef(modelRef string) (Provider, Model, error) {
+	modelRef = strings.TrimSpace(modelRef)
+	for _, provider := range c.Providers {
+		if !provider.Enabled {
+			continue
+		}
+		for _, model := range provider.Models {
+			if model.ModelRef != modelRef {
+				continue
+			}
+			if !model.Enabled {
+				return Provider{}, Model{}, ErrModelDisabled
+			}
+			return provider, model, nil
+		}
+	}
+	return Provider{}, Model{}, ErrModelNotFound
 }
 
 func (c Catalog) FirstFallbackProvider(excludeProvider string, excludeModel string) (Provider, Model, error) {
@@ -209,6 +231,10 @@ func (p Provider) FirstEnabledFallbackModel() (Model, error) {
 
 func (m Model) Normalize() Model {
 	m.ModelID = strings.TrimSpace(m.ModelID)
+	m.ModelRef = strings.TrimSpace(m.ModelRef)
+	if m.ModelRef == "" {
+		m.ModelRef = m.ModelID
+	}
 	m.ModelName = strings.TrimSpace(m.ModelName)
 	m.DisplayName = strings.TrimSpace(m.DisplayName)
 	m.Routing.CostTier = strings.TrimSpace(m.Routing.CostTier)

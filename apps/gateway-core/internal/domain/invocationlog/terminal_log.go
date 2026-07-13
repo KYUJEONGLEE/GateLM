@@ -42,15 +42,15 @@ type TerminalLog struct {
 	Stream                 bool
 	RequestedProvider      string
 	RequestedModel         string
+	ModelRef               string
 	Provider               string
+	ProviderID             string
 	Model                  string
-	SelectedProvider       string
-	SelectedProviderID     string
-	SelectedModel          string
-	SelectedModelID        string
+	ModelID                string
 	RoutingReason          string
 	RoutingPolicyHash      string
 	PromptCategory         string
+	PromptDifficulty       string
 	RoutingDecisionKeyHash string
 	RoutingDiagnostics     routing.CategoryDiagnostics
 
@@ -62,6 +62,7 @@ type TerminalLog struct {
 	CostingResult     costing.Result
 	LatencyMs         int64
 	ProviderLatencyMs *int64
+	ProviderCalled    bool
 
 	Status       string
 	HTTPStatus   int
@@ -141,15 +142,15 @@ type TerminalLogInput struct {
 	Stream                 bool
 	RequestedProvider      string
 	RequestedModel         string
+	ModelRef               string
 	Provider               string
+	ProviderID             string
 	Model                  string
-	SelectedProvider       string
-	SelectedProviderID     string
-	SelectedModel          string
-	SelectedModelID        string
+	ModelID                string
 	RoutingReason          string
 	RoutingPolicyHash      string
 	PromptCategory         string
+	PromptDifficulty       string
 	RoutingDecisionKeyHash string
 	RoutingDiagnostics     routing.CategoryDiagnostics
 
@@ -161,6 +162,7 @@ type TerminalLogInput struct {
 	CostingResult     costing.Result
 	LatencyMs         int64
 	ProviderLatencyMs *int64
+	ProviderCalled    bool
 
 	Status       string
 	HTTPStatus   int
@@ -348,14 +350,21 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if strings.TrimSpace(input.RoutingDecisionKeyHash) != "" {
 		metadata["routingDecisionKeyHash"] = strings.TrimSpace(input.RoutingDecisionKeyHash)
 	}
-	if strings.TrimSpace(input.SelectedProviderID) != "" {
-		metadata["selectedProviderId"] = strings.TrimSpace(input.SelectedProviderID)
+	if strings.TrimSpace(input.ModelRef) != "" {
+		metadata["modelRef"] = strings.TrimSpace(input.ModelRef)
 	}
-	if strings.TrimSpace(input.SelectedModelID) != "" {
-		metadata["selectedModelId"] = strings.TrimSpace(input.SelectedModelID)
+	providerCalled := terminalProviderCalled(input)
+	if providerCalled && (strings.TrimSpace(input.ProviderID) != "" || strings.TrimSpace(input.ModelID) != "") {
+		metadata["providerAttempt"] = map[string]string{
+			"providerId": strings.TrimSpace(input.ProviderID),
+			"modelId":    strings.TrimSpace(input.ModelID),
+		}
 	}
 	if strings.TrimSpace(input.PromptCategory) != "" {
 		metadata["promptCategory"] = strings.TrimSpace(input.PromptCategory)
+	}
+	if strings.TrimSpace(input.PromptDifficulty) != "" {
+		metadata["promptDifficulty"] = strings.TrimSpace(input.PromptDifficulty)
 	}
 	if input.RoutingDiagnostics.HasData() {
 		metadata["routingDiagnostics"] = input.RoutingDiagnostics
@@ -414,7 +423,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		metadata["stageTimings"] = stagetiming.Clone(input.StageTimings)
 	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
-	metadata["providerCalled"] = terminalProviderCalled(input)
+	metadata["providerCalled"] = providerCalled
 	if costingMetadata := input.CostingResult.Metadata(); len(costingMetadata) > 0 {
 		metadata["costing"] = costingMetadata
 	}
@@ -448,15 +457,15 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		Stream:                 input.Stream,
 		RequestedProvider:      strings.TrimSpace(input.RequestedProvider),
 		RequestedModel:         strings.TrimSpace(input.RequestedModel),
+		ModelRef:               strings.TrimSpace(input.ModelRef),
 		Provider:               strings.TrimSpace(input.Provider),
 		Model:                  strings.TrimSpace(input.Model),
-		SelectedProvider:       strings.TrimSpace(input.SelectedProvider),
-		SelectedProviderID:     strings.TrimSpace(input.SelectedProviderID),
-		SelectedModel:          strings.TrimSpace(input.SelectedModel),
-		SelectedModelID:        strings.TrimSpace(input.SelectedModelID),
+		ProviderID:             strings.TrimSpace(input.ProviderID),
+		ModelID:                strings.TrimSpace(input.ModelID),
 		RoutingReason:          strings.TrimSpace(input.RoutingReason),
 		RoutingPolicyHash:      strings.TrimSpace(input.RoutingPolicyHash),
 		PromptCategory:         strings.TrimSpace(input.PromptCategory),
+		PromptDifficulty:       strings.TrimSpace(input.PromptDifficulty),
 		RoutingDecisionKeyHash: strings.TrimSpace(input.RoutingDecisionKeyHash),
 		RoutingDiagnostics:     input.RoutingDiagnostics,
 
@@ -468,6 +477,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		CostingResult:     input.CostingResult,
 		LatencyMs:         latencyMs,
 		ProviderLatencyMs: input.ProviderLatencyMs,
+		ProviderCalled:    providerCalled,
 
 		Status:       strings.TrimSpace(input.Status),
 		HTTPStatus:   input.HTTPStatus,
@@ -623,6 +633,9 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func terminalProviderCalled(input TerminalLogInput) bool {
+	if input.ProviderCalled {
+		return true
+	}
 	if strings.TrimSpace(input.CacheStatus) == CacheStatusHit {
 		return false
 	}
@@ -632,7 +645,7 @@ func terminalProviderCalled(input TerminalLogInput) bool {
 	if input.ProviderLatencyMs != nil {
 		return true
 	}
-	return strings.TrimSpace(input.Provider) != "" || strings.TrimSpace(input.SelectedProvider) != ""
+	return strings.TrimSpace(input.Provider) != "" || strings.TrimSpace(input.Model) != ""
 }
 
 func truncateRunes(value string, maxRunes int) (string, bool) {

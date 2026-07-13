@@ -4,7 +4,7 @@ import {
   test
 } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import type { InvocationLogRecord } from "../src/lib/fixtures/v1-observability-fixtures";
+import type { LiveInvocationLogRecord as InvocationLogRecord } from "../src/lib/gateway/live-observability-contract";
 import type { LiveRequestRow } from "../src/lib/gateway/live-requests-types";
 
 const tenantId = "tenant_demo_acme";
@@ -37,7 +37,7 @@ test.beforeEach(async ({ context, page, request }) => {
       body: JSON.stringify({
         data: {
           generatedAt: "2026-07-11T00:10:06.000Z",
-          modelOptions: ["gpt-4o-mini"],
+          requestedModelOptions: ["auto"],
           projectNameSource: "control-plane",
           rows: liveRows()
         }
@@ -102,7 +102,7 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
     "요청 시각",
     "프로젝트",
     "애플리케이션",
-    "프로바이더 / 모델",
+    "요청 모델",
     "최종 결과",
     "총 처리 시간",
     "사용 토큰",
@@ -260,15 +260,17 @@ function liveRows(): LiveRequestRow[] {
     const sequence = index + 1;
     return {
       cacheStatus: sequence === 2 ? "HIT" : "MISS",
+      category: sequence === 3 ? "code" : "general",
       costUsd: 0.00012 * sequence,
+      difficulty: sequence === 3 ? "complex" : "simple",
       id: `req-live-${sequence}`,
       latencyMs: sequence === 2 ? 18 : 310 + sequence * 37,
-      model: "gpt-4o-mini",
+      modelRef: sequence === 3 ? "catalog:code-complex" : "catalog:general-simple",
       projectId: "project-demo",
       projectName: "Customer Support",
-      provider: "openai",
-      providerLabel: "OpenAI",
+      requestedModel: "auto",
       requestId: `req-live-${sequence}`,
+      routingReason: "category_difficulty_matrix",
       safetyAction: sequence === 3 ? "MASKED" : "NONE",
       status: "success",
       statusCode: 200,
@@ -307,11 +309,13 @@ function detailRecord(requestId: string): InvocationLogRecord {
     cacheKeyHash: null,
     cacheStatus: "miss",
     cacheType: "exact",
+    category: "general",
     completedAt: "2026-07-11T00:10:06.000Z",
     completionTokens: 82,
     costMicroUsd: 120,
     createdAt: "2026-07-11T00:10:05.000Z",
     domainOutcomes: baseOutcomes,
+    difficulty: "simple",
     endUserId: null,
     endpoint: "/v1/chat/completions",
     errorCode: null,
@@ -325,9 +329,17 @@ function detailRecord(requestId: string): InvocationLogRecord {
     maskingDetectedTypes: [],
     metadata: { runtime: { runtimeSnapshot: null } },
     method: "POST",
+    modelRef: "catalog:general-simple",
     projectId: "project-demo",
     promptHash: "sanitized-hash",
     promptTokens: 48,
+    providerAttempt: {
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+      outcome: "succeeded",
+      latencyMs: 360,
+      sanitizedErrorCode: null
+    },
     providerCalled: true,
     providerLatencyMs: 360,
     rateLimitDecision: {
@@ -345,13 +357,10 @@ function detailRecord(requestId: string): InvocationLogRecord {
     },
     redactedPromptPreview: null,
     requestBodyHash: "sanitized-hash",
-    requestedModel: "gpt-4o-mini",
-    requestedProvider: "openai",
+    requestedModel: "auto",
     requestId,
     routingReason: "standard routing",
     savedCostMicroUsd: 0,
-    selectedModel: "gpt-4o-mini",
-    selectedProvider: "openai",
     source: "playwright",
     status: "success",
     stream: false,
@@ -370,8 +379,10 @@ function detailRecord(requestId: string): InvocationLogRecord {
         cache: { outcome: "hit" },
         provider: { outcome: "not_called" }
       },
+      modelRef: null,
       providerCalled: false,
-      providerLatencyMs: null
+      providerLatencyMs: null,
+      providerAttempt: null
     };
   }
 
@@ -415,11 +426,11 @@ function terminalDetailRecord(
       safety: { outcome: rateLimited ? "not_checked" : "blocked" }
     },
     httpStatus: rateLimited ? 429 : 403,
+    modelRef: null,
     providerCalled: false,
     providerLatencyMs: null,
+    providerAttempt: null,
     routingReason: null,
-    selectedModel: null,
-    selectedProvider: null,
     status: terminalStatus,
     terminalStatus
   };

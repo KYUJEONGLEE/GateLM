@@ -25,6 +25,7 @@ import {
   ListRuntimeConfigHistoryQueryDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
+  RUNTIME_CONFIG_ROUTING_CATEGORIES,
   RUNTIME_CONFIG_VERSION_PATTERN,
   RollbackRuntimeConfigDto,
   ResourceStatusDto,
@@ -44,6 +45,7 @@ import {
   RuntimeConfigRateLimitResponseDto,
   RuntimeConfigResponseCapturePolicyResponseDto,
   RuntimeConfigRoutingPolicyResponseDto,
+  RuntimeConfigRoutingRoutesDto,
   RuntimeConfigSafetyDetectorResponseDto,
   RuntimeConfigSafetyPolicyResponseDto,
   RuntimeSnapshotResponseDto,
@@ -63,6 +65,21 @@ const DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT = 80;
 const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
 const DEFAULT_PROMPT_CAPTURE_MAX_CHARS = 8000;
 const DEFAULT_RESPONSE_CAPTURE_MAX_CHARS = 8000;
+const BUILTIN_MOCK_MODEL_REF = 'mock-balanced';
+const BUILTIN_MOCK_PROVIDER_ID = '00000000-0000-4000-8000-000000000001';
+const BUILTIN_MOCK_PROVIDER_NAME = 'mock';
+const BUILTIN_MOCK_PROVIDER_BASE_URL = 'http://mock-provider:8090';
+const ROUTING_DIFFICULTIES = ['simple', 'complex'] as const;
+const LEGACY_ROUTING_FIELDS = [
+  'defaultProvider',
+  'defaultModel',
+  'lowCostProvider',
+  'lowCostModel',
+  'highQualityProvider',
+  'highQualityModel',
+  'fallbackProvider',
+  'fallbackModel',
+] as const;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
@@ -90,6 +107,11 @@ type RuntimeApplicationContext = NonNullable<
   tenant: { id: string; status: ResourceStatus };
   project: { id: string; status: ResourceStatus };
 };
+
+type RoutingProvider = Pick<
+  ProviderConnection,
+  'id' | 'provider' | 'status'
+>;
 
 @Injectable()
 export class RuntimeConfigsService {
@@ -184,14 +206,13 @@ export class RuntimeConfigsService {
       throw new NotFoundException('Runtime Config history item not found.');
     }
 
-    const document = this.withProviderCredentialRefBridge(
-      this.toRuntimeConfigDocument(runtimeConfig.document),
-    );
+    const migrated = this.readRuntimeConfigDocument(runtimeConfig);
+    const { document } = migrated;
     this.assertNoForbiddenRuntimeConfigKeys(document);
 
     return {
       applicationId,
-      item: this.toRuntimeConfigHistoryItem(runtimeConfig),
+      item: this.toRuntimeConfigHistoryItem(migrated.runtimeConfig),
       runtimeConfig: {
         ...document,
         publishState: this.toRuntimeConfigPublishState(
@@ -417,7 +438,7 @@ export class RuntimeConfigsService {
     document: ActiveRuntimeConfigResponseDto;
   }> {
     const { applicationId, notFoundMessage } = args;
-    const runtimeConfig = await this.prisma.runtimeConfig.findFirst({
+    const storedRuntimeConfig = await this.prisma.runtimeConfig.findFirst({
       where: {
         applicationId,
         publishState: RuntimeConfigPublishState.ACTIVE,
@@ -425,13 +446,12 @@ export class RuntimeConfigsService {
       orderBy: [{ publishedAt: 'desc' }, { updatedAt: 'desc' }],
     });
 
-    if (!runtimeConfig) {
+    if (!storedRuntimeConfig) {
       throw new NotFoundException(notFoundMessage);
     }
 
-    const document = this.withProviderCredentialRefBridge(
-      this.toRuntimeConfigDocument(runtimeConfig.document),
-    );
+    const { runtimeConfig, document } =
+      this.readRuntimeConfigDocument(storedRuntimeConfig);
     await this.assertRuntimeConfigExecutable({
       applicationId,
       runtimeConfig,
@@ -534,7 +554,8 @@ export class RuntimeConfigsService {
       throw new NotFoundException('Runtime Config draft not found.');
     }
 
-    const draftDocument = this.toRuntimeConfigDocument(draft.document);
+    const { document: draftDocument } =
+      this.readRuntimeConfigDocument(draft);
     const activeConfigVersion =
       dto.configVersion?.trim() || this.createPublishedConfigVersion(now);
     if (activeConfigVersion === draft.configVersion) {
@@ -638,9 +659,8 @@ export class RuntimeConfigsService {
       );
     }
 
-    const targetDocument = this.withProviderCredentialRefBridge(
-      this.toRuntimeConfigDocument(target.document),
-    );
+    const { document: targetDocument } =
+      this.readRuntimeConfigDocument(target);
     const rollbackConfigVersion =
       dto.rollbackConfigVersion?.trim() ||
       this.createRollbackConfigVersion(target.configVersion, now);
@@ -773,46 +793,30 @@ export class RuntimeConfigsService {
       this.getActiveApiKeyOrThrow(context.projectId, args.now),
       this.getApplicationProvidersOrThrow(context.id),
     ]);
-    const activeProvider = this.getPrimaryActiveProvider(providers);
-    const models = this.resolveModels(args.dto.models, providers);
-    const defaultModel = this.resolveModelForProvider(
-      models,
-      args.dto.routingPolicy?.defaultProvider ?? activeProvider.provider,
-      args.dto.routingPolicy?.defaultModel,
+    const models = this.withBuiltinMockModel(
+      this.resolveModels(args.dto.models, providers),
     );
-    const lowCostModel = this.resolveModelForProvider(
+    const routingProviders = this.withBuiltinMockRoutingProvider(providers);
+    const routingPolicy = this.resolveRoutingPolicy({
+      dto: args.dto,
       models,
-      args.dto.routingPolicy?.lowCostProvider ?? defaultModel.provider,
-      args.dto.routingPolicy?.lowCostModel,
-    );
-    const highQualityModel =
-      (args.dto.routingPolicy?.highQualityProvider ||
-        args.dto.routingPolicy?.highQualityModel)
-        ? this.resolveModelForProvider(
-            models,
-            args.dto.routingPolicy?.highQualityProvider ??
-              defaultModel.provider,
-            args.dto.routingPolicy?.highQualityModel,
-          )
-        : undefined;
-    const fallbackModel = this.resolveModelForProvider(
+      providers: routingProviders,
+    });
+    const routingTargets = this.resolveRoutingTargets(
+      routingPolicy,
       models,
-      args.dto.routingPolicy?.fallbackProvider ?? defaultModel.provider,
-      args.dto.routingPolicy?.fallbackModel,
+      routingProviders,
     );
-    const selectedProviders = [
-      defaultModel.provider,
-      lowCostModel.provider,
-      ...(highQualityModel ? [highQualityModel.provider] : []),
-      fallbackModel.provider,
+    const routingProviderNames = [
+      ...new Set(routingTargets.map((target) => target.provider.provider)),
     ];
-    this.assertSelectedProviderConnectionsActive(providers, selectedProviders);
-    this.assertSelectedModelsActive([
-      defaultModel,
-      lowCostModel,
-      ...(highQualityModel ? [highQualityModel] : []),
-      fallbackModel,
-    ]);
+    this.assertRoutingProviderConnectionsActive(
+      routingProviders,
+      routingProviderNames,
+    );
+    this.assertRoutingModelsActive(
+      routingTargets.map((target) => target.model),
+    );
     const effectiveAt = args.dto.effectiveAt
       ? new Date(args.dto.effectiveAt)
       : args.now;
@@ -820,25 +824,13 @@ export class RuntimeConfigsService {
     const effectiveAtIso = effectiveAt.toISOString();
     const publishedAtIso = args.publishedAt.toISOString();
     const safetyPolicy = this.resolveSafetyPolicy(args.dto.safetyPolicy);
-    const routingPolicy = this.resolveRoutingPolicy({
-      dto: args.dto,
-      defaultModel,
-      lowCostModel,
-      highQualityModel,
-      fallbackModel,
-    });
-    const providersResponse = providers.map((provider) =>
-      this.toRuntimeProvider(provider, models),
+    const providersResponse = this.withBuiltinMockRuntimeProvider(
+      providers.map((provider) => this.toRuntimeProvider(provider, models)),
     );
     if (args.publishState === 'active') {
       this.assertRuntimeSnapshotProviderCredentialBindings(
         providersResponse,
-        [
-          defaultModel.provider,
-          lowCostModel.provider,
-          ...(highQualityModel ? [highQualityModel.provider] : []),
-          fallbackModel.provider,
-        ],
+        routingProviderNames,
       );
     }
     const pricingRules = this.resolvePricingRules(
@@ -848,7 +840,7 @@ export class RuntimeConfigsService {
       args.now,
     );
     const documentWithoutHash: ActiveRuntimeConfigResponseDto = {
-      schemaVersion: 'gatelm.active-runtime-config.v1',
+      schemaVersion: 'gatelm.active-runtime-config.v2',
       configVersion: args.configVersion,
       configHash: '',
       configHashAlgorithm: CONFIG_HASH_ALGORITHM,
@@ -870,12 +862,6 @@ export class RuntimeConfigsService {
       appToken: null,
       providers: providersResponse,
       models,
-      defaultProvider: defaultModel.provider,
-      defaultModel: defaultModel.model,
-      lowCostProvider: lowCostModel.provider,
-      lowCostModel: lowCostModel.model,
-      fallbackProvider: fallbackModel.provider,
-      fallbackModel: fallbackModel.model,
       rateLimit: this.resolveRateLimit(args.dto.rateLimit),
       budgetPolicy: this.resolveBudgetPolicy(args.dto.budgetPolicy),
       safetyPolicy,
@@ -911,12 +897,17 @@ export class RuntimeConfigsService {
   }): Promise<void> {
     this.assertActiveRuntimeConfigSnapshot(args);
     this.assertRuntimeConfigPolicyBundle(args.document);
+    const routingTargets = this.resolveRoutingTargets(
+      args.document.routingPolicy,
+      args.document.models,
+      this.toProviderConnectionsForRouting(args.document.providers),
+    );
     this.assertRuntimeSnapshotProviderCredentialBindings(
       args.document.providers,
       [
-        args.document.defaultProvider,
-        args.document.lowCostProvider,
-        args.document.fallbackProvider,
+        ...new Set(
+          routingTargets.map((target) => target.provider.provider),
+        ),
       ],
     );
     this.assertNoForbiddenRuntimeConfigKeys(args.document);
@@ -945,7 +936,7 @@ export class RuntimeConfigsService {
       runtimeConfig.projectId !== document.projectId ||
       runtimeConfig.configVersion !== document.configVersion ||
       runtimeConfig.configHash !== document.configHash ||
-      document.schemaVersion !== 'gatelm.active-runtime-config.v1' ||
+      document.schemaVersion !== 'gatelm.active-runtime-config.v2' ||
       document.configHashAlgorithm !== CONFIG_HASH_ALGORITHM ||
       document.publishState !== 'active'
     ) {
@@ -1002,21 +993,19 @@ export class RuntimeConfigsService {
     document: ActiveRuntimeConfigResponseDto,
     context: RuntimeApplicationContext,
   ): Promise<void> {
-    const selectedProviderNames = new Set([
-      document.defaultProvider,
-      document.lowCostProvider,
-      document.fallbackProvider,
-      document.routingPolicy.defaultProvider,
-      document.routingPolicy.lowCostProvider,
-      document.routingPolicy.highQualityProvider,
-      document.routingPolicy.fallbackProvider,
-    ].filter((providerName): providerName is string => Boolean(providerName)));
+    const routingProviderNames = new Set(
+      this.resolveRoutingTargets(
+        document.routingPolicy,
+        document.models,
+        this.toProviderConnectionsForRouting(document.providers),
+      ).map((target) => target.provider.provider),
+    );
     const currentProviderConnections =
       await this.prisma.applicationProviderConnection.findMany({
         where: {
           applicationId: context.id,
           providerConnection: {
-            provider: { in: [...selectedProviderNames] },
+            provider: { in: [...routingProviderNames] },
           },
         },
         include: {
@@ -1030,10 +1019,17 @@ export class RuntimeConfigsService {
       currentProviders.map((provider) => [provider.provider, provider]),
     );
 
-    for (const providerName of selectedProviderNames) {
+    for (const providerName of routingProviderNames) {
       const documentProvider = document.providers.find(
         (provider) => provider.provider === providerName,
       );
+      if (
+        documentProvider?.providerId === BUILTIN_MOCK_PROVIDER_ID &&
+        documentProvider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+        documentProvider.status === 'active'
+      ) {
+        continue;
+      }
       const currentProvider = currentByName.get(providerName);
       if (
         !documentProvider ||
@@ -1053,45 +1049,22 @@ export class RuntimeConfigsService {
     document: ActiveRuntimeConfigResponseDto,
   ): void {
     this.assertRuntimeConfigRequiredPolicyShape(document);
-    this.assertSelectedModelIsExecutable(
-      document,
-      document.defaultProvider,
-      document.defaultModel,
+    const routingTargets = this.resolveRoutingTargets(
+      document.routingPolicy,
+      document.models,
+      this.toProviderConnectionsForRouting(document.providers),
     );
-    this.assertSelectedModelIsExecutable(
-      document,
-      document.lowCostProvider,
-      document.lowCostModel,
-    );
-    this.assertSelectedModelIsExecutable(
-      document,
-      document.fallbackProvider,
-      document.fallbackModel,
-    );
-    this.assertSelectedModelIsExecutable(
-      document,
-      document.routingPolicy.defaultProvider,
-      document.routingPolicy.defaultModel,
-    );
-    this.assertSelectedModelIsExecutable(
-      document,
-      document.routingPolicy.lowCostProvider,
-      document.routingPolicy.lowCostModel,
-    );
-    if (
-      document.routingPolicy.highQualityProvider ||
-      document.routingPolicy.highQualityModel
-    ) {
-      this.assertSelectedModelIsExecutable(
+    for (const target of routingTargets) {
+      this.assertRoutingModelExecutable(
         document,
-        document.routingPolicy.highQualityProvider ?? '',
-        document.routingPolicy.highQualityModel ?? '',
+        target.provider.provider,
+        target.model.model,
       );
     }
-    this.assertSelectedModelIsExecutable(
-      document,
-      document.routingPolicy.fallbackProvider,
-      document.routingPolicy.fallbackModel,
+    const expectedBootstrapState = this.toRoutingBootstrapState(
+      document.routingPolicy.routes,
+      document.models,
+      this.toProviderConnectionsForRouting(document.providers),
     );
 
     if (
@@ -1110,9 +1083,14 @@ export class RuntimeConfigsService {
       !document.safetyPolicy.securityPolicyHash ||
       !Array.isArray(document.safetyPolicy.detectors) ||
       document.safetyPolicy.detectors.length === 0 ||
-      document.routingPolicy.type !== 'simple' ||
-      document.routingPolicy.autoModel !== 'auto' ||
-      !document.routingPolicy.routingPolicyHash ||
+      document.routingPolicy.schemaVersion !== 'gatelm.routing-policy.v2' ||
+      !['auto', 'manual'].includes(document.routingPolicy.mode) ||
+      !['mock_bootstrap', 'configured'].includes(
+        document.routingPolicy.bootstrapState,
+      ) ||
+      document.routingPolicy.bootstrapState !== expectedBootstrapState ||
+      !this.isRoutingRoutesShape(document.routingPolicy.routes) ||
+      !this.isRoutingPolicyHash(document.routingPolicy.routingPolicyHash) ||
       !Array.isArray(document.pricingRules) ||
       document.pricingRules.length === 0
     ) {
@@ -1149,7 +1127,7 @@ export class RuntimeConfigsService {
     }
   }
 
-  private assertSelectedModelIsExecutable(
+  private assertRoutingModelExecutable(
     document: ActiveRuntimeConfigResponseDto,
     providerName: string,
     modelName: string,
@@ -1341,30 +1319,15 @@ export class RuntimeConfigsService {
     return providers;
   }
 
-  private getPrimaryActiveProvider(
-    providers: ProviderConnection[],
-  ): ProviderConnection {
-    const provider = providers.find(
-      (candidate) => candidate.status === ProviderConnectionStatus.ACTIVE,
-    );
-    if (!provider) {
-      throw new ConflictException(
-        'Runtime Config requires at least one active provider.',
-      );
-    }
-
-    return provider;
-  }
-
-  private assertSelectedProviderConnectionsActive(
-    providers: ProviderConnection[],
-    selectedProviderNames: string[],
+  private assertRoutingProviderConnectionsActive(
+    providers: RoutingProvider[],
+    routingProviderNames: string[],
   ): void {
     const providersByName = new Map(
       providers.map((provider) => [provider.provider, provider]),
     );
 
-    for (const providerName of selectedProviderNames) {
+    for (const providerName of routingProviderNames) {
       const provider = providersByName.get(providerName);
       if (!provider || provider.status !== ProviderConnectionStatus.ACTIVE) {
         throw new ConflictException(
@@ -1374,10 +1337,10 @@ export class RuntimeConfigsService {
     }
   }
 
-  private assertSelectedModelsActive(
-    selectedModels: RuntimeConfigModelResponseDto[],
+  private assertRoutingModelsActive(
+    routingModels: RuntimeConfigModelResponseDto[],
   ): void {
-    if (selectedModels.some((model) => model.status !== 'active')) {
+    if (routingModels.some((model) => model.status !== 'active')) {
       throw new ConflictException(
         'Runtime Config selected models must be active.',
       );
@@ -1386,11 +1349,11 @@ export class RuntimeConfigsService {
 
   private assertRuntimeSnapshotProviderCredentialBindings(
     providers: RuntimeConfigProviderDto[],
-    selectedProviderNames: string[],
+    routingProviderNames: string[],
   ): void {
-    const selectedProviderSet = new Set(selectedProviderNames);
+    const routingProviderSet = new Set(routingProviderNames);
     for (const provider of providers) {
-      if (!selectedProviderSet.has(provider.provider)) {
+      if (!routingProviderSet.has(provider.provider)) {
         continue;
       }
       if (!(provider.credentialRequired ?? provider.resolver !== 'none')) {
@@ -1497,26 +1460,6 @@ export class RuntimeConfigsService {
     return [`${provider.provider}-default`];
   }
 
-  private resolveModelForProvider(
-    models: RuntimeConfigModelResponseDto[],
-    provider: string,
-    requestedModel: string | undefined,
-  ): RuntimeConfigModelResponseDto {
-    const matched = requestedModel
-      ? models.find(
-          (model) =>
-            model.provider === provider && model.model === requestedModel,
-        )
-      : models.find((model) => model.provider === provider);
-    if (matched) {
-      return matched;
-    }
-
-    throw new ConflictException(
-      this.toModelUnavailableMessage(provider, requestedModel),
-    );
-  }
-
   private resolveRateLimit(
     dto: UpsertRuntimeConfigDraftDto['rateLimit'],
   ): RuntimeConfigRateLimitResponseDto {
@@ -1556,8 +1499,6 @@ export class RuntimeConfigsService {
       warningThresholdPercent:
         dto?.warningThresholdPercent ??
         DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
-      restrictHighQualityOnBudgetRisk:
-        dto?.restrictHighQualityOnBudgetRisk ?? true,
     };
   }
 
@@ -1655,36 +1596,310 @@ export class RuntimeConfigsService {
 
   private resolveRoutingPolicy(args: {
     dto: UpsertRuntimeConfigDraftDto;
-    defaultModel: RuntimeConfigModelResponseDto;
-    lowCostModel: RuntimeConfigModelResponseDto;
-    highQualityModel?: RuntimeConfigModelResponseDto;
-    fallbackModel: RuntimeConfigModelResponseDto;
+    models: RuntimeConfigModelResponseDto[];
+    providers: RoutingProvider[];
   }): RuntimeConfigRoutingPolicyResponseDto {
+    const routes = args.dto.routingPolicy
+      ? this.normalizeRoutingRoutes(args.dto.routingPolicy.routes)
+      : this.buildUniformRoutingRoutes(BUILTIN_MOCK_MODEL_REF);
+    this.resolveRoutingTargets(
+      {
+        schemaVersion: 'gatelm.routing-policy.v2',
+        mode: args.dto.routingPolicy?.mode ?? 'auto',
+        bootstrapState: 'configured',
+        routes,
+        routingPolicyHash: '',
+      },
+      args.models,
+      args.providers,
+    );
     const routingPolicyWithoutHash = {
-      type: 'simple',
-      autoModel: 'auto',
-      defaultProvider: args.defaultModel.provider,
-      defaultModel: args.defaultModel.model,
-      lowCostProvider: args.lowCostModel.provider,
-      lowCostModel: args.lowCostModel.model,
-      ...(args.highQualityModel
-        ? {
-            highQualityProvider: args.highQualityModel.provider,
-            highQualityModel: args.highQualityModel.model,
-          }
-        : {}),
-      fallbackProvider: args.fallbackModel.provider,
-      fallbackModel: args.fallbackModel.model,
-      shortPromptMaxChars:
-        args.dto.routingPolicy?.shortPromptMaxChars ?? 500,
+      schemaVersion: 'gatelm.routing-policy.v2',
+      mode: args.dto.routingPolicy?.mode ?? 'auto',
+      bootstrapState: this.toRoutingBootstrapState(
+        routes,
+        args.models,
+        args.providers,
+      ),
+      routes,
     } as const;
 
     return {
       ...routingPolicyWithoutHash,
-      routingPolicyHash: this.sha256(
+      routingPolicyHash: this.sha256Tagged(
         this.canonicalJson(routingPolicyWithoutHash),
       ),
     };
+  }
+
+  private normalizeRoutingRoutes(
+    routes: RuntimeConfigRoutingRoutesDto,
+  ): RuntimeConfigRoutingRoutesDto {
+    if (!this.isRoutingRoutesShape(routes)) {
+      throw new ConflictException(
+        'Runtime Config routing policy requires all category and difficulty cells.',
+      );
+    }
+
+    return Object.fromEntries(
+      RUNTIME_CONFIG_ROUTING_CATEGORIES.map((category) => [
+        category,
+        Object.fromEntries(
+          ROUTING_DIFFICULTIES.map((difficulty) => [
+            difficulty,
+            {
+              modelRefs: routes[category][difficulty].modelRefs.map((ref) =>
+                ref.trim(),
+              ),
+            },
+          ]),
+        ),
+      ]),
+    ) as unknown as RuntimeConfigRoutingRoutesDto;
+  }
+
+  private buildUniformRoutingRoutes(modelRef: string): RuntimeConfigRoutingRoutesDto {
+    return Object.fromEntries(
+      RUNTIME_CONFIG_ROUTING_CATEGORIES.map((category) => [
+        category,
+        {
+          simple: { modelRefs: [modelRef] },
+          complex: { modelRefs: [modelRef] },
+        },
+      ]),
+    ) as unknown as RuntimeConfigRoutingRoutesDto;
+  }
+
+  private isRoutingRoutesShape(value: unknown): value is RuntimeConfigRoutingRoutesDto {
+    if (!this.isRecord(value)) {
+      return false;
+    }
+    if (
+      Object.keys(value).length !== RUNTIME_CONFIG_ROUTING_CATEGORIES.length ||
+      !RUNTIME_CONFIG_ROUTING_CATEGORIES.every((category) => category in value)
+    ) {
+      return false;
+    }
+
+    return RUNTIME_CONFIG_ROUTING_CATEGORIES.every((category) => {
+      const categoryRoutes = value[category];
+      if (
+        !this.isRecord(categoryRoutes) ||
+        Object.keys(categoryRoutes).length !== ROUTING_DIFFICULTIES.length
+      ) {
+        return false;
+      }
+      return ROUTING_DIFFICULTIES.every((difficulty) => {
+        const cell = categoryRoutes[difficulty];
+        if (
+          !this.isRecord(cell) ||
+          Object.keys(cell).length !== 1 ||
+          !Array.isArray(cell.modelRefs) ||
+          cell.modelRefs.length === 0 ||
+          !cell.modelRefs.every(
+            (ref) =>
+              typeof ref === 'string' &&
+              ref.trim().length > 0 &&
+              ref.trim().length <= 240,
+          )
+        ) {
+          return false;
+        }
+        const normalizedRefs = cell.modelRefs.map((ref) => ref.trim());
+        return new Set(normalizedRefs).size === normalizedRefs.length;
+      });
+    });
+  }
+
+  private routingModelRefs(routes: RuntimeConfigRoutingRoutesDto): string[] {
+    return RUNTIME_CONFIG_ROUTING_CATEGORIES.flatMap((category) =>
+      ROUTING_DIFFICULTIES.flatMap(
+        (difficulty) => routes[category][difficulty].modelRefs,
+      ),
+    );
+  }
+
+  private withBuiltinMockModel(
+    models: RuntimeConfigModelResponseDto[],
+  ): RuntimeConfigModelResponseDto[] {
+    if (
+      models.some(
+        (model) =>
+          model.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+          model.model === BUILTIN_MOCK_MODEL_REF &&
+          model.status === 'active',
+      )
+    ) {
+      return models;
+    }
+
+    return [
+      ...models.filter(
+        (model) =>
+          model.provider !== BUILTIN_MOCK_PROVIDER_NAME ||
+          model.model !== BUILTIN_MOCK_MODEL_REF,
+      ),
+      {
+        provider: BUILTIN_MOCK_PROVIDER_NAME,
+        model: BUILTIN_MOCK_MODEL_REF,
+        displayName: 'Mock Balanced',
+        status: 'active',
+        contextWindowTokens: 8192,
+        supportsStreaming: false,
+        supportsJsonMode: false,
+      },
+    ];
+  }
+
+  private withBuiltinMockRoutingProvider(
+    providers: RoutingProvider[],
+  ): RoutingProvider[] {
+    if (
+      providers.some(
+        (provider) =>
+          provider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+          provider.status === ProviderConnectionStatus.ACTIVE,
+      )
+    ) {
+      return providers;
+    }
+
+    return [
+      ...providers.filter(
+        (provider) => provider.provider !== BUILTIN_MOCK_PROVIDER_NAME,
+      ),
+      {
+        id: BUILTIN_MOCK_PROVIDER_ID,
+        provider: BUILTIN_MOCK_PROVIDER_NAME,
+        status: ProviderConnectionStatus.ACTIVE,
+      },
+    ];
+  }
+
+  private withBuiltinMockRuntimeProvider(
+    providers: RuntimeConfigProviderDto[],
+  ): RuntimeConfigProviderDto[] {
+    const activeMockProvider = providers.find(
+      (provider) =>
+        provider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+        provider.status === 'active',
+    );
+    if (activeMockProvider) {
+      return providers.map((provider) =>
+        provider === activeMockProvider &&
+        !provider.models.includes(BUILTIN_MOCK_MODEL_REF)
+          ? {
+              ...provider,
+              models: [...provider.models, BUILTIN_MOCK_MODEL_REF],
+            }
+          : provider,
+      );
+    }
+
+    return [
+      ...providers.filter(
+        (provider) => provider.provider !== BUILTIN_MOCK_PROVIDER_NAME,
+      ),
+      {
+        providerId: BUILTIN_MOCK_PROVIDER_ID,
+        provider: BUILTIN_MOCK_PROVIDER_NAME,
+        displayName: 'Built-in Mock Provider',
+        status: 'active',
+        adapterType: 'mock',
+        baseUrl: BUILTIN_MOCK_PROVIDER_BASE_URL,
+        timeoutMs: 30000,
+        credentialRequired: false,
+        credentialRef: null,
+        secretRef: null,
+        credentialPreview: null,
+        resolver: 'none',
+        adapterConfig: { requestFormat: 'mock_chat_completions' },
+        models: [BUILTIN_MOCK_MODEL_REF],
+        failureMode: 'fail_closed',
+      },
+    ];
+  }
+
+  private resolveRoutingTargets(
+    policy: RuntimeConfigRoutingPolicyResponseDto,
+    models: RuntimeConfigModelResponseDto[],
+    providers: RoutingProvider[],
+  ): Array<{ provider: RoutingProvider; model: RuntimeConfigModelResponseDto }> {
+    if (!this.isRoutingRoutesShape(policy.routes)) {
+      throw new ConflictException(
+        'Runtime Config routing policy requires all category and difficulty cells.',
+      );
+    }
+
+    const targets: Array<{
+      provider: RoutingProvider;
+      model: RuntimeConfigModelResponseDto;
+    }> = [];
+    for (const modelRef of new Set(this.routingModelRefs(policy.routes))) {
+      if (modelRef === BUILTIN_MOCK_MODEL_REF) {
+        const mockProvider = providers.find(
+          (provider) => provider.provider === 'mock',
+        );
+        const mockModel = models.find(
+          (model) => model.provider === 'mock' && model.model === 'mock-balanced',
+        );
+        if (!mockProvider || !mockModel) {
+          throw new ConflictException(
+            'Runtime Config built-in mock target is unavailable.',
+          );
+        }
+        targets.push({ provider: mockProvider, model: mockModel });
+        continue;
+      }
+
+      const target = providers
+        .map((provider) => ({
+          provider,
+          model: models.find(
+            (model) =>
+              model.provider === provider.provider &&
+              `${provider.id}:${model.model}` === modelRef,
+          ),
+        }))
+        .find(
+          (candidate): candidate is {
+            provider: RoutingProvider;
+            model: RuntimeConfigModelResponseDto;
+          } => Boolean(candidate.model),
+        );
+      if (!target) {
+        throw new ConflictException(
+          'Runtime Config routing modelRef is not available in the provider catalog.',
+        );
+      }
+      targets.push(target);
+    }
+
+    return targets;
+  }
+
+  private toRoutingBootstrapState(
+    routes: RuntimeConfigRoutingRoutesDto,
+    models: RuntimeConfigModelResponseDto[],
+    providers: RoutingProvider[],
+  ): RuntimeConfigRoutingPolicyResponseDto['bootstrapState'] {
+    if (this.routingModelRefs(routes).includes(BUILTIN_MOCK_MODEL_REF)) {
+      return 'mock_bootstrap';
+    }
+    const targets = this.resolveRoutingTargets(
+      {
+        schemaVersion: 'gatelm.routing-policy.v2',
+        mode: 'auto',
+        bootstrapState: 'configured',
+        routes,
+        routingPolicyHash: '',
+      },
+      models,
+      providers,
+    );
+    return targets.some((target) => target.provider.provider === 'mock')
+      ? 'mock_bootstrap'
+      : 'configured';
   }
 
   private resolvePricingRules(
@@ -1752,8 +1967,7 @@ export class RuntimeConfigsService {
         'tenantId',
         'projectId',
         'applicationId',
-        'selectedProvider',
-        'selectedModel',
+        'resolvedModelRef',
         'normalizedRedactedPrompt',
         'securityPolicyHash',
         'routingPolicyHash',
@@ -1803,6 +2017,19 @@ export class RuntimeConfigsService {
     };
   }
 
+  private toProviderConnectionsForRouting(
+    providers: RuntimeConfigProviderDto[],
+  ): RoutingProvider[] {
+    return providers.map((provider) => ({
+      id: provider.providerId,
+      provider: provider.provider,
+      status:
+        provider.status === 'active'
+          ? ProviderConnectionStatus.ACTIVE
+          : ProviderConnectionStatus.DISABLED,
+    }));
+  }
+
   private toRuntimeSnapshotResponse(
     runtimeConfig: RuntimeConfig,
     document: ActiveRuntimeConfigResponseDto,
@@ -1822,6 +2049,7 @@ export class RuntimeConfigsService {
     };
 
     const snapshotWithoutContentHash = {
+      schemaVersion: 'gatelm.runtime-snapshot.v2',
       runtimeSnapshotId: runtimeConfig.id,
       runtimeSnapshotVersion,
       contentHash: undefined,
@@ -1861,19 +2089,9 @@ export class RuntimeConfigsService {
           })),
         },
         routing: {
-          autoModelEnabled: true,
-          defaultRequestedModel: document.routingPolicy.autoModel,
-          defaultProvider: document.routingPolicy.defaultProvider,
-          defaultModel: document.routingPolicy.defaultModel,
-          lowCostProvider: document.routingPolicy.lowCostProvider,
-          lowCostModel: document.routingPolicy.lowCostModel,
-          ...(document.routingPolicy.highQualityProvider &&
-          document.routingPolicy.highQualityModel
-            ? {
-                highQualityProvider: document.routingPolicy.highQualityProvider,
-                highQualityModel: document.routingPolicy.highQualityModel,
-              }
-            : {}),
+          mode: document.routingPolicy.mode,
+          bootstrapState: document.routingPolicy.bootstrapState,
+          routes: document.routingPolicy.routes,
           routingPolicyHash: document.routingPolicy.routingPolicyHash,
         },
         cache: {
@@ -1906,14 +2124,6 @@ export class RuntimeConfigsService {
           enforcementMode: document.budgetPolicy.enforcementMode,
           warningThresholdPercent:
             document.budgetPolicy.warningThresholdPercent,
-          restrictHighQualityOnBudgetRisk:
-            document.budgetPolicy.restrictHighQualityOnBudgetRisk,
-        },
-        fallback: {
-          enabled: true,
-          fallbackProvider: document.routingPolicy.fallbackProvider,
-          fallbackModel: document.routingPolicy.fallbackModel,
-          allowedReasons: ['provider_timeout', 'provider_error'],
         },
         streaming: {
           enabled: document.models.some((model) => model.supportsStreaming),
@@ -1952,6 +2162,21 @@ export class RuntimeConfigsService {
 
     const document =
       runtimeSnapshot.snapshotBody as unknown as RuntimeSnapshotResponseDto;
+    const routingPolicy = document.policies?.routing as unknown;
+    if (
+      document.schemaVersion !== 'gatelm.runtime-snapshot.v2' ||
+      !this.isRecord(routingPolicy) ||
+      (routingPolicy.mode !== 'auto' && routingPolicy.mode !== 'manual') ||
+      !this.isRoutingPolicyHash(routingPolicy.routingPolicyHash) ||
+      !this.isRoutingRoutesShape(routingPolicy.routes) ||
+      LEGACY_ROUTING_FIELDS.some(
+        (legacyField) => legacyField in routingPolicy,
+      )
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is invalid.',
+      );
+    }
     const persistedVersion = Number(runtimeSnapshot.version);
     if (!Number.isSafeInteger(persistedVersion)) {
       throw new InternalServerErrorException(
@@ -2122,8 +2347,15 @@ export class RuntimeConfigsService {
     provider: RuntimeConfigProviderDto,
     document: ActiveRuntimeConfigResponseDto,
   ): ProviderCatalogResponseDto['providers'][number]['models'][number] {
+    const modelId = `${provider.providerId}:${model.model}`;
+    const modelRef =
+      provider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+      model.model === BUILTIN_MOCK_MODEL_REF
+        ? BUILTIN_MOCK_MODEL_REF
+        : modelId;
     return {
-      modelId: `${provider.providerId}:${model.model}`,
+      modelId,
+      modelRef,
       modelName: model.model,
       displayName: model.displayName,
       enabled: model.status === 'active',
@@ -2134,9 +2366,9 @@ export class RuntimeConfigsService {
         maxOutputTokens: this.toMaxOutputTokens(model),
       },
       routing: {
-        autoRoutingEligible: this.isModelSelectedForRouting(model, document),
-        costTier: this.toModelCostTier(model, document),
-        fallbackPriority: this.toModelFallbackPriority(model, document),
+        autoRoutingEligible: this.isModelSelectedForRouting(modelRef, document),
+        costTier: 'balanced',
+        fallbackPriority: this.toModelFallbackPriority(modelRef, document),
       },
     };
   }
@@ -2315,94 +2547,27 @@ export class RuntimeConfigsService {
     );
   }
 
-  private toModelCostTier(
-    model: RuntimeConfigModelResponseDto,
-    document: ActiveRuntimeConfigResponseDto,
-  ): 'low' | 'balanced' | 'premium' {
-    if (!document.routingPolicy) {
-      return 'balanced';
-    }
-
-    if (
-      model.provider === document.routingPolicy.lowCostProvider &&
-      model.model === document.routingPolicy.lowCostModel
-    ) {
-      return 'low';
-    }
-    if (
-      document.routingPolicy.highQualityProvider &&
-      document.routingPolicy.highQualityModel &&
-      model.provider === document.routingPolicy.highQualityProvider &&
-      model.model === document.routingPolicy.highQualityModel
-    ) {
-      return 'premium';
-    }
-
-    return 'balanced';
-  }
-
   private isModelSelectedForRouting(
-    model: RuntimeConfigModelResponseDto,
+    modelRef: string,
     document: ActiveRuntimeConfigResponseDto,
   ): boolean {
-    if (model.status !== 'active') {
-      return false;
-    }
-
-    if (!document.routingPolicy) {
-      return true;
-    }
-
-    return (
-      (model.provider === document.routingPolicy.lowCostProvider &&
-        model.model === document.routingPolicy.lowCostModel) ||
-      (model.provider === document.routingPolicy.defaultProvider &&
-        model.model === document.routingPolicy.defaultModel) ||
-      (document.routingPolicy.highQualityProvider !== undefined &&
-        document.routingPolicy.highQualityModel !== undefined &&
-        model.provider === document.routingPolicy.highQualityProvider &&
-        model.model === document.routingPolicy.highQualityModel) ||
-      (model.provider === document.routingPolicy.fallbackProvider &&
-        model.model === document.routingPolicy.fallbackModel)
+    return this.routingModelRefs(document.routingPolicy.routes).includes(
+      modelRef,
     );
   }
 
   private toModelFallbackPriority(
-    model: RuntimeConfigModelResponseDto,
+    modelRef: string,
     document: ActiveRuntimeConfigResponseDto,
   ): number {
-    if (!document.routingPolicy) {
-      return 100;
-    }
-
-    if (
-      model.provider === document.routingPolicy.lowCostProvider &&
-      model.model === document.routingPolicy.lowCostModel
-    ) {
-      return 0;
-    }
-    if (
-      model.provider === document.routingPolicy.defaultProvider &&
-      model.model === document.routingPolicy.defaultModel
-    ) {
-      return 1;
-    }
-    if (
-      document.routingPolicy.highQualityProvider &&
-      document.routingPolicy.highQualityModel &&
-      model.provider === document.routingPolicy.highQualityProvider &&
-      model.model === document.routingPolicy.highQualityModel
-    ) {
-      return 2;
-    }
-    if (
-      model.provider === document.routingPolicy.fallbackProvider &&
-      model.model === document.routingPolicy.fallbackModel
-    ) {
-      return 10;
-    }
-
-    return 5;
+    const indexes = RUNTIME_CONFIG_ROUTING_CATEGORIES.flatMap((category) =>
+      ROUTING_DIFFICULTIES.map((difficulty) =>
+        document.routingPolicy.routes[category][difficulty].modelRefs.indexOf(
+          modelRef,
+        ),
+      ),
+    ).filter((index) => index >= 0);
+    return indexes.length > 0 ? Math.min(...indexes) : 100;
   }
 
   private isSafeCatalogToken(value: unknown): value is string {
@@ -2554,8 +2719,6 @@ export class RuntimeConfigsService {
         enforcementMode: document.budgetPolicy.enforcementMode,
         warningThresholdPercent:
           document.budgetPolicy.warningThresholdPercent,
-        restrictHighQualityOnBudgetRisk:
-          document.budgetPolicy.restrictHighQualityOnBudgetRisk,
       },
       cachePolicy: {
         enabled: document.cachePolicy.enabled,
@@ -2572,20 +2735,8 @@ export class RuntimeConfigsService {
         maxChars: document.responseCapturePolicy.maxChars,
       },
       routingPolicy: {
-        defaultProvider: document.routingPolicy.defaultProvider,
-        defaultModel: document.routingPolicy.defaultModel,
-        lowCostProvider: document.routingPolicy.lowCostProvider,
-        lowCostModel: document.routingPolicy.lowCostModel,
-        ...(document.routingPolicy.highQualityProvider &&
-        document.routingPolicy.highQualityModel
-          ? {
-              highQualityProvider: document.routingPolicy.highQualityProvider,
-              highQualityModel: document.routingPolicy.highQualityModel,
-            }
-          : {}),
-        fallbackProvider: document.routingPolicy.fallbackProvider,
-        fallbackModel: document.routingPolicy.fallbackModel,
-        shortPromptMaxChars: document.routingPolicy.shortPromptMaxChars,
+        mode: document.routingPolicy.mode,
+        routes: document.routingPolicy.routes,
       },
       safetyPolicy: {
         detectors: document.safetyPolicy.detectors,
@@ -2618,6 +2769,79 @@ export class RuntimeConfigsService {
       updatedAt: runtimeConfig.updatedAt.toISOString(),
       runtimeConfig: this.toRuntimeConfigDocument(runtimeConfig.document),
     };
+  }
+
+  private readRuntimeConfigDocument<
+    T extends { configHash: string; document: Prisma.JsonValue },
+  >(
+    runtimeConfig: T,
+  ): {
+    runtimeConfig: T;
+    document: ActiveRuntimeConfigResponseDto;
+  } {
+    const isV2 = this.isPersistedRoutingV2(runtimeConfig.document);
+    if (this.declaresRoutingV2(runtimeConfig.document) && !isV2) {
+      throw new ConflictException(
+        'Runtime Config routing policy v2 is invalid.',
+      );
+    }
+    const normalized = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
+    if (isV2) {
+      return { runtimeConfig, document: normalized };
+    }
+
+    const migratedDocument = {
+      ...normalized,
+      configHash: this.sha256(
+        this.canonicalJson({
+          ...normalized,
+          configHash: undefined,
+        }),
+      ),
+    };
+    return {
+      runtimeConfig: {
+        ...runtimeConfig,
+        configHash: migratedDocument.configHash,
+      },
+      document: migratedDocument,
+    };
+  }
+
+  private isPersistedRoutingV2(value: Prisma.JsonValue): boolean {
+    if (!this.isRecord(value)) {
+      return false;
+    }
+    const routingPolicy = value.routingPolicy;
+    return (
+      value.schemaVersion === 'gatelm.active-runtime-config.v2' &&
+      this.isRecord(routingPolicy) &&
+      Object.keys(routingPolicy).length === 5 &&
+      routingPolicy.schemaVersion === 'gatelm.routing-policy.v2' &&
+      (routingPolicy.mode === 'auto' || routingPolicy.mode === 'manual') &&
+      (routingPolicy.bootstrapState === 'mock_bootstrap' ||
+        routingPolicy.bootstrapState === 'configured') &&
+      this.isRoutingPolicyHash(routingPolicy.routingPolicyHash) &&
+      this.isRoutingRoutesShape(routingPolicy.routes) &&
+      !LEGACY_ROUTING_FIELDS.some(
+        (legacyField) =>
+          legacyField in value || legacyField in routingPolicy,
+      )
+    );
+  }
+
+  private declaresRoutingV2(value: Prisma.JsonValue): boolean {
+    if (!this.isRecord(value)) {
+      return false;
+    }
+    const routingPolicy = value.routingPolicy;
+    return (
+      value.schemaVersion === 'gatelm.active-runtime-config.v2' ||
+      (this.isRecord(routingPolicy) &&
+        routingPolicy.schemaVersion === 'gatelm.routing-policy.v2')
+    );
   }
 
   private toRuntimeConfigHistoryItem(
@@ -2658,10 +2882,33 @@ export class RuntimeConfigsService {
     }
 
     const runtimeDocument = value as Record<string, unknown>;
-    const document = value as unknown as ActiveRuntimeConfigResponseDto;
+    const {
+      defaultProvider: _defaultProvider,
+      defaultModel: _defaultModel,
+      lowCostProvider: _lowCostProvider,
+      lowCostModel: _lowCostModel,
+      highQualityProvider: _highQualityProvider,
+      highQualityModel: _highQualityModel,
+      fallbackProvider: _fallbackProvider,
+      fallbackModel: _fallbackModel,
+      routingPolicy: _routingPolicy,
+      ...documentWithoutLegacyRouting
+    } = runtimeDocument;
+    const providers = Array.isArray(runtimeDocument.providers)
+      ? (runtimeDocument.providers as unknown as RuntimeConfigProviderDto[])
+      : [];
+    const models = this.withBuiltinMockModel(
+      Array.isArray(runtimeDocument.models)
+        ? (runtimeDocument.models as unknown as RuntimeConfigModelResponseDto[])
+        : [],
+    );
+    const runtimeProviders = this.withBuiltinMockRuntimeProvider(providers);
 
     return {
-      ...document,
+      ...(documentWithoutLegacyRouting as unknown as ActiveRuntimeConfigResponseDto),
+      schemaVersion: 'gatelm.active-runtime-config.v2',
+      providers: runtimeProviders,
+      models,
       budgetPolicy: this.normalizeRuntimeConfigBudgetPolicy(
         runtimeDocument,
       ),
@@ -2669,7 +2916,89 @@ export class RuntimeConfigsService {
         this.normalizeRuntimeConfigPromptCapturePolicy(runtimeDocument),
       responseCapturePolicy:
         this.normalizeRuntimeConfigResponseCapturePolicy(runtimeDocument),
+      routingPolicy: this.normalizeStoredRoutingPolicy(
+        runtimeDocument,
+        runtimeProviders,
+        models,
+      ),
     };
+  }
+
+  private normalizeStoredRoutingPolicy(
+    runtimeDocument: Record<string, unknown>,
+    providers: RuntimeConfigProviderDto[],
+    models: RuntimeConfigModelResponseDto[],
+  ): RuntimeConfigRoutingPolicyResponseDto {
+    const rawPolicy = this.isRecord(runtimeDocument.routingPolicy)
+      ? runtimeDocument.routingPolicy
+      : null;
+    const routingProviders = this.toProviderConnectionsForRouting(providers);
+    if (
+      rawPolicy?.schemaVersion === 'gatelm.routing-policy.v2' &&
+      (rawPolicy.mode === 'auto' || rawPolicy.mode === 'manual') &&
+      (rawPolicy.bootstrapState === 'mock_bootstrap' ||
+        rawPolicy.bootstrapState === 'configured') &&
+      this.isRoutingRoutesShape(rawPolicy.routes) &&
+      this.isRoutingPolicyHash(rawPolicy.routingPolicyHash)
+    ) {
+      return {
+        schemaVersion: 'gatelm.routing-policy.v2',
+        mode: rawPolicy.mode,
+        bootstrapState: rawPolicy.bootstrapState,
+        routes: rawPolicy.routes,
+        routingPolicyHash: rawPolicy.routingPolicyHash,
+      };
+    }
+
+    const legacyDefaultModel =
+      this.toNonEmptyTrimmedString(rawPolicy?.defaultModel) ??
+      this.toNonEmptyTrimmedString(runtimeDocument.defaultModel);
+    const matchedProvider = legacyDefaultModel
+      ? providers
+          .filter(
+            (provider) =>
+              provider.status === 'active' &&
+              models.some(
+                (model) =>
+                  model.status === 'active' &&
+                  model.provider === provider.provider &&
+                  model.model === legacyDefaultModel,
+              ),
+          )
+          .sort((left, right) =>
+            left.providerId.localeCompare(right.providerId),
+          )[0]
+      : undefined;
+    const modelRef =
+      matchedProvider && legacyDefaultModel
+        ? matchedProvider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+          legacyDefaultModel === BUILTIN_MOCK_MODEL_REF
+          ? BUILTIN_MOCK_MODEL_REF
+          : `${matchedProvider.providerId}:${legacyDefaultModel}`
+        : BUILTIN_MOCK_MODEL_REF;
+    const routes = this.buildUniformRoutingRoutes(modelRef);
+    const policyWithoutHash = {
+      schemaVersion: 'gatelm.routing-policy.v2',
+      mode: 'auto',
+      bootstrapState: this.toRoutingBootstrapState(
+        routes,
+        models,
+        routingProviders,
+      ),
+      routes,
+    } as const;
+    return {
+      ...policyWithoutHash,
+      routingPolicyHash: this.sha256Tagged(
+        this.canonicalJson(policyWithoutHash),
+      ),
+    };
+  }
+
+  private toNonEmptyTrimmedString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0
+      ? value.trim()
+      : null;
   }
 
   private defaultRuntimeConfigBudgetPolicy(): RuntimeConfigBudgetPolicyResponseDto {
@@ -2677,7 +3006,6 @@ export class RuntimeConfigsService {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
-      restrictHighQualityOnBudgetRisk: true,
     };
   }
 
@@ -2693,7 +3021,6 @@ export class RuntimeConfigsService {
       Number.isInteger(budgetPolicy.warningThresholdPercent) &&
       budgetPolicy.warningThresholdPercent >= 0 &&
       budgetPolicy.warningThresholdPercent <= 100 &&
-      typeof budgetPolicy.restrictHighQualityOnBudgetRisk === 'boolean' &&
       (budgetPolicy.enabled
         ? budgetPolicy.enforcementMode !== 'disabled'
         : budgetPolicy.enforcementMode === 'disabled')
@@ -2758,12 +3085,6 @@ export class RuntimeConfigsService {
     )
       ? candidate.warningThresholdPercent
       : DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT;
-    const restrictHighQualityOnBudgetRisk = Object.prototype.hasOwnProperty.call(
-      candidate,
-      'restrictHighQualityOnBudgetRisk',
-    )
-      ? candidate.restrictHighQualityOnBudgetRisk
-      : true;
     const normalized: RuntimeConfigBudgetPolicyResponseDto = {
       enabled:
         candidate.enabled as RuntimeConfigBudgetPolicyResponseDto['enabled'],
@@ -2771,8 +3092,6 @@ export class RuntimeConfigsService {
         candidate.enforcementMode as RuntimeConfigBudgetPolicyResponseDto['enforcementMode'],
       warningThresholdPercent:
         warningThresholdPercent as RuntimeConfigBudgetPolicyResponseDto['warningThresholdPercent'],
-      restrictHighQualityOnBudgetRisk:
-        restrictHighQualityOnBudgetRisk as RuntimeConfigBudgetPolicyResponseDto['restrictHighQualityOnBudgetRisk'],
     };
 
     if (!this.isExecutableBudgetPolicy(normalized)) {
@@ -3075,6 +3394,14 @@ export class RuntimeConfigsService {
     return createHash('sha256').update(value, 'utf8').digest('hex');
   }
 
+  private sha256Tagged(value: string): string {
+    return `sha256:${this.sha256(value)}`;
+  }
+
+  private isRoutingPolicyHash(value: unknown): value is string {
+    return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
+  }
+
   private toDate(value: string): Date {
     return new Date(value);
   }
@@ -3092,34 +3419,6 @@ export class RuntimeConfigsService {
 
   private toModelKey(provider: string, model: string): string {
     return `${provider}\u0000${model}`;
-  }
-
-  private toModelUnavailableMessage(
-    provider: string,
-    requestedModel: string | undefined,
-  ): string {
-    const providerLabel = this.toDiagnosticValue(provider);
-    if (!requestedModel) {
-      return `Runtime Config model is not available for provider "${providerLabel}".`;
-    }
-
-    return `Runtime Config model is not available for provider "${providerLabel}" and model "${this.toDiagnosticValue(requestedModel)}".`;
-  }
-
-  private toDiagnosticValue(value: string): string {
-    const normalized = value
-      .replace(/[\r\n\t]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/["\\]/g, '_');
-
-    if (normalized.length === 0) {
-      return '<empty>';
-    }
-
-    return normalized.length > 80
-      ? `${normalized.slice(0, 77)}...`
-      : normalized;
   }
 
   private isUniqueConstraintError(

@@ -91,9 +91,8 @@ export function setup() {
 
   if (
     response.status !== 200 ||
-    metadata.selectedProvider !== "mock" ||
     metadata.providerCalled !== true ||
-    !isMockModel(metadata.selectedModel)
+    !isMockModelRef(metadata.modelRef)
   ) {
     throw new Error("Mock routing preflight failed; load execution was blocked.");
   }
@@ -112,9 +111,8 @@ export default function (data) {
 
   check(response, {
     "load request returns 200": (value) => value.status === 200,
-    "load request uses Mock provider": () => metadata.selectedProvider === "mock",
     "load request calls provider": () => metadata.providerCalled === true,
-    "load request uses Mock model": () => isMockModel(metadata.selectedModel),
+    "load request uses Mock modelRef": () => isMockModelRef(metadata.modelRef),
     "load request is a cache miss": (value) =>
       headerValue(value, "X-GateLM-Cache-Status") === "miss",
   });
@@ -226,7 +224,7 @@ function safeJson(body) {
   }
 }
 
-function isMockModel(value) {
+function isMockModelRef(value) {
   const catalogModel = typeof value === "string" ? value.split(":").pop() : "";
   return catalogModel.startsWith("mock-");
 }

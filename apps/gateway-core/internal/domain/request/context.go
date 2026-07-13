@@ -89,18 +89,14 @@ type MaskingContext struct {
 }
 
 type RoutingContext struct {
-	RequestedModel             string
-	SelectedProvider           string
-	SelectedProviderID         string
-	SelectedProviderCatalogKey string
-	SelectedModel              string
-	SelectedModelID            string
-	ProviderCatalogContentHash string
-	RoutingDecisionKeyHash     string
-	RoutingDecisionMaterial    map[string]string
-	RoutingReason              string
-	RoutingPolicyHash          string
-	CategoryDiagnostics        routing.CategoryDiagnostics
+	RequestedModel          string
+	ModelRef                string
+	CandidateModelRefs      []string
+	RoutingDecisionKeyHash  string
+	RoutingDecisionMaterial map[string]string
+	RoutingReason           string
+	RoutingPolicyHash       string
+	CategoryDiagnostics     routing.CategoryDiagnostics
 }
 
 type CacheContext struct {

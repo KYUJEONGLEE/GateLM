@@ -291,12 +291,10 @@ function Select-SafeRuntimeSnapshotSummary {
         lookupKey = $Snapshot.lookupKey
         providerCatalogRef = $Snapshot.providerCatalogRef
         routing = [ordered]@{
-            defaultProvider = $Snapshot.policies.routing.defaultProvider
-            defaultModel = $Snapshot.policies.routing.defaultModel
-        }
-        fallback = [ordered]@{
-            fallbackProvider = $Snapshot.policies.fallback.fallbackProvider
-            fallbackModel = $Snapshot.policies.fallback.fallbackModel
+            mode = $Snapshot.policies.routing.mode
+            bootstrapState = $Snapshot.policies.routing.bootstrapState
+            routingPolicyHash = $Snapshot.policies.routing.routingPolicyHash
+            routes = $Snapshot.policies.routing.routes
         }
         cache = [ordered]@{
             exactCacheEnabled = $Snapshot.policies.cache.exactCacheEnabled
@@ -324,6 +322,8 @@ function Select-SafeRequestDetailSummary {
         terminalStatus = $data.terminalStatus
         httpStatus = $data.httpStatus
         runtimeSnapshot = $data.runtimeSnapshot
+        routing = $data.routing
+        providerAttempt = $data.providerAttempt
         domainOutcomes = $domainOutcomes
     }
 }
@@ -512,9 +512,9 @@ $report = [ordered]@{
     responseHeaders = [ordered]@{
         cacheStatus = Get-HeaderValue $chatResponse.headers "X-GateLM-Cache-Status"
         maskingAction = Get-HeaderValue $chatResponse.headers "X-GateLM-Masking-Action"
-        routedProvider = Get-HeaderValue $chatResponse.headers "X-GateLM-Routed-Provider"
-        routedModel = Get-HeaderValue $chatResponse.headers "X-GateLM-Routed-Model"
     }
+    routing = $detailSummary.routing
+    providerAttempt = $detailSummary.providerAttempt
     runtimeSnapshot = Select-SafeRuntimeSnapshotSummary -Snapshot $snapshot
     dashboardOverview = [ordered]@{
         totalRequests = $dashboardOverview.totals.totalRequests

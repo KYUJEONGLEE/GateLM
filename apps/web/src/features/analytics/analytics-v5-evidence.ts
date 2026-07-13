@@ -1,6 +1,11 @@
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performance";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
+
+type AnalyticsV5InvocationRecord = Pick<
+  LiveInvocationLogRecord,
+  "createdAt" | "modelRef" | "requestedModel"
+>;
 
 export type AnalyticsV5ModelSeries = {
   id: string;
@@ -26,7 +31,7 @@ const bucketCountByRange: Record<LiveAnalyticsRange, number> = {
 const MAX_MODEL_SERIES = 5;
 
 export function buildAnalyticsV5Evidence(
-  records: InvocationLogRecord[],
+  records: AnalyticsV5InvocationRecord[],
   input: { from: string; range: LiveAnalyticsRange; to: string }
 ): AnalyticsV5Evidence {
   const fromMs = Date.parse(input.from);
@@ -84,7 +89,7 @@ export function buildAnalyticsV5Evidence(
   };
 }
 
-function normalizedModel(record: InvocationLogRecord) {
-  const model = record.selectedModel?.trim() || record.requestedModel?.trim();
+function normalizedModel(record: AnalyticsV5InvocationRecord) {
+  const model = record.modelRef?.trim() || record.requestedModel?.trim();
   return model ? formatModelDisplayName(model) : null;
 }

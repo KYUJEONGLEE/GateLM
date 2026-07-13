@@ -77,16 +77,12 @@ async function main(opts) {
     body: JSON.stringify(requestBody),
   });
 
-  const routedProviderHeader = response.headers.get("x-gatelm-routed-provider") ?? "";
-  const routedModelHeader = response.headers.get("x-gatelm-routed-model") ?? "";
   const cacheStatusHeader = response.headers.get("x-gatelm-cache-status") ?? "";
   const maskingActionHeader = response.headers.get("x-gatelm-masking-action") ?? "";
   const contentType = response.headers.get("content-type") ?? "";
 
   console.log(`HTTP status:     ${response.status}`);
   console.log(`Content-Type:    ${contentType}`);
-  console.log(`Routed-Provider: ${routedProviderHeader}`);
-  console.log(`Routed-Model:    ${routedModelHeader}`);
   console.log(`Cache-Status:    ${cacheStatusHeader}`);
   console.log(`Masking-Action:  ${maskingActionHeader}`);
 
@@ -105,8 +101,6 @@ async function main(opts) {
 
     throw new Error("Gateway Claude chat completion failed");
   }
-
-  assert(routedModelHeader.includes("claude-"), `Gateway routed model is not Claude: ${routedModelHeader}`);
 
   if (opts.stream) {
     await handleStreamingResponse(response, contentType, opts);
@@ -178,19 +172,16 @@ async function handleJsonResponse(response, opts) {
 
   writeRawBlock("RAW ASSISTANT RESPONSE", assistantText, opts);
 
-  assert(String(responseJson.model ?? "").includes("claude-"), `response model is not Claude: ${responseJson.model}`);
   assert(responseJson.gate_lm != null, "gate_lm metadata is missing");
   assert(responseJson.gate_lm.providerCalled === true, "Gateway did not call provider");
-  assert(
-    String(responseJson.gate_lm.selectedModel ?? "").includes("claude-"),
-    `gate_lm.selectedModel is not Claude: ${responseJson.gate_lm.selectedModel}`,
-  );
+  assert(responseJson.gate_lm.requestedModel === "auto", "gate_lm.requestedModel is not auto");
+  assert(String(responseJson.gate_lm.routingReason ?? "").trim() !== "", "gate_lm.routingReason is empty");
   assert(responseJson.gate_lm.domainOutcomes?.provider?.outcome === "success", "gate_lm provider outcome is not success");
   assert(responseJson.gate_lm.domainOutcomes?.fallback?.outcome !== "success", "fallback was used");
 
-  console.log(`response.model:              ${responseJson.model}`);
-  console.log(`gate_lm.selectedProvider:    ${responseJson.gate_lm.selectedProvider}`);
-  console.log(`gate_lm.selectedModel:       ${responseJson.gate_lm.selectedModel}`);
+  console.log(`response.model(requested):   ${responseJson.model}`);
+  console.log(`gate_lm.routingReason:       ${responseJson.gate_lm.routingReason ?? ""}`);
+  console.log(`gate_lm.executionMode:       ${responseJson.gate_lm.executionMode ?? ""}`);
   console.log(`gate_lm.provider.outcome:    ${responseJson.gate_lm.domainOutcomes?.provider?.outcome ?? ""}`);
   console.log(`gate_lm.fallback.outcome:    ${responseJson.gate_lm.domainOutcomes?.fallback?.outcome ?? ""}`);
   console.log(`response.choicesCount:       ${choices.length}`);
@@ -334,8 +325,17 @@ async function assertRequestDetail(opts, requestId) {
   assert(detailData?.requestId === requestId, "Request Detail requestId mismatch");
   assert(detailData?.domainOutcomes?.provider?.outcome === "success", "Request Detail provider outcome is not success");
   assert(detailData?.domainOutcomes?.fallback?.outcome !== "success", "Request Detail fallback was used");
+  assert(
+    String(detailData?.providerAttempt?.modelId ?? "").includes("claude-"),
+    `Request Detail providerAttempt.modelId is not Claude: ${detailData?.providerAttempt?.modelId ?? ""}`,
+  );
 
   console.log(`detail.terminalStatus:       ${detailData?.terminalStatus ?? ""}`);
+  console.log(`detail.routing.category:     ${detailData?.routing?.category ?? ""}`);
+  console.log(`detail.routing.difficulty:   ${detailData?.routing?.difficulty ?? ""}`);
+  console.log(`detail.routing.reason:       ${detailData?.routing?.routingReason ?? ""}`);
+  console.log(`detail.providerAttempt.id:   ${detailData?.providerAttempt?.providerId ?? ""}`);
+  console.log(`detail.providerAttempt.model:${detailData?.providerAttempt?.modelId ?? ""}`);
   console.log(`detail.provider.outcome:     ${detailData?.domainOutcomes?.provider?.outcome ?? ""}`);
   console.log(`detail.fallback.outcome:     ${detailData?.domainOutcomes?.fallback?.outcome ?? ""}`);
   console.log(`detail.streaming.outcome:    ${detailData?.domainOutcomes?.streaming?.outcome ?? ""}`);

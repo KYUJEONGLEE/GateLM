@@ -141,4 +141,10 @@ v2.1 category evaluation 계약, schema 또는 fixture를 변경하면 다음도
 corepack pnpm run verify:v2.1-category-eval
 ```
 
+v2.1 difficulty evaluation 계약, schema 또는 fixture를 변경하면 다음도 실행한다.
+
+```powershell
+corepack pnpm run verify:v2.1-difficulty-eval
+```
+
 `verify:v2-docs`는 current entrypoint, version status README, v2 baseline schema/fixture를 검증하지만 일반 Markdown 링크와 anchor를 전부 검사하지 않는다. 링크 검사는 별도로 수행하고 결과를 작업 보고에 남긴다.

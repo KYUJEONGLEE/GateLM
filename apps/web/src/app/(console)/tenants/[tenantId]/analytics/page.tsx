@@ -27,9 +27,11 @@ import {
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
 import { getLiveAnalyticsV5Evidence } from "@/lib/gateway/live-analytics-v5";
-import { getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import {
+  getLiveDashboardOverview,
+  type LiveDashboardOverview
+} from "@/lib/gateway/live-dashboard-overview";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
-import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -325,25 +327,25 @@ function normalizeText(value: string | undefined) {
 }
 
 function buildProviderOptions(
-  overview: DashboardOverview | undefined,
+  overview: LiveDashboardOverview | undefined,
   performance: LiveAnalyticsPerformance | undefined,
-  selectedProvider: string
+  activeProvider: string
 ) {
   return uniqueSorted([
-    selectedProvider,
-    ...(overview?.breakdowns?.byProviderModel?.map((row) => row.selectedProvider) ?? []),
+    activeProvider,
+    ...(overview?.breakdowns?.byProviderModel?.map((row) => row.provider) ?? []),
     ...(performance?.providerModelPerformance.map((row) => row.provider) ?? [])
   ]);
 }
 
 function buildModelOptions(
-  overview: DashboardOverview | undefined,
+  overview: LiveDashboardOverview | undefined,
   performance: LiveAnalyticsPerformance | undefined,
-  selectedModel: string
+  activeModel: string
 ) {
   return uniqueSorted([
-    selectedModel,
-    ...(overview?.breakdowns?.byProviderModel?.map((row) => row.selectedModel) ?? []),
+    activeModel,
+    ...(overview?.breakdowns?.byProviderModel?.map((row) => row.model) ?? []),
     ...(performance?.providerModelPerformance.map((row) => row.model) ?? [])
   ]);
 }

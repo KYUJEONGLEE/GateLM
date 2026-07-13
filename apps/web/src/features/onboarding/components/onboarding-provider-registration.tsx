@@ -196,7 +196,7 @@ export function OnboardingProviderRegistration({
       onProviderSaved({
         provider: row.connection,
         selectedModelKey: nextModel.trim()
-          ? `${row.connection.provider}::${nextModel.trim()}`
+          ? `${row.connection.id}:${nextModel.trim()}`
           : ""
       });
     }
@@ -211,7 +211,7 @@ export function OnboardingProviderRegistration({
     if (selectedRow.kind === "registered" && selectedRow.connection) {
       onProviderSaved({
         provider: selectedRow.connection,
-        selectedModelKey: `${selectedRow.connection.provider}::${selectedModel.trim()}`
+        selectedModelKey: `${selectedRow.connection.id}:${selectedModel.trim()}`
       });
       setSubmitState({ message: text.registered, status: "success" });
       return;
@@ -283,7 +283,7 @@ export function OnboardingProviderRegistration({
     setSelectedModel(savedModel);
     onProviderSaved({
       provider: savedProvider,
-      selectedModelKey: `${savedProvider.provider}::${savedModel}`
+      selectedModelKey: `${savedProvider.id}:${savedModel}`
     });
     const discoveredModels = await discoverModelsForProvider(savedProvider, savedModel);
     if (discoveredModels) {
@@ -478,7 +478,7 @@ export function OnboardingProviderRegistration({
     setPendingAction(false);
     onProviderSaved({
       provider: savedProvider,
-      selectedModelKey: `${savedProvider.provider}::${nextSelectedModel}`
+      selectedModelKey: `${savedProvider.id}:${nextSelectedModel}`
     });
   }
 

@@ -205,7 +205,7 @@ export function AnalyticsImpactPanel({
                         <strong data-kind={outcome.kind}>{outcome.label}</strong>
                       </div>
                       <p>
-                        <span>{row.model}</span>
+                        <span>{formatModelDisplayName(row.modelRef ?? row.requestedModel)}</span>
                         <em>{formatInteger(row.latencyMs)} ms</em>
                       </p>
                       <ArrowUpRight aria-hidden="true" size={22} />
@@ -583,7 +583,7 @@ export function AnalyticsReliabilityPanel({
               {shortRequestId(row.requestId)}
             </Link>,
             projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
-            formatModelDisplayName(row.selectedModel ?? row.requestedModel ?? "-"),
+            formatModelDisplayName(row.modelRef ?? row.requestedModel ?? "-"),
             <ReliabilityBadge key="continuity" record={row} />,
             <StatusBadge code={row.httpStatus} key="status" status={row.terminalStatus ?? row.status} />
           ],

@@ -110,7 +110,7 @@ async function main(options) {
 
   const runCompletedAt = new Date().toISOString();
   const report = {
-    schemaVersion: "gatelm.routing-blind-100-evidence.v1",
+    schemaVersion: "gatelm.routing-blind-100-evidence.v2",
     runId,
     generatedAt: runCompletedAt,
     gatewayBaseUrl: options.gatewayBaseUrl,
@@ -129,8 +129,10 @@ async function main(options) {
     blindDataset: {
       caseCount: routingCases.length,
       file: "latest_blind_cases.json",
-      note: "The blind dataset file excludes expected category/model/reason labels. This JSON report keeps labels only for scoring.",
+      note: "The blind dataset file excludes expected category labels. This JSON report keeps expected category only for scoring.",
     },
+    routingObservationNote:
+      "Selected provider/model and routing reason are optional observations only; they are not correctness expectations.",
     routingResults: enrichedRouting,
     flowResults: enrichedFlow,
     dbLogSample: dbLogs.slice(0, 20),
@@ -140,13 +142,11 @@ async function main(options) {
   };
 
   const answerKey = {
-    schemaVersion: "gatelm.routing-blind-100-answer-key.v1",
+    schemaVersion: "gatelm.routing-blind-100-answer-key.v2",
     runId,
     cases: routingCases.map((testCase) => ({
       caseId: testCase.caseId,
       expectedCategory: testCase.expectedCategory,
-      expectedModel: testCase.expectedModel,
-      expectedRoutingReason: testCase.expectedRoutingReason,
     })),
   };
 
@@ -264,16 +264,12 @@ function buildRoutingCases(runId) {
       prefix: "general_short",
       count: 15,
       expectedCategory: "general",
-      expectedModel: "mock-fast",
-      expectedRoutingReason: "short_prompt_low_cost",
       prompt: (index) => `Explain the weekly product update for customer success case ${index} in one short paragraph. Run ${runId}.`,
     },
     {
       prefix: "general_long",
       count: 10,
       expectedCategory: "general",
-      expectedModel: "mock-balanced",
-      expectedRoutingReason: "default_balanced",
       prompt: (index) =>
         [
           `Write a calm internal briefing for a product announcement case ${index}.`,
@@ -284,51 +280,39 @@ function buildRoutingCases(runId) {
         ].join(" "),
     },
     {
-      prefix: "support_refund",
+      prefix: "general_refund",
       count: 15,
-      expectedCategory: "support_refund",
-      expectedModel: "mock-fast",
-      expectedRoutingReason: "category_support_refund_low_cost",
+      expectedCategory: "general",
       prompt: (index) => `Write a refund response for a customer who wants to return an item after billing case ${index}. Run ${runId}.`,
     },
     {
       prefix: "code",
       count: 15,
       expectedCategory: "code",
-      expectedModel: "mock-smart",
-      expectedRoutingReason: "category_code_high_quality",
       prompt: (index) => `Fix this TypeScript function error and explain the failing condition for handler case ${index}. Run ${runId}.`,
     },
     {
       prefix: "translation",
       count: 15,
       expectedCategory: "translation",
-      expectedModel: "mock-balanced",
-      expectedRoutingReason: "category_translation_balanced",
       prompt: (index) => `Translate this customer notice into English with a polite tone for case ${index}. Run ${runId}.`,
     },
     {
       prefix: "summarization",
       count: 10,
       expectedCategory: "summarization",
-      expectedModel: "mock-balanced",
-      expectedRoutingReason: "category_summarization_balanced",
       prompt: (index) => `Summarize the meeting notes into three decisions and two blockers for case ${index}. Run ${runId}.`,
     },
     {
-      prefix: "extraction_json",
+      prefix: "general_json",
       count: 10,
-      expectedCategory: "extraction_json",
-      expectedModel: "mock-balanced",
-      expectedRoutingReason: "category_extraction_json_balanced",
+      expectedCategory: "general",
       prompt: (index) => `Extract the order id, status, and owner as JSON from this text for case ${index}. Run ${runId}.`,
     },
     {
       prefix: "reasoning",
       count: 10,
       expectedCategory: "reasoning",
-      expectedModel: "mock-smart",
-      expectedRoutingReason: "category_reasoning_high_quality",
       prompt: (index) => `Compare these rollout options and explain the tradeoff before recommending one path for case ${index}. Run ${runId}.`,
     },
   ];
@@ -341,8 +325,6 @@ function buildRoutingCases(runId) {
         caseId: `${spec.prefix}_${String(index).padStart(3, "0")}`,
         prompt: spec.prompt(index),
         expectedCategory: spec.expectedCategory,
-        expectedModel: spec.expectedModel,
-        expectedRoutingReason: spec.expectedRoutingReason,
         expectedHTTPStatus: 200,
         temperature: 0.2,
         maxTokens: 96,
@@ -421,7 +403,7 @@ async function writeBlindDataset(reportDir, runId, routingCases) {
     schemaVersion: "gatelm.routing-blind-100-dataset.v1",
     runId,
     caseCount: routingCases.length,
-    note: "This blind dataset intentionally excludes expectedCategory, expectedModel, and expectedRoutingReason.",
+    note: "This blind dataset intentionally excludes expectedCategory.",
     cases: routingCases.map((testCase) => ({
       caseId: testCase.caseId,
       prompt: testCase.prompt,
@@ -493,8 +475,6 @@ async function invokeGatewayChat(options, runId, testCase, extra) {
     promptFingerprint: shortHash(testCase.prompt),
     promptPreview: testCase.kind === "routing" ? safePreview(testCase.prompt) : safeFlowPromptPreview(testCase),
     expectedCategory: testCase.expectedCategory,
-    expectedModel: testCase.expectedModel,
-    expectedRoutingReason: testCase.expectedRoutingReason,
     expectedHTTPStatus: testCase.expectedHTTPStatus,
     httpStatus: response.status,
     errorCode,
@@ -504,9 +484,8 @@ async function invokeGatewayChat(options, runId, testCase, extra) {
     cacheType: gateLM.cacheType ?? "",
     cacheHitRequestId: gateLM.cacheHitRequestId ?? "",
     maskingAction: headerOr(response, "x-gatelm-masking-action", gateLM.maskingAction),
-    selectedProvider: headerOr(response, "x-gatelm-routed-provider", gateLM.selectedProvider),
-    selectedModel: headerOr(response, "x-gatelm-routed-model", gateLM.selectedModel),
     routingReason: gateLM.routingReason ?? "",
+    executionMode: gateLM.executionMode ?? "",
     terminalStatus: gateLM.terminalStatus ?? "",
     providerCalled: Boolean(gateLM.providerCalled),
     latencyMs: typeof gateLM.latencyMs === "number" ? gateLM.latencyMs : null,
@@ -515,18 +494,16 @@ async function invokeGatewayChat(options, runId, testCase, extra) {
 }
 
 function enrichRoutingResult(result, dbLog) {
-  const actualCategory = firstNonEmpty(dbLog?.promptCategory, categoryFromRoutingReason(result.routingReason));
-  const actualModel = firstNonEmpty(result.selectedModel, dbLog?.selectedModel);
-  const actualReason = firstNonEmpty(result.routingReason, dbLog?.routingReason);
+  const actualCategory = firstNonEmpty(dbLog?.promptCategory, "general");
+  const actualDifficulty = firstNonEmpty(dbLog?.promptDifficulty, "simple");
   return {
     ...result,
     actualCategory,
+    actualDifficulty,
     db: compactDbEvidence(dbLog),
     pass: {
       http: result.httpStatus === result.expectedHTTPStatus,
       category: actualCategory === result.expectedCategory,
-      model: actualModel === result.expectedModel,
-      routingReason: actualReason === result.expectedRoutingReason,
       dbLogWritten: Boolean(dbLog),
     },
   };
@@ -566,10 +543,11 @@ function compactDbEvidence(dbLog) {
     maskingAction: dbLog.maskingAction,
     maskingDetectedTypes: dbLog.maskingDetectedTypes,
     maskingDetectedCount: dbLog.maskingDetectedCount,
-    selectedProvider: dbLog.selectedProvider,
-    selectedModel: dbLog.selectedModel,
+    providerAttemptProviderId: dbLog.providerAttemptProviderId,
+    providerAttemptModelId: dbLog.providerAttemptModelId,
     routingReason: dbLog.routingReason,
     promptCategory: dbLog.promptCategory,
+    promptDifficulty: dbLog.promptDifficulty,
     providerCalled: boolish(dbLog.providerCalled),
     providerOutcome: dbLog.providerOutcome,
     requestLogWritten: boolish(dbLog.requestLogWritten),
@@ -580,31 +558,49 @@ function compactDbEvidence(dbLog) {
 function summarizeRouting(results) {
   const total = results.length;
   const httpPass = count(results, (item) => item.pass.http);
+  const categoryObserved = count(results, (item) => item.actualCategory !== "");
   const categoryPass = count(results, (item) => item.pass.category);
-  const modelPass = count(results, (item) => item.pass.model);
-  const reasonPass = count(results, (item) => item.pass.routingReason);
   const dbPass = count(results, (item) => item.pass.dbLogWritten);
   const byExpectedCategory = {};
   for (const result of results) {
     const key = result.expectedCategory;
-    byExpectedCategory[key] ??= { total: 0, categoryPass: 0, modelPass: 0, reasonPass: 0 };
+    byExpectedCategory[key] ??= { total: 0, categoryPass: 0 };
     byExpectedCategory[key].total += 1;
     if (result.pass.category) byExpectedCategory[key].categoryPass += 1;
-    if (result.pass.model) byExpectedCategory[key].modelPass += 1;
-    if (result.pass.routingReason) byExpectedCategory[key].reasonPass += 1;
+  }
+  for (const stats of Object.values(byExpectedCategory)) {
+    stats.categoryIncorrect = stats.total - stats.categoryPass;
+    stats.categoryAccuracy = ratio(stats.categoryPass, stats.total);
   }
   return {
     total,
     httpPass,
+    categoryObserved,
     categoryPass,
-    modelPass,
-    reasonPass,
     dbLogWritten: dbPass,
+    categoryEvidenceCoverage: ratio(categoryObserved, total),
     categoryAccuracy: ratio(categoryPass, total),
-    modelAccuracy: ratio(modelPass, total),
-    routingReasonAccuracy: ratio(reasonPass, total),
     dbLogCoverage: ratio(dbPass, total),
     byExpectedCategory,
+    difficultyObservations: distribution(results, (item) => firstNonEmpty(item.actualDifficulty, "simple")),
+    routingReasonObservations: distribution(results, (item) => firstNonEmpty(item.routingReason, item.db.routingReason, "unavailable")),
+    executionModeObservations: distribution(results, (item) => firstNonEmpty(item.executionMode, "not_reported")),
+    providerAttemptObservations: {
+      providerIds: distribution(results, (item) => firstNonEmpty(item.db.providerAttemptProviderId, "unavailable")),
+      modelIds: distribution(results, (item) => firstNonEmpty(item.db.providerAttemptModelId, "unavailable")),
+    },
+    categoryFailures: results
+      .filter((item) => !item.pass.category)
+      .slice(0, 20)
+      .map((item) => ({
+        caseId: item.caseId,
+        requestId: item.requestId,
+        expectedCategory: item.expectedCategory,
+        actualCategory: item.actualCategory,
+        actualDifficulty: item.actualDifficulty,
+        routingReason: firstNonEmpty(item.routingReason, item.db.routingReason),
+        executionMode: firstNonEmpty(item.executionMode, "not_reported"),
+      })),
   };
 }
 
@@ -676,16 +672,6 @@ function buildAssertions(input) {
       detail: `${input.routingSummary.categoryPass}/${ROUTING_CASE_COUNT}`,
     },
     {
-      name: "routing selected model accuracy is 100%",
-      pass: input.routingSummary.modelPass === ROUTING_CASE_COUNT,
-      detail: `${input.routingSummary.modelPass}/${ROUTING_CASE_COUNT}`,
-    },
-    {
-      name: "routing reason accuracy is 100%",
-      pass: input.routingSummary.reasonPass === ROUTING_CASE_COUNT,
-      detail: `${input.routingSummary.reasonPass}/${ROUTING_CASE_COUNT}`,
-    },
-    {
       name: "exact cache second request hit",
       pass: input.flowSummary.exactCache.secondHit,
       detail: JSON.stringify(input.flowSummary.exactCache),
@@ -740,8 +726,8 @@ from (
     request_id as "requestId",
     status,
     http_status as "httpStatus",
-    selected_provider as "selectedProvider",
-    selected_model as "selectedModel",
+    coalesce(nullif(metadata #>> '{providerAttempt,providerId}', ''), nullif(provider, '')) as "providerAttemptProviderId",
+    coalesce(nullif(metadata #>> '{providerAttempt,modelId}', ''), nullif(model, '')) as "providerAttemptModelId",
     routing_reason as "routingReason",
     cache_status as "cacheStatus",
     cache_type as "cacheType",
@@ -752,6 +738,7 @@ from (
     provider_latency_ms as "providerLatencyMs",
     metadata #>> '{providerCalled}' as "providerCalled",
     metadata #>> '{promptCategory}' as "promptCategory",
+    metadata #>> '{promptDifficulty}' as "promptDifficulty",
     metadata #>> '{semanticCacheEnabled}' as "semanticCacheEnabled",
     metadata #>> '{semanticCacheMode}' as "semanticCacheMode",
     metadata #>> '{semanticCacheHit}' as "semanticCacheHit",
@@ -846,8 +833,7 @@ function renderPublicMarkdown(report) {
   lines.push("| --- | ---: |");
   lines.push(`| routing cases | ${report.summary.routing.total} |`);
   lines.push(`| category accuracy | ${percent(report.summary.routing.categoryAccuracy)} |`);
-  lines.push(`| selected model accuracy | ${percent(report.summary.routing.modelAccuracy)} |`);
-  lines.push(`| routing reason accuracy | ${percent(report.summary.routing.routingReasonAccuracy)} |`);
+  lines.push(`| category evidence coverage | ${percent(report.summary.routing.categoryEvidenceCoverage)} |`);
   lines.push(`| routing DB log coverage | ${percent(report.summary.routing.dbLogCoverage)} |`);
   lines.push(`| total DB logs in run | ${report.summary.dbLogCount} |`);
   lines.push("");
@@ -863,11 +849,11 @@ function renderPublicMarkdown(report) {
   lines.push("");
   lines.push("## Routing Results");
   lines.push("");
-  lines.push("| caseId | requestId | http | actualCategory | selectedModel | routingReason | cache | providerCalled | dbLog |");
-  lines.push("| --- | --- | ---: | --- | --- | --- | --- | --- | --- |");
+  lines.push("| caseId | requestId | http | actualCategory | difficulty | routingReason | executionMode | providerAttemptModel | cache | providerCalled | dbLog |");
+  lines.push("| --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const item of report.routingResults) {
     lines.push(
-      `| ${item.caseId} | \`${item.requestId}\` | ${item.httpStatus} | ${item.actualCategory || "-"} | ${item.selectedModel || item.db.selectedModel || "-"} | ${item.routingReason || item.db.routingReason || "-"} | ${item.cacheStatus || item.db.cacheStatus || "-"} / ${item.cacheType || item.db.cacheType || "-"} | ${displayBool(item.providerCalled || item.db.providerCalled)} | ${displayBool(item.db.written)} |`,
+      `| ${item.caseId} | \`${item.requestId}\` | ${item.httpStatus} | ${item.actualCategory || "-"} | ${item.actualDifficulty || "-"} | ${item.routingReason || item.db.routingReason || "-"} | ${item.executionMode || "not_reported"} | ${item.db.providerAttemptModelId || "-"} | ${item.cacheStatus || item.db.cacheStatus || "-"} / ${item.cacheType || item.db.cacheType || "-"} | ${displayBool(item.providerCalled || item.db.providerCalled)} | ${displayBool(item.db.written)} |`,
     );
   }
   lines.push("");
@@ -879,7 +865,7 @@ function renderPublicMarkdown(report) {
     lines.push(`| ${assertion.name} | ${displayBool(assertion.pass)} | ${escapeMarkdown(assertion.detail)} |`);
   }
   lines.push("");
-  lines.push("> Expected labels are intentionally omitted from this public Markdown. Use `latest_answer_key.json` or `latest.json` for scoring details.");
+  lines.push("> Expected category labels are intentionally omitted from this public Markdown. Difficulty, routingReason, and executionMode are routing observations; providerAttemptModel is execution evidence only.");
   lines.push("");
   return `${lines.join("\n")}\n`;
 }
@@ -900,28 +886,6 @@ function safeFlowPromptPreview(testCase) {
       return "Summarize this synthetic config: api_key=<synthetic_secret>";
     default:
       return safePreview(testCase.prompt);
-  }
-}
-
-function categoryFromRoutingReason(reason) {
-  switch (reason) {
-    case "category_code_high_quality":
-      return "code";
-    case "category_translation_balanced":
-      return "translation";
-    case "category_summarization_balanced":
-      return "summarization";
-    case "category_extraction_json_balanced":
-      return "extraction_json";
-    case "category_support_refund_low_cost":
-      return "support_refund";
-    case "category_reasoning_high_quality":
-      return "reasoning";
-    case "short_prompt_low_cost":
-    case "default_balanced":
-      return "general";
-    default:
-      return "";
   }
 }
 
@@ -999,6 +963,15 @@ function firstNonEmpty(...values) {
 
 function count(values, predicate) {
   return values.reduce((total, item) => total + (predicate(item) ? 1 : 0), 0);
+}
+
+function distribution(values, selector) {
+  const result = {};
+  for (const value of values) {
+    const key = selector(value);
+    result[key] = (result[key] ?? 0) + 1;
+  }
+  return result;
 }
 
 function ratio(numerator, denominator) {

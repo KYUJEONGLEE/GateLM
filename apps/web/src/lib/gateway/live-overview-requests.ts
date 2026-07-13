@@ -3,13 +3,12 @@ import "server-only";
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type {
   LiveRequestCacheStatus,
-  LiveRequestProvider,
   LiveRequestsPayload,
   LiveRequestSafetyAction,
   LiveRequestStatusFilter
@@ -53,6 +52,7 @@ export async function getLiveOverviewRequests(
     projectId: filters.projectId,
     projectIds,
     resolvedBy: filters.resolvedBy,
+    requestedModel: filters.model,
     status: filters.status || undefined,
     tenantId,
     to: liveRange.to
@@ -67,13 +67,13 @@ export async function getLiveOverviewRequests(
   const allRows = records.map((record) => toLiveRequestRow(record, projectNames, employeeNames));
   const modelFilter = normalizeModelFilter(filters.model);
   const rows = allRows
-    .filter((row) => !modelFilter || normalizeModelFilter(row.model) === modelFilter)
+    .filter((row) => !modelFilter || normalizeModelFilter(row.requestedModel) === modelFilter)
     .slice(0, LIVE_REQUESTS_DISPLAY_LIMIT);
-  const modelOptions = buildModelOptions(allRows, filters.model);
+  const requestedModelOptions = buildModelOptions(allRows, filters.model);
 
   return {
     generatedAt: new Date().toISOString(),
-    modelOptions,
+    requestedModelOptions,
     projectNameSource: options.projectNameSource ?? projectsModel?.source ?? "control-plane",
     rows
   };
@@ -101,26 +101,27 @@ function buildEmployeeNameMap(
 }
 
 function toLiveRequestRow(
-  record: InvocationLogRecord,
+  record: LiveInvocationLogRecord,
   projectNames: Map<string, string>,
   employeeNames: Map<string, string>
 ) {
   const projectId = record.projectId;
-  const provider = normalizeProvider(record.selectedProvider ?? record.requestedProvider);
   const statusCode = record.httpStatus || statusToFallbackCode(record.status);
 
   return {
     cacheStatus: normalizeCacheStatus(record.cacheStatus),
+    category: record.category,
     costUsd: record.costMicroUsd / 1_000_000,
+    difficulty: record.difficulty,
     fallbackUsed: record.domainOutcomes?.fallback?.outcome === "success",
     id: record.requestId,
     latencyMs: record.latencyMs,
-    model: formatModelDisplayName(record.selectedModel ?? record.requestedModel, "Unknown"),
+    modelRef: record.modelRef,
     projectId,
     projectName: projectNames.get(projectId) ?? formatDisplayIdentifier(projectId),
-    provider,
-    providerLabel: providerLabel(provider),
+    requestedModel: record.requestedModel ?? "auto",
     requestId: record.requestId,
+    routingReason: record.routingReason,
     safetyAction: normalizeSafetyAction(record),
     surface: "project_application" as const,
     status: record.status,
@@ -143,45 +144,6 @@ function normalizeUserName(
     : null;
 }
 
-function normalizeProvider(value: string | null | undefined): LiveRequestProvider {
-  const provider = (value ?? "").toLowerCase();
-
-  if (provider.includes("openai")) {
-    return "openai";
-  }
-
-  if (provider.includes("anthropic") || provider.includes("claude")) {
-    return "anthropic";
-  }
-
-  if (provider.includes("gemini")) {
-    return "gemini";
-  }
-
-  if (provider.includes("google")) {
-    return "google";
-  }
-
-  if (provider.includes("mock")) {
-    return "mock";
-  }
-
-  return "unknown";
-}
-
-function providerLabel(provider: LiveRequestProvider) {
-  const labels: Record<LiveRequestProvider, string> = {
-    anthropic: "Anthropic",
-    gemini: "Gemini",
-    google: "Google",
-    mock: "Mock",
-    openai: "OpenAI",
-    unknown: "Unknown"
-  };
-
-  return labels[provider];
-}
-
 function normalizeCacheStatus(value: string): LiveRequestCacheStatus {
   const normalized = value.toLowerCase();
 
@@ -200,7 +162,7 @@ function normalizeCacheStatus(value: string): LiveRequestCacheStatus {
   return "NONE";
 }
 
-function normalizeSafetyAction(record: InvocationLogRecord): LiveRequestSafetyAction {
+function normalizeSafetyAction(record: LiveInvocationLogRecord): LiveRequestSafetyAction {
   const action = record.maskingAction.toLowerCase();
   const outcome = record.domainOutcomes?.safety?.outcome?.toLowerCase() ?? "";
 
@@ -264,18 +226,18 @@ function statusLabel(statusCode: number, status: string) {
 }
 
 function buildModelOptions(
-  rows: Array<{ model: string }>,
-  selectedModel: string | undefined
+  rows: Array<{ requestedModel: string }>,
+  modelFilter: string | undefined
 ) {
   const models = new Set<string>();
 
-  if (selectedModel?.trim()) {
-    models.add(selectedModel.trim());
+  if (modelFilter?.trim()) {
+    models.add(modelFilter.trim());
   }
 
   rows.forEach((row) => {
-    if (row.model && row.model !== "Unknown") {
-      models.add(row.model);
+    if (row.requestedModel && row.requestedModel !== "auto") {
+      models.add(row.requestedModel);
     }
   });
 

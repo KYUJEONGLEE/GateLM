@@ -1,0 +1,28 @@
+{
+  "mode": "auto",
+  "bootstrapState": "mock_bootstrap",
+  "routingPolicyHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "routes": {
+    "general": {
+      "simple": { "modelRefs": ["mock-balanced"] },
+      "complex": { "modelRefs": ["mock-balanced"] }
+    },
+    "code": {
+      "simple": { "modelRefs": ["mock-balanced"] },
+      "complex": { "modelRefs": ["mock-balanced"] }
+    },
+    "translation": {
+      "simple": { "modelRefs": ["mock-balanced"] },
+      "complex": { "modelRefs": ["mock-balanced"] }
+    },
+    "summarization": {
+      "simple": { "modelRefs": ["mock-balanced"] },
+      "complex": { "modelRefs": ["mock-balanced"] }
+    },
+    "reasoning": {
+      "simple": { "modelRefs": ["mock-balanced"] },
+      "complex": { "modelRefs": ["mock-balanced"] }
+    }
+  }
+}
+

@@ -56,8 +56,6 @@ export type PolicySection =
   | "cache"
   | "streaming";
 
-export type RoutingPriorityRoute = "default" | "fallback" | "highQuality" | "lowCost";
-
 export type RoutingProviderOption = {
   displayName: string;
   family: string;
@@ -68,19 +66,6 @@ export type RoutingProviderOption = {
 export type RuntimePolicyDraftValuesSetter = Dispatch<
   SetStateAction<RuntimePolicyDraftValues>
 >;
-
-export type RoutingPriorityRow = {
-  priority: string;
-  provider: string;
-  route: RoutingPriorityRoute;
-  selectedModel: string;
-};
-
-export type RoutingPriorityTableText = {
-  model: string;
-  noProviderModels: string;
-  provider: string;
-};
 
 export type RuntimePolicyEditorText = {
   activeApiKeyMissing: string;
@@ -105,7 +90,6 @@ export type RuntimePolicyEditorText = {
   close: string;
   completionPrice: string;
   configVersion: string;
-  defaultRoute: string;
   details: string;
   detectorNames: Record<RuntimePolicyDetector["type"], string>;
   detectorType: string;
@@ -114,17 +98,14 @@ export type RuntimePolicyEditorText = {
   edit: string;
   enabled: string;
   employees: string;
-  fallbackRoute: string;
   fixtureFallback: string;
   general: string;
   history: string;
-  highQualityRoute: string;
   issueApiKey: string;
   issuingApiKey: string;
   jsonMode: string;
   limit: string;
   logSafeCaptureHint: string;
-  lowCostRoute: string;
   mandatoryProtection: string;
   mandatoryProtectionHint: string;
   maxBucketTokens: string;
@@ -158,7 +139,6 @@ export type RuntimePolicyEditorText = {
   responseCaptureMaxChars: string;
   rollback: string;
   routing: string;
-  routingAdvanced: string;
   runtimeSnapshot: string;
   safetyTab: string;
   saveDraft: string;
@@ -166,7 +146,6 @@ export type RuntimePolicyEditorText = {
   semanticCacheDisabled: string;
   semanticCacheEvidenceOnly: string;
   semanticCacheNote: string;
-  shortPrompt: string;
   snapshotState: string;
   snapshotVersion: string;
   streaming: string;

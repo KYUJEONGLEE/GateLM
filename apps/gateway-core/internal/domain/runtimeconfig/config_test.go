@@ -2,10 +2,12 @@ package runtimeconfig
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 )
 
 func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
@@ -192,42 +194,98 @@ func TestActiveConfigValidateActiveRejectsInactiveCredentialStatus(t *testing.T)
 	}
 }
 
-func TestRoutingPolicySimpleRouterConfigUsesHighQualityModelWhenConfigured(t *testing.T) {
-	policy := RoutingPolicy{
-		DefaultProvider:     "mock",
-		DefaultModel:        "mock-balanced",
-		LowCostProvider:     "mock-cheap",
-		LowCostModel:        "mock-fast",
-		HighQualityProvider: "mock-premium",
-		HighQualityModel:    "mock-smart",
-		FallbackProvider:    "mock",
-		FallbackModel:       "mock-fallback",
-		RoutingPolicyHash:   "hash_routing_policy_test",
-	}
+func TestRoutingPolicySimpleRouterConfigPreservesV2Matrix(t *testing.T) {
+	policy := BootstrapRoutingPolicy("hash_routing_policy_test")
+	policy.Routes.Code.Complex.ModelRefs = []string{"provider-code:model-smart", "provider-code:model-fallback"}
 
 	config := policy.SimpleRouterConfig()
 
-	if config.LowCostProvider != "mock-cheap" || config.LowCostModel != "mock-fast" {
-		t.Fatalf("expected low-cost route to use configured provider/model: %#v", config)
+	if config.Mode != routing.RoutingPolicyModeAuto || config.BootstrapState != routing.BootstrapStateMock {
+		t.Fatalf("unexpected routing mode/bootstrap state: %#v", config)
 	}
-	if config.HighQualityProvider != "mock-premium" || config.HighQualityModel != "mock-smart" {
-		t.Fatalf("expected high-quality route to use configured provider/model: %#v", config)
+	refs := config.Routes.Code.Complex.ModelRefs
+	if len(refs) != 2 || refs[0] != "provider-code:model-smart" || refs[1] != "provider-code:model-fallback" {
+		t.Fatalf("ordered modelRefs were not preserved: %#v", refs)
 	}
 }
 
-func TestRoutingPolicySimpleRouterConfigFallsBackHighQualityToDefaultModel(t *testing.T) {
-	policy := RoutingPolicy{
-		DefaultProvider:   "mock",
-		DefaultModel:      "mock-balanced",
-		FallbackProvider:  "mock",
-		FallbackModel:     "mock-fallback",
-		RoutingPolicyHash: "hash_routing_policy_test",
+func TestRoutingPolicyRequiresAllTenCellsEvenInManualMode(t *testing.T) {
+	policy := BootstrapRoutingPolicy("hash_routing_policy_test")
+	policy.Mode = routing.RoutingPolicyModeManual
+	policy.Routes.Reasoning.Complex.ModelRefs = nil
+	if IsValidRoutingPolicy(policy) {
+		t.Fatal("manual policy with a missing matrix cell must be invalid")
 	}
+}
 
-	config := policy.SimpleRouterConfig()
+func TestRoutingPolicyRejectsConfiguredStateWhileAnyMockRouteRemains(t *testing.T) {
+	policy := BootstrapRoutingPolicy("hash_routing_policy_test")
+	policy.BootstrapState = routing.BootstrapStateConfigured
+	if IsValidRoutingPolicy(policy) {
+		t.Fatal("configured state must be rejected while mock-balanced remains")
+	}
+}
 
-	if config.HighQualityProvider != "mock" || config.HighQualityModel != "mock-balanced" {
-		t.Fatalf("expected high-quality route to fall back to default provider/model: %#v", config)
+func TestIsCanonicalRoutingPolicyHash(t *testing.T) {
+	if !IsCanonicalRoutingPolicyHash("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef") {
+		t.Fatal("expected lowercase sha256 hash to be canonical")
+	}
+	for _, value := range []string{"hash", "sha256:abc", "sha256:0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"} {
+		if IsCanonicalRoutingPolicyHash(value) {
+			t.Fatalf("expected non-canonical routing hash rejection: %q", value)
+		}
+	}
+}
+
+func TestRoutingPolicyRejectsMalformedModelRefsWithoutRepair(t *testing.T) {
+	for name, mutate := range map[string]func(*RoutingPolicy){
+		"blank": func(policy *RoutingPolicy) {
+			policy.Routes.General.Simple.ModelRefs = append(policy.Routes.General.Simple.ModelRefs, " ")
+		},
+		"duplicate": func(policy *RoutingPolicy) {
+			policy.Routes.General.Simple.ModelRefs = append(policy.Routes.General.Simple.ModelRefs, routing.MockBootstrapRef)
+		},
+		"too_long": func(policy *RoutingPolicy) {
+			policy.Routes.General.Simple.ModelRefs = []string{strings.Repeat("x", 241)}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			policy := BootstrapRoutingPolicy("hash_routing_policy_test")
+			mutate(&policy)
+			if IsValidRoutingPolicy(policy) {
+				t.Fatalf("malformed modelRefs must be rejected without normalization: %#v", policy.Routes.General.Simple.ModelRefs)
+			}
+		})
+	}
+}
+
+func TestExecutionSnapshotValidateRejectsDuplicateRefsAfterNormalization(t *testing.T) {
+	snapshot := testActiveConfig().ExecutionSnapshot()
+	snapshot.Snapshot.RuntimeSnapshotVersion = 2
+	snapshot.RoutingPolicy.Routes.General.Simple.ModelRefs = append(snapshot.RoutingPolicy.Routes.General.Simple.ModelRefs, routing.MockBootstrapRef)
+	if err := snapshot.Validate(); !errors.Is(err, ErrInvalidRoutingPolicy) {
+		t.Fatalf("expected duplicate ref rejection after normalization, got %v", err)
+	}
+}
+
+func TestActiveConfigValidateActiveNormalizesRoutingPolicyBeforeValidation(t *testing.T) {
+	config := testActiveConfig()
+	config.RoutingPolicy.Mode = " AUTO "
+	config.RoutingPolicy.BootstrapState = " mock_bootstrap "
+	config.RoutingPolicy.RoutingPolicyHash = " hash_routing_policy_test "
+	config.RoutingPolicy.Routes.General.Simple.ModelRefs = []string{" mock-balanced "}
+
+	if err := config.ValidateActive(); err != nil {
+		t.Fatalf("expected normalized routing policy to validate, got %v", err)
+	}
+}
+
+func TestExecutionSnapshotValidateChecksSchemaFallbackBeforeNormalization(t *testing.T) {
+	snapshot := testActiveConfig().ExecutionSnapshot()
+	snapshot.Snapshot.RuntimeSnapshotVersion = 0
+
+	if err := snapshot.Validate(); !errors.Is(err, ErrUnsupportedSnapshotSchema) {
+		t.Fatalf("expected unsupported snapshot schema before default normalization, got %v", err)
 	}
 }
 
@@ -256,18 +314,7 @@ func testActiveConfig() ActiveConfig {
 		SafetyPolicy: SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",
 		},
-		RoutingPolicy: RoutingPolicy{
-			DefaultProvider:     "mock",
-			DefaultModel:        "mock-balanced",
-			LowCostProvider:     "mock",
-			LowCostModel:        "mock-fast",
-			HighQualityProvider: "mock",
-			HighQualityModel:    "mock-smart",
-			FallbackProvider:    "mock",
-			FallbackModel:       "mock-balanced",
-			ShortPromptMaxChars: 500,
-			RoutingPolicyHash:   "hash_routing_policy_test",
-		},
+		RoutingPolicy: BootstrapRoutingPolicy("hash_routing_policy_test"),
 		CachePolicy: CachePolicy{
 			Enabled:    true,
 			Type:       CacheTypeExact,

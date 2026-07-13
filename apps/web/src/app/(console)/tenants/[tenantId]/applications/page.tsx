@@ -29,11 +29,11 @@ export default async function ApplicationsPage({ params }: ApplicationsPageProps
           applicationId,
           config
             ? {
-                defaultModel: config.routingPolicy.defaultModel,
-                defaultProvider: config.routingPolicy.defaultProvider,
+                bootstrapState: config.routingPolicy.bootstrapState,
                 modelCount: config.models.length,
                 publishedAt: config.publishedAt,
-                publishState: config.publishState
+                publishState: config.publishState,
+                routingMode: config.routingPolicy.mode
               }
             : null
         ])

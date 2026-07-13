@@ -417,8 +417,10 @@ Invoke-SmokeCase -Name "safe request logs miss then cache hit" -Body {
     $firstDetail = Wait-RequestDetail -RequestId $script:SafeMissRequestId
     Assert-Equal -Name "first detail status" -Expected "success" -Actual ([string]$firstDetail.data.status)
     Assert-Equal -Name "first detail cache status" -Expected "miss" -Actual ([string]$firstDetail.data.cache.cacheStatus)
-    Assert-Equal -Name "first selected model" -Expected "mock-fast" -Actual ([string]$firstDetail.data.selectedModel)
-    Assert-Equal -Name "first routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first routing category" -Expected "general" -Actual ([string]$firstDetail.data.routing.category)
+    Assert-Equal -Name "first routing difficulty" -Expected "simple" -Actual ([string]$firstDetail.data.routing.difficulty)
+    Assert-Equal -Name "first routing reason" -Expected "category_difficulty_matrix" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first provider attempt model" -Expected "mock-balanced" -Actual ([string]$firstDetail.data.providerAttempt.modelId)
     Assert-LogItem -RequestId $script:SafeMissRequestId -ExpectedStatus "success" -ExpectedCacheStatus "miss"
 
     $second = Invoke-GatewayChat -Prompt $prompt -Feature "day4-cache-smoke"

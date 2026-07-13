@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildAnalyticsReadModel } from "./analytics-read-model";
-import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
+import type { LiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
 
 test("builds an executive analytics model from canonical Gateway evidence", () => {
   const overview = {
@@ -21,14 +21,14 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
         {
           p95ProviderLatencyMs: 410,
           requestCount: 12,
-          selectedModel: "provider-id:gpt-4o-mini",
-          selectedProvider: "openai-main"
+          model: "provider-id:gpt-4o-mini",
+          provider: "openai-main"
         },
         {
           p95ProviderLatencyMs: 520,
           requestCount: 8,
-          selectedModel: "gemini-2.5-flash",
-          selectedProvider: "gemini-main"
+          model: "gemini-2.5-flash",
+          provider: "gemini-main"
         }
       ],
       bySafetyOutcome: [
@@ -51,16 +51,16 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
         costMicroUsd: 5000,
         costUsd: "0.005000",
         requestCount: 12,
-        selectedModel: "provider-id:gpt-4o-mini",
-        selectedProvider: "openai-main",
+        model: "provider-id:gpt-4o-mini",
+        provider: "openai-main",
         totalTokens: 1000
       },
       {
         costMicroUsd: 3000,
         costUsd: "0.003000",
         requestCount: 8,
-        selectedModel: "gemini-2.5-flash",
-        selectedProvider: "gemini-main",
+        model: "gemini-2.5-flash",
+        provider: "gemini-main",
         totalTokens: 600
       }
     ],
@@ -106,30 +106,30 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
       to: "2026-07-12T00:00:00.000Z"
     },
     rateLimitedRequests: 2,
-    routingCountByModel: [
+    routingSummaries: [
       {
+        category: "general",
+        difficulty: "simple",
         requestCount: 8,
-        routingReason: "short_prompt_low_cost",
-        selectedModel: "provider-id:gpt-4o-mini",
-        selectedProvider: "openai-main"
+        routingReason: "category_difficulty_matrix"
       },
       {
+        category: "reasoning",
+        difficulty: "complex",
         requestCount: 4,
-        routingReason: "category_reasoning_high_quality",
-        selectedModel: "gpt-4o",
-        selectedProvider: "openai-main"
+        routingReason: "category_difficulty_matrix"
       },
       {
+        category: "translation",
+        difficulty: "simple",
         requestCount: 6,
-        routingReason: "default_balanced",
-        selectedModel: "gemini-2.5-flash",
-        selectedProvider: "gemini-main"
+        routingReason: "category_difficulty_matrix"
       },
       {
+        category: "code",
+        difficulty: "complex",
         requestCount: 2,
-        routingReason: "budget_downgraded_from_high_quality",
-        selectedModel: "provider-id:gpt-4o-mini",
-        selectedProvider: "openai-main"
+        routingReason: "category_difficulty_matrix"
       }
     ],
     savedCostMicroUsd: 2000,
@@ -138,7 +138,7 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
     totalCostMicroUsd: 8000,
     totalRequests: 20,
     totalTokens: 1600
-  } as unknown as DashboardOverview;
+  } as unknown as LiveDashboardOverview;
 
   const model = buildAnalyticsReadModel(overview);
 
@@ -155,10 +155,9 @@ test("builds an executive analytics model from canonical Gateway evidence", () =
     guardrail: 4,
     provider: 13
   });
-  expect(Object.fromEntries(model.impact.routingTiers.map((row) => [row.id, row.value]))).toEqual({
-    balanced: 6,
-    high_quality: 4,
-    low_cost: 10
+  expect(Object.fromEntries(model.impact.routingDifficulties.map((row) => [row.id, row.value]))).toEqual({
+    complex: 6,
+    simple: 14
   });
   expect(model.usage).toMatchObject({
     activeModels: 2,
@@ -228,13 +227,14 @@ test("tolerates partial legacy aggregate collections", () => {
     successfulRequests: 0,
     totalCostMicroUsd: 0,
     totalRequests: 0,
-    totalTokens: 0
-  } as unknown as DashboardOverview;
+    totalTokens: 0,
+    routingSummaries: []
+  } as unknown as LiveDashboardOverview;
 
   const model = buildAnalyticsReadModel(overview);
 
   expect(model.impact.modelMix).toEqual([]);
-  expect(model.impact.routingTiers).toEqual([]);
+  expect(model.impact.routingDifficulties).toEqual([]);
   expect(model.cost.costByModel).toEqual([]);
   expect(model.reliability.terminalOutcomes).toEqual([]);
 });

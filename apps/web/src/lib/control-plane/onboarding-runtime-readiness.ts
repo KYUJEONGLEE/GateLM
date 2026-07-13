@@ -26,7 +26,7 @@ export function getSelectableOnboardingRuntimeModels(
         label: `${model} (${providerConnection.provider})`,
         providerConnectionId: providerConnection.id,
         providerTenantId: providerConnection.tenantId,
-        value: `${providerConnection.provider}::${model}`
+        value: `${providerConnection.id}:${model}`
       }))
     );
 }
@@ -78,6 +78,10 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
 }
 
 function isRuntimeModelKey(value: string) {
-  const [provider, model, ...rest] = value.split("::");
-  return rest.length === 0 && Boolean(provider?.trim()) && Boolean(model?.trim());
+  const separatorIndex = value.indexOf(":");
+  return (
+    separatorIndex > 0 &&
+    Boolean(value.slice(0, separatorIndex).trim()) &&
+    Boolean(value.slice(separatorIndex + 1).trim())
+  );
 }

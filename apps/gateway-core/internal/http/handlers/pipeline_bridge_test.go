@@ -38,14 +38,7 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 		Limit:         7,
 	}
 	reqCtx.HasRuntimeRateLimit = true
-	reqCtx.RuntimeRoutingPolicy = runtimeconfig.RoutingPolicy{
-		DefaultProvider:     "mock",
-		DefaultModel:        "mock-balanced",
-		LowCostProvider:     "mock",
-		LowCostModel:        "mock-fast",
-		ShortPromptMaxChars: 500,
-		RoutingPolicyHash:   "hash_routing_policy_test",
-	}
+	reqCtx.RuntimeRoutingPolicy = runtimeconfig.BootstrapRoutingPolicy("hash_routing_policy_test")
 	reqCtx.HasRuntimeRoutingPolicy = true
 	reqCtx.RateLimitDecision = &ratelimit.Decision{
 		Allowed:   true,
@@ -250,15 +243,8 @@ func TestApplyGatewayContextCopiesRuntimeMetadata(t *testing.T) {
 				Limit:         7,
 			},
 			HasRateLimitConfig: true,
-			RoutingPolicy: runtimeconfig.RoutingPolicy{
-				DefaultProvider:     "mock",
-				DefaultModel:        "mock-balanced",
-				LowCostProvider:     "mock",
-				LowCostModel:        "mock-fast",
-				ShortPromptMaxChars: 500,
-				RoutingPolicyHash:   "hash_routing_policy_test",
-			},
-			HasRoutingPolicy: true,
+			RoutingPolicy:      runtimeconfig.BootstrapRoutingPolicy("hash_routing_policy_test"),
+			HasRoutingPolicy:   true,
 			CachePolicy: runtimeconfig.CachePolicy{
 				Enabled:    true,
 				Type:       runtimeconfig.CacheTypeExact,
@@ -317,11 +303,11 @@ func TestApplyGatewayContextCopiesRoutingPolicyHash(t *testing.T) {
 	})
 	gatewayCtx := &request.GatewayContext{
 		Routing: request.RoutingContext{
-			RequestedModel:    "auto",
-			SelectedProvider:  "mock",
-			SelectedModel:     "mock-fast",
-			RoutingReason:     "short_prompt_low_cost",
-			RoutingPolicyHash: "route_p0_v1",
+			RequestedModel:     "auto",
+			ModelRef:           "mock-fast",
+			CandidateModelRefs: []string{"mock-fast"},
+			RoutingReason:      "category_difficulty_matrix",
+			RoutingPolicyHash:  "route_policy_v2",
 		},
 	}
 
@@ -330,11 +316,11 @@ func TestApplyGatewayContextCopiesRoutingPolicyHash(t *testing.T) {
 	if reqCtx.RequestedModel != "auto" {
 		t.Fatalf("expected requested model auto, got %s", reqCtx.RequestedModel)
 	}
-	if reqCtx.SelectedProvider != "mock" || reqCtx.SelectedModel != "mock-fast" {
-		t.Fatalf("unexpected selected route: %#v", reqCtx)
+	if reqCtx.ModelRef != "mock-fast" || len(reqCtx.CandidateModelRefs) != 1 {
+		t.Fatalf("unexpected model reference route: %#v", reqCtx)
 	}
-	if reqCtx.RoutingPolicyHash != "route_p0_v1" {
-		t.Fatalf("expected routing policy hash route_p0_v1, got %s", reqCtx.RoutingPolicyHash)
+	if reqCtx.RoutingPolicyHash != "route_policy_v2" {
+		t.Fatalf("expected routing policy hash route_policy_v2, got %s", reqCtx.RoutingPolicyHash)
 	}
 }
 

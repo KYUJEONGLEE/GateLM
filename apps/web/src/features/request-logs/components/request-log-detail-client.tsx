@@ -8,17 +8,16 @@ import {
   REQUEST_LOG_DETAIL_CLOSE_EVENT,
   REQUEST_LOG_DETAIL_SELECT_EVENT
 } from "./request-log-detail-anchor";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import type { Locale } from "@/lib/i18n/locale";
 
 type RequestLogDetailClientProps = {
   initialProjectId?: string;
-  initialRecord?: InvocationLogRecord;
+  initialRecord?: LiveInvocationLogRecord;
   initialRequestId?: string;
   locale: Locale;
   onClose?: () => void;
-  records?: InvocationLogRecord[];
+  records?: LiveInvocationLogRecord[];
   selectedProjectId?: string;
   selectedRequestId?: string;
   tenantId: string;
@@ -32,12 +31,12 @@ type DetailSelection = {
 };
 
 type DetailApiResponse = {
-  data?: InvocationLogRecord | null;
+  data?: LiveInvocationLogRecord | null;
 };
 
 type DetailLoadState = "idle" | "loading" | "ready" | "error";
 
-const emptyRecords: InvocationLogRecord[] = [];
+const emptyRecords: LiveInvocationLogRecord[] = [];
 
 export function RequestLogDetailClient({
   initialProjectId,
@@ -63,7 +62,7 @@ export function RequestLogDetailClient({
       variant === "drawer" ? selectedProjectId : initialProjectId,
     requestId: initialSelectedRequestId
   });
-  const [detail, setDetail] = useState<InvocationLogRecord | undefined>(
+  const [detail, setDetail] = useState<LiveInvocationLogRecord | undefined>(
     initialRecord
   );
   const [loadState, setLoadState] = useState<DetailLoadState>(
@@ -233,7 +232,7 @@ export function RequestLogDetailClient({
         }
 
         if (payload.data) {
-          setDetail(toDisplayModelRecord(payload.data));
+          setDetail(payload.data);
           setLoadState("ready");
           return;
         }
@@ -301,16 +300,4 @@ export function RequestLogDetailClient({
       timezone={timezone}
     />
   );
-}
-
-function toDisplayModelRecord(record: InvocationLogRecord): InvocationLogRecord {
-  return {
-    ...record,
-    requestedModel: record.requestedModel
-      ? formatModelDisplayName(record.requestedModel)
-      : record.requestedModel,
-    selectedModel: record.selectedModel
-      ? formatModelDisplayName(record.selectedModel)
-      : record.selectedModel
-  };
 }

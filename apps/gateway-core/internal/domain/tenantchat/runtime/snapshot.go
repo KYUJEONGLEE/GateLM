@@ -148,6 +148,15 @@ func ParseSnapshot(document []byte) (Snapshot, error) {
 	if err := json.Unmarshal(document, &snapshot); err != nil {
 		return Snapshot{}, fmt.Errorf("decode typed tenant chat runtime snapshot: %w", err)
 	}
+	for index, route := range snapshot.Pricing.Routes {
+		if route.CacheReadInputMicroUSDPerMillionTokens != nil &&
+			*route.CacheReadInputMicroUSDPerMillionTokens > route.InputMicroUSDPerMillionTokens {
+			return Snapshot{}, fmt.Errorf(
+				"validate tenant chat runtime snapshot: pricing.routes[%d] cache-read input price exceeds regular input price",
+				index,
+			)
+		}
+	}
 	return snapshot, nil
 }
 

@@ -118,8 +118,6 @@ func (w *TerminalLogWriter) statements(log invocationlog.TerminalLog) ([]termina
 			nullableText(record.RequestedModel),
 			record.Provider,
 			record.Model,
-			nullableText(record.SelectedProvider),
-			nullableText(record.SelectedModel),
 			nullableText(record.RoutingReason),
 			record.PromptTokens,
 			record.CompletionTokens,
@@ -200,8 +198,6 @@ type terminalLogRecord struct {
 	RequestedModel           string
 	Provider                 string
 	Model                    string
-	SelectedProvider         string
-	SelectedModel            string
 	RoutingReason            string
 	PromptTokens             int
 	CompletionTokens         int
@@ -296,8 +292,6 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		RequestedModel:           strings.TrimSpace(log.RequestedModel),
 		Provider:                 strings.TrimSpace(log.Provider),
 		Model:                    strings.TrimSpace(log.Model),
-		SelectedProvider:         strings.TrimSpace(log.SelectedProvider),
-		SelectedModel:            strings.TrimSpace(log.SelectedModel),
 		RoutingReason:            strings.TrimSpace(log.RoutingReason),
 		PromptTokens:             log.PromptTokens,
 		CompletionTokens:         log.CompletionTokens,
@@ -477,8 +471,6 @@ insert into p0_llm_invocation_logs (
   requested_model,
   provider,
   model,
-  selected_provider,
-  selected_model,
   routing_reason,
   prompt_tokens,
   completion_tokens,
@@ -510,7 +502,7 @@ insert into p0_llm_invocation_logs (
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44, $45, $46
+  $41, $42, $43, $44
 )
 on conflict (request_id) do nothing`
 

@@ -280,11 +280,7 @@ func snapshotVersion(version int) runtimeconfig.ExecutionSnapshot {
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security",
 		},
-		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:   "mock",
-			DefaultModel:      "mock-balanced",
-			RoutingPolicyHash: "hash_routing",
-		},
+		RoutingPolicy:   runtimeconfig.BootstrapRoutingPolicy("hash_routing"),
 		PromptCapture:   runtimeconfig.DefaultPromptCapturePolicy(),
 		ResponseCapture: runtimeconfig.DefaultResponseCapturePolicy(),
 	}

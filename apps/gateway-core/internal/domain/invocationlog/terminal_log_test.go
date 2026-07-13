@@ -30,9 +30,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		RequestedModel:          "auto",
 		Provider:                "mock",
 		Model:                   "mock-fast",
-		SelectedProvider:        "mock",
-		SelectedModel:           "mock-fast",
-		RoutingReason:           "short_prompt_low_cost",
+		RoutingReason:           routing.ReasonMatrixRoute,
 		RoutingPolicyHash:       "route_p0_v1",
 		PromptTokens:            4,
 		CompletionTokens:        3,
@@ -96,7 +94,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected runtime snapshot metadata, got %+v", log.Metadata)
 	}
-	if runtimeSnapshot["runtimeSnapshotVersion"] != 1 || runtimeSnapshot["runtimeState"] != "snapshot_active" {
+	if runtimeSnapshot["runtimeSnapshotVersion"] != 2 || runtimeSnapshot["runtimeState"] != "snapshot_active" {
 		t.Fatalf("unexpected runtime snapshot metadata: %+v", runtimeSnapshot)
 	}
 	legacyHashes, ok := runtimeSnapshot["legacyHashes"].(map[string]string)
@@ -349,9 +347,9 @@ func TestBuildTerminalLogMapsExactCacheHitDomainOutcomes(t *testing.T) {
 		RequestID:         "request_cache_hit",
 		ApplicationID:     "app_demo",
 		RequestedModel:    "auto",
-		SelectedProvider:  "mock",
-		SelectedModel:     "mock-fast",
-		RoutingReason:     "short_prompt_low_cost",
+		Provider:          "mock",
+		Model:             "mock-fast",
+		RoutingReason:     routing.ReasonMatrixRoute,
 		Status:            StatusSuccess,
 		HTTPStatus:        200,
 		CacheStatus:       CacheStatusHit,
@@ -394,8 +392,8 @@ func TestBuildTerminalLogMapsPreRoutingExactCacheHitAsSkippedRouting(t *testing.
 		*log.DomainOutcomes.Routing.RoutingReason != "exact_cache_hit_provider_bypass" {
 		t.Fatalf("unexpected pre-routing cache hit reason: %+v", log.DomainOutcomes.Routing)
 	}
-	if log.DomainOutcomes.Provider.SelectedProvider != nil || log.DomainOutcomes.Provider.SelectedModel != nil {
-		t.Fatalf("pre-routing cache hit must not invent provider/model, got %+v", log.DomainOutcomes.Provider)
+	if log.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("pre-routing cache hit must not call provider, got %+v", log.DomainOutcomes.Provider)
 	}
 }
 
@@ -429,8 +427,8 @@ func TestBuildTerminalLogMapsStreamingFinalOutcomes(t *testing.T) {
 		ApplicationID:     "app_demo",
 		Stream:            true,
 		RequestedModel:    "auto",
-		SelectedProvider:  "mock",
-		SelectedModel:     "mock-fast",
+		Provider:          "mock",
+		Model:             "mock-fast",
 		Status:            StatusSuccess,
 		HTTPStatus:        200,
 		CacheStatus:       CacheStatusMiss,

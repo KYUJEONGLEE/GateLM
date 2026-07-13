@@ -36,13 +36,14 @@ type fakeAdmissionService struct {
 	admission domain.Admission
 	cancel    domain.AdmissionCancellation
 	err       error
+	context   domain.RequestContext
 }
 
 func (s *fakeAdmissionService) Admit(
 	_ context.Context,
-	_ domain.RequestContext,
-	_ workloadauth.Claims,
+	requestContext domain.RequestContext,
 ) (domain.Admission, error) {
+	s.context = requestContext
 	return s.admission, s.err
 }
 
@@ -103,6 +104,35 @@ func TestPrivateHandlerRejectsUnknownFieldsBeforeAuthentication(t *testing.T) {
 	}
 }
 
+func TestAdmissionUsesWorkloadBoundActorWithoutReevaluation(t *testing.T) {
+	auth := &fakeAuthenticator{verified: workloadauth.VerifiedToken{Claims: workloadauth.Claims{
+		UserID: "different-user-that-must-not-be-reinterpreted",
+	}}}
+	service := &fakeAdmissionService{admission: domain.Admission{
+		AdmissionID: "00000000-0000-4000-8000-000000000001",
+		RequestID:   "request_fixture_001",
+		State:       "active",
+		ExpiresAt:   time.Date(2026, 7, 13, 0, 0, 30, 0, time.UTC),
+	}}
+	requestContext := domain.RequestContext{ExecutionScope: domain.ExecutionScope{
+		TenantID: "00000000-0000-4000-8000-000000000100",
+		Actor: domain.Actor{
+			UserID:     "00000000-0000-4000-8000-000000000200",
+			ActorKind:  "employee",
+			EmployeeID: "00000000-0000-4000-8000-000000000300",
+		},
+	}}
+	recorder := performJSONRequest(t, NewRouter(auth, service, 64*1024),
+		"/internal/v1/tenant-chat/admissions", domain.AdmissionRequest{Context: requestContext})
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("want admission success, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if service.context.ExecutionScope.Actor != requestContext.ExecutionScope.Actor {
+		t.Fatalf("Gateway reinterpreted the workload-bound actor: got %+v want %+v",
+			service.context.ExecutionScope.Actor, requestContext.ExecutionScope.Actor)
+	}
+}
+
 func TestPrivateHandlerReturnsSafeContractErrors(t *testing.T) {
 	auth := &fakeAuthenticator{err: requestauth.ErrGuardUnavailable}
 	router := NewRouter(auth, &fakeAdmissionService{}, 64*1024)
@@ -158,6 +188,9 @@ func TestServiceErrorMapping(t *testing.T) {
 		{err: domain.ErrIdempotencyConflict, code: "CHAT_IDEMPOTENCY_CONFLICT"},
 		{err: domain.ErrRateLimited, code: "CHAT_RATE_LIMITED"},
 		{err: domain.ErrConcurrencyLimited, code: "CHAT_CONCURRENCY_LIMITED"},
+		{err: domain.ErrTenantDisabled, code: "CHAT_TENANT_DISABLED"},
+		{err: domain.ErrRuntimeUnavailable, code: "CHAT_RUNTIME_UNAVAILABLE"},
+		{err: context.DeadlineExceeded, code: "CHAT_RUNTIME_UNAVAILABLE"},
 		{err: errors.New("database detail"), code: "CHAT_USAGE_GUARD_UNAVAILABLE"},
 	}
 	for _, test := range tests {
@@ -172,6 +205,14 @@ func TestServiceErrorMapping(t *testing.T) {
 				t.Fatalf("unexpected safe error mapping: %+v", response)
 			}
 		})
+	}
+}
+
+func TestServiceCancellationDoesNotWriteResponse(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeServiceError(recorder, context.Canceled)
+	if recorder.Body.Len() != 0 || recorder.Header().Get("Content-Type") != "" {
+		t.Fatalf("canceled request wrote a response: headers=%v body=%q", recorder.Header(), recorder.Body.String())
 	}
 }
 

@@ -115,7 +115,6 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn',
         warningThresholdPercent: 70,
-        restrictHighQualityOnBudgetRisk: true,
       },
       cachePolicy: { ttlSeconds: 120 },
       promptCapturePolicy: {
@@ -146,7 +145,6 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 70,
-      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.runtimeConfig.cachePolicy.ttlSeconds).toBe(120);
     expect(result.runtimeConfig.promptCapturePolicy).toEqual({
@@ -252,7 +250,7 @@ describe('RuntimeConfigsService', () => {
     );
   });
 
-  it('keeps optional high-quality routing model in the runtime policy', async () => {
+  it('stores the complete v2 routing matrix with opaque catalog model refs', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma, {
       providerConfig: { models: ['mock-fast', 'mock-balanced', 'mock-smart'] },
@@ -264,29 +262,49 @@ describe('RuntimeConfigsService', () => {
 
     const result = await service.upsertDraft(applicationId, {
       routingPolicy: {
-        defaultProvider: 'mock',
-        defaultModel: 'mock-balanced',
-        lowCostProvider: 'mock',
-        lowCostModel: 'mock-fast',
-        highQualityProvider: 'mock',
-        highQualityModel: 'mock-smart',
+        mode: 'auto',
+        routes: routingRoutes(`${providerId}:mock-smart`),
       },
     });
 
-    expect(result.runtimeConfig.routingPolicy).toEqual(
-      expect.objectContaining({
-        defaultModel: 'mock-balanced',
-        lowCostModel: 'mock-fast',
-        highQualityProvider: 'mock',
-        highQualityModel: 'mock-smart',
-      }),
+    expect(result.runtimeConfig.schemaVersion).toBe(
+      'gatelm.active-runtime-config.v2',
+    );
+    expect(result.runtimeConfig.routingPolicy).toEqual({
+      schemaVersion: 'gatelm.routing-policy.v2',
+      mode: 'auto',
+      bootstrapState: 'mock_bootstrap',
+      routes: routingRoutes(`${providerId}:mock-smart`),
+      routingPolicyHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(result.runtimeConfig).not.toHaveProperty('defaultModel');
+    expect(result.runtimeConfig.routingPolicy).not.toHaveProperty(
+      'highQualityModel',
     );
     expect(result.runtimeConfig.routingPolicy.routingPolicyHash).toMatch(
-      /^[a-f0-9]{64}$/,
+      /^sha256:[a-f0-9]{64}$/,
     );
   });
 
-  it('uses the selected high-quality provider default model when the model is omitted', async () => {
+  it('uses the reserved mock model for all ten cells when no policy exists', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {});
+
+    expect(result.runtimeConfig.routingPolicy.bootstrapState).toBe(
+      'mock_bootstrap',
+    );
+    expect(result.runtimeConfig.routingPolicy.routes).toEqual(
+      routingRoutes('mock-balanced'),
+    );
+  });
+
+  it('publishes a resolvable built-in mock target when a tenant only has real providers', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
     prisma.providerConnection.findMany.mockResolvedValue([
@@ -307,45 +325,107 @@ describe('RuntimeConfigsService', () => {
         createdAt: now,
         updatedAt: now,
       },
-      {
-        id: '00000000-0000-4000-8000-000000000601',
-        tenantId,
-        projectId,
-        provider: 'mock-premium',
-        displayName: 'Mock Premium',
-        status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: 'http://mock-premium:8090',
-        timeoutMs: 30000,
-        secretRef: 'secret/provider/mock-premium',
-        credentialPrefix: 'mock_',
-        credentialLast4: '8bB2',
-        resolver: 'none',
-        providerConfig: { models: ['mock-smart', 'mock-balanced'] },
-        createdAt: now,
-        updatedAt: now,
-      },
     ]);
     prisma.runtimeConfig.findUnique.mockResolvedValue(null);
     prisma.runtimeConfig.create.mockImplementation(({ data }) =>
       Promise.resolve(runtimeConfigRecord(data.document, data)),
     );
 
-    const result = await service.upsertDraft(applicationId, {
-      routingPolicy: {
-        defaultProvider: 'openai-main',
-        defaultModel: 'gpt-4o',
-        highQualityProvider: 'mock-premium',
-      },
-    });
+    const result = await service.upsertDraft(applicationId, {});
 
-    expect(result.runtimeConfig.routingPolicy).toEqual(
+    expect(result.runtimeConfig.routingPolicy.routes).toEqual(
+      routingRoutes('mock-balanced'),
+    );
+    expect(result.runtimeConfig.providers).toContainEqual(
       expect.objectContaining({
-        defaultProvider: 'openai-main',
-        defaultModel: 'gpt-4o',
-        highQualityProvider: 'mock-premium',
-        highQualityModel: 'mock-smart',
+        providerId: '00000000-0000-4000-8000-000000000001',
+        provider: 'mock',
+        adapterType: 'mock',
+        credentialRequired: false,
+        models: ['mock-balanced'],
       }),
     );
+    expect(result.runtimeConfig.models).toContainEqual(
+      expect.objectContaining({
+        provider: 'mock',
+        model: 'mock-balanced',
+        status: 'active',
+      }),
+    );
+  });
+
+  it('normalizes legacy defaultModel for reads without persisting', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const current = activeRuntimeConfigDocument();
+    const legacyDocument = {
+      ...current,
+      schemaVersion: 'gatelm.active-runtime-config.v1',
+      defaultProvider: 'mock',
+      defaultModel: 'mock-fast',
+      lowCostProvider: 'ignored-low-provider',
+      lowCostModel: 'ignored-low-model',
+      highQualityProvider: 'ignored-high-provider',
+      highQualityModel: 'ignored-high-model',
+      fallbackProvider: 'ignored-fallback-provider',
+      fallbackModel: 'ignored-fallback-model',
+      routingPolicy: {
+        type: 'simple',
+        autoModel: 'auto',
+        defaultProvider: 'mock',
+        defaultModel: 'mock-fast',
+        lowCostProvider: 'ignored-low-provider',
+        lowCostModel: 'ignored-low-model',
+        highQualityProvider: 'ignored-high-provider',
+        highQualityModel: 'ignored-high-model',
+        fallbackProvider: 'ignored-fallback-provider',
+        fallbackModel: 'ignored-fallback-model',
+        shortPromptMaxChars: 500,
+        routingPolicyHash: 'e'.repeat(64),
+      },
+    };
+    prisma.runtimeConfig.findUnique.mockResolvedValue(
+      runtimeConfigRecord(legacyDocument as unknown as ActiveRuntimeConfigResponseDto),
+    );
+
+    const result = await service.getRuntimeConfigHistoryDetail(
+      applicationId,
+      current.configVersion,
+    );
+
+    expect(result.runtimeConfig.routingPolicy.routes).toEqual(
+      routingRoutes(`${providerId}:mock-fast`),
+    );
+    expect(JSON.stringify(result.runtimeConfig)).not.toContain('lowCostModel');
+    expect(JSON.stringify(result.runtimeConfig)).not.toContain(
+      'highQualityModel',
+    );
+    expect(JSON.stringify(result.runtimeConfig)).not.toContain('fallbackModel');
+    expect(result.item.configHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed stored v2 routing policy instead of treating it as legacy', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const malformedV2 = {
+      ...activeRuntimeConfigDocument(),
+      routingPolicy: {
+        ...activeRuntimeConfigDocument().routingPolicy,
+        routingPolicyHash: 'not-a-canonical-hash',
+      },
+    };
+    prisma.runtimeConfig.findUnique.mockResolvedValue(
+      runtimeConfigRecord(malformedV2),
+    );
+
+    await expect(
+      service.getRuntimeConfigHistoryDetail(
+        applicationId,
+        malformedV2.configVersion,
+      ),
+    ).rejects.toThrow('Runtime Config routing policy v2 is invalid.');
+    expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
   });
 
   it('publishes a draft as the single active runtime config snapshot', async () => {
@@ -357,8 +437,8 @@ describe('RuntimeConfigsService', () => {
     );
     const draft = await service.upsertDraft(applicationId, {
       routingPolicy: {
-        defaultProvider: 'mock',
-        defaultModel: 'mock-balanced',
+        mode: 'auto',
+        routes: routingRoutes('mock-balanced'),
       },
     });
     const tx = {
@@ -458,7 +538,7 @@ describe('RuntimeConfigsService', () => {
     );
     expect(result.configVersion).toBe('runtime_config_test_001');
     expect(result.publishState).toBe('active');
-    expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v1');
+    expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v2');
     expect(result.providers[0]?.credentialRef).toEqual({
       credentialRefId: 'secret/provider/mock',
       credentialVersion: 1,
@@ -560,7 +640,6 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn' as const,
         warningThresholdPercent: 75,
-        restrictHighQualityOnBudgetRisk: true,
       },
     };
     prisma.runtimeConfig.findUnique.mockResolvedValue(
@@ -610,7 +689,6 @@ describe('RuntimeConfigsService', () => {
           enabled: true,
           enforcementMode: 'warn',
           warningThresholdPercent: 75,
-          restrictHighQualityOnBudgetRisk: true,
         },
       }),
     );
@@ -657,7 +735,6 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'block' as const,
         warningThresholdPercent: 70,
-        restrictHighQualityOnBudgetRisk: true,
       },
     };
     const tx = {
@@ -764,7 +841,6 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'block',
       warningThresholdPercent: 70,
-      restrictHighQualityOnBudgetRisk: true,
     });
     expect(createdDocument.configVersion).toBe(
       'runtime_config_rollback_manual',
@@ -893,7 +969,19 @@ describe('RuntimeConfigsService', () => {
       where: { id: apiKeyId },
     });
     expect(prisma.appToken.findUnique).not.toHaveBeenCalled();
-    expect(result).toEqual(activeDocument);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ...activeDocument,
+        models: expect.arrayContaining(activeDocument.models),
+        routingPolicy: expect.objectContaining({
+          schemaVersion: 'gatelm.routing-policy.v2',
+          mode: 'auto',
+          routes: activeDocument.routingPolicy.routes,
+          routingPolicyHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        }),
+      }),
+    );
+    expect(result).not.toHaveProperty('defaultModel');
   });
 
   it('returns an active RuntimeSnapshot execution view without copying legacy secret refs', async () => {
@@ -946,10 +1034,12 @@ describe('RuntimeConfigsService', () => {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
-      restrictHighQualityOnBudgetRisk: true,
     });
-    expect(result.policies.routing.defaultProvider).toBe('mock');
-    expect(result.policies.routing.lowCostModel).toBe('mock-fast');
+    expect(result.schemaVersion).toBe('gatelm.runtime-snapshot.v2');
+    expect(result.policies.routing.mode).toBe('auto');
+    expect(result.policies.routing.routes).toEqual(
+      routingRoutes(`${providerId}:mock-fast`),
+    );
     expect(result.policies.safety.requestSideRequired).toBe(true);
     expect(result.policies.promptCapture).toEqual({
       enabled: true,
@@ -964,7 +1054,7 @@ describe('RuntimeConfigsService', () => {
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
       securityPolicyHash: activeDocument.safetyPolicy.securityPolicyHash,
-      routingPolicyHash: activeDocument.routingPolicy.routingPolicyHash,
+      routingPolicyHash: result.policies.routing.routingPolicyHash,
     });
     expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(result)).not.toContain('secretHash');
@@ -995,6 +1085,22 @@ describe('RuntimeConfigsService', () => {
     });
     expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('rejects persisted v1 RuntimeSnapshot bodies after the v2 hard cutover', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const snapshotBody = {
+      ...runtimeSnapshotBody(),
+      schemaVersion: 'gatelm.runtime-snapshot.v1',
+    } as unknown as RuntimeSnapshotResponseDto;
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(snapshotBody),
+    );
+
+    await expect(
+      service.getActiveRuntimeSnapshot(applicationId),
+    ).rejects.toThrow('RuntimeSnapshot body is invalid.');
   });
 
   it('fails with an internal error when the active snapshot pointer references another application', async () => {
@@ -1085,7 +1191,6 @@ describe('RuntimeConfigsService', () => {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
-      restrictHighQualityOnBudgetRisk: true,
     });
   });
 
@@ -1116,7 +1221,6 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 80,
-      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.budgetResolution).toEqual({
       budgetScopeType: 'application',
@@ -1195,7 +1299,6 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'block' as const,
         warningThresholdPercent: 75,
-        restrictHighQualityOnBudgetRisk: false,
       },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
@@ -1217,7 +1320,6 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'block',
       warningThresholdPercent: 75,
-      restrictHighQualityOnBudgetRisk: false,
     });
   });
 
@@ -1230,7 +1332,6 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn' as const,
         warningThresholdPercent: 65,
-        restrictHighQualityOnBudgetRisk: true,
       },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
@@ -1245,7 +1346,6 @@ describe('RuntimeConfigsService', () => {
     expect(Object.keys(result.policies.budget).sort()).toEqual([
       'enabled',
       'enforcementMode',
-      'restrictHighQualityOnBudgetRisk',
       'warningThresholdPercent',
     ]);
     expect(Object.keys(result.budgetResolution).sort()).toEqual([
@@ -1258,7 +1358,6 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 65,
-      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.budgetResolution).toEqual({
       budgetScopeType: 'application',
@@ -1393,7 +1492,7 @@ describe('RuntimeConfigsService', () => {
       },
       routing: {
         autoRoutingEligible: true,
-        costTier: 'low',
+        costTier: 'balanced',
         fallbackPriority: 0,
       },
     });
@@ -1438,14 +1537,9 @@ describe('RuntimeConfigsService', () => {
           supportsJsonMode: true,
         },
       ],
-      defaultModel: selectedModel,
-      lowCostModel: selectedModel,
-      fallbackModel: selectedModel,
       routingPolicy: {
         ...baseDocument.routingPolicy,
-        defaultModel: selectedModel,
-        lowCostModel: selectedModel,
-        fallbackModel: selectedModel,
+        routes: routingRoutes(`${providerId}:${selectedModel}`),
       },
       pricingRules: [
         {
@@ -1476,13 +1570,13 @@ describe('RuntimeConfigsService', () => {
 
     expect(snapshot.policies.routing).toEqual(
       expect.objectContaining({
-        defaultModel: selectedModel,
-        lowCostModel: selectedModel,
+        routes: routingRoutes(`${providerId}:${selectedModel}`),
       }),
     );
-    expect(snapshot.policies.fallback.fallbackModel).toBe(selectedModel);
+    expect(snapshot.policies).not.toHaveProperty('fallback');
     expect(catalogModel).toMatchObject({
       modelId: `${providerId}:${selectedModel}`,
+      modelRef: `${providerId}:${selectedModel}`,
       modelName: selectedModel,
       enabled: true,
       routing: expect.objectContaining({
@@ -1810,6 +1904,22 @@ describe('RuntimeConfigsService', () => {
     ).rejects.toThrow('Active Runtime Config is not executable.');
   });
 
+  it('rejects configured state when any route still resolves to mock', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    activeDocument.routingPolicy.bootstrapState = 'configured';
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+  });
+
   it('rejects an active runtime config containing forbidden credential fields', async () => {
     const { service, prisma } = createService();
     const activeDocument =
@@ -2000,29 +2110,46 @@ describe('RuntimeConfigsService', () => {
           },
         ],
         routingPolicy: {
-          defaultProvider: 'mock',
-          defaultModel: 'mock-fast',
+          mode: 'auto',
+          routes: routingRoutes(`${providerId}:mock-fast`),
         },
       }),
     ).rejects.toThrow('Runtime Config selected models must be active.');
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
   });
 
-  it('returns a sanitized provider and model in unavailable model errors', async () => {
+  it('rejects routing model refs that are not in the provider catalog', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
 
     await expect(
       service.upsertDraft(applicationId, {
         routingPolicy: {
-          defaultProvider: 'mock',
-          defaultModel: 'missing\n"model"',
+          mode: 'auto',
+          routes: routingRoutes(`${providerId}:missing-model`),
         },
       }),
     ).rejects.toThrow(
-      'Runtime Config model is not available for provider "mock" and model "missing _model_".',
+      'Runtime Config routing modelRef is not available in the provider catalog.',
     );
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects routing model refs that become duplicates after trimming', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    const duplicateRef = `${providerId}:mock-fast`;
+    const routes = routingRoutes(duplicateRef);
+    routes.general.simple.modelRefs = [duplicateRef, ` ${duplicateRef} `];
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        routingPolicy: { mode: 'auto', routes },
+      }),
+    ).rejects.toThrow(
+      'Runtime Config routing policy requires all category and difficulty cells.',
+    );
   });
 
   it('rejects provider credential previews that cannot match runtime schema', async () => {
@@ -2231,6 +2358,7 @@ describe('RuntimeConfigsService', () => {
     overrides: Partial<RuntimeSnapshotResponseDto> = {},
   ): RuntimeSnapshotResponseDto {
     return {
+      schemaVersion: 'gatelm.runtime-snapshot.v2',
       runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
       runtimeSnapshotVersion: 1,
       contentHash: 'c'.repeat(64),
@@ -2263,13 +2391,10 @@ describe('RuntimeConfigsService', () => {
           detectorSet: [{ detectorType: 'email', action: 'redact' }],
         },
         routing: {
-          autoModelEnabled: true,
-          defaultRequestedModel: 'auto',
-          defaultProvider: 'mock',
-          defaultModel: 'mock-fast',
-          lowCostProvider: 'mock',
-          lowCostModel: 'mock-fast',
-          routingPolicyHash: 'e'.repeat(64),
+          mode: 'auto',
+          bootstrapState: 'mock_bootstrap',
+          routes: routingRoutes(`${providerId}:mock-fast`),
+          routingPolicyHash: `sha256:${'e'.repeat(64)}`,
         },
         cache: {
           exactCacheEnabled: true,
@@ -2296,13 +2421,6 @@ describe('RuntimeConfigsService', () => {
           enabled: false,
           enforcementMode: 'disabled',
           warningThresholdPercent: 80,
-          restrictHighQualityOnBudgetRisk: true,
-        },
-        fallback: {
-          enabled: true,
-          fallbackProvider: 'mock',
-          fallbackModel: 'mock-fast',
-          allowedReasons: ['provider_timeout', 'provider_error'],
         },
         streaming: {
           enabled: false,
@@ -2318,9 +2436,34 @@ describe('RuntimeConfigsService', () => {
     };
   }
 
+  function routingRoutes(modelRef: string) {
+    return {
+      general: {
+        simple: { modelRefs: [modelRef] },
+        complex: { modelRefs: [modelRef] },
+      },
+      code: {
+        simple: { modelRefs: [modelRef] },
+        complex: { modelRefs: [modelRef] },
+      },
+      translation: {
+        simple: { modelRefs: [modelRef] },
+        complex: { modelRefs: [modelRef] },
+      },
+      summarization: {
+        simple: { modelRefs: [modelRef] },
+        complex: { modelRefs: [modelRef] },
+      },
+      reasoning: {
+        simple: { modelRefs: [modelRef] },
+        complex: { modelRefs: [modelRef] },
+      },
+    };
+  }
+
   function activeRuntimeConfigDocument(): ActiveRuntimeConfigResponseDto {
     return {
-      schemaVersion: 'gatelm.active-runtime-config.v1',
+      schemaVersion: 'gatelm.active-runtime-config.v2',
       configVersion: 'runtime_config_test_001',
       configHash: 'c'.repeat(64),
       configHashAlgorithm:
@@ -2381,12 +2524,6 @@ describe('RuntimeConfigsService', () => {
           supportsJsonMode: false,
         },
       ],
-      defaultProvider: 'mock',
-      defaultModel: 'mock-fast',
-      lowCostProvider: 'mock',
-      lowCostModel: 'mock-fast',
-      fallbackProvider: 'mock',
-      fallbackModel: 'mock-fast',
       rateLimit: {
         enabled: true,
         scope: 'application',
@@ -2398,7 +2535,6 @@ describe('RuntimeConfigsService', () => {
         enabled: false,
         enforcementMode: 'disabled',
         warningThresholdPercent: 80,
-        restrictHighQualityOnBudgetRisk: true,
       },
       safetyPolicy: {
         mode: 'rule_based',
@@ -2425,16 +2561,11 @@ describe('RuntimeConfigsService', () => {
         maxChars: 8000,
       },
       routingPolicy: {
-        type: 'simple',
-        autoModel: 'auto',
-        defaultProvider: 'mock',
-        defaultModel: 'mock-fast',
-        lowCostProvider: 'mock',
-        lowCostModel: 'mock-fast',
-        fallbackProvider: 'mock',
-        fallbackModel: 'mock-fast',
-        shortPromptMaxChars: 500,
-        routingPolicyHash: 'e'.repeat(64),
+        schemaVersion: 'gatelm.routing-policy.v2',
+        mode: 'auto',
+        bootstrapState: 'mock_bootstrap',
+        routes: routingRoutes(`${providerId}:mock-fast`),
+        routingPolicyHash: `sha256:${'e'.repeat(64)}`,
       },
       pricingRules: [
         {

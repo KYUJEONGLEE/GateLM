@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Status | PR1 implementation in progress |
+| Status | Runtime/Gateway foundations merged; contract reconciliation in progress |
 | Contract | `docs/tenant-chat`, contract ID `tenant-chat/v1` |
-| Contract baseline | `origin/dev @ b7d1a740` |
+| Contract baseline | `origin/dev @ 1114b62f` |
 | Target | Control Plane, Gateway, projector, Web Console |
 | Legacy impact | Existing Project/Application and public `/v1` remain unchanged |
-| Last reviewed | 2026-07-12 |
+| Last reviewed | 2026-07-13 |
 
 ## 1. 목표
 
@@ -101,6 +101,13 @@ PR1은 Tenant Chat traffic을 받거나 Provider를 호출하지 않는다. 후�
 - 기존 Project/Application schema diff 없음 확인
 
 ## 6. PR2 - Private Gateway And Usage Transactions
+
+### 6.0 As-built checkpoint
+
+- PR [#296](https://github.com/KYUJEONGLEE/GateLM/pull/296)은 `29941e42`에 merge되어 tenant RuntimeSnapshot/publish와 usage schema 기반을 제공한다.
+- PR [#297](https://github.com/KYUJEONGLEE/GateLM/pull/297)은 `be9adde7`에 merge되어 private listener, workload JWT/JTI, admission/cancel, runtime reader와 usage transaction 기반을 제공한다.
+- 이 상태는 PR2 완료가 아니다. private completion endpoint, provider/fallback 연결, terminal outbox, pending-unconfirmed 처리와 admission→Dashboard E2E가 남아 있다.
+- identity entitlement의 소유권은 active contract를 따른다. Chat API가 Control Plane authoritative read를 완료하고 workload JWT를 발급하며, Gateway는 User/Membership/Employee table을 다시 조회하거나 actor를 재판정하지 않는다. Gateway의 tenant active 확인은 tenant RuntimeSnapshot reader 경계에 둔다.
 
 ### 6.1 완성할 흐름
 
