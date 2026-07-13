@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
 
@@ -13,8 +14,27 @@ import (
 )
 
 type ReservationStore struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool    *pgxpool.Pool
+	now     func() time.Time
+	metrics *metrics.Registry
+}
+
+func (s *ReservationStore) WithMetrics(registry *metrics.Registry) *ReservationStore {
+	if s != nil {
+		s.metrics = registry
+	}
+	return s
+}
+
+func (s *ReservationStore) observeTransaction(transition string, started time.Time) {
+	if s == nil || s.metrics == nil {
+		return
+	}
+	s.metrics.ObserveHistogram(
+		metrics.TenantChatAccountingTransactionSeconds,
+		[]metrics.Label{{Name: "transition", Value: transition}},
+		time.Since(started).Seconds(),
+	)
 }
 
 func NewReservationStore(pool *pgxpool.Pool) *ReservationStore {
@@ -25,6 +45,25 @@ func (s *ReservationStore) ConsumeAndReserve(
 	ctx context.Context,
 	requestContext tenantchat.RequestContext,
 	snapshot tenantruntime.Snapshot,
+) (tenantchat.UsageReservation, error) {
+	return s.consumeAndReserve(ctx, requestContext, snapshot, false)
+}
+
+func (s *ReservationStore) BeginExecution(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+) (tenantchat.UsageReservation, error) {
+	started := time.Now()
+	defer s.observeTransaction("begin_execution", started)
+	return s.consumeAndReserve(ctx, requestContext, snapshot, true)
+}
+
+func (s *ReservationStore) consumeAndReserve(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+	startPrimary bool,
 ) (result tenantchat.UsageReservation, err error) {
 	if s == nil || s.pool == nil || requestContext.UsageIntent == nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
@@ -131,6 +170,13 @@ func (s *ReservationStore) ConsumeAndReserve(
 		reservationID, eventID, reservedTokens, reservedCost, quotaState, budgetState, now,
 	); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if startPrimary {
+		if err = insertAttemptRow(
+			ctx, tx, requestContext, reservationID, route, 1, "primary", reservedCost, now,
+		); err != nil {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable

@@ -54,6 +54,21 @@ type fakeCompletionService struct {
 	request   domain.CompletionRequest
 }
 
+type fakeReceiptAuth struct{ allowed bool }
+
+func (a *fakeReceiptAuth) Authenticate(string) bool { return a.allowed }
+
+type fakeReceiptService struct {
+	result  domain.UsageReceiptResult
+	err     error
+	receipt domain.UsageReceipt
+}
+
+func (s *fakeReceiptService) RecordUsageReceipt(_ context.Context, receipt domain.UsageReceipt) (domain.UsageReceiptResult, error) {
+	s.receipt = receipt
+	return s.result, s.err
+}
+
 func (s *fakeCompletionService) Prepare(
 	_ context.Context,
 	request domain.CompletionRequest,
@@ -282,6 +297,32 @@ func TestPrivateHandlerRejectsUnknownFieldsBeforeAuthentication(t *testing.T) {
 	}
 }
 
+func TestUsageReceiptUsesDedicatedBearerAndReturnsReplayState(t *testing.T) {
+	service := &fakeReceiptService{result: domain.UsageReceiptResult{
+		RequestID: "request_receipt_001", AttemptNo: 1, State: "settled", Replayed: true,
+	}}
+	router := NewRouter(
+		&fakeAuthenticator{}, &fakeAdmissionService{}, 64*1024,
+		WithUsageReceipts(&fakeReceiptAuth{allowed: true}, service),
+	)
+	receipt := domain.UsageReceipt{
+		RequestID: "request_receipt_001", AttemptNo: 1, ProviderID: "provider_001",
+		InputTokens: 10, OutputTokens: 4, CacheReadInputTokens: 2,
+	}
+	recorder := performJSONRequest(t, router, "/internal/v1/tenant-chat/usage-receipts", receipt)
+	if recorder.Code != http.StatusOK || service.receipt != receipt {
+		t.Fatalf("unexpected usage receipt result: status=%d receipt=%+v body=%s", recorder.Code, service.receipt, recorder.Body.String())
+	}
+
+	unauthorized := NewRouter(
+		&fakeAuthenticator{}, &fakeAdmissionService{}, 64*1024,
+		WithUsageReceipts(&fakeReceiptAuth{}, service),
+	)
+	if got := performJSONRequest(t, unauthorized, "/internal/v1/tenant-chat/usage-receipts", receipt); got.Code != http.StatusUnauthorized {
+		t.Fatalf("dedicated receipt bearer was not enforced: %d", got.Code)
+	}
+}
+
 func TestAdmissionUsesWorkloadBoundActorWithoutReevaluation(t *testing.T) {
 	auth := &fakeAuthenticator{verified: workloadauth.VerifiedToken{Claims: workloadauth.Claims{
 		UserID: "different-user-that-must-not-be-reinterpreted",
@@ -367,6 +408,7 @@ func TestServiceErrorMapping(t *testing.T) {
 		{err: domain.ErrRateLimited, code: "CHAT_RATE_LIMITED"},
 		{err: domain.ErrConcurrencyLimited, code: "CHAT_CONCURRENCY_LIMITED"},
 		{err: domain.ErrTenantDisabled, code: "CHAT_TENANT_DISABLED"},
+		{err: domain.ErrSafetyBlocked, code: "CHAT_SAFETY_BLOCKED"},
 		{err: domain.ErrRuntimeUnavailable, code: "CHAT_RUNTIME_UNAVAILABLE"},
 		{err: context.DeadlineExceeded, code: "CHAT_RUNTIME_UNAVAILABLE"},
 		{err: errors.New("database detail"), code: "CHAT_USAGE_GUARD_UNAVAILABLE"},

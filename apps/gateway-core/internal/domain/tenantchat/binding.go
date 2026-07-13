@@ -23,6 +23,7 @@ type BindingObject struct {
 	SnapshotDigest  string         `json:"snapshotDigest"`
 	SnapshotVersion int64          `json:"snapshotVersion"`
 	TurnID          string         `json:"turnId"`
+	UsageIntent     *UsageIntent   `json:"usageIntent,omitempty"`
 }
 
 func BuildBindingObject(context RequestContext, payloadDigest string) BindingObject {
@@ -41,6 +42,7 @@ func BuildBindingObject(context RequestContext, payloadDigest string) BindingObj
 		SnapshotDigest:  context.Snapshot.Digest,
 		SnapshotVersion: context.Snapshot.Version,
 		TurnID:          context.TurnID,
+		UsageIntent:     context.UsageIntent,
 	}
 }
 

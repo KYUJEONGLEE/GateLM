@@ -58,7 +58,7 @@ func persistSettlement(
 		SET state = 'settled', reserved_tokens = 0, reserved_cost_micro_usd = 0,
 		    confirmed_input_tokens = $3, confirmed_output_tokens = $4,
 		    confirmed_cost_micro_usd = $5, ledger_version = $6,
-		    terminal_at = $7, updated_at = $7
+		    usage_pending_at = NULL, terminal_at = $7, updated_at = $7
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid
 		  AND state = 'reserved' AND ledger_version = $8
 	`, reservationID, requestContext.ExecutionScope.TenantID,

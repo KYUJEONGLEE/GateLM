@@ -95,6 +95,9 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		StreamRelayTotal,
 		StreamDurationSeconds,
 		StreamTimeToFirstTokenSeconds,
+		TenantChatCompletionTotal,
+		TenantChatUsageReconciliationTotal,
+		TenantChatAccountingTransactionSeconds,
 	} {
 		assertMetricsContains(t, output, "# TYPE "+metricName)
 	}

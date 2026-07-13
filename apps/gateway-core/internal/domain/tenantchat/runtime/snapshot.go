@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 
+	"gatelm/apps/gateway-core/internal/domain/masking"
+
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -53,15 +55,16 @@ type PriceRoute struct {
 }
 
 type Policies struct {
-	RateLimit   RateLimitPolicy   `json:"rateLimit"`
-	Concurrency ConcurrencyPolicy `json:"concurrency"`
-	Quota       QuotaPolicy       `json:"quota"`
-	Budget      BudgetPolicy      `json:"budget"`
-	Routing     RoutingPolicy     `json:"routing"`
-	Fallback    FallbackPolicy    `json:"fallback"`
-	Cache       CachePolicy       `json:"cache"`
-	Safety      SafetyPolicy      `json:"safety"`
-	Streaming   StreamingPolicy   `json:"streaming"`
+	RateLimit         RateLimitPolicy         `json:"rateLimit"`
+	Concurrency       ConcurrencyPolicy       `json:"concurrency"`
+	Quota             QuotaPolicy             `json:"quota"`
+	Budget            BudgetPolicy            `json:"budget"`
+	Routing           RoutingPolicy           `json:"routing"`
+	Fallback          FallbackPolicy          `json:"fallback"`
+	ProviderTokenRate ProviderTokenRatePolicy `json:"providerTokenRate"`
+	Cache             CachePolicy             `json:"cache"`
+	Safety            SafetyPolicy            `json:"safety"`
+	Streaming         StreamingPolicy         `json:"streaming"`
 }
 
 type RateLimitPolicy struct {
@@ -112,16 +115,33 @@ type FallbackPolicy struct {
 	AllowedReasons []string `json:"allowedReasons"`
 }
 
+type ProviderTokenRatePolicy struct {
+	Providers []ProviderTokenWindow `json:"providers"`
+}
+
+type ProviderTokenWindow struct {
+	ProviderID    string `json:"providerId"`
+	LimitTokens   int64  `json:"limitTokens"`
+	WindowSeconds int    `json:"windowSeconds"`
+}
+
 type CachePolicy struct {
 	Strategy          string `json:"strategy"`
 	Enabled           bool   `json:"enabled"`
 	TTLSeconds        int    `json:"ttlSeconds"`
 	MaxEntriesPerUser int    `json:"maxEntriesPerUser"`
+	KeySetID          string `json:"keySetId"`
 }
 
 type SafetyPolicy struct {
-	Enabled      bool   `json:"enabled"`
-	PolicyDigest string `json:"policyDigest"`
+	Enabled      bool             `json:"enabled"`
+	PolicyDigest string           `json:"policyDigest"`
+	DetectorSet  []SafetyDetector `json:"detectorSet"`
+}
+
+type SafetyDetector struct {
+	DetectorType string `json:"detectorType"`
+	Action       string `json:"action"`
 }
 
 type StreamingPolicy struct {
@@ -155,6 +175,30 @@ func ParseSnapshot(document []byte) (Snapshot, error) {
 				"validate tenant chat runtime snapshot: pricing.routes[%d] cache-read input price exceeds regular input price",
 				index,
 			)
+		}
+	}
+	providerPolicies := make(map[string]struct{}, len(snapshot.Policies.ProviderTokenRate.Providers))
+	for index, policy := range snapshot.Policies.ProviderTokenRate.Providers {
+		if _, exists := providerPolicies[policy.ProviderID]; exists {
+			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: duplicate provider token policy at index %d", index)
+		}
+		providerPolicies[policy.ProviderID] = struct{}{}
+	}
+	for index, route := range snapshot.Policies.Routing.Routes {
+		if route.Enabled {
+			if _, exists := providerPolicies[route.ProviderID]; !exists {
+				return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: routing route %d lacks provider token policy", index)
+			}
+		}
+	}
+	detectors := make(map[string]struct{}, len(snapshot.Policies.Safety.DetectorSet))
+	for index, detector := range snapshot.Policies.Safety.DetectorSet {
+		if _, exists := detectors[detector.DetectorType]; exists {
+			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: duplicate safety detector at index %d", index)
+		}
+		detectors[detector.DetectorType] = struct{}{}
+		if masking.IsMandatoryDetector(detector.DetectorType) && detector.Action == string(masking.PolicyActionAllow) {
+			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: mandatory detector %d cannot allow", index)
 		}
 	}
 	return snapshot, nil

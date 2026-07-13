@@ -37,9 +37,12 @@ import (
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
+	redistenantcache "gatelm/apps/gateway-core/internal/adapters/tenantchat/cache/redis"
 	postgrestenantprovider "gatelm/apps/gateway-core/internal/adapters/tenantchat/provider/postgres"
+	redistenantratelimit "gatelm/apps/gateway-core/internal/adapters/tenantchat/ratelimit/redis"
 	postgrestentantruntime "gatelm/apps/gateway-core/internal/adapters/tenantchat/runtime/postgres"
 	postgrestenantusage "gatelm/apps/gateway-core/internal/adapters/tenantchat/usage/postgres"
+	"gatelm/apps/gateway-core/internal/adapters/tenantchat/usagereceipt"
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
@@ -62,7 +65,9 @@ import (
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
 	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
+	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
+	tenantsafety "gatelm/apps/gateway-core/internal/services/tenantchat/safety"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -240,7 +245,16 @@ func main() {
 	)
 	server := app.NewServer(cfg, router)
 	var tenantChatPrivateServer *app.Server
+	var tenantChatReconciliationWorker *reconciliation.Worker
 	if cfg.TenantChatPrivate.Enabled {
+		tenantChatCacheKeySets, err := redistenantcache.LoadKeySets(cfg.TenantChatPrivate.CacheKeySetsFile)
+		if err != nil {
+			log.Fatalf("gateway-core tenant chat cache key sets failed: %v", err)
+		}
+		tenantChatReceiptToken, err := usagereceipt.LoadToken(cfg.TenantChatPrivate.UsageReceiptTokenFile)
+		if err != nil {
+			log.Fatalf("gateway-core tenant chat usage receipt token failed: %v", err)
+		}
 		workloadVerifier, err := workloadauth.Load(
 			cfg.TenantChatPrivate.WorkloadJWKSFile,
 			cfg.TenantChatPrivate.BindingHMACKeysFile,
@@ -254,7 +268,8 @@ func main() {
 		}
 		tenantChatAuthenticator := requestauth.New(workloadVerifier, jtiConsumer)
 		tenantChatRuntime := postgrestentantruntime.NewReader(postgresPool)
-		tenantChatUsage := postgrestenantusage.NewReservationStore(postgresPool)
+		tenantChatUsage := postgrestenantusage.NewReservationStore(postgresPool).WithMetrics(metricsRegistry)
+		tenantChatReconciliationWorker = reconciliation.NewWorker(tenantChatUsage).WithMetrics(metricsRegistry)
 		tenantChatAdmissions := admissionservice.New(
 			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
@@ -263,12 +278,17 @@ func main() {
 			tenantChatRuntime,
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
+			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluator()),
+			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
+			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
+			completionservice.WithMetrics(metricsRegistry),
 		)
 		tenantChatPrivateRouter := tenantchathttp.NewRouter(
 			tenantChatAuthenticator,
 			tenantChatAdmissions,
 			cfg.MaxRequestBodyBytes,
 			tenantchathttp.WithCompletionService(tenantChatCompletions),
+			tenantchathttp.WithUsageReceipts(tenantChatReceiptToken, tenantChatUsage),
 		)
 		tenantChatPrivateServer = app.NewServerAtAddress(
 			cfg.TenantChatPrivate.ListenAddress,
@@ -278,6 +298,9 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if tenantChatReconciliationWorker != nil {
+		go tenantChatReconciliationWorker.Run(ctx)
+	}
 
 	go func() {
 		log.Printf("gateway-core listening on :%s", cfg.Port)

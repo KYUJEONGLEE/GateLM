@@ -53,25 +53,25 @@ func (e *Executor) OpenStream(
 	requestContext tenantchat.RequestContext,
 	route tenantchat.SelectedRoute,
 	input tenantchat.CompletionInput,
-) (provider.ChatCompletionStreamReader, error) {
+) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
 	if e == nil || e.db == nil || e.providers == nil || requestContext.UsageIntent == nil {
-		return nil, tenantchat.ErrUsageGuardUnavailable
+		return nil, tenantchat.ProviderCallNotStarted, tenantchat.ErrUsageGuardUnavailable
 	}
 	connection, err := e.resolveConnection(ctx, requestContext.ExecutionScope.TenantID, route.ProviderID)
 	if err != nil {
-		return nil, err
+		return nil, tenantchat.ProviderCallNotStarted, err
 	}
 	config, err := parseProviderConfig(connection.ProviderConfig)
 	if err != nil {
-		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
+		return nil, tenantchat.ProviderCallNotStarted, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
 	}
 	adapter, err := e.providers.Get(config.AdapterType)
 	if err != nil {
-		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
+		return nil, tenantchat.ProviderCallNotStarted, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
 	}
 	streamingAdapter, ok := adapter.(provider.StreamingAdapter)
 	if !ok {
-		return nil, provider.NewError(
+		return nil, tenantchat.ProviderCallNotStarted, provider.NewError(
 			provider.ErrorKindError,
 			provider.ErrorCodeProviderError,
 			errors.New("tenant chat provider does not support streaming"),
@@ -80,13 +80,13 @@ func (e *Executor) OpenStream(
 
 	credential, err := e.resolveCredential(ctx, connection)
 	if err != nil {
-		return nil, err
+		return nil, tenantchat.ProviderCallNotStarted, err
 	}
 	messages := make([]provider.ChatMessage, 0, len(input.Messages))
 	for _, message := range input.Messages {
 		content, marshalErr := json.Marshal(message.Content)
 		if marshalErr != nil {
-			return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, marshalErr)
+			return nil, tenantchat.ProviderCallNotStarted, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, marshalErr)
 		}
 		messages = append(messages, provider.ChatMessage{Role: message.Role, Content: content})
 	}
@@ -112,7 +112,15 @@ func (e *Executor) OpenStream(
 			APIVersion:    config.APIVersion,
 		},
 	}
-	return streamingAdapter.CreateChatCompletionStream(ctx, executionConfig, providerRequest)
+	stream, err := streamingAdapter.CreateChatCompletionStream(ctx, executionConfig, providerRequest)
+	if err == nil && stream == nil {
+		err = provider.NewError(
+			provider.ErrorKindError,
+			provider.ErrorCodeProviderError,
+			errors.New("tenant chat provider returned no stream"),
+		)
+	}
+	return stream, tenantchat.ProviderCallStartedOrUnknown, err
 }
 
 func (e *Executor) resolveConnection(

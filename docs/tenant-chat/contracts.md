@@ -224,7 +224,8 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
     "strategy": "exact",
     "enabled": true,
     "ttlSeconds": 300,
-    "maxEntriesPerUser": 100
+    "maxEntriesPerUser": 100,
+    "keySetId": "tenant_chat_cache_keys_001"
   }
 }
 ```
@@ -233,6 +234,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - Semantic Cache는 닫힌 non-goal이 아니라 follow-up capability지만, backend API와 Gateway adapter가 없으므로 현재 DTO, published RuntimeSnapshot, Admin UI에 선택지를 노출하지 않는다.
 - cache adapter/interface, versioned policy discriminator, capabilities response는 후속 contract revision에서 `semantic` 전략을 추가할 수 있어야 한다.
 - exact cache는 tenant+user scoped, encrypted, history disabled면 off다.
+- exact cache outer key는 tenant+user namespace만 포함하고 keyed fingerprint는 Redis hash field로만 사용한다. value는 AES-256-GCM으로 암호화하며 confirmed primary 성공만 저장한다.
 - Semantic Cache를 구현할 때 tenant isolation, embedding/version, safety/policy/snapshot binding, content retention, invalidation, false-hit evaluation과 Admin API/UI를 별도 contract revision으로 고정한다.
 
 ## 8. Quota와 budget 정책
@@ -321,7 +323,7 @@ Idempotency rules:
 - provider attempt는 `(requestId,attemptNo)` unique다.
 - ledger transition은 expected `ledgerVersion` CAS로 한 번만 적용한다.
 - outbox insert는 ledger transaction과 같은 DB transaction이다.
-- event `schemaVersion=1`, `eventVersion=ledgerVersion`이며 consumer는 `(aggregateId=requestId,eventType,eventVersion)` duplicate를 no-op한다.
+- 기존 event는 `schemaVersion=1`을 유지한다. mixed deadline/late transition만 `schemaVersion=2`, `eventVersion=ledgerVersion`이며 consumer는 `(aggregateId=requestId,eventType,eventVersion)` duplicate를 no-op한다.
 
 ## 10. 오류 계약
 
@@ -339,6 +341,7 @@ Idempotency rules:
 | 403 | `CHAT_TENANT_DISABLED` | Tenant inactive |
 | 403 | `CHAT_MEMBERSHIP_DISABLED` | active membership 없음 |
 | 403 | `CHAT_EMPLOYEE_DISABLED` | employee actor의 linked Employee inactive/missing |
+| 403 | `CHAT_SAFETY_BLOCKED` | executable safety policy가 content를 차단; detected value는 비노출 |
 | 403 | `CHAT_QUOTA_HARD_LIMIT` | user hard stop; cache miss provider call 불가 |
 | 403 | `CHAT_BUDGET_HARD_LIMIT` | tenant hard stop; 금액은 직원에게 비노출 |
 | 409 | `CHAT_POLICY_ACK_REQUIRED` | employee notice acknowledgement 필요 |

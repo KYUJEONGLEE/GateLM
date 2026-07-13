@@ -19,8 +19,11 @@ revision: `tenant-chat/v1`
 | SSE | [`schemas/completion-sse-event.schema.json`](./schemas/completion-sse-event.schema.json) |
 | Usage outbox payload | [`schemas/usage-settlement-event.schema.json`](./schemas/usage-settlement-event.schema.json) |
 | Pre-ledger terminal payload | [`schemas/invocation-terminal-event.schema.json`](./schemas/invocation-terminal-event.schema.json) |
+| Mixed/late usage outbox payload | [`schemas/usage-settlement-event-v2.schema.json`](./schemas/usage-settlement-event-v2.schema.json) |
+| Pre-ledger terminal payload v2 | [`schemas/invocation-terminal-event-v2.schema.json`](./schemas/invocation-terminal-event-v2.schema.json) |
 | Binding vectors | [`vectors/binding-digest-vectors.json`](./vectors/binding-digest-vectors.json) |
 | Event transition vectors | [`vectors/usage-event-vectors.json`](./vectors/usage-event-vectors.json) |
+| Mixed/late event vectors | [`vectors/usage-event-v2-vectors.json`](./vectors/usage-event-v2-vectors.json) |
 
 ## 2. API idempotency와 retry
 
@@ -55,7 +58,7 @@ revision: `tenant-chat/v1`
 
 ### 4.2 Binding object
 
-아래 필드만 포함한다. `admissionId`가 없는 admission은 JSON `null`을 넣는다.
+아래 필드만 포함한다. `admissionId`가 없는 admission은 JSON `null`을 넣고 `usageIntent`는 completion phase에만 포함한다.
 
 ```json
 {
@@ -67,7 +70,13 @@ revision: `tenant-chat/v1`
   "requestId": "<opaque>",
   "snapshotDigest": "sha256:<base64url>",
   "snapshotVersion": 1,
-  "turnId": "<opaque>"
+  "turnId": "<opaque>",
+  "usageIntent": {
+    "estimatedInputTokens": 1,
+    "maxOutputTokens": 1,
+    "requestedTier": "standard",
+    "cacheStrategy": "exact"
+  }
 }
 ```
 
@@ -133,6 +142,9 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 - Gateway는 DB body를 다시 digest하고 요청의 version/digest와 exact match할 때만 실행한다.
 - pricing은 snapshot에 `version`, `digest`, `effectiveAt`, USD micro-unit 단가를 immutable하게 pin한다. pricing digest는 pricing object에서 `digest`를 제거한 뒤 같은 RFC 8785/SHA-256/base64url 규칙으로 계산한다.
 - attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
+- `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. safety는 cache/routing/Provider보다 먼저 실행하고 redacted input만 다음 단계에 전달한다.
+- `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
+- `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
 
 예약 계산은 integer arithmetic만 사용한다.
 
@@ -158,18 +170,24 @@ Reservation transition:
 ```text
 admitted -> reserved -> settled
                     -> released
+                    -> pending_unconfirmed(reserved + usage_pending_at)
                     -> unconfirmed
 ```
 
 - top-up은 `reserved` self-transition이며 ledger version을 증가시킨다.
+- `pending_unconfirmed`은 별도 reservation state가 아니라 unresolved attempt의 `usage_quality`와 reservation의 `usage_pending_at`으로 표현한다. 이 동안 reserved balance와 ledger version은 유지한다.
+- Gateway reconciliation worker는 `usage_pending_at <= now()-15m` row를 bounded batch와 `FOR UPDATE SKIP LOCKED`로 claim한다.
 - terminal state에서 다른 terminal state로 전이하지 않는다. late provider usage는 `unconfirmed`의 incident exposure를 역분개하고 original period/pricing으로 별도 exactly-once settle한다.
 - writer는 period rows와 reservation을 lock하고 expected `ledgerVersion` CAS, ledger insert, outbox insert를 한 transaction에서 수행한다.
 - provider attempt와 ledger row는 `(reservationId,requestId)` 복합 FK로 reservation identity를 검증한다. 두 ID를 각각 다른 reservation에 연결하는 독립 FK는 허용하지 않는다.
 - outbox idempotency key는 `(aggregateId=requestId,eventType,eventVersion=ledgerVersion)`다.
 - consumer는 version이 현재 이하이면 duplicate로 no-op한다. 정확히 `current+1`만 적용한다.
 - version gap이면 뒤 event를 적용하지 않고 aggregate replay를 요청한다. 재시도 후에도 gap이면 DLQ/incident로 보내며 quota correctness source에는 영향이 없다.
-- event별 signed delta 조건은 schema와 `usage-event-vectors.json`을 따른다.
+- v1 event 의미는 변경하지 않는다. mixed confirmed/unconfirmed deadline transition과 late negative unconfirmed delta만 schemaVersion 2를 사용하며 signed delta 조건은 v2 schema/vector를 따른다.
+- projector는 일반 terminal event를 snapshot 값으로 투영하고, `schemaVersion=2`, `eventType=usage_settled`, `lateUsage=true`에 한해 기존 confirmed 합계에 delta를 누적한다.
 - ledger 이전 rate/concurrency/policy/runtime block은 `invocation_terminal`을 admission transaction의 outbox에 기록한다. content와 usage delta는 없으며 Dashboard projector만 소비한다.
+
+Transaction 경계는 `BeginExecution`(admission consume, period reservation, reservation, primary attempt, `usage_reserved` ledger/outbox), `BeginFallback`(이전 attempt 결과, fallback top-up, fallback attempt), terminal/reconciliation transaction으로 나눈다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
 
 ## 8. 구현 소유권
 

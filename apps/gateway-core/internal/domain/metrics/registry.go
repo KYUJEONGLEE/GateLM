@@ -10,29 +10,32 @@ import (
 )
 
 const (
-	GatewayRequestsTotal             = "gatelm_gateway_requests_total"
-	GatewayRequestDurationSeconds    = "gatelm_gateway_request_duration_seconds"
-	GatewayStageDurationSeconds      = "gatelm_gateway_stage_duration_seconds"
-	GatewayInflightRequests          = "gatelm_gateway_inflight_requests"
-	ProviderRequestsTotal            = "gatelm_provider_requests_total"
-	ProviderRequestDurationSeconds   = "gatelm_provider_request_duration_seconds"
-	CacheOperationsTotal             = "gatelm_cache_operations_total"
-	RateLimitDecisionsTotal          = "gatelm_rate_limit_decisions_total"
-	RateLimitDecisionDurationSeconds = "gatelm_rate_limit_decision_duration_seconds"
-	MaskingActionsTotal              = "gatelm_masking_actions_total"
-	LogWritesTotal                   = "gatelm_log_writes_total"
-	LogWriteDurationSeconds          = "gatelm_log_write_duration_seconds"
-	AsyncLogEnqueueTotal             = "gatelm_async_log_enqueue_total"
-	AsyncLogEnqueueDurationSeconds   = "gatelm_async_log_enqueue_duration_seconds"
-	AsyncLogQueueDepth               = "gatelm_async_log_queue_depth"
-	AsyncLogDroppedTotal             = "gatelm_async_log_dropped_total"
-	AsyncLogPersistTotal             = "gatelm_async_log_persist_total"
-	AsyncLogPersistDurationSeconds   = "gatelm_async_log_persist_duration_seconds"
-	StreamsActive                    = "gatelm_streams_active"
-	StreamRelayTotal                 = "gatelm_stream_relay_total"
-	StreamDurationSeconds            = "gatelm_stream_duration_seconds"
-	StreamTimeToFirstTokenSeconds    = "gatelm_stream_time_to_first_token_seconds"
-	PrometheusTextContentType        = "text/plain; version=0.0.4; charset=utf-8"
+	GatewayRequestsTotal                   = "gatelm_gateway_requests_total"
+	GatewayRequestDurationSeconds          = "gatelm_gateway_request_duration_seconds"
+	GatewayStageDurationSeconds            = "gatelm_gateway_stage_duration_seconds"
+	GatewayInflightRequests                = "gatelm_gateway_inflight_requests"
+	ProviderRequestsTotal                  = "gatelm_provider_requests_total"
+	ProviderRequestDurationSeconds         = "gatelm_provider_request_duration_seconds"
+	CacheOperationsTotal                   = "gatelm_cache_operations_total"
+	RateLimitDecisionsTotal                = "gatelm_rate_limit_decisions_total"
+	RateLimitDecisionDurationSeconds       = "gatelm_rate_limit_decision_duration_seconds"
+	MaskingActionsTotal                    = "gatelm_masking_actions_total"
+	LogWritesTotal                         = "gatelm_log_writes_total"
+	LogWriteDurationSeconds                = "gatelm_log_write_duration_seconds"
+	AsyncLogEnqueueTotal                   = "gatelm_async_log_enqueue_total"
+	AsyncLogEnqueueDurationSeconds         = "gatelm_async_log_enqueue_duration_seconds"
+	AsyncLogQueueDepth                     = "gatelm_async_log_queue_depth"
+	AsyncLogDroppedTotal                   = "gatelm_async_log_dropped_total"
+	AsyncLogPersistTotal                   = "gatelm_async_log_persist_total"
+	AsyncLogPersistDurationSeconds         = "gatelm_async_log_persist_duration_seconds"
+	StreamsActive                          = "gatelm_streams_active"
+	StreamRelayTotal                       = "gatelm_stream_relay_total"
+	StreamDurationSeconds                  = "gatelm_stream_duration_seconds"
+	StreamTimeToFirstTokenSeconds          = "gatelm_stream_time_to_first_token_seconds"
+	TenantChatCompletionTotal              = "gatelm_tenant_chat_completion_total"
+	TenantChatUsageReconciliationTotal     = "gatelm_tenant_chat_usage_reconciliation_total"
+	TenantChatAccountingTransactionSeconds = "gatelm_tenant_chat_accounting_transaction_seconds"
+	PrometheusTextContentType              = "text/plain; version=0.0.4; charset=utf-8"
 )
 
 var defaultDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
@@ -67,28 +70,31 @@ type metricSpec struct {
 }
 
 var metricSpecs = map[string]metricSpec{
-	GatewayRequestsTotal:             {"counter", "Total Gateway requests by terminal outcome."},
-	GatewayRequestDurationSeconds:    {"histogram", "Gateway request duration in seconds."},
-	GatewayStageDurationSeconds:      {"histogram", "Gateway stage duration in seconds."},
-	GatewayInflightRequests:          {"gauge", "Current in-flight Gateway requests."},
-	ProviderRequestsTotal:            {"counter", "Total provider requests issued by Gateway."},
-	ProviderRequestDurationSeconds:   {"histogram", "Provider request duration in seconds."},
-	CacheOperationsTotal:             {"counter", "Total Gateway cache operations."},
-	RateLimitDecisionsTotal:          {"counter", "Total Gateway rate limit decisions."},
-	RateLimitDecisionDurationSeconds: {"histogram", "Gateway rate limit decision duration in seconds."},
-	MaskingActionsTotal:              {"counter", "Total Gateway masking actions."},
-	LogWritesTotal:                   {"counter", "Total invocation log writes."},
-	LogWriteDurationSeconds:          {"histogram", "Invocation log write duration in seconds."},
-	AsyncLogEnqueueTotal:             {"counter", "Total async invocation log enqueue attempts."},
-	AsyncLogEnqueueDurationSeconds:   {"histogram", "Async invocation log enqueue duration in seconds."},
-	AsyncLogQueueDepth:               {"gauge", "Current async invocation log queue depth."},
-	AsyncLogDroppedTotal:             {"counter", "Total async invocation logs dropped before persistence."},
-	AsyncLogPersistTotal:             {"counter", "Total async invocation log records by persistence outcome."},
-	AsyncLogPersistDurationSeconds:   {"histogram", "Async invocation log delegate write duration in seconds."},
-	StreamsActive:                    {"gauge", "Current active Gateway streaming relays."},
-	StreamRelayTotal:                 {"counter", "Total Gateway streaming relay attempts by outcome."},
-	StreamDurationSeconds:            {"histogram", "Gateway streaming relay duration in seconds."},
-	StreamTimeToFirstTokenSeconds:    {"histogram", "Gateway streaming time to first visible content token in seconds."},
+	GatewayRequestsTotal:                   {"counter", "Total Gateway requests by terminal outcome."},
+	GatewayRequestDurationSeconds:          {"histogram", "Gateway request duration in seconds."},
+	GatewayStageDurationSeconds:            {"histogram", "Gateway stage duration in seconds."},
+	GatewayInflightRequests:                {"gauge", "Current in-flight Gateway requests."},
+	ProviderRequestsTotal:                  {"counter", "Total provider requests issued by Gateway."},
+	ProviderRequestDurationSeconds:         {"histogram", "Provider request duration in seconds."},
+	CacheOperationsTotal:                   {"counter", "Total Gateway cache operations."},
+	RateLimitDecisionsTotal:                {"counter", "Total Gateway rate limit decisions."},
+	RateLimitDecisionDurationSeconds:       {"histogram", "Gateway rate limit decision duration in seconds."},
+	MaskingActionsTotal:                    {"counter", "Total Gateway masking actions."},
+	LogWritesTotal:                         {"counter", "Total invocation log writes."},
+	LogWriteDurationSeconds:                {"histogram", "Invocation log write duration in seconds."},
+	AsyncLogEnqueueTotal:                   {"counter", "Total async invocation log enqueue attempts."},
+	AsyncLogEnqueueDurationSeconds:         {"histogram", "Async invocation log enqueue duration in seconds."},
+	AsyncLogQueueDepth:                     {"gauge", "Current async invocation log queue depth."},
+	AsyncLogDroppedTotal:                   {"counter", "Total async invocation logs dropped before persistence."},
+	AsyncLogPersistTotal:                   {"counter", "Total async invocation log records by persistence outcome."},
+	AsyncLogPersistDurationSeconds:         {"histogram", "Async invocation log delegate write duration in seconds."},
+	StreamsActive:                          {"gauge", "Current active Gateway streaming relays."},
+	StreamRelayTotal:                       {"counter", "Total Gateway streaming relay attempts by outcome."},
+	StreamDurationSeconds:                  {"histogram", "Gateway streaming relay duration in seconds."},
+	StreamTimeToFirstTokenSeconds:          {"histogram", "Gateway streaming time to first visible content token in seconds."},
+	TenantChatCompletionTotal:              {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
+	TenantChatUsageReconciliationTotal:     {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
+	TenantChatAccountingTransactionSeconds: {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},
 }
 
 var allowedLabels = map[string]struct{}{
@@ -106,6 +112,9 @@ var allowedLabels = map[string]struct{}{
 	"model":              {},
 	"operation":          {},
 	"stream_outcome":     {},
+	"outcome":            {},
+	"result":             {},
+	"transition":         {},
 }
 
 var forbiddenLabels = map[string]struct{}{

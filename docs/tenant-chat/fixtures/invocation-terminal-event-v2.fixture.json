@@ -1,0 +1,20 @@
+{
+  "eventId": "invocation_terminal_v2_fixture_001",
+  "schemaVersion": 2,
+  "eventType": "invocation_terminal",
+  "eventVersion": 1,
+  "occurredAt": "2026-07-12T12:00:01Z",
+  "aggregateId": "request_safety_blocked_fixture_001",
+  "requestId": "request_safety_blocked_fixture_001",
+  "turnId": "turn_safety_blocked_fixture_001",
+  "idempotencyKey": "idempotency_safety_blocked_fixture_001",
+  "executionScope": { "kind": "tenant_chat", "tenantId": "tenant_fixture_001", "userId": "user_fixture_001", "actorKind": "employee", "employeeId": "employee_fixture_001" },
+  "snapshotVersion": 12,
+  "pricingVersion": 5,
+  "terminalOutcome": "safety_blocked",
+  "errorCode": "CHAT_SAFETY_BLOCKED",
+  "quotaState": "normal",
+  "budgetState": "normal",
+  "cacheOutcome": "off",
+  "latencyMs": 3
+}

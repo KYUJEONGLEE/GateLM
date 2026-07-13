@@ -303,12 +303,62 @@ function validatePolicies(
     );
   }
 
+  const routedProviders = new Set(
+    policies.routing.routes.map((route) => route.providerId),
+  );
+  const tokenRateProviders = new Set<string>();
+  for (const [index, provider] of policies.providerTokenRate.providers.entries()) {
+    const prefix = `policies.providerTokenRate.providers[${index}]`;
+    assertOpaqueId(provider.providerId, `${prefix}.providerId`);
+    assertPositiveInteger(provider.limitTokens, `${prefix}.limitTokens`);
+    assertPositiveInteger(provider.windowSeconds, `${prefix}.windowSeconds`);
+    if (!routedProviders.has(provider.providerId)) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.providerId must reference a routed provider`,
+      );
+    }
+    if (tokenRateProviders.has(provider.providerId)) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.providerId is duplicated`,
+      );
+    }
+    tokenRateProviders.add(provider.providerId);
+  }
+  for (const providerId of routedProviders) {
+    if (!tokenRateProviders.has(providerId)) {
+      throw new TenantChatRuntimeContractError(
+        `policies.providerTokenRate must define routed provider ${providerId}`,
+      );
+    }
+  }
+
   assertPositiveInteger(policies.cache.ttlSeconds, 'policies.cache.ttlSeconds');
   assertPositiveInteger(
     policies.cache.maxEntriesPerUser,
     'policies.cache.maxEntriesPerUser',
   );
+  assertOpaqueId(policies.cache.keySetId, 'policies.cache.keySetId');
   assertDigest(policies.safety.policyDigest, 'policies.safety.policyDigest');
+  const detectorTypes = new Set<string>();
+  for (const [index, detector] of policies.safety.detectorSet.entries()) {
+    const prefix = `policies.safety.detectorSet[${index}]`;
+    if (detectorTypes.has(detector.detectorType)) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.detectorType is duplicated`,
+      );
+    }
+    if (
+      detector.action === 'allow' &&
+      ['resident_registration_number', 'api_key', 'authorization_header', 'jwt', 'private_key'].includes(
+        detector.detectorType,
+      )
+    ) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.action cannot allow a mandatory protected detector`,
+      );
+    }
+    detectorTypes.add(detector.detectorType);
+  }
   assertPositiveInteger(
     policies.streaming.maxDurationSeconds,
     'policies.streaming.maxDurationSeconds',

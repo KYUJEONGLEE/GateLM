@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 	completionContext := fixture.completionContext(admission.AdmissionID)
 	store := NewReservationStore(pool)
 	store.now = func() time.Time { return now }
-	reservation, err := store.ConsumeAndReserve(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
+	reservation, err := store.BeginExecution(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
 	if err != nil {
 		t.Fatalf("consume and reserve usage: %v", err)
 	}
@@ -42,10 +43,12 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 	var tokenReserved int64
 	var costReserved int64
 	var ledgerCount int
+	var attemptCount int
 	var payload []byte
 	if err := pool.QueryRow(context.Background(), `
 		SELECT admission.state, token_period.reserved_tokens, cost_period.reserved_cost_micro_usd,
 		       (SELECT count(*) FROM tenant_chat_usage_ledger_entries WHERE request_id = $2),
+		       (SELECT count(*) FROM tenant_chat_provider_attempts WHERE request_id = $2),
 		       outbox.payload
 		FROM tenant_chat_request_admissions AS admission
 		JOIN tenant_chat_user_token_periods AS token_period
@@ -55,29 +58,23 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 		JOIN tenant_chat_invocation_outbox AS outbox ON outbox.aggregate_id = $2
 		WHERE admission.admission_id = $1::uuid
 	`, admission.AdmissionID, completionContext.RequestID).Scan(
-		&admissionState, &tokenReserved, &costReserved, &ledgerCount, &payload,
+		&admissionState, &tokenReserved, &costReserved, &ledgerCount, &attemptCount, &payload,
 	); err != nil {
 		t.Fatalf("read atomic reservation records: %v", err)
 	}
-	if admissionState != "consumed" || tokenReserved != 200 || costReserved != 125 || ledgerCount != 1 {
-		t.Fatalf("atomic records mismatch: state=%s tokens=%d cost=%d ledger=%d", admissionState, tokenReserved, costReserved, ledgerCount)
+	if admissionState != "consumed" || tokenReserved != 200 || costReserved != 125 || ledgerCount != 1 || attemptCount != 1 {
+		t.Fatalf("atomic records mismatch: state=%s tokens=%d cost=%d ledger=%d attempts=%d", admissionState, tokenReserved, costReserved, ledgerCount, attemptCount)
 	}
 	var event map[string]any
 	if err := json.Unmarshal(payload, &event); err != nil || event["eventType"] != "usage_reserved" || event["requestId"] != completionContext.RequestID {
 		t.Fatalf("invalid outbox event: event=%v err=%v", event, err)
 	}
 
-	replayed, err := store.ConsumeAndReserve(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
+	replayed, err := store.BeginExecution(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
 	if err != nil || !replayed.Replayed || replayed.ReservationID != reservation.ReservationID {
 		t.Fatalf("replay reservation: result=%+v err=%v", replayed, err)
 	}
 
-	if err := store.StartAttempt(
-		context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000),
-		reservation.ReservationID, reservation.Route, 1, "primary",
-	); err != nil {
-		t.Fatalf("start primary attempt: %v", err)
-	}
 	settlement, err := store.FinalizeConfirmed(
 		context.Background(), completionContext, reservation.ReservationID, 1,
 		tenantchat.ConfirmedUsage{InputTokens: 150, OutputTokens: 50}, "succeeded",
@@ -144,31 +141,20 @@ func TestFallbackSettlementIncludesEveryBillableAttemptIntegration(t *testing.T)
 	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
 	snapshot := fixture.snapshot(10_000, 1_000_000)
 	store := NewReservationStore(pool)
-	reservation, err := store.ConsumeAndReserve(context.Background(), completionContext, snapshot)
+	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
 	if err != nil {
 		t.Fatalf("reserve primary exposure: %v", err)
-	}
-	if err := store.StartAttempt(
-		context.Background(), completionContext, snapshot,
-		reservation.ReservationID, reservation.Route, 1, "primary",
-	); err != nil {
-		t.Fatalf("start primary attempt: %v", err)
-	}
-	if err := store.RecordConfirmedAttempt(
-		context.Background(), completionContext, reservation.ReservationID, 1,
-		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
-	); err != nil {
-		t.Fatalf("record billable primary failure: %v", err)
 	}
 	fallbackRoute, err := selectRoute(snapshot, "economy", "normal", "normal")
 	if err != nil {
 		t.Fatalf("select fallback route: %v", err)
 	}
-	if err := store.StartAttempt(
-		context.Background(), completionContext, snapshot,
-		reservation.ReservationID, fallbackRoute, 2, "fallback",
+	if err := store.BeginFallback(
+		context.Background(), completionContext, snapshot, reservation.ReservationID,
+		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
+		fallbackRoute, 2,
 	); err != nil {
-		t.Fatalf("top up and start fallback: %v", err)
+		t.Fatalf("record primary, top up, and start fallback: %v", err)
 	}
 	settlement, err := store.FinalizeConfirmed(
 		context.Background(), completionContext, reservation.ReservationID, 2,
@@ -317,6 +303,94 @@ func TestFinalizeUnconfirmedMovesExposureToIncidentHoldIntegration(t *testing.T)
 			"unconfirmed records mismatch: state=%s reservedTokens=%d unconfirmedTokens=%d reservedCost=%d unconfirmedCost=%d quality=%s outcome=%s",
 			reservationState, reservedTokens, unconfirmedTokens, reservedCost, unconfirmedCost, usageQuality, outcome,
 		)
+	}
+}
+
+func TestPendingDeadlineAndLateReceiptExactlyOnceIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC()
+	admissionContext := fixture.admissionContext()
+	admissionContext.RequestID = "pending_late_request_001"
+	admissionContext.TurnID = "pending_late_turn_001"
+	admissionContext.IdempotencyKey = "pending_late_attempt_001"
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), admissionContext,
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create pending admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.RequestID = admissionContext.RequestID
+	completionContext.TurnID = admissionContext.TurnID
+	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	reservation, err := store.BeginExecution(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
+	if err != nil {
+		t.Fatalf("begin pending execution: %v", err)
+	}
+	settlement, err := store.MarkPending(
+		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
+	)
+	if err != nil || settlement.State != "pending_unconfirmed" {
+		t.Fatalf("mark pending: settlement=%+v err=%v", settlement, err)
+	}
+	var state string
+	var pendingAt time.Time
+	var reservedTokens int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT state, usage_pending_at, reserved_tokens
+		FROM tenant_chat_usage_reservations WHERE reservation_id = $1::uuid
+	`, reservation.ReservationID).Scan(&state, &pendingAt, &reservedTokens); err != nil {
+		t.Fatalf("read pending reservation: %v", err)
+	}
+	if state != "reserved" || !pendingAt.Equal(now) || reservedTokens != 200 {
+		t.Fatalf("pending exposure changed early: state=%s pending=%s reserved=%d", state, pendingAt, reservedTokens)
+	}
+	processed, err := store.ReconcileNextPending(context.Background(), now.Add(15*time.Minute))
+	if err != nil || !processed {
+		t.Fatalf("reconcile exact deadline: processed=%t err=%v", processed, err)
+	}
+	late := tenantchat.UsageReceipt{
+		RequestID: completionContext.RequestID, AttemptNo: 1, ProviderID: "provider",
+		InputTokens: 80, OutputTokens: 20, CacheReadInputTokens: 0,
+	}
+	result, err := store.RecordUsageReceipt(context.Background(), late)
+	if err != nil || result.State != "settled" || result.Replayed {
+		t.Fatalf("record late receipt: result=%+v err=%v", result, err)
+	}
+	replayed, err := store.RecordUsageReceipt(context.Background(), late)
+	if err != nil || !replayed.Replayed || replayed.State != "settled" {
+		t.Fatalf("replay late receipt: result=%+v err=%v", replayed, err)
+	}
+	conflict := late
+	conflict.OutputTokens++
+	if _, err := store.RecordUsageReceipt(context.Background(), conflict); !errors.Is(err, tenantchat.ErrIdempotencyConflict) {
+		t.Fatalf("conflicting late receipt must be rejected, got %v", err)
+	}
+	var unconfirmedTokens int64
+	var confirmedTokens int64
+	var payload []byte
+	if err := pool.QueryRow(context.Background(), `
+		SELECT token_period.unconfirmed_tokens, token_period.confirmed_total_tokens, outbox.payload
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_user_token_periods AS token_period
+		  ON token_period.tenant_id = reservation.tenant_id
+		 AND token_period.user_id = reservation.user_id
+		 AND token_period.period_start = reservation.user_period_start
+		JOIN tenant_chat_invocation_outbox AS outbox
+		  ON outbox.aggregate_id = reservation.request_id AND outbox.event_version = 3
+		WHERE reservation.reservation_id = $1::uuid
+	`, reservation.ReservationID).Scan(&unconfirmedTokens, &confirmedTokens, &payload); err != nil {
+		t.Fatalf("read late settlement: %v", err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(payload, &event); err != nil {
+		t.Fatalf("decode late event: %v", err)
+	}
+	if unconfirmedTokens != 0 || confirmedTokens != 100 || event["schemaVersion"] != float64(2) || event["lateUsage"] != true {
+		t.Fatalf("unexpected late transition: unconfirmed=%d confirmed=%d event=%v", unconfirmedTokens, confirmedTokens, event)
 	}
 }
 

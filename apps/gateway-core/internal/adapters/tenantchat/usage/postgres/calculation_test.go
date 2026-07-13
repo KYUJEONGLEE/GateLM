@@ -35,6 +35,34 @@ func TestValidateTerminalWritePreservesContextAndDatabaseErrors(t *testing.T) {
 	}
 }
 
+func TestValidateLedgerlessReplayPreservesContextErrors(t *testing.T) {
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := validateLedgerlessReplay(cancelledCtx, errors.New("driver error"), 0); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancelled context, got %v", err)
+	}
+
+	deadlineCtx, deadlineCancel := context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer deadlineCancel()
+	if err := validateLedgerlessReplay(deadlineCtx, errors.New("driver error"), 0); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+}
+
+func TestValidateLedgerlessReplaySeparatesDatabaseFailureAndConflict(t *testing.T) {
+	if err := validateLedgerlessReplay(context.Background(), errors.New("database unavailable"), 0); !errors.Is(err, tenantchat.ErrUsageGuardUnavailable) {
+		t.Fatalf("expected usage guard unavailable, got %v", err)
+	}
+	for _, count := range []int{0, 2} {
+		if err := validateLedgerlessReplay(context.Background(), nil, count); !errors.Is(err, tenantchat.ErrIdempotencyConflict) {
+			t.Fatalf("expected idempotency conflict for count %d, got %v", count, err)
+		}
+	}
+	if err := validateLedgerlessReplay(context.Background(), nil, 1); err != nil {
+		t.Fatalf("expected valid replay, got %v", err)
+	}
+}
+
 func TestConfirmedAttemptCostRejectsCacheReadPriceAboveRegularInput(t *testing.T) {
 	cacheReadPrice := int64(251_000)
 	_, err := confirmedAttemptCost(

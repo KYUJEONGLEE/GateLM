@@ -409,10 +409,19 @@ function runtimeSnapshot(tenantId: string): TenantChatRuntimeSnapshotDocument {
         ],
       },
       fallback: { enabled: false, routeIds: [], maxAttempts: 1, allowedReasons: [] },
-      cache: { strategy: 'exact', enabled: true, ttlSeconds: 300, maxEntriesPerUser: 100 },
+      providerTokenRate: {
+        providers: [
+          { providerId: 'provider_projection', limitTokens: 120000, windowSeconds: 60 },
+        ],
+      },
+      cache: { strategy: 'exact', enabled: true, ttlSeconds: 300, maxEntriesPerUser: 100, keySetId: 'tenant_chat_cache_keys_projection' },
       safety: {
         enabled: true,
         policyDigest: `sha256:${'A'.repeat(43)}`,
+        detectorSet: [
+          { detectorType: 'email', action: 'redact' },
+          { detectorType: 'api_key', action: 'block' },
+        ],
       },
       streaming: { enabled: true, maxDurationSeconds: 120, finalEventRequired: true },
     },

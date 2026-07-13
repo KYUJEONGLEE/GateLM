@@ -10,6 +10,8 @@ var tenantChatPrivateEnvKeys = []string{
 	"TENANT_CHAT_PRIVATE_LISTEN_ADDRESS",
 	"TENANT_CHAT_WORKLOAD_JWKS_FILE",
 	"TENANT_CHAT_BINDING_HMAC_KEYS_FILE",
+	"TENANT_CHAT_CACHE_KEYSETS_FILE",
+	"TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE",
 	"TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX",
 }
 
@@ -47,6 +49,16 @@ func TestTenantChatPrivateGatewayRequiresSecretsAndSeparateListener(t *testing.T
 	}
 
 	t.Setenv("TENANT_CHAT_BINDING_HMAC_KEYS_FILE", "/run/secrets/tenant_chat_binding_hmac_keys")
+	if _, err := LoadWithError(); err == nil || !strings.Contains(err.Error(), "TENANT_CHAT_CACHE_KEYSETS_FILE") {
+		t.Fatalf("expected missing cache keys error, got %v", err)
+	}
+
+	t.Setenv("TENANT_CHAT_CACHE_KEYSETS_FILE", "/run/secrets/tenant_chat_cache_keysets")
+	if _, err := LoadWithError(); err == nil || !strings.Contains(err.Error(), "TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE") {
+		t.Fatalf("expected missing receipt token error, got %v", err)
+	}
+
+	t.Setenv("TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE", "/run/secrets/tenant_chat_usage_receipt_token")
 	t.Setenv("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS", ":8080")
 	if _, err := LoadWithError(); err == nil || !strings.Contains(err.Error(), "must not share") {
 		t.Fatalf("expected shared listener rejection, got %v", err)
