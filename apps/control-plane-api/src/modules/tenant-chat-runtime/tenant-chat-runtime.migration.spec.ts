@@ -5,9 +5,13 @@ const HISTORICAL_MIGRATION_PATH = resolve(
   __dirname,
   '../../../prisma/migrations/20260712190000_tenant_chat_runtime_usage_pr1/migration.sql',
 );
-const CACHE_READ_PRICE_MIGRATION_PATH = resolve(
+const CACHE_READ_PRICE_CONSTRAINT_MIGRATION_PATH = resolve(
   __dirname,
   '../../../prisma/migrations/20260713120000_tenant_chat_cache_read_price_constraint/migration.sql',
+);
+const CACHE_READ_PRICE_VALIDATION_MIGRATION_PATH = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260713120001_tenant_chat_cache_read_price_validation/migration.sql',
 );
 const ACTIVE_USAGE_DDL_PATH = resolve(
   __dirname,
@@ -16,7 +20,14 @@ const ACTIVE_USAGE_DDL_PATH = resolve(
 
 describe('Tenant Chat migrations', () => {
   const historicalSql = readFileSync(HISTORICAL_MIGRATION_PATH, 'utf8');
-  const cacheReadPriceSql = readFileSync(CACHE_READ_PRICE_MIGRATION_PATH, 'utf8');
+  const cacheReadPriceConstraintSql = readFileSync(
+    CACHE_READ_PRICE_CONSTRAINT_MIGRATION_PATH,
+    'utf8',
+  );
+  const cacheReadPriceValidationSql = readFileSync(
+    CACHE_READ_PRICE_VALIDATION_MIGRATION_PATH,
+    'utf8',
+  );
   const activeUsageDdl = readFileSync(ACTIVE_USAGE_DDL_PATH, 'utf8');
 
   it.each([
@@ -75,48 +86,78 @@ describe('Tenant Chat migrations', () => {
     );
   });
 
-  it('distinguishes the historical migration from the contracted final state', () => {
+  it('distinguishes the historical migration, constraint add, and contracted final state', () => {
     const cacheReadPricePredicate =
       /cache_read_input_micro_usd_per_million_tokens\s*<=\s*input_micro_usd_per_million_tokens/;
 
     expect(historicalSql).not.toMatch(cacheReadPricePredicate);
-    expect(cacheReadPriceSql).toMatch(cacheReadPricePredicate);
+    expect(cacheReadPriceConstraintSql).toMatch(cacheReadPricePredicate);
+    expect(cacheReadPriceValidationSql).not.toMatch(cacheReadPricePredicate);
     expect(activeUsageDdl).toMatch(cacheReadPricePredicate);
-    expect(cacheReadPriceSql).toContain('tenant_chat_attempt_cache_read_price_check');
+    expect(cacheReadPriceConstraintSql).toContain(
+      'tenant_chat_attempt_cache_read_price_check',
+    );
+    expect(cacheReadPriceValidationSql).toContain(
+      'tenant_chat_attempt_cache_read_price_check',
+    );
     expect(activeUsageDdl).toContain('tenant_chat_attempt_cache_read_price_check');
   });
 
-  it('preflights provider attempts and active RuntimeSnapshots before adding the constraint', () => {
-    const compactSql = compactWhitespace(cacheReadPriceSql);
-    const providerAttemptPreflight = compactSql.indexOf(
-      'FROM tenant_chat_provider_attempts WHERE cache_read_input_micro_usd_per_million_tokens IS NOT NULL',
-    );
-    const activeSnapshotPreflight = compactSql.indexOf(
-      'FROM tenant_chat_active_runtime_snapshots AS active_snapshot JOIN tenant_chat_runtime_snapshots AS runtime_snapshot',
-    );
-    const addConstraint = compactSql.indexOf(
+  it.each([
+    [
+      'adding the constraint',
+      cacheReadPriceConstraintSql,
       'ADD CONSTRAINT tenant_chat_attempt_cache_read_price_check',
+    ],
+    [
+      'validating the constraint',
+      cacheReadPriceValidationSql,
+      'VALIDATE CONSTRAINT tenant_chat_attempt_cache_read_price_check',
+    ],
+  ])(
+    'preflights provider attempts and active RuntimeSnapshots before %s',
+    (_phase, sourceSql, operation) => {
+      const compactSql = compactWhitespace(sourceSql);
+      const providerAttemptPreflight = compactSql.indexOf(
+        'FROM tenant_chat_provider_attempts WHERE cache_read_input_micro_usd_per_million_tokens IS NOT NULL',
+      );
+      const activeSnapshotPreflight = compactSql.indexOf(
+        'FROM tenant_chat_active_runtime_snapshots AS active_snapshot JOIN tenant_chat_runtime_snapshots AS runtime_snapshot',
+      );
+      const operationIndex = compactSql.indexOf(operation);
+
+      expect(providerAttemptPreflight).toBeGreaterThanOrEqual(0);
+      expect(activeSnapshotPreflight).toBeGreaterThanOrEqual(0);
+      expect(operationIndex).toBeGreaterThanOrEqual(0);
+      expect(providerAttemptPreflight).toBeLessThan(operationIndex);
+      expect(activeSnapshotPreflight).toBeLessThan(operationIndex);
+      expect(compactSql).toContain(
+        "'$.pricing.routes[*] ? (@.cacheReadInputMicroUsdPerMillionTokens > @.inputMicroUsdPerMillionTokens)'",
+      );
+    },
+  );
+
+  it('keeps both forward migrations non-mutating and separates add from validation', () => {
+    const compactConstraintSql = compactWhitespace(cacheReadPriceConstraintSql);
+    const compactValidationSql = compactWhitespace(cacheReadPriceValidationSql);
+
+    expect(cacheReadPriceConstraintSql).not.toMatch(
+      /\b(?:UPDATE|DELETE|DROP|TRUNCATE)\b/i,
     );
-
-    expect(providerAttemptPreflight).toBeGreaterThanOrEqual(0);
-    expect(activeSnapshotPreflight).toBeGreaterThanOrEqual(0);
-    expect(addConstraint).toBeGreaterThanOrEqual(0);
-    expect(providerAttemptPreflight).toBeLessThan(addConstraint);
-    expect(activeSnapshotPreflight).toBeLessThan(addConstraint);
-    expect(compactSql).toContain(
-      "'$.pricing.routes[*] ? (@.cacheReadInputMicroUsdPerMillionTokens > @.inputMicroUsdPerMillionTokens)'",
+    expect(cacheReadPriceValidationSql).not.toMatch(
+      /\b(?:UPDATE|DELETE|DROP|TRUNCATE)\b/i,
     );
-  });
-
-  it('keeps the forward migration non-mutating and validates the new constraint', () => {
-    const compactSql = compactWhitespace(cacheReadPriceSql);
-
-    expect(cacheReadPriceSql).not.toMatch(/\b(?:UPDATE|DELETE|DROP|TRUNCATE)\b/i);
-    expect(compactSql).toContain(
+    expect(compactConstraintSql).toContain(
       'CHECK ( cache_read_input_micro_usd_per_million_tokens IS NULL OR cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens ) NOT VALID',
     );
-    expect(compactSql).toContain(
+    expect(compactConstraintSql).not.toContain(
       'VALIDATE CONSTRAINT tenant_chat_attempt_cache_read_price_check',
+    );
+    expect(compactValidationSql).toContain(
+      'VALIDATE CONSTRAINT tenant_chat_attempt_cache_read_price_check',
+    );
+    expect(compactValidationSql).not.toContain(
+      'ADD CONSTRAINT tenant_chat_attempt_cache_read_price_check',
     );
   });
 });
