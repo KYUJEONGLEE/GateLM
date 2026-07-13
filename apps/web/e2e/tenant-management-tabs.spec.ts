@@ -122,7 +122,7 @@ test("mock bootstrap warning clears only after every mock modelRef is replaced",
   await expect(routingForm).toHaveAttribute("data-bootstrap-state", "configured");
 });
 
-test("manual mode preserves the matrix without creating a manual default mapping", async ({
+test("manual mode hides model configuration while preserving the matrix", async ({
   page
 }) => {
   await page.goto(tenantManagementPath);
@@ -136,9 +136,8 @@ test("manual mode preserves the matrix without creating a manual default mapping
 
   await routingSwitch.click();
   await expect(routingSwitch).toHaveAttribute("aria-checked", "false");
-  await expect(
-    page.getByRole("heading", { exact: true, name: "Manual model selection" })
-  ).toBeVisible();
+  await expect(page.locator(".tenant-routing-model-card")).toHaveCount(0);
+  await expect(page.getByText("Manual model selection", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("table", { name: "Category by difficulty modelRef matrix" })).toHaveCount(
     0
   );
@@ -159,9 +158,7 @@ test("manual mode preserves the matrix without creating a manual default mapping
   await page.getByRole("tab", { exact: true, name: "Routing" }).click();
 
   await expect(routingSwitch).toHaveAttribute("aria-checked", "false");
-  await expect(
-    page.getByRole("heading", { exact: true, name: "Manual model selection" })
-  ).toBeVisible();
+  await expect(page.locator(".tenant-routing-model-card")).toHaveCount(0);
   await routingSwitch.click();
   await expect(generalSimplePrimary).toHaveValue("google:gemini-flash");
 });

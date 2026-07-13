@@ -4,12 +4,13 @@ import { expect, test } from "@playwright/test";
 
 const pageSourceUrl = new URL("./page.tsx", import.meta.url);
 
-test("tenant routing page exposes the Auto and Manual modelRef contract", async () => {
+test("tenant routing page exposes the Auto modelRef contract without an OFF-state model card", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
   expect(pageSource).toContain('type RoutingMode = "auto" | "manual"');
   expect(pageSource).toContain("Category × difficulty routing matrix");
-  expect(pageSource).toContain("Manual model selection");
+  expect(pageSource).not.toContain("tenant-manual-routing-title");
+  expect(pageSource).not.toContain("Manual model selection");
   expect(pageSource).toContain("modelRefs: string[]");
   expect(pageSource).toContain('const mockBootstrapModelRef = "mock-balanced"');
   expect(pageSource).toContain('data-bootstrap-state={usesMockModels ? "mock_bootstrap" : "configured"}');

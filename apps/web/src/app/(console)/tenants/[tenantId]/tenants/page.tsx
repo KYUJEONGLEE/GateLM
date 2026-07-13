@@ -431,19 +431,7 @@ function TenantRoutingPanel({
             })}
           </div>
         </section>
-      ) : (
-        <section className="tenant-routing-model-card" aria-labelledby="tenant-manual-routing-title">
-          <header className="tenant-routing-model-heading">
-            <div className="tenant-routing-model-heading-copy">
-              <h3 id="tenant-manual-routing-title">Manual model selection</h3>
-              <p>
-                Callers must send an explicit modelRef. Manual mode has no default-model mapping;
-                the complete Auto routing matrix stays saved for the next time Auto is enabled.
-              </p>
-            </div>
-          </header>
-        </section>
-      )}
+      ) : null}
 
       <div className="tenant-routing-actions">
         <button
