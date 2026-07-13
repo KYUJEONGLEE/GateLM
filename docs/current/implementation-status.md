@@ -3,8 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Active as-built snapshot |
-| Baseline | `origin/dev @ e8152d87` |
-| Verified at | 2026-07-11 |
+| Baseline | `origin/dev @ 79bf254d` |
+| Verified at | 2026-07-13 |
 | Release meaning | Unreleased development snapshot |
 | Official latest release | `v0.0.1` |
 
@@ -15,9 +15,11 @@
 | Component | Verified implementation |
 |---|---|
 | Web Console | Next.js 15, React 19, TypeScript |
-| Application surface | Next.js/React 기반 Application/Chat |
+| Tenant Chat Web | Next.js 15 기반 auth/invitation/tenant-selection BFF와 Chat shell |
+| Tenant Chat API | NestJS 기반 private auth/session API와 Control Plane identity/entitlement client |
+| Legacy Application surface | `apps/application`에 보존된 기존 Project/Application Chat reference |
 | Control Plane API | NestJS, Prisma |
-| Gateway data plane | Go 1.24 |
+| Gateway data plane | Go 1.24 public `/v1` data plane과 opt-in Tenant Chat private listener |
 | AI service | Python 3.12, FastAPI |
 | State and dependencies | PostgreSQL, Redis, Mock Provider |
 | Delivery | Production Dockerfiles와 `deploy/selfhost` bundle |
@@ -38,6 +40,10 @@
 - 비용/예산/쿼터/Redis rate-limit 관련 domain과 Control Plane 모델
 - Request Log, Dashboard, Live Requests, Request Detail, Gateway Pipeline UI
 - Application Chat과 conversation 경로
+- Tenant Chat invitation/password/Google auth, rotating refresh session, tenant selection과 독립 Chat shell
+- Tenant Chat identity/runtime/publish 경계와 usage schema, outbox projector, 요청 목록/상세 및 집계 Dashboard
+- Tenant Chat private workload JWT/binding/JTI, admission/cancel/completion, Provider/fallback, quota/budget reservation과 confirmed/released/unconfirmed settlement
+- Tenant Chat provider-attempt, usage ledger/outbox, terminal replay와 동일 idempotency 요청의 in-flight attach
 - Self-host Compose bundle, migration/seed/smoke/운영 문서
 - mutation auth, demo/public 노출 제한, raw response capture 제한 등 보안 hardening
 
@@ -47,7 +53,7 @@
 
 | Area | Safe statement | Do not assume |
 |---|---|---|
-| Tenant Chat | `docs/tenant-chat`에 active scoped contract와 구현 계획이 존재 | 독립 `chat-web`/`chat-api`/private Gateway/ledger가 현재 구현됨 |
+| Tenant Chat | 독립 `chat-web` auth shell, `chat-api` auth/session, Control Plane identity/runtime/projection, private Gateway admission/completion과 Provider/fallback/usage ledger 코드 및 테스트가 `dev`에 병합됨 | Chat API conversation/SSE/EncryptedChatStore와 Chat Web composer가 연결된 end-to-end 제품, Exact Cache/Safety 실행, fresh-host acceptance, release 완료 또는 GA |
 | Semantic Cache | 코드와 테스트가 존재하며 기본 설정은 disabled/shadow | 기본 live response path 또는 GA |
 | Advanced Routing | 분류/정책/evaluation harness가 존재 | 최신 정확도, SLA, production quality |
 | Provider adapters | adapter 코드와 테스트가 존재 | 모든 vendor의 production credential live 검증 완료 |
@@ -57,17 +63,17 @@
 
 ## 4. Recent Merged Development Flow
 
-다음 항목은 2026-07-11(KST) 기준 `dev`에 병합된 최근 제품 변경의 예다.
+다음 항목은 2026-07-13(KST) 기준 `dev`에 병합된 최근 제품 변경의 예다.
 
-- PR #281: Live Requests 및 요청 상세 UI 개선
-- PR #278: 정책 관리 UI 및 설정 화면 개선
-- PR #276: Control Plane 로컬 환경 bootstrap 안정화
-- PR #274: 직원 통제와 조직 초대 흐름
-- PR #271: Demo Tenant/Fallback 격리 강화
-- PR #269: raw response capture 범위 제한
-- PR #268: demo/admin/public 노출 차단
-- PR #267: Control Plane mutation 인증 강화
-- PR #266: Provider routing 정책 흐름 개선
+- PR #295: Tenant Chat active contract와 통합 경계 확정
+- PR #296: tenant RuntimeSnapshot/publish와 usage schema 기반 구현
+- PR #297: private listener, workload JWT/JTI, admission/cancel과 usage transaction 기반 구현
+- PR #298: 초대 인증, rotating session, tenant selection과 Chat Web auth shell 구현
+- PR #301: usage outbox projector와 Tenant Chat Dashboard 구현
+- PR #304: Chat API, Control Plane, Gateway 소유권과 가격 검증 경계 정렬
+- PR #305: cache-read 가격 제약 migration 이력 교정
+- PR #307: private completion, Provider/fallback, 정산과 terminal replay/attach 구현
+- PR #308: Web Console, 분석 화면, 내비게이션과 다국어 전환 UI 개선
 
 열린 PR은 병합되기 전까지 위 current 구현 목록에 포함하지 않는다.
 

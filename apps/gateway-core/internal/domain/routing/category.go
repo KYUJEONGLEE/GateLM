@@ -4,11 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
-
-const maxCategoryScanBytes = 4096
 
 //go:embed category_policy.json
 var categoryPolicyJSON []byte
@@ -30,6 +26,24 @@ type categoryRuleData struct {
 	EnableSQLPattern bool     `json:"enableSQLPattern"`
 }
 
+// CategoryIntentFeatures is the shared score decomposition used for every
+// non-general category. General remains the fallback when no category reaches
+// its evidence threshold.
+type CategoryIntentFeatures struct {
+	actionScore             int
+	objectFitScore          int
+	structuralEvidenceScore int
+	intentPairScore         int
+	negativeContextScore    int
+}
+
+type CategoryFeatures struct {
+	code          CategoryIntentFeatures
+	translation   CategoryIntentFeatures
+	summarization CategoryIntentFeatures
+	reasoning     CategoryIntentFeatures
+}
+
 var categoryPolicy = loadCategoryPolicy()
 
 func loadCategoryPolicy() categoryPolicyData {
@@ -42,6 +56,24 @@ func loadCategoryPolicy() categoryPolicyData {
 
 type RuleBasedCategoryClassifier struct{}
 
+type CategoryResult struct {
+	Category    string
+	Diagnostics CategoryDiagnostics
+}
+
+type PromptClassificationResult struct {
+	Category   CategoryResult
+	Difficulty DifficultyResult
+}
+
+type RuleBasedPromptClassifier struct {
+	categoryClassifier   RuleBasedCategoryClassifier
+	difficultyClassifier RuleBasedDifficultyClassifier
+}
+
+// RoutingSignals is the legacy combined category signal projection.
+//
+// Deprecated: use PromptFeatures and CategoryResult in new code.
 type RoutingSignals struct {
 	PromptLength        int
 	HasCodeSignal       bool
@@ -52,25 +84,67 @@ type RoutingSignals struct {
 	CategoryDiagnostics CategoryDiagnostics
 }
 
+func NewRuleBasedPromptClassifier() RuleBasedPromptClassifier {
+	return RuleBasedPromptClassifier{
+		categoryClassifier:   NewRuleBasedCategoryClassifier(),
+		difficultyClassifier: NewRuleBasedDifficultyClassifier(),
+	}
+}
+
+// Classify is the canonical prompt classification entrypoint. Common prompt
+// preprocessing runs once before category-aware difficulty extraction.
+func (classifier RuleBasedPromptClassifier) Classify(prompt string) PromptClassificationResult {
+	features := ExtractPromptFeatures(prompt)
+	return classifier.ClassifyFeatures(features)
+}
+
+func (classifier RuleBasedPromptClassifier) ClassifyFeatures(features PromptFeatures) PromptClassificationResult {
+	categoryResult := classifier.categoryClassifier.ClassifyFeatures(features)
+	difficultyFeatures := ExtractDifficultyFeatures(features, categoryResult.Category)
+	difficultyResult := classifier.difficultyClassifier.ClassifyFeatures(difficultyFeatures)
+	return PromptClassificationResult{
+		Category:   categoryResult,
+		Difficulty: difficultyResult,
+	}
+}
+
 func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
 	return RuleBasedCategoryClassifier{}
 }
 
-func (RuleBasedCategoryClassifier) Classify(prompt string) string {
-	return ExtractRoutingSignals(prompt).Category
+// Classify is a compatibility wrapper.
+//
+// Deprecated: new runtime and evaluation code must call ClassifyFeatures with
+// one shared PromptFeatures value.
+func (classifier RuleBasedCategoryClassifier) Classify(prompt string) string {
+	return classifier.ClassifyFeatures(ExtractPromptFeatures(prompt)).Category
 }
 
-func (RuleBasedCategoryClassifier) ExtractRoutingSignals(prompt string) RoutingSignals {
-	return ExtractRoutingSignals(prompt)
+// ExtractRoutingSignals returns the legacy combined signal projection.
+//
+// Deprecated: use ExtractPromptFeatures and ClassifyFeatures in new code.
+func (classifier RuleBasedCategoryClassifier) ExtractRoutingSignals(prompt string) RoutingSignals {
+	features := ExtractPromptFeatures(prompt)
+	return routingSignalsFrom(features, classifier.ClassifyFeatures(features))
 }
 
-func (RuleBasedCategoryClassifier) Diagnose(prompt string) CategoryDiagnostics {
-	return ExtractRoutingSignals(prompt).CategoryDiagnostics
+// Diagnose is a compatibility wrapper around feature-based classification.
+//
+// Deprecated: use ExtractPromptFeatures and ClassifyFeatures in new code.
+func (classifier RuleBasedCategoryClassifier) Diagnose(prompt string) CategoryDiagnostics {
+	return classifier.ClassifyFeatures(ExtractPromptFeatures(prompt)).Diagnostics
 }
 
+// ExtractRoutingSignals is a compatibility wrapper for legacy internal callers.
+//
+// Deprecated: use ExtractPromptFeatures and ClassifyFeatures in new code.
 func ExtractRoutingSignals(prompt string) RoutingSignals {
-	normalized := normalizeRoutingText(prompt, maxCategoryScanBytes)
-	scores := categoryScores(normalized)
+	classifier := NewRuleBasedCategoryClassifier()
+	return classifier.ExtractRoutingSignals(prompt)
+}
+
+func (RuleBasedCategoryClassifier) ClassifyFeatures(features PromptFeatures) CategoryResult {
+	scores := categoryScores(features)
 	top, second := topTwoCategoryScores(scores)
 	category := CategoryGeneral
 	if top.Score > 0 {
@@ -102,14 +176,22 @@ func ExtractRoutingSignals(prompt string) RoutingSignals {
 		diagnostics.AmbiguityReason = AmbiguityReasonLowScore
 	}
 
+	return CategoryResult{
+		Category:    category,
+		Diagnostics: diagnostics,
+	}
+}
+
+func routingSignalsFrom(features PromptFeatures, result CategoryResult) RoutingSignals {
+	scores := result.Diagnostics.ScoreVector
 	return RoutingSignals{
-		PromptLength:        utf8.RuneCountInString(prompt),
+		PromptLength:        features.promptRuneLength,
 		HasCodeSignal:       scoreForCategory(scores, CategoryCode) > 0,
 		WantsTranslation:    scoreForCategory(scores, CategoryTranslation) > 0,
 		WantsSummarization:  scoreForCategory(scores, CategorySummarization) > 0,
 		NeedsReasoning:      scoreForCategory(scores, CategoryReasoning) > 0,
-		Category:            category,
-		CategoryDiagnostics: diagnostics,
+		Category:            result.Category,
+		CategoryDiagnostics: result.Diagnostics,
 	}
 }
 
@@ -128,24 +210,26 @@ func (d CategoryDiagnostics) HasData() bool {
 	return d.SelectedCategory != "" || d.TopCategory != "" || len(d.ScoreVector) > 0 || d.Confidence != ""
 }
 
-func categoryScores(text string) []CategoryScore {
-	tokens := routingTokenSet(text)
-	code := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode]) + weightedSignalScore(text,
+func categoryScores(features PromptFeatures) []CategoryScore {
+	text := features.normalizedText
+	tokens := features.tokens
+	intentFeatures := extractCategoryFeatures(features)
+	code := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode])+weightedSignalScore(text,
 		[]string{"```", "stack trace", "syntax error", "race condition", "nil pointer", "compile error"},
 		[]string{"typescript", "javascript", "python", "golang", " go ", "sql", "function", "class", "api", "debug", "refactor", "code", "bug", "코드", "버그", "함수"},
-	)
-	translation := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryTranslation]) + weightedSignalScore(text,
+	), intentFeatures.code)
+	translation := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryTranslation])+weightedSignalScore(text,
 		[]string{"translate", "translation", "번역", "영어로", "한국어로", "일본어로", "중국어로"},
 		[]string{" to english", " to korean", " to japanese", " to chinese", "tone", "terminology"},
-	)
-	summarization := policyRuleScore(text, tokens, categoryPolicy.Rules[CategorySummarization]) + weightedSignalScore(text,
+	), intentFeatures.translation)
+	summarization := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategorySummarization])+weightedSignalScore(text,
 		[]string{"summarize", "summary", "요약", "핵심 정리", "key points"},
 		[]string{"meeting notes", "report", "document", "결론", "결정사항"},
-	)
-	reasoning := policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryReasoning]) + weightedSignalScore(text,
+	), intentFeatures.summarization)
+	reasoning := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryReasoning])+weightedSignalScore(text,
 		[]string{"compare", "tradeoff", "trade-off", "recommend", "evaluate", "analyze", "reason", "비교", "추천", "분석", "판단"},
 		[]string{"constraint", "option", "because", "if ", "plan", "우선순위", "장단점"},
-	)
+	), intentFeatures.reasoning)
 
 	// Translation and summarization are explicit output intents and win ties.
 	return []CategoryScore{
@@ -155,6 +239,126 @@ func categoryScores(text string) []CategoryScore {
 		{Category: CategoryReasoning, Score: reasoning, Matched: reasoning > 0},
 		{Category: CategoryGeneral, Score: 0, Matched: true},
 	}
+}
+
+func extractCategoryFeatures(features PromptFeatures) CategoryFeatures {
+	return CategoryFeatures{
+		code:          extractCategoryIntentFeatures(features, CategoryCode),
+		translation:   extractCategoryIntentFeatures(features, CategoryTranslation),
+		summarization: extractCategoryIntentFeatures(features, CategorySummarization),
+		reasoning:     extractCategoryIntentFeatures(features, CategoryReasoning),
+	}
+}
+
+func extractCategoryIntentFeatures(features PromptFeatures, category string) CategoryIntentFeatures {
+	text := features.instructionText
+	if text == "" {
+		text = features.normalizedText
+	}
+	actionScore := minInt(countDistinctPhrases(text, categoryActionPhrases(category))*2, 6)
+	objectFitScore := minInt(countDistinctPhrases(text, categoryObjectPhrases(category)), 4)
+	structuralEvidenceScore := categoryStructuralEvidenceScore(features, category)
+	intentPairScore := 0
+	if actionScore > 0 && objectFitScore > 0 {
+		intentPairScore = 3
+	} else if actionScore > 0 && structuralEvidenceScore > 0 {
+		intentPairScore = 2
+	}
+	negativeContextScore := minInt(countDistinctPhrases(text, categoryNegativeContextPhrases(category))*3, 6)
+	return CategoryIntentFeatures{
+		actionScore:             actionScore,
+		objectFitScore:          objectFitScore,
+		structuralEvidenceScore: structuralEvidenceScore,
+		intentPairScore:         intentPairScore,
+		negativeContextScore:    negativeContextScore,
+	}
+}
+
+func categoryIntentAdjustedScore(base int, features CategoryIntentFeatures) int {
+	if features.negativeContextScore > 0 {
+		return 0
+	}
+
+	bonus := features.intentPairScore + minInt(features.structuralEvidenceScore, 2)
+	if base > 0 {
+		return base + bonus
+	}
+	if features.intentPairScore > 0 {
+		return features.actionScore + features.objectFitScore + bonus
+	}
+	return 0
+}
+
+func categoryActionPhrases(category string) []string {
+	switch category {
+	case CategoryCode:
+		return []string{"fix", "debug", "refactor", "implement", "compile", "find the cause", "write code", "수정", "고쳐", "디버깅", "리팩터", "구현", "컴파일", "원인을", "버그를 찾아"}
+	case CategoryTranslation:
+		return []string{"translate", "translation", "localize", "into korean", "into english", "to korean", "to english", "번역", "영문화", "현지화", "영어로", "한국어로", "일본어로", "중국어로"}
+	case CategorySummarization:
+		return []string{"summarize", "summary", "condense", "shorten", "key points", "요약", "압축", "줄여", "핵심만", "요점", "짧게 정리", "추려"}
+	case CategoryReasoning:
+		return []string{"compare", "recommend", "evaluate", "decide", "prioritize", "tradeoff", "trade-off", "비교", "추천", "평가", "판단", "결정", "우선순위", "장단점", "트레이드오프"}
+	default:
+		return nil
+	}
+}
+
+func categoryObjectPhrases(category string) []string {
+	switch category {
+	case CategoryCode:
+		return []string{"code", "function", "class", "api", "sql", "stack trace", "exception", "test failure", "typescript", "javascript", "python", "golang", "코드", "함수", "에러", "오류", "버그", "테스트 실패", "타입스크립트", "자바스크립트", "파이썬"}
+	case CategoryTranslation:
+		return []string{"sentence", "paragraph", "document", "email", "notice", "source text", "korean", "english", "japanese", "chinese", "문장", "문단", "문서", "메일", "안내문", "공지", "원문", "한국어", "영어", "일본어", "중국어"}
+	case CategorySummarization:
+		return []string{"report", "document", "meeting notes", "record", "article", "conversation", "policy", "보고서", "문서", "회의록", "기록", "대화", "정책", "공지", "메모"}
+	case CategoryReasoning:
+		return []string{"option", "alternative", "plan", "strategy", "criteria", "constraint", "cost", "risk", "schedule", "대안", "방식", "계획", "전략", "기준", "제약", "비용", "위험", "일정"}
+	default:
+		return nil
+	}
+}
+
+func categoryNegativeContextPhrases(category string) []string {
+	phrases := append([]string(nil), categoryPolicy.Rules[category].NegativeSignals...)
+	switch category {
+	case CategoryCode:
+		return append(phrases, "api key", "api 키", "api response example", "api 응답 예시", "payment error", "결제 오류")
+	case CategoryTranslation:
+		return append(phrases, "language menu", "translation setting")
+	case CategorySummarization:
+		return append(phrases, "summary page", "json output", "json 형태")
+	case CategoryReasoning:
+		return append(phrases, "comparison page", "priority field", "우선순위 필드", "json output", "json 형태")
+	default:
+		return phrases
+	}
+}
+
+func categoryStructuralEvidenceScore(features PromptFeatures, category string) int {
+	text := features.normalizedText
+	switch category {
+	case CategoryCode:
+		score := 0
+		if features.hasCodeFence {
+			score += 3
+		}
+		if hasAnyPhrase(text, []string{"stack trace", "syntax error", "compile error", "select * from", "insert into", "update ", "package main", "func ", "스택 트레이스", "컴파일 에러"}) {
+			score += 2
+		}
+		return minInt(score, 4)
+	case CategoryTranslation:
+		return minInt(countDistinctPhrases(text, []string{"to korean", "to english", "to japanese", "to chinese", "into korean", "into english", "영어로", "한국어로", "일본어로", "중국어로", "영문화"})*2, 4)
+	case CategorySummarization:
+		if hasAnyPhrase(text, []string{"meeting notes", "long report", "multiple documents", "회의록", "긴 보고서", "여러 문서", "세 문서"}) {
+			return 2
+		}
+	case CategoryReasoning:
+		if features.scopeCount >= 2 && hasAnyPhrase(text, []string{"option", "alternative", "plan", "strategy", "대안", "방식", "계획", "전략"}) {
+			return 2
+		}
+	}
+	return 0
 }
 
 func policyRuleScore(text string, tokens map[string]struct{}, rule categoryRuleData) int {
@@ -210,25 +414,6 @@ func policyRuleScore(text string, tokens map[string]struct{}, rule categoryRuleD
 	return score
 }
 
-func routingTokenSet(text string) map[string]struct{} {
-	tokens := strings.FieldsFunc(text, func(r rune) bool {
-		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
-	})
-	result := make(map[string]struct{}, len(tokens))
-	for _, token := range tokens {
-		result[token] = struct{}{}
-	}
-	return result
-}
-
-func containsRoutingToken(tokens map[string]struct{}, target string) bool {
-	if target == "" {
-		return false
-	}
-	_, exists := tokens[target]
-	return exists
-}
-
 func weightedSignalScore(text string, strong []string, soft []string) int {
 	if text == "" {
 		return 0
@@ -273,108 +458,6 @@ func scoreForCategory(scores []CategoryScore, category string) int {
 	return 0
 }
 
-func normalizeRoutingText(prompt string, maxBytes int) string {
-	prompt = strings.TrimSpace(strings.ToLower(prompt))
-	if maxBytes > 0 && len(prompt) > maxBytes {
-		prompt = prompt[:maxBytes]
-		for !utf8.ValidString(prompt) && len(prompt) > 0 {
-			prompt = prompt[:len(prompt)-1]
-		}
-	}
-	return strings.Join(strings.Fields(prompt), " ")
-}
-
-type RuleBasedDifficultyClassifier struct{}
-
-func NewRuleBasedDifficultyClassifier() RuleBasedDifficultyClassifier {
-	return RuleBasedDifficultyClassifier{}
-}
-
-// Classify uses the selected category as part of its rule set. Length is only
-// an auxiliary signal; a long direct request can still be simple.
-func (RuleBasedDifficultyClassifier) Classify(prompt string, category string) string {
-	text := normalizeRoutingText(prompt, maxCategoryScanBytes)
-	if isMeaninglessRoutingText(text) {
-		return DifficultySimple
-	}
-
-	category = canonicalCategory(category)
-	if hasAnyPhrase(text, genericComplexSignals()) || hasAnyPhrase(text, categoryComplexSignals(category)) {
-		return DifficultyComplex
-	}
-	if hasAnyPhrase(text, categorySimpleSignals(category)) {
-		return DifficultySimple
-	}
-
-	// Short, single-clause questions are clear enough to be simple. Meaningful
-	// but otherwise uncertain requests deliberately fail closed to complex.
-	if len(strings.Fields(text)) <= 9 && singleClause(text) {
-		return DifficultySimple
-	}
-	return DifficultyComplex
-}
-
-func isMeaninglessRoutingText(text string) bool {
-	if text == "" {
-		return true
-	}
-	meaningful := 0
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			meaningful++
-		}
-	}
-	if meaningful == 0 {
-		return true
-	}
-	switch text {
-	case "test", "n/a", "na", "[redacted]", "[masked]":
-		return true
-	default:
-		return false
-	}
-}
-
-func genericComplexSignals() []string {
-	return []string{
-		"multiple constraints", "several constraints", "tradeoff", "trade-off",
-		"compare three", "compare four", "multi-step", "multiple steps",
-		"across multiple", "end-to-end", "root cause", "rollout plan",
-		"five constraints", "six constraints", "four options", "three plans",
-		"investigate", "best approach",
-	}
-}
-
-func categoryComplexSignals(category string) []string {
-	switch category {
-	case CategoryCode:
-		return []string{"debug", "architecture", "refactor", "performance", "race condition", "multi-file", "multiple files", "distributed", "migration", "디버깅", "아키텍처", "리팩터링", "성능", "경쟁 상태", "여러 파일", "분산 시스템", "마이그레이션", "교착", "원인", "수정안"}
-	case CategoryTranslation:
-		return []string{"terminology", "defined terms", "modal verb", "cross-reference", "cross reference", "internal reference", "formal tone", "informal tone", "preserving tone", "preserve tone", "formatting", "table", "legal", "localize", "전문 용어", "전문용어", "법률 용어", "존댓말", "반말", "말투", "형식", "표", "현지화"}
-	case CategorySummarization:
-		return []string{"multiple documents", "three documents", "multi-document", "comparative", "disagreement", "unresolved conflict", "unassigned follow-up", "citations", "structured table", "long report", "여러 문서", "세 문서", "다중 문서", "비교 요약", "충돌점", "충돌 지점", "담당자 없는 후속 조치", "인용", "근거", "구조화된 표", "표로", "긴 보고서"}
-	case CategoryReasoning:
-		return []string{"evaluate", "options", "constraints", "tradeoff", "justify", "recommendation", "scenario", "prioritize", "평가", "대안", "제약", "트레이드오프", "근거", "추천안", "시나리오", "우선순위", "비용", "위험", "일정"}
-	default:
-		return []string{"compare", "plan", "constraints", "tradeoff", "alternatives", "strategy"}
-	}
-}
-
-func categorySimpleSignals(category string) []string {
-	switch category {
-	case CategoryCode:
-		return []string{"syntax", "one function", "small edit", "single api", "what does", "example"}
-	case CategoryTranslation:
-		return []string{"translate", "번역"}
-	case CategorySummarization:
-		return []string{"key points", "brief summary", "summarize", "요약"}
-	case CategoryReasoning:
-		return []string{"should i", "if ", "which one"}
-	default:
-		return []string{"explain", "what is", "how do i", "briefly", "single"}
-	}
-}
-
 func hasAnyPhrase(text string, phrases []string) bool {
 	for _, phrase := range phrases {
 		if strings.Contains(text, phrase) {
@@ -382,13 +465,6 @@ func hasAnyPhrase(text string, phrases []string) bool {
 		}
 	}
 	return false
-}
-
-func singleClause(text string) bool {
-	return strings.Count(text, ",") == 0 &&
-		strings.Count(text, ";") == 0 &&
-		!strings.Contains(text, " and ") &&
-		!strings.Contains(text, " then ")
 }
 
 func capabilityForCategory(category string) string {

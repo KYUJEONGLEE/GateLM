@@ -4,6 +4,7 @@
 |---|---|
 | Status | Active issue register |
 | Authority | 확인된 문서/구현 불일치와 결정 대기 항목 |
+| Baseline | `origin/dev @ 79bf254d` |
 | Last verified | 2026-07-13 |
 
 이 문서는 후보를 계약으로 승격하지 않는다. 확실한 불일치를 기록하고, 사람 결정이 필요한 항목을 구현 작업과 분리한다.
@@ -13,7 +14,7 @@
 | ID | Finding | Evidence | Required decision |
 |---|---|---|---|
 | DOC-001 | 다음 개발 SemVer를 확정할 수 없다 | GitHub `v0.0.1`, root `0.0.0`, app `0.1.0`, docs v2.x가 불일치 | release owner가 tag/package/docs version policy 결정 |
-| DOC-002 | `dev`와 `main`이 동일 snapshot이 아니다 | 최근 기능 PR은 `dev` 대상이며 `dev -> main`은 별도 PR | current 구현 기준을 계속 `dev`로 둘지 release 기준과 분리할지 결정 |
+| DOC-002 | `dev`와 `main`이 동일 snapshot이 아니다 | 2026-07-13 기준 `origin/dev @ 79bf254d`, `origin/main @ d0dde8ce`이며 `dev -> main`은 별도 PR | current 구현 기준을 계속 `dev`로 둘지 release 기준과 분리할지 결정 |
 | DOC-003 | v2.1.0은 전체 post-v2 제품 계약이 아니다 | self-host contract와 routing evidence가 같은 폴더에 있고 최근 UI/직원/정책 흐름은 포괄하지 않음 | 다음 versioned umbrella contract 또는 scope별 contract 구조 결정 |
 | DOC-004 | v2.0 행동 계약의 current 상속 범위가 완전하게 감사되지 않았다 | v2.1 문서가 v2.0을 상속하지만 현재 코드가 크게 확장됨 | API/DB/Event/Metrics/Security 영역별 promote/supersede 목록 승인 |
 | DOC-005 | v2.0 RC release evidence가 공식 v2 tag와 연결되지 않는다 | RC notes는 not tagged 상태이고 remote v2 tag가 없음 | v2를 historical baseline으로만 둘지 release evidence를 보완할지 결정 |
@@ -27,6 +28,7 @@
 | DOC-013 | Tenant Chat terminal replay에서 assistant content 복구 경계가 없다 | final SSE는 terminal facts만 포함하고 Gateway는 content를 저장하지 않아 Chat API가 ciphertext 저장 전에 장애가 나면 응답 본문을 복구할 계약이 없음 | encrypted final result handoff 또는 재처리 불변조건 확정 |
 | DOC-014 | `userId`별 quota override 의미는 있으나 실행 schema가 없다 | `contracts.md`는 audit 후 새 RuntimeSnapshot부터 override 적용을 요구하지만 RuntimeSnapshot에는 default quota만 있고 Gateway-owned period table을 Control Plane이 직접 수정할 수도 없음 | versioned user override schema, writer, audit, snapshot binding 및 Gateway materialization 규칙 추가 |
 | DOC-015 | primary realistic category fixture의 생성 provenance를 재현할 수 없다 | challenge/ambiguous fixture에는 checked-in generator가 있지만 `category-evaluation-dataset.fixture.jsonl`을 재생성하는 generator, seed 또는 manual review 기록은 확인되지 않음 | deterministic generator와 seed/version을 추가하거나 manual fixture라면 생성·검토 provenance를 명시 |
+| DOC-016 | Calibrated `ComplexityScore` target 계약은 확정됐지만 model/calibrator artifact와 승격 evidence가 없다 | `docs/current/implementation-status.md`의 `origin/dev @ e8152d87` baseline과 2026-07-13 local HEAD `273d36fe9` 기반 current worktree를 확인하면 42차원 `difficulty-feature-vector.v1` encoder는 존재하지만 `DifficultyResult`는 아직 difficulty만 반환하고 model/calibrator artifact가 없으며 10건 fixture는 contract smoke 범위임 | 별도 구현 PR에서 versioned model/calibrator artifact와 family-disjoint train/calibration/holdout evidence를 만들고, current rule-based baseline 대비 전체·category별 `complex -> simple` 비악화 holdout gate 전에는 runtime을 변경하지 않음 |
 
 ## Known Documentation Drift
 
@@ -48,9 +50,7 @@
 
 각 항목은 별도 owner 승인과 contract PR이 필요하다.
 
-## Unmerged/Future Candidates
+## Snapshot Notes
 
-아래 기능은 2026-07-11 기준 원격 feature 브랜치 또는 열린 PR에 있으나 `origin/dev @ e8152d87`에 병합되지 않았다. current 구현이나 current contract gap으로 간주하지 않는다.
-
-- 직원별 quota/rate-limit 고도화
-- tenant 관리 routing UI 고도화
+- 이전 `origin/dev @ e8152d87`의 unmerged 후보 목록은 후속 PR이 `dev`에 병합되어 제거했다.
+- branch와 PR queue는 변동 가능하므로 이 문서에 backlog로 복제하지 않는다. 현재 구현 사실은 [`implementation-status.md`](implementation-status.md)와 기준 commit에서 확인한다.
