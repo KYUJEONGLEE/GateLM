@@ -63,6 +63,9 @@ func TestAdapterCreateChatCompletionStreamReadsMockProviderSSE(t *testing.T) {
 	if !strings.Contains(string(first.Data), "로컬 mock streaming") {
 		t.Fatalf("unexpected first event: %s", string(first.Data))
 	}
+	if first.Delta != "로컬 mock streaming" {
+		t.Fatalf("expected normalized mock delta, got %q", first.Delta)
+	}
 
 	second, err := stream.Next()
 	if err != nil {

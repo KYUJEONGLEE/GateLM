@@ -197,7 +197,7 @@ const employeeText: Record<
   },
   ko: {
     addTab: "직원 추가",
-    allocation: "Project 배정",
+    allocation: "프로젝트 배정",
     assigned: "배정",
     budget: "이번 달 비용 한도",
     cancel: "취소",
@@ -211,24 +211,24 @@ const employeeText: Record<
     disable: "비활성화",
     editDepartment: "부서 설정",
     email: "이메일",
-    employeeAddTitle: "개별 Chat 초대",
+    employeeAddTitle: "개별 채팅 초대",
     employees: "직원",
-    fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
+    fixtureFallback: "Control Plane을 사용할 수 없어 예시 직원을 표시 중입니다.",
     import: "등록",
     imported: "등록됨",
-    invitation: "Chat 초대",
-    inviteAll: "Chat 초대 일괄 발송",
-    inviteResend: "Chat 초대 재발송",
-    inviteSend: "Chat 초대 보내기",
-    inviteSent: "Chat 초대 메일을 발송했습니다.",
+    invitation: "채팅 초대",
+    inviteAll: "채팅 초대 일괄 발송",
+    inviteResend: "채팅 초대 재발송",
+    inviteSend: "채팅 초대 보내기",
+    inviteSent: "채팅 초대 메일을 발송했습니다.",
     name: "이름",
     next: "다음",
-    noAssignments: "Project에 배정된 직원이 없습니다.",
+    noAssignments: "프로젝트에 배정된 직원이 없습니다.",
     noEmployees: "직원이 없습니다.",
     note: "메모",
     page: "페이지",
     previous: "이전",
-    project: "Project",
+    project: "프로젝트",
     projectCount: "프로젝트",
     remaining: "잔여",
     save: "저장",
@@ -347,7 +347,7 @@ const projectEmployeeText: Record<
     confirmDisable: "비활성화",
     costLimit: "비용 한도",
     dailyTokenLimit: "일일 토큰 한도",
-    dailyTokenColumn: "일일 Token",
+    dailyTokenColumn: "일일 토큰",
     dailyTokenUsage: "오늘 사용 토큰 (UTC)",
     department: "부서",
     disable: "비활성화",
@@ -357,11 +357,11 @@ const projectEmployeeText: Record<
     employeeList: "직원 목록",
     employees: "직원",
     enabled: "활성화",
-    fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
+    fixtureFallback: "Control Plane을 사용할 수 없어 예시 직원을 표시 중입니다.",
     management: "관리",
     monthlyUsage: "이번 달 사용액",
     name: "이름",
-    noAssignments: "Project에 배정된 직원이 없습니다.",
+    noAssignments: "프로젝트에 배정된 직원이 없습니다.",
     noCandidates: "배정할 수 있는 직원이 없습니다.",
     noDepartments: "등록된 부서가 없습니다.",
     noEmployees: "이 부서에 배정 가능한 직원이 없습니다.",
@@ -370,7 +370,7 @@ const projectEmployeeText: Record<
     quotaNotConfigured: "한도 미설정",
     quotaWarning: "한도 임박",
     quotaWithinLimit: "정상",
-    rateLimit: "Rate Limit",
+    rateLimit: "요청 제한",
     remaining: "프로젝트 잔여 예산",
     refillRequestsPerSecond: "초당 토큰 충전",
     requestsPerMinute: "분당 요청 한도",
@@ -1744,10 +1744,10 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   }
 
   return (
-    <main className="console-content employee-console">
-      <section className="employee-hero">
+    <main className="console-content management-line-content employee-console">
+      <header className="project-page-header employee-hero">
         <h2>{text.title}</h2>
-      </section>
+      </header>
 
       {model.source === "fixture" ? (
         <Alert variant="warning">

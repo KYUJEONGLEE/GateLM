@@ -9,10 +9,12 @@ type IntentPrefetchLinkProps = Omit<
   "href" | "prefetch"
 > & {
   href: string;
+  intentPrefetch?: boolean;
 };
 
 export function IntentPrefetchLink({
   href,
+  intentPrefetch = true,
   onFocus,
   onMouseEnter,
   ...props
@@ -25,14 +27,14 @@ export function IntentPrefetchLink({
 
   function handleFocus(event: FocusEvent<HTMLAnchorElement>) {
     onFocus?.(event);
-    if (!event.defaultPrevented) {
+    if (!event.defaultPrevented && intentPrefetch) {
       prefetch();
     }
   }
 
   function handleMouseEnter(event: MouseEvent<HTMLAnchorElement>) {
     onMouseEnter?.(event);
-    if (!event.defaultPrevented) {
+    if (!event.defaultPrevented && intentPrefetch) {
       prefetch();
     }
   }
@@ -41,8 +43,8 @@ export function IntentPrefetchLink({
     <Link
       {...props}
       href={href}
-      onFocus={handleFocus}
-      onMouseEnter={handleMouseEnter}
+      onFocus={intentPrefetch ? handleFocus : onFocus}
+      onMouseEnter={intentPrefetch ? handleMouseEnter : onMouseEnter}
       prefetch={false}
     />
   );

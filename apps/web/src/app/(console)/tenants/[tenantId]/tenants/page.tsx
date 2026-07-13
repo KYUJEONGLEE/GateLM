@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
+import {
+  LOCALE_COOKIE_NAME,
+  normalizeLocale,
+  type Locale
+} from "@/lib/i18n/locale";
 
 const tenantManagementSections = [
   { id: "budget", label: "Budget" },
@@ -34,6 +39,70 @@ const routingDifficulties = [
   { id: "simple", label: "Simple" },
   { id: "complex", label: "Complex" }
 ] as const;
+
+const tenantManagementText = {
+  en: {
+    addFallback: "Add fallback",
+    auto: "Auto",
+    autoDescription:
+      "Auto classifies category first, then evaluates difficulty with that category context.",
+    autoRouting: "Auto routing",
+    budget: "Budget",
+    budgetDescription: "Tenant budget settings are managed separately from routing.",
+    category: "Category",
+    categories: {
+      code: "Code",
+      general: "General",
+      reasoning: "Reasoning",
+      summarization: "Summarization",
+      translation: "Translation"
+    },
+    complex: "Complex",
+    manual: "Manual",
+    matrix: "Category × difficulty routing matrix",
+    matrixDescription:
+      "Each cell is an ordered modelRef list. The first entry is primary; the remaining entries are attempted as fallbacks in order. Uncategorized requests use General.",
+    mockDescription: "Replace every mock-balanced entry with a real modelRef to clear this warning.",
+    mockTitle: "Mock routing is active.",
+    reset: "Reset",
+    saved: "Saved",
+    save: "Save changes",
+    sections: { budget: "Budget", routing: "Routing" },
+    sectionLabel: "Tenant management sections",
+    simple: "Simple",
+    title: "Tenant management"
+  },
+  ko: {
+    addFallback: "대체 모델 추가",
+    auto: "자동",
+    autoDescription: "요청 카테고리를 먼저 분류한 다음 카테고리 맥락에서 난이도를 판별합니다.",
+    autoRouting: "자동 라우팅",
+    budget: "예산",
+    budgetDescription: "테넌트 예산 설정은 라우팅과 별도로 관리됩니다.",
+    category: "카테고리",
+    categories: {
+      code: "코드",
+      general: "일반",
+      reasoning: "추론",
+      summarization: "요약",
+      translation: "번역"
+    },
+    complex: "복합",
+    manual: "수동",
+    matrix: "카테고리 × 난이도 라우팅 설정",
+    matrixDescription:
+      "각 칸은 모델 참조의 우선순위 목록입니다. 첫 모델을 우선 호출하고, 이후 모델은 순서대로 대체 호출합니다. 분류되지 않은 요청은 일반 카테고리를 사용합니다.",
+    mockDescription: "모든 mock-balanced 항목을 실제 모델 참조로 바꾸면 이 경고가 사라집니다.",
+    mockTitle: "Mock 라우팅이 적용 중입니다.",
+    reset: "초기화",
+    saved: "저장됨",
+    save: "변경사항 저장",
+    sections: { budget: "예산", routing: "라우팅" },
+    sectionLabel: "테넌트 관리 섹션",
+    simple: "단순",
+    title: "테넌트 관리"
+  }
+} as const;
 
 const modelRefOptions = [
   "mock-balanced",
@@ -145,20 +214,31 @@ function matrixUsesMockModels(matrix: RoutingMatrix) {
 }
 
 export default function TenantsPage() {
+  const [locale, setLocale] = useState<Locale>("en");
   const [activeSection, setActiveSection] = useState<TenantManagementSection>("routing");
   const [savedRoutingSettings, setSavedRoutingSettings] = useState<TenantRoutingSettings>(
     createInitialTenantRoutingSettings
   );
+  const text = tenantManagementText[locale];
+
+  useEffect(() => {
+    const localeCookie = document.cookie
+      .split(";")
+      .map((value) => value.trim())
+      .find((value) => value.startsWith(`${LOCALE_COOKIE_NAME}=`))
+      ?.split("=")[1];
+    setLocale(normalizeLocale(localeCookie));
+  }, []);
 
   return (
     <main className="console-content management-line-content tenant-management-content">
       <header className="project-page-header">
-        <h2>Tenant management</h2>
+        <h2>{text.title}</h2>
       </header>
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div
-          aria-label="Tenant management sections"
+          aria-label={text.sectionLabel}
           className="policy-section-tabs tenant-management-tabs"
           role="tablist"
         >
@@ -176,7 +256,7 @@ export default function TenantsPage() {
                 role="tab"
                 type="button"
               >
-                {section.label}
+                {text.sections[section.id]}
               </button>
             );
           })}
@@ -192,13 +272,14 @@ export default function TenantsPage() {
         {activeSection === "routing" ? (
           <TenantRoutingPanel
             initialSettings={savedRoutingSettings}
+            locale={locale}
             onSave={(settings) => setSavedRoutingSettings(cloneTenantRoutingSettings(settings))}
           />
         ) : (
           <section className="tenant-routing-enable-card" aria-labelledby="tenant-budget-title">
             <div>
-              <h3 id="tenant-budget-title">Budget</h3>
-              <p>Tenant budget settings are managed separately from routing.</p>
+              <h3 id="tenant-budget-title">{text.budget}</h3>
+              <p>{text.budgetDescription}</p>
             </div>
           </section>
         )}
@@ -209,11 +290,14 @@ export default function TenantsPage() {
 
 function TenantRoutingPanel({
   initialSettings,
+  locale,
   onSave
 }: {
   initialSettings: TenantRoutingSettings;
+  locale: Locale;
   onSave: (settings: TenantRoutingSettings) => void;
 }) {
+  const text = tenantManagementText[locale];
   const saveConfirmationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSaveConfirmed, setIsSaveConfirmed] = useState(false);
   const [mode, setMode] = useState<RoutingMode>(initialSettings.mode);
@@ -348,19 +432,17 @@ function TenantRoutingPanel({
     >
       <section className="tenant-routing-enable-card" aria-labelledby="tenant-auto-routing-title">
         <div>
-          <h3 id="tenant-auto-routing-title">Auto routing</h3>
-          <p>
-            Auto classifies category first, then evaluates difficulty with that category context.
-          </p>
+          <h3 id="tenant-auto-routing-title">{text.autoRouting}</h3>
+          <p>{text.autoDescription}</p>
         </div>
         <div className="tenant-routing-switch-control">
           <Switch
-            aria-label="Auto routing"
+            aria-label={text.autoRouting}
             checked={mode === "auto"}
             className="tenant-routing-switch"
             onCheckedChange={changeMode}
           />
-          <span>{mode === "auto" ? "Auto" : "Manual"}</span>
+          <span>{mode === "auto" ? text.auto : text.manual}</span>
         </div>
       </section>
 
@@ -368,11 +450,8 @@ function TenantRoutingPanel({
         <div className="tenant-routing-mock-warning" role="alert">
           <TriangleAlert aria-hidden="true" />
           <div>
-            <strong>Mock routing is active.</strong>
-            <span>
-              Replace every <code>mock-balanced</code> entry with a real modelRef to clear this
-              warning.
-            </span>
+            <strong>{text.mockTitle}</strong>
+            <span>{text.mockDescription}</span>
           </div>
         </div>
       ) : null}
@@ -381,23 +460,20 @@ function TenantRoutingPanel({
         <section className="tenant-routing-model-card" aria-labelledby="tenant-routing-model-title">
           <header className="tenant-routing-model-heading">
             <div className="tenant-routing-model-heading-copy">
-              <h3 id="tenant-routing-model-title">Category × difficulty routing matrix</h3>
-              <p>
-                Each cell is an ordered modelRef list. The first entry is primary; the remaining
-                entries are attempted as fallbacks in order. Uncategorized requests use General.
-              </p>
+              <h3 id="tenant-routing-model-title">{text.matrix}</h3>
+              <p>{text.matrixDescription}</p>
             </div>
           </header>
 
           <div
-            aria-label="Category by difficulty modelRef matrix"
+            aria-label={text.matrix}
             className="tenant-routing-table"
             role="table"
           >
             <div className="tenant-routing-table-head" role="row">
-              <span role="columnheader">Category</span>
-              <span role="columnheader">Simple</span>
-              <span role="columnheader">Complex</span>
+              <span role="columnheader">{text.category}</span>
+              <span role="columnheader">{text.simple}</span>
+              <span role="columnheader">{text.complex}</span>
             </div>
             {routingCategories.map((category) => {
               const CategoryIcon = category.icon;
@@ -406,14 +482,14 @@ function TenantRoutingPanel({
                 <div className="tenant-routing-table-row" key={category.id} role="row">
                   <div className="tenant-routing-category" role="rowheader">
                     <CategoryIcon aria-hidden="true" />
-                    <span>{category.label}</span>
+                    <span>{text.categories[category.id]}</span>
                   </div>
                   {routingDifficulties.map((difficulty) => (
                     <RoutingCellEditor
                       category={category.id}
-                      categoryLabel={category.label}
+                      categoryLabel={text.categories[category.id]}
                       difficulty={difficulty.id}
-                      difficultyLabel={difficulty.label}
+                      difficultyLabel={difficulty.id === "simple" ? text.simple : text.complex}
                       key={difficulty.id}
                       modelRefs={routingMatrix[category.id][difficulty.id].modelRefs}
                       onAdd={() => addFallback(category.id, difficulty.id)}
@@ -424,6 +500,7 @@ function TenantRoutingPanel({
                         moveModelRef(category.id, difficulty.id, index, direction)
                       }
                       onRemove={(index) => removeModelRef(category.id, difficulty.id, index)}
+                      addFallbackLabel={text.addFallback}
                     />
                   ))}
                 </div>
@@ -439,7 +516,7 @@ function TenantRoutingPanel({
           onClick={resetRoutingSettings}
           type="button"
         >
-          Reset
+          {text.reset}
         </button>
         <button
           className="primary-button tenant-routing-save-button"
@@ -447,7 +524,7 @@ function TenantRoutingPanel({
           type="submit"
         >
           {isSaveConfirmed ? <Check aria-hidden="true" /> : null}
-          {isSaveConfirmed ? "Saved" : "Save changes"}
+          {isSaveConfirmed ? text.saved : text.save}
         </button>
       </div>
 
@@ -459,6 +536,7 @@ function TenantRoutingPanel({
 }
 
 function RoutingCellEditor({
+  addFallbackLabel,
   category,
   categoryLabel,
   difficulty,
@@ -469,6 +547,7 @@ function RoutingCellEditor({
   onMove,
   onRemove
 }: {
+  addFallbackLabel: string;
   category: RoutingCategory;
   categoryLabel: string;
   difficulty: RoutingDifficulty;
@@ -550,7 +629,7 @@ function RoutingCellEditor({
         type="button"
       >
         <Plus aria-hidden="true" />
-        Add fallback
+        {addFallbackLabel}
       </button>
     </div>
   );

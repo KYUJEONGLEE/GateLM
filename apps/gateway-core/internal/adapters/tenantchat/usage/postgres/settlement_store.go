@@ -85,16 +85,19 @@ func (s *ReservationStore) FinalizeConfirmed(
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 
-	attempts, totals, err := readConfirmedAttempts(ctx, tx, requestContext, reservationID)
-	if err != nil {
+	attempts, totals, hasPending, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
+	if err != nil || len(attempts) == 0 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if hasPending {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrIdempotencyConflict
 	}
 	userPeriod, tenantPeriod, err := lockSettlementPeriods(ctx, tx, requestContext, reservation)
 	if err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
-	projectedTokens := userPeriod.Confirmed + totals.InputTokens + totals.OutputTokens + userPeriod.Reserved - reservation.ReservedTokens
-	projectedCost := tenantPeriod.Confirmed + totals.CostMicroUSD + tenantPeriod.Reserved - reservation.ReservedCostMicroUSD
+	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + totals.InputTokens + totals.OutputTokens + userPeriod.Reserved - reservation.ReservedTokens
+	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + totals.CostMicroUSD + tenantPeriod.Reserved - reservation.ReservedCostMicroUSD
 	if projectedTokens < 0 || projectedCost < 0 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -106,6 +109,91 @@ func (s *ReservationStore) FinalizeConfirmed(
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 
+	if err = persistSettlement(
+		ctx, tx, requestContext, reservationID, reservation, userPeriod, tenantPeriod,
+		attempts, totals, quotaState, budgetState, eventID, nextVersion, now,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	return tenantchat.UsageSettlement{
+		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "settled",
+		ConfirmedInputTokens: totals.InputTokens, ConfirmedOutputTokens: totals.OutputTokens,
+		ConfirmedCostMicroUSD: totals.CostMicroUSD, QuotaState: quotaState, BudgetState: budgetState,
+		LedgerVersion: nextVersion, Attempts: attempts,
+	}, nil
+}
+
+func (s *ReservationStore) FinalizeRecordedAttempts(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+) (result tenantchat.UsageSettlement, err error) {
+	if s == nil || s.pool == nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	if err = lockUsageActors(ctx, tx, requestContext); err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	reservation, err := lockReservationForSettlement(ctx, tx, requestContext, reservationID)
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if reservation.State == "settled" {
+		result, err = readSettlement(ctx, tx, requestContext, reservationID)
+		if err != nil {
+			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		result.Attempts, _, _, err = readSettlementAttempts(ctx, tx, requestContext, reservationID)
+		if err != nil {
+			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		result.Replayed = true
+		if err = tx.Commit(ctx); err != nil {
+			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		return result, nil
+	}
+	if reservation.State != "reserved" {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrIdempotencyConflict
+	}
+	attempts, totals, hasPending, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
+	if err != nil || len(attempts) == 0 || hasPending {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	for _, attempt := range attempts {
+		if attempt.UsageQuality != "confirmed" {
+			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+		}
+	}
+	userPeriod, tenantPeriod, err := lockSettlementPeriods(ctx, tx, requestContext, reservation)
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + totals.InputTokens + totals.OutputTokens + userPeriod.Reserved - reservation.ReservedTokens
+	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + totals.CostMicroUSD + tenantPeriod.Reserved - reservation.ReservedCostMicroUSD
+	if projectedTokens < 0 || projectedCost < 0 {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	quotaState := usageState(projectedTokens, userPeriod.Warning, userPeriod.Economy, userPeriod.HardStop)
+	budgetState := usageState(projectedCost, tenantPeriod.Warning, tenantPeriod.Economy, tenantPeriod.HardStop)
+	nextVersion := reservation.LedgerVersion + 1
+	eventID, err := newUUID()
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	now := s.now().UTC()
 	if err = persistSettlement(
 		ctx, tx, requestContext, reservationID, reservation, userPeriod, tenantPeriod,
 		attempts, totals, quotaState, budgetState, eventID, nextVersion, now,
@@ -188,6 +276,14 @@ func lockAttempt(
 }
 
 func confirmedAttemptCost(attempt settlementAttempt, usage tenantchat.ConfirmedUsage) (int64, error) {
+	if attempt.InputPrice < 0 || attempt.OutputPrice < 0 ||
+		(attempt.CacheReadPrice != nil && (*attempt.CacheReadPrice < 0 || *attempt.CacheReadPrice > attempt.InputPrice)) {
+		return 0, errors.New("invalid pinned settlement pricing")
+	}
+	if usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.CacheReadInputTokens < 0 ||
+		usage.CacheReadInputTokens > usage.InputTokens {
+		return 0, errors.New("invalid confirmed usage values")
+	}
 	regularInput := usage.InputTokens
 	cacheRead := int64(0)
 	cachePrice := attempt.InputPrice
@@ -211,26 +307,26 @@ func confirmedAttemptCost(attempt settlementAttempt, usage tenantchat.ConfirmedU
 	return regularCost + cacheCost + outputCost, nil
 }
 
-func readConfirmedAttempts(
+func readSettlementAttempts(
 	ctx context.Context,
 	tx pgx.Tx,
 	requestContext tenantchat.RequestContext,
 	reservationID string,
-) ([]tenantchat.ProviderAttempt, settlementTotals, error) {
+) ([]tenantchat.ProviderAttempt, settlementTotals, bool, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT attempt_no, kind, provider_id, model_key, outcome, usage_quality,
 		       confirmed_input_tokens, confirmed_output_tokens, confirmed_cost_micro_usd
 		FROM tenant_chat_provider_attempts
 		WHERE request_id = $1 AND reservation_id = $2::uuid AND tenant_id = $3::uuid
-		  AND usage_quality = 'confirmed'
 		ORDER BY attempt_no
 	`, requestContext.RequestID, reservationID, requestContext.ExecutionScope.TenantID)
 	if err != nil {
-		return nil, settlementTotals{}, err
+		return nil, settlementTotals{}, false, err
 	}
 	defer rows.Close()
 	attempts := make([]tenantchat.ProviderAttempt, 0, 4)
 	totals := settlementTotals{}
+	hasPending := false
 	for rows.Next() {
 		var attempt tenantchat.ProviderAttempt
 		if err := rows.Scan(
@@ -238,18 +334,22 @@ func readConfirmedAttempts(
 			&attempt.Outcome, &attempt.UsageQuality, &attempt.InputTokens,
 			&attempt.OutputTokens, &attempt.CostMicroUSD,
 		); err != nil {
-			return nil, settlementTotals{}, err
+			return nil, settlementTotals{}, false, err
 		}
 		attempt.RequestID = requestContext.RequestID
 		attempts = append(attempts, attempt)
-		totals.InputTokens += attempt.InputTokens
-		totals.OutputTokens += attempt.OutputTokens
-		totals.CostMicroUSD += attempt.CostMicroUSD
+		if attempt.UsageQuality == "confirmed" {
+			totals.InputTokens += attempt.InputTokens
+			totals.OutputTokens += attempt.OutputTokens
+			totals.CostMicroUSD += attempt.CostMicroUSD
+		} else if attempt.UsageQuality == "pending_unconfirmed" {
+			hasPending = true
+		}
 	}
-	if err := rows.Err(); err != nil || len(attempts) == 0 {
-		return nil, settlementTotals{}, errors.New("confirmed provider attempts are unavailable")
+	if err := rows.Err(); err != nil {
+		return nil, settlementTotals{}, false, errors.New("provider attempts are unavailable")
 	}
-	return attempts, totals, nil
+	return attempts, totals, hasPending, nil
 }
 
 func lockSettlementPeriods(
@@ -262,7 +362,7 @@ func lockSettlementPeriods(
 	err := tx.QueryRow(ctx, `
 		SELECT period_start, period_end, period_timezone, limit_tokens,
 		       warning_threshold_tokens, economy_threshold_tokens, hard_stop_tokens,
-		       reserved_tokens, confirmed_total_tokens, state
+		       reserved_tokens, confirmed_total_tokens, unconfirmed_tokens, state
 		FROM tenant_chat_user_token_periods
 		WHERE tenant_id = $1::uuid AND user_id = $2::uuid AND period_start = $3
 		FOR UPDATE
@@ -270,7 +370,7 @@ func lockSettlementPeriods(
 		reservation.UserPeriodStart).Scan(
 		&userPeriod.Start, &userPeriod.End, &userPeriod.Timezone, &userPeriod.Limit,
 		&userPeriod.Warning, &userPeriod.Economy, &userPeriod.HardStop,
-		&userPeriod.Reserved, &userPeriod.Confirmed, &userPeriod.State,
+		&userPeriod.Reserved, &userPeriod.Confirmed, &userPeriod.Unconfirmed, &userPeriod.State,
 	)
 	if err != nil {
 		return tokenPeriod{}, costPeriod{}, err
@@ -279,14 +379,15 @@ func lockSettlementPeriods(
 	err = tx.QueryRow(ctx, `
 		SELECT period_start, period_end, period_timezone, limit_micro_usd,
 		       warning_threshold_micro_usd, economy_threshold_micro_usd, hard_stop_micro_usd,
-		       reserved_cost_micro_usd, confirmed_cost_micro_usd, state
+		       reserved_cost_micro_usd, confirmed_cost_micro_usd,
+		       unconfirmed_exposure_micro_usd, state
 		FROM tenant_chat_tenant_cost_periods
 		WHERE tenant_id = $1::uuid AND period_start = $2 AND currency = 'USD'
 		FOR UPDATE
 	`, requestContext.ExecutionScope.TenantID, reservation.TenantPeriodStart).Scan(
 		&tenantPeriod.Start, &tenantPeriod.End, &tenantPeriod.Timezone, &tenantPeriod.Limit,
 		&tenantPeriod.Warning, &tenantPeriod.Economy, &tenantPeriod.HardStop,
-		&tenantPeriod.Reserved, &tenantPeriod.Confirmed, &tenantPeriod.State,
+		&tenantPeriod.Reserved, &tenantPeriod.Confirmed, &tenantPeriod.Unconfirmed, &tenantPeriod.State,
 	)
 	return userPeriod, tenantPeriod, err
 }
@@ -308,13 +409,26 @@ func readSettlement(
 ) (tenantchat.UsageSettlement, error) {
 	var result tenantchat.UsageSettlement
 	err := tx.QueryRow(ctx, `
-		SELECT request_id, reservation_id::text, state, confirmed_input_tokens,
-		       confirmed_output_tokens, confirmed_cost_micro_usd, ledger_version
-		FROM tenant_chat_usage_reservations
-		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid
+		SELECT reservation.request_id, reservation.reservation_id::text, reservation.state,
+		       reservation.confirmed_input_tokens, reservation.confirmed_output_tokens,
+		       reservation.confirmed_cost_micro_usd, reservation.unconfirmed_tokens,
+		       reservation.unconfirmed_exposure_micro_usd, token_period.state,
+		       cost_period.state, reservation.ledger_version
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_user_token_periods AS token_period
+		  ON token_period.tenant_id = reservation.tenant_id
+		 AND token_period.user_id = reservation.user_id
+		 AND token_period.period_start = reservation.user_period_start
+		JOIN tenant_chat_tenant_cost_periods AS cost_period
+		  ON cost_period.tenant_id = reservation.tenant_id
+		 AND cost_period.period_start = reservation.tenant_period_start
+		 AND cost_period.currency = reservation.currency
+		WHERE reservation.reservation_id = $1::uuid AND reservation.tenant_id = $2::uuid
 	`, reservationID, requestContext.ExecutionScope.TenantID).Scan(
 		&result.RequestID, &result.ReservationID, &result.State, &result.ConfirmedInputTokens,
-		&result.ConfirmedOutputTokens, &result.ConfirmedCostMicroUSD, &result.LedgerVersion,
+		&result.ConfirmedOutputTokens, &result.ConfirmedCostMicroUSD, &result.UnconfirmedTokens,
+		&result.UnconfirmedExposureMicroUSD, &result.QuotaState, &result.BudgetState,
+		&result.LedgerVersion,
 	)
 	return result, err
 }

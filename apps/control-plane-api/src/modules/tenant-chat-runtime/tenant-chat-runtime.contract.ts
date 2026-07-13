@@ -167,6 +167,14 @@ function validatePricing(pricing: TenantChatPricing): void {
         route.cacheReadInputMicroUsdPerMillionTokens,
         `${prefix}.cacheReadInputMicroUsdPerMillionTokens`,
       );
+      if (
+        route.cacheReadInputMicroUsdPerMillionTokens >
+        route.inputMicroUsdPerMillionTokens
+      ) {
+        throw new TenantChatRuntimeContractError(
+          `${prefix}.cacheReadInputMicroUsdPerMillionTokens must not exceed regular input price`,
+        );
+      }
     }
     if (routeIds.has(route.routeId)) {
       throw new TenantChatRuntimeContractError(

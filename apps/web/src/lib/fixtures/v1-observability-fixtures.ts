@@ -164,6 +164,7 @@ export type InvocationLogRecord = {
 };
 
 export type DashboardOverview = {
+  surface?: "all" | "project_application" | "tenant_chat";
   fixtureName: string;
   fixtureVersion: string;
   owner: string;
@@ -206,10 +207,14 @@ export type DashboardOverview = {
   savedCostUsd: string;
   averageLatencyMs: number;
   p95LatencyMs: number;
+  latencyBySurface?: {
+    projectApplicationP95Ms?: number;
+    tenantChatP95Ms?: number;
+  };
   maskingActionCounts: Record<string, number>;
   routingSummaries: Array<{
-    category: string;
-    difficulty: string;
+    category: "general" | "code" | "translation" | "summarization" | "reasoning";
+    difficulty: "simple" | "complex";
     routingReason: string;
     requestCount: number;
   }>;

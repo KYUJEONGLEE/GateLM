@@ -12,29 +12,31 @@ import (
 )
 
 type tokenPeriod struct {
-	Start     time.Time
-	End       time.Time
-	Timezone  string
-	Limit     int64
-	Warning   int64
-	Economy   int64
-	HardStop  int64
-	Reserved  int64
-	Confirmed int64
-	State     string
+	Start       time.Time
+	End         time.Time
+	Timezone    string
+	Limit       int64
+	Warning     int64
+	Economy     int64
+	HardStop    int64
+	Reserved    int64
+	Confirmed   int64
+	Unconfirmed int64
+	State       string
 }
 
 type costPeriod struct {
-	Start     time.Time
-	End       time.Time
-	Timezone  string
-	Limit     int64
-	Warning   int64
-	Economy   int64
-	HardStop  int64
-	Reserved  int64
-	Confirmed int64
-	State     string
+	Start       time.Time
+	End         time.Time
+	Timezone    string
+	Limit       int64
+	Warning     int64
+	Economy     int64
+	HardStop    int64
+	Reserved    int64
+	Confirmed   int64
+	Unconfirmed int64
+	State       string
 }
 
 func ensureTokenPeriod(
@@ -89,7 +91,7 @@ func findTokenPeriod(
 	err = tx.QueryRow(ctx, `
 		SELECT period_start, period_end, period_timezone, limit_tokens,
 		       warning_threshold_tokens, economy_threshold_tokens, hard_stop_tokens,
-		       reserved_tokens, confirmed_total_tokens, state
+		       reserved_tokens, confirmed_total_tokens, unconfirmed_tokens, state
 		FROM tenant_chat_user_token_periods
 		WHERE tenant_id = $1::uuid AND user_id = $2::uuid
 		  AND period_start <= $3 AND period_end > $3
@@ -97,7 +99,7 @@ func findTokenPeriod(
 	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID, now).Scan(
 		&result.Start, &result.End, &result.Timezone, &result.Limit,
 		&result.Warning, &result.Economy, &result.HardStop,
-		&result.Reserved, &result.Confirmed, &result.State,
+		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State,
 	)
 	return result, err
 }
@@ -155,7 +157,8 @@ func findCostPeriod(
 	err = tx.QueryRow(ctx, `
 		SELECT period_start, period_end, period_timezone, limit_micro_usd,
 		       warning_threshold_micro_usd, economy_threshold_micro_usd, hard_stop_micro_usd,
-		       reserved_cost_micro_usd, confirmed_cost_micro_usd, state
+		       reserved_cost_micro_usd, confirmed_cost_micro_usd,
+		       unconfirmed_exposure_micro_usd, state
 		FROM tenant_chat_tenant_cost_periods
 		WHERE tenant_id = $1::uuid AND currency = 'USD'
 		  AND period_start <= $2 AND period_end > $2
@@ -163,7 +166,7 @@ func findCostPeriod(
 	`, requestContext.ExecutionScope.TenantID, now).Scan(
 		&result.Start, &result.End, &result.Timezone, &result.Limit,
 		&result.Warning, &result.Economy, &result.HardStop,
-		&result.Reserved, &result.Confirmed, &result.State,
+		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State,
 	)
 	return result, err
 }

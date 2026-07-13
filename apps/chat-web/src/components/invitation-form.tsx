@@ -34,12 +34,12 @@ export function InvitationForm() {
 
   return <Card className="auth-panel">
     <Badge>Chat 초대</Badge>
-    <h2 style={{ marginTop: 14 }}>{busy && !invite ? '초대를 확인하고 있어요' : '조직 초대 확인'}</h2>
+    <h2 className="invitation-heading">{busy && !invite ? '초대를 확인하고 있어요' : '조직 초대 확인'}</h2>
     <p className="auth-lead">초대받은 조직과 계정을 확인한 뒤 시작하세요.</p>
     {error && <div className="error-box" role="alert">{error}</div>}
     {invite && <>
-      <div className="info-box"><strong><Building2 size={17} aria-hidden style={{ verticalAlign: '-3px', marginRight: 7 }} />{invite.tenantName}</strong><br />{invite.email}</div>
-      <form className="form-stack" onSubmit={submit} style={{ marginTop: 20 }}>
+      <div className="info-box"><strong><Building2 className="inline-heading-icon" size={17} aria-hidden />{invite.tenantName}</strong><br />{invite.email}</div>
+      <form className="form-stack invitation-form" onSubmit={submit}>
         {invite.accountState === 'new' && <div className="field"><label htmlFor="name">이름</label><Input id="name" name="name" defaultValue={invite.employeeName ?? ''} autoComplete="name" required /></div>}
         <div className="field"><label htmlFor="password">{invite.accountState === 'new' ? '새 비밀번호' : '기존 계정 비밀번호'}</label><Input id="password" name="password" type="password" minLength={8} autoComplete={invite.accountState === 'new' ? 'new-password' : 'current-password'} required /></div>
         <Button disabled={busy} type="submit">{busy ? '처리하는 중…' : invite.accountState === 'new' ? '계정 만들고 시작' : '로그인하고 초대 수락'}</Button>

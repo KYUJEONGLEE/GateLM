@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -114,6 +115,44 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 	return completion.toGateLM(req.Model)
 }
 
+func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	config = normalizeConfig(config)
+	if err := validateConfig(config, true); err != nil {
+		return nil, err
+	}
+	streamRequest, err := toAnthropicRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	streamRequest.Stream = true
+	body, err := json.Marshal(streamRequest)
+	if err != nil {
+		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("encode provider streaming chat request: %w", err))
+	}
+	reqCtx, cancel := contextWithTimeout(ctx, config.Timeout)
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, providerEndpoint(config.BaseURL, "/messages"), bytes.NewReader(body))
+	if err != nil {
+		cancel()
+		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("build provider streaming chat request: %w", err))
+	}
+	setAnthropicHeaders(httpReq, config, true, req.RequestID)
+	httpReq.Header.Set("Accept", "text/event-stream")
+	resp, err := a.httpClient.Do(httpReq)
+	if err != nil {
+		cancel()
+		return nil, classifyTransportError(reqCtx, err)
+	}
+	if err := classifyStatus(resp); err != nil {
+		resp.Body.Close()
+		cancel()
+		return nil, err
+	}
+	return &anthropicStreamReader{
+		ctx: reqCtx, cancel: cancel, body: resp.Body, reader: bufio.NewReader(resp.Body),
+		model: req.Model, created: time.Now().Unix(),
+	}, nil
+}
+
 type anthropicRequest struct {
 	Model       string             `json:"model"`
 	MaxTokens   int                `json:"max_tokens"`
@@ -144,8 +183,214 @@ type anthropicContentBlock struct {
 }
 
 type anthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+}
+
+type anthropicStreamReader struct {
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	body                 io.ReadCloser
+	reader               *bufio.Reader
+	id                   string
+	model                string
+	created              int64
+	inputTokens          int
+	outputTokens         int
+	cacheReadInputTokens int
+	usageEmitted         bool
+	closed               bool
+}
+
+type anthropicStreamEvent struct {
+	Type    string `json:"type"`
+	Message *struct {
+		ID    string          `json:"id"`
+		Model string          `json:"model"`
+		Usage *anthropicUsage `json:"usage"`
+	} `json:"message,omitempty"`
+	Delta struct {
+		Type       string `json:"type"`
+		Text       string `json:"text"`
+		StopReason string `json:"stop_reason"`
+	} `json:"delta,omitempty"`
+	Usage *anthropicUsage `json:"usage,omitempty"`
+}
+
+func (r *anthropicStreamReader) Next() (provider.ChatCompletionStreamEvent, error) {
+	if r == nil || r.reader == nil || r.closed {
+		return provider.ChatCompletionStreamEvent{}, io.EOF
+	}
+	for {
+		eventName, payload, err := r.readEvent()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return provider.ChatCompletionStreamEvent{}, io.EOF
+			}
+			return provider.ChatCompletionStreamEvent{}, classifyAnthropicStreamReadError(r.ctx, err)
+		}
+		var event anthropicStreamEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return provider.ChatCompletionStreamEvent{}, provider.NewError(
+				provider.ErrorKindError, provider.ErrorCodeProviderError,
+				errors.New("provider stream returned malformed json chunk"),
+			)
+		}
+		if event.Type == "" {
+			event.Type = eventName
+		}
+		switch event.Type {
+		case "message_start":
+			if event.Message != nil {
+				r.id = firstNonEmpty(event.Message.ID, r.id)
+				r.model = firstNonEmpty(event.Message.Model, r.model)
+				if event.Message.Usage != nil {
+					r.inputTokens = anthropicTotalInputTokens(event.Message.Usage)
+					r.outputTokens = event.Message.Usage.OutputTokens
+					r.cacheReadInputTokens = event.Message.Usage.CacheReadInputTokens
+				}
+			}
+		case "content_block_delta":
+			if event.Delta.Type != "text_delta" || event.Delta.Text == "" {
+				continue
+			}
+			raw, err := r.normalizedChunk(event.Delta.Text, "", nil)
+			if err != nil {
+				return provider.ChatCompletionStreamEvent{}, err
+			}
+			return provider.ChatCompletionStreamEvent{Data: raw, Delta: event.Delta.Text}, nil
+		case "message_delta":
+			if event.Usage != nil {
+				r.outputTokens = event.Usage.OutputTokens
+			}
+			usage := r.currentUsage()
+			r.usageEmitted = true
+			raw, err := r.normalizedChunk("", finishReason(event.Delta.StopReason), usage)
+			if err != nil {
+				return provider.ChatCompletionStreamEvent{}, err
+			}
+			return provider.ChatCompletionStreamEvent{Data: raw, Usage: usage}, nil
+		case "message_stop":
+			if r.usageEmitted {
+				return provider.ChatCompletionStreamEvent{}, io.EOF
+			}
+			usage := r.currentUsage()
+			r.usageEmitted = true
+			raw, err := r.normalizedChunk("", "stop", usage)
+			if err != nil {
+				return provider.ChatCompletionStreamEvent{}, err
+			}
+			return provider.ChatCompletionStreamEvent{Data: raw, Usage: usage}, nil
+		case "error":
+			return provider.ChatCompletionStreamEvent{}, provider.NewError(
+				provider.ErrorKindError, provider.ErrorCodeProviderError,
+				errors.New("provider stream returned an error event"),
+			)
+		}
+	}
+}
+
+func (r *anthropicStreamReader) Close() error {
+	if r == nil || r.closed {
+		return nil
+	}
+	r.closed = true
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if r.body != nil {
+		return r.body.Close()
+	}
+	return nil
+}
+
+func (r *anthropicStreamReader) readEvent() (string, json.RawMessage, error) {
+	var eventName string
+	dataLines := make([]string, 0, 1)
+	for {
+		line, err := r.reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", nil, err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if strings.TrimSpace(line) == "" {
+			if len(dataLines) > 0 {
+				payload := json.RawMessage([]byte(strings.Join(dataLines, "\n")))
+				if !json.Valid(payload) {
+					return "", nil, errors.New("provider stream returned malformed json chunk")
+				}
+				return eventName, payload, nil
+			}
+			if errors.Is(err, io.EOF) {
+				return "", nil, io.EOF
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "event:") {
+			eventName = strings.TrimSpace(line[len("event:"):])
+		} else if strings.HasPrefix(line, "data:") {
+			dataPayload := line[len("data:"):]
+			if strings.HasPrefix(dataPayload, " ") {
+				dataPayload = dataPayload[1:]
+			}
+			dataLines = append(dataLines, dataPayload)
+		}
+		if errors.Is(err, io.EOF) {
+			if len(dataLines) == 0 {
+				return "", nil, io.EOF
+			}
+			payload := json.RawMessage([]byte(strings.Join(dataLines, "\n")))
+			if !json.Valid(payload) {
+				return "", nil, errors.New("provider stream returned malformed json chunk")
+			}
+			return eventName, payload, nil
+		}
+	}
+}
+
+func (r *anthropicStreamReader) currentUsage() *provider.Usage {
+	inputTokens := r.inputTokens
+	return &provider.Usage{
+		PromptTokens: inputTokens, CompletionTokens: r.outputTokens,
+		TotalTokens:          inputTokens + r.outputTokens,
+		CacheReadInputTokens: r.cacheReadInputTokens,
+	}
+}
+
+func (r *anthropicStreamReader) normalizedChunk(delta string, stopReason string, usage *provider.Usage) (json.RawMessage, error) {
+	choice := map[string]any{
+		"index": 0, "delta": map[string]any{}, "finish_reason": nil,
+	}
+	if delta != "" {
+		choice["delta"] = map[string]any{"content": delta}
+	}
+	if stopReason != "" {
+		choice["finish_reason"] = stopReason
+	}
+	payload := map[string]any{
+		"id": firstNonEmpty(r.id, "chatcmpl_anthropic"), "object": "chat.completion.chunk",
+		"created": r.created, "model": r.model, "choices": []any{choice},
+	}
+	if usage != nil {
+		payload["usage"] = usage
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("encode normalized provider streaming chunk"))
+	}
+	return json.RawMessage(encoded), nil
+}
+
+func classifyAnthropicStreamReadError(ctx context.Context, err error) error {
+	if errors.Is(err, context.Canceled) || (ctx != nil && errors.Is(ctx.Err(), context.Canceled)) {
+		return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, context.Canceled)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || (ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, context.DeadlineExceeded)
+	}
+	return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
 }
 
 type anthropicModelListResponse struct {
@@ -290,14 +535,23 @@ func (r anthropicMessageResponse) toGateLM(requestedModel string) (*provider.Cha
 	}
 
 	if r.Usage != nil {
+		inputTokens := anthropicTotalInputTokens(r.Usage)
 		resp.Usage = &provider.Usage{
-			PromptTokens:     r.Usage.InputTokens,
-			CompletionTokens: r.Usage.OutputTokens,
-			TotalTokens:      r.Usage.InputTokens + r.Usage.OutputTokens,
+			PromptTokens:         inputTokens,
+			CompletionTokens:     r.Usage.OutputTokens,
+			TotalTokens:          inputTokens + r.Usage.OutputTokens,
+			CacheReadInputTokens: r.Usage.CacheReadInputTokens,
 		}
 	}
 
 	return resp, nil
+}
+
+func anthropicTotalInputTokens(usage *anthropicUsage) int {
+	if usage == nil {
+		return 0
+	}
+	return usage.InputTokens + usage.CacheReadInputTokens + usage.CacheCreationInputTokens
 }
 
 func (r anthropicMessageResponse) text() string {

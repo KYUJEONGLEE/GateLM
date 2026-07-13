@@ -123,6 +123,7 @@ function toLiveRequestRow(
     requestId: record.requestId,
     routingReason: record.routingReason,
     safetyAction: normalizeSafetyAction(record),
+    surface: "project_application" as const,
     status: record.status,
     statusCode,
     statusLabel: statusLabel(statusCode, record.status),

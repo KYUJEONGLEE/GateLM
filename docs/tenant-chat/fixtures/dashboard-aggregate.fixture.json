@@ -14,6 +14,10 @@
     "failed": 20,
     "cancelled": 2,
     "cacheHits": 180,
+    "cacheMisses": 912,
+    "cacheOff": 0,
+    "cacheEligible": 1092,
+    "cacheHitRate": 0.16483516483516483,
     "rateLimited": 14,
     "concurrencyLimited": 4,
     "safetyBlocked": 8,
@@ -47,6 +51,7 @@
     }
   },
   "latency": {
+    "averageMs": 910,
     "p50Ms": 740,
     "p95Ms": 2100,
     "p99Ms": 4200,

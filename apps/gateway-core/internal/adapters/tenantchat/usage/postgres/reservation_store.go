@@ -107,11 +107,11 @@ func (s *ReservationStore) ConsumeAndReserve(
 	if err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
-	projectedTokens := userPeriod.Confirmed + userPeriod.Reserved + reservedTokens
+	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + userPeriod.Reserved + reservedTokens
 	if projectedTokens < reservedTokens || projectedTokens > userPeriod.HardStop {
 		return tenantchat.UsageReservation{}, tenantchat.ErrQuotaHardLimit
 	}
-	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Reserved + reservedCost
+	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + tenantPeriod.Reserved + reservedCost
 	if projectedCost < reservedCost || projectedCost > tenantPeriod.HardStop {
 		return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
 	}

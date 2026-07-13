@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: '조직에서 안전하게 사용하는 GateLM Chat',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return <html lang="ko"><body>{children}</body></html>;
 }

@@ -20,6 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 import {
   compareProjectCreatedAtDescending,
   getProjectCreateActionLocation,
+  getProjectSettingsHref,
   isProjectVisibleInList
 } from "./project-management-state";
 
@@ -116,7 +117,7 @@ const projectText: Record<
     budgetAlert: "예산 초과",
     budgetWarning: "예산 경고",
     costReportFallback: "월간 사용량을 불러올 수 없습니다.",
-    fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
+    fixtureFallback: "Control Plane을 사용할 수 없어 예시 프로젝트를 표시 중입니다.",
     detailSaved: "프로젝트가 저장되었습니다.",
     projectSettings: "프로젝트 설정",
     draftBadge: "임시 저장",
@@ -243,9 +244,8 @@ export function ProjectManagement({
 
             <div className="project-card-grid">
               {sortedProjects.map((project) => {
-                const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
-                const opensPolicy = project.status !== "DRAFT" && Boolean(project.runtimeApplicationId);
-                const editProjectHref = opensPolicy ? `${projectHref}/policies` : projectHref;
+                const opensPolicy = project.status === "ACTIVE" && Boolean(project.runtimeApplicationId);
+                const editProjectHref = getProjectSettingsHref(model.routeTenantId, project);
                 const editProjectLabel = text.projectSettings;
                 const usage = getProjectUsage(
                   project,
@@ -392,6 +392,12 @@ export function ProjectDetailManagement({
         message: text.detailSaved,
         status: "success"
       });
+
+      if (payload.project.status !== "ACTIVE") {
+        router.replace(`/tenants/${tenantId}/projects/${payload.project.id}`);
+        return;
+      }
+
       router.refresh();
     } catch {
       setSubmitState({
@@ -576,6 +582,12 @@ export function ProjectDetailSection({
         message: text.detailSaved,
         status: "success"
       });
+
+      if (payload.project.status !== "ACTIVE") {
+        router.replace(`/tenants/${tenantId}/projects/${payload.project.id}`);
+        return;
+      }
+
       router.refresh();
     } catch {
       setSubmitState({

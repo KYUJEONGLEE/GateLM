@@ -42,4 +42,23 @@ describe('TenantChatRuntimeService persistence boundary', () => {
     );
     expect(transaction).not.toHaveBeenCalled();
   });
+
+  it('rejects an invalid cache-read price before starting a publish transaction', async () => {
+    const snapshot = JSON.parse(
+      readFileSync(
+        resolve(
+          __dirname,
+          '../../../../../docs/tenant-chat/fixtures/tenant-runtime-snapshot.fixture.json',
+        ),
+        'utf8',
+      ),
+    ) as TenantChatRuntimeSnapshotDocument;
+    snapshot.pricing.routes[0]!.cacheReadInputMicroUsdPerMillionTokens =
+      snapshot.pricing.routes[0]!.inputMicroUsdPerMillionTokens + 1;
+
+    await expect(service.publishSnapshot({ snapshot })).rejects.toThrow(
+      'cacheReadInputMicroUsdPerMillionTokens must not exceed regular input price',
+    );
+    expect(transaction).not.toHaveBeenCalled();
+  });
 });

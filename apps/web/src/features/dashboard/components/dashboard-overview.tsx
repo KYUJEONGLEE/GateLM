@@ -65,6 +65,7 @@ export type DashboardFilterState = {
   projectId: string;
   range: DashboardRange;
   resolvedBy: string;
+  surface: "all" | "project_application" | "tenant_chat";
 };
 
 const dashboardTabs: DashboardVisibleTab[] = ["requests", "cache", "routing", "safety", "limits"];
@@ -78,6 +79,18 @@ const dashboardText: Record<
     actionRequestLogs: string;
     backToOverview: string;
     costByModel: string;
+    dashboardFilters: string;
+    dataAsOf: string;
+    keyMetrics: string;
+    kpi: {
+      monthCost: string;
+      monthCostDetail: string;
+      successRate: string;
+      successful: string;
+      totalRequests: string;
+    };
+    overviewWorkspace: string;
+    refreshDashboard: string;
     metrics: {
       averageLatency: string;
       averageP95Latency: string;
@@ -132,6 +145,8 @@ const dashboardText: Record<
     actionRequestLogs: "Open request logs",
     backToOverview: "Back to overview",
     costByModel: "Cost by model",
+    dashboardFilters: "Dashboard filters",
+    dataAsOf: "Data as of",
     filter: {
       apply: "Apply",
       budgetScopeId: "Policy ID",
@@ -172,6 +187,16 @@ const dashboardText: Record<
       totalRequests: "Total requests",
       totalTokens: "Total tokens"
     },
+    keyMetrics: "Dashboard key metrics",
+    kpi: {
+      monthCost: "Month-to-date cost",
+      monthCostDetail: "Live accumulated cost for this month",
+      successRate: "Success rate",
+      successful: "successful",
+      totalRequests: "Total requests"
+    },
+    overviewWorkspace: "Dashboard overview workspace",
+    refreshDashboard: "Refresh dashboard",
     maskingActions: "Masking actions",
     budgetScopeBreakdown: "Project policy/budget breakdown",
     queryBudget: "Query budget",
@@ -190,8 +215,10 @@ const dashboardText: Record<
   },
   ko: {
     actionRequestLogs: "요청 로그 열기",
-    backToOverview: "Overview로 돌아가기",
+    backToOverview: "개요로 돌아가기",
     costByModel: "모델별 비용",
+    dashboardFilters: "대시보드 필터",
+    dataAsOf: "데이터 기준 시각",
     filter: {
       apply: "적용",
       budgetScopeId: "Policy ID",
@@ -232,6 +259,16 @@ const dashboardText: Record<
       totalRequests: "총 요청",
       totalTokens: "총 토큰"
     },
+    keyMetrics: "대시보드 핵심 지표",
+    kpi: {
+      monthCost: "이번 달 누적 비용",
+      monthCostDetail: "이번 달 실시간 누적 비용",
+      successRate: "성공률",
+      successful: "성공",
+      totalRequests: "총 요청"
+    },
+    overviewWorkspace: "대시보드 개요 영역",
+    refreshDashboard: "대시보드 새로고침",
     maskingActions: "마스킹 동작",
     budgetScopeBreakdown: "Project 정책/예산 집계",
     queryBudget: "Query budget",
@@ -271,27 +308,28 @@ export function DashboardOverviewView({
   const dataAsOf = formatDashboardDataAsOf(
     overview.dataFreshness.lastLogCreatedAt ||
       overview.dataFreshness.generatedAt ||
-      overview.range.to
+      overview.range.to,
+    locale
   );
   const kpiCards = [
     {
-      detail: `${formatInteger(overview.totalRequests)}건 · ${kpiRangeLabel(filters.range)}`,
+      detail: `${formatInteger(overview.totalRequests)} ${locale === "ko" ? "건" : "requests"} · ${rangeLabel(filters.range, locale)}`,
       icon: <Activity aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "총 요청",
+      label: text.kpi.totalRequests,
       tone: "blue",
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)}건 성공 · 평균 ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
+      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful} · ${text.metrics.averageLatency} ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
       icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "성공률",
+      label: text.kpi.successRate,
       tone: "green",
       value: formatPercent(successRate)
     },
     {
-      detail: "이번 달 실시간 누적 비용",
+      detail: text.kpi.monthCostDetail,
       icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: "이번 달 누적 비용",
+      label: text.kpi.monthCost,
       tone: "orange",
       value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
@@ -309,7 +347,7 @@ export function DashboardOverviewView({
           <h1>{text.title}</h1>
         </div>
         <Link
-          aria-label="Refresh dashboard"
+          aria-label={text.refreshDashboard}
           className="dashboard-refresh-link"
           href={dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })}
         >
@@ -317,27 +355,34 @@ export function DashboardOverviewView({
         </Link>
       </section>
 
-      <section className="dashboard-summary-bar" aria-label="Dashboard filters">
+      <section className="dashboard-summary-bar" aria-label={text.dashboardFilters}>
         <DashboardFilterForm
           actionPath={`/tenants/${overview.filters.tenantId}/dashboard`}
           allowAllProjects={allowAllProjects}
+          allowTenantChat={allowAllProjects}
           applyLabel={text.filter.apply}
           filters={filters}
+          locale={locale}
           projects={projects}
           rangeOptions={dashboardRanges.map((range) => ({
-            label: rangeLabel(range),
+            label: rangeLabel(range, locale),
             value: range
           }))}
         />
+        {overview.queryBudget?.status === "partial" && overview.queryBudget.guidance ? (
+          <div className="dashboard-source-warning" role="status">
+            {overview.queryBudget.guidance}
+          </div>
+        ) : null}
         <div className="dashboard-data-freshness">
-          <span>Data as of</span>
+          <span>{text.dataAsOf}</span>
           <strong>{dataAsOf}</strong>
         </div>
       </section>
 
-      <section className="dashboard-overview-workspace" aria-label="Dashboard overview workspace">
+      <section className="dashboard-overview-workspace" aria-label={text.overviewWorkspace}>
         <div className="dashboard-main-panel">
-          <div className="dashboard-kpi-grid" aria-label="Dashboard key metrics">
+          <div className="dashboard-kpi-grid" aria-label={text.keyMetrics}>
             {kpiCards.map((card) => (
               <article className="dashboard-kpi-card" data-tone={card.tone} key={card.label}>
                 <div className="dashboard-kpi-card-header">
@@ -356,9 +401,10 @@ export function DashboardOverviewView({
                 tenantId: overview.filters.tenantId
               }}
               initialSummary={costOverTime}
-              rangeLabel={rangeLabel(filters.range)}
+              locale={locale}
+              rangeLabel={rangeLabel(filters.range, locale)}
             />
-            <ProviderModelUsageCard rows={buildProviderModelUsageRows(overview)} />
+            <ProviderModelUsageCard locale={locale} rows={buildProviderModelUsageRows(overview)} />
           </div>
           <LiveRequestsCard
             filters={{
@@ -384,57 +430,37 @@ function ratio(numerator: number, denominator: number) {
   return numerator / denominator;
 }
 
-function formatDashboardDataAsOf(value: string) {
+function formatDashboardDataAsOf(value: string, locale: Locale) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Seoul"
   }).format(date);
 }
 
-function rangeLabel(range: DashboardRange) {
+function rangeLabel(range: DashboardRange, locale: Locale) {
   if (range === "5m") {
-    return "Last 5 minutes";
+    return locale === "ko" ? "최근 5분" : "Last 5 minutes";
   }
 
   if (range === "15m") {
-    return "Last 15 minutes";
+    return locale === "ko" ? "최근 15분" : "Last 15 minutes";
   }
 
   if (range === "1h") {
-    return "Last hour";
+    return locale === "ko" ? "최근 1시간" : "Last hour";
   }
 
   if (range === "1d") {
-    return "Last 24 hours";
+    return locale === "ko" ? "최근 24시간" : "Last 24 hours";
   }
 
-  return "Last 7 days";
-}
-
-function kpiRangeLabel(range: DashboardRange) {
-  if (range === "5m") {
-    return "최근 5분";
-  }
-
-  if (range === "15m") {
-    return "최근 15분";
-  }
-
-  if (range === "1h") {
-    return "최근 1시간";
-  }
-
-  if (range === "1d") {
-    return "최근 24시간";
-  }
-
-  return "최근 7일";
+  return locale === "ko" ? "최근 7일" : "Last 7 days";
 }
 
 function formatMicroUsd(value: number) {
@@ -730,6 +756,7 @@ function DashboardFilterBar({
     >
       {activeTab !== "overview" ? <input name="tab" type="hidden" value={activeTab} /> : null}
       <input name="range" type="hidden" value={filters.range} />
+      <input name="surface" type="hidden" value={filters.surface} />
       <label className="request-log-filter-control">
         <input
           aria-label={text.filter.projectId}
@@ -793,6 +820,7 @@ function dashboardHref(
   appendDashboardQuery(query, "budgetScopeId", filters.budgetScopeId);
   appendDashboardQuery(query, "resolvedBy", filters.resolvedBy);
   appendDashboardQuery(query, "range", filters.range);
+  appendDashboardQuery(query, "surface", filters.surface);
   appendDashboardQuery(query, "motion", extra?.motion ?? "");
   appendDashboardQuery(query, "requestId", extra?.requestId ?? "");
 

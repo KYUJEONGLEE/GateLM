@@ -162,7 +162,6 @@ func TestResolverReturnsStaleCatalogWhileRefreshing(t *testing.T) {
 	block := make(chan struct{})
 	delegate.block = block
 	delegate.started = make(chan int, 1)
-	delegate.completed = make(chan int, 1)
 
 	stale, err := resolver.GetCatalog(context.Background(), ref, catalogScope())
 	if err != nil {
@@ -173,8 +172,18 @@ func TestResolverReturnsStaleCatalogWhileRefreshing(t *testing.T) {
 	}
 
 	<-delegate.started
+	resolver.mu.Lock()
+	refresh := resolver.flights[ref]
+	resolver.mu.Unlock()
+	if refresh == nil {
+		t.Fatal("expected stale cache refresh flight")
+	}
 	close(block)
-	<-delegate.completed
+	select {
+	case <-refresh.done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stale cache refresh")
+	}
 
 	refreshed, err := resolver.GetCatalog(context.Background(), ref, catalogScope())
 	if err != nil {
@@ -233,13 +242,12 @@ func TestResolverRejectsCachedCatalogForMismatchedApplicationScope(t *testing.T)
 }
 
 type fakeCatalogResolver struct {
-	mu        sync.Mutex
-	calls     int
-	catalogs  []providercatalog.Catalog
-	err       error
-	block     <-chan struct{}
-	started   chan int
-	completed chan int
+	mu       sync.Mutex
+	calls    int
+	catalogs []providercatalog.Catalog
+	err      error
+	block    <-chan struct{}
+	started  chan int
 }
 
 func newFakeCatalogResolver(catalogs ...providercatalog.Catalog) *fakeCatalogResolver {
@@ -253,7 +261,6 @@ func (r *fakeCatalogResolver) GetCatalog(ctx context.Context, _ providercatalog.
 	err := r.err
 	block := r.block
 	started := r.started
-	completed := r.completed
 	catalog := r.catalogs[len(r.catalogs)-1]
 	if call <= len(r.catalogs) {
 		catalog = r.catalogs[call-1]
@@ -269,9 +276,6 @@ func (r *fakeCatalogResolver) GetCatalog(ctx context.Context, _ providercatalog.
 		case <-ctx.Done():
 			return providercatalog.Catalog{}, ctx.Err()
 		}
-	}
-	if completed != nil {
-		defer func() { completed <- call }()
 	}
 	if err != nil {
 		return providercatalog.Catalog{}, err

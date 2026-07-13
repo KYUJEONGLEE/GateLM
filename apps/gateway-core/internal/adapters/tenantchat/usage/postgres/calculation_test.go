@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -16,6 +17,65 @@ func TestReservationCostUsesCeilingIntegerArithmetic(t *testing.T) {
 	}
 	if cost != 2 {
 		t.Fatalf("want 2 micro USD, got %d", cost)
+	}
+}
+
+func TestValidateTerminalWritePreservesContextAndDatabaseErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := validateTerminalWrite(ctx, "update fixture", errors.New("driver error"), 0); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancelled context, got %v", err)
+	}
+	databaseErr := errors.New("database unavailable")
+	if err := validateTerminalWrite(context.Background(), "update fixture", databaseErr, 0); !errors.Is(err, databaseErr) {
+		t.Fatalf("expected wrapped database error, got %v", err)
+	}
+	if err := validateTerminalWrite(context.Background(), "update fixture", nil, 0); err == nil {
+		t.Fatal("expected no-rows error")
+	}
+}
+
+func TestConfirmedAttemptCostRejectsCacheReadPriceAboveRegularInput(t *testing.T) {
+	cacheReadPrice := int64(251_000)
+	_, err := confirmedAttemptCost(
+		settlementAttempt{InputPrice: 250_000, OutputPrice: 1_000_000, CacheReadPrice: &cacheReadPrice},
+		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10, CacheReadInputTokens: 50},
+	)
+	if err == nil {
+		t.Fatal("settlement accepted a cache-read input price above the regular input price")
+	}
+}
+
+func TestConfirmedAttemptCostRejectsInvalidUsage(t *testing.T) {
+	attempt := settlementAttempt{InputPrice: 250_000, OutputPrice: 1_000_000}
+	for _, test := range []struct {
+		name  string
+		usage tenantchat.ConfirmedUsage
+	}{
+		{name: "negative input", usage: tenantchat.ConfirmedUsage{InputTokens: -1}},
+		{name: "negative output", usage: tenantchat.ConfirmedUsage{OutputTokens: -1}},
+		{name: "negative cache read", usage: tenantchat.ConfirmedUsage{CacheReadInputTokens: -1}},
+		{name: "cache read exceeds input", usage: tenantchat.ConfirmedUsage{InputTokens: 1, CacheReadInputTokens: 2}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := confirmedAttemptCost(attempt, test.usage); err == nil {
+				t.Fatal("settlement accepted invalid confirmed usage")
+			}
+		})
+	}
+}
+
+func TestConfirmedAttemptCostUsesPinnedCacheReadDiscount(t *testing.T) {
+	cacheReadPrice := int64(25_000)
+	cost, err := confirmedAttemptCost(
+		settlementAttempt{InputPrice: 250_000, OutputPrice: 1_000_000, CacheReadPrice: &cacheReadPrice},
+		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10, CacheReadInputTokens: 50},
+	)
+	if err != nil {
+		t.Fatalf("calculate confirmed settlement cost: %v", err)
+	}
+	if cost != 25 {
+		t.Fatalf("want 25 micro USD, got %d", cost)
 	}
 }
 
