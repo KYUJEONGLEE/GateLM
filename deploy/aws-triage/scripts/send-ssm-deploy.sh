@@ -56,22 +56,22 @@ public_url=${public_url_q}
 chat_url=${chat_url_q}
 repo=/home/ubuntu/GateLM
 script_path=\$(mktemp /tmp/gatelm-deploy-main.XXXXXX)
-cleanup() { rm -f \"\${script_path}\"; }
+cleanup() { rm -f "\${script_path}"; }
 trap cleanup EXIT
-sudo -u ubuntu git -C \"\${repo}\" fetch --no-tags origin main
-actual_sha=\$(sudo -u ubuntu git -C \"\${repo}\" rev-parse FETCH_HEAD)
-if [[ \"\${actual_sha}\" != \"\${deploy_sha}\" ]]; then
-  echo \"[GateLM CD] ERROR: origin/main moved to \${actual_sha}.\" >&2
+sudo -u ubuntu git -C "\${repo}" fetch --no-tags origin main
+actual_sha=\$(sudo -u ubuntu git -C "\${repo}" rev-parse FETCH_HEAD)
+if [[ "\${actual_sha}" != "\${deploy_sha}" ]]; then
+  echo "[GateLM CD] ERROR: origin/main moved to \${actual_sha}." >&2
   exit 1
 fi
-sudo -u ubuntu git -C \"\${repo}\" show \"\${deploy_sha}:deploy/aws-triage/scripts/deploy-main.sh\" > \"\${script_path}\"
-chown ubuntu:ubuntu \"\${script_path}\"
-chmod 700 \"\${script_path}\"
+sudo -u ubuntu git -C "\${repo}" show "\${deploy_sha}:deploy/aws-triage/scripts/deploy-main.sh" > "\${script_path}"
+chown ubuntu:ubuntu "\${script_path}"
+chmod 700 "\${script_path}"
 sudo -u ubuntu env \
-  GATELM_REPO_DIR=\"\${repo}\" \
-  GATELM_DEPLOY_PUBLIC_URL=\"\${public_url}\" \
-  GATELM_DEPLOY_CHAT_URL=\"\${chat_url}\" \
-  bash \"\${script_path}\" \"\${deploy_sha}\"
+  GATELM_REPO_DIR="\${repo}" \
+  GATELM_DEPLOY_PUBLIC_URL="\${public_url}" \
+  GATELM_DEPLOY_CHAT_URL="\${chat_url}" \
+  bash "\${script_path}" "\${deploy_sha}"
 EOF
 )"
 
