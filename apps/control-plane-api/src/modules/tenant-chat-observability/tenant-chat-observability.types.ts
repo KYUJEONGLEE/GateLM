@@ -47,6 +47,7 @@ export interface TenantChatProjectionEvent {
   budgetState?: string;
   cacheOutcome?: string;
   latencyMs?: number;
+  lateUsage?: boolean;
   quota?: {
     state: string;
     reservedTokensDelta: number;

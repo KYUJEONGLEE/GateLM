@@ -1,0 +1,52 @@
+{
+  "schema": "../schemas/usage-settlement-event-v2.schema.json",
+  "events": [
+    {
+      "eventId": "usage_unconfirmed_v2_fixture_001",
+      "schemaVersion": 2,
+      "eventType": "usage_unconfirmed",
+      "eventVersion": 3,
+      "occurredAt": "2026-07-12T12:15:00Z",
+      "aggregateId": "request_mixed_fixture_001",
+      "requestId": "request_mixed_fixture_001",
+      "turnId": "turn_mixed_fixture_001",
+      "idempotencyKey": "idempotency_mixed_fixture_001",
+      "reservationId": "reservation_mixed_fixture_001",
+      "executionScope": { "kind": "tenant_chat", "tenantId": "tenant_fixture_001", "userId": "user_fixture_001", "actorKind": "employee", "employeeId": "employee_fixture_001" },
+      "period": { "start": "2026-06-30T15:00:00Z", "end": "2026-07-31T15:00:00Z", "timezone": "Asia/Seoul", "currency": "USD" },
+      "snapshotVersion": 12,
+      "pricingVersion": 5,
+      "quota": { "state": "normal", "reservedTokensDelta": -3328, "confirmedInputTokensDelta": 820, "confirmedOutputTokensDelta": 410, "confirmedTotalTokensDelta": 1230, "unconfirmedTokensDelta": 1664 },
+      "budget": { "state": "normal", "reservedCostMicroUsdDelta": -2368, "confirmedCostMicroUsdDelta": 615, "unconfirmedExposureMicroUsdDelta": 1184 },
+      "attempts": [
+        { "attemptNo": 1, "kind": "primary", "providerId": "provider_fixture_001", "modelKey": "model_standard_001", "outcome": "failed_pre_delta", "usageQuality": "confirmed", "inputTokens": 820, "outputTokens": 410, "costMicroUsd": 615 },
+        { "attemptNo": 2, "kind": "fallback", "providerId": "provider_fixture_002", "modelKey": "model_economy_001", "outcome": "timed_out", "usageQuality": "pending_unconfirmed", "inputTokens": 0, "outputTokens": 0, "costMicroUsd": 0 }
+      ],
+      "terminalOutcome": "failed"
+    },
+    {
+      "eventId": "usage_late_settled_v2_fixture_001",
+      "schemaVersion": 2,
+      "eventType": "usage_settled",
+      "eventVersion": 4,
+      "occurredAt": "2026-07-12T12:20:00Z",
+      "aggregateId": "request_mixed_fixture_001",
+      "requestId": "request_mixed_fixture_001",
+      "turnId": "turn_mixed_fixture_001",
+      "idempotencyKey": "idempotency_mixed_fixture_001",
+      "reservationId": "reservation_mixed_fixture_001",
+      "executionScope": { "kind": "tenant_chat", "tenantId": "tenant_fixture_001", "userId": "user_fixture_001", "actorKind": "employee", "employeeId": "employee_fixture_001" },
+      "period": { "start": "2026-06-30T15:00:00Z", "end": "2026-07-31T15:00:00Z", "timezone": "Asia/Seoul", "currency": "USD" },
+      "snapshotVersion": 12,
+      "pricingVersion": 5,
+      "quota": { "state": "normal", "reservedTokensDelta": 0, "confirmedInputTokensDelta": 400, "confirmedOutputTokensDelta": 200, "confirmedTotalTokensDelta": 600, "unconfirmedTokensDelta": -1664 },
+      "budget": { "state": "normal", "reservedCostMicroUsdDelta": 0, "confirmedCostMicroUsdDelta": 120, "unconfirmedExposureMicroUsdDelta": -1184 },
+      "attempts": [
+        { "attemptNo": 1, "kind": "primary", "providerId": "provider_fixture_001", "modelKey": "model_standard_001", "outcome": "failed_pre_delta", "usageQuality": "confirmed", "inputTokens": 820, "outputTokens": 410, "costMicroUsd": 615 },
+        { "attemptNo": 2, "kind": "fallback", "providerId": "provider_fixture_002", "modelKey": "model_economy_001", "outcome": "timed_out", "usageQuality": "confirmed", "inputTokens": 400, "outputTokens": 200, "costMicroUsd": 120 }
+      ],
+      "terminalOutcome": "failed",
+      "lateUsage": true
+    }
+  ]
+}

@@ -149,6 +149,24 @@
           "504": { "$ref": "#/components/responses/ProviderTimeout" }
         }
       }
+    },
+    "/internal/v1/tenant-chat/usage-receipts": {
+      "post": {
+        "operationId": "recordTenantChatUsageReceipt",
+        "summary": "Record exactly-once late Provider usage for an existing attempt",
+        "security": [{ "usageReceiptBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UsageReceiptRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Receipt applied or replayed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UsageReceiptResponse" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/TokenInvalid" },
+          "409": { "$ref": "#/components/responses/IdempotencyConflict" },
+          "503": { "$ref": "#/components/responses/GuardUnavailable" }
+        }
+      }
     }
   },
   "components": {
@@ -158,6 +176,12 @@
         "scheme": "bearer",
         "bearerFormat": "gatelm-workload+jwt",
         "description": "Ed25519 JWT defined by workload-jwt-claims.schema.json"
+      },
+      "usageReceiptBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque-service-token",
+        "description": "Dedicated token loaded from TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE; never accepted by workload-JWT routes."
       }
     },
     "headers": {
@@ -236,6 +260,30 @@
           "stream": { "const": true }
         }
       },
+      "UsageReceiptRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "attemptNo", "providerId", "inputTokens", "outputTokens", "cacheReadInputTokens"],
+        "properties": {
+          "requestId": { "$ref": "#/components/schemas/OpaqueId" },
+          "attemptNo": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "providerId": { "$ref": "#/components/schemas/OpaqueId" },
+          "inputTokens": { "type": "integer", "minimum": 0 },
+          "outputTokens": { "type": "integer", "minimum": 0 },
+          "cacheReadInputTokens": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "UsageReceiptResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "attemptNo", "state", "replayed"],
+        "properties": {
+          "requestId": { "$ref": "#/components/schemas/OpaqueId" },
+          "attemptNo": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "state": { "type": "string", "enum": ["pending", "settled", "unconfirmed"] },
+          "replayed": { "type": "boolean" }
+        }
+      },
       "EphemeralMessage": {
         "type": "object",
         "additionalProperties": false,
@@ -296,6 +344,7 @@
               "CHAT_ADMISSION_EXPIRED",
               "CHAT_RATE_LIMITED",
               "CHAT_CONCURRENCY_LIMITED",
+              "CHAT_SAFETY_BLOCKED",
               "CHAT_PROVIDER_FAILED",
               "CHAT_RUNTIME_UNAVAILABLE",
               "CHAT_USAGE_GUARD_UNAVAILABLE",
@@ -320,8 +369,8 @@
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
       },
       "LimitDenied": {
-        "description": "403 CHAT_QUOTA_HARD_LIMIT or CHAT_BUDGET_HARD_LIMIT. User and Employee entitlement errors are owned by Chat API, not this private Gateway API.",
-        "x-error-codes": ["CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT"],
+        "description": "403 CHAT_SAFETY_BLOCKED, CHAT_QUOTA_HARD_LIMIT, or CHAT_BUDGET_HARD_LIMIT. User and Employee entitlement errors are owned by Chat API, not this private Gateway API.",
+        "x-error-codes": ["CHAT_SAFETY_BLOCKED", "CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT"],
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
       },
       "IdempotencyConflict": {
@@ -480,7 +529,7 @@
               "employeeNoticeVersion": 3,
               "pricingVersion": 5
             },
-            "bindingDigest": "hmac-sha256:wip0OBmQCUFausq7QgVoOecQB22pauanKV0FDKS3Zlc",
+            "bindingDigest": "hmac-sha256:9q5GSRXGlGvD0AG0P367oxDQVoYsLusfPsRQpxOYZh0",
             "usageIntent": {
               "estimatedInputTokens": 640,
               "maxOutputTokens": 1024,

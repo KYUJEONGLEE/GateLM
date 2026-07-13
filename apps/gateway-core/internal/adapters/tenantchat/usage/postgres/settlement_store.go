@@ -20,6 +20,8 @@ func (s *ReservationStore) FinalizeConfirmed(
 	usage tenantchat.ConfirmedUsage,
 	outcome string,
 ) (result tenantchat.UsageSettlement, err error) {
+	started := time.Now()
+	defer s.observeTransaction("finalize_confirmed", started)
 	if s == nil || s.pool == nil || attemptNo < 1 || attemptNo > 4 || !validAttemptOutcome(outcome) ||
 		usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.CacheReadInputTokens < 0 ||
 		usage.CacheReadInputTokens > usage.InputTokens {
@@ -131,6 +133,8 @@ func (s *ReservationStore) FinalizeRecordedAttempts(
 	requestContext tenantchat.RequestContext,
 	reservationID string,
 ) (result tenantchat.UsageSettlement, err error) {
+	started := time.Now()
+	defer s.observeTransaction("finalize_recorded", started)
 	if s == nil || s.pool == nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}

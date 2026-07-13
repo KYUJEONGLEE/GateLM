@@ -36,10 +36,20 @@ type completionService interface {
 	Prepare(ctx context.Context, request domain.CompletionRequest) (completionservice.Execution, error)
 }
 
+type usageReceiptAuthenticator interface {
+	Authenticate(authorization string) bool
+}
+
+type usageReceiptService interface {
+	RecordUsageReceipt(ctx context.Context, receipt domain.UsageReceipt) (domain.UsageReceiptResult, error)
+}
+
 type Handler struct {
 	auth         authenticator
 	admissions   admissionService
 	completions  completionService
+	receiptAuth  usageReceiptAuthenticator
+	receipts     usageReceiptService
 	maxBodyBytes int64
 }
 
@@ -48,6 +58,13 @@ type Option func(*Handler)
 func WithCompletionService(completions completionService) Option {
 	return func(handler *Handler) {
 		handler.completions = completions
+	}
+}
+
+func WithUsageReceipts(auth usageReceiptAuthenticator, receipts usageReceiptService) Option {
+	return func(handler *Handler) {
+		handler.receiptAuth = auth
+		handler.receipts = receipts
 	}
 }
 
@@ -62,7 +79,32 @@ func NewRouter(auth authenticator, admissions admissionService, maxBodyBytes int
 	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions", handler.admit)
 	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions/{admissionId}/cancel", handler.cancel)
 	mux.HandleFunc("POST /internal/v1/tenant-chat/completions", handler.complete)
+	if handler.receiptAuth != nil && handler.receipts != nil {
+		mux.HandleFunc("POST /internal/v1/tenant-chat/usage-receipts", handler.recordUsageReceipt)
+	}
 	return mux
+}
+
+func (h *Handler) recordUsageReceipt(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.receiptAuth == nil || !h.receiptAuth.Authenticate(r.Header.Get("Authorization")) {
+		writeError(w, http.StatusUnauthorized, "CHAT_TOKEN_INVALID", "Tenant chat service authorization failed.", 0)
+		return
+	}
+	receipt := domain.UsageReceipt{}
+	if err := h.decodeJSON(w, r, &receipt); err != nil || domain.ValidateUsageReceipt(receipt) != nil {
+		writeError(w, http.StatusBadRequest, "CHAT_INVALID_REQUEST", "Invalid tenant chat request.", 0)
+		return
+	}
+	result, err := h.receipts.RecordUsageReceipt(r.Context(), receipt)
+	if errors.Is(err, domain.ErrIdempotencyConflict) {
+		writeError(w, http.StatusConflict, "CHAT_IDEMPOTENCY_CONFLICT", "Usage receipt conflicts with an existing attempt.", 0)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "CHAT_USAGE_GUARD_UNAVAILABLE", "Tenant chat usage guard is unavailable.", 1)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) admit(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +278,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "CHAT_RUNTIME_UNAVAILABLE", "Tenant chat runtime is unavailable.", 1)
 	case errors.Is(err, domain.ErrTenantDisabled):
 		writeError(w, http.StatusForbidden, "CHAT_TENANT_DISABLED", "Tenant is disabled.", 0)
+	case errors.Is(err, domain.ErrSafetyBlocked):
+		writeError(w, http.StatusForbidden, "CHAT_SAFETY_BLOCKED", "Tenant chat safety policy blocked the request.", 0)
 	case errors.Is(err, domain.ErrRuntimeUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "CHAT_RUNTIME_UNAVAILABLE", "Tenant chat runtime is unavailable.", 1)
 	case errors.Is(err, domain.ErrIdempotencyConflict):

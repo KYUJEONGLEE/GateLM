@@ -6,9 +6,13 @@ import (
 )
 
 const (
-	CompletionEventDelta = "tenant_chat.delta"
-	CompletionEventFinal = "tenant_chat.final"
+	CompletionEventDelta         = "tenant_chat.delta"
+	CompletionEventFinal         = "tenant_chat.final"
+	ProviderCallNotStarted       = "not_started"
+	ProviderCallStartedOrUnknown = "started_or_unknown"
 )
+
+type ProviderCallStartStatus string
 
 type CompletionUsage struct {
 	InputTokens  int64  `json:"inputTokens"`
@@ -21,6 +25,37 @@ type CompletionError struct {
 	Code              string `json:"code"`
 	Message           string `json:"message"`
 	RetryAfterSeconds int    `json:"retryAfterSeconds,omitempty"`
+}
+
+type SafetyEvaluation struct {
+	Input   CompletionInput
+	Blocked bool
+}
+
+type ExactCacheEntry struct {
+	ResponseText      string `json:"responseText"`
+	EffectiveModelKey string `json:"effectiveModelKey"`
+}
+
+type ProviderTokenRateDecision struct {
+	Allowed           bool
+	RetryAfterSeconds int
+}
+
+type UsageReceipt struct {
+	RequestID            string `json:"requestId"`
+	AttemptNo            int    `json:"attemptNo"`
+	ProviderID           string `json:"providerId"`
+	InputTokens          int64  `json:"inputTokens"`
+	OutputTokens         int64  `json:"outputTokens"`
+	CacheReadInputTokens int64  `json:"cacheReadInputTokens"`
+}
+
+type UsageReceiptResult struct {
+	RequestID string `json:"requestId"`
+	AttemptNo int    `json:"attemptNo"`
+	State     string `json:"state"`
+	Replayed  bool   `json:"replayed"`
 }
 
 type CompletionEvent struct {

@@ -16,6 +16,7 @@ var (
 	ErrQuotaHardLimit        = errors.New("tenant chat user quota hard limit")
 	ErrBudgetHardLimit       = errors.New("tenant chat tenant budget hard limit")
 	ErrNoEligibleRoute       = errors.New("tenant chat has no eligible route")
+	ErrSafetyBlocked         = errors.New("tenant chat safety policy blocked request")
 )
 
 type AdmissionLimits struct {

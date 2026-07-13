@@ -13,6 +13,10 @@ const CACHE_READ_PRICE_VALIDATION_MIGRATION_PATH = resolve(
   __dirname,
   '../../../prisma/migrations/20260713135501_tenant_chat_cache_read_price_validation/migration.sql',
 );
+const USAGE_PENDING_MIGRATION_PATH = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260713160000_tenant_chat_usage_pending/migration.sql',
+);
 const ACTIVE_USAGE_DDL_PATH = resolve(
   __dirname,
   '../../../../../docs/tenant-chat/db/tenant-chat-usage.sql',
@@ -30,6 +34,7 @@ describe('Tenant Chat migrations', () => {
     CACHE_READ_PRICE_VALIDATION_MIGRATION_PATH,
     'utf8',
   );
+  const usagePendingSql = readFileSync(USAGE_PENDING_MIGRATION_PATH, 'utf8');
   const activeUsageDdl = readFileSync(ACTIVE_USAGE_DDL_PATH, 'utf8');
 
   it.each([
@@ -160,6 +165,16 @@ describe('Tenant Chat migrations', () => {
       expect(sourceSql).not.toMatch(/MESSAGE\s*=\s*format/i);
     },
   );
+
+  it('adds only the nullable pending timestamp and bounded partial scan index', () => {
+    expect(usagePendingSql).toContain(
+      'ADD COLUMN usage_pending_at timestamptz NULL',
+    );
+    expect(compactWhitespace(usagePendingSql)).toContain(
+      "CREATE INDEX tenant_chat_reservation_usage_pending_idx ON tenant_chat_usage_reservations (usage_pending_at, reservation_id) WHERE state = 'reserved' AND usage_pending_at IS NOT NULL",
+    );
+    expect(usagePendingSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE|DROP)\b/i);
+  });
 });
 
 function compactWhitespace(value: string): string {

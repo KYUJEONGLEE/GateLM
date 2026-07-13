@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { verifyDifficultyEvaluationDataset } from "./verify-v2.1-difficulty-eval.mjs";
+import {
+  verifyDifficultyEvaluationDataset,
+  verifyDifficultyTrainingPilot,
+} from "./verify-v2.1-difficulty-eval.mjs";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
 
 const schemaRelativePath = "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json";
@@ -156,6 +159,10 @@ test("category-only records reject expectedDifficulty", () => {
     const failures = verifyCategoryEvaluationDataset({ rootDir });
     assert.ok(failures.some((failure) => failure.includes("unexpected property expectedDifficulty")));
   });
+});
+
+test("checked-in 500-record training pilot is family-disjoint and reproducible", () => {
+  assert.deepEqual(verifyDifficultyTrainingPilot(), []);
 });
 
 function withDataset(schema, records, assertion) {

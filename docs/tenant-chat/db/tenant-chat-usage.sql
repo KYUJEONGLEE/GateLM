@@ -174,6 +174,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   unconfirmed_exposure_micro_usd bigint NOT NULL DEFAULT 0,
   ledger_version bigint NOT NULL DEFAULT 0,
   reserved_at timestamptz NOT NULL,
+  usage_pending_at timestamptz NULL,
   terminal_at timestamptz NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -203,7 +204,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   CONSTRAINT tenant_chat_reservation_version_check CHECK (snapshot_version > 0 AND pricing_version > 0),
   CONSTRAINT tenant_chat_reservation_terminal_check CHECK (
     (state = 'reserved' AND terminal_at IS NULL)
-    OR (state IN ('settled', 'released', 'unconfirmed') AND terminal_at IS NOT NULL)
+    OR (state IN ('settled', 'released', 'unconfirmed') AND terminal_at IS NOT NULL AND usage_pending_at IS NULL)
   )
 );
 
@@ -213,6 +214,9 @@ CREATE INDEX tenant_chat_reservation_user_period_idx
   ON tenant_chat_usage_reservations (tenant_id, user_id, user_period_start);
 CREATE INDEX tenant_chat_reservation_cost_period_idx
   ON tenant_chat_usage_reservations (tenant_id, tenant_period_start, currency);
+CREATE INDEX tenant_chat_reservation_usage_pending_idx
+  ON tenant_chat_usage_reservations (usage_pending_at, reservation_id)
+  WHERE state = 'reserved' AND usage_pending_at IS NOT NULL;
 
 CREATE TABLE tenant_chat_provider_attempts (
   request_id text NOT NULL,

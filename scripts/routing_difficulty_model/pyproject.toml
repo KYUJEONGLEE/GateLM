@@ -1,0 +1,24 @@
+[project]
+name = "gatelm-routing-difficulty-model"
+version = "0.0.0"
+description = "Offline-only GateLM difficulty Logistic Regression training tooling"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy>=1.26,<3",
+  "scikit-learn>=1.4,<2",
+]
+
+[project.scripts]
+gatelm-train-difficulty = "gatelm_difficulty_model.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gatelm_difficulty_model*"]
+
+[tool.unittest]
+start-directory = "tests"
+pattern = "test_*.py"

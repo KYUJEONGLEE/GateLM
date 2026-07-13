@@ -134,11 +134,13 @@ type Config struct {
 }
 
 type TenantChatPrivateConfig struct {
-	Enabled             bool
-	ListenAddress       string
-	WorkloadJWKSFile    string
-	BindingHMACKeysFile string
-	WorkloadJTIPrefix   string
+	Enabled               bool
+	ListenAddress         string
+	WorkloadJWKSFile      string
+	BindingHMACKeysFile   string
+	CacheKeySetsFile      string
+	UsageReceiptTokenFile string
+	WorkloadJTIPrefix     string
 }
 
 type AISafetySidecarConfig struct {
@@ -363,11 +365,13 @@ func LoadWithError() (Config, error) {
 		ResponseCaptureMaxChars:    envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:              semanticCache,
 		TenantChatPrivate: TenantChatPrivateConfig{
-			Enabled:             envBool("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED", false),
-			ListenAddress:       strings.TrimSpace(envString("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS", ":8081")),
-			WorkloadJWKSFile:    strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JWKS_FILE", "")),
-			BindingHMACKeysFile: strings.TrimSpace(envString("TENANT_CHAT_BINDING_HMAC_KEYS_FILE", "")),
-			WorkloadJTIPrefix:   strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX", "tenant-chat:workload-jti:")),
+			Enabled:               envBool("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED", false),
+			ListenAddress:         strings.TrimSpace(envString("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS", ":8081")),
+			WorkloadJWKSFile:      strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JWKS_FILE", "")),
+			BindingHMACKeysFile:   strings.TrimSpace(envString("TENANT_CHAT_BINDING_HMAC_KEYS_FILE", "")),
+			CacheKeySetsFile:      strings.TrimSpace(envString("TENANT_CHAT_CACHE_KEYSETS_FILE", "")),
+			UsageReceiptTokenFile: strings.TrimSpace(envString("TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE", "")),
+			WorkloadJTIPrefix:     strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX", "tenant-chat:workload-jti:")),
 		},
 	}
 	if err != nil {
@@ -436,6 +440,12 @@ func validateTenantChatPrivateConfig(cfg Config) error {
 	}
 	if private.BindingHMACKeysFile == "" {
 		return fmt.Errorf("TENANT_CHAT_BINDING_HMAC_KEYS_FILE is required when private Gateway is enabled")
+	}
+	if private.CacheKeySetsFile == "" {
+		return fmt.Errorf("TENANT_CHAT_CACHE_KEYSETS_FILE is required when private Gateway is enabled")
+	}
+	if private.UsageReceiptTokenFile == "" {
+		return fmt.Errorf("TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE is required when private Gateway is enabled")
 	}
 	if private.WorkloadJTIPrefix == "" {
 		return fmt.Errorf("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX is required when private Gateway is enabled")

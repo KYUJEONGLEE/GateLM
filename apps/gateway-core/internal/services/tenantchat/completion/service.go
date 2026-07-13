@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
@@ -19,27 +21,21 @@ type snapshotResolver interface {
 }
 
 type usageAccounting interface {
-	ConsumeAndReserve(
+	BeginExecution(
 		ctx context.Context,
 		requestContext tenantchat.RequestContext,
 		snapshot tenantruntime.Snapshot,
 	) (tenantchat.UsageReservation, error)
-	StartAttempt(
+	BeginFallback(
 		ctx context.Context,
 		requestContext tenantchat.RequestContext,
 		snapshot tenantruntime.Snapshot,
 		reservationID string,
+		previousAttemptNo int,
+		previousUsage tenantchat.ConfirmedUsage,
+		previousOutcome string,
 		route tenantchat.SelectedRoute,
 		attemptNo int,
-		kind string,
-	) error
-	RecordConfirmedAttempt(
-		ctx context.Context,
-		requestContext tenantchat.RequestContext,
-		reservationID string,
-		attemptNo int,
-		usage tenantchat.ConfirmedUsage,
-		outcome string,
 	) error
 	FinalizeConfirmed(
 		ctx context.Context,
@@ -67,6 +63,13 @@ type usageAccounting interface {
 		attemptNo int,
 		outcome string,
 	) (tenantchat.UsageSettlement, error)
+	MarkPending(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		reservationID string,
+		attemptNo int,
+		outcome string,
+	) (tenantchat.UsageSettlement, error)
 	ReadTerminal(
 		ctx context.Context,
 		requestContext tenantchat.RequestContext,
@@ -80,13 +83,73 @@ type providerExecutor interface {
 		requestContext tenantchat.RequestContext,
 		route tenantchat.SelectedRoute,
 		input tenantchat.CompletionInput,
-	) (provider.ChatCompletionStreamReader, error)
+	) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error)
+}
+
+type safetyEvaluator interface {
+	Evaluate(
+		ctx context.Context,
+		snapshot tenantruntime.Snapshot,
+		input tenantchat.CompletionInput,
+	) (tenantchat.SafetyEvaluation, error)
+}
+
+type exactCache interface {
+	Get(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		snapshot tenantruntime.Snapshot,
+		input tenantchat.CompletionInput,
+	) (tenantchat.ExactCacheEntry, bool, error)
+	Put(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		snapshot tenantruntime.Snapshot,
+		input tenantchat.CompletionInput,
+		entry tenantchat.ExactCacheEntry,
+	) error
+}
+
+type providerTokenLimiter interface {
+	Check(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		snapshot tenantruntime.Snapshot,
+		route tenantchat.SelectedRoute,
+	) (tenantchat.ProviderTokenRateDecision, error)
+}
+
+type ledgerlessAccounting interface {
+	FinalizeLedgerless(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		snapshot tenantruntime.Snapshot,
+		terminalOutcome string,
+		errorCode string,
+		cacheOutcome string,
+	) (bool, error)
+}
+
+type preCallAccounting interface {
+	FinalizePreCall(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		reservationID string,
+		attemptNo int,
+		terminalOutcome string,
+	) (tenantchat.UsageSettlement, error)
 }
 
 type Service struct {
 	snapshots  snapshotResolver
 	usage      usageAccounting
 	providers  providerExecutor
+	safety     safetyEvaluator
+	cache      exactCache
+	tokenRate  providerTokenLimiter
+	ledgerless ledgerlessAccounting
+	preCall    preCallAccounting
+	metrics    *metrics.Registry
 	sessionsMu sync.Mutex
 	sessions   map[string]*sharedSession
 }
@@ -105,17 +168,32 @@ type PreparedExecution struct {
 	attemptNo      int
 	route          tenantchat.SelectedRoute
 	usedRouteIDs   map[string]struct{}
+	cache          exactCache
+	cacheResponse  []string
+	cacheEligible  bool
+	tokenRate      providerTokenLimiter
+	preCall        preCallAccounting
+	metrics        *metrics.Registry
 }
 
 type ReplayExecution struct {
 	requestContext tenantchat.RequestContext
 	settlement     tenantchat.UsageSettlement
 	emitted        bool
+	metrics        *metrics.Registry
 }
 
 type AttachedExecution struct {
 	requestContext tenantchat.RequestContext
 	session        *sharedSession
+}
+
+type CacheExecution struct {
+	requestContext tenantchat.RequestContext
+	entry          tenantchat.ExactCacheEntry
+	replayed       bool
+	emitted        bool
+	metrics        *metrics.Registry
 }
 
 type sharedSession struct {
@@ -142,11 +220,37 @@ type attemptRelayResult struct {
 	clientWrite bool
 }
 
-func New(snapshots snapshotResolver, usage usageAccounting, providers providerExecutor) *Service {
-	return &Service{
+type Option func(*Service)
+
+func WithSafetyEvaluator(evaluator safetyEvaluator) Option {
+	return func(service *Service) { service.safety = evaluator }
+}
+
+func WithExactCache(cache exactCache) Option {
+	return func(service *Service) { service.cache = cache }
+}
+
+func WithProviderTokenLimiter(limiter providerTokenLimiter) Option {
+	return func(service *Service) { service.tokenRate = limiter }
+}
+
+func WithMetrics(registry *metrics.Registry) Option {
+	return func(service *Service) { service.metrics = registry }
+}
+
+func New(snapshots snapshotResolver, usage usageAccounting, providers providerExecutor, options ...Option) *Service {
+	service := &Service{
 		snapshots: snapshots, usage: usage, providers: providers,
 		sessions: make(map[string]*sharedSession),
 	}
+	service.ledgerless, _ = usage.(ledgerlessAccounting)
+	service.preCall, _ = usage.(preCallAccounting)
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service
 }
 
 func (s *Service) Prepare(
@@ -169,13 +273,55 @@ func (s *Service) Prepare(
 	if !snapshot.Policies.Streaming.Enabled || !snapshot.Policies.Streaming.FinalEventRequired {
 		return nil, tenantchat.ErrRuntimeUnavailable
 	}
-	// The active contract does not yet carry executable safety rules or the
-	// encrypted exact-cache key contract. Never silently bypass either policy.
-	if snapshot.Policies.Cache.Enabled || snapshot.Policies.Safety.Enabled {
-		return nil, tenantchat.ErrRuntimeUnavailable
+	input := request.Input
+	if snapshot.Policies.Safety.Enabled {
+		if s.safety == nil || s.ledgerless == nil {
+			return nil, tenantchat.ErrRuntimeUnavailable
+		}
+		evaluation, evaluateErr := s.safety.Evaluate(ctx, snapshot, input)
+		if evaluateErr != nil {
+			return nil, tenantchat.ErrRuntimeUnavailable
+		}
+		if evaluation.Blocked {
+			settleCtx, settleCancel := detachedAccountingContext(ctx)
+			_, settleErr := s.ledgerless.FinalizeLedgerless(
+				settleCtx, request.Context, snapshot, "safety_blocked", "CHAT_SAFETY_BLOCKED", "off",
+			)
+			settleCancel()
+			if settleErr != nil {
+				return nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			s.recordCompletionOutcome("safety_blocked")
+			return nil, tenantchat.ErrSafetyBlocked
+		}
+		input = evaluation.Input
+	}
+	cacheEligible := snapshot.Policies.Cache.Enabled && request.Context.UsageIntent != nil &&
+		request.Context.UsageIntent.CacheStrategy == "exact"
+	if cacheEligible {
+		if snapshot.Policies.Cache.Strategy != "exact" || s.cache == nil || s.ledgerless == nil {
+			return nil, tenantchat.ErrRuntimeUnavailable
+		}
+		entry, hit, cacheErr := s.cache.Get(ctx, request.Context, snapshot, input)
+		if cacheErr != nil {
+			return nil, tenantchat.ErrRuntimeUnavailable
+		}
+		if hit {
+			settleCtx, settleCancel := detachedAccountingContext(ctx)
+			replayed, settleErr := s.ledgerless.FinalizeLedgerless(
+				settleCtx, request.Context, snapshot, "cache_hit", "", "hit",
+			)
+			settleCancel()
+			if settleErr != nil {
+				return nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			return &CacheExecution{
+				requestContext: request.Context, entry: entry, replayed: replayed, metrics: s.metrics,
+			}, nil
+		}
 	}
 
-	reservation, err := s.usage.ConsumeAndReserve(ctx, request.Context, snapshot)
+	reservation, err := s.usage.BeginExecution(ctx, request.Context, snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +330,6 @@ func (s *Service) Prepare(
 			if session := s.activeSession(request.Context); session != nil {
 				return &AttachedExecution{requestContext: request.Context, session: session}, nil
 			}
-			return nil, tenantchat.ErrUsageGuardUnavailable
 		}
 		settlement, replayErr := s.usage.ReadTerminal(ctx, request.Context, reservation.ReservationID)
 		if replayErr != nil {
@@ -192,37 +337,49 @@ func (s *Service) Prepare(
 		}
 		return &ReplayExecution{requestContext: request.Context, settlement: settlement}, nil
 	}
-	if err := s.usage.StartAttempt(
-		ctx,
-		request.Context,
-		snapshot,
-		reservation.ReservationID,
-		reservation.Route,
-		1,
-		"primary",
-	); err != nil {
-		settleCtx, cancel := detachedAccountingContext(ctx)
-		_, releaseErr := s.usage.FinalizeReleased(
-			settleCtx, request.Context, reservation.ReservationID, terminalOutcomeForError(err),
-		)
-		cancel()
-		if releaseErr != nil {
+	if len(snapshot.Policies.ProviderTokenRate.Providers) > 0 {
+		if s.tokenRate == nil || s.preCall == nil {
 			return nil, tenantchat.ErrUsageGuardUnavailable
 		}
-		return nil, err
+		decision, rateErr := s.tokenRate.Check(ctx, request.Context, snapshot, reservation.Route)
+		if rateErr != nil || !decision.Allowed {
+			terminalOutcome := "rate_limited"
+			if rateErr != nil {
+				terminalOutcome = "failed"
+			}
+			settleCtx, settleCancel := detachedAccountingContext(ctx)
+			_, settleErr := s.preCall.FinalizePreCall(
+				settleCtx, request.Context, reservation.ReservationID, 1, terminalOutcome,
+			)
+			settleCancel()
+			if settleErr != nil {
+				return nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			if rateErr != nil {
+				return nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			s.recordCompletionOutcome("rate_limited")
+			return nil, tenantchat.ErrRateLimited
+		}
 	}
-
 	streamCtx, cancel := context.WithTimeout(
 		ctx,
 		time.Duration(snapshot.Policies.Streaming.MaxDurationSeconds)*time.Second,
 	)
-	stream, err := s.providers.OpenStream(streamCtx, request.Context, reservation.Route, request.Input)
+	stream, startStatus, err := s.providers.OpenStream(streamCtx, request.Context, reservation.Route, input)
 	if err != nil {
 		cancel()
 		settleCtx, settleCancel := detachedAccountingContext(ctx)
-		_, settleErr := s.usage.FinalizeUnconfirmed(
-			settleCtx, request.Context, reservation.ReservationID, 1, attemptOutcome(err, 0),
-		)
+		var settleErr error
+		if startStatus == tenantchat.ProviderCallNotStarted && s.preCall != nil {
+			_, settleErr = s.preCall.FinalizePreCall(
+				settleCtx, request.Context, reservation.ReservationID, 1, "failed",
+			)
+		} else {
+			_, settleErr = s.usage.MarkPending(
+				settleCtx, request.Context, reservation.ReservationID, 1, attemptOutcome(err, 0),
+			)
+		}
 		settleCancel()
 		if settleErr != nil {
 			return nil, tenantchat.ErrUsageGuardUnavailable
@@ -234,7 +391,7 @@ func (s *Service) Prepare(
 		requestContext: request.Context,
 		reservation:    reservation,
 		snapshot:       snapshot,
-		input:          request.Input,
+		input:          input,
 		stream:         stream,
 		cancel:         cancel,
 		usage:          s.usage,
@@ -243,6 +400,11 @@ func (s *Service) Prepare(
 		attemptNo:      1,
 		route:          reservation.Route,
 		usedRouteIDs:   map[string]struct{}{reservation.Route.RouteID: {}},
+		cache:          s.cache,
+		cacheEligible:  cacheEligible,
+		tokenRate:      s.tokenRate,
+		preCall:        s.preCall,
+		metrics:        s.metrics,
 	}, nil
 }
 
@@ -258,6 +420,7 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 			if err != nil {
 				return e.emitAccountingFailure(emit, err)
 			}
+			e.storeConfirmedPrimaryCache(ctx)
 			return e.emitEvent(emit, e.finalEvent(settlement, "succeeded", nil, false))
 		}
 
@@ -266,7 +429,7 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 			outcome = attemptOutcome(tenantchat.ErrUsageGuardUnavailable, result.deltaCount)
 		}
 		if result.usage == nil {
-			settlement, err := e.finalizeUnconfirmed(ctx, outcome)
+			settlement, err := e.finalizePending(ctx, outcome)
 			if err != nil {
 				return e.emitAccountingFailure(emit, err)
 			}
@@ -285,30 +448,35 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 
 		confirmed := confirmedUsage(result.usage)
 		if !result.clientWrite && result.deltaCount == 0 && e.canFallback(result.err) {
-			if err := e.recordConfirmed(ctx, confirmed, outcome); err != nil {
-				return e.emitAccountingFailure(emit, err)
-			}
 			fallbackRoute, ok := e.nextFallbackRoute()
 			if ok {
-				started, openErr := e.openFallback(ctx, fallbackRoute)
+				started, preCallSettlement, openErr := e.openFallback(ctx, fallbackRoute, confirmed, outcome)
 				if openErr == nil {
 					continue
 				}
 				if started {
-					settlement, settleErr := e.finalizeUnconfirmed(ctx, attemptOutcome(openErr, 0))
+					settlement, settleErr := e.finalizePending(ctx, attemptOutcome(openErr, 0))
 					if settleErr != nil {
 						return e.emitAccountingFailure(emit, settleErr)
 					}
 					return e.emitEvent(emit, e.finalEvent(settlement, terminalOutcomeForError(openErr), completionErrorFor(openErr), false))
 				} else {
-					settlement, settleErr := e.finalizeRecorded(ctx)
+					if errors.Is(openErr, tenantchat.ErrUsageGuardUnavailable) {
+						return e.emitAccountingFailure(emit, openErr)
+					}
+					if preCallSettlement != nil {
+						return e.emitEvent(emit, e.finalEvent(
+							*preCallSettlement, terminalOutcomeForError(openErr), completionErrorFor(openErr), false,
+						))
+					}
+					settlement, settleErr := e.finalizeConfirmed(ctx, result.usage, outcome)
 					if settleErr != nil {
 						return e.emitAccountingFailure(emit, settleErr)
 					}
 					return e.emitEvent(emit, e.finalEvent(settlement, "failed", completionErrorFor(openErr), false))
 				}
 			}
-			settlement, err := e.finalizeRecorded(ctx)
+			settlement, err := e.finalizeConfirmed(ctx, result.usage, outcome)
 			if err != nil {
 				return e.emitAccountingFailure(emit, err)
 			}
@@ -358,6 +526,9 @@ func (e *PreparedExecution) relayAttempt(ctx context.Context, emit EventEmitter)
 		if event.Delta == "" {
 			continue
 		}
+		if e.attemptNo == 1 && e.cacheEligible {
+			e.cacheResponse = append(e.cacheResponse, event.Delta)
+		}
 		if err := e.emitEvent(emit, e.deltaEvent(event.Delta)); err != nil {
 			result.err = err
 			result.clientWrite = true
@@ -367,31 +538,70 @@ func (e *PreparedExecution) relayAttempt(ctx context.Context, emit EventEmitter)
 	}
 }
 
-func (e *PreparedExecution) openFallback(ctx context.Context, route tenantchat.SelectedRoute) (bool, error) {
+func (e *PreparedExecution) openFallback(
+	ctx context.Context,
+	route tenantchat.SelectedRoute,
+	previousUsage tenantchat.ConfirmedUsage,
+	previousOutcome string,
+) (bool, *tenantchat.UsageSettlement, error) {
 	e.closeCurrentStream()
+	e.cacheResponse = nil
 	e.attemptNo++
-	if err := e.usage.StartAttempt(
-		ctx, e.requestContext, e.snapshot, e.reservation.ReservationID, route, e.attemptNo, "fallback",
+	if err := e.usage.BeginFallback(
+		ctx, e.requestContext, e.snapshot, e.reservation.ReservationID,
+		e.attemptNo-1, previousUsage, previousOutcome, route, e.attemptNo,
 	); err != nil {
 		e.attemptNo--
-		return false, err
+		return false, nil, err
+	}
+	if len(e.snapshot.Policies.ProviderTokenRate.Providers) > 0 {
+		if e.tokenRate == nil || e.preCall == nil {
+			return false, nil, tenantchat.ErrUsageGuardUnavailable
+		}
+		decision, rateErr := e.tokenRate.Check(ctx, e.requestContext, e.snapshot, route)
+		if rateErr != nil || !decision.Allowed {
+			terminalOutcome := "rate_limited"
+			if rateErr != nil {
+				terminalOutcome = "failed"
+			}
+			settleCtx, settleCancel := detachedAccountingContext(ctx)
+			settlement, settleErr := e.preCall.FinalizePreCall(
+				settleCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo, terminalOutcome,
+			)
+			settleCancel()
+			if settleErr != nil || rateErr != nil {
+				return false, nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			return false, &settlement, tenantchat.ErrRateLimited
+		}
 	}
 	streamCtx, cancel := context.WithTimeout(
 		ctx,
 		time.Duration(e.snapshot.Policies.Streaming.MaxDurationSeconds)*time.Second,
 	)
-	stream, err := e.providers.OpenStream(streamCtx, e.requestContext, route, e.input)
+	stream, startStatus, err := e.providers.OpenStream(streamCtx, e.requestContext, route, e.input)
 	if err != nil {
 		cancel()
 		e.route = route
 		e.usedRouteIDs[route.RouteID] = struct{}{}
-		return true, err
+		if startStatus == tenantchat.ProviderCallNotStarted && e.preCall != nil {
+			settleCtx, settleCancel := detachedAccountingContext(ctx)
+			settlement, settleErr := e.preCall.FinalizePreCall(
+				settleCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo, "failed",
+			)
+			settleCancel()
+			if settleErr != nil {
+				return false, nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			return false, &settlement, err
+		}
+		return true, nil, err
 	}
 	e.stream = stream
 	e.cancel = cancel
 	e.route = route
 	e.usedRouteIDs[route.RouteID] = struct{}{}
-	return true, nil
+	return true, nil, nil
 }
 
 func (e *PreparedExecution) canFallback(err error) bool {
@@ -449,14 +659,6 @@ func resolveSnapshotRoute(snapshot tenantruntime.Snapshot, routeID string) (tena
 	return tenantchat.SelectedRoute{}, false
 }
 
-func (e *PreparedExecution) recordConfirmed(ctx context.Context, usage tenantchat.ConfirmedUsage, outcome string) error {
-	settleCtx, cancel := detachedAccountingContext(ctx)
-	defer cancel()
-	return e.usage.RecordConfirmedAttempt(
-		settleCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo, usage, outcome,
-	)
-}
-
 func (e *PreparedExecution) finalizeConfirmed(ctx context.Context, usage *provider.Usage, outcome string) (tenantchat.UsageSettlement, error) {
 	if usage == nil || usage.PromptTokens < 0 || usage.CompletionTokens < 0 || usage.TotalTokens < 0 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -475,10 +677,10 @@ func (e *PreparedExecution) finalizeRecorded(ctx context.Context) (tenantchat.Us
 	return e.usage.FinalizeRecordedAttempts(settleCtx, e.requestContext, e.reservation.ReservationID)
 }
 
-func (e *PreparedExecution) finalizeUnconfirmed(ctx context.Context, outcome string) (tenantchat.UsageSettlement, error) {
+func (e *PreparedExecution) finalizePending(ctx context.Context, outcome string) (tenantchat.UsageSettlement, error) {
 	settleCtx, cancel := detachedAccountingContext(ctx)
 	defer cancel()
-	return e.usage.FinalizeUnconfirmed(
+	return e.usage.MarkPending(
 		settleCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo, outcome,
 	)
 }
@@ -532,6 +734,8 @@ func completionErrorFor(err error) *tenantchat.CompletionError {
 		return &tenantchat.CompletionError{Code: "CHAT_QUOTA_HARD_LIMIT", Message: "Tenant chat user quota was reached."}
 	case errors.Is(err, tenantchat.ErrBudgetHardLimit):
 		return &tenantchat.CompletionError{Code: "CHAT_BUDGET_HARD_LIMIT", Message: "Tenant chat tenant budget was reached."}
+	case errors.Is(err, tenantchat.ErrRateLimited):
+		return &tenantchat.CompletionError{Code: "CHAT_RATE_LIMITED", Message: "Tenant chat provider token rate was reached.", RetryAfterSeconds: 1}
 	case errors.Is(err, context.Canceled):
 		return &tenantchat.CompletionError{Code: "CHAT_REQUEST_CANCELLED", Message: "Tenant chat request was cancelled."}
 	default:
@@ -543,6 +747,7 @@ func (e *PreparedExecution) Close() {
 	if e == nil {
 		return
 	}
+	e.cacheResponse = nil
 	e.closeCurrentStream()
 }
 
@@ -557,7 +762,61 @@ func (e *PreparedExecution) closeCurrentStream() {
 	}
 }
 
+func (e *PreparedExecution) storeConfirmedPrimaryCache(ctx context.Context) {
+	if e == nil || e.cache == nil || e.attemptNo != 1 || !e.cacheEligible {
+		e.cacheResponse = nil
+		return
+	}
+	response := strings.Join(e.cacheResponse, "")
+	e.cacheResponse = nil
+	if response == "" {
+		return
+	}
+	cacheCtx, cancel := detachedAccountingContext(ctx)
+	defer cancel()
+	_ = e.cache.Put(cacheCtx, e.requestContext, e.snapshot, e.input, tenantchat.ExactCacheEntry{
+		ResponseText: response, EffectiveModelKey: e.route.ModelKey,
+	})
+}
+
 func (e *PreparedExecution) IsReplay() bool { return false }
+
+func (e *CacheExecution) Relay(_ context.Context, emit EventEmitter) error {
+	if e == nil || emit == nil || e.emitted || e.entry.ResponseText == "" || e.entry.EffectiveModelKey == "" {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	e.emitted = true
+	if e.metrics != nil {
+		e.metrics.AddCounter(
+			metrics.TenantChatCompletionTotal,
+			[]metrics.Label{{Name: "outcome", Value: "cache_hit"}}, 1,
+		)
+	}
+	modelKey := e.entry.EffectiveModelKey
+	replayed := e.replayed
+	if err := emit(tenantchat.CompletionEvent{
+		Type: tenantchat.CompletionEventDelta, SchemaVersion: 1,
+		RequestID: e.requestContext.RequestID, TurnID: e.requestContext.TurnID,
+		Sequence: 1, Delta: e.entry.ResponseText,
+	}); err != nil {
+		return err
+	}
+	return emit(tenantchat.CompletionEvent{
+		Type: tenantchat.CompletionEventFinal, SchemaVersion: 1,
+		RequestID: e.requestContext.RequestID, TurnID: e.requestContext.TurnID,
+		Sequence: 2, TerminalOutcome: "succeeded", EffectiveModelKey: &modelKey,
+		Usage:      &tenantchat.CompletionUsage{UsageQuality: "confirmed"},
+		QuotaState: "normal", BudgetState: "normal", CacheOutcome: "hit", Replayed: &replayed,
+	})
+}
+
+func (e *CacheExecution) Close() {
+	if e != nil {
+		e.entry.ResponseText = ""
+	}
+}
+
+func (e *CacheExecution) IsReplay() bool { return e != nil && e.replayed }
 
 func (e *PreparedExecution) deltaEvent(delta string) tenantchat.CompletionEvent {
 	e.sequence++
@@ -574,17 +833,22 @@ func (e *PreparedExecution) finalEvent(
 	completionErr *tenantchat.CompletionError,
 	replayed bool,
 ) tenantchat.CompletionEvent {
+	e.recordCompletionOutcome(terminalOutcome)
 	e.sequence++
 	modelKey := e.route.ModelKey
 	usageQuality := "confirmed"
 	inputTokens := settlement.ConfirmedInputTokens
 	outputTokens := settlement.ConfirmedOutputTokens
-	if settlement.State == "unconfirmed" {
+	if settlement.State == "unconfirmed" || settlement.State == "pending_unconfirmed" {
 		usageQuality = "pending_unconfirmed"
 		inputTokens = 0
 		outputTokens = 0
 	} else if settlement.State == "released" {
 		usageQuality = "not_available"
+	}
+	cacheOutcome := "off"
+	if e.cacheEligible {
+		cacheOutcome = "miss"
 	}
 	return tenantchat.CompletionEvent{
 		Type: tenantchat.CompletionEventFinal, SchemaVersion: 1,
@@ -595,27 +859,52 @@ func (e *PreparedExecution) finalEvent(
 			TotalTokens: inputTokens + outputTokens, UsageQuality: usageQuality,
 		},
 		QuotaState: settlement.QuotaState, BudgetState: settlement.BudgetState,
-		CacheOutcome: "off", Replayed: &replayed, Error: completionErr,
+		CacheOutcome: cacheOutcome, Replayed: &replayed, Error: completionErr,
 	}
 }
 
 func (e *PreparedExecution) emitAccountingFailure(emit EventEmitter, accountingErr error) error {
+	e.recordCompletionOutcome("accounting_failed")
 	replayed := false
 	modelKey := e.route.ModelKey
 	e.sequence++
+	cacheOutcome := "off"
+	if e.cacheEligible {
+		cacheOutcome = "miss"
+	}
 	event := tenantchat.CompletionEvent{
 		Type: tenantchat.CompletionEventFinal, SchemaVersion: 1,
 		RequestID: e.requestContext.RequestID, TurnID: e.requestContext.TurnID,
 		Sequence: e.sequence, TerminalOutcome: "failed", EffectiveModelKey: &modelKey,
 		Usage:      &tenantchat.CompletionUsage{UsageQuality: "not_available"},
 		QuotaState: e.reservation.QuotaState, BudgetState: e.reservation.BudgetState,
-		CacheOutcome: "off", Replayed: &replayed,
+		CacheOutcome: cacheOutcome, Replayed: &replayed,
 		Error: &tenantchat.CompletionError{Code: "CHAT_USAGE_GUARD_UNAVAILABLE", Message: "Tenant chat usage guard is unavailable.", RetryAfterSeconds: 1},
 	}
 	if err := e.emitEvent(emit, event); err != nil {
 		return err
 	}
 	return accountingErr
+}
+
+func (s *Service) recordCompletionOutcome(outcome string) {
+	if s == nil || s.metrics == nil {
+		return
+	}
+	s.metrics.AddCounter(
+		metrics.TenantChatCompletionTotal,
+		[]metrics.Label{{Name: "outcome", Value: outcome}}, 1,
+	)
+}
+
+func (e *PreparedExecution) recordCompletionOutcome(outcome string) {
+	if e == nil || e.metrics == nil {
+		return
+	}
+	e.metrics.AddCounter(
+		metrics.TenantChatCompletionTotal,
+		[]metrics.Label{{Name: "outcome", Value: outcome}}, 1,
+	)
 }
 
 func (e *ReplayExecution) Relay(_ context.Context, emit EventEmitter) error {
@@ -636,7 +925,7 @@ func (e *ReplayExecution) Relay(_ context.Context, emit EventEmitter) error {
 	}
 	if e.settlement.State == "settled" {
 		usageQuality = "confirmed"
-	} else if e.settlement.State == "unconfirmed" {
+	} else if e.settlement.State == "unconfirmed" || e.settlement.State == "pending_unconfirmed" {
 		usageQuality = "pending_unconfirmed"
 		inputTokens = 0
 		outputTokens = 0

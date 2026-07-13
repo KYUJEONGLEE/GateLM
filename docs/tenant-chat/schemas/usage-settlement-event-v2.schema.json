@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v2/usage-settlement-event.schema.json",
+  "title": "Tenant Chat usage settlement event v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "schemaVersion", "eventType", "eventVersion", "occurredAt", "aggregateId", "requestId", "turnId", "idempotencyKey", "reservationId", "executionScope", "period", "snapshotVersion", "pricingVersion", "quota", "budget", "attempts"],
+  "properties": {
+    "eventId": { "$ref": "#/$defs/opaqueId" },
+    "schemaVersion": { "const": 2 },
+    "eventType": { "type": "string", "enum": ["usage_reserved", "usage_topped_up", "usage_settled", "usage_released", "usage_unconfirmed"] },
+    "eventVersion": { "type": "integer", "minimum": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "aggregateId": { "$ref": "#/$defs/opaqueId" },
+    "requestId": { "$ref": "#/$defs/opaqueId" },
+    "turnId": { "$ref": "#/$defs/opaqueId" },
+    "idempotencyKey": { "$ref": "#/$defs/opaqueId" },
+    "reservationId": { "$ref": "#/$defs/opaqueId" },
+    "executionScope": { "$ref": "#/$defs/executionScope" },
+    "period": { "$ref": "#/$defs/period" },
+    "snapshotVersion": { "type": "integer", "minimum": 1 },
+    "pricingVersion": { "type": "integer", "minimum": 1 },
+    "quota": { "$ref": "#/$defs/quota" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "attempts": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/attempt" } },
+    "terminalOutcome": { "type": "string", "enum": ["succeeded", "failed", "cancelled", "cache_hit", "rate_limited", "quota_blocked", "budget_blocked"] },
+    "lateUsage": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "eventType": { "enum": ["usage_reserved", "usage_topped_up"] } }, "required": ["eventType"] },
+      "then": {
+        "properties": {
+          "quota": { "properties": { "reservedTokensDelta": { "type": "integer", "minimum": 1 }, "confirmedInputTokensDelta": { "const": 0 }, "confirmedOutputTokensDelta": { "const": 0 }, "confirmedTotalTokensDelta": { "const": 0 }, "unconfirmedTokensDelta": { "const": 0 } } },
+          "budget": { "properties": { "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 1 }, "confirmedCostMicroUsdDelta": { "const": 0 }, "unconfirmedExposureMicroUsdDelta": { "const": 0 } } },
+          "attempts": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "usage_settled" } }, "required": ["eventType"] },
+      "then": {
+        "properties": {
+          "quota": { "properties": { "reservedTokensDelta": { "type": "integer", "maximum": 0 }, "unconfirmedTokensDelta": { "type": "integer", "maximum": 0 } } },
+          "budget": { "properties": { "reservedCostMicroUsdDelta": { "type": "integer", "maximum": 0 }, "unconfirmedExposureMicroUsdDelta": { "type": "integer", "maximum": 0 } } },
+          "attempts": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "eventType": { "const": "usage_unconfirmed" } }, "required": ["eventType"] },
+      "then": {
+        "properties": {
+          "quota": { "properties": { "reservedTokensDelta": { "type": "integer", "maximum": 0 }, "unconfirmedTokensDelta": { "type": "integer", "minimum": 0 } } },
+          "budget": { "properties": { "reservedCostMicroUsdDelta": { "type": "integer", "maximum": 0 }, "unconfirmedExposureMicroUsdDelta": { "type": "integer", "minimum": 0 } } },
+          "attempts": { "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+    "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
+    "executionScope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "userId", "actorKind"],
+      "properties": {
+        "kind": { "const": "tenant_chat" }, "tenantId": { "$ref": "#/$defs/opaqueId" }, "userId": { "$ref": "#/$defs/opaqueId" },
+        "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] }, "employeeId": { "$ref": "#/$defs/opaqueId" }
+      },
+      "allOf": [{ "if": { "properties": { "actorKind": { "const": "employee" } }, "required": ["actorKind"] }, "then": { "required": ["employeeId"] } }]
+    },
+    "period": {
+      "type": "object", "additionalProperties": false,
+      "required": ["start", "end", "timezone", "currency"],
+      "properties": { "start": { "type": "string", "format": "date-time" }, "end": { "type": "string", "format": "date-time" }, "timezone": { "type": "string", "minLength": 1, "maxLength": 64 }, "currency": { "const": "USD" } }
+    },
+    "quota": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "reservedTokensDelta", "confirmedInputTokensDelta", "confirmedOutputTokensDelta", "confirmedTotalTokensDelta", "unconfirmedTokensDelta"],
+      "properties": {
+        "state": { "$ref": "#/$defs/policyState" }, "reservedTokensDelta": { "type": "integer" },
+        "confirmedInputTokensDelta": { "type": "integer", "minimum": 0 }, "confirmedOutputTokensDelta": { "type": "integer", "minimum": 0 },
+        "confirmedTotalTokensDelta": { "type": "integer", "minimum": 0 }, "unconfirmedTokensDelta": { "type": "integer" }
+      }
+    },
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "reservedCostMicroUsdDelta", "confirmedCostMicroUsdDelta", "unconfirmedExposureMicroUsdDelta"],
+      "properties": { "state": { "$ref": "#/$defs/policyState" }, "reservedCostMicroUsdDelta": { "type": "integer" }, "confirmedCostMicroUsdDelta": { "type": "integer", "minimum": 0 }, "unconfirmedExposureMicroUsdDelta": { "type": "integer" } }
+    },
+    "attempt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["attemptNo", "kind", "providerId", "modelKey", "outcome", "usageQuality", "inputTokens", "outputTokens", "costMicroUsd"],
+      "properties": {
+        "attemptNo": { "type": "integer", "minimum": 1, "maximum": 4 }, "kind": { "type": "string", "enum": ["primary", "fallback"] },
+        "providerId": { "$ref": "#/$defs/opaqueId" }, "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "outcome": { "type": "string", "enum": ["succeeded", "failed_pre_delta", "failed_post_delta", "cancelled", "timed_out"] },
+        "usageQuality": { "type": "string", "enum": ["confirmed", "pending_unconfirmed", "not_available"] },
+        "inputTokens": { "type": "integer", "minimum": 0 }, "outputTokens": { "type": "integer", "minimum": 0 }, "costMicroUsd": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

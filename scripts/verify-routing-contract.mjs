@@ -380,6 +380,7 @@ function validateDocumentation(rootDir, failures) {
     "docs/routing/contracts.md",
     "docs/routing/classification-pipeline.md",
     "docs/routing/difficulty-feature-vector-v1.md",
+    "docs/routing/difficulty-logistic-training.md",
     "docs/current/README.md",
     "docs/current/source-of-truth.md",
     "docs/v2.0.0/README.md",
@@ -408,6 +409,9 @@ function validateDocumentation(rootDir, failures) {
   if (!texts.get("docs/routing/README.md")?.includes("difficulty-feature-vector-v1.md")) {
     failures.push("docs/routing/README.md: difficulty feature vector v1 link is missing");
   }
+  if (!texts.get("docs/routing/README.md")?.includes("difficulty-logistic-training.md")) {
+    failures.push("docs/routing/README.md: difficulty Logistic training boundary link is missing");
+  }
   if (!texts.get("docs/routing/contracts.md")?.includes("classification-pipeline.md")) {
     failures.push("docs/routing/contracts.md: classification pipeline contract link is missing");
   }
@@ -419,6 +423,20 @@ function validateDocumentation(rootDir, failures) {
   }
   if (!texts.get("docs/current/source-of-truth.md")?.includes("../routing/classification-pipeline.md")) {
     failures.push("docs/current/source-of-truth.md: classification pipeline authority link is missing");
+  }
+
+  const thresholdPolicyMarker = "difficulty-threshold-v1 = 0.45";
+  const thresholdDecisionMarker = "ComplexityScore >= 0.45";
+  for (const relativePath of ["docs/routing/contracts.md", "docs/routing/classification-pipeline.md"]) {
+    if (!texts.get(relativePath)?.includes(thresholdPolicyMarker)) {
+      failures.push(`${relativePath}: global difficulty threshold policy must be 0.45`);
+    }
+    if (!texts.get(relativePath)?.includes(thresholdDecisionMarker)) {
+      failures.push(`${relativePath}: ComplexityScore decision boundary must be 0.45`);
+    }
+  }
+  if (!texts.get("docs/routing/difficulty-logistic-training.md")?.includes(thresholdPolicyMarker)) {
+    failures.push("docs/routing/difficulty-logistic-training.md: training threshold policy must be 0.45");
   }
 
   const pipelinePath = "docs/routing/classification-pipeline.md";
@@ -433,6 +451,11 @@ function validateDocumentation(rootDir, failures) {
     "DifficultyResult",
     "Go struct",
     "compatibility wrapper",
+    "hard-complex",
+    "1.0 + complex",
+    "Bounded-simple",
+    "-difficulty-shadow-model-artifact",
+    "model path",
   ]) {
     if (!pipeline.includes(marker)) {
       failures.push(`${pipelinePath}: required canonical pipeline marker is missing: ${marker}`);

@@ -3,7 +3,10 @@ import { createHash, createHmac } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
-import { verifyDifficultyEvaluationDataset } from "./verify-v2.1-difficulty-eval.mjs";
+import {
+  verifyDifficultyEvaluationDataset,
+  verifyDifficultyTrainingPilot,
+} from "./verify-v2.1-difficulty-eval.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -73,6 +76,10 @@ const versionedV21Docs = [
   "docs/v2.1.0/schemas/category-evaluation-record.schema.json",
   "docs/v2.1.0/difficulty-evaluation-dataset-contract.md",
   "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json",
+  "docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json",
+  "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json",
+  "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",
+  "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json",
   "docs/v2.1.0/routing-advanced-plan.md",
   "docs/v2.1.0/routing-performance-test-scenario.md",
   "docs/v2.1.0/routing-random-probe.md",
@@ -651,6 +658,7 @@ function assertTenantChatExecutableContract() {
       "/internal/v1/tenant-chat/admissions": ["200", "201", "400", "401", "409", "429", "503"],
       "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
       "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
+      "/internal/v1/tenant-chat/usage-receipts": ["200", "400", "401", "409", "503"],
     };
     const errorStatus = new Map([
       ["CHAT_INVALID_REQUEST", "400"],
@@ -660,6 +668,7 @@ function assertTenantChatExecutableContract() {
       ["CHAT_TENANT_DISABLED", "403"],
       ["CHAT_MEMBERSHIP_DISABLED", "403"],
       ["CHAT_EMPLOYEE_DISABLED", "403"],
+      ["CHAT_SAFETY_BLOCKED", "403"],
       ["CHAT_QUOTA_HARD_LIMIT", "403"],
       ["CHAT_BUDGET_HARD_LIMIT", "403"],
       ["CHAT_POLICY_ACK_REQUIRED", "409"],
@@ -973,6 +982,9 @@ function main() {
     fail(failure);
   }
   for (const failure of verifyDifficultyEvaluationDataset({ rootDir })) {
+    fail(failure);
+  }
+  for (const failure of verifyDifficultyTrainingPilot({ rootDir })) {
     fail(failure);
   }
 
