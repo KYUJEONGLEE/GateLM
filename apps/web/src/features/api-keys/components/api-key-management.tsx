@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Copy, KeyRound, Plus, RotateCcw } from "lucide-react";
+import { Ban, Copy, Plus, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -313,19 +313,8 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
 
   return (
     <main className="console-content management-line-content api-key-management">
-      <header className="api-key-page-header">
+      <header className="project-page-header api-key-hero">
         <h2>{text.title}</h2>
-        <Button
-          disabled={actionsDisabled || model.projects.length === 0}
-          onClick={() => {
-            setSubmitState({ message: "", status: "idle" });
-            setIssueOpen(true);
-          }}
-          type="button"
-        >
-          <Plus aria-hidden="true" />
-          {text.issue}
-        </Button>
       </header>
 
       {model.source === "error" ? (
@@ -342,13 +331,8 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
         </Alert>
       ) : null}
 
-      <section className="console-panel credential-line-panel api-key-list-panel">
+      <section className="api-key-list-section">
         <div className="api-key-list-toolbar">
-          <div>
-            <KeyRound aria-hidden="true" />
-            <strong>{text.credential}</strong>
-            <Badge variant="outline">{filteredApiKeys.length}</Badge>
-          </div>
           <div className="api-key-filters">
             <select
               aria-label={text.project}
@@ -372,40 +356,53 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
               <option value="expired">Expired</option>
             </select>
           </div>
+          <Button
+            className="api-key-issue-trigger"
+            disabled={actionsDisabled || model.projects.length === 0}
+            onClick={() => {
+              setSubmitState({ message: "", status: "idle" });
+              setIssueOpen(true);
+            }}
+            size="sm"
+            type="button"
+          >
+            <Plus aria-hidden="true" />
+            {text.issue}
+          </Button>
         </div>
 
         {filteredApiKeys.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table api-key-table">
-              <thead>
-                <tr>
-                  <th>{text.name}</th>
-                  <th>{text.project}</th>
-                  <th>{text.credential}</th>
-                  <th>{text.status}</th>
-                  <th>{text.created}</th>
-                  <th>{text.lastUsed}</th>
-                  <th><span className="sr-only">{text.actions}</span></th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="api-key-list-scroll">
+            <div className="api-key-list-grid">
+              <div className="api-key-list-header">
+                <span>{text.name}</span>
+                <span>{text.project}</span>
+                <span>{text.credential}</span>
+                <span>{text.status}</span>
+                <span>{text.created}</span>
+                <span>{text.lastUsed}</span>
+                <span aria-hidden="true" />
+              </div>
+              <div className="api-key-list">
                 {filteredApiKeys.map((apiKey) => {
                   const effectiveStatus = getEffectiveStatus(apiKey);
                   const active = effectiveStatus === "active";
                   const rowPending = pendingAction?.endsWith(apiKey.credentialId) ?? false;
                   return (
-                    <tr key={apiKey.credentialId}>
-                      <td>
+                    <article className="api-key-list-row" key={apiKey.credentialId}>
+                      <div className="api-key-list-cell" data-label={text.name}>
                         <strong className="provider-name">{apiKey.displayName}</strong>
                         <small className="project-muted">{apiKey.scopes.join(", ")}</small>
-                      </td>
-                      <td>
+                      </div>
+                      <div className="api-key-list-cell" data-label={text.project}>
                         <strong className="provider-name">{apiKey.projectName}</strong>
-                      </td>
-                      <td><code className="api-key-preview">{apiKey.prefix}••••{apiKey.last4}</code></td>
-                      <td>
+                      </div>
+                      <div className="api-key-list-cell" data-label={text.credential}>
+                        <code className="api-key-preview">{apiKey.prefix}••••{apiKey.last4}</code>
+                      </div>
+                      <div className="api-key-list-cell" data-label={text.status}>
                         <Badge
                           className="project-status-badge"
                           data-status={effectiveStatus.toUpperCase()}
@@ -413,13 +410,15 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
                         >
                           {statusLabel(effectiveStatus, locale)}
                         </Badge>
-                      </td>
-                      <td>
+                      </div>
+                      <div className="api-key-list-cell" data-label={text.created}>
                         <span className="project-muted">{formatDateTime(apiKey.createdAt)}</span>
                         {apiKey.expiresAt ? <small className="project-muted">{text.expires}: {formatDateTime(apiKey.expiresAt)}</small> : null}
-                      </td>
-                      <td><span className="project-muted">{apiKey.lastUsedAt ? formatDateTime(apiKey.lastUsedAt) : text.never}</span></td>
-                      <td>
+                      </div>
+                      <div className="api-key-list-cell" data-label={text.lastUsed}>
+                        <span className="project-muted">{apiKey.lastUsedAt ? formatDateTime(apiKey.lastUsedAt) : text.never}</span>
+                      </div>
+                      <div className="api-key-list-cell api-key-action-cell" data-label={text.actions}>
                         <TooltipProvider>
                           <div className="api-key-row-actions">
                             <Tooltip>
@@ -460,12 +459,12 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
                             </Tooltip>
                           </div>
                         </TooltipProvider>
-                      </td>
-                    </tr>
+                      </div>
+                    </article>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
         )}
       </section>
