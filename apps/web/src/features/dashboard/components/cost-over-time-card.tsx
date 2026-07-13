@@ -16,6 +16,7 @@ type CostOverTimeCardFilters = {
   projectId: string;
   range: CostOverTimeRange;
   resolvedBy: string;
+  surface: "all" | "project_application" | "tenant_chat";
   tenantId: string;
 };
 
@@ -38,6 +39,7 @@ export function CostOverTimeCard({
     projectId,
     range,
     resolvedBy,
+    surface,
     tenantId
   } = filters;
   const queryString = useMemo(
@@ -47,7 +49,8 @@ export function CostOverTimeCard({
         budgetScopeType,
         projectId,
         range,
-        resolvedBy,
+          resolvedBy,
+          surface,
         tenantId
       }),
     [
@@ -56,6 +59,7 @@ export function CostOverTimeCard({
       projectId,
       range,
       resolvedBy,
+      surface,
       tenantId
     ]
   );
@@ -237,6 +241,7 @@ function buildCostOverTimeQuery(filters: CostOverTimeCardFilters) {
   setOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
   setOptionalQuery(query, "projectId", filters.projectId);
   setOptionalQuery(query, "resolvedBy", filters.resolvedBy);
+  setOptionalQuery(query, "surface", filters.surface);
 
   return query.toString();
 }

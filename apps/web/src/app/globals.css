@@ -1553,10 +1553,10 @@ select {
 
 .dashboard-summary-form {
   display: grid;
-  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr) auto;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(190px, 0.8fr) minmax(220px, 1fr) auto;
   gap: var(--space-4);
   align-items: end;
-  width: min(720px, 100%);
+  width: min(900px, 100%);
 }
 
 .dashboard-summary-form label {
@@ -1596,6 +1596,13 @@ select {
   border-radius: var(--radius-md);
   line-height: 1;
   box-shadow: var(--shadow-xs);
+}
+
+.dashboard-source-warning {
+  color: #b45309;
+  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
+  max-width: 240px;
 }
 
 .dashboard-filter-input {

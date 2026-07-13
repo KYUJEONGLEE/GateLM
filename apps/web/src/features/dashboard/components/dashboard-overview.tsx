@@ -65,6 +65,7 @@ export type DashboardFilterState = {
   projectId: string;
   range: DashboardRange;
   resolvedBy: string;
+  surface: "all" | "project_application" | "tenant_chat";
 };
 
 const dashboardTabs: DashboardVisibleTab[] = ["requests", "cache", "routing", "safety", "limits"];
@@ -321,6 +322,7 @@ export function DashboardOverviewView({
         <DashboardFilterForm
           actionPath={`/tenants/${overview.filters.tenantId}/dashboard`}
           allowAllProjects={allowAllProjects}
+          allowTenantChat={allowAllProjects}
           applyLabel={text.filter.apply}
           filters={filters}
           projects={projects}
@@ -329,6 +331,11 @@ export function DashboardOverviewView({
             value: range
           }))}
         />
+        {overview.queryBudget?.status === "partial" && overview.queryBudget.guidance ? (
+          <div className="dashboard-source-warning" role="status">
+            {overview.queryBudget.guidance}
+          </div>
+        ) : null}
         <div className="dashboard-data-freshness">
           <span>Data as of</span>
           <strong>{dataAsOf}</strong>
@@ -730,6 +737,7 @@ function DashboardFilterBar({
     >
       {activeTab !== "overview" ? <input name="tab" type="hidden" value={activeTab} /> : null}
       <input name="range" type="hidden" value={filters.range} />
+      <input name="surface" type="hidden" value={filters.surface} />
       <label className="request-log-filter-control">
         <input
           aria-label={text.filter.projectId}
@@ -793,6 +801,7 @@ function dashboardHref(
   appendDashboardQuery(query, "budgetScopeId", filters.budgetScopeId);
   appendDashboardQuery(query, "resolvedBy", filters.resolvedBy);
   appendDashboardQuery(query, "range", filters.range);
+  appendDashboardQuery(query, "surface", filters.surface);
   appendDashboardQuery(query, "motion", extra?.motion ?? "");
   appendDashboardQuery(query, "requestId", extra?.requestId ?? "");
 
@@ -1678,6 +1687,15 @@ function sumRecordMatches(record: Record<string, number> | null | undefined, nee
 
     return needles.some((needle) => normalizedKey.includes(needle)) ? sum + value : sum;
   }, 0);
+}
+
+function latencyDetail(overview: DashboardOverview) {
+  const projectP95 = overview.latencyBySurface?.projectApplicationP95Ms;
+  const tenantChatP95 = overview.latencyBySurface?.tenantChatP95Ms;
+  if (projectP95 !== undefined && tenantChatP95 !== undefined) {
+    return `프로젝트·앱 p95 ${formatLatency(Math.round(projectP95))} · Tenant Chat p95 ${formatLatency(Math.round(tenantChatP95))}`;
+  }
+  return `p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`;
 }
 
 function compactModelLabel(model: string) {

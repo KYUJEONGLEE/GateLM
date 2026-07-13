@@ -765,6 +765,7 @@ function assertTenantChatExecutableContract() {
     "limit_tokens = 0 and warning_threshold_tokens = 0 and economy_threshold_tokens = 0 and hard_stop_tokens = 0 and state = 'blocked'",
     "limit_micro_usd = 0 and warning_threshold_micro_usd = 0 and economy_threshold_micro_usd = 0 and hard_stop_micro_usd = 0 and state = 'blocked'",
     "cache_read_input_micro_usd_per_million_tokens >= 0",
+    "constraint tenant_chat_attempt_cache_read_price_check check ( cache_read_input_micro_usd_per_million_tokens is null or cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens )",
     "confirmed_cache_read_input_tokens <= confirmed_input_tokens",
   ];
   for (const fragment of expectedDdlFragments) {
