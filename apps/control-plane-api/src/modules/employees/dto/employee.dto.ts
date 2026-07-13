@@ -1,7 +1,5 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  ArrayMaxSize,
-  IsArray,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -180,19 +178,6 @@ export class UpsertProjectEmployeeAssignmentDto {
   @Max(3600)
   rateLimitWindowSeconds?: number;
 
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50)
-  @IsUUID('4', { each: true })
-  allowedProviderConnectionIds?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(100)
-  @IsString({ each: true })
-  @MaxLength(120, { each: true })
-  allowedModelKeys?: string[];
-
   @Transform(({ value }) => trimString(value))
   @IsOptional()
   @IsString()
@@ -261,8 +246,6 @@ export interface EmployeeInvitationResponseDto {
 }
 
 export interface ProjectEmployeePolicyDto {
-  allowedModelKeys: string[];
-  allowedProviderConnectionIds: string[];
   dailyTokenLimit: ProjectEmployeeDailyTokenLimitPolicyDto;
   note: string | null;
   rateLimit: ProjectEmployeeRateLimitPolicyDto;

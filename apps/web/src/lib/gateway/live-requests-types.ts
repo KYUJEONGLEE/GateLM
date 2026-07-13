@@ -9,6 +9,7 @@ export type LiveRequestRow = {
   category: "general" | "code" | "translation" | "summarization" | "reasoning";
   costUsd: number;
   difficulty: "simple" | "complex";
+  fallbackUsed?: boolean;
   id: string;
   latencyMs: number;
   modelRef: string | null;

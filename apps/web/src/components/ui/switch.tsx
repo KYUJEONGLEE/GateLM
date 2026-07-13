@@ -16,6 +16,7 @@ function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
         className
       )}
       {...props}
+      suppressHydrationWarning
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"

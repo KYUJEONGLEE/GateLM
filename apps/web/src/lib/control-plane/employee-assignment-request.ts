@@ -4,8 +4,6 @@ export function buildProjectEmployeeAssignmentRequestBody(
   values: ProjectEmployeeAssignmentValues
 ) {
   return {
-    allowedModelKeys: values.allowedModelKeys,
-    allowedProviderConnectionIds: values.allowedProviderConnectionIds,
     dailyTokenLimit: values.dailyTokenLimit,
     monthlyBudgetLimitUsd: values.monthlyBudgetLimitUsd,
     policyNote: values.policyNote.trim() || undefined,

@@ -99,6 +99,9 @@ async function route(req, res) {
       return;
     }
 
+    if (options.defaultLatencyMs > 0) {
+      await sleep(options.defaultLatencyMs);
+    }
     recordCall(req.headers["x-gatelm-request-id"], model, payload.messages);
 
     if (payload.stream === true) {
@@ -133,6 +136,11 @@ function parseArgs(args) {
   const parsed = {
     host: process.env.FAST_NOOP_MOCK_HOST || "127.0.0.1",
     port: Number(process.env.FAST_NOOP_MOCK_PORT || 8091),
+    defaultLatencyMs: Number(
+      process.env.FAST_NOOP_MOCK_DEFAULT_LATENCY_MS ||
+        process.env.MOCK_PROVIDER_DEFAULT_LATENCY_MS ||
+        0,
+    ),
     timeoutDelayMs: Number(process.env.FAST_NOOP_MOCK_TIMEOUT_DELAY_MS || 60_000),
   };
 
@@ -152,6 +160,8 @@ function parseArgs(args) {
       parsed.port = Number(next());
     } else if (arg === "--timeout-delay-ms") {
       parsed.timeoutDelayMs = Number(next());
+    } else if (arg === "--default-latency-ms") {
+      parsed.defaultLatencyMs = Number(next());
     } else if (arg === "--help") {
       printUsage();
       process.exit(0);
@@ -166,12 +176,15 @@ function parseArgs(args) {
   if (!Number.isFinite(parsed.timeoutDelayMs) || parsed.timeoutDelayMs < 0) {
     throw new Error(`invalid --timeout-delay-ms ${parsed.timeoutDelayMs}`);
   }
+  if (!Number.isFinite(parsed.defaultLatencyMs) || parsed.defaultLatencyMs < 0) {
+    throw new Error(`invalid --default-latency-ms ${parsed.defaultLatencyMs}`);
+  }
   return parsed;
 }
 
 function printUsage() {
   console.log(`Usage:
-  node scripts/dev/fast-noop-mock-provider.mjs [--host 127.0.0.1] [--port 8091]
+  node scripts/dev/fast-noop-mock-provider.mjs [--host 127.0.0.1] [--port 8091] [--default-latency-ms 0]
 
 Local fast/no-op OpenAI-compatible mock provider for Gateway logging evidence.
 

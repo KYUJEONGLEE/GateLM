@@ -113,6 +113,7 @@ function toLiveRequestRow(
     category: record.category,
     costUsd: record.costMicroUsd / 1_000_000,
     difficulty: record.difficulty,
+    fallbackUsed: record.domainOutcomes?.fallback?.outcome === "success",
     id: record.requestId,
     latencyMs: record.latencyMs,
     modelRef: record.modelRef,

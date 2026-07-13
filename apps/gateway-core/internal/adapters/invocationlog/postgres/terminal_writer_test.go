@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,7 +12,100 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/routing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+func TestTerminalLogWriterSendsMultipleLogsInOnePostgresBatch(t *testing.T) {
+	db := &fakeBatchExecer{}
+	writer := NewTerminalLogWriter(db, TerminalLogDefaults{})
+	logs := []invocationlog.TerminalLog{
+		batchTestTerminalLog("request_batch_1"),
+		batchTestTerminalLog("request_batch_2"),
+	}
+
+	if err := writer.WriteTerminalLogs(context.Background(), logs); err != nil {
+		t.Fatalf("WriteTerminalLogs returned error: %v", err)
+	}
+	if len(db.batches) != 1 {
+		t.Fatalf("expected one PostgreSQL batch, got %d", len(db.batches))
+	}
+	if got := db.batches[0].Len(); got != 2 {
+		t.Fatalf("expected two statements in the batch, got %d", got)
+	}
+	for _, queued := range db.batches[0].QueuedQueries {
+		if !strings.Contains(queued.SQL, "insert into p0_llm_invocation_logs") {
+			t.Fatalf("unexpected batched statement: %s", queued.SQL)
+		}
+		if len(queued.Arguments) != 44 {
+			t.Fatalf("expected 44 terminal insert arguments, got %d", len(queued.Arguments))
+		}
+	}
+	if db.calls != 0 {
+		t.Fatalf("batch-capable executor should not use individual Exec calls, got %d", db.calls)
+	}
+}
+
+func TestTerminalLogWriterReturnsPostgresBatchCloseError(t *testing.T) {
+	db := &fakeBatchExecer{closeErr: errors.New("synthetic batch close failure")}
+	writer := NewTerminalLogWriter(db, TerminalLogDefaults{})
+
+	err := writer.WriteTerminalLogs(context.Background(), []invocationlog.TerminalLog{
+		batchTestTerminalLog("request_batch_error_1"),
+		batchTestTerminalLog("request_batch_error_2"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "synthetic batch close failure") {
+		t.Fatalf("expected batch close error, got %v", err)
+	}
+}
+
+func batchTestTerminalLog(requestID string) invocationlog.TerminalLog {
+	now := time.Date(2026, 7, 12, 1, 2, 3, 0, time.UTC)
+	return invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
+		RequestID:     requestID,
+		TenantID:      "00000000-0000-4000-8000-000000000100",
+		ProjectID:     "00000000-0000-4000-8000-000000000200",
+		ApplicationID: "00000000-0000-4000-8000-000000000300",
+		Provider:      "mock",
+		Model:         "mock-fast",
+		Status:        invocationlog.StatusSuccess,
+		HTTPStatus:    200,
+		StartedAt:     now,
+		CompletedAt:   now.Add(10 * time.Millisecond),
+	})
+}
+
+type fakeBatchExecer struct {
+	fakeExecer
+	batches  []*pgx.Batch
+	closeErr error
+}
+
+func (f *fakeBatchExecer) SendBatch(_ context.Context, batch *pgx.Batch) pgx.BatchResults {
+	f.batches = append(f.batches, batch)
+	return &fakeBatchResults{closeErr: f.closeErr}
+}
+
+type fakeBatchResults struct {
+	closeErr error
+}
+
+func (r *fakeBatchResults) Exec() (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, r.closeErr
+}
+
+func (r *fakeBatchResults) Query() (pgx.Rows, error) {
+	return nil, r.closeErr
+}
+
+func (r *fakeBatchResults) QueryRow() pgx.Row {
+	return nil
+}
+
+func (r *fakeBatchResults) Close() error {
+	return r.closeErr
+}
 
 func TestTerminalLogWriterWritesProjectBudgetNotificationsForTenantAndProjectAdmins(t *testing.T) {
 	execer := &fakeExecer{}

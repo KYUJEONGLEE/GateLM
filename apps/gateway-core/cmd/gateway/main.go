@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	cachedauth "gatelm/apps/gateway-core/internal/adapters/auth/cached"
 	postgresauth "gatelm/apps/gateway-core/internal/adapters/auth/postgres"
 	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
@@ -21,11 +22,13 @@ import (
 	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
+	cachedpricing "gatelm/apps/gateway-core/internal/adapters/pricing/cached"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
 	cachedprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/cached"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
+	providerhttpclient "gatelm/apps/gateway-core/internal/adapters/providers/httpclient"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
@@ -33,6 +36,10 @@ import (
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
+	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
+	postgresentitlement "gatelm/apps/gateway-core/internal/adapters/tenantchat/entitlement/postgres"
+	postgrestentantruntime "gatelm/apps/gateway-core/internal/adapters/tenantchat/runtime/postgres"
+	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
@@ -46,11 +53,14 @@ import (
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
+	tenantchathttp "gatelm/apps/gateway-core/internal/http/tenantchat"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
 	employeepolicystage "gatelm/apps/gateway-core/internal/pipeline/stages/employeepolicy"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
+	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
+	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -71,7 +81,19 @@ func main() {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
 
-	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
+	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
+		RequestTimeout:        cfg.ProviderTimeout,
+		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
+		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
+		IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
+		DialTimeout:           cfg.ProviderTransport.DialTimeout,
+		DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
+		TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: cfg.ProviderTransport.ResponseHeaderTimeout,
+		ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
+	})
+	defer providerHTTPClient.CloseIdleConnections()
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
@@ -79,11 +101,16 @@ func main() {
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
 	metricsRegistry := metrics.NewRegistry()
 
-	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
+	postgresPool, err := newPostgresPool(context.Background(), cfg.DatabaseURL, cfg.DatabasePool, "gatelm-gateway-main")
 	if err != nil {
 		log.Fatalf("gateway-core postgres pool configuration failed: %v", err)
 	}
 	defer postgresPool.Close()
+	logPostgresPool, err := newPostgresPool(context.Background(), cfg.LogDatabaseURL, cfg.LogDatabasePool, "gatelm-gateway-log")
+	if err != nil {
+		log.Fatalf("gateway-core log postgres pool configuration failed: %v", err)
+	}
+	defer logPostgresPool.Close()
 	credentialResolver, err := buildProviderCredentialResolver(cfg, postgresPool)
 	if err != nil {
 		log.Fatalf("gateway-core provider credential resolver configuration failed: %v", err)
@@ -101,6 +128,11 @@ func main() {
 			Required:       true,
 			FailureMessage: "connection failed",
 			Check:          postgresPool.Ping,
+		},
+		"postgres_log": {
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          logPostgresPool.Ping,
 		},
 		"redis": {
 			Required:       true,
@@ -123,12 +155,12 @@ func main() {
 		}
 	}
 
-	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
+	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(logPostgresPool, postgresinvocationlog.AuthFailureDefaults{
 		TenantID:      cfg.DemoTenantID,
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
-	postgresTerminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
+	postgresTerminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(logPostgresPool, postgresinvocationlog.TerminalLogDefaults{
 		TenantID:      cfg.DemoTenantID,
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
@@ -140,6 +172,8 @@ func main() {
 		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
 			QueueSize:       cfg.AsyncLogQueueSize,
 			WorkerCount:     cfg.AsyncLogWorkerCount,
+			BatchSize:       cfg.AsyncLogBatchSize,
+			FlushInterval:   cfg.AsyncLogBatchFlushInterval,
 			WriteTimeout:    cfg.AsyncLogWriteTimeout,
 			MetricsRegistry: metricsRegistry,
 		})
@@ -150,7 +184,12 @@ func main() {
 		dailyTokenUsageStore,
 	)
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
-	costCalculator := costing.NewCalculator(postgrespricing.NewReader(postgresPool))
+	pricingCatalog := cachedpricing.NewReader(postgrespricing.NewReader(postgresPool), cachedpricing.Config{
+		Enabled:    cfg.PricingCache.Enabled,
+		TTL:        cfg.PricingCache.TTL,
+		MaxEntries: cfg.PricingCache.MaxEntries,
+	})
+	costCalculator := costing.NewCalculator(pricingCatalog)
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
@@ -164,7 +203,12 @@ func main() {
 		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
 	}
 	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
-		gatewayCredentials := postgresauth.NewStore(postgresPool)
+		gatewayCredentials := cachedauth.NewStore(postgresauth.NewStore(postgresPool), cachedauth.Config{
+			Enabled:    cfg.AuthCache.Enabled,
+			TTL:        cfg.AuthCache.TTL,
+			MaxEntries: cfg.AuthCache.MaxEntries,
+			KeySecret:  []byte(cfg.AuthCache.KeySecret),
+		})
 		routerOptions = append(routerOptions, app.WithGatewayAuth(gatewayCredentials, gatewayCredentials))
 	}
 	rateLimiter, err := buildRateLimiter(cfg, postgresPool, redisClient)
@@ -193,6 +237,35 @@ func main() {
 		routerOptions...,
 	)
 	server := app.NewServer(cfg, router)
+	var tenantChatPrivateServer *app.Server
+	if cfg.TenantChatPrivate.Enabled {
+		workloadVerifier, err := workloadauth.Load(
+			cfg.TenantChatPrivate.WorkloadJWKSFile,
+			cfg.TenantChatPrivate.BindingHMACKeysFile,
+		)
+		if err != nil {
+			log.Fatalf("gateway-core tenant chat workload verifier failed: %v", err)
+		}
+		jtiConsumer, err := workloadauth.NewJTIConsumer(redisClient, cfg.TenantChatPrivate.WorkloadJTIPrefix)
+		if err != nil {
+			log.Fatalf("gateway-core tenant chat jti guard failed: %v", err)
+		}
+		tenantChatAuthenticator := requestauth.New(workloadVerifier, jtiConsumer)
+		tenantChatAdmissions := admissionservice.New(
+			postgresentitlement.NewChecker(postgresPool),
+			postgrestentantruntime.NewReader(postgresPool),
+			postgresadmission.NewStore(postgresPool),
+		)
+		tenantChatPrivateRouter := tenantchathttp.NewRouter(
+			tenantChatAuthenticator,
+			tenantChatAdmissions,
+			cfg.MaxRequestBodyBytes,
+		)
+		tenantChatPrivateServer = app.NewServerAtAddress(
+			cfg.TenantChatPrivate.ListenAddress,
+			tenantChatPrivateRouter,
+		)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -203,6 +276,14 @@ func main() {
 			log.Fatalf("gateway-core server failed: %v", err)
 		}
 	}()
+	if tenantChatPrivateServer != nil {
+		go func() {
+			log.Printf("gateway-core tenant chat private listener enabled")
+			if err := tenantChatPrivateServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Fatalf("gateway-core tenant chat private server failed: %v", err)
+			}
+		}()
+	}
 
 	<-ctx.Done()
 
@@ -211,6 +292,11 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("gateway-core shutdown failed: %v", err)
 	}
+	if tenantChatPrivateServer != nil {
+		if err := tenantChatPrivateServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("gateway-core tenant chat private shutdown failed: %v", err)
+		}
+	}
 	if asyncTerminalLogWriter != nil {
 		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)
 		defer logCloseCancel()
@@ -218,6 +304,29 @@ func main() {
 			log.Printf("gateway-core async terminal log flush failed: %v", err)
 		}
 	}
+}
+
+func newPostgresPool(ctx context.Context, rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Pool, error) {
+	poolConfig, err := parsePostgresPoolConfig(rawURL, tuning, applicationName)
+	if err != nil {
+		return nil, err
+	}
+	return pgxpool.NewWithConfig(ctx, poolConfig)
+}
+
+func parsePostgresPoolConfig(rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Config, error) {
+	poolConfig, err := pgxpool.ParseConfig(config.DatabaseDriverURL(rawURL))
+	if err != nil {
+		return nil, errors.New("invalid PostgreSQL pool connection configuration")
+	}
+	poolConfig.MaxConns = int32(tuning.MaxConns)
+	poolConfig.MinConns = int32(tuning.MinConns)
+	poolConfig.MaxConnLifetime = tuning.MaxConnLifetime
+	poolConfig.MaxConnLifetimeJitter = tuning.MaxConnLifetime / 10
+	poolConfig.MaxConnIdleTime = tuning.MaxConnIdleTime
+	poolConfig.HealthCheckPeriod = tuning.HealthCheckPeriod
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = strings.TrimSpace(applicationName)
+	return poolConfig, nil
 }
 
 func buildProviderCredentialResolver(cfg config.Config, postgresPool *pgxpool.Pool) (credentials.Resolver, error) {

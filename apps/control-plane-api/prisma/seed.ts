@@ -101,6 +101,10 @@ export const PROVIDER_PRESETS = [
 
 type DemoProviderMode = 'mock' | 'actual';
 
+const DEFAULT_DEMO_RATE_LIMIT_LIMIT = 60;
+const MAX_DEMO_RATE_LIMIT_LIMIT = 100000;
+const PERF_RUNTIME_RATE_LIMIT_ENV = 'GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT';
+
 interface DemoRuntimeConfigOptions {
   providerMode?: DemoProviderMode;
   mockProviderId?: string;
@@ -114,6 +118,7 @@ interface DemoRuntimeConfigOptions {
   apiKeyLast4?: string;
   appTokenPrefix?: string;
   appTokenLast4?: string;
+  rateLimitLimit?: number;
 }
 
 export function credentialHash(plaintext: string): string {
@@ -149,6 +154,7 @@ export function buildDemoRuntimeConfigDocument(
   const apiKeyLast4 = options.apiKeyLast4 ?? '9xA1';
   const appTokenPrefix = options.appTokenPrefix ?? 'gat_app_';
   const appTokenLast4 = options.appTokenLast4 ?? '4tK2';
+  const rateLimitLimit = resolveDemoRateLimitLimit(options.rateLimitLimit);
   const safetyPolicy = buildSafetyPolicy();
   const routingPolicy = buildRoutingPolicy();
   const providers =
@@ -299,7 +305,7 @@ export function buildDemoRuntimeConfigDocument(
       scope: 'application',
       algorithm: 'fixed_window',
       windowSeconds: 60,
-      limit: 60,
+      limit: rateLimitLimit,
     },
     budgetPolicy: {
       enabled: false,
@@ -385,6 +391,8 @@ export function buildDemoRuntimeConfigDocument(
 
 export async function seedDemoData(client: PrismaClient): Promise<void> {
   assertDemoSeedAllowed(process.env);
+  const providerMode = readDemoProviderMode();
+  const rateLimitLimit = readDemoRateLimitLimit(providerMode, process.env);
 
   await client.$transaction(async (tx) => {
     await seedProviderPresets(tx);
@@ -446,7 +454,6 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       },
     });
 
-    const providerMode = readDemoProviderMode();
     const mockProviderBaseUrl = readEnvString(
       'GATELM_DEMO_MOCK_PROVIDER_BASE_URL',
       DEMO_PROVIDER_BASE_URL,
@@ -637,6 +644,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       apiKeyLast4: apiKeyPreview.last4,
       appTokenPrefix: appTokenPreview.prefix,
       appTokenLast4: appTokenPreview.last4,
+      rateLimitLimit,
     });
     await tx.runtimeConfig.updateMany({
       where: {
@@ -755,15 +763,7 @@ function isProductionLikeDemoSeedEnv(env: NodeJS.ProcessEnv): boolean {
     return true;
   }
 
-  const deploymentEnv = (
-    env.GATELM_DEPLOYMENT_ENV ??
-    env.CONTROL_PLANE_DEPLOYMENT_ENV ??
-    env.DEPLOYMENT_ENV ??
-    env.APP_ENV ??
-    ''
-  )
-    .trim()
-    .toLowerCase();
+  const deploymentEnv = readDeploymentEnv(env);
 
   return [
     'aws',
@@ -775,6 +775,18 @@ function isProductionLikeDemoSeedEnv(env: NodeJS.ProcessEnv): boolean {
     'staging',
     'stage',
   ].includes(deploymentEnv);
+}
+
+function readDeploymentEnv(env: NodeJS.ProcessEnv): string {
+  return (
+    env.GATELM_DEPLOYMENT_ENV ??
+    env.CONTROL_PLANE_DEPLOYMENT_ENV ??
+    env.DEPLOYMENT_ENV ??
+    env.APP_ENV ??
+    ''
+  )
+    .trim()
+    .toLowerCase();
 }
 
 async function upsertDemoTenantProvider(
@@ -1721,6 +1733,46 @@ function readDemoProviderMode(): DemoProviderMode {
   return process.env.GATELM_DEMO_PROVIDER_MODE === 'actual'
     ? 'actual'
     : 'mock';
+}
+
+function readDemoRateLimitLimit(
+  providerMode: DemoProviderMode,
+  env: NodeJS.ProcessEnv,
+): number {
+  const rawValue = env[PERF_RUNTIME_RATE_LIMIT_ENV];
+  if (typeof rawValue !== 'string' || rawValue.trim().length === 0) {
+    return DEFAULT_DEMO_RATE_LIMIT_LIMIT;
+  }
+
+  if (readDeploymentEnv(env) !== 'perf' || providerMode !== 'mock') {
+    throw new Error(
+      `${PERF_RUNTIME_RATE_LIMIT_ENV} is allowed only for the isolated perf Mock seed.`,
+    );
+  }
+
+  const value = rawValue.trim();
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(
+      `${PERF_RUNTIME_RATE_LIMIT_ENV} must be an integer from 1 to ${MAX_DEMO_RATE_LIMIT_LIMIT}.`,
+    );
+  }
+
+  return resolveDemoRateLimitLimit(Number(value));
+}
+
+function resolveDemoRateLimitLimit(value: number | undefined): number {
+  const limit = value ?? DEFAULT_DEMO_RATE_LIMIT_LIMIT;
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_DEMO_RATE_LIMIT_LIMIT
+  ) {
+    throw new Error(
+      `Demo rate limit must be an integer from 1 to ${MAX_DEMO_RATE_LIMIT_LIMIT}.`,
+    );
+  }
+
+  return limit;
 }
 
 function readEnvString(key: string, fallback: string): string {
