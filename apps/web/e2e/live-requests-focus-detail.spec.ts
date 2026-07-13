@@ -86,15 +86,17 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
     })
     .toBeLessThanOrEqual(2);
   const focusBox = await focus.boundingBox();
-  expect(focusBox).not.toBeNull();
-  expect(focusBox?.width).toBeGreaterThanOrEqual(1795);
-  expect(focusBox?.width).toBeLessThanOrEqual(1815);
-  expect(focusBox?.height).toBeGreaterThanOrEqual(940);
-  expect(focusBox?.height).toBeLessThanOrEqual(960);
-  expect(focusBox!.x).toBeGreaterThanOrEqual(0);
-  expect(focusBox!.y).toBeGreaterThanOrEqual(0);
-  expect(focusBox!.x + focusBox!.width).toBeLessThanOrEqual(desktopViewport.width);
-  expect(focusBox!.y + focusBox!.height).toBeLessThanOrEqual(desktopViewport.height);
+  if (!focusBox) {
+    throw new Error("Live Requests focus dialog has no bounding box");
+  }
+  expect(focusBox.width).toBeGreaterThanOrEqual(1795);
+  expect(focusBox.width).toBeLessThanOrEqual(1815);
+  expect(focusBox.height).toBeGreaterThanOrEqual(940);
+  expect(focusBox.height).toBeLessThanOrEqual(960);
+  expect(focusBox.x).toBeGreaterThanOrEqual(0);
+  expect(focusBox.y).toBeGreaterThanOrEqual(0);
+  expect(focusBox.x + focusBox.width).toBeLessThanOrEqual(desktopViewport.width);
+  expect(focusBox.y + focusBox.height).toBeLessThanOrEqual(desktopViewport.height);
   await expect(focus).toHaveCSS("translate", "none");
 
   const targetDetail = focus.getByRole("button", {
@@ -144,13 +146,15 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
     })
     .toBeLessThanOrEqual(2);
   const drawerBox = await drawer.boundingBox();
-  expect(drawerBox).not.toBeNull();
-  expect(drawerBox?.width).toBeGreaterThanOrEqual(1590);
-  expect(drawerBox?.width).toBeLessThanOrEqual(1610);
-  expect(drawerBox!.x).toBeGreaterThanOrEqual(0);
-  expect(drawerBox!.y).toBeGreaterThanOrEqual(0);
-  expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(desktopViewport.width);
-  expect(drawerBox!.y + drawerBox!.height).toBeLessThanOrEqual(desktopViewport.height);
+  if (!drawerBox) {
+    throw new Error("Request detail drawer has no bounding box");
+  }
+  expect(drawerBox.width).toBeGreaterThanOrEqual(1590);
+  expect(drawerBox.width).toBeLessThanOrEqual(1610);
+  expect(drawerBox.x).toBeGreaterThanOrEqual(0);
+  expect(drawerBox.y).toBeGreaterThanOrEqual(0);
+  expect(drawerBox.x + drawerBox.width).toBeLessThanOrEqual(desktopViewport.width);
+  expect(drawerBox.y + drawerBox.height).toBeLessThanOrEqual(desktopViewport.height);
   await expect(drawer).toHaveCSS("translate", "none");
 
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
@@ -237,8 +241,11 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(dashboardPath);
-  await page
-    .locator('.dashboard-live-requests-panel[data-live-view="compact"]')
+  const compact = page.locator(
+    '.dashboard-live-requests-panel[data-live-view="compact"]'
+  );
+  await expect(compact.locator("tbody tr")).toHaveCount(4);
+  await compact
     .getByRole("button", { name: "실시간 요청 확대 화면 열기" })
     .click();
 
