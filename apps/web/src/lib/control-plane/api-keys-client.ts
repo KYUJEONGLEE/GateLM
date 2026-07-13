@@ -1,10 +1,12 @@
 import "server-only";
 
-import credentialLifecycleFixture from "../../../../../docs/v1.0.0/fixtures/credential-lifecycle.fixture.json";
 import {
   getControlPlaneBaseUrl,
-  getControlPlaneProjectId
+  getControlPlaneProjectId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import { listControlPlaneProjects } from "@/lib/control-plane/projects-client";
+import { attachProjectToApiKeys } from "@/lib/control-plane/api-keys-management-model";
 import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
@@ -17,14 +19,6 @@ import type {
   ApiKeyStatus,
   OneTimeApiKeyResponse
 } from "@/lib/control-plane/api-keys-types";
-
-type CredentialLifecycleFixture = {
-  credentialLifecycle: {
-    apiKey: {
-      listItemExample: ApiKeyListItem;
-    };
-  };
-};
 
 type ApiKeyListResult =
   | {
@@ -64,27 +58,56 @@ type ApiKeyRevokeResult =
 
 export async function getApiKeysModel(routeTenantId: string): Promise<ApiKeysModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const controlPlaneProjectId = getControlPlaneProjectId();
-  const listResult = await listApiKeys(controlPlaneProjectId);
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
+  const projectsResult = await listControlPlaneProjects(tenantId);
 
-  if (listResult.ok) {
+  if (!projectsResult.ok) {
     return {
-      apiKeys: listResult.data,
+      apiKeys: [],
       controlPlaneBaseUrl,
-      controlPlaneProjectId,
-      loadError: null,
+      controlPlaneProjectId: "",
+      loadError: projectsResult.error,
+      projects: [],
       routeTenantId,
-      source: "control-plane"
+      source: "error"
     };
   }
 
+  const projects = projectsResult.data;
+  const listResults = await Promise.all(
+    projects.map(async (project) => ({
+      project,
+      result: await listApiKeys(project.id)
+    }))
+  );
+  const failedResult = listResults.find(({ result }) => !result.ok)?.result;
+
+  if (failedResult && !failedResult.ok) {
+    return {
+      apiKeys: [],
+      controlPlaneBaseUrl,
+      controlPlaneProjectId: projects[0]?.id ?? "",
+      loadError: failedResult.error,
+      projects,
+      routeTenantId,
+      source: "error"
+    };
+  }
+
+  const apiKeys = listResults.flatMap(({ project, result }) =>
+    result.ok
+      ? attachProjectToApiKeys(project, result.data)
+      : []
+  );
+
   return {
-    apiKeys: [getFixtureApiKey()],
+    apiKeys,
     controlPlaneBaseUrl,
-    controlPlaneProjectId,
-    loadError: listResult.error,
+    controlPlaneProjectId: projects[0]?.id ?? getControlPlaneProjectId(),
+    loadError: null,
+    projects,
     routeTenantId,
-    source: "fixture"
+    source: "control-plane"
   };
 }
 
@@ -101,6 +124,7 @@ export async function getProjectApiKeysModel(
       controlPlaneBaseUrl,
       controlPlaneProjectId: projectId,
       loadError: null,
+      projects: [],
       routeTenantId,
       source: "control-plane"
     };
@@ -111,13 +135,21 @@ export async function getProjectApiKeysModel(
     controlPlaneBaseUrl,
     controlPlaneProjectId: projectId,
     loadError: listResult.error,
+    projects: [],
     routeTenantId,
-    source: "fixture"
+    source: "error"
   };
 }
 
 export async function listApiKeysForProject(projectId: string): Promise<ApiKeyListResult> {
   return listApiKeys(projectId);
+}
+
+export async function listApiKeysForProjectWithAuth(
+  projectId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<ApiKeyListResult> {
+  return listApiKeys(projectId, options);
 }
 
 export async function issueApiKey(
@@ -197,13 +229,16 @@ export async function revokeApiKey(
   }
 }
 
-async function listApiKeys(projectId: string): Promise<ApiKeyListResult> {
+async function listApiKeys(
+  projectId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<ApiKeyListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/api-keys?limit=50`,
       {
         cache: "no-store",
-        headers: await buildControlPlaneHeaders()
+        headers: await buildControlPlaneHeaders(options)
       }
     );
 
@@ -385,11 +420,6 @@ function getErrorMessage(payload: unknown, status: number) {
   return `Control Plane request failed with HTTP ${status}.`;
 }
 
-function getFixtureApiKey(): ApiKeyListItem {
-  const fixture = credentialLifecycleFixture as CredentialLifecycleFixture;
-  return fixture.credentialLifecycle.apiKey.listItemExample;
-}
-
 function toApiKeyListItem(value: unknown): ApiKeyListItem | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -421,6 +451,8 @@ function toApiKeyListItem(value: unknown): ApiKeyListItem | null {
     last4: record.last4,
     lastUsedAt: typeof record.lastUsedAt === "string" ? record.lastUsedAt : null,
     prefix: record.prefix,
+    projectId: "",
+    projectName: "",
     scopes,
     status
   };

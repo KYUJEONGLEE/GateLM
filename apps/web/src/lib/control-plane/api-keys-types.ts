@@ -11,6 +11,8 @@ export type ApiKeyListItem = {
   last4: string;
   lastUsedAt: string | null;
   prefix: string;
+  projectId: string;
+  projectName: string;
   scopes: string[];
   status: ApiKeyStatus;
 };
@@ -52,8 +54,9 @@ export type ApiKeysModel = {
   controlPlaneBaseUrl: string;
   controlPlaneProjectId: string;
   loadError: string | null;
+  projects: Pick<ProjectRecord, "id" | "name" | "tenantId">[];
   routeTenantId: string;
-  source: "control-plane" | "fixture";
+  source: "control-plane" | "error";
 };
 
 export type ApiKeyRevokedResponse = {

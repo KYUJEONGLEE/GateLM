@@ -8,6 +8,7 @@ import {
   CircleHelp,
   FolderKanban,
   House,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -64,7 +65,7 @@ const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
 };
 
 const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
-  "api-keys": SettingsIcon,
+  "api-keys": KeyRound,
   "app-tokens": SettingsIcon,
   employees: Users,
   alerts: Bell,
@@ -181,6 +182,14 @@ const navigationItems: Array<{
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
+      },
+      {
+        labels: {
+          en: "API Management",
+          ko: "API 관리"
+        },
+        item: "api-keys",
+        path: (tenantId) => `/tenants/${tenantId}/api-keys`
       }
     ],
     section: "management"

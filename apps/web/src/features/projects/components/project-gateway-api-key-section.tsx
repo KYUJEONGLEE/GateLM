@@ -114,7 +114,7 @@ export function ProjectGatewayApiKeyPanel({
     status: "idle"
   });
   const representativeKey = getRepresentativeActiveKey(apiKeys);
-  const actionsDisabled = model.source === "fixture";
+  const actionsDisabled = model.source !== "control-plane";
 
   async function submitIssueApiKey() {
     setPendingAction("issue");
@@ -208,7 +208,7 @@ export function ProjectGatewayApiKeyPanel({
           </div>
 
           <div className="gateway-api-key-main">
-            {model.source === "fixture" ? (
+            {model.source === "error" ? (
               <Alert variant="warning">
                 <AlertDescription>
                   {text.fixtureFallback} {model.loadError}
@@ -319,6 +319,8 @@ function toListItem(apiKey: OneTimeApiKeyResponse, displayName: string): ApiKeyL
     last4: apiKey.last4,
     lastUsedAt: null,
     prefix: apiKey.prefix,
+    projectId: "",
+    projectName: "",
     scopes: apiKey.scopes,
     status: apiKey.status
   };

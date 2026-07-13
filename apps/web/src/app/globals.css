@@ -7301,6 +7301,161 @@ html[data-theme="dark"] .provider-card-icon[data-family="openai"] img {
   min-width: 1120px;
 }
 
+.api-key-management {
+  gap: 14px;
+}
+
+.api-key-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px;
+}
+
+.api-key-page-header h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
+  line-height: 1.25;
+}
+
+.api-key-list-panel {
+  padding-top: 12px;
+}
+
+.api-key-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.api-key-list-toolbar > div,
+.api-key-filters,
+.api-key-row-actions {
+  display: flex;
+  align-items: center;
+}
+
+.api-key-list-toolbar > div {
+  gap: 8px;
+}
+
+.api-key-list-toolbar svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.api-key-filters {
+  gap: 8px;
+}
+
+.api-key-filters select,
+.api-key-dialog-fields select {
+  min-height: 36px;
+  padding: 0 32px 0 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+
+.api-key-filters select {
+  width: min(210px, 28vw);
+}
+
+.api-key-preview,
+.api-key-one-time-value {
+  color: var(--foreground);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.api-key-preview {
+  display: inline-block;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.api-key-row-actions {
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.api-key-dialog,
+.api-key-secret-dialog {
+  width: min(500px, calc(100vw - 32px));
+}
+
+.api-key-dialog-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.api-key-dialog-fields label {
+  display: grid;
+  gap: 7px;
+}
+
+.api-key-dialog-fields label > span {
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
+}
+
+.api-key-confirm-target,
+.api-key-secret-context {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.api-key-confirm-target span,
+.api-key-secret-context span {
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+}
+
+.api-key-confirm-target code {
+  margin-top: 4px;
+}
+
+.api-key-one-time-value {
+  display: block;
+  padding: 14px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+@media (max-width: 760px) {
+  .api-key-page-header,
+  .api-key-list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .api-key-page-header > button {
+    align-self: flex-start;
+  }
+
+  .api-key-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .api-key-filters select {
+    width: 100%;
+  }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
