@@ -258,7 +258,8 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   if (manifest.datasetVersion !== "difficulty_eval_2026_07_13_pilot_500_v1") {
     failures.push(`${splitManifestPath}: datasetVersion mismatch`);
   }
-  if (manifest.datasetSha256 !== sha256(fixtureText)) {
+  const canonicalFixtureText = fixtureText.replace(/\r\n/g, "\n");
+  if (manifest.datasetSha256 !== sha256(canonicalFixtureText)) {
     failures.push(`${splitManifestPath}: datasetSha256 mismatch`);
   }
   if (

@@ -1,0 +1,112 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "GateLM Tenant Chat Private Control Plane API",
+    "version": "tenant-chat/v1",
+    "description": "Private service-token protected metadata read contract for Chat API. This API never returns the RuntimeSnapshot body."
+  },
+  "servers": [
+    {
+      "url": "http://control-plane-api:3001",
+      "description": "Private service network only"
+    }
+  ],
+  "security": [{ "tenantChatServiceToken": [] }],
+  "paths": {
+    "/internal/v1/tenant-chat/runtime/snapshots/{tenantId}/active": {
+      "get": {
+        "operationId": "getActiveTenantChatRuntimeSnapshotMetadata",
+        "summary": "Read immutable metadata for the active Tenant Chat RuntimeSnapshot",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active and contract-valid snapshot metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["data"],
+                  "properties": { "data": { "$ref": "#/components/schemas/ActiveRuntimeSnapshotMetadata" } }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ServiceAuthenticationRequired" },
+          "503": { "$ref": "#/components/responses/RuntimeUnavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "tenantChatServiceToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-gatelm-tenant-chat-service-token",
+        "description": "Dedicated Chat API to Control Plane service token. Never log or return this value."
+      }
+    },
+    "schemas": {
+      "ActiveRuntimeSnapshotMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenantId",
+          "version",
+          "digest",
+          "policyVersion",
+          "employeeNoticeVersion",
+          "pricingVersion"
+        ],
+        "properties": {
+          "tenantId": { "type": "string", "format": "uuid" },
+          "version": { "type": "integer", "minimum": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+          "policyVersion": { "type": "integer", "minimum": 1 },
+          "employeeNoticeVersion": { "type": "integer", "minimum": 1 },
+          "pricingVersion": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "details", "requestId", "retryable"],
+            "properties": {
+              "code": { "type": "string", "enum": ["CHAT_AUTH_REQUIRED", "CHAT_RUNTIME_UNAVAILABLE"] },
+              "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+              "details": { "type": "null" },
+              "requestId": { "type": ["string", "null"] },
+              "retryable": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "ServiceAuthenticationRequired": {
+        "description": "Dedicated Tenant Chat service token is missing or invalid.",
+        "x-error-codes": ["CHAT_AUTH_REQUIRED"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "RuntimeUnavailable": {
+        "description": "No active snapshot exists, the stored snapshot is invalid, or metadata cannot be read safely.",
+        "x-error-codes": ["CHAT_RUNTIME_UNAVAILABLE"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    }
+  }
+}

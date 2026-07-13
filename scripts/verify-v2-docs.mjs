@@ -36,6 +36,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/contracts.md",
   "docs/tenant-chat/execution-contract.md",
   "docs/tenant-chat/openapi/chat-auth.openapi.json",
+  "docs/tenant-chat/openapi/private-control-plane.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
   "docs/tenant-chat/db/tenant-chat-usage.sql",
   "docs/tenant-chat/schemas/*.schema.json",
@@ -619,6 +620,7 @@ function sha256Base64Url(value) {
 
 function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
+  const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
@@ -644,6 +646,33 @@ function assertTenantChatExecutableContract() {
     ]) {
       if (!authOpenApi.paths?.[apiPath]?.[method]) {
         fail(`${authOpenApiPath}: missing ${method.toUpperCase()} ${apiPath}`);
+      }
+    }
+  }
+
+  const controlPlaneOpenApi = readJson(controlPlaneOpenApiPath);
+  if (controlPlaneOpenApi) {
+    if (controlPlaneOpenApi.openapi !== "3.1.0") {
+      fail(`${controlPlaneOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+    const operation = controlPlaneOpenApi.paths?.[
+      "/internal/v1/tenant-chat/runtime/snapshots/{tenantId}/active"
+    ]?.get;
+    if (!operation?.responses?.["200"] || !operation?.responses?.["401"] || !operation?.responses?.["503"]) {
+      fail(`${controlPlaneOpenApiPath}: active snapshot metadata reader responses are incomplete`);
+    }
+    const metadata = controlPlaneOpenApi.components?.schemas?.ActiveRuntimeSnapshotMetadata;
+    const required = new Set(metadata?.required ?? []);
+    for (const field of [
+      "tenantId",
+      "version",
+      "digest",
+      "policyVersion",
+      "employeeNoticeVersion",
+      "pricingVersion",
+    ]) {
+      if (!required.has(field)) {
+        fail(`${controlPlaneOpenApiPath}: metadata must require ${field}`);
       }
     }
   }
@@ -945,6 +974,7 @@ function assertTenantChatExecutableContract() {
 
   for (const expectedText of [
     "openapi/chat-auth.openapi.json",
+    "openapi/private-control-plane.openapi.json",
     "openapi/private-gateway.openapi.json",
     "db/tenant-chat-usage.sql",
     "vectors/binding-digest-vectors.json",
