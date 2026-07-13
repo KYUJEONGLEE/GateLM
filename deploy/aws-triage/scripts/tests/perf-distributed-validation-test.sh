@@ -102,6 +102,7 @@ write_attestation "${attestation_dir}/loadgen.attestation.env" loadgen 10.77.1.1
 write_attestation "${attestation_dir}/gateway.attestation.env" gateway 10.77.1.20 "$(printf '2%.0s' {1..64})"
 write_attestation "${attestation_dir}/data.attestation.env" data 10.77.1.30 "$(printf '3%.0s' {1..64})"
 write_attestation "${attestation_dir}/mock.attestation.env" mock 10.77.1.40 "$(printf '4%.0s' {1..64})"
+printf '\n \t\n' >> "${attestation_dir}/loadgen.attestation.env"
 verify_attestations "${valid_env}" "${attestation_dir}" >/dev/null
 
 write_attestation "${attestation_dir}/mock.attestation.env" mock 10.77.1.40 "$(printf '3%.0s' {1..64})"

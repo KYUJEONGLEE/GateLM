@@ -269,7 +269,8 @@ dist_read_attestation() {
     perf_fail "Distributed ${expected_role} attestation is missing or is a symbolic link."
   while IFS= read -r line || [[ -n "${line}" ]]; do
     line="${line%$'\r'}"
-    [[ -n "${line}" && "${line}" == *=* ]] || \
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "${line}" == *=* ]] || \
       perf_fail "Distributed ${expected_role} attestation contains a malformed line."
     key="${line%%=*}"
     value="${line#*=}"

@@ -124,7 +124,17 @@ with open(sys.argv[1], encoding="utf-8") as handle:
     body = json.load(handle)
 metadata = body.get("gate_lm") or {}
 model_ref = str(metadata.get("modelRef") or "")
-if metadata.get("providerCalled") is not True or not model_ref.split(":")[-1].startswith("mock-"):
+if metadata.get("providerCalled") is not True:
+    print(
+        "Gateway preflight response did not confirm providerCalled=true.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if not model_ref.split(":")[-1].startswith("mock-"):
+    print(
+        "Gateway preflight response modelRef does not reference the Mock provider.",
+        file=sys.stderr,
+    )
     raise SystemExit(1)
 PY
 
