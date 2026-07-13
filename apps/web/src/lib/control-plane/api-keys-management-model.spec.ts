@@ -2,9 +2,40 @@ import { expect, test } from "@playwright/test";
 import type { ApiKeyListItem } from "@/lib/control-plane/api-keys-types";
 import {
   attachProjectToApiKeys,
+  compareApiKeyCreatedAtDescending,
   containsApiKey,
   containsProject
 } from "@/lib/control-plane/api-keys-management-model";
+
+test("sorts API Keys by newest creation date first", () => {
+  expect(
+    compareApiKeyCreatedAtDescending(
+      { createdAt: "2026-07-14T12:00:00.000Z" },
+      { createdAt: "2026-07-13T12:00:00.000Z" }
+    )
+  ).toBeLessThan(0);
+});
+
+test("places invalid API Key creation dates after valid dates", () => {
+  expect(
+    compareApiKeyCreatedAtDescending(
+      { createdAt: "invalid-left" },
+      { createdAt: "2026-07-13T12:00:00.000Z" }
+    )
+  ).toBeGreaterThan(0);
+  expect(
+    compareApiKeyCreatedAtDescending(
+      { createdAt: "2026-07-13T12:00:00.000Z" },
+      { createdAt: "invalid-right" }
+    )
+  ).toBeLessThan(0);
+  expect(
+    compareApiKeyCreatedAtDescending(
+      { createdAt: "invalid-left" },
+      { createdAt: "invalid-right" }
+    )
+  ).toBe(0);
+});
 
 test("attaches the applied project without exposing secret material", () => {
   const result = attachProjectToApiKeys(

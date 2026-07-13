@@ -3,6 +3,24 @@ import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 
 type ApiKeyProject = Pick<ProjectRecord, "id" | "name">;
 
+export function compareApiKeyCreatedAtDescending(
+  left: Pick<ApiKeyListItem, "createdAt">,
+  right: Pick<ApiKeyListItem, "createdAt">
+) {
+  const leftTime = Date.parse(left.createdAt);
+  const rightTime = Date.parse(right.createdAt);
+
+  if (Number.isNaN(leftTime)) {
+    return Number.isNaN(rightTime) ? 0 : 1;
+  }
+
+  if (Number.isNaN(rightTime)) {
+    return -1;
+  }
+
+  return rightTime - leftTime;
+}
+
 export function containsProject(
   projects: ApiKeyProject[],
   projectId: string

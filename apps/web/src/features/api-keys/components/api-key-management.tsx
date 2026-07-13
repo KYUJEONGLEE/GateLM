@@ -26,6 +26,7 @@ import type {
   ApiKeyStatus,
   OneTimeApiKeyResponse
 } from "@/lib/control-plane/api-keys-types";
+import { compareApiKeyCreatedAtDescending } from "@/lib/control-plane/api-keys-management-model";
 import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -166,7 +167,7 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
   const filteredApiKeys = useMemo(() => apiKeys
     .filter((apiKey) => projectFilter === "all" || apiKey.projectId === projectFilter)
     .filter((apiKey) => statusFilter === "all" || getEffectiveStatus(apiKey) === statusFilter)
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+    .sort(compareApiKeyCreatedAtDescending),
   [apiKeys, projectFilter, statusFilter]);
 
   async function issueApiKey() {
