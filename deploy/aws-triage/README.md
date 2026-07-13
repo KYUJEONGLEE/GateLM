@@ -179,6 +179,7 @@ Apply dashboard pricing catalog compatibility tables and demo pricing seed:
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/002_drop_legacy_selected_routing_columns.sql
 ```
 
 Do not run the demo seed in AWS/prod-like environments. The Control Plane now refuses the demo seed path there; create the tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API.
@@ -518,9 +519,73 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/002_drop_legacy_selected_routing_columns.sql
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core web chat-api chat-web
 docker compose --env-file .env ps
 ```
+
+## GitHub Actions CD Through OIDC And SSM
+
+The public AWS triage host can deploy an approved `main` SHA without storing the
+EC2 PEM file or long-lived AWS access keys in GitHub. This remains a single-host
+triage deployment, not a highly available production architecture.
+
+The workflow is intentionally gated:
+
+```text
+main push -> ci passes -> production approval -> GitHub OIDC -> AWS SSM
+-> database backup -> sequential image build -> migrations -> cutover
+-> local/public health checks
+```
+
+Create the AWS resources with CloudFormation using
+`aws/github-actions-cd.template.json`. Set:
+
+- `DeploymentInstanceId`: the public GateLM EC2 instance
+- `CreateGitHubOidcProvider`: `true` only when the account does not already
+  contain `token.actions.githubusercontent.com`
+- the default GitHub organization, repository, and environment values unless
+  the repository has moved
+
+The stack creates an EC2 Systems Manager instance profile and a GitHub OIDC
+deployment role. CloudFormation cannot attach the new instance profile to an
+already-running EC2 instance, so attach the `Ec2SsmInstanceProfileName` stack
+output through **EC2 -> Actions -> Security -> Modify IAM role**. Restart the
+Snap-packaged agent after the role is attached:
+
+```bash
+sudo systemctl restart snap.amazon-ssm-agent.amazon-ssm-agent.service
+```
+
+Wait until the instance appears as `Online` in Systems Manager. Then create the
+GitHub `production` environment, allow only `main`, require a reviewer, and set
+these environment variables from the stack outputs and deployment URLs:
+
+```text
+AWS_REGION=ap-northeast-2
+AWS_ROLE_ARN=<GitHubDeployRoleArn stack output>
+AWS_INSTANCE_ID=<DeploymentInstanceId stack output>
+GATELM_PUBLIC_URL=https://gatelm.co.kr
+GATELM_CHAT_URL=https://chat.gatelm.co.kr
+```
+
+`.github/workflows/deploy-production.yml` runs only after a successful `ci`
+push on `main`, or from a manual dispatch made on `main`. It rejects a stale SHA
+when `origin/main` has moved while approval was pending. The OIDC role can send
+only `AWS-RunShellScript` to the configured EC2 instance and can read or cancel
+only the resulting SSM command.
+
+The remote `scripts/deploy-main.sh` command keeps the existing containers alive
+while it builds each image sequentially. Before migrations it stores a custom
+PostgreSQL dump, the protected `.env`, the previous SHA, and previous image IDs
+under `/home/ubuntu/gatelm-deploy-backups`. A pre-cutover failure leaves the old
+containers running. A failed post-cutover health check restores the previous
+application image tags and recreates the previous containers.
+
+Database migrations are forward-only. Application rollback does not reverse a
+schema migration; use the recorded PostgreSQL dump for a deliberate database
+restore. Deployment logs remain on the instance under
+`/home/ubuntu/gatelm-deploy-logs`.
 
 If Provider registration shows `Provider credential encryption backend is not configured`, set
 `GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY` and recreate `control-plane-api`
