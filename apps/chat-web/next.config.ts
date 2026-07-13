@@ -1,6 +1,8 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
 
+import { createContentSecurityPolicy } from './content-security-policy.mjs';
+
 const standalone = process.env.GATELM_NEXT_OUTPUT_STANDALONE === 'true' || process.platform !== 'win32';
 
 const nextConfig: NextConfig = {
@@ -13,7 +15,7 @@ const nextConfig: NextConfig = {
       source: '/:path*',
       headers: [
         { key: 'Cache-Control', value: 'no-store' },
-        { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" },
+        { key: 'Content-Security-Policy', value: createContentSecurityPolicy() },
         { key: 'Referrer-Policy', value: 'no-referrer' },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'X-Frame-Options', value: 'DENY' },
