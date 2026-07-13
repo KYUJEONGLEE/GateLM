@@ -1,9 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const MIGRATION_PATH = resolve(
+const HISTORICAL_MIGRATION_PATH = resolve(
   __dirname,
   '../../../prisma/migrations/20260712190000_tenant_chat_runtime_usage_pr1/migration.sql',
+);
+const CACHE_READ_PRICE_MIGRATION_PATH = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260713135500_tenant_chat_cache_read_price_constraint/migration.sql',
 );
 const ACTIVE_USAGE_DDL_PATH = resolve(
   __dirname,
@@ -11,7 +15,8 @@ const ACTIVE_USAGE_DDL_PATH = resolve(
 );
 
 describe('Tenant Chat PR1 migration', () => {
-  const sql = readFileSync(MIGRATION_PATH, 'utf8');
+  const historicalSql = readFileSync(HISTORICAL_MIGRATION_PATH, 'utf8');
+  const cacheReadPriceSql = readFileSync(CACHE_READ_PRICE_MIGRATION_PATH, 'utf8');
   const activeUsageDdl = readFileSync(ACTIVE_USAGE_DDL_PATH, 'utf8');
 
   it.each([
@@ -24,21 +29,23 @@ describe('Tenant Chat PR1 migration', () => {
     'tenant_chat_invocation_outbox',
     'tenant_chat_invocation_logs',
   ])('creates the contracted usage table %s', (tableName) => {
-    expect(sql).toContain(`CREATE TABLE ${tableName}`);
+    expect(historicalSql).toContain(`CREATE TABLE ${tableName}`);
   });
 
-  it('keeps the migration additive', () => {
-    expect(sql).not.toMatch(/\b(?:DROP|TRUNCATE)\b/i);
-    expect(sql).not.toMatch(/\bALTER\s+TABLE\s+(?:runtime_configs|runtime_snapshots|active_runtime_snapshots)\b/i);
+  it('keeps the historical migration additive', () => {
+    expect(historicalSql).not.toMatch(/\b(?:DROP|TRUNCATE)\b/i);
+    expect(historicalSql).not.toMatch(
+      /\bALTER\s+TABLE\s+(?:runtime_configs|runtime_snapshots|active_runtime_snapshots)\b/i,
+    );
   });
 
   it('does not introduce Project or Application columns into Tenant Chat tables', () => {
-    expect(sql).not.toMatch(/\bproject_id\b/i);
-    expect(sql).not.toMatch(/\bapplication_id\b/i);
+    expect(historicalSql).not.toMatch(/\bproject_id\b/i);
+    expect(historicalSql).not.toMatch(/\bapplication_id\b/i);
   });
 
   it('binds RuntimeSnapshot dependencies to the same tenant', () => {
-    const compactSql = compactWhitespace(sql);
+    const compactSql = compactWhitespace(historicalSql);
 
     expect(compactSql).toContain(
       'CONSTRAINT tenant_chat_pricing_identity_tenant_key UNIQUE (id, tenant_id)',
@@ -55,7 +62,7 @@ describe('Tenant Chat PR1 migration', () => {
   });
 
   it.each([
-    ['implementation migration', sql],
+    ['historical implementation migration', historicalSql],
     ['active usage DDL', activeUsageDdl],
   ])('binds usage children to reservation tenant in %s', (_source, sourceSql) => {
     const compactSql = compactWhitespace(sourceSql);
@@ -68,12 +75,31 @@ describe('Tenant Chat PR1 migration', () => {
     );
   });
 
-  it.each([
-    ['implementation migration', sql],
-    ['active usage DDL', activeUsageDdl],
-  ])('allows any non-negative provider cache-read price in %s', (_source, sourceSql) => {
-    expect(sourceSql).not.toMatch(
+  it('preserves the historical migration cache-read price rule', () => {
+    expect(historicalSql).not.toMatch(
       /cache_read_input_micro_usd_per_million_tokens\s*<=\s*input_micro_usd_per_million_tokens/,
+    );
+  });
+
+  it.each([
+    ['forward migration', cacheReadPriceSql],
+    ['active usage DDL', activeUsageDdl],
+  ])('enforces the final provider cache-read price rule in %s', (_source, sourceSql) => {
+    const compactSql = compactWhitespace(sourceSql);
+
+    expect(compactSql).toContain(
+      'CONSTRAINT tenant_chat_attempt_cache_read_price_check CHECK ( cache_read_input_micro_usd_per_million_tokens IS NULL OR cache_read_input_micro_usd_per_million_tokens <= input_micro_usd_per_million_tokens )',
+    );
+  });
+
+  it('probes shared data before adding the cache-read price constraint', () => {
+    expect(cacheReadPriceSql).toContain('FROM tenant_chat_provider_attempts');
+    expect(cacheReadPriceSql).toContain('FROM tenant_chat_active_runtime_snapshots');
+    expect(cacheReadPriceSql).toContain('jsonb_path_exists');
+    expect(cacheReadPriceSql).toContain('RAISE EXCEPTION');
+    expect(cacheReadPriceSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE|DROP)\b/i);
+    expect(cacheReadPriceSql.indexOf('RAISE EXCEPTION')).toBeLessThan(
+      cacheReadPriceSql.indexOf('ADD CONSTRAINT'),
     );
   });
 });
