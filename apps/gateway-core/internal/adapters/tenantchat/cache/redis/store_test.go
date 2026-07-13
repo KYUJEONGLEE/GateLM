@@ -1,0 +1,103 @@
+package redis
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/tenantchat"
+	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
+
+	goredis "github.com/redis/go-redis/v9"
+)
+
+type fakeCacheClient struct {
+	key   string
+	field string
+	value []byte
+	err   error
+}
+
+func (f *fakeCacheClient) HGet(_ context.Context, key string, field string) *goredis.StringCmd {
+	if f.err != nil {
+		return goredis.NewStringResult("", f.err)
+	}
+	if key != f.key || field != f.field || len(f.value) == 0 {
+		return goredis.NewStringResult("", goredis.Nil)
+	}
+	return goredis.NewStringResult(string(f.value), nil)
+}
+
+func (f *fakeCacheClient) Eval(_ context.Context, _ string, keys []string, args ...any) *goredis.Cmd {
+	f.key = keys[0]
+	f.field = args[0].(string)
+	f.value = append([]byte(nil), args[1].([]byte)...)
+	return goredis.NewCmdResult(int64(1), f.err)
+}
+
+func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
+	client := &fakeCacheClient{}
+	keySets := &KeySets{byID: map[string]KeySet{
+		"keys_001": {ID: "keys_001", FingerprintKey: bytesOf(1), EncryptionKey: bytesOf(2)},
+	}}
+	store := NewStore(client, keySets)
+	store.now = func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
+	store.rand = strings.NewReader("0123456789ab")
+	requestContext := tenantchat.RequestContext{
+		ExecutionScope: tenantchat.ExecutionScope{
+			TenantID: "tenant_001", Actor: tenantchat.Actor{UserID: "user_001"},
+		},
+		UsageIntent: &tenantchat.UsageIntent{
+			EstimatedInputTokens: 10, MaxOutputTokens: 32, RequestedTier: "standard", CacheStrategy: "exact",
+		},
+	}
+	snapshot := tenantruntime.Snapshot{
+		Digest: "sha256:synthetic", Policies: tenantruntime.Policies{Cache: tenantruntime.CachePolicy{
+			Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 10, KeySetID: "keys_001",
+		}},
+	}
+	input := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "synthetic private prompt"}}, Stream: true}
+	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
+	if err := store.Put(context.Background(), requestContext, snapshot, input, entry); err != nil {
+		t.Fatalf("put exact cache: %v", err)
+	}
+	originalField := client.field
+	differentIntent := requestContext
+	differentIntent.UsageIntent = &tenantchat.UsageIntent{
+		EstimatedInputTokens: 10, MaxOutputTokens: 64, RequestedTier: "standard", CacheStrategy: "exact",
+	}
+	_, _, differentField, err := store.resolve(differentIntent, snapshot, input)
+	if err != nil || differentField == originalField {
+		t.Fatalf("usage intent must be bound into exact-cache fingerprint: field=%q err=%v", differentField, err)
+	}
+	if client.key != "tenant-chat:exact-cache:v1:tenant_001:user_001" || strings.Contains(client.key, client.field) {
+		t.Fatalf("unexpected cache namespace: %q", client.key)
+	}
+	if strings.Contains(string(client.value), input.Messages[0].Content) || strings.Contains(string(client.value), entry.ResponseText) {
+		t.Fatal("cache value exposed plaintext content")
+	}
+	var encoded envelope
+	if err := json.Unmarshal(client.value, &encoded); err != nil || encoded.Ciphertext == "" || encoded.Nonce == "" {
+		t.Fatalf("invalid encrypted envelope: %v %+v", err, encoded)
+	}
+	got, hit, err := store.Get(context.Background(), requestContext, snapshot, input)
+	if err != nil || !hit || got != entry {
+		t.Fatalf("get exact cache: hit=%t err=%v entry=%+v", hit, err, got)
+	}
+
+	client.value[len(client.value)-2] ^= 1
+	if _, _, err := store.Get(context.Background(), requestContext, snapshot, input); !errors.Is(err, ErrCacheUnavailable) {
+		t.Fatalf("tampered cache must fail closed, got %v", err)
+	}
+}
+
+func bytesOf(value byte) []byte {
+	result := make([]byte, 32)
+	for index := range result {
+		result[index] = value
+	}
+	return result
+}

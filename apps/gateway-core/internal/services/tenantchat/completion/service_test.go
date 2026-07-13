@@ -56,6 +56,9 @@ func TestServiceRelaysPrimaryStreamAndSettlesConfirmedUsage(t *testing.T) {
 			usage.reserveCalls, usage.startAttemptCalls, usage.settleCalls, providers.calls,
 		)
 	}
+	if got := usage.transactionCalls(); got != 2 {
+		t.Fatalf("primary confirmed transaction budget exceeded: got %d want 2", got)
+	}
 	if len(events) != 3 || events[0].Delta != "안녕" || events[1].Delta != "하세요" {
 		t.Fatalf("unexpected delta events: %+v", events)
 	}
@@ -72,14 +75,17 @@ func TestServiceRelaysPrimaryStreamAndSettlesConfirmedUsage(t *testing.T) {
 	}
 }
 
-func TestServiceFailsClosedBeforeReservationForPendingStageTwoPolicies(t *testing.T) {
+func TestServiceFailsClosedBeforeReservationWhenExactCacheAdapterIsMissing(t *testing.T) {
 	snapshot := completionSnapshot()
 	snapshot.Policies.Cache.Enabled = true
+	snapshot.Policies.Cache.Strategy = "exact"
 	usage := &fakeUsageAccounting{}
 	providers := &fakeProviderExecutor{}
 	service := New(&fakeSnapshotResolver{snapshot: snapshot}, usage, providers)
 
-	if _, err := service.Prepare(context.Background(), completionRequest()); err != tenantchat.ErrRuntimeUnavailable {
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+	if _, err := service.Prepare(context.Background(), request); err != tenantchat.ErrRuntimeUnavailable {
 		t.Fatalf("expected runtime unavailable, got %v", err)
 	}
 	if usage.reserveCalls != 0 || providers.calls != 0 {
@@ -87,7 +93,104 @@ func TestServiceFailsClosedBeforeReservationForPendingStageTwoPolicies(t *testin
 	}
 }
 
-func TestServiceEmitsSafeFinalAndMarksMissingUsageUnconfirmed(t *testing.T) {
+func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{}
+	cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{
+		ResponseText: "cached synthetic response", EffectiveModelKey: "model-cached",
+	}, hit: true}
+	providers := &fakeProviderExecutor{}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache hit: %v", err)
+	}
+	var events []tenantchat.CompletionEvent
+	if err := execution.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay cache hit: %v", err)
+	}
+	if usage.reserveCalls != 0 || usage.ledgerlessCalls != 1 || providers.calls != 0 || len(events) != 2 ||
+		events[1].CacheOutcome != "hit" || events[1].Usage == nil || events[1].Usage.TotalTokens != 0 {
+		t.Fatalf("unexpected cache hit path: usage=%+v provider=%d events=%+v", usage, providers.calls, events)
+	}
+	if got := usage.transactionCalls(); got != 1 {
+		t.Fatalf("cache-hit transaction budget exceeded: got %d want 1", got)
+	}
+}
+
+func TestServiceSafetyBlockConsumesAdmissionWithoutReservation(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Safety = tenantruntime.SafetyPolicy{
+		Enabled: true, PolicyDigest: "sha256:synthetic",
+		DetectorSet: []tenantruntime.SafetyDetector{{DetectorType: "api_key", Action: "block"}},
+	}
+	usage := &fakeUsageAccounting{}
+	providers := &fakeProviderExecutor{}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithSafetyEvaluator(&fakeSafetyEvaluator{result: tenantchat.SafetyEvaluation{Blocked: true}}),
+	)
+	if _, err := service.Prepare(context.Background(), completionRequest()); !errors.Is(err, tenantchat.ErrSafetyBlocked) {
+		t.Fatalf("expected safety block, got %v", err)
+	}
+	if usage.reserveCalls != 0 || usage.ledgerlessCalls != 1 || providers.calls != 0 {
+		t.Fatalf("unexpected safety block side effects: usage=%+v provider=%d", usage, providers.calls)
+	}
+	if got := usage.transactionCalls(); got != 1 {
+		t.Fatalf("safety-block transaction budget exceeded: got %d want 1", got)
+	}
+}
+
+func TestServiceProviderTokenGateRunsAfterReservationBeforeProvider(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.ProviderTokenRate = tenantruntime.ProviderTokenRatePolicy{Providers: []tenantruntime.ProviderTokenWindow{{
+		ProviderID: "provider", LimitTokens: 40, WindowSeconds: 60,
+	}}}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", State: "reserved",
+		Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+	}}
+	providers := &fakeProviderExecutor{}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithProviderTokenLimiter(&fakeTokenLimiter{decision: tenantchat.ProviderTokenRateDecision{Allowed: false}}),
+	)
+	if _, err := service.Prepare(context.Background(), completionRequest()); !errors.Is(err, tenantchat.ErrRateLimited) {
+		t.Fatalf("expected provider token limit, got %v", err)
+	}
+	if usage.reserveCalls != 1 || usage.preCallCalls != 1 || providers.calls != 0 {
+		t.Fatalf("unexpected token gate ordering: usage=%+v provider=%d", usage, providers.calls)
+	}
+}
+
+func TestServicePreCallProviderFailureReleasesWithoutPendingExposure(t *testing.T) {
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", State: "reserved",
+		Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+	}}
+	providerErr := provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic pre-call failure"))
+	providers := &fakeProviderExecutor{err: providerErr, status: tenantchat.ProviderCallNotStarted}
+	service := New(&fakeSnapshotResolver{snapshot: completionSnapshot()}, usage, providers)
+	if _, err := service.Prepare(context.Background(), completionRequest()); !errors.Is(err, providerErr) {
+		t.Fatalf("expected provider error, got %v", err)
+	}
+	if usage.preCallCalls != 1 || usage.unconfirmedCalls != 0 {
+		t.Fatalf("pre-call failure accounting mismatch: preCall=%d pending=%d", usage.preCallCalls, usage.unconfirmedCalls)
+	}
+}
+
+func TestServiceEmitsSafeFinalAndKeepsMissingUsagePending(t *testing.T) {
 	usage := &fakeUsageAccounting{
 		reservation: tenantchat.UsageReservation{
 			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
@@ -95,7 +198,7 @@ func TestServiceEmitsSafeFinalAndMarksMissingUsageUnconfirmed(t *testing.T) {
 			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
 		},
 		settlement: tenantchat.UsageSettlement{
-			State: "unconfirmed", QuotaState: "warning", BudgetState: "normal",
+			State: "pending_unconfirmed", QuotaState: "warning", BudgetState: "normal",
 		},
 	}
 	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{{Delta: "부분 응답"}}}}
@@ -123,19 +226,7 @@ func TestServiceEmitsSafeFinalAndMarksMissingUsageUnconfirmed(t *testing.T) {
 }
 
 func TestServiceFallsBackBeforeDeltaAndSettlesAllConfirmedAttempts(t *testing.T) {
-	snapshot := completionSnapshot()
-	snapshot.Pricing = tenantruntime.Pricing{Version: 3, Routes: []tenantruntime.PriceRoute{
-		{RouteID: "route_standard", ProviderID: "provider-primary", ModelKey: "model-standard", InputMicroUSDPerMillionTokens: 10, OutputMicroUSDPerMillionTokens: 20},
-		{RouteID: "route_economy", ProviderID: "provider-fallback", ModelKey: "model-economy", InputMicroUSDPerMillionTokens: 5, OutputMicroUSDPerMillionTokens: 10},
-	}}
-	snapshot.Policies.Routing = tenantruntime.RoutingPolicy{Routes: []tenantruntime.RuntimeRoute{
-		{RouteID: "route_standard", Tier: "standard", ProviderID: "provider-primary", ModelKey: "model-standard", Enabled: true},
-		{RouteID: "route_economy", Tier: "economy", ProviderID: "provider-fallback", ModelKey: "model-economy", Enabled: true},
-	}}
-	snapshot.Policies.Fallback = tenantruntime.FallbackPolicy{
-		Enabled: true, RouteIDs: []string{"route_economy"}, MaxAttempts: 2,
-		AllowedReasons: []string{"provider_error_pre_delta"},
-	}
+	snapshot := fallbackCompletionSnapshot()
 	usage := &fakeUsageAccounting{
 		reservation: tenantchat.UsageReservation{
 			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
@@ -172,9 +263,93 @@ func TestServiceFallsBackBeforeDeltaAndSettlesAllConfirmedAttempts(t *testing.T)
 	if usage.recordCalls != 1 || usage.startAttemptCalls != 2 || usage.settleCalls != 1 || providers.calls != 2 {
 		t.Fatalf("unexpected fallback calls: record=%d start=%d settle=%d provider=%d", usage.recordCalls, usage.startAttemptCalls, usage.settleCalls, providers.calls)
 	}
+	if got := usage.transactionCalls(); got != 3 {
+		t.Fatalf("fallback confirmed transaction budget exceeded: got %d want 3", got)
+	}
 	if len(events) != 2 || events[0].Delta != "fallback answer" || events[1].TerminalOutcome != "succeeded" ||
 		events[1].EffectiveModelKey == nil || *events[1].EffectiveModelKey != "model-economy" {
 		t.Fatalf("unexpected fallback events: %+v", events)
+	}
+}
+
+func TestServiceSettlesCurrentAttemptWhenFallbackTopUpFails(t *testing.T) {
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider-primary", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			State: "settled", ConfirmedInputTokens: 8, QuotaState: "normal", BudgetState: "blocked",
+		},
+		fallbackErr: tenantchat.ErrBudgetHardLimit,
+	}
+	providers := &fakeProviderExecutor{stream: &fakeStream{
+		events:      []provider.ChatCompletionStreamEvent{{Usage: &provider.Usage{PromptTokens: 8, TotalTokens: 8}}},
+		terminalErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic primary failure")),
+	}}
+	service := New(&fakeSnapshotResolver{snapshot: fallbackCompletionSnapshot()}, usage, providers)
+	execution, err := service.Prepare(context.Background(), completionRequest())
+	if err != nil {
+		t.Fatalf("prepare fallback top-up failure: %v", err)
+	}
+	var events []tenantchat.CompletionEvent
+	if err := execution.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay fallback top-up failure: %v", err)
+	}
+	if usage.settleCalls != 1 || providers.calls != 1 || usage.transactionCalls() != 3 {
+		t.Fatalf("fallback top-up failure accounting mismatch: usage=%+v provider=%d", usage, providers.calls)
+	}
+	if len(events) != 1 || events[0].Error == nil || events[0].Error.Code != "CHAT_BUDGET_HARD_LIMIT" {
+		t.Fatalf("unexpected fallback top-up terminal event: %+v", events)
+	}
+}
+
+func TestServiceUsesFallbackPreCallSettlementWithoutFourthTransaction(t *testing.T) {
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider-primary", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			State: "settled", ConfirmedInputTokens: 8, QuotaState: "normal", BudgetState: "normal",
+		},
+	}
+	providers := &fakeProviderExecutor{
+		streams: []provider.ChatCompletionStreamReader{
+			&fakeStream{
+				events:      []provider.ChatCompletionStreamEvent{{Usage: &provider.Usage{PromptTokens: 8, TotalTokens: 8}}},
+				terminalErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic primary failure")),
+			},
+			nil,
+		},
+		errors: []error{nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic pre-call failure"))},
+		statuses: []tenantchat.ProviderCallStartStatus{
+			tenantchat.ProviderCallStartedOrUnknown,
+			tenantchat.ProviderCallNotStarted,
+		},
+	}
+	service := New(&fakeSnapshotResolver{snapshot: fallbackCompletionSnapshot()}, usage, providers)
+	execution, err := service.Prepare(context.Background(), completionRequest())
+	if err != nil {
+		t.Fatalf("prepare fallback pre-call failure: %v", err)
+	}
+	var events []tenantchat.CompletionEvent
+	if err := execution.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay fallback pre-call failure: %v", err)
+	}
+	if usage.preCallCalls != 1 || usage.settleCalls != 0 || providers.calls != 2 || usage.transactionCalls() != 3 {
+		t.Fatalf("fallback pre-call transaction budget mismatch: usage=%+v provider=%d", usage, providers.calls)
+	}
+	if len(events) != 1 || events[0].Error == nil || events[0].Error.Code != "CHAT_PROVIDER_FAILED" {
+		t.Fatalf("unexpected fallback pre-call terminal event: %+v", events)
 	}
 }
 
@@ -436,9 +611,58 @@ func completionSnapshot() tenantruntime.Snapshot {
 	}
 }
 
+func fallbackCompletionSnapshot() tenantruntime.Snapshot {
+	snapshot := completionSnapshot()
+	snapshot.Pricing = tenantruntime.Pricing{Version: 3, Routes: []tenantruntime.PriceRoute{
+		{RouteID: "route_standard", ProviderID: "provider-primary", ModelKey: "model-standard", InputMicroUSDPerMillionTokens: 10, OutputMicroUSDPerMillionTokens: 20},
+		{RouteID: "route_economy", ProviderID: "provider-fallback", ModelKey: "model-economy", InputMicroUSDPerMillionTokens: 5, OutputMicroUSDPerMillionTokens: 10},
+	}}
+	snapshot.Policies.Routing = tenantruntime.RoutingPolicy{Routes: []tenantruntime.RuntimeRoute{
+		{RouteID: "route_standard", Tier: "standard", ProviderID: "provider-primary", ModelKey: "model-standard", Enabled: true},
+		{RouteID: "route_economy", Tier: "economy", ProviderID: "provider-fallback", ModelKey: "model-economy", Enabled: true},
+	}}
+	snapshot.Policies.Fallback = tenantruntime.FallbackPolicy{
+		Enabled: true, RouteIDs: []string{"route_economy"}, MaxAttempts: 2,
+		AllowedReasons: []string{"provider_error_pre_delta"},
+	}
+	return snapshot
+}
+
 type fakeSnapshotResolver struct {
 	snapshot tenantruntime.Snapshot
 	err      error
+}
+
+type fakeSafetyEvaluator struct {
+	result tenantchat.SafetyEvaluation
+	err    error
+}
+
+func (f *fakeSafetyEvaluator) Evaluate(context.Context, tenantruntime.Snapshot, tenantchat.CompletionInput) (tenantchat.SafetyEvaluation, error) {
+	return f.result, f.err
+}
+
+type fakeExactCache struct {
+	entry tenantchat.ExactCacheEntry
+	hit   bool
+	err   error
+}
+
+func (f *fakeExactCache) Get(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.CompletionInput) (tenantchat.ExactCacheEntry, bool, error) {
+	return f.entry, f.hit, f.err
+}
+
+func (f *fakeExactCache) Put(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.CompletionInput, tenantchat.ExactCacheEntry) error {
+	return f.err
+}
+
+type fakeTokenLimiter struct {
+	decision tenantchat.ProviderTokenRateDecision
+	err      error
+}
+
+func (f *fakeTokenLimiter) Check(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.SelectedRoute) (tenantchat.ProviderTokenRateDecision, error) {
+	return f.decision, f.err
 }
 
 func (f *fakeSnapshotResolver) Resolve(context.Context, tenantchat.RequestContext) (tenantruntime.Snapshot, error) {
@@ -450,6 +674,7 @@ type fakeUsageAccounting struct {
 	reservations []tenantchat.UsageReservation
 	settlement   tenantchat.UsageSettlement
 	err          error
+	fallbackErr  error
 
 	reserveCalls      int
 	startAttemptCalls int
@@ -457,8 +682,24 @@ type fakeUsageAccounting struct {
 	recordCalls       int
 	releasedCalls     int
 	unconfirmedCalls  int
+	ledgerlessCalls   int
+	preCallCalls      int
 	confirmedUsage    tenantchat.ConfirmedUsage
 	lastOutcome       string
+}
+
+func (f *fakeUsageAccounting) transactionCalls() int {
+	return f.reserveCalls + f.recordCalls + f.settleCalls + f.releasedCalls + f.ledgerlessCalls + f.preCallCalls
+}
+
+func (f *fakeUsageAccounting) FinalizeLedgerless(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, string, string, string) (bool, error) {
+	f.ledgerlessCalls++
+	return false, f.err
+}
+
+func (f *fakeUsageAccounting) FinalizePreCall(context.Context, tenantchat.RequestContext, string, int, string) (tenantchat.UsageSettlement, error) {
+	f.preCallCalls++
+	return f.settlement, f.err
 }
 
 func (f *fakeUsageAccounting) BeginExecution(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot) (tenantchat.UsageReservation, error) {
@@ -484,6 +725,9 @@ func (f *fakeUsageAccounting) BeginFallback(
 ) error {
 	f.startAttemptCalls++
 	f.recordCalls++
+	if f.fallbackErr != nil {
+		return f.fallbackErr
+	}
 	return f.err
 }
 
@@ -510,19 +754,28 @@ func (f *fakeUsageAccounting) FinalizeUnconfirmed(_ context.Context, _ tenantcha
 	return f.settlement, f.err
 }
 
+func (f *fakeUsageAccounting) MarkPending(_ context.Context, _ tenantchat.RequestContext, _ string, _ int, outcome string) (tenantchat.UsageSettlement, error) {
+	f.settleCalls++
+	f.unconfirmedCalls++
+	f.lastOutcome = outcome
+	return f.settlement, f.err
+}
+
 func (f *fakeUsageAccounting) ReadTerminal(context.Context, tenantchat.RequestContext, string) (tenantchat.UsageSettlement, error) {
 	return f.settlement, f.err
 }
 
 type fakeProviderExecutor struct {
-	stream  provider.ChatCompletionStreamReader
-	streams []provider.ChatCompletionStreamReader
-	errors  []error
-	err     error
-	calls   int
+	stream   provider.ChatCompletionStreamReader
+	streams  []provider.ChatCompletionStreamReader
+	errors   []error
+	err      error
+	status   tenantchat.ProviderCallStartStatus
+	statuses []tenantchat.ProviderCallStartStatus
+	calls    int
 }
 
-func (f *fakeProviderExecutor) OpenStream(context.Context, tenantchat.RequestContext, tenantchat.SelectedRoute, tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, error) {
+func (f *fakeProviderExecutor) OpenStream(context.Context, tenantchat.RequestContext, tenantchat.SelectedRoute, tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
 	index := f.calls
 	f.calls++
 	if index < len(f.streams) {
@@ -530,9 +783,17 @@ func (f *fakeProviderExecutor) OpenStream(context.Context, tenantchat.RequestCon
 		if index < len(f.errors) {
 			err = f.errors[index]
 		}
-		return f.streams[index], err
+		status := tenantchat.ProviderCallStartStatus(tenantchat.ProviderCallStartedOrUnknown)
+		if index < len(f.statuses) && f.statuses[index] != "" {
+			status = f.statuses[index]
+		}
+		return f.streams[index], status, err
 	}
-	return f.stream, f.err
+	status := f.status
+	if status == "" {
+		status = tenantchat.ProviderCallStartedOrUnknown
+	}
+	return f.stream, status, f.err
 }
 
 type fakeStream struct {

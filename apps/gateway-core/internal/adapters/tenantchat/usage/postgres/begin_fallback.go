@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
@@ -18,6 +19,8 @@ func (s *ReservationStore) BeginFallback(
 	route tenantchat.SelectedRoute,
 	attemptNo int,
 ) (err error) {
+	started := time.Now()
+	defer s.observeTransaction("begin_fallback", started)
 	if s == nil || s.pool == nil || requestContext.UsageIntent == nil ||
 		previousAttemptNo < 1 || previousAttemptNo > 3 || attemptNo != previousAttemptNo+1 || attemptNo > 4 ||
 		!validAttemptOutcome(previousOutcome) || previousUsage.InputTokens < 0 ||
