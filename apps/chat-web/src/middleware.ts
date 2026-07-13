@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { createContentSecurityPolicy } from '../content-security-policy.mjs';
+
 const CSRF_COOKIE = 'gatelm_chat_csrf';
 const INVITATION_COOKIE = 'gatelm_chat_invitation_intent';
 
 export async function middleware(request: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const contentSecurityPolicy = createContentSecurityPolicy(process.env.NODE_ENV, nonce);
+
   if (request.nextUrl.pathname === '/invitations/accept' && request.nextUrl.searchParams.has('token')) {
     const token = request.nextUrl.searchParams.get('token') ?? '';
     const cleanUrl = new URL('/invitations/accept', request.url);
@@ -21,20 +26,29 @@ export async function middleware(request: NextRequest) {
       });
       const payload = await response.json() as { intent?: unknown };
       if (!response.ok || typeof payload.intent !== 'string') {
-        return invitationErrorRedirect(request, cleanUrl, response.status >= 500 ? 'unavailable' : 'invalid');
+        return secureResponse(
+          invitationErrorRedirect(request, cleanUrl, response.status >= 500 ? 'unavailable' : 'invalid'),
+          contentSecurityPolicy,
+        );
       }
       const redirect = NextResponse.redirect(cleanUrl, 303);
       redirect.cookies.set(INVITATION_COOKIE, payload.intent, shortCookie(15 * 60));
       ensureCsrf(request, redirect);
-      return redirect;
+      return secureResponse(redirect, contentSecurityPolicy);
     } catch {
-      return invitationErrorRedirect(request, cleanUrl, 'unavailable');
+      return secureResponse(
+        invitationErrorRedirect(request, cleanUrl, 'unavailable'),
+        contentSecurityPolicy,
+      );
     }
   }
 
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('Content-Security-Policy', contentSecurityPolicy);
+  requestHeaders.set('x-nonce', nonce);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   ensureCsrf(request, response);
-  return response;
+  return secureResponse(response, contentSecurityPolicy);
 }
 
 function invitationErrorRedirect(request: NextRequest, cleanUrl: URL, error: 'invalid' | 'unavailable') {
@@ -50,6 +64,11 @@ function ensureCsrf(request: NextRequest, response: NextResponse) {
       httpOnly: false, maxAge: 24 * 60 * 60, path: '/', sameSite: 'strict', secure: process.env.NODE_ENV === 'production',
     });
   }
+}
+
+function secureResponse(response: NextResponse, contentSecurityPolicy: string) {
+  response.headers.set('Content-Security-Policy', contentSecurityPolicy);
+  return response;
 }
 
 function shortCookie(maxAge: number) {

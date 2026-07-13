@@ -27,8 +27,10 @@ a { color: inherit; }
 .auth-main { display: grid; place-items: center; padding: clamp(24px, 5vw, 72px); background: linear-gradient(140deg, #fafbfc, #f3f4f8); }
 .auth-panel { width: min(100%, 480px); padding: clamp(26px, 4vw, 42px); }
 .auth-panel h2 { margin: 0; font-size: 30px; line-height: 1.25; letter-spacing: -.035em; }
+.auth-panel h2.invitation-heading { margin-top: 14px; }
 .auth-lead { margin: 10px 0 28px; color: var(--g-text-muted); font-size: 16px; }
 .form-stack { display: grid; gap: 18px; }
+.invitation-form { margin-top: 20px; }
 .field { display: grid; gap: 7px; }
 .field label { font-size: 15px; font-weight: 650; }
 .form-actions { display: grid; gap: 10px; margin-top: 6px; }
@@ -39,6 +41,7 @@ a { color: inherit; }
 .error-box, .info-box { border-radius: 10px; padding: 12px 14px; font-size: 15px; }
 .error-box { background: #fff1f0; color: var(--g-danger); }
 .info-box { background: var(--g-primary-soft); color: #4338b4; }
+.inline-heading-icon { margin-right: 7px; vertical-align: -3px; }
 .helper { margin: 22px 0 0; color: var(--g-text-muted); font-size: 14px; text-align: center; }
 .tenant-list { display: grid; gap: 10px; margin: 24px 0; }
 .tenant-option { display: flex; width: 100%; min-height: 66px; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--g-border); border-radius: 12px; background: var(--g-surface); padding: 13px 15px; text-align: left; cursor: pointer; }
@@ -51,6 +54,7 @@ a { color: inherit; }
 .nav-item { display: flex; min-height: 44px; align-items: center; gap: 10px; border-radius: 10px; padding: 9px 11px; color: var(--g-text-muted); text-decoration: none; }
 .nav-item.active { background: var(--g-primary-soft); color: #4338b4; font-weight: 650; }
 .sidebar-account { display: grid; gap: 12px; border-top: 1px solid var(--g-border); padding-top: 16px; }
+.badge-leading-icon { margin-right: 6px; }
 .account-name { font-weight: 650; overflow-wrap: anywhere; }
 .account-email { color: var(--g-text-muted); font-size: 14px; overflow-wrap: anywhere; }
 .chat-main { min-width: 0; display: grid; grid-template-rows: 68px minmax(0, 1fr); }

@@ -25,7 +25,7 @@ export function TenantPicker() {
     {error && <div className="error-box" role="alert">{error}</div>}
     {!session ? <div className="info-box" role="status">조직 정보를 불러오는 중…</div> : <div className="tenant-list">
       {session.tenants.map((tenant) => <button className="tenant-option" key={tenant.id} disabled={Boolean(busy)} onClick={() => select(tenant.id)}>
-        <span><strong><Building2 size={17} aria-hidden style={{ verticalAlign: '-3px', marginRight: 7 }} />{tenant.name}</strong><span>{tenant.actorKind === 'tenant_admin' ? '조직 관리자' : '직원'}</span></span>
+        <span><strong><Building2 className="inline-heading-icon" size={17} aria-hidden />{tenant.name}</strong><span>{tenant.actorKind === 'tenant_admin' ? '조직 관리자' : '직원'}</span></span>
         {busy === tenant.id ? '연결 중…' : <ChevronRight size={20} aria-hidden />}
       </button>)}
     </div>}
