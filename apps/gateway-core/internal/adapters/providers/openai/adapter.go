@@ -192,6 +192,7 @@ func openAIRequestForModel(req provider.ChatCompletionRequest) openAIChatComplet
 			out.MaxCompletionTokens = out.MaxTokens
 		}
 		out.MaxTokens = nil
+		out.Temperature = nil
 	}
 	return out
 }

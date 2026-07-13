@@ -4,7 +4,12 @@ import { TLSSocket, connect as connectTls } from 'node:tls';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { EmailSender, ProjectAdminInvitationEmailMessage, VerificationEmailMessage } from './email-sender';
+import {
+  EmailSender,
+  EmployeeInvitationEmailMessage,
+  ProjectAdminInvitationEmailMessage,
+  VerificationEmailMessage,
+} from './email-sender';
 
 type SmtpSocket = Socket | TLSSocket;
 
@@ -28,6 +33,24 @@ interface SmtpResponse {
 @Injectable()
 export class SmtpEmailSender implements EmailSender {
   constructor(private readonly config: ConfigService) {}
+
+  async sendEmployeeInvitationEmail(
+    message: EmployeeInvitationEmailMessage,
+  ): Promise<void> {
+    const smtpConfig = this.readConfig();
+    const connection = await SmtpConnection.open(smtpConfig);
+
+    try {
+      await connection.sendMail({
+        body: this.renderEmployeeInvitationBody(message),
+        from: smtpConfig.from,
+        subject: `GateLM employee invitation for ${message.tenantName}`,
+        to: message.email,
+      });
+    } finally {
+      await connection.close();
+    }
+  }
 
   async sendProjectAdminInvitationEmail(
     message: ProjectAdminInvitationEmailMessage,
@@ -62,6 +85,23 @@ export class SmtpEmailSender implements EmailSender {
     } finally {
       await connection.close();
     }
+  }
+
+  private renderEmployeeInvitationBody(
+    message: EmployeeInvitationEmailMessage,
+  ): string {
+    return [
+      `Hello ${message.name},`,
+      '',
+      `You have been invited to use GateLM for ${message.tenantName}.`,
+      '',
+      'Use the link below to set your password and activate your employee account:',
+      message.signupUrl,
+      '',
+      `This invitation expires at: ${message.expiresAt.toISOString()}`,
+      '',
+      'If you did not expect this invitation, you can ignore this email.',
+    ].join('\r\n');
   }
 
   private renderProjectAdminInvitationBody(

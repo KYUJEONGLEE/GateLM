@@ -2,12 +2,14 @@ package ratelimit
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
 const (
 	ScopeApplication     = "application"
 	ScopeProject         = "project"
+	ScopeEmployee        = "employee"
 	AlgorithmFixedWindow = "fixed_window"
 	AlgorithmTokenBucket = "token_bucket"
 
@@ -30,6 +32,7 @@ type Request struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	EmployeeID    string
 	Config        Config
 	Now           time.Time
 }
@@ -103,6 +106,13 @@ func ScopeID(scope string, req Request) string {
 		return req.ApplicationID
 	case ScopeProject:
 		return req.ProjectID
+	case ScopeEmployee:
+		projectID := strings.TrimSpace(req.ProjectID)
+		employeeID := strings.TrimSpace(req.EmployeeID)
+		if projectID == "" || employeeID == "" {
+			return ""
+		}
+		return projectID + ":" + employeeID
 	default:
 		return ""
 	}

@@ -305,14 +305,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   return (
     <main className="console-content analytics-page">
       <header className="analytics-header">
-        <div>
-          <h1>{text.title}</h1>
-          <p>{text.subtitle}</p>
-        </div>
-        <button className="analytics-export-button" type="button">
-          <Download aria-hidden="true" size={16} />
-          {text.export}
-        </button>
+        <h1>{text.title}</h1>
       </header>
 
       <form action={`/tenants/${tenantId}/analytics`} className="analytics-filter-bar">
@@ -362,6 +355,10 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         </label>
         <button className="analytics-apply-button" type="submit">
           {text.apply}
+        </button>
+        <button className="analytics-export-button" type="button">
+          <Download aria-hidden="true" size={16} />
+          {text.export}
         </button>
       </form>
 

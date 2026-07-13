@@ -9,6 +9,7 @@ import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
+import { getOnboardingRuntimeSelectionError } from "@/lib/control-plane/onboarding-runtime-readiness";
 import {
   publishRuntimePolicyModelSelectionForApplication
 } from "@/lib/control-plane/runtime-policy-client";
@@ -175,6 +176,16 @@ export async function updateProject(
   routeTenantId?: string,
   options?: ControlPlaneRequestOptions
 ): Promise<ProjectRequestResult> {
+  const runtimeSelectionError = getOnboardingRuntimeSelectionError(values);
+
+  if (runtimeSelectionError) {
+    return {
+      error: runtimeSelectionError,
+      ok: false,
+      status: 400
+    };
+  }
+
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}`,

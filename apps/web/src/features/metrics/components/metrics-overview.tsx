@@ -87,7 +87,6 @@ export function MetricsOverview({ locale, model }: MetricsOverviewProps) {
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">{text.analytics}</p>
           <h2>{text.title}</h2>
         </div>
       </section>

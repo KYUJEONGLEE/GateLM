@@ -15,7 +15,18 @@ export interface ProjectAdminInvitationEmailMessage {
   tenantName: string;
 }
 
+export interface EmployeeInvitationEmailMessage {
+  email: string;
+  expiresAt: Date;
+  name: string;
+  signupUrl: string;
+  tenantName: string;
+}
+
 export interface EmailSender {
+  sendEmployeeInvitationEmail(
+    message: EmployeeInvitationEmailMessage,
+  ): Promise<void>;
   sendProjectAdminInvitationEmail(
     message: ProjectAdminInvitationEmailMessage,
   ): Promise<void>;
@@ -24,8 +35,15 @@ export interface EmailSender {
 
 @Injectable()
 export class InMemoryEmailSender implements EmailSender {
+  readonly employeeInvitationsSent: EmployeeInvitationEmailMessage[] = [];
   readonly projectAdminInvitationsSent: ProjectAdminInvitationEmailMessage[] = [];
   readonly sent: VerificationEmailMessage[] = [];
+
+  async sendEmployeeInvitationEmail(
+    message: EmployeeInvitationEmailMessage,
+  ): Promise<void> {
+    this.employeeInvitationsSent.push(message);
+  }
 
   async sendProjectAdminInvitationEmail(
     message: ProjectAdminInvitationEmailMessage,

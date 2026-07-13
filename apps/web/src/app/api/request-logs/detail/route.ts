@@ -62,7 +62,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Request log was not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ data: detail });
+  const projectName = projectsModel.projects.find((project) => project.id === detail.projectId)?.name ?? null;
+
+  return NextResponse.json({
+    data: {
+      ...detail,
+      projectName
+    }
+  });
 }
 
 function optionalQueryValue(query: URLSearchParams, key: string) {

@@ -74,7 +74,7 @@ export function DashboardLineEChart({
         extraCssText: "box-shadow: 0 14px 30px rgba(15, 23, 42, 0.24); border-radius: 8px;",
         textStyle: {
           color: "#f8fafc",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 800
         },
         trigger: "axis",
@@ -83,7 +83,7 @@ export function DashboardLineEChart({
       xAxis: {
         axisLabel: {
           color: chartAxisColor,
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: 700,
           hideOverlap: true
         },
@@ -102,7 +102,7 @@ export function DashboardLineEChart({
       yAxis: {
         axisLabel: {
           color: chartAxisColor,
-          fontSize: 11,
+          fontSize: 13,
           formatter: compactAxisNumber
         },
         axisLine: {
@@ -177,13 +177,13 @@ export function DashboardPieEChart({
         subtext: totalLabel,
         subtextStyle: {
           color: centerSubtextColor,
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: 800
         },
         text: formatInteger(total),
         textStyle: {
           color: centerTextColor,
-          fontSize: 24,
+          fontSize: 26,
           fontWeight: 900
         },
         top: "center"
@@ -204,7 +204,7 @@ export function DashboardPieEChart({
         },
         textStyle: {
           color: "#f8fafc",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 800
         },
         trigger: "item"
@@ -275,7 +275,7 @@ export function DashboardCostOverTimeEChart({
         formatter: (params: unknown) => formatCostTooltip(params, averageSpendUsd),
         textStyle: {
           color: "#f8fafc",
-          fontSize: 13,
+          fontSize: 15,
           fontWeight: 800
         },
         trigger: "axis"
@@ -283,7 +283,7 @@ export function DashboardCostOverTimeEChart({
       xAxis: {
         axisLabel: {
           color: "#94a3b8",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           hideOverlap: true,
           interval: xAxisLabelInterval
@@ -302,7 +302,7 @@ export function DashboardCostOverTimeEChart({
       yAxis: {
         axisLabel: {
           color: "#94a3b8",
-          fontSize: 12,
+          fontSize: 14,
           formatter: formatCostAxisValue
         },
         axisLine: {
@@ -338,7 +338,7 @@ export function DashboardCostOverTimeEChart({
 
               return formatCostUsd(Number(params.value ?? 0));
             },
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: 800,
             position: "top",
             show: values.length <= 8

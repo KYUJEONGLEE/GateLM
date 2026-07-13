@@ -55,7 +55,7 @@ export function AnalyticsProviderLatencyBarChart({
       xAxis: {
         axisLabel: {
           color: axisColor,
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           formatter: compactAxisNumber
         },
@@ -77,7 +77,7 @@ export function AnalyticsProviderLatencyBarChart({
       yAxis: {
         axisLabel: {
           color: "#d7dee9",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 800
         },
         axisLine: {
@@ -134,7 +134,7 @@ export function AnalyticsLatencyDistributionLineChart({
         right: 6,
         textStyle: {
           color: "#cbd5e1",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 800
         },
         top: 0
@@ -143,7 +143,7 @@ export function AnalyticsLatencyDistributionLineChart({
       xAxis: {
         axisLabel: {
           color: axisColor,
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           hideOverlap: true,
           interval: xAxisLabelInterval
@@ -163,7 +163,7 @@ export function AnalyticsLatencyDistributionLineChart({
       yAxis: {
         axisLabel: {
           color: axisColor,
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           formatter: compactAxisNumber
         },
@@ -304,7 +304,7 @@ function analyticsTooltip(unit: string) {
     extraCssText: "box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42); border-radius: 8px;",
     textStyle: {
       color: "#f8fafc",
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: 800
     },
     trigger: "axis",

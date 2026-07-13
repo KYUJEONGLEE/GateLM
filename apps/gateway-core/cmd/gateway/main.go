@@ -18,6 +18,8 @@ import (
 	credentialcomposite "gatelm/apps/gateway-core/internal/adapters/credentials/composite"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	credentialpostgres "gatelm/apps/gateway-core/internal/adapters/credentials/postgres"
+	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
+	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	cachedpricing "gatelm/apps/gateway-core/internal/adapters/pricing/cached"
@@ -34,6 +36,10 @@ import (
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
+	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
+	postgresentitlement "gatelm/apps/gateway-core/internal/adapters/tenantchat/entitlement/postgres"
+	postgrestentantruntime "gatelm/apps/gateway-core/internal/adapters/tenantchat/runtime/postgres"
+	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
@@ -46,10 +52,14 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
+	tenantchathttp "gatelm/apps/gateway-core/internal/http/tenantchat"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
+	employeepolicystage "gatelm/apps/gateway-core/internal/pipeline/stages/employeepolicy"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
+	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
+	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -154,6 +164,7 @@ func main() {
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
+	dailyTokenUsageStore := redisemployeepolicy.NewDailyTokenUsageStore(redisClient)
 	var terminalLogWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
 	var asyncTerminalLogWriter *asyncinvocationlog.TerminalLogWriter
 	if cfg.AsyncLogEnabled {
@@ -167,6 +178,10 @@ func main() {
 		})
 		terminalLogWriter = asyncTerminalLogWriter
 	}
+	terminalLogWriter = redisemployeepolicy.NewTrackingTerminalLogWriter(
+		terminalLogWriter,
+		dailyTokenUsageStore,
+	)
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
 	pricingCatalog := cachedpricing.NewReader(postgrespricing.NewReader(postgresPool), cachedpricing.Config{
 		Enabled:    cfg.PricingCache.Enabled,
@@ -201,6 +216,10 @@ func main() {
 	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
+		employeepolicystage.NewStage(postgresemployeepolicy.NewResolverWithDailyTokenUsage(
+			postgresPool,
+			dailyTokenUsageStore,
+		)),
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)
@@ -217,6 +236,35 @@ func main() {
 		routerOptions...,
 	)
 	server := app.NewServer(cfg, router)
+	var tenantChatPrivateServer *app.Server
+	if cfg.TenantChatPrivate.Enabled {
+		workloadVerifier, err := workloadauth.Load(
+			cfg.TenantChatPrivate.WorkloadJWKSFile,
+			cfg.TenantChatPrivate.BindingHMACKeysFile,
+		)
+		if err != nil {
+			log.Fatalf("gateway-core tenant chat workload verifier failed: %v", err)
+		}
+		jtiConsumer, err := workloadauth.NewJTIConsumer(redisClient, cfg.TenantChatPrivate.WorkloadJTIPrefix)
+		if err != nil {
+			log.Fatalf("gateway-core tenant chat jti guard failed: %v", err)
+		}
+		tenantChatAuthenticator := requestauth.New(workloadVerifier, jtiConsumer)
+		tenantChatAdmissions := admissionservice.New(
+			postgresentitlement.NewChecker(postgresPool),
+			postgrestentantruntime.NewReader(postgresPool),
+			postgresadmission.NewStore(postgresPool),
+		)
+		tenantChatPrivateRouter := tenantchathttp.NewRouter(
+			tenantChatAuthenticator,
+			tenantChatAdmissions,
+			cfg.MaxRequestBodyBytes,
+		)
+		tenantChatPrivateServer = app.NewServerAtAddress(
+			cfg.TenantChatPrivate.ListenAddress,
+			tenantChatPrivateRouter,
+		)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -227,6 +275,14 @@ func main() {
 			log.Fatalf("gateway-core server failed: %v", err)
 		}
 	}()
+	if tenantChatPrivateServer != nil {
+		go func() {
+			log.Printf("gateway-core tenant chat private listener enabled")
+			if err := tenantChatPrivateServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Fatalf("gateway-core tenant chat private server failed: %v", err)
+			}
+		}()
+	}
 
 	<-ctx.Done()
 
@@ -234,6 +290,11 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("gateway-core shutdown failed: %v", err)
+	}
+	if tenantChatPrivateServer != nil {
+		if err := tenantChatPrivateServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("gateway-core tenant chat private shutdown failed: %v", err)
+		}
 	}
 	if asyncTerminalLogWriter != nil {
 		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)

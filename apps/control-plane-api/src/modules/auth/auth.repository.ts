@@ -1,5 +1,12 @@
 export type AuthSessionKind = 'full' | 'onboarding';
 
+export class EmployeeInvitationNotFoundError extends Error {
+  constructor() {
+    super('Employee invitation not found.');
+    this.name = 'EmployeeInvitationNotFoundError';
+  }
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -80,6 +87,17 @@ export interface AuthProjectAdminInvitation {
   project?: AuthProject;
 }
 
+export interface AuthEmployeeInvitation {
+  acceptedAt: Date | null;
+  email: string;
+  employeeId: string;
+  expiresAt: Date;
+  name: string | null;
+  status: string;
+  tenant?: AuthTenant;
+  tenantId: string;
+}
+
 export interface AuthSession {
   id: string;
   userId: string;
@@ -128,6 +146,17 @@ export interface CreateUserInput {
 }
 
 export interface AuthRepository {
+  acceptEmployeeInvitation(input: {
+    acceptedAt: Date;
+    email: string;
+    name: string | null;
+    passwordHash: string;
+    tokenHash: string;
+  }): Promise<{
+    employeeInvitation: AuthEmployeeInvitation;
+    membership: AuthTenantMembership;
+    user: AuthUser;
+  }>;
   acceptProjectAdminInvitation(input: {
     acceptedAt: Date;
     email: string;

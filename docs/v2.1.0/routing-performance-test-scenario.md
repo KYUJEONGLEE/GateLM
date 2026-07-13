@@ -1,5 +1,8 @@
 # GateLM Routing Performance Test Scenario
 
+> [!NOTE]
+> **문서 상태: Versioned evidence scenario.** 현재 문서 진입점은 [`docs/current/README.md`](../current/README.md)다. 수치와 결과는 실행 commit과 환경을 함께 확인한다.
+
 ## 목적
 
 멘토 공유용 라우팅 성능 테스트 시나리오다.

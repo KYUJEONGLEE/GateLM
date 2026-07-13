@@ -124,13 +124,14 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
-		RequestID: requestID,
-		TraceID:   requestID,
-		Endpoint:  "/v1/chat/completions",
-		Method:    http.MethodPost,
-		StartedAt: startedAt.UTC(),
-		EndUserID: r.Header.Get("X-GateLM-End-User-Id"),
-		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
+		RequestID:      requestID,
+		TraceID:        requestID,
+		Endpoint:       "/v1/chat/completions",
+		Method:         http.MethodPost,
+		StartedAt:      startedAt.UTC(),
+		EndUserID:      r.Header.Get("X-GateLM-End-User-Id"),
+		TrustedActorID: r.Header.Get("X-GateLM-End-User-Id"),
+		FeatureID:      r.Header.Get("X-GateLM-Feature-Id"),
 	})
 	h.initializeSemanticCacheContext(reqCtx)
 	h.recordGatewayRequestStarted(reqCtx)
@@ -3513,6 +3514,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		RuntimeSnapshot:             reqCtx.RuntimeSnapshot,
 		RateLimitDecision:           reqCtx.RateLimitDecision,
 		BudgetDecision:              reqCtx.BudgetDecision,
+		EmployeePolicyDecision:      reqCtx.EmployeePolicyDecision,
 		Endpoint:                    reqCtx.Endpoint,
 		Method:                      reqCtx.Method,
 		Source:                      invocationlog.SourceCustomerApp,

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/request"
@@ -133,6 +134,38 @@ func TestStagePassesProjectScopedRuntimeRateLimitConfig(t *testing.T) {
 
 	if limiter.request.Config.Scope != ratelimit.ScopeProject || limiter.request.ProjectID != "project_demo" {
 		t.Fatalf("expected project scoped rate limit request, got %#v", limiter.request)
+	}
+}
+
+func TestStageUsesEmployeeRateLimitInsteadOfSharedApplicationBucket(t *testing.T) {
+	limiter := &fakeLimiter{decision: ratelimit.Decision{Allowed: true}}
+	stage := NewStage(limiter, ratelimit.Config{
+		Enabled:       true,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     ratelimit.AlgorithmTokenBucket,
+		WindowSeconds: 60,
+		Limit:         1000,
+	})
+	gatewayCtx := testGatewayContext()
+	gatewayCtx.Identity.EmployeeID = "employee_demo"
+	gatewayCtx.Runtime.HasEmployeePolicy = true
+	gatewayCtx.Runtime.EmployeePolicy = employeepolicy.Policy{
+		EmployeeID: "employee_demo",
+		RateLimit: employeepolicy.RateLimitPolicy{
+			Enabled:       true,
+			Limit:         5,
+			WindowSeconds: 60,
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected employee rate limit request to pass, got %v", err)
+	}
+	if limiter.request.Config.Scope != ratelimit.ScopeEmployee || limiter.request.Config.Limit != 5 {
+		t.Fatalf("expected employee policy override, got %#v", limiter.request.Config)
+	}
+	if limiter.request.EmployeeID != "employee_demo" || ratelimit.ScopeID(limiter.request.Config.Scope, limiter.request) != "project_demo:employee_demo" {
+		t.Fatalf("expected project-scoped employee bucket, got %#v", limiter.request)
 	}
 }
 

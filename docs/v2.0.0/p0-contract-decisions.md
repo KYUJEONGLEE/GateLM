@@ -1,5 +1,8 @@
 # GateLM v2.0.0 P0 contract decisions draft
 
+> [!IMPORTANT]
+> **문서 상태: Historical draft.** 현재 작업은 [`docs/current/README.md`](../current/README.md)에서 시작한다. 이 문서의 후보 표현은 current 계약이나 schema field가 아니다.
+
 ## 1. Summary
 
 이 문서는 `docs/v2.0.0/p0-legacy-field-cleanup.md`의 `contract-change-needed` 항목을 팀 리뷰용 결정안으로 정리한다.

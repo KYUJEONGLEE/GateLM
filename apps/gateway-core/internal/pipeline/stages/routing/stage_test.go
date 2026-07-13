@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -224,5 +225,65 @@ func TestStageDoesNotRestrictHighQualityWhenBudgetPolicyDisablesQualityGuard(t *
 	}
 	if router.request.HighQualityRestricted {
 		t.Fatal("expected disabled budget quality guard to keep high quality routes unrestricted")
+	}
+}
+
+func TestStageRestrictsHighQualityWhenEmployeeQuotaExceeded(t *testing.T) {
+	router := &fakeRouter{decision: routing.Decision{RequestedModel: "auto"}}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{RequestedModel: "auto"},
+		Governance: request.GovernanceContext{
+			EmployeePolicyDecision: &employeepolicy.Decision{
+				QuotaOutcome: employeepolicy.QuotaOutcomeExceeded,
+			},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if !router.request.HighQualityRestricted {
+		t.Fatal("expected employee quota exceed to restrict high quality")
+	}
+}
+
+func TestStageDoesNotRestrictHighQualityAtEmployeeWarningThreshold(t *testing.T) {
+	router := &fakeRouter{decision: routing.Decision{RequestedModel: "auto"}}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{RequestedModel: "auto"},
+		Governance: request.GovernanceContext{
+			EmployeePolicyDecision: &employeepolicy.Decision{
+				QuotaOutcome: employeepolicy.QuotaOutcomeWarned,
+			},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if router.request.HighQualityRestricted {
+		t.Fatal("employee quota warning must not restrict high quality")
+	}
+}
+
+func TestStageRestrictsHighQualityWhenEmployeeDailyTokenLimitExceeded(t *testing.T) {
+	router := &fakeRouter{decision: routing.Decision{RequestedModel: "auto"}}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{RequestedModel: "auto"},
+		Governance: request.GovernanceContext{
+			EmployeePolicyDecision: &employeepolicy.Decision{
+				DailyTokenOutcome: employeepolicy.DailyTokenOutcomeExceeded,
+			},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if !router.request.HighQualityRestricted {
+		t.Fatal("expected employee daily token exceed to restrict high quality")
 	}
 }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -15,6 +16,7 @@ import {
   verifyPassword,
 } from './auth.crypto';
 import {
+  AuthEmployeeInvitation,
   AuthProjectAdmin,
   AuthProjectAdminInvitation,
   AuthRepository,
@@ -23,6 +25,7 @@ import {
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
+  EmployeeInvitationNotFoundError,
 } from './auth.repository';
 import { AUTH_REPOSITORY, EMAIL_SENDER, GOOGLE_OAUTH_CLIENT } from './auth.tokens';
 import {
@@ -78,6 +81,17 @@ interface PublicProjectAdminInvitation {
   tenantName: string | null;
 }
 
+interface PublicEmployeeInvitation {
+  acceptedAt?: string | null;
+  email: string;
+  employeeId: string;
+  expiresAt: string;
+  name: string | null;
+  status: string;
+  tenantId: string;
+  tenantName: string | null;
+}
+
 const MAX_EMAIL_VERIFICATION_FAILURES = 5;
 
 export interface SessionIssue {
@@ -113,6 +127,7 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<{
+    acceptedEmployeeInvitation?: PublicEmployeeInvitation;
     acceptedProjectInvitation?: PublicProjectAdminInvitation;
     session?: SessionIssue;
     signupDraft?: SignupDraftIssue;
@@ -122,6 +137,9 @@ export class AuthService {
     const email = normalizeEmail(dto.email);
     const devAutoVerify = this.isDevAutoVerifyEnabled();
     const now = new Date();
+    if (dto.projectInviteToken && dto.employeeInviteToken) {
+      throw new BadRequestException('Only one invitation token can be used.');
+    }
     if (dto.projectInviteToken) {
       await this.getProjectAdminInvitationOrThrow(
         dto.projectInviteToken,
@@ -130,12 +148,40 @@ export class AuthService {
       );
     }
 
+    const passwordHash = await hashPassword(dto.password);
+
+    if (dto.employeeInviteToken) {
+      let accepted: Awaited<ReturnType<AuthRepository['acceptEmployeeInvitation']>>;
+      try {
+        accepted = await this.repository.acceptEmployeeInvitation({
+          acceptedAt: now,
+          email,
+          name: dto.name,
+          passwordHash,
+          tokenHash: hashSecret(dto.employeeInviteToken),
+        });
+      } catch (error) {
+        if (error instanceof EmployeeInvitationNotFoundError) {
+          throw new UnauthorizedException('Invalid or expired employee invitation.');
+        }
+        throw error;
+      }
+      const session = await this.issueSession(accepted.user.id, 'full');
+
+      return {
+        acceptedEmployeeInvitation: this.toPublicEmployeeInvitation(
+          accepted.employeeInvitation,
+        ),
+        session,
+        user: this.toPublicUser(accepted.user),
+        verificationRequired: false,
+      };
+    }
+
     const existingUser = await this.repository.findUserByEmail(email);
     if (existingUser) {
       await this.ensureEmailCanStartLocalSignup(existingUser);
     }
-
-    const passwordHash = await hashPassword(dto.password);
 
     if (dto.projectInviteToken) {
       if (existingUser) {
@@ -784,6 +830,21 @@ export class AuthService {
       projectName: projectAdmin.project?.name ?? null,
       tenantId: projectAdmin.tenantId,
       userId: projectAdmin.userId,
+    };
+  }
+
+  private toPublicEmployeeInvitation(
+    invitation: AuthEmployeeInvitation,
+  ): PublicEmployeeInvitation {
+    return {
+      acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
+      email: invitation.email,
+      employeeId: invitation.employeeId,
+      expiresAt: invitation.expiresAt.toISOString(),
+      name: invitation.name,
+      status: invitation.status,
+      tenantId: invitation.tenantId,
+      tenantName: invitation.tenant?.name ?? null,
     };
   }
 

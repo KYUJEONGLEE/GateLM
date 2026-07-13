@@ -25,7 +25,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} className="font-sans" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {children}
       </body>
