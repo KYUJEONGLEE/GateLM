@@ -33,7 +33,7 @@ max_polls="${GATELM_SSM_MAX_POLLS:-480}"
 [[ "${poll_interval_seconds}" =~ ^[0-9]+$ ]] || ssm_fail "Invalid poll interval."
 [[ "${max_polls}" =~ ^[1-9][0-9]*$ ]] || ssm_fail "Invalid poll count."
 
-for command_name in aws jq; do
+for command_name in aws base64 jq tr; do
   need_command "${command_name}"
 done
 
@@ -75,8 +75,11 @@ sudo -u ubuntu env \
 EOF
 )"
 
+remote_script_base64="$(printf '%s' "${remote_script}" | base64 | tr -d '\n')"
+remote_command="printf '%s' '${remote_script_base64}' | base64 --decode | bash"
+
 parameters_json="$(jq -cn \
-  --arg command "${remote_script}" \
+  --arg command "${remote_command}" \
   '{commands: [$command], executionTimeout: ["7200"]}')"
 
 ssm_log "Sending deployment ${deploy_sha} to ${instance_id}."
