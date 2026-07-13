@@ -12,7 +12,7 @@
     "verify:v2.1-category-eval": "node --test scripts/verify-v2.1-category-eval.test.mjs && node scripts/verify-v2.1-category-eval.mjs",
     "verify:v2.1-difficulty-eval": "node --test scripts/verify-v2.1-difficulty-eval.test.mjs && node scripts/verify-v2.1-difficulty-eval.mjs",
     "v2.1:routing:generate-difficulty-training-pilot": "node scripts/dev/generate-v2.1-difficulty-training-pilot.mjs",
-    "v2.1:routing:test-difficulty-training-tooling": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-difficulty-training-tooling-test.ps1",
+    "v2.1:routing:test-difficulty-training-tooling": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-difficulty-training-tooling-test.ps1",
     "v2.1:routing:evaluate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-routing-evaluate.ps1",
     "v2.1:routing:evaluate:difficulty": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-routing-evaluate.ps1 -evaluation-scope difficulty -dataset docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl",
     "v2.1:routing:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-routing-eval-report.ps1",
