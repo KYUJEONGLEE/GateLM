@@ -19,27 +19,21 @@ type snapshotResolver interface {
 }
 
 type usageAccounting interface {
-	ConsumeAndReserve(
+	BeginExecution(
 		ctx context.Context,
 		requestContext tenantchat.RequestContext,
 		snapshot tenantruntime.Snapshot,
 	) (tenantchat.UsageReservation, error)
-	StartAttempt(
+	BeginFallback(
 		ctx context.Context,
 		requestContext tenantchat.RequestContext,
 		snapshot tenantruntime.Snapshot,
 		reservationID string,
+		previousAttemptNo int,
+		previousUsage tenantchat.ConfirmedUsage,
+		previousOutcome string,
 		route tenantchat.SelectedRoute,
 		attemptNo int,
-		kind string,
-	) error
-	RecordConfirmedAttempt(
-		ctx context.Context,
-		requestContext tenantchat.RequestContext,
-		reservationID string,
-		attemptNo int,
-		usage tenantchat.ConfirmedUsage,
-		outcome string,
 	) error
 	FinalizeConfirmed(
 		ctx context.Context,
@@ -175,7 +169,7 @@ func (s *Service) Prepare(
 		return nil, tenantchat.ErrRuntimeUnavailable
 	}
 
-	reservation, err := s.usage.ConsumeAndReserve(ctx, request.Context, snapshot)
+	reservation, err := s.usage.BeginExecution(ctx, request.Context, snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -192,26 +186,6 @@ func (s *Service) Prepare(
 		}
 		return &ReplayExecution{requestContext: request.Context, settlement: settlement}, nil
 	}
-	if err := s.usage.StartAttempt(
-		ctx,
-		request.Context,
-		snapshot,
-		reservation.ReservationID,
-		reservation.Route,
-		1,
-		"primary",
-	); err != nil {
-		settleCtx, cancel := detachedAccountingContext(ctx)
-		_, releaseErr := s.usage.FinalizeReleased(
-			settleCtx, request.Context, reservation.ReservationID, terminalOutcomeForError(err),
-		)
-		cancel()
-		if releaseErr != nil {
-			return nil, tenantchat.ErrUsageGuardUnavailable
-		}
-		return nil, err
-	}
-
 	streamCtx, cancel := context.WithTimeout(
 		ctx,
 		time.Duration(snapshot.Policies.Streaming.MaxDurationSeconds)*time.Second,
@@ -285,12 +259,9 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 
 		confirmed := confirmedUsage(result.usage)
 		if !result.clientWrite && result.deltaCount == 0 && e.canFallback(result.err) {
-			if err := e.recordConfirmed(ctx, confirmed, outcome); err != nil {
-				return e.emitAccountingFailure(emit, err)
-			}
 			fallbackRoute, ok := e.nextFallbackRoute()
 			if ok {
-				started, openErr := e.openFallback(ctx, fallbackRoute)
+				started, openErr := e.openFallback(ctx, fallbackRoute, confirmed, outcome)
 				if openErr == nil {
 					continue
 				}
@@ -367,11 +338,17 @@ func (e *PreparedExecution) relayAttempt(ctx context.Context, emit EventEmitter)
 	}
 }
 
-func (e *PreparedExecution) openFallback(ctx context.Context, route tenantchat.SelectedRoute) (bool, error) {
+func (e *PreparedExecution) openFallback(
+	ctx context.Context,
+	route tenantchat.SelectedRoute,
+	previousUsage tenantchat.ConfirmedUsage,
+	previousOutcome string,
+) (bool, error) {
 	e.closeCurrentStream()
 	e.attemptNo++
-	if err := e.usage.StartAttempt(
-		ctx, e.requestContext, e.snapshot, e.reservation.ReservationID, route, e.attemptNo, "fallback",
+	if err := e.usage.BeginFallback(
+		ctx, e.requestContext, e.snapshot, e.reservation.ReservationID,
+		e.attemptNo-1, previousUsage, previousOutcome, route, e.attemptNo,
 	); err != nil {
 		e.attemptNo--
 		return false, err
@@ -447,14 +424,6 @@ func resolveSnapshotRoute(snapshot tenantruntime.Snapshot, routeID string) (tena
 		}
 	}
 	return tenantchat.SelectedRoute{}, false
-}
-
-func (e *PreparedExecution) recordConfirmed(ctx context.Context, usage tenantchat.ConfirmedUsage, outcome string) error {
-	settleCtx, cancel := detachedAccountingContext(ctx)
-	defer cancel()
-	return e.usage.RecordConfirmedAttempt(
-		settleCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo, usage, outcome,
-	)
 }
 
 func (e *PreparedExecution) finalizeConfirmed(ctx context.Context, usage *provider.Usage, outcome string) (tenantchat.UsageSettlement, error) {

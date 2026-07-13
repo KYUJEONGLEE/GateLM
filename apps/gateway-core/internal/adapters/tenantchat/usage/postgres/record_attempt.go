@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 
@@ -36,6 +37,27 @@ func (s *ReservationStore) RecordConfirmedAttempt(
 	if err != nil || reservation.State != "reserved" {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = recordConfirmedAttemptTx(
+		ctx, tx, s.now().UTC(), requestContext, reservationID, attemptNo, usage, outcome,
+	); err != nil {
+		return err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	return nil
+}
+
+func recordConfirmedAttemptTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	now time.Time,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	attemptNo int,
+	usage tenantchat.ConfirmedUsage,
+	outcome string,
+) error {
 	attempt, err := lockAttempt(ctx, tx, requestContext, reservationID, attemptNo)
 	if err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
@@ -63,9 +85,6 @@ func (s *ReservationStore) RecordConfirmedAttempt(
 			storedOutput != usage.OutputTokens || storedCacheRead != usage.CacheReadInputTokens || storedCost != confirmedCost {
 			return tenantchat.ErrIdempotencyConflict
 		}
-		if err = tx.Commit(ctx); err != nil {
-			return tenantchat.ErrUsageGuardUnavailable
-		}
 		return nil
 	}
 	if _, err = tx.Exec(ctx, `
@@ -77,13 +96,10 @@ func (s *ReservationStore) RecordConfirmedAttempt(
 		  AND reservation_id = $3::uuid AND tenant_id = $10::uuid
 	`, requestContext.RequestID, attemptNo, reservationID,
 		usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens, confirmedCost,
-		outcome, s.now().UTC(), requestContext.ExecutionScope.TenantID); err != nil {
+		outcome, now, requestContext.ExecutionScope.TenantID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tenantchat.ErrIdempotencyConflict
 		}
-		return tenantchat.ErrUsageGuardUnavailable
-	}
-	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
 	return nil

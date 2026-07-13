@@ -461,17 +461,29 @@ type fakeUsageAccounting struct {
 	lastOutcome       string
 }
 
-func (f *fakeUsageAccounting) ConsumeAndReserve(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot) (tenantchat.UsageReservation, error) {
+func (f *fakeUsageAccounting) BeginExecution(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot) (tenantchat.UsageReservation, error) {
 	index := f.reserveCalls
 	f.reserveCalls++
+	f.startAttemptCalls++
 	if index < len(f.reservations) {
 		return f.reservations[index], f.err
 	}
 	return f.reservation, f.err
 }
 
-func (f *fakeUsageAccounting) StartAttempt(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, string, tenantchat.SelectedRoute, int, string) error {
+func (f *fakeUsageAccounting) BeginFallback(
+	context.Context,
+	tenantchat.RequestContext,
+	tenantruntime.Snapshot,
+	string,
+	int,
+	tenantchat.ConfirmedUsage,
+	string,
+	tenantchat.SelectedRoute,
+	int,
+) error {
 	f.startAttemptCalls++
+	f.recordCalls++
 	return f.err
 }
 
@@ -479,12 +491,6 @@ func (f *fakeUsageAccounting) FinalizeConfirmed(_ context.Context, _ tenantchat.
 	f.settleCalls++
 	f.confirmedUsage = usage
 	return f.settlement, f.err
-}
-
-func (f *fakeUsageAccounting) RecordConfirmedAttempt(_ context.Context, _ tenantchat.RequestContext, _ string, _ int, usage tenantchat.ConfirmedUsage, _ string) error {
-	f.recordCalls++
-	f.confirmedUsage = usage
-	return f.err
 }
 
 func (f *fakeUsageAccounting) FinalizeRecordedAttempts(context.Context, tenantchat.RequestContext, string) (tenantchat.UsageSettlement, error) {

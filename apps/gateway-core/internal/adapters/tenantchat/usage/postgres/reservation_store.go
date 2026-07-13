@@ -25,6 +25,23 @@ func (s *ReservationStore) ConsumeAndReserve(
 	ctx context.Context,
 	requestContext tenantchat.RequestContext,
 	snapshot tenantruntime.Snapshot,
+) (tenantchat.UsageReservation, error) {
+	return s.consumeAndReserve(ctx, requestContext, snapshot, false)
+}
+
+func (s *ReservationStore) BeginExecution(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+) (tenantchat.UsageReservation, error) {
+	return s.consumeAndReserve(ctx, requestContext, snapshot, true)
+}
+
+func (s *ReservationStore) consumeAndReserve(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+	startPrimary bool,
 ) (result tenantchat.UsageReservation, err error) {
 	if s == nil || s.pool == nil || requestContext.UsageIntent == nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
@@ -131,6 +148,13 @@ func (s *ReservationStore) ConsumeAndReserve(
 		reservationID, eventID, reservedTokens, reservedCost, quotaState, budgetState, now,
 	); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if startPrimary {
+		if err = insertAttemptRow(
+			ctx, tx, requestContext, reservationID, route, 1, "primary", reservedCost, now,
+		); err != nil {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
