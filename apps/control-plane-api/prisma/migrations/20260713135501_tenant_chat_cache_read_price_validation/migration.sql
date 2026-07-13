@@ -1,5 +1,4 @@
--- Validate separately so the ADD CONSTRAINT transaction releases its
--- AccessExclusiveLock before PostgreSQL scans existing provider attempts.
+-- Repeat the safe preflight immediately before validating existing rows.
 
 DO $tenant_chat_cache_read_price_preflight$
 BEGIN
