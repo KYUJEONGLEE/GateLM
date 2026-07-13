@@ -91,7 +91,7 @@ Not yet covered as first-class metrics:
 
 | Future metric | Current status |
 |---|---|
-| Async log retry count | needs retry logic before metric can be meaningful |
+| Async log retry count | batch failures fall back to single writes; no dedicated retry counter yet |
 | Async log DLQ count | needs dead-letter queue design first |
 | Oldest queued log age | needs queue item enqueue timestamp tracking |
 | Dedicated Provider bypass count | currently approximated from Gateway vs Provider request samples and dashboard cache/safety/rate-limit outcomes |
@@ -105,8 +105,85 @@ The Gateway async terminal log writer is enabled by default:
 GATEWAY_ASYNC_LOG_ENABLED=true
 GATEWAY_ASYNC_LOG_QUEUE_SIZE=1024
 GATEWAY_ASYNC_LOG_WORKER_COUNT=2
+GATEWAY_ASYNC_LOG_BATCH_SIZE=100
+GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS=10
 GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS=2000
 GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS=5000
 ```
 
-For performance tuning, compare queue depth, dropped count, enqueue latency, persist latency, and dashboard freshness while changing `GATEWAY_ASYNC_LOG_WORKER_COUNT` to values such as `1`, `2`, `4`, and `8`.
+The PostgreSQL adapter sends each worker batch with one `pgx.Batch` round trip.
+If a batch write fails, the async writer retries each record individually; the
+Request Log insert and related upserts are idempotent by request/event keys.
+`gatelm_async_log_persist_total` counts records by final persistence outcome,
+while the persist duration histogram observes delegate write calls (single or
+batch).
+
+For performance tuning, compare queue depth, dropped count, enqueue latency,
+persist latency, and dashboard freshness while changing worker count, batch
+size, and flush interval one variable at a time. A larger queue only absorbs a
+burst; it does not increase steady-state database throughput.
+
+## Database Pool Isolation And Read Caches
+
+Gateway creates separate primary and Request Log PostgreSQL pools. The log
+pool is used by terminal and authentication-failure writers; authentication,
+budget, pricing, credentials, rate-limit fallback, and dashboard reads use the
+primary pool. Both connections set distinct PostgreSQL `application_name`
+values so operators can inspect them without high-cardinality labels.
+
+```text
+GATEWAY_DATABASE_MAX_CONNS=16
+GATEWAY_DATABASE_MIN_CONNS=2
+GATEWAY_LOG_DATABASE_MAX_CONNS=4
+GATEWAY_LOG_DATABASE_MIN_CONNS=2
+```
+
+Size both pools against the database server connection budget. Increasing
+pool limits beyond the database's useful concurrency can increase latency.
+
+Database auth and pricing caches are disabled by default and explicitly
+enabled in the isolated performance Compose profile:
+
+```text
+GATEWAY_AUTH_CACHE_ENABLED=false
+GATEWAY_AUTH_CACHE_TTL_MS=1000
+GATEWAY_AUTH_CACHE_MAX_ENTRIES=4096
+GATEWAY_PRICING_CACHE_ENABLED=false
+GATEWAY_PRICING_CACHE_TTL_MS=5000
+GATEWAY_PRICING_CACHE_MAX_ENTRIES=1024
+```
+
+The auth cache stores successful identities only, uses a bounded LRU, and keys
+entries with HMAC-SHA256; plaintext credentials and invalid credential results
+are never cached. Enabling it creates a revocation visibility window of at
+most the configured TTL, so production enablement requires that tradeoff to
+match the credential revocation SLA. The pricing cache rechecks each rule's
+effective interval and never caches lookup failures.
+
+## Provider Transport And Performance Mock
+
+Gateway uses a dedicated cloned `http.Transport` for Provider adapters instead
+of Go's low default idle-connection limit per host. Defaults are bounded and
+configurable:
+
+```text
+GATEWAY_PROVIDER_MAX_IDLE_CONNS=512
+GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST=256
+GATEWAY_PROVIDER_MAX_CONNS_PER_HOST=256
+GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS=90000
+GATEWAY_PROVIDER_DIAL_TIMEOUT_MS=5000
+GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS=30000
+GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS=10000
+GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS=<GATEWAY_PROVIDER_TIMEOUT_MS>
+```
+
+The transport keeps proxy behavior and HTTP/2 negotiation from Go's default
+transport while bounding connections per Provider host. Limits must be tuned
+against the Provider's own concurrency and rate limits; raising them does not
+override an upstream quota.
+
+The isolated performance Compose profile replaces the thread-per-request
+Python mock with the repository's Node 22 no-op mock. It retains the configured
+`MOCK_PROVIDER_DEFAULT_LATENCY_MS` (100ms in the perf seed), OpenAI-compatible
+response shape, streaming support, health endpoint, and failure-control
+endpoints. The pinned container runs read-only without Linux capabilities.

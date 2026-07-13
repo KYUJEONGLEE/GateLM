@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	cachedauth "gatelm/apps/gateway-core/internal/adapters/auth/cached"
 	postgresauth "gatelm/apps/gateway-core/internal/adapters/auth/postgres"
 	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
@@ -21,11 +22,13 @@ import (
 	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
+	cachedpricing "gatelm/apps/gateway-core/internal/adapters/pricing/cached"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
 	cachedprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/cached"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
+	providerhttpclient "gatelm/apps/gateway-core/internal/adapters/providers/httpclient"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
@@ -77,7 +80,19 @@ func main() {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
 
-	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
+	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
+		RequestTimeout:        cfg.ProviderTimeout,
+		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
+		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
+		IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
+		DialTimeout:           cfg.ProviderTransport.DialTimeout,
+		DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
+		TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: cfg.ProviderTransport.ResponseHeaderTimeout,
+		ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
+	})
+	defer providerHTTPClient.CloseIdleConnections()
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
@@ -85,11 +100,16 @@ func main() {
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
 	metricsRegistry := metrics.NewRegistry()
 
-	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
+	postgresPool, err := newPostgresPool(context.Background(), cfg.DatabaseURL, cfg.DatabasePool, "gatelm-gateway-main")
 	if err != nil {
 		log.Fatalf("gateway-core postgres pool configuration failed: %v", err)
 	}
 	defer postgresPool.Close()
+	logPostgresPool, err := newPostgresPool(context.Background(), cfg.LogDatabaseURL, cfg.LogDatabasePool, "gatelm-gateway-log")
+	if err != nil {
+		log.Fatalf("gateway-core log postgres pool configuration failed: %v", err)
+	}
+	defer logPostgresPool.Close()
 	credentialResolver, err := buildProviderCredentialResolver(cfg, postgresPool)
 	if err != nil {
 		log.Fatalf("gateway-core provider credential resolver configuration failed: %v", err)
@@ -107,6 +127,11 @@ func main() {
 			Required:       true,
 			FailureMessage: "connection failed",
 			Check:          postgresPool.Ping,
+		},
+		"postgres_log": {
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          logPostgresPool.Ping,
 		},
 		"redis": {
 			Required:       true,
@@ -129,12 +154,12 @@ func main() {
 		}
 	}
 
-	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
+	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(logPostgresPool, postgresinvocationlog.AuthFailureDefaults{
 		TenantID:      cfg.DemoTenantID,
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
-	postgresTerminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
+	postgresTerminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(logPostgresPool, postgresinvocationlog.TerminalLogDefaults{
 		TenantID:      cfg.DemoTenantID,
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
@@ -146,6 +171,8 @@ func main() {
 		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
 			QueueSize:       cfg.AsyncLogQueueSize,
 			WorkerCount:     cfg.AsyncLogWorkerCount,
+			BatchSize:       cfg.AsyncLogBatchSize,
+			FlushInterval:   cfg.AsyncLogBatchFlushInterval,
 			WriteTimeout:    cfg.AsyncLogWriteTimeout,
 			MetricsRegistry: metricsRegistry,
 		})
@@ -156,7 +183,12 @@ func main() {
 		dailyTokenUsageStore,
 	)
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
-	costCalculator := costing.NewCalculator(postgrespricing.NewReader(postgresPool))
+	pricingCatalog := cachedpricing.NewReader(postgrespricing.NewReader(postgresPool), cachedpricing.Config{
+		Enabled:    cfg.PricingCache.Enabled,
+		TTL:        cfg.PricingCache.TTL,
+		MaxEntries: cfg.PricingCache.MaxEntries,
+	})
+	costCalculator := costing.NewCalculator(pricingCatalog)
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
@@ -170,7 +202,12 @@ func main() {
 		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
 	}
 	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
-		gatewayCredentials := postgresauth.NewStore(postgresPool)
+		gatewayCredentials := cachedauth.NewStore(postgresauth.NewStore(postgresPool), cachedauth.Config{
+			Enabled:    cfg.AuthCache.Enabled,
+			TTL:        cfg.AuthCache.TTL,
+			MaxEntries: cfg.AuthCache.MaxEntries,
+			KeySecret:  []byte(cfg.AuthCache.KeySecret),
+		})
 		routerOptions = append(routerOptions, app.WithGatewayAuth(gatewayCredentials, gatewayCredentials))
 	}
 	rateLimiter, err := buildRateLimiter(cfg, postgresPool, redisClient)
@@ -266,6 +303,29 @@ func main() {
 			log.Printf("gateway-core async terminal log flush failed: %v", err)
 		}
 	}
+}
+
+func newPostgresPool(ctx context.Context, rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Pool, error) {
+	poolConfig, err := parsePostgresPoolConfig(rawURL, tuning, applicationName)
+	if err != nil {
+		return nil, err
+	}
+	return pgxpool.NewWithConfig(ctx, poolConfig)
+}
+
+func parsePostgresPoolConfig(rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Config, error) {
+	poolConfig, err := pgxpool.ParseConfig(config.DatabaseDriverURL(rawURL))
+	if err != nil {
+		return nil, errors.New("invalid PostgreSQL pool connection configuration")
+	}
+	poolConfig.MaxConns = int32(tuning.MaxConns)
+	poolConfig.MinConns = int32(tuning.MinConns)
+	poolConfig.MaxConnLifetime = tuning.MaxConnLifetime
+	poolConfig.MaxConnLifetimeJitter = tuning.MaxConnLifetime / 10
+	poolConfig.MaxConnIdleTime = tuning.MaxConnIdleTime
+	poolConfig.HealthCheckPeriod = tuning.HealthCheckPeriod
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = strings.TrimSpace(applicationName)
+	return poolConfig, nil
 }
 
 func buildProviderCredentialResolver(cfg config.Config, postgresPool *pgxpool.Pool) (credentials.Resolver, error) {

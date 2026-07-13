@@ -209,6 +209,245 @@ Then publish a new RuntimeSnapshot from the Console or admin API and recreate th
 docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core application web
 ```
 
+## Isolated Mock Performance Environment
+
+Do not switch the normal `.env` or published RuntimeSnapshot to Mock for load
+testing. The performance environment uses a separate Compose project, database,
+Redis volume, network, ports, and generated test credentials:
+
+```text
+project:          gatelm-aws-perf
+gateway:          http://127.0.0.1:18080
+control plane:    http://127.0.0.1:13001
+postgres volume:  gatelm-aws-perf-postgres-data
+redis volume:     gatelm-aws-perf-redis-data
+```
+
+The performance override also uses the pinned Node-based concurrent Mock
+Provider while preserving `MOCK_PROVIDER_DEFAULT_LATENCY_MS`. This avoids a
+thread-per-request Python server becoming the measured bottleneck.
+
+The performance override forces `OPENAI_API_KEY` and both Provider credential
+maps to empty values. Its bootstrap fails unless the target PostgreSQL container
+belongs to `gatelm-aws-perf` and mounts the expected isolated volume.
+It also publishes a performance-only Mock RuntimeSnapshot with the Control
+Plane ceiling of `100000` requests per 60 seconds. Normal and
+actual-Provider RuntimeSnapshots keep their configured limits.
+
+Create `.env.perf` once. The generated secret values are written with mode `600`
+and are not printed:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+bash scripts/perf-init.sh
+```
+
+On the first run after building or pulling new runtime source, build and start
+the minimal performance stack. This applies the existing migrations only to the
+isolated database, publishes a Mock RuntimeSnapshot, starts the runtime, and
+runs the fail-closed routing preflight:
+
+```bash
+bash scripts/perf-up.sh --build
+```
+
+For later starts with already-current images, omit `--build`:
+
+```bash
+bash scripts/perf-up.sh
+```
+
+Run the safety preflight again before every k6 session:
+
+```bash
+bash scripts/perf-preflight.sh
+```
+
+The preflight requires all of the following before load is allowed:
+
+- no live Provider credential in Control Plane or Gateway
+- active RuntimeSnapshot rate limit matches the performance setting (default
+  `100000` requests per 60 seconds)
+- `selectedProvider=mock` and a Mock catalog model (`mock-*` suffix)
+- published RuntimeSnapshot provenance
+- successful Request Detail with `fallback=not_needed`
+
+Point host-executed k6 only at `http://127.0.0.1:18080`. Host port `8080`
+belongs to the normal stack and may call an actual Provider. The Docker runner
+below uses the isolated performance network instead of either host port.
+
+Run the simple cache-miss baseline with the pinned Docker k6 runner. k6 does
+not need to be installed on the EC2 host:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+GATELM_K6_TARGET_RPS=1 \
+GATELM_K6_DURATION=2m \
+bash scripts/perf-load.sh
+```
+
+The runner performs the Mock routing preflight first, joins only the
+`gatelm-aws-perf-internal` Docker network, and targets `gateway-core:8080`
+inside that network. It passes only the performance API Key and App Token to
+the k6 container. The normal host port `8080` is never used.
+
+Every run uses a dedicated run ID. After k6 exits, the runner waits for the
+async log queue to drain and reconciles completed k6 iterations against the
+matching `p0_llm_invocation_logs` rows. The run fails unless all of the
+following are true:
+
+- completed load iterations equal total and distinct Request Log rows
+- every matched row is `success`, HTTP `200`, and has written logging outcomes
+- k6 has no failed checks, HTTP failures, or dropped iterations
+- async enqueue/drop/persist error deltas are zero and final queue depth is zero
+
+The HTML dashboard export, safe k6 JSON summary, and combined reconciliation
+report are written under `reports/perf/`. The combined report contains only
+the synthetic run ID and aggregate values; it does not contain credentials,
+raw prompts, or responses.
+
+Before starting the runner, open an SSH tunnel from the operator machine:
+
+```powershell
+ssh -i "C:\path\to\gatelm.pem" -N `
+  -L 5665:127.0.0.1:5665 `
+  ubuntu@<ec2-public-ip>
+```
+
+Keep that terminal open and browse to:
+
+```text
+http://127.0.0.1:5665
+```
+
+Do not open port `5665` in the EC2 Security Group. The k6 dashboard is
+published on EC2 loopback only. Close the dashboard browser tab after the test
+finishes so k6 can exit and write the self-contained HTML report under
+`reports/perf/`.
+
+Optional runner settings:
+
+| Variable | Default | Purpose |
+|---|---:|---|
+| `GATELM_K6_TARGET_RPS` | `1` | Scheduled cache-miss requests per second |
+| `GATELM_K6_DURATION` | `2m` | Load duration |
+| `GATELM_K6_PRE_ALLOCATED_VUS` | target RPS | VUs initialized before the test |
+| `GATELM_K6_MAX_VUS` | target RPS x 2 | Maximum VUs k6 may allocate |
+| `GATELM_K6_DASHBOARD_PORT` | `5665` | EC2 loopback dashboard port |
+| `GATELM_K6_DASHBOARD_PERIOD` | `1s` | Live dashboard aggregation period |
+| `GATELM_PERF_LOG_DRAIN_TIMEOUT_SECONDS` | `60` | Maximum Request Log reconciliation wait |
+| `GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT` | `100000` | Isolated Mock RuntimeSnapshot limit per 60 seconds |
+
+### Dedicated Load Generator Evidence (500 RPS)
+
+The local runner above shares CPU, memory, disk, and Docker networking with the
+Gateway. It is useful for regression checks, but it is not sufficient evidence
+that one Gateway node sustains 500 RPS. Formal capacity evidence requires a
+separate target host and load-generator host in the same private network.
+
+On the target host, set the exact private IPv4 address in `.env.perf` and opt in
+to remote load generation:
+
+```dotenv
+GATELM_PERF_REMOTE_LOADGEN_ENABLED=true
+AWS_TRIAGE_GATEWAY_BIND=10.0.1.10
+AWS_TRIAGE_GATEWAY_PORT=18080
+AWS_TRIAGE_CONTROL_PLANE_BIND=127.0.0.1
+```
+
+`AWS_TRIAGE_GATEWAY_BIND=0.0.0.0` is rejected. In the target Security Group,
+allow inbound TCP `18080` only from the load-generator Security Group or its
+private `/32` address. Do not expose the Control Plane, PostgreSQL, Redis, Mock
+Provider, or k6 dashboard. Recreate and verify the target runtime after the bind
+change:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+bash scripts/perf-up.sh --build
+bash scripts/perf-preflight.sh
+```
+
+Use the same repository commit on the load-generator host. It needs Docker,
+curl, and coreutils, but it does not need the target database or Provider
+credentials. Create its restricted environment file:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+cp loadgen.env.example .env.loadgen
+chmod 600 .env.loadgen
+```
+
+Set `GATELM_LOADGEN_GATEWAY_BASE_URL` to the target's private Gateway endpoint.
+Copy only `GATELM_DEMO_API_KEY` and `GATELM_DEMO_APP_TOKEN` from the isolated
+target `.env.perf`. The runner rejects extra `.env.loadgen` keys, Provider
+credentials, database credentials, internal service tokens, and files readable
+by group or other users.
+
+Run the default capacity profile from the load-generator host:
+
+```bash
+bash scripts/perf-loadgen-run.sh
+```
+
+This schedules `500 RPS` for `2m`, performs the Mock routing preflight, waits for
+the async terminal-log queue to drain, and writes a self-contained bundle under
+`reports/perf/loadgen/`. The bundle omits the target URL and credentials. Its
+manifest deliberately keeps `capacityClaimEligible=false` because the
+load-generator cannot query the target database.
+
+Copy the complete bundle into the same path on the target host, then reconcile
+it against the isolated PostgreSQL database:
+
+```bash
+cd /home/ubuntu/GateLM
+scp -r ubuntu@<load-generator-private-ip>:/home/ubuntu/GateLM/reports/perf/loadgen/<bundle> \
+  reports/perf/loadgen/
+cd deploy/aws-triage
+bash scripts/perf-loadgen-reconcile.sh \
+  /home/ubuntu/GateLM/reports/perf/loadgen/<bundle>
+```
+
+The target writes `loadgen.evidence.json`. `capacityClaimEligible=true` is
+possible only when all of these conditions hold:
+
+- execution mode is `dedicated` and run-scoped machine hashes prove the two
+  scripts ran on different hosts
+- target remote-load mode is explicitly enabled without a wildcard bind
+- target rate is exactly `500 RPS` and duration is at least `2m`
+- k6 has no dropped iterations, failed checks, or HTTP failures
+- completed iterations equal total and distinct Request Log rows
+- every row is successful, HTTP `200`, and has written logging outcomes
+- async enqueue, drop, persist-error, and persist-panic deltas are zero
+- both captured and current terminal-log queue depth are zero
+
+The raw machine ID is never written to the bundle. Each script hashes it with
+the run ID, so the value cannot be correlated across runs.
+
+For script integration checks on one development machine, set the load-generator
+URL to `http://gateway-core:8080` and run:
+
+```bash
+GATELM_LOADGEN_EXECUTION_MODE=local_validation \
+GATELM_LOADGEN_DOCKER_NETWORK=gatelm-aws-perf-internal \
+GATELM_K6_TARGET_RPS=500 \
+GATELM_K6_DURATION=30s \
+bash scripts/perf-loadgen-run.sh
+```
+
+Target-side reconciliation can pass in `local_validation` mode, but capacity
+eligibility remains false by design.
+
+Stop the performance containers without deleting their volumes:
+
+```bash
+bash scripts/perf-down.sh
+```
+
+This setup isolates data and Provider credentials, but it does not isolate EC2
+CPU, memory, or disk I/O. Results on the shared host are suitable for relative
+regression checks, not production capacity claims. Use a dedicated load-test
+host and target environment for formal capacity evidence.
+
 ## Start
 
 ```bash
