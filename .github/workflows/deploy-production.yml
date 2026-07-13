@@ -1,0 +1,96 @@
+name: deploy-production
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: gatelm-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy approved main SHA
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 135
+    environment:
+      name: production
+      url: https://gatelm.co.kr
+    env:
+      DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      AWS_INSTANCE_ID: ${{ vars.AWS_INSTANCE_ID }}
+      GATELM_PUBLIC_URL: ${{ vars.GATELM_PUBLIC_URL }}
+      GATELM_CHAT_URL: ${{ vars.GATELM_CHAT_URL }}
+
+    steps:
+      - name: Checkout deployment SHA
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Verify exact current main SHA and deployment variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          : "${AWS_REGION:?AWS_REGION production variable is required}"
+          : "${AWS_ROLE_ARN:?AWS_ROLE_ARN production variable is required}"
+          : "${AWS_INSTANCE_ID:?AWS_INSTANCE_ID production variable is required}"
+          : "${GATELM_PUBLIC_URL:?GATELM_PUBLIC_URL production variable is required}"
+          : "${GATELM_CHAT_URL:?GATELM_CHAT_URL production variable is required}"
+          git fetch --no-tags origin main
+          current_main_sha="$(git rev-parse origin/main)"
+          if [[ "$DEPLOY_SHA" != "$current_main_sha" ]]; then
+            echo "Refusing stale deployment: requested=$DEPLOY_SHA current_main=$current_main_sha" >&2
+            exit 1
+          fi
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # v6.2.2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: gatelm-production-${{ github.run_id }}
+
+      - name: Deploy through AWS Systems Manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deploy/aws-triage/scripts/send-ssm-deploy.sh \
+            "$AWS_INSTANCE_ID" \
+            "$DEPLOY_SHA" \
+            "$GATELM_PUBLIC_URL" \
+            "$GATELM_CHAT_URL"
+
+      - name: Verify public authentication boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 5 --max-time 30 -fsS -o /dev/null "$GATELM_PUBLIC_URL"
+          curl --connect-timeout 5 --max-time 30 -fsS -o /dev/null "$GATELM_CHAT_URL/login"
+
+          gateway_status="$(curl --connect-timeout 5 --max-time 30 -sS -o /dev/null -w '%{http_code}' \
+            -X POST "$GATELM_PUBLIC_URL/v1/chat/completions" \
+            -H 'Content-Type: application/json' \
+            --data '{"model":"deployment-check","messages":[{"role":"user","content":"authentication-boundary-check"}]}')"
+          [[ "$gateway_status" == "401" ]]
+
+          chat_status="$(curl --connect-timeout 5 --max-time 30 -sS -o /dev/null -w '%{http_code}' \
+            "$GATELM_CHAT_URL/api/tenant-chat/auth/session")"
+          [[ "$chat_status" == "401" ]]

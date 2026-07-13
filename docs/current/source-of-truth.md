@@ -47,6 +47,7 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 
 - [`../routing/README.md`](../routing/README.md): 범위와 artifact 진입점
 - [`../routing/contracts.md`](../routing/contracts.md): active 의미 계약
+- [`../routing/classification-pipeline.md`](../routing/classification-pipeline.md): category·difficulty 분류의 active 내부 구현 계약
 - [`../routing/schemas/routing-policy.schema.json`](../routing/schemas/routing-policy.schema.json): routing policy v2 schema
 - [`../routing/fixtures/routing-policy.fixture.json`](../routing/fixtures/routing-policy.fixture.json): safe Mock bootstrap fixture
 - [`../routing/schemas/runtime-snapshot-routing.schema.json`](../routing/schemas/runtime-snapshot-routing.schema.json): RuntimeSnapshot routing v2 schema

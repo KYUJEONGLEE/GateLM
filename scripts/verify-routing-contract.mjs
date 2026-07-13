@@ -19,6 +19,51 @@ export const routingCategories = [
 
 export const routingDifficulties = ["simple", "complex"];
 
+const difficultyFeatureVectorV1Names = [
+  "payloadEmpty",
+  "payloadSmall",
+  "payloadMedium",
+  "payloadLarge",
+  "taskCount",
+  "constraintCount",
+  "scopeCount",
+  "dependencyDepth",
+  "categoryGeneral",
+  "categoryCode",
+  "categoryTranslation",
+  "categorySummarization",
+  "categoryReasoning",
+  "generalWorkflowDepth",
+  "generalBranchOrExceptionCount",
+  "generalExtractionBreadth",
+  "generalHasCrossSourceSynthesis",
+  "codeOperationUnknown",
+  "codeOperationSyntax",
+  "codeOperationExample",
+  "codeOperationSmallEdit",
+  "codeOperationDebug",
+  "codeOperationRefactor",
+  "codeOperationDesign",
+  "codeOperationMigration",
+  "codeOperationConcurrency",
+  "codeOperationPerformance",
+  "codeScopeBreadth",
+  "codeCausalComplexity",
+  "codeEngineeringConstraintCount",
+  "translationScopeCount",
+  "translationPreservationConstraintCount",
+  "translationDomainTerminologyLevel",
+  "translationLocalizationDegree",
+  "summarizationSourceBreadth",
+  "summarizationSynthesisLevel",
+  "summarizationFacetCount",
+  "summarizationHasTraceabilityConstraints",
+  "reasoningAlternativeCount",
+  "reasoningCriteriaAndConstraintCount",
+  "reasoningDepth",
+  "reasoningUncertaintyScenarioCount",
+];
+
 const retiredKeys = new Set([
   "tier",
   "expectedTier",
@@ -333,6 +378,8 @@ function validateDocumentation(rootDir, failures) {
   const requiredPaths = [
     "docs/routing/README.md",
     "docs/routing/contracts.md",
+    "docs/routing/classification-pipeline.md",
+    "docs/routing/difficulty-feature-vector-v1.md",
     "docs/current/README.md",
     "docs/current/source-of-truth.md",
     "docs/v2.0.0/README.md",
@@ -354,6 +401,82 @@ function validateDocumentation(rootDir, failures) {
   }
   if (!texts.get("docs/current/source-of-truth.md")?.includes("../routing/README.md")) {
     failures.push("docs/current/source-of-truth.md: active routing authority link is missing");
+  }
+  if (!texts.get("docs/routing/README.md")?.includes("classification-pipeline.md")) {
+    failures.push("docs/routing/README.md: classification pipeline link is missing");
+  }
+  if (!texts.get("docs/routing/README.md")?.includes("difficulty-feature-vector-v1.md")) {
+    failures.push("docs/routing/README.md: difficulty feature vector v1 link is missing");
+  }
+  if (!texts.get("docs/routing/contracts.md")?.includes("classification-pipeline.md")) {
+    failures.push("docs/routing/contracts.md: classification pipeline contract link is missing");
+  }
+  if (!texts.get("docs/routing/contracts.md")?.includes("difficulty-feature-vector-v1.md")) {
+    failures.push("docs/routing/contracts.md: difficulty feature vector v1 contract link is missing");
+  }
+  if (!texts.get("docs/routing/classification-pipeline.md")?.includes("difficulty-feature-vector-v1.md")) {
+    failures.push("docs/routing/classification-pipeline.md: difficulty feature vector v1 contract link is missing");
+  }
+  if (!texts.get("docs/current/source-of-truth.md")?.includes("../routing/classification-pipeline.md")) {
+    failures.push("docs/current/source-of-truth.md: classification pipeline authority link is missing");
+  }
+
+  const pipelinePath = "docs/routing/classification-pipeline.md";
+  const pipeline = texts.get(pipelinePath) ?? "";
+  for (const marker of [
+    "Active routing target contract",
+    "ExtractPromptFeatures",
+    "PromptFeatures",
+    "CategoryResult",
+    "ExtractDifficultyFeatures",
+    "DifficultyFeatures",
+    "DifficultyResult",
+    "Go struct",
+    "compatibility wrapper",
+  ]) {
+    if (!pipeline.includes(marker)) {
+      failures.push(`${pipelinePath}: required canonical pipeline marker is missing: ${marker}`);
+    }
+  }
+
+  const featureVectorPath = "docs/routing/difficulty-feature-vector-v1.md";
+  const featureVector = texts.get(featureVectorPath) ?? "";
+  for (const marker of [
+    "difficulty-feature-vector.v1",
+    "Dimension",
+    "`42`",
+    "DifficultyFeatureNamesV1",
+    "VectorizeDifficultyFeaturesV1",
+    "float64(clamp(value, 0, max)) / float64(max)",
+    "canonicalCategory",
+    "zero-fill",
+    "intercept",
+  ]) {
+    if (!featureVector.includes(marker)) {
+      failures.push(`${featureVectorPath}: required v1 feature contract marker is missing: ${marker}`);
+    }
+  }
+
+  let previousFeatureIndex = -1;
+  for (const featureName of difficultyFeatureVectorV1Names) {
+    const featureIndex = featureVector.indexOf(`\`${featureName}\``, previousFeatureIndex + 1);
+    if (featureIndex < 0) {
+      failures.push(`${featureVectorPath}: v1 feature is missing or out of order: ${featureName}`);
+      break;
+    }
+    previousFeatureIndex = featureIndex;
+  }
+
+  const retiredDirectPromptForms = [
+    "category = CategoryClassifier(prompt)",
+    "difficulty = ComplexityClassifier(prompt, category)",
+  ];
+  for (const relativePath of ["docs/routing/contracts.md", pipelinePath]) {
+    for (const retiredForm of retiredDirectPromptForms) {
+      if (texts.get(relativePath)?.includes(retiredForm)) {
+        failures.push(`${relativePath}: retired direct-prompt classifier form is still canonical: ${retiredForm}`);
+      }
+    }
   }
 
   for (const relativePath of ["docs/v2.0.0/README.md", "docs/v2.0.0/contracts.md"]) {

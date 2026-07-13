@@ -1,0 +1,212 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "GateLM GitHub Actions OIDC and Systems Manager deployment roles for one AWS triage EC2 instance.",
+  "Parameters": {
+    "GitHubOrganization": {
+      "Type": "String",
+      "Default": "KYUJEONGLEE",
+      "AllowedPattern": "[A-Za-z0-9-]+"
+    },
+    "GitHubRepository": {
+      "Type": "String",
+      "Default": "GateLM",
+      "AllowedPattern": "[A-Za-z0-9_.-]+"
+    },
+    "GitHubEnvironment": {
+      "Type": "String",
+      "Default": "production",
+      "AllowedPattern": "[A-Za-z0-9_.-]+"
+    },
+    "DeploymentInstanceId": {
+      "Type": "AWS::EC2::Instance::Id"
+    },
+    "CreateGitHubOidcProvider": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Set to false when token.actions.githubusercontent.com already exists in this AWS account."
+    }
+  },
+  "Conditions": {
+    "ShouldCreateGitHubOidcProvider": {
+      "Fn::Equals": [
+        {
+          "Ref": "CreateGitHubOidcProvider"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "GitHubOidcProvider": {
+      "Type": "AWS::IAM::OIDCProvider",
+      "Condition": "ShouldCreateGitHubOidcProvider",
+      "Properties": {
+        "Url": "https://token.actions.githubusercontent.com",
+        "ClientIdList": [
+          "sts.amazonaws.com"
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "GateLM"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GitHubActionsCD"
+          }
+        ]
+      }
+    },
+    "GateLMEc2SsmRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Allows the GateLM EC2 instance to register as an SSM managed node.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "GateLM"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "ProductionCD"
+          }
+        ]
+      }
+    },
+    "GateLMEc2SsmInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "GateLMEc2SsmRole"
+          }
+        ]
+      }
+    },
+    "GitHubDeployRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Allows the approved GateLM production GitHub environment to deploy one EC2 instance through SSM.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::If": [
+                    "ShouldCreateGitHubOidcProvider",
+                    {
+                      "Ref": "GitHubOidcProvider"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+                    }
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": {
+                    "Fn::Sub": "repo:${GitHubOrganization}/${GitHubRepository}:environment:${GitHubEnvironment}"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "GateLMProductionSsmDeploy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "SendCommandToGateLMInstance",
+                  "Effect": "Allow",
+                  "Action": "ssm:SendCommand",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${DeploymentInstanceId}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadAndCancelDeploymentCommand",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:CancelCommand",
+                    "ssm:DescribeInstanceInformation",
+                    "ssm:GetCommandInvocation",
+                    "ssm:ListCommandInvocations",
+                    "ssm:ListCommands"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "GateLM"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "ProductionCD"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "GitHubDeployRoleArn": {
+      "Description": "Set this as the production environment variable AWS_ROLE_ARN.",
+      "Value": {
+        "Fn::GetAtt": [
+          "GitHubDeployRole",
+          "Arn"
+        ]
+      }
+    },
+    "Ec2SsmInstanceProfileName": {
+      "Description": "Attach this instance profile to the deployment EC2 instance.",
+      "Value": {
+        "Ref": "GateLMEc2SsmInstanceProfile"
+      }
+    },
+    "DeploymentInstanceId": {
+      "Value": {
+        "Ref": "DeploymentInstanceId"
+      }
+    }
+  }
+}

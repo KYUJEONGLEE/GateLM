@@ -505,8 +505,8 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 	latencies := []float64{}
 	for _, record := range records {
 		expected := strings.TrimSpace(record.ExpectedCategory)
-		signals, sampleLatencies := classifyWithLatency(classifier, record.promptText(), latencyIterations)
-		actual := signals.Category
+		categoryResult, sampleLatencies := classifyCategoryWithLatency(classifier, record.promptText(), latencyIterations)
+		actual := categoryResult.Category
 		latencies = append(latencies, sampleLatencies...)
 		result.Samples = append(result.Samples, evaluationSample{
 			SampleID:            record.expectedID(),
@@ -515,7 +515,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 			ExpectedCategoryKo:  categoryLabelKo(expected),
 			ActualCategory:      actual,
 			ActualCategoryKo:    categoryLabelKo(actual),
-			CategoryDiagnostics: signals.CategoryDiagnostics.WithSelectedCategory(actual),
+			CategoryDiagnostics: categoryResult.Diagnostics.WithSelectedCategory(actual),
 			Matched:             actual == expected,
 		})
 
@@ -559,6 +559,7 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 	}
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
 	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
+	promptClassifier := routing.NewRuleBasedPromptClassifier()
 	result := difficultyReport{
 		DatasetPath:          datasetPath,
 		ClassifierName:       defaultDifficultyClassifierName,
@@ -577,10 +578,11 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		expectedDifficulty := strings.TrimSpace(record.ExpectedDifficulty)
 		prompt := record.promptText()
 
-		categorySignals, sampleCategoryLatencies := classifyWithLatency(categoryClassifier, prompt, latencyIterations)
-		actualCategory := categorySignals.Category
-		actualDifficulty, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, prompt, actualCategory, latencyIterations)
-		sampleTotalLatencies := classifyTotalWithLatency(categoryClassifier, difficultyClassifier, prompt, latencyIterations)
+		categoryResult, sampleCategoryLatencies := classifyCategoryWithLatency(categoryClassifier, prompt, latencyIterations)
+		actualCategory := categoryResult.Category
+		features := routing.ExtractPromptFeatures(prompt)
+		actualDifficulty, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, features, actualCategory, latencyIterations)
+		sampleTotalLatencies := classifyTotalWithLatency(promptClassifier, prompt, latencyIterations)
 		categoryLatencies = append(categoryLatencies, sampleCategoryLatencies...)
 		difficultyLatencies = append(difficultyLatencies, sampleDifficultyLatencies...)
 		totalLatencies = append(totalLatencies, sampleTotalLatencies...)
@@ -654,23 +656,23 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 	return result
 }
 
-func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, prompt string, category string, iterations int) (string, []float64) {
+func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (string, []float64) {
 	latencies := make([]float64, 0, iterations)
 	actual := ""
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		actual = classifier.Classify(prompt, category)
+		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
+		actual = classifier.ClassifyFeatures(difficultyFeatures).Difficulty
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
 	return actual, latencies
 }
 
-func classifyTotalWithLatency(categoryClassifier routing.RuleBasedCategoryClassifier, difficultyClassifier routing.RuleBasedDifficultyClassifier, prompt string, iterations int) []float64 {
+func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prompt string, iterations int) []float64 {
 	latencies := make([]float64, 0, iterations)
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		category := categoryClassifier.Classify(prompt)
-		_ = difficultyClassifier.Classify(prompt, category)
+		_ = classifier.Classify(prompt)
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
 	return latencies
@@ -683,15 +685,16 @@ func marshalDifficultyReport(result difficultyReport, pretty bool) ([]byte, erro
 	return json.Marshal(result)
 }
 
-func classifyWithLatency(classifier routing.RuleBasedCategoryClassifier, prompt string, iterations int) (routing.RoutingSignals, []float64) {
+func classifyCategoryWithLatency(classifier routing.RuleBasedCategoryClassifier, prompt string, iterations int) (routing.CategoryResult, []float64) {
 	latencies := make([]float64, 0, iterations)
-	var signals routing.RoutingSignals
+	var result routing.CategoryResult
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		signals = classifier.ExtractRoutingSignals(prompt)
+		features := routing.ExtractPromptFeatures(prompt)
+		result = classifier.ClassifyFeatures(features)
 		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
-	return signals, latencies
+	return result, latencies
 }
 
 func probe(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) probeReport {
@@ -711,8 +714,8 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 
 	latencies := []float64{}
 	for _, record := range records {
-		signals, sampleLatencies := classifyWithLatency(classifier, record.promptText(), latencyIterations)
-		category := signals.Category
+		categoryResult, sampleLatencies := classifyCategoryWithLatency(classifier, record.promptText(), latencyIterations)
+		category := categoryResult.Category
 		latencies = append(latencies, sampleLatencies...)
 
 		categoryStat := result.ByCategory[category]
@@ -725,7 +728,7 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 			RedactedPrompt:      record.promptText(),
 			Category:            category,
 			CategoryKo:          categoryLabelKo(category),
-			CategoryDiagnostics: signals.CategoryDiagnostics.WithSelectedCategory(category),
+			CategoryDiagnostics: categoryResult.Diagnostics.WithSelectedCategory(category),
 		})
 	}
 
