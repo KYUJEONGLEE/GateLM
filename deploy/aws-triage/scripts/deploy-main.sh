@@ -145,6 +145,14 @@ wait_for_http() {
   return 1
 }
 
+capture_http_status() {
+  local status
+
+  status="$(curl "$@" || true)"
+  [[ -n "${status}" ]] || status="000"
+  printf '%s' "${status}"
+}
+
 wait_for_postgres() {
   local attempts="${1:-30}"
   local delay_seconds="${2:-1}"
@@ -249,7 +257,7 @@ tracked_changes="$(git -C "${repo_dir}" status --porcelain --untracked-files=no)
 
 git -C "${repo_dir}" fetch --no-tags origin main
 resolved_target="$(git -C "${repo_dir}" rev-parse "${target_sha}^{commit}")"
-origin_main="$(git -C "${repo_dir}" rev-parse origin/main)"
+origin_main="$(git -C "${repo_dir}" rev-parse FETCH_HEAD)"
 [[ "${resolved_target}" == "${target_sha}" ]] || deploy_fail "Target SHA could not be resolved exactly."
 [[ "${origin_main}" == "${target_sha}" ]] || \
   deploy_fail "Target SHA is stale; origin/main is ${origin_main}."
@@ -336,14 +344,14 @@ wait_for_http "public Web Console" "${public_url}" || \
 wait_for_http "public Tenant Chat" "${chat_url}/login" || \
   deploy_warn "Public Tenant Chat is not reachable from this host."
 
-gateway_auth_status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
+gateway_auth_status="$(capture_http_status --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
   -X POST "http://127.0.0.1:8080/v1/chat/completions" \
   -H 'Content-Type: application/json' \
   --data '{"model":"deployment-check","messages":[{"role":"user","content":"authentication-boundary-check"}]}')"
 [[ "${gateway_auth_status}" == "401" ]] || \
   deploy_fail "Unauthenticated Gateway request returned ${gateway_auth_status}, expected 401."
 
-chat_auth_status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
+chat_auth_status="$(capture_http_status --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' \
   "http://127.0.0.1:3002/api/tenant-chat/auth/session")"
 [[ "${chat_auth_status}" == "401" ]] || \
   deploy_fail "Unauthenticated Tenant Chat session returned ${chat_auth_status}, expected 401."
