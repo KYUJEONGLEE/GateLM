@@ -2,16 +2,12 @@ package admission
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
 )
-
-type entitlementChecker interface {
-	Check(ctx context.Context, claims workloadauth.Claims) error
-}
 
 type snapshotResolver interface {
 	Resolve(ctx context.Context, requestContext tenantchat.RequestContext) (tenantruntime.Snapshot, error)
@@ -23,29 +19,30 @@ type admissionStore interface {
 }
 
 type Service struct {
-	entitlements entitlementChecker
-	snapshots    snapshotResolver
-	admissions   admissionStore
+	snapshots  snapshotResolver
+	admissions admissionStore
 }
 
-func New(entitlements entitlementChecker, snapshots snapshotResolver, admissions admissionStore) *Service {
-	return &Service{entitlements: entitlements, snapshots: snapshots, admissions: admissions}
+func New(snapshots snapshotResolver, admissions admissionStore) *Service {
+	return &Service{snapshots: snapshots, admissions: admissions}
 }
 
 func (s *Service) Admit(
 	ctx context.Context,
 	requestContext tenantchat.RequestContext,
-	claims workloadauth.Claims,
 ) (tenantchat.Admission, error) {
-	if s == nil || s.entitlements == nil || s.snapshots == nil || s.admissions == nil {
+	// Chat API owns Control Plane entitlement resolution. The authenticated,
+	// body-bound requestContext is the actor decision; Gateway only applies the
+	// active tenant runtime and admission policy to that signed context.
+	if s == nil || s.snapshots == nil || s.admissions == nil {
 		return tenantchat.Admission{}, tenantchat.ErrUsageGuardUnavailable
-	}
-	if err := s.entitlements.Check(ctx, claims); err != nil {
-		return tenantchat.Admission{}, err
 	}
 	snapshot, err := s.snapshots.Resolve(ctx, requestContext)
 	if err != nil {
-		return tenantchat.Admission{}, tenantchat.ErrUsageGuardUnavailable
+		if errors.Is(err, tenantchat.ErrTenantDisabled) {
+			return tenantchat.Admission{}, tenantchat.ErrTenantDisabled
+		}
+		return tenantchat.Admission{}, tenantchat.ErrRuntimeUnavailable
 	}
 	limits := tenantchat.AdmissionLimits{
 		RequestsPerWindow:          snapshot.Policies.RateLimit.Requests,
