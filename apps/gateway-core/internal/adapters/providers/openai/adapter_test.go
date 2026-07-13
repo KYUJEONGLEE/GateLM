@@ -198,6 +198,9 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 	if first.Usage != nil || !json.Valid(first.Data) {
 		t.Fatalf("unexpected first event: %+v", first)
 	}
+	if first.Delta != "안녕" {
+		t.Fatalf("expected normalized stream delta, got %q", first.Delta)
+	}
 	second, err := stream.Next()
 	if err != nil {
 		t.Fatalf("read usage stream event: %v", err)

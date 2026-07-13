@@ -41,6 +41,7 @@ type ChatCompletionResponse struct {
 
 type ChatCompletionStreamEvent struct {
 	Data  json.RawMessage
+	Delta string
 	Usage *Usage
 }
 

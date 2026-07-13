@@ -158,15 +158,28 @@ func (r *mockStreamReader) Next() (provider.ChatCompletionStreamEvent, error) {
 		}
 
 		var metadata struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
 			Usage *provider.Usage `json:"usage"`
 		}
 		if err := json.Unmarshal(raw, &metadata); err != nil {
 			return provider.ChatCompletionStreamEvent{}, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("decode mock provider streaming chunk metadata: %w", err))
 		}
 
+		var delta string
+		for _, choice := range metadata.Choices {
+			if choice.Delta.Content != "" {
+				delta = choice.Delta.Content
+				break
+			}
+		}
 		copied := append(json.RawMessage(nil), raw...)
 		return provider.ChatCompletionStreamEvent{
 			Data:  copied,
+			Delta: delta,
 			Usage: metadata.Usage,
 		}, nil
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -175,5 +176,24 @@ func TestExecutorDoesNotFallBackToAnotherProviderConnection(t *testing.T) {
 	)
 	if !errors.Is(err, tenantchat.ErrNoEligibleRoute) {
 		t.Fatalf("want no eligible route, got %v", err)
+	}
+}
+
+func TestExecutorPreservesWrappedDatabaseContextErrors(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled", err: fmt.Errorf("query canceled: %w", context.Canceled), want: context.Canceled},
+		{name: "deadline", err: fmt.Errorf("query timed out: %w", context.DeadlineExceeded), want: context.DeadlineExceeded},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			executor := NewExecutor(&executorQueryer{row: executorRow{err: test.err}}, nil, nil)
+			_, err := executor.resolveConnection(context.Background(), "tenant-primary", "connection-primary")
+			if !errors.Is(err, test.want) {
+				t.Fatalf("want %v, got %v", test.want, err)
+			}
+		})
 	}
 }

@@ -1,9 +1,11 @@
 package tenantchat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/adapters/tenantchat/workloadauth"
+	"gatelm/apps/gateway-core/internal/domain/provider"
 	domain "gatelm/apps/gateway-core/internal/domain/tenantchat"
 	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
@@ -61,6 +64,7 @@ func (s *fakeCompletionService) Prepare(
 
 type fakeCompletionExecution struct {
 	events []domain.CompletionEvent
+	err    error
 	closed bool
 }
 
@@ -70,10 +74,90 @@ func (e *fakeCompletionExecution) Relay(_ context.Context, emit completionservic
 			return err
 		}
 	}
-	return nil
+	return e.err
 }
 
 func (e *fakeCompletionExecution) Close() { e.closed = true }
+
+func TestCompletionReportsRelayFailureWithoutRawProviderDetail(t *testing.T) {
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+	}()
+
+	execution := &fakeCompletionExecution{err: provider.NewError(
+		provider.ErrorKindError,
+		provider.ErrorCodeProviderError,
+		errors.New("raw provider detail must not be logged"),
+	)}
+	request := domain.CompletionRequest{
+		Context: domain.RequestContext{Phase: domain.PhaseCompletion, RequestID: "request_relay_failure"},
+		Input: domain.CompletionInput{
+			Messages: []domain.EphemeralMessage{{Role: "user", Content: "안녕하세요"}}, Stream: true,
+		},
+	}
+	recorder := performJSONRequest(
+		t,
+		NewRouter(
+			&fakeAuthenticator{},
+			&fakeAdmissionService{},
+			64*1024,
+			WithCompletionService(&fakeCompletionService{execution: execution}),
+		),
+		"/internal/v1/tenant-chat/completions",
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("want started SSE response, got %d", recorder.Code)
+	}
+	if !strings.Contains(logs.String(), "request_id=request_relay_failure") ||
+		!strings.Contains(logs.String(), "error_code=CHAT_PROVIDER_FAILED") ||
+		strings.Contains(logs.String(), "raw provider detail") {
+		t.Fatalf("unexpected safe relay log: %s", logs.String())
+	}
+}
+
+func TestCompletionDoesNotReportClientCancellation(t *testing.T) {
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+	}()
+
+	request := domain.CompletionRequest{
+		Context: domain.RequestContext{Phase: domain.PhaseCompletion, RequestID: "request_client_cancel"},
+		Input: domain.CompletionInput{
+			Messages: []domain.EphemeralMessage{{Role: "user", Content: "안녕하세요"}}, Stream: true,
+		},
+	}
+	performJSONRequest(
+		t,
+		NewRouter(
+			&fakeAuthenticator{},
+			&fakeAdmissionService{},
+			64*1024,
+			WithCompletionService(&fakeCompletionService{
+				execution: &fakeCompletionExecution{err: context.Canceled},
+			}),
+		),
+		"/internal/v1/tenant-chat/completions",
+		request,
+	)
+
+	if logs.Len() != 0 {
+		t.Fatalf("client cancellation must not be reported as a relay failure: %s", logs.String())
+	}
+}
 
 func TestCompletionAuthenticatesBoundPayloadAndStreamsContractEvents(t *testing.T) {
 	auth := &fakeAuthenticator{}

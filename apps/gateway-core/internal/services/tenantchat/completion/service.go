@@ -2,7 +2,6 @@ package completion
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"time"
@@ -159,14 +158,10 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 		if event.Usage != nil {
 			confirmedUsage = event.Usage
 		}
-		delta, err := completionDelta(event.Data)
-		if err != nil {
-			return err
-		}
-		if delta == "" {
+		if event.Delta == "" {
 			continue
 		}
-		if err := emit(e.deltaEvent(delta)); err != nil {
+		if err := emit(e.deltaEvent(event.Delta)); err != nil {
 			return err
 		}
 	}
@@ -230,23 +225,4 @@ func (e *PreparedExecution) finalEvent(settlement tenantchat.UsageSettlement) te
 		QuotaState: settlement.QuotaState, BudgetState: settlement.BudgetState,
 		CacheOutcome: "off", Replayed: &replayed,
 	}
-}
-
-func completionDelta(payload json.RawMessage) (string, error) {
-	var chunk struct {
-		Choices []struct {
-			Delta struct {
-				Content string `json:"content"`
-			} `json:"delta"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(payload, &chunk); err != nil {
-		return "", provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
-	}
-	for _, choice := range chunk.Choices {
-		if choice.Delta.Content != "" {
-			return choice.Delta.Content, nil
-		}
-	}
-	return "", nil
 }

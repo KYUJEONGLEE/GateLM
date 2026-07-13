@@ -147,6 +147,9 @@ func (e *Executor) resolveConnection(
 		if contextErr := ctx.Err(); contextErr != nil {
 			return providerConnection{}, contextErr
 		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return providerConnection{}, err
+		}
 		return providerConnection{}, tenantchat.ErrRuntimeUnavailable
 	}
 	if err := validateBaseURL(result.BaseURL); err != nil {

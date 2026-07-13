@@ -30,8 +30,8 @@ func TestServiceRelaysPrimaryStreamAndSettlesConfirmedUsage(t *testing.T) {
 		},
 	}
 	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{
-		{Data: json.RawMessage(`{"choices":[{"delta":{"content":"안녕"}}]}`)},
-		{Data: json.RawMessage(`{"choices":[{"delta":{"content":"하세요"}}]}`)},
+		{Data: json.RawMessage(`{"providerSpecific":"first"}`), Delta: "안녕"},
+		{Data: json.RawMessage(`{"providerSpecific":"second"}`), Delta: "하세요"},
 		{Data: json.RawMessage(`{"choices":[{"delta":{}}],"usage":{"prompt_tokens":12,"completion_tokens":5,"total_tokens":17}}`), Usage: &provider.Usage{PromptTokens: 12, CompletionTokens: 5, TotalTokens: 17}},
 	}}}
 	service := New(snapshots, usage, providers)

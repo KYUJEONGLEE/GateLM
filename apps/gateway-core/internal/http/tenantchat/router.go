@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -168,13 +169,31 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Idempotency-Replayed", "false")
 	w.WriteHeader(http.StatusOK)
 	w.(http.Flusher).Flush()
-	_ = execution.Relay(r.Context(), func(event domain.CompletionEvent) error {
+	err = execution.Relay(r.Context(), func(event domain.CompletionEvent) error {
 		if err := writeSSEEvent(w, event); err != nil {
 			return err
 		}
 		w.(http.Flusher).Flush()
 		return nil
 	})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf(
+			"tenant chat completion relay failed request_id=%s error_code=%s",
+			request.Context.RequestID,
+			safeRelayErrorCode(err),
+		)
+	}
+}
+
+func safeRelayErrorCode(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), isProviderErrorKind(err, provider.ErrorKindTimeout):
+		return "CHAT_PROVIDER_TIMEOUT"
+	case isProviderError(err):
+		return "CHAT_PROVIDER_FAILED"
+	default:
+		return "CHAT_USAGE_GUARD_UNAVAILABLE"
+	}
 }
 
 func (h *Handler) decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
