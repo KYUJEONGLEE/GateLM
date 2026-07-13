@@ -53,6 +53,11 @@ test.beforeEach(async ({ context, request }) => {
 
   await context.addCookies([
     {
+      name: "gatelm_locale",
+      url: e2eBaseUrl,
+      value: "en"
+    },
+    {
       name: "gatelm_session",
       url: e2eBaseUrl,
       value: sessionCookie
@@ -79,9 +84,13 @@ test("routing roles persist and manual mode keeps the projected ten cells", asyn
   await expect(routingPanel.getByLabel("Complex model", { exact: true })).toHaveValue(
     "mock-balanced"
   );
+  const fallbackModelSelect = routingPanel.getByLabel("Fallback model (optional)", {
+    exact: true
+  });
+  await expect(fallbackModelSelect).toHaveValue("");
   await expect(
-    routingPanel.getByLabel("Fallback model (optional)", { exact: true })
-  ).toHaveValue("");
+    fallbackModelSelect.locator("..").locator(".tenant-routing-provider-icon")
+  ).toHaveCount(0);
 
   const autoRoutingSwitch = routingPanel.getByRole("switch", {
     exact: true,

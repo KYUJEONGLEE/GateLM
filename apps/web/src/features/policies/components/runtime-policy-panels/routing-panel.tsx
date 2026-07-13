@@ -237,11 +237,13 @@ function RoleModelSelect({
     <label className="tenant-routing-route">
       <span>{label}</span>
       <span className="routing-model-ref-item">
-        <ProviderFamilyIcon
-          className="tenant-routing-provider-icon"
-          family={selectedOption?.family ?? "mock"}
-          size={20}
-        />
+        {value ? (
+          <ProviderFamilyIcon
+            className="tenant-routing-provider-icon"
+            family={selectedOption?.family ?? "mock"}
+            size={20}
+          />
+        ) : null}
         <select aria-label={label} onChange={(event) => onChange(event.target.value)} value={value}>
           {allowEmpty ? <option value="">{noneLabel}</option> : null}
           {options.map((option) => (
