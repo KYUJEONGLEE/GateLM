@@ -15,6 +15,19 @@ import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performanc
 import type { Locale } from "@/lib/i18n/locale";
 
 const palette = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#94a3b8"];
+const routingTierColors: Record<string, string> = {
+  balanced: "#f59e0b",
+  high_quality: "#3b82f6",
+  low_cost: "#10b981",
+  other: "#94a3b8"
+};
+
+export type AnalyticsV5ProjectUsageRow = {
+  costMicroUsd: number;
+  id: string;
+  label: string;
+  requestCount: number;
+};
 
 export function AnalyticsV5ModelTrafficChart({
   ariaLabel,
@@ -150,6 +163,136 @@ export function AnalyticsV5ModelShareChart({
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-model-share-chart" option={option} />;
 }
 
+export function AnalyticsV5RoutingTierChart({
+  ariaLabel,
+  locale,
+  rows
+}: {
+  ariaLabel: string;
+  locale: Locale;
+  rows: AnalyticsValueRow[];
+}) {
+  const theme = useAnalyticsChartTheme();
+  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0), [rows]);
+  const total = useMemo(
+    () => visibleRows.reduce((sum, row) => sum + row.value, 0),
+    [visibleRows]
+  );
+  const option = useMemo<AnalyticsEChartOption>(
+    () => ({
+      animationDuration: 420,
+      grid: { bottom: 24, containLabel: false, left: 148, right: 112, top: 18 },
+      tooltip: analyticsTooltip(locale === "ko" ? "건" : " requests", theme),
+      xAxis: {
+        axisLabel: { color: theme.axis, fontSize: 14, fontWeight: 700, formatter: compactAxisNumber },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        minInterval: 1,
+        splitLine: { lineStyle: { color: theme.grid } },
+        type: "value"
+      },
+      yAxis: {
+        axisLabel: { color: theme.label, fontSize: 16, fontWeight: 800 },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        data: visibleRows.map((row) => routingTierLabel(row.id, locale)),
+        inverse: true,
+        type: "category"
+      },
+      series: [
+        {
+          barMaxWidth: 30,
+          data: visibleRows.map((row) => ({
+            itemStyle: {
+              borderRadius: [0, 5, 5, 0],
+              color: routingTierColors[row.id] ?? routingTierColors.other
+            },
+            share: safeRatio(row.value, total),
+            value: row.value
+          })),
+          emphasis: { focus: "self" },
+          label: {
+            color: theme.label,
+            fontSize: 15,
+            fontWeight: 800,
+            formatter: routingValueLabel,
+            position: "right",
+            show: true
+          },
+          type: "bar"
+        }
+      ]
+    }),
+    [locale, theme, total, visibleRows]
+  );
+
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-routing-tier-chart" option={option} />;
+}
+
+export function AnalyticsV5ProjectUsageChart({
+  ariaLabel,
+  locale,
+  rows
+}: {
+  ariaLabel: string;
+  locale: Locale;
+  rows: AnalyticsV5ProjectUsageRow[];
+}) {
+  const theme = useAnalyticsChartTheme();
+  const option = useMemo<AnalyticsEChartOption>(
+    () => ({
+      animationDuration: 420,
+      grid: { bottom: 24, containLabel: false, left: 172, right: 154, top: 18 },
+      tooltip: analyticsTooltip(locale === "ko" ? "건" : " requests", theme),
+      xAxis: {
+        axisLabel: { color: theme.axis, fontSize: 14, fontWeight: 700, formatter: compactAxisNumber },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        minInterval: 1,
+        splitLine: { lineStyle: { color: theme.grid } },
+        type: "value"
+      },
+      yAxis: {
+        axisLabel: {
+          color: theme.label,
+          fontSize: 16,
+          fontWeight: 800,
+          overflow: "truncate",
+          width: 148
+        },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        data: rows.map((row) => row.label),
+        inverse: true,
+        type: "category"
+      },
+      series: [
+        {
+          barMaxWidth: 30,
+          data: rows.map((row) => ({
+            costMicroUsd: row.costMicroUsd,
+            itemStyle: { borderRadius: [0, 5, 5, 0], color: "#10b981" },
+            value: row.requestCount
+          })),
+          emphasis: { focus: "self" },
+          label: {
+            color: theme.label,
+            fontSize: 15,
+            fontWeight: 800,
+            formatter: projectUsageValueLabel,
+            position: "right",
+            show: true
+          },
+          type: "bar"
+        }
+      ]
+    }),
+    [locale, rows, theme]
+  );
+
+  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-project-usage-chart" option={option} />;
+}
+
 function formatBucket(value: string, range: LiveAnalyticsRange, locale: Locale) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -167,4 +310,44 @@ function formatBucket(value: string, range: LiveAnalyticsRange, locale: Locale) 
     hour: "2-digit",
     minute: range === "1d" ? undefined : "2-digit"
   }).format(date);
+}
+
+function routingTierLabel(id: string, locale: Locale) {
+  const labels = locale === "ko"
+    ? { balanced: "균형", high_quality: "고품질", low_cost: "저비용", other: "기타" }
+    : { balanced: "Balanced", high_quality: "High quality", low_cost: "Low cost", other: "Other" };
+  return labels[id as keyof typeof labels] ?? id;
+}
+
+function routingValueLabel(params: { data?: { share?: number }; value?: number }) {
+  return `${formatInteger(params.value)} · ${formatPercent(params.data?.share)}`;
+}
+
+function projectUsageValueLabel(params: { data?: { costMicroUsd?: number }; value?: number }) {
+  return `${formatInteger(params.value)} · ${formatMicroUsd(params.data?.costMicroUsd)}`;
+}
+
+function formatInteger(value: number | undefined) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value ?? 0);
+}
+
+function formatPercent(value: number | undefined) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+    style: "percent"
+  }).format(value ?? 0);
+}
+
+function formatMicroUsd(value: number | undefined) {
+  const dollars = (value ?? 0) / 1_000_000;
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: dollars > 0 && dollars < 1 ? 4 : 2,
+    minimumFractionDigits: 2,
+    style: "currency"
+  }).format(dollars);
+}
+
+function safeRatio(numerator: number, denominator: number) {
+  return denominator > 0 ? numerator / denominator : 0;
 }

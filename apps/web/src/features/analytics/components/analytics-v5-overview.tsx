@@ -1,9 +1,11 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { AnalyticsV5Evidence } from "@/features/analytics/analytics-v5-evidence";
 import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import {
   AnalyticsV5ModelShareChart,
-  AnalyticsV5ModelTrafficChart
+  AnalyticsV5ModelTrafficChart,
+  AnalyticsV5ProjectUsageChart,
+  AnalyticsV5RoutingTierChart
 } from "@/features/analytics/components/analytics-v5-charts";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
@@ -91,10 +93,10 @@ export function AnalyticsV5Overview({
   const projectCostById = new Map(model.cost.costByProject.map((row) => [row.id, row.value]));
   const projectRows = model.usage.projectMix.slice(0, 5).map((row) => ({
     costMicroUsd: projectCostById.get(row.id) ?? 0,
-    projectId: row.id,
+    id: row.id,
+    label: projectNameById.get(row.id) ?? formatDisplayIdentifier(row.id),
     requestCount: row.value
   }));
-  const maxProjectRequests = Math.max(...projectRows.map((row) => row.requestCount), 1);
   const policyRows = model.impact.outcomes.filter((row) => row.value > 0);
   const routingTierRows = model.impact.routingTiers;
   const routedRequests = routingTierRows.reduce((sum, row) => sum + row.value, 0);
@@ -163,26 +165,21 @@ export function AnalyticsV5Overview({
       <div className="analytics-v5-secondary-grid">
         <AnalyticsV5Surface subtitle={text.routingSub} title={text.routing}>
           {routingTierRows.length ? (
-            <div className="analytics-v5-routing-tier-list">
-              {routingTierRows.map((row) => (
-                <RoutingTierRow key={row.id} row={row} total={routedRequests} />
-              ))}
-            </div>
+            <AnalyticsV5RoutingTierChart
+              ariaLabel={text.routing}
+              locale={locale}
+              rows={routingTierRows}
+            />
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>
 
         <AnalyticsV5Surface subtitle={text.projectsSub} title={text.projects}>
           {projectRows.length ? (
-            <ol className="analytics-v5-project-list">
-              {projectRows.map((row, index) => (
-                <li key={row.projectId}>
-                  <strong>{projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId)}</strong>
-                  <div><i style={{ "--analytics-v5-share": `${Math.max(4, (row.requestCount / maxProjectRequests) * 100)}%` } as CSSProperties} /></div>
-                  <span>{formatInteger(row.requestCount)} · {formatMicroUsd(row.costMicroUsd)}</span>
-                  <em>{index + 1}</em>
-                </li>
-              ))}
-            </ol>
+            <AnalyticsV5ProjectUsageChart
+              ariaLabel={text.projects}
+              locale={locale}
+              rows={projectRows}
+            />
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>
       </div>
@@ -207,20 +204,6 @@ function AnalyticsV5Surface({
       </header>
       {children}
     </section>
-  );
-}
-
-function RoutingTierRow({ row, total }: { row: AnalyticsValueRow; total: number }) {
-  const share = safeRatio(row.value, total);
-
-  return (
-    <div className="analytics-v5-routing-tier-row" data-tier={row.id}>
-      <div>
-        <span>{row.label}</span>
-        <strong>{formatInteger(row.value)}<small>{formatPercent(share)}</small></strong>
-      </div>
-      <i><b style={{ "--analytics-v5-share": `${Math.max(3, share * 100)}%` } as CSSProperties} /></i>
-    </div>
   );
 }
 

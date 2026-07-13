@@ -293,118 +293,12 @@
 }
 
 .analytics-v5-model-flow-chart,
-.analytics-v5-model-share-chart {
+.analytics-v5-model-share-chart,
+.analytics-v5-routing-tier-chart,
+.analytics-v5-project-usage-chart {
   width: 100%;
   height: 284px;
   margin-top: 8px;
-}
-
-.analytics-v5-routing-tier-list {
-  display: grid;
-  gap: 19px;
-  margin-top: 26px;
-}
-
-.analytics-v5-routing-tier-row {
-  display: grid;
-  gap: 8px;
-}
-
-.analytics-v5-routing-tier-row > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.analytics-v5-routing-tier-row span {
-  color: var(--text-muted);
-  font-size: calc(17px + var(--global-font-lift));
-  font-weight: 750;
-}
-
-.analytics-v5-routing-tier-row strong {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-  color: var(--foreground);
-  font-size: calc(24px + var(--global-font-lift));
-  font-weight: 850;
-}
-
-.analytics-v5-routing-tier-row strong small {
-  color: var(--text-muted);
-  font-size: calc(15px + var(--global-font-lift));
-}
-
-.analytics-v5-routing-tier-row > i,
-.analytics-v5-project-list li > div {
-  display: block;
-  overflow: hidden;
-  height: 16px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--analytics-v5-gray) 14%, var(--surface-subtle));
-}
-
-.analytics-v5-routing-tier-row > i > b,
-.analytics-v5-project-list li > div > i {
-  display: block;
-  width: var(--analytics-v5-share);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--analytics-v5-green-bright);
-}
-
-.analytics-v5-routing-tier-row[data-tier="balanced"] > i > b {
-  background: var(--analytics-v5-amber);
-}
-
-.analytics-v5-routing-tier-row[data-tier="high_quality"] > i > b {
-  background: var(--analytics-v5-blue);
-}
-
-.analytics-v5-routing-tier-row[data-tier="other"] > i > b {
-  background: var(--analytics-v5-gray);
-}
-
-.analytics-v5-project-list {
-  display: grid;
-  gap: 14px;
-  margin: 26px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.analytics-v5-project-list li {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(150px, 200px) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-}
-
-.analytics-v5-project-list li > strong {
-  overflow: hidden;
-  color: var(--foreground);
-  font-size: calc(16px + var(--global-font-lift));
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.analytics-v5-project-list li > div > i {
-  background: var(--analytics-v5-green-bright);
-}
-
-.analytics-v5-project-list li > span {
-  color: var(--text-muted);
-  font-size: calc(16px + var(--global-font-lift));
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.analytics-v5-project-list li > em {
-  display: none;
 }
 
 .analytics-v5-empty {
@@ -482,13 +376,8 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
     height: 265px;
   }
 
-  .analytics-v5-project-list li {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
-  }
-
-  .analytics-v5-project-list li > div {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .analytics-v5-routing-tier-chart,
+  .analytics-v5-project-usage-chart {
+    height: 270px;
   }
 }
