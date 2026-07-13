@@ -66,7 +66,7 @@ func TestAdmitUsesSignedActorContextWithoutIdentityLookup(t *testing.T) {
 	}
 }
 
-func TestAdmitSeparatesTenantAndRuntimeRejection(t *testing.T) {
+func TestAdmitSeparatesTenantRuntimeAndContextErrors(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		err  error
@@ -74,6 +74,8 @@ func TestAdmitSeparatesTenantAndRuntimeRejection(t *testing.T) {
 	}{
 		{name: "inactive tenant", err: tenantchat.ErrTenantDisabled, want: tenantchat.ErrTenantDisabled},
 		{name: "runtime unavailable", err: errors.New("snapshot unavailable"), want: tenantchat.ErrRuntimeUnavailable},
+		{name: "request canceled", err: context.Canceled, want: context.Canceled},
+		{name: "request deadline exceeded", err: context.DeadlineExceeded, want: context.DeadlineExceeded},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service := New(&fakeSnapshotResolver{err: test.err}, &fakeAdmissionStore{})

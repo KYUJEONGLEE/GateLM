@@ -190,6 +190,7 @@ func TestServiceErrorMapping(t *testing.T) {
 		{err: domain.ErrConcurrencyLimited, code: "CHAT_CONCURRENCY_LIMITED"},
 		{err: domain.ErrTenantDisabled, code: "CHAT_TENANT_DISABLED"},
 		{err: domain.ErrRuntimeUnavailable, code: "CHAT_RUNTIME_UNAVAILABLE"},
+		{err: context.DeadlineExceeded, code: "CHAT_RUNTIME_UNAVAILABLE"},
 		{err: errors.New("database detail"), code: "CHAT_USAGE_GUARD_UNAVAILABLE"},
 	}
 	for _, test := range tests {
@@ -204,6 +205,14 @@ func TestServiceErrorMapping(t *testing.T) {
 				t.Fatalf("unexpected safe error mapping: %+v", response)
 			}
 		})
+	}
+}
+
+func TestServiceCancellationDoesNotWriteResponse(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeServiceError(recorder, context.Canceled)
+	if recorder.Body.Len() != 0 || recorder.Header().Get("Content-Type") != "" {
+		t.Fatalf("canceled request wrote a response: headers=%v body=%q", recorder.Header(), recorder.Body.String())
 	}
 }
 

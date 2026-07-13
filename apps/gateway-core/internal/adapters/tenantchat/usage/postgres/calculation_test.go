@@ -30,6 +30,25 @@ func TestConfirmedAttemptCostRejectsCacheReadPriceAboveRegularInput(t *testing.T
 	}
 }
 
+func TestConfirmedAttemptCostRejectsInvalidUsage(t *testing.T) {
+	attempt := settlementAttempt{InputPrice: 250_000, OutputPrice: 1_000_000}
+	for _, test := range []struct {
+		name  string
+		usage tenantchat.ConfirmedUsage
+	}{
+		{name: "negative input", usage: tenantchat.ConfirmedUsage{InputTokens: -1}},
+		{name: "negative output", usage: tenantchat.ConfirmedUsage{OutputTokens: -1}},
+		{name: "negative cache read", usage: tenantchat.ConfirmedUsage{CacheReadInputTokens: -1}},
+		{name: "cache read exceeds input", usage: tenantchat.ConfirmedUsage{InputTokens: 1, CacheReadInputTokens: 2}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := confirmedAttemptCost(attempt, test.usage); err == nil {
+				t.Fatal("settlement accepted invalid confirmed usage")
+			}
+		})
+	}
+}
+
 func TestConfirmedAttemptCostUsesPinnedCacheReadDiscount(t *testing.T) {
 	cacheReadPrice := int64(25_000)
 	cost, err := confirmedAttemptCost(

@@ -39,6 +39,9 @@ func (s *Service) Admit(
 	}
 	snapshot, err := s.snapshots.Resolve(ctx, requestContext)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return tenantchat.Admission{}, err
+		}
 		if errors.Is(err, tenantchat.ErrTenantDisabled) {
 			return tenantchat.Admission{}, tenantchat.ErrTenantDisabled
 		}

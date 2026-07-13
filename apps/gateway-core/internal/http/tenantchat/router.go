@@ -142,6 +142,10 @@ func writeAuthenticationError(w http.ResponseWriter, err error) {
 
 func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, context.Canceled):
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		writeError(w, http.StatusServiceUnavailable, "CHAT_RUNTIME_UNAVAILABLE", "Tenant chat runtime is unavailable.", 1)
 	case errors.Is(err, domain.ErrTenantDisabled):
 		writeError(w, http.StatusForbidden, "CHAT_TENANT_DISABLED", "Tenant is disabled.", 0)
 	case errors.Is(err, domain.ErrRuntimeUnavailable):

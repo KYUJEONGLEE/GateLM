@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -96,6 +97,31 @@ func TestReaderRejectsMissingActiveRuntime(t *testing.T) {
 	reader := NewReader(&fakeQueryer{tenantStatus: "ACTIVE"})
 	if _, err := reader.Resolve(context.Background(), runtimeContextFixture()); !errors.Is(err, ErrSnapshotUnavailable) {
 		t.Fatalf("want unavailable snapshot, got %v", err)
+	}
+}
+
+func TestReaderPreservesContextErrors(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled", err: fmt.Errorf("query canceled: %w", context.Canceled), want: context.Canceled},
+		{name: "deadline exceeded", err: fmt.Errorf("query timed out: %w", context.DeadlineExceeded), want: context.DeadlineExceeded},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reader := NewReader(&fakeQueryer{err: test.err})
+			if _, err := reader.Resolve(context.Background(), runtimeContextFixture()); !errors.Is(err, test.want) {
+				t.Fatalf("want %v, got %v", test.want, err)
+			}
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	reader := NewReader(&fakeQueryer{err: errors.New("driver stopped")})
+	if _, err := reader.Resolve(ctx, runtimeContextFixture()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want canceled context fallback, got %v", err)
 	}
 }
 

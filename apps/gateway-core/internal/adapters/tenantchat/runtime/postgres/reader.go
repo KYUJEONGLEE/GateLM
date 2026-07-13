@@ -49,6 +49,12 @@ func (r *Reader) Resolve(ctx context.Context, requestContext tenantchat.RequestC
 		requestContext.Snapshot.Digest,
 	).Scan(&tenantStatus, &document)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return tenantruntime.Snapshot{}, err
+		}
+		if contextErr := ctx.Err(); contextErr != nil {
+			return tenantruntime.Snapshot{}, contextErr
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tenantruntime.Snapshot{}, tenantchat.ErrTenantDisabled
 		}
