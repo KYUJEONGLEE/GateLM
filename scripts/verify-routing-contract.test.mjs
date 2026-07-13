@@ -56,6 +56,34 @@ test("active routing contract rejects a fallback that is not global", () => {
 
     const failures = verifyRoutingContract({ rootDir, verifyDocumentation: false });
     assert.ok(failures.some((failure) => failure.includes("fallback must be present in all cells")));
+    assert.equal(
+      failures.some((failure) => failure.includes("every cell must share the same optional fallback")),
+      false,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing contract rejects different fallback models without reporting a missing fallback", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-fallback-profile-"));
+  try {
+    const policy = validPolicy();
+    for (const route of Object.values(policy.routes)) {
+      route.simple.modelRefs.push("provider:fallback");
+      route.complex.modelRefs.push("provider:fallback");
+    }
+    policy.routes.code.simple.modelRefs[1] = "provider:different-fallback";
+    writeContractFiles(rootDir, validSchema(), policy);
+
+    const failures = verifyRoutingContract({ rootDir, verifyDocumentation: false });
+    assert.ok(
+      failures.some((failure) => failure.includes("every cell must share the same optional fallback")),
+    );
+    assert.equal(
+      failures.some((failure) => failure.includes("fallback must be present in all cells")),
+      false,
+    );
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

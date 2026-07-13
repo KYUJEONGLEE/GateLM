@@ -382,11 +382,12 @@ function validateFixture(policy, failures) {
       if (fallbackModelRef === undefined && cellFallback !== undefined) {
         fallbackModelRef = cellFallback;
       }
-      if (fallbackModelRef !== undefined && cellFallback !== fallbackModelRef) {
+      if (
+        fallbackModelRef !== undefined &&
+        cellFallback !== undefined &&
+        cellFallback !== fallbackModelRef
+      ) {
         failures.push(`${fixturePath}: every cell must share the same optional fallback modelRef`);
-      }
-      if (fallbackModelRef === undefined && cellFallback === undefined) {
-        continue;
       }
     }
   }
@@ -394,7 +395,7 @@ function validateFixture(policy, failures) {
   if (fallbackModelRef !== undefined) {
     const hasMissingGlobalFallback = routingCategories.some((category) =>
       routingDifficulties.some(
-        (difficulty) => policy.routes[category]?.[difficulty]?.modelRefs?.[1] !== fallbackModelRef,
+        (difficulty) => policy.routes[category]?.[difficulty]?.modelRefs?.[1] === undefined,
       ),
     );
     if (hasMissingGlobalFallback) {
