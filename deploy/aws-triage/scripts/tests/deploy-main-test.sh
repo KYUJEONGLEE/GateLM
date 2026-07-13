@@ -86,6 +86,24 @@ if grep -Fq 'secrets.' "${WORKFLOW_FILE}"; then
   fail "The deployment workflow must not use long-lived GitHub secrets"
 fi
 
+grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
+  fail "PostgreSQL readiness must be verified before migrations"
+grep -Fq 'http://127.0.0.1:8080/v1/chat/completions' "${DEPLOY_SCRIPT}" || \
+  fail "Gateway authentication boundary must be verified through loopback"
+grep -Fq 'http://127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat authentication boundary must be verified through loopback"
+grep -Fq 'Public Web Console is not reachable from this host.' "${DEPLOY_SCRIPT}" || \
+  fail "Public reachability failures must remain non-fatal on the target host"
+# Runtime services are captured once for rollback and checked once after cutover.
+# shellcheck disable=SC2016
+runtime_service_loops="$(grep -Fc 'for service in "${runtime_services[@]}"; do' "${DEPLOY_SCRIPT}")"
+[[ "${runtime_service_loops}" == "2" ]] || \
+  fail "Restart and OOM checks must be limited to recreated runtime services"
+# The generated remote script must retain these variables for the target shell.
+# shellcheck disable=SC2016
+grep -Fq 'bash \"\${script_path}\" \"\${deploy_sha}\"' "${SSM_SCRIPT}" || \
+  fail "SSM bootstrap must invoke the temporary script through bash"
+
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 fake_bin="${tmp_dir}/bin"

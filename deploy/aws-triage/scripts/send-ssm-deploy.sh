@@ -71,7 +71,7 @@ sudo -u ubuntu env \
   GATELM_REPO_DIR=\"\${repo}\" \
   GATELM_DEPLOY_PUBLIC_URL=\"\${public_url}\" \
   GATELM_DEPLOY_CHAT_URL=\"\${chat_url}\" \
-  \"\${script_path}\" \"\${deploy_sha}\"
+  bash \"\${script_path}\" \"\${deploy_sha}\"
 EOF
 )"
 
