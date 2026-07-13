@@ -331,12 +331,12 @@ describe('RuntimeConfigsService', () => {
       Promise.resolve(runtimeConfigRecord(data.document, data)),
     );
 
-    const result = await service.upsertDraft(applicationId, {});
+    const draft = await service.upsertDraft(applicationId, {});
 
-    expect(result.runtimeConfig.routingPolicy.routes).toEqual(
+    expect(draft.runtimeConfig.routingPolicy.routes).toEqual(
       routingRoutes('mock-balanced'),
     );
-    expect(result.runtimeConfig.providers).toContainEqual(
+    expect(draft.runtimeConfig.providers).toContainEqual(
       expect.objectContaining({
         providerId: '00000000-0000-4000-8000-000000000001',
         provider: 'mock',
@@ -345,11 +345,57 @@ describe('RuntimeConfigsService', () => {
         models: ['mock-balanced'],
       }),
     );
-    expect(result.runtimeConfig.models).toContainEqual(
+    expect(draft.runtimeConfig.models).toContainEqual(
       expect.objectContaining({
         provider: 'mock',
         model: 'mock-balanced',
         status: 'active',
+      }),
+    );
+
+    const tx = {
+      runtimeConfig: {
+        updateMany: jest.fn(),
+        create: jest.fn(),
+      },
+      runtimeSnapshot: {
+        create: jest.fn(),
+      },
+      activeRuntimeSnapshot: {
+        upsert: jest.fn(),
+      },
+    };
+    tx.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(draft.runtimeConfig, {
+        id: draft.id,
+        publishState: RuntimeConfigPublishState.DRAFT,
+      }),
+    );
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const published = await service.publishRuntimeConfig(applicationId, {
+      configVersion: 'runtime_config_real_provider_with_builtin_mock_001',
+    });
+
+    expect(published.publishState).toBe('active');
+    expect(published.routingPolicy.routes).toEqual(
+      routingRoutes('mock-balanced'),
+    );
+    expect(tx.runtimeSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshotBody: expect.objectContaining({
+            schemaVersion: 'gatelm.runtime-snapshot.v2',
+            policies: expect.objectContaining({
+              routing: expect.objectContaining({
+                routes: routingRoutes('mock-balanced'),
+              }),
+            }),
+          }),
+        }),
       }),
     );
   });
@@ -2074,6 +2120,23 @@ describe('RuntimeConfigsService', () => {
     await expect(
       service.upsertDraft(applicationId, {
         models: [{ provider: 'openai', model: 'gpt-4o-mini' }],
+      }),
+    ).rejects.toThrow('Runtime Config model provider is not registered.');
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-reserved mock models when mock is not registered', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      baseUrl: 'https://api.openai.example/v1',
+      providerConfig: { models: ['gpt-4o'] },
+    });
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        models: [{ provider: 'mock', model: 'mock-fast' }],
       }),
     ).rejects.toThrow('Runtime Config model provider is not registered.');
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();

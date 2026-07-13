@@ -1381,7 +1381,10 @@ export class RuntimeConfigsService {
     if (dtoModels?.length) {
       const modelKeys = new Set<string>();
       for (const model of dtoModels) {
-        if (!providerNames.has(model.provider)) {
+        const isBuiltinMockModel =
+          model.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+          model.model === BUILTIN_MOCK_MODEL_REF;
+        if (!isBuiltinMockModel && !providerNames.has(model.provider)) {
           throw new ConflictException(
             'Runtime Config model provider is not registered.',
           );
@@ -1396,15 +1399,21 @@ export class RuntimeConfigsService {
         modelKeys.add(modelKey);
       }
 
-      const models = dtoModels.map((model) => ({
-        provider: model.provider,
-        model: model.model,
-        displayName: model.displayName ?? model.model,
-        status: model.status ?? 'active',
-        contextWindowTokens: model.contextWindowTokens ?? 8192,
-        supportsStreaming: model.supportsStreaming ?? false,
-        supportsJsonMode: model.supportsJsonMode ?? false,
-      }));
+      const models = dtoModels
+        .filter(
+          (model) =>
+            model.provider !== BUILTIN_MOCK_PROVIDER_NAME ||
+            model.model !== BUILTIN_MOCK_MODEL_REF,
+        )
+        .map((model) => ({
+          provider: model.provider,
+          model: model.model,
+          displayName: model.displayName ?? model.model,
+          status: model.status ?? 'active',
+          contextWindowTokens: model.contextWindowTokens ?? 8192,
+          supportsStreaming: model.supportsStreaming ?? false,
+          supportsJsonMode: model.supportsJsonMode ?? false,
+        }));
 
       for (const provider of providers) {
         if (models.some((model) => model.provider === provider.provider)) {
