@@ -95,12 +95,19 @@ node ../../scripts/dev/generate-tenant-chat-local-secrets.mjs \
   --kid=tenant-chat-production-1
 chmod 700 .secrets/tenant-chat
 chmod 600 .secrets/tenant-chat/*
+id -u
+id -g
 ```
 
 The generated directory is gitignored. Never copy its private JWK, HMAC keys,
 cache keys, or usage receipt token into `.env`, Git, logs, or deployment
 evidence. The deployment preflight rejects missing, empty, or group/world-readable
-secret files before building images.
+secret files before building images. Set `TENANT_CHAT_RUNTIME_UID` and
+`TENANT_CHAT_RUNTIME_GID` in `.env` to the numeric values printed by `id -u`
+and `id -g`. Gateway and Chat API use that non-root identity so file-backed
+Compose secrets remain readable without relaxing the `700` directory and `600`
+file modes. The production deployment script verifies that all five files have
+one non-root owner and passes the detected UID/GID to Compose automatically.
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
