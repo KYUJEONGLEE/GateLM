@@ -269,7 +269,7 @@ async function handleControlPlaneRequest(
     url.pathname === `/admin/v1/tenants/${tenantId}/tenant-chat/runtime` &&
     request.method === "GET"
   ) {
-    return json(response, 200, runtimeSetup());
+    return json(response, 200, { data: runtimeSetup() });
   }
   if (
     url.pathname === `/admin/v1/tenants/${tenantId}/tenant-chat/runtime` &&
@@ -287,7 +287,7 @@ async function handleControlPlaneRequest(
       snapshotId: "tenant_chat_snapshot_e2e",
       version: 1
     };
-    return json(response, 200, runtimeSetup());
+    return json(response, 200, { data: runtimeSetup() });
   }
 
   return json(response, 404, { message: "Not found" });
