@@ -12,6 +12,7 @@ import type {
   TenantChatAdminRuntimeSetup,
   TenantChatRuntimeActivationValues
 } from "@/lib/control-plane/tenant-chat-runtime-types";
+import { tenantChatRuntimeSetupFromPayload } from "@/lib/control-plane/tenant-chat-runtime-payload";
 
 export type TenantChatRuntimeResult =
   | { data: TenantChatAdminRuntimeSetup; ok: true; status: number }
@@ -62,7 +63,8 @@ async function requestTenantChatRuntime(
         status: response.status
       };
     }
-    if (!isTenantChatAdminRuntimeSetup(payload)) {
+    const setup = tenantChatRuntimeSetupFromPayload(payload);
+    if (!setup) {
       return {
         error: "Control Plane response did not include a valid Tenant Chat runtime setup.",
         ok: false,
@@ -70,88 +72,10 @@ async function requestTenantChatRuntime(
       };
     }
 
-    return { data: payload, ok: true, status: response.status };
+    return { data: setup, ok: true, status: response.status };
   } catch {
     return { error: "Control Plane unavailable.", ok: false, status: 0 };
   }
-}
-
-function isTenantChatAdminRuntimeSetup(value: unknown): value is TenantChatAdminRuntimeSetup {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    (record.readiness === "needs_provider" ||
-      record.readiness === "needs_model" ||
-      record.readiness === "needs_activation" ||
-      record.readiness === "ready" ||
-      record.readiness === "degraded") &&
-    Array.isArray(record.providers) &&
-    record.providers.every(isProviderCandidate) &&
-    (record.activeSnapshot === null || isActiveSnapshot(record.activeSnapshot))
-  );
-}
-
-function isProviderCandidate(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.providerConnectionId === "string" &&
-    typeof record.providerKey === "string" &&
-    typeof record.providerFamily === "string" &&
-    typeof record.displayName === "string" &&
-    Array.isArray(record.models) &&
-    record.models.every(isModelCandidate)
-  );
-}
-
-function isModelCandidate(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.modelKey === "string" &&
-    (record.activationStatus === "available" ||
-      record.activationStatus === "pricing_unavailable") &&
-    (record.pricing === null || isPricing(record.pricing))
-  );
-}
-
-function isPricing(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    Number.isSafeInteger(record.inputMicroUsdPerMillionTokens) &&
-    Number.isSafeInteger(record.outputMicroUsdPerMillionTokens) &&
-    (record.cacheReadInputMicroUsdPerMillionTokens === undefined ||
-      Number.isSafeInteger(record.cacheReadInputMicroUsdPerMillionTokens))
-  );
-}
-
-function isActiveSnapshot(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.snapshotId === "string" &&
-    typeof record.digest === "string" &&
-    typeof record.providerConnectionId === "string" &&
-    typeof record.modelKey === "string" &&
-    typeof record.publishedAt === "string" &&
-    Number.isSafeInteger(record.version) &&
-    Number.isSafeInteger(record.policyVersion) &&
-    Number.isSafeInteger(record.pricingVersion) &&
-    (record.pricingStatus === "current" ||
-      record.pricingStatus === "update_available" ||
-      record.pricingStatus === "unavailable")
-  );
 }
 
 function readErrorMessage(payload: unknown, status: number) {
