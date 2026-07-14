@@ -146,8 +146,8 @@ function getSetCookieValue(headers: { name: string; value: string }[], cookieNam
 
     const [nameValue] = header.value.split(";");
     const separatorIndex = nameValue.indexOf("=");
-    const name = separatorIndex >= 0 ? nameValue.slice(0, separatorIndex) : "";
-    const value = separatorIndex >= 0 ? nameValue.slice(separatorIndex + 1) : "";
+    const name = separatorIndex >= 0 ? nameValue.slice(0, separatorIndex).trim() : "";
+    const value = separatorIndex >= 0 ? nameValue.slice(separatorIndex + 1).trim() : "";
 
     if (name === cookieName) {
       return value;
