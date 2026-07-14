@@ -102,6 +102,8 @@ grep -Fq 'export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"' "${DEPLOY_SCRIPT
   fail "Tenant Chat secret owner GID must be passed to Compose"
 grep -Fq 'Tenant Chat secret files must share one owner UID and GID.' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret files must have consistent ownership"
+grep -Fq 'content-keys.json' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat content keys must be validated before the image build"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
@@ -111,11 +113,14 @@ for required_setting in \
   'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \
   'TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json' \
   'TENANT_CHAT_WORKLOAD_JWKS_FILE: /run/secrets/tenant-chat/jwks.json' \
-  'TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json'
+  'TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json' \
+  'TENANT_CHAT_CONTENT_KEYS_FILE: /run/secrets/tenant-chat/content-keys.json'
 do
   grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
     fail "Tenant Chat production Compose setting is missing: ${required_setting}"
 done
+[[ "$(grep -v '^[[:space:]]*#' "${COMPOSE_FILE}" | grep -Fc 'target: /run/secrets/tenant-chat/content-keys.json')" == "1" ]] || \
+  fail "Tenant Chat content keys must be mounted only into Chat API"
 [[ "$(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}")" == "2" ]] || \
   fail "Gateway and Chat API must run as the Tenant Chat secret owner"
 grep -Fq 'http://127.0.0.1:8080/v1/chat/completions' "${DEPLOY_SCRIPT}" || \
