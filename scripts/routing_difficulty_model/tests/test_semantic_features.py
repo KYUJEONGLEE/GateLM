@@ -39,24 +39,46 @@ class OfflineFeatureShapeTest(unittest.TestCase):
         )
 
         self.assertEqual(RULE_VECTOR_V1_DIMENSION, 42)
-        self.assertEqual(SEMANTIC_HEAD_PROBABILITY_DIMENSION_V1, 46)
+        self.assertEqual(SEMANTIC_HEAD_PROBABILITY_DIMENSION_V1, 12)
+        self.assertEqual(
+            [(spec.name, spec.classes) for spec in SEMANTIC_HEAD_SPECS_V1],
+            [
+                ("semanticTaskBucket", ("count_1", "count_2", "count_3_plus")),
+                (
+                    "semanticConstraintBucket",
+                    ("count_0_to_1", "count_2", "count_3_plus"),
+                ),
+                (
+                    "semanticScopeBucket",
+                    ("count_1", "count_2_to_3", "count_4_plus"),
+                ),
+                (
+                    "semanticDependencyBucket",
+                    ("depth_0_to_1", "depth_2", "depth_3_plus"),
+                ),
+            ],
+        )
         self.assertEqual(baseline.total_dimension, 42)
         self.assertEqual(projection.total_dimension, 50)
-        self.assertEqual(combined.total_dimension, 96)
+        self.assertEqual(combined.total_dimension, 62)
         self.assertEqual(
             [(segment.name, segment.offset, segment.dimension) for segment in combined.segments],
             [
                 ("ruleVectorV1", 0, 42),
                 ("semanticProjection", 42, 8),
-                ("semanticHeads.semanticTaskBucket", 50, 6),
-                ("semanticHeads.semanticConstraintBucket", 56, 7),
-                ("semanticHeads.semanticScopeBucket", 63, 5),
-                ("semanticHeads.semanticDependencyBucket", 68, 6),
-                ("semanticHeads.semanticCodeOperation", 74, 10),
-                ("semanticHeads.semanticDomainTerminology", 84, 3),
-                ("semanticHeads.semanticSynthesisLevel", 87, 3),
-                ("semanticHeads.semanticReasoningDepth", 90, 6),
+                ("semanticHeads.semanticTaskBucket", 50, 3),
+                ("semanticHeads.semanticConstraintBucket", 53, 3),
+                ("semanticHeads.semanticScopeBucket", 56, 3),
+                ("semanticHeads.semanticDependencyBucket", 59, 3),
             ],
+        )
+
+    def test_p32_candidate_dimensions_are_42_74_and_86(self) -> None:
+        shape = make_shape(projection_dimension=32)
+
+        self.assertEqual(
+            [shape.descriptor(candidate).total_dimension for candidate in OfflineFeatureCandidate],
+            [42, 74, 86],
         )
 
     def test_assembles_candidates_without_overwriting_rule_vector_v1(self) -> None:
@@ -64,19 +86,24 @@ class OfflineFeatureShapeTest(unittest.TestCase):
         rule = tuple(float(index) / 42.0 for index in range(42))
         projection = (0.25, -0.5)
         heads = one_hot_heads()
-        values = OfflineFeatureValues(
-            rule_vector_v1=rule,
-            semantic_projection=projection,
-            semantic_head_probabilities=heads,
+        baseline = shape.assemble(
+            OfflineFeatureCandidate.RULE_VECTOR_V1,
+            OfflineFeatureValues(rule_vector_v1=rule),
         )
-
-        baseline = shape.assemble(OfflineFeatureCandidate.RULE_VECTOR_V1, values)
         projected = shape.assemble(
-            OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION, values
+            OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION,
+            OfflineFeatureValues(
+                rule_vector_v1=rule,
+                semantic_projection=projection,
+            ),
         )
         combined = shape.assemble(
             OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
-            values,
+            OfflineFeatureValues(
+                rule_vector_v1=rule,
+                semantic_projection=projection,
+                semantic_head_probabilities=heads,
+            ),
         )
 
         self.assertEqual(baseline, rule)
@@ -84,7 +111,7 @@ class OfflineFeatureShapeTest(unittest.TestCase):
         self.assertEqual(combined[:42], rule)
         self.assertEqual(projected[42:], projection)
         self.assertEqual(combined[42:44], projection)
-        self.assertEqual(len(combined), 42 + 2 + 46)
+        self.assertEqual(len(combined), 42 + 2 + 12)
 
     def test_uses_distinct_deterministic_feature_names(self) -> None:
         shape = make_shape(projection_dimension=2)
@@ -92,19 +119,49 @@ class OfflineFeatureShapeTest(unittest.TestCase):
             OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS
         )
 
-        self.assertEqual(len(names), 90)
+        self.assertEqual(len(names), 56)
         self.assertEqual(names[0], "ruleVectorV1.payloadEmpty")
         self.assertEqual(names[41], "ruleVectorV1.reasoningUncertaintyScenarioCount")
         self.assertEqual(names[42:44], ("semanticProjection[0]", "semanticProjection[1]"))
         self.assertEqual(
             names[44],
-            "semanticHeads.semanticTaskBucket.count_0.probability",
+            "semanticHeads.semanticTaskBucket.count_1.probability",
         )
         self.assertEqual(
             names[-1],
-            "semanticHeads.semanticReasoningDepth.depth_5_plus.probability",
+            "semanticHeads.semanticDependencyBucket.depth_3_plus.probability",
         )
         self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(
+            names,
+            shape.descriptor(
+                OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS
+            ).feature_names,
+        )
+
+    def test_excludes_removed_heads_without_removing_rule_features(self) -> None:
+        names = make_shape(projection_dimension=2).feature_names(
+            OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS
+        )
+
+        for removed_head in (
+            "semanticCodeOperation",
+            "semanticDomainTerminology",
+            "semanticSynthesisLevel",
+            "semanticReasoningDepth",
+        ):
+            self.assertFalse(
+                any(name.startswith(f"semanticHeads.{removed_head}.") for name in names)
+            )
+
+        for preserved_rule_feature in (
+            "ruleVectorV1.codeOperationUnknown",
+            "ruleVectorV1.codeOperationPerformance",
+            "ruleVectorV1.translationDomainTerminologyLevel",
+            "ruleVectorV1.summarizationSynthesisLevel",
+            "ruleVectorV1.reasoningDepth",
+        ):
+            self.assertIn(preserved_rule_feature, names[:RULE_VECTOR_V1_DIMENSION])
 
     def test_requires_candidate_specific_inputs_without_silent_fallback(self) -> None:
         shape = make_shape()
@@ -128,6 +185,24 @@ class OfflineFeatureShapeTest(unittest.TestCase):
             shape.assemble(
                 OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
                 projection_only,
+            )
+
+        with self.assertRaisesRegex(ValueError, "must not contain semantic segments"):
+            shape.assemble(
+                OfflineFeatureCandidate.RULE_VECTOR_V1,
+                OfflineFeatureValues(
+                    rule_vector_v1=(0.0,) * 42,
+                    semantic_projection=(0.0,) * 8,
+                ),
+            )
+        with self.assertRaisesRegex(ValueError, "must not contain semantic head"):
+            shape.assemble(
+                OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION,
+                OfflineFeatureValues(
+                    rule_vector_v1=(0.0,) * 42,
+                    semantic_projection=(0.0,) * 8,
+                    semantic_head_probabilities=one_hot_heads(),
+                ),
             )
 
     def test_rejects_dimension_and_numeric_errors(self) -> None:
@@ -177,15 +252,15 @@ class OfflineFeatureShapeTest(unittest.TestCase):
             )
 
         extra = one_hot_heads()
-        extra["semanticUnknown"] = (1.0,)
-        with self.assertRaisesRegex(ValueError, "extra=.*semanticUnknown"):
+        extra["semanticCodeOperation"] = (1.0,)
+        with self.assertRaisesRegex(ValueError, "extra=.*semanticCodeOperation"):
             shape.assemble(
                 OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
                 OfflineFeatureValues(base.rule_vector_v1, base.semantic_projection, extra),
             )
 
         bad_sum = one_hot_heads()
-        bad_sum["semanticSynthesisLevel"] = (0.2, 0.2, 0.2)
+        bad_sum["semanticConstraintBucket"] = (0.2, 0.2, 0.2)
         with self.assertRaisesRegex(ValueError, "must sum to 1"):
             shape.assemble(
                 OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
@@ -195,7 +270,7 @@ class OfflineFeatureShapeTest(unittest.TestCase):
             )
 
         out_of_range = one_hot_heads()
-        out_of_range["semanticDomainTerminology"] = (1.1, -0.1, 0.0)
+        out_of_range["semanticScopeBucket"] = (1.1, -0.1, 0.0)
         with self.assertRaisesRegex(ValueError, r"within \[0, 1\]"):
             shape.assemble(
                 OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
@@ -222,7 +297,7 @@ class OfflineFeatureShapeTest(unittest.TestCase):
                 semantic_heads_version=" ",
             )
         changed_last_head = SemanticHeadSpec(
-            "semanticReasoningDepth",
+            "semanticDependencyBucket",
             tuple(reversed(SEMANTIC_HEAD_SPECS_V1[-1].classes)),
         )
         with self.assertRaisesRegex(ValueError, "fixed v1 name, class, and ordering"):

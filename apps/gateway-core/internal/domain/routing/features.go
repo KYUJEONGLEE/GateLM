@@ -21,6 +21,7 @@ const (
 	payloadBoundaryBeginEnd
 	payloadBoundaryBlockQuote
 	payloadBoundaryCue
+	payloadBoundaryMessageRole
 )
 
 type payloadSplitConfidence uint8
@@ -36,11 +37,13 @@ const (
 // Its fields stay private so normalized prompt material and tokens cannot be
 // serialized into routing responses, diagnostics, logs, events, or metrics.
 type PromptFeatures struct {
-	normalizedText    string
-	instructionText   string
-	payloadText       string
-	tokens            map[string]struct{}
-	instructionTokens map[string]struct{}
+	normalizedText         string
+	instructionText        string
+	instructionContextText string
+	payloadText            string
+	tokens                 map[string]struct{}
+	instructionTokens      map[string]struct{}
+	roleStructured         bool
 
 	promptRuneLength  int
 	wordCount         int
@@ -60,6 +63,27 @@ type PromptFeatures struct {
 	payloadSplitConfidence  payloadSplitConfidence
 }
 
+// PromptMessage preserves a request-local chat role boundary without allowing
+// raw message text to be serialized through routing surfaces.
+type PromptMessage struct {
+	Role string `json:"-"`
+	Text string `json:"-"`
+}
+
+type routingPromptSegment struct {
+	text         string
+	messageIndex int
+	role         string
+	afterGap     bool
+}
+
+type routingPromptScan struct {
+	segments         []routingPromptSegment
+	truncated        bool
+	promptRuneLength int
+	roleStructured   bool
+}
+
 // ModelCapabilityFeatures is intentionally separate from category and
 // difficulty classification. It may be consumed by a future capability
 // matcher without changing the routing classification pipeline.
@@ -71,9 +95,33 @@ type ModelCapabilityFeatures struct {
 // ExtractPromptFeatures performs the common bounded preprocessing once. It
 // deliberately contains no category or difficulty result fields.
 func ExtractPromptFeatures(prompt string) PromptFeatures {
-	scan := boundedRoutingTextSegments(prompt, maxCategoryScanBytes)
+	textScan := boundedRoutingTextSegments(prompt, maxCategoryScanBytes)
+	segments := make([]routingPromptSegment, 0, len(textScan.segments))
+	for index, segment := range textScan.segments {
+		segments = append(segments, routingPromptSegment{
+			text:         segment,
+			messageIndex: 0,
+			afterGap:     textScan.truncated && index > 0,
+		})
+	}
+	return extractPromptFeatures(routingPromptScan{
+		segments:         segments,
+		truncated:        textScan.truncated,
+		promptRuneLength: utf8.RuneCountInString(prompt),
+	})
+}
+
+// ExtractPromptFeaturesFromMessages preserves chat roles as an upstream
+// structural boundary. Instruction-bearing messages still require an explicit
+// in-text delimiter before any of their content is treated as payload.
+func ExtractPromptFeaturesFromMessages(messages []PromptMessage) PromptFeatures {
+	return extractPromptFeatures(boundedRoutingPromptMessages(messages, maxCategoryScanBytes))
+}
+
+func extractPromptFeatures(scan routingPromptScan) PromptFeatures {
 	normalizedParts := make([]string, 0, len(scan.segments))
 	instructionParts := make([]string, 0, len(scan.segments))
+	instructionContextParts := make([]string, 0, len(scan.segments))
 	payloadParts := make([]string, 0, len(scan.segments))
 	structuredInstructionParts := make([]string, 0, len(scan.segments))
 	payloadBlockCount := 0
@@ -81,9 +129,19 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 	payloadState := routingPayloadBoundaryState{}
 	payloadEvidence := payloadBoundaryEvidence(0)
 	payloadLowConfidence := false
+	previousMessageIndex := -1
+	rolePayloadMessages := make(map[int]struct{})
 
-	for segmentIndex, segment := range scan.segments {
-		canonical := canonicalizeRoutingText(segment)
+	for _, segment := range scan.segments {
+		if previousMessageIndex >= 0 && previousMessageIndex != segment.messageIndex {
+			if routingPayloadStateIsUnclosed(payloadState) {
+				payloadLowConfidence = true
+			}
+			payloadState = routingPayloadBoundaryState{}
+		}
+		previousMessageIndex = segment.messageIndex
+
+		canonical := canonicalizeRoutingText(segment.text)
 		if normalizedPart := collapseRoutingWhitespace(canonical); normalizedPart != "" {
 			normalizedParts = append(normalizedParts, normalizedPart)
 		}
@@ -91,7 +149,19 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 		if strings.Contains(canonical, "```") {
 			hasCodeFence = true
 		}
-		if scan.truncated && segmentIndex > 0 {
+		if isRoutingPayloadMessageRole(segment.role) {
+			if payloadPart := collapseRoutingWhitespace(canonical); payloadPart != "" {
+				payloadParts = append(payloadParts, payloadPart)
+				if _, counted := rolePayloadMessages[segment.messageIndex]; !counted {
+					rolePayloadMessages[segment.messageIndex] = struct{}{}
+					payloadBlockCount++
+					payloadEvidence |= payloadBoundaryMessageRole
+				}
+			}
+			continue
+		}
+
+		if segment.afterGap {
 			if payloadState.kind != 0 {
 				payloadLowConfidence = true
 			} else if inferredState, inferred := inferRoutingPayloadStateAtTruncatedTail(canonical); inferred {
@@ -107,8 +177,12 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 		payloadEvidence |= split.evidence
 		instructionRaw := split.instruction
 		payloadBlocks := split.payloadBlocks
-		if instructionPart := collapseRoutingWhitespace(instructionRaw); instructionPart != "" {
+		instructionPart := collapseRoutingWhitespace(instructionRaw)
+		if instructionPart != "" {
 			instructionParts = append(instructionParts, instructionPart)
+			if isRoutingInstructionContextMessageRole(segment.role) {
+				instructionContextParts = append(instructionContextParts, instructionPart)
+			}
 		}
 		if strings.TrimSpace(instructionRaw) != "" {
 			structuredInstructionParts = append(structuredInstructionParts, instructionRaw)
@@ -122,6 +196,7 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 
 	normalized := strings.Join(normalizedParts, " ")
 	instruction := strings.Join(instructionParts, " ")
+	instructionContext := strings.Join(instructionContextParts, " ")
 	payload := strings.Join(payloadParts, "\n")
 	structuredInstruction := strings.Join(structuredInstructionParts, "\n")
 	meaningless := isMeaninglessRoutingText(normalized)
@@ -134,27 +209,51 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 		}
 	}
 	return PromptFeatures{
-		normalizedText:    normalized,
-		instructionText:   instruction,
-		payloadText:       payload,
-		tokens:            routingTokenSet(normalized),
-		instructionTokens: routingTokenSet(instruction),
-		promptRuneLength:  utf8.RuneCountInString(prompt),
-		wordCount:         len(strings.Fields(normalized)),
-		clauseCount:       countRoutingClauses(structuredInstruction, meaningless),
-		taskCount:         countRoutingTasks(structuredInstruction, meaningless),
-		constraintCount:   countRoutingConstraints(instruction),
-		scopeCount:        countRoutingScope(instruction, meaningless, payloadBlockCount, listItemCount),
-		dependencyDepth:   countRoutingDependencyDepth(instruction),
-		languageBucket:    routingLanguageBucket(normalized),
-		hasCodeFence:      hasCodeFence,
-		isMeaningless:     meaningless,
-		payloadBlockCount: payloadBlockCount,
-		listItemCount:     listItemCount,
-		wasTruncated:      scan.truncated,
+		normalizedText:         normalized,
+		instructionText:        instruction,
+		instructionContextText: instructionContext,
+		payloadText:            payload,
+		tokens:                 routingTokenSet(normalized),
+		instructionTokens:      routingTokenSet(instruction),
+		roleStructured:         scan.roleStructured,
+		promptRuneLength:       scan.promptRuneLength,
+		wordCount:              len(strings.Fields(normalized)),
+		clauseCount:            countRoutingClauses(structuredInstruction, meaningless),
+		taskCount:              countRoutingTasks(structuredInstruction, meaningless),
+		constraintCount:        countRoutingConstraints(instruction),
+		scopeCount:             countRoutingScope(instruction, meaningless, payloadBlockCount, listItemCount),
+		dependencyDepth:        countRoutingDependencyDepth(instruction),
+		languageBucket:         routingLanguageBucket(normalized),
+		hasCodeFence:           hasCodeFence,
+		isMeaningless:          meaningless,
+		payloadBlockCount:      payloadBlockCount,
+		listItemCount:          listItemCount,
+		wasTruncated:           scan.truncated,
 
 		payloadBoundaryEvidence: payloadEvidence,
 		payloadSplitConfidence:  payloadConfidence,
+	}
+}
+
+func routingPayloadStateIsUnclosed(state routingPayloadBoundaryState) bool {
+	return state.kind == payloadBoundaryCodeFence || state.kind == payloadBoundaryTag || state.kind == payloadBoundaryBeginEnd
+}
+
+func isRoutingPayloadMessageRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "assistant", "tool", "function":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRoutingInstructionContextMessageRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "system", "developer":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -249,9 +348,126 @@ func boundedRoutingTextSegments(prompt string, maxBytes int) boundedRoutingScan 
 	return boundedRoutingScan{segments: segments, truncated: true}
 }
 
+func boundedRoutingPromptMessages(messages []PromptMessage, maxBytes int) routingPromptScan {
+	promptRuneLength := 0
+	totalBytes := 0
+	for index, message := range messages {
+		if index > 0 {
+			promptRuneLength++
+			totalBytes++
+		}
+		promptRuneLength += utf8.RuneCountInString(message.Text)
+		totalBytes += len(message.Text)
+	}
+
+	if maxBytes <= 0 || totalBytes <= maxBytes {
+		segments := make([]routingPromptSegment, 0, len(messages))
+		for index, message := range messages {
+			segments = append(segments, routingPromptSegment{
+				text:         message.Text,
+				messageIndex: index,
+				role:         message.Role,
+			})
+		}
+		return routingPromptScan{
+			segments:         segments,
+			promptRuneLength: promptRuneLength,
+			roleStructured:   true,
+		}
+	}
+
+	headBytes := maxBytes / 2
+	tailBytes := maxBytes - headBytes
+	head := routingPromptMessagePrefixSegments(messages, headBytes)
+	tail := routingPromptMessageSuffixSegments(messages, tailBytes)
+	if len(tail) > 0 {
+		tail[0].afterGap = true
+	}
+	segments := make([]routingPromptSegment, 0, len(head)+len(tail))
+	segments = append(segments, head...)
+	segments = append(segments, tail...)
+	return routingPromptScan{
+		segments:         segments,
+		truncated:        true,
+		promptRuneLength: promptRuneLength,
+		roleStructured:   true,
+	}
+}
+
+func routingPromptMessagePrefixSegments(messages []PromptMessage, budget int) []routingPromptSegment {
+	remaining := budget
+	segments := make([]routingPromptSegment, 0, len(messages))
+	for index, message := range messages {
+		if index > 0 {
+			if remaining <= 0 {
+				break
+			}
+			remaining--
+		}
+		if message.Text == "" {
+			continue
+		}
+		take := minInt(len(message.Text), remaining)
+		if take <= 0 {
+			break
+		}
+		text := validRoutingUTF8Prefix(message.Text[:take])
+		if text != "" {
+			segments = append(segments, routingPromptSegment{text: text, messageIndex: index, role: message.Role})
+		}
+		remaining -= take
+		if take < len(message.Text) {
+			break
+		}
+	}
+	return segments
+}
+
+func routingPromptMessageSuffixSegments(messages []PromptMessage, budget int) []routingPromptSegment {
+	remaining := budget
+	reversed := make([]routingPromptSegment, 0, len(messages))
+	for index := len(messages) - 1; index >= 0; index-- {
+		if index < len(messages)-1 {
+			if remaining <= 0 {
+				break
+			}
+			remaining--
+		}
+		message := messages[index]
+		if message.Text == "" {
+			continue
+		}
+		take := minInt(len(message.Text), remaining)
+		if take <= 0 {
+			break
+		}
+		text := validRoutingUTF8Suffix(message.Text[len(message.Text)-take:])
+		if text != "" {
+			reversed = append(reversed, routingPromptSegment{text: text, messageIndex: index, role: message.Role})
+		}
+		remaining -= take
+		if take < len(message.Text) {
+			break
+		}
+	}
+
+	segments := make([]routingPromptSegment, len(reversed))
+	for index := range reversed {
+		segments[len(reversed)-1-index] = reversed[index]
+	}
+	return segments
+}
+
 func validRoutingUTF8Prefix(text string) string {
 	for !utf8.ValidString(text) && len(text) > 0 {
 		text = text[:len(text)-1]
+	}
+	return text
+}
+
+func validRoutingUTF8Suffix(text string) string {
+	for !utf8.ValidString(text) && len(text) > 0 {
+		text = text[1:]
 	}
 	return text
 }

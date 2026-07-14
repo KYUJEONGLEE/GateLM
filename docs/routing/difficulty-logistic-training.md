@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Offline tooling prepared; no model trained or promoted |
+| Status | 42D/106D/118D offline selection candidates trained; not runtime-promoted |
 | Model policy | `difficulty-logistic-v1` |
 | Feature contract | `difficulty-feature-vector.v1` (42 dimensions) |
 | Calibration policy | `difficulty-calibration-v1` |
@@ -19,6 +19,9 @@
 - [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl): 500건 synthetic training-tooling smoke. 전부 `human review pending`이며 model/calibrator/threshold evidence가 아니다.
 - [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json): 500건을 `trainingEligible=false`, approved human-reviewed family 0으로 고정한다.
 - [`../v2.1.0/fixtures/difficulty-training-split-manifest.v1.json`](../v2.1.0/fixtures/difficulty-training-split-manifest.v1.json): 25개 cross-label family의 smoke tooling partition을 train 15개/300건, calibration 5개/100건, holdout 5개/100건으로 고정한다. 이 이름은 production evidence split을 뜻하지 않는다.
+- [`../v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl`](../v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl): 500건이 모두 `human_review + approved`인 owner-approved training candidate다. Synthetic prompt source와 consent provenance는 보존한다.
+- [`../v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json`](../v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json): 89개 approved family, versioned minimum-family policy와 family-disjoint train 300/calibration 100/holdout 100 partition을 `trainingEligible=true`로 고정한다.
+- [`../v2.1.0/reviews/difficulty-training-candidate-500.owner-approval.json`](../v2.1.0/reviews/difficulty-training-candidate-500.owner-approval.json): dataset owner 승인 범위, source dataset·manifest hash와 gate 결과를 보존한다.
 
 500건은 다음 명령으로 결정론적으로 다시 만든다.
 
@@ -27,11 +30,11 @@ corepack pnpm run v2.1:routing:generate-difficulty-training-pilot
 corepack pnpm run verify:v2.1-difficulty-eval
 ```
 
-500건 smoke의 legacy family key는 `sampleId`의 category와 `fNN`만 사용한 `{category}/{fNN}`이다. `expectedDifficulty`와 `vNN`을 제외하므로 같은 family의 simple/complex contrast와 모든 variant가 항상 함께 이동한다. 향후 실제 dataset은 `difficulty-label-record.v1`의 `promptFamily`와 versioned minimum-family policy를 사용하며 legacy 25 family를 승인된 학습 family로 승격하지 않는다.
+500건 smoke의 legacy family key는 `sampleId`의 category와 `fNN`만 사용한 `{category}/{fNN}`이다. `expectedDifficulty`와 `vNN`을 제외하므로 같은 family의 simple/complex contrast와 모든 variant가 항상 함께 이동한다. 승인된 training candidate는 `difficulty-label-record.v2`의 `promptFamily`, `semanticInputStatus`와 `difficulty-training-minimum-family-policy.2026-07-14.v1`을 사용하며 legacy 25 family를 그대로 승인된 학습 family로 승격하지 않는다. `empty_instruction` record의 `not_applicable`은 semantic head class가 아니므로 initial 4-head candidate target이나 zero-vector fallback으로 변환하지 않는다.
 
 ## Training Boundary
 
-실제 training candidate는 모든 포함 record가 `human_review + approved`이고, 독립 family 전체가 한 split에만 있으며, dataset manifest가 `trainingEligible=true`와 versioned minimum-family policy를 선언해야 한다. 현재 minimum family 수는 decision pending이므로 repository의 checked-in dataset은 이 조건을 만족하지 않는다. Record 수, synthetic 균형 또는 smoke partition만으로 이 gate를 통과할 수 없다.
+실제 training candidate는 모든 포함 record가 `human_review + approved`이고, 독립 family 전체가 한 split에만 있으며, dataset manifest가 `trainingEligible=true`와 versioned minimum-family policy를 선언해야 한다. Checked-in owner-approved 500건/89-family candidate는 이 입력 gate와 train 300/calibration 100/holdout 100 partition을 만족한다. 이 승인은 offline 학습 입력 자격이며 model coefficient, semantic-head weight, calibrator, holdout 결과, runtime promotion 또는 GA를 승인하지 않는다.
 
 학습 입력은 offline Go exporter가 canonical Go pipeline으로 만든다.
 
@@ -49,9 +52,21 @@ redactedPrompt
 
 Python tooling은 [`../../scripts/routing_difficulty_model/`](../../scripts/routing_difficulty_model/)에 격리한다. Gateway와 AI service production dependency에는 NumPy나 scikit-learn을 추가하지 않는다. Versioned policy는 L2 Logistic Regression regularization group CV, Platt/isotonic global calibrator 비교와 고정 `0.45` threshold를 선언한다. 두 후보는 모두 `raw_probability`를 입력으로 쓰며 평균 log loss, `0.000001` 허용 오차 안의 평균 Brier score, Platt 우선 순서로 선택한다. 한 후보가 실패하면 다른 유효 후보를 사용할 수 있지만 둘 다 실패하면 학습을 실패시키며 identity 또는 무보정 fallback artifact를 만들지 않는다.
 
+모든 scikit-learn Logistic Regression fit은 `ConvergenceWarning`을 fail closed로 처리한다. Regularization group CV에서 한 fold라도 미수렴한 `C`는 전체 후보를 `failed`로 표시하고 평균 metric이나 선택에 사용하지 않는다. 모든 `C`가 실패하거나 선택된 `C`의 전체 train final fit이 미수렴하면 학습을 중단하며 artifact와 holdout report를 만들지 않는다. Platt fit이 미수렴하면 해당 calibrator 후보를 실패 처리하고 이미 검증된 다른 후보만 사용할 수 있다. Report에는 raw probability, vector 또는 coefficient 대신 안전한 `C`, fold, configured maximum과 observed iteration count만 기록한다. `maxIterations`는 실행 중 자동 증가시키지 않으며 변경이 필요하면 versioned training policy를 명시적으로 갱신한 뒤 전체 evidence run을 다시 실행한다.
+
+동일한 Logistic Regression regularization search와 calibrator 선택·fit 함수는 `difficulty-offline-feature-shape.v1` descriptor 기반 training API에서도 재사용한다. 기존 `train_from_vector_export()`와 CLI는 exact 42D v1 name/order/dimension만 계속 허용한다. 별도 `train_from_offline_feature_matrix()`는 canonical assembler가 만든 `42`, `106`, `118` matrix의 candidate, feature names, total dimension, sample dimension, finite 값, family-disjoint split과 sentinel `modelPath`를 교차 검증한다. 각 호출은 candidate 자신의 weights/bias와 calibration raw probability로 calibrator를 다시 fit한다. Combined vector와 semantic intermediate를 파일로 쓰는 helper는 제공하지 않는다.
+
 Isotonic은 scikit-learn의 선형 interpolation predictor를 artifact 의미로 사용하지 않고 tooling의 작은 PAVA 구현으로 학습한다. Raw probability를 정렬하고 exact-equal 값만 먼저 묶어 sample count와 complex count를 계산한 뒤, 앞 block의 비율이 뒤 block보다 큰 동안 sample-count 가중 병합을 반복한다. `labelConfidence`, epsilon grouping, 고정 score bin과 자동 small-block 병합은 사용하지 않는다. Artifact에는 각 최종 block의 포함 하한과 complex 비율을 저장하며 single constant block도 유효하다. Runtime은 포함 하한 floor lookup과 양끝 clipping만 수행한다.
 
 ## Candidate Training Command
+
+Canonical semantic candidate 세 개를 동일한 owner-approved 500건에서 생성하는 명령은 다음과 같다.
+
+```powershell
+corepack pnpm run v2.1:routing:train-difficulty-semantic-candidates
+```
+
+이 명령은 하나의 canonical export와 membership hash를 공유하며 train 300건으로 semantic heads와 세 decision head를 학습하고, 같은 calibration 100건으로 후보별 calibrator를 독립 fit한 뒤, 같은 untouched holdout 100건에서 aggregate selection evidence를 만든다. `ruleVectorV1`, pooled/projected embedding, semantic head probability와 sample score는 process-local memory에만 유지한다.
 
 아래 명령은 실제 학습을 실행하므로 승인된 dataset manifest와 별도 family-disjoint split manifest가 준비된 evidence run에서만 사용한다. 500건 smoke 경로를 인자로 넘기지 않는다.
 
@@ -106,6 +121,17 @@ Isotonic의 `xThresholds[i]`는 block의 포함 하한이다. `xThresholds[i] <=
 
 Candidate JSON은 [`../v2.1.0/schemas/difficulty-model-artifact.schema.json`](../v2.1.0/schemas/difficulty-model-artifact.schema.json)을 따른다. JSON은 offline provenance와 coefficient를 보존하는 교환 artifact이며 Gateway hot path에서 파싱하지 않는다.
 
+Semantic comparison candidate는 v1 schema를 느슨하게 확장하지 않고 [`../v2.1.0/schemas/difficulty-offline-model-artifact.schema.json`](../v2.1.0/schemas/difficulty-offline-model-artifact.schema.json)을 사용한다. 이 closed schema는 `offlineFeatureShapeVersion`, candidate, preprocessing, tokenizer/encoder/pooling version과 hash, projection parameter와 `P`, 고정 4-head/12D class order와 coefficient/intercept, exact `totalDimension`/feature names/classifier weights, candidate별 calibrator, threshold/equality, dataset/split hash와 training policy를 요구한다. Bundle hash는 component tuple과 parameter/shape를 고정하고 content hash는 classifier·calibrator와 전체 provenance까지 고정한다. 기존 v1 parser는 이 artifact를 받지 않고 offline parser도 v1 artifact를 받지 않는다.
+
+Semantic encoder는 [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md)의 canonical E5 QInt8 경로만 사용한다. Raw pooled train embedding `[300,384]`에 full-SVD PCA를 fit해 committed 64D projection을 만들고, 요청 처리에서는 PCA 뒤 L2 정규화한다. Tokenizer/QInt8 large artifact는 local artifact cache 또는 향후 Docker image build 단계에 포함하며 runtime download를 금지한다.
+
+```powershell
+corepack pnpm run v2.1:routing:setup-e5-encoder
+corepack pnpm run v2.1:routing:prepare-e5-encoder
+corepack pnpm run v2.1:routing:fit-e5-pca
+corepack pnpm run verify:v2.1-e5-encoder
+```
+
 ```powershell
 $env:GOCACHE=(Resolve-Path '.gocache').Path
 go run ./apps/gateway-core/cmd/difficulty-model-codegen `
@@ -114,6 +140,18 @@ go run ./apps/gateway-core/cmd/difficulty-model-codegen `
 ```
 
 Code generation은 feature/model/calibration version, exact 42개 이름·순서·weight, finite bias/coefficient, calibrator parameter, fixed threshold와 inference-material content hash를 검증한다. 학습 dataset version, split policy, regularization 설정 같은 provenance metadata는 artifact schema와 offline report의 책임이며 code generation을 막지 않는다. 알 수 없는 설명용 metadata도 무시한다. Gateway runtime에는 JSON parsing이나 반복 shape 검증을 추가하지 않는다.
+
+같은 command가 별도 offline artifact도 schema identity로 분기해 생성할 수 있다. 이 경우 candidate, feature shape, total dimension, feature order와 content hash를 검증하고 package-private `generatedDifficultyLogisticOfflineModel`을 만든다. 생성 파일에는 offline/shadow 전용이며 product routing에 등록되지 않는다는 주석이 포함된다. v1 artifact는 계속 exact 42D code를 만들며, 두 schema의 교차 입력과 unsupported candidate/dimension은 codegen 단계에서 실패한다.
+
+Offline artifact 자체는 다음 독립 verifier로 code generation 없이 검증할 수 있다.
+
+```powershell
+corepack pnpm run v2.1:routing:verify-difficulty-artifact -- `
+  -artifact .tmp\difficulty-offline-candidate.json `
+  -report .tmp\difficulty-offline-validation-report.json
+```
+
+Verifier는 closed JSON shape, immutable version, 4-head/12D parameter와 class order, projection/classifier dimension, finite numeric material, calibrator tagged union, threshold equality, dataset/split/training provenance, bundle hash와 content hash를 fail closed로 확인한다. 성공 report는 version/hash와 candidate/dimension만 포함하며 projection/head/classifier parameter를 복제하지 않는다. 실패 report는 입력값이나 JSON fragment 없이 `invalid_arguments`, `artifact_read_failed`, `artifact_invalid`, `report_write_failed` 중 하나의 안전한 code만 제공한다. Artifact나 report에는 raw prompt, token, embedding, vector, head output, per-sample score 또는 matched phrase를 넣지 않는다.
 
 Validated candidate artifact는 제품 runtime에 포함하지 않고 다음처럼 opt-in offline shadow 비교에만 입력할 수 있다.
 
@@ -126,19 +164,30 @@ Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + com
 
 생성된 candidate를 checked-in active generated model로 옮기거나 `SimpleRouter`의 rule-based classifier를 교체하는 작업은 별도 promotion 단계다. Offline constructor와 evaluator가 존재하더라도 checked-in active artifact와 runtime behavior는 추가하지 않는다.
 
+## Current Tooling-Smoke Baseline
+
+The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testing/difficulty-42d-tooling-smoke-baseline.md`](../testing/difficulty-42d-tooling-smoke-baseline.md). It evaluates exact 42D `difficulty-feature-vector.v1` only. Because the dataset is synthetic `training_tooling_smoke` with `trainingEligible=false`, it is not eligible for model-quality comparison, semantic-candidate ranking, promotion gating, or production evidence. The canonical E5/PCA semantic shapes (`42`, `106`, `118`), four-head/12D output, v2 `semanticInputStatus`/bucket targets and fail-closed empty semantic input require their own contract-compliant evaluation. The v2 label-contract smoke used for negation/payload slices is projection-only: its semantic annotation targets are not consumed by the 42D evaluator and do not establish semantic target quality.
+
 ## Prepared Tests
 
-- Label schema, 필수 slice, category-semantic 조합, review 상태와 family-level coverage
+- Label schema v2의 고정 4-head class order, empty-instruction fail-closed, 필수 slice, category-semantic 조합, review 상태와 family-level coverage
 - 500건 smoke 재생성, 균형, provenance, dataset hash와 `trainingEligible=false`
 - Smoke와 향후 candidate의 simple/complex cross-label family split/fold 비누출
 - actual category vector와 oracle category vector의 분리
 - deterministic sentinel과 Logistic Regression `modelPath` 학습·calibration 분리
 - 작은 in-memory synthetic matrix의 Logistic Regression/calibrator fit
 - Python artifact hash와 Go code generator parity
+- Generic scorer의 canonical `42`, `106`, `118` 계산과 dimension/finite fail-closed
+- Pinned E5 tokenizer/QInt8 artifact hash, attention-mask mean pooling, train-only PCA `[384]`/`[64,384]`, post-PCA L2와 64D output 검증
+- Descriptor 기반 세 candidate의 별도 weights/bias/calibrator fit과 feature order 검증
+- v1/offline artifact parser 교차 거부, offline component provenance와 Go/Python hash parity
+- Offline generated Go의 candidate/dimension/feature order 보존과 type-check
 - stable sigmoid, Platt 공식과 포함 하한 Isotonic 계단 lookup의 Python-Go 공통 golden parity
 - PAVA exact-tie grouping, sample-count 가중 cascade merge, block 진단과 single-block inference
 - 잘못된 feature order/count, threshold, calibrator와 content hash의 codegen 거부
 - meaningless/hard-complex sentinel 우선순위와 remaining-request model path
 - opt-in shadow artifact load, runtime 비교, 긴 simple·짧은 complex segment와 민감 material 비노출
 
-500건 smoke는 ephemeral tooling test에만 사용할 수 있다. Approved human-reviewed family dataset을 이용한 실제 학습, production artifact 생성, holdout promotion gate와 runtime cutover는 이 준비 범위에 포함하지 않는다.
+500건 smoke는 ephemeral tooling test에만 사용할 수 있다. 실제 후보는 owner-approved 500건/89-family와 exact 300/100/100 partition만 사용한다. 현재 holdout 100건은 세 조합을 비교하는 selection evidence이며, 이 결과로 조합을 선택한 뒤에는 final runtime promotion evidence로 재사용할 수 없다.
+
+현재 artifact는 semantic head, 후보별 difficulty decision head와 calibrator를 포함하지만 API, DB, Event, Metrics, RuntimeSnapshot, routing policy와 제품 `DifficultyResult` shape를 변경하지 않는다. Gateway shadow 실행 위치, image packaging, 새 untouched promotion holdout과 runtime 승격은 포함하지 않는다.

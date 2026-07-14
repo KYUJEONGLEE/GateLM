@@ -84,7 +84,11 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if requestedModel == "" {
 		requestedModel = "auto"
 	}
-	classification := promptClassifier.Classify(req.PromptText)
+	features := ExtractPromptFeatures(req.PromptText)
+	if len(req.PromptMessages) > 0 {
+		features = ExtractPromptFeaturesFromMessages(req.PromptMessages)
+	}
+	classification := promptClassifier.ClassifyFeatures(features)
 	category := canonicalCategory(classification.Category.Category)
 	difficulty := canonicalDifficulty(classification.Difficulty.Difficulty)
 	diagnostics := classification.Category.Diagnostics.WithSelectedCategory(category)

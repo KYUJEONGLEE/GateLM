@@ -90,54 +90,19 @@ class SemanticHeadSpec:
 SEMANTIC_HEAD_SPECS_V1 = (
     SemanticHeadSpec(
         "semanticTaskBucket",
-        ("count_0", "count_1", "count_2", "count_3", "count_4", "count_5_plus"),
+        ("count_1", "count_2", "count_3_plus"),
     ),
     SemanticHeadSpec(
         "semanticConstraintBucket",
-        (
-            "count_0",
-            "count_1",
-            "count_2",
-            "count_3",
-            "count_4",
-            "count_5",
-            "count_6_plus",
-        ),
+        ("count_0_to_1", "count_2", "count_3_plus"),
     ),
     SemanticHeadSpec(
         "semanticScopeBucket",
-        ("count_0", "count_1", "count_2", "count_3", "count_4_plus"),
+        ("count_1", "count_2_to_3", "count_4_plus"),
     ),
     SemanticHeadSpec(
         "semanticDependencyBucket",
-        ("depth_0", "depth_1", "depth_2", "depth_3", "depth_4", "depth_5_plus"),
-    ),
-    SemanticHeadSpec(
-        "semanticCodeOperation",
-        (
-            "unknown",
-            "syntax",
-            "example",
-            "small_edit",
-            "debug",
-            "refactor",
-            "design",
-            "migration",
-            "concurrency",
-            "performance",
-        ),
-    ),
-    SemanticHeadSpec(
-        "semanticDomainTerminology",
-        ("level_0", "level_1", "level_2"),
-    ),
-    SemanticHeadSpec(
-        "semanticSynthesisLevel",
-        ("level_0", "level_1", "level_2"),
-    ),
-    SemanticHeadSpec(
-        "semanticReasoningDepth",
-        ("depth_0", "depth_1", "depth_2", "depth_3", "depth_4", "depth_5_plus"),
+        ("depth_0_to_1", "depth_2", "depth_3_plus"),
     ),
 )
 
@@ -168,6 +133,32 @@ class FeatureShapeDescriptor:
     semantic_head_specs: tuple[SemanticHeadSpec, ...]
     segments: tuple[FeatureSegment, ...]
     total_dimension: int
+    feature_names: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.shape_version.strip() or not self.rule_vector_version.strip():
+            raise ValueError("feature shape and rule vector versions must not be empty")
+        if not self.projection_version.strip() or not self.semantic_heads_version.strip():
+            raise ValueError("feature shape component versions must not be empty")
+        if self.projection_dimension <= 0 or self.total_dimension <= 0:
+            raise ValueError("feature shape dimensions must be positive")
+        if len(self.feature_names) != self.total_dimension:
+            raise ValueError("feature names must exactly match total dimension")
+        if len(set(self.feature_names)) != len(self.feature_names) or any(
+            not name.strip() for name in self.feature_names
+        ):
+            raise ValueError("feature names must be non-empty and unique")
+        if not self.segments or self.segments[0] != FeatureSegment(
+            "ruleVectorV1", 0, RULE_VECTOR_V1_DIMENSION
+        ):
+            raise ValueError("feature segments must start with the exact v1 rule vector")
+        expected_offset = 0
+        for segment in self.segments:
+            if segment.offset != expected_offset or segment.dimension <= 0:
+                raise ValueError("feature segments must be positive and contiguous")
+            expected_offset = segment.end
+        if expected_offset != self.total_dimension:
+            raise ValueError("feature segment end must equal total dimension")
 
 
 @dataclass(frozen=True)
@@ -227,6 +218,7 @@ class OfflineFeatureShape:
             semantic_head_specs=self.semantic_head_specs,
             segments=segments,
             total_dimension=segments[-1].end,
+            feature_names=self.feature_names(canonical_candidate),
         )
 
     def feature_names(self, candidate: OfflineFeatureCandidate | str) -> tuple[str, ...]:
@@ -260,6 +252,11 @@ class OfflineFeatureShape:
         if any(value < 0.0 or value > 1.0 for value in result):
             raise ValueError("ruleVectorV1 values must be within [0, 1]")
         if canonical_candidate is OfflineFeatureCandidate.RULE_VECTOR_V1:
+            if (
+                values.semantic_projection is not None
+                or values.semantic_head_probabilities is not None
+            ):
+                raise ValueError("rule-vector-only candidate must not contain semantic segments")
             return result
 
         if values.semantic_projection is None:
@@ -270,6 +267,8 @@ class OfflineFeatureShape:
             self.projection_dimension,
         )
         if canonical_candidate is OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION:
+            if values.semantic_head_probabilities is not None:
+                raise ValueError("projection candidate must not contain semantic head probabilities")
             return result
 
         result += self._flatten_head_probabilities(values.semantic_head_probabilities)
@@ -338,6 +337,8 @@ class OfflineFeatureShape:
 def _finite_vector(name: str, values: Sequence[float], dimension: int) -> tuple[float, ...]:
     if len(values) != dimension:
         raise ValueError(f"{name} dimension is {len(values)}, expected {dimension}")
+    if any(isinstance(value, (bool, str, bytes)) for value in values):
+        raise ValueError(f"{name} must contain only numeric values")
     try:
         result = tuple(float(value) for value in values)
     except (TypeError, ValueError) as error:

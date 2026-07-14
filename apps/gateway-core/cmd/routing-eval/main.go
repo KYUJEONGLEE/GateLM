@@ -27,6 +27,9 @@ const (
 	defaultDifficultyDatasetPath       = "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl"
 	defaultProbeDatasetPath            = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
 	defaultLatencyIterations           = 20
+	defaultLatencyWarmupIterations     = 5
+	defaultLatencyBatchSize            = 32
+	defaultDifficultyLatencyBatchSize  = 4096
 	categoryRecordV2                   = "gatelm.category-evaluation-record.v2"
 	difficultyRecordV1                 = "gatelm.difficulty-evaluation-record.v1"
 
@@ -38,15 +41,16 @@ const (
 )
 
 type datasetRecord struct {
-	SchemaVersion      string  `json:"schemaVersion"`
-	SampleID           string  `json:"sampleId"`
-	LegacyID           string  `json:"id"`
-	RedactedPrompt     *string `json:"redactedPrompt"`
-	Prompt             *string `json:"prompt"`
-	ExpectedCategory   string  `json:"expectedCategory"`
-	ExpectedDifficulty string  `json:"expectedDifficulty"`
-	Language           string  `json:"language"`
-	ExpectedTier       *string `json:"expectedTier"`
+	SchemaVersion      string   `json:"schemaVersion"`
+	SampleID           string   `json:"sampleId"`
+	LegacyID           string   `json:"id"`
+	RedactedPrompt     *string  `json:"redactedPrompt"`
+	Prompt             *string  `json:"prompt"`
+	ExpectedCategory   string   `json:"expectedCategory"`
+	ExpectedDifficulty string   `json:"expectedDifficulty"`
+	Language           string   `json:"language"`
+	EvaluationSlices   []string `json:"evaluationSlices,omitempty"`
+	ExpectedTier       *string  `json:"expectedTier"`
 }
 
 type report struct {
@@ -76,12 +80,14 @@ type categoryStats struct {
 }
 
 type latencyStats struct {
-	Iterations int     `json:"iterations"`
-	Samples    int     `json:"samples"`
-	AvgMicros  float64 `json:"avgMicros"`
-	P50Micros  float64 `json:"p50Micros"`
-	P95Micros  float64 `json:"p95Micros"`
-	MaxMicros  float64 `json:"maxMicros"`
+	WarmupIterations int     `json:"warmupIterations"`
+	BatchSize        int     `json:"batchSize"`
+	Iterations       int     `json:"iterations"`
+	Samples          int     `json:"samples"`
+	AvgMicros        float64 `json:"avgMicros"`
+	P50Micros        float64 `json:"p50Micros"`
+	P95Micros        float64 `json:"p95Micros"`
+	MaxMicros        float64 `json:"maxMicros"`
 }
 
 type difficultyReport struct {
@@ -96,6 +102,7 @@ type difficultyReport struct {
 	ByCategoryDifficulty  map[string]map[string]categoryStats `json:"byCategoryDifficulty"`
 	DirectionalErrors     directionalErrorStats               `json:"directionalErrors"`
 	ClassificationLatency classificationLatencyStats          `json:"classificationLatency"`
+	Calibration           difficultyCalibrationReport         `json:"calibration"`
 	Failures              []difficultyEvaluationFailure       `json:"failures"`
 	Samples               []difficultyEvaluationSample        `json:"samples"`
 	Shadow                *difficultyShadowReport             `json:"shadow,omitempty"`
@@ -126,9 +133,50 @@ type difficultyShadowReport struct {
 	DirectionalErrors      directionalErrorStats               `json:"directionalErrors"`
 	DifficultyLatency      latencyStats                        `json:"difficultyLatency"`
 	TotalLatency           latencyStats                        `json:"totalLatency"`
+	Calibration            difficultyCalibrationReport         `json:"calibration"`
 	RuntimeComparison      difficultyRuntimeComparison         `json:"runtimeComparison"`
 	Segments               difficultyShadowSegments            `json:"segments"`
+	PromotionGate          difficultyPromotionGateReport       `json:"promotionGate"`
 }
+
+type difficultyCalibrationReport struct {
+	Applicable         bool                                  `json:"applicable"`
+	Valid              bool                                  `json:"valid"`
+	Reason             string                                `json:"reason,omitempty"`
+	Scope              string                                `json:"scope,omitempty"`
+	BinPolicy          string                                `json:"binPolicy,omitempty"`
+	Samples            int                                   `json:"samples"`
+	SentinelExcluded   int                                   `json:"sentinelExcluded"`
+	InvalidScores      int                                   `json:"invalidScores"`
+	LogLoss            float64                               `json:"logLoss"`
+	BrierScore         float64                               `json:"brierScore"`
+	ByExpectedCategory map[string]difficultyCalibrationStats `json:"byExpectedCategory,omitempty"`
+	Bins               []difficultyCalibrationBin            `json:"bins,omitempty"`
+}
+
+type difficultyCalibrationStats struct {
+	Samples    int     `json:"samples"`
+	LogLoss    float64 `json:"logLoss"`
+	BrierScore float64 `json:"brierScore"`
+}
+
+type difficultyCalibrationBin struct {
+	Index               int     `json:"index"`
+	LowerInclusive      float64 `json:"lowerInclusive"`
+	UpperExclusive      float64 `json:"upperExclusive"`
+	UpperInclusive      bool    `json:"upperInclusive"`
+	Samples             int     `json:"samples"`
+	MeanComplexityScore float64 `json:"meanComplexityScore"`
+	ObservedComplexRate float64 `json:"observedComplexRate"`
+}
+
+type difficultyCalibrationObservation struct {
+	ExpectedCategory string
+	Label            int
+	Score            float64
+}
+
+var latencyChecksumSink uint64
 
 type difficultyRuntimeComparison struct {
 	ChangedSamples                       int             `json:"changedSamples"`
@@ -140,8 +188,10 @@ type difficultyRuntimeComparison struct {
 }
 
 type difficultyShadowSegments struct {
-	LongSimple   difficultySegmentComparison `json:"longSimple"`
-	ShortComplex difficultySegmentComparison `json:"shortComplex"`
+	LongSimple           difficultySegmentComparison `json:"longSimple"`
+	ShortComplex         difficultySegmentComparison `json:"shortComplex"`
+	Negation             difficultySegmentComparison `json:"negation"`
+	PayloadContamination difficultySegmentComparison `json:"payloadContamination"`
 }
 
 type difficultySegmentComparison struct {
@@ -151,6 +201,22 @@ type difficultySegmentComparison struct {
 	ShadowCorrect   int     `json:"shadowCorrect"`
 	RuntimeAccuracy float64 `json:"runtimeAccuracy"`
 	ShadowAccuracy  float64 `json:"shadowAccuracy"`
+}
+
+type difficultyPromotionGateReport struct {
+	Applicable bool                           `json:"applicable"`
+	Passed     bool                           `json:"passed"`
+	Policy     string                         `json:"policy"`
+	Checks     []difficultyPromotionGateCheck `json:"checks"`
+}
+
+type difficultyPromotionGateCheck struct {
+	Name         string   `json:"name"`
+	Passed       bool     `json:"passed"`
+	Reason       string   `json:"reason,omitempty"`
+	RuntimeValue *float64 `json:"runtimeValue,omitempty"`
+	ShadowValue  *float64 `json:"shadowValue,omitempty"`
+	Unit         string   `json:"unit,omitempty"`
 }
 
 type directionalErrorStats struct {
@@ -189,6 +255,7 @@ type difficultyEvaluationSample struct {
 	Matched            bool     `json:"matched"`
 	ShadowDifficulty   string   `json:"shadowDifficulty,omitempty"`
 	ComplexityScore    *float64 `json:"complexityScore,omitempty"`
+	ModelPath          *bool    `json:"modelPath,omitempty"`
 	ShadowMatched      *bool    `json:"shadowMatched,omitempty"`
 	RuntimeChanged     *bool    `json:"runtimeChanged,omitempty"`
 }
@@ -281,6 +348,9 @@ func main() {
 	difficultyShadowModelArtifact := flag.String("difficulty-shadow-model-artifact", "", "optional validated model artifact for offline difficulty shadow comparison")
 	minAccuracy := flag.Float64("min-accuracy", 0, "optional minimum exact-match accuracy, from 0 to 1")
 	latencyIterations := flag.Int("latency-iterations", defaultLatencyIterations, "routing decision iterations per sample for latency measurement")
+	latencyWarmupIterations := flag.Int("latency-warmup-iterations", defaultLatencyWarmupIterations, "unmeasured routing warm-up iterations per sample")
+	latencyBatchSize := flag.Int("latency-batch-size", defaultLatencyBatchSize, "classifier calls per timed batch, reported as per-call latency")
+	difficultyLatencyBatchSize := flag.Int("difficulty-latency-batch-size", defaultDifficultyLatencyBatchSize, "difficulty-only classifier calls per timed batch, reported as per-call latency")
 	pretty := flag.Bool("pretty", true, "pretty-print JSON report")
 	flag.Parse()
 
@@ -336,7 +406,7 @@ func main() {
 			if version == defaultClassifierVersion {
 				version = defaultDifficultyClassifierVersion
 			}
-			evalReport := evaluateDifficulty(*datasetPath, version, records, *latencyIterations, shadowOptions)
+			evalReport := evaluateDifficultyWithWarmup(*datasetPath, version, records, *latencyIterations, *latencyWarmupIterations, *latencyBatchSize, *difficultyLatencyBatchSize, shadowOptions)
 			payload, err = marshalDifficultyReport(evalReport, *pretty)
 			if err != nil {
 				exitWithError(err)
@@ -662,8 +732,21 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 }
 
 func evaluateDifficulty(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int, shadowOptions *difficultyShadowOptions) difficultyReport {
+	return evaluateDifficultyWithWarmup(datasetPath, classifierVersion, records, latencyIterations, defaultLatencyWarmupIterations, defaultLatencyBatchSize, defaultDifficultyLatencyBatchSize, shadowOptions)
+}
+
+func evaluateDifficultyWithWarmup(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int, latencyWarmupIterations int, latencyBatchSize int, difficultyLatencyBatchSize int, shadowOptions *difficultyShadowOptions) difficultyReport {
 	if latencyIterations <= 0 {
 		latencyIterations = 1
+	}
+	if latencyWarmupIterations < 0 {
+		latencyWarmupIterations = 0
+	}
+	if latencyBatchSize <= 0 {
+		latencyBatchSize = 1
+	}
+	if difficultyLatencyBatchSize <= 0 {
+		difficultyLatencyBatchSize = 1
 	}
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
 	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
@@ -674,8 +757,13 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		ClassifierVersion:    classifierVersion,
 		TotalSamples:         len(records),
 		ByCategoryDifficulty: map[string]map[string]categoryStats{},
-		Failures:             []difficultyEvaluationFailure{},
-		Samples:              []difficultyEvaluationSample{},
+		Calibration: difficultyCalibrationReport{
+			Applicable: false,
+			Valid:      false,
+			Reason:     "rule-based difficulty classifier does not provide a calibrated probability",
+		},
+		Failures: []difficultyEvaluationFailure{},
+		Samples:  []difficultyEvaluationSample{},
 	}
 
 	categoryLatencies := []float64{}
@@ -683,6 +771,8 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 	totalLatencies := []float64{}
 	shadowDifficultyLatencies := []float64{}
 	shadowTotalLatencies := []float64{}
+	shadowCalibrationObservations := []difficultyCalibrationObservation{}
+	shadowSentinelExcluded := 0
 	runtimeComplexToSimpleByCategory := map[string]int{}
 	shadowComplexToSimpleByCategory := map[string]int{}
 	if shadowOptions != nil {
@@ -695,6 +785,12 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 			ContentHash:            shadowOptions.ContentHash,
 			ProductRuntimeChanged:  false,
 			ByCategoryDifficulty:   map[string]map[string]categoryStats{},
+			Calibration: difficultyCalibrationReport{
+				Applicable: true,
+				Valid:      true,
+				Scope:      "modelPath=true only; deterministic sentinels excluded",
+				BinPolicy:  "equal-width-10-v1",
+			},
 			RuntimeComparison: difficultyRuntimeComparison{
 				ComplexToSimpleNonIncreaseByCategory: map[string]bool{},
 			},
@@ -705,6 +801,12 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 				ShortComplex: difficultySegmentComparison{
 					Definition: "expectedDifficulty=complex and redactedPrompt rune length <= 120",
 				},
+				Negation: difficultySegmentComparison{
+					Definition: `evaluationSlices contains "negation"`,
+				},
+				PayloadContamination: difficultySegmentComparison{
+					Definition: `evaluationSlices contains "payload_contamination"`,
+				},
 			},
 		}
 	}
@@ -713,11 +815,12 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		expectedDifficulty := strings.TrimSpace(record.ExpectedDifficulty)
 		prompt := record.promptText()
 
-		categoryResult, sampleCategoryLatencies := classifyCategoryWithLatency(categoryClassifier, prompt, latencyIterations)
+		categoryResult, sampleCategoryLatencies := classifyCategoryWithWarmupLatency(categoryClassifier, prompt, latencyIterations, latencyWarmupIterations, latencyBatchSize)
 		actualCategory := categoryResult.Category
 		features := routing.ExtractPromptFeatures(prompt)
-		actualDifficulty, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, features, actualCategory, latencyIterations)
-		sampleTotalLatencies := classifyTotalWithLatency(promptClassifier, prompt, latencyIterations)
+		difficultyFeatures := routing.ExtractDifficultyFeatures(features, actualCategory)
+		actualDifficulty, sampleDifficultyLatencies := classifyDifficultyWithLatency(difficultyClassifier, difficultyFeatures, latencyIterations, latencyWarmupIterations, difficultyLatencyBatchSize)
+		sampleTotalLatencies := classifyTotalWithLatency(promptClassifier, prompt, latencyIterations, latencyWarmupIterations, latencyBatchSize)
 		categoryLatencies = append(categoryLatencies, sampleCategoryLatencies...)
 		difficultyLatencies = append(difficultyLatencies, sampleDifficultyLatencies...)
 		totalLatencies = append(totalLatencies, sampleTotalLatencies...)
@@ -741,11 +844,12 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		if shadowOptions != nil {
 			shadowResult, sampleShadowDifficultyLatencies := classifyShadowDifficultyWithLatency(
 				shadowOptions.Classifier,
-				features,
-				actualCategory,
+				difficultyFeatures,
 				latencyIterations,
+				latencyWarmupIterations,
+				difficultyLatencyBatchSize,
 			)
-			sampleShadowTotalLatencies := classifyShadowTotalWithLatency(shadowOptions.Classifier, prompt, latencyIterations)
+			sampleShadowTotalLatencies := classifyShadowTotalWithLatency(shadowOptions.Classifier, prompt, latencyIterations, latencyWarmupIterations, latencyBatchSize)
 			shadowDifficultyLatencies = append(shadowDifficultyLatencies, sampleShadowDifficultyLatencies...)
 			shadowTotalLatencies = append(shadowTotalLatencies, sampleShadowTotalLatencies...)
 
@@ -753,10 +857,25 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 			shadowMatched := shadowDifficulty == expectedDifficulty
 			runtimeChanged := shadowDifficulty != actualDifficulty
 			complexityScore := shadowResult.ComplexityScore
+			modelPath := routing.UsesDifficultyModelPath(difficultyFeatures)
 			sample.ShadowDifficulty = shadowDifficulty
 			sample.ComplexityScore = &complexityScore
+			sample.ModelPath = &modelPath
 			sample.ShadowMatched = &shadowMatched
 			sample.RuntimeChanged = &runtimeChanged
+			if modelPath {
+				label := 0
+				if expectedDifficulty == routing.DifficultyComplex {
+					label = 1
+				}
+				shadowCalibrationObservations = append(shadowCalibrationObservations, difficultyCalibrationObservation{
+					ExpectedCategory: expectedCategory,
+					Label:            label,
+					Score:            complexityScore,
+				})
+			} else {
+				shadowSentinelExcluded++
+			}
 
 			shadow := result.Shadow
 			if _, ok := shadow.ByCategoryDifficulty[expectedCategory]; !ok {
@@ -802,6 +921,12 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 			}
 			if expectedDifficulty == routing.DifficultyComplex && promptRuneLength <= 120 {
 				updateDifficultySegment(&shadow.Segments.ShortComplex, matched, shadowMatched)
+			}
+			if record.hasEvaluationSlice("negation") {
+				updateDifficultySegment(&shadow.Segments.Negation, matched, shadowMatched)
+			}
+			if record.hasEvaluationSlice("payload_contamination") {
+				updateDifficultySegment(&shadow.Segments.PayloadContamination, matched, shadowMatched)
 			}
 		}
 
@@ -857,9 +982,9 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 	)
 	result.ClassificationLatency = classificationLatencyStats{
 		Unit:       "microseconds",
-		Category:   summarizeLatency(categoryLatencies, latencyIterations),
-		Difficulty: summarizeLatency(difficultyLatencies, latencyIterations),
-		Total:      summarizeLatency(totalLatencies, latencyIterations),
+		Category:   summarizeLatencyWithWarmup(categoryLatencies, latencyIterations, latencyWarmupIterations, latencyBatchSize),
+		Difficulty: summarizeLatencyWithWarmup(difficultyLatencies, latencyIterations, latencyWarmupIterations, difficultyLatencyBatchSize),
+		Total:      summarizeLatencyWithWarmup(totalLatencies, latencyIterations, latencyWarmupIterations, latencyBatchSize),
 	}
 	if result.Shadow != nil {
 		shadow := result.Shadow
@@ -874,12 +999,13 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 			shadow.DirectionalErrors.ComplexToSimpleCount,
 			shadow.DirectionalErrors.ComplexExpectedSamples,
 		)
-		shadow.DifficultyLatency = summarizeLatency(shadowDifficultyLatencies, latencyIterations)
-		shadow.TotalLatency = summarizeLatency(shadowTotalLatencies, latencyIterations)
+		shadow.DifficultyLatency = summarizeLatencyWithWarmup(shadowDifficultyLatencies, latencyIterations, latencyWarmupIterations, difficultyLatencyBatchSize)
+		shadow.TotalLatency = summarizeLatencyWithWarmup(shadowTotalLatencies, latencyIterations, latencyWarmupIterations, latencyBatchSize)
+		shadow.Calibration = summarizeDifficultyCalibration(shadowCalibrationObservations, shadowSentinelExcluded)
 
 		shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall =
 			shadow.DirectionalErrors.ComplexToSimpleCount <= result.DirectionalErrors.ComplexToSimpleCount
-		shadow.RuntimeComparison.SafetyGatePassed = shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall
+		shadow.RuntimeComparison.SafetyGatePassed = shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall && shadow.Calibration.Valid
 		for category := range result.ByCategoryDifficulty {
 			passed := shadowComplexToSimpleByCategory[category] <= runtimeComplexToSimpleByCategory[category]
 			shadow.RuntimeComparison.ComplexToSimpleNonIncreaseByCategory[category] = passed
@@ -889,45 +1015,73 @@ func evaluateDifficulty(datasetPath string, classifierVersion string, records []
 		}
 		finalizeDifficultySegment(&shadow.Segments.LongSimple)
 		finalizeDifficultySegment(&shadow.Segments.ShortComplex)
+		finalizeDifficultySegment(&shadow.Segments.Negation)
+		finalizeDifficultySegment(&shadow.Segments.PayloadContamination)
+		shadow.PromotionGate = buildDifficultyPromotionGate(result, shadow)
 	}
 	return result
 }
 
-func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (string, []float64) {
+func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassifier, features routing.DifficultyFeatures, iterations int, warmupIterations int, batchSize int) (string, []float64) {
 	latencies := make([]float64, 0, iterations)
 	actual := ""
-	difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
+	checksum := uint64(0)
+	for i := 0; i < warmupIterations; i++ {
+		actual = classifier.ClassifyFeatures(features).Difficulty
+	}
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		actual = classifier.ClassifyFeatures(difficultyFeatures).Difficulty
-		latencies = append(latencies, durationMicros(time.Since(start)))
+		for batchIndex := 0; batchIndex < batchSize; batchIndex++ {
+			actual = classifier.ClassifyFeatures(features).Difficulty
+			checksum += uint64(len(actual))
+		}
+		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
+	latencyChecksumSink ^= checksum
 	return actual, latencies
 }
 
-func classifyShadowDifficultyWithLatency(classifier routing.DifficultyClassifier, features routing.PromptFeatures, category string, iterations int) (routing.DifficultyResult, []float64) {
+func classifyShadowDifficultyWithLatency(classifier routing.DifficultyClassifier, features routing.DifficultyFeatures, iterations int, warmupIterations int, batchSize int) (routing.DifficultyResult, []float64) {
 	latencies := make([]float64, 0, iterations)
 	var actual routing.DifficultyResult
-	difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
+	checksum := uint64(0)
+	for i := 0; i < warmupIterations; i++ {
+		actual = classifier.ClassifyFeatures(features)
+	}
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		actual = classifier.ClassifyFeatures(difficultyFeatures)
-		latencies = append(latencies, durationMicros(time.Since(start)))
+		for batchIndex := 0; batchIndex < batchSize; batchIndex++ {
+			actual = classifier.ClassifyFeatures(features)
+			checksum += uint64(len(actual.Difficulty))
+		}
+		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
+	latencyChecksumSink ^= checksum
 	return actual, latencies
 }
 
-func classifyShadowTotalWithLatency(classifier routing.DifficultyClassifier, prompt string, iterations int) []float64 {
+func classifyShadowTotalWithLatency(classifier routing.DifficultyClassifier, prompt string, iterations int, warmupIterations int, batchSize int) []float64 {
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
 	latencies := make([]float64, 0, iterations)
-	for i := 0; i < iterations; i++ {
-		start := time.Now()
+	checksum := uint64(0)
+	for i := 0; i < warmupIterations; i++ {
 		features := routing.ExtractPromptFeatures(prompt)
 		category := categoryClassifier.ClassifyFeatures(features).Category
 		difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
 		_ = classifier.ClassifyFeatures(difficultyFeatures)
-		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		for batchIndex := 0; batchIndex < batchSize; batchIndex++ {
+			features := routing.ExtractPromptFeatures(prompt)
+			category := categoryClassifier.ClassifyFeatures(features).Category
+			difficultyFeatures := routing.ExtractDifficultyFeatures(features, category)
+			result := classifier.ClassifyFeatures(difficultyFeatures)
+			checksum += uint64(len(category) + len(result.Difficulty))
+		}
+		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
+	}
+	latencyChecksumSink ^= checksum
 	return latencies
 }
 
@@ -946,13 +1100,134 @@ func finalizeDifficultySegment(segment *difficultySegmentComparison) {
 	segment.ShadowAccuracy = ratio(segment.ShadowCorrect, segment.Total)
 }
 
-func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prompt string, iterations int) []float64 {
+func buildDifficultyPromotionGate(result difficultyReport, shadow *difficultyShadowReport) difficultyPromotionGateReport {
+	gate := difficultyPromotionGateReport{
+		Applicable: true,
+		Passed:     true,
+		Policy:     "difficulty-shadow-promotion-gate.v1.fail-closed",
+		Checks:     []difficultyPromotionGateCheck{},
+	}
+	add := func(check difficultyPromotionGateCheck) {
+		gate.Checks = append(gate.Checks, check)
+		if !check.Passed {
+			gate.Passed = false
+		}
+	}
+
+	add(difficultyPromotionGateCheck{
+		Name:         "complex_to_simple_non_regression_overall",
+		Passed:       shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall,
+		RuntimeValue: floatPointer(float64(result.DirectionalErrors.ComplexToSimpleCount)),
+		ShadowValue:  floatPointer(float64(shadow.DirectionalErrors.ComplexToSimpleCount)),
+		Unit:         "samples",
+	})
+	byCategoryPassed := true
+	for _, passed := range shadow.RuntimeComparison.ComplexToSimpleNonIncreaseByCategory {
+		byCategoryPassed = byCategoryPassed && passed
+	}
+	add(difficultyPromotionGateCheck{
+		Name:   "complex_to_simple_non_regression_by_category",
+		Passed: byCategoryPassed,
+		Reason: missingCategoryGateReason(shadow.RuntimeComparison.ComplexToSimpleNonIncreaseByCategory),
+	})
+	add(segmentImprovementCheck("long_simple_improvement", shadow.Segments.LongSimple))
+	add(segmentImprovementCheck("short_complex_improvement", shadow.Segments.ShortComplex))
+	add(segmentImprovementCheck("negation_improvement", shadow.Segments.Negation))
+	add(segmentImprovementCheck("payload_contamination_improvement", shadow.Segments.PayloadContamination))
+	add(difficultyPromotionGateCheck{
+		Name:   "semantic_head_quality",
+		Passed: false,
+		Reason: "not evaluated by routing-eval; requires aggregate semantic-head evidence for the fixed 4-head/12-dimension contract",
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "calibration",
+		Passed: shadow.Calibration.Valid,
+		Reason: shadow.Calibration.Reason,
+	})
+	add(difficultyPromotionGateCheck{
+		Name:         "p95_latency_budget",
+		Passed:       shadow.TotalLatency.P95Micros > 0 && shadow.TotalLatency.P95Micros <= result.ClassificationLatency.Total.P95Micros,
+		RuntimeValue: floatPointer(result.ClassificationLatency.Total.P95Micros),
+		ShadowValue:  floatPointer(shadow.TotalLatency.P95Micros),
+		Unit:         "microseconds",
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "memory_budget",
+		Passed: false,
+		Reason: "not measured by routing-eval; promotion requires an explicit memory budget run",
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "artifact_reproducibility",
+		Passed: shadow.ArtifactVersion != "" && shadow.ContentHash != "" && shadow.ModelVersion != "" && shadow.CalibrationVersion != "",
+		Reason: artifactReproducibilityReason(shadow),
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "sensitive_data_non_exposure",
+		Passed: false,
+		Reason: "promotion artifact must be generated in an aggregate-only mode; this evaluator still includes compatibility sample records",
+	})
+	return gate
+}
+
+func segmentImprovementCheck(name string, segment difficultySegmentComparison) difficultyPromotionGateCheck {
+	check := difficultyPromotionGateCheck{
+		Name:         name,
+		Passed:       segment.Total > 0 && segment.ShadowAccuracy > segment.RuntimeAccuracy,
+		RuntimeValue: floatPointer(segment.RuntimeAccuracy),
+		ShadowValue:  floatPointer(segment.ShadowAccuracy),
+		Unit:         "accuracy",
+	}
+	if segment.Total == 0 {
+		check.Reason = "no covered samples"
+	} else if segment.ShadowAccuracy <= segment.RuntimeAccuracy {
+		check.Reason = "shadow accuracy did not strictly improve over runtime baseline"
+	}
+	return check
+}
+
+func missingCategoryGateReason(categories map[string]bool) string {
+	if len(categories) == 0 {
+		return "no category comparison evidence"
+	}
+	failed := []string{}
+	for category, passed := range categories {
+		if !passed {
+			failed = append(failed, category)
+		}
+	}
+	if len(failed) == 0 {
+		return ""
+	}
+	sort.Strings(failed)
+	return "failed categories: " + strings.Join(failed, ",")
+}
+
+func artifactReproducibilityReason(shadow *difficultyShadowReport) string {
+	if shadow.ArtifactVersion == "" || shadow.ContentHash == "" || shadow.ModelVersion == "" || shadow.CalibrationVersion == "" {
+		return "artifact identity or content hash is missing"
+	}
+	return ""
+}
+
+func floatPointer(value float64) *float64 {
+	return &value
+}
+
+func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prompt string, iterations int, warmupIterations int, batchSize int) []float64 {
 	latencies := make([]float64, 0, iterations)
+	checksum := uint64(0)
+	for i := 0; i < warmupIterations; i++ {
+		_ = classifier.Classify(prompt)
+	}
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		_ = classifier.Classify(prompt)
-		latencies = append(latencies, durationMicros(time.Since(start)))
+		for batchIndex := 0; batchIndex < batchSize; batchIndex++ {
+			result := classifier.Classify(prompt)
+			checksum += uint64(len(result.Category.Category) + len(result.Difficulty.Difficulty))
+		}
+		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
+	latencyChecksumSink ^= checksum
 	return latencies
 }
 
@@ -964,14 +1239,27 @@ func marshalDifficultyReport(result difficultyReport, pretty bool) ([]byte, erro
 }
 
 func classifyCategoryWithLatency(classifier routing.RuleBasedCategoryClassifier, prompt string, iterations int) (routing.CategoryResult, []float64) {
+	return classifyCategoryWithWarmupLatency(classifier, prompt, iterations, 0, 1)
+}
+
+func classifyCategoryWithWarmupLatency(classifier routing.RuleBasedCategoryClassifier, prompt string, iterations int, warmupIterations int, batchSize int) (routing.CategoryResult, []float64) {
 	latencies := make([]float64, 0, iterations)
 	var result routing.CategoryResult
-	for i := 0; i < iterations; i++ {
-		start := time.Now()
+	checksum := uint64(0)
+	for i := 0; i < warmupIterations; i++ {
 		features := routing.ExtractPromptFeatures(prompt)
 		result = classifier.ClassifyFeatures(features)
-		latencies = append(latencies, durationMicros(time.Since(start)))
 	}
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		for batchIndex := 0; batchIndex < batchSize; batchIndex++ {
+			features := routing.ExtractPromptFeatures(prompt)
+			result = classifier.ClassifyFeatures(features)
+			checksum += uint64(len(result.Category))
+		}
+		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
+	}
+	latencyChecksumSink ^= checksum
 	return result, latencies
 }
 
@@ -1034,6 +1322,15 @@ func (r datasetRecord) promptText() string {
 	return ""
 }
 
+func (r datasetRecord) hasEvaluationSlice(slice string) bool {
+	for _, candidate := range r.EvaluationSlices {
+		if strings.TrimSpace(candidate) == slice {
+			return true
+		}
+	}
+	return false
+}
+
 func ratio(numerator int, denominator int) float64 {
 	if denominator <= 0 {
 		return 0
@@ -1052,9 +1349,17 @@ func round4(value float64) float64 {
 	return math.Round(value*10000) / 10000
 }
 
+func round6(value float64) float64 {
+	return math.Round(value*1000000) / 1000000
+}
+
 func summarizeLatency(latencies []float64, iterations int) latencyStats {
+	return summarizeLatencyWithWarmup(latencies, iterations, 0, 1)
+}
+
+func summarizeLatencyWithWarmup(latencies []float64, iterations int, warmupIterations int, batchSize int) latencyStats {
 	if len(latencies) == 0 {
-		return latencyStats{Iterations: iterations}
+		return latencyStats{WarmupIterations: warmupIterations, BatchSize: batchSize, Iterations: iterations}
 	}
 	totalMicros := 0.0
 	for _, latency := range latencies {
@@ -1062,13 +1367,81 @@ func summarizeLatency(latencies []float64, iterations int) latencyStats {
 	}
 	sort.Float64s(latencies)
 	return latencyStats{
-		Iterations: iterations,
-		Samples:    len(latencies),
-		AvgMicros:  round4(totalMicros / float64(len(latencies))),
-		P50Micros:  round4(percentile(latencies, 0.50)),
-		P95Micros:  round4(percentile(latencies, 0.95)),
-		MaxMicros:  round4(latencies[len(latencies)-1]),
+		WarmupIterations: warmupIterations,
+		BatchSize:        batchSize,
+		Iterations:       iterations,
+		Samples:          len(latencies),
+		AvgMicros:        round4(totalMicros / float64(len(latencies))),
+		P50Micros:        round4(percentile(latencies, 0.50)),
+		P95Micros:        round4(percentile(latencies, 0.95)),
+		MaxMicros:        round4(latencies[len(latencies)-1]),
 	}
+}
+
+func summarizeDifficultyCalibration(observations []difficultyCalibrationObservation, sentinelExcluded int) difficultyCalibrationReport {
+	report := difficultyCalibrationReport{Applicable: true, Valid: true, Scope: "modelPath=true only; deterministic sentinels excluded", BinPolicy: "equal-width-10-v1", SentinelExcluded: sentinelExcluded, ByExpectedCategory: map[string]difficultyCalibrationStats{}, Bins: make([]difficultyCalibrationBin, 10)}
+	for index := range report.Bins {
+		report.Bins[index] = difficultyCalibrationBin{Index: index, LowerInclusive: float64(index) / 10, UpperExclusive: float64(index+1) / 10, UpperInclusive: index == 9}
+	}
+	if len(observations) == 0 {
+		report.Valid = false
+		report.Reason = "no model-path samples available for calibration measurement"
+		return report
+	}
+	valid := make([]difficultyCalibrationObservation, 0, len(observations))
+	for _, observation := range observations {
+		if math.IsNaN(observation.Score) || math.IsInf(observation.Score, 0) || observation.Score < 0 || observation.Score > 1 {
+			report.InvalidScores++
+			continue
+		}
+		valid = append(valid, observation)
+	}
+	if report.InvalidScores > 0 {
+		report.Valid = false
+		report.Reason = "one or more model-path scores were non-finite or outside the inclusive 0..1 range"
+	}
+	if len(valid) == 0 {
+		return report
+	}
+	report.Samples = len(valid)
+	metrics := calibrationMetrics(valid)
+	report.LogLoss, report.BrierScore = metrics.LogLoss, metrics.BrierScore
+	byCategory := map[string][]difficultyCalibrationObservation{}
+	for _, observation := range valid {
+		byCategory[observation.ExpectedCategory] = append(byCategory[observation.ExpectedCategory], observation)
+		binIndex := int(observation.Score * 10)
+		if binIndex >= 10 {
+			binIndex = 9
+		}
+		bin := &report.Bins[binIndex]
+		bin.Samples++
+		bin.MeanComplexityScore += observation.Score
+		bin.ObservedComplexRate += float64(observation.Label)
+	}
+	for category, values := range byCategory {
+		report.ByExpectedCategory[category] = calibrationMetrics(values)
+	}
+	for index := range report.Bins {
+		bin := &report.Bins[index]
+		if bin.Samples > 0 {
+			bin.MeanComplexityScore = round6(bin.MeanComplexityScore / float64(bin.Samples))
+			bin.ObservedComplexRate = round6(bin.ObservedComplexRate / float64(bin.Samples))
+		}
+	}
+	return report
+}
+
+func calibrationMetrics(observations []difficultyCalibrationObservation) difficultyCalibrationStats {
+	const epsilon = 1e-15
+	logLoss, brierScore := 0.0, 0.0
+	for _, observation := range observations {
+		probability := math.Min(math.Max(observation.Score, epsilon), 1-epsilon)
+		label := float64(observation.Label)
+		logLoss += -(label*math.Log(probability) + (1-label)*math.Log(1-probability))
+		delta := observation.Score - label
+		brierScore += delta * delta
+	}
+	return difficultyCalibrationStats{Samples: len(observations), LogLoss: round6(logLoss / float64(len(observations))), BrierScore: round6(brierScore / float64(len(observations)))}
 }
 
 func durationMicros(duration time.Duration) float64 {
@@ -1077,6 +1450,17 @@ func durationMicros(duration time.Duration) float64 {
 		return 0.001
 	}
 	return micros
+}
+
+func perCallDurationMicros(duration time.Duration, batchSize int) float64 {
+	if batchSize <= 0 {
+		batchSize = 1
+	}
+	value := durationMicros(duration) / float64(batchSize)
+	if value < 0.001 {
+		return 0.001
+	}
+	return value
 }
 
 func percentile(sortedValues []float64, p float64) float64 {

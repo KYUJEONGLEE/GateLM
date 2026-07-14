@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v1",
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v2",
   "datasetVersion": "difficulty_eval_2026_07_13_pilot_500_v1",
   "recordSchemaVersion": "gatelm.difficulty-evaluation-record.v1",
   "datasetPath": "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",

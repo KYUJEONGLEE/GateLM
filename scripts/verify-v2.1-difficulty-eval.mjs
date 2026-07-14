@@ -19,17 +19,26 @@ const labelFixturePath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.f
 const labelManifestPath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json";
 const labelManifestSchemaPath =
   "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json";
+const historicalLabelSchemaPath =
+  "docs/v2.1.0/schemas/difficulty-label-record.v1.schema.json";
+const historicalLabelManifestSchemaPath =
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.v1.schema.json";
+const semanticFeatureContractPath =
+  "scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py";
 const modelArtifactSchemaPath = "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json";
+const offlineModelArtifactSchemaPath =
+  "docs/v2.1.0/schemas/difficulty-offline-model-artifact.schema.json";
 const trainingPolicyPath = "scripts/routing_difficulty_model/training-policy.v1.json";
 const activeSchemaVersion = "gatelm.difficulty-evaluation-record.v1";
-const activeLabelSchemaVersion = "gatelm.difficulty-label-record.v1";
-const activeLabelManifestSchemaVersion = "gatelm.difficulty-label-dataset-manifest.v1";
+const activeLabelSchemaVersion = "gatelm.difficulty-label-record.v2";
+const activeLabelManifestSchemaVersion = "gatelm.difficulty-label-dataset-manifest.v2";
 const activeCategories = ["general", "code", "translation", "summarization", "reasoning"];
 const activeDifficulties = ["simple", "complex"];
 const requiredEvaluationFields = ["redactedPrompt", "expectedCategory", "expectedDifficulty", "language"];
 const requiredLabelFields = [
   "expectedDifficulty",
   "expectedCategory",
+  "semanticInputStatus",
   "taskBucket",
   "constraintBucket",
   "scopeBucket",
@@ -88,8 +97,30 @@ const semanticLabelsByCategory = {
     "reasoning_causal",
   ],
 };
-const countBuckets = ["zero", "one", "two", "three_plus"];
-const scopeBuckets = ["zero", "one", "two_to_three", "four_plus"];
+const semanticHeadTargets = [
+  {
+    name: "semanticTaskBucket",
+    field: "taskBucket",
+    classes: ["count_1", "count_2", "count_3_plus"],
+  },
+  {
+    name: "semanticConstraintBucket",
+    field: "constraintBucket",
+    classes: ["count_0_to_1", "count_2", "count_3_plus"],
+  },
+  {
+    name: "semanticScopeBucket",
+    field: "scopeBucket",
+    classes: ["count_1", "count_2_to_3", "count_4_plus"],
+  },
+  {
+    name: "semanticDependencyBucket",
+    field: "dependencyBucket",
+    classes: ["depth_0_to_1", "depth_2", "depth_3_plus"],
+  },
+];
+const semanticInputStatuses = ["eligible", "empty_instruction"];
+const nonSemanticHeadTarget = "not_applicable";
 const languageSliceByLanguage = { ko: "korean", en: "english", mixed: "mixed_language" };
 const sensitiveStringPattern =
   /(sk-[a-z0-9_-]{12,}|Bearer\s+[a-z0-9._-]{12,}|-----BEGIN\s+(RSA|OPENSSH|EC|PRIVATE)\s+KEY-----)/i;
@@ -219,9 +250,6 @@ function validateRecord(schema, record, lineNumber, failures, recordPath = fixtu
     if (record.consentType !== "synthetic") {
       failures.push(`${prefix}: synthetic_fixture must use consentType=synthetic`);
     }
-    if (record.labelSource !== "synthetic_fixture") {
-      failures.push(`${prefix}: synthetic_fixture must use labelSource=synthetic_fixture`);
-    }
   }
 }
 
@@ -258,7 +286,18 @@ function hasExactValues(actual, expected) {
   );
 }
 
-function validateLabelSchemaShape(schema, manifestSchema, failures) {
+function hasExactOrder(actual, expected) {
+  return Array.isArray(actual) && JSON.stringify(actual) === JSON.stringify(expected);
+}
+
+function validateLabelSchemaShape(
+  schema,
+  manifestSchema,
+  historicalSchema,
+  historicalManifestSchema,
+  semanticFeatureContract,
+  failures,
+) {
   if (schema?.properties?.schemaVersion?.const !== activeLabelSchemaVersion) {
     failures.push(`${labelSchemaPath}: schemaVersion const must be ${activeLabelSchemaVersion}`);
   }
@@ -283,17 +322,49 @@ function validateLabelSchemaShape(schema, manifestSchema, failures) {
   if (!hasExactValues(schema?.properties?.expectedSemanticLabel?.enum, semanticLabels)) {
     failures.push(`${labelSchemaPath}: expectedSemanticLabel enum does not match the category taxonomy`);
   }
-  if (!hasExactValues(schema?.$defs?.countBucket?.enum, countBuckets)) {
-    failures.push(`${labelSchemaPath}: count bucket enum must be zero,one,two,three_plus`);
+  if (!hasExactOrder(schema?.properties?.semanticInputStatus?.enum, semanticInputStatuses)) {
+    failures.push(`${labelSchemaPath}: semanticInputStatus must be eligible,empty_instruction in that order`);
   }
-  if (!hasExactValues(schema?.properties?.scopeBucket?.enum, scopeBuckets)) {
-    failures.push(`${labelSchemaPath}: scope bucket enum must be zero,one,two_to_three,four_plus`);
+  for (const head of semanticHeadTargets) {
+    const expectedValues = [...head.classes, nonSemanticHeadTarget];
+    if (!hasExactOrder(schema?.properties?.[head.field]?.enum, expectedValues)) {
+      failures.push(
+        `${labelSchemaPath}: ${head.field} must match ${head.name} class order followed by ${nonSemanticHeadTarget}`,
+      );
+    }
   }
   if (
     manifestSchema?.properties?.schemaVersion?.const !== activeLabelManifestSchemaVersion ||
     manifestSchema?.additionalProperties !== false
   ) {
-    failures.push(`${labelManifestSchemaPath}: closed v1 label dataset manifest schema is required`);
+    failures.push(`${labelManifestSchemaPath}: closed v2 label dataset manifest schema is required`);
+  }
+  if (
+    historicalSchema?.properties?.schemaVersion?.const !== "gatelm.difficulty-label-record.v1" ||
+    historicalSchema?.additionalProperties !== false ||
+    historicalManifestSchema?.properties?.schemaVersion?.const !==
+      "gatelm.difficulty-label-dataset-manifest.v1" ||
+    historicalManifestSchema?.additionalProperties !== false
+  ) {
+    failures.push(
+      `${historicalLabelSchemaPath} and ${historicalLabelManifestSchemaPath}: closed v1 historical snapshots are required`,
+    );
+  }
+
+  const implementedHeads = [...semanticFeatureContract.matchAll(
+    /SemanticHeadSpec\(\s*"([^"]+)"\s*,\s*\(([^)]*)\)\s*,?\s*\)/g,
+  )].map((match) => ({
+    name: match[1],
+    classes: [...match[2].matchAll(/"([^"]+)"/g)].map((classMatch) => classMatch[1]),
+  }));
+  const expectedHeads = semanticHeadTargets.map(({ name, classes }) => ({ name, classes }));
+  if (
+    JSON.stringify(implementedHeads) !== JSON.stringify(expectedHeads) ||
+    implementedHeads.reduce((total, head) => total + head.classes.length, 0) !== 12
+  ) {
+    failures.push(
+      `${semanticFeatureContractPath}: SEMANTIC_HEAD_SPECS_V1 must match the canonical four-head/12D label class order`,
+    );
   }
 }
 
@@ -389,13 +460,23 @@ function validateLabelRecord(schema, record, lineNumber, failures) {
   validateRecord(schema, record, lineNumber, failures, labelFixturePath);
   if (!record || typeof record !== "object" || Array.isArray(record)) return;
 
-  for (const field of ["taskBucket", "constraintBucket", "dependencyBucket"]) {
-    if (!countBuckets.includes(record[field])) {
-      failures.push(`${prefix}.${field}: expected one of ${JSON.stringify(countBuckets)}`);
+  if (!semanticInputStatuses.includes(record.semanticInputStatus)) {
+    failures.push(`${prefix}.semanticInputStatus: expected one of ${JSON.stringify(semanticInputStatuses)}`);
+  }
+  for (const head of semanticHeadTargets) {
+    const expectedValues =
+      record.semanticInputStatus === "eligible" ? head.classes : [nonSemanticHeadTarget];
+    if (!expectedValues.includes(record[head.field])) {
+      failures.push(
+        `${prefix}.${head.field}: ${record.semanticInputStatus} must use one of ${JSON.stringify(expectedValues)}`,
+      );
     }
   }
-  if (!scopeBuckets.includes(record.scopeBucket)) {
-    failures.push(`${prefix}.scopeBucket: expected one of ${JSON.stringify(scopeBuckets)}`);
+  if (
+    record.expectedInstructionPayloadBoundary?.kind === "payload_only" &&
+    record.semanticInputStatus !== "empty_instruction"
+  ) {
+    failures.push(`${prefix}: payload_only must use semanticInputStatus=empty_instruction`);
   }
   const semanticLabels = semanticLabelsByCategory[record.expectedCategory] ?? [];
   if (!semanticLabels.includes(record.expectedSemanticLabel)) {
@@ -476,6 +557,40 @@ function groupLabelFamilies(records, failures) {
   return families;
 }
 
+export function verifyDifficultyLabelRecords(records, options = {}) {
+  const rootDir = options.rootDir ?? defaultRootDir;
+  const failures = [];
+  const schema = readJson(rootDir, labelSchemaPath, failures);
+  if (!schema) return failures;
+  if (!Array.isArray(records) || records.length === 0) {
+    return ["difficulty label records: expected a non-empty record array"];
+  }
+  records.forEach((record, index) => validateLabelRecord(schema, record, index + 1, failures));
+  if (new Set(records.map((record) => record.sampleId)).size !== records.length) {
+    failures.push("difficulty label records: sampleId values must be unique");
+  }
+  if (new Set(records.map((record) => record.datasetVersion)).size !== 1) {
+    failures.push("difficulty label records: expected one datasetVersion");
+  }
+  groupLabelFamilies(records, failures);
+  return failures;
+}
+
+export function verifyDifficultyLabelDatasetManifest(manifest, options = {}) {
+  const rootDir = options.rootDir ?? defaultRootDir;
+  const failures = [];
+  const schema = readJson(rootDir, labelManifestSchemaPath, failures);
+  if (!schema) return failures;
+  validateRecord(
+    schema,
+    manifest,
+    1,
+    failures,
+    options.manifestPath ?? "difficulty label dataset manifest",
+  );
+  return failures;
+}
+
 function countFamilies(families, predicate) {
   let count = 0;
   for (const records of families.values()) {
@@ -546,9 +661,29 @@ export function verifyDifficultyLabelContract(options = {}) {
   const fixtureText = readText(rootDir, labelFixturePath, failures);
   const manifest = readJson(rootDir, labelManifestPath, failures);
   const manifestSchema = readJson(rootDir, labelManifestSchemaPath, failures);
-  if (!schema || fixtureText === null || !manifest || !manifestSchema) return failures;
+  const historicalSchema = readJson(rootDir, historicalLabelSchemaPath, failures);
+  const historicalManifestSchema = readJson(rootDir, historicalLabelManifestSchemaPath, failures);
+  const semanticFeatureContract = readText(rootDir, semanticFeatureContractPath, failures);
+  if (
+    !schema ||
+    fixtureText === null ||
+    !manifest ||
+    !manifestSchema ||
+    !historicalSchema ||
+    !historicalManifestSchema ||
+    semanticFeatureContract === null
+  ) {
+    return failures;
+  }
 
-  validateLabelSchemaShape(schema, manifestSchema, failures);
+  validateLabelSchemaShape(
+    schema,
+    manifestSchema,
+    historicalSchema,
+    historicalManifestSchema,
+    semanticFeatureContract,
+    failures,
+  );
   const lines = fixtureText.split(/\r?\n/).filter((line) => line.trim().length > 0);
   const records = [];
   lines.forEach((line, index) => {
@@ -614,11 +749,25 @@ export function verifyDifficultyLabelContract(options = {}) {
       (record) => record.labelSource === "human_review" && record.reviewStatus === "approved" && record.reviewerCount >= 1,
     ),
   ).length;
+  const semanticHeadEligibleRecords = records.filter(
+    (record) => record.semanticInputStatus === "eligible",
+  );
+  const emptyInstructionRecords = records.filter(
+    (record) => record.semanticInputStatus === "empty_instruction",
+  );
   const expectedCounts = {
     records: records.length,
     families: families.size,
     humanReviewedFamilies,
     approvedHumanReviewedFamilies,
+    semanticHeadEligibleRecords: semanticHeadEligibleRecords.length,
+    semanticHeadEligibleFamilies: new Set(
+      semanticHeadEligibleRecords.map((record) => record.promptFamily),
+    ).size,
+    emptyInstructionRecords: emptyInstructionRecords.length,
+    emptyInstructionFamilies: new Set(
+      emptyInstructionRecords.map((record) => record.promptFamily),
+    ).size,
   };
   if (JSON.stringify(manifest.counts) !== JSON.stringify(expectedCounts)) {
     failures.push(`${labelManifestPath}: family-level counts do not match the label records`);
@@ -712,6 +861,7 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   const smokeManifest = readJson(rootDir, trainingSmokeManifestPath, failures);
   const labelManifestSchema = readJson(rootDir, labelManifestSchemaPath, failures);
   const artifactSchema = readJson(rootDir, modelArtifactSchemaPath, failures);
+  const offlineArtifactSchema = readJson(rootDir, offlineModelArtifactSchemaPath, failures);
   const trainingPolicy = readJson(rootDir, trainingPolicyPath, failures);
   if (
     !schema ||
@@ -721,6 +871,7 @@ export function verifyDifficultyTrainingPilot(options = {}) {
     !smokeManifest ||
     !labelManifestSchema ||
     !artifactSchema ||
+    !offlineArtifactSchema ||
     !trainingPolicy
   ) {
     return failures;
@@ -922,6 +1073,97 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   ) {
     failures.push(
       `${modelArtifactSchemaPath} and ${trainingPolicyPath}: closed v1 artifact schema with threshold 0.45, nested Platt/Isotonic calibrators, and exact single-block PAVA floor-lookup policy is required`,
+    );
+  }
+  const offlineCandidates = [
+    "42d-rule-vector-v1",
+    "42d-rule-vector-v1-plus-projection",
+    "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities",
+  ];
+  const offlineRequiredFields = [
+    "schemaVersion",
+    "artifactVersion",
+    "modelVersion",
+    "offlineFeatureShapeVersion",
+    "candidateName",
+    "ruleVectorVersion",
+    "preprocessingVersion",
+    "tokenizerVersion",
+    "encoderVersion",
+    "poolingVersion",
+    "projectionVersion",
+    "projectionDimension",
+    "projectionParameters",
+    "semanticHeadsVersion",
+    "semanticHeadClassOrder",
+    "semanticHeadInputDimension",
+    "semanticHeadParameters",
+    "semanticHeadProbabilityRule",
+    "totalDimension",
+    "featureNames",
+    "weights",
+    "bias",
+    "calibrationVersion",
+    "calibrator",
+    "thresholdPolicyVersion",
+    "threshold",
+    "thresholdEquality",
+    "trainingDatasetVersion",
+    "trainingDatasetSha256",
+    "splitPolicyVersion",
+    "splitManifestSha256",
+    "trainingPolicyVersion",
+    "regularization",
+    "componentHashes",
+    "bundleVersion",
+    "bundleHashAlgorithm",
+    "bundleHash",
+    "contentHashAlgorithm",
+    "contentHash",
+  ];
+  const offlineHeadDefs = ["taskHead", "constraintHead", "scopeHead", "dependencyHead"];
+  const offlineHeadOrder = offlineHeadDefs.map((name) => ({
+    name: offlineArtifactSchema?.$defs?.[name]?.properties?.name?.const,
+    classes: offlineArtifactSchema?.$defs?.[name]?.properties?.classes?.allOf?.[1]?.prefixItems?.map(
+      (item) => item.const,
+    ),
+  }));
+  const ruleOnlyBranch = offlineArtifactSchema?.allOf?.find(
+    (branch) => branch?.if?.properties?.candidateName?.const === offlineCandidates[0],
+  );
+  if (
+    offlineArtifactSchema?.properties?.schemaVersion?.const !==
+      "gatelm.difficulty-offline-model-artifact.v1" ||
+    offlineArtifactSchema?.properties?.modelVersion?.const !== "difficulty-logistic-v1" ||
+    offlineArtifactSchema?.properties?.offlineFeatureShapeVersion?.const !==
+      "difficulty-offline-feature-shape.v1" ||
+    offlineArtifactSchema?.properties?.ruleVectorVersion?.const !==
+      "difficulty-feature-vector.v1" ||
+    JSON.stringify(offlineArtifactSchema?.properties?.candidateName?.enum) !==
+      JSON.stringify(offlineCandidates) ||
+    offlineArtifactSchema?.properties?.contentHashAlgorithm?.const !==
+      "difficulty-offline-model-inference-material.v1" ||
+    offlineArtifactSchema?.properties?.bundleHashAlgorithm?.const !==
+      "difficulty-feature-bundle-material.v1" ||
+    offlineArtifactSchema?.properties?.thresholdEquality?.const !== "greater_than_or_equal" ||
+    offlineArtifactSchema?.properties?.semanticHeadProbabilityRule?.const !==
+      "multinomial_linear_softmax.v1" ||
+    offlineArtifactSchema?.additionalProperties !== false ||
+    !offlineRequiredFields.every((field) => offlineArtifactSchema?.required?.includes(field)) ||
+    JSON.stringify(Object.keys(offlineArtifactSchema?.properties?.componentHashes?.properties ?? {}).sort()) !==
+      JSON.stringify(["encoder", "projection", "ruleVector", "semanticHeads", "tokenizer"].sort()) ||
+    offlineArtifactSchema?.properties?.componentHashes?.additionalProperties !== false ||
+    offlineArtifactSchema?.$defs?.projectionParameters?.additionalProperties !== false ||
+    offlineArtifactSchema?.$defs?.headParameters?.additionalProperties !== false ||
+    offlineArtifactSchema?.properties?.semanticHeadParameters?.minItems !== 4 ||
+    offlineArtifactSchema?.properties?.semanticHeadParameters?.maxItems !== 4 ||
+    ruleOnlyBranch?.then?.properties?.totalDimension?.const !== 42 ||
+    ruleOnlyBranch?.then?.properties?.featureNames?.maxItems !== 42 ||
+    ruleOnlyBranch?.then?.properties?.weights?.maxItems !== 42 ||
+    JSON.stringify(offlineHeadOrder) !== JSON.stringify(semanticHeadTargets.map(({ name, classes }) => ({ name, classes })))
+  ) {
+    failures.push(
+      `${offlineModelArtifactSchemaPath}: closed offline-only 42/42+P/54+P artifact shape with exact four-head order and separate content-hash identity is required`,
     );
   }
   return failures;

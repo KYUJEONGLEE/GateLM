@@ -22,12 +22,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "read model artifact:", err)
 		os.Exit(1)
 	}
-	artifact, err := difficultymodel.ParseArtifact(payload)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	generated, err := difficultymodel.RenderGo(artifact, "routing")
+	generated, err := difficultymodel.RenderArtifactPayload(payload, "routing")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

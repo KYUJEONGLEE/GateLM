@@ -1,0 +1,904 @@
+{
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v2",
+  "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
+  "recordSchemaVersion": "gatelm.difficulty-label-record.v2",
+  "datasetPath": "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl",
+  "datasetSha256": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+  "datasetPurpose": "training_candidate",
+  "trainingEligible": true,
+  "labelCoverageStatus": "complete",
+  "familyPolicyVersion": "difficulty-prompt-family.v1",
+  "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
+  "splitSeed": 20260715,
+  "splitCounts": {
+    "train": {
+      "families": 51,
+      "records": 300
+    },
+    "calibration": {
+      "families": 20,
+      "records": 100
+    },
+    "holdout": {
+      "families": 18,
+      "records": 100
+    }
+  },
+  "trainingGate": {
+    "minimumFamilyPolicyStatus": "versioned",
+    "policyVersion": "difficulty-training-minimum-family-policy.2026-07-14.v1",
+    "minApprovedFamilies": 89,
+    "minFamiliesPerCategory": 15,
+    "minFamiliesPerCategoryDifficulty": 9,
+    "minFamiliesPerLanguage": 50,
+    "minFamiliesPerSlice": 1
+  },
+  "counts": {
+    "records": 500,
+    "families": 89,
+    "humanReviewedFamilies": 89,
+    "approvedHumanReviewedFamilies": 89,
+    "semanticHeadEligibleRecords": 500,
+    "semanticHeadEligibleFamilies": 89,
+    "emptyInstructionRecords": 0,
+    "emptyInstructionFamilies": 0
+  },
+  "coverage": {
+    "categoryFamilies": {
+      "general": 15,
+      "code": 17,
+      "translation": 18,
+      "summarization": 19,
+      "reasoning": 20
+    },
+    "difficultyFamilies": {
+      "simple": 49,
+      "complex": 48
+    },
+    "categoryDifficultyFamilies": {
+      "general": {
+        "simple": 9,
+        "complex": 9
+      },
+      "code": {
+        "simple": 10,
+        "complex": 9
+      },
+      "translation": {
+        "simple": 10,
+        "complex": 9
+      },
+      "summarization": {
+        "simple": 10,
+        "complex": 9
+      },
+      "reasoning": {
+        "simple": 10,
+        "complex": 12
+      }
+    },
+    "languageFamilies": {
+      "ko": 88,
+      "en": 57,
+      "mixed": 50,
+      "unknown": 0
+    },
+    "evaluationSliceFamilies": {
+      "negation": 15,
+      "indirect_expression": 1,
+      "synonym": 1,
+      "short_complex": 47,
+      "long_simple": 8,
+      "payload_contamination": 1,
+      "korean": 88,
+      "english": 57,
+      "mixed_language": 50,
+      "category_confusion": 19,
+      "ood_terminology": 1
+    }
+  },
+  "families": [
+    {
+      "promptFamily": "pilot.code.complex.categoryconfusion",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.code.complex.negativecontext",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.code.complex.template.f01",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.complex.template.f02",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.complex.template.f03",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_design",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.code.complex.template.f04",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.complex.template.f05",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.constraintcontrast",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.code.simple.categoryconfusion",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.code.simple.negativecontext",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.code.simple.slice.synonym.f01",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 3
+    },
+    {
+      "promptFamily": "pilot.code.simple.template.f01",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 7
+    },
+    {
+      "promptFamily": "pilot.code.simple.template.f02",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.simple.template.f03",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.code.simple.template.f04",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.simple.template.f05",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.code.taskcontrast",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.general.categoryconfusion",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.general.complex.template.f01",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.complex.template.f02",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.complex.template.f03",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.general.complex.template.f04",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.complex.template.f05",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.constraintcontrast",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.general.explanation.rejection_reason",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.general.negativecontext",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.general.simple.template.f01",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.simple.template.f02",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.simple.template.f03",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.general.simple.template.f04",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.simple.template.f05",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.general.taskcontrast",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.categoryconfusion",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_planning",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.constraint_solving.f05",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_constraint_solving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 3
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.negativecontext",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.planning.f05",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_planning",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.slice.ood_terminology.f01",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 3
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.template.f01",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 7
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.template.f02",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_planning",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.template.f03",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_causal",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.template.f04",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_constraint_solving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.reasoning.complex.template.f05",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.reasoning.constraintcontrast",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.categoryconfusion",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.comparison.f05",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 4
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.negativecontext",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.template.f01",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.template.f02",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.template.f03",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.template.f04",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.reasoning.simple.template.f05",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_constraint_solving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.reasoning.taskcontrast",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 2
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.categoryconfusion",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.negativecontext",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.taskcontrast",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_structured",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.template.f01",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.template.f02",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.template.f03",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_structured",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.template.f04",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_structured",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.summarization.complex.template.f05",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.summarization.constraintcontrast",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.multisource.attribution",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.categoryconfusion",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.negativecontext",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.slice.indirect_expression.f01",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 3
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.taskcontrast",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.template.f01",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 7
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.template.f02",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.template.f03",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.template.f04",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.summarization.simple.template.f05",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.complex.categoryconfusion",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.translation.complex.constraintcontrast",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.translation.complex.negativecontext",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.translation.complex.template.f01",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.complex.template.f02",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.complex.template.f03",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.translation.complex.template.f04",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.complex.template.f05",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.simple.categoryconfusion",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "calibration",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.translation.simple.constraintcontrast",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.translation.simple.negativecontext",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 1
+    },
+    {
+      "promptFamily": "pilot.translation.simple.slice.payload_contamination.f01",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "holdout",
+      "records": 3
+    },
+    {
+      "promptFamily": "pilot.translation.simple.template.f01",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 7
+    },
+    {
+      "promptFamily": "pilot.translation.simple.template.f02",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.simple.template.f03",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 6
+    },
+    {
+      "promptFamily": "pilot.translation.simple.template.f04",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.simple.template.f05",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 10
+    },
+    {
+      "promptFamily": "pilot.translation.taskcontrast",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "approved",
+      "humanReviewed": true,
+      "partition": "train",
+      "records": 2
+    }
+  ],
+  "createdAt": "2026-07-14T00:00:00Z"
+}

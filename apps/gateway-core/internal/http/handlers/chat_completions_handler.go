@@ -194,7 +194,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	if runtimePolicyPipeline := h.runtimePolicyPipeline(); runtimePolicyPipeline != nil {
 		policyChecksStartedAt := time.Now()
-		gatewayCtx := newGatewayContext(reqCtx, "")
+		gatewayCtx := newGatewayContext(reqCtx, "", nil)
 		err := runtimePolicyPipeline.Execute(r.Context(), gatewayCtx)
 		recordRequestStageTiming(reqCtx, stagetiming.StagePolicyChecksTotal, time.Since(policyChecksStartedAt))
 		if err != nil {
@@ -244,8 +244,13 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	chatReq.Messages = redactedMessages
 	promptText = redactedPrompt
+	routingMessages, err := extractRoutingPromptMessages(chatReq.Messages)
+	if err != nil {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway routing input failed.", "prepare_routing_input")
+		return
+	}
 
-	gatewayCtx := newGatewayContext(reqCtx, promptText)
+	gatewayCtx := newGatewayContext(reqCtx, promptText, routingMessages)
 	if h.PreProviderPipeline != nil {
 		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 			if isPreCacheGatewayError(err) {
@@ -263,7 +268,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			h.writeProviderResolutionFailure(w, reqCtx, err)
 			return
 		}
-		gatewayCtx = newGatewayContext(reqCtx, promptText)
+		gatewayCtx = newGatewayContext(reqCtx, promptText, routingMessages)
 		cachePayload, cacheHitRequestID, savedCostMicroUSD, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
 		applyExactCacheLookupToGatewayContext(gatewayCtx, reqCtx, cachePayload, cacheHitRequestID, savedCostMicroUSD, cacheHit)
 	}
@@ -1778,7 +1783,7 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 	reqCtx.RoutingReason = firstNonEmpty(reqCtx.RoutingReason, "semantic_cache_hit_provider_bypass")
 	h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
 
-	gatewayCtx := newGatewayContext(reqCtx, "")
+	gatewayCtx := newGatewayContext(reqCtx, "", nil)
 	gatewayCtx.Cache.CacheStatus = cachestage.CacheStatusHit
 	gatewayCtx.Cache.CacheType = cachestage.CacheTypeSemantic
 	gatewayCtx.Cache.CacheHitRequestID = reqCtx.CacheHitRequestID
@@ -4187,4 +4192,19 @@ func extractTextPrompt(messages []provider.ChatMessage) (string, error) {
 	}
 
 	return builder.String(), nil
+}
+
+func extractRoutingPromptMessages(messages []provider.ChatMessage) ([]routingdomain.PromptMessage, error) {
+	result := make([]routingdomain.PromptMessage, 0, len(messages))
+	for index, message := range messages {
+		content, err := chatMessageText(message)
+		if err != nil {
+			return nil, fmt.Errorf("messages[%d].content must be a JSON string: %w", index, err)
+		}
+		result = append(result, routingdomain.PromptMessage{
+			Role: strings.ToLower(strings.TrimSpace(message.Role)),
+			Text: content,
+		})
+	}
+	return result, nil
 }

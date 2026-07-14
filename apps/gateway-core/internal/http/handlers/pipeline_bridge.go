@@ -6,6 +6,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -14,7 +15,7 @@ type GatewayPipeline interface {
 	Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error
 }
 
-func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *request.GatewayContext {
+func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string, promptMessages []routing.PromptMessage) *request.GatewayContext {
 	if reqCtx == nil {
 		return &request.GatewayContext{}
 	}
@@ -29,6 +30,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			StartedAt:      reqCtx.StartedAt,
 			RequestedModel: reqCtx.RequestedModel,
 			PromptText:     promptText,
+			PromptMessages: append([]routing.PromptMessage(nil), promptMessages...),
 		},
 		Identity: request.IdentityContext{
 			TenantID:       reqCtx.TenantID,

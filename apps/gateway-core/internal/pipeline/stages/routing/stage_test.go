@@ -37,7 +37,11 @@ func TestStageWritesV2RoutingDecisionWithoutProviderOrTier(t *testing.T) {
 		},
 		CategoryDiagnostics: routing.CategoryDiagnostics{TopCategory: routing.CategoryCode, TopScore: 5},
 	}}
-	gatewayCtx := &request.GatewayContext{Request: request.RequestContext{RequestedModel: "auto", PromptText: "debug several files"}}
+	gatewayCtx := &request.GatewayContext{Request: request.RequestContext{
+		RequestedModel: "auto",
+		PromptText:     "debug several files",
+		PromptMessages: []routing.PromptMessage{{Role: "user", Text: "debug several files"}},
+	}}
 
 	if err := NewStage(router).Execute(context.Background(), gatewayCtx); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -50,6 +54,9 @@ func TestStageWritesV2RoutingDecisionWithoutProviderOrTier(t *testing.T) {
 	}
 	if _, exists := gatewayCtx.Routing.RoutingDecisionMaterial["tier"]; exists {
 		t.Fatalf("tier leaked into v2 decision: %#v", gatewayCtx.Routing.RoutingDecisionMaterial)
+	}
+	if !reflect.DeepEqual(router.request.PromptMessages, gatewayCtx.Request.PromptMessages) {
+		t.Fatalf("prompt messages were not passed to router: %#v", router.request.PromptMessages)
 	}
 }
 

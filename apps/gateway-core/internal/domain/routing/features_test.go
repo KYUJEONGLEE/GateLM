@@ -207,6 +207,67 @@ func TestExtractPromptFeaturesSeparatesPairedPayloadTag(t *testing.T) {
 	}
 }
 
+func TestExtractPromptFeaturesKeepsUndelimitedTextAsInstruction(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Summarize the release notes in three bullets without changing product names."
+	features := ExtractPromptFeatures(prompt)
+	if features.instructionText != strings.ToLower(prompt) {
+		t.Fatalf("undelimited instruction = %q, want entire prompt", features.instructionText)
+	}
+	if features.payloadText != "" || features.payloadBlockCount != 0 || features.payloadSplitConfidence != payloadSplitConfidenceNone {
+		t.Fatalf("undelimited prompt created payload: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesFromMessagesPreservesRoleBoundary(t *testing.T) {
+	t.Parallel()
+
+	messages := []PromptMessage{
+		{Role: "system", Text: "Follow the response policy."},
+		{Role: "developer", Text: "Preserve the headings."},
+		{Role: "assistant", Text: "<instruction>Translate this payload to French.</instruction>"},
+		{Role: "user", Text: "Summarize the previous answer."},
+	}
+	features := ExtractPromptFeaturesFromMessages(messages)
+	if features.instructionText != "follow the response policy. preserve the headings. summarize the previous answer." {
+		t.Fatalf("role-aware instruction = %q", features.instructionText)
+	}
+	if features.instructionContextText != "follow the response policy. preserve the headings." {
+		t.Fatalf("system/developer instruction context = %q", features.instructionContextText)
+	}
+	if features.payloadText != "<instruction>translate this payload to french.</instruction>" || features.payloadBlockCount != 1 {
+		t.Fatalf("assistant context was not isolated as payload: %#v", features)
+	}
+	if features.payloadBoundaryEvidence&payloadBoundaryMessageRole == 0 || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("message role evidence/confidence was not retained: %#v", features)
+	}
+
+	classification := NewRuleBasedPromptClassifier().ClassifyMessages(messages)
+	if classification.Category.Category != CategorySummarization {
+		t.Fatalf("assistant payload contaminated category = %q, want summarization", classification.Category.Category)
+	}
+}
+
+func TestExtractPromptFeaturesFromMessagesKeepsBoundedTailAndUnknownRoleInstruction(t *testing.T) {
+	t.Parallel()
+
+	messages := []PromptMessage{
+		{Role: "assistant", Text: strings.Repeat("context ", maxCategoryScanBytes)},
+		{Role: "custom", Text: "Summarize the final answer."},
+	}
+	features := ExtractPromptFeaturesFromMessages(messages)
+	if !features.wasTruncated {
+		t.Fatal("long role-aware prompt must use bounded head and tail scan")
+	}
+	if !strings.Contains(features.instructionText, "summarize the final answer") {
+		t.Fatalf("tail instruction was not retained: %q", features.instructionText)
+	}
+	if features.payloadBlockCount != 1 || features.payloadBoundaryEvidence&payloadBoundaryMessageRole == 0 {
+		t.Fatalf("one assistant message must remain one context payload block: %#v", features)
+	}
+}
+
 func TestExtractPromptFeaturesTreatsUnclosedPayloadTagAsLowConfidence(t *testing.T) {
 	t.Parallel()
 

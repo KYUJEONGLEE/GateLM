@@ -7,7 +7,7 @@
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "gatelm.difficulty-label-record.v1"
+      "const": "gatelm.difficulty-label-record.v2"
     },
     "datasetVersion": {
       "type": "string",
@@ -34,18 +34,26 @@
       "type": "string",
       "enum": ["simple", "complex"]
     },
+    "semanticInputStatus": {
+      "type": "string",
+      "enum": ["eligible", "empty_instruction"],
+      "description": "Whether a meaningful instruction can produce targets for the fixed four semantic heads."
+    },
     "taskBucket": {
-      "$ref": "#/$defs/countBucket"
+      "type": "string",
+      "enum": ["count_1", "count_2", "count_3_plus", "not_applicable"]
     },
     "constraintBucket": {
-      "$ref": "#/$defs/countBucket"
+      "type": "string",
+      "enum": ["count_0_to_1", "count_2", "count_3_plus", "not_applicable"]
     },
     "scopeBucket": {
       "type": "string",
-      "enum": ["zero", "one", "two_to_three", "four_plus"]
+      "enum": ["count_1", "count_2_to_3", "count_4_plus", "not_applicable"]
     },
     "dependencyBucket": {
-      "$ref": "#/$defs/countBucket"
+      "type": "string",
+      "enum": ["depth_0_to_1", "depth_2", "depth_3_plus", "not_applicable"]
     },
     "expectedSemanticLabel": {
       "type": "string",
@@ -114,7 +122,8 @@
     },
     "labelSource": {
       "type": "string",
-      "enum": ["human_review", "synthetic_fixture"]
+      "enum": ["human_review", "synthetic_fixture"],
+      "description": "Annotation provenance. A human-reviewed derived record may use human_review while preserving source=synthetic_fixture."
     },
     "consentType": {
       "type": "string",
@@ -122,7 +131,8 @@
     },
     "source": {
       "type": "string",
-      "enum": ["synthetic_fixture", "manual_seed"]
+      "enum": ["synthetic_fixture", "manual_seed"],
+      "description": "Prompt source provenance. Human review does not rewrite a synthetic prompt source as manual_seed."
     },
     "redactionVersion": {
       "type": "string",
@@ -162,6 +172,7 @@
     "redactedPrompt",
     "expectedCategory",
     "expectedDifficulty",
+    "semanticInputStatus",
     "taskBucket",
     "constraintBucket",
     "scopeBucket",
@@ -182,11 +193,44 @@
   ],
   "allOf": [
     {
+      "if": { "properties": { "semanticInputStatus": { "const": "eligible" } }, "required": ["semanticInputStatus"] },
+      "then": {
+        "properties": {
+          "taskBucket": { "enum": ["count_1", "count_2", "count_3_plus"] },
+          "constraintBucket": { "enum": ["count_0_to_1", "count_2", "count_3_plus"] },
+          "scopeBucket": { "enum": ["count_1", "count_2_to_3", "count_4_plus"] },
+          "dependencyBucket": { "enum": ["depth_0_to_1", "depth_2", "depth_3_plus"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "semanticInputStatus": { "const": "empty_instruction" } }, "required": ["semanticInputStatus"] },
+      "then": {
+        "properties": {
+          "taskBucket": { "const": "not_applicable" },
+          "constraintBucket": { "const": "not_applicable" },
+          "scopeBucket": { "const": "not_applicable" },
+          "dependencyBucket": { "const": "not_applicable" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "expectedInstructionPayloadBoundary": {
+            "properties": { "kind": { "const": "payload_only" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["expectedInstructionPayloadBoundary"]
+      },
+      "then": { "properties": { "semanticInputStatus": { "const": "empty_instruction" } } }
+    },
+    {
       "if": { "properties": { "source": { "const": "synthetic_fixture" } }, "required": ["source"] },
       "then": {
         "properties": {
-          "consentType": { "const": "synthetic" },
-          "labelSource": { "const": "synthetic_fixture" }
+          "consentType": { "const": "synthetic" }
         }
       }
     },
@@ -263,10 +307,6 @@
     }
   ],
   "$defs": {
-    "countBucket": {
-      "type": "string",
-      "enum": ["zero", "one", "two", "three_plus"]
-    },
     "instructionPayloadBoundary": {
       "oneOf": [
         {

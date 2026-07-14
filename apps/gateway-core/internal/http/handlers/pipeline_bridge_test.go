@@ -7,6 +7,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -49,10 +50,16 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 		Reason:    ratelimit.ReasonWithinLimit,
 	}
 
-	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt")
+	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt", []routing.PromptMessage{
+		{Role: "system", Text: "system prompt"},
+		{Role: "user", Text: "user prompt"},
+	})
 
 	if gatewayCtx.Request.PromptText != "system prompt\nuser prompt" {
 		t.Fatalf("unexpected prompt text: %q", gatewayCtx.Request.PromptText)
+	}
+	if len(gatewayCtx.Request.PromptMessages) != 2 || gatewayCtx.Request.PromptMessages[0].Role != "system" || gatewayCtx.Request.PromptMessages[1].Role != "user" {
+		t.Fatalf("unexpected routing prompt messages: %#v", gatewayCtx.Request.PromptMessages)
 	}
 	if gatewayCtx.Request.RequestedModel != "auto" {
 		t.Fatalf("unexpected requested model: %s", gatewayCtx.Request.RequestedModel)
