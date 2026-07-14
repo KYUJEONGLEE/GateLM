@@ -96,6 +96,12 @@ grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
 grep -Fq 'validate_tenant_chat_secrets' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret files must be validated before the image build"
+grep -Fq 'export TENANT_CHAT_RUNTIME_UID="${secret_owner_uid}"' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret owner UID must be passed to Compose"
+grep -Fq 'export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret owner GID must be passed to Compose"
+grep -Fq 'Tenant Chat secret files must share one owner UID and GID.' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret files must have consistent ownership"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
@@ -110,6 +116,8 @@ do
   grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
     fail "Tenant Chat production Compose setting is missing: ${required_setting}"
 done
+[[ "$(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}")" == "2" ]] || \
+  fail "Gateway and Chat API must run as the Tenant Chat secret owner"
 grep -Fq 'http://127.0.0.1:8080/v1/chat/completions' "${DEPLOY_SCRIPT}" || \
   fail "Gateway authentication boundary must be verified through loopback"
 grep -Fq 'http://127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" || \
