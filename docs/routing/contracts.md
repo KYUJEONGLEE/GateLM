@@ -56,19 +56,21 @@ Prompt
 
 | Category | `simple` evidence | `complex` evidence |
 |---|---|---|
-| `general` | 짧은 설명, 단일 작업 | 비교, 계획, 여러 제약 또는 복수 작업 |
-| `code` | 문법 질문, 작은 수정, 단일 API | 디버깅, 설계, 리팩터링, 성능, multi-file 작업 |
+| `general` | bounded 단일 작업; payload 길이만으로 complex가 되지 않음 | 비교, 계획, 여러 제약 또는 복수 작업 |
+| `code` | 문법 질문, 작은 수정, 단일 API, 추가 구조 근거가 없는 bounded `debug`/`refactor` | operation과 넓은 scope, causal complexity 또는 여러 engineering constraint가 결합된 작업 |
 | `translation` | 직접 번역 | 톤, 전문용어, 형식, 여러 제약을 함께 보존하는 번역 |
-| `summarization` | 짧은 입력의 핵심 요약 | 긴 입력, 여러 문서, 비교 요약, 구조 제약 |
+| `summarization` | 단일 source의 직접 요약; payload 길이만으로 complex가 되지 않음 | 여러 문서, 비교·종합, 다수 facet 또는 traceability 제약 |
 | `reasoning` | 조건이 적은 짧은 판단 | 다단계 추론, 여러 제약, trade-off 분석 |
 
 현재 rule-based runtime baseline의 공통 fallback 규칙은 다음과 같다.
 
 - 비었거나 의미 없는 입력: `general + simple`
+- `large` payload 또는 bounded `debug`/`refactor` operation 하나만 있고 작업·제약·scope·의존 깊이와 category별 구조가 단순함: `simple`
+- 길이와 operation처럼 독립적인 proxy가 둘 이상이거나 별도 구조 근거가 있음: 기존 complex rule 적용
 - 의미 있는 입력이지만 simple/complex 판정 근거가 불충분함: `complex`
 - 명확한 simple evidence가 있음: `simple`
 
-Gateway 내부 difficulty target classifier는 deterministic 예외와 단일 model path를 결합한다. 비었거나 의미 없는 입력은 `0.0 + simple`, 현재 rule-based classifier의 명백한 공통 또는 category별 complex 구조 evidence는 `1.0 + complex`로 먼저 반환한다. 나머지 `DifficultyFeatures`만 versioned deterministic encoder로 변환한 뒤 `difficulty-logistic-v1`의 단일 전역 regularized Logistic Regression을 적용한다. Logistic Regression의 raw score는 선형 logit 자체가 아니라 미보정 확률 `sigmoid(w·x+b)`다. `difficulty-calibration-v1`이 선택한 단 하나의 전역 calibrator가 이 값을 inclusive `0.0~1.0`의 최종 model-path `DifficultyResult.ComplexityScore`로 보정한다. Category별 model 또는 calibrator는 두지 않는다. 기존 bounded-simple evidence와 수동 simple score는 target classifier를 short-circuit하지 않는다.
+Gateway 내부 difficulty target classifier는 deterministic 예외와 단일 model path를 결합한다. 비었거나 의미 없는 입력은 `0.0 + simple`, 공통 또는 category별 evidence score가 hard threshold에 도달한 명백한 복합 구조는 `1.0 + complex`로 먼저 반환한다. `large` payload 하나와 bounded `debug`/`refactor` operation 하나는 hard threshold에 도달하지 않으며 model path로 전달한다. 나머지 `DifficultyFeatures`만 versioned deterministic encoder로 변환한 뒤 `difficulty-logistic-v1`의 단일 전역 regularized Logistic Regression을 적용한다. Logistic Regression의 raw score는 선형 logit 자체가 아니라 미보정 확률 `sigmoid(w·x+b)`다. `difficulty-calibration-v1`이 선택한 단 하나의 전역 calibrator가 이 값을 inclusive `0.0~1.0`의 최종 model-path `DifficultyResult.ComplexityScore`로 보정한다. Category별 model 또는 calibrator는 두지 않는다. 기존 bounded-simple evidence와 single-proxy simple 예외는 target classifier를 short-circuit하지 않는다.
 
 모든 category는 초기 bootstrap policy인 `difficulty-threshold-v1 = 0.45` 하나를 공유한다. `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다. Category별, tenant별, request별 threshold를 만들지 않으며 RuntimeConfig, RuntimeSnapshot, 환경변수 또는 runtime caller로 threshold를 주입하지 않는다. Deterministic `0.0`과 `1.0`은 calibrated estimate가 아니라 각각 empty-input과 hard-complex sentinel이다.
 

@@ -9,6 +9,8 @@
 
 기존 [`category-evaluation-dataset-contract.md`](category-evaluation-dataset-contract.md)와 `category-evaluation-record`는 category-only 계약이다. Category record에 `expectedDifficulty`를 추가하거나 difficulty record를 category fixture에 섞지 않는다. 두 계약은 별도 schema, fixture, verifier를 사용한다.
 
+사람 검토의 canonical source record, prompt family, instruction/payload 경계, semantic label, review 상태와 training eligibility는 [`difficulty-label-guide.md`](difficulty-label-guide.md)가 정의한다. 이 문서의 `difficulty-evaluation-record`는 evaluator가 필요한 필드만 받는 projection이며 annotation source schema를 대신하거나 합치지 않는다.
+
 Gateway hot path와 RuntimeSnapshot의 category × difficulty 정책은 [`../routing/contracts.md`](../routing/contracts.md)를 우선한다.
 
 ## 2. 데이터 경계
@@ -82,9 +84,17 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 이 10개 fixture는 schema, enum, provenance와 기본 evaluation wiring을 검증할 뿐 model 학습, calibrator 선택 또는 threshold 최적화 dataset이 아니다. 이 fixture만으로 encoder/model/calibrator artifact를 만들거나 active runtime을 바꾸면 안 된다.
 
-[`fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl)은 별도로 재생 가능한 synthetic training pilot이다. 다섯 category × 두 difficulty cell에 각각 50건을 두어 총 500건이며 simple/complex는 각 250건이다. `reviewerNote`가 선언하듯 사람이 승인한 production training evidence가 아니라 `human review pending` 상태다. [`../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs`](../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs)로 결정론적으로 다시 생성한다.
+[`fixtures/difficulty-label-contract-smoke.fixture.jsonl`](fixtures/difficulty-label-contract-smoke.fixture.jsonl)과 [`fixtures/difficulty-label-contract-smoke.manifest.json`](fixtures/difficulty-label-contract-smoke.manifest.json)은 [`difficulty-label-guide.md`](difficulty-label-guide.md)의 필수 label, 다섯 category, 두 difficulty와 모든 required evaluation slice를 검증하는 10건/5-family synthetic smoke다. 모든 record가 `pending`이고 approved human-reviewed family는 0이므로 학습에 사용할 수 없다.
 
-[`fixtures/difficulty-training-split-manifest.v1.json`](fixtures/difficulty-training-split-manifest.v1.json)은 `difficulty-family-split.v1`을 고정한다. Family key는 `sampleId`의 `{category}/{fNN}`이며 `expectedDifficulty`와 `vNN`을 제외한다. 따라서 같은 family의 simple/complex contrast와 모든 variant는 train/calibration/holdout 중 하나에만 속한다. Manifest는 train 15 family/300건, calibration 5 family/100건, holdout 5 family/100건과 dataset SHA-256을 고정한다. 이 pilot과 tooling의 존재만으로 runtime promotion을 허용하지 않는다.
+[`fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl)은 별도로 재생 가능한 **training-tooling smoke**다. 다섯 category × 두 difficulty cell에 각각 50건을 두어 총 500건이며 simple/complex는 각 250건이다. 모든 record가 synthetic이고 `human review pending`이므로 실제 model 학습 데이터, calibrator/threshold 선택 evidence 또는 runtime promotion evidence가 아니다. [`../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs`](../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs)로 결정론적으로 다시 생성한다.
+
+[`fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json`](fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json)은 이 dataset을 `trainingEligible=false`, `labelCoverageStatus=unlabeled`, approved human-reviewed family 0으로 고정한다. [`fixtures/difficulty-training-split-manifest.v1.json`](fixtures/difficulty-training-split-manifest.v1.json)의 `train` 15 family/300건, `calibration` 5 family/100건, `holdout` 5 family/100건은 ephemeral tooling 경로를 검사하는 smoke partition일 뿐 production evidence split이 아니다.
+
+### 6.1 Family-level training readiness
+
+실제 training candidate는 record 수가 아니라 `difficulty-prompt-family.v1`의 독립 family를 기준으로 승인한다. 같은 primary intent의 paraphrase, synonym, language variant, negation, payload variant와 simple/complex contrast를 split 사이에 나누지 않는다. Manifest는 전체/승인 family 수뿐 아니라 category, difficulty, category × difficulty, language와 required evaluation slice별 family 수를 보고해야 한다.
+
+현재 전체 및 cell/slice별 최소 approved family 수는 owner가 승인하지 않았다. 따라서 `minimumFamilyPolicyStatus=decision_required`인 모든 manifest는 `trainingEligible=false`여야 한다. 최소 수치를 추측으로 채우지 않으며, versioned minimum-family policy가 승인된 뒤에만 training candidate manifest와 family-disjoint train/calibration/holdout split을 만들 수 있다.
 
 ## 7. Evaluation Report
 
@@ -113,7 +123,7 @@ Hybrid target의 canonical 예측 score는 세 경로를 가진다. Empty 또는
 
 Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexityScore`, `expectedProbability`, `expectedRawScore` 또는 ground-truth probability를 schema와 fixture에 추가하지 않는다. Model path의 calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이지 개별 요청의 절대적 보장이 아니다. Dataset 구성, sample size, category 분포와 distribution drift를 함께 고려해야 한다. 두 sentinel은 calibration bin, log loss와 Brier score에서는 제외하고 end-to-end accuracy와 directional error에는 포함한다.
 
-Model과 calibration evidence는 prompt family 단위로 분리된 다음 세 split을 사용한다.
+향후 승인된 training candidate의 model과 calibration evidence는 prompt family 단위로 분리된 다음 세 split을 사용한다. 현재 500건 smoke의 동명 partition은 이 evidence가 아니다.
 
 - `train`: 단일 전역 regularized Logistic Regression 학습
 - `calibration`: 단일 전역 calibrator 후보 비교, 선택과 최종 fit
@@ -160,7 +170,7 @@ corepack pnpm run verify:v2-docs
 corepack pnpm run v2.1:routing:evaluate:difficulty
 ```
 
-Difficulty verifier는 schema identity, 필수 필드, `simple | complex` enum, 추가 필드 금지, provenance 조합과 secret 형태 문자열을 검사한다. Category verifier는 category fixture에 `expectedDifficulty`가 섞이면 실패해야 한다.
+Difficulty verifier는 evaluation schema identity, 필수 필드, `simple | complex` enum, 추가 필드 금지, provenance 조합과 secret 형태 문자열을 검사한다. 또한 label source의 category–semantic 조합, 구조 bucket, instruction/payload 경계, slice와 review 상태, family·coverage 집계, dataset hash 및 500건 pilot의 `trainingEligible=false` manifest를 검사한다. Category verifier는 category fixture에 `expectedDifficulty`가 섞이면 실패해야 한다.
 
 ## 9. 범위 밖
 

@@ -1,17 +1,24 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   verifyDifficultyEvaluationDataset,
+  verifyDifficultyLabelContract,
   verifyDifficultyTrainingPilot,
 } from "./verify-v2.1-difficulty-eval.mjs";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
 
 const schemaRelativePath = "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json";
 const fixtureRelativePath = "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl";
+const labelSchemaRelativePath = "docs/v2.1.0/schemas/difficulty-label-record.schema.json";
+const labelFixtureRelativePath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl";
+const labelManifestSchemaRelativePath =
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json";
+const labelManifestRelativePath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json";
 
 test("difficulty verifier accepts a valid difficulty-only evaluation record", () => {
   withDataset(
@@ -161,7 +168,116 @@ test("category-only records reject expectedDifficulty", () => {
   });
 });
 
-test("checked-in 500-record training pilot is family-disjoint and reproducible", () => {
+test("checked-in label contract covers every required slice and remains smoke-only", () => {
+  assert.deepEqual(verifyDifficultyLabelContract(), []);
+});
+
+test("difficulty labels reject category and semantic-label mismatches", () => {
+  withLabelContract(
+    ({ records }) => {
+      records[0].expectedSemanticLabel = "code_explanation";
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some((failure) => failure.includes("semantic label") && failure.includes("incompatible")),
+        `category/semantic mismatch was accepted: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("difficulty labels reject invalid reviewer state and synthetic approval", () => {
+  withLabelContract(
+    ({ records }) => {
+      records[0].reviewStatus = "approved";
+      records[0].reviewerCount = 1;
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some((failure) => failure.includes("synthetic fixture must remain pending")),
+        `synthetic approval was accepted: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("difficulty labels reject undeclared metadata and unsafe prompt-family ids", () => {
+  withLabelContract(
+    ({ records }) => {
+      records[0].categoryDiagnostics = {};
+      records[0].promptFamily = "fixture.general.train.20260714";
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some((failure) => failure.includes("unexpected property categoryDiagnostics")),
+        `undeclared label metadata was accepted: ${JSON.stringify(failures)}`,
+      );
+      assert.ok(
+        failures.some((failure) => failure.includes("split name or timestamp")),
+        `unsafe promptFamily was accepted: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("difficulty labels reject boundary and derived-slice inconsistencies", () => {
+  withLabelContract(
+    ({ records }) => {
+      const payloadRecord = records.find((record) => record.evaluationSlices.includes("payload_contamination"));
+      payloadRecord.expectedInstructionPayloadBoundary = {
+        kind: "instruction_only",
+        boundaryType: "none",
+        confidence: "none",
+        payloadBlockCount: "zero",
+      };
+      const shortComplexRecord = records.find((record) => record.evaluationSlices.includes("short_complex"));
+      shortComplexRecord.evaluationSlices = shortComplexRecord.evaluationSlices.filter(
+        (slice) => slice !== "short_complex",
+      );
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some((failure) => failure.includes("payload_contamination cannot use instruction_only")),
+        `payload contamination boundary mismatch was accepted: ${JSON.stringify(failures)}`,
+      );
+      assert.ok(
+        failures.some((failure) => failure.includes("short_complex must exactly match")),
+        `short-complex mismatch was accepted: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("difficulty label manifest rejects family leakage and unapproved training eligibility", () => {
+  withLabelContract(
+    ({ manifest }) => {
+      manifest.trainingEligible = true;
+      manifest.datasetPurpose = "training_candidate";
+      manifest.families.push({ ...manifest.families[0], partition: "holdout" });
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some((failure) => failure.includes("family leakage")),
+        `family leakage was accepted: ${JSON.stringify(failures)}`,
+      );
+      assert.ok(
+        failures.some((failure) => failure.includes("unapproved family cannot be training eligible")),
+        `unapproved training eligibility was accepted: ${JSON.stringify(failures)}`,
+      );
+      assert.ok(
+        failures.some((failure) => failure.includes("versioned minimum family policy")),
+        `decision_required gate was accepted for training: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("checked-in 500-record pilot is a reproducible, non-training-eligible tooling smoke", () => {
   assert.deepEqual(verifyDifficultyTrainingPilot(), []);
 });
 
@@ -217,6 +333,57 @@ function withCategoryDataset(extraFields, assertion) {
     ]) {
       writeFileSync(path.join(fixtureDir, fixtureName), `${JSON.stringify(record)}\n`, "utf8");
     }
+    assertion({ rootDir });
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+}
+
+function withLabelContract(mutator, assertion) {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-difficulty-label-"));
+  try {
+    const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+    const schema = JSON.parse(readFileSync(path.join(sourceRoot, ...labelSchemaRelativePath.split("/")), "utf8"));
+    const records = readFileSync(path.join(sourceRoot, ...labelFixtureRelativePath.split("/")), "utf8")
+      .split(/\r?\n/)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line));
+    const manifestSchema = JSON.parse(
+      readFileSync(path.join(sourceRoot, ...labelManifestSchemaRelativePath.split("/")), "utf8"),
+    );
+    const manifest = JSON.parse(
+      readFileSync(path.join(sourceRoot, ...labelManifestRelativePath.split("/")), "utf8"),
+    );
+
+    mutator({ schema, records, manifestSchema, manifest });
+    for (const relativePath of [
+      labelSchemaRelativePath,
+      labelFixtureRelativePath,
+      labelManifestSchemaRelativePath,
+      labelManifestRelativePath,
+    ]) {
+      mkdirSync(path.dirname(path.join(rootDir, ...relativePath.split("/"))), { recursive: true });
+    }
+    writeFileSync(
+      path.join(rootDir, ...labelSchemaRelativePath.split("/")),
+      `${JSON.stringify(schema, null, 2)}\n`,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(rootDir, ...labelFixtureRelativePath.split("/")),
+      `${records.map((record) => JSON.stringify(record)).join("\n")}\n`,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(rootDir, ...labelManifestSchemaRelativePath.split("/")),
+      `${JSON.stringify(manifestSchema, null, 2)}\n`,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(rootDir, ...labelManifestRelativePath.split("/")),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
     assertion({ rootDir });
   } finally {
     rmSync(rootDir, { recursive: true, force: true });

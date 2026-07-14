@@ -8,6 +8,9 @@ const outputPath = path.resolve(
 const splitManifestPath = path.resolve(
   "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json",
 );
+const smokeManifestPath = path.resolve(
+  "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json",
+);
 
 const datasetVersion = "difficulty_eval_2026_07_13_pilot_500_v1";
 const createdAt = "2026-07-13T00:00:00Z";
@@ -689,9 +692,33 @@ const splitManifest = {
   splitCounts,
   families: familyAssignments,
 };
+const smokeManifest = {
+  schemaVersion: "gatelm.difficulty-label-dataset-manifest.v1",
+  datasetVersion,
+  recordSchemaVersion: "gatelm.difficulty-evaluation-record.v1",
+  datasetPath: "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",
+  datasetSha256: sha256(datasetText),
+  datasetPurpose: "training_tooling_smoke",
+  trainingEligible: false,
+  labelCoverageStatus: "unlabeled",
+  familyPolicyVersion: "difficulty-prompt-family.v1",
+  trainingGate: {
+    minimumFamilyPolicyStatus: "decision_required",
+  },
+  counts: {
+    records: records.length,
+    families: familyAssignments.length,
+    humanReviewedFamilies: 0,
+    approvedHumanReviewedFamilies: 0,
+  },
+  legacyPartitionManifestPath: "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json",
+  createdAt: "2026-07-14T00:00:00Z",
+};
 
 mkdirSync(path.dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, datasetText, "utf8");
 writeFileSync(splitManifestPath, `${JSON.stringify(splitManifest, null, 2)}\n`, "utf8");
+writeFileSync(smokeManifestPath, `${JSON.stringify(smokeManifest, null, 2)}\n`, "utf8");
 console.log(`wrote ${records.length} records to ${outputPath}`);
 console.log(`wrote ${familyAssignments.length} family assignments to ${splitManifestPath}`);
+console.log(`wrote smoke-only dataset status to ${smokeManifestPath}`);
