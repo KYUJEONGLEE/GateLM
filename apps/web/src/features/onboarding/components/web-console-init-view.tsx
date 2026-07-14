@@ -1,6 +1,6 @@
 "use client";
 
-import { LogIn, LogOut, Route, Send, UserPlus } from "lucide-react";
+import { LogIn, LogOut, Route, UserPlus } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
@@ -319,22 +319,27 @@ const initText: Record<
     },
     hero: {
       body:
-        "Keep existing customer services and internal UI intact while routing every LLM request through one place for cost, policy, logs, and security operations.",
-      chips: ["Cost Control", "Policy", "Gateway API"],
-      eyebrow: "B2B LLMOps Gateway for enterprise teams",
-      title: "Turn enterprise LLM usage into an",
-      titleAccent: "operable Gateway."
+        "GateLM adds budget, security, and audit controls to enterprise AI usage without changing how employees work.",
+      chips: [],
+      eyebrow: "Enterprise AI management platform",
+      title: "Employees use AI.",
+      titleAccent: "The company stays in control."
     },
     language: "Console language",
     nav: {
       company: "Company",
-      gateway: "AI Gateway",
-      integrations: "Integrations",
-      policies: "Policies"
+      gateway: "Product",
+      integrations: "Getting started",
+      policies: "Security"
     },
     providers: {
-      label: "Supported AI Providers",
-      names: ["OpenAI", "Anthropic", "Google Gemini", "Cohere", "Azure OpenAI", "AWS Bedrock"]
+      label: "Available AI models",
+      names: [
+        "OpenAI GPT family",
+        "Anthropic Claude family",
+        "Google Gemini family",
+        "Automatic failover"
+      ]
     },
     scene: {
       app: "Customer App",
@@ -362,63 +367,62 @@ const initText: Record<
       title: "Do not block AI usage. Make it operational."
     },
     features: {
-      title: "Manage cost, models, and security policy from one Gateway.",
-      body:
-        "Provider calls, API keys, logs, and budget policy are standardized at the gateway layer instead of being scattered across services.",
+      title: "Four reasons enterprises can adopt AI with confidence",
+      body: "",
       items: [
         {
-          title: "Unified API",
-          body: "Connect multiple providers and models through one OpenAI-compatible gateway surface."
+          title: "Predictable spend",
+          body: "Set budget limits by project and service, then stop over-budget requests before provider charges occur."
         },
         {
-          title: "Spend Tracking",
-          body: "Track tokens and cost by tenant, project, application, and budget scope."
+          title: "Sensitive data protection",
+          body: "Detect and mask personal or confidential information before it reaches an external AI provider."
         },
         {
-          title: "Smart Cache",
-          body: "Answer repeated requests through exact cache paths and reduce provider spend."
+          title: "Auditable usage",
+          body: "Track who used which model, when it was used, and how much it cost without exposing raw secrets."
         },
         {
-          title: "Model Access",
-          body: "Control which teams can use each provider, model, and budget boundary."
+          title: "Operational continuity",
+          body: "Keep existing employee workflows and route around model or provider failures automatically."
         }
       ]
     },
     policies: {
-      title: "Change operating policy in the console without redeploying code.",
+      title: "Built for enterprise security boundaries",
       body:
-        "Administrators can separate budget, rate limit, masking, and routing policy by scope and publish controlled runtime snapshots.",
+        "GateLM keeps provider credentials and sensitive request evidence out of user-facing surfaces while applying policy before provider calls.",
       items: [
         {
-          title: "Budget Policy",
-          body: "Set budget thresholds and block runaway spend before it reaches providers."
+          title: "Raw conversations stay private",
+          body: "Raw prompts and responses are not exposed in console evidence."
         },
         {
-          title: "Security Policy",
-          body: "Apply request-side masking and keep sensitive evidence sanitized."
+          title: "Credentials remain protected",
+          body: "API keys, app tokens, authorization headers, and provider secrets are never shown in plaintext."
         },
         {
-          title: "Routing Policy",
-          body: "Select models by cost, latency, provider health, and application context."
+          title: "Sensitive values are handled first",
+          body: "Masking and blocking policies run before requests are sent to providers."
         }
       ]
     },
     workflow: {
-      title: "Keep the customer UI. Route only the LLM request through GateLM.",
+      title: "Keep the workflow. Bring control back to the company.",
       body:
-        "Employees keep using the product surfaces they already know while customer servers call the GateLM Gateway with scoped application credentials.",
+        "Employees continue using familiar tools while administrators configure models, budgets, and security policy in four steps.",
       steps: [
-        "An Owner/Admin creates a tenant, project, and application.",
-        "Provider credentials and GateLM application tokens are registered.",
-        "The customer server calls the Gateway instead of calling providers directly.",
-        "Dashboard, request logs, and policy events show the outcome in one place."
+        "Create an organization account and register employees.",
+        "Connect providers and choose the models the organization can use.",
+        "Create a project and configure budget and security policy.",
+        "Monitor cost, usage, and policy outcomes from the console."
       ]
     },
     bottomCta: {
       action: "Open console",
       body:
-        "GateLM adds an operating layer for LLM usage without changing the employee experience.",
-      title: "Operations gets control. Employees keep their workflow."
+        "Centralize enterprise AI cost, security, routing, and audit evidence in one operating layer.",
+      title: "AI adoption without losing operational control."
     }
   },
   ko: {
@@ -453,22 +457,27 @@ const initText: Record<
     },
     hero: {
       body:
-        "고객사의 기존 서비스와 사내 UI를 유지한 채 모든 LLM 요청을 하나의 Gateway로 통과시켜 비용, 정책, 로그, 보안을 운영 레벨에서 관리합니다.",
+        "GateLM은 회사의 AI 사용에 예산, 보안, 기록이라는 세 가지 장치를 더합니다. 직원의 업무 방식은 바뀌지 않습니다.",
       chips: [],
-      eyebrow: "",
-      title: "기업의 LLM 사용을",
-      titleAccent: "운영 가능한 Gateway로\n전환합니다."
+      eyebrow: "기업용 AI 관리 플랫폼",
+      title: "직원은 AI를 쓰고,",
+      titleAccent: "회사는 안심합니다."
     },
     language: "콘솔 언어",
     nav: {
       company: "회사 소개",
-      gateway: "AI Gateway",
-      integrations: "연동",
-      policies: "정책"
+      gateway: "제품",
+      integrations: "도입 안내",
+      policies: "보안"
     },
     providers: {
-      label: "연동 가능한 AI Provider",
-      names: ["OpenAI", "Anthropic", "Google Gemini", "Cohere", "Azure OpenAI", "AWS Bedrock"]
+      label: "사용 가능한 AI 모델",
+      names: [
+        "OpenAI GPT 계열",
+        "Anthropic Claude 계열",
+        "Google Gemini 계열",
+        "장애 시 자동 전환"
+      ]
     },
     scene: {
       app: "Customer App",
@@ -496,63 +505,61 @@ const initText: Record<
       title: "기업의 AI 사용을 막지 않고, 운영 가능한 형태로 바꿉니다."
     },
     features: {
-      title: "Gateway 한 곳에서 비용, 모델, 보안 정책을 관리합니다.",
-      body:
-        "서비스마다 흩어진 Provider 호출, API Key, 로그, 예산 정책을 Gateway 계층에서 표준화합니다.",
+      title: "회사가 안심할 수 있는 네 가지 이유",
+      body: "",
       items: [
         {
-          title: "Unified API",
-          body: "OpenAI 호환 API 하나로 여러 Provider와 모델을 연결합니다."
+          title: "예측 가능한 비용",
+          body: "프로젝트와 서비스 단위로 예산 한도를 정합니다. 한도를 넘는 사용은 결제가 발생하기 전에 자동으로 차단합니다."
         },
         {
-          title: "Spend Tracking",
-          body: "테넌트, 프로젝트, 애플리케이션, budget scope 단위로 토큰과 비용을 추적합니다."
+          title: "새지 않는 민감정보",
+          body: "개인정보와 사내 기밀은 외부 AI로 전달되기 전에 탐지하고 정책에 따라 마스킹하거나 차단합니다."
         },
         {
-          title: "Smart Cache",
-          body: "반복 요청은 exact cache 경로로 응답해 Provider 호출 비용을 줄입니다."
+          title: "감사에 대응하는 기록",
+          body: "누가 어떤 모델을 얼마나 사용했는지 기록으로 남겨 보안 감사와 내부 검토에 활용할 수 있습니다."
         },
         {
-          title: "Model Access",
-          body: "팀과 서비스가 사용할 수 있는 Provider, 모델, 예산 경계를 제어합니다."
+          title: "바뀌지 않는 업무 방식",
+          body: "직원은 쓰던 서비스와 도구를 그대로 사용합니다. 모델 장애가 발생하면 정책에 따라 다른 경로로 전환합니다."
         }
       ]
     },
     policies: {
-      title: "운영 정책은 코드 배포 없이 콘솔에서 변경합니다.",
+      title: "기업 보안 경계를 고려해 설계했습니다.",
       body:
-        "관리자는 예산, rate limit, masking, routing 정책을 scope별로 분리하고 RuntimeSnapshot으로 publish할 수 있습니다.",
+        "Provider 호출 전에 정책을 적용하고, 사용자 화면과 운영 증거에는 자격 증명과 민감한 원문을 노출하지 않습니다.",
       items: [
         {
-          title: "Budget Policy",
-          body: "예산 임계값을 설정해 과금 급증을 Provider 호출 전에 차단합니다."
+          title: "대화 원문 보호",
+          body: "운영 화면에는 raw prompt와 raw response를 노출하지 않습니다."
         },
         {
-          title: "Security Policy",
-          body: "request-side masking을 적용하고 민감한 evidence는 sanitized 형태로 유지합니다."
+          title: "인증 정보 보호",
+          body: "API Key, App Token, Authorization header, Provider secret은 평문으로 표시하지 않습니다."
         },
         {
-          title: "Routing Policy",
-          body: "비용, 지연 시간, Provider 상태, 애플리케이션 맥락에 따라 모델을 선택합니다."
+          title: "민감정보 사전 처리",
+          body: "외부 Provider로 요청을 보내기 전에 마스킹과 차단 정책을 적용합니다."
         }
       ]
     },
     workflow: {
-      title: "고객 UI는 그대로 두고, LLM 요청만 GateLM으로 보냅니다.",
+      title: "직원은 그대로, 통제권만 회사로.",
       body:
-        "직원은 익숙한 제품 화면을 계속 사용하고, 고객 서버는 scope가 정해진 application credential로 GateLM Gateway를 호출합니다.",
+        "직원은 익숙한 도구를 그대로 사용하고, 관리자는 네 단계로 모델과 예산·보안 정책을 운영합니다.",
       steps: [
-        "Owner/Admin이 tenant, project, application을 생성합니다.",
-        "Provider credential과 GateLM application token을 등록합니다.",
-        "고객 서버가 Provider 직접 호출 대신 Gateway를 호출합니다.",
-        "Dashboard, request log, policy event에서 결과를 한 곳에 확인합니다."
+        "조직 계정을 만들고 직원을 등록합니다.",
+        "사용할 Provider와 모델을 연결합니다.",
+        "프로젝트를 만들고 예산·보안 정책을 설정합니다.",
+        "대시보드에서 비용과 사용 현황을 확인합니다."
       ]
     },
     bottomCta: {
-      action: "콘솔 열기",
-      body:
-        "GateLM은 직원 경험을 바꾸지 않고 LLM 사용을 운영 가능한 레이어로 묶습니다.",
-      title: "운영자는 통제하고, 직원은 하던 대로 사용합니다."
+      action: "콘솔 로그인",
+      body: "비용, 보안, 라우팅, 감사 기록을 하나의 운영 계층에서 관리합니다.",
+      title: "기업의 AI 도입, 운영 통제까지 함께 시작합니다."
     }
   }
 };
@@ -870,76 +877,97 @@ export function WebConsoleInitView({
 
   return (
     <main className="landing-shell">
-      <nav className="landing-topbar" aria-label="GateLM landing navigation">
-        <div className="landing-brand-cluster">
+      <div className="landing-hero-block">
+        <nav className="landing-topbar" aria-label="GateLM landing navigation">
           <Link className="landing-brand" href="/" aria-label="GateLM home">
-            <GateLMLogo surface="light" />
+            <GateLMLogo />
           </Link>
-          {authStatus === "authenticated" ? (
-            <Link className="landing-auth-button landing-gateway-request-button" href="/application">
-              <Send aria-hidden="true" size={16} strokeWidth={2.4} />
-              <span>{text.actions.gatewayRequest}</span>
-            </Link>
-          ) : null}
-          {authStatus === "authenticated" && dashboardTenantId ? (
-            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref(dashboardTenantId)}>
-              <Route aria-hidden="true" size={17} strokeWidth={2.4} />
-              <span>{text.actions.dashboard}</span>
-            </Link>
-          ) : null}
-        </div>
-        <div className="landing-nav-links">
-          <a href="#gateway">{text.nav.gateway}</a>
-          <a href="#policies">{text.nav.policies}</a>
-          <a href="#integrations">{text.nav.integrations}</a>
-          <a href="#company">{text.nav.company}</a>
-        </div>
-        <div className="landing-top-actions">
-          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          {authStatus === "authenticated" ? (
-            <button className="landing-auth-button" onClick={logout} type="button">
-              <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
-              <span>{text.actions.logout}</span>
-            </button>
-          ) : null}
-          {authStatus === "anonymous" ? (
-            <>
-              <button
-                className="landing-auth-button"
-                onClick={() => openAuthPanel("login")}
-                type="button"
-              >
-                <LogIn aria-hidden="true" size={17} strokeWidth={2.4} />
-                <span>{text.actions.login}</span>
-              </button>
-              <button
-                className="landing-auth-button landing-auth-button-primary"
-                onClick={() => openAuthPanel("signup")}
-                type="button"
-              >
-                <UserPlus aria-hidden="true" size={17} strokeWidth={2.4} />
-                <span>{text.actions.signup}</span>
-              </button>
-            </>
-          ) : null}
-        </div>
-      </nav>
-
-      <section className="landing-hero">
-        <GatewayScene text={text.scene} />
-        <div className="landing-hero-copy">
-          <div className="landing-chip-row">
-            {text.hero.chips.map((chip) => (
-              <span key={chip}>{chip}</span>
-            ))}
+          <div className="landing-nav-links">
+            <a href="#gateway">{text.nav.gateway}</a>
+            <a href="#policies">{text.nav.policies}</a>
+            <a href="#integrations">{text.nav.integrations}</a>
           </div>
+          <div className="landing-top-actions">
+            <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+            {authStatus === "authenticated" ? (
+              <>
+                {dashboardTenantId ? (
+                  <Link
+                    className="landing-auth-button landing-auth-button-primary"
+                    href={getDashboardHref(dashboardTenantId)}
+                  >
+                    <Route aria-hidden="true" size={17} strokeWidth={2.4} />
+                    <span>{text.actions.dashboard}</span>
+                  </Link>
+                ) : null}
+                <button className="landing-auth-button" onClick={logout} type="button">
+                  <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
+                  <span>{text.actions.logout}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="landing-auth-button"
+                  onClick={() => openAuthPanel("login")}
+                  type="button"
+                >
+                  <LogIn aria-hidden="true" size={17} strokeWidth={2.4} />
+                  <span>{text.actions.login}</span>
+                </button>
+                <button
+                  className="landing-auth-button landing-auth-button-primary"
+                  onClick={() => openAuthPanel("signup")}
+                  type="button"
+                >
+                  <UserPlus aria-hidden="true" size={17} strokeWidth={2.4} />
+                  <span>{text.actions.signup}</span>
+                </button>
+              </>
+            )}
+          </div>
+        </nav>
+
+        <header className="landing-hero" id="top">
+          <p className="landing-eyebrow">{text.hero.eyebrow}</p>
           <h1>
             {text.hero.title}
             <span>{text.hero.titleAccent}</span>
           </h1>
           <p>{text.hero.body}</p>
-        </div>
-      </section>
+          <div className="landing-hero-actions">
+            {authStatus === "authenticated" && dashboardTenantId ? (
+              <Link className="landing-cta" href={getDashboardHref(dashboardTenantId)}>
+                <Route aria-hidden="true" size={18} strokeWidth={2.4} />
+                <span>{text.actions.dashboard}</span>
+              </Link>
+            ) : (
+              <>
+                <button className="landing-cta" onClick={() => openAuthPanel("login")} type="button">
+                  <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
+                  <span>{text.actions.login}</span>
+                </button>
+                <button
+                  className="landing-secondary-cta"
+                  onClick={() => openAuthPanel("signup")}
+                  type="button"
+                >
+                  <UserPlus aria-hidden="true" size={18} strokeWidth={2.4} />
+                  <span>{text.actions.signup}</span>
+                </button>
+              </>
+            )}
+          </div>
+          <div className="landing-hero-cards">
+            {text.features.items.slice(0, 3).map((item) => (
+              <article key={item.title}>
+                <strong>{item.title}</strong>
+                <span>{item.body}</span>
+              </article>
+            ))}
+          </div>
+        </header>
+      </div>
 
       <WebConsoleLandingSections
         authStatus={authStatus}
@@ -966,47 +994,6 @@ export function WebConsoleInitView({
         />
       ) : null}
     </main>
-  );
-}
-
-function GatewayScene({ text }: { text: (typeof initText)[Locale]["scene"] }) {
-  return (
-    <div className="landing-hero-scene" aria-hidden="true">
-      <div className="landing-gateway-window">
-        <div className="landing-window-bar">
-          <span />
-          <strong>{text.title}</strong>
-          <em>{text.live}</em>
-        </div>
-        <div className="landing-window-grid">
-          <div className="landing-customer-node">
-            <strong>{text.app}</strong>
-            <span>{text.appSubcopy}</span>
-          </div>
-          <div className="landing-gateway-node">
-            <h2>GateLM</h2>
-            <div>
-              {text.stages.map((stage) => (
-                <span key={stage}>{stage}</span>
-              ))}
-            </div>
-          </div>
-          <div className="landing-provider-row">
-            {text.providers.map((provider) => (
-              <span key={provider}>{provider}</span>
-            ))}
-          </div>
-          <div className="landing-metric-row">
-            {text.metrics.map(([label, value]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 

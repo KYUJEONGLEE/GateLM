@@ -11,17 +11,20 @@ import {
   ShieldCheck,
   Sparkles,
   TimerOff,
+  Users,
   Zap
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   AnalyticsCompositionChart,
   AnalyticsCostTrendChart,
+  AnalyticsEmployeeTokenBarChart,
   AnalyticsLatencyTrendChart,
   AnalyticsRankedBarChart,
   AnalyticsRequestVolumeChart
 } from "@/features/analytics/components/analytics-charts";
 import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
+import type { EmployeeUsageReadModel } from "@/features/employees/employee-usage-read-model";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
@@ -330,6 +333,119 @@ export function AnalyticsUsagePanel({
         title={text.projects}
       />
     </PanelShell>
+  );
+}
+
+export function AnalyticsEmployeeUsagePanel({
+  locale,
+  source,
+  tenantId,
+  usage
+}: {
+  locale: Locale;
+  source: "control-plane" | "fixture";
+  tenantId: string;
+  usage: EmployeeUsageReadModel;
+}) {
+  const text = locale === "ko"
+    ? {
+        active: "활성 직원",
+        average: "사용 직원 평균",
+        chart: "직원별 토큰 사용량",
+        chartSub: "오늘(UTC) 기준 사용 토큰 상위 직원",
+        department: "부서",
+        employee: "직원",
+        evidence: "직원별 토큰 사용량",
+        evidenceSub: "직원을 선택하면 사용량과 프로젝트별 통제 설정을 확인합니다",
+        projects: "프로젝트",
+        title: "직원 사용량",
+        tokens: "오늘 사용 토큰"
+      }
+    : {
+        active: "Active employees",
+        average: "Average per tracked employee",
+        chart: "Tokens by employee",
+        chartSub: "Top token users today (UTC)",
+        department: "Department",
+        employee: "Employee",
+        evidence: "Tokens by employee",
+        evidenceSub: "Select an employee to review usage and project-level controls",
+        projects: "Projects",
+        title: "Employee usage",
+        tokens: "Tokens used today"
+      };
+  const chartRows = usage.rows.map((row) => ({
+    id: row.employeeId,
+    label: row.name,
+    value: row.dailyTokens
+  }));
+
+  return (
+    <section className="analytics-v3-panel">
+      <header className="analytics-v3-panel-topline">
+        <h2>{text.title}</h2>
+        <div
+          className="analytics-v3-data-state"
+          data-state={source === "control-plane" ? "live" : "partial"}
+        >
+          <i />
+          <strong>
+            {source === "control-plane"
+              ? locale === "ko" ? "Control Plane 데이터" : "Control Plane data"
+              : locale === "ko" ? "예시 데이터" : "Fixture data"}
+          </strong>
+        </div>
+      </header>
+      <ExecutiveBand
+        accent="usage"
+        icon={Users}
+        lead={{ label: text.tokens, meta: "UTC", value: formatInteger(usage.totalDailyTokens) }}
+        metrics={[
+          { label: text.active, value: formatInteger(usage.activeEmployees) },
+          { label: text.average, value: formatInteger(Math.round(usage.averageDailyTokens)) }
+        ]}
+      />
+
+      <div className="analytics-v3-workspace analytics-employee-workspace">
+        <AnalysisSurface subtitle={text.chartSub} title={text.chart}>
+          <ChartOrEmpty hasData={usage.totalDailyTokens > 0} locale={locale}>
+            <AnalyticsEmployeeTokenBarChart
+              ariaLabel={text.chart}
+              maxRows={10}
+              rows={chartRows}
+            />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+      </div>
+
+      <EvidenceTable
+        action={(
+          <Link className="analytics-v3-table-link" href={`/tenants/${tenantId}/employees`}>
+            {locale === "ko" ? "직원 관리" : "Manage employees"}
+            <ArrowUpRight aria-hidden="true" size={18} />
+          </Link>
+        )}
+        columns={[text.employee, text.department, text.tokens, text.projects]}
+        emptyLocale={locale}
+        rows={usage.rows.map((row) => ({
+          cells: [
+            <Link
+              className="analytics-employee-link"
+              href={`/tenants/${tenantId}/employees?employeeId=${encodeURIComponent(row.employeeId)}`}
+              key="employee"
+            >
+              {row.name}
+            </Link>,
+            row.department ?? "-",
+            <strong key="tokens">{formatInteger(row.dailyTokens)}</strong>,
+            formatInteger(row.projectCount)
+          ],
+          key: row.employeeId
+        }))}
+        subtitle={text.evidenceSub}
+        title={text.evidence}
+      />
+    </section>
   );
 }
 
