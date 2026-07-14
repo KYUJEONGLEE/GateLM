@@ -1,4 +1,40 @@
+import type { LiveRequestRow } from "@/lib/gateway/live-requests-types";
+
 const projectPillToneCount = 6;
+
+export type PrimaryPolicyResult =
+  | {
+      kind: "safety";
+      label: string;
+      value: Exclude<LiveRequestRow["safetyAction"], "NONE">;
+    }
+  | {
+      kind: "cache";
+      label: string;
+      value: Exclude<LiveRequestRow["cacheStatus"], "NONE">;
+    };
+
+export function primaryPolicyResult(
+  row: Pick<LiveRequestRow, "cacheStatus" | "safetyAction">
+): PrimaryPolicyResult | null {
+  if (row.safetyAction !== "NONE") {
+    return {
+      kind: "safety",
+      label: `PII ${row.safetyAction}`,
+      value: row.safetyAction
+    };
+  }
+
+  if (row.cacheStatus !== "NONE") {
+    return {
+      kind: "cache",
+      label: `CACHE ${row.cacheStatus}`,
+      value: row.cacheStatus
+    };
+  }
+
+  return null;
+}
 
 export function projectPillTone(value: string | null | undefined) {
   const seed = typeof value === "string" && value.trim().length > 0
