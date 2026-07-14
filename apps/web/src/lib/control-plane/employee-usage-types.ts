@@ -61,6 +61,8 @@ export type EmployeeUsageQuery = {
   to: string;
 };
 
+export type EmployeeUsageListQuery = Omit<EmployeeUsageQuery, 'cursor' | 'limit'>;
+
 export type EmployeeUsageRequestResult =
   | { data: EmployeeUsageResponse; ok: true; status: number }
   | { error: string; ok: false; status: number };

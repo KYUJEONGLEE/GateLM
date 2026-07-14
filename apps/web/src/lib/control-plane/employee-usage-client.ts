@@ -7,9 +7,14 @@ import {
 } from '@/lib/control-plane/control-plane-request';
 import { parseEmployeeUsageResponse } from '@/lib/control-plane/employee-usage-parser';
 import type {
+  EmployeeUsageListQuery,
   EmployeeUsageQuery,
   EmployeeUsageRequestResult,
+  EmployeeUsageResponse,
 } from '@/lib/control-plane/employee-usage-types';
+
+const EMPLOYEE_USAGE_PAGE_LIMIT = 100;
+const EMPLOYEE_USAGE_MAX_PAGES = 100;
 
 export async function getEmployeeUsage(
   query: EmployeeUsageQuery,
@@ -51,6 +56,49 @@ export async function getEmployeeUsage(
   }
 }
 
+export async function getAllEmployeeUsage(
+  query: EmployeeUsageListQuery,
+  options?: ControlPlaneRequestOptions,
+): Promise<EmployeeUsageRequestResult> {
+  const rows: EmployeeUsageResponse['data'] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  for (let page = 0; page < EMPLOYEE_USAGE_MAX_PAGES; page += 1) {
+    const result = await getEmployeeUsage(
+      { ...query, cursor, limit: EMPLOYEE_USAGE_PAGE_LIMIT },
+      options,
+    );
+    if (!result.ok) return result;
+
+    rows.push(...result.data.data);
+    if (!result.data.pagination.hasMore) {
+      return {
+        data: {
+          ...result.data,
+          data: rows,
+          pagination: {
+            hasMore: false,
+            limit: EMPLOYEE_USAGE_PAGE_LIMIT,
+            nextCursor: null,
+          },
+        },
+        ok: true,
+        status: result.status,
+      };
+    }
+
+    const nextCursor = result.data.pagination.nextCursor;
+    if (!nextCursor || seenCursors.has(nextCursor)) {
+      return invalidPaginationResult();
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  return invalidPaginationResult();
+}
+
 function readError(value: unknown): string | null {
   if (!isRecord(value)) return null;
   if (typeof value.message === 'string') return value.message;
@@ -60,4 +108,12 @@ function readError(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function invalidPaginationResult(): EmployeeUsageRequestResult {
+  return {
+    error: 'Control Plane employee usage pagination did not terminate.',
+    ok: false,
+    status: 502,
+  };
 }
