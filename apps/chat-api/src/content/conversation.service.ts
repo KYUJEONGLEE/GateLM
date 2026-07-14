@@ -8,6 +8,7 @@ import { ExecutionBridgeService } from '@/execution/execution-bridge.service';
 import type {
   AdmissionHandle,
   ClientUsageIntent,
+  CompletionFinalEvent,
   EphemeralMessage,
   UsageIntent,
 } from '@/execution/execution.types';
@@ -51,6 +52,13 @@ export type SafeStreamError = Readonly<{
   code: string;
   message: string;
   cancelled: boolean;
+}>;
+
+export type CompletedTurn = Readonly<{
+  message: MessageView;
+  replayed: boolean;
+  quotaState?: CompletionFinalEvent['quotaState'];
+  budgetState?: CompletionFinalEvent['budgetState'];
 }>;
 
 @Injectable()
@@ -173,7 +181,7 @@ export class ConversationService {
   async executeTurn(
     prepared: Extract<PreparedTurn, { kind: 'execute' }>,
     onDelta: (delta: string) => Promise<void>,
-  ): Promise<Readonly<{ message: MessageView; replayed: boolean }>> {
+  ): Promise<CompletedTurn> {
     const turnId = prepared.reserved.turnId;
     let flight = this.inFlight.get(turnId);
     const listener: FlightListener = { nextIndex: 0, send: onDelta };
@@ -209,7 +217,7 @@ export class ConversationService {
   private async runTurn(
     prepared: Extract<PreparedTurn, { kind: 'execute' }>,
     onDelta: (delta: string) => Promise<void>,
-  ): Promise<Readonly<{ message: MessageView; replayed: boolean }>> {
+  ): Promise<CompletedTurn> {
     let assistantBytes = 0;
     let assistantTooLarge = false;
     try {
@@ -257,7 +265,12 @@ export class ConversationService {
       }
       if (prepared.signal.aborted) throw new TurnStateConflict();
       const persisted = await this.persistAssistantWithRetry(prepared, result.assistantContent);
-      return Object.freeze({ message: persisted.message, replayed: persisted.replayed });
+      return Object.freeze({
+        message: persisted.message,
+        replayed: persisted.replayed,
+        quotaState: result.final.quotaState,
+        budgetState: result.final.budgetState,
+      });
     } catch (error) {
       if (error instanceof AssistantTooLarge) {
         await this.store.markTerminalFailure(

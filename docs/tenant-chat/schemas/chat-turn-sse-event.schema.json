@@ -15,6 +15,8 @@
     "delta": { "type": "string", "minLength": 1, "maxLength": 16384 },
     "messageId": { "$ref": "#/$defs/uuid" },
     "terminalOutcome": { "const": "succeeded" },
+    "quotaState": { "$ref": "#/$defs/policyState" },
+    "budgetState": { "$ref": "#/$defs/policyState" },
     "error": { "$ref": "#/$defs/safeError" }
   },
   "oneOf": [
@@ -91,6 +93,8 @@
             "sequence": { "type": "integer", "minimum": 2 },
             "messageId": { "$ref": "#/$defs/uuid" },
             "terminalOutcome": { "const": "succeeded" },
+            "quotaState": { "$ref": "#/$defs/policyState" },
+            "budgetState": { "$ref": "#/$defs/policyState" },
             "replayed": { "type": "boolean" }
           }
         }
@@ -105,6 +109,10 @@
         "message": { "type": "string", "minLength": 1, "maxLength": 256 },
         "retryAfterSeconds": { "type": "integer", "minimum": 1, "maximum": 60 }
       }
+    },
+    "policyState": {
+      "type": "string",
+      "enum": ["normal", "warning", "economy", "blocked"]
     },
     "error": {
       "allOf": [

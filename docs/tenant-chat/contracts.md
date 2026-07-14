@@ -461,6 +461,7 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
 
 - Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다. 같은 turn의 HTTP attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다.
+- fresh successful `chat.turn.final`은 Gateway가 확정한 bounded `quotaState`와 `budgetState`를 전달한다. encrypted assistant만으로 재생하는 completed turn은 두 상태를 복원할 Chat API-owned 근거가 없으므로 생략할 수 있으며, browser는 이를 새 정책 상태로 추정하지 않는다.
 - public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다.
 - attachment capacity는 admission 전에 reserve한다. admission 뒤 user persistence, history preparation 또는 local attachment activation이 실패하면 마지막 local attachment만 admission과 turn을 best effort cancel하고 reservation을 반드시 해제한다.
 - 느린 attachment의 response backpressure는 해당 응답에만 적용하며 공유 Provider stream과 final persistence를 막지 않는다. disconnect된 attachment handle은 취소 시도 결과와 무관하게 local registry에서 해제한다.

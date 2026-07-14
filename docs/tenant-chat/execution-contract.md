@@ -60,6 +60,7 @@ revision: `tenant-chat/v1`
 - successful final 저장의 retryable PostgreSQL timeout/connection/transaction conflict는 동일 assistant content를 유지한 채 최대 3회 재시도한다. unique `(turn_id,role)`와 decrypt/compare가 commit 후 응답 유실도 same-content replay로 수렴시킨다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
 - DOC-013은 Chat API의 encrypted final을 authoritative replay source로 사용해 닫는다. local final이 있으면 `accepted`, bounded reconstructed `delta`, `final`을 재생한다. Gateway terminal replay만 있고 local final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 fail closed하며 성공 content를 만들지 않는다.
+- Chat API-facing fresh success `chat.turn.final`은 private final의 bounded `quotaState`와 `budgetState`를 그대로 전달한다. local encrypted replay는 해당 usage state를 DB에 중복 저장하지 않으므로 두 필드를 생략할 수 있고, browser는 마지막으로 확인한 상태만 유지한다.
 - client disconnect는 local attachment handle을 즉시 해제하고 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
 - Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
