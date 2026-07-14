@@ -41,15 +41,16 @@ const (
 )
 
 type datasetRecord struct {
-	SchemaVersion      string  `json:"schemaVersion"`
-	SampleID           string  `json:"sampleId"`
-	LegacyID           string  `json:"id"`
-	RedactedPrompt     *string `json:"redactedPrompt"`
-	Prompt             *string `json:"prompt"`
-	ExpectedCategory   string  `json:"expectedCategory"`
-	ExpectedDifficulty string  `json:"expectedDifficulty"`
-	Language           string  `json:"language"`
-	ExpectedTier       *string `json:"expectedTier"`
+	SchemaVersion      string   `json:"schemaVersion"`
+	SampleID           string   `json:"sampleId"`
+	LegacyID           string   `json:"id"`
+	RedactedPrompt     *string  `json:"redactedPrompt"`
+	Prompt             *string  `json:"prompt"`
+	ExpectedCategory   string   `json:"expectedCategory"`
+	ExpectedDifficulty string   `json:"expectedDifficulty"`
+	Language           string   `json:"language"`
+	EvaluationSlices   []string `json:"evaluationSlices,omitempty"`
+	ExpectedTier       *string  `json:"expectedTier"`
 }
 
 type report struct {
@@ -135,6 +136,7 @@ type difficultyShadowReport struct {
 	Calibration            difficultyCalibrationReport         `json:"calibration"`
 	RuntimeComparison      difficultyRuntimeComparison         `json:"runtimeComparison"`
 	Segments               difficultyShadowSegments            `json:"segments"`
+	PromotionGate          difficultyPromotionGateReport       `json:"promotionGate"`
 }
 
 type difficultyCalibrationReport struct {
@@ -186,8 +188,10 @@ type difficultyRuntimeComparison struct {
 }
 
 type difficultyShadowSegments struct {
-	LongSimple   difficultySegmentComparison `json:"longSimple"`
-	ShortComplex difficultySegmentComparison `json:"shortComplex"`
+	LongSimple           difficultySegmentComparison `json:"longSimple"`
+	ShortComplex         difficultySegmentComparison `json:"shortComplex"`
+	Negation             difficultySegmentComparison `json:"negation"`
+	PayloadContamination difficultySegmentComparison `json:"payloadContamination"`
 }
 
 type difficultySegmentComparison struct {
@@ -197,6 +201,22 @@ type difficultySegmentComparison struct {
 	ShadowCorrect   int     `json:"shadowCorrect"`
 	RuntimeAccuracy float64 `json:"runtimeAccuracy"`
 	ShadowAccuracy  float64 `json:"shadowAccuracy"`
+}
+
+type difficultyPromotionGateReport struct {
+	Applicable bool                           `json:"applicable"`
+	Passed     bool                           `json:"passed"`
+	Policy     string                         `json:"policy"`
+	Checks     []difficultyPromotionGateCheck `json:"checks"`
+}
+
+type difficultyPromotionGateCheck struct {
+	Name         string   `json:"name"`
+	Passed       bool     `json:"passed"`
+	Reason       string   `json:"reason,omitempty"`
+	RuntimeValue *float64 `json:"runtimeValue,omitempty"`
+	ShadowValue  *float64 `json:"shadowValue,omitempty"`
+	Unit         string   `json:"unit,omitempty"`
 }
 
 type directionalErrorStats struct {
@@ -781,6 +801,12 @@ func evaluateDifficultyWithWarmup(datasetPath string, classifierVersion string, 
 				ShortComplex: difficultySegmentComparison{
 					Definition: "expectedDifficulty=complex and redactedPrompt rune length <= 120",
 				},
+				Negation: difficultySegmentComparison{
+					Definition: `evaluationSlices contains "negation"`,
+				},
+				PayloadContamination: difficultySegmentComparison{
+					Definition: `evaluationSlices contains "payload_contamination"`,
+				},
 			},
 		}
 	}
@@ -896,6 +922,12 @@ func evaluateDifficultyWithWarmup(datasetPath string, classifierVersion string, 
 			if expectedDifficulty == routing.DifficultyComplex && promptRuneLength <= 120 {
 				updateDifficultySegment(&shadow.Segments.ShortComplex, matched, shadowMatched)
 			}
+			if record.hasEvaluationSlice("negation") {
+				updateDifficultySegment(&shadow.Segments.Negation, matched, shadowMatched)
+			}
+			if record.hasEvaluationSlice("payload_contamination") {
+				updateDifficultySegment(&shadow.Segments.PayloadContamination, matched, shadowMatched)
+			}
 		}
 
 		result.Samples = append(result.Samples, sample)
@@ -983,6 +1015,9 @@ func evaluateDifficultyWithWarmup(datasetPath string, classifierVersion string, 
 		}
 		finalizeDifficultySegment(&shadow.Segments.LongSimple)
 		finalizeDifficultySegment(&shadow.Segments.ShortComplex)
+		finalizeDifficultySegment(&shadow.Segments.Negation)
+		finalizeDifficultySegment(&shadow.Segments.PayloadContamination)
+		shadow.PromotionGate = buildDifficultyPromotionGate(result, shadow)
 	}
 	return result
 }
@@ -1063,6 +1098,119 @@ func updateDifficultySegment(segment *difficultySegmentComparison, runtimeMatche
 func finalizeDifficultySegment(segment *difficultySegmentComparison) {
 	segment.RuntimeAccuracy = ratio(segment.RuntimeCorrect, segment.Total)
 	segment.ShadowAccuracy = ratio(segment.ShadowCorrect, segment.Total)
+}
+
+func buildDifficultyPromotionGate(result difficultyReport, shadow *difficultyShadowReport) difficultyPromotionGateReport {
+	gate := difficultyPromotionGateReport{
+		Applicable: true,
+		Passed:     true,
+		Policy:     "difficulty-shadow-promotion-gate.v1.fail-closed",
+		Checks:     []difficultyPromotionGateCheck{},
+	}
+	add := func(check difficultyPromotionGateCheck) {
+		gate.Checks = append(gate.Checks, check)
+		if !check.Passed {
+			gate.Passed = false
+		}
+	}
+
+	add(difficultyPromotionGateCheck{
+		Name:         "complex_to_simple_non_regression_overall",
+		Passed:       shadow.RuntimeComparison.ComplexToSimpleNonIncreaseOverall,
+		RuntimeValue: floatPointer(float64(result.DirectionalErrors.ComplexToSimpleCount)),
+		ShadowValue:  floatPointer(float64(shadow.DirectionalErrors.ComplexToSimpleCount)),
+		Unit:         "samples",
+	})
+	byCategoryPassed := true
+	for _, passed := range shadow.RuntimeComparison.ComplexToSimpleNonIncreaseByCategory {
+		byCategoryPassed = byCategoryPassed && passed
+	}
+	add(difficultyPromotionGateCheck{
+		Name:   "complex_to_simple_non_regression_by_category",
+		Passed: byCategoryPassed,
+		Reason: missingCategoryGateReason(shadow.RuntimeComparison.ComplexToSimpleNonIncreaseByCategory),
+	})
+	add(segmentImprovementCheck("long_simple_improvement", shadow.Segments.LongSimple))
+	add(segmentImprovementCheck("short_complex_improvement", shadow.Segments.ShortComplex))
+	add(segmentImprovementCheck("negation_improvement", shadow.Segments.Negation))
+	add(segmentImprovementCheck("payload_contamination_improvement", shadow.Segments.PayloadContamination))
+	add(difficultyPromotionGateCheck{
+		Name:   "semantic_head_quality",
+		Passed: false,
+		Reason: "not evaluated by routing-eval; requires aggregate semantic-head evidence for the fixed 4-head/12-dimension contract",
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "calibration",
+		Passed: shadow.Calibration.Valid,
+		Reason: shadow.Calibration.Reason,
+	})
+	add(difficultyPromotionGateCheck{
+		Name:         "p95_latency_budget",
+		Passed:       shadow.TotalLatency.P95Micros > 0 && shadow.TotalLatency.P95Micros <= result.ClassificationLatency.Total.P95Micros,
+		RuntimeValue: floatPointer(result.ClassificationLatency.Total.P95Micros),
+		ShadowValue:  floatPointer(shadow.TotalLatency.P95Micros),
+		Unit:         "microseconds",
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "memory_budget",
+		Passed: false,
+		Reason: "not measured by routing-eval; promotion requires an explicit memory budget run",
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "artifact_reproducibility",
+		Passed: shadow.ArtifactVersion != "" && shadow.ContentHash != "" && shadow.ModelVersion != "" && shadow.CalibrationVersion != "",
+		Reason: artifactReproducibilityReason(shadow),
+	})
+	add(difficultyPromotionGateCheck{
+		Name:   "sensitive_data_non_exposure",
+		Passed: false,
+		Reason: "promotion artifact must be generated in an aggregate-only mode; this evaluator still includes compatibility sample records",
+	})
+	return gate
+}
+
+func segmentImprovementCheck(name string, segment difficultySegmentComparison) difficultyPromotionGateCheck {
+	check := difficultyPromotionGateCheck{
+		Name:         name,
+		Passed:       segment.Total > 0 && segment.ShadowAccuracy > segment.RuntimeAccuracy,
+		RuntimeValue: floatPointer(segment.RuntimeAccuracy),
+		ShadowValue:  floatPointer(segment.ShadowAccuracy),
+		Unit:         "accuracy",
+	}
+	if segment.Total == 0 {
+		check.Reason = "no covered samples"
+	} else if segment.ShadowAccuracy <= segment.RuntimeAccuracy {
+		check.Reason = "shadow accuracy did not strictly improve over runtime baseline"
+	}
+	return check
+}
+
+func missingCategoryGateReason(categories map[string]bool) string {
+	if len(categories) == 0 {
+		return "no category comparison evidence"
+	}
+	failed := []string{}
+	for category, passed := range categories {
+		if !passed {
+			failed = append(failed, category)
+		}
+	}
+	if len(failed) == 0 {
+		return ""
+	}
+	sort.Strings(failed)
+	return "failed categories: " + strings.Join(failed, ",")
+}
+
+func artifactReproducibilityReason(shadow *difficultyShadowReport) string {
+	if shadow.ArtifactVersion == "" || shadow.ContentHash == "" || shadow.ModelVersion == "" || shadow.CalibrationVersion == "" {
+		return "artifact identity or content hash is missing"
+	}
+	return ""
+}
+
+func floatPointer(value float64) *float64 {
+	return &value
 }
 
 func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prompt string, iterations int, warmupIterations int, batchSize int) []float64 {
@@ -1172,6 +1320,15 @@ func (r datasetRecord) promptText() string {
 		return *r.Prompt
 	}
 	return ""
+}
+
+func (r datasetRecord) hasEvaluationSlice(slice string) bool {
+	for _, candidate := range r.EvaluationSlices {
+		if strings.TrimSpace(candidate) == slice {
+			return true
+		}
+	}
+	return false
 }
 
 func ratio(numerator int, denominator int) float64 {
