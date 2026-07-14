@@ -20,6 +20,7 @@ export function IntentPrefetchLink({
   ...props
 }: IntentPrefetchLinkProps) {
   const router = useRouter();
+  const shouldPrefetch = intentPrefetch && process.env.NODE_ENV === "production";
 
   function prefetch() {
     router.prefetch(href);
@@ -27,14 +28,14 @@ export function IntentPrefetchLink({
 
   function handleFocus(event: FocusEvent<HTMLAnchorElement>) {
     onFocus?.(event);
-    if (!event.defaultPrevented && intentPrefetch) {
+    if (!event.defaultPrevented && shouldPrefetch) {
       prefetch();
     }
   }
 
   function handleMouseEnter(event: MouseEvent<HTMLAnchorElement>) {
     onMouseEnter?.(event);
-    if (!event.defaultPrevented && intentPrefetch) {
+    if (!event.defaultPrevented && shouldPrefetch) {
       prefetch();
     }
   }
@@ -43,8 +44,8 @@ export function IntentPrefetchLink({
     <Link
       {...props}
       href={href}
-      onFocus={intentPrefetch ? handleFocus : onFocus}
-      onMouseEnter={intentPrefetch ? handleMouseEnter : onMouseEnter}
+      onFocus={shouldPrefetch ? handleFocus : onFocus}
+      onMouseEnter={shouldPrefetch ? handleMouseEnter : onMouseEnter}
       prefetch={false}
     />
   );

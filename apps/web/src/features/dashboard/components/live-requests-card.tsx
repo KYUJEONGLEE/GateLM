@@ -20,7 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 const COMPACT_LIVE_REQUEST_LIMIT = 5;
 const FOCUS_LIVE_REQUEST_LIMIT = 9;
 
-export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
+export const LIVE_REQUESTS_POLL_INTERVAL_MS = 2000;
 
 type LiveRequestsCardFilters = {
   budgetScopeId: string;
@@ -197,18 +197,62 @@ export function LiveRequestsCard({
   );
 
   useEffect(() => {
-    if (initialPayload && !skippedInitialFetchRef.current) {
-      skippedInitialFetchRef.current = true;
-    } else {
-      void loadRequests({ silent: false });
+    let stopped = false;
+    let timeoutId: number | null = null;
+
+    function clearScheduledPoll() {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     }
 
-    const interval = window.setInterval(() => {
-      void loadRequests({ silent: true });
-    }, LIVE_REQUESTS_POLL_INTERVAL_MS);
+    function schedulePoll() {
+      clearScheduledPoll();
+      timeoutId = window.setTimeout(() => {
+        void poll();
+      }, LIVE_REQUESTS_POLL_INTERVAL_MS);
+    }
+
+    async function poll() {
+      if (stopped || document.visibilityState !== "visible") {
+        return;
+      }
+
+      await loadRequests({ silent: true });
+      if (!stopped) {
+        schedulePoll();
+      }
+    }
+
+    function handleVisibilityChange() {
+      clearScheduledPoll();
+
+      if (document.visibilityState !== "visible") {
+        abortRef.current?.abort();
+        return;
+      }
+
+      void poll();
+    }
+
+    if (initialPayload && !skippedInitialFetchRef.current) {
+      skippedInitialFetchRef.current = true;
+      schedulePoll();
+    } else if (document.visibilityState === "visible") {
+      void loadRequests({ silent: false }).finally(() => {
+        if (!stopped) {
+          schedulePoll();
+        }
+      });
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(interval);
+      stopped = true;
+      clearScheduledPoll();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       abortRef.current?.abort();
       inFlightQueryRef.current = null;
     };
