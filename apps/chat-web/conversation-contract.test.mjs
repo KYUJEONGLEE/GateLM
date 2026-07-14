@@ -81,6 +81,9 @@ test('SSE parser rejects gaps, mismatched ids, and oversized frames', async () =
     frame('chat.turn.accepted', 1, { replayed: false }).replace(`${turnId}:1`, `${turnId}:2`),
   ]), { conversationId }));
   await assert.rejects(() => consumeTurnSse(stream([`event: chat.turn.delta\ndata: ${'x'.repeat(70_000)}\n\n`]), { conversationId }));
+  await assert.rejects(() => consumeTurnSse(stream([
+    `: ${'한'.repeat(30_000)}\n\n`,
+  ]), { conversationId }), { message: 'SSE frame limit exceeded.' });
 });
 
 function frame(type, sequence, extra) {

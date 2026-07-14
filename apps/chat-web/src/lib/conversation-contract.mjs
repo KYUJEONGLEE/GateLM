@@ -146,7 +146,9 @@ export async function consumeTurnSse(stream, options) {
   if (!stream) throw new Error('응답 스트림을 열 수 없습니다.');
   const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
+  const encoder = new TextEncoder();
   let buffer = '';
+  let bufferByteLength = 0;
   let expectedSequence = 1;
   let acceptedTurnId;
   let terminal;
@@ -154,14 +156,17 @@ export async function consumeTurnSse(stream, options) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true }).replaceAll('\r\n', '\n');
-      if (new TextEncoder().encode(buffer).byteLength > 128 * 1024) throw new Error('SSE frame limit exceeded.');
+      const decoded = decoder.decode(value, { stream: true }).replaceAll('\r\n', '\n');
+      buffer += decoded;
+      bufferByteLength += encoder.encode(decoded).byteLength;
       let boundary;
       while ((boundary = buffer.indexOf('\n\n')) !== -1) {
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
+        const frameByteLength = encoder.encode(frame).byteLength;
+        bufferByteLength -= frameByteLength + 2;
         if (!frame) continue;
-        const event = parseFrame(frame, options.conversationId, acceptedTurnId, expectedSequence);
+        const event = parseFrame(frame, frameByteLength, options.conversationId, acceptedTurnId, expectedSequence);
         acceptedTurnId ??= event.turnId;
         expectedSequence += 1;
         if (terminal) throw new Error('Terminal SSE event must be last.');
@@ -172,8 +177,12 @@ export async function consumeTurnSse(stream, options) {
           options.onTerminal?.(event);
         }
       }
+      if (bufferByteLength > 128 * 1024) throw new Error('SSE frame limit exceeded.');
     }
-    buffer += decoder.decode();
+    const tail = decoder.decode().replaceAll('\r\n', '\n');
+    buffer += tail;
+    bufferByteLength += encoder.encode(tail).byteLength;
+    if (bufferByteLength > 128 * 1024) throw new Error('SSE frame limit exceeded.');
     if (buffer.trim()) throw new Error('Incomplete SSE frame.');
     if (!acceptedTurnId || !terminal) throw new Error('Incomplete SSE sequence.');
     return terminal;
@@ -182,8 +191,8 @@ export async function consumeTurnSse(stream, options) {
   }
 }
 
-function parseFrame(frame, expectedConversationId, expectedTurnId, expectedSequence) {
-  if (new TextEncoder().encode(frame).byteLength > 64 * 1024) throw new Error('SSE frame limit exceeded.');
+function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurnId, expectedSequence) {
+  if (frameByteLength > 64 * 1024) throw new Error('SSE frame limit exceeded.');
   const fields = Object.create(null);
   for (const line of frame.split('\n')) {
     if (!line || line.startsWith(':')) continue;

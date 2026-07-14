@@ -59,6 +59,24 @@ test('missing access, redirects, and provider raw errors fail closed with safe p
   });
 });
 
+test('bounded JSON cancels the upstream reader after a runtime overflow', async () => {
+  let cancelled = false;
+  await assert.rejects(() => conversationJson({
+    ...input,
+    fetchImpl: async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+        controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+      },
+      cancel() { cancelled = true; },
+    }), { headers: { 'content-type': 'application/json' } }),
+  }), (error) => {
+    assert.equal(error.payload.code, 'CHAT_RESPONSE_TOO_LARGE');
+    return true;
+  });
+  assert.equal(cancelled, true);
+});
+
 test('SSE proxy rejects declared overflow and aborts upstream when browser cancels', async () => {
   await assert.rejects(() => conversationSse({
     ...input,

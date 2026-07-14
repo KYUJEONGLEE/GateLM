@@ -116,22 +116,33 @@ function rejectRedirect(response) {
 
 async function boundedJson(response, limit) {
   const contentType = response.headers.get('content-type')?.split(';')[0]?.trim();
-  if (contentType !== 'application/json') throw new ConversationBffError(502, { code: 'CHAT_UPSTREAM_INVALID' });
+  if (contentType !== 'application/json') {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ConversationBffError(502, { code: 'CHAT_UPSTREAM_INVALID' });
+  }
   const declared = Number(response.headers.get('content-length') ?? '0');
-  if (Number.isFinite(declared) && declared > limit) throw new ConversationBffError(502, { code: 'CHAT_RESPONSE_TOO_LARGE' });
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ConversationBffError(502, { code: 'CHAT_RESPONSE_TOO_LARGE' });
+  }
   const reader = response.body?.getReader();
   if (!reader) throw new ConversationBffError(502, { code: 'CHAT_UPSTREAM_INVALID' });
   const chunks = [];
   let total = 0;
+  let complete = false;
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        complete = true;
+        break;
+      }
       total += value.byteLength;
       if (total > limit) throw new ConversationBffError(502, { code: 'CHAT_RESPONSE_TOO_LARGE' });
       chunks.push(value);
     }
   } finally {
+    if (!complete) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(total);

@@ -307,6 +307,7 @@ export function ChatShell() {
       }
     } catch (caught) {
       const admitted = activeTurnIdRef.current !== null;
+      if (!admitted) setComposer(content);
       setMessages((current) => current.filter((message) =>
         (message.id !== draftId || Boolean(message.content)) && (admitted || message.id !== optimisticUserId)));
       if (caught instanceof DOMException && caught.name === 'AbortError') setStatus('답변 생성을 중지했습니다.');
@@ -332,8 +333,9 @@ export function ChatShell() {
     try {
       await api(`/api/tenant-chat/conversations/${selectedId}/turns/${turn}/cancel`, { method: 'POST' });
     } catch (caught) {
-      streamControllerRef.current?.abort();
       reportError(caught);
+    } finally {
+      streamControllerRef.current?.abort();
     }
   }
 
