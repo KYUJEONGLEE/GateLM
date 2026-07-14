@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { expect, test } from "@playwright/test";
 
 import type { ProviderConnectionRecord } from "../src/lib/control-plane/provider-connections-types";
@@ -15,6 +17,11 @@ import {
   getSelectedRoutingProviderConnections,
   hasCompleteRoutingMatrix
 } from "../src/features/policies/components/runtime-policy-editor-utils";
+
+const routingPanelSourceUrl = new URL(
+  "../src/features/policies/components/runtime-policy-panels/routing-panel.tsx",
+  import.meta.url
+);
 
 test("mock bootstrap creates all five category by two difficulty cells", () => {
   const policy = createMockBootstrapRoutingPolicy();
@@ -93,6 +100,20 @@ test("global Simple and Complex roles project to all ten cells with one fallback
     "provider-b:premium",
     "provider-c:backup"
   ]);
+});
+
+test("project routing UI preserves the three global roles and only applies card styling", async () => {
+  const source = await readFile(routingPanelSourceUrl, "utf8");
+
+  expect(source).toContain("policy-routing-role-list");
+  expect(source.match(/appearance="card"/g)).toHaveLength(3);
+  expect(source).toContain("label={text.routingSimpleModel}");
+  expect(source).toContain("label={text.routingComplexModel}");
+  expect(source).toContain("label={text.routingFallbackModel}");
+  expect(source).not.toContain("routingCategoryRows");
+  expect(source).toContain("createRuntimePolicyRoleRoutes(nextRoles)");
+  expect(source).toContain("setRoles({ ...roles, simpleModelRef })");
+  expect(source).toContain("setRoles({ ...roles, complexModelRef })");
 });
 
 test("Simple and Complex may use the same model while fallback stays distinct", () => {
