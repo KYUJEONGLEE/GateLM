@@ -27,6 +27,7 @@ import type {
   ProviderConnectionRecord,
   ProviderConnectionsModel,
   ProviderConnectionStatus,
+  ProviderModelMetadata,
   ProviderModelDiscovery,
   ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
@@ -47,6 +48,7 @@ type SubmitState = {
 type ProviderDiscoveryPreview = {
   chatModels: string[];
   discoveredAt: string;
+  modelMetadata: Record<string, ProviderModelMetadata>;
   modelReleaseDates: Record<string, string | null>;
   selectedModels: string[];
   skippedModelCount: number;
@@ -83,6 +85,7 @@ const emptyProviderForm: ProviderConnectionFormValues = {
   credentialValue: "",
   displayName: "",
   failureMode: "fail_closed",
+  modelMetadata: {},
   models: "",
   modelsEndpointPath: "/models",
   presetProviderKey: "openai",
@@ -341,16 +344,21 @@ export function ProviderConnectionManagement({
       });
       const discoveryPayload = (await discoveryResponse.json().catch(() => ({}))) as ProviderResponsePayload;
       const discoveredChatModels = discoveryPayload.discovery
-        ? filterChatCompletionModels(
-            discoveryPayload.discovery.models.map((item) => item.modelName)
-          )
+        ? filterDiscoveredChatCompletionModels(discoveryPayload.discovery.models)
         : [];
+      const discoveredModelMetadata = discoveryPayload.discovery
+        ? getDiscoveredModelMetadata(discoveryPayload.discovery.models)
+        : {};
 
       if (discoveryResponse.ok && discoveredChatModels.length > 0) {
         const configuredValues = {
           ...getProviderFormValues(savedProvider),
           credentialValue: "",
           isEdit: true,
+          modelMetadata: {
+            ...valuesToSubmit.modelMetadata,
+            ...discoveredModelMetadata
+          },
           models: discoveredChatModels.join(", ")
         };
         const configureResponse = await fetch("/api/control-plane/provider-connections", {
@@ -485,13 +493,18 @@ export function ProviderConnectionManagement({
     const discoveredModels = payload.discovery.models.map((item) =>
       normalizeDiscoveredModelName(item.modelName)
     );
+    const discoveredModelMetadata = getDiscoveredModelMetadata(
+      payload.discovery.models
+    );
     const modelReleaseDates = Object.fromEntries(
       payload.discovery.models.map((item) => [
         normalizeDiscoveredModelName(item.modelName),
         item.createdAt
       ])
     );
-    const chatModels = filterChatCompletionModels(discoveredModels);
+    const chatModels = filterDiscoveredChatCompletionModels(
+      payload.discovery.models
+    );
     const existingSelectedModels = splitModelNames(baseValues.models).filter((modelName) =>
       chatModels.includes(modelName)
     );
@@ -516,6 +529,7 @@ export function ProviderConnectionManagement({
       [normalizedProvider]: {
         chatModels,
         discoveredAt: payload.discovery?.discoveredAt ?? new Date().toISOString(),
+        modelMetadata: discoveredModelMetadata,
         modelReleaseDates,
         selectedModels,
         skippedModelCount
@@ -539,6 +553,10 @@ export function ProviderConnectionManagement({
           adapterType: payload.discovery?.adapterType ?? current.adapterType,
           baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
           credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
+          modelMetadata: {
+            ...current.modelMetadata,
+            ...discoveredModelMetadata
+          },
           models: selectedModels.join(", ")
         };
       });
@@ -826,7 +844,11 @@ export function ProviderConnectionManagement({
                         {activeDiscoveryModelList?.visibleModels.map((modelName) => {
                           const isSelected = activeDiscovery.selectedModels.includes(modelName);
                           const isRecommended = isRecommendedModel(modelName, activeProviderFamily);
-                          const capabilities = getModelCapabilities(modelName);
+                          const modelMetadata = activeDiscovery.modelMetadata[modelName];
+                          const capabilities = getModelCapabilities(
+                            modelName,
+                            modelMetadata
+                          );
 
                           return (
                             <tr
@@ -873,7 +895,7 @@ export function ProviderConnectionManagement({
                                   ))}
                                 </span>
                               </td>
-                              <td>{getModelContextWindow(modelName)}</td>
+                              <td>{getModelContextWindow(modelName, modelMetadata)}</td>
                               <td>
                                 <span className="provider-model-route" data-enabled={isRecommended}>
                                   {isRecommended
@@ -1028,6 +1050,9 @@ export function ProviderConnectionManagement({
 
   function renderProviderModels(provider: ProviderConnectionRecord) {
     const discovery = discoveryByProvider[provider.provider];
+    const configuredModelMetadata = getProviderConfigModelMetadata(
+      provider.providerConfig
+    );
     const modelNames = Array.from(
       new Set(
         discovery
@@ -1060,7 +1085,10 @@ export function ProviderConnectionManagement({
           </thead>
           <tbody>
             {modelNames.map((modelName) => {
-              const capabilities = getModelCapabilities(modelName);
+              const modelMetadata =
+                discovery?.modelMetadata[modelName] ??
+                configuredModelMetadata[modelName];
+              const capabilities = getModelCapabilities(modelName, modelMetadata);
               const providerFamily = getProviderConnectionFamily(provider);
               const isRecommended = isRecommendedModel(modelName, providerFamily);
 
@@ -1076,7 +1104,7 @@ export function ProviderConnectionManagement({
                       ))}
                     </span>
                   </td>
-                  <td>{getModelContextWindow(modelName)}</td>
+                  <td>{getModelContextWindow(modelName, modelMetadata)}</td>
                   <td>
                     <span className="provider-model-route" data-enabled={isRecommended}>
                       {isRecommended
@@ -1422,6 +1450,7 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     credentialValue: "",
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
+    modelMetadata: getProviderConfigModelMetadata(providerConfig),
     models: getProviderConfigModels(provider.providerConfig)
       .filter(isChatCompletionModelName)
       .join(", "),
@@ -1467,6 +1496,18 @@ function getProviderFamilyLabel(providerFamily: string) {
     return "Claude";
   }
 
+  if (providerFamily === "groq") {
+    return "Groq";
+  }
+
+  if (providerFamily === "cerebras") {
+    return "Cerebras";
+  }
+
+  if (providerFamily === "mistral") {
+    return "Mistral AI";
+  }
+
   if (providerFamily === "mock") {
     return "Mock";
   }
@@ -1503,6 +1544,7 @@ function getProviderFormValuesFromPreset(
     baseUrl: preset.baseUrl,
     credentialRequired: preset.credentialRequired,
     displayName: getDefaultProviderDisplayName(preset, provider),
+    modelMetadata: getProviderConfigModelMetadata(preset.providerConfig),
     models: "",
     modelsEndpointPath: preset.modelsEndpointPath,
     presetProviderKey: preset.providerKey,
@@ -1617,14 +1659,52 @@ function splitModelNames(value: string) {
     .filter(isChatCompletionModelName);
 }
 
-function filterChatCompletionModels(modelNames: string[]) {
+function filterDiscoveredChatCompletionModels(
+  models: ProviderModelDiscovery["models"]
+) {
   return Array.from(
     new Set(
-      modelNames
-        .map((modelName) => normalizeDiscoveredModelName(modelName))
-        .filter(Boolean)
-        .filter(isChatCompletionModelName)
+      models.flatMap((model) => {
+        const modelName = normalizeDiscoveredModelName(model.modelName);
+
+        if (!modelName || model.chatCompletionSupported === false) {
+          return [];
+        }
+
+        return model.chatCompletionSupported === true ||
+          isChatCompletionModelName(modelName)
+          ? [modelName]
+          : [];
+      })
     )
+  );
+}
+
+function getDiscoveredModelMetadata(
+  models: ProviderModelDiscovery["models"]
+): Record<string, ProviderModelMetadata> {
+  return Object.fromEntries(
+    models.flatMap((model) => {
+      const modelName = normalizeDiscoveredModelName(model.modelName);
+      const metadata: ProviderModelMetadata = {};
+
+      if (model.contextWindowTokens && model.contextWindowTokens > 0) {
+        metadata.contextWindowTokens = model.contextWindowTokens;
+      }
+      if (model.displayName && model.displayName !== model.modelName) {
+        metadata.displayName = model.displayName;
+      }
+      if (model.supportsJsonMode !== null) {
+        metadata.supportsJsonMode = model.supportsJsonMode;
+      }
+      if (model.supportsStreaming !== null) {
+        metadata.supportsStreaming = model.supportsStreaming;
+      }
+
+      return Object.keys(metadata).length > 0
+        ? [[modelName, metadata] as const]
+        : [];
+    })
   );
 }
 
@@ -1759,6 +1839,27 @@ function getPreferredModelRules(providerFamily: string) {
     ];
   }
 
+  if (providerFamily === "groq") {
+    return [
+      { matches: (model: string) => model === "llama-3.1-8b-instant" },
+      { matches: (model: string) => model === "llama-3.3-70b-versatile" },
+      { matches: (model: string) => model === "openai/gpt-oss-120b" },
+      { matches: (model: string) => model === "openai/gpt-oss-20b" }
+    ];
+  }
+
+  if (providerFamily === "cerebras") {
+    return [{ matches: (model: string) => model === "gpt-oss-120b" }];
+  }
+
+  if (providerFamily === "mistral") {
+    return [
+      { matches: (model: string) => model === "mistral-small-latest" },
+      { matches: (model: string) => model === "mistral-large-latest" },
+      { matches: (model: string) => model === "mistral-medium-latest" }
+    ];
+  }
+
   return [];
 }
 
@@ -1790,6 +1891,16 @@ function isChatCompletionModelName(modelName: string) {
     normalizedModelName.startsWith("o4") ||
     normalizedModelName.startsWith("claude-") ||
     normalizedModelName.startsWith("gemini-") ||
+    normalizedModelName.startsWith("llama-") ||
+    normalizedModelName.startsWith("openai/gpt-") ||
+    normalizedModelName.startsWith("mistral-") ||
+    normalizedModelName.startsWith("ministral-") ||
+    normalizedModelName.startsWith("magistral-") ||
+    normalizedModelName.startsWith("devstral-") ||
+    normalizedModelName.startsWith("codestral-") ||
+    normalizedModelName.startsWith("qwen-") ||
+    normalizedModelName.startsWith("gemma-") ||
+    normalizedModelName.startsWith("zai-") ||
     normalizedModelName.startsWith("chat-") ||
     normalizedModelName.startsWith("chatgpt-")
   );
@@ -1918,7 +2029,49 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
     : [];
 }
 
-function getModelCapabilities(modelName: string) {
+function getProviderConfigModelMetadata(
+  providerConfig: Record<string, unknown> | null
+): Record<string, ProviderModelMetadata> {
+  const value = providerConfig?.modelMetadata;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([model, rawMetadata]) => {
+      if (!rawMetadata || typeof rawMetadata !== "object" || Array.isArray(rawMetadata)) {
+        return [];
+      }
+
+      const record = rawMetadata as Record<string, unknown>;
+      const metadata: ProviderModelMetadata = {};
+      if (typeof record.contextWindowTokens === "number") {
+        metadata.contextWindowTokens = record.contextWindowTokens;
+      }
+      if (typeof record.displayName === "string") {
+        metadata.displayName = record.displayName;
+      }
+      if (typeof record.maxOutputTokens === "number") {
+        metadata.maxOutputTokens = record.maxOutputTokens;
+      }
+      if (typeof record.supportsJsonMode === "boolean") {
+        metadata.supportsJsonMode = record.supportsJsonMode;
+      }
+      if (typeof record.supportsStreaming === "boolean") {
+        metadata.supportsStreaming = record.supportsStreaming;
+      }
+
+      return Object.keys(metadata).length > 0
+        ? [[model, metadata] as const]
+        : [];
+    })
+  );
+}
+
+function getModelCapabilities(
+  modelName: string,
+  metadata?: ProviderModelMetadata
+) {
   const normalized = modelName.toLowerCase();
   const capabilities = ["chat"];
 
@@ -1931,10 +2084,25 @@ function getModelCapabilities(modelName: string) {
     capabilities.push("vision");
   }
 
+  if (metadata?.supportsStreaming) {
+    capabilities.push("stream");
+  }
+
+  if (metadata?.supportsJsonMode) {
+    capabilities.push("json");
+  }
+
   return capabilities;
 }
 
-function getModelContextWindow(modelName: string) {
+function getModelContextWindow(
+  modelName: string,
+  metadata?: ProviderModelMetadata
+) {
+  if (metadata?.contextWindowTokens) {
+    return formatContextWindowTokens(metadata.contextWindowTokens);
+  }
+
   const normalized = modelName.toLowerCase();
 
   if (normalized.includes("embedding")) {
@@ -1949,9 +2117,25 @@ function getModelContextWindow(modelName: string) {
     return "200k";
   }
 
+  if (normalized.includes("mistral")) {
+    return "256k";
+  }
+
+  if (normalized.includes("llama-") || normalized.includes("gpt-oss")) {
+    return "128k";
+  }
+
   if (normalized.includes("4o") || normalized.includes("o3") || normalized.includes("o4")) {
     return "128k";
   }
 
   return "-";
+}
+
+function formatContextWindowTokens(tokens: number) {
+  if (tokens >= 1000000) {
+    return `${Number((tokens / 1000000).toFixed(1))}M`;
+  }
+
+  return `${Math.round(tokens / 1000)}k`;
 }

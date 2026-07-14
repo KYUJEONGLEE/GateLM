@@ -278,6 +278,12 @@ func TestPricingKeysIncludeCanonicalAndCompatibilityAliases(t *testing.T) {
 	if containsString(providerKeys, "79e07d4e-3d26-47fc-b001-ae0e6402ed82-main") || containsString(providerKeys, "openai_compatible-main") {
 		t.Fatalf("provider aliases must not be generated for ids or adapter types: %+v", providerKeys)
 	}
+	if aliases := providerPricingAliases("groq-2"); len(aliases) != 1 || aliases[0] != "groq" {
+		t.Fatalf("numbered provider connections must fall back to family pricing, got %+v", aliases)
+	}
+	if aliases := providerPricingAliases("groq-secondary"); len(aliases) != 1 || aliases[0] != "groq-secondary-main" {
+		t.Fatalf("custom provider names must retain the existing main alias rule, got %+v", aliases)
+	}
 	if !containsString(modelKeys, "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o") || !containsString(modelKeys, "gpt-4o") {
 		t.Fatalf("expected execution model id and billing model alias, got %+v", modelKeys)
 	}

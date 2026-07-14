@@ -234,7 +234,9 @@ describe('Control Plane demo seed baseline', () => {
 
     expect(tx.providerPreset.updateMany).toHaveBeenCalledWith({
       where: {
-        providerKey: { notIn: ['openai', 'gemini'] },
+        providerKey: {
+          notIn: ['openai', 'gemini', 'groq', 'cerebras', 'mistral'],
+        },
         status: ResourceStatus.ACTIVE,
       },
       data: { status: ResourceStatus.ARCHIVED },
@@ -262,7 +264,31 @@ describe('Control Plane demo seed baseline', () => {
       tx.providerPreset.upsert.mock.calls.map(
         ([args]) => args.create.providerKey,
       ),
-    ).toEqual(['openai', 'gemini', 'claude']);
+    ).toEqual([
+      'openai',
+      'gemini',
+      'groq',
+      'cerebras',
+      'mistral',
+      'claude',
+    ]);
+    expect(tx.providerPreset.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { providerKey: 'groq' },
+        create: expect.objectContaining({
+          baseUrl: 'https://api.groq.com/openai/v1',
+          status: ResourceStatus.ACTIVE,
+          providerConfig: expect.objectContaining({
+            adapterType: 'openai_compatible',
+            models: expect.arrayContaining([
+              'llama-3.1-8b-instant',
+              'openai/gpt-oss-120b',
+            ]),
+            providerFamily: 'groq',
+          }),
+        }),
+      }),
+    );
     expect(tx.providerPreset.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { providerKey: 'claude' },

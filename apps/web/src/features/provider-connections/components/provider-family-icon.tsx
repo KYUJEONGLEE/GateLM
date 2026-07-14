@@ -1,3 +1,4 @@
+import { Cpu, Gauge, Wind } from "lucide-react";
 import Image from "next/image";
 
 export {
@@ -19,10 +20,26 @@ export function ProviderFamilyIcon({ className, family, size = 28 }: ProviderFam
       {iconSrc ? (
         <Image alt="" aria-hidden="true" height={size} src={iconSrc} width={size} />
       ) : (
-        getProviderFamilyInitial(family)
+        getProviderFamilySymbol(family, size) ?? getProviderFamilyInitial(family)
       )}
     </span>
   );
+}
+
+function getProviderFamilySymbol(providerFamily: string, size: number) {
+  if (providerFamily === "groq") {
+    return <Gauge aria-hidden="true" size={size} strokeWidth={1.8} />;
+  }
+
+  if (providerFamily === "cerebras") {
+    return <Cpu aria-hidden="true" size={size} strokeWidth={1.8} />;
+  }
+
+  if (providerFamily === "mistral") {
+    return <Wind aria-hidden="true" size={size} strokeWidth={1.8} />;
+  }
+
+  return null;
 }
 
 export function getProviderFamilyInitial(providerFamily: string) {

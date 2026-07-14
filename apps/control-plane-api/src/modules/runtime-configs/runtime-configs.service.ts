@@ -1418,6 +1418,9 @@ export class RuntimeConfigsService {
     const providerNames = new Set(
       providers.map((provider) => provider.provider),
     );
+    const providersByName = new Map(
+      providers.map((provider) => [provider.provider, provider]),
+    );
     const hasRegisteredMockProvider = providerNames.has(
       BUILTIN_MOCK_PROVIDER_NAME,
     );
@@ -1454,15 +1457,28 @@ export class RuntimeConfigsService {
             model.provider !== BUILTIN_MOCK_PROVIDER_NAME ||
             model.model !== BUILTIN_MOCK_MODEL_REF,
         )
-        .map((model) => ({
-          provider: model.provider,
-          model: model.model,
-          displayName: model.displayName ?? model.model,
-          status: model.status ?? 'active',
-          contextWindowTokens: model.contextWindowTokens ?? 8192,
-          supportsStreaming: model.supportsStreaming ?? false,
-          supportsJsonMode: model.supportsJsonMode ?? false,
-        }));
+        .map((model) => {
+          const provider = providersByName.get(model.provider);
+          const defaults = provider
+            ? this.resolveProviderModel(provider, model.model)
+            : null;
+
+          return {
+            provider: model.provider,
+            model: model.model,
+            displayName:
+              model.displayName ?? defaults?.displayName ?? model.model,
+            status: model.status ?? 'active',
+            contextWindowTokens:
+              model.contextWindowTokens ??
+              defaults?.contextWindowTokens ??
+              8192,
+            supportsStreaming:
+              model.supportsStreaming ?? defaults?.supportsStreaming ?? false,
+            supportsJsonMode:
+              model.supportsJsonMode ?? defaults?.supportsJsonMode ?? false,
+          };
+        });
 
       for (const provider of providers) {
         if (models.some((model) => model.provider === provider.provider)) {
@@ -1470,15 +1486,9 @@ export class RuntimeConfigsService {
         }
 
         models.push(
-          ...this.resolveProviderModelNames(provider).map((model) => ({
-            provider: provider.provider,
-            model,
-            displayName: model,
-            status: 'active' as const,
-            contextWindowTokens: 8192,
-            supportsStreaming: false,
-            supportsJsonMode: false,
-          })),
+          ...this.resolveProviderModelNames(provider).map((model) =>
+            this.resolveProviderModel(provider, model),
+          ),
         );
       }
 
@@ -1486,16 +1496,45 @@ export class RuntimeConfigsService {
     }
 
     return providers.flatMap((provider) =>
-      this.resolveProviderModelNames(provider).map((model) => ({
-        provider: provider.provider,
-        model,
-        displayName: model,
-        status: 'active',
-        contextWindowTokens: 8192,
-        supportsStreaming: false,
-        supportsJsonMode: false,
-      })),
+      this.resolveProviderModelNames(provider).map((model) =>
+        this.resolveProviderModel(provider, model),
+      ),
     );
+  }
+
+  private resolveProviderModel(
+    provider: ProviderConnection,
+    model: string,
+  ): RuntimeConfigModelResponseDto {
+    const providerConfig = this.toRecordOrNull(provider.providerConfig);
+    const modelMetadata = this.toRecordOrNull(providerConfig?.modelMetadata);
+    const metadata = this.toRecordOrNull(modelMetadata?.[model]);
+    const contextWindowTokens = this.toModelContextWindowTokens(
+      metadata?.contextWindowTokens,
+    );
+
+    return {
+      provider: provider.provider,
+      model,
+      displayName:
+        typeof metadata?.displayName === 'string' &&
+        metadata.displayName.trim()
+          ? metadata.displayName.trim()
+          : model,
+      status: 'active',
+      contextWindowTokens: contextWindowTokens ?? 8192,
+      supportsStreaming: metadata?.supportsStreaming === true,
+      supportsJsonMode: metadata?.supportsJsonMode === true,
+    };
+  }
+
+  private toModelContextWindowTokens(value: unknown): number | null {
+    return typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value > 0 &&
+      value <= 1000000
+      ? value
+      : null;
   }
 
   private resolveProviderModelNames(provider: ProviderConnection): string[] {
@@ -3412,7 +3451,7 @@ export class RuntimeConfigsService {
     return value as unknown as Prisma.InputJsonObject;
   }
 
-  private toRecordOrNull(value: Prisma.JsonValue): Record<string, unknown> | null {
+  private toRecordOrNull(value: unknown): Record<string, unknown> | null {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       return value as Record<string, unknown>;
     }

@@ -790,7 +790,13 @@ describe('ProviderConnectionsService', () => {
       json: jest.fn().mockResolvedValue({
         data: [
           {
+            capabilities: {
+              completion_chat: true,
+              json_mode: true,
+              streaming: true,
+            },
             id: 'gpt-4o-mini',
+            max_context_length: 128000,
             object: 'model',
             created: 1715367049,
             owned_by: 'openai',
@@ -819,10 +825,14 @@ describe('ProviderConnectionsService', () => {
       modelCount: 1,
       models: [
         expect.objectContaining({
+          chatCompletionSupported: true,
+          contextWindowTokens: 128000,
           modelName: 'gpt-4o-mini',
           ownedBy: 'openai',
           provider: 'openai-main',
           providerId,
+          supportsJsonMode: true,
+          supportsStreaming: true,
         }),
       ],
       provider: 'openai-main',

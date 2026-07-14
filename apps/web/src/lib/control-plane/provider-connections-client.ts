@@ -14,6 +14,7 @@ import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
   ProviderConnectionsModel,
+  ProviderModelMetadata,
   ProviderModelDiscovery,
   ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
@@ -280,6 +281,10 @@ export async function removeProviderModel({
       displayName: providerConnection.displayName,
       failureMode: getProviderFailureMode(providerConnection.providerConfig),
       isEdit: true,
+      modelMetadata: getProviderConfigModelMetadata(
+        providerConnection.providerConfig,
+        remainingModels
+      ),
       models: remainingModels.join(", "),
       modelsEndpointPath: getProviderConfigString(
         providerConnection.providerConfig,
@@ -436,6 +441,7 @@ function toProviderConfig(values: ProviderConnectionFormValues, models: string[]
   const adapterType = values.adapterType.trim();
   const apiVersion = values.apiVersion.trim();
   const providerFamily = values.presetProviderKey.trim();
+  const configuredModelMetadata = values.modelMetadata ?? {};
   const providerConfig: Record<string, unknown> = {
     credentialRequired: values.credentialRequired,
     failureMode: values.failureMode,
@@ -444,6 +450,16 @@ function toProviderConfig(values: ProviderConnectionFormValues, models: string[]
 
   if (models.length > 0) {
     providerConfig.models = models;
+  }
+
+  const modelMetadata = Object.fromEntries(
+    models.flatMap((model) => {
+      const metadata = configuredModelMetadata[model];
+      return metadata ? [[model, metadata] as const] : [];
+    })
+  );
+  if (Object.keys(modelMetadata).length > 0) {
+    providerConfig.modelMetadata = modelMetadata;
   }
 
   if (adapterType) {
@@ -485,6 +501,49 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
         .filter((model): model is string => typeof model === "string" && model.trim().length > 0)
         .map((model) => normalizeDiscoveredModelName(model))
     : [];
+}
+
+function getProviderConfigModelMetadata(
+  providerConfig: Record<string, unknown> | null,
+  selectedModels?: string[]
+): Record<string, ProviderModelMetadata> {
+  const value = toRecordOrNull(providerConfig?.modelMetadata);
+  if (!value) {
+    return {};
+  }
+
+  const selectedModelSet = selectedModels ? new Set(selectedModels) : null;
+  const entries = Object.entries(value).flatMap(([model, rawMetadata]) => {
+    if (selectedModelSet && !selectedModelSet.has(model)) {
+      return [];
+    }
+
+    const metadata = toRecordOrNull(rawMetadata);
+    if (!metadata) {
+      return [];
+    }
+
+    const normalized: ProviderModelMetadata = {};
+    if (typeof metadata.contextWindowTokens === "number") {
+      normalized.contextWindowTokens = metadata.contextWindowTokens;
+    }
+    if (typeof metadata.displayName === "string") {
+      normalized.displayName = metadata.displayName;
+    }
+    if (typeof metadata.maxOutputTokens === "number") {
+      normalized.maxOutputTokens = metadata.maxOutputTokens;
+    }
+    if (typeof metadata.supportsJsonMode === "boolean") {
+      normalized.supportsJsonMode = metadata.supportsJsonMode;
+    }
+    if (typeof metadata.supportsStreaming === "boolean") {
+      normalized.supportsStreaming = metadata.supportsStreaming;
+    }
+
+    return Object.keys(normalized).length > 0 ? [[model, normalized] as const] : [];
+  });
+
+  return Object.fromEntries(entries);
 }
 
 function normalizeDiscoveredModelName(modelName: string) {
@@ -569,6 +628,18 @@ function inferProviderFamily(providerConnection: ProviderConnectionRecord) {
 
   if (provider.includes("claude") || provider.includes("anthropic") || baseUrl.includes("anthropic.com")) {
     return "claude";
+  }
+
+  if (provider.includes("groq") || baseUrl.includes("api.groq.com")) {
+    return "groq";
+  }
+
+  if (provider.includes("cerebras") || baseUrl.includes("api.cerebras.ai")) {
+    return "cerebras";
+  }
+
+  if (provider.includes("mistral") || baseUrl.includes("api.mistral.ai")) {
+    return "mistral";
   }
 
   if (provider === "mock") {
@@ -870,20 +941,29 @@ function toProviderDiscoveredModel(value: unknown): ProviderModelDiscovery["mode
     typeof record.providerId !== "string" ||
     typeof record.provider !== "string" ||
     typeof record.modelName !== "string" ||
-    typeof record.displayName !== "string" ||
-    typeof record.object !== "string"
+    typeof record.displayName !== "string"
   ) {
     return null;
   }
 
   return {
+    chatCompletionSupported:
+      typeof record.chatCompletionSupported === "boolean"
+        ? record.chatCompletionSupported
+        : null,
+    contextWindowTokens:
+      typeof record.contextWindowTokens === "number" ? record.contextWindowTokens : null,
     createdAt: typeof record.createdAt === "string" ? record.createdAt : null,
     displayName: record.displayName,
     modelName: record.modelName,
-    object: record.object,
+    object: typeof record.object === "string" ? record.object : null,
     ownedBy: typeof record.ownedBy === "string" ? record.ownedBy : null,
     provider: record.provider,
-    providerId: record.providerId
+    providerId: record.providerId,
+    supportsJsonMode:
+      typeof record.supportsJsonMode === "boolean" ? record.supportsJsonMode : null,
+    supportsStreaming:
+      typeof record.supportsStreaming === "boolean" ? record.supportsStreaming : null
   };
 }
 
@@ -935,6 +1015,7 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
           cacheTtlSeconds: 3600,
           type: "openai_compatible_models"
         },
+        providerFamily: "openai",
         requestFormat: "openai_chat_completions"
       },
       providerKey: "openai"
@@ -950,9 +1031,141 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       providerConfig: {
         adapterType: "openai_compatible",
         credentialRequired: true,
+        providerFamily: "gemini",
         requestFormat: "openai_chat_completions"
       },
       providerKey: "gemini"
+    },
+    {
+      adapterType: "openai_compatible",
+      baseUrl: "https://api.groq.com/openai/v1",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "Groq",
+      modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "openai_compatible",
+        credentialRequired: true,
+        modelDiscovery: {
+          cacheTtlSeconds: 3600,
+          type: "openai_compatible_models"
+        },
+        modelMetadata: {
+          "llama-3.1-8b-instant": {
+            contextWindowTokens: 131072,
+            displayName: "Llama 3.1 8B Instant",
+            maxOutputTokens: 131072,
+            supportsJsonMode: true,
+            supportsStreaming: true
+          },
+          "llama-3.3-70b-versatile": {
+            contextWindowTokens: 131072,
+            displayName: "Llama 3.3 70B Versatile",
+            maxOutputTokens: 32768,
+            supportsJsonMode: true,
+            supportsStreaming: true
+          },
+          "openai/gpt-oss-20b": {
+            contextWindowTokens: 131072,
+            displayName: "GPT-OSS 20B",
+            maxOutputTokens: 65536,
+            supportsJsonMode: true,
+            supportsStreaming: true
+          },
+          "openai/gpt-oss-120b": {
+            contextWindowTokens: 131072,
+            displayName: "GPT-OSS 120B",
+            maxOutputTokens: 65536,
+            supportsJsonMode: true,
+            supportsStreaming: true
+          }
+        },
+        models: [
+          "llama-3.1-8b-instant",
+          "llama-3.3-70b-versatile",
+          "openai/gpt-oss-20b",
+          "openai/gpt-oss-120b"
+        ],
+        providerFamily: "groq",
+        requestFormat: "openai_chat_completions"
+      },
+      providerKey: "groq"
+    },
+    {
+      adapterType: "openai_compatible",
+      baseUrl: "https://api.cerebras.ai/v1",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "Cerebras",
+      modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "openai_compatible",
+        credentialRequired: true,
+        modelDiscovery: {
+          cacheTtlSeconds: 3600,
+          type: "openai_compatible_models"
+        },
+        modelMetadata: {
+          "gpt-oss-120b": {
+            contextWindowTokens: 131072,
+            displayName: "GPT-OSS 120B",
+            maxOutputTokens: 40960,
+            supportsJsonMode: true,
+            supportsStreaming: true
+          }
+        },
+        models: ["gpt-oss-120b"],
+        providerFamily: "cerebras",
+        requestFormat: "openai_chat_completions"
+      },
+      providerKey: "cerebras"
+    },
+    {
+      adapterType: "openai_compatible",
+      baseUrl: "https://api.mistral.ai/v1",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "Mistral AI",
+      modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "openai_compatible",
+        credentialRequired: true,
+        modelDiscovery: {
+          cacheTtlSeconds: 3600,
+          type: "openai_compatible_models"
+        },
+        modelMetadata: {
+          "mistral-small-latest": {
+            contextWindowTokens: 256000,
+            displayName: "Mistral Small",
+            supportsJsonMode: true,
+            supportsStreaming: true
+          },
+          "mistral-medium-latest": {
+            contextWindowTokens: 256000,
+            displayName: "Mistral Medium",
+            supportsJsonMode: true,
+            supportsStreaming: true
+          },
+          "mistral-large-latest": {
+            contextWindowTokens: 256000,
+            displayName: "Mistral Large",
+            supportsJsonMode: true,
+            supportsStreaming: true
+          }
+        },
+        models: [
+          "mistral-small-latest",
+          "mistral-medium-latest",
+          "mistral-large-latest"
+        ],
+        providerFamily: "mistral",
+        requestFormat: "openai_chat_completions"
+      },
+      providerKey: "mistral"
     },
     {
       adapterType: "anthropic",
@@ -965,6 +1178,7 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       providerConfig: {
         adapterType: "anthropic",
         credentialRequired: true,
+        providerFamily: "claude",
         requestFormat: "anthropic_messages"
       },
       providerKey: "claude"
@@ -990,12 +1204,24 @@ function getProviderPresetOrder(providerKey: string) {
     return 10;
   }
 
-  if (providerKey === "claude") {
+  if (providerKey === "gemini") {
     return 20;
   }
 
-  if (providerKey === "gemini") {
+  if (providerKey === "groq") {
     return 30;
+  }
+
+  if (providerKey === "cerebras") {
+    return 40;
+  }
+
+  if (providerKey === "mistral") {
+    return 50;
+  }
+
+  if (providerKey === "claude") {
+    return 60;
   }
 
   return 100;

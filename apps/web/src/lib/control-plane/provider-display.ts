@@ -75,6 +75,27 @@ export function getProviderFamilyFromKey(providerKey: string, baseUrl = "") {
     return "claude";
   }
 
+  if (
+    normalizedProvider.includes("groq") ||
+    normalizedBaseUrl.includes("api.groq.com")
+  ) {
+    return "groq";
+  }
+
+  if (
+    normalizedProvider.includes("cerebras") ||
+    normalizedBaseUrl.includes("api.cerebras.ai")
+  ) {
+    return "cerebras";
+  }
+
+  if (
+    normalizedProvider.includes("mistral") ||
+    normalizedBaseUrl.includes("api.mistral.ai")
+  ) {
+    return "mistral";
+  }
+
   if (normalizedProvider === "mock") {
     return "mock";
   }
