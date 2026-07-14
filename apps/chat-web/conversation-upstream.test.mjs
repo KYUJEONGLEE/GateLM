@@ -103,6 +103,31 @@ test('SSE proxy rejects declared overflow and aborts upstream when browser cance
   assert.equal(upstreamSignal.aborted, true);
 });
 
+test('SSE proxy cancels the upstream reader after a runtime overflow', async () => {
+  let cancelled = false;
+  let upstreamSignal;
+  const response = await conversationSse({
+    ...input,
+    body: {},
+    fetchImpl: async (_url, init) => {
+      upstreamSignal = init.signal;
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(4 * 1024 * 1024));
+          controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+        },
+        cancel() { cancelled = true; },
+      }), { headers: { 'content-type': 'text/event-stream' } });
+    },
+  });
+
+  const reader = response.body.getReader();
+  assert.equal((await reader.read()).done, false);
+  await assert.rejects(() => reader.read(), { message: 'SSE byte limit exceeded.' });
+  assert.equal(cancelled, true);
+  assert.equal(upstreamSignal.aborted, true);
+});
+
 test('SSE proxy disables compression and relays a delta before upstream completion', async () => {
   let releaseUpstream;
   const upstreamReleased = new Promise((resolve) => { releaseUpstream = resolve; });
@@ -157,4 +182,18 @@ test('expired access refreshes once and retries the identical idempotent request
   ]);
   assert.equal(calls[0].body, requestBody);
   assert.equal(calls[2].body, requestBody);
+});
+
+test('failed session refresh preserves the original unauthorized response body', async () => {
+  const responses = [
+    Response.json({ code: 'CHAT_AUTH_REQUIRED' }, { status: 401 }),
+    Response.json({ code: 'CHAT_AUTH_REQUIRED' }, { status: 401 }),
+  ];
+  const response = await fetchWithSessionRefresh('/api/tenant-chat/conversations', undefined, {
+    fetchImpl: async () => responses.shift(),
+    prepare: (value) => value,
+  });
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { code: 'CHAT_AUTH_REQUIRED' });
 });

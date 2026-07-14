@@ -162,11 +162,12 @@ function boundedStream(source, limit, controller, timeout) {
   const reader = source.getReader();
   let total = 0;
   let closed = false;
-  const cleanup = () => {
+  const cleanup = async (cancelReader = false) => {
     if (closed) return;
     closed = true;
     clearTimeout(timeout);
     controller.cleanup();
+    if (cancelReader) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   };
   return new ReadableStream({
@@ -174,7 +175,7 @@ function boundedStream(source, limit, controller, timeout) {
       try {
         const { done, value } = await reader.read();
         if (done) {
-          cleanup();
+          await cleanup();
           destination.close();
           return;
         }
@@ -183,14 +184,13 @@ function boundedStream(source, limit, controller, timeout) {
         destination.enqueue(value);
       } catch (error) {
         controller.abort('stream');
-        cleanup();
+        await cleanup(true);
         destination.error(error);
       }
     },
     async cancel() {
       controller.abort('browser-disconnect');
-      await reader.cancel().catch(() => undefined);
-      cleanup();
+      await cleanup(true);
     },
   });
 }
