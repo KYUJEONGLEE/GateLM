@@ -50,6 +50,7 @@ Replace:
 - `TENANT_CHAT_WEB_SERVICE_TOKEN`
 - `TENANT_CHAT_ACCESS_JWT_SECRET`
 - `TENANT_CHAT_INTENT_SECRET`
+- `TENANT_CHAT_WORKLOAD_ACTIVE_KID`
 - `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` (use the same value)
 - `GATEWAY_OBSERVABILITY_INTERNAL_TOKEN` (use a separate value)
 - `GATELM_GATEWAY_API_KEY`
@@ -83,6 +84,23 @@ SMTP_USER=<smtp-user-if-required>
 SMTP_PASSWORD=<smtp-password-if-required>
 SMTP_FROM=<verified-sender>
 ```
+
+Generate the Tenant Chat workload signing, verification, cache, and usage
+receipt files once from `deploy/aws-triage`. The `kid` must exactly match
+`TENANT_CHAT_WORKLOAD_ACTIVE_KID` in `.env`:
+
+```bash
+node ../../scripts/dev/generate-tenant-chat-local-secrets.mjs \
+  --target=.secrets/tenant-chat \
+  --kid=tenant-chat-production-1
+chmod 700 .secrets/tenant-chat
+chmod 600 .secrets/tenant-chat/*
+```
+
+The generated directory is gitignored. Never copy its private JWK, HMAC keys,
+cache keys, or usage receipt token into `.env`, Git, logs, or deployment
+evidence. The deployment preflight rejects missing, empty, or group/world-readable
+secret files before building images.
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
@@ -132,6 +150,7 @@ Recommended public exposure:
 - Chat API `3003`: Docker-network only; never publish it on the host or Security Group
 - Control Plane `3001`: localhost-bound by default; do not expose publicly
 - Gateway `8080`: localhost-bound by default; do not expose publicly
+- Tenant Chat private Gateway `8081`: Docker-network only; never publish it on the host or Security Group
 
 When HTTPS is enabled through a host-level reverse proxy such as Caddy, open `80` and `443`, keep `22` restricted to your IP, and prefer closing public `3000`/`3002` access. Keep `3001` and `8080` blocked from the public internet even with `CONTROL_PLANE_ADMIN_AUTH_MODE=session_cookie`.
 
@@ -153,7 +172,10 @@ docker compose --env-file .env config --quiet
 docker compose --env-file .env build
 ```
 
-On a small instance, the first build can be slow. Keep `AI_SERVICE_INSTALL_ML_DEPS=false` unless you are intentionally testing the heavier AI safety path.
+Compose requires the five files under `.secrets/tenant-chat` and an active
+workload `kid` before it can start Gateway and Chat API. On a small instance,
+the first build can be slow. Keep `AI_SERVICE_INSTALL_ML_DEPS=false` unless you
+are intentionally testing the heavier AI safety path.
 
 ## Initialize Data
 
@@ -733,10 +755,11 @@ only the resulting SSM command.
 
 The remote `scripts/deploy-main.sh` command keeps the existing containers alive
 while it builds each image sequentially. Before migrations it stores a custom
-PostgreSQL dump, the protected `.env`, the previous SHA, and previous image IDs
+PostgreSQL dump, the protected `.env`, the previous SHA, and protected rollback image tags
 under `/home/ubuntu/gatelm-deploy-backups`. A pre-cutover failure leaves the old
 containers running. A failed post-cutover health check restores the previous
-application image tags and recreates the previous containers.
+application image tags and recreates the previous containers. Temporary rollback
+tags are removed only after a successful deployment or successful rollback.
 
 Database migrations are forward-only. Application rollback does not reverse a
 schema migration; use the recorded PostgreSQL dump for a deliberate database
