@@ -154,6 +154,7 @@ type RequestLogListItem struct {
 	BudgetScope      budget.Scope
 	UserRef          string
 	RequestedModel   string
+	ProviderAttempt  *ProviderAttemptFields
 	Category         string
 	Difficulty       string
 	ModelRef         string
@@ -824,6 +825,7 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		BudgetScope:      budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
 		UserRef:          log.EndUserID,
 		RequestedModel:   log.RequestedModel,
+		ProviderAttempt:  providerAttemptFromLog(log, domainOutcomes),
 		Category:         CanonicalRoutingCategory(log.PromptCategory),
 		Difficulty:       CanonicalRoutingDifficulty(log.PromptDifficulty),
 		ModelRef:         log.ModelRef,
@@ -850,16 +852,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 	terminalStatus := NormalizeTerminalStatus(firstNonEmptyString(log.TerminalStatus, log.Status))
 	domainOutcomes := NormalizeDomainOutcomes(log)
 	providerCalled := requestDetailProviderCalled(log)
-	var providerAttempt *ProviderAttemptFields
-	if providerCalled {
-		providerAttempt = &ProviderAttemptFields{
-			ProviderID:         firstNonEmptyString(log.ProviderID, log.Provider),
-			ModelID:            firstNonEmptyString(log.ModelID, log.Model),
-			Outcome:            domainOutcomes.Provider.Outcome,
-			LatencyMs:          log.ProviderLatencyMs,
-			SanitizedErrorCode: domainOutcomes.Provider.SanitizedErrorCode,
-		}
-	}
+	providerAttempt := providerAttemptFromLog(log, domainOutcomes)
 	latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs, log.TTFTMs)
 	safetySummary := SafetySummaryFields{
 		Outcome:                 domainOutcomes.Safety.Outcome,
@@ -1006,6 +999,19 @@ func requestDetailProviderCalled(log LlmInvocationLog) bool {
 		return true
 	}
 	return strings.TrimSpace(log.Provider) != "" || strings.TrimSpace(log.Model) != "" || strings.TrimSpace(log.ProviderID) != "" || strings.TrimSpace(log.ModelID) != ""
+}
+
+func providerAttemptFromLog(log LlmInvocationLog, domainOutcomes DomainOutcomes) *ProviderAttemptFields {
+	if !requestDetailProviderCalled(log) {
+		return nil
+	}
+	return &ProviderAttemptFields{
+		ProviderID:         firstNonEmptyString(log.ProviderID, log.Provider),
+		ModelID:            firstNonEmptyString(log.ModelID, log.Model),
+		Outcome:            domainOutcomes.Provider.Outcome,
+		LatencyMs:          log.ProviderLatencyMs,
+		SanitizedErrorCode: domainOutcomes.Provider.SanitizedErrorCode,
+	}
 }
 
 func runtimeSnapshotPointer(snapshot runtimeconfig.RuntimeSnapshotProvenance, createdAt time.Time) *runtimeconfig.RuntimeSnapshotProvenance {

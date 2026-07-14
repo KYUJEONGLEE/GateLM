@@ -1,5 +1,9 @@
 import Image from "next/image";
-import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+
+export {
+  getProviderConnectionFamily,
+  getProviderFamilyFromKey
+} from "@/lib/control-plane/provider-display";
 
 type ProviderFamilyIconProps = {
   className: string;
@@ -19,46 +23,6 @@ export function ProviderFamilyIcon({ className, family, size = 28 }: ProviderFam
       )}
     </span>
   );
-}
-
-export function getProviderConnectionFamily(provider: ProviderConnectionRecord) {
-  const configuredFamily = getProviderConfigString(provider.providerConfig, "providerFamily", "");
-
-  if (configuredFamily) {
-    return configuredFamily;
-  }
-
-  return getProviderFamilyFromKey(provider.provider, provider.baseUrl);
-}
-
-export function getProviderFamilyFromKey(providerKey: string, baseUrl = "") {
-  const normalizedProvider = providerKey.toLowerCase();
-  const normalizedBaseUrl = baseUrl.toLowerCase();
-
-  if (
-    normalizedProvider.includes("gemini") ||
-    normalizedBaseUrl.includes("generativelanguage.googleapis.com")
-  ) {
-    return "gemini";
-  }
-
-  if (
-    normalizedProvider.includes("claude") ||
-    normalizedProvider.includes("anthropic") ||
-    normalizedBaseUrl.includes("anthropic.com")
-  ) {
-    return "claude";
-  }
-
-  if (normalizedProvider === "mock") {
-    return "mock";
-  }
-
-  if (normalizedProvider === "new-provider") {
-    return "new-provider";
-  }
-
-  return "openai";
 }
 
 export function getProviderFamilyInitial(providerFamily: string) {
@@ -91,14 +55,4 @@ export function getProviderFamilyIconSrc(providerFamily: string) {
   }
 
   return null;
-}
-
-function getProviderConfigString(
-  providerConfig: Record<string, unknown> | null,
-  key: string,
-  fallback: string
-) {
-  const value = providerConfig?.[key];
-
-  return typeof value === "string" ? value : fallback;
 }

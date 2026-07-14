@@ -52,8 +52,25 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 	if item.CacheStatus != CacheStatusMiss || item.CacheType != CacheTypeExact {
 		t.Fatalf("unexpected cache fields: %+v", item)
 	}
+	if item.ProviderAttempt == nil || item.ProviderAttempt.ProviderID != "mock" || item.ProviderAttempt.ModelID != "mock-fast" {
+		t.Fatalf("expected actual provider attempt in list item: %+v", item.ProviderAttempt)
+	}
 	if item.BudgetScope.Type != budget.ScopeTypeApplication || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
 		t.Fatalf("unexpected default budget scope: %+v", item.BudgetScope)
+	}
+}
+
+func TestToRequestLogListItemKeepsProviderAttemptNullWhenProviderWasNotCalled(t *testing.T) {
+	item := ToRequestLogListItem(LlmInvocationLog{
+		RequestID:      "request_cache_hit",
+		RequestedModel: "auto",
+		Status:         StatusSuccess,
+		HTTPStatus:     200,
+		CacheStatus:    CacheStatusHit,
+	})
+
+	if item.ProviderAttempt != nil {
+		t.Fatalf("expected no provider attempt for cache hit, got %+v", item.ProviderAttempt)
 	}
 }
 

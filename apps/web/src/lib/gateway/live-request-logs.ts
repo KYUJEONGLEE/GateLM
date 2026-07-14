@@ -13,6 +13,7 @@ import {
 } from "@/lib/gateway/live-gateway-config";
 import {
   type LiveInvocationLogRecord,
+  normalizeProviderAttempt,
   normalizeRequestRouting
 } from "@/lib/gateway/live-observability-contract";
 import { matchesRequestLogSafetyOutcome } from "@/lib/gateway/request-log-safety-filter";
@@ -42,6 +43,13 @@ type GatewayProjectLogItem = {
   modelRef?: string;
   projectId?: string;
   promptTokens?: number;
+  providerAttempt?: {
+    latencyMs?: number | null;
+    modelId?: string;
+    outcome?: string;
+    providerId?: string;
+    sanitizedErrorCode?: string | null;
+  } | null;
   requestId?: string;
   requestedModel?: string;
   routingReason?: string;
@@ -414,7 +422,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Liv
     difficulty: routing.difficulty,
     modelRef: routing.modelRef,
     routingReason: routing.routingReason,
-    providerAttempt: null,
+    providerAttempt: normalizeProviderAttempt(item.providerAttempt),
     cacheStatus,
     cacheType: item.cacheType ?? "none",
     cacheDecisionReason: null,

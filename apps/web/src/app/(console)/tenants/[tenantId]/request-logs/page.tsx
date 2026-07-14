@@ -25,6 +25,9 @@ import {
 } from "@/lib/gateway/live-request-logs";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
+import { resolveControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import { listTenantProviderConnections } from "@/lib/control-plane/provider-connections-client";
+import { buildProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import type { EmployeeRecord } from "@/lib/control-plane/employees-types";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import { normalizeRequestLogSafetyOutcomeFilter } from "@/lib/gateway/request-log-safety-filter";
@@ -66,9 +69,10 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     notFound();
   }
 
-  const [projectsModel, employees] = await Promise.all([
+  const [projectsModel, employees, providerConnections] = await Promise.all([
     getProjectsModel(effectiveTenantId),
-    getTenantEmployees(effectiveTenantId)
+    getTenantEmployees(effectiveTenantId),
+    listTenantProviderConnections(resolveControlPlaneTenantId(effectiveTenantId))
   ]);
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, effectiveTenantId) : undefined;
@@ -101,6 +105,9 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   });
   const rawRecords = logsResult?.records;
   const employeeDirectory = buildRequestLogEmployeeDirectory(employees);
+  const providerDirectory = buildProviderDisplayDirectory(
+    providerConnections.ok ? providerConnections.data : []
+  );
   const projectNamesById = new Map(
     visibleProjects.map((project) => [project.id, project.name] as const)
   );
@@ -129,6 +136,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
           initialRecord={fallbackSelectedRecord}
           initialRequestId={selectedRequestId || undefined}
           locale={locale}
+          providerDirectory={providerDirectory}
           records={displayRecords}
           tenantId={effectiveTenantId}
           timezone={DEFAULT_DISPLAY_TIMEZONE}
@@ -140,6 +148,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
       locale={locale}
       modelOptions={modelOptions}
       projects={visibleProjects}
+      providerDirectory={providerDirectory}
       records={displayRecords}
       selectedRequestId={selectedRequestId || undefined}
       sourceState={records ? "ready" : "unavailable"}
@@ -182,7 +191,6 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       from,
       limit: search || model ? 1000 : 100,
       projectId: projectId || undefined,
-      requestedModel: model || undefined,
       safetyOutcome: safetyOutcome || undefined,
       status: status || undefined,
       to
@@ -256,15 +264,17 @@ function getModelOptions(
     options.add(modelFilter);
   }
 
-  if (filterOptions?.requestedModels.length) {
-    filterOptions.requestedModels.forEach((model) => options.add(model));
-  } else {
-    records.forEach((record) => {
-      const model = record.requestedModel;
-      if (model) {
-        options.add(model);
-      }
-    });
+  records.forEach((record) => {
+    const model = displayedModel(record);
+    if (model && model !== "auto") {
+      options.add(model);
+    }
+  });
+
+  if (options.size === 0) {
+    (filterOptions?.requestedModels ?? [])
+      .filter((model) => model !== "auto")
+      .forEach((model) => options.add(model));
   }
 
   return Array.from(options).sort((first, second) => first.localeCompare(second));
@@ -303,7 +313,7 @@ function filterRequestLogRecords(
   const search = normalizeSearchValue(filters.search);
 
   return records.filter((record) => {
-    const model = record.requestedModel ?? "";
+    const model = displayedModel(record);
     if (filters.model && !valuesMatch(model, filters.model)) {
       return false;
     }
@@ -342,6 +352,10 @@ function filterRequestLogRecords(
 
     return candidates.some((value) => normalizeSearchValue(value).includes(search));
   });
+}
+
+function displayedModel(record: LiveInvocationLogRecord) {
+  return record.providerAttempt?.modelId ?? record.requestedModel ?? "";
 }
 
 function valuesMatch(first: string, second: string) {

@@ -6,6 +6,7 @@ import {
   primaryPolicyResult,
   projectPillTone
 } from "@/features/dashboard/live-requests-format";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatResponseTimeSeconds } from "@/lib/formatting/formatters";
 import type {
@@ -395,16 +396,32 @@ function PolicyBadges({ locale, row }: { locale: Locale; row: LiveRequestRow }) 
 }
 
 function LiveRequestRouting({ row }: { row: LiveRequestRow }) {
-  const model = formatModelDisplayName(row.requestedModel, "auto");
+  const model = formatModelDisplayName(
+    row.executedModel ?? row.requestedModel,
+    "auto"
+  );
+  const requestMode = row.requestedModel === "auto"
+    ? "Auto routing"
+    : formatModelDisplayName(row.requestedModel, "Manual routing");
+  const executionLabel = row.providerName
+    ? `${row.providerName} · ${requestMode}`
+    : `${row.category} / ${row.difficulty} / ${row.modelRef ?? "-"}`;
   const routingLabel = `${row.category} / ${row.difficulty} / ${row.modelRef ?? "no-model-ref"} / ${row.routingReason ?? "not-set"}`;
   return (
     <span
       className="dashboard-live-provider-model"
       title={routingLabel + " · " + model}
     >
+      {row.providerFamily ? (
+        <ProviderFamilyIcon
+          className="dashboard-live-provider-icon"
+          family={row.providerFamily}
+          size={24}
+        />
+      ) : null}
       <span className="dashboard-live-provider-copy">
         <strong>{model}</strong>
-        <small>{row.category} / {row.difficulty} / {row.modelRef ?? "-"}</small>
+        <small>{executionLabel}</small>
       </span>
     </span>
   );

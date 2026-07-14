@@ -9,6 +9,7 @@ import {
   REQUEST_LOG_DETAIL_SELECT_EVENT
 } from "./request-log-detail-anchor";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
+import type { ProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import type { Locale } from "@/lib/i18n/locale";
 
 type RequestLogDetailClientProps = {
@@ -17,6 +18,7 @@ type RequestLogDetailClientProps = {
   initialRequestId?: string;
   locale: Locale;
   onClose?: () => void;
+  providerDirectory?: ProviderDisplayDirectory;
   records?: LiveInvocationLogRecord[];
   selectedProjectId?: string;
   selectedRequestId?: string;
@@ -55,6 +57,7 @@ export function RequestLogDetailClient({
   initialRequestId,
   locale,
   onClose,
+  providerDirectory = {},
   records = emptyRecords,
   selectedProjectId,
   selectedRequestId,
@@ -294,6 +297,7 @@ export function RequestLogDetailClient({
         loadState={loadState}
         locale={locale}
         onClose={() => onClose?.()}
+        providerDirectory={providerDirectory}
         record={record}
         requestId={selection.requestId}
         timezone={timezone}
@@ -308,6 +312,7 @@ export function RequestLogDetailClient({
   return (
     <RequestLogDetailAside
       locale={locale}
+      providerDirectory={providerDirectory}
       record={record}
       tenantId={tenantId}
       timezone={timezone}

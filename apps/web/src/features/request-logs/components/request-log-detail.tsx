@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { GatewayPipeline } from "./gateway-pipeline";
 import { RequestIdCopyButton } from "./request-id-copy-button";
 import { RequestLogDetailDismissLink } from "./request-log-detail-dismiss-link";
@@ -20,8 +21,13 @@ import { StatusBadge } from "./request-log-status-badge";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import {
   formatBudgetScopeDisplayName,
-  formatDisplayIdentifier
+  formatDisplayIdentifier,
+  formatModelDisplayName
 } from "@/lib/formatting/display-identifiers";
+import {
+  resolveProviderDisplay,
+  type ProviderDisplayDirectory
+} from "@/lib/control-plane/provider-display";
 import {
   formatInteger,
   nullableText
@@ -31,6 +37,7 @@ import { formatRequestLogTtft } from "../request-log-latency";
 
 type RequestLogDetailProps = {
   locale: Locale;
+  providerDirectory?: ProviderDisplayDirectory;
   record: LiveInvocationLogRecord;
   tenantId: string;
   timezone: string;
@@ -79,6 +86,7 @@ const requestDetailText: Record<
 
 export function RequestLogDetail({
   locale,
+  providerDirectory = {},
   record,
   tenantId,
   timezone
@@ -98,7 +106,12 @@ export function RequestLogDetail({
       </section>
 
       <section className="detail-grid detail-stack-grid">
-        <RequestLogDetailPanel locale={locale} record={record} timezone={timezone} />
+        <RequestLogDetailPanel
+          locale={locale}
+          providerDirectory={providerDirectory}
+          record={record}
+          timezone={timezone}
+        />
       </section>
     </main>
   );
@@ -106,6 +119,7 @@ export function RequestLogDetail({
 
 export function RequestLogDetailAside({
   locale,
+  providerDirectory = {},
   record,
   tenantId,
   timezone
@@ -139,7 +153,12 @@ export function RequestLogDetailAside({
             ×
           </RequestLogDetailDismissLink>
         </div>
-        <RequestLogDetailPanel locale={locale} record={record} timezone={timezone} />
+        <RequestLogDetailPanel
+          locale={locale}
+          providerDirectory={providerDirectory}
+          record={record}
+          timezone={timezone}
+        />
       </aside>
     </>
   );
@@ -147,6 +166,7 @@ export function RequestLogDetailAside({
 
 export function RequestLogDetailPanel({
   locale,
+  providerDirectory = {},
   record,
   timezone
 }: Omit<RequestLogDetailProps, "tenantId">) {
@@ -159,7 +179,12 @@ export function RequestLogDetailPanel({
 
   return (
     <article className="request-detail-workspace">
-      <RequestSummary locale={locale} record={record} timezone={timezone} />
+      <RequestSummary
+        locale={locale}
+        providerDirectory={providerDirectory}
+        record={record}
+        timezone={timezone}
+      />
       <GatewayPipeline locale={locale} record={record} />
 
       <section
@@ -410,14 +435,31 @@ type DetailRow = [string, ReactNode];
 
 function RequestSummary({
   locale,
+  providerDirectory,
   record,
   timezone
 }: {
   locale: Locale;
+  providerDirectory: ProviderDisplayDirectory;
   record: LiveInvocationLogRecord;
   timezone: string;
 }) {
-  const model = record.requestedModel;
+  const model = record.providerAttempt?.modelId;
+  const provider = resolveProviderDisplay(
+    providerDirectory,
+    record.providerAttempt?.providerId
+  );
+  const requestMode = record.requestedModel === "auto"
+    ? "Auto routing"
+    : formatModelDisplayName(record.requestedModel, "Manual routing");
+  const providerLabel = provider?.name ?? (
+    record.providerAttempt?.providerId
+      ? formatDisplayIdentifier(record.providerAttempt.providerId)
+      : null
+  );
+  const modelLabel = model
+    ? formatModelDisplayName(model)
+    : locale === "ko" ? "프로바이더 호출 없음" : "No provider call";
 
   return (
     <section
@@ -482,12 +524,21 @@ function RequestSummary({
         />
         <SummaryMetric
           icon={<Boxes aria-hidden="true" />}
-          label={locale === "ko" ? "요청 모델" : "Requested model"}
+          label={locale === "ko" ? "실행 모델" : "Executed model"}
           value={
             <span className="request-detail-summary-provider">
+              {provider ? (
+                <ProviderFamilyIcon
+                  className="request-detail-provider-icon"
+                  family={provider.family}
+                  size={28}
+                />
+              ) : null}
               <span>
-                <strong>{model ?? "auto"}</strong>
-                <small>{record.category} / {record.difficulty}</small>
+                <strong>{modelLabel}</strong>
+                <small>
+                  {providerLabel ? `${providerLabel} · ${requestMode}` : requestMode}
+                </small>
               </span>
             </span>
           }

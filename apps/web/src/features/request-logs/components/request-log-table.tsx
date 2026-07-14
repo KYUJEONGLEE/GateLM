@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+import {
+  resolveProviderDisplay,
+  type ProviderDisplayDirectory
+} from "@/lib/control-plane/provider-display";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import {
@@ -41,6 +46,7 @@ type RequestLogTableProps = {
   locale: Locale;
   modelOptions: string[];
   projects?: ProjectRecord[];
+  providerDirectory: ProviderDisplayDirectory;
   records: LiveInvocationLogRecord[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
@@ -141,7 +147,7 @@ const requestLogText: Record<
     },
     emptyPreview: "No preview stored",
     filterLabel: "Log filters",
-    modelLabel: "Detailed model",
+    modelLabel: "Executed model",
     nextPage: "Next",
     pageSummary: "Showing {start}-{end} of {total}",
     previousPage: "Previous",
@@ -196,7 +202,7 @@ const requestLogText: Record<
     },
     emptyPreview: "저장된 preview 없음",
     filterLabel: "로그 필터",
-    modelLabel: "상세 모델",
+    modelLabel: "실행 모델",
     nextPage: "다음",
     pageSummary: "{total}개 중 {start}-{end}개 표시",
     previousPage: "이전",
@@ -247,6 +253,7 @@ export function RequestLogTable({
   locale,
   modelOptions,
   projects = [],
+  providerDirectory,
   records,
   selectedRequestId,
   sourceState,
@@ -469,7 +476,10 @@ export function RequestLogTable({
                           </span>
                         </td>
                         <td>
-                          <RequestRoutingCell record={record} />
+                          <RequestRoutingCell
+                            providerDirectory={providerDirectory}
+                            record={record}
+                          />
                         </td>
                         <td>
                           <StatusBadge label={formatHttpStatus(record)} status={record.status} />
@@ -570,14 +580,45 @@ function appendRequestLogQuery(query: URLSearchParams, key: string, value: strin
   }
 }
 
-function RequestRoutingCell({ record }: { record: LiveInvocationLogRecord }) {
-  const modelName = formatModelDisplayName(record.requestedModel, "auto");
-  const providerName = `${record.category} / ${record.difficulty} / ${record.modelRef ?? "no-model-ref"} / ${record.routingReason ?? "not-set"}`;
+function RequestRoutingCell({
+  providerDirectory,
+  record
+}: {
+  providerDirectory: ProviderDisplayDirectory;
+  record: LiveInvocationLogRecord;
+}) {
+  const modelName = formatModelDisplayName(
+    record.providerAttempt?.modelId ?? record.requestedModel,
+    "not called"
+  );
+  const provider = resolveProviderDisplay(
+    providerDirectory,
+    record.providerAttempt?.providerId
+  );
+  const requestMode = record.requestedModel === "auto"
+    ? "Auto routing"
+    : formatModelDisplayName(record.requestedModel, "Manual routing");
+  const executionLabel = provider
+    ? `${provider.name} · ${requestMode}`
+    : `${record.category} / ${record.difficulty} / ${record.modelRef ?? "-"}`;
+  const routingEvidence = `${record.category} / ${record.difficulty} / ${record.modelRef ?? "no-model-ref"} / ${record.routingReason ?? "not-set"}`;
 
   return (
-    <span className="request-log-provider-model" title={`${providerName} · ${modelName}`}>
-      <strong>{modelName}</strong>
-      <small>{record.category} / {record.difficulty} / {record.modelRef ?? "-"}</small>
+    <span
+      className="request-log-provider-model"
+      title={`${modelName} · ${executionLabel} · ${routingEvidence}`}
+    >
+      {provider ? (
+        <ProviderFamilyIcon
+          className="request-log-provider-icon"
+          family={provider.family}
+          size={24}
+        />
+      ) : null}
+      <span className="request-log-provider-copy">
+        <strong>{modelName}</strong>
+        <small>{executionLabel}</small>
+      </span>
     </span>
   );
 }
