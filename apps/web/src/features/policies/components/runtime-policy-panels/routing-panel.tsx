@@ -259,14 +259,20 @@ export function RoutingPolicyPanel({
             </div>
           </header>
 
-          <div className="tenant-routing-table" role="group" aria-label={text.routingRoleModels}>
+          <div
+            aria-label={text.routingRoleModels}
+            className="tenant-routing-table policy-routing-role-list"
+            role="group"
+          >
             <RoleModelSelect
+              appearance="card"
               label={text.routingSimpleModel}
               modelOptions={modelOptions}
               onChange={(simpleModelRef) => setRoles({ ...roles, simpleModelRef })}
               value={roles.simpleModelRef}
             />
             <RoleModelSelect
+              appearance="card"
               label={text.routingComplexModel}
               modelOptions={modelOptions}
               onChange={(complexModelRef) => setRoles({ ...roles, complexModelRef })}
@@ -274,6 +280,7 @@ export function RoutingPolicyPanel({
             />
             <RoleModelSelect
               allowEmpty
+              appearance="card"
               excludedModelRefs={[roles.simpleModelRef, roles.complexModelRef]}
               label={text.routingFallbackModel}
               modelOptions={modelOptions}
@@ -335,6 +342,7 @@ export function RoutingPolicyPanel({
 
 function RoleModelSelect({
   allowEmpty = false,
+  appearance = "default",
   excludedModelRefs = [],
   label,
   modelOptions,
@@ -343,6 +351,7 @@ function RoleModelSelect({
   value
 }: {
   allowEmpty?: boolean;
+  appearance?: "card" | "default";
   excludedModelRefs?: string[];
   label: string;
   modelOptions: RoutingModelOption[];
@@ -367,6 +376,45 @@ function RoleModelSelect({
           ...availableOptions
         ]
       : availableOptions;
+
+  if (appearance === "card") {
+    return (
+      <label className="tenant-routing-route policy-routing-role-row">
+        <span className="policy-routing-role-label">{label}</span>
+        <span
+          className="tenant-routing-model-choice policy-routing-model-choice"
+          data-has-icon={value ? "true" : "false"}
+        >
+          {value ? (
+            <ProviderFamilyIcon
+              className="tenant-routing-provider-icon tenant-routing-provider-icon-large"
+              family={selectedOption?.family ?? "mock"}
+              size={36}
+            />
+          ) : null}
+          <span className="tenant-routing-model-choice-copy">
+            {value ? (
+              <span className="tenant-routing-model-provider">
+                {selectedOption?.providerName ?? "unavailable"}
+              </span>
+            ) : null}
+            <select
+              aria-label={label}
+              onChange={(event) => onChange(event.target.value)}
+              value={value}
+            >
+              {allowEmpty ? <option value="">{noneLabel}</option> : null}
+              {options.map((option) => (
+                <option key={option.modelRef} value={option.modelRef}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </span>
+        </span>
+      </label>
+    );
+  }
 
   return (
     <label className="tenant-routing-route">
