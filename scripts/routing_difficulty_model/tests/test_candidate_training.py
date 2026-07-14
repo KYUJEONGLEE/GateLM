@@ -7,6 +7,7 @@ import numpy as np
 
 from gatelm_difficulty_model.candidate_training import (
     EXPECTED_CANDIDATE_DIMENSIONS,
+    EXPECTED_MODEL_PATH_SPLIT_RECORDS,
     assemble_candidate_samples,
     candidate_membership_hash,
     select_candidate_by_calibration_evidence,
@@ -43,7 +44,7 @@ def candidate_export() -> dict:
                     "vectorCategory": "general",
                     "expectedDifficulty": expected_difficulty,
                     "ruleDifficulty": expected_difficulty,
-                    "modelPath": True,
+                    "modelPath": split_index < EXPECTED_MODEL_PATH_SPLIT_RECORDS[split],
                     "ruleVectorV1": [float((global_index + offset) % 11) / 10.0 for offset in range(42)],
                     "language": ("ko", "en", "mixed")[class_index],
                     "evaluationSlices": [("korean", "english", "mixed_language")[class_index]],
@@ -189,6 +190,13 @@ class CandidateTrainingTest(unittest.TestCase):
             {candidate_membership_hash(rows) for rows in matrices.values()},
             {candidate_membership_hash(samples)},
         )
+        self.assertEqual(
+            {
+                split: sum(sample["split"] == split and sample["modelPath"] for sample in samples)
+                for split in EXPECTED_MODEL_PATH_SPLIT_RECORDS
+            },
+            EXPECTED_MODEL_PATH_SPLIT_RECORDS,
+        )
 
     def test_rejects_count_drift_and_family_leakage(self) -> None:
         exported = candidate_export()
@@ -199,6 +207,16 @@ class CandidateTrainingTest(unittest.TestCase):
         exported = candidate_export()
         exported["samples"][300]["familyId"] = exported["samples"][0]["familyId"]
         with self.assertRaisesRegex(ValueError, "leaked across splits"):
+            validate_candidate_training_input(exported)
+
+        exported = candidate_export()
+        sentinel = next(
+            sample
+            for sample in exported["samples"]
+            if sample["split"] == "train" and not sample["modelPath"]
+        )
+        sentinel["modelPath"] = True
+        with self.assertRaisesRegex(ValueError, "model-path counts"):
             validate_candidate_training_input(exported)
 
     def test_rejects_candidate_specific_sample_or_prefix_drift(self) -> None:

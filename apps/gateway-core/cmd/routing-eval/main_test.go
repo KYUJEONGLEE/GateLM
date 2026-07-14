@@ -6,11 +6,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/tools/difficultymodel"
 )
+
+func TestLatencyChecksumSinkIsRaceSafe(t *testing.T) {
+	classifier := routing.NewRuleBasedCategoryClassifier()
+	const workers = 16
+
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(workers)
+	for range workers {
+		go func() {
+			defer waitGroup.Done()
+			_, latencies := classifyCategoryWithWarmupLatency(
+				classifier,
+				"Compare two bounded options.",
+				2,
+				1,
+				4,
+			)
+			if len(latencies) != 2 {
+				t.Errorf("latency samples = %d, want 2", len(latencies))
+			}
+		}()
+	}
+	waitGroup.Wait()
+}
 
 func TestEvaluateReportIncludesSyntheticPromptText(t *testing.T) {
 	records := []datasetRecord{

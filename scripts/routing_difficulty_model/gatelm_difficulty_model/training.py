@@ -370,6 +370,68 @@ def _candidate_better(
     return selected_final_tie is None or final_tie < selected_final_tie
 
 
+def _validate_regularization_config(config: Mapping[str, Any]) -> list[float]:
+    if config.get("penalty") != "l2":
+        raise ValueError("difficulty-logistic-v1 supports only L2 regularization")
+    if config.get("solver") != "liblinear":
+        raise ValueError("difficulty-logistic-v1 supports only the liblinear solver")
+    if config.get("selectionMetric") != "mean_log_loss":
+        raise ValueError("regularization selection metric must be mean_log_loss")
+    if config.get("tieBreakers") != ["mean_brier_score", "stronger_regularization"]:
+        raise ValueError(
+            "regularization tie breakers must be mean_brier_score then stronger_regularization"
+        )
+
+    raw_candidates = config.get("cCandidates")
+    if (
+        isinstance(raw_candidates, (str, bytes))
+        or not isinstance(raw_candidates, Sequence)
+        or not raw_candidates
+    ):
+        raise ValueError("regularization C candidates must be a non-empty sequence")
+    candidates: list[float] = []
+    for value in raw_candidates:
+        if isinstance(value, bool):
+            raise ValueError("regularization C candidates must be finite positive numbers")
+        try:
+            candidate = float(value)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "regularization C candidates must be finite positive numbers"
+            ) from error
+        if not math.isfinite(candidate) or candidate <= 0:
+            raise ValueError("regularization C candidates must be finite positive numbers")
+        candidates.append(candidate)
+    if len(set(candidates)) != len(candidates) or candidates != sorted(candidates):
+        raise ValueError("regularization C candidates must be unique and ordered ascending")
+
+    group_folds = config.get("groupFolds")
+    if isinstance(group_folds, bool) or not isinstance(group_folds, int) or group_folds < 2:
+        raise ValueError("regularization groupFolds must be an integer of at least 2")
+    tie_tolerance = config.get("tieTolerance")
+    if isinstance(tie_tolerance, bool):
+        raise ValueError("regularization tieTolerance must be a finite non-negative number")
+    try:
+        tolerance = float(tie_tolerance)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "regularization tieTolerance must be a finite non-negative number"
+        ) from error
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("regularization tieTolerance must be a finite non-negative number")
+    max_iterations = config.get("maxIterations")
+    if (
+        isinstance(max_iterations, bool)
+        or not isinstance(max_iterations, int)
+        or max_iterations <= 0
+    ):
+        raise ValueError("regularization maxIterations must be a positive integer")
+    random_seed = config.get("randomSeed")
+    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
+        raise ValueError("regularization randomSeed must be an integer")
+    return candidates
+
+
 def _group_folds(groups: Any, requested: int) -> Any:
     import numpy as np
     from sklearn.model_selection import GroupKFold
@@ -431,12 +493,13 @@ def _fit_logistic(x: Any, y: Any, c_value: float, config: dict[str, Any]) -> Any
 def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) -> tuple[float, list[dict[str, Any]]]:
     import numpy as np
 
+    c_candidates = _validate_regularization_config(config)
     splitter = _group_folds(groups, config["groupFolds"])
     evaluations: list[dict[str, Any]] = []
     selected_c: float | None = None
     selected_metrics: dict[str, float] | None = None
     selected_tie: tuple[Any, ...] | None = None
-    for c_value in config["cCandidates"]:
+    for c_value in c_candidates:
         fold_metrics = []
         fold_iterations = []
         convergence_failure: dict[str, Any] | None = None
@@ -455,6 +518,7 @@ def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) 
                     "maxIterations": error.max_iterations,
                     "observedIterations": error.observed_iterations,
                     "foldIterations": fold_iterations,
+                    "foldMetrics": fold_metrics,
                 }
                 break
             fold_iterations.append(
@@ -464,7 +528,12 @@ def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) 
                 }
             )
             probabilities = model.predict_proba(x[validation_indices])[:, 1]
-            fold_metrics.append(_metrics(y[validation_indices], probabilities))
+            fold_metrics.append(
+                {
+                    "fold": fold,
+                    **_metrics(y[validation_indices], probabilities),
+                }
+            )
         if convergence_failure is not None:
             evaluations.append(convergence_failure)
             continue
@@ -474,6 +543,7 @@ def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) 
             "logLoss": float(np.mean([item["logLoss"] for item in fold_metrics])),
             "brierScore": float(np.mean([item["brierScore"] for item in fold_metrics])),
             "foldIterations": fold_iterations,
+            "foldMetrics": fold_metrics,
         }
         evaluations.append(candidate)
         score = {"logLoss": candidate["logLoss"], "brierScore": candidate["brierScore"]}
@@ -1035,6 +1105,14 @@ def _fit_candidate(
             "selected regularization candidate failed to converge during final fit"
         ) from error
     final_fit_iterations = _logistic_iteration_count(model)
+    weights = np.asarray(model.coef_[0], dtype=float)
+    bias = float(model.intercept_[0])
+    if (
+        weights.shape != (train_x.shape[1],)
+        or not np.all(np.isfinite(weights))
+        or not math.isfinite(bias)
+    ):
+        raise ValueError("selected Logistic Regression produced invalid weights or bias")
 
     calibration_x, calibration_y, calibration_groups = arrays(model_samples_by_split["calibration"])
     calibration_raw = model.predict_proba(calibration_x)[:, 1]
@@ -1058,8 +1136,8 @@ def _fit_candidate(
             "groupFolds": policy["regularization"]["groupFolds"],
             "randomSeed": policy["regularization"]["randomSeed"],
         },
-        "bias": float(model.intercept_[0]),
-        "weights": [float(value) for value in model.coef_[0]],
+        "bias": bias,
+        "weights": [float(value) for value in weights],
         "calibrator": calibrator_material,
     }
 
@@ -1102,6 +1180,11 @@ def _fit_candidate(
         "runtimePromotionEvaluated": False,
         "notes": [
             "Model and calibrator fitting do not read holdout labels or holdout outcome metrics.",
+            (
+                f"The train partition contains {len(samples_by_split['train'])} records; "
+                "Logistic Regression fits only the "
+                f"{len(model_samples_by_split['train'])} modelPath=true records."
+            ),
             "The selected frozen candidate is evaluated on holdout by the outer candidate suite.",
         ],
     }

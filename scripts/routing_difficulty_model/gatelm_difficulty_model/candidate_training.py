@@ -32,6 +32,7 @@ from .training import OfflineArtifactProvenance, train_from_offline_feature_matr
 
 CANDIDATE_COMPARISON_SCHEMA = "gatelm.difficulty-offline-candidate-comparison.v2"
 EXPECTED_SPLIT_RECORDS = {"train": 300, "calibration": 100, "holdout": 100}
+EXPECTED_MODEL_PATH_SPLIT_RECORDS = {"train": 244, "calibration": 85, "holdout": 64}
 EXPECTED_TOTAL_RECORDS = sum(EXPECTED_SPLIT_RECORDS.values())
 EXPECTED_PROJECTION_DIMENSION = 64
 EXPECTED_POOLED_DIMENSION = 384
@@ -200,6 +201,7 @@ def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list
     seen_sample_ids: set[str] = set()
     family_splits: dict[str, set[str]] = defaultdict(set)
     actual_split_records = {split: 0 for split in EXPECTED_SPLIT_RECORDS}
+    actual_model_path_records = {split: 0 for split in EXPECTED_SPLIT_RECORDS}
     actual_split_families = {split: set() for split in EXPECTED_SPLIT_RECORDS}
     for index, sample in enumerate(samples):
         if not isinstance(sample, Mapping):
@@ -228,6 +230,8 @@ def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list
             raise ValueError(f"semantic candidate sample {index} does not use the actual category")
         if sample.get("ruleDifficulty") not in ALLOWED_DIFFICULTIES or not isinstance(sample.get("modelPath"), bool):
             raise ValueError(f"semantic candidate sample {index} has invalid rule/model-path metadata")
+        if sample["modelPath"]:
+            actual_model_path_records[split] += 1
         if not isinstance(sample.get("instructionText"), str) or not sample["instructionText"]:
             raise ValueError(f"semantic candidate sample {index} has no eligible instruction")
 
@@ -256,6 +260,11 @@ def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list
         raise ValueError("semantic candidate prompt family leaked across splits")
     if actual_split_records != EXPECTED_SPLIT_RECORDS:
         raise ValueError("semantic candidate actual split counts are not exactly 300/100/100")
+    if actual_model_path_records != EXPECTED_MODEL_PATH_SPLIT_RECORDS:
+        raise ValueError(
+            "semantic candidate model-path counts must be exactly "
+            "train=244 calibration=85 holdout=64 within the 300/100/100 partitions"
+        )
     for split in EXPECTED_SPLIT_RECORDS:
         if len(actual_split_families[split]) != declared_split_counts[split]["families"]:
             raise ValueError(f"semantic candidate {split} family count does not match the manifest")

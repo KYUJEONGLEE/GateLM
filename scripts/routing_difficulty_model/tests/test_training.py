@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -277,6 +278,30 @@ class CalibrationMathTests(unittest.TestCase):
         np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-15)
 
 
+class TrainingPolicyContractTests(unittest.TestCase):
+    def test_semantic_candidate_policy_fixes_l2_c_grid_and_family_folds(self) -> None:
+        policy = json.loads(
+            (TOOL_DIR / "training-policy.semantic-candidates.v2.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        regularization = policy["regularization"]
+
+        self.assertEqual(regularization["penalty"], "l2")
+        self.assertEqual(regularization["solver"], "liblinear")
+        self.assertEqual(
+            regularization["cCandidates"],
+            [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0],
+        )
+        self.assertEqual(regularization["groupFolds"], 5)
+        self.assertEqual(regularization["selectionMetric"], "mean_log_loss")
+        self.assertEqual(
+            regularization["tieBreakers"],
+            ["mean_brier_score", "stronger_regularization"],
+        )
+        self.assertEqual(regularization["maxIterations"], 2000)
+
+
 class ToyTrainingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -297,6 +322,8 @@ class ToyTrainingTests(unittest.TestCase):
         self.assertEqual(artifact["threshold"], 0.45)
         self.assertIn(artifact["calibrator"]["type"], {"platt", "isotonic"})
         self.assertTrue(artifact["contentHash"].startswith("sha256:"))
+        self.assertTrue(all(math.isfinite(value) for value in artifact["weights"]))
+        self.assertTrue(math.isfinite(artifact["bias"]))
         self.assertEqual(report["modelPathSplitCounts"]["holdout"]["samples"], 4)
         self.assertNotIn("holdout", report)
         self.assertTrue(report["holdoutEvaluationDeferred"])
@@ -314,6 +341,18 @@ class ToyTrainingTests(unittest.TestCase):
             "intercept",
         ):
             self.assertNotIn(forbidden, serialized_report)
+        for candidate in report["regularizationSelection"]["candidates"]:
+            if candidate["status"] != "valid":
+                continue
+            self.assertEqual(len(candidate["foldMetrics"]), 2)
+            self.assertAlmostEqual(
+                candidate["logLoss"],
+                sum(item["logLoss"] for item in candidate["foldMetrics"]) / 2,
+            )
+            self.assertAlmostEqual(
+                candidate["brierScore"],
+                sum(item["brierScore"] for item in candidate["foldMetrics"]) / 2,
+            )
         isotonic_evaluation = next(
             candidate
             for candidate in report["calibrationSelection"]["candidates"]
@@ -384,6 +423,91 @@ class ToyTrainingTests(unittest.TestCase):
         self.assertEqual(raised.exception.max_iterations, 2000)
         self.assertEqual(raised.exception.observed_iterations, 2000)
 
+    def test_family_group_folds_are_disjoint_and_deterministic(self) -> None:
+        import numpy as np
+
+        groups = np.asarray(
+            [f"family-{family}" for family in range(10) for _ in range(2)],
+            dtype=object,
+        )
+        x = np.zeros((len(groups), 1), dtype=float)
+        y = np.asarray([index % 2 for index in range(len(groups))], dtype=int)
+
+        def split_signature() -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
+            splitter = training._group_folds(groups, 5)
+            return [
+                (tuple(fit_indices), tuple(validation_indices))
+                for fit_indices, validation_indices in splitter.split(x, y, groups)
+            ]
+
+        first = split_signature()
+        self.assertEqual(first, split_signature())
+        self.assertEqual(len(first), 5)
+        for fit_indices, validation_indices in first:
+            fit_families = {groups[index] for index in fit_indices}
+            validation_families = {groups[index] for index in validation_indices}
+            self.assertTrue(fit_families.isdisjoint(validation_families))
+
+    def test_regularization_metric_priority_is_log_loss_then_brier_then_smaller_c(self) -> None:
+        tolerance = 0.000001
+        selected = {"logLoss": 0.4, "brierScore": 0.2}
+
+        self.assertTrue(
+            training._candidate_better(
+                {"logLoss": 0.39, "brierScore": 0.9},
+                selected,
+                tolerance,
+                (10.0,),
+                (1.0,),
+            )
+        )
+        self.assertTrue(
+            training._candidate_better(
+                {"logLoss": 0.4000005, "brierScore": 0.1},
+                selected,
+                tolerance,
+                (10.0,),
+                (1.0,),
+            )
+        )
+        self.assertTrue(
+            training._candidate_better(
+                selected,
+                selected,
+                tolerance,
+                (0.1,),
+                (1.0,),
+            )
+        )
+        self.assertFalse(
+            training._candidate_better(
+                selected,
+                selected,
+                tolerance,
+                (10.0,),
+                (1.0,),
+            )
+        )
+
+    def test_regularization_policy_shape_fails_closed(self) -> None:
+        import numpy as np
+
+        config = toy_training_policy()["regularization"]
+        x = np.asarray([[0.0], [1.0], [0.0], [1.0]], dtype=float)
+        y = np.asarray([0, 1, 0, 1], dtype=int)
+        groups = np.asarray(["a", "a", "b", "b"], dtype=object)
+        invalid_values = {
+            "selectionMetric": "accuracy",
+            "tieBreakers": ["stronger_regularization", "mean_brier_score"],
+            "cCandidates": [1.0, 0.1],
+            "groupFolds": 1,
+        }
+        for field, value in invalid_values.items():
+            with self.subTest(field=field):
+                mutated = {**config, field: value}
+                with self.assertRaises(ValueError):
+                    training._select_regularization(x, y, groups, mutated)
+
     def test_regularization_excludes_c_when_any_fold_fails_to_converge(self) -> None:
         import numpy as np
 
@@ -442,6 +566,31 @@ class ToyTrainingTests(unittest.TestCase):
 
         with mock.patch.object(training, "_fit_logistic", side_effect=fail_final_fit):
             with self.assertRaisesRegex(ValueError, "final fit"):
+                train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
+
+    def test_final_logistic_fit_rejects_non_finite_weights_or_bias(self) -> None:
+        import numpy as np
+
+        policy = toy_training_policy()
+        export = toy_vector_export()
+        original_fit = training._fit_logistic
+        full_train_size = sum(
+            sample["split"] == "train" and sample["modelPath"]
+            for sample in export["samples"]
+        )
+
+        class NonFiniteModel:
+            coef_ = np.full((1, 42), float("nan"), dtype=float)
+            intercept_ = np.asarray([float("inf")], dtype=float)
+            n_iter_ = np.asarray([1], dtype=int)
+
+        def non_finite_final_fit(x, y, c_value, config):
+            if len(x) == full_train_size:
+                return NonFiniteModel()
+            return original_fit(x, y, c_value, config)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=non_finite_final_fit):
+            with self.assertRaisesRegex(ValueError, "invalid weights or bias"):
                 train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
 
     def test_trains_all_offline_candidates_with_separate_fit_material(self) -> None:

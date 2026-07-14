@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -1037,7 +1038,7 @@ func classifyDifficultyWithLatency(classifier routing.RuleBasedDifficultyClassif
 		}
 		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
-	latencyChecksumSink ^= checksum
+	atomic.AddUint64(&latencyChecksumSink, checksum)
 	return actual, latencies
 }
 
@@ -1056,7 +1057,7 @@ func classifyShadowDifficultyWithLatency(classifier routing.DifficultyClassifier
 		}
 		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
-	latencyChecksumSink ^= checksum
+	atomic.AddUint64(&latencyChecksumSink, checksum)
 	return actual, latencies
 }
 
@@ -1081,7 +1082,7 @@ func classifyShadowTotalWithLatency(classifier routing.DifficultyClassifier, pro
 		}
 		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
-	latencyChecksumSink ^= checksum
+	atomic.AddUint64(&latencyChecksumSink, checksum)
 	return latencies
 }
 
@@ -1227,7 +1228,7 @@ func classifyTotalWithLatency(classifier routing.RuleBasedPromptClassifier, prom
 		}
 		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
-	latencyChecksumSink ^= checksum
+	atomic.AddUint64(&latencyChecksumSink, checksum)
 	return latencies
 }
 
@@ -1259,7 +1260,7 @@ func classifyCategoryWithWarmupLatency(classifier routing.RuleBasedCategoryClass
 		}
 		latencies = append(latencies, perCallDurationMicros(time.Since(start), batchSize))
 	}
-	latencyChecksumSink ^= checksum
+	atomic.AddUint64(&latencyChecksumSink, checksum)
 	return result, latencies
 }
 
