@@ -330,6 +330,30 @@ export async function sendEmployeeInvitation(
   }
 }
 
+export async function deleteEmployeeInvitation(
+  values: EmployeeInvitationValues,
+  options?: ControlPlaneRequestOptions
+): Promise<EmployeeRequestResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(values.tenantId)}/employees/${encodeURIComponent(values.employeeId)}/invitations`,
+      {
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
+        method: "DELETE"
+      }
+    );
+
+    return readEmployeeResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
 export async function createEmployee(
   values: EmployeeCreateValues,
   options?: ControlPlaneRequestOptions

@@ -105,6 +105,19 @@ export class EmployeesController {
     };
   }
 
+  @Delete('tenants/:tenantId/employees/:employeeId/invitations')
+  async deleteEmployeeInvitation(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+  ): Promise<DataEnvelope<EmployeeResponseDto>> {
+    return {
+      data: await this.employeesService.deleteEmployeeInvitation(
+        tenantId,
+        employeeId,
+      ),
+    };
+  }
+
   @Patch('tenants/:tenantId/employees/:employeeId')
   async updateEmployee(
     @Param('tenantId', ParseUUIDPipe) tenantId: string,

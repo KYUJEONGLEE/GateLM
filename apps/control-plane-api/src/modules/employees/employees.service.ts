@@ -657,6 +657,43 @@ export class EmployeesService {
     };
   }
 
+  async deleteEmployeeInvitation(
+    tenantId: string,
+    employeeId: string,
+  ): Promise<EmployeeResponseDto> {
+    const employee = await this.getEmployeeOrThrow(tenantId, employeeId);
+
+    if (
+      employee.invitationStatus !== 'pending' ||
+      employee.acceptedAt !== null
+    ) {
+      throw new BadRequestException('Employee invitation is not pending.');
+    }
+
+    const revokedAt = new Date();
+    const result = await this.prisma.employee.updateMany({
+      data: {
+        invitationExpiresAt: null,
+        invitationRevokedAt: revokedAt,
+        invitationStatus: 'revoked',
+        invitationTokenHash: null,
+      },
+      where: {
+        acceptedAt: null,
+        deletedAt: null,
+        id: employeeId,
+        invitationStatus: 'pending',
+        tenantId,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new BadRequestException('Employee invitation is no longer pending.');
+    }
+
+    return this.getEmployeeResponseOrThrow(tenantId, employeeId);
+  }
+
   async updateEmployee(
     tenantId: string,
     employeeId: string,

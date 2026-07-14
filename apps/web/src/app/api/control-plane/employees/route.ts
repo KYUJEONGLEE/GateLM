@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   createEmployee,
+  deleteEmployeeInvitation,
   disableProjectEmployeeAssignment,
   importEmployeeOrganizationCsv,
   importEmployeesCsv,
@@ -80,6 +81,7 @@ export async function POST(request: Request) {
 type EmployeeAction =
   | "assign"
   | "create"
+  | "deleteInvitation"
   | "disableAssignment"
   | "importCsv"
   | "importOrganizationCsv"
@@ -105,6 +107,12 @@ async function runEmployeeAction(
     return isEmployeeInvitationValues(values) ? sendEmployeeInvitation(values, requestOptions) : null;
   }
 
+  if (action === "deleteInvitation") {
+    return isEmployeeInvitationValues(values)
+      ? deleteEmployeeInvitation(values, requestOptions)
+      : null;
+  }
+
   if (action === "create") {
     return isEmployeeCreateValues(values) ? createEmployee(values, requestOptions) : null;
   }
@@ -128,6 +136,7 @@ function isEmployeeAction(value: unknown): value is EmployeeAction {
   return (
     value === "assign" ||
     value === "create" ||
+    value === "deleteInvitation" ||
     value === "disableAssignment" ||
     value === "importCsv" ||
     value === "importOrganizationCsv" ||

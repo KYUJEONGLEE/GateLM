@@ -17050,12 +17050,14 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .employee-list-actions {
+  flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .employee-selection-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
