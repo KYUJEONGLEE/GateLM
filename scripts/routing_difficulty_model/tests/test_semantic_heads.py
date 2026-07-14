@@ -223,6 +223,28 @@ class SemanticHeadsTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, serialized)
 
+    def test_candidate_selection_phase_does_not_evaluate_holdout_heads(self) -> None:
+        exported = semantic_head_training_export()
+
+        def encode(instruction_text: str) -> np.ndarray:
+            index = int(instruction_text.removeprefix("approved instruction "))
+            return np.asarray(
+                [index % 3, (index // 3) % 3, index / 20.0, 1.0], dtype=np.float32
+            )
+
+        _, report = train_and_evaluate_semantic_heads(
+            exported,
+            encode,
+            artifact_version="difficulty-semantic-heads.selection-test-v1",
+            encoder_version="difficulty-encoder.selection-test-v1",
+            encoder_hash="d" * 64,
+            pooling_version="difficulty-pooling.selection-test-v1",
+            evaluation_splits=("calibration",),
+        )
+
+        self.assertEqual(set(report["splits"]), {"calibration"})
+        self.assertNotIn("holdout", report["splits"])
+
     def test_offline_workflow_rejects_family_split_leakage(self) -> None:
         exported = semantic_head_training_export()
         exported["samples"][-1]["familyId"] = exported["samples"][0]["familyId"]

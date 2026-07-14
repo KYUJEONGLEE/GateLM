@@ -52,6 +52,12 @@ projected /= max(np.linalg.norm(projected), 1e-12)
 
 Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[64,384]`만 포함한다. 두 array는 finite `float32`여야 한다. PCA parameter, file, source dataset과 runtime component hash는 manifest로 검증한다. Projection norm이 finite가 아니거나 `1e-12` 이하이면 zero vector를 반환하지 않고 `invalid_embedding`으로 처리한다.
 
+### 2.1 Candidate selection과 untouched Holdout
+
+42D·106D·118D candidate는 `difficulty-semantic-candidate-selection.2026-07-15.v1`에 따라 calibration split의 selected-calibrator family-grouped CV log loss로 선택한다. Tie는 Brier score, lower dimension 순서로만 해소한다. Candidate별 Holdout metric을 생성하거나 Holdout accuracy로 candidate를 선택하면 안 된다.
+
+선택된 candidate의 model, calibrator, threshold, encoder/PCA/semantic-head hash를 먼저 freeze한 다음 그 candidate만 untouched Holdout 100건에 한 번 적용한다. Non-selected candidate report에는 Holdout outcome을 남기지 않는다. Component를 바꾸거나 Holdout 결과를 보고 다시 선택하면 기존 final evidence를 폐기하고 새 version과 untouched Holdout으로 다시 검증한다.
+
 ## 3. Artifact And Distribution Contract
 
 PCA NPZ와 작은 manifest는 source control에 포함한다. Tokenizer와 ONNX model처럼 큰 runtime artifact는 Git에 포함하지 않는다. 개발 환경에서는 `.tmp/difficulty-semantic-encoder-artifacts`의 로컬 artifact cache에 exact pinned revision과 hash로 준비한다.

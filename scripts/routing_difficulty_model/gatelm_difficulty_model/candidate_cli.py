@@ -26,7 +26,7 @@ DEFAULT_DATASET_MANIFEST = (
     REPO_ROOT
     / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json"
 )
-DEFAULT_POLICY = TOOL_DIR / "training-policy.semantic-candidates.v1.json"
+DEFAULT_POLICY = TOOL_DIR / "training-policy.semantic-candidates.v2.json"
 DEFAULT_OUTPUT_DIRECTORY = TOOL_DIR / "artifacts/candidates"
 
 
@@ -51,7 +51,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--bundle-version",
-        default="difficulty-feature-bundle.owner-approved-500.2026-07-15.v1",
+        default="difficulty-feature-bundle.owner-approved-500.2026-07-15.v2",
     )
     parser.add_argument("--go", default=os.environ.get("GATELM_GO_EXECUTABLE", "go"))
     return parser.parse_args(argv)
@@ -123,15 +123,15 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any], dict[
     output_directory.mkdir(parents=True, exist_ok=True)
     write_json(output_directory / "difficulty-semantic-heads.owner-approved-500.v1.json", semantic_heads)
     candidate_paths = {
-        "42d-rule-vector-v1": "difficulty-candidate-a-42d.owner-approved-500.v1.json",
-        "42d-rule-vector-v1-plus-projection": "difficulty-candidate-b-106d.owner-approved-500.v1.json",
+        "42d-rule-vector-v1": "difficulty-candidate-a-42d.owner-approved-500.v2.json",
+        "42d-rule-vector-v1-plus-projection": "difficulty-candidate-b-106d.owner-approved-500.v2.json",
         "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities": (
-            "difficulty-candidate-c-118d.owner-approved-500.v1.json"
+            "difficulty-candidate-c-118d.owner-approved-500.v2.json"
         ),
     }
     for candidate_name, artifact in artifacts.items():
         write_json(output_directory / candidate_paths[candidate_name], artifact)
-    write_json(output_directory / "difficulty-candidate-comparison.owner-approved-500.v1.json", report)
+    write_json(output_directory / "difficulty-candidate-comparison.owner-approved-500.v2.json", report)
     return semantic_heads, artifacts, report
 
 

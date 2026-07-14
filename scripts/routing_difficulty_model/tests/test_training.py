@@ -298,6 +298,8 @@ class ToyTrainingTests(unittest.TestCase):
         self.assertIn(artifact["calibrator"]["type"], {"platt", "isotonic"})
         self.assertTrue(artifact["contentHash"].startswith("sha256:"))
         self.assertEqual(report["modelPathSplitCounts"]["holdout"]["samples"], 4)
+        self.assertNotIn("holdout", report)
+        self.assertTrue(report["holdoutEvaluationDeferred"])
         self.assertFalse(report["runtimePromotionEvaluated"])
         serialized_report = json.dumps(report, sort_keys=True)
         for forbidden in (

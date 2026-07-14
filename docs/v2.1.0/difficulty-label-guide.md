@@ -212,7 +212,7 @@ Family가 training-eligible이려면 포함하려는 모든 record가 `human_rev
 - [`training/difficulty-training-candidate-500.owner-approved.manifest.json`](training/difficulty-training-candidate-500.owner-approved.manifest.json): 89개 approved family, versioned minimum-family gate와 `difficulty-family-constrained-split.2026-07-15.v1`의 family-disjoint train 300/calibration 100/holdout 100
 - [`reviews/difficulty-training-candidate-500.owner-approval.json`](reviews/difficulty-training-candidate-500.owner-approval.json): 승인 범위, synthetic provenance 보존, dataset·manifest hash와 gate 결과
 
-`difficulty-training-minimum-family-policy.2026-07-14.v1`은 승인된 candidate의 관찰 최소값을 고정한다. 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 family 이상을 요구한다. Split seed는 `20260715`이며 한 prompt family 전체가 반드시 한 split에만 있어야 한다. Train 300건은 encoder PCA와 model fit에, calibration 100건은 calibrator 선택·fit에, untouched holdout 100건은 final gate에만 사용한다. 이 승격은 offline model 학습 input eligibility이며 학습 결과의 성능, threshold 선택, runtime 배포 또는 GA를 자동 승인하지 않는다.
+`difficulty-training-minimum-family-policy.2026-07-14.v1`은 승인된 candidate의 관찰 최소값을 고정한다. 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 family 이상을 요구한다. Split seed는 `20260715`이며 한 prompt family 전체가 반드시 한 split에만 있어야 한다. Train 300건은 encoder PCA와 model fit에, calibration 100건은 calibrator 선택·fit과 42D·106D·118D feature candidate 선택에 사용한다. Candidate 선택은 calibration family-grouped CV log loss, Brier score, lower dimension 순서로만 수행한다. Untouched holdout 100건은 candidate·calibrator·threshold·component hash를 freeze한 뒤 선택된 단 하나의 candidate에 대한 final gate에만 사용한다. 이 승격은 offline model 학습 input eligibility이며 학습 결과의 성능, threshold 선택, runtime 배포 또는 GA를 자동 승인하지 않는다.
 
 ## 11. 금지 데이터
 

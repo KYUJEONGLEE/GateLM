@@ -1063,16 +1063,6 @@ def _fit_candidate(
         "calibrator": calibrator_material,
     }
 
-    holdout_samples = model_samples_by_split["holdout"]
-    holdout_x, holdout_y, _ = arrays(holdout_samples)
-    holdout_scores = apply_calibrator(model.predict_proba(holdout_x)[:, 1])
-    by_category: dict[str, dict[str, Any]] = {}
-    for category in sorted({sample["expectedCategory"] for sample in holdout_samples}):
-        indices = [index for index, sample in enumerate(holdout_samples) if sample["expectedCategory"] == category]
-        by_category[category] = {
-            "samples": len(indices),
-            **_metrics(holdout_y[indices], holdout_scores[indices]),
-        }
     calibration_selection = {
         "selectedType": calibrator_kind,
         "candidates": calibration_evaluations,
@@ -1108,14 +1098,11 @@ def _fit_candidate(
             "maxIterations": policy["regularization"]["maxIterations"],
         },
         "calibrationSelection": calibration_selection,
-        "holdout": {
-            "overall": {"samples": len(holdout_samples), **_metrics(holdout_y, holdout_scores)},
-            "byExpectedCategory": by_category,
-        },
+        "holdoutEvaluationDeferred": True,
         "runtimePromotionEvaluated": False,
         "notes": [
-            "This report contains aggregate calibrated results only.",
-            "Runtime promotion and rule-based directional-error gates require a separate approved evidence run.",
+            "Model and calibrator fitting do not read holdout labels or holdout outcome metrics.",
+            "The selected frozen candidate is evaluated on holdout by the outer candidate suite.",
         ],
     }
     return fitted, report

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "gatelm.difficulty-offline-model-artifact.v1",
-  "artifactVersion": "difficulty-offline.owner-approved-500.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v1",
+  "artifactVersion": "difficulty-offline.owner-approved-500.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v2",
   "modelVersion": "difficulty-logistic-v1",
   "offlineFeatureShapeVersion": "difficulty-offline-feature-shape.v1",
   "candidateName": "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities",
@@ -26261,9 +26261,9 @@
   "trainingDatasetSha256": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
   "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
   "splitManifestSha256": "7e6e81a79741eb5f1b1aeec33dcd7cb92621bc2832feb57414e425157b51a6f3",
-  "trainingPolicyVersion": "difficulty-logistic-training.semantic-candidates.2026-07-15.v1",
+  "trainingPolicyVersion": "difficulty-logistic-training.semantic-candidates.2026-07-15.v2",
   "regularization": {
-    "policyVersion": "difficulty-logistic-training.semantic-candidates.2026-07-15.v1",
+    "policyVersion": "difficulty-logistic-training.semantic-candidates.2026-07-15.v2",
     "penalty": "l2",
     "solver": "liblinear",
     "selectedC": 10.0,
@@ -26277,9 +26277,9 @@
     "projection": "sha256:cddd5ea36ab6ee5bae0144e04f3faabe1c593857c5f53e058aa184ae790e2e12",
     "semanticHeads": "sha256:64b0590af9a9cbb8bfc62d43bdcb2930ae584eee59e2707aa9c4af7b358ef9fb"
   },
-  "bundleVersion": "difficulty-feature-bundle.owner-approved-500.2026-07-15.v1",
+  "bundleVersion": "difficulty-feature-bundle.owner-approved-500.2026-07-15.v2",
   "bundleHashAlgorithm": "difficulty-feature-bundle-material.v1",
   "contentHashAlgorithm": "difficulty-offline-model-inference-material.v1",
-  "bundleHash": "sha256:7a5c209afeffb5fdae996d7972714aa121f1d8f7e095acd163788d7095b38c59",
-  "contentHash": "sha256:599871645a6ccc90ef9894ba9c5f30ebc4103e5e2ee5f09d46b1764180eed8d0"
+  "bundleHash": "sha256:4835d722bba348416693eda83bc33ff0328d93bb4e806c762481df94f57ec5ed",
+  "contentHash": "sha256:b41ed845c7b6931c7ad5738c7ef95e3013d5b1708ccd09440a86db5cd158efa0"
 }

@@ -4,9 +4,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const defaultRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const candidateDirectory = "scripts/routing_difficulty_model/artifacts/candidates";
-const reportPath = `${candidateDirectory}/difficulty-candidate-comparison.owner-approved-500.v1.json`;
+const reportPath = `${candidateDirectory}/difficulty-candidate-comparison.owner-approved-500.v2.json`;
 const semanticHeadsPath = `${candidateDirectory}/difficulty-semantic-heads.owner-approved-500.v1.json`;
-const policyPath = "scripts/routing_difficulty_model/training-policy.semantic-candidates.v1.json";
+const policyPath = "scripts/routing_difficulty_model/training-policy.semantic-candidates.v2.json";
 const encoderManifestPath =
   "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json";
 const datasetManifestPath =
@@ -15,17 +15,17 @@ const candidateArtifacts = [
   {
     name: "42d-rule-vector-v1",
     dimension: 42,
-    path: `${candidateDirectory}/difficulty-candidate-a-42d.owner-approved-500.v1.json`,
+    path: `${candidateDirectory}/difficulty-candidate-a-42d.owner-approved-500.v2.json`,
   },
   {
     name: "42d-rule-vector-v1-plus-projection",
     dimension: 106,
-    path: `${candidateDirectory}/difficulty-candidate-b-106d.owner-approved-500.v1.json`,
+    path: `${candidateDirectory}/difficulty-candidate-b-106d.owner-approved-500.v2.json`,
   },
   {
     name: "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities",
     dimension: 118,
-    path: `${candidateDirectory}/difficulty-candidate-c-118d.owner-approved-500.v1.json`,
+    path: `${candidateDirectory}/difficulty-candidate-c-118d.owner-approved-500.v2.json`,
   },
 ];
 const expectedSplitRecords = { train: 300, calibration: 100, holdout: 100 };
@@ -73,6 +73,76 @@ function sameSplitCounts(left, right) {
   );
 }
 
+function selectedCalibrationEvaluation(candidateReport) {
+  const selectedType = candidateReport?.training?.calibrationSelection?.selectedType;
+  return candidateReport?.training?.calibrationSelection?.candidates?.find(
+    (candidate) => candidate?.type === selectedType && candidate?.status === "valid",
+  );
+}
+
+function selectByCalibrationEvidence(candidateReports, tolerance) {
+  if (!Number.isFinite(tolerance) || tolerance < 0) return null;
+  const scored = Object.entries(candidateReports).map(([name, report]) => ({
+    name,
+    logLoss: report?.selectionEvidence?.groupCvLogLoss,
+    brierScore: report?.selectionEvidence?.groupCvBrierScore,
+    dimension: report?.totalDimension,
+  }));
+  if (
+    scored.length === 0 ||
+    scored.some(
+      ({ logLoss, brierScore, dimension }) =>
+        !Number.isFinite(logLoss) ||
+        logLoss < 0 ||
+        !Number.isFinite(brierScore) ||
+        brierScore < 0 ||
+        !Number.isInteger(dimension) ||
+        dimension <= 0,
+    )
+  ) {
+    return null;
+  }
+  const bestLogLoss = Math.min(...scored.map(({ logLoss }) => logLoss));
+  let contenders = scored.filter(({ logLoss }) => Math.abs(logLoss - bestLogLoss) <= tolerance);
+  const bestBrier = Math.min(...contenders.map(({ brierScore }) => brierScore));
+  contenders = contenders.filter(({ brierScore }) => Math.abs(brierScore - bestBrier) <= tolerance);
+  const bestDimension = Math.min(...contenders.map(({ dimension }) => dimension));
+  contenders = contenders.filter(({ dimension }) => dimension === bestDimension);
+  return contenders.length === 1 ? contenders[0].name : null;
+}
+
+function expectedPromotionSafetyGate(candidate, baseline) {
+  function comparison(candidateRow, baselineRow) {
+    return {
+      candidateCount: candidateRow?.complexToSimpleCount,
+      baselineCount: baselineRow?.complexToSimpleCount,
+      candidateRate: candidateRow?.complexToSimpleRate,
+      baselineRate: baselineRow?.complexToSimpleRate,
+      passed:
+        candidateRow?.complexToSimpleCount <= baselineRow?.complexToSimpleCount &&
+        candidateRow?.complexToSimpleRate <= baselineRow?.complexToSimpleRate,
+    };
+  }
+  const candidateCategories = candidate?.byExpectedCategory;
+  const baselineCategories = baseline?.byExpectedCategory;
+  if (!candidateCategories || !baselineCategories) return null;
+  const categories = Object.keys(candidateCategories).sort();
+  if (JSON.stringify(categories) !== JSON.stringify(Object.keys(baselineCategories).sort())) return null;
+  const overall = comparison(candidate, baseline);
+  const byExpectedCategory = Object.fromEntries(
+    categories.map((category) => [
+      category,
+      comparison(candidateCategories[category], baselineCategories[category]),
+    ]),
+  );
+  return {
+    policy: "complex_to_simple_non_increase_overall_and_each_expected_category",
+    overall,
+    byExpectedCategory,
+    passed: overall.passed && Object.values(byExpectedCategory).every(({ passed }) => passed),
+  };
+}
+
 function findForbiddenReportKeys(value, location, failures) {
   if (Array.isArray(value)) {
     value.forEach((item, index) => findForbiddenReportKeys(item, `${location}[${index}]`, failures));
@@ -111,10 +181,18 @@ export function verifyDifficultySemanticCandidates(options = {}) {
   }
 
   if (
-    report.schemaVersion !== "gatelm.difficulty-offline-candidate-comparison.v1" ||
-    report.status !== "offline_selection_evidence_not_runtime_promotion" ||
+    report.schemaVersion !== "gatelm.difficulty-offline-candidate-comparison.v2" ||
+    report.status !==
+      "offline_selection_and_untouched_holdout_evidence_not_runtime_promotion" ||
     report.productRuntimeChanged !== false ||
-    report.finalPromotionHoldoutRequiredAfterSelection !== true
+    report.finalPromotionHoldoutRequiredAfterSelection !== false ||
+    report.holdoutUsedForCandidateSelection !== false ||
+    report.runtimePromotionEligible !== false ||
+    !Array.isArray(report.runtimePromotionBlockers) ||
+    !report.runtimePromotionBlockers.includes(
+      "runtime_packaging_latency_failure_isolation_not_evaluated",
+    ) ||
+    !report.runtimePromotionBlockers.includes("active_runtime_contract_not_approved")
   ) {
     failures.push(`${reportPath}: report identity/runtime boundary is invalid`);
   }
@@ -140,9 +218,21 @@ export function verifyDifficultySemanticCandidates(options = {}) {
     failures.push(`${encoderManifestPath}: PCA dataset/split provenance does not match candidate evidence`);
   }
   if (
-    policy.policyVersion !== "difficulty-logistic-training.semantic-candidates.2026-07-15.v1" ||
+    policy.policyVersion !== "difficulty-logistic-training.semantic-candidates.2026-07-15.v2" ||
     policy.splitPolicyVersion !== report.splitPolicyVersion ||
-    policy.threshold?.value !== 0.45
+    policy.threshold?.value !== 0.45 ||
+    policy.candidateSelection?.policyVersion !==
+      "difficulty-semantic-candidate-selection.2026-07-15.v1" ||
+    policy.candidateSelection?.evidenceSplit !== "calibration" ||
+    policy.candidateSelection?.selectionMetric !==
+      "selected_calibrator_group_cv_log_loss" ||
+    !Number.isFinite(policy.candidateSelection?.tieTolerance) ||
+    policy.candidateSelection.tieTolerance < 0 ||
+    JSON.stringify(policy.candidateSelection?.tieBreakers) !==
+      JSON.stringify(["selected_calibrator_group_cv_brier_score", "lower_dimension"]) ||
+    policy.candidateSelection?.holdoutUsage !==
+      "final_evaluation_after_candidate_freeze_only" ||
+    JSON.stringify(report.selectionPolicy) !== JSON.stringify(policy.candidateSelection)
   ) {
     failures.push(`${policyPath}: semantic candidate training policy is inconsistent`);
   }
@@ -152,9 +242,11 @@ export function verifyDifficultySemanticCandidates(options = {}) {
     semanticHeads.inputDimension !== 64 ||
     semanticHeads.training?.trainSamples !== 300 ||
     report.semanticHeads?.splits?.calibration?.sampleCount !== 100 ||
-    report.semanticHeads?.splits?.holdout?.sampleCount !== 100
+    report.semanticHeads?.splits?.holdout !== undefined
   ) {
-    failures.push(`${semanticHeadsPath}: semantic heads must use train 300 and canonical E5/PCA 64D→12D material`);
+    failures.push(
+      `${semanticHeadsPath}: selection phase must use train 300, calibration 100, no holdout diagnostics, and canonical E5/PCA 64D→12D material`,
+    );
   }
 
   const membershipHashes = new Set();
@@ -182,9 +274,26 @@ export function verifyDifficultySemanticCandidates(options = {}) {
       candidateReport.bundleHash !== artifact.bundleHash ||
       JSON.stringify(splitSamples(candidateReport.training?.splitCounts)) !==
         JSON.stringify(expectedSplitRecords) ||
-      candidateReport.holdoutClassification?.samples !== 100
+      candidateReport.training?.holdoutEvaluationDeferred !== true ||
+      candidateReport.training?.holdout !== undefined ||
+      candidateReport.holdoutClassification !== undefined ||
+      candidateReport.deltaVsRule !== undefined
     ) {
-      failures.push(`${reportPath}: ${name} report does not match its artifact and 300/100/100 split`);
+      failures.push(
+        `${reportPath}: ${name} report must match its artifact and defer all holdout outcomes`,
+      );
+    }
+    const calibrationEvaluation = selectedCalibrationEvaluation(candidateReport);
+    if (
+      candidateReport?.selectionEvidence?.evidenceSplit !== "calibration" ||
+      candidateReport?.selectionEvidence?.evaluationMethod !==
+        "selected_calibrator_family_grouped_cross_validation" ||
+      candidateReport?.selectionEvidence?.selectedCalibratorType !==
+        candidateReport?.training?.calibrationSelection?.selectedType ||
+      candidateReport?.selectionEvidence?.groupCvLogLoss !== calibrationEvaluation?.logLoss ||
+      candidateReport?.selectionEvidence?.groupCvBrierScore !== calibrationEvaluation?.brierScore
+    ) {
+      failures.push(`${reportPath}: ${name} selection evidence must come only from calibration group-CV`);
     }
     membershipHashes.add(candidateReport?.membershipHash);
   }
@@ -196,6 +305,49 @@ export function verifyDifficultySemanticCandidates(options = {}) {
     JSON.stringify(Object.fromEntries(candidateArtifacts.map(({ name, dimension }) => [name, dimension])))
   ) {
     failures.push(`${reportPath}: candidate dimensions must be exactly 42/106/118`);
+  }
+  const expectedSelectedCandidate = selectByCalibrationEvidence(
+    report.candidates ?? {},
+    policy.candidateSelection?.tieTolerance,
+  );
+  if (!expectedSelectedCandidate || report.selectedCandidate !== expectedSelectedCandidate) {
+    failures.push(`${reportPath}: selected candidate must be determined only by calibration evidence`);
+  }
+  const selectedArtifact = artifacts.find(({ name }) => name === report.selectedCandidate)?.artifact;
+  const freeze = report.selectedCandidateFreeze;
+  const finalHoldout = report.finalHoldoutEvaluation;
+  const expectedSafetyGate = expectedPromotionSafetyGate(
+    finalHoldout?.selectedCandidateClassification,
+    finalHoldout?.ruleBaselineClassification,
+  );
+  if (
+    !selectedArtifact ||
+    freeze?.candidateName !== report.selectedCandidate ||
+    freeze?.artifactVersion !== selectedArtifact.artifactVersion ||
+    freeze?.contentHash !== selectedArtifact.contentHash ||
+    freeze?.bundleHash !== selectedArtifact.bundleHash ||
+    freeze?.calibratorType !== selectedArtifact.calibrator?.type ||
+    freeze?.threshold !== selectedArtifact.threshold ||
+    finalHoldout?.status !== "evaluated_after_candidate_freeze" ||
+    finalHoldout?.accessPolicy !== "selected_candidate_only_after_freeze" ||
+    finalHoldout?.candidateName !== report.selectedCandidate ||
+    finalHoldout?.artifactVersion !== selectedArtifact.artifactVersion ||
+    finalHoldout?.contentHash !== selectedArtifact.contentHash ||
+    finalHoldout?.bundleHash !== selectedArtifact.bundleHash ||
+    finalHoldout?.samples !== 100 ||
+    finalHoldout?.families !== datasetManifest.splitCounts?.holdout?.families ||
+    finalHoldout?.selectedCandidateClassification?.samples !== 100 ||
+    finalHoldout?.ruleBaselineClassification?.samples !== 100 ||
+    !expectedSafetyGate ||
+    JSON.stringify(finalHoldout?.promotionSafetyGate) !== JSON.stringify(expectedSafetyGate) ||
+    (expectedSafetyGate.passed ===
+      report.runtimePromotionBlockers.includes(
+        "holdout_per_category_complex_to_simple_regression",
+      ))
+  ) {
+    failures.push(
+      `${reportPath}: untouched holdout must evaluate only the selected frozen candidate over all 100 records`,
+    );
   }
   findForbiddenReportKeys(report, "report", failures);
   return failures;

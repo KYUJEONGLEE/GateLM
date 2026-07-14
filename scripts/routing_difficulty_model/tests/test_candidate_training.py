@@ -9,7 +9,7 @@ from gatelm_difficulty_model.candidate_training import (
     EXPECTED_CANDIDATE_DIMENSIONS,
     assemble_candidate_samples,
     candidate_membership_hash,
-    select_candidate_by_holdout_accuracy,
+    select_candidate_by_calibration_evidence,
     validate_candidate_training_input,
 )
 from gatelm_difficulty_model.semantic_features import (
@@ -88,27 +88,70 @@ def semantic_probabilities(sample_count: int) -> dict[str, np.ndarray]:
     return result
 
 
+def candidate_selection_policy() -> dict:
+    return {
+        "policyVersion": "difficulty-semantic-candidate-selection.test-v1",
+        "evidenceSplit": "calibration",
+        "selectionMetric": "selected_calibrator_group_cv_log_loss",
+        "tieTolerance": 0.000001,
+        "tieBreakers": ["selected_calibrator_group_cv_brier_score", "lower_dimension"],
+        "holdoutUsage": "final_evaluation_after_candidate_freeze_only",
+    }
+
+
+def candidate_report(dimension: int, log_loss: float, brier_score: float) -> dict:
+    return {
+        "totalDimension": dimension,
+        "selectionEvidence": {
+            "evidenceSplit": "calibration",
+            "evaluationMethod": "selected_calibrator_family_grouped_cross_validation",
+            "selectedCalibratorType": "platt",
+            "groupCvLogLoss": log_loss,
+            "groupCvBrierScore": brier_score,
+        },
+    }
+
+
 class CandidateTrainingTest(unittest.TestCase):
-    def test_selects_unique_highest_holdout_accuracy(self) -> None:
+    def test_selects_lowest_calibration_group_cv_loss_without_holdout(self) -> None:
         reports = {
-            "candidate-a": {"holdoutClassification": {"accuracy": 0.70}},
-            "candidate-b": {"holdoutClassification": {"accuracy": 0.90}},
-            "candidate-c": {"holdoutClassification": {"accuracy": 0.91}},
+            "candidate-a": candidate_report(42, 0.70, 0.25),
+            "candidate-b": candidate_report(106, 0.40, 0.12),
+            "candidate-c": candidate_report(118, 0.31, 0.06),
         }
 
         self.assertEqual(
-            select_candidate_by_holdout_accuracy(reports),
+            select_candidate_by_calibration_evidence(reports, candidate_selection_policy()),
             "candidate-c",
         )
 
-    def test_rejects_tied_highest_holdout_accuracy(self) -> None:
+    def test_holdout_outcomes_cannot_change_candidate_selection(self) -> None:
         reports = {
-            "candidate-b": {"holdoutClassification": {"accuracy": 0.90}},
-            "candidate-c": {"holdoutClassification": {"accuracy": 0.90}},
+            "candidate-a": {
+                **candidate_report(42, 0.70, 0.25),
+                "holdoutClassification": {"accuracy": 1.0},
+            },
+            "candidate-b": {
+                **candidate_report(106, 0.40, 0.12),
+                "holdoutClassification": {"accuracy": 0.0},
+            },
         }
 
-        with self.assertRaisesRegex(ValueError, "unique highest"):
-            select_candidate_by_holdout_accuracy(reports)
+        self.assertEqual(
+            select_candidate_by_calibration_evidence(reports, candidate_selection_policy()),
+            "candidate-b",
+        )
+
+    def test_breaks_calibration_metric_ties_by_lower_dimension(self) -> None:
+        reports = {
+            "candidate-b": candidate_report(106, 0.40, 0.12),
+            "candidate-c": candidate_report(118, 0.40, 0.12),
+        }
+
+        self.assertEqual(
+            select_candidate_by_calibration_evidence(reports, candidate_selection_policy()),
+            "candidate-b",
+        )
 
     def test_validates_exact_300_100_100_and_assembles_42_106_118(self) -> None:
         exported = candidate_export()

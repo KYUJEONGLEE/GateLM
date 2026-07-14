@@ -30,7 +30,7 @@ from .semantic_heads import (
 from .training import OfflineArtifactProvenance, train_from_offline_feature_matrix
 
 
-CANDIDATE_COMPARISON_SCHEMA = "gatelm.difficulty-offline-candidate-comparison.v1"
+CANDIDATE_COMPARISON_SCHEMA = "gatelm.difficulty-offline-candidate-comparison.v2"
 EXPECTED_SPLIT_RECORDS = {"train": 300, "calibration": 100, "holdout": 100}
 EXPECTED_TOTAL_RECORDS = sum(EXPECTED_SPLIT_RECORDS.values())
 EXPECTED_PROJECTION_DIMENSION = 64
@@ -59,38 +59,93 @@ def _require_hex_sha256(value: Any, name: str) -> str:
     return value
 
 
-def select_candidate_by_holdout_accuracy(
+def _finite_metric(value: Any, name: str) -> float:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+    ):
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return float(value)
+
+
+def _selection_evidence(training_report: Mapping[str, Any]) -> dict[str, Any]:
+    calibration = training_report.get("calibrationSelection")
+    if not isinstance(calibration, Mapping):
+        raise ValueError("candidate training report has no calibration selection evidence")
+    selected_type = calibration.get("selectedType")
+    candidates = calibration.get("candidates")
+    if not isinstance(selected_type, str) or not isinstance(candidates, Sequence):
+        raise ValueError("candidate calibration selection evidence is malformed")
+    selected = next(
+        (
+            candidate
+            for candidate in candidates
+            if isinstance(candidate, Mapping)
+            and candidate.get("type") == selected_type
+            and candidate.get("status") == "valid"
+        ),
+        None,
+    )
+    if selected is None:
+        raise ValueError("selected calibrator has no valid family-grouped CV evidence")
+    return {
+        "evidenceSplit": "calibration",
+        "evaluationMethod": "selected_calibrator_family_grouped_cross_validation",
+        "selectedCalibratorType": selected_type,
+        "groupCvLogLoss": _finite_metric(selected.get("logLoss"), "calibration group-CV log loss"),
+        "groupCvBrierScore": _finite_metric(
+            selected.get("brierScore"), "calibration group-CV Brier score"
+        ),
+    }
+
+
+def select_candidate_by_calibration_evidence(
     candidate_reports: Mapping[str, Mapping[str, Any]],
+    selection_policy: Mapping[str, Any],
 ) -> str:
-    """Select the unique candidate with the highest holdout accuracy."""
+    """Select a candidate without reading holdout outcomes."""
 
     if not candidate_reports:
         raise ValueError("candidate selection requires at least one candidate report")
+    if (
+        selection_policy.get("evidenceSplit") != "calibration"
+        or selection_policy.get("selectionMetric")
+        != "selected_calibrator_group_cv_log_loss"
+        or selection_policy.get("tieBreakers")
+        != ["selected_calibrator_group_cv_brier_score", "lower_dimension"]
+        or selection_policy.get("holdoutUsage")
+        != "final_evaluation_after_candidate_freeze_only"
+    ):
+        raise ValueError("candidate selection policy must keep holdout final and untouched")
+    tolerance = _finite_metric(selection_policy.get("tieTolerance"), "candidate tie tolerance")
 
-    accuracies: dict[str, float] = {}
+    scored: list[tuple[str, float, float, int]] = []
     for candidate_name, report in candidate_reports.items():
-        holdout = report.get("holdoutClassification")
-        if not isinstance(holdout, Mapping):
-            raise ValueError(f"candidate {candidate_name} has no holdout classification")
-        accuracy = holdout.get("accuracy")
-        if (
-            not isinstance(accuracy, (int, float))
-            or isinstance(accuracy, bool)
-            or not math.isfinite(float(accuracy))
-            or float(accuracy) < 0
-            or float(accuracy) > 1
-        ):
-            raise ValueError(f"candidate {candidate_name} has an invalid holdout accuracy")
-        accuracies[candidate_name] = float(accuracy)
+        evidence = report.get("selectionEvidence")
+        dimension = report.get("totalDimension")
+        if not isinstance(evidence, Mapping) or evidence.get("evidenceSplit") != "calibration":
+            raise ValueError(f"candidate {candidate_name} has no calibration selection evidence")
+        if isinstance(dimension, bool) or not isinstance(dimension, int) or dimension <= 0:
+            raise ValueError(f"candidate {candidate_name} has an invalid dimension")
+        scored.append(
+            (
+                candidate_name,
+                _finite_metric(evidence.get("groupCvLogLoss"), "candidate group-CV log loss"),
+                _finite_metric(evidence.get("groupCvBrierScore"), "candidate group-CV Brier score"),
+                dimension,
+            )
+        )
 
-    highest_accuracy = max(accuracies.values())
-    selected = [
-        candidate_name
-        for candidate_name, accuracy in accuracies.items()
-        if accuracy == highest_accuracy
-    ]
+    best_log_loss = min(item[1] for item in scored)
+    contenders = [item for item in scored if abs(item[1] - best_log_loss) <= tolerance]
+    best_brier = min(item[2] for item in contenders)
+    contenders = [item for item in contenders if abs(item[2] - best_brier) <= tolerance]
+    best_dimension = min(item[3] for item in contenders)
+    selected = [item[0] for item in contenders if item[3] == best_dimension]
     if len(selected) != 1:
-        raise ValueError("candidate selection requires a unique highest holdout accuracy")
+        raise ValueError("candidate calibration selection tie could not be resolved")
     return selected[0]
 
 
@@ -380,7 +435,42 @@ def _classification_summary(
     }
 
 
-def _holdout_predictions(
+def _complex_to_simple_safety_gate(
+    candidate: Mapping[str, Any], baseline: Mapping[str, Any]
+) -> dict[str, Any]:
+    def comparison(candidate_row: Mapping[str, Any], baseline_row: Mapping[str, Any]) -> dict[str, Any]:
+        candidate_count = int(candidate_row["complexToSimpleCount"])
+        baseline_count = int(baseline_row["complexToSimpleCount"])
+        candidate_rate = float(candidate_row["complexToSimpleRate"])
+        baseline_rate = float(baseline_row["complexToSimpleRate"])
+        return {
+            "candidateCount": candidate_count,
+            "baselineCount": baseline_count,
+            "candidateRate": candidate_rate,
+            "baselineRate": baseline_rate,
+            "passed": candidate_count <= baseline_count and candidate_rate <= baseline_rate,
+        }
+
+    overall = comparison(candidate, baseline)
+    candidate_categories = candidate.get("byExpectedCategory")
+    baseline_categories = baseline.get("byExpectedCategory")
+    if not isinstance(candidate_categories, Mapping) or not isinstance(baseline_categories, Mapping):
+        raise ValueError("holdout safety gate requires category-level directional errors")
+    if set(candidate_categories) != set(baseline_categories):
+        raise ValueError("candidate and baseline holdout categories do not match")
+    by_category = {
+        category: comparison(candidate_categories[category], baseline_categories[category])
+        for category in sorted(candidate_categories)
+    }
+    return {
+        "policy": "complex_to_simple_non_increase_overall_and_each_expected_category",
+        "overall": overall,
+        "byExpectedCategory": by_category,
+        "passed": overall["passed"] and all(row["passed"] for row in by_category.values()),
+    }
+
+
+def _hybrid_predictions(
     artifact: Mapping[str, Any], candidate_samples: Sequence[Mapping[str, Any]]
 ) -> list[str]:
     import numpy as np
@@ -498,6 +588,7 @@ def train_candidate_suite(
         encoder_version=str(encoder_manifest["bundleVersion"]),
         encoder_hash=_require_hex_sha256(encoder_manifest.get("bundleSha256"), "encoder bundle hash"),
         pooling_version=str(encoder_manifest["pooling"]["version"]),
+        evaluation_splits=("calibration",),
     )
     if cursor != EXPECTED_TOTAL_RECORDS:
         raise ValueError("semantic head workflow did not consume all 500 canonical samples")
@@ -543,14 +634,11 @@ def train_candidate_suite(
         bundle_version=bundle_version,
     )
 
-    holdout_source = [sample for sample in samples if sample["split"] == "holdout"]
-    baseline_predictions = [sample["ruleDifficulty"] for sample in holdout_source]
-    baseline_summary = _classification_summary(holdout_source, baseline_predictions)
     artifacts: dict[str, dict[str, Any]] = {}
     candidate_reports: dict[str, Any] = {}
     for candidate in OfflineFeatureCandidate:
         descriptor = shape.descriptor(candidate)
-        artifact_version = artifact_version_prefix + "." + candidate.value + ".v1"
+        artifact_version = artifact_version_prefix + "." + candidate.value + ".v2"
         artifact, training_report = train_from_offline_feature_matrix(
             candidate_samples[candidate],
             descriptor,
@@ -559,11 +647,6 @@ def train_candidate_suite(
             provenance,
         )
         artifacts[candidate.value] = artifact
-        holdout_candidate_samples = [
-            sample for sample in candidate_samples[candidate] if sample["split"] == "holdout"
-        ]
-        predictions = _holdout_predictions(artifact, holdout_candidate_samples)
-        classification = _classification_summary(holdout_source, predictions)
         candidate_reports[candidate.value] = {
             "candidateName": candidate.value,
             "totalDimension": descriptor.total_dimension,
@@ -573,19 +656,53 @@ def train_candidate_suite(
             "contentHash": artifact["contentHash"],
             "calibratorType": artifact["calibrator"]["type"],
             "training": training_report,
-            "holdoutClassification": classification,
-            "deltaVsRule": {
-                "accuracy": classification["accuracy"] - baseline_summary["accuracy"],
-                "complexToSimpleCount": classification["complexToSimpleCount"]
-                - baseline_summary["complexToSimpleCount"],
-            },
+            "selectionEvidence": _selection_evidence(training_report),
         }
 
-    selected_candidate = select_candidate_by_holdout_accuracy(candidate_reports)
+    selection_policy = policy.get("candidateSelection")
+    if not isinstance(selection_policy, Mapping):
+        raise ValueError("semantic candidate policy has no holdout-safe candidate selection policy")
+    selected_candidate = select_candidate_by_calibration_evidence(
+        candidate_reports, selection_policy
+    )
+    selected_kind = OfflineFeatureCandidate(selected_candidate)
+    selected_artifact = artifacts[selected_candidate]
+    selected_report = candidate_reports[selected_candidate]
+
+    # Holdout outcomes are intentionally read only after candidate and calibrator freeze.
+    holdout_source = [sample for sample in samples if sample["split"] == "holdout"]
+    holdout_candidate_samples = [
+        sample for sample in candidate_samples[selected_kind] if sample["split"] == "holdout"
+    ]
+    selected_predictions = _hybrid_predictions(selected_artifact, holdout_candidate_samples)
+    selected_classification = _classification_summary(holdout_source, selected_predictions)
+    baseline_predictions = [sample["ruleDifficulty"] for sample in holdout_source]
+    baseline_summary = _classification_summary(holdout_source, baseline_predictions)
+    promotion_safety_gate = _complex_to_simple_safety_gate(
+        selected_classification, baseline_summary
+    )
+    final_holdout_evaluation = {
+        "status": "evaluated_after_candidate_freeze",
+        "accessPolicy": "selected_candidate_only_after_freeze",
+        "candidateName": selected_candidate,
+        "artifactVersion": selected_artifact["artifactVersion"],
+        "contentHash": selected_artifact["contentHash"],
+        "bundleHash": selected_artifact["bundleHash"],
+        "samples": len(holdout_source),
+        "families": len({sample["familyId"] for sample in holdout_source}),
+        "selectedCandidateClassification": selected_classification,
+        "ruleBaselineClassification": baseline_summary,
+        "promotionSafetyGate": promotion_safety_gate,
+        "deltaVsRule": {
+            "accuracy": selected_classification["accuracy"] - baseline_summary["accuracy"],
+            "complexToSimpleCount": selected_classification["complexToSimpleCount"]
+            - baseline_summary["complexToSimpleCount"],
+        },
+    }
 
     comparison_report = {
         "schemaVersion": CANDIDATE_COMPARISON_SCHEMA,
-        "status": "offline_selection_evidence_not_runtime_promotion",
+        "status": "offline_selection_and_untouched_holdout_evidence_not_runtime_promotion",
         "datasetVersion": exported_input["datasetVersion"],
         "datasetSha256": exported_input["datasetSha256"],
         "splitPolicyVersion": exported_input["splitPolicyVersion"],
@@ -596,11 +713,31 @@ def train_candidate_suite(
             candidate.value: EXPECTED_CANDIDATE_DIMENSIONS[candidate]
             for candidate in OfflineFeatureCandidate
         },
-        "ruleBaselineHoldout": baseline_summary,
         "semanticHeads": semantic_heads_report,
+        "selectionPolicy": dict(selection_policy),
         "candidates": candidate_reports,
         "selectedCandidate": selected_candidate,
+        "selectedCandidateFreeze": {
+            "candidateName": selected_candidate,
+            "artifactVersion": selected_artifact["artifactVersion"],
+            "contentHash": selected_artifact["contentHash"],
+            "bundleHash": selected_artifact["bundleHash"],
+            "calibratorType": selected_report["calibratorType"],
+            "threshold": selected_artifact["threshold"],
+        },
+        "holdoutUsedForCandidateSelection": False,
+        "finalHoldoutEvaluation": final_holdout_evaluation,
         "productRuntimeChanged": False,
-        "finalPromotionHoldoutRequiredAfterSelection": True,
+        "finalPromotionHoldoutRequiredAfterSelection": False,
+        "runtimePromotionEligible": False,
+        "runtimePromotionBlockers": [
+            *(
+                []
+                if promotion_safety_gate["passed"]
+                else ["holdout_per_category_complex_to_simple_regression"]
+            ),
+            "runtime_packaging_latency_failure_isolation_not_evaluated",
+            "active_runtime_contract_not_approved",
+        ],
     }
     return semantic_heads_artifact, artifacts, comparison_report

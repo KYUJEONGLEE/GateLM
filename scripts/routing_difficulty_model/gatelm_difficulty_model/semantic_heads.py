@@ -490,6 +490,7 @@ def train_and_evaluate_semantic_heads(
     encoder_hash: str,
     pooling_version: str,
     calibration_bins: int = 10,
+    evaluation_splits: Sequence[str] = ("calibration", "holdout"),
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run the approved offline workflow without serializing derived sample material."""
 
@@ -593,8 +594,15 @@ def train_and_evaluate_semantic_heads(
     artifact["artifactContentHash"] = _artifact_hash(artifact)
     validate_semantic_heads_artifact(artifact)
 
+    requested_evaluation_splits = tuple(evaluation_splits)
+    if (
+        not requested_evaluation_splits
+        or len(set(requested_evaluation_splits)) != len(requested_evaluation_splits)
+        or any(split not in {"calibration", "holdout"} for split in requested_evaluation_splits)
+    ):
+        raise ValueError("semantic head evaluation splits must be unique calibration/holdout values")
     split_reports: dict[str, Any] = {}
-    for split in ("calibration", "holdout"):
+    for split in requested_evaluation_splits:
         indices = split_indices[split]
         index_array = np.asarray(indices, dtype=np.int64)
         probabilities = predict_semantic_head_probabilities(artifact, matrix[index_array])
