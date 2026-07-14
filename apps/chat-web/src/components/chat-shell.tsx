@@ -39,12 +39,13 @@ export function ChatShell() {
   const [conversations, setConversations] = useState<readonly Conversation[]>([]);
   const [conversationCursor, setConversationCursor] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<readonly Message[]>([]);
+  const [messages, setMessages] = useState<readonly DisplayMessage[]>([]);
   const [messageCursor, setMessageCursor] = useState<string | null>(null);
   const [composer, setComposer] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [policyState, setPolicyState] = useState<PolicyState>('normal');
@@ -60,6 +61,7 @@ export function ChatShell() {
   const renameReturnIdRef = useRef<string | null>(null);
   const streamControllerRef = useRef<AbortController | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
+  const newConversationIdRef = useRef<string | null>(null);
 
   const reportError = useCallback((caught: unknown) => {
     const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
@@ -88,7 +90,7 @@ export function ChatShell() {
         setConversations(page.items);
         setConversationCursor(page.nextCursor);
         setSelectedId(page.items[0]?.id ?? null);
-        setStatus(page.items.length ? '최근 대화를 불러왔습니다.' : '새 대화를 만들어 시작하세요.');
+        setStatus(page.items.length ? '최근 대화를 불러왔습니다.' : '메시지를 입력해 새 대화를 시작하세요.');
       } catch {
         router.replace('/login');
       } finally {
@@ -104,6 +106,12 @@ export function ChatShell() {
       setMessages([]);
       setMessageCursor(null);
       setPolicyState('normal');
+      setError(null);
+      return;
+    }
+    if (newConversationIdRef.current === selectedId) {
+      newConversationIdRef.current = null;
+      setHistoryLoading(false);
       setError(null);
       return;
     }
@@ -155,14 +163,16 @@ export function ChatShell() {
     finally { router.replace('/login'); router.refresh(); }
   }
 
-  async function createConversation() {
-    if (streaming) return;
+  async function createConversation(): Promise<Conversation | null> {
+    if (streaming || creatingConversation) return null;
+    setCreatingConversation(true);
     setError(null);
     try {
       const created = await api<Conversation>('/api/tenant-chat/conversations', {
         body: JSON.stringify({ idempotencyKey: idempotencyKey(), title: '새 대화' }),
         method: 'POST',
       });
+      newConversationIdRef.current = created.id;
       setConversations((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       setSelectedId(created.id);
       setMessages([]);
@@ -171,8 +181,12 @@ export function ChatShell() {
       setStatus('새 대화를 만들었습니다. 메시지를 입력하세요.');
       closeDrawer(false);
       requestAnimationFrame(() => composerRef.current?.focus());
+      return created;
     } catch (caught) {
       reportError(caught);
+      return null;
+    } finally {
+      setCreatingConversation(false);
     }
   }
 
@@ -249,8 +263,14 @@ export function ChatShell() {
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
-    if (!selectedId || streaming || policyState === 'blocked' || !composer.trim()) return;
+    if (streaming || creatingConversation || policyState === 'blocked' || !composer.trim()) return;
     const content = composer;
+    let conversationId = selectedId;
+    if (!conversationId) {
+      const created = await createConversation();
+      if (!created) return;
+      conversationId = created.id;
+    }
     const optimisticUserId = crypto.randomUUID();
     const draftId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -260,7 +280,7 @@ export function ChatShell() {
     setStreaming(true);
     setStatus('답변을 생성하고 있습니다.');
     setMessages((current) => [
-      ...current,
+      ...(selectedId ? current : []),
       { id: optimisticUserId, turnId: optimisticUserId, role: 'user', content, sequence: baseSequence + 1, createdAt: now },
       { id: draftId, turnId: draftId, role: 'assistant', content: '', sequence: baseSequence + 2, createdAt: now },
     ]);
@@ -268,7 +288,7 @@ export function ChatShell() {
     streamControllerRef.current = controller;
     activeTurnIdRef.current = null;
     try {
-      const response = await streamApi(`/api/tenant-chat/conversations/${selectedId}/turns`, {
+      const response = await streamApi(`/api/tenant-chat/conversations/${conversationId}/turns`, {
         body: JSON.stringify({
           content,
           idempotencyKey: idempotencyKey(),
@@ -278,7 +298,7 @@ export function ChatShell() {
         signal: controller.signal,
       });
       const terminal = await consumeTurnSse(response.body, {
-        conversationId: selectedId,
+        conversationId,
         onAccepted: (accepted) => {
           activeTurnIdRef.current = accepted.turnId;
           setMessages((current) => current.map((message) => message.id === optimisticUserId
@@ -301,17 +321,28 @@ export function ChatShell() {
         setStatus('답변 생성을 완료했습니다.');
       } else {
         const detail = terminal.error ?? safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
-        setMessages((current) => current.filter((message) => message.id !== draftId || Boolean(message.content)));
-        if (terminal.type === 'chat.turn.cancelled') setStatus(detail.message);
-        else reportError(new ChatApiError(400, detail));
+        if (terminal.type === 'chat.turn.cancelled') {
+          setMessages((current) => current.filter((message) => message.id !== draftId || Boolean(message.content)));
+          setStatus(detail.message);
+        } else {
+          setMessages((current) => current.map((message) => message.id === draftId ? { ...message, notice: detail } : message));
+          if (isBlockedCode(detail.code)) setPolicyState('blocked');
+          setStatus(detail.message);
+        }
       }
     } catch (caught) {
       const admitted = activeTurnIdRef.current !== null;
-      if (!admitted) setComposer(content);
-      setMessages((current) => current.filter((message) =>
-        (message.id !== draftId || Boolean(message.content)) && (admitted || message.id !== optimisticUserId)));
-      if (caught instanceof DOMException && caught.name === 'AbortError') setStatus('답변 생성을 중지했습니다.');
-      else reportError(caught);
+      if (caught instanceof DOMException && caught.name === 'AbortError') {
+        setMessages((current) => current.filter((message) =>
+          (message.id !== draftId || Boolean(message.content)) && (admitted || message.id !== optimisticUserId)));
+        if (!admitted) setComposer(content);
+        setStatus('답변 생성을 중지했습니다.');
+      } else {
+        const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
+        setMessages((current) => current.map((message) => message.id === draftId ? { ...message, notice: detail } : message));
+        if (isBlockedCode(detail.code)) setPolicyState('blocked');
+        setStatus(detail.message);
+      }
     } finally {
       streamControllerRef.current = null;
       activeTurnIdRef.current = null;
@@ -359,7 +390,7 @@ export function ChatShell() {
           <div className="brand"><span className="brand-mark"><MessageSquareText size={21} aria-hidden /></span>GateLM Chat</div>
           <Button className="mobile-close" variant="ghost" aria-label="대화 메뉴 닫기" onClick={() => closeDrawer(true)}><X size={20} aria-hidden /></Button>
         </div>
-        <Button className="new-conversation" onClick={createConversation} disabled={streaming}><Plus size={17} aria-hidden />새 대화</Button>
+        <Button className="new-conversation" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden />새 대화</Button>
         <div className="conversation-heading"><span>내 대화</span><span>{conversations.length}</span></div>
         <ul className="conversation-list" aria-label="대화 목록">
           {conversations.map((conversation) => <li key={conversation.id} className={conversation.id === selectedId ? 'is-selected' : ''}>
@@ -394,33 +425,36 @@ export function ChatShell() {
       <header className="chat-topbar">
         <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
         <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}</span></div>
-        <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
+        <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
       </header>
-      <div className="conversation-workspace">
+      <div className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
         <div className={`policy-banner policy-${policyState}`} role={policyState === 'blocked' ? 'alert' : 'status'}>
           {policyState === 'normal' ? <ShieldCheck size={18} aria-hidden /> : policyState === 'blocked' ? <AlertTriangle size={18} aria-hidden /> : <Gauge size={18} aria-hidden />}
           <div><strong>{policyCopy.label}</strong><span>{policyCopy.description}</span></div>
         </div>
         {error && <div className="chat-error" role="alert"><AlertTriangle size={18} aria-hidden /><span>{error.message}</span><button aria-label="오류 메시지 닫기" onClick={() => setError(null)}><X size={16} aria-hidden /></button></div>}
         <div className="message-stage">
-          {!selected ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>무엇을 함께 해결할까요?</h1><p>새 대화를 만들면 조직의 정책 안에서 안전하게 질문하고 답변을 이어갈 수 있습니다.</p><Button onClick={createConversation}><Plus size={17} aria-hidden />첫 대화 만들기</Button></div></div>
+          {!selected ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>무엇을 함께 해결할까요?</h1><p>메시지를 보내면 새 대화를 만들고 조직의 정책 안에서 안전하게 답변합니다.</p></div></div>
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
               : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
                 {messages.map((message) => <li key={message.id} className={`message-row message-${message.role}`}>
-                  <div className="message-avatar" aria-hidden>{message.role === 'user' ? displayName.slice(0, 1).toUpperCase() : <MessageSquareText size={17} />}</div>
-                  <article><span className="message-author">{message.role === 'user' ? displayName : 'GateLM'}</span><p>{message.content || (streaming && message === messages.at(-1) ? '답변을 작성하고 있습니다…' : '')}</p></article>
+                  {message.role === 'user' ? <article><span className="sr-only">내 메시지</span><p>{message.content}</p></article> : <>
+                    <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
+                    <article><span className="message-author">GateLM</span>{message.notice
+                      ? <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>
+                      : <p>{message.content || (streaming && message === messages.at(-1) ? '답변을 작성하고 있습니다…' : '')}</p>}</article>
+                  </>}
                 </li>)}
                 {historyLoading && <li className="history-loading"><LoaderCircle className="spin" size={18} aria-hidden />대화 기록을 불러오는 중…</li>}
               </ol>}
           {selected && messageCursor && <Button className="history-more" variant="ghost" onClick={loadMoreMessages} disabled={historyLoading}>대화 기록 더 보기</Button>}
-          {policyState === 'blocked' && <div className="blocked-callout" role="alert"><AlertTriangle size={24} aria-hidden /><div><strong>현재 새 요청을 보낼 수 없습니다.</strong><p>조직 사용 한도가 해제될 때까지 기다리거나 조직 관리자에게 문의해 주세요.</p></div></div>}
         </div>
         <form className="composer-area" onSubmit={sendMessage}>
           <div className={`composer${streaming ? ' is-streaming' : ''}`}>
             <label className="sr-only" htmlFor="chat-composer">메시지 입력</label>
-            <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={!selected || policyState === 'blocked'} placeholder={selected ? policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : '메시지를 입력하세요' : '먼저 새 대화를 만들어 주세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
+            <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={policyState === 'blocked'} placeholder={policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
             {streaming ? <Button type="button" className="stop-button" aria-label="답변 생성 중지" onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden />{stopping ? '중지 중' : '중지'}</Button>
-              : <Button type="submit" aria-label="메시지 보내기" disabled={!selected || !composer.trim() || policyState === 'blocked'}><Send size={18} aria-hidden /></Button>}
+              : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim() || policyState === 'blocked'}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
           </div>
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
         </form>
@@ -440,6 +474,7 @@ export function ChatShell() {
 
 type ConversationPage = Readonly<{ items: readonly Conversation[]; nextCursor: string | null }>;
 type MessagePage = Readonly<{ items: readonly Message[]; nextCursor: string | null }>;
+type DisplayMessage = Message & Readonly<{ notice?: SafeChatError }>;
 
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
