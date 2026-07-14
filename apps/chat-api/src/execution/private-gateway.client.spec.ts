@@ -74,6 +74,17 @@ describe('PrivateGatewayClient', () => {
     expect(signer.authorize).toHaveBeenCalledTimes(2);
   });
 
+  it('does not reattach after the caller aborts during the completion stream', async () => {
+    const signer = signerMock();
+    const controller = new AbortController();
+    global.fetch = jest.fn().mockResolvedValue(sseResponse(abortingStream(controller))) as typeof fetch;
+
+    await expect(client(signer).complete(handle, input, usageIntent, { signal: controller.signal }))
+      .rejects.toMatchObject({ code: 'CHAT_REQUEST_CANCELLED', status: 499 });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(signer.authorize).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces a terminal Provider error without retry', async () => {
     const signer = signerMock();
     global.fetch = jest.fn().mockResolvedValue(sseResponse(textStream([
@@ -222,4 +233,19 @@ function textStream(chunks: string[]) {
 
 function errorStream(chunks: string[]) {
   return new ReadableStream<Uint8Array>({ start(controller) { chunks.forEach((chunk) => controller.enqueue(Buffer.from(chunk))); controller.error(new Error('disconnect')); } });
+}
+
+function abortingStream(controller: AbortController) {
+  let delivered = false;
+  return new ReadableStream<Uint8Array>({
+    pull(streamController) {
+      if (!delivered) {
+        delivered = true;
+        streamController.enqueue(Buffer.from(frame(delta(1, 'partial'))));
+        return;
+      }
+      controller.abort();
+      streamController.error(new Error('aborted'));
+    },
+  });
 }

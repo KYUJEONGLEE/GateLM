@@ -68,6 +68,30 @@ export class StrictCompletionStreamParser {
     const reader = body.getReader();
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let buffer = '';
+    let pendingFrame = '';
+    const drainLines = async () => {
+      buffer = buffer.replace(/\r\n/g, '\n');
+      let lineEnd = buffer.indexOf('\n');
+      while (lineEnd >= 0) {
+        const line = buffer.slice(0, lineEnd);
+        buffer = buffer.slice(lineEnd + 1);
+        if (line.length === 0) {
+          if (pendingFrame.length > 0) {
+            await this.consumeFrame(pendingFrame);
+            pendingFrame = '';
+          }
+        } else {
+          pendingFrame += pendingFrame.length > 0 ? `\n${line}` : line;
+          if (Buffer.byteLength(pendingFrame) > this.frameMaxBytes) {
+            throw new InvalidCompletionStream();
+          }
+        }
+        lineEnd = buffer.indexOf('\n');
+      }
+      const pendingBytes = Buffer.byteLength(pendingFrame) + Buffer.byteLength(buffer) +
+        (pendingFrame.length > 0 && buffer.length > 0 ? 1 : 0);
+      if (pendingBytes > this.frameMaxBytes) throw new InvalidCompletionStream();
+    };
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -76,19 +100,10 @@ export class StrictCompletionStreamParser {
         this.totalBytes += value.byteLength;
         if (this.totalBytes > this.streamMaxBytes) throw new InvalidCompletionStream();
         buffer += decoder.decode(value, { stream: true });
-        buffer = buffer.replace(/\r\n/g, '\n');
-        if (Buffer.byteLength(buffer) > this.frameMaxBytes && !buffer.includes('\n\n')) {
-          throw new InvalidCompletionStream();
-        }
-        let boundary = buffer.indexOf('\n\n');
-        while (boundary >= 0) {
-          const frame = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          await this.consumeFrame(frame);
-          boundary = buffer.indexOf('\n\n');
-        }
+        await drainLines();
       }
       buffer += decoder.decode();
+      await drainLines();
     } catch (error) {
       if (
         error instanceof InvalidCompletionStream ||
@@ -100,7 +115,7 @@ export class StrictCompletionStreamParser {
     } finally {
       reader.releaseLock();
     }
-    if (buffer.length > 0) throw new CompletionStreamDisconnected();
+    if (buffer.length > 0 || pendingFrame.length > 0) throw new CompletionStreamDisconnected();
     if (!this.finalEvent) throw new CompletionStreamDisconnected();
   }
 

@@ -19,6 +19,24 @@ describe('StrictCompletionStreamParser', () => {
     expect(deltas).toEqual(['안녕']);
   });
 
+  it('ignores empty event blocks at stream boundaries and between events', async () => {
+    const parser = new StrictCompletionStreamParser(requestId, turnId, 64 * 1024, 1024 * 1024);
+    await parser.consume(stream([
+      '\n',
+      `${frame(delta(1, '안녕'))}\n`,
+      '\n',
+      `${frame(final(2))}\n`,
+    ]), false);
+
+    expect(parser.finish()).toMatchObject({ assistantContent: '안녕', final: { sequence: 2 } });
+  });
+
+  it('rejects a whitespace-only frame instead of treating it as empty', async () => {
+    const parser = new StrictCompletionStreamParser(requestId, turnId, 64 * 1024, 1024 * 1024);
+    await expect(parser.consume(stream([`\n \n\n${frame(final(1))}`]), false))
+      .rejects.toBeInstanceOf(InvalidCompletionStream);
+  });
+
   it.each([
     ['sequence gap', [frame(delta(2, 'gap'))]],
     ['wrong event name', [frame(delta(1, 'x')).replace('event: tenant_chat.delta', 'event: wrong')]],

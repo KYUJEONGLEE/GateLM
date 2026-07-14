@@ -32,6 +32,7 @@ revision: `tenant-chat/v1`
 - transport retry는 세 값을 유지하고 새 `jti`, `iat`, `nbf`, `exp`로 JWT만 다시 발급한다.
 - Chat API transport는 최대 2회 시도한다. response header 전 network/timeout 또는 짧은 `503`만 한 번 재시도하고, `4xx`, `429`, Provider terminal 오류는 재시도하지 않는다.
 - completion stream이 final 전에 비정상 종료되면 같은 실행 ID로 한 번만 reattach한다. reattach도 새 JWT/JTI를 사용한다.
+- caller abort는 transport failure로 재시도하거나 reattach하지 않는다. Chat API private client는 내부 `499 CHAT_REQUEST_CANCELLED`로 즉시 중단하고 execution bridge가 admission/Provider cancel을 best effort로 시도한다.
 - 같은 `(tenantId,userId,idempotencyKey)`와 같은 binding은 provider를 다시 호출하지 않는다.
 - admission 최초 생성은 `201`, 같은 binding replay는 `200`과 `replayed=true`다.
 - cancel 최초·동일 replay는 모두 `200`이다. 이미 consume/expire된 admission의 첫 cancel은 `409 CHAT_ADMISSION_EXPIRED`다.
@@ -43,6 +44,7 @@ revision: `tenant-chat/v1`
 ## 3. SSE wire 규칙
 
 - response는 UTF-8 `text/event-stream`이며 각 event는 `id`, `event`, 단일-line JSON `data`와 빈 줄로 끝난다.
+- stream 시작·event 사이·종료의 field 없는 빈 event block은 무시한다. 공백, comment, unknown/duplicate field가 있는 frame은 빈 event로 취급하지 않고 거부한다.
 - `id`는 `<requestId>:<sequence>`다. sequence는 request별 1부터 단조 증가한다.
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.

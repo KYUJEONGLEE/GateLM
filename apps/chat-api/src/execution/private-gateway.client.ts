@@ -179,6 +179,9 @@ export class PrivateGatewayClient {
           response.headers.get('idempotency-replayed')?.toLowerCase() === 'true',
         );
       } catch (error) {
+        if (options.signal?.aborted) {
+          throw new PrivateGatewayError('CHAT_REQUEST_CANCELLED', 499);
+        }
         if (
           error instanceof CompletionStreamDisconnected &&
           !parser.hasFinal() &&
