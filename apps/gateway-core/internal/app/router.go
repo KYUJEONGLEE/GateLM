@@ -17,6 +17,7 @@ import (
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
+	httpmiddleware "gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
 	"gatelm/apps/gateway-core/internal/ports"
@@ -255,6 +256,11 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 			Locale:      cfg.AISafetySidecar.Locale,
 		})
 	}
+	observabilityToken := cfg.ObservabilityInternalToken
+	if cfg.ObservabilityAuthRequired && config.IsWeakObservabilityInternalToken(observabilityToken) {
+		observabilityToken = ""
+	}
+	observabilityAuth := httpmiddleware.ObservabilityAuthMiddleware(observabilityToken, cfg.ObservabilityAuthRequired)
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /metrics", handlers.MetricsHandler{Registry: metricsRegistry})
@@ -270,27 +276,27 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExpectedAppID:           cfg.ExpectedApplicationID,
 		RuntimePolicyPipeline:   routerOptions.ModelsRuntimePipeline,
 	})
-	mux.Handle("GET /api/projects/{projectId}/logs", handlers.ProjectLogsHandler{
+	mux.Handle("GET /api/projects/{projectId}/logs", observabilityAuth(handlers.ProjectLogsHandler{
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
-	})
-	mux.Handle("GET /api/llm-requests/{requestId}", handlers.RequestDetailHandler{
+	}))
+	mux.Handle("GET /api/llm-requests/{requestId}", observabilityAuth(handlers.RequestDetailHandler{
 		Reader:    routerOptions.InvocationLogReader,
 		TenantID:  cfg.DemoTenantID,
 		ProjectID: cfg.DemoProjectID,
-	})
-	mux.Handle("GET /api/dashboard/overview", handlers.DashboardOverviewHandler{
+	}))
+	mux.Handle("GET /api/dashboard/overview", observabilityAuth(handlers.DashboardOverviewHandler{
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
-	})
-	mux.Handle("GET /api/analytics/performance", handlers.AnalyticsPerformanceHandler{
+	}))
+	mux.Handle("GET /api/analytics/performance", observabilityAuth(handlers.AnalyticsPerformanceHandler{
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
-	})
-	mux.Handle("GET /api/reports/costs", handlers.CostReportHandler{
+	}))
+	mux.Handle("GET /api/reports/costs", observabilityAuth(handlers.CostReportHandler{
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
-	})
+	}))
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
 		Providers:                            providers,

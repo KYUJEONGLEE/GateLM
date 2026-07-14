@@ -27,6 +27,7 @@ import {
   nullableText
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import { formatRequestLogTtft } from "../request-log-latency";
 
 type RequestLogDetailProps = {
   locale: Locale;
@@ -342,6 +343,12 @@ export function RequestLogDetailPanel({
                 formatDetailLatency(
                   record.latencySummary?.totalLatencyMs ?? record.latencyMs,
                   locale
+                )
+              ],
+              [
+                detailLabel(locale, "Time to first token (TTFT)", "첫 토큰 도착 시간(TTFT)"),
+                formatRequestLogTtft(
+                  record.latencySummary?.ttftMs ?? record.ttftMs
                 )
               ],
               [

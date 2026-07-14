@@ -51,6 +51,7 @@ Replace:
 - `TENANT_CHAT_ACCESS_JWT_SECRET`
 - `TENANT_CHAT_INTENT_SECRET`
 - `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` (use the same value)
+- `GATEWAY_OBSERVABILITY_INTERNAL_TOKEN` (use a separate value)
 - `GATELM_GATEWAY_API_KEY`
 - `GATEWAY_EXACT_CACHE_KEY_SECRET`
 - `GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY`
@@ -69,6 +70,7 @@ CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=false
 CONTROL_PLANE_AUTH_STATE_SECRET=<random-long-value>
 CONTROL_PLANE_INTERNAL_SERVICE_TOKEN=<random-long-value>
 GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN=<same-random-long-value>
+GATEWAY_OBSERVABILITY_INTERNAL_TOKEN=<separate-random-long-value>
 TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN=<separate-random-long-value>
 TENANT_CHAT_WEB_SERVICE_TOKEN=<separate-random-long-value>
 TENANT_CHAT_ACCESS_JWT_SECRET=<separate-random-long-value>
@@ -180,6 +182,8 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/002_drop_legacy_selected_routing_columns.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/003_add_p0_invocation_log_ttft.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/004_add_p0_dashboard_rollup_indexes.sql
 ```
 
 Do not run the demo seed in AWS/prod-like environments. The Control Plane now refuses the demo seed path there; create the tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API.
@@ -670,6 +674,8 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/002_drop_legacy_selected_routing_columns.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/003_add_p0_invocation_log_ttft.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/004_add_p0_dashboard_rollup_indexes.sql
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core web chat-api chat-web
 docker compose --env-file .env ps
 ```

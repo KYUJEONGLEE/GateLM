@@ -4,6 +4,7 @@ import {
   getVisibleProjectsForConsoleAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveGatewayRequestDetail } from "@/lib/gateway/live-request-detail";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
@@ -24,8 +25,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (auth.memberships.length === 0 && auth.projectAdmins.length === 0) {
-    return NextResponse.json({ error: "Project access denied" }, { status: 403 });
+  if (!hasConsoleTenantAccess(auth, tenantId)) {
+    return NextResponse.json({ error: "Tenant access denied" }, { status: 403 });
   }
 
   const projectsModel = await getProjectsModel(tenantId);

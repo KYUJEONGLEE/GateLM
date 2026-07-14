@@ -61,6 +61,7 @@ type TerminalLog struct {
 	SavedCostMicroUSD int64
 	CostingResult     costing.Result
 	LatencyMs         int64
+	TTFTMs            *int64
 	ProviderLatencyMs *int64
 	ProviderCalled    bool
 
@@ -161,6 +162,7 @@ type TerminalLogInput struct {
 	SavedCostMicroUSD int64
 	CostingResult     costing.Result
 	LatencyMs         int64
+	TTFTMs            *int64
 	ProviderLatencyMs *int64
 	ProviderCalled    bool
 
@@ -476,6 +478,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		SavedCostMicroUSD: input.SavedCostMicroUSD,
 		CostingResult:     input.CostingResult,
 		LatencyMs:         latencyMs,
+		TTFTMs:            cloneNonNegativeInt64Pointer(input.TTFTMs),
 		ProviderLatencyMs: input.ProviderLatencyMs,
 		ProviderCalled:    providerCalled,
 
@@ -542,6 +545,14 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	log.Metadata["domainOutcomes"] = log.DomainOutcomes
 	log.Metadata["gatewayStageOutcomes"] = BuildGatewayStageOutcomes(log)
 	return log
+}
+
+func cloneNonNegativeInt64Pointer(value *int64) *int64 {
+	if value == nil || *value < 0 {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func BuildPromptCaptureFields(policy runtimeconfig.PromptCapturePolicy, logSafePrompt string) (PromptCaptureFields, bool) {

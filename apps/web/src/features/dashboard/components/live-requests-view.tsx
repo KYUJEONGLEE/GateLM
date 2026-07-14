@@ -7,6 +7,7 @@ import {
   projectPillTone
 } from "@/features/dashboard/live-requests-format";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { formatResponseTimeSeconds } from "@/lib/formatting/formatters";
 import type {
   LiveRequestRow,
   LiveRequestStatusFilter
@@ -260,7 +261,7 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "라우팅" : "Routing"}</th>
               <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
               <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Result"}</th>
-              <th scope="col">{locale === "ko" ? "지연 시간" : "Latency"}</th>
+              <th scope="col">{locale === "ko" ? "응답 시간" : "Response time"}</th>
               <th scope="col">{text.detail}</th>
             </tr>
           </thead>
@@ -338,7 +339,7 @@ export function LiveRequestsView({
                 <td>
                   <PolicyBadges locale={locale} row={row} />
                 </td>
-                <td>{formatLiveLatency(row.latencyMs)}</td>
+                <td>{formatResponseTimeSeconds(row.ttftMs)}</td>
                 <td>
                   {row.surface === "tenant_chat" ? (
                     <span className="dashboard-live-muted-value">-</span>
@@ -448,14 +449,4 @@ function formatLiveTime(value: string) {
 function formatLiveDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : dateFormatter.format(date);
-}
-
-function formatLiveLatency(value: number) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-  if (value >= 1000) {
-    return (value / 1000).toFixed(2) + " s";
-  }
-  return integerFormatter.format(Math.max(0, Math.round(value))) + " ms";
 }

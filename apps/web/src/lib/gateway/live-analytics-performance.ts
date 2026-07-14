@@ -1,7 +1,10 @@
 import "server-only";
 
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  getGatewayObservabilityHeaders,
+  getLiveGatewayConfig
+} from "@/lib/gateway/live-gateway-config";
 import { getAlignedLiveTimeRange } from "@/lib/gateway/time-series-range";
 
 export type LiveAnalyticsRange = "15m" | "1h" | "1d" | "1w";
@@ -114,9 +117,7 @@ export async function getLiveAnalyticsPerformance(
   appendOptionalQuery(query, "model", filters.model);
 
   const response = await fetch(`${config.baseUrl}/api/analytics/performance?${query.toString()}`, {
-    headers: {
-      "X-GateLM-Request-Id": `request_web_analytics_${Date.now()}`
-    },
+    headers: getGatewayObservabilityHeaders(`request_web_analytics_${Date.now()}`),
     cache: "no-store"
   }).catch(() => undefined);
 

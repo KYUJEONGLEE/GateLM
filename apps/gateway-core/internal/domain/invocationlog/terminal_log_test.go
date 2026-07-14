@@ -17,6 +17,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	startedAt := time.Date(2026, 6, 26, 1, 2, 3, 0, time.UTC)
 	completedAt := startedAt.Add(25 * time.Millisecond)
 	providerLatencyMs := int64(10)
+	ttftMs := int64(15)
 
 	log := BuildTerminalLog(TerminalLogInput{
 		RequestID:               " request_success ",
@@ -37,6 +38,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		TotalTokens:             7,
 		SavedCostMicroUSD:       9,
 		LatencyMs:               25,
+		TTFTMs:                  &ttftMs,
 		ProviderLatencyMs:       &providerLatencyMs,
 		Status:                  StatusSuccess,
 		HTTPStatus:              200,
@@ -70,6 +72,9 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	}
 	if log.SavedCostMicroUSD != 9 {
 		t.Fatalf("expected saved cost metadata 9, got %d", log.SavedCostMicroUSD)
+	}
+	if log.TTFTMs == nil || *log.TTFTMs != 15 {
+		t.Fatalf("expected nullable TTFT 15, got %+v", log.TTFTMs)
 	}
 	if !strings.HasPrefix(log.RequestBodyHash, "sha256:") || !strings.HasPrefix(log.PromptHash, "sha256:") {
 		t.Fatalf("expected synthetic hashes, got %s %s", log.RequestBodyHash, log.PromptHash)
@@ -105,6 +110,22 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		legacyHashes["securityPolicyHash"] != "hash_security_policy_test" ||
 		legacyHashes["routingPolicyHash"] != "route_p0_v1" {
 		t.Fatalf("unexpected legacy hash bridge: %+v", legacyHashes)
+	}
+}
+
+func TestBuildTerminalLogRejectsNegativeTTFT(t *testing.T) {
+	negativeTTFT := int64(-1)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:   "request_negative_ttft",
+		TTFTMs:      &negativeTTFT,
+		Status:      StatusFailed,
+		HTTPStatus:  500,
+		StartedAt:   time.Now().UTC(),
+		CompletedAt: time.Now().UTC(),
+	})
+
+	if log.TTFTMs != nil {
+		t.Fatalf("negative TTFT must remain unknown instead of being persisted, got %+v", log.TTFTMs)
 	}
 }
 
