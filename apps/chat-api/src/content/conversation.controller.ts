@@ -256,7 +256,8 @@ function utf8Chunks(value: string, maximum: number): string[] {
   let current = '';
   let bytes = 0;
   for (const symbol of value) {
-    const size = Buffer.byteLength(symbol, 'utf8');
+    const codePoint = symbol.codePointAt(0);
+    const size = codePoint === undefined ? 0 : (codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4);
     if (bytes + size > maximum && current) {
       chunks.push(current);
       current = '';
