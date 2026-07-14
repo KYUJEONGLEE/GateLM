@@ -11,6 +11,7 @@ import type {
 import tenantRuntimeSnapshotSchema = require('./tenant-runtime-snapshot.schema.json');
 
 const OPAQUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+export const TENANT_CHAT_MODEL_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 const SHA256_DIGEST_PATTERN = /^sha256:[A-Za-z0-9_-]{43}$/;
 const tenantRuntimeSnapshotAjv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(tenantRuntimeSnapshotAjv);
@@ -80,6 +81,12 @@ export function computeTenantChatPolicyDigest(
   policies: TenantChatRuntimePolicies,
 ): string {
   return sha256Digest(policies);
+}
+
+export function computeTenantChatSafetyPolicyDigest(
+  safety: Omit<TenantChatRuntimePolicies['safety'], 'policyDigest'>,
+): string {
+  return sha256Digest(safety);
 }
 
 export function canonicalizeTenantChatJson(value: unknown): string {
@@ -153,7 +160,7 @@ function validatePricing(pricing: TenantChatPricing): void {
     const prefix = `pricing.routes[${index}]`;
     assertOpaqueId(route.routeId, `${prefix}.routeId`);
     assertOpaqueId(route.providerId, `${prefix}.providerId`);
-    assertOpaqueId(route.modelKey, `${prefix}.modelKey`);
+    assertModelKey(route.modelKey, `${prefix}.modelKey`);
     assertNonnegativeInteger(
       route.inputMicroUsdPerMillionTokens,
       `${prefix}.inputMicroUsdPerMillionTokens`,
@@ -243,7 +250,7 @@ function validatePolicies(
     const prefix = `policies.routing.routes[${index}]`;
     assertOpaqueId(route.routeId, `${prefix}.routeId`);
     assertOpaqueId(route.providerId, `${prefix}.providerId`);
-    assertOpaqueId(route.modelKey, `${prefix}.modelKey`);
+    assertModelKey(route.modelKey, `${prefix}.modelKey`);
     if (runtimeByRoute.has(route.routeId)) {
       throw new TenantChatRuntimeContractError(
         `runtime routeId ${route.routeId} is duplicated`,
@@ -426,6 +433,12 @@ function validateBudgetPolicy(policies: TenantChatRuntimePolicies): void {
 function assertOpaqueId(value: string, path: string): void {
   if (!OPAQUE_ID_PATTERN.test(value)) {
     throw new TenantChatRuntimeContractError(`${path} is not a valid opaque ID`);
+  }
+}
+
+function assertModelKey(value: string, path: string): void {
+  if (!TENANT_CHAT_MODEL_KEY_PATTERN.test(value)) {
+    throw new TenantChatRuntimeContractError(`${path} is not a valid model key`);
   }
 }
 

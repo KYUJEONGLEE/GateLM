@@ -12,6 +12,7 @@ revision: `tenant-chat/v1`
 |---|---|
 | Browser/session auth wire | [`openapi/chat-auth.openapi.json`](./openapi/chat-auth.openapi.json) |
 | Private Control Plane metadata wire | [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json) |
+| Admin Runtime wire | [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json) |
 | Conversation/turn wire | [`openapi/chat-conversation.openapi.json`](./openapi/chat-conversation.openapi.json) |
 | Private Gateway wire contract | [`openapi/private-gateway.openapi.json`](./openapi/private-gateway.openapi.json) |
 | Content DB record | [`db/tenant-chat-content.sql`](./db/tenant-chat-content.sql) |
@@ -192,6 +193,9 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. safety는 cache/routing/Provider보다 먼저 실행하고 redacted input만 다음 단계에 전달한다.
 - `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
 - `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
+- 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, exact cache off, email redact/API-key block safety, streaming `120s`와 required final이다.
+- 관리자 재발행은 active snapshot의 비라우팅 정책과 `employeeNoticeVersion`을 보존한다. 선택 Provider/model에 대한 standard/economy route, disabled fallback, provider token rate와 pinned pricing만 교체한다.
+- Admin Runtime publisher는 full-session tenant admin의 server-side user ID를 `publishedBy`로 사용하며 client가 publisher를 공급하지 못하게 한다.
 
 예약 계산은 integer arithmetic만 사용한다.
 

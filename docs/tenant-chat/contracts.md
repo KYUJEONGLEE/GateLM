@@ -217,7 +217,19 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - routing/provider/safety/cache/quota/budget/pricing capability는 snapshot에 포함한다.
 - 정확한 tenant snapshot shape, digest와 pricing provenance는 [paired schema](./schemas/tenant-runtime-snapshot.schema.json) 및 [execution contract](./execution-contract.md)를 따른다.
 
-### 7.1 Cache extensibility
+### 7.1 관리자 Runtime 활성화
+
+- 관리자 wire는 [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json)을 따른다.
+- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 가격 지원 상태와 active snapshot metadata만 반환한다. credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
+- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 `providerConnectionId`와 `modelKey`만 받는다. Control Plane은 tenant scope, `projectId=null`, ACTIVE 상태, persisted `providerConfig.models` 포함 여부와 versioned 가격 catalog의 exact model entry를 다시 검증한다.
+- Provider family는 persisted `providerConfig.providerFamily`에서만 판정한다. client 입력이나 base URL 추론으로 가격을 선택하지 않는다.
+- 가격 catalog는 Provider/Model config data이며 DB/code enum이 아니다. 표준 on-demand text input/output 가격을 현재 pricing schema로 정확히 표현할 수 있는 exact model ID만 활성화한다. 알 수 없거나 tiered/modality-specific인 가격은 `pricing_unavailable`이다.
+- `modelKey`는 1~200자의 `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$`를 사용한다. Provider/model catalog의 점, 슬래시와 콜론을 지원하지만 whitespace와 control 문자는 허용하지 않는다.
+- 최초 활성화는 계약에 고정된 safe default policy를 조합한다. 재구성은 active snapshot의 rate/concurrency/quota/budget/cache/safety/streaming 및 employee notice version을 보존하고 routing/fallback/provider token rate/pricing만 새 선택으로 교체한다.
+- 동일 Provider/model, policy와 가격의 PUT은 active snapshot을 그대로 반환한다. 변경이 있으면 snapshot, policy, pricing version을 serializable transaction 안에서 각각 monotonic하게 증가시킨다.
+- 선택 모델 하나에 deterministic `standard`와 `economy` route를 만들고 fallback은 끈다. client-provided quota, budget, route 또는 publisher scope는 허용하지 않는다.
+
+### 7.2 Cache extensibility
 
 현재 published policy shape는 다음 전략만 허용한다.
 
