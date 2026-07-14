@@ -47,6 +47,18 @@ test("keeps employees without usage visible and ignores disabled assignments", (
   expect(usage.totalDailyTokens).toBe(100);
 });
 
+test("keeps the aggregate daily token limit unlimited when any project is unlimited", () => {
+  const model = buildModel();
+  model.assignmentsByProjectId["project-b"][0].policy.dailyTokenLimit = {
+    enabled: false,
+    limit: 0
+  };
+
+  const usage = buildEmployeeUsageReadModel(model);
+
+  expect(usage.rows.find((row) => row.employeeId === "employee-a")?.dailyTokenLimit).toBeNull();
+});
+
 function buildModel() {
   const employee = {
     acceptedAt: null,

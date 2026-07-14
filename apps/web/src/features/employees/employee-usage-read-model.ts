@@ -75,9 +75,9 @@ export function buildEmployeeUsageReadModel(model: EmployeeControlModel): Employ
 
     return {
       dailyTokenLimit:
-        configuredTokenLimits.length > 0
-          ? configuredTokenLimits.reduce((sum, limit) => sum + limit, 0)
-          : null,
+        projects.length === 0 || projects.some((project) => project.dailyTokenLimit === null)
+          ? null
+          : configuredTokenLimits.reduce((sum, limit) => sum + limit, 0),
       dailyTokens: projects.reduce((sum, project) => sum + project.dailyTokens, 0),
       department: employee.department,
       email: employee.email,

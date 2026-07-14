@@ -1453,10 +1453,8 @@ export function EmployeeControlManagement({
   }, [pageCount, pageIndex]);
 
   useEffect(() => {
-    if (initialEmployeeId && usageByEmployeeId.has(initialEmployeeId)) {
-      setSelectedEmployeeId(initialEmployeeId);
-    }
-  }, [initialEmployeeId, usageByEmployeeId]);
+    setSelectedEmployeeId(initialEmployeeId ?? null);
+  }, [initialEmployeeId]);
 
   async function handleCsvFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1941,7 +1939,7 @@ export function EmployeeControlManagement({
                           type="button"
                         >
                           <span>
-                            <strong>{nullableText(employee.name, text.email)}</strong>
+                            <strong>{nullableText(employee.name, employee.email)}</strong>
                             <span className="employee-name-metadata">
                               <span className="employee-email-reveal">
                                 <span aria-hidden="true" className="employee-email-mask">***</span>
