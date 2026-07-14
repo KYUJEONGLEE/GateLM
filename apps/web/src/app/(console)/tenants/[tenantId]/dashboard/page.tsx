@@ -22,7 +22,7 @@ import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getTenantChatDashboard } from "@/lib/control-plane/tenant-chat-observability-client";
 import {
   type DashboardSurface,
-  mergeDashboardOverviews,
+  selectDashboardSurfaceOverview,
   toTenantChatDashboardOverview
 } from "@/lib/dashboard/unified-dashboard";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
@@ -127,10 +127,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const tenantChatOverview = tenantChatDashboard
     ? toTenantChatDashboardOverview(effectiveTenantId, tenantChatDashboard)
     : undefined;
-  const overview = selectSurfaceOverview(
+  const overview = selectDashboardSurfaceOverview(
     scopedDashboardFilters.surface,
     projectApplicationOverview,
-    tenantChatOverview
+    tenantChatOverview,
+    { tenantChatNotConfigured: tenantChatDashboard === null }
   );
 
   if (!overview) {
@@ -245,37 +246,6 @@ function normalizeDashboardSurface(value: string | undefined): DashboardSurface 
     return value;
   }
   return "all";
-}
-
-function selectSurfaceOverview(
-  surface: DashboardSurface,
-  projectApplication: Awaited<ReturnType<typeof getLiveDashboardOverview>>,
-  tenantChat: ReturnType<typeof toTenantChatDashboardOverview> | undefined
-) {
-  if (surface === "project_application") {
-    return projectApplication;
-  }
-  if (surface === "tenant_chat") {
-    return tenantChat;
-  }
-  if (projectApplication && tenantChat) {
-    return mergeDashboardOverviews(projectApplication, tenantChat);
-  }
-  const partial = projectApplication ?? tenantChat;
-  return partial
-    ? {
-        ...partial,
-        surface: "all" as const,
-        queryBudget: {
-          status: "partial" as const,
-          maxRangeHours: partial.queryBudget?.maxRangeHours ?? 24,
-          maxBreakdownItems: partial.queryBudget?.maxBreakdownItems ?? 50,
-          guidance: projectApplication
-            ? "Tenant Chat aggregate is unavailable."
-            : "Project/Application aggregate is unavailable."
-        }
-      }
-    : undefined;
 }
 
 function normalizeDashboardRange(

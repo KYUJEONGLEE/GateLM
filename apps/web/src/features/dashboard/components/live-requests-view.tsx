@@ -29,6 +29,7 @@ type LiveRequestsViewProps = {
   rows: LiveRequestRow[];
   selectedRequestId?: string;
   statusFilter: LiveRequestStatusFilter;
+  tenantId: string;
   viewAllLogsHref: string;
 };
 
@@ -140,6 +141,7 @@ export function LiveRequestsView({
   rows,
   selectedRequestId,
   statusFilter,
+  tenantId,
   viewAllLogsHref
 }: LiveRequestsViewProps) {
   const isFocus = mode === "focus";
@@ -299,13 +301,25 @@ export function LiveRequestsView({
                   )}
                 </td>
                 <td>
-                  <span
-                    className="dashboard-live-project-pill"
-                    data-project-tone={projectPillTone(row.projectId || row.projectName)}
-                    title={projectTitle(row)}
-                  >
-                    {row.projectName || "-"}
-                  </span>
+                  {row.projectId ? (
+                    <Link
+                      aria-label={`${row.projectName || row.projectId} ${locale === "ko" ? "프로젝트 열기" : "Open project"}`}
+                      className="dashboard-live-project-pill"
+                      data-project-tone={projectPillTone(row.projectId || row.projectName)}
+                      href={`/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(row.projectId)}/policies`}
+                      title={projectTitle(row)}
+                    >
+                      {row.projectName || row.projectId}
+                    </Link>
+                  ) : (
+                    <span
+                      className="dashboard-live-project-pill"
+                      data-project-tone={projectPillTone(row.projectName)}
+                      title={projectTitle(row)}
+                    >
+                      {row.projectName || "-"}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <LiveRequestRouting row={row} />

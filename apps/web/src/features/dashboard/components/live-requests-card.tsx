@@ -17,6 +17,9 @@ import type {
 } from "@/lib/gateway/live-requests-types";
 import type { Locale } from "@/lib/i18n/locale";
 
+const COMPACT_LIVE_REQUEST_LIMIT = 5;
+const FOCUS_LIVE_REQUEST_LIMIT = 9;
+
 export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
 
 type LiveRequestsCardFilters = {
@@ -306,8 +309,9 @@ export function LiveRequestsCard({
           onOpenFocus={openFocusView}
           onOpenRequest={openRequestDetail}
           onStatusFilterChange={setStatusFilter}
-          rows={rows.slice(0, 4)}
+          rows={rows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)}
           statusFilter={statusFilter}
+          tenantId={tenantId}
           viewAllLogsHref={viewAllLogsHref}
         />
       </div>
@@ -333,9 +337,10 @@ export function LiveRequestsCard({
           onOpenRequest={openRequestDetail}
           onStatusFilterChange={setStatusFilter}
           pendingCount={pendingCount}
-          rows={focusRows}
+          rows={focusRows.slice(0, FOCUS_LIVE_REQUEST_LIMIT)}
           selectedRequestId={selectedRequest?.requestId}
           statusFilter={statusFilter}
+          tenantId={tenantId}
           viewAllLogsHref={viewAllLogsHref}
         />
         <RequestLogDetailClient

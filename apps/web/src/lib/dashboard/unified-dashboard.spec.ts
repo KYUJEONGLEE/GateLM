@@ -5,6 +5,7 @@ import type { TenantChatDashboard } from "@/lib/control-plane/tenant-chat-observ
 import {
   mergeDashboardOverviews,
   mergeCostOverTime,
+  selectDashboardSurfaceOverview,
   toTenantChatDashboardOverview
 } from "./unified-dashboard";
 
@@ -57,6 +58,23 @@ test("merges aligned cost buckets without losing either surface", () => {
   expect(merged.points).toEqual([
     { bucket: "2026-07-12T12:00:00Z", label: "12:00", spendUsd: 1.5 }
   ]);
+});
+
+test("treats an unconfigured Tenant Chat surface as an empty optional surface", () => {
+  const projectApplication = toTenantChatDashboardOverview(tenantId, tenantChatDashboard());
+  projectApplication.surface = "project_application";
+
+  const overview = selectDashboardSurfaceOverview(
+    "all",
+    projectApplication,
+    undefined,
+    { tenantChatNotConfigured: true }
+  );
+
+  expect(overview?.surface).toBe("all");
+  expect(overview?.queryBudget?.guidance).not.toBe(
+    "Tenant Chat aggregate is unavailable."
+  );
 });
 
 const tenantId = "00000000-0000-4000-8000-000000000100";
