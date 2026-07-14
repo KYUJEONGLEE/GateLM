@@ -9,7 +9,12 @@ const VERSION_NAME = 'GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION';
 export async function ensureTenantChatLocalProviderEnv(options = {}) {
   const envFile = resolve(options.envFile ?? '.env.tenant-chat.local');
   const randomBytesImpl = options.randomBytesImpl ?? randomBytes;
-  const source = await readFile(envFile, 'utf8');
+  let source = '';
+  try {
+    source = await readFile(envFile, 'utf8');
+  } catch (error) {
+    if (!isFileNotFound(error)) throw error;
+  }
   const eol = source.includes('\r\n') ? '\r\n' : '\n';
   const lines = source.split(/\r?\n/);
   const changed = [];
@@ -59,6 +64,10 @@ function isValidEncryptionKey(raw) {
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64Value)) return false;
   const decoded = Buffer.from(base64Value, 'base64');
   return decoded.length === 32 && decoded.toString('base64').replace(/=+$/, '') === base64Value.replace(/=+$/, '');
+}
+
+function isFileNotFound(error) {
+  return Boolean(error) && typeof error === 'object' && error.code === 'ENOENT';
 }
 
 async function main() {

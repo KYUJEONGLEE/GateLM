@@ -6,6 +6,28 @@ import test from 'node:test';
 
 import { ensureTenantChatLocalProviderEnv } from './ensure-tenant-chat-local-provider-env.mjs';
 
+test('creates a missing local env file without exposing the generated key', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'gatelm-provider-env-'));
+  const envFile = join(directory, '.env');
+  try {
+    const result = await ensureTenantChatLocalProviderEnv({
+      envFile,
+      randomBytesImpl: () => Buffer.alloc(32, 5),
+    });
+    const source = await readFile(envFile, 'utf8');
+
+    assert.equal(result.status, 'updated');
+    assert.deepEqual(result.changed, [
+      'GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY',
+      'GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION',
+    ]);
+    assert.match(source, /^GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY=0505[0-9a-f]{60}$/m);
+    assert.match(source, /^GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION=v1$/m);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('adds a non-exported 32-byte encryption key and version without changing existing values', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'gatelm-provider-env-'));
   const envFile = join(directory, '.env');

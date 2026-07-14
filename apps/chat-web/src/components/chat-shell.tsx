@@ -339,7 +339,14 @@ export function ChatShell() {
         setStatus('답변 생성을 중지했습니다.');
       } else {
         const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
-        setMessages((current) => current.map((message) => message.id === draftId ? { ...message, notice: detail } : message));
+        if (!admitted) {
+          setMessages((current) => current.filter((message) =>
+            message.id !== draftId && message.id !== optimisticUserId));
+          setComposer(content);
+        } else {
+          setMessages((current) => current.map((message) =>
+            message.id === draftId ? { ...message, notice: detail } : message));
+        }
         if (isBlockedCode(detail.code)) setPolicyState('blocked');
         setStatus(detail.message);
       }
@@ -440,9 +447,15 @@ export function ChatShell() {
                 {messages.map((message) => <li key={message.id} className={`message-row message-${message.role}`}>
                   {message.role === 'user' ? <article><span className="sr-only">내 메시지</span><p>{message.content}</p></article> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
-                    <article><span className="message-author">GateLM</span>{message.notice
-                      ? <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>
-                      : <p>{message.content || (streaming && message === messages.at(-1) ? '답변을 작성하고 있습니다…' : '')}</p>}</article>
+                    <article>
+                      <span className="message-author">GateLM</span>
+                      {message.content
+                        ? <p>{message.content}</p>
+                        : streaming && message === messages.at(-1) && !message.notice
+                          ? <p>답변을 작성하고 있습니다…</p>
+                          : null}
+                      {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
+                    </article>
                   </>}
                 </li>)}
                 {historyLoading && <li className="history-loading"><LoaderCircle className="spin" size={18} aria-hidden />대화 기록을 불러오는 중…</li>}
