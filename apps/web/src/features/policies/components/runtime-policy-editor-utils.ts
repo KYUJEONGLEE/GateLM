@@ -13,6 +13,13 @@ import {
 
 import type { RoutingProviderOption } from "./runtime-policy-editor-types";
 
+export type RoutingModelOption = {
+  family: string;
+  label: string;
+  modelRef: string;
+  providerName: string;
+};
+
 export function areRuntimePolicyDraftValuesEqual(
   left: RuntimePolicyDraftValues,
   right: RuntimePolicyDraftValues
@@ -71,6 +78,45 @@ export function getRoutingProviderOptions(
   }
 
   return Array.from(providerOptions.values());
+}
+
+export function getRoutingModelOptions(
+  providerConnections: ProviderConnectionRecord[]
+): RoutingModelOption[] {
+  const options = new Map<string, RoutingModelOption>();
+
+  for (const providerConnection of providerConnections) {
+    if (
+      providerConnection.projectId !== null ||
+      providerConnection.status !== "ACTIVE"
+    ) {
+      continue;
+    }
+
+    const providerName = normalizePolicyText(providerConnection.provider);
+    const displayName =
+      normalizePolicyText(providerConnection.displayName) || providerName;
+
+    if (!providerName) {
+      continue;
+    }
+
+    for (const modelId of getProviderConnectionModels(providerConnection)) {
+      const modelRef =
+        providerName === "mock" && modelId === "mock-balanced"
+          ? "mock-balanced"
+          : getRoutingModelRef(providerConnection, modelId);
+
+      options.set(modelRef, {
+        family: getProviderConnectionFamily(providerConnection),
+        label: `${displayName} / ${modelId}`,
+        modelRef,
+        providerName
+      });
+    }
+  }
+
+  return Array.from(options.values());
 }
 
 export function getSelectedRoutingProviderConnections(
