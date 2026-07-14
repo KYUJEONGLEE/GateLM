@@ -85,8 +85,8 @@ SMTP_PASSWORD=<smtp-password-if-required>
 SMTP_FROM=<verified-sender>
 ```
 
-Generate the Tenant Chat workload signing, verification, cache, and usage
-receipt files once from `deploy/aws-triage`. The `kid` must exactly match
+Generate the Tenant Chat workload signing, verification, content encryption,
+cache, and usage receipt files once from `deploy/aws-triage`. The `kid` must exactly match
 `TENANT_CHAT_WORKLOAD_ACTIVE_KID` in `.env`:
 
 ```bash
@@ -106,7 +106,7 @@ secret files before building images. Set `TENANT_CHAT_RUNTIME_UID` and
 `TENANT_CHAT_RUNTIME_GID` in `.env` to the numeric values printed by `id -u`
 and `id -g`. Gateway and Chat API use that non-root identity so file-backed
 Compose secrets remain readable without relaxing the `700` directory and `600`
-file modes. The production deployment script verifies that all five files have
+file modes. The production deployment script verifies that all six files have
 one non-root owner and passes the detected UID/GID to Compose automatically.
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
@@ -179,7 +179,7 @@ docker compose --env-file .env config --quiet
 docker compose --env-file .env build
 ```
 
-Compose requires the five files under `.secrets/tenant-chat` and an active
+Compose requires the six files under `.secrets/tenant-chat` and an active
 workload `kid` before it can start Gateway and Chat API. On a small instance,
 the first build can be slow. Keep `AI_SERVICE_INSTALL_ML_DEPS=false` unless you
 are intentionally testing the heavier AI safety path.
