@@ -86,19 +86,24 @@ class OfflineFeatureShapeTest(unittest.TestCase):
         rule = tuple(float(index) / 42.0 for index in range(42))
         projection = (0.25, -0.5)
         heads = one_hot_heads()
-        values = OfflineFeatureValues(
-            rule_vector_v1=rule,
-            semantic_projection=projection,
-            semantic_head_probabilities=heads,
+        baseline = shape.assemble(
+            OfflineFeatureCandidate.RULE_VECTOR_V1,
+            OfflineFeatureValues(rule_vector_v1=rule),
         )
-
-        baseline = shape.assemble(OfflineFeatureCandidate.RULE_VECTOR_V1, values)
         projected = shape.assemble(
-            OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION, values
+            OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION,
+            OfflineFeatureValues(
+                rule_vector_v1=rule,
+                semantic_projection=projection,
+            ),
         )
         combined = shape.assemble(
             OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
-            values,
+            OfflineFeatureValues(
+                rule_vector_v1=rule,
+                semantic_projection=projection,
+                semantic_head_probabilities=heads,
+            ),
         )
 
         self.assertEqual(baseline, rule)
@@ -127,6 +132,12 @@ class OfflineFeatureShapeTest(unittest.TestCase):
             "semanticHeads.semanticDependencyBucket.depth_3_plus.probability",
         )
         self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(
+            names,
+            shape.descriptor(
+                OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS
+            ).feature_names,
+        )
 
     def test_excludes_removed_heads_without_removing_rule_features(self) -> None:
         names = make_shape(projection_dimension=2).feature_names(
@@ -174,6 +185,24 @@ class OfflineFeatureShapeTest(unittest.TestCase):
             shape.assemble(
                 OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
                 projection_only,
+            )
+
+        with self.assertRaisesRegex(ValueError, "must not contain semantic segments"):
+            shape.assemble(
+                OfflineFeatureCandidate.RULE_VECTOR_V1,
+                OfflineFeatureValues(
+                    rule_vector_v1=(0.0,) * 42,
+                    semantic_projection=(0.0,) * 8,
+                ),
+            )
+        with self.assertRaisesRegex(ValueError, "must not contain semantic head"):
+            shape.assemble(
+                OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION,
+                OfflineFeatureValues(
+                    rule_vector_v1=(0.0,) * 42,
+                    semantic_projection=(0.0,) * 8,
+                    semantic_head_probabilities=one_hot_heads(),
+                ),
             )
 
     def test_rejects_dimension_and_numeric_errors(self) -> None:

@@ -42,6 +42,7 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `schemas/difficulty-training-split-manifest.schema.json` | 500건 smoke tooling의 family-disjoint partition manifest schema |
 | `fixtures/difficulty-training-split-manifest.v1.json` | 500건 smoke tooling 내부 partition; production evidence split이 아님 |
 | `schemas/difficulty-model-artifact.schema.json` | Offline Logistic Regression·calibrator candidate artifact schema |
+| `schemas/difficulty-offline-model-artifact.schema.json` | Proposed semantic candidate `42 / 42+P / 54+P`의 component parameter, classifier/calibrator와 dataset/split/training provenance를 고정하는 별도 offline/shadow artifact schema; v1 parser와 runtime은 수용하지 않음 |
 | `routing-advanced-plan.md` | Evaluation-based routing plan |
 | `routing-performance-test-scenario.md` | Performance evidence scenario |
 | `routing-random-probe.md` | Unlabeled synthetic distribution probe |

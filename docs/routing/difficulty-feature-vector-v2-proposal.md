@@ -151,6 +151,8 @@ semanticHeads[12]
 
 Canonical offline assembly 구현은 [`../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py`](../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py)다. 이 구현은 assembled vector 또는 head probability의 JSON/report serializer를 제공하지 않는다.
 
+현재 구현된 `FeatureShapeDescriptor`는 candidate, segment offset, exact `totalDimension`과 deterministic `featureNames`를 함께 고정한다. Candidate A는 semantic segment를 받지 않고, Candidate B는 projection만, Candidate C는 projection과 고정 4-head probability를 모두 받아들인다. 누락뿐 아니라 선택 candidate에 없는 추가 segment도 거부한다. 이 descriptor는 process-local generic training validation에 사용되며 assembled vector 자체를 artifact나 report로 직렬화하지 않는다.
+
 비활성 offline 준비 tooling은 다음 경계를 추가로 구현한다.
 
 - [`../../apps/gateway-core/cmd/difficulty-semantic-head-training-export`](../../apps/gateway-core/cmd/difficulty-semantic-head-training-export)는 `trainingEligible=true`, complete label coverage, versioned family policy와 human-approved record/family만 받아들이고 canonical `instructionText`, 고정 4-head label과 low-cardinality evaluation metadata를 process-local JSON pipe로 전달한다. Empty instruction은 `not_applicable` label을 확인한 뒤 encoder 입력에서 제외한다.
@@ -199,6 +201,14 @@ Payload structural statistics와 별도 category control block은 이 세 후보
 
 세 후보 중 어느 조합도 이 proposal만으로 runtime `difficulty-feature-vector.v2`가 되지 않는다. Runtime 계약의 이름, exact shape와 bundle은 offline evidence 이후 별도 active contract 변경에서 결정한다.
 
+### 5.1 Prepared Decision-head Infrastructure
+
+차원 독립 Logistic Regression scorer, 기존 Platt/Isotonic calibrator, descriptor 기반 Python training API와 별도 offline artifact/codegen 경로가 준비돼 있다. 공통 scorer는 empty weight, vector/weight dimension mismatch, NaN, infinity와 dot-product overflow를 panic 없이 거부한다. v1 adapter는 계속 exact 42 names/weights와 고정 threshold policy만 받는다.
+
+Offline candidate artifact는 [`../v2.1.0/schemas/difficulty-offline-model-artifact.schema.json`](../v2.1.0/schemas/difficulty-offline-model-artifact.schema.json)의 `gatelm.difficulty-offline-model-artifact.v1`을 사용한다. 이 schema는 기존 `gatelm.difficulty-model-artifact.v1`을 확장하지 않으며 두 parser는 교차 입력을 거부한다. Artifact는 feature shape, preprocessing, tokenizer·encoder·pooling version과 hash, projection parameter, 고정 4-head/12D parameter, exact feature names와 classifier coefficient/bias, candidate별 새 calibrator, threshold/equality, dataset/split hash와 training policy를 보존한다. Bundle hash는 component tuple과 parameter/shape를, artifact content hash는 classifier·calibrator와 전체 training provenance를 추가로 묶는다. Go/Python은 같은 length-prefixed IEEE-754 material 규칙을 사용한다.
+
+Version-aware codegen은 v1 artifact에는 exact 42D 기존 변수를, offline artifact에는 candidate와 total dimension을 보존한 별도 package-private 변수를 생성한다. Offline 생성물에는 제품 routing 등록이 없으며 `SimpleRouter`, routing matrix와 Gateway hot path에서 참조하지 않는다. 이 infrastructure와 synthetic test artifact는 실제 difficulty decision weight, approved calibrator, runtime bundle 또는 promotion evidence가 존재한다는 뜻이 아니다.
+
 ## 6. Component And Artifact Versioning
 
 모든 실행은 mutable `latest` 이름이 아니라 exact bundle manifest를 사용해야 한다. Component identifier 형식은 다음 namespace를 사용하되 concrete version과 artifact는 승인 전까지 `pending`이다.
@@ -222,16 +232,22 @@ Bundle manifest는 적어도 다음 값을 가져야 한다. 이 표현은 shape
 offlineFeatureShapeVersion
 candidateName
 ruleVectorVersion
+preprocessingVersion
 tokenizerVersion + tokenizerHash
 encoderVersion + encoderHash
 poolingVersion
 projectionVersion + projectionHash
 projectionDimension
+projectionParameters
 semanticHeadsVersion + semanticHeadsHash
 semanticHeadClassOrder
-difficultyHeadVersion + difficultyHeadHash
+semanticHeadParameters
+difficultyHeadVersion + classifier coefficient/bias
 calibratorVersion + calibratorHash
-classifierVersion
+classifierVersion + threshold + equality rule
+datasetVersion + datasetHash
+splitPolicyVersion + splitManifestHash
+trainingPolicyVersion
 totalDimension
 bundleHash
 ```

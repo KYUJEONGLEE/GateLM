@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-offline-model-artifact.schema.json",
+  "title": "GateLM Offline Difficulty Logistic Candidate Artifact",
+  "description": "Offline/shadow-only model material for the three fixed difficulty feature-shape candidates. This schema is not accepted by the v1 runtime artifact parser.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "gatelm.difficulty-offline-model-artifact.v1" },
+    "artifactVersion": { "$ref": "#/$defs/immutableVersion" },
+    "modelVersion": { "const": "difficulty-logistic-v1" },
+    "offlineFeatureShapeVersion": { "const": "difficulty-offline-feature-shape.v1" },
+    "candidateName": {
+      "enum": [
+        "42d-rule-vector-v1",
+        "42d-rule-vector-v1-plus-projection",
+        "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities"
+      ]
+    },
+    "ruleVectorVersion": { "const": "difficulty-feature-vector.v1" },
+    "preprocessingVersion": { "$ref": "#/$defs/immutableVersion" },
+    "tokenizerVersion": { "$ref": "#/$defs/immutableVersion" },
+    "encoderVersion": { "$ref": "#/$defs/immutableVersion" },
+    "poolingVersion": { "$ref": "#/$defs/immutableVersion" },
+    "projectionVersion": { "$ref": "#/$defs/immutableVersion" },
+    "projectionDimension": { "type": "integer", "minimum": 1 },
+    "projectionParameters": { "$ref": "#/$defs/projectionParameters" },
+    "semanticHeadsVersion": { "$ref": "#/$defs/immutableVersion" },
+    "semanticHeadClassOrder": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "$ref": "#/$defs/taskHead" },
+        { "$ref": "#/$defs/constraintHead" },
+        { "$ref": "#/$defs/scopeHead" },
+        { "$ref": "#/$defs/dependencyHead" }
+      ],
+      "items": false
+    },
+    "semanticHeadInputDimension": { "type": "integer", "minimum": 1 },
+    "semanticHeadParameters": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/headParameters" }
+    },
+    "semanticHeadProbabilityRule": { "const": "multinomial_linear_softmax.v1" },
+    "totalDimension": { "type": "integer", "minimum": 42 },
+    "featureNames": {
+      "type": "array",
+      "minItems": 42,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "weights": {
+      "type": "array",
+      "minItems": 42,
+      "items": { "type": "number" }
+    },
+    "bias": { "type": "number" },
+    "calibrationVersion": { "const": "difficulty-calibration-v1" },
+    "calibrator": { "$ref": "#/$defs/calibrator" },
+    "thresholdPolicyVersion": { "$ref": "#/$defs/immutableVersion" },
+    "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+    "thresholdEquality": { "const": "greater_than_or_equal" },
+    "trainingDatasetVersion": { "$ref": "#/$defs/immutableVersion" },
+    "trainingDatasetSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "splitPolicyVersion": { "$ref": "#/$defs/immutableVersion" },
+    "splitManifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "trainingPolicyVersion": { "$ref": "#/$defs/immutableVersion" },
+    "regularization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policyVersion": { "type": "string", "minLength": 1 },
+        "penalty": { "const": "l2" },
+        "solver": { "type": "string", "minLength": 1 },
+        "selectedC": { "type": "number", "exclusiveMinimum": 0 },
+        "groupFolds": { "type": "integer", "minimum": 2 },
+        "randomSeed": { "type": "integer" }
+      },
+      "required": ["policyVersion", "penalty", "solver", "selectedC", "groupFolds", "randomSeed"]
+    },
+    "componentHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ruleVector": { "$ref": "#/$defs/contentHash" },
+        "tokenizer": { "$ref": "#/$defs/contentHash" },
+        "encoder": { "$ref": "#/$defs/contentHash" },
+        "projection": { "$ref": "#/$defs/contentHash" },
+        "semanticHeads": { "$ref": "#/$defs/contentHash" }
+      },
+      "required": ["ruleVector", "tokenizer", "encoder", "projection", "semanticHeads"]
+    },
+    "bundleVersion": { "$ref": "#/$defs/immutableVersion" },
+    "bundleHashAlgorithm": { "const": "difficulty-feature-bundle-material.v1" },
+    "bundleHash": { "$ref": "#/$defs/contentHash" },
+    "contentHashAlgorithm": { "const": "difficulty-offline-model-inference-material.v1" },
+    "contentHash": { "$ref": "#/$defs/contentHash" }
+  },
+  "required": [
+    "schemaVersion",
+    "artifactVersion",
+    "modelVersion",
+    "offlineFeatureShapeVersion",
+    "candidateName",
+    "ruleVectorVersion",
+    "preprocessingVersion",
+    "tokenizerVersion",
+    "encoderVersion",
+    "poolingVersion",
+    "projectionVersion",
+    "projectionDimension",
+    "projectionParameters",
+    "semanticHeadsVersion",
+    "semanticHeadClassOrder",
+    "semanticHeadInputDimension",
+    "semanticHeadParameters",
+    "semanticHeadProbabilityRule",
+    "totalDimension",
+    "featureNames",
+    "weights",
+    "bias",
+    "calibrationVersion",
+    "calibrator",
+    "thresholdPolicyVersion",
+    "threshold",
+    "thresholdEquality",
+    "trainingDatasetVersion",
+    "trainingDatasetSha256",
+    "splitPolicyVersion",
+    "splitManifestSha256",
+    "trainingPolicyVersion",
+    "regularization",
+    "componentHashes",
+    "bundleVersion",
+    "bundleHashAlgorithm",
+    "bundleHash",
+    "contentHashAlgorithm",
+    "contentHash"
+  ],
+  "allOf": [
+    {
+      "if": { "properties": { "candidateName": { "const": "42d-rule-vector-v1" } } },
+      "then": {
+        "properties": {
+          "totalDimension": { "const": 42 },
+          "featureNames": { "minItems": 42, "maxItems": 42 },
+          "weights": { "minItems": 42, "maxItems": 42 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "candidateName": { "const": "42d-rule-vector-v1-plus-projection" } } },
+      "then": { "properties": { "totalDimension": { "minimum": 43 } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "candidateName": {
+            "const": "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities"
+          }
+        }
+      },
+      "then": { "properties": { "totalDimension": { "minimum": 55 } } }
+    }
+  ],
+  "$defs": {
+    "immutableVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "not": { "const": "latest" }
+    },
+    "contentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "projectionParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["identity", "pca_full_svd"] },
+        "inputDimension": { "type": "integer", "minimum": 1 },
+        "outputDimension": { "type": "integer", "minimum": 1 },
+        "dtype": { "const": "float32_le" },
+        "fitSplit": { "const": "train" },
+        "randomSeed": { "type": "integer" },
+        "whiten": { "const": false },
+        "l2Position": { "const": "after_projection" },
+        "l2Epsilon": { "type": "number", "exclusiveMinimum": 0 },
+        "mean": { "type": "array", "items": { "type": "number" } },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "number" }
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "inputDimension",
+        "outputDimension",
+        "dtype",
+        "fitSplit",
+        "randomSeed",
+        "whiten",
+        "l2Position",
+        "l2Epsilon",
+        "mean",
+        "components"
+      ]
+    },
+    "headParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "enum": [
+            "semanticTaskBucket",
+            "semanticConstraintBucket",
+            "semanticScopeBucket",
+            "semanticDependencyBucket"
+          ]
+        },
+        "classes": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "coefficient": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "number" }
+          }
+        },
+        "intercept": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "number" }
+        }
+      },
+      "required": ["name", "classes", "coefficient", "intercept"]
+    },
+    "headClasses": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "taskHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "semanticTaskBucket" },
+        "classes": {
+          "allOf": [
+            { "$ref": "#/$defs/headClasses" },
+            { "prefixItems": [{ "const": "count_1" }, { "const": "count_2" }, { "const": "count_3_plus" }], "items": false }
+          ]
+        }
+      },
+      "required": ["name", "classes"]
+    },
+    "constraintHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "semanticConstraintBucket" },
+        "classes": {
+          "allOf": [
+            { "$ref": "#/$defs/headClasses" },
+            { "prefixItems": [{ "const": "count_0_to_1" }, { "const": "count_2" }, { "const": "count_3_plus" }], "items": false }
+          ]
+        }
+      },
+      "required": ["name", "classes"]
+    },
+    "scopeHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "semanticScopeBucket" },
+        "classes": {
+          "allOf": [
+            { "$ref": "#/$defs/headClasses" },
+            { "prefixItems": [{ "const": "count_1" }, { "const": "count_2_to_3" }, { "const": "count_4_plus" }], "items": false }
+          ]
+        }
+      },
+      "required": ["name", "classes"]
+    },
+    "dependencyHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "semanticDependencyBucket" },
+        "classes": {
+          "allOf": [
+            { "$ref": "#/$defs/headClasses" },
+            { "prefixItems": [{ "const": "depth_0_to_1" }, { "const": "depth_2" }, { "const": "depth_3_plus" }], "items": false }
+          ]
+        }
+      },
+      "required": ["name", "classes"]
+    },
+    "calibrator": {
+      "description": "A freshly fitted calibrator for this candidate. v1 parameters are not copied into the offline artifact.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "platt" },
+            "input": { "const": "raw_probability" },
+            "coefficient": { "type": "number" },
+            "intercept": { "type": "number" }
+          },
+          "required": ["type", "input", "coefficient", "intercept"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "isotonic" },
+            "input": { "const": "raw_probability" },
+            "xThresholds": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "yThresholds": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          "required": ["type", "input", "xThresholds", "yThresholds"]
+        }
+      ]
+    }
+  }
+}

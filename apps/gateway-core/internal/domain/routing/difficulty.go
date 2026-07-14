@@ -106,7 +106,13 @@ func (classifier DifficultyClassifier) ClassifyFeatures(features DifficultyFeatu
 	}
 
 	vector := classifier.vectorizer(features)
-	rawScore := classifier.model.score(vector)
+	rawScore, err := classifier.model.score(vector)
+	if err != nil {
+		// The v1 constructor and canonical vectorizer make this unreachable in
+		// normal use. Keep the inactive shadow path fail closed rather than
+		// allowing malformed internal material to panic or weaken difficulty.
+		return DifficultyResult{ComplexityScore: 1, Difficulty: DifficultyComplex}
+	}
 	calibratedScore := classifier.calibrator.calibrate(rawScore)
 
 	return DifficultyResult{

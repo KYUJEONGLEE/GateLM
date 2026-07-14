@@ -19,7 +19,15 @@ from .semantic_heads import (
     train_semantic_heads,
     validate_semantic_heads_artifact,
 )
-from .training import artifact_content_hash, train_from_vector_export
+from .training import (
+    OfflineArtifactProvenance,
+    artifact_content_hash,
+    offline_bundle_hash,
+    train_from_offline_feature_matrix,
+    train_from_vector_export,
+    validate_offline_feature_matrix,
+    validate_v1_vector_export,
+)
 
 __all__ = [
     "OFFLINE_FEATURE_SHAPE_VERSION",
@@ -37,6 +45,11 @@ __all__ = [
     "train_and_evaluate_semantic_heads",
     "train_semantic_heads",
     "validate_semantic_heads_artifact",
+    "OfflineArtifactProvenance",
     "artifact_content_hash",
+    "offline_bundle_hash",
+    "train_from_offline_feature_matrix",
     "train_from_vector_export",
+    "validate_offline_feature_matrix",
+    "validate_v1_vector_export",
 ]

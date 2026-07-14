@@ -49,6 +49,8 @@ redactedPrompt
 
 Python tooling은 [`../../scripts/routing_difficulty_model/`](../../scripts/routing_difficulty_model/)에 격리한다. Gateway와 AI service production dependency에는 NumPy나 scikit-learn을 추가하지 않는다. Versioned policy는 L2 Logistic Regression regularization group CV, Platt/isotonic global calibrator 비교와 고정 `0.45` threshold를 선언한다. 두 후보는 모두 `raw_probability`를 입력으로 쓰며 평균 log loss, `0.000001` 허용 오차 안의 평균 Brier score, Platt 우선 순서로 선택한다. 한 후보가 실패하면 다른 유효 후보를 사용할 수 있지만 둘 다 실패하면 학습을 실패시키며 identity 또는 무보정 fallback artifact를 만들지 않는다.
 
+동일한 Logistic Regression regularization search와 calibrator 선택·fit 함수는 `difficulty-offline-feature-shape.v1` descriptor 기반 training API에서도 재사용한다. 기존 `train_from_vector_export()`와 CLI는 exact 42D v1 name/order/dimension만 계속 허용한다. 별도 `train_from_offline_feature_matrix()`는 canonical assembler가 만든 `42`, `42 + P`, `54 + P` matrix의 candidate, feature names, total dimension, sample dimension, finite 값, family-disjoint split과 sentinel `modelPath`를 교차 검증한다. 각 호출은 candidate 자신의 weights/bias와 calibration raw probability로 calibrator를 다시 fit한다. Combined vector와 semantic intermediate를 파일로 쓰는 helper는 제공하지 않는다.
+
 Isotonic은 scikit-learn의 선형 interpolation predictor를 artifact 의미로 사용하지 않고 tooling의 작은 PAVA 구현으로 학습한다. Raw probability를 정렬하고 exact-equal 값만 먼저 묶어 sample count와 complex count를 계산한 뒤, 앞 block의 비율이 뒤 block보다 큰 동안 sample-count 가중 병합을 반복한다. `labelConfidence`, epsilon grouping, 고정 score bin과 자동 small-block 병합은 사용하지 않는다. Artifact에는 각 최종 block의 포함 하한과 complex 비율을 저장하며 single constant block도 유효하다. Runtime은 포함 하한 floor lookup과 양끝 clipping만 수행한다.
 
 ## Candidate Training Command
@@ -106,6 +108,8 @@ Isotonic의 `xThresholds[i]`는 block의 포함 하한이다. `xThresholds[i] <=
 
 Candidate JSON은 [`../v2.1.0/schemas/difficulty-model-artifact.schema.json`](../v2.1.0/schemas/difficulty-model-artifact.schema.json)을 따른다. JSON은 offline provenance와 coefficient를 보존하는 교환 artifact이며 Gateway hot path에서 파싱하지 않는다.
 
+Semantic comparison candidate는 v1 schema를 느슨하게 확장하지 않고 [`../v2.1.0/schemas/difficulty-offline-model-artifact.schema.json`](../v2.1.0/schemas/difficulty-offline-model-artifact.schema.json)을 사용한다. 이 closed schema는 `offlineFeatureShapeVersion`, candidate, preprocessing, tokenizer/encoder/pooling version과 hash, projection parameter와 `P`, 고정 4-head/12D class order와 coefficient/intercept, exact `totalDimension`/feature names/classifier weights, candidate별 calibrator, threshold/equality, dataset/split hash와 training policy를 요구한다. Bundle hash는 component tuple과 parameter/shape를 고정하고 content hash는 classifier·calibrator와 전체 provenance까지 고정한다. 기존 v1 parser는 이 artifact를 받지 않고 offline parser도 v1 artifact를 받지 않는다.
+
 ```powershell
 $env:GOCACHE=(Resolve-Path '.gocache').Path
 go run ./apps/gateway-core/cmd/difficulty-model-codegen `
@@ -114,6 +118,18 @@ go run ./apps/gateway-core/cmd/difficulty-model-codegen `
 ```
 
 Code generation은 feature/model/calibration version, exact 42개 이름·순서·weight, finite bias/coefficient, calibrator parameter, fixed threshold와 inference-material content hash를 검증한다. 학습 dataset version, split policy, regularization 설정 같은 provenance metadata는 artifact schema와 offline report의 책임이며 code generation을 막지 않는다. 알 수 없는 설명용 metadata도 무시한다. Gateway runtime에는 JSON parsing이나 반복 shape 검증을 추가하지 않는다.
+
+같은 command가 별도 offline artifact도 schema identity로 분기해 생성할 수 있다. 이 경우 candidate, feature shape, total dimension, feature order와 content hash를 검증하고 package-private `generatedDifficultyLogisticOfflineModel`을 만든다. 생성 파일에는 offline/shadow 전용이며 product routing에 등록되지 않는다는 주석이 포함된다. v1 artifact는 계속 exact 42D code를 만들며, 두 schema의 교차 입력과 unsupported candidate/dimension은 codegen 단계에서 실패한다.
+
+Offline artifact 자체는 다음 독립 verifier로 code generation 없이 검증할 수 있다.
+
+```powershell
+corepack pnpm run v2.1:routing:verify-difficulty-artifact -- `
+  -artifact .tmp\difficulty-offline-candidate.json `
+  -report .tmp\difficulty-offline-validation-report.json
+```
+
+Verifier는 closed JSON shape, immutable version, 4-head/12D parameter와 class order, projection/classifier dimension, finite numeric material, calibrator tagged union, threshold equality, dataset/split/training provenance, bundle hash와 content hash를 fail closed로 확인한다. 성공 report는 version/hash와 candidate/dimension만 포함하며 projection/head/classifier parameter를 복제하지 않는다. 실패 report는 입력값이나 JSON fragment 없이 `invalid_arguments`, `artifact_read_failed`, `artifact_invalid`, `report_write_failed` 중 하나의 안전한 code만 제공한다. Artifact나 report에는 raw prompt, token, embedding, vector, head output, per-sample score 또는 matched phrase를 넣지 않는다.
 
 Validated candidate artifact는 제품 runtime에 포함하지 않고 다음처럼 opt-in offline shadow 비교에만 입력할 수 있다.
 
@@ -139,6 +155,10 @@ The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testi
 - deterministic sentinel과 Logistic Regression `modelPath` 학습·calibration 분리
 - 작은 in-memory synthetic matrix의 Logistic Regression/calibrator fit
 - Python artifact hash와 Go code generator parity
+- Generic scorer의 `42`, `42 + P`, `54 + P` 계산과 dimension/finite fail-closed
+- Descriptor 기반 세 candidate의 별도 weights/bias/calibrator fit과 feature order 검증
+- v1/offline artifact parser 교차 거부, offline component provenance와 Go/Python hash parity
+- Offline generated Go의 candidate/dimension/feature order 보존과 type-check
 - stable sigmoid, Platt 공식과 포함 하한 Isotonic 계단 lookup의 Python-Go 공통 golden parity
 - PAVA exact-tie grouping, sample-count 가중 cascade merge, block 진단과 single-block inference
 - 잘못된 feature order/count, threshold, calibrator와 content hash의 codegen 거부
@@ -146,3 +166,5 @@ The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testi
 - opt-in shadow artifact load, runtime 비교, 긴 simple·짧은 complex segment와 민감 material 비노출
 
 500건 smoke는 ephemeral tooling test에만 사용할 수 있다. Approved human-reviewed family dataset을 이용한 실제 학습, production artifact 생성, holdout promotion gate와 runtime cutover는 이 준비 범위에 포함하지 않는다.
+
+이번 준비는 API, DB, Event, Metrics, RuntimeSnapshot, routing policy와 제품 `DifficultyResult` shape를 변경하지 않는다. 실제 encoder/projection/head/decision artifact 선택, approved semantic dataset 학습, Gateway shadow 실행 위치와 runtime 승격도 포함하지 않는다.

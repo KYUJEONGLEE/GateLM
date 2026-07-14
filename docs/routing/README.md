@@ -17,7 +17,7 @@
 | [`contracts.md`](contracts.md) | category, difficulty, auto/manual, migration, event/log 경계 |
 | [`classification-pipeline.md`](classification-pipeline.md) | 공통 feature 추출, category 결과, category-aware difficulty 분류의 canonical 내부 구조 |
 | [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md) | `difficulty-feature-vector.v1`의 42차원 순서, scaling, enum과 zero-fill 계약 |
-| [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | 500건 smoke-only pilot, 향후 approved-family split, offline Python 학습과 generated Go artifact의 비활성 준비 경계 |
+| [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | 500건 smoke-only pilot, 향후 approved-family split, exact 42D v1과 descriptor 기반 semantic candidate의 offline Python 학습·artifact·generated Go 비활성 준비 경계 |
 | [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 전역 Simple/Complex/단일 fallback을 5 category × 2 difficulty에 투영하는 routing policy v2 schema |
 | [`fixtures/routing-policy.fixture.json`](fixtures/routing-policy.fixture.json) | 모든 셀이 `mock-balanced`인 안전한 bootstrap fixture |
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |
