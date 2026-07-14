@@ -281,8 +281,8 @@ export function ChatShell() {
     setStatus('답변을 생성하고 있습니다.');
     setMessages((current) => [
       ...(selectedId ? current : []),
-      { id: optimisticUserId, turnId: optimisticUserId, role: 'user', content, sequence: baseSequence + 1, createdAt: now },
-      { id: draftId, turnId: draftId, role: 'assistant', content: '', sequence: baseSequence + 2, createdAt: now },
+      { id: optimisticUserId, localId: optimisticUserId, turnId: optimisticUserId, role: 'user', content, sequence: baseSequence + 1, createdAt: now },
+      { id: draftId, localId: draftId, turnId: draftId, role: 'assistant', content: '', sequence: baseSequence + 2, createdAt: now },
     ]);
     const controller = new AbortController();
     streamControllerRef.current = controller;
@@ -444,7 +444,7 @@ export function ChatShell() {
           {!selected ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>무엇을 함께 해결할까요?</h1><p>메시지를 보내면 새 대화를 만들고 조직의 정책 안에서 안전하게 답변합니다.</p></div></div>
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
               : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
-                {messages.map((message) => <li key={message.id} className={`message-row message-${message.role}`}>
+                {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
                   {message.role === 'user' ? <article><span className="sr-only">내 메시지</span><p>{message.content}</p></article> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
                     <article>
@@ -487,7 +487,7 @@ export function ChatShell() {
 
 type ConversationPage = Readonly<{ items: readonly Conversation[]; nextCursor: string | null }>;
 type MessagePage = Readonly<{ items: readonly Message[]; nextCursor: string | null }>;
-type DisplayMessage = Message & Readonly<{ notice?: SafeChatError }>;
+type DisplayMessage = Message & Readonly<{ localId?: string; notice?: SafeChatError }>;
 
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
