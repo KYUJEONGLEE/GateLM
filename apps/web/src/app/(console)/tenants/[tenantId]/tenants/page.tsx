@@ -41,6 +41,7 @@ const tenantManagementText = {
     auto: "Auto",
     autoDescription:
       "Classifies each request by workload and complexity, then applies the approved route before provider execution.",
+    autoEnabledMessage: "Auto routing enabled. The saved routing matrix is active.",
     autoRouting: "Auto routing",
     budget: "Budget",
     budgetDescription: "Tenant budget settings are managed separately from routing.",
@@ -63,11 +64,14 @@ const tenantManagementText = {
     fallbackModel: "Fallback model",
     fallbackTitle: "Fallback model settings",
     manual: "Manual",
+    manualEnabledMessage: "Manual mode selected. The Auto routing matrix is preserved.",
     matrix: "Workload routing policy",
     matrixDescription:
       "Assign approved models by workload and complexity. Explicit assignments override the company default; unclassified requests use General.",
     reset: "Reset",
+    resetMessage: "Routing settings reset to the company default model.",
     saved: "Saved",
+    savedMessage: "Routing settings saved.",
     save: "Save changes",
     sections: { budget: "Budget policy", routing: "Routing policy" },
     sectionLabel: "Company policy sections",
@@ -78,6 +82,7 @@ const tenantManagementText = {
     auto: "자동",
     autoDescription:
       "요청을 업무 유형과 복잡도로 분류하고, Provider 호출 전에 승인된 라우팅 정책을 적용합니다.",
+    autoEnabledMessage: "자동 라우팅이 활성화되었습니다. 저장된 라우팅 정책이 적용됩니다.",
     autoRouting: "자동 라우팅",
     budget: "예산",
     budgetDescription: "테넌트 예산 설정은 라우팅과 별도로 관리됩니다.",
@@ -100,11 +105,14 @@ const tenantManagementText = {
     fallbackModel: "Fallback 모델",
     fallbackTitle: "Fallback 모델 설정",
     manual: "수동",
+    manualEnabledMessage: "수동 모드가 선택되었습니다. 자동 라우팅 정책은 유지됩니다.",
     matrix: "업무 유형별 라우팅 정책",
     matrixDescription:
       "업무 유형과 복잡도별 승인 모델을 지정합니다. 개별 설정은 회사 기본 모델보다 우선하며, 분류되지 않은 요청은 일반 정책을 사용합니다.",
     reset: "초기화",
+    resetMessage: "라우팅 설정을 회사 기본 모델로 초기화했습니다.",
     saved: "저장됨",
+    savedMessage: "라우팅 설정을 저장했습니다.",
     save: "변경사항 저장",
     sections: { budget: "예산 정책", routing: "라우팅 정책" },
     sectionLabel: "회사 정책 섹션",
@@ -435,9 +443,7 @@ function TenantRoutingPanel({
     clearSaveConfirmation();
     setMode(autoRoutingEnabled ? "auto" : "manual");
     setStatusMessage(
-      autoRoutingEnabled
-        ? "Auto routing enabled. The saved routing matrix is active."
-        : "Manual mode selected. The Auto routing matrix is preserved."
+      autoRoutingEnabled ? text.autoEnabledMessage : text.manualEnabledMessage
     );
   }
 
@@ -449,7 +455,7 @@ function TenantRoutingPanel({
       mode,
       routes: cloneRoutingMatrix(routingMatrix)
     });
-    setStatusMessage("Routing settings saved.");
+    setStatusMessage(text.savedMessage);
     saveConfirmationTimeout.current = setTimeout(() => {
       setIsSaveConfirmed(true);
       saveConfirmationTimeout.current = setTimeout(() => {
@@ -465,7 +471,7 @@ function TenantRoutingPanel({
     setFallbackModelRef(initialFallbackModelRef);
     setMode("auto");
     setRoutingMatrix(createCompanyDefaultMatrix());
-    setStatusMessage("Routing settings reset to the company default model.");
+    setStatusMessage(text.resetMessage);
   }
 
   return (

@@ -22,6 +22,10 @@ test("company policy page exposes routing first with the Claude company default"
   expect(pageSource).toContain('modelRef: "openai:gpt-4o-mini"');
   expect(pageSource).toContain('fallbackTitle: "Fallback model settings"');
   expect(pageSource).toContain('fallbackTitle: "Fallback 모델 설정"');
+  expect(pageSource).toContain('savedMessage: "라우팅 설정을 저장했습니다."');
+  expect(pageSource).toContain('resetMessage: "라우팅 설정을 회사 기본 모델로 초기화했습니다."');
+  expect(pageSource).toContain("setStatusMessage(text.savedMessage)");
+  expect(pageSource).toContain("setStatusMessage(text.resetMessage)");
   expect(pageSource).toContain("ProviderFamilyIcon");
   expect(pageSource).not.toContain("Add fallback");
   expect(pageSource).not.toContain("moveModelRef");

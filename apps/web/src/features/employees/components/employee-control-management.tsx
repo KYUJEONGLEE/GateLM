@@ -1814,63 +1814,68 @@ export function EmployeeControlManagement({
     setPendingAction("deleteSelected");
     setSubmitState({ message: "", status: "idle" });
 
-    const deletedEmployeeIds: string[] = [];
-    let failedCount = 0;
+    try {
+      const deletedEmployeeIds: string[] = [];
+      let failedCount = 0;
 
-    for (let index = 0; index < targets.length; index += 5) {
-      const batch = targets.slice(index, index + 5);
-      const results = await Promise.all(
-        batch.map(async (employee) => {
-          try {
-            const response = await fetch("/api/control-plane/employees", {
-              body: JSON.stringify({
-                action: "update",
-                values: {
-                  employeeId: employee.id,
-                  status: "archived",
-                  tenantId: model.controlPlaneTenantId
-                }
-              }),
-              headers: { "Content-Type": "application/json" },
-              method: "POST"
-            });
-            const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
+      for (let index = 0; index < targets.length; index += 5) {
+        const batch = targets.slice(index, index + 5);
+        const results = await Promise.all(
+          batch.map(async (employee) => {
+            try {
+              const response = await fetch("/api/control-plane/employees", {
+                body: JSON.stringify({
+                  action: "update",
+                  values: {
+                    employeeId: employee.id,
+                    status: "archived",
+                    tenantId: model.controlPlaneTenantId
+                  }
+                }),
+                headers: { "Content-Type": "application/json" },
+                method: "POST"
+              });
+              const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
 
-            return response.ok && payload.employee?.status === "archived"
-              ? employee.id
-              : null;
-          } catch {
-            return null;
+              return response.ok && payload.employee?.status === "archived"
+                ? employee.id
+                : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        for (const employeeId of results) {
+          if (employeeId) {
+            deletedEmployeeIds.push(employeeId);
+          } else {
+            failedCount += 1;
           }
-        })
-      );
-
-      for (const employeeId of results) {
-        if (employeeId) {
-          deletedEmployeeIds.push(employeeId);
-        } else {
-          failedCount += 1;
         }
       }
-    }
 
-    const deletedIdSet = new Set(deletedEmployeeIds);
-    setEmployees((current) => current.filter((employee) => !deletedIdSet.has(employee.id)));
-    setSelectedEmployeeIds((current) =>
-      current.filter((employeeId) => !deletedIdSet.has(employeeId))
-    );
-    if (selectedEmployeeId && deletedIdSet.has(selectedEmployeeId)) {
-      setSelectedEmployeeId(null);
+      const deletedIdSet = new Set(deletedEmployeeIds);
+      setEmployees((current) => current.filter((employee) => !deletedIdSet.has(employee.id)));
+      setSelectedEmployeeIds((current) =>
+        current.filter((employeeId) => !deletedIdSet.has(employeeId))
+      );
+      setSelectedEmployeeId((current) =>
+        current && deletedIdSet.has(current) ? null : current
+      );
+      setSubmitState({
+        message:
+          deletedEmployeeIds.length > 0
+            ? text.deleted(deletedEmployeeIds.length, failedCount)
+            : text.deleteFailed,
+        status: failedCount > 0 || deletedEmployeeIds.length === 0 ? "error" : "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({ message: text.deleteFailed, status: "error" });
+    } finally {
+      setPendingAction(null);
     }
-    setSubmitState({
-      message:
-        deletedEmployeeIds.length > 0
-          ? text.deleted(deletedEmployeeIds.length, failedCount)
-          : text.deleteFailed,
-      status: failedCount > 0 || deletedEmployeeIds.length === 0 ? "error" : "success"
-    });
-    setPendingAction(null);
-    router.refresh();
   }
 
   function toggleEmployeeSelection(employeeId: string, checked: boolean) {
