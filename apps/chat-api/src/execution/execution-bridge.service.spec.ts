@@ -50,6 +50,23 @@ describe('ExecutionBridgeService', () => {
     expect(handle.idempotencyKey).not.toBe(handle.requestId);
   });
 
+  it('preserves store-reserved logical identities at the Gateway boundary', async () => {
+    const gateway = {
+      isConfigured: () => true,
+      admit: jest.fn(async (seed) => ({ ...seed, admissionId: 'admission_001', expiresAt: '2026-07-14T00:00:30Z' })),
+    };
+    const bridge = new ExecutionBridgeService(
+      {} as never,
+      { activeRuntimeSnapshot: async () => runtime } as never,
+      gateway as never,
+      { isReady: async () => true } as never,
+    );
+    const identity = { requestId: 'request-stable', turnId: 'turn-stable', idempotencyKey: 'idem-stable' };
+    const handle = await bridge.admitAuthorized(actor, identity);
+    expect(handle).toMatchObject(identity);
+    expect(gateway.admit).toHaveBeenCalledWith(expect.objectContaining(identity));
+  });
+
   it('closes authorization before entitlement work when signing configuration is unavailable', async () => {
     const sessions = { authorizeExecution: jest.fn() };
     const bridge = new ExecutionBridgeService(

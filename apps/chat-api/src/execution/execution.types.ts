@@ -51,6 +51,12 @@ export type AdmissionSeed = Readonly<{
   sessionVersion: number;
 }>;
 
+export type AdmissionIdentity = Readonly<{
+  requestId: string;
+  turnId: string;
+  idempotencyKey: string;
+}>;
+
 export type AdmissionHandle = Readonly<AdmissionSeed & {
   admissionId: string;
   expiresAt: string;

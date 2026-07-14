@@ -21,6 +21,10 @@ export type ChatApiEnv = {
   TENANT_CHAT_GATEWAY_REQUEST_MAX_BYTES: number;
   TENANT_CHAT_GATEWAY_SSE_FRAME_MAX_BYTES: number;
   TENANT_CHAT_GATEWAY_STREAM_MAX_BYTES: number;
+  TENANT_CHAT_HISTORY_RETENTION_DAYS: 0 | 7 | 30 | 90;
+  TENANT_CHAT_RETENTION_BATCH_SIZE: number;
+  TENANT_CHAT_RETENTION_INTERVAL_MS: number;
+  TENANT_CHAT_ASSISTANT_MAX_BYTES: number;
 };
 
 export function validateEnv(env: RawEnv): ChatApiEnv {
@@ -103,7 +107,37 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
       64 * 1024,
       16 * 1024 * 1024,
     ),
+    TENANT_CHAT_HISTORY_RETENTION_DAYS: retentionDays(env),
+    TENANT_CHAT_RETENTION_BATCH_SIZE: boundedInteger(
+      env,
+      'TENANT_CHAT_RETENTION_BATCH_SIZE',
+      50,
+      1,
+      500,
+    ),
+    TENANT_CHAT_RETENTION_INTERVAL_MS: boundedInteger(
+      env,
+      'TENANT_CHAT_RETENTION_INTERVAL_MS',
+      60_000,
+      1_000,
+      3_600_000,
+    ),
+    TENANT_CHAT_ASSISTANT_MAX_BYTES: boundedInteger(
+      env,
+      'TENANT_CHAT_ASSISTANT_MAX_BYTES',
+      1024 * 1024,
+      1024,
+      1024 * 1024,
+    ),
   };
+}
+
+function retentionDays(env: RawEnv): 0 | 7 | 30 | 90 {
+  const value = Number(env.TENANT_CHAT_HISTORY_RETENTION_DAYS ?? '30');
+  if (![0, 7, 30, 90].includes(value)) {
+    throw new Error('TENANT_CHAT_HISTORY_RETENTION_DAYS must be one of 0, 7, 30, or 90.');
+  }
+  return value as 0 | 7 | 30 | 90;
 }
 
 function boundedDatabaseUrl(env: RawEnv): string {

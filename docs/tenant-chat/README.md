@@ -60,6 +60,7 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - confirmed usage ledger와 Dashboard aggregate
 - admin policy/BYOK 및 감사되는 단건 content diagnostic
 - local/self-host Compose, seed, smoke, browser/load evidence
+- Unit 4 encrypted conversation/API 검증: `corepack pnpm tenant-chat:encrypted-conversation:smoke`
 
 ### Follow-up PR
 

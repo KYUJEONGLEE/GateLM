@@ -26,11 +26,11 @@ export class TenantContentKeyService {
   async isReady(): Promise<boolean> {
     try {
       const keySet = await this.provider.load();
-      const rows = await this.prisma.tenantChatContentKeyState.findMany({
+      const state = await this.prisma.tenantChatContentKeyState.findFirst({
         select: { wrappingKeyRollbackFloor: true },
-        take: 1000,
+        orderBy: { wrappingKeyRollbackFloor: 'desc' },
       });
-      return rows.every((row) => keySet.activeVersion >= row.wrappingKeyRollbackFloor);
+      return !state || keySet.activeVersion >= state.wrappingKeyRollbackFloor;
     } catch {
       return false;
     }

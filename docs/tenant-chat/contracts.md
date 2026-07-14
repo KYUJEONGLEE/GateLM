@@ -351,6 +351,7 @@ Idempotency rules:
 | 409 | `CHAT_POLICY_ACK_REQUIRED` | employee notice acknowledgement 필요 |
 | 409 | `CHAT_IDEMPOTENCY_CONFLICT` | 같은 key와 다른 binding |
 | 409 | `CHAT_CONVERSATION_VERSION_CONFLICT` | stale rename/delete compare-and-swap |
+| 409 | `CHAT_TURN_STATE_CONFLICT` | terminal/deleted turn 또는 cache epoch 변경으로 실행을 계속할 수 없음 |
 | 409 | `CHAT_TERMINAL_REPLAY_UNAVAILABLE` | terminal facts는 있으나 성공 content를 안전하게 복구할 수 없음 |
 | 409 | `CHAT_ADMISSION_EXPIRED` | admission 30초 만료/consume됨 |
 | 409 | `CHAT_INVITATION_INVALID` | invitation intent가 없거나 token이 유효하지 않음 |
@@ -365,9 +366,12 @@ Idempotency rules:
 | 503 | `CHAT_USAGE_GUARD_UNAVAILABLE` | rate/quota consistency를 안전하게 판단할 수 없음 |
 | 503 | `CHAT_NO_ELIGIBLE_ROUTE` | policy에 실행 가능한 route 없음; publish validator가 선제 차단해야 함 |
 | 503 | `CHAT_ENTITLEMENT_UNAVAILABLE` | Control Plane entitlement를 안전하게 확인할 수 없음 |
+| 503 | `CHAT_STORAGE_UNAVAILABLE` | encrypted content store를 안전하게 사용할 수 없음 |
 | 504 | `CHAT_PROVIDER_TIMEOUT` | provider hard timeout |
 | 404 | `CHAT_CONVERSATION_NOT_FOUND` | foreign/deleted/missing conversation의 동일 경계 |
 | 503 | `CHAT_CONTENT_KEY_UNAVAILABLE` | active/grace content key를 안전하게 사용할 수 없음 |
+| 500 | `CHAT_CONTENT_INTEGRITY_FAILED` | ciphertext/tag/AAD/key binding 검증 실패; detail은 비노출 |
+| SSE | `CHAT_RESPONSE_TOO_LARGE` | assistant aggregate가 Chat API 상한을 초과해 fail closed |
 
 ## 11. Dashboard와 metrics
 
@@ -416,7 +420,7 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - conversation, turn, message ID는 UUID v4 opaque ID다. foreign tenant, 다른 user, deleted row와 존재하지 않는 row는 모두 같은 `404 CHAT_CONVERSATION_NOT_FOUND`를 반환한다.
 - create와 turn은 caller가 만든 bounded `idempotencyKey`를 사용한다. Chat API는 actor와 canonical request binding을 keyed MAC으로 저장하며 same key/different binding은 `409 CHAT_IDEMPOTENCY_CONFLICT`다.
 - rename/delete는 conversation `version`을 compare-and-swap한다. stale mutation은 `409 CHAT_CONVERSATION_VERSION_CONFLICT`이며 title plaintext를 conflict response에 포함하지 않는다.
-- list/history cursor는 version, actor, scope, conversation, boundary, requested limit, `cacheEpoch`를 MAC으로 binding한다. tamper, scope 변경, epoch 불일치는 `400 CHAT_CURSOR_INVALID`다.
+- list cursor는 version, actor, scope, boundary, requested limit을 MAC으로 binding한다. history cursor는 여기에 conversation과 `cacheEpoch`를 추가한다. tamper, scope 변경, epoch 불일치는 `400 CHAT_CURSOR_INVALID`다.
 - history page는 최대 100개, completion context는 최근 completed message 최대 32개와 복호화 plaintext 최대 256 KiB다. request user content는 UTF-8 1~20,000자, title은 1~120자다.
 - exact route와 response field는 OpenAPI, resource shape는 [conversation schema](./schemas/chat-conversation.schema.json), SSE는 [turn event schema](./schemas/chat-turn-sse-event.schema.json)를 따른다.
 
@@ -453,7 +457,8 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - delete는 conversation row를 actor-scoped lock하고 deleted tombstone/version/cache epoch를 먼저 commit한 뒤 title/message ciphertext를 synchronous hard delete한다. tombstone에는 content를 남기지 않는다.
 - final persistence는 같은 conversation row의 active 상태와 captured cache epoch를 lock/check하므로 delete 뒤 late assistant가 다시 나타날 수 없다.
 - active turn은 delete/caller disconnect에서 best-effort Gateway cancel하고 Chat API turn state를 terminal cancel로 만든다. billable usage 정산은 되돌리지 않는다.
-- retention worker는 expiry 순서의 bounded batch를 같은 hard-delete primitive로 처리한다. tombstone/이미 삭제된 row replay는 no-op이며 destructive down이나 plaintext export rollback을 제공하지 않는다.
+- retention expiry는 마지막 성공적인 user/assistant ciphertext commit에서 server policy 기간만큼 연장된다. `disabled`는 expiry를 두지 않는다.
+- retention worker는 expiry 순서의 bounded batch를 같은 hard-delete primitive로 처리하고 active in-process turn을 commit 뒤 best-effort cancel한다. tombstone/이미 삭제된 row replay는 no-op이며 destructive down이나 plaintext export rollback을 제공하지 않는다.
 - history cursor와 any future cache entry는 `cacheEpoch`를 binding한다. delete epoch 이전 값은 재사용할 수 없다.
 
 ### 12.5 Admin diagnostic

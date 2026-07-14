@@ -42,6 +42,7 @@ revision: `tenant-chat/v1`
 - admission 최초 생성은 `201`, 같은 binding replay는 `200`과 `replayed=true`다.
 - cancel 최초·동일 replay는 모두 `200`이다. 이미 consume/expire된 admission의 첫 cancel은 `409 CHAT_ADMISSION_EXPIRED`다.
 - completion의 in-flight replay는 같은 실행 stream에 attach한다. terminal replay는 provider 호출 없이 final event만 다시 보낸다. 둘 다 `200`이며 `Idempotency-Replayed: true`다.
+- Chat API는 같은 logical turn의 concurrent HTTP attachment를 하나의 completion promise와 AbortSignal로 fan-out한다. 늦게 attach한 응답은 이미 관측된 bounded delta부터 순서대로 replay하며 별도 Provider call을 만들지 않는다.
 - process recovery 중 안전한 attach/replay를 증명할 수 없으면 `503 CHAT_USAGE_GUARD_UNAVAILABLE`와 bounded `retryAfterSeconds`를 반환한다.
 - 같은 key와 다른 binding은 항상 `409 CHAT_IDEMPOTENCY_CONFLICT`이며 기존 request 상태를 노출하지 않는다.
 - 오류 body는 OpenAPI의 `ErrorResponse`만 사용한다. Provider raw error, request body, JWT, 내부 stack과 비용 금액을 넣지 않는다.
@@ -259,7 +260,7 @@ Chat API는 Control Plane-owned identity table을 직접 읽지 않는다. sessi
 - assistant final은 conversation row를 `FOR UPDATE`로 잠그고 `deleted_at IS NULL`, captured `cache_epoch`, turn state를 확인한 뒤 message insert, next sequence increment, turn completed transition을 한 transaction에서 수행한다.
 - assistant insert unique key는 `(turn_id,role)`다. duplicate는 기존 ciphertext를 decrypt/compare한 뒤 same content만 replay하고, mismatch는 integrity failure다.
 - delete는 conversation lock, tombstone/version/cache epoch update, message ciphertext delete, unfinished turn cancel transition을 한 transaction에서 수행한다. 외부 Gateway cancel은 commit 뒤 best effort다.
-- retention은 같은 delete primitive의 bounded batch다. worker crash/replay가 content를 복구하거나 epoch를 낮추지 않는다.
+- retention은 마지막 ciphertext commit 기준 sliding expiry와 같은 delete primitive의 bounded batch다. active in-process handle은 commit 뒤 best-effort cancel하며 worker crash/replay가 content를 복구하거나 epoch를 낮추지 않는다.
 
 ## 9. 구현 및 연동 순서
 

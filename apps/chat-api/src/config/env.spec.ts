@@ -32,4 +32,13 @@ describe('Chat API environment', () => {
     expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '300001' }))
       .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
   });
+
+  it('accepts only server-owned retention choices and bounds assistant persistence', () => {
+    expect(validateEnv(base).TENANT_CHAT_HISTORY_RETENTION_DAYS).toBe(30);
+    expect(validateEnv({ ...base, TENANT_CHAT_HISTORY_RETENTION_DAYS: '0' }).TENANT_CHAT_HISTORY_RETENTION_DAYS).toBe(0);
+    expect(() => validateEnv({ ...base, TENANT_CHAT_HISTORY_RETENTION_DAYS: '31' }))
+      .toThrow('TENANT_CHAT_HISTORY_RETENTION_DAYS');
+    expect(() => validateEnv({ ...base, TENANT_CHAT_ASSISTANT_MAX_BYTES: '1048577' }))
+      .toThrow('TENANT_CHAT_ASSISTANT_MAX_BYTES');
+  });
 });
