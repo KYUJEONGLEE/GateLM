@@ -104,6 +104,7 @@ export class ConversationController {
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Connection', 'keep-alive');
+    response.setHeader('Content-Encoding', 'identity');
     response.setHeader('X-Accel-Buffering', 'no');
     response.flushHeaders();
     let sequence = 1;

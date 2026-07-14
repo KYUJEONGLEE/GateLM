@@ -88,6 +88,7 @@ describe('ConversationController SSE cleanup', () => {
       response as unknown as Response,
     );
 
+    expect(response.setHeader).toHaveBeenCalledWith('Content-Encoding', 'identity');
     expect(finalPayload(response)).toMatchObject({
       type: 'chat.turn.final',
       quotaState: 'economy',

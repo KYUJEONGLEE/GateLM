@@ -103,6 +103,31 @@ test('SSE proxy rejects declared overflow and aborts upstream when browser cance
   assert.equal(upstreamSignal.aborted, true);
 });
 
+test('SSE proxy disables compression and relays a delta before upstream completion', async () => {
+  let releaseUpstream;
+  const upstreamReleased = new Promise((resolve) => { releaseUpstream = resolve; });
+  const firstFrame = new TextEncoder().encode('event: chat.turn.delta\ndata: {"delta":"안"}\n\n');
+  const response = await conversationSse({
+    ...input,
+    body: {},
+    fetchImpl: async () => new Response(new ReadableStream({
+      async start(controller) {
+        controller.enqueue(firstFrame);
+        await upstreamReleased;
+        controller.close();
+      },
+    }), { headers: { 'content-type': 'text/event-stream' } }),
+  });
+
+  assert.equal(response.headers.get('content-encoding'), 'identity');
+  const reader = response.body.getReader();
+  const firstRead = await reader.read();
+  assert.equal(firstRead.done, false);
+  assert.deepEqual(firstRead.value, firstFrame);
+  releaseUpstream();
+  assert.equal((await reader.read()).done, true);
+});
+
 test('expired access refreshes once and retries the identical idempotent request body', async () => {
   const requestBody = JSON.stringify({ idempotencyKey: '1234567890abcdef', title: '새 대화' });
   const calls = [];

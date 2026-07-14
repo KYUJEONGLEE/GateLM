@@ -67,6 +67,7 @@ export async function conversationSse(input) {
     return new Response(stream, {
       headers: {
         'cache-control': 'no-store',
+        'content-encoding': 'identity',
         'content-type': 'text/event-stream; charset=utf-8',
         'x-accel-buffering': 'no',
         'x-content-type-options': 'nosniff',
