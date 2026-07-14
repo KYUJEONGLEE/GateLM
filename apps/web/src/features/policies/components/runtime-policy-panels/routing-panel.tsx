@@ -1,8 +1,11 @@
 "use client";
 
+import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import {
@@ -33,6 +36,7 @@ export type RoutingPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   providerCatalog: RuntimePolicyModel["providerCatalog"];
+  providerManagementHref?: string;
   providers: RuntimePolicyProvider[];
   text: RuntimePolicyEditorText;
 };
@@ -41,6 +45,7 @@ export function RoutingPolicyPanel({
   draftValues,
   onDraftValuesChange,
   providerCatalog,
+  providerManagementHref,
   providers,
   text
 }: RoutingPolicyPanelProps) {
@@ -167,6 +172,15 @@ export function RoutingPolicyPanel({
       <article className="console-panel policy-editor-panel">
         <div className="panel-heading">
           <h3>{text.providerCatalog}</h3>
+          {providerManagementHref ? (
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href={providerManagementHref}
+            >
+              <Plus aria-hidden="true" />
+              {text.providerAdd}
+            </Link>
+          ) : null}
         </div>
         {providerCatalog.loadError ? (
           <Alert variant="warning">
