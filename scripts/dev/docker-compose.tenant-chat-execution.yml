@@ -76,6 +76,10 @@ services:
       TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json
       TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
       TENANT_CHAT_CONTENT_KEYS_FILE: /run/secrets/tenant-chat/content-keys.json
+      TENANT_CHAT_HISTORY_RETENTION_DAYS: ${TENANT_CHAT_HISTORY_RETENTION_DAYS:-30}
+      TENANT_CHAT_RETENTION_BATCH_SIZE: ${TENANT_CHAT_RETENTION_BATCH_SIZE:-50}
+      TENANT_CHAT_RETENTION_INTERVAL_MS: ${TENANT_CHAT_RETENTION_INTERVAL_MS:-60000}
+      TENANT_CHAT_ASSISTANT_MAX_BYTES: ${TENANT_CHAT_ASSISTANT_MAX_BYTES:-1048576}
     secrets:
       - source: tenant_chat_workload_signing_jwk
         target: /run/secrets/tenant-chat/signing.jwk.json
