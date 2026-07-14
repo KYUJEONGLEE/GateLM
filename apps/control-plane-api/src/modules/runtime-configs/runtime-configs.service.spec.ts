@@ -478,7 +478,7 @@ describe('RuntimeConfigsService', () => {
         models: ['llama-3.1-8b-instant'],
         modelMetadata: {
           'llama-3.1-8b-instant': {
-            contextWindowTokens: 131072,
+            contextWindowTokens: 2_000_000,
             displayName: 'Llama 3.1 8B Instant',
             supportsJsonMode: true,
             supportsStreaming: true,
@@ -499,7 +499,7 @@ describe('RuntimeConfigsService', () => {
       model: 'llama-3.1-8b-instant',
       displayName: 'Llama 3.1 8B Instant',
       status: 'active',
-      contextWindowTokens: 131072,
+      contextWindowTokens: 2_000_000,
       supportsStreaming: true,
       supportsJsonMode: true,
     });

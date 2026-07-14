@@ -25,6 +25,8 @@ import type {
 
 const minProviderTimeoutMs = 1000;
 const maxProviderTimeoutMs = 120000;
+const maxProviderContextWindowTokens = 10_000_000;
+const maxProviderOutputTokens = 1_000_000;
 
 type RequestPayload = {
   action?: unknown;
@@ -252,12 +254,12 @@ function isProviderModelMetadataMap(value: unknown) {
         (typeof record.contextWindowTokens === "number" &&
           Number.isSafeInteger(record.contextWindowTokens) &&
           record.contextWindowTokens > 0 &&
-          record.contextWindowTokens <= 1000000)) &&
+          record.contextWindowTokens <= maxProviderContextWindowTokens)) &&
       (record.maxOutputTokens === undefined ||
         (typeof record.maxOutputTokens === "number" &&
           Number.isSafeInteger(record.maxOutputTokens) &&
           record.maxOutputTokens > 0 &&
-          record.maxOutputTokens <= 1000000)) &&
+          record.maxOutputTokens <= maxProviderOutputTokens)) &&
       (record.displayName === undefined ||
         (typeof record.displayName === "string" && record.displayName.length <= 120)) &&
       (record.supportsJsonMode === undefined ||

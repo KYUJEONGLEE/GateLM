@@ -152,6 +152,7 @@ export async function consumeTurnSse(stream, options) {
   let expectedSequence = 1;
   let acceptedTurnId;
   let terminal;
+  let completed = false;
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -185,8 +186,10 @@ export async function consumeTurnSse(stream, options) {
     if (bufferByteLength > 128 * 1024) throw new Error('SSE frame limit exceeded.');
     if (buffer.trim()) throw new Error('Incomplete SSE frame.');
     if (!acceptedTurnId || !terminal) throw new Error('Incomplete SSE sequence.');
+    completed = true;
     return terminal;
   } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

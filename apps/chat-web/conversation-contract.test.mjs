@@ -86,6 +86,25 @@ test('SSE parser rejects gaps, mismatched ids, and oversized frames', async () =
   ]), { conversationId }), { message: 'SSE frame limit exceeded.' });
 });
 
+test('SSE parser cancels the upstream reader after a malformed sequence', async () => {
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  const malformedStream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode([
+        frame('chat.turn.accepted', 1, { replayed: false }),
+        frame('chat.turn.delta', 3, { delta: 'gap' }),
+      ].join('')));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await assert.rejects(() => consumeTurnSse(malformedStream, { conversationId }));
+  assert.equal(cancelled, true);
+});
+
 function frame(type, sequence, extra) {
   const event = { type, schemaVersion: 1, conversationId, turnId, sequence, ...extra };
   return `id: ${turnId}:${sequence}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`;

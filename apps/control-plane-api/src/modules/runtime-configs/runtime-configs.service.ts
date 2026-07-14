@@ -23,6 +23,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import {
   ActiveRuntimeConfigResponseDto,
   ListRuntimeConfigHistoryQueryDto,
+  MAX_RUNTIME_MODEL_CONTEXT_WINDOW_TOKENS,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
   RUNTIME_CONFIG_ROUTING_CATEGORIES,
@@ -1532,7 +1533,7 @@ export class RuntimeConfigsService {
     return typeof value === 'number' &&
       Number.isSafeInteger(value) &&
       value > 0 &&
-      value <= 1000000
+      value <= MAX_RUNTIME_MODEL_CONTEXT_WINDOW_TOKENS
       ? value
       : null;
   }
