@@ -618,6 +618,7 @@ export function RuntimePolicyEditor({
     const response = await fetch("/api/control-plane/api-keys", {
       body: JSON.stringify({
         action: "issue",
+        routeTenantId: model.routeTenantId,
         values: {
           displayName: `${projectName} Runtime API Key`,
           expiresAt: "",
