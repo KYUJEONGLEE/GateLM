@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getEmployeeControlModel } from "@/lib/control-plane/employees-client";
+import { getLiveMonthlyProjectCostReport } from "@/lib/gateway/live-cost-report";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type EmployeesPageProps = {
@@ -31,7 +32,10 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
     notFound();
   }
 
-  const model = await getEmployeeControlModel(effectiveTenantId);
+  const [model, monthlyCostReport] = await Promise.all([
+    getEmployeeControlModel(effectiveTenantId),
+    getLiveMonthlyProjectCostReport(effectiveTenantId)
+  ]);
   const usage = buildEmployeeUsageReadModel(model);
 
   return (
@@ -39,6 +43,7 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
       initialEmployeeId={resolvedSearchParams?.employeeId?.trim() || undefined}
       locale={locale}
       model={model}
+      monthlyCostReport={monthlyCostReport}
       usage={usage}
     />
   );

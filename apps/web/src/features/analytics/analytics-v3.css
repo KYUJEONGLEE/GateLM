@@ -253,6 +253,10 @@
   --analytics-accent: var(--analytics-coral);
 }
 
+.analytics-v3-executive-band[data-accent="security"] {
+  --analytics-accent: #7c3aed;
+}
+
 .analytics-v3-executive-band[data-accent="usage"] {
   --analytics-accent: var(--analytics-cobalt);
 }
@@ -331,6 +335,11 @@
   min-height: 360px;
 }
 
+.analytics-v3-security-workspace {
+  min-height: 410px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.75fr);
+}
+
 .analytics-v3-cache-workspace .analytics-v3-composition-chart {
   height: 250px;
 }
@@ -343,32 +352,6 @@
 .analytics-v3-driver-rail {
   border-left: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-subtle) 72%, var(--surface));
-}
-
-.analytics-employee-workspace {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.analytics-employee-workspace .analytics-v3-employee-token-chart {
-  height: 420px;
-}
-
-.analytics-v3-table-link,
-.analytics-employee-link {
-  color: var(--foreground);
-  font-weight: var(--font-weight-bold);
-  text-decoration: none;
-}
-
-.analytics-v3-table-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.analytics-v3-table-link:hover,
-.analytics-employee-link:hover {
-  color: var(--analytics-emerald);
 }
 
 .analytics-v3-section-heading {
