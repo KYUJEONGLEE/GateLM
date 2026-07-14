@@ -117,3 +117,55 @@ export interface TenantChatRuntimeSnapshotDocument {
 export interface PublishTenantChatRuntimeSnapshotInput {
   snapshot: TenantChatRuntimeSnapshotDocument;
 }
+
+export type TenantChatAdminReadiness =
+  | 'needs_provider'
+  | 'needs_model'
+  | 'needs_activation'
+  | 'ready'
+  | 'degraded';
+
+export interface TenantChatAdminModelPricing {
+  inputMicroUsdPerMillionTokens: number;
+  outputMicroUsdPerMillionTokens: number;
+  cacheReadInputMicroUsdPerMillionTokens?: number;
+}
+
+export interface TenantChatAdminModelCandidate {
+  modelKey: string;
+  activationStatus: 'available' | 'pricing_unavailable';
+  pricing: TenantChatAdminModelPricing | null;
+}
+
+export interface TenantChatAdminProviderCandidate {
+  providerConnectionId: string;
+  providerKey: string;
+  providerFamily: string;
+  displayName: string;
+  models: TenantChatAdminModelCandidate[];
+}
+
+export interface TenantChatAdminActiveSnapshot {
+  snapshotId: string;
+  version: number;
+  digest: string;
+  policyVersion: number;
+  pricingVersion: number;
+  providerConnectionId: string;
+  modelKey: string;
+  publishedAt: string;
+  pricingStatus: 'current' | 'update_available' | 'unavailable';
+}
+
+export interface TenantChatAdminRuntimeSetup {
+  readiness: TenantChatAdminReadiness;
+  providers: TenantChatAdminProviderCandidate[];
+  activeSnapshot: TenantChatAdminActiveSnapshot | null;
+}
+
+export interface ActivateTenantChatRuntimeInput {
+  tenantId: string;
+  providerConnectionId: string;
+  modelKey: string;
+  publishedBy: string;
+}

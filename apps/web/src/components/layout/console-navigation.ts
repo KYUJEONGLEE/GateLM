@@ -7,6 +7,7 @@ export type ManagementNavItem =
   | "policies"
   | "project"
   | "provider"
+  | "tenant-chat"
   | "tenant"
   | "teams";
 
@@ -74,6 +75,11 @@ export function getConsoleNavigationState(pathname: string | null): ConsoleNavig
     case "model-catalog":
       return {
         activeManagementItem: "provider",
+        activeSection: "management"
+      };
+    case "tenant-chat":
+      return {
+        activeManagementItem: "tenant-chat",
         activeSection: "management"
       };
     case "teams":
