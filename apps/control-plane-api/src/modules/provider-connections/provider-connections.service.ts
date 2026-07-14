@@ -80,6 +80,9 @@ type StoredProviderCredentialRow = {
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/;
 const SAFE_CATALOG_TOKEN_PATTERN = /^[a-z][a-z0-9_:-]{0,79}$/;
 const SAFE_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,127}$/;
+const HEADER_SAFE_CREDENTIAL_PATTERN = /^[\x21-\x7e]+$/;
+const INVALID_PROVIDER_CREDENTIAL_MESSAGE =
+  'Provider credential must contain only printable ASCII characters without spaces.';
 const PROVIDED_CREDENTIAL_PREFIX = 'provided_';
 const FORBIDDEN_BASE_URL_QUERY_KEYS = new Set([
   'api_key',
@@ -756,10 +759,12 @@ export class ProviderConnectionsService {
       await this.resolveStoredProviderCredential(credentialRefs);
 
     if (storedCredential) {
-      return storedCredential;
+      return this.toHeaderSafeCredentialOrThrow(storedCredential);
     }
 
-    return this.resolveEnvironmentProviderCredential(credentialRefs);
+    return this.toHeaderSafeCredentialOrThrow(
+      this.resolveEnvironmentProviderCredential(credentialRefs),
+    );
   }
 
   private resolveEnvironmentProviderCredential(credentialRefs: string[]): string {
@@ -1439,7 +1444,24 @@ export class ProviderConnectionsService {
   }
 
   private toCredentialValue(dto: UpsertProviderDto): string | null {
-    return dto.credentialValue?.trim() || null;
+    const credentialValue = dto.credentialValue?.trim();
+
+    return credentialValue
+      ? this.toHeaderSafeCredentialOrThrow(credentialValue)
+      : null;
+  }
+
+  private toHeaderSafeCredentialOrThrow(credentialValue: string): string {
+    const normalizedCredential = credentialValue.trim();
+
+    if (
+      !normalizedCredential ||
+      !HEADER_SAFE_CREDENTIAL_PATTERN.test(normalizedCredential)
+    ) {
+      throw new BadRequestException(INVALID_PROVIDER_CREDENTIAL_MESSAGE);
+    }
+
+    return normalizedCredential;
   }
 
   private toCredentialLast4(credentialValue: string): string {

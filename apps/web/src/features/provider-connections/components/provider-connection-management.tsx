@@ -71,6 +71,7 @@ type ProviderModalState =
     };
 
 const providerKeyPattern = /^[a-z][a-z0-9_-]{1,63}$/;
+const providerCredentialPattern = /^[\x21-\x7e]+$/;
 const minProviderTimeoutMs = 1000;
 const maxProviderTimeoutMs = 120000;
 const providerModelPageSize = 10;
@@ -1615,6 +1616,12 @@ function getProviderDiscoveryErrorMessage(
 ) {
   const message = error ?? "Provider model discovery failed.";
 
+  if (message.includes("Provider credential must contain only printable ASCII")) {
+    return locale === "ko"
+      ? "API 키에는 공백이나 한글을 넣을 수 없습니다. Provider에서 발급한 Key 원문을 다시 입력하세요."
+      : "The API key cannot contain spaces or non-ASCII characters. Enter the original key issued by the provider.";
+  }
+
   if (
     provider.includes("gemini") &&
     message.includes("Provider credential reference is not bound")
@@ -1921,6 +1928,14 @@ function validateProviderForm(values: ProviderConnectionFormValues, locale: Loca
     return locale === "ko"
       ? "Provider key는 소문자로 시작하고 영문/숫자/_/- 조합 2~64자여야 합니다."
       : "Provider key must start with a lowercase letter and use only lowercase letters, numbers, underscores, or hyphens, 2-64 characters.";
+  }
+
+  const credentialValue = values.credentialValue?.trim();
+
+  if (credentialValue && !providerCredentialPattern.test(credentialValue)) {
+    return locale === "ko"
+      ? "API 키에는 공백이나 한글을 넣을 수 없습니다. Provider에서 발급한 Key 원문을 다시 입력하세요."
+      : "The API key cannot contain spaces or non-ASCII characters. Enter the original key issued by the provider.";
   }
 
   if (
