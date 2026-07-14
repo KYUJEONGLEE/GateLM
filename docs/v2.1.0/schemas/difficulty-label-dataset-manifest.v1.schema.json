@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-label-dataset-manifest.v1.schema.json",
   "title": "GateLM Difficulty Label Dataset Manifest",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "gatelm.difficulty-label-dataset-manifest.v2"
+      "const": "gatelm.difficulty-label-dataset-manifest.v1"
     },
     "datasetVersion": {
       "type": "string",
@@ -14,7 +14,7 @@
       "maxLength": 120
     },
     "recordSchemaVersion": {
-      "enum": ["gatelm.difficulty-label-record.v2", "gatelm.difficulty-evaluation-record.v1"]
+      "enum": ["gatelm.difficulty-label-record.v1", "gatelm.difficulty-evaluation-record.v1"]
     },
     "datasetPath": {
       "type": "string",
@@ -79,11 +79,7 @@
         "records": { "type": "integer", "minimum": 1 },
         "families": { "type": "integer", "minimum": 1 },
         "humanReviewedFamilies": { "type": "integer", "minimum": 0 },
-        "approvedHumanReviewedFamilies": { "type": "integer", "minimum": 0 },
-        "semanticHeadEligibleRecords": { "type": "integer", "minimum": 0 },
-        "semanticHeadEligibleFamilies": { "type": "integer", "minimum": 0 },
-        "emptyInstructionRecords": { "type": "integer", "minimum": 0 },
-        "emptyInstructionFamilies": { "type": "integer", "minimum": 0 }
+        "approvedHumanReviewedFamilies": { "type": "integer", "minimum": 0 }
       },
       "required": ["records", "families", "humanReviewedFamilies", "approvedHumanReviewedFamilies"]
     },
@@ -146,17 +142,7 @@
     {
       "if": { "properties": { "labelCoverageStatus": { "const": "complete" } }, "required": ["labelCoverageStatus"] },
       "then": {
-        "properties": {
-          "recordSchemaVersion": { "const": "gatelm.difficulty-label-record.v2" },
-          "counts": {
-            "required": [
-              "semanticHeadEligibleRecords",
-              "semanticHeadEligibleFamilies",
-              "emptyInstructionRecords",
-              "emptyInstructionFamilies"
-            ]
-          }
-        },
+        "properties": { "recordSchemaVersion": { "const": "gatelm.difficulty-label-record.v1" } },
         "required": ["coverage", "families"]
       }
     },

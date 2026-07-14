@@ -162,7 +162,7 @@ func buildBenchmarkInput(datasetPath string, manifestPath string) (benchmarkInpu
 		features := routing.ExtractPromptFeatures(record.RedactedPrompt)
 		instructionText, available := routing.DifficultySemanticInputForOffline(features)
 		if !available {
-			instructionText = ""
+			return benchmarkInput{}, fmt.Errorf("record line %d has no semantic instruction input", lineNumber)
 		}
 		actualCategory := categoryClassifier.ClassifyFeatures(features).Category
 		difficultyFeatures := routing.ExtractDifficultyFeatures(features, actualCategory)

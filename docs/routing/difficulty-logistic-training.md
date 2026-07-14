@@ -27,7 +27,7 @@ corepack pnpm run v2.1:routing:generate-difficulty-training-pilot
 corepack pnpm run verify:v2.1-difficulty-eval
 ```
 
-500건 smoke의 legacy family key는 `sampleId`의 category와 `fNN`만 사용한 `{category}/{fNN}`이다. `expectedDifficulty`와 `vNN`을 제외하므로 같은 family의 simple/complex contrast와 모든 variant가 항상 함께 이동한다. 향후 실제 dataset은 `difficulty-label-record.v1`의 `promptFamily`와 versioned minimum-family policy를 사용하며 legacy 25 family를 승인된 학습 family로 승격하지 않는다.
+500건 smoke의 legacy family key는 `sampleId`의 category와 `fNN`만 사용한 `{category}/{fNN}`이다. `expectedDifficulty`와 `vNN`을 제외하므로 같은 family의 simple/complex contrast와 모든 variant가 항상 함께 이동한다. 향후 실제 dataset은 `difficulty-label-record.v2`의 `promptFamily`, `semanticInputStatus`와 versioned minimum-family policy를 사용하며 legacy 25 family를 승인된 학습 family로 승격하지 않는다. `empty_instruction` record의 `not_applicable`은 semantic head class가 아니므로 initial 4-head candidate target이나 zero-vector fallback으로 변환하지 않는다.
 
 ## Training Boundary
 
@@ -128,11 +128,11 @@ Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + com
 
 ## Current Tooling-Smoke Baseline
 
-The reproducible rule-versus-42D measurement is recorded in [`../testing/difficulty-42d-tooling-smoke-baseline.md`](../testing/difficulty-42d-tooling-smoke-baseline.md). It is synthetic `training_tooling_smoke` evidence with `trainingEligible=false`, not promotion or production evidence.
+The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testing/difficulty-42d-tooling-smoke-baseline.md`](../testing/difficulty-42d-tooling-smoke-baseline.md). It evaluates exact 42D `difficulty-feature-vector.v1` only. Because the dataset is synthetic `training_tooling_smoke` with `trainingEligible=false`, it is not eligible for model-quality comparison, semantic-candidate ranking, promotion gating, or production evidence. The proposed semantic shapes (`42`, `42 + P`, `54 + P`), four-head/12D output, v2 `semanticInputStatus`/bucket targets and fail-closed empty semantic input require their own contract-compliant evaluation. The v2 label-contract smoke used for negation/payload slices is projection-only: its semantic annotation targets are not consumed by the 42D evaluator and do not establish semantic target quality.
 
 ## Prepared Tests
 
-- Label schema, 필수 slice, category-semantic 조합, review 상태와 family-level coverage
+- Label schema v2의 고정 4-head class order, empty-instruction fail-closed, 필수 slice, category-semantic 조합, review 상태와 family-level coverage
 - 500건 smoke 재생성, 균형, provenance, dataset hash와 `trainingEligible=false`
 - Smoke와 향후 candidate의 simple/complex cross-label family split/fold 비누출
 - actual category vector와 oracle category vector의 분리

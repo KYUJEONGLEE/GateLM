@@ -33,9 +33,10 @@
       "tailTokens": 63,
       "oddUsableToken": "head_receives_extra_token",
       "comparison": "content_token_count_greater_than_usable_content_tokens",
+      "specialTokenTreatment": "prepend_declared_cls_or_bos_id_and_append_declared_sep_or_eos_id",
       "callerOverride": false,
       "separateUnicodeNormalization": "none",
-      "emptyOrSpecialTokenOnly": "zero_representation_without_encoder_call"
+      "emptyOrSpecialTokenOnly": "reject_before_encoder_call"
     },
     "pooling": {
       "version": "difficulty-masked-mean.v1",

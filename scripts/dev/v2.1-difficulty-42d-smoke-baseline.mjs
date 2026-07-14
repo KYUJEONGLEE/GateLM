@@ -14,6 +14,110 @@ const smokeManifestFile = "docs/v2.1.0/fixtures/difficulty-evaluation-training-p
 const labelSmokeFile = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl";
 const labelManifestFile = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json";
 const robustnessSlices = ["negation", "payload_contamination"];
+const semanticLabelTargetClasses = {
+  taskBucket: ["count_1", "count_2", "count_3_plus"],
+  constraintBucket: ["count_0_to_1", "count_2", "count_3_plus"],
+  scopeBucket: ["count_1", "count_2_to_3", "count_4_plus"],
+  dependencyBucket: ["depth_0_to_1", "depth_2", "depth_3_plus"],
+};
+
+export function currentContractContext() {
+  return {
+    baselineFeatureContract: "difficulty-feature-vector.v1",
+    baselineDimension: 42,
+    semanticFeatureContractEvaluated: false,
+    semanticProposalStatus: "proposed_not_active",
+    semanticHeadCount: 4,
+    semanticHeadProbabilityDimension: 12,
+    semanticCandidateShapes: ["42", "42 + P", "54 + P"],
+    emptySemanticInputPolicy: "fail_closed_until_versioned_representation_is_approved",
+    currentSemanticLabelContract: "gatelm.difficulty-label-record.v2",
+    semanticInputStatuses: ["eligible", "empty_instruction"],
+    emptySemanticBucketTarget: "not_applicable",
+  };
+}
+
+export function toolingSmokeEligibility() {
+  return {
+    evidenceClass: "training_tooling_smoke",
+    partitionSemantics: "tooling_smoke_only",
+    modelQualityComparisonEligible: false,
+    semanticCandidateComparisonEligible: false,
+    promotionGateApplicable: false,
+    productionEvidenceEligible: false,
+  };
+}
+
+export function assert42DArtifactContract(artifact) {
+  if (artifact.featureVersion !== "difficulty-feature-vector.v1") {
+    throw new Error("42D tooling baseline requires difficulty-feature-vector.v1");
+  }
+  if (!Array.isArray(artifact.weights) || artifact.weights.length !== 42) {
+    throw new Error("42D tooling baseline requires exactly 42 model weights");
+  }
+}
+
+export function assertLabelRecordContract(records, manifest) {
+  if (
+    manifest.schemaVersion !== "gatelm.difficulty-label-dataset-manifest.v2" ||
+    manifest.recordSchemaVersion !== "gatelm.difficulty-label-record.v2"
+  ) {
+    throw new Error("42D tooling baseline requires the current v2 label manifest and record contract");
+  }
+  const versions = new Set(records.map((record) => record.schemaVersion));
+  if (versions.size !== 1) throw new Error("label contract smoke must use exactly one record schema version");
+  const [recordSchemaVersion] = versions;
+  if (recordSchemaVersion !== manifest.recordSchemaVersion) {
+    throw new Error("label contract smoke record schema does not match its manifest");
+  }
+  return recordSchemaVersion;
+}
+
+export function summarizeSemanticLabelEligibility(records, manifest) {
+  const eligibleFamilies = new Set();
+  const emptyFamilies = new Set();
+  let eligibleRecords = 0;
+  let emptyRecords = 0;
+  for (const record of records) {
+    if (record.semanticInputStatus === "eligible") {
+      eligibleRecords += 1;
+      eligibleFamilies.add(record.promptFamily);
+      for (const [field, classes] of Object.entries(semanticLabelTargetClasses)) {
+        if (!classes.includes(record[field])) {
+          throw new Error(`eligible v2 label record has invalid ${field}`);
+        }
+      }
+    } else if (record.semanticInputStatus === "empty_instruction") {
+      emptyRecords += 1;
+      emptyFamilies.add(record.promptFamily);
+      for (const field of Object.keys(semanticLabelTargetClasses)) {
+        if (record[field] !== "not_applicable") {
+          throw new Error(`empty-instruction v2 label record must use not_applicable ${field}`);
+        }
+      }
+    } else {
+      throw new Error("v2 label record has an unsupported semanticInputStatus");
+    }
+    if (
+      record.expectedInstructionPayloadBoundary?.kind === "payload_only" &&
+      record.semanticInputStatus !== "empty_instruction"
+    ) {
+      throw new Error("payload-only v2 label record must use empty_instruction");
+    }
+  }
+  const summary = {
+    semanticHeadEligibleRecords: eligibleRecords,
+    semanticHeadEligibleFamilies: eligibleFamilies.size,
+    emptyInstructionRecords: emptyRecords,
+    emptyInstructionFamilies: emptyFamilies.size,
+  };
+  for (const [field, value] of Object.entries(summary)) {
+    if (manifest.counts?.[field] !== value) {
+      throw new Error(`label contract smoke ${field} does not match its manifest`);
+    }
+  }
+  return summary;
+}
 
 export function parseJSONL(text, source = "JSONL") {
   return text
@@ -321,7 +425,12 @@ function markdown(report) {
     `- Commit: \`${report.provenance.commit}\``,
     `- Dataset: \`${report.provenance.dataset.version}\` (` + "`trainingEligible=false`" + ")",
     `- Artifact: \`${report.provenance.artifact.contentHash}\``,
-    "- Status: synthetic tooling smoke only; not promotion or production evidence",
+    "- Status: synthetic tooling smoke only; not model-quality, semantic-candidate, promotion, or production evidence",
+    `- Semantic candidate comparison eligible: \`${report.eligibility.semanticCandidateComparisonEligible}\``,
+    `- Promotion gate applicable: \`${report.eligibility.promotionGateApplicable}\``,
+    `- Contract scope: exact ${report.contractContext.baselineDimension}D \`${report.contractContext.baselineFeatureContract}\` only; semantic proposal not evaluated`,
+    `- Slice label contract: \`${report.labelContractSmoke.recordSchemaVersion}\`; annotation-only semantic targets not evaluated`,
+    `- Slice semantic eligibility: ${report.labelContractSmoke.semanticEligibility.semanticHeadEligibleRecords} eligible / ${report.labelContractSmoke.semanticEligibility.emptyInstructionRecords} empty-instruction records`,
     "",
     "| Metric | Rule | 42D hybrid | Delta |",
     "|---|---:|---:|---:|",
@@ -344,7 +453,7 @@ function markdown(report) {
   }
   lines.push(
     "",
-    `Safety gate: **${value.runtimeComparison.safetyGatePassed ? "PASS" : "FAIL"}**`,
+    `Tooling-smoke directional diagnostic: **${value.runtimeComparison.safetyGatePassed ? "PASS" : "FAIL"}** (promotion gate: N/A)`,
     "",
     "## Robustness contract-smoke slices",
     "",
@@ -376,7 +485,11 @@ export function main(argv = process.argv.slice(2)) {
   if (datasetHash !== splitManifest.datasetSha256 || datasetHash !== smokeManifest.datasetSha256) {
     throw new Error("difficulty tooling-smoke dataset hash does not match its manifests");
   }
-  if (smokeManifest.trainingEligible !== false || smokeManifest.datasetPurpose !== "training_tooling_smoke") {
+  if (
+    smokeManifest.schemaVersion !== "gatelm.difficulty-label-dataset-manifest.v2" ||
+    smokeManifest.trainingEligible !== false ||
+    smokeManifest.datasetPurpose !== "training_tooling_smoke"
+  ) {
     throw new Error("500-record smoke must remain non-training-eligible training_tooling_smoke data");
   }
   if (records.length !== smokeManifest.counts.records || records.length !== splitManifest.totals.samples) {
@@ -409,6 +522,8 @@ export function main(argv = process.argv.slice(2)) {
   if (labelManifest.families.some((family) => family.reviewStatus !== "pending" || family.humanReviewed !== false)) {
     throw new Error("label contract smoke must remain pending and not human-reviewed");
   }
+  const labelRecordSchemaVersion = assertLabelRecordContract(labelRecords, labelManifest);
+  const semanticEligibility = summarizeSemanticLabelEligibility(labelRecords, labelManifest);
   const labelProjection = path.join(outputDir, "difficulty-label-contract-smoke-projection.jsonl");
   writeJSONL(labelProjection, projectLabelRecords(labelRecords));
 
@@ -431,12 +546,15 @@ export function main(argv = process.argv.slice(2)) {
   );
 
   const artifact = JSON.parse(readFileSync(trained.artifact, "utf8"));
+  assert42DArtifactContract(artifact);
   const trainingReport = JSON.parse(readFileSync(trained.report, "utf8"));
   const env = baseEnvironment(repoRoot);
   const command = (name, args) => run(name, args, repoRoot, env);
   const cpu = os.cpus();
   const report = {
-    schemaVersion: "gatelm.difficulty-42d-tooling-smoke-baseline.v1",
+    schemaVersion: "gatelm.difficulty-42d-tooling-smoke-baseline.v2",
+    contractContext: currentContractContext(),
+    eligibility: toolingSmokeEligibility(),
     provenance: {
       measuredAt: new Date().toISOString(),
       commit: command("git", ["rev-parse", "HEAD"]),
@@ -482,21 +600,28 @@ export function main(argv = process.argv.slice(2)) {
     },
     holdout: {
       split: "holdout",
+      partitionSemantics: "tooling_smoke_only",
       families: holdoutFamilies.size,
       samples: holdoutRecords.length,
       comparison: comparison(holdoutEvaluation),
     },
     labelContractSmoke: {
       datasetVersion: labelManifest.datasetVersion,
+      recordSchemaVersion: labelRecordSchemaVersion,
       sha256: labelHash,
       trainingEligible: false,
       reviewStatus: "pending",
+      semanticEligibility,
       samples: labelRecords.length,
       slices: aggregateSliceResults(labelEvaluation, labelRecords),
     },
     limitations: [
       "The 500-record dataset and split are synthetic training-tooling smoke only.",
       "There are zero approved human-reviewed families, so this is not promotion or production evidence.",
+      "This report does not evaluate the proposed semantic feature contract and cannot rank semantic candidates.",
+      "The current semantic proposal uses four heads / 12 probabilities and candidate shapes 42, 42 + P, and 54 + P.",
+      "Empty semantic input remains fail-closed until a versioned representation is approved; this 42D v1 sentinel path does not define that semantic representation.",
+      `The robustness slice fixture uses ${labelRecordSchemaVersion}; its annotation-only semantic targets are not evaluated here.`,
       "Negation and payload-contamination use a very small pending label-contract smoke fixture.",
       "The measurement was made from the recorded dirty worktree and commit provenance.",
     ],

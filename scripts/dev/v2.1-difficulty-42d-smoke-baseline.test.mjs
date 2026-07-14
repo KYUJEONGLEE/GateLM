@@ -3,11 +3,124 @@ import test from "node:test";
 
 import {
   aggregateSliceResults,
+  assert42DArtifactContract,
+  assertLabelRecordContract,
+  currentContractContext,
   legacyFamilyId,
   parseJSONL,
   projectLabelRecords,
   selectSplitRecords,
+  summarizeSemanticLabelEligibility,
+  toolingSmokeEligibility,
 } from "./v2.1-difficulty-42d-smoke-baseline.mjs";
+
+test("baseline report scope follows the current semantic proposal without claiming semantic evaluation", () => {
+  assert.deepEqual(currentContractContext(), {
+    baselineFeatureContract: "difficulty-feature-vector.v1",
+    baselineDimension: 42,
+    semanticFeatureContractEvaluated: false,
+    semanticProposalStatus: "proposed_not_active",
+    semanticHeadCount: 4,
+    semanticHeadProbabilityDimension: 12,
+    semanticCandidateShapes: ["42", "42 + P", "54 + P"],
+    emptySemanticInputPolicy: "fail_closed_until_versioned_representation_is_approved",
+    currentSemanticLabelContract: "gatelm.difficulty-label-record.v2",
+    semanticInputStatuses: ["eligible", "empty_instruction"],
+    emptySemanticBucketTarget: "not_applicable",
+  });
+  assert.deepEqual(toolingSmokeEligibility(), {
+    evidenceClass: "training_tooling_smoke",
+    partitionSemantics: "tooling_smoke_only",
+    modelQualityComparisonEligible: false,
+    semanticCandidateComparisonEligible: false,
+    promotionGateApplicable: false,
+    productionEvidenceEligible: false,
+  });
+});
+
+test("baseline artifact stays exact 42D v1 and rejects semantic shapes", () => {
+  assert.doesNotThrow(() =>
+    assert42DArtifactContract({ featureVersion: "difficulty-feature-vector.v1", weights: Array(42).fill(0) }),
+  );
+  assert.throws(
+    () => assert42DArtifactContract({ featureVersion: "difficulty-feature-vector.v2", weights: Array(42).fill(0) }),
+    /requires difficulty-feature-vector\.v1/u,
+  );
+  assert.throws(
+    () => assert42DArtifactContract({ featureVersion: "difficulty-feature-vector.v1", weights: Array(54).fill(0) }),
+    /exactly 42 model weights/u,
+  );
+});
+
+test("slice fixture record contract must match its manifest", () => {
+  assert.equal(
+    assertLabelRecordContract(
+      [{ schemaVersion: "gatelm.difficulty-label-record.v2" }],
+      {
+        schemaVersion: "gatelm.difficulty-label-dataset-manifest.v2",
+        recordSchemaVersion: "gatelm.difficulty-label-record.v2",
+      },
+    ),
+    "gatelm.difficulty-label-record.v2",
+  );
+  assert.throws(
+    () =>
+      assertLabelRecordContract(
+        [{ schemaVersion: "gatelm.difficulty-label-record.v1" }],
+        {
+          schemaVersion: "gatelm.difficulty-label-dataset-manifest.v1",
+          recordSchemaVersion: "gatelm.difficulty-label-record.v1",
+        },
+      ),
+    /requires the current v2 label manifest/u,
+  );
+});
+
+test("v2 semantic label targets reject legacy and invalid empty buckets", () => {
+  const manifest = {
+    counts: {
+      semanticHeadEligibleRecords: 1,
+      semanticHeadEligibleFamilies: 1,
+      emptyInstructionRecords: 1,
+      emptyInstructionFamilies: 1,
+    },
+  };
+  const eligible = {
+    promptFamily: "fixture.general.f01",
+    semanticInputStatus: "eligible",
+    taskBucket: "count_1",
+    constraintBucket: "count_0_to_1",
+    scopeBucket: "count_1",
+    dependencyBucket: "depth_0_to_1",
+    expectedInstructionPayloadBoundary: { kind: "instruction_only" },
+  };
+  const empty = {
+    promptFamily: "fixture.payload.f01",
+    semanticInputStatus: "empty_instruction",
+    taskBucket: "not_applicable",
+    constraintBucket: "not_applicable",
+    scopeBucket: "not_applicable",
+    dependencyBucket: "not_applicable",
+    expectedInstructionPayloadBoundary: { kind: "payload_only" },
+  };
+  assert.deepEqual(summarizeSemanticLabelEligibility([eligible, empty], manifest), manifest.counts);
+  assert.throws(
+    () => summarizeSemanticLabelEligibility([{ ...eligible, taskBucket: "one" }, empty], manifest),
+    /invalid taskBucket/u,
+  );
+  assert.throws(
+    () => summarizeSemanticLabelEligibility([eligible, { ...empty, scopeBucket: "count_1" }], manifest),
+    /must use not_applicable scopeBucket/u,
+  );
+  assert.throws(
+    () =>
+      summarizeSemanticLabelEligibility(
+        [eligible, { ...empty, semanticInputStatus: "eligible" }],
+        manifest,
+      ),
+    /payload-only v2 label record must use empty_instruction|invalid taskBucket/u,
+  );
+});
 
 test("family-disjoint split selection keeps contrast variants together", () => {
   const records = [
@@ -40,9 +153,15 @@ test("split selection rejects a family without an assignment", () => {
 test("label projection excludes annotation-only slice metadata", () => {
   const [projection] = projectLabelRecords([
     {
+      schemaVersion: "gatelm.difficulty-label-record.v2",
       datasetVersion: "label-smoke-v1",
       sampleId: "sample_1",
       redactedPrompt: "safe synthetic prompt",
+      semanticInputStatus: "eligible",
+      taskBucket: "count_1",
+      constraintBucket: "count_0_to_1",
+      scopeBucket: "count_1",
+      dependencyBucket: "depth_0_to_1",
       expectedCategory: "general",
       expectedDifficulty: "simple",
       labelSource: "synthetic_fixture",
@@ -58,6 +177,11 @@ test("label projection excludes annotation-only slice metadata", () => {
   ]);
   assert.equal(projection.schemaVersion, "gatelm.difficulty-evaluation-record.v1");
   assert.equal("evaluationSlices" in projection, false);
+  assert.equal("semanticInputStatus" in projection, false);
+  assert.equal("taskBucket" in projection, false);
+  assert.equal("constraintBucket" in projection, false);
+  assert.equal("scopeBucket" in projection, false);
+  assert.equal("dependencyBucket" in projection, false);
 });
 
 test("slice aggregation uses explicit membership", () => {

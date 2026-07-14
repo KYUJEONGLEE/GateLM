@@ -27,7 +27,8 @@
 
 | Path | Status | Scope |
 |---|---|---|
-| [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | `instructionText` semantic representation과 deterministic payload statistics를 사용하는 offline/shadow difficulty candidate |
+| [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | Exact v1 42D를 보존하고 `instructionText` projection과 4-head/12D probability를 분리해 비교하는 offline/shadow difficulty candidate |
+| [`../testing/difficulty-semantic-encoder-selection.md`](../testing/difficulty-semantic-encoder-selection.md) | Provisional offline evidence; not active | Immutable local multilingual encoder, QInt8 runtime variant, `P=64` projection과 재현 가능한 CPU benchmark lock |
 
 이 표의 문서는 active contract가 아니다. 별도 승인과 source-of-truth 승격 전에는 Gateway hot path, routing policy 또는 제품 surface의 근거로 사용할 수 없다.
 

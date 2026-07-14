@@ -40,7 +40,15 @@ FORBIDDEN_REPORT_KEYS = {
     "rawResponse",
     "embedding",
     "embeddings",
+    "projectedEmbedding",
+    "semanticHeads",
+    "semanticHeadProbabilities",
+    "headOutput",
+    "assembledVector",
+    "featureVector",
     "intermediateVector",
+    "rawScore",
+    "calibratedValue",
     "samples",
 }
 
@@ -285,6 +293,16 @@ def _forbidden_key_paths(value: Any, path: str = "$") -> list[str]:
     return found
 
 
+def projection_selection(evaluation: dict[str, Any]) -> dict[str, Any]:
+    """Describe the projection produced by the selected runtime variant."""
+    return {
+        "selectedDimension": evaluation["projectionDimension"],
+        "selectedProjectionVersion": evaluation["projectionVersion"],
+        "selectedProjectionSha256": evaluation["projectionSha256"],
+        "selectionSplit": "calibration",
+    }
+
+
 def run_benchmark(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
     config = load_candidate_config(args.config)
     args.work_dir.mkdir(parents=True, exist_ok=True)
@@ -328,12 +346,7 @@ def run_benchmark(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
                 "sourceModelId": candidate["sourceModelId"],
                 "sourceRevision": candidate["sourceRevision"],
                 "nativeDimension": candidate["nativeDimension"],
-                "projectionSelection": {
-                    "selectedDimension": dimension,
-                    "selectedProjectionVersion": chosen_projection["projectionVersion"],
-                    "selectedProjectionSha256": chosen_projection["projectionSha256"],
-                    "selectionSplit": "calibration",
-                },
+                "projectionSelection": projection_selection(selected_evaluation),
                 "quantizationDecision": quant,
                 "selectedVariant": selected_variant,
                 "selectedCalibration": selected_evaluation,
@@ -610,4 +623,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

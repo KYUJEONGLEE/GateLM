@@ -84,7 +84,7 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 이 10개 fixture는 schema, enum, provenance와 기본 evaluation wiring을 검증할 뿐 model 학습, calibrator 선택 또는 threshold 최적화 dataset이 아니다. 이 fixture만으로 encoder/model/calibrator artifact를 만들거나 active runtime을 바꾸면 안 된다.
 
-[`fixtures/difficulty-label-contract-smoke.fixture.jsonl`](fixtures/difficulty-label-contract-smoke.fixture.jsonl)과 [`fixtures/difficulty-label-contract-smoke.manifest.json`](fixtures/difficulty-label-contract-smoke.manifest.json)은 [`difficulty-label-guide.md`](difficulty-label-guide.md)의 필수 label, 다섯 category, 두 difficulty와 모든 required evaluation slice를 검증하는 10건/5-family synthetic smoke다. 모든 record가 `pending`이고 approved human-reviewed family는 0이므로 학습에 사용할 수 없다.
+[`fixtures/difficulty-label-contract-smoke.fixture.jsonl`](fixtures/difficulty-label-contract-smoke.fixture.jsonl)과 [`fixtures/difficulty-label-contract-smoke.manifest.json`](fixtures/difficulty-label-contract-smoke.manifest.json)은 [`difficulty-label-guide.md`](difficulty-label-guide.md)의 필수 label, 고정 4-head·12차원 class order, empty-instruction fail-closed, 다섯 category, 두 difficulty와 모든 required evaluation slice를 검증하는 10건/5-family synthetic smoke다. 모든 record가 `pending`이고 approved human-reviewed family는 0이므로 학습에 사용할 수 없다.
 
 [`fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl)은 별도로 재생 가능한 **training-tooling smoke**다. 다섯 category × 두 difficulty cell에 각각 50건을 두어 총 500건이며 simple/complex는 각 250건이다. 모든 record가 synthetic이고 `human review pending`이므로 실제 model 학습 데이터, calibrator/threshold 선택 evidence 또는 runtime promotion evidence가 아니다. [`../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs`](../../scripts/dev/generate-v2.1-difficulty-training-pilot.mjs)로 결정론적으로 다시 생성한다.
 
@@ -170,7 +170,7 @@ corepack pnpm run verify:v2-docs
 corepack pnpm run v2.1:routing:evaluate:difficulty
 ```
 
-Difficulty verifier는 evaluation schema identity, 필수 필드, `simple | complex` enum, 추가 필드 금지, provenance 조합과 secret 형태 문자열을 검사한다. 또한 label source의 category–semantic 조합, 구조 bucket, instruction/payload 경계, slice와 review 상태, family·coverage 집계, dataset hash 및 500건 pilot의 `trainingEligible=false` manifest를 검사한다. Category verifier는 category fixture에 `expectedDifficulty`가 섞이면 실패해야 한다.
+Difficulty verifier는 evaluation schema identity, 필수 필드, `simple | complex` enum, 추가 필드 금지, provenance 조합과 secret 형태 문자열을 검사한다. 또한 label source의 category–semantic 조합, 고정된 네 semantic head class order, empty instruction의 `not_applicable` fail-closed, instruction/payload 경계, slice와 review 상태, family·coverage 집계, dataset hash 및 500건 pilot의 `trainingEligible=false` manifest를 검사한다. Category verifier는 category fixture에 `expectedDifficulty`가 섞이면 실패해야 한다.
 
 ## 9. 범위 밖
 

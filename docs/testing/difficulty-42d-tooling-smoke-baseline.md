@@ -1,17 +1,31 @@
-# 42D Difficulty Tooling-Smoke Baseline
+# 42D Difficulty Tooling-Smoke Measurement Baseline
 
 ## Status
 
 - Evidence class: offline `training_tooling_smoke`
-- Promotion status: **FAIL / not eligible**
+- Model-quality comparison eligible: `false`
+- Semantic-candidate comparison eligible: `false`
+- Promotion gate applicable: `false`
+- Production evidence eligible: `false`
 - Product runtime changed: `false`
 - Measured at: `2026-07-14T06:51:42.304Z` (`2026-07-14 15:51:42 KST`)
+- Current-contract/slice revalidation: `2026-07-14T07:50:55.135Z` (`2026-07-14 16:50:55 KST`), base commit `9ae1d25922696aece2d191d8abff08e13026dfbc`
 - Base commit: `1fdfdde19f8bd352b6f29fe702f8159cb433ba5f`
 - Branch: `feat/routing-difficulty-update`
 - `origin/dev`: `dace6848836994bfc8c501604560eb40aca3224c`
 - Worktree at measurement: dirty; the evaluator and runner changes in this evidence were not committed yet
 
-This result compares the current rule classifier and an ephemeral 42D Logistic Regression hybrid on the same family-disjoint holdout. It is the reproducible comparison baseline for later semantic candidates, but it is not model-quality, promotion, or production evidence.
+This result records a reproducible instrumentation smoke between the current rule classifier and an ephemeral 42D Logistic Regression hybrid on the same family-disjoint tooling partition. It is not a model-quality baseline and must not be used to rank later semantic candidates.
+
+## Current Contract Boundary
+
+- This report evaluates exact `difficulty-feature-vector.v1` with 42 dimensions only.
+- It does not evaluate the proposed semantic feature contract.
+- The current semantic proposal has 4 heads / 12 probability dimensions and initial candidate shapes `42`, `42 + P`, and `54 + P`.
+- The current semantic annotation contract is `gatelm.difficulty-label-record.v2`: `semanticInputStatus` distinguishes `eligible` from `empty_instruction`, and empty semantic input uses `not_applicable` bucket targets rather than invented head probabilities.
+- The semantic proposal remains `Proposed; not active`; no Gateway hot-path or runtime behavior is changed here.
+- Empty semantic input must fail closed until a versioned empty representation is approved. The 42D v1 empty/meaningless sentinel is a separate existing classifier rule and must not be reused as a semantic zero-vector contract.
+- The robustness fixture used below is `gatelm.difficulty-label-record.v2`; its annotation-only semantic targets are deliberately excluded when projecting to the 42D difficulty-evaluation contract.
 
 ## Dataset And Artifact
 
@@ -21,15 +35,18 @@ This result compares the current rule classifier and an ephemeral 42D Logistic R
 - Approved human-reviewed families: `0`
 - Split policy: `difficulty-family-split.v1`
 - Family rule: `difficulty-sample-family.v1`
-- Split: train `300 samples / 15 families`, calibration `100 / 5`, holdout `100 / 5`
+- Tooling partition: train `300 samples / 15 families`, calibration `100 / 5`, holdout `100 / 5`
 - Holdout model path: `85`; deterministic sentinels excluded from calibration: `15`
 - Ephemeral artifact: `difficulty-logistic-v1-42d-tooling-smoke-baseline`
 - Artifact SHA-256: `sha256:0fcc5a0689aaf0a934b4e1df0645d9cbfbc48be6d30d81ee4a5d56ba5a693c0f`
 - Calibrator / threshold: Platt / `0.45`
+- Slice dataset: `difficulty_label_contract_smoke_2026_07_14_v2`
+- Slice record contract / SHA-256: `gatelm.difficulty-label-record.v2` / `ab9305583a424793efd94afec420198f36d6214c79fa7a855ae2eacf846549ca`
+- Slice semantic eligibility: `10 records / 5 families` eligible, `0 / 0` empty-instruction
 
-The split is selected only through the checked-in family assignment manifest. No record-random split is used, and contrast variants remain in the same family.
+The tooling partition is selected only through the checked-in family assignment manifest. No record-random split is used, and contrast variants remain in the same family. Per the current label contract, these `train|calibration|holdout` names are smoke-tooling partitions rather than production evidence splits.
 
-## Primary Result
+## Observed Tooling-Smoke Output
 
 | Metric | Rule | 42D hybrid | Delta |
 |---|---:|---:|---:|
@@ -37,9 +54,9 @@ The split is selected only through the checked-in family assignment manifest. No
 | `complex -> simple` | 7/50 (0.14) | 13/50 (0.26) | +6 / +0.12 |
 | Changed prediction | - | 28/100 | - |
 
-The candidate fails the directional safety gate because `complex -> simple` errors increase overall and in three expected-category groups.
+The tooling-smoke directional diagnostic returns false because `complex -> simple` counts increase overall and in three expected-category groups. This is not a promotion-gate result because promotion-gate applicability is `false` for this dataset.
 
-| Expected category | Rule accuracy | 42D accuracy | Rule `complex -> simple` | 42D `complex -> simple` | Directional gate |
+| Expected category | Rule accuracy | 42D accuracy | Rule `complex -> simple` | 42D `complex -> simple` | Directional diagnostic |
 |---|---:|---:|---:|---:|---|
 | code | 1.00 | 0.70 | 0/10 | 0/10 | PASS |
 | general | 0.80 | 0.70 | 4/10 | 6/10 | FAIL |
@@ -82,7 +99,7 @@ Fixed calibration bin policy: `equal-width-10-v1`.
 | long-simple (`rune length > 120`) | 3 | 1.0000 | 0.6667 |
 | short-complex (`rune length <= 120`) | 33 | 0.9091 | 0.6061 |
 
-Negation and payload-contamination use explicit `evaluationSlices` membership from `difficulty_label_contract_smoke_2026_07_14_v1`. The records are synthetic, pending review, and too small for quality claims.
+Negation and payload-contamination use explicit `evaluationSlices` membership from `difficulty_label_contract_smoke_2026_07_14_v2`. The records are synthetic, pending review, and too small for quality claims. The v2 revalidation preserved the observed slice values below. Annotation-only semantic fields, including `semanticInputStatus` and bucket targets, are not projected into the 42D evaluation record.
 
 | Slice | N | Rule accuracy | 42D accuracy | Rule `complex -> simple` | 42D `complex -> simple` |
 |---|---:|---:|---:|---:|---:|
@@ -103,7 +120,7 @@ Environment: Windows `10.0.26200`, Intel Core Ultra 7 155H, Go `1.24.13`, Node `
 - Difficulty-only delta: average `+0.1137 us`, p95 `+0.1229 us`
 - End-to-end delta: average `+0.7012 us`, p95 `+0.0094 us`
 - The rule difficulty-only p50 is at the evaluator reporting floor (`0.001 us`) and should be read as an upper bound, not as exact sub-nanosecond timing.
-- Host load can move absolute latency; compare later candidates with the same host, warm-up, iteration, and batch settings.
+- Host load can move absolute latency. These settings may be reused to validate measurement plumbing, but semantic candidate comparison requires a separate contract-compliant run and eligible dataset.
 
 ## Reproduction
 
@@ -122,4 +139,4 @@ The command writes the aggregate JSON and Markdown reports plus ephemeral traini
 
 ## Interpretation
 
-This run establishes the measurement pipeline and a synthetic comparison anchor. It does not justify replacing the rule classifier: the 42D candidate loses 18 percentage points of synthetic holdout accuracy, doubles the directional error rate from 0.14 to 0.26, and fails the overall/category safety gates. A later semantic candidate must be evaluated with the same family-disjoint and slice rules, but promotion requires an approved human-reviewed dataset rather than this smoke fixture.
+This run establishes the measurement pipeline and records synthetic observations only. It does not justify replacing the rule classifier, selecting a model, calibrator or threshold, or ranking a semantic candidate. A semantic comparison must follow the current `42`, `42 + P`, `54 + P` shape contract, use four heads / 12 probabilities, reject unapproved empty-input zero-fill, and be rerun on an approved human-reviewed family-disjoint dataset before any promotion gate is applicable.

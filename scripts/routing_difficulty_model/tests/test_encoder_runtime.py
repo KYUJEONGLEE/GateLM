@@ -4,6 +4,7 @@ import numpy as np
 
 from gatelm_difficulty_model.encoder_runtime import (
     HeadTailTokenizer,
+    LocalEncoderRuntime,
     fit_projection,
     l2_normalize,
     masked_mean,
@@ -11,6 +12,11 @@ from gatelm_difficulty_model.encoder_runtime import (
 
 
 class FakeTokenizer:
+    cls_token_id = 101
+    bos_token_id = None
+    sep_token_id = 102
+    eos_token_id = None
+
     def num_special_tokens_to_add(self, pair=False):
         return 2
 
@@ -42,6 +48,14 @@ class EncoderRuntimeTest(unittest.TestCase):
     def test_empty_input_does_not_create_special_token_only_input(self) -> None:
         tokenizer = HeadTailTokenizer(FakeTokenizer(), 128)
         self.assertIsNone(tokenizer.tokenize(" \n\t"))
+
+    def test_runtime_rejects_empty_input_instead_of_inventing_zero_representation(self) -> None:
+        runtime = object.__new__(LocalEncoderRuntime)
+        runtime.tokenizer = HeadTailTokenizer(FakeTokenizer(), 128)
+        runtime.native_dimension = 8
+
+        with self.assertRaisesRegex(ValueError, "semantic input must not be empty"):
+            runtime.encode_raw(" \n\t")
 
     def test_masked_mean_excludes_padding_and_zeroes_invalid_mask(self) -> None:
         hidden = np.asarray([[[1, 2], [3, 4], [100, 100]]], dtype=np.float32)

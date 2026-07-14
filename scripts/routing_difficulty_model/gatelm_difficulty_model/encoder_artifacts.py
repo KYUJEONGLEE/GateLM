@@ -88,6 +88,13 @@ def load_candidate_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
         raise ValueError("head and tail token budgets must consume the exact usable token count")
     if truncation.get("callerOverride") is not False:
         raise ValueError("head-tail truncation cannot be caller configurable")
+    if truncation.get("emptyOrSpecialTokenOnly") != "reject_before_encoder_call":
+        raise ValueError("empty semantic input must be rejected before encoder call")
+    if (
+        truncation.get("specialTokenTreatment")
+        != "prepend_declared_cls_or_bos_id_and_append_declared_sep_or_eos_id"
+    ):
+        raise ValueError("semantic encoder special-token treatment does not match v1")
     candidate_ids: set[str] = set()
     candidates = config.get("candidates")
     if not isinstance(candidates, list) or len(candidates) < 3:
@@ -264,4 +271,3 @@ def artifact_for_role(manifest: dict[str, Any], directory: Path, role: str) -> P
     if len(matches) != 1:
         raise ValueError(f"artifact role {role!r} must resolve exactly once")
     return directory / matches[0]["relativePath"]
-

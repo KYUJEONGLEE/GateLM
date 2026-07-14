@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-label-record.schema.json",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-label-record.v1.schema.json",
   "title": "GateLM Difficulty Label Record",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "gatelm.difficulty-label-record.v2"
+      "const": "gatelm.difficulty-label-record.v1"
     },
     "datasetVersion": {
       "type": "string",
@@ -34,26 +34,18 @@
       "type": "string",
       "enum": ["simple", "complex"]
     },
-    "semanticInputStatus": {
-      "type": "string",
-      "enum": ["eligible", "empty_instruction"],
-      "description": "Whether a meaningful instruction can produce targets for the fixed four semantic heads."
-    },
     "taskBucket": {
-      "type": "string",
-      "enum": ["count_1", "count_2", "count_3_plus", "not_applicable"]
+      "$ref": "#/$defs/countBucket"
     },
     "constraintBucket": {
-      "type": "string",
-      "enum": ["count_0_to_1", "count_2", "count_3_plus", "not_applicable"]
+      "$ref": "#/$defs/countBucket"
     },
     "scopeBucket": {
       "type": "string",
-      "enum": ["count_1", "count_2_to_3", "count_4_plus", "not_applicable"]
+      "enum": ["zero", "one", "two_to_three", "four_plus"]
     },
     "dependencyBucket": {
-      "type": "string",
-      "enum": ["depth_0_to_1", "depth_2", "depth_3_plus", "not_applicable"]
+      "$ref": "#/$defs/countBucket"
     },
     "expectedSemanticLabel": {
       "type": "string",
@@ -170,7 +162,6 @@
     "redactedPrompt",
     "expectedCategory",
     "expectedDifficulty",
-    "semanticInputStatus",
     "taskBucket",
     "constraintBucket",
     "scopeBucket",
@@ -190,40 +181,6 @@
     "reviewerCount"
   ],
   "allOf": [
-    {
-      "if": { "properties": { "semanticInputStatus": { "const": "eligible" } }, "required": ["semanticInputStatus"] },
-      "then": {
-        "properties": {
-          "taskBucket": { "enum": ["count_1", "count_2", "count_3_plus"] },
-          "constraintBucket": { "enum": ["count_0_to_1", "count_2", "count_3_plus"] },
-          "scopeBucket": { "enum": ["count_1", "count_2_to_3", "count_4_plus"] },
-          "dependencyBucket": { "enum": ["depth_0_to_1", "depth_2", "depth_3_plus"] }
-        }
-      }
-    },
-    {
-      "if": { "properties": { "semanticInputStatus": { "const": "empty_instruction" } }, "required": ["semanticInputStatus"] },
-      "then": {
-        "properties": {
-          "taskBucket": { "const": "not_applicable" },
-          "constraintBucket": { "const": "not_applicable" },
-          "scopeBucket": { "const": "not_applicable" },
-          "dependencyBucket": { "const": "not_applicable" }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "expectedInstructionPayloadBoundary": {
-            "properties": { "kind": { "const": "payload_only" } },
-            "required": ["kind"]
-          }
-        },
-        "required": ["expectedInstructionPayloadBoundary"]
-      },
-      "then": { "properties": { "semanticInputStatus": { "const": "empty_instruction" } } }
-    },
     {
       "if": { "properties": { "source": { "const": "synthetic_fixture" } }, "required": ["source"] },
       "then": {
@@ -306,6 +263,10 @@
     }
   ],
   "$defs": {
+    "countBucket": {
+      "type": "string",
+      "enum": ["zero", "one", "two", "three_plus"]
+    },
     "instructionPayloadBoundary": {
       "oneOf": [
         {

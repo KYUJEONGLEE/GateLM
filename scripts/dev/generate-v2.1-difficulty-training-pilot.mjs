@@ -693,7 +693,7 @@ const splitManifest = {
   families: familyAssignments,
 };
 const smokeManifest = {
-  schemaVersion: "gatelm.difficulty-label-dataset-manifest.v1",
+  schemaVersion: "gatelm.difficulty-label-dataset-manifest.v2",
   datasetVersion,
   recordSchemaVersion: "gatelm.difficulty-evaluation-record.v1",
   datasetPath: "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",

@@ -37,6 +37,24 @@ class EncoderArtifactTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "mutable or invalid revision"):
                 load_candidate_config(path)
 
+    def test_rejects_unapproved_empty_or_special_token_policy(self) -> None:
+        config = json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))
+        truncation = config["benchmarkProtocol"]["truncation"]
+        truncation["emptyOrSpecialTokenOnly"] = "zero_representation_without_encoder_call"
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value) / "candidates.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "empty semantic input"):
+                load_candidate_config(path)
+
+        config = json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))
+        config["benchmarkProtocol"]["truncation"]["specialTokenTreatment"] = "tokenizer_default"
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value) / "candidates.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "special-token treatment"):
+                load_candidate_config(path)
+
     def test_artifact_hash_mismatch_is_rejected(self) -> None:
         config = load_candidate_config(DEFAULT_CONFIG)
         candidate = copy.deepcopy(config["candidates"][0])

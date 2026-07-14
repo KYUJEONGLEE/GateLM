@@ -3,6 +3,7 @@ import unittest
 from gatelm_difficulty_model.encoder_benchmark import (
     _forbidden_key_paths,
     choose_projection,
+    projection_selection,
     quantization_decision,
 )
 
@@ -57,10 +58,50 @@ class EncoderBenchmarkTest(unittest.TestCase):
         self.assertFalse(decision["selected"])
         self.assertFalse(decision["qualityGatePassed"])
 
+    def test_projection_selection_uses_selected_variant_artifact(self) -> None:
+        fp32 = evaluation(64, 0.96, 3)
+        quantized = evaluation(64, 0.97, 3)
+        quantized["projectionVersion"] = "qint8-projection"
+        quantized["projectionSha256"] = "sha256:" + ("a" * 64)
+
+        selected = projection_selection(quantized)
+
+        self.assertEqual(selected["selectedDimension"], 64)
+        self.assertEqual(selected["selectedProjectionVersion"], "qint8-projection")
+        self.assertEqual(selected["selectedProjectionSha256"], "sha256:" + ("a" * 64))
+        self.assertNotEqual(selected["selectedProjectionSha256"], fp32["projectionSha256"])
+
     def test_forbidden_report_material_is_rejected_recursively(self) -> None:
         self.assertEqual(_forbidden_key_paths({"aggregate": {"accuracy": 1.0}}), [])
-        paths = _forbidden_key_paths({"candidate": {"embedding": [0.1], "samples": []}})
-        self.assertEqual(paths, ["$.candidate.embedding", "$.candidate.samples"])
+        paths = _forbidden_key_paths(
+            {
+                "candidate": {
+                    "embedding": [0.1],
+                    "projectedEmbedding": [0.2],
+                    "semanticHeads": {"semanticTaskBucket": [1.0, 0.0, 0.0]},
+                    "headOutput": [0.8],
+                    "assembledVector": [0.1, 0.2],
+                    "featureVector": [0.1, 0.2],
+                    "rawScore": 0.4,
+                    "calibratedValue": 0.5,
+                    "samples": [],
+                }
+            }
+        )
+        self.assertEqual(
+            paths,
+            [
+                "$.candidate.embedding",
+                "$.candidate.projectedEmbedding",
+                "$.candidate.semanticHeads",
+                "$.candidate.headOutput",
+                "$.candidate.assembledVector",
+                "$.candidate.featureVector",
+                "$.candidate.rawScore",
+                "$.candidate.calibratedValue",
+                "$.candidate.samples",
+            ],
+        )
 
 
 if __name__ == "__main__":

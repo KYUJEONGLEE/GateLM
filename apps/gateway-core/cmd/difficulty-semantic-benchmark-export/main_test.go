@@ -81,3 +81,47 @@ func TestDifficultyFamilyIDKeepsContrastsTogether(t *testing.T) {
 		t.Fatalf("contrast family split: simple=%q complex=%q", simple, complex)
 	}
 }
+
+func TestBuildBenchmarkInputRejectsMissingSemanticInstruction(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "dataset.jsonl")
+	manifestPath := filepath.Join(tempDir, "manifest.json")
+	record := map[string]any{
+		"datasetVersion":     "difficulty_test_v1",
+		"sampleId":           "difficulty_code_simple_core_clear_f01_v01",
+		"redactedPrompt":     "```go\nfunc main() {}\n```",
+		"expectedCategory":   "code",
+		"expectedDifficulty": "simple",
+		"language":           "en",
+	}
+	recordBytes, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	datasetBytes := append(recordBytes, '\n')
+	if err := os.WriteFile(datasetPath, datasetBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(datasetBytes)
+	manifest := splitManifest{
+		SchemaVersion:      "gatelm.difficulty-training-split-manifest.v1",
+		DatasetVersion:     "difficulty_test_v1",
+		DatasetSHA256:      hex.EncodeToString(hash[:]),
+		SplitPolicyVersion: "difficulty-family-split.v1",
+		FamilyRuleVersion:  "difficulty-sample-family.v1",
+		Families:           []familyAssignment{{FamilyID: "code/f01", Split: "train"}},
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, manifestBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = buildBenchmarkInput(datasetPath, manifestPath)
+	if err == nil || !strings.Contains(err.Error(), "no semantic instruction input") {
+		t.Fatalf("payload-only benchmark error = %v, want missing semantic input rejection", err)
+	}
+}

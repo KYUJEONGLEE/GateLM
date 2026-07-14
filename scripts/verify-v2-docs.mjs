@@ -81,6 +81,8 @@ const versionedV21Docs = [
   "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json",
   "docs/v2.1.0/schemas/difficulty-label-record.schema.json",
   "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json",
+  "docs/v2.1.0/schemas/difficulty-label-record.v1.schema.json",
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.v1.schema.json",
   "docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json",
   "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json",
   "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl",

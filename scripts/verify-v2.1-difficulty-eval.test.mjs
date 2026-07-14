@@ -19,6 +19,12 @@ const labelFixtureRelativePath = "docs/v2.1.0/fixtures/difficulty-label-contract
 const labelManifestSchemaRelativePath =
   "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json";
 const labelManifestRelativePath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json";
+const historicalLabelSchemaRelativePath =
+  "docs/v2.1.0/schemas/difficulty-label-record.v1.schema.json";
+const historicalLabelManifestSchemaRelativePath =
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.v1.schema.json";
+const semanticFeatureContractRelativePath =
+  "scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py";
 
 test("difficulty verifier accepts a valid difficulty-only evaluation record", () => {
   withDataset(
@@ -182,6 +188,58 @@ test("difficulty labels reject category and semantic-label mismatches", () => {
       assert.ok(
         failures.some((failure) => failure.includes("semantic label") && failure.includes("incompatible")),
         `category/semantic mismatch was accepted: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("difficulty labels enforce the fixed four-head class order and reject legacy buckets", () => {
+  withLabelContract(
+    ({ schema, records }) => {
+      schema.properties.taskBucket.enum = [
+        "count_2",
+        "count_1",
+        "count_3_plus",
+        "not_applicable",
+      ];
+      records[0].taskBucket = "one";
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some((failure) => failure.includes("semanticTaskBucket class order")),
+        `semantic head class reordering was accepted: ${JSON.stringify(failures)}`,
+      );
+      assert.ok(
+        failures.some((failure) => failure.includes("taskBucket") && failure.includes("count_1")),
+        `legacy bucket was accepted: ${JSON.stringify(failures)}`,
+      );
+    },
+  );
+});
+
+test("difficulty labels fail closed for empty semantic input", () => {
+  withLabelContract(
+    ({ records }) => {
+      records[0].semanticInputStatus = "empty_instruction";
+      records[1].expectedInstructionPayloadBoundary = {
+        kind: "payload_only",
+        boundaryType: "unsupported",
+        confidence: "low",
+        payloadBlockCount: "one",
+      };
+    },
+    ({ rootDir }) => {
+      const failures = verifyDifficultyLabelContract({ rootDir });
+      assert.ok(
+        failures.some(
+          (failure) => failure.includes("empty_instruction") && failure.includes("not_applicable"),
+        ),
+        `empty semantic input was coerced into a head target: ${JSON.stringify(failures)}`,
+      );
+      assert.ok(
+        failures.some((failure) => failure.includes("payload_only must use semanticInputStatus")),
+        `payload-only input was accepted as head-eligible: ${JSON.stringify(failures)}`,
       );
     },
   );
@@ -354,6 +412,18 @@ function withLabelContract(mutator, assertion) {
     const manifest = JSON.parse(
       readFileSync(path.join(sourceRoot, ...labelManifestRelativePath.split("/")), "utf8"),
     );
+    const historicalSchema = readFileSync(
+      path.join(sourceRoot, ...historicalLabelSchemaRelativePath.split("/")),
+      "utf8",
+    );
+    const historicalManifestSchema = readFileSync(
+      path.join(sourceRoot, ...historicalLabelManifestSchemaRelativePath.split("/")),
+      "utf8",
+    );
+    const semanticFeatureContract = readFileSync(
+      path.join(sourceRoot, ...semanticFeatureContractRelativePath.split("/")),
+      "utf8",
+    );
 
     mutator({ schema, records, manifestSchema, manifest });
     for (const relativePath of [
@@ -361,6 +431,9 @@ function withLabelContract(mutator, assertion) {
       labelFixtureRelativePath,
       labelManifestSchemaRelativePath,
       labelManifestRelativePath,
+      historicalLabelSchemaRelativePath,
+      historicalLabelManifestSchemaRelativePath,
+      semanticFeatureContractRelativePath,
     ]) {
       mkdirSync(path.dirname(path.join(rootDir, ...relativePath.split("/"))), { recursive: true });
     }
@@ -382,6 +455,21 @@ function withLabelContract(mutator, assertion) {
     writeFileSync(
       path.join(rootDir, ...labelManifestRelativePath.split("/")),
       `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(rootDir, ...historicalLabelSchemaRelativePath.split("/")),
+      historicalSchema,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(rootDir, ...historicalLabelManifestSchemaRelativePath.split("/")),
+      historicalManifestSchema,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(rootDir, ...semanticFeatureContractRelativePath.split("/")),
+      semanticFeatureContract,
       "utf8",
     );
     assertion({ rootDir });

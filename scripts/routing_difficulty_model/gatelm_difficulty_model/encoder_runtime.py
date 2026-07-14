@@ -43,6 +43,14 @@ class HeadTailTokenizer:
         self.usable_tokens = self.maximum_length - self.special_token_budget
         self.head_tokens = (self.usable_tokens + 1) // 2
         self.tail_tokens = self.usable_tokens // 2
+        self.start_token_id = tokenizer.cls_token_id
+        if self.start_token_id is None:
+            self.start_token_id = tokenizer.bos_token_id
+        self.end_token_id = tokenizer.sep_token_id
+        if self.end_token_id is None:
+            self.end_token_id = tokenizer.eos_token_id
+        if self.start_token_id is None or self.end_token_id is None:
+            raise ValueError("tokenizer must declare one start and one end token for single-sequence input")
 
     def content_ids(self, text: str) -> tuple[int, ...]:
         if not text.strip():
@@ -63,17 +71,10 @@ class HeadTailTokenizer:
         bounded = content
         if truncated:
             bounded = content[: self.head_tokens] + content[-self.tail_tokens :]
-        input_ids = tuple(
-            int(value) for value in self.tokenizer.build_inputs_with_special_tokens(list(bounded))
-        )
+        input_ids = (int(self.start_token_id),) + bounded + (int(self.end_token_id),)
         if len(input_ids) > self.maximum_length or len(input_ids) != len(bounded) + 2:
             raise ValueError("tokenizer special token construction violated the fixed v1 budget")
-        token_types = tuple(
-            int(value)
-            for value in self.tokenizer.create_token_type_ids_from_sequences(list(bounded))
-        )
-        if len(token_types) != len(input_ids):
-            token_types = (0,) * len(input_ids)
+        token_types = (0,) * len(input_ids)
         return TokenizedInput(
             input_ids=input_ids,
             attention_mask=(1,) * len(input_ids),
@@ -272,7 +273,7 @@ class LocalEncoderRuntime:
 
         tokenized = self.tokenizer.tokenize(text)
         if tokenized is None:
-            return np.zeros((self.native_dimension,), dtype=np.float32)
+            raise ValueError("semantic input must not be empty")
         inputs: dict[str, Any] = {}
         if "input_ids" in self.input_names:
             inputs["input_ids"] = np.asarray([tokenized.input_ids], dtype=np.int64)
@@ -314,4 +315,3 @@ def latency_bucket_texts(runtime: LocalEncoderRuntime) -> list[tuple[str, str, i
             raise ValueError("latency corpus unexpectedly produced an empty semantic input")
         result.append((name, text, tokenized.content_token_count, tokenized.truncated))
     return result
-
