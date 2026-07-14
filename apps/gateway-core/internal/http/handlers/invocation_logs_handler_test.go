@@ -23,11 +23,16 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	createdAt := time.Date(2026, 6, 25, 1, 2, 3, 0, time.UTC)
 	reader := &recordingProjectLogsReader{
 		items: []invocationlog.RequestLogListItem{{
-			RequestID:        "request_001",
-			ProjectID:        "project_demo",
-			ApplicationID:    "app_demo",
-			UserRef:          "Yoonji",
-			RequestedModel:   "auto",
+			RequestID:      "request_001",
+			ProjectID:      "project_demo",
+			ApplicationID:  "app_demo",
+			UserRef:        "Yoonji",
+			RequestedModel: "auto",
+			ProviderAttempt: &invocationlog.ProviderAttemptFields{
+				ProviderID: "provider_openai",
+				ModelID:    "gpt-4o-mini",
+				Outcome:    "success",
+			},
 			Status:           invocationlog.StatusSuccess,
 			HTTPStatus:       http.StatusOK,
 			PromptTokens:     32,
@@ -77,6 +82,9 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	}
 	if item.UserRef == nil || *item.UserRef != "Yoonji" {
 		t.Fatalf("unexpected user ref: %+v", item)
+	}
+	if item.ProviderAttempt == nil || item.ProviderAttempt.ProviderID != "provider_openai" || item.ProviderAttempt.ModelID != "gpt-4o-mini" {
+		t.Fatalf("unexpected provider attempt: %+v", item.ProviderAttempt)
 	}
 
 	for _, forbidden := range []string{

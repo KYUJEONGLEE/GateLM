@@ -506,30 +506,31 @@ type detailErrorResponse struct {
 }
 
 type requestLogListItemResponse struct {
-	RequestID        string                 `json:"requestId"`
-	ProjectID        string                 `json:"projectId"`
-	ApplicationID    string                 `json:"applicationId"`
-	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
-	UserRef          *string                `json:"userRef,omitempty"`
-	RequestedModel   string                 `json:"requestedModel"`
-	Category         string                 `json:"category"`
-	Difficulty       string                 `json:"difficulty"`
-	ModelRef         string                 `json:"modelRef"`
-	Status           string                 `json:"status"`
-	TerminalStatus   string                 `json:"terminalStatus"`
-	DomainOutcomes   domainOutcomesResponse `json:"domainOutcomes"`
-	HTTPStatus       int                    `json:"httpStatus"`
-	PromptTokens     int64                  `json:"promptTokens"`
-	CompletionTokens int64                  `json:"completionTokens"`
-	TotalTokens      int64                  `json:"totalTokens"`
-	CostUSD          string                 `json:"costUsd"`
-	CostMicroUSD     int64                  `json:"costMicroUsd"`
-	LatencyMs        int64                  `json:"latencyMs"`
-	CacheStatus      string                 `json:"cacheStatus"`
-	CacheType        string                 `json:"cacheType"`
-	RoutingReason    string                 `json:"routingReason"`
-	MaskingAction    string                 `json:"maskingAction"`
-	CreatedAt        time.Time              `json:"createdAt"`
+	RequestID        string                   `json:"requestId"`
+	ProjectID        string                   `json:"projectId"`
+	ApplicationID    string                   `json:"applicationId"`
+	BudgetScope      budgetScopeResponse      `json:"budgetScope"`
+	UserRef          *string                  `json:"userRef,omitempty"`
+	RequestedModel   string                   `json:"requestedModel"`
+	ProviderAttempt  *providerAttemptResponse `json:"providerAttempt"`
+	Category         string                   `json:"category"`
+	Difficulty       string                   `json:"difficulty"`
+	ModelRef         string                   `json:"modelRef"`
+	Status           string                   `json:"status"`
+	TerminalStatus   string                   `json:"terminalStatus"`
+	DomainOutcomes   domainOutcomesResponse   `json:"domainOutcomes"`
+	HTTPStatus       int                      `json:"httpStatus"`
+	PromptTokens     int64                    `json:"promptTokens"`
+	CompletionTokens int64                    `json:"completionTokens"`
+	TotalTokens      int64                    `json:"totalTokens"`
+	CostUSD          string                   `json:"costUsd"`
+	CostMicroUSD     int64                    `json:"costMicroUsd"`
+	LatencyMs        int64                    `json:"latencyMs"`
+	CacheStatus      string                   `json:"cacheStatus"`
+	CacheType        string                   `json:"cacheType"`
+	RoutingReason    string                   `json:"routingReason"`
+	MaskingAction    string                   `json:"maskingAction"`
+	CreatedAt        time.Time                `json:"createdAt"`
 }
 
 type paginationResponse struct {
@@ -1061,6 +1062,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			BudgetScope:      budgetScopeResponseFromScope(item.BudgetScope, item.ApplicationID),
 			UserRef:          stringPointerOrNil(item.UserRef),
 			RequestedModel:   item.RequestedModel,
+			ProviderAttempt:  providerAttemptResponseFromDomain(item.ProviderAttempt),
 			Category:         item.Category,
 			Difficulty:       item.Difficulty,
 			ModelRef:         item.ModelRef,

@@ -11,6 +11,7 @@ import {
 import { RequestLogDetailPanel } from "./request-log-detail";
 import { RequestIdCopyButton } from "./request-id-copy-button";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
+import type { ProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -19,6 +20,7 @@ type RequestDetailDrawerProps = {
   locale: Locale;
   loadState: "idle" | "loading" | "ready" | "error";
   onClose: () => void;
+  providerDirectory: ProviderDisplayDirectory;
   record?: LiveInvocationLogRecord;
   requestId: string;
   timezone: string;
@@ -29,6 +31,7 @@ export function RequestDetailDrawer({
   locale,
   loadState,
   onClose,
+  providerDirectory,
   record,
   requestId,
   timezone
@@ -127,7 +130,12 @@ export function RequestDetailDrawer({
             </div>
           ) : null}
           {record ? (
-            <RequestLogDetailPanel locale={locale} record={record} timezone={timezone} />
+            <RequestLogDetailPanel
+              locale={locale}
+              providerDirectory={providerDirectory}
+              record={record}
+              timezone={timezone}
+            />
           ) : null}
         </div>
       </DialogContent>

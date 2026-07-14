@@ -10,6 +10,7 @@ import {
 } from "@/features/dashboard/live-requests-history";
 import { RequestLogDetailClient } from "@/features/request-logs/components/request-log-detail-client";
 import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
+import type { ProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import type {
   LiveRequestRow,
   LiveRequestsPayload,
@@ -45,6 +46,9 @@ type LiveRequestsApiResponse = {
 
 type SelectedRequest = {
   projectId: string;
+  providerFamily: string | null;
+  providerId: string | null;
+  providerName: string | null;
   requestId: string;
 };
 
@@ -329,6 +333,9 @@ export function LiveRequestsCard({
     const selectRequest = () => {
       setSelectedRequest({
         projectId: row.projectId,
+        providerFamily: row.providerFamily,
+        providerId: row.providerId,
+        providerName: row.providerName,
         requestId: row.requestId
       });
       detailOpenTimerRef.current = null;
@@ -401,6 +408,7 @@ export function LiveRequestsCard({
         <RequestLogDetailClient
           locale={locale}
           onClose={closeRequestDetail}
+          providerDirectory={selectedRequestProviderDirectory(selectedRequest)}
           selectedProjectId={selectedRequest?.projectId}
           selectedRequestId={selectedRequest?.requestId}
           tenantId={tenantId}
@@ -519,4 +527,23 @@ function normalizeModelOptions(options: string[] | undefined) {
     .filter((option): option is string => typeof option === "string")
     .map((option) => option.trim())
     .filter(Boolean);
+}
+
+function selectedRequestProviderDirectory(
+  selectedRequest: SelectedRequest | null
+): ProviderDisplayDirectory {
+  if (
+    !selectedRequest?.providerId ||
+    !selectedRequest.providerFamily ||
+    !selectedRequest.providerName
+  ) {
+    return {};
+  }
+
+  return {
+    [selectedRequest.providerId]: {
+      family: selectedRequest.providerFamily,
+      name: selectedRequest.providerName
+    }
+  };
 }

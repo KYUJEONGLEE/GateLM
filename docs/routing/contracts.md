@@ -165,6 +165,8 @@ ResolvedTarget {
 
 `ResolvedTarget`은 catalog resolution과 provider adapter 호출을 위한 내부 값이다. routing decision, 외부 response, invocation summary event/log에는 실제 provider/model을 넣지 않는다. 실제 호출된 `providerId`/`modelId`는 별도의 provider-attempt 및 비용 정산 record에만 남긴다.
 
+관리자 Request Log의 목록과 상세 응답은 실제 호출 증거를 표시하기 위해 중첩된 `providerAttempt` record를 노출할 수 있다. 이 record는 routing decision이나 invocation summary가 아니며, 실제 provider 호출이 없으면 `null`이다. UI는 `requestedModel: "auto"`를 실제 모델명으로 바꾸지 않고 요청 모드로 유지하며, 실행 대상은 `providerAttempt.providerId`와 `providerAttempt.modelId`에서 별도로 표시한다.
+
 라우팅 결과는 category, difficulty, 선택한 opaque modelRef와 safe routing outcome을 설명할 수 있다. `selectedProvider`/`selectedModel`은 routing field 이름을 바꾸어 우회 보존하지 않는다.
 
 ## 6. One-time Migration

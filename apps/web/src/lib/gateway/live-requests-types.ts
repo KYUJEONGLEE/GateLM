@@ -9,12 +9,16 @@ export type LiveRequestRow = {
   category: "general" | "code" | "translation" | "summarization" | "reasoning";
   costUsd: number;
   difficulty: "simple" | "complex";
+  executedModel: string | null;
   fallbackUsed?: boolean;
   id: string;
   latencyMs: number;
   modelRef: string | null;
   projectId: string;
   projectName: string;
+  providerFamily: string | null;
+  providerId: string | null;
+  providerName: string | null;
   requestedModel: string;
   requestId: string;
   routingReason: string | null;

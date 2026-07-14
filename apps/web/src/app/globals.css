@@ -9018,6 +9018,25 @@ html[data-theme="dark"] .request-log-screen {
   text-overflow: ellipsis;
 }
 
+.request-log-provider-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.request-log-provider-copy strong,
+.request-log-provider-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-log-provider-copy small {
+  color: var(--request-log-muted);
+  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-weight: var(--font-weight-regular);
+}
+
 .request-log-provider-icon {
   display: inline-grid;
   width: 28px;
