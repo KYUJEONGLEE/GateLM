@@ -23,6 +23,14 @@
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |
 | [`fixtures/runtime-snapshot-routing.fixture.json`](fixtures/runtime-snapshot-routing.fixture.json) | routingPolicyHash를 포함한 RuntimeSnapshot routing bootstrap fixture |
 
+## Non-active Proposals
+
+| Path | Status | Scope |
+|---|---|---|
+| [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | `instructionText` semantic representation과 deterministic payload statistics를 사용하는 offline/shadow difficulty candidate |
+
+이 표의 문서는 active contract가 아니다. 별도 승인과 source-of-truth 승격 전에는 Gateway hot path, routing policy 또는 제품 surface의 근거로 사용할 수 없다.
+
 ## Authority And Boundaries
 
 이 계약은 일반 Gateway 라우팅 범위에서 `docs/v2.0.0`의 `category -> tier -> model`, legacy `routingPolicy` provider/model 필드, `selectedProvider`/`selectedModel` 의미를 대체한다. `docs/v2.0.0` 원문은 historical baseline으로 보존하며 이 문서로 새 의미를 읽는다.

@@ -55,6 +55,46 @@ func TestDifficultyClassifierUsesCalibratedModelScoreForRemainingRequests(t *tes
 	}
 }
 
+func TestSingleProxyDifficultySignalsDoNotBypassTheModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		prompt   string
+		category string
+	}{
+		{
+			name:     "medium payload alone",
+			prompt:   strings.Repeat("background context ", 10) + "state the service window",
+			category: CategoryGeneral,
+		},
+		{
+			name:     "large payload alone",
+			prompt:   strings.Repeat("background context ", 60) + "state the service window",
+			category: CategoryGeneral,
+		},
+		{
+			name:     "large summarization payload alone",
+			prompt:   "Summarize this text: " + strings.Repeat("plain context ", 70),
+			category: CategorySummarization,
+		},
+		{name: "debug operation alone", prompt: "Debug this function.", category: CategoryCode},
+		{name: "refactor operation alone", prompt: "Refactor this function.", category: CategoryCode},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			features := ExtractDifficultyFeatures(ExtractPromptFeatures(test.prompt), test.category)
+			if !UsesDifficultyModelPath(features) {
+				t.Fatalf("single proxy signal unexpectedly bypassed the model: %#v", features)
+			}
+			if actual := NewRuleBasedDifficultyClassifier().ClassifyFeatures(features); actual.Difficulty != DifficultySimple {
+				t.Fatalf("single proxy rule result = %#v, want simple", actual)
+			}
+		})
+	}
+}
+
 func TestDifficultyClassifierDoesNotApplyBoundedSimpleRuleAfterHardRules(t *testing.T) {
 	t.Parallel()
 
