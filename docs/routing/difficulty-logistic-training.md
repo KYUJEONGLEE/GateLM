@@ -56,7 +56,7 @@ Python tooling은 [`../../scripts/routing_difficulty_model/`](../../scripts/rout
 
 동일한 Logistic Regression regularization search와 calibrator 선택·fit 함수는 `difficulty-offline-feature-shape.v1` descriptor 기반 training API에서도 재사용한다. 기존 `train_from_vector_export()`와 CLI는 exact 42D v1 name/order/dimension만 계속 허용한다. 별도 `train_from_offline_feature_matrix()`는 canonical assembler가 만든 `42`, `106`, `118` matrix의 candidate, feature names, total dimension, sample dimension, finite 값, family-disjoint split과 sentinel `modelPath`를 교차 검증한다. 각 호출은 candidate 자신의 weights/bias와 calibration raw probability로 calibrator를 다시 fit한다. Combined vector와 semantic intermediate를 파일로 쓰는 helper는 제공하지 않는다.
 
-Isotonic은 scikit-learn의 선형 interpolation predictor를 artifact 의미로 사용하지 않고 tooling의 작은 PAVA 구현으로 학습한다. Raw probability를 정렬하고 exact-equal 값만 먼저 묶어 sample count와 complex count를 계산한 뒤, 앞 block의 비율이 뒤 block보다 큰 동안 sample-count 가중 병합을 반복한다. `labelConfidence`, epsilon grouping, 고정 score bin과 자동 small-block 병합은 사용하지 않는다. Artifact에는 각 최종 block의 포함 하한과 complex 비율을 저장하며 single constant block도 유효하다. Runtime은 포함 하한 floor lookup과 양끝 clipping만 수행한다.
+Isotonic은 scikit-learn의 선형 interpolation predictor를 artifact 의미로 사용하지 않고 tooling의 작은 PAVA 구현으로 학습한다. Raw probability를 정렬하고 exact-equal 값만 먼저 묶어 sample count와 complex count를 계산한 뒤, 앞 block의 비율이 뒤 block보다 크면 sample-count 가중 PAVA 병합을 반복한다. 인접 block의 fitted complex 비율이 정확히 같으면 예측 함수를 바꾸지 않는 canonicalization으로 다시 합쳐 최대 constant block 하나로 표현한다. 비율의 위반과 동률은 정수 complex count와 sample count의 교차 곱으로 비교한다. `labelConfidence`, epsilon grouping, 고정 score bin과 자동 small-block 병합은 사용하지 않는다. Artifact에는 각 최종 최대 constant block의 포함 하한과 complex 비율을 저장하며 single constant block도 유효하다. 최종 Isotonic selected-fit report에는 `blockCount`, `blockSampleCounts`와 그 최솟값인 `minBlockSampleCount`를 함께 기록한다. Runtime은 포함 하한 floor lookup과 양끝 clipping만 수행한다.
 
 ## Candidate Training Command
 
@@ -183,7 +183,7 @@ The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testi
 - v1/offline artifact parser 교차 거부, offline component provenance와 Go/Python hash parity
 - Offline generated Go의 candidate/dimension/feature order 보존과 type-check
 - stable sigmoid, Platt 공식과 포함 하한 Isotonic 계단 lookup의 Python-Go 공통 golden parity
-- PAVA exact-tie grouping, sample-count 가중 cascade merge, block 진단과 single-block inference
+- PAVA exact-tie grouping, sample-count 가중 cascade merge, 동일 fitted-value 최대 constant block canonicalization, block 진단과 single-block inference
 - 잘못된 feature order/count, threshold, calibrator와 content hash의 codegen 거부
 - meaningless/hard-complex sentinel 우선순위와 remaining-request model path
 - opt-in shadow artifact load, runtime 비교, 긴 simple·짧은 complex segment와 민감 material 비노출

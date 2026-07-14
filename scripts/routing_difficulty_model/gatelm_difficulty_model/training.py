@@ -672,15 +672,22 @@ def _fit_isotonic_pava(raw_probabilities: Any, labels: Any) -> tuple[list[float]
         while len(blocks) >= 2:
             left = blocks[-2]
             right = blocks[-1]
-            left_rate = int(left["positiveCount"]) / int(left["sampleCount"])
-            right_rate = int(right["positiveCount"]) / int(right["sampleCount"])
-            if left_rate <= right_rate:
+            left_positive_count = int(left["positiveCount"])
+            left_sample_count = int(left["sampleCount"])
+            right_positive_count = int(right["positiveCount"])
+            right_sample_count = int(right["sampleCount"])
+            # Merge violations and exact-equal fitted rates so emitted blocks are maximal constants.
+            rate_comparison = (
+                left_positive_count * right_sample_count
+                - right_positive_count * left_sample_count
+            )
+            if rate_comparison < 0:
                 break
             blocks[-2:] = [
                 {
                     "lowerBound": float(left["lowerBound"]),
-                    "sampleCount": int(left["sampleCount"]) + int(right["sampleCount"]),
-                    "positiveCount": int(left["positiveCount"]) + int(right["positiveCount"]),
+                    "sampleCount": left_sample_count + right_sample_count,
+                    "positiveCount": left_positive_count + right_positive_count,
                 }
             ]
 
@@ -718,12 +725,16 @@ def _validate_calibration_config(config: dict[str, Any]) -> None:
         "algorithm": "pava",
         "tieGrouping": "exact_float64",
         "weighting": "sample_count",
+        "blockCanonicalization": "maximal_constant",
         "lookup": "inclusive_lower_floor",
         "outOfBounds": "clip",
         "smallBlockMerge": "disabled",
     }
     if isotonic != expected_isotonic:
-        raise ValueError("isotonic policy must use exact sample-weighted PAVA floor lookup without small-block merging")
+        raise ValueError(
+            "isotonic policy must use exact sample-weighted maximal-constant PAVA floor lookup "
+            "without small-block merging"
+        )
 
 
 def _select_calibrator(raw: Any, y: Any, groups: Any, config: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
@@ -1149,6 +1160,7 @@ def _fit_candidate(
         calibration_selection["selectedFit"] = {
             "blockCount": calibrator_diagnostics["blockCount"],
             "blockSampleCounts": calibrator_diagnostics["blockSampleCounts"],
+            "minBlockSampleCount": calibrator_diagnostics["minBlockSampleCount"],
         }
 
     report = {

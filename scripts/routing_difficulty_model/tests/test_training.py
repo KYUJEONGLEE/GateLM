@@ -208,6 +208,17 @@ class CalibrationMathTests(unittest.TestCase):
         self.assertEqual(block_counts, [5, 1])
         self.assertEqual(y_thresholds, [0.4, 1.0])
 
+    def test_pava_coalesces_adjacent_equal_fitted_values_into_maximal_blocks(self) -> None:
+        import numpy as np
+
+        x_thresholds, y_thresholds, block_counts = training._fit_isotonic_pava(
+            np.asarray([0.1, 0.2, 0.3, 0.4, 0.5, 0.6], dtype=float),
+            np.asarray([0, 1, 0, 0, 1, 1], dtype=int),
+        )
+        self.assertEqual(x_thresholds, [0.1, 0.2, 0.5])
+        self.assertEqual(y_thresholds, [0.0, 1 / 3, 1.0])
+        self.assertEqual(block_counts, [1, 3, 2])
+
     def test_pava_does_not_quantize_nearby_raw_probabilities(self) -> None:
         import numpy as np
 
@@ -301,6 +312,14 @@ class TrainingPolicyContractTests(unittest.TestCase):
         )
         self.assertEqual(regularization["maxIterations"], 2000)
 
+    def test_isotonic_policy_requires_maximal_constant_block_canonicalization(self) -> None:
+        policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
+        training._validate_calibration_config(policy["calibration"])
+
+        policy["calibration"]["isotonic"]["blockCanonicalization"] = "preserve_equal_neighbors"
+        with self.assertRaisesRegex(ValueError, "maximal-constant PAVA"):
+            training._validate_calibration_config(policy["calibration"])
+
 
 class ToyTrainingTests(unittest.TestCase):
     @classmethod
@@ -367,9 +386,14 @@ class ToyTrainingTests(unittest.TestCase):
                 all(item["minBlockSampleCount"] >= 1 for item in isotonic_evaluation["foldDiagnostics"])
             )
         if artifact["calibrator"]["type"] == "isotonic":
+            selected_fit = report["calibrationSelection"]["selectedFit"]
             self.assertEqual(
-                report["calibrationSelection"]["selectedFit"]["blockCount"],
+                selected_fit["blockCount"],
                 len(artifact["calibrator"]["xThresholds"]),
+            )
+            self.assertEqual(
+                selected_fit["minBlockSampleCount"],
+                min(selected_fit["blockSampleCounts"]),
             )
 
     def test_rejects_family_split_leakage(self) -> None:
