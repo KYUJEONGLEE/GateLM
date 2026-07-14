@@ -187,6 +187,7 @@ services:
       context: ../..
       dockerfile: infra/docker/gateway-core.Dockerfile
     restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
     environment:
       GATEWAY_PORT: "8080"
       DATABASE_URL: ${GATEWAY_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public}
@@ -297,6 +298,7 @@ services:
       context: ../..
       dockerfile: infra/docker/chat-api.Dockerfile
     restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
     environment:
       CHAT_API_PORT: "3003"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public&connection_limit=${TENANT_CHAT_DB_POOL_LIMIT:-12}&pool_timeout=5

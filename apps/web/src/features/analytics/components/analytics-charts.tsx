@@ -121,17 +121,28 @@ export function AnalyticsRankedBarChart({
 export function AnalyticsEmployeeTokenBarChart({
   ariaLabel,
   maxRows = 10,
-  rows
+  rows,
+  totalValue
 }: {
   ariaLabel: string;
   maxRows?: number;
   rows: AnalyticsValueRow[];
+  totalValue?: number;
 }) {
   const theme = useAnalyticsChartTheme();
   const visibleRows = useMemo(
-    () => rows.filter((row) => row.value > 0).slice(0, maxRows),
+    () =>
+      [...rows]
+        .filter((row) => row.value > 0)
+        .sort(
+          (left, right) =>
+            right.value - left.value || left.label.localeCompare(right.label)
+        )
+        .slice(0, maxRows),
     [maxRows, rows]
   );
+  const employeeTokenTotal =
+    totalValue ?? visibleRows.reduce((sum, row) => sum + row.value, 0);
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 360,
@@ -168,10 +179,13 @@ export function AnalyticsEmployeeTokenBarChart({
       series: [
         {
           barMaxWidth: 54,
-          data: visibleRows.map((row, index) => ({
+          data: visibleRows.map((row) => ({
             itemStyle: {
               borderRadius: [5, 5, 0, 0],
-              color: palette[index % palette.length]
+              color:
+                employeeTokenTotal > 0 && row.value / employeeTokenTotal >= 0.15
+                  ? "#dc4c4c"
+                  : "#0f8f66"
             },
             value: row.value
           })),
@@ -187,7 +201,7 @@ export function AnalyticsEmployeeTokenBarChart({
         }
       ]
     }),
-    [theme, visibleRows]
+    [employeeTokenTotal, theme, visibleRows]
   );
 
   return (

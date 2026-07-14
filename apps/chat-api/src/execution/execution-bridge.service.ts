@@ -5,6 +5,7 @@ import { ControlPlaneClient } from '@/auth/control-plane.client';
 import { SessionService } from '@/auth/session.service';
 
 import type {
+  AdmissionIdentity,
   AdmissionHandle,
   AdmissionSeed,
   CompleteOptions,
@@ -14,6 +15,7 @@ import type {
   SnapshotReference,
   UsageIntent,
 } from './execution.types';
+import type { AuthorizedExecution } from '@/auth/auth.types';
 import { PrivateGatewayClient } from './private-gateway.client';
 import { WorkloadCredentialsService } from './workload-credentials';
 
@@ -28,9 +30,24 @@ export class ExecutionBridgeService {
     private readonly credentials: WorkloadCredentialsService,
   ) {}
 
-  async authorizeAndAdmit(accessToken: string): Promise<AdmissionHandle> {
+  async authorizeAndAdmit(
+    accessToken: string,
+    identity: AdmissionIdentity = {
+      requestId: randomUUID(),
+      turnId: randomUUID(),
+      idempotencyKey: randomUUID(),
+    },
+  ): Promise<AdmissionHandle> {
     await this.assertExecutionReady();
     const actor = await this.sessions.authorizeExecution(accessToken);
+    return this.admitAuthorized(actor, identity);
+  }
+
+  async admitAuthorized(
+    actor: AuthorizedExecution,
+    identity: AdmissionIdentity,
+  ): Promise<AdmissionHandle> {
+    await this.assertExecutionReady();
     const runtime = await this.controlPlane.activeRuntimeSnapshot(actor.tenantId);
     const executionScope: ExecutionScope = deepFreeze({
       kind: 'tenant_chat',
@@ -51,9 +68,9 @@ export class ExecutionBridgeService {
       pricingVersion: runtime.pricingVersion,
     });
     const seed: AdmissionSeed = deepFreeze({
-      requestId: randomUUID(),
-      turnId: randomUUID(),
-      idempotencyKey: randomUUID(),
+      requestId: identity.requestId,
+      turnId: identity.turnId,
+      idempotencyKey: identity.idempotencyKey,
       executionScope,
       snapshot,
       actorAuthzVersion: actor.actorAuthzVersion,

@@ -75,11 +75,19 @@ services:
       TENANT_CHAT_WORKLOAD_ACTIVE_KID: ${TENANT_CHAT_WORKLOAD_ACTIVE_KID:-tenant-chat-local-1}
       TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json
       TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+      TENANT_CHAT_CONTENT_KEYS_FILE: /run/secrets/tenant-chat/content-keys.json
+      TENANT_CHAT_HISTORY_RETENTION_DAYS: ${TENANT_CHAT_HISTORY_RETENTION_DAYS:-30}
+      TENANT_CHAT_RETENTION_BATCH_SIZE: ${TENANT_CHAT_RETENTION_BATCH_SIZE:-50}
+      TENANT_CHAT_RETENTION_INTERVAL_MS: ${TENANT_CHAT_RETENTION_INTERVAL_MS:-60000}
+      TENANT_CHAT_ASSISTANT_MAX_BYTES: ${TENANT_CHAT_ASSISTANT_MAX_BYTES:-1048576}
+      TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: ${TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN:-4}
     secrets:
       - source: tenant_chat_workload_signing_jwk
         target: /run/secrets/tenant-chat/signing.jwk.json
       - source: tenant_chat_binding_hmac_keys
         target: /run/secrets/tenant-chat/binding-hmac-keys.json
+      - source: tenant_chat_content_keys
+        target: /run/secrets/tenant-chat/content-keys.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,5 +120,7 @@ secrets:
     file: .secrets/tenant-chat/binding-hmac-keys.json
   tenant_chat_cache_keysets:
     file: .secrets/tenant-chat/cache-keysets.json
+  tenant_chat_content_keys:
+    file: .secrets/tenant-chat/content-keys.json
   tenant_chat_usage_receipt_token:
     file: .secrets/tenant-chat/usage-receipt-token

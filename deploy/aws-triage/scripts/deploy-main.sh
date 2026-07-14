@@ -187,7 +187,9 @@ apply_sql_file() {
 }
 
 validate_tenant_chat_secrets() {
-  local path mode name active_kid
+  local path mode name active_kid owner owner_uid owner_gid
+  local secret_owner_uid=""
+  local secret_owner_gid=""
 
   [[ -d "${tenant_chat_secret_dir}" && ! -L "${tenant_chat_secret_dir}" ]] || \
     deploy_fail "Tenant Chat secret directory not found: ${tenant_chat_secret_dir}"
@@ -209,7 +211,23 @@ validate_tenant_chat_secrets() {
     if [[ ! "${mode}" =~ ^[0-7]{3,4}$ ]] || (( (8#${mode} & 077) != 0 )); then
       deploy_fail "${path} permissions are too open (${mode:-unknown}); expected 600."
     fi
+    owner="$(stat -c '%u:%g' "${path}" 2>/dev/null || true)"
+    [[ "${owner}" =~ ^[0-9]+:[0-9]+$ ]] || \
+      deploy_fail "Could not determine Tenant Chat secret ownership: ${path}"
+    owner_uid="${owner%%:*}"
+    owner_gid="${owner##*:}"
+    if [[ -z "${secret_owner_uid}" ]]; then
+      secret_owner_uid="${owner_uid}"
+      secret_owner_gid="${owner_gid}"
+    elif [[ "${owner_uid}" != "${secret_owner_uid}" || "${owner_gid}" != "${secret_owner_gid}" ]]; then
+      deploy_fail "Tenant Chat secret files must share one owner UID and GID."
+    fi
   done
+
+  [[ "${secret_owner_uid}" != "0" && "${secret_owner_gid}" != "0" ]] || \
+    deploy_fail "Tenant Chat secret files must be owned by a non-root runtime UID and GID."
+  export TENANT_CHAT_RUNTIME_UID="${secret_owner_uid}"
+  export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"
 }
 
 previous_sha=""

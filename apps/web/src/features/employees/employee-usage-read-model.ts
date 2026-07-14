@@ -7,6 +7,7 @@ import type {
 
 export type EmployeeProjectUsage = {
   dailyTokenLimit: number | null;
+  dailyTokenStatus: ProjectEmployeeQuotaStatus;
   dailyTokens: number;
   monthlyBudgetLimitUsd: number;
   monthlyCostUsd: number;
@@ -31,6 +32,7 @@ export type EmployeeUsageRow = {
   rank: number;
   status: EmployeeRecord["status"];
   tokenShare: number;
+  weeklyTokens: number | null;
 };
 
 export type EmployeeUsageReadModel = {
@@ -100,7 +102,8 @@ export function buildEmployeeUsageReadModel(model: EmployeeControlModel): Employ
       ),
       rank: 0,
       status: employee.status,
-      tokenShare: 0
+      tokenShare: 0,
+      weeklyTokens: null
     } satisfies EmployeeUsageRow;
   });
 
@@ -139,6 +142,7 @@ function buildProjectUsage(
     dailyTokenLimit: assignment.policy.dailyTokenLimit.enabled
       ? assignment.policy.dailyTokenLimit.limit
       : null,
+    dailyTokenStatus: assignment.dailyTokenStatus,
     dailyTokens: assignment.dailyTokenUsed,
     monthlyBudgetLimitUsd: assignment.monthlyBudgetLimitUsd,
     monthlyCostUsd: assignment.monthlyUsedUsd,

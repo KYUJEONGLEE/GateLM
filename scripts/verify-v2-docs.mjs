@@ -38,7 +38,9 @@ const tenantChatDocs = [
   "docs/tenant-chat/execution-contract.md",
   "docs/tenant-chat/openapi/chat-auth.openapi.json",
   "docs/tenant-chat/openapi/private-control-plane.openapi.json",
+  "docs/tenant-chat/openapi/chat-conversation.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
+  "docs/tenant-chat/db/tenant-chat-content.sql",
   "docs/tenant-chat/db/tenant-chat-usage.sql",
   "docs/tenant-chat/schemas/*.schema.json",
   "docs/tenant-chat/fixtures/*.fixture.json",
@@ -628,6 +630,7 @@ function sha256Base64Url(value) {
 function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
   const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
+  const conversationOpenApiPath = "docs/tenant-chat/openapi/chat-conversation.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
@@ -681,6 +684,33 @@ function assertTenantChatExecutableContract() {
       if (!required.has(field)) {
         fail(`${controlPlaneOpenApiPath}: metadata must require ${field}`);
       }
+    }
+  }
+
+  const conversationOpenApi = readJson(conversationOpenApiPath);
+  if (conversationOpenApi) {
+    if (conversationOpenApi.openapi !== "3.1.0") {
+      fail(`${conversationOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+    for (const [method, apiPath] of [
+      ["post", "/internal/v1/tenant-chat/conversations"],
+      ["get", "/internal/v1/tenant-chat/conversations"],
+      ["get", "/internal/v1/tenant-chat/conversations/{conversationId}"],
+      ["patch", "/internal/v1/tenant-chat/conversations/{conversationId}"],
+      ["delete", "/internal/v1/tenant-chat/conversations/{conversationId}"],
+      ["get", "/internal/v1/tenant-chat/conversations/{conversationId}/messages"],
+      ["post", "/internal/v1/tenant-chat/conversations/{conversationId}/turns"],
+      ["post", "/internal/v1/tenant-chat/conversations/{conversationId}/turns/{turnId}/cancel"],
+    ]) {
+      if (!conversationOpenApi.paths?.[apiPath]?.[method]) {
+        fail(`${conversationOpenApiPath}: missing ${method.toUpperCase()} ${apiPath}`);
+      }
+    }
+    const turnResponse = conversationOpenApi.paths?.[
+      "/internal/v1/tenant-chat/conversations/{conversationId}/turns"
+    ]?.post?.responses?.["200"];
+    if (!turnResponse?.content?.["text/event-stream"] || turnResponse?.content?.["application/json"]) {
+      fail(`${conversationOpenApiPath}: turn success must be text/event-stream only`);
     }
   }
 
@@ -982,11 +1012,15 @@ function assertTenantChatExecutableContract() {
   for (const expectedText of [
     "openapi/chat-auth.openapi.json",
     "openapi/private-control-plane.openapi.json",
+    "openapi/chat-conversation.openapi.json",
     "openapi/private-gateway.openapi.json",
+    "db/tenant-chat-content.sql",
     "db/tenant-chat-usage.sql",
     "vectors/binding-digest-vectors.json",
     "schemas/tenant-runtime-snapshot.schema.json",
     "schemas/completion-sse-event.schema.json",
+    "schemas/chat-turn-sse-event.schema.json",
+    "schemas/chat-conversation.schema.json",
   ]) {
     assertIncludes("docs/tenant-chat/README.md", expectedText);
     assertIncludes("docs/tenant-chat/execution-contract.md", expectedText);

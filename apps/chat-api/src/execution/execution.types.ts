@@ -20,11 +20,16 @@ export type SnapshotReference = Readonly<{
   pricingVersion: number;
 }>;
 
-export type UsageIntent = Readonly<{
-  estimatedInputTokens: number;
+export const MAX_EPHEMERAL_MESSAGE_CHARACTERS = 20_000;
+
+export type ClientUsageIntent = Readonly<{
   maxOutputTokens: number;
   requestedTier: 'auto' | 'high_quality' | 'standard' | 'economy';
   cacheStrategy: 'off' | 'exact';
+}>;
+
+export type UsageIntent = Readonly<ClientUsageIntent & {
+  estimatedInputTokens: number;
 }>;
 
 export type ExecutionContext = Readonly<{
@@ -49,6 +54,12 @@ export type AdmissionSeed = Readonly<{
   actorAuthzVersion: number;
   tenantAuthzVersion: number;
   sessionVersion: number;
+}>;
+
+export type AdmissionIdentity = Readonly<{
+  requestId: string;
+  turnId: string;
+  idempotencyKey: string;
 }>;
 
 export type AdmissionHandle = Readonly<AdmissionSeed & {

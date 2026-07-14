@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/chat-turn-sse-event.schema.json",
+  "title": "Tenant Chat API-facing turn SSE event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence"],
+  "properties": {
+    "type": { "enum": ["chat.turn.accepted", "chat.turn.delta", "chat.turn.final", "chat.turn.error", "chat.turn.cancelled"] },
+    "schemaVersion": { "const": 1 },
+    "conversationId": { "$ref": "#/$defs/uuid" },
+    "turnId": { "$ref": "#/$defs/uuid" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "replayed": { "type": "boolean" },
+    "delta": { "type": "string", "minLength": 1, "maxLength": 16384 },
+    "messageId": { "$ref": "#/$defs/uuid" },
+    "terminalOutcome": { "const": "succeeded" },
+    "error": { "$ref": "#/$defs/safeError" }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/accepted" },
+    { "$ref": "#/$defs/delta" },
+    { "$ref": "#/$defs/final" },
+    { "$ref": "#/$defs/error" },
+    { "$ref": "#/$defs/cancelled" }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "base": {
+      "type": "object",
+      "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence"],
+      "properties": {
+        "type": { "type": "string" },
+        "schemaVersion": { "const": 1 },
+        "conversationId": { "$ref": "#/$defs/uuid" },
+        "turnId": { "$ref": "#/$defs/uuid" },
+        "sequence": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "accepted": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "replayed"],
+          "properties": {
+            "type": { "const": "chat.turn.accepted" },
+            "schemaVersion": { "const": 1 },
+            "conversationId": { "$ref": "#/$defs/uuid" },
+            "turnId": { "$ref": "#/$defs/uuid" },
+            "sequence": { "const": 1 },
+            "replayed": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "delta": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "delta"],
+          "properties": {
+            "type": { "const": "chat.turn.delta" },
+            "schemaVersion": { "const": 1 },
+            "conversationId": { "$ref": "#/$defs/uuid" },
+            "turnId": { "$ref": "#/$defs/uuid" },
+            "sequence": { "type": "integer", "minimum": 2 },
+            "delta": { "type": "string", "minLength": 1, "maxLength": 16384 }
+          }
+        }
+      ]
+    },
+    "final": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "messageId", "terminalOutcome", "replayed"],
+          "properties": {
+            "type": { "const": "chat.turn.final" },
+            "schemaVersion": { "const": 1 },
+            "conversationId": { "$ref": "#/$defs/uuid" },
+            "turnId": { "$ref": "#/$defs/uuid" },
+            "sequence": { "type": "integer", "minimum": 2 },
+            "messageId": { "$ref": "#/$defs/uuid" },
+            "terminalOutcome": { "const": "succeeded" },
+            "replayed": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "safeError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^CHAT_[A-Z0-9_]{1,59}$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "retryAfterSeconds": { "type": "integer", "minimum": 1, "maximum": 60 }
+      }
+    },
+    "error": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "error"],
+          "properties": {
+            "type": { "const": "chat.turn.error" },
+            "schemaVersion": { "const": 1 },
+            "conversationId": { "$ref": "#/$defs/uuid" },
+            "turnId": { "$ref": "#/$defs/uuid" },
+            "sequence": { "type": "integer", "minimum": 2 },
+            "error": { "$ref": "#/$defs/safeError" }
+          }
+        }
+      ]
+    },
+    "cancelled": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "error"],
+          "properties": {
+            "type": { "const": "chat.turn.cancelled" },
+            "schemaVersion": { "const": 1 },
+            "conversationId": { "$ref": "#/$defs/uuid" },
+            "turnId": { "$ref": "#/$defs/uuid" },
+            "sequence": { "type": "integer", "minimum": 2 },
+            "error": {
+              "allOf": [
+                { "$ref": "#/$defs/safeError" },
+                { "properties": { "code": { "const": "CHAT_REQUEST_CANCELLED" } } }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

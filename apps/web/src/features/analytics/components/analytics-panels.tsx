@@ -7,24 +7,23 @@ import {
   Database,
   Gauge,
   Route,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   TimerOff,
-  Users,
   Zap
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   AnalyticsCompositionChart,
   AnalyticsCostTrendChart,
-  AnalyticsEmployeeTokenBarChart,
   AnalyticsLatencyTrendChart,
   AnalyticsRankedBarChart,
   AnalyticsRequestVolumeChart
 } from "@/features/analytics/components/analytics-charts";
 import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
-import type { EmployeeUsageReadModel } from "@/features/employees/employee-usage-read-model";
+import type { AnalyticsSecurityEvidence } from "@/features/analytics/analytics-security-evidence";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
@@ -336,119 +335,6 @@ export function AnalyticsUsagePanel({
   );
 }
 
-export function AnalyticsEmployeeUsagePanel({
-  locale,
-  source,
-  tenantId,
-  usage
-}: {
-  locale: Locale;
-  source: "control-plane" | "fixture";
-  tenantId: string;
-  usage: EmployeeUsageReadModel;
-}) {
-  const text = locale === "ko"
-    ? {
-        active: "활성 직원",
-        average: "사용 직원 평균",
-        chart: "직원별 토큰 사용량",
-        chartSub: "오늘(UTC) 기준 사용 토큰 상위 직원",
-        department: "부서",
-        employee: "직원",
-        evidence: "직원별 토큰 사용량",
-        evidenceSub: "직원을 선택하면 사용량과 프로젝트별 통제 설정을 확인합니다",
-        projects: "프로젝트",
-        title: "직원 사용량",
-        tokens: "오늘 사용 토큰"
-      }
-    : {
-        active: "Active employees",
-        average: "Average per tracked employee",
-        chart: "Tokens by employee",
-        chartSub: "Top token users today (UTC)",
-        department: "Department",
-        employee: "Employee",
-        evidence: "Tokens by employee",
-        evidenceSub: "Select an employee to review usage and project-level controls",
-        projects: "Projects",
-        title: "Employee usage",
-        tokens: "Tokens used today"
-      };
-  const chartRows = usage.rows.map((row) => ({
-    id: row.employeeId,
-    label: row.name,
-    value: row.dailyTokens
-  }));
-
-  return (
-    <section className="analytics-v3-panel">
-      <header className="analytics-v3-panel-topline">
-        <h2>{text.title}</h2>
-        <div
-          className="analytics-v3-data-state"
-          data-state={source === "control-plane" ? "live" : "partial"}
-        >
-          <i />
-          <strong>
-            {source === "control-plane"
-              ? locale === "ko" ? "Control Plane 데이터" : "Control Plane data"
-              : locale === "ko" ? "예시 데이터" : "Fixture data"}
-          </strong>
-        </div>
-      </header>
-      <ExecutiveBand
-        accent="usage"
-        icon={Users}
-        lead={{ label: text.tokens, meta: "UTC", value: formatInteger(usage.totalDailyTokens) }}
-        metrics={[
-          { label: text.active, value: formatInteger(usage.activeEmployees) },
-          { label: text.average, value: formatInteger(Math.round(usage.averageDailyTokens)) }
-        ]}
-      />
-
-      <div className="analytics-v3-workspace analytics-employee-workspace">
-        <AnalysisSurface subtitle={text.chartSub} title={text.chart}>
-          <ChartOrEmpty hasData={usage.totalDailyTokens > 0} locale={locale}>
-            <AnalyticsEmployeeTokenBarChart
-              ariaLabel={text.chart}
-              maxRows={10}
-              rows={chartRows}
-            />
-          </ChartOrEmpty>
-        </AnalysisSurface>
-      </div>
-
-      <EvidenceTable
-        action={(
-          <Link className="analytics-v3-table-link" href={`/tenants/${tenantId}/employees`}>
-            {locale === "ko" ? "직원 관리" : "Manage employees"}
-            <ArrowUpRight aria-hidden="true" size={18} />
-          </Link>
-        )}
-        columns={[text.employee, text.department, text.tokens, text.projects]}
-        emptyLocale={locale}
-        rows={usage.rows.map((row) => ({
-          cells: [
-            <Link
-              className="analytics-employee-link"
-              href={`/tenants/${tenantId}/employees?employeeId=${encodeURIComponent(row.employeeId)}`}
-              key="employee"
-            >
-              {row.name}
-            </Link>,
-            row.department ?? "-",
-            <strong key="tokens">{formatInteger(row.dailyTokens)}</strong>,
-            formatInteger(row.projectCount)
-          ],
-          key: row.employeeId
-        }))}
-        subtitle={text.evidenceSub}
-        title={text.evidence}
-      />
-    </section>
-  );
-}
-
 export function AnalyticsCostPanel({
   costTrend,
   locale,
@@ -708,6 +594,96 @@ export function AnalyticsReliabilityPanel({
         subtitle={text.incidentSub}
         title={text.incident}
       />
+    </PanelShell>
+  );
+}
+
+export function AnalyticsSecurityPanel({
+  evidence,
+  locale,
+  model
+}: AnalyticsPanelProps & {
+  evidence: AnalyticsSecurityEvidence | undefined;
+}) {
+  const text = locale === "ko"
+    ? {
+        blocked: "차단 요청",
+        detectedTypes: "탐지 유형별 요청",
+        detectedTypesEmpty: "최근 보호 요청에 유형별 탐지 근거가 없습니다",
+        detectedTypesSub: "최근 보호 요청 Detail에서 확인한 유형별 요청 수",
+        masked: "마스킹 요청",
+        protected: "보호 처리 요청",
+        sampled: "최근 Detail {sampled}/{total}건 기반",
+        treatment: "보안 처리 결과",
+        treatmentSub: "선택 기간의 마스킹과 차단 처리량",
+        title: "보안"
+      }
+    : {
+        blocked: "Blocked requests",
+        detectedTypes: "Requests by detected type",
+        detectedTypesEmpty: "No detector-type evidence is available for recent protected requests",
+        detectedTypesSub: "Requests by type observed in recent protected request details",
+        masked: "Masked requests",
+        protected: "Protected requests",
+        sampled: "Based on {sampled}/{total} recent details",
+        treatment: "Security outcomes",
+        treatmentSub: "Masked and blocked requests in the selected range",
+        title: "Security"
+      };
+  const maskedRequests = valueById(model.impact.outcomes, "pii_masked");
+  const blockedRequests = valueById(model.impact.outcomes, "blocked");
+  const protectedRequests = maskedRequests + blockedRequests;
+  const treatmentRows: AnalyticsValueRow[] = [
+    { id: "pii_masked", label: locale === "ko" ? "마스킹" : "MASKED", value: maskedRequests },
+    { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests }
+  ];
+  const detectedTypeRows = (evidence?.detectedTypeRows ?? []).map((row) => ({
+    ...row,
+    label: safetyDetectorLabel(row.label, locale)
+  }));
+  const evidenceSubtitle = evidence
+    ? text.sampled
+        .replace("{sampled}", formatInteger(evidence.sampledDetailCount))
+        .replace("{total}", formatInteger(evidence.protectedRequestCount))
+    : text.detectedTypesEmpty;
+
+  return (
+    <PanelShell locale={locale} model={model} title={text.title}>
+      <ExecutiveBand
+        accent="security"
+        icon={Shield}
+        lead={{ label: text.protected, value: formatInteger(protectedRequests) }}
+        metrics={[
+          { label: text.masked, value: formatInteger(maskedRequests) },
+          { label: text.blocked, value: formatInteger(blockedRequests) }
+        ]}
+      />
+
+      <div className="analytics-v3-workspace analytics-v3-security-workspace">
+        <AnalysisSurface
+          className="analytics-v3-main-canvas"
+          subtitle={`${text.detectedTypesSub} · ${evidenceSubtitle}`}
+          title={text.detectedTypes}
+        >
+          <ChartOrEmpty hasData={hasRows(detectedTypeRows)} locale={locale}>
+            <AnalyticsRankedBarChart
+              ariaLabel={text.detectedTypes}
+              maxRows={8}
+              presentation
+              rows={detectedTypeRows}
+            />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+        <AnalysisSurface
+          className="analytics-v3-driver-rail"
+          subtitle={text.treatmentSub}
+          title={text.treatment}
+        >
+          <ChartOrEmpty compact hasData={hasRows(treatmentRows)} locale={locale}>
+            <AnalyticsCompositionChart ariaLabel={text.treatment} rows={treatmentRows} />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+      </div>
     </PanelShell>
   );
 }
@@ -1071,6 +1047,35 @@ function safeRatio(numerator: number, denominator: number) {
 
 function valueById(rows: AnalyticsValueRow[], id: string) {
   return rows.find((row) => row.id === id)?.value ?? 0;
+}
+
+const koreanSafetyDetectorLabels: Record<string, string> = {
+  account_number: "계좌번호",
+  api_key: "API 키",
+  driver_license: "운전면허번호",
+  email: "이메일",
+  jwt: "JWT",
+  passport_number: "여권번호",
+  person_name: "이름",
+  phone: "전화번호",
+  phone_number: "전화번호",
+  postal_address: "주소",
+  private_key: "개인 키",
+  private_url: "비공개 URL",
+  resident_registration_number: "주민등록번호",
+  secret: "민감 자격 증명"
+};
+
+function safetyDetectorLabel(value: string, locale: Locale) {
+  if (locale === "ko") {
+    return koreanSafetyDetectorLabels[value] ?? formatDisplayIdentifier(value);
+  }
+
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
+    .join(" ");
 }
 
 function liveRequestOutcome(row: LiveRequestRow) {

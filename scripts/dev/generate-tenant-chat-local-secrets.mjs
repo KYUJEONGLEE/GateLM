@@ -33,6 +33,15 @@ export async function generateTenantChatLocalSecrets(options = {}) {
           encryptionKey: randomBytes(32).toString('base64url'),
         }],
       }, null, 2) + '\n'],
+      ['content-keys.json', JSON.stringify({
+        schemaVersion: 1,
+        activeVersion: 1,
+        keys: [{
+          version: 1,
+          wrappingKey: randomBytes(32).toString('base64url'),
+          integrityKey: randomBytes(32).toString('base64url'),
+        }],
+      }, null, 2) + '\n'],
       ['usage-receipt-token', randomBytes(48).toString('base64url') + '\n'],
     ]);
     for (const [name, contents] of files) {
