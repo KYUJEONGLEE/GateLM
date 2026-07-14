@@ -115,15 +115,11 @@ Payload에 tokenizer, semantic model, keyword matcher, identifier parser, conten
 ```text
 ruleVectorV1[42]
 semanticProjection[P]
-semanticHeads[46]
-├─ semanticTaskBucket[6]
-├─ semanticConstraintBucket[7]
-├─ semanticScopeBucket[5]
-├─ semanticDependencyBucket[6]
-├─ semanticCodeOperation[10]
-├─ semanticDomainTerminology[3]
-├─ semanticSynthesisLevel[3]
-└─ semanticReasoningDepth[6]
+semanticHeads[12]
+├─ semanticTaskBucket[3]
+├─ semanticConstraintBucket[3]
+├─ semanticScopeBucket[3]
+└─ semanticDependencyBucket[3]
 ```
 
 `P`는 projection artifact가 고정하는 양의 정수다. Feature shape descriptor에는 `projectionVersion`, `semanticHeadsVersion`, `P`, head class order, segment offset과 전체 dimension이 모두 있어야 한다. Mutable `latest` 또는 dimension 추론은 허용하지 않는다.
@@ -132,16 +128,12 @@ semanticHeads[46]
 
 | Head | Ordered classes | Dimension |
 |---|---|---:|
-| `semanticTaskBucket` | `count_0, count_1, count_2, count_3, count_4, count_5_plus` | 6 |
-| `semanticConstraintBucket` | `count_0, count_1, count_2, count_3, count_4, count_5, count_6_plus` | 7 |
-| `semanticScopeBucket` | `count_0, count_1, count_2, count_3, count_4_plus` | 5 |
-| `semanticDependencyBucket` | `depth_0, depth_1, depth_2, depth_3, depth_4, depth_5_plus` | 6 |
-| `semanticCodeOperation` | `unknown, syntax, example, small_edit, debug, refactor, design, migration, concurrency, performance` | 10 |
-| `semanticDomainTerminology` | `level_0, level_1, level_2` | 3 |
-| `semanticSynthesisLevel` | `level_0, level_1, level_2` | 3 |
-| `semanticReasoningDepth` | `depth_0, depth_1, depth_2, depth_3, depth_4, depth_5_plus` | 6 |
+| `semanticTaskBucket` | `count_1, count_2, count_3_plus` | 3 |
+| `semanticConstraintBucket` | `count_0_to_1, count_2, count_3_plus` | 3 |
+| `semanticScopeBucket` | `count_1, count_2_to_3, count_4_plus` | 3 |
+| `semanticDependencyBucket` | `depth_0_to_1, depth_2, depth_3_plus` | 3 |
 
-각 head probability vector는 위 class order를 사용하고 모든 값이 finite inclusive `0.0~1.0`이며 합이 `1.0`이어야 한다. Initial head probability dimension `H`는 `6 + 7 + 5 + 6 + 10 + 3 + 3 + 6 = 46`이다. 누락·추가 head, dimension mismatch, NaN, infinity, 범위 밖 값과 합 오류는 candidate invalid이며 zero-fill 또는 rule 값 fallback으로 교정하지 않는다.
+각 head probability vector는 위 class order를 사용하고 모든 값이 finite inclusive `0.0~1.0`이며 합이 `1.0`이어야 한다. Initial head probability dimension `H`는 `3 + 3 + 3 + 3 = 12`다. `codeOperation`, `terminology`, `synthesis`, `reasoningDepth`는 semantic head에 포함하지 않지만 그 정보가 이미 존재하는 `ruleVectorV1`의 feature name, order, value와 scaling은 변경하지 않는다. 누락·추가 head, dimension mismatch, NaN, infinity, 범위 밖 값과 합 오류는 candidate invalid이며 zero-fill 또는 rule 값 fallback으로 교정하지 않는다.
 
 고정 비교 후보는 다음 세 개다.
 
@@ -149,9 +141,11 @@ semanticHeads[46]
 |---|---|---:|
 | `42d-rule-vector-v1` | `ruleVectorV1` | `42` |
 | `42d-rule-vector-v1-plus-projection` | `ruleVectorV1 -> semanticProjection` | `42 + P` |
-| `42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities` | `ruleVectorV1 -> semanticProjection -> semanticHeads` | `42 + P + 46 = 88 + P` |
+| `42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities` | `ruleVectorV1 -> semanticProjection -> semanticHeads` | `42 + P + 12 = 54 + P` |
 
 모든 후보에서 `ruleVectorV1`은 offset `0`, dimension `42`다. Projection은 offset `42`이고, semantic head probability는 offset `42 + P`부터 위 표의 head 순서로 이어진다. Feature name도 `ruleVectorV1.*`, `semanticProjection[*]`, `semanticHeads.<head>.<class>.probability`로 분리한다.
+
+예를 들어 `P = 32`인 artifact를 사용하면 세 후보의 total dimension은 각각 `42`, `74`, `86`이다. 이는 계산 예시이며 `P` 자체를 `32`로 고정하지 않는다.
 
 Canonical offline assembly 구현은 [`../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py`](../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py)다. 이 구현은 assembled vector 또는 head probability의 JSON/report serializer를 제공하지 않는다.
 
@@ -169,7 +163,7 @@ PromptFeatures.instructionText
   -> versioned encoder
   -> versioned pooling
   ├-> versioned projection -> semanticProjection[P]
-  └-> versioned semantic heads -> semanticHeads[46]
+  └-> versioned semantic heads -> semanticHeads[12]
 
 DifficultyFeatures
   -> VectorizeDifficultyFeaturesV1
@@ -205,7 +199,7 @@ Payload structural statistics와 별도 category control block은 이 세 후보
 | Encoder | `difficulty-encoder.vN` | architecture, weights, output shape, dtype |
 | Pooling | `difficulty-pooling.vN` | token selection, mask와 aggregation rule |
 | Projection | `difficulty-projection.vN` | input/output dimension, weights, activation와 normalization |
-| Semantic heads | `difficulty-semantic-heads.vN` | 8개 head class order, output dimension, weights와 probability rule |
+| Semantic heads | `difficulty-semantic-heads.vN` | 4개 head class order, output dimension, weights와 probability rule |
 | Offline feature assembly | `difficulty-offline-feature-shape.v1` | candidate names, block order, exact dimension와 missing handling |
 | Difficulty decision head | `difficulty-head.vN` | candidate input dimension, weights와 output semantics |
 | Calibrator | `difficulty-calibrator.vN` | family, parameter, valid input range와 output rule |
@@ -359,8 +353,8 @@ V2를 current runtime 후보로 검토하기 전에 다음 evidence와 별도 ac
 - V1 42D 불변
 - 첫 단계 offline/shadow only
 - Semantic raw-text input은 `instructionText` only
-- 초기 비교 후보는 `42`, `42 + P`, `88 + P` 세 shape만 사용
-- 8개 semantic head의 이름·순서·class order와 총 46차원 고정
+- 초기 비교 후보는 `42`, `42 + P`, `54 + P` 세 shape만 사용
+- 4개 semantic head의 이름·순서·class order와 총 12차원 고정
 - `ruleVectorV1`, `semanticProjection`, `semanticHeads` namespace와 segment 분리
 - Payload raw content는 semantic encoder 입력에서 제외
 - 모든 pipeline component와 exact bundle versioning
@@ -386,8 +380,9 @@ Open decision을 해결하지 않은 상태에서 placeholder artifact를 만들
 
 - 문서와 구현 어디에서도 `difficulty-feature-vector.v1`의 42차원 계약을 변경하지 않는다.
 - Initial offline assembler는 `ruleVectorV1`을 exact 42차원 첫 segment로 보존하고 semantic 값으로 덮어쓰지 않는다.
-- 세 후보의 차원은 `42`, `42 + P`, `88 + P`이며 segment와 feature name이 분리되어 있다.
-- 8개 semantic head probability는 고정 class order의 총 46차원이고 invalid/missing 값은 fail closed로 거부한다.
+- 세 후보의 차원은 `42`, `42 + P`, `54 + P`이며 segment와 feature name이 분리되어 있다. `P = 32`이면 각각 `42`, `74`, `86`이다.
+- 4개 semantic head probability는 고정 class order의 총 12차원이고 invalid/missing 값은 fail closed로 거부한다.
+- `codeOperation`, `terminology`, `synthesis`, `reasoningDepth`는 semantic head에서 제외하지만 기존 `ruleVectorV1`의 대응 feature는 그대로 보존한다.
 - V2는 exact opt-in bundle 없이는 실행되지 않고 current runtime 결과를 바꾸지 않는다.
 - Tokenizer와 encoder가 `instructionText` 외의 raw text를 읽지 않는다.
 - Initial semantic 후보는 raw payload content를 tokenizer/encoder에 전달하지 않으며 별도 payload feature를 추가하지 않는다.

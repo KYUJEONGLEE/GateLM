@@ -90,54 +90,19 @@ class SemanticHeadSpec:
 SEMANTIC_HEAD_SPECS_V1 = (
     SemanticHeadSpec(
         "semanticTaskBucket",
-        ("count_0", "count_1", "count_2", "count_3", "count_4", "count_5_plus"),
+        ("count_1", "count_2", "count_3_plus"),
     ),
     SemanticHeadSpec(
         "semanticConstraintBucket",
-        (
-            "count_0",
-            "count_1",
-            "count_2",
-            "count_3",
-            "count_4",
-            "count_5",
-            "count_6_plus",
-        ),
+        ("count_0_to_1", "count_2", "count_3_plus"),
     ),
     SemanticHeadSpec(
         "semanticScopeBucket",
-        ("count_0", "count_1", "count_2", "count_3", "count_4_plus"),
+        ("count_1", "count_2_to_3", "count_4_plus"),
     ),
     SemanticHeadSpec(
         "semanticDependencyBucket",
-        ("depth_0", "depth_1", "depth_2", "depth_3", "depth_4", "depth_5_plus"),
-    ),
-    SemanticHeadSpec(
-        "semanticCodeOperation",
-        (
-            "unknown",
-            "syntax",
-            "example",
-            "small_edit",
-            "debug",
-            "refactor",
-            "design",
-            "migration",
-            "concurrency",
-            "performance",
-        ),
-    ),
-    SemanticHeadSpec(
-        "semanticDomainTerminology",
-        ("level_0", "level_1", "level_2"),
-    ),
-    SemanticHeadSpec(
-        "semanticSynthesisLevel",
-        ("level_0", "level_1", "level_2"),
-    ),
-    SemanticHeadSpec(
-        "semanticReasoningDepth",
-        ("depth_0", "depth_1", "depth_2", "depth_3", "depth_4", "depth_5_plus"),
+        ("depth_0_to_1", "depth_2", "depth_3_plus"),
     ),
 )
 
