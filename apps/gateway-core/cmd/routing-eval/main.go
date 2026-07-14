@@ -138,6 +138,7 @@ type difficultyShadowReport struct {
 	RuntimeComparison      difficultyRuntimeComparison         `json:"runtimeComparison"`
 	Segments               difficultyShadowSegments            `json:"segments"`
 	PromotionGate          difficultyPromotionGateReport       `json:"promotionGate"`
+	DecisionLossExperiment *difficultyDecisionLossExperiment   `json:"decisionLossExperiment,omitempty"`
 }
 
 type difficultyCalibrationReport struct {
@@ -347,6 +348,10 @@ func main() {
 	outputPath := flag.String("output", "", "optional report output path")
 	classifierVersion := flag.String("classifier-version", defaultClassifierVersion, "classifier version label for the report")
 	difficultyShadowModelArtifact := flag.String("difficulty-shadow-model-artifact", "", "optional validated model artifact for offline difficulty shadow comparison")
+	difficultyDecisionLossExperiment := flag.Bool("difficulty-decision-loss-experiment", false, "run an offline threshold sweep with aggregate expected decision loss evidence")
+	difficultyDecisionLossFPCost := flag.Float64("difficulty-decision-loss-fp-cost", 1, "relative false-positive loss used by the offline threshold experiment")
+	difficultyDecisionLossFNCosts := flag.String("difficulty-decision-loss-fn-costs", "1,3,5,10", "comma-separated relative false-negative loss scenarios for the offline threshold experiment")
+	difficultyDecisionLossThresholdStep := flag.Float64("difficulty-decision-loss-threshold-step", 0.01, "fixed threshold grid step for the offline decision-loss experiment; must divide 1.0")
 	minAccuracy := flag.Float64("min-accuracy", 0, "optional minimum exact-match accuracy, from 0 to 1")
 	latencyIterations := flag.Int("latency-iterations", defaultLatencyIterations, "routing decision iterations per sample for latency measurement")
 	latencyWarmupIterations := flag.Int("latency-warmup-iterations", defaultLatencyWarmupIterations, "unmeasured routing warm-up iterations per sample")
@@ -399,6 +404,26 @@ func main() {
 		}
 	}
 
+	var decisionLossConfig *difficultyDecisionLossConfig
+	if *difficultyDecisionLossExperiment {
+		if reportMode != modeEvaluate || reportScope != evaluationScopeDifficulty || shadowOptions == nil {
+			exitWithError(errors.New("-difficulty-decision-loss-experiment requires difficulty evaluation mode and -difficulty-shadow-model-artifact"))
+		}
+		falseNegativeCosts, parseErr := parseDifficultyDecisionLossCosts(*difficultyDecisionLossFNCosts)
+		if parseErr != nil {
+			exitWithError(parseErr)
+		}
+		candidate := difficultyDecisionLossConfig{
+			FalsePositiveCost:  *difficultyDecisionLossFPCost,
+			FalseNegativeCosts: falseNegativeCosts,
+			ThresholdStep:      *difficultyDecisionLossThresholdStep,
+		}
+		if _, validationErr := validateDifficultyDecisionLossConfig(candidate); validationErr != nil {
+			exitWithError(validationErr)
+		}
+		decisionLossConfig = &candidate
+	}
+
 	var payload []byte
 	switch reportMode {
 	case modeEvaluate:
@@ -408,6 +433,13 @@ func main() {
 				version = defaultDifficultyClassifierVersion
 			}
 			evalReport := evaluateDifficultyWithWarmup(*datasetPath, version, records, *latencyIterations, *latencyWarmupIterations, *latencyBatchSize, *difficultyLatencyBatchSize, shadowOptions)
+			if decisionLossConfig != nil {
+				experiment, experimentErr := buildDifficultyDecisionLossExperiment(evalReport, *decisionLossConfig)
+				if experimentErr != nil {
+					exitWithError(experimentErr)
+				}
+				evalReport.Shadow.DecisionLossExperiment = &experiment
+			}
 			payload, err = marshalDifficultyReport(evalReport, *pretty)
 			if err != nil {
 				exitWithError(err)

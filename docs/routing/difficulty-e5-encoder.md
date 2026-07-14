@@ -56,7 +56,7 @@ Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[
 
 42D·106D·118D candidate는 `difficulty-semantic-candidate-selection.2026-07-15.v1`에 따라 calibration split의 selected-calibrator family-grouped CV log loss로 선택한다. Tie는 Brier score, lower dimension 순서로만 해소한다. Candidate별 Holdout metric을 생성하거나 Holdout accuracy로 candidate를 선택하면 안 된다.
 
-선택된 candidate의 model, calibrator, threshold, encoder/PCA/semantic-head hash를 먼저 freeze한 다음 그 candidate만 untouched Holdout 100건에 한 번 적용한다. Non-selected candidate report에는 Holdout outcome을 남기지 않는다. Component를 바꾸거나 Holdout 결과를 보고 다시 선택하면 기존 final evidence를 폐기하고 새 version과 untouched Holdout으로 다시 검증한다.
+선택된 candidate의 model, calibrator, threshold, encoder/PCA/semantic-head hash를 먼저 freeze한 다음 그 candidate만 untouched Holdout 100건에 한 번 적용한다. Non-selected candidate report에는 Holdout outcome을 남기지 않는다. Holdout 결과를 확인한 뒤 feature, model, calibrator 또는 threshold 중 하나라도 변경하면 기존 final evidence를 폐기하고 새 evidence run으로 취급한다. 이때 새 immutable artifact version과 기존에 결과를 확인한 Holdout을 포함하지 않는 새 untouched Holdout으로 다시 검증해야 하며, 현재 Holdout을 반복 튜닝에 사용하면 leakage다.
 
 ## 3. Artifact And Distribution Contract
 
@@ -90,4 +90,14 @@ corepack pnpm run verify:v2.1-e5-encoder
 
 ## 6. Runtime Boundary
 
-이 encoder는 offline evaluation과 후속 semantic-head/difficulty-head artifact 생성에만 사용한다. Gateway의 current `difficulty-feature-vector.v1`, rule-based classifier, `DifficultyResult`, RuntimeSnapshot, routing policy, API, DB, Event와 Metrics는 변경하지 않는다. Gateway hot path 승격에는 별도 active contract 변경, image packaging, latency/memory/failure-isolation evidence와 current rule-based baseline 대비 promotion gate가 필요하다.
+이 encoder는 offline evaluation과 후속 semantic-head/difficulty-head artifact 생성에만 사용한다. Gateway의 current `difficulty-feature-vector.v1`, rule-based classifier, `DifficultyResult`, RuntimeSnapshot, routing policy, API, DB, Event와 Metrics는 변경하지 않는다.
+
+Gateway hot path 승격 전에는 다음 경계를 모두 충족해야 한다.
+
+- 실패한 per-category safety regression을 새 evidence run에서 해결
+- pinned tokenizer·encoder·PCA·semantic-head·difficulty-head·calibrator를 포함하는 image/runtime packaging과 시작 시 hash 검증
+- supported runtime의 latency, memory와 failure isolation evidence
+- supported runtime별 Python inference와 generated Go inference의 numeric tolerance 및 label parity
+- [`contracts.md`](contracts.md), [`classification-pipeline.md`](classification-pipeline.md)와 필요한 verifier를 포함한 active runtime contract 승인
+
+위 조건을 충족한 artifact도 먼저 opt-in shadow로 실행한다. Shadow 결과와 rollback 준비를 검토한 뒤 owner가 exact artifact version, bundle hash와 threshold policy를 명시적으로 promotion해야 하며 자동 승격은 허용하지 않는다.

@@ -133,13 +133,17 @@ Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexitySc
 
 같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. Owner-approved candidate의 `difficulty-family-constrained-split.2026-07-15.v1`은 difficulty label을 family key에서 제외하고 train 300/calibration 100/holdout 100을 exact count로 배정해 cross-label contrast 누출도 금지한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
 
-Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용하며 log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 Platt를 고른다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
+Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용하며 log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 Platt를 고른다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보는 calibration split 전체로 다시 fit한다.
+
+Untouched Holdout 결과를 확인한 시점에 해당 Holdout은 freeze된 artifact의 final evidence로 소비된 것으로 본다. 그 결과를 근거로 feature 정의·구성, model, calibrator 또는 threshold 중 하나라도 변경하면 기존 run의 연장이 아니라 새 evidence run이다. 이 경우 dataset/split과 immutable artifact version을 올리고, 기존에 결과를 확인한 Holdout을 포함하지 않는 새 untouched Holdout을 준비해 선택 절차부터 다시 수행한다. 이미 본 Holdout으로 새 artifact를 반복 튜닝하거나 선택·검증·승격 evidence를 다시 만들면 Holdout leakage로 간주한다.
 
 42D·106D·118D feature candidate의 선택도 Holdout을 사용하지 않는다. 각 candidate에서 선택된 calibrator의 calibration family-grouped CV 평균 log loss가 가장 낮은 candidate를 고르고, 허용 오차 안에서 같으면 평균 Brier score가 낮은 candidate, 그래도 같으면 더 낮은 dimension을 고른다. 이 선택 정책은 `difficulty-semantic-candidate-selection.2026-07-15.v1`로 고정한다. Candidate별 report에는 Holdout outcome을 만들지 않으며, candidate·calibrator·threshold와 component hash를 freeze한 뒤 선택된 단 하나의 candidate만 untouched Holdout 100건에 적용한다.
 
 두 후보의 입력은 모두 Logistic Regression의 미보정 `raw_probability`다. Isotonic은 exact-equal score를 동일 가중 sample count로 먼저 묶고, complex 비율이 감소하는 인접 block을 PAVA로 병합한다. Artifact의 x 경계는 각 block의 포함 하한이며 runtime은 floor lookup과 양끝 clipping만 사용하고 선형 보간하지 않는다. Single constant block도 유효하다. Score 반올림, epsilon grouping, 고정 interval, `labelConfidence` weighting과 사후 small-block 자동 병합은 사용하지 않는다. 과세분화는 group-CV 회귀와 fold별 block count·최소 block 표본 수로 확인하며, 선택된 Isotonic 전체 fit의 block sample count를 aggregate report에 둘 수 있다. Raw probability, logit과 실제 score 경계는 report에 넣지 않는다.
 
 초기 threshold policy는 모든 category가 공유하는 `difficulty-threshold-v1 = 0.45`다. `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다. `0.45`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 이후 evidence가 다른 값을 지지하면 v1을 변경하지 않고 새 global threshold policy version과 immutable artifact를 만든다. Category별 threshold, calibrator 또는 model은 평가 candidate로도 만들지 않는다.
+
+Threshold selection은 calibrator candidate 선택·fit과 분리한다. 변경 후보의 threshold grid, 목적 함수, cost ratio, tie-break와 safety constraint를 evidence run 전에 고정하고, 선택된 model·calibrator의 family-grouped calibration OOF calibrated score만 사용한다. 이 절차에서 승인 후보를 만들면 이름은 `difficulty-threshold-v2`로 제안하며, category별 threshold로 분기하지 않는다. Untouched Holdout은 freeze된 threshold의 final gate에만 사용하고 threshold 선택·재조정에는 사용하지 않는다. Holdout 결과로 `difficulty-threshold-v2` 값을 고르면 해당 Holdout은 final evidence 자격을 잃는다.
 
 Promotion report는 최소한 다음 provenance와 결과를 선언한다.
 

@@ -394,6 +394,10 @@ func TestRoutingEvalCLIProducesOptInDifficultyShadowReport(t *testing.T) {
 		"-evaluation-scope", "difficulty",
 		"-dataset", datasetPath,
 		"-difficulty-shadow-model-artifact", artifactPath,
+		"-difficulty-decision-loss-experiment",
+		"-difficulty-decision-loss-fp-cost", "1",
+		"-difficulty-decision-loss-fn-costs", "1,3,5,10",
+		"-difficulty-decision-loss-threshold-step", "0.1",
 		"-latency-iterations", "1",
 		"-pretty=false",
 	)
@@ -408,6 +412,9 @@ func TestRoutingEvalCLIProducesOptInDifficultyShadowReport(t *testing.T) {
 	}
 	if report.Shadow == nil || report.Shadow.ProductRuntimeChanged || report.Shadow.ArtifactVersion != "difficulty-logistic-v1-test" {
 		t.Fatalf("unexpected difficulty shadow CLI report: %#v", report.Shadow)
+	}
+	if experiment := report.Shadow.DecisionLossExperiment; experiment == nil || !experiment.Applicable || experiment.ProductRuntimeChanged || experiment.ThresholdSelectionForPromotionAllowed || len(experiment.Scenarios) != 4 {
+		t.Fatalf("unexpected decision-loss experiment report: %#v", experiment)
 	}
 }
 
