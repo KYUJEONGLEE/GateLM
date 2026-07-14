@@ -126,6 +126,10 @@ Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + com
 
 생성된 candidate를 checked-in active generated model로 옮기거나 `SimpleRouter`의 rule-based classifier를 교체하는 작업은 별도 promotion 단계다. Offline constructor와 evaluator가 존재하더라도 checked-in active artifact와 runtime behavior는 추가하지 않는다.
 
+## Current Tooling-Smoke Baseline
+
+The reproducible rule-versus-42D measurement is recorded in [`../testing/difficulty-42d-tooling-smoke-baseline.md`](../testing/difficulty-42d-tooling-smoke-baseline.md). It is synthetic `training_tooling_smoke` evidence with `trainingEligible=false`, not promotion or production evidence.
+
 ## Prepared Tests
 
 - Label schema, 필수 slice, category-semantic 조합, review 상태와 family-level coverage

@@ -216,6 +216,21 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 	if report.Samples[1].ComplexityScore == nil || *report.Samples[1].ComplexityScore != 1 || report.Samples[1].ShadowDifficulty != routing.DifficultyComplex {
 		t.Fatalf("expected hard-complex sentinel for short sample: %#v", report.Samples[1])
 	}
+	if report.Samples[0].ModelPath == nil || !*report.Samples[0].ModelPath || report.Samples[1].ModelPath == nil || *report.Samples[1].ModelPath {
+		t.Fatalf("expected explicit model-path boundaries: %#v", report.Samples)
+	}
+	if calibration := report.Shadow.Calibration; !calibration.Valid || calibration.Samples != 1 || calibration.SentinelExcluded != 1 || calibration.BinPolicy != "equal-width-10-v1" {
+		t.Fatalf("unexpected calibration evidence: %#v", calibration)
+	}
+	if report.Calibration.Applicable || report.Calibration.Reason == "" {
+		t.Fatalf("rule calibration must be unavailable: %#v", report.Calibration)
+	}
+	if report.ClassificationLatency.Total.WarmupIterations != defaultLatencyWarmupIterations || report.Shadow.TotalLatency.WarmupIterations != defaultLatencyWarmupIterations || report.ClassificationLatency.Total.BatchSize != defaultLatencyBatchSize || report.Shadow.TotalLatency.BatchSize != defaultLatencyBatchSize {
+		t.Fatalf("missing latency warm-up provenance: runtime=%#v shadow=%#v", report.ClassificationLatency.Total, report.Shadow.TotalLatency)
+	}
+	if report.ClassificationLatency.Difficulty.BatchSize != defaultDifficultyLatencyBatchSize || report.Shadow.DifficultyLatency.BatchSize != defaultDifficultyLatencyBatchSize {
+		t.Fatalf("missing difficulty-only latency batch provenance: runtime=%#v shadow=%#v", report.ClassificationLatency.Difficulty, report.Shadow.DifficultyLatency)
+	}
 
 	payload, err := marshalDifficultyReport(report, false)
 	if err != nil {
@@ -226,6 +241,19 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 		if strings.Contains(output, forbiddenField) {
 			t.Fatalf("shadow report must not include %s: %s", forbiddenField, output)
 		}
+	}
+}
+
+func TestSummarizeDifficultyCalibrationUsesFixedBins(t *testing.T) {
+	report := summarizeDifficultyCalibration([]difficultyCalibrationObservation{
+		{ExpectedCategory: routing.CategoryGeneral, Label: 0, Score: 0.2},
+		{ExpectedCategory: routing.CategoryCode, Label: 1, Score: 0.8},
+	}, 3)
+	if !report.Valid || report.Samples != 2 || report.SentinelExcluded != 3 || report.LogLoss != 0.223144 || report.BrierScore != 0.04 {
+		t.Fatalf("unexpected calibration summary: %#v", report)
+	}
+	if len(report.Bins) != 10 || report.Bins[2].Samples != 1 || report.Bins[8].Samples != 1 {
+		t.Fatalf("unexpected calibration bins: %#v", report.Bins)
 	}
 }
 
