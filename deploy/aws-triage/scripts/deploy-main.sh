@@ -69,6 +69,7 @@ tenant_chat_secret_files=(
   signing.jwk.json
   jwks.json
   binding-hmac-keys.json
+  content-keys.json
   cache-keysets.json
   usage-receipt-token
 )
