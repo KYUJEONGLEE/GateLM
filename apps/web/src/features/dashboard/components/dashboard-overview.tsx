@@ -93,8 +93,6 @@ const dashboardText: Record<
     overviewWorkspace: string;
     refreshDashboard: string;
     metrics: {
-      averageLatency: string;
-      averageP95Latency: string;
       budgetLedgerCost: string;
       budgetScope: string;
       blocked: string;
@@ -102,15 +100,11 @@ const dashboardText: Record<
       cancelled: string;
       failed: string;
       fallbackSuccess: string;
-      p95Latency: string;
-      p95LatencyBySurface: string;
-      projectApplication: string;
       rateLimited: string;
       records: string;
       savedCost: string;
       systemErrorRate: string;
       successful: string;
-      tenantChat: string;
       totalCost: string;
       totalRequests: string;
       totalTokens: string;
@@ -174,8 +168,6 @@ const dashboardText: Record<
       traffic: "Requests"
     },
     metrics: {
-      averageLatency: "Average latency",
-      averageP95Latency: "Average/P95 latency",
       budgetLedgerCost: "Budget ledger cost",
       budgetScope: "Project budget",
       blocked: "Blocked",
@@ -183,15 +175,11 @@ const dashboardText: Record<
       cancelled: "Cancelled",
       failed: "Failed",
       fallbackSuccess: "Fallback success",
-      p95Latency: "P95 latency",
-      p95LatencyBySurface: "P95 latency by surface",
-      projectApplication: "Project/Application",
       rateLimited: "Rate limited",
       records: "Records",
       savedCost: "Saved cost",
       systemErrorRate: "System error rate",
       successful: "Successful",
-      tenantChat: "Tenant Chat",
       totalCost: "Total cost",
       totalRequests: "Total requests",
       totalTokens: "Total tokens"
@@ -251,8 +239,6 @@ const dashboardText: Record<
       traffic: "Requests"
     },
     metrics: {
-      averageLatency: "평균 지연",
-      averageP95Latency: "평균/P95 지연",
       budgetLedgerCost: "Budget ledger 비용",
       budgetScope: "Project budget",
       blocked: "차단",
@@ -260,15 +246,11 @@ const dashboardText: Record<
       cancelled: "취소",
       failed: "실패",
       fallbackSuccess: "Fallback 성공",
-      p95Latency: "P95 지연",
-      p95LatencyBySurface: "Surface별 P95 지연",
-      projectApplication: "Project·Application",
       rateLimited: "Rate limit",
       records: "레코드",
       savedCost: "절감 비용",
       systemErrorRate: "시스템 오류율",
       successful: "성공",
-      tenantChat: "Tenant Chat",
       totalCost: "총 비용",
       totalRequests: "총 요청",
       totalTokens: "총 토큰"
@@ -355,11 +337,11 @@ export function DashboardOverviewView({
   if (overview.gatewayTtft?.scope === "project_application") {
     const ttft = overview.gatewayTtft;
     kpiCards.push({
-      detail: `p50 ${formatTtftLatency(ttft.p50Ms)} · p99 ${formatTtftLatency(ttft.p99Ms)} · ${formatTtftCoverage(ttft, text.ttftCoverage)}`,
+      detail: formatTtftCoverage(ttft, text.ttftCoverage),
       icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.ttftTitle,
       tone: "violet",
-      value: `p95 ${formatTtftLatency(ttft.p95Ms)}`
+      value: formatTtftLatency(ttft.averageMs)
     });
   }
 
@@ -464,49 +446,6 @@ function ratio(numerator: number, denominator: number) {
 
 function formatTtftLatency(value: number | null) {
   return value === null ? "—" : formatLatency(Math.round(value));
-}
-
-function formatDashboardLatencyBySurface(
-  overview: DashboardOverview,
-  text: DashboardCopy
-) {
-  const rows = dashboardSurfaceP95Rows(overview, text);
-  return rows.length > 0
-    ? rows
-        .map((row) => `${row.label} ${formatLatency(Math.round(row.value))}`)
-        .join(" · ")
-    : "—";
-}
-
-function dashboardSurfaceP95Rows(
-  overview: DashboardOverview,
-  text: DashboardCopy
-) {
-  const rows: Array<{ label: string; value: number }> = [];
-  const projectApplicationP95Ms = validLatency(
-    overview.latencyBySurface?.projectApplicationP95Ms
-  );
-  const tenantChatP95Ms = validLatency(
-    overview.latencyBySurface?.tenantChatP95Ms
-  );
-
-  if (projectApplicationP95Ms !== undefined) {
-    rows.push({
-      label: text.metrics.projectApplication,
-      value: projectApplicationP95Ms
-    });
-  }
-  if (tenantChatP95Ms !== undefined) {
-    rows.push({ label: text.metrics.tenantChat, value: tenantChatP95Ms });
-  }
-
-  return rows;
-}
-
-function validLatency(value: number | undefined) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? value
-    : undefined;
 }
 
 function formatTtftCoverage(
@@ -1016,16 +955,8 @@ function DashboardTabPanel({
           <FocusStat label={text.metrics.successful} value={formatInteger(overview.successfulRequests)} />
           <FocusStat label={text.metrics.failed} value={formatInteger(overview.failedRequests)} />
           <FocusStat
-            label={
-              overview.surface === "all"
-                ? text.metrics.p95LatencyBySurface
-                : text.metrics.averageP95Latency
-            }
-            value={
-              overview.surface === "all"
-                ? formatDashboardLatencyBySurface(overview, text)
-                : formatLatencyPair(overview.averageLatencyMs, overview.p95LatencyMs)
-            }
+            label={text.ttftTitle}
+            value={formatTtftLatency(overview.gatewayTtft?.averageMs ?? null)}
           />
         </div>
       </section>
@@ -1555,10 +1486,6 @@ function RequestTrendRangeToggle({
       ))}
     </div>
   );
-}
-
-function formatLatencyPair(averageLatencyMs: number, p95LatencyMs: number) {
-  return `${formatInteger(averageLatencyMs)} / ${formatInteger(p95LatencyMs)} ms`;
 }
 
 function sumBudgetScopeCostMicroUsd(overview: DashboardOverview) {
