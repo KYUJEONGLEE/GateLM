@@ -28,7 +28,8 @@ describe('CursorCodec', () => {
     await expect(codec.decode(`${payload.slice(0, -1)}${replacement}.${version}.${digest}`))
       .rejects.toBeInstanceOf(InvalidCursor);
     await expect(codec.decode(`${payload}.2.${digest}`)).rejects.toBeInstanceOf(InvalidCursor);
-    await expect(codec.decode(`${payload}.${version}.${digest.slice(0, -1)}A`))
+    const digestReplacement = digest.endsWith('A') ? 'B' : 'A';
+    await expect(codec.decode(`${payload}.${version}.${digest.slice(0, -1)}${digestReplacement}`))
       .rejects.toBeInstanceOf(InvalidCursor);
     await expect(codec.decode('not-a-cursor')).rejects.toBeInstanceOf(InvalidCursor);
   });
