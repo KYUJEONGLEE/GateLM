@@ -2,7 +2,10 @@
 
 import { Eye, Info, Maximize2, RotateCw, X } from "lucide-react";
 import Link from "next/link";
-import { projectPillTone } from "@/features/dashboard/live-requests-format";
+import {
+  primaryPolicyResult,
+  projectPillTone
+} from "@/features/dashboard/live-requests-format";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type {
   LiveRequestRow,
@@ -256,7 +259,7 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
               <th scope="col">{locale === "ko" ? "라우팅" : "Routing"}</th>
               <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
-              <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Results"}</th>
+              <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Result"}</th>
               <th scope="col">{locale === "ko" ? "지연 시간" : "Latency"}</th>
               <th scope="col">{text.detail}</th>
             </tr>
@@ -333,7 +336,7 @@ export function LiveRequestsView({
                   </span>
                 </td>
                 <td>
-                  <PolicyBadges row={row} />
+                  <PolicyBadges locale={locale} row={row} />
                 </td>
                 <td>{formatLiveLatency(row.latencyMs)}</td>
                 <td>
@@ -370,31 +373,22 @@ export function LiveRequestsView({
   );
 }
 
-function PolicyBadges({ row }: { row: LiveRequestRow }) {
-  if (row.cacheStatus === "NONE" && row.safetyAction === "NONE") {
+function PolicyBadges({ locale, row }: { locale: Locale; row: LiveRequestRow }) {
+  const result = primaryPolicyResult(row, locale);
+
+  if (!result) {
     return <span className="dashboard-live-muted-value">-</span>;
   }
 
   return (
     <span className="dashboard-live-policy-badges">
-      {row.safetyAction !== "NONE" ? (
-        <span
-          className="dashboard-live-mini-badge"
-          data-kind="safety"
-          data-value={row.safetyAction}
-        >
-          {"PII " + row.safetyAction}
-        </span>
-      ) : null}
-      {row.cacheStatus !== "NONE" ? (
-        <span
-          className="dashboard-live-mini-badge"
-          data-kind="cache"
-          data-value={row.cacheStatus}
-        >
-          {"CACHE " + row.cacheStatus}
-        </span>
-      ) : null}
+      <span
+        className="dashboard-live-mini-badge"
+        data-kind={result.kind}
+        data-value={result.value}
+      >
+        {result.label}
+      </span>
     </span>
   );
 }
