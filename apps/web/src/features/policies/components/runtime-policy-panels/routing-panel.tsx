@@ -377,8 +377,6 @@ function RoleModelSelect({
         ]
       : availableOptions;
 
-  const currentOption = options.find((option) => option.modelRef === value);
-
   if (appearance === "card") {
     return (
       <label className="tenant-routing-route policy-routing-role-row">
@@ -390,14 +388,14 @@ function RoleModelSelect({
           {value ? (
             <ProviderFamilyIcon
               className="tenant-routing-provider-icon tenant-routing-provider-icon-large"
-              family={currentOption?.family ?? "mock"}
+              family={selectedOption?.family ?? "mock"}
               size={36}
             />
           ) : null}
           <span className="tenant-routing-model-choice-copy">
             {value ? (
               <span className="tenant-routing-model-provider">
-                {currentOption?.providerName ?? "unavailable"}
+                {selectedOption?.providerName ?? "unavailable"}
               </span>
             ) : null}
             <select
