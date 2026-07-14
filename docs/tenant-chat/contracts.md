@@ -40,7 +40,7 @@
 Browser auth wire는 [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)를 따른다.
 
 - Browser는 `chat-web`의 same-origin BFF만 호출한다. `chat-api`와 Control Plane은 private service network에만 둔다.
-- Chat Web BFF는 `TENANT_CHAT_WEB_SERVICE_TOKEN`으로 Chat API를 인증한다. Chat API는 별도 `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`으로 Control Plane의 Tenant Chat identity endpoint만 호출한다. 기존 Gateway용 internal token 권한을 mutation으로 넓히지 않는다.
+- Chat Web BFF는 `TENANT_CHAT_WEB_SERVICE_TOKEN`으로 Chat API를 인증한다. Chat API는 별도 `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`으로 Control Plane의 Tenant Chat identity endpoint와 active RuntimeSnapshot metadata reader만 호출한다. 기존 Gateway용 internal token 권한을 mutation으로 넓히지 않는다.
 - access token은 별도 signing key set으로 서명한 5분 JWT다. refresh token은 30일 opaque random token이며 PostgreSQL에는 hash만 저장한다.
 - refresh는 매번 rotate한다. consumed token 재사용이 발견되면 해당 family와 session을 모두 revoke하고 `sessionVersion`을 증가시킨다.
 - Chat API는 session table만 직접 소유·조회한다. User/Tenant/Membership/Employee identity는 Control Plane private entitlement API에서 authoritative하게 확인한다.

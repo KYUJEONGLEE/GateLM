@@ -43,10 +43,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
         typeof body === 'object' && body !== null && 'message' in body
           ? String((body as { message: unknown }).message)
           : exception.message;
+      const explicitCode =
+        typeof body === 'object' &&
+        body !== null &&
+        'code' in body &&
+        typeof (body as { code: unknown }).code === 'string' &&
+        /^[A-Z][A-Z0-9_]{0,63}$/.test((body as { code: string }).code)
+          ? (body as { code: string }).code
+          : undefined;
 
       return {
         error: {
-          code: this.toErrorCode(exception.getStatus()),
+          code: explicitCode ?? this.toErrorCode(exception.getStatus()),
           message,
           details: null,
           requestId: null,

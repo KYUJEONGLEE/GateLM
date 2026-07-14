@@ -49,3 +49,14 @@ export type PublicSession = {
   }>;
   user: { email: string; id: string; name: string | null };
 };
+
+export type AuthorizedExecution = {
+  actorAuthzVersion: number;
+  actorKind: 'tenant_admin' | 'employee';
+  employeeId?: string;
+  sessionId: string;
+  sessionVersion: number;
+  tenantAuthzVersion: number;
+  tenantId: string;
+  userId: string;
+};

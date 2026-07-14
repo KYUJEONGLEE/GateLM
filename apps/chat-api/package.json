@@ -7,6 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "build": "nest build",
+    "smoke:execution": "ts-node -r tsconfig-paths/register src/execution/smoke.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --passWithNoTests"
   },
@@ -16,6 +17,7 @@
     "@nestjs/core": "^10.4.15",
     "@nestjs/platform-express": "^10.4.15",
     "@prisma/client": "^6.1.0",
+    "ajv": "^8.17.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "express": "^4.22.1",

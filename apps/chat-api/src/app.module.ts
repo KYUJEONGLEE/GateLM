@@ -7,11 +7,24 @@ import { ControlPlaneClient } from './auth/control-plane.client';
 import { SessionService } from './auth/session.service';
 import { validateEnv } from './config/env';
 import { PrismaService } from './database/prisma.service';
+import { ExecutionBridgeService } from './execution/execution-bridge.service';
+import { PrivateGatewayClient } from './execution/private-gateway.client';
+import { WorkloadCredentialsService } from './execution/workload-credentials';
+import { WorkloadSigner } from './execution/workload-signer';
 import { HealthController } from './health.controller';
 
 @Module({
   controllers: [AuthController, HealthController],
   imports: [ConfigModule.forRoot({ isGlobal: true, validate: validateEnv })],
-  providers: [ChatWebServiceGuard, ControlPlaneClient, PrismaService, SessionService],
+  providers: [
+    ChatWebServiceGuard,
+    ControlPlaneClient,
+    ExecutionBridgeService,
+    PrismaService,
+    PrivateGatewayClient,
+    SessionService,
+    WorkloadCredentialsService,
+    WorkloadSigner,
+  ],
 })
 export class AppModule {}

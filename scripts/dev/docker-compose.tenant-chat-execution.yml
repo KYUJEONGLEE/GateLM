@@ -1,0 +1,116 @@
+services:
+  control-plane-api:
+    build:
+      context: .
+      dockerfile: infra/docker/control-plane-api.Dockerfile
+    environment:
+      NODE_ENV: development
+      CONTROL_PLANE_PORT: "3001"
+      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      REDIS_URL: redis://redis:6379
+      CONTROL_PLANE_AUTH_STATE_SECRET: ${CONTROL_PLANE_AUTH_STATE_SECRET:?CONTROL_PLANE_AUTH_STATE_SECRET is required}
+      CONTROL_PLANE_ADMIN_AUTH_MODE: demo_admin_placeholder
+      CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: "true"
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
+      TENANT_CHAT_PROJECTOR_ENABLED: "true"
+      TS_NODE_COMPILER_OPTIONS: '{"module":"NodeNext","moduleResolution":"NodeNext"}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  gateway-core:
+    build:
+      context: .
+      dockerfile: infra/docker/gateway-core.Dockerfile
+    environment:
+      GATEWAY_PORT: "8080"
+      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      REDIS_URL: redis://redis:6379
+      GATEWAY_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
+      GATEWAY_RUNTIME_SNAPSHOT_MODE: demo
+      MOCK_PROVIDER_BASE_URL: http://mock-provider:8090
+      TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"
+      TENANT_CHAT_PRIVATE_LISTEN_ADDRESS: ":8081"
+      TENANT_CHAT_WORKLOAD_JWKS_FILE: /run/secrets/tenant-chat/jwks.json
+      TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+      TENANT_CHAT_CACHE_KEYSETS_FILE: /run/secrets/tenant-chat/cache-keysets.json
+      TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE: /run/secrets/tenant-chat/usage-receipt-token
+    expose:
+      - "8081"
+    secrets:
+      - source: tenant_chat_workload_jwks
+        target: /run/secrets/tenant-chat/jwks.json
+      - source: tenant_chat_binding_hmac_keys
+        target: /run/secrets/tenant-chat/binding-hmac-keys.json
+      - source: tenant_chat_cache_keysets
+        target: /run/secrets/tenant-chat/cache-keysets.json
+      - source: tenant_chat_usage_receipt_token
+        target: /run/secrets/tenant-chat/usage-receipt-token
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mock-provider:
+        condition: service_healthy
+      control-plane-api:
+        condition: service_started
+
+  chat-api:
+    build:
+      context: .
+      dockerfile: infra/docker/chat-api.Dockerfile
+    environment:
+      NODE_ENV: development
+      CHAT_API_PORT: "3003"
+      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      TENANT_CHAT_ACCESS_JWT_SECRET: ${TENANT_CHAT_ACCESS_JWT_SECRET:?TENANT_CHAT_ACCESS_JWT_SECRET is required}
+      TENANT_CHAT_INTENT_SECRET: ${TENANT_CHAT_INTENT_SECRET:?TENANT_CHAT_INTENT_SECRET is required}
+      TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}
+      TENANT_CHAT_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
+      TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081
+      TENANT_CHAT_WORKLOAD_ACTIVE_KID: ${TENANT_CHAT_WORKLOAD_ACTIVE_KID:-tenant-chat-local-1}
+      TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json
+      TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+    secrets:
+      - source: tenant_chat_workload_signing_jwk
+        target: /run/secrets/tenant-chat/signing.jwk.json
+      - source: tenant_chat_binding_hmac_keys
+        target: /run/secrets/tenant-chat/binding-hmac-keys.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      control-plane-api:
+        condition: service_started
+      gateway-core:
+        condition: service_started
+
+  chat-web:
+    build:
+      context: .
+      dockerfile: infra/docker/chat-web.Dockerfile
+    environment:
+      NODE_ENV: production
+      GATELM_CHAT_WEB_ORIGIN: http://chat.localhost:3002
+      TENANT_CHAT_API_BASE_URL: http://chat-api:3003
+      TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      chat-api:
+        condition: service_started
+
+secrets:
+  tenant_chat_workload_signing_jwk:
+    file: .secrets/tenant-chat/signing.jwk.json
+  tenant_chat_workload_jwks:
+    file: .secrets/tenant-chat/jwks.json
+  tenant_chat_binding_hmac_keys:
+    file: .secrets/tenant-chat/binding-hmac-keys.json
+  tenant_chat_cache_keysets:
+    file: .secrets/tenant-chat/cache-keysets.json
+  tenant_chat_usage_receipt_token:
+    file: .secrets/tenant-chat/usage-receipt-token

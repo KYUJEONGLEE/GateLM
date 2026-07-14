@@ -11,6 +11,7 @@ revision: `tenant-chat/v1`
 | 범위 | 기준 |
 |---|---|
 | Browser/session auth wire | [`openapi/chat-auth.openapi.json`](./openapi/chat-auth.openapi.json) |
+| Private Control Plane metadata wire | [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json) |
 | Private Gateway wire contract | [`openapi/private-gateway.openapi.json`](./openapi/private-gateway.openapi.json) |
 | Usage DB record | [`db/tenant-chat-usage.sql`](./db/tenant-chat-usage.sql) |
 | RuntimeSnapshot | [`schemas/tenant-runtime-snapshot.schema.json`](./schemas/tenant-runtime-snapshot.schema.json) |
@@ -29,6 +30,9 @@ revision: `tenant-chat/v1`
 
 - Chat API는 logical turn에 `turnId`, Gateway execution에 `requestId`, logical retry에 `idempotencyKey`를 한 번 생성한다.
 - transport retry는 세 값을 유지하고 새 `jti`, `iat`, `nbf`, `exp`로 JWT만 다시 발급한다.
+- Chat API transport는 최대 2회 시도한다. response header 전 network/timeout 또는 짧은 `503`만 한 번 재시도하고, `4xx`, `429`, Provider terminal 오류는 재시도하지 않는다.
+- completion stream이 final 전에 비정상 종료되면 같은 실행 ID로 한 번만 reattach한다. reattach도 새 JWT/JTI를 사용한다.
+- caller abort는 transport failure로 재시도하거나 reattach하지 않는다. Chat API private client는 내부 `499 CHAT_REQUEST_CANCELLED`로 즉시 중단하고 execution bridge가 admission/Provider cancel을 best effort로 시도한다.
 - 같은 `(tenantId,userId,idempotencyKey)`와 같은 binding은 provider를 다시 호출하지 않는다.
 - admission 최초 생성은 `201`, 같은 binding replay는 `200`과 `replayed=true`다.
 - cancel 최초·동일 replay는 모두 `200`이다. 이미 consume/expire된 admission의 첫 cancel은 `409 CHAT_ADMISSION_EXPIRED`다.
@@ -40,12 +44,24 @@ revision: `tenant-chat/v1`
 ## 3. SSE wire 규칙
 
 - response는 UTF-8 `text/event-stream`이며 각 event는 `id`, `event`, 단일-line JSON `data`와 빈 줄로 끝난다.
+- stream 시작·event 사이·종료의 field 없는 빈 event block은 무시한다. 공백, comment, unknown/duplicate field가 있는 frame은 빈 event로 취급하지 않고 거부한다.
 - `id`는 `<requestId>:<sequence>`다. sequence는 request별 1부터 단조 증가한다.
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
+- DOC-013이 해결되기 전 interim 규칙으로, terminal replay가 sequence 1부터 assistant content를 재구성할 수 없으면 Chat API는 성공 content를 만들지 않고 내부 `TerminalReplayContentUnavailable`로 fail closed한다. encrypted final handoff 또는 복구 불변조건은 후속 EncryptedChatStore contract에서 확정한다.
 - client disconnect는 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
+- Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
+- Chat API `readyz`는 DB와 workload signing/binding/private Gateway 설정을 함께 검사한다. key file, active `kid`, matching HMAC key 또는 Gateway URL이 없거나 잘못되면 `healthz`는 유지하되 readiness와 execution을 `503`으로 닫는다.
+- workload signing/binding credential은 최초 검증 성공 전까지 `readyz`와 execution 호출에서 fail closed로 다시 로드하며, 성공하면 private `KeyObject`, active `kid`, HMAC key만 프로세스 수명 동안 로컬 메모리에 캐시한다. 기존 프로세스는 재시작 전까지 캐시한 key를 계속 사용한다.
+- signing/binding key 변경은 새 `kid`를 포함한 Chat API rolling restart로 적용한다. 실행 중 file watch, TTL/mtime polling, Redis cache 또는 hot reload는 이 계약에 포함하지 않는다.
+
+## 3.1 Active RuntimeSnapshot metadata reader
+
+- Chat API는 admission 전에 service token으로 보호된 `GET /internal/v1/tenant-chat/runtime/snapshots/{tenantId}/active`를 호출한다. wire shape는 [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json)을 따른다.
+- Control Plane은 기존 active pointer와 `TenantChatRuntimeService`를 재사용하며 `tenantId`, `version`, `digest`, `policyVersion`, `employeeNoticeVersion`, `pricingVersion`만 반환한다. snapshot body, Provider credential 또는 policy detail을 반환하지 않는다.
+- active snapshot이 없거나 tenant가 다르거나 저장 body가 active schema에 맞지 않으면 `503 CHAT_RUNTIME_UNAVAILABLE`로 fail closed한다. Chat API는 이 metadata와 authoritative entitlement를 admission handle에 immutable하게 pin한다.
 
 ## 4. `bindingDigest`
 

@@ -47,6 +47,33 @@ function accessToken(overrides: Partial<AccessClaims> = {}) {
 }
 
 describe('SessionService', () => {
+  it('revalidates the selected authoritative entitlement for execution', async () => {
+    const prisma = { tenantChatSession: { findUnique: jest.fn().mockResolvedValue(session) } };
+    const controlPlane = { entitlement: jest.fn().mockResolvedValue(identity.tenants[0]) };
+
+    await expect(service(prisma, controlPlane).authorizeExecution(accessToken())).resolves.toMatchObject({
+      actorKind: 'employee',
+      employeeId: identity.tenants[0].employeeId,
+      tenantId: session.selectedTenantId,
+      userId: session.userId,
+    });
+    expect(controlPlane.entitlement).toHaveBeenCalledWith(session.userId, session.selectedTenantId);
+  });
+
+  it('rejects unavailable or stale execution entitlement without falling back', async () => {
+    const prisma = { tenantChatSession: { findUnique: jest.fn().mockResolvedValue(session) } };
+    const unavailable = { entitlement: jest.fn().mockRejectedValue(new Error('unavailable')) };
+    await expect(service(prisma, unavailable).authorizeExecution(accessToken())).rejects.toThrow('unavailable');
+
+    const stale = {
+      entitlement: jest.fn().mockResolvedValue({ ...identity.tenants[0], tenantAuthzVersion: 8 }),
+    };
+    await expect(service(prisma, stale).authorizeExecution(accessToken())).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CHAT_ACCESS_STALE' }),
+      status: 401,
+    });
+  });
+
   it('does not mint another refresh family during tenant selection', async () => {
     const prisma = {
       tenantChatRefreshToken: { create: jest.fn() },
