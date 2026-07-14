@@ -213,7 +213,7 @@ const dashboardText: Record<
     routingSummary: "Routing by category and difficulty",
     statusDistribution: "Status distribution",
     ttftCoverage: "Coverage",
-    ttftTitle: "Project/Application TTFT",
+    ttftTitle: "Response time",
     tabs: {
       overview: "Overview",
       requests: "Requests",
@@ -290,7 +290,7 @@ const dashboardText: Record<
     routingSummary: "카테고리·난이도별 라우팅",
     statusDistribution: "상태 분포",
     ttftCoverage: "관측률",
-    ttftTitle: "Project·Application TTFT",
+    ttftTitle: "응답 시간",
     tabs: {
       overview: "Overview",
       requests: "Requests",
@@ -337,7 +337,7 @@ export function DashboardOverviewView({
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful} · ${formatDashboardLatencySummary(overview, text)}`,
+      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful}`,
       icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.successRate,
       tone: "green",
@@ -464,22 +464,6 @@ function ratio(numerator: number, denominator: number) {
 
 function formatTtftLatency(value: number | null) {
   return value === null ? "—" : formatLatency(Math.round(value));
-}
-
-function formatDashboardLatencySummary(
-  overview: DashboardOverview,
-  text: DashboardCopy
-) {
-  if (overview.surface !== "all") {
-    return `${text.metrics.averageLatency} ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`;
-  }
-
-  const rows = dashboardSurfaceP95Rows(overview, text);
-  return rows.length > 0
-    ? rows
-        .map((row) => `${row.label} p95 ${formatLatency(Math.round(row.value))}`)
-        .join(" · ")
-    : `${text.metrics.p95Latency} —`;
 }
 
 function formatDashboardLatencyBySurface(
