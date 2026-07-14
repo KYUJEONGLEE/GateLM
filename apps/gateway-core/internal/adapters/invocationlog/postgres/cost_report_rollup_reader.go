@@ -160,18 +160,19 @@ func (r *QueryReader) addCostReportRollupRows(
 	aggregate *costReportAggregate,
 ) error {
 	totalsQuery, totalsArgs := buildCostReportRollupTotalsQuery(filter, segments)
-	rows, err := r.db.Query(ctx, totalsQuery, totalsArgs...)
+	totalsRows, err := r.db.Query(ctx, totalsQuery, totalsArgs...)
 	if err != nil {
 		return err
 	}
-	for rows.Next() {
+	defer totalsRows.Close()
+	for totalsRows.Next() {
 		var sourceBucketStart time.Time
 		var projectID string
 		var applicationID string
 		var scope budget.Scope
 		var metrics costReportMetrics
 		var sourceMaxAt sql.NullTime
-		if err := rows.Scan(
+		if err := totalsRows.Scan(
 			&sourceBucketStart,
 			&projectID,
 			&applicationID,
@@ -186,7 +187,6 @@ func (r *QueryReader) addCostReportRollupRows(
 			&metrics.SavedCostMicroUSD,
 			&sourceMaxAt,
 		); err != nil {
-			rows.Close()
 			return err
 		}
 		var lastSourceAt *time.Time
@@ -203,23 +203,24 @@ func (r *QueryReader) addCostReportRollupRows(
 			lastSourceAt,
 		)
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+	if err := totalsRows.Err(); err != nil {
 		return err
 	}
-	rows.Close()
+	// Release the first result set before issuing the second query. The defer
+	// above remains as the error-path safety net.
+	totalsRows.Close()
 
 	modelQuery, modelArgs := buildCostReportRollupModelQuery(filter, segments)
-	rows, err = r.db.Query(ctx, modelQuery, modelArgs...)
+	modelRows, err := r.db.Query(ctx, modelQuery, modelArgs...)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
+	defer modelRows.Close()
+	for modelRows.Next() {
 		var provider string
 		var model string
 		var metrics costReportMetrics
-		if err := rows.Scan(
+		if err := modelRows.Scan(
 			&provider,
 			&model,
 			&metrics.RequestCount,
@@ -233,7 +234,7 @@ func (r *QueryReader) addCostReportRollupRows(
 		}
 		aggregate.addModelRow(provider, model, metrics)
 	}
-	return rows.Err()
+	return modelRows.Err()
 }
 
 func (r *QueryReader) addCostReportRawRangeRows(
@@ -246,18 +247,19 @@ func (r *QueryReader) addCostReportRawRangeRows(
 		return nil
 	}
 	totalsQuery, totalsArgs := buildCostReportRawRangeTotalsQuery(filter, ranges)
-	rows, err := r.db.Query(ctx, totalsQuery, totalsArgs...)
+	totalsRows, err := r.db.Query(ctx, totalsQuery, totalsArgs...)
 	if err != nil {
 		return err
 	}
-	for rows.Next() {
+	defer totalsRows.Close()
+	for totalsRows.Next() {
 		var periodStart time.Time
 		var projectID string
 		var applicationID string
 		var scope budget.Scope
 		var metrics costReportMetrics
 		var lastLogCreatedAt sql.NullTime
-		if err := rows.Scan(
+		if err := totalsRows.Scan(
 			&periodStart,
 			&projectID,
 			&applicationID,
@@ -272,7 +274,6 @@ func (r *QueryReader) addCostReportRawRangeRows(
 			&metrics.SavedCostMicroUSD,
 			&lastLogCreatedAt,
 		); err != nil {
-			rows.Close()
 			return err
 		}
 		var lastSourceAt *time.Time
@@ -289,23 +290,24 @@ func (r *QueryReader) addCostReportRawRangeRows(
 			lastSourceAt,
 		)
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+	if err := totalsRows.Err(); err != nil {
 		return err
 	}
-	rows.Close()
+	// Release the first result set before issuing the second query. The defer
+	// above remains as the error-path safety net.
+	totalsRows.Close()
 
 	modelQuery, modelArgs := buildCostReportRawRangeModelQuery(filter, ranges)
-	rows, err = r.db.Query(ctx, modelQuery, modelArgs...)
+	modelRows, err := r.db.Query(ctx, modelQuery, modelArgs...)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
+	defer modelRows.Close()
+	for modelRows.Next() {
 		var provider string
 		var model string
 		var metrics costReportMetrics
-		if err := rows.Scan(
+		if err := modelRows.Scan(
 			&provider,
 			&model,
 			&metrics.RequestCount,
@@ -319,7 +321,7 @@ func (r *QueryReader) addCostReportRawRangeRows(
 		}
 		aggregate.addModelRow(provider, model, metrics)
 	}
-	return rows.Err()
+	return modelRows.Err()
 }
 
 func buildCostReportRollupTotalsQuery(

@@ -981,12 +981,15 @@ func (q *fakeQueryer) QueryRow(_ context.Context, query string, arguments ...any
 }
 
 type fakeRows struct {
-	values [][]any
-	index  int
-	err    error
+	values     [][]any
+	index      int
+	err        error
+	closeCount int
 }
 
-func (r *fakeRows) Close() {}
+func (r *fakeRows) Close() {
+	r.closeCount++
+}
 
 func (r *fakeRows) Err() error {
 	return r.err

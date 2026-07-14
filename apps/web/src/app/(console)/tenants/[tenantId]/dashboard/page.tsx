@@ -206,7 +206,7 @@ async function MonthToDateSpendValue({
   const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
   const totalMicroUsd =
     (totalSpendUsd === undefined ? 0 : totalSpendUsd * 1_000_000) +
-    (tenantChat?.usage.confirmedCostMicroUsd ?? 0);
+    (tenantChat?.usage?.confirmedCostMicroUsd ?? 0);
   const hasCurrentData =
     summary !== undefined || (tenantChat !== undefined && tenantChat !== null);
 

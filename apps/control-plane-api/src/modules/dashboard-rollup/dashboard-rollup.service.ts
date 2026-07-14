@@ -597,14 +597,9 @@ export class DashboardRollupService
           provider_latency_ms::bigint AS provider_latency_ms,
           stream,
           CASE
-            WHEN coalesce(
-              to_jsonb(p0_llm_invocation_logs) ->> 'ttft_ms',
-              metadata #>> '{streaming,ttftMs}'
-            ) ~ '^[0-9]+$'
-            THEN coalesce(
-              to_jsonb(p0_llm_invocation_logs) ->> 'ttft_ms',
-              metadata #>> '{streaming,ttftMs}'
-            )::bigint
+            WHEN ttft_ms IS NOT NULL THEN ttft_ms::bigint
+            WHEN (metadata #>> '{streaming,ttftMs}') ~ '^[0-9]+$'
+            THEN (metadata #>> '{streaming,ttftMs}')::bigint
             ELSE NULL
           END AS ttft_ms,
           coalesce(
@@ -704,8 +699,9 @@ export class DashboardRollupService
           provider_latency_ms::bigint AS provider_latency_ms,
           stream,
           CASE
-            WHEN coalesce(to_jsonb(p0_llm_invocation_logs) ->> 'ttft_ms', metadata #>> '{streaming,ttftMs}') ~ '^[0-9]+$'
-            THEN coalesce(to_jsonb(p0_llm_invocation_logs) ->> 'ttft_ms', metadata #>> '{streaming,ttftMs}')::bigint
+            WHEN ttft_ms IS NOT NULL THEN ttft_ms::bigint
+            WHEN (metadata #>> '{streaming,ttftMs}') ~ '^[0-9]+$'
+            THEN (metadata #>> '{streaming,ttftMs}')::bigint
             ELSE NULL
           END AS ttft_ms,
           coalesce(nullif(masking_action, ''), 'none') AS masking_action,

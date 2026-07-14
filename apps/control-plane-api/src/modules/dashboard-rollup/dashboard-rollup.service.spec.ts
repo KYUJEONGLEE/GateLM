@@ -231,6 +231,43 @@ describe('DashboardRollupService', () => {
     expect(executeRaw).not.toHaveBeenCalled();
   });
 
+  it('reads the physical TTFT column without serializing each source row', async () => {
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw };
+    const service = createService();
+    const internals = service as unknown as {
+      rebuildProjectApplicationHour: (
+        client: typeof tx,
+        bucket: {
+          tenant_id: string;
+          surface: 'project_application';
+          grain: 'hour';
+          bucket_start: Date;
+        },
+        bucketEnd: Date,
+      ) => Promise<void>;
+    };
+    const bucketStart = new Date('2026-07-14T12:00:00Z');
+
+    await internals.rebuildProjectApplicationHour(
+      tx,
+      {
+        tenant_id: tenantA,
+        surface: 'project_application',
+        grain: 'hour',
+        bucket_start: bucketStart,
+      },
+      new Date('2026-07-14T13:00:00Z'),
+    );
+
+    expect(executeRaw).toHaveBeenCalledTimes(2);
+    for (const [query] of executeRaw.mock.calls) {
+      const sql = rawQuery(query).sql;
+      expect(sql).toContain('WHEN ttft_ms IS NOT NULL THEN ttft_ms::bigint');
+      expect(sql).not.toContain('to_jsonb(p0_llm_invocation_logs)');
+    }
+  });
+
   it('keeps the migration additive, tenant-first, and content-free', () => {
     const sql = readFileSync(migrationPath, 'utf8');
     const discoveryIndexSql = readFileSync(discoveryIndexMigrationPath, 'utf8');

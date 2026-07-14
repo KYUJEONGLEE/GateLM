@@ -85,6 +85,54 @@ func TestBuildCostReportRollupPlanFallsBackForUnsupportedContracts(t *testing.T)
 	}
 }
 
+func TestAddCostReportRollupRowsClosesTotalsRowsOnScanError(t *testing.T) {
+	from := time.Date(2026, 7, 14, 8, 0, 0, 0, time.UTC)
+	totalsRows := &fakeRows{values: [][]any{{"incomplete row"}}}
+	db := &fakeQueryer{rowsQueue: []*fakeRows{totalsRows}}
+	aggregate := newCostReportAggregate()
+	err := NewQueryReader(db).addCostReportRollupRows(
+		context.Background(),
+		invocationlog.CostReportFilter{
+			TenantID: testTenantID,
+			Period:   "hour",
+			From:     from,
+			To:       from.Add(time.Hour),
+		},
+		[]dashboardRollupSegment{{Grain: "hour", From: from, To: from.Add(time.Hour)}},
+		&aggregate,
+	)
+	if err == nil {
+		t.Fatal("expected an invalid totals row to fail scanning")
+	}
+	if totalsRows.closeCount == 0 {
+		t.Fatal("expected rollup totals rows to close on scan failure")
+	}
+}
+
+func TestAddCostReportRawRangeRowsClosesTotalsRowsOnScanError(t *testing.T) {
+	from := time.Date(2026, 7, 14, 8, 0, 0, 0, time.UTC)
+	totalsRows := &fakeRows{values: [][]any{{"incomplete row"}}}
+	db := &fakeQueryer{rowsQueue: []*fakeRows{totalsRows}}
+	aggregate := newCostReportAggregate()
+	err := NewQueryReader(db).addCostReportRawRangeRows(
+		context.Background(),
+		invocationlog.CostReportFilter{
+			TenantID: testTenantID,
+			Period:   "hour",
+			From:     from,
+			To:       from.Add(time.Hour),
+		},
+		[]dashboardTimeRange{{From: from, To: from.Add(time.Hour)}},
+		&aggregate,
+	)
+	if err == nil {
+		t.Fatal("expected an invalid raw totals row to fail scanning")
+	}
+	if totalsRows.closeCount == 0 {
+		t.Fatal("expected raw totals rows to close on scan failure")
+	}
+}
+
 func TestBuildCostReportRollupQueriesPreserveTenantApplicationAndBudgetScope(t *testing.T) {
 	from := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
 	filter := invocationlog.CostReportFilter{

@@ -16,3 +16,9 @@ test("dashboard validates tenant access before projects or observability reads",
   expect(projectsReadIndex).toBeGreaterThan(accessGuardIndex);
   expect(gatewayReadIndex).toBeGreaterThan(accessGuardIndex);
 });
+
+test("month-to-date spend tolerates missing Tenant Chat usage", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("tenantChat?.usage?.confirmedCostMicroUsd ?? 0");
+});
