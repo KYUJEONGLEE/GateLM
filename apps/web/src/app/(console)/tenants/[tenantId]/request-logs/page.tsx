@@ -266,7 +266,7 @@ function getModelOptions(
   });
 
   if (options.size === 0) {
-    filterOptions?.requestedModels
+    (filterOptions?.requestedModels ?? [])
       .filter((model) => model !== "auto")
       .forEach((model) => options.add(model));
   }
