@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import type { ProviderConnectionRecord } from "../src/lib/control-plane/provider-connections-types";
 import {
+  countRuntimePolicyModelRoleConversionChanges,
   createRuntimePolicyRoleRoutes,
   getRuntimePolicyModelRoleConversion,
   getRuntimePolicyModelRoles,
@@ -112,11 +113,26 @@ test("legacy conversion uses general primaries and drops non-uniform fallback", 
   policy.routes.code.simple.modelRefs = ["provider-d:category", "provider-e:other-backup"];
 
   expect(getRuntimePolicyModelRoles(policy.routes)).toBeNull();
-  expect(getRuntimePolicyModelRoleConversion(policy.routes)).toEqual({
+  const conversion = getRuntimePolicyModelRoleConversion(policy.routes);
+
+  expect(conversion).toEqual({
     complexModelRef: "provider-b:premium",
     fallbackModelRef: null,
     simpleModelRef: "provider-a:cheap"
   });
+  expect(countRuntimePolicyModelRoleConversionChanges(policy.routes, conversion!)).toBe(10);
+});
+
+test("conversion change count is zero for an existing global role profile", () => {
+  const routes = createRuntimePolicyRoleRoutes({
+    complexModelRef: "provider-b:premium",
+    fallbackModelRef: "provider-c:backup",
+    simpleModelRef: "provider-a:cheap"
+  });
+  const roles = getRuntimePolicyModelRoles(routes);
+
+  expect(roles).not.toBeNull();
+  expect(countRuntimePolicyModelRoleConversionChanges(routes, roles!)).toBe(0);
 });
 
 test("an empty route cell makes the matrix invalid", () => {

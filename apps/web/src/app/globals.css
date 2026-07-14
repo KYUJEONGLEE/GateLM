@@ -18956,6 +18956,58 @@ html:has(.tenant-management-content) {
   padding-bottom: var(--space-4);
 }
 
+.routing-migration-alert [data-slot="alert-description"] {
+  gap: 14px;
+  width: 100%;
+}
+
+.routing-migration-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning-border) 68%, var(--border));
+  border-radius: var(--radius-md);
+}
+
+.routing-migration-preview div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid color-mix(in srgb, var(--warning-border) 68%, var(--border));
+}
+
+.routing-migration-preview div:last-child {
+  border-right: 0;
+}
+
+.routing-migration-preview dt {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.routing-migration-preview dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.routing-migration-meta {
+  display: grid;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.routing-migration-action {
+  min-height: 38px;
+}
+
 .tenant-routing-enable-card,
 .tenant-routing-model-card,
 .tenant-routing-off-default-card,
@@ -19606,6 +19658,19 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 @media (max-width: 820px) {
+  .routing-migration-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routing-migration-preview div {
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--warning-border) 68%, var(--border));
+  }
+
+  .routing-migration-preview div:last-child {
+    border-bottom: 0;
+  }
+
   .tenant-routing-enable-card {
     grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
@@ -19670,6 +19735,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 @media (max-width: 560px) {
+  .routing-migration-action {
+    width: 100%;
+  }
+
   .tenant-routing-enable-card,
   .tenant-routing-model-card,
   .tenant-routing-off-default-card,

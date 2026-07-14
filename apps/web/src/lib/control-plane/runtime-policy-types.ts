@@ -537,6 +537,32 @@ export function getRuntimePolicyModelRoleConversion(
   };
 }
 
+export function countRuntimePolicyModelRoleConversionChanges(
+  routes: RuntimePolicyRoutingRoutes,
+  roles: RuntimePolicyModelRoles
+) {
+  const convertedRoutes = createRuntimePolicyRoleRoutes(roles);
+
+  return runtimeRoutingCategories.reduce(
+    (changeCount, category) =>
+      changeCount +
+      runtimeRoutingDifficulties.filter((difficulty) => {
+        const current = routes[category]?.[difficulty]?.modelRefs;
+        const converted = convertedRoutes[category][difficulty].modelRefs;
+
+        return (
+          !Array.isArray(current) ||
+          current.length !== converted.length ||
+          current.some(
+            (modelRef, index) =>
+              normalizeRuntimePolicyModelRef(modelRef) !== converted[index]
+          )
+        );
+      }).length,
+    0
+  );
+}
+
 export function isRuntimePolicyModelRoleProfile(
   routes: RuntimePolicyRoutingRoutes
 ) {

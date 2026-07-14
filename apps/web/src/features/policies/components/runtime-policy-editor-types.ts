@@ -144,6 +144,11 @@ export type RuntimePolicyEditorText = {
   routingAuthoringRequired: string;
   routingComplexModel: string;
   routingConvert: string;
+  routingConversionDescription: string;
+  routingConversionDraftNote: string;
+  routingConversionImpact: string;
+  routingConversionTitle: string;
+  routingConversionUnavailable: string;
   routingFallbackModel: string;
   routingFallbackNone: string;
   routingMockWarning: string;

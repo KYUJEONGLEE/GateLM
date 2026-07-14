@@ -246,9 +246,17 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     rollback: "Rollback",
     routing: "Routing",
     routingAuthoringRequired:
-      "This saved policy uses the previous per-category routing format. It remains active until you explicitly convert it; draft save and publish are blocked meanwhile.",
+      "Update this saved policy to the global Simple/Complex format before saving or publishing.",
     routingComplexModel: "Complex model",
-    routingConvert: "Convert to global Simple/Complex policy",
+    routingConvert: "Use these models in draft",
+    routingConversionDescription:
+      "Your existing policy is still active. Review the global model roles below before updating this draft.",
+    routingConversionDraftNote:
+      "This only updates the draft in this browser. Nothing changes until you save or publish.",
+    routingConversionImpact: "{count} of 10 route cells will use the new global roles.",
+    routingConversionTitle: "One-time routing update",
+    routingConversionUnavailable:
+      "This policy cannot be converted automatically because its General Simple or Complex route is missing.",
     routingFallbackModel: "Fallback model (optional)",
     routingFallbackNone: "No fallback",
     routingMockWarning:
@@ -371,9 +379,17 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     rollback: "되돌리기",
     routing: "라우팅",
     routingAuthoringRequired:
-      "이 정책은 이전 카테고리별 라우팅 형식으로 저장되어 있습니다. 명시적으로 전환하기 전까지 기존 정책은 유지되며 임시 저장과 발행은 차단됩니다.",
+      "저장하거나 발행하기 전에 이 정책을 전역 Simple/Complex 형식으로 업데이트하세요.",
     routingComplexModel: "Complex 모델",
-    routingConvert: "전역 Simple/Complex 정책으로 전환",
+    routingConvert: "이 모델로 초안 전환",
+    routingConversionDescription:
+      "현재 운영 정책은 그대로 동작합니다. 아래 전역 모델 역할을 확인한 뒤 초안을 업데이트하세요.",
+    routingConversionDraftNote:
+      "이 작업은 현재 브라우저의 초안만 바꿉니다. 저장하거나 발행하기 전에는 운영에 반영되지 않습니다.",
+    routingConversionImpact: "전체 10개 경로 중 {count}개가 새 전역 역할로 변경됩니다.",
+    routingConversionTitle: "라우팅 정책 1회 업데이트",
+    routingConversionUnavailable:
+      "General Simple 또는 Complex 경로가 없어 이 정책을 자동으로 전환할 수 없습니다.",
     routingFallbackModel: "Fallback 모델 (선택)",
     routingFallbackNone: "Fallback 없음",
     routingMockWarning:

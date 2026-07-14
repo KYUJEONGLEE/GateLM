@@ -1,15 +1,16 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ArrowRight, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { buttonVariants } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import {
   createRuntimePolicyRoleRoutes,
+  countRuntimePolicyModelRoleConversionChanges,
   getRuntimePolicyModelRoleConversion,
   getRuntimePolicyModelRoles,
   runtimeRoutingCategories,
@@ -54,6 +55,12 @@ export function RoutingPolicyPanel({
   const conversionRoles = getRuntimePolicyModelRoleConversion(
     draftValues.routingPolicy.routes
   );
+  const conversionChangeCount = conversionRoles
+    ? countRuntimePolicyModelRoleConversionChanges(
+        draftValues.routingPolicy.routes,
+        conversionRoles
+      )
+    : 0;
   const hasMockRoute = hasMockModelInRoutes(
     draftValues.routingPolicy.routes,
     modelOptions
@@ -113,17 +120,52 @@ export function RoutingPolicyPanel({
       ) : null}
 
       {!roles ? (
-        <Alert variant="warning">
+        <Alert className="routing-migration-alert" variant="warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{text.routingConversionTitle}</AlertTitle>
           <AlertDescription>
-            <p>{text.routingAuthoringRequired}</p>
-            <button
-              className="secondary-button"
-              disabled={!conversionRoles}
-              onClick={() => conversionRoles && setRoles(conversionRoles)}
-              type="button"
-            >
-              {text.routingConvert}
-            </button>
+            <p>{text.routingConversionDescription}</p>
+            {conversionRoles ? (
+              <>
+                <dl className="routing-migration-preview">
+                  <div>
+                    <dt>{text.routingSimpleModel}</dt>
+                    <dd>{getModelRefLabel(conversionRoles.simpleModelRef, modelOptions)}</dd>
+                  </div>
+                  <div>
+                    <dt>{text.routingComplexModel}</dt>
+                    <dd>{getModelRefLabel(conversionRoles.complexModelRef, modelOptions)}</dd>
+                  </div>
+                  <div>
+                    <dt>{text.routingFallbackModel}</dt>
+                    <dd>
+                      {conversionRoles.fallbackModelRef
+                        ? getModelRefLabel(conversionRoles.fallbackModelRef, modelOptions)
+                        : text.routingFallbackNone}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="routing-migration-meta">
+                  <span>
+                    {text.routingConversionImpact.replace(
+                      "{count}",
+                      String(conversionChangeCount)
+                    )}
+                  </span>
+                  <span>{text.routingConversionDraftNote}</span>
+                </div>
+                <Button
+                  className="routing-migration-action"
+                  onClick={() => setRoles(conversionRoles)}
+                  type="button"
+                >
+                  {text.routingConvert}
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+              </>
+            ) : (
+              <p>{text.routingConversionUnavailable}</p>
+            )}
           </AlertDescription>
         </Alert>
       ) : (
@@ -296,6 +338,12 @@ function createModelRefOptions(providers: RuntimePolicyProvider[]): ModelRefOpti
   }
 
   return options;
+}
+
+function getModelRefLabel(modelRef: string, modelOptions: ModelRefOption[]) {
+  return (
+    modelOptions.find((option) => option.modelRef === modelRef)?.label ?? modelRef
+  );
 }
 
 function getProviderFamily(provider: RuntimePolicyProvider) {
