@@ -8,6 +8,7 @@ import { EmailSender, InMemoryEmailSender } from '@/modules/auth/email-sender';
 import { SmtpEmailSender } from '@/modules/auth/smtp-email-sender';
 
 import { EmployeesController } from './employees.controller';
+import { EmployeeUsageService } from './employee-usage.service';
 import { EmployeesService } from './employees.service';
 
 @Module({
@@ -15,6 +16,7 @@ import { EmployeesService } from './employees.service';
   controllers: [EmployeesController],
   providers: [
     EmployeesService,
+    EmployeeUsageService,
     AdminAuthGuard,
     {
       provide: EMAIL_SENDER,

@@ -10,7 +10,9 @@ test("employee management validates tenant access before loading employees", asy
     "if (!hasConsoleTenantAccess(auth, effectiveTenantId))"
   );
   const employeesReadIndex = pageSource.indexOf("getEmployeeControlModel(effectiveTenantId)");
+  const usageReadIndex = pageSource.indexOf("getAllEmployeeUsage({");
 
   expect(accessGuardIndex).toBeGreaterThan(-1);
   expect(employeesReadIndex).toBeGreaterThan(accessGuardIndex);
+  expect(usageReadIndex).toBeGreaterThan(accessGuardIndex);
 });

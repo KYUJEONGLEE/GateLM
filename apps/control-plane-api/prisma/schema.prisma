@@ -87,6 +87,7 @@ model Tenant {
   dashboardRollupBucketStates     DashboardRollupBucketState[]
   dashboardRollupTotals           DashboardRollupTotal[]
   dashboardRollupDimensions       DashboardRollupDimension[]
+  employeeUsageRollups            EmployeeUsageRollup[]
 
   @@map("tenants")
 }
@@ -387,7 +388,9 @@ model Employee {
   projectAssignments          ProjectEmployeeAssignment[]
   tenantChatRequestAdmissions TenantChatRequestAdmission[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
+  usageRollups                EmployeeUsageRollup[]
 
+  @@unique([id, tenantId], map: "employees_identity_tenant_key")
   @@index([tenantId, status])
   @@index([tenantId, invitationStatus])
   @@index([tenantId, department])
@@ -1283,24 +1286,52 @@ model DashboardRollupDirtyBucket {
 }
 
 model DashboardRollupBucketState {
-  tenantId          String    @map("tenant_id") @db.Uuid
-  surface           String
-  grain             String
-  bucketStart       DateTime  @map("bucket_start") @db.Timestamptz(6)
-  state             String
-  sourceMaxAt       DateTime? @map("source_max_at") @db.Timestamptz(6)
-  aggregatedAt      DateTime? @map("aggregated_at") @db.Timestamptz(6)
-  histogramVersion  Int       @default(1) @map("histogram_version")
-  lastErrorCode     String?   @map("last_error_code")
-  totalRowCount     Int       @default(0) @map("total_row_count")
-  dimensionRowCount Int       @default(0) @map("dimension_row_count")
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenantId              String    @map("tenant_id") @db.Uuid
+  surface               String
+  grain                 String
+  bucketStart           DateTime  @map("bucket_start") @db.Timestamptz(6)
+  state                 String
+  sourceMaxAt           DateTime? @map("source_max_at") @db.Timestamptz(6)
+  aggregatedAt          DateTime? @map("aggregated_at") @db.Timestamptz(6)
+  histogramVersion      Int       @default(1) @map("histogram_version")
+  lastErrorCode         String?   @map("last_error_code")
+  totalRowCount         Int       @default(0) @map("total_row_count")
+  dimensionRowCount     Int       @default(0) @map("dimension_row_count")
+  employeeUsageReady    Boolean   @default(false) @map("employee_usage_ready")
+  employeeUsageRowCount Int       @default(0) @map("employee_usage_row_count")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "dashboard_rollup_bucket_states_tenant_fkey")
 
   @@id([tenantId, surface, grain, bucketStart])
   @@map("dashboard_rollup_bucket_states")
+}
+
+model EmployeeUsageRollup {
+  tenantId     String    @map("tenant_id") @db.Uuid
+  employeeId   String    @map("employee_id") @db.Uuid
+  surface      String
+  grain        String
+  bucketStart  DateTime  @map("bucket_start") @db.Timestamptz(6)
+  projectId    String    @default("") @map("project_id")
+  requestCount BigInt    @default(0) @map("request_count")
+  inputTokens  BigInt    @default(0) @map("input_tokens")
+  outputTokens BigInt    @default(0) @map("output_tokens")
+  totalTokens  BigInt    @default(0) @map("total_tokens")
+  costMicroUsd BigInt    @default(0) @map("cost_micro_usd")
+  sourceMaxAt  DateTime? @map("source_max_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "employee_usage_rollups_tenant_fkey")
+  employee Employee @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "employee_usage_rollups_employee_tenant_fkey")
+
+  @@id([tenantId, employeeId, surface, grain, bucketStart, projectId])
+  @@index([tenantId, surface, grain, bucketStart], map: "employee_usage_rollups_period_idx")
+  @@index([tenantId, grain, bucketStart, totalTokens(sort: Desc)], map: "employee_usage_rollups_ranking_idx")
+  @@index([tenantId, employeeId, grain, bucketStart], map: "employee_usage_rollups_employee_idx")
+  @@map("employee_usage_rollups")
 }
 
 model DashboardRollupTotal {
