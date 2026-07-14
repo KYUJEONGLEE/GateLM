@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   createRuntimePolicyRoleRoutes,
   countRuntimePolicyModelRoleConversionChanges,
@@ -17,28 +18,24 @@ import {
   runtimeRoutingDifficulties,
   type RuntimePolicyDraftValues,
   type RuntimePolicyModel,
-  type RuntimePolicyModelRoles,
-  type RuntimePolicyProvider
+  type RuntimePolicyModelRoles
 } from "@/lib/control-plane/runtime-policy-types";
 
 import type {
   RuntimePolicyDraftValuesSetter,
   RuntimePolicyEditorText
 } from "../runtime-policy-editor-types";
-
-type ModelRefOption = {
-  family: string;
-  label: string;
-  modelRef: string;
-  providerName: string;
-};
+import {
+  getRoutingModelOptions,
+  type RoutingModelOption
+} from "../runtime-policy-editor-utils";
 
 export type RoutingPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   providerCatalog: RuntimePolicyModel["providerCatalog"];
+  providerConnections: ProviderConnectionRecord[];
   providerManagementHref?: string;
-  providers: RuntimePolicyProvider[];
   text: RuntimePolicyEditorText;
 };
 
@@ -46,11 +43,14 @@ export function RoutingPolicyPanel({
   draftValues,
   onDraftValuesChange,
   providerCatalog,
+  providerConnections,
   providerManagementHref,
-  providers,
   text
 }: RoutingPolicyPanelProps) {
-  const modelOptions = useMemo(() => createModelRefOptions(providers), [providers]);
+  const modelOptions = useMemo(
+    () => createModelRefOptions(providerConnections),
+    [providerConnections]
+  );
   const [manualSetupRoles, setManualSetupRoles] = useState<RuntimePolicyModelRoles>({
     complexModelRef: "",
     fallbackModelRef: null,
@@ -345,7 +345,7 @@ function RoleModelSelect({
   allowEmpty?: boolean;
   excludedModelRefs?: string[];
   label: string;
-  modelOptions: ModelRefOption[];
+  modelOptions: RoutingModelOption[];
   noneLabel?: string;
   onChange: (modelRef: string) => void;
   value: string;
@@ -392,20 +392,10 @@ function RoleModelSelect({
   );
 }
 
-function createModelRefOptions(providers: RuntimePolicyProvider[]): ModelRefOption[] {
-  const options = providers
-    .filter((provider) => provider.status !== "disabled")
-    .flatMap((provider) =>
-      provider.models.map((modelId) => ({
-        family: getProviderFamily(provider),
-        label: `${provider.displayName} / ${modelId}`,
-        modelRef:
-          provider.provider === "mock" && modelId === "mock-balanced"
-            ? "mock-balanced"
-            : `${provider.providerId}:${modelId}`,
-        providerName: provider.provider
-      }))
-    );
+function createModelRefOptions(
+  providerConnections: ProviderConnectionRecord[]
+): RoutingModelOption[] {
+  const options = getRoutingModelOptions(providerConnections);
 
   if (!options.some((option) => option.modelRef === "mock-balanced")) {
     options.unshift({
@@ -419,23 +409,15 @@ function createModelRefOptions(providers: RuntimePolicyProvider[]): ModelRefOpti
   return options;
 }
 
-function getModelRefLabel(modelRef: string, modelOptions: ModelRefOption[]) {
+function getModelRefLabel(modelRef: string, modelOptions: RoutingModelOption[]) {
   return (
     modelOptions.find((option) => option.modelRef === modelRef)?.label ?? modelRef
   );
 }
 
-function getProviderFamily(provider: RuntimePolicyProvider) {
-  const key = `${provider.provider} ${provider.displayName} ${provider.baseUrl}`.toLowerCase();
-  if (key.includes("anthropic") || key.includes("claude")) return "claude";
-  if (key.includes("gemini") || key.includes("google")) return "gemini";
-  if (key.includes("mock")) return "mock";
-  return "openai";
-}
-
 function hasMockModelInRoutes(
   routes: RuntimePolicyDraftValues["routingPolicy"]["routes"],
-  modelOptions: ModelRefOption[]
+  modelOptions: RoutingModelOption[]
 ) {
   return runtimeRoutingCategories.some((category) =>
     runtimeRoutingDifficulties.some((difficulty) =>
@@ -446,7 +428,7 @@ function hasMockModelInRoutes(
   );
 }
 
-function isMockModelRef(modelRef: string, modelOptions: ModelRefOption[]) {
+function isMockModelRef(modelRef: string, modelOptions: RoutingModelOption[]) {
   return (
     modelRef === "mock-balanced" ||
     modelOptions.find((option) => option.modelRef === modelRef)?.providerName === "mock"

@@ -802,8 +802,8 @@ export function RuntimePolicyEditor({
               draftValues={draftValues}
               onDraftValuesChange={setDraftValues}
               providerCatalog={model.providerCatalog}
+              providerConnections={model.providerConnections.available}
               providerManagementHref={providerManagementHref}
-              providers={model.activeConfig.providers}
               text={text}
             />
           </Suspense>

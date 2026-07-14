@@ -12,6 +12,7 @@ import {
 import {
   createMockBootstrapRoutingPolicy,
   getRoutingModelRef,
+  getRoutingModelOptions,
   getRoutingProviderOptions,
   getSelectedRoutingProviderConnections,
   getWritableRuntimePolicyDraftValues,
@@ -98,6 +99,38 @@ test("routing provider options use display names and provider families", () => {
     provider: "gemini-provider",
     providerId: "provider-gemini"
   });
+});
+
+test("all active tenant provider models are available as routing candidates", () => {
+  const openai = createProviderConnection("provider-openai", "openai-main", ["gpt-4o-mini"]);
+  const gemini = createProviderConnection("provider-gemini", "gemini-main", [
+    "gemini-2.5-flash"
+  ]);
+  const disabled = createProviderConnection(
+    "provider-disabled",
+    "anthropic-main",
+    ["claude-sonnet-4"],
+    "DISABLED"
+  );
+  const projectScoped = {
+    ...createProviderConnection("provider-project", "project-only", ["project-model"]),
+    projectId: "project-test"
+  };
+
+  expect(getRoutingModelOptions([openai, gemini, disabled, projectScoped])).toEqual([
+    {
+      family: "openai",
+      label: "openai-main / gpt-4o-mini",
+      modelRef: "provider-openai:gpt-4o-mini",
+      providerName: "openai-main"
+    },
+    {
+      family: "gemini",
+      label: "gemini-main / gemini-2.5-flash",
+      modelRef: "provider-gemini:gemini-2.5-flash",
+      providerName: "gemini-main"
+    }
+  ]);
 });
 
 test("mandatory safety detector classification stays fixed", () => {
