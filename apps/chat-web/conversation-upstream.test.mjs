@@ -197,3 +197,15 @@ test('failed session refresh preserves the original unauthorized response body',
   assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), { code: 'CHAT_AUTH_REQUIRED' });
 });
+
+test('browser fetch keeps the global receiver instead of the retry options object', async () => {
+  const response = await fetchWithSessionRefresh('/api/tenant-chat/auth/session', undefined, {
+    fetchImpl: function fetchImpl() {
+      assert.equal(this, globalThis);
+      return Promise.resolve(Response.json({ state: 'authenticated' }));
+    },
+    prepare: (value) => value,
+  });
+
+  assert.equal(response.status, 200);
+});
