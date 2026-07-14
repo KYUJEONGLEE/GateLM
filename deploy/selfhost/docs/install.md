@@ -87,6 +87,7 @@ Minimum values to review:
 | `GATELM_GATEWAY_API_KEY` | Runtime project Gateway API key for smoke and public chat |
 | `CONTROL_PLANE_INTERNAL_SERVICE_TOKEN` | Control Plane internal read token for Gateway |
 | `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` | Gateway copy of the Control Plane internal read token |
+| `GATEWAY_OBSERVABILITY_INTERNAL_TOKEN` | Separate server-only Web-to-Gateway observability read token |
 
 Demo seed is disabled for self-host/prod-like deployments. Keep demo UUID values only for non-prod local seed experiments:
 

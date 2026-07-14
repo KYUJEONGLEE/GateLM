@@ -46,6 +46,7 @@ export async function getTenantChatLiveRequests(
         difficulty: "simple" as const,
         id: invocation.requestId,
         latencyMs: invocation.latencyMs,
+        ttftMs: null,
         modelRef: null,
         projectId: "",
         projectName: "Tenant Chat",

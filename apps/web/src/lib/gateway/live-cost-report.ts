@@ -2,7 +2,10 @@ import "server-only";
 
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
-import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  getGatewayObservabilityHeaders,
+  getLiveGatewayConfig
+} from "@/lib/gateway/live-gateway-config";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 
 export type LiveCostOverTimeFilters = {
@@ -76,9 +79,7 @@ export async function getLiveCostOverTime(
   appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(`${config.baseUrl}/api/reports/costs?${query.toString()}`, {
-    headers: {
-      "X-GateLM-Request-Id": `request_web_cost_over_time_${Date.now()}`
-    },
+    headers: getGatewayObservabilityHeaders(`request_web_cost_over_time_${Date.now()}`),
     cache: "no-store"
   }).catch(() => undefined);
 
@@ -105,9 +106,7 @@ export async function getLiveMonthlyProjectCostReport(
 
   const response = await fetch(`${config.baseUrl}/api/reports/costs?${query.toString()}`, {
     cache: "no-store",
-    headers: {
-      "X-GateLM-Request-Id": `request_web_project_costs_${Date.now()}`
-    }
+    headers: getGatewayObservabilityHeaders(`request_web_project_costs_${Date.now()}`)
   }).catch(() => undefined);
 
   if (!response?.ok) {

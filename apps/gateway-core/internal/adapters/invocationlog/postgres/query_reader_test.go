@@ -37,6 +37,9 @@ func TestBuildProjectLogsQueryUsesTenantProjectScopeAndSafeColumns(t *testing.T)
 	if !strings.Contains(query, "from p0_llm_invocation_logs") {
 		t.Fatalf("expected p0 fallback table query, got %s", query)
 	}
+	if !strings.Contains(query, "ttft_ms") {
+		t.Fatalf("request log list query must expose nullable TTFT, got %s", query)
+	}
 	for _, expected := range []string{
 		"tenant_id = $1",
 		"project_id = $2",
@@ -230,6 +233,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				int64(56),
 				int64(1),
 				int64(132),
+				sql.NullInt64{Int64: 84, Valid: true},
 				invocationlog.CacheStatusMiss,
 				invocationlog.CacheTypeExact,
 				sql.NullString{String: "category_difficulty_matrix", Valid: true},
@@ -257,6 +261,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	item := items[0]
 	if item.RequestID != "request_001" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
+	}
+	if item.TTFTMs == nil || *item.TTFTMs != 84 {
+		t.Fatalf("unexpected list item TTFT: %+v", item.TTFTMs)
 	}
 	if item.UserRef != "Yoonji" {
 		t.Fatalf("unexpected user ref: %+v", item)
@@ -305,6 +312,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			int64(56),
 			int64(1),
 			int64(132),
+			sql.NullInt64{Int64: 84, Valid: true},
 			providerLatencyMs,
 			invocationlog.CacheStatusMiss,
 			invocationlog.CacheTypeExact,
@@ -337,6 +345,9 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	}
 	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.Category != "general" {
 		t.Fatalf("unexpected cache/routing detail: %+v %+v", detail.Cache, detail.Routing)
+	}
+	if detail.Latency.TTFTMs == nil || *detail.Latency.TTFTMs != 84 || detail.LatencySummary.TTFTMs == nil || *detail.LatencySummary.TTFTMs != 84 {
+		t.Fatalf("unexpected detail TTFT: latency=%+v summary=%+v", detail.Latency, detail.LatencySummary)
 	}
 	if detail.ProviderAttempt == nil || detail.ProviderAttempt.ProviderID != "mock" || detail.ProviderAttempt.ModelID != "mock-fast" || detail.ProviderAttempt.Outcome != "success" {
 		t.Fatalf("unexpected provider attempt detail: %+v", detail.ProviderAttempt)
@@ -463,6 +474,12 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			sql.NullFloat64{Float64: 34, Valid: true},
 			sql.NullFloat64{Float64: 86, Valid: true},
 			sql.NullFloat64{Float64: 120, Valid: true},
+			sql.NullFloat64{Float64: 80, Valid: true},
+			sql.NullFloat64{Float64: 70, Valid: true},
+			sql.NullFloat64{Float64: 110, Valid: true},
+			sql.NullFloat64{Float64: 130, Valid: true},
+			int64(4),
+			int64(3),
 			[]byte(`{"success":3,"blocked":1,"rate_limited":1,"failed":1,"cancelled":1}`),
 			[]byte(`{"none":4,"redacted":1,"blocked":1}`),
 			[]byte(`{"passed":4,"redacted":1,"blocked":1}`),
@@ -516,6 +533,16 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {
 		t.Fatalf("unexpected performance split: %+v", overview.Performance)
 	}
+	if overview.Performance.GatewayTTFT.Scope != "project_application" ||
+		overview.Performance.GatewayTTFT.AverageMs == nil || !floatEquals(*overview.Performance.GatewayTTFT.AverageMs, 80) ||
+		overview.Performance.GatewayTTFT.P50Ms == nil || !floatEquals(*overview.Performance.GatewayTTFT.P50Ms, 70) ||
+		overview.Performance.GatewayTTFT.P95Ms == nil || !floatEquals(*overview.Performance.GatewayTTFT.P95Ms, 110) ||
+		overview.Performance.GatewayTTFT.P99Ms == nil || !floatEquals(*overview.Performance.GatewayTTFT.P99Ms, 130) ||
+		overview.Performance.GatewayTTFT.EligibleStreamRequests != 4 ||
+		overview.Performance.GatewayTTFT.ObservedRequests != 3 ||
+		overview.Performance.GatewayTTFT.CoverageRate == nil || !floatEquals(*overview.Performance.GatewayTTFT.CoverageRate, 0.75) {
+		t.Fatalf("unexpected gateway TTFT: %+v", overview.Performance.GatewayTTFT)
+	}
 	if len(overview.ProjectBreakdown) != 1 || overview.ProjectBreakdown[0].ProjectID != "project_demo" || overview.ProjectBreakdown[0].TotalTokens != 33 || overview.ProjectBreakdown[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected project breakdown: %+v", overview.ProjectBreakdown)
 	}
@@ -544,6 +571,12 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact'",
 		"saved_cost_micro_usd",
 		"percentile_disc(0.95)",
+		"avg(ttft_ms) filter (where stream and ttft_ms is not null)",
+		"percentile_disc(0.50) within group (order by ttft_ms) filter (where stream and ttft_ms is not null)",
+		"percentile_disc(0.95) within group (order by ttft_ms) filter (where stream and ttft_ms is not null)",
+		"percentile_disc(0.99) within group (order by ttft_ms) filter (where stream and ttft_ms is not null)",
+		"count(*) filter (where stream)::bigint as eligible_stream_requests",
+		"count(*) filter (where stream and ttft_ms is not null)::bigint as observed_ttft_requests",
 		"status_counts",
 		"masking_action_counts",
 		"safety_outcome_counts",
@@ -948,12 +981,15 @@ func (q *fakeQueryer) QueryRow(_ context.Context, query string, arguments ...any
 }
 
 type fakeRows struct {
-	values [][]any
-	index  int
-	err    error
+	values     [][]any
+	index      int
+	err        error
+	closeCount int
 }
 
-func (r *fakeRows) Close() {}
+func (r *fakeRows) Close() {
+	r.closeCount++
+}
 
 func (r *fakeRows) Err() error {
 	return r.err
@@ -1002,6 +1038,8 @@ func assignScanValues(dest []any, values []any) error {
 			*target = values[index].(time.Time)
 		case *[]byte:
 			*target = values[index].([]byte)
+		case *[]int64:
+			*target = append((*target)[:0], values[index].([]int64)...)
 		case *sql.NullString:
 			*target = values[index].(sql.NullString)
 		case *sql.NullInt64:

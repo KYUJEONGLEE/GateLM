@@ -64,6 +64,8 @@ type Config struct {
 	ControlPlaneBaseURL                    string
 	ControlPlaneInternalToken              string
 	ControlPlaneTimeout                    time.Duration
+	ObservabilityInternalToken             string
+	ObservabilityAuthRequired              bool
 	RuntimeSnapshotMode                    string
 	RuntimeSnapshotCache                   RuntimeSnapshotCacheConfig
 	ProviderCatalogCache                   ProviderCatalogCacheConfig
@@ -240,6 +242,7 @@ func LoadWithError() (Config, error) {
 	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
 	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
 	deploymentMode := normalizeDeploymentMode(envString("DEPLOYMENT_MODE", ""))
+	requireObservabilityAuth := observabilityAuthRequired(deploymentMode)
 	cfg := Config{
 		Port:        envString("GATEWAY_PORT", "8080"),
 		DatabaseURL: databaseURL,
@@ -263,8 +266,10 @@ func LoadWithError() (Config, error) {
 		ControlPlaneInternalToken: strings.TrimSpace(
 			envString("GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN", ""),
 		),
-		ControlPlaneTimeout: envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
-		RuntimeSnapshotMode: envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
+		ControlPlaneTimeout:        envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
+		ObservabilityInternalToken: strings.TrimSpace(envString("GATEWAY_OBSERVABILITY_INTERNAL_TOKEN", "")),
+		ObservabilityAuthRequired:  requireObservabilityAuth,
+		RuntimeSnapshotMode:        envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
 		RuntimeSnapshotCache: RuntimeSnapshotCacheConfig{
 			Enabled:  envBool("GATEWAY_RUNTIME_SNAPSHOT_CACHE_ENABLED", true),
 			TTL:      envDurationMillis("GATEWAY_RUNTIME_SNAPSHOT_CACHE_TTL_MS", 5000),
@@ -398,6 +403,9 @@ func LoadWithError() (Config, error) {
 	if err := validateTenantChatPrivateConfig(cfg); err != nil {
 		return cfg, err
 	}
+	if err := validateObservabilityAuthConfig(cfg); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
@@ -505,6 +513,84 @@ func productionLikeMode(value string) bool {
 	default:
 		return false
 	}
+}
+
+func observabilityAuthRequired(deploymentMode string) bool {
+	if observabilityAuthRequiredEnv() || productionLikeEnv() {
+		return true
+	}
+
+	for _, value := range []string{
+		deploymentMode,
+		os.Getenv("NODE_ENV"),
+		os.Getenv("APP_ENV"),
+		os.Getenv("ENV"),
+		os.Getenv("DEPLOYMENT_ENV"),
+		os.Getenv("GATELM_DEPLOYMENT_ENV"),
+	} {
+		if observabilityProductionLikeMode(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func observabilityAuthRequiredEnv() bool {
+	value := strings.TrimSpace(os.Getenv("GATEWAY_OBSERVABILITY_AUTH_REQUIRED"))
+	if value == "" {
+		return false
+	}
+	parsed, err := strconv.ParseBool(value)
+	// An invalid security switch must never silently disable the boundary.
+	return err != nil || parsed
+}
+
+func observabilityProductionLikeMode(value string) bool {
+	if productionLikeMode(value) {
+		return true
+	}
+	switch normalizeDeploymentMode(value) {
+	case "self_host", "release", "aws_triage":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateObservabilityAuthConfig(cfg Config) error {
+	if !cfg.ObservabilityAuthRequired {
+		return nil
+	}
+	if IsWeakObservabilityInternalToken(cfg.ObservabilityInternalToken) {
+		return errors.New("GATEWAY_OBSERVABILITY_INTERNAL_TOKEN must be a non-placeholder value of at least 32 characters when observability auth is required")
+	}
+	return nil
+}
+
+// IsWeakObservabilityInternalToken rejects values that are too short or look
+// like deployment placeholders. It is exported so manually constructed router
+// configs retain the same fail-closed behavior as LoadWithError.
+func IsWeakObservabilityInternalToken(value string) bool {
+	value = strings.TrimSpace(value)
+	normalized := strings.ToLower(value)
+	compact := strings.NewReplacer("-", "", "_", "", " ", "").Replace(normalized)
+	if len(value) < 32 {
+		return true
+	}
+	for _, marker := range []string{
+		"changeme",
+		"demo",
+		"devonly",
+		"example",
+		"placeholder",
+		"replaceme",
+		"redacted",
+	} {
+		if strings.Contains(compact, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeRateLimitBackend(value string) string {

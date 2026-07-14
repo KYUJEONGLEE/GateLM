@@ -18,7 +18,9 @@ perf_wait_for_http \
   15
 perf_assert_no_live_provider_credentials
 
-if ! perf_compose exec -T control-plane-api node - < "${SCRIPT_DIR}/perf-preflight.mjs"; then
+if ! perf_compose exec -T \
+  -e GATEWAY_OBSERVABILITY_INTERNAL_TOKEN="${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN}" \
+  control-plane-api node - < "${SCRIPT_DIR}/perf-preflight.mjs"; then
   perf_fail "Mock routing preflight failed. Do not run k6 against this environment."
 fi
 

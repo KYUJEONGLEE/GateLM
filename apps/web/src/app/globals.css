@@ -1741,6 +1741,11 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   max-width: 240px;
 }
 
+.dashboard-source-warning[data-status="too_broad"],
+.dashboard-source-warning[data-status="unavailable"] {
+  color: #b91c1c;
+}
+
 .dashboard-filter-input {
   position: relative;
   display: grid;
@@ -1803,7 +1808,7 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 }
 
 .dashboard-overview-workspace .dashboard-kpi-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .dashboard-main-panel {
@@ -8910,6 +8915,38 @@ html[data-theme="dark"] .request-log-screen {
 .request-log-time-cell {
   color: color-mix(in srgb, var(--request-log-text) 88%, var(--request-log-muted));
   white-space: nowrap;
+}
+
+.request-log-latency-cell {
+  display: grid;
+  min-width: 120px;
+  gap: 4px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.request-log-latency-cell > div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.request-log-latency-cell dt,
+.request-log-latency-cell dd {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.request-log-latency-cell dt {
+  color: var(--request-log-muted);
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+  font-weight: var(--font-weight-medium);
+}
+
+.request-log-latency-cell dd {
+  color: var(--request-log-text);
+  font-weight: var(--font-weight-semibold);
 }
 
 .request-log-project-pill {

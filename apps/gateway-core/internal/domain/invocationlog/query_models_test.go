@@ -283,6 +283,33 @@ func TestBuildDashboardOverviewCacheHitRateUsesOnlyExactCacheEligibleRequests(t 
 	}
 }
 
+func TestBuildDashboardOverviewGatewayTTFTUsesOnlyEligibleStreams(t *testing.T) {
+	fastTTFT := int64(50)
+	slowTTFT := int64(150)
+	nonStreamTTFT := int64(1)
+	logs := []LlmInvocationLog{
+		{Status: StatusSuccess, Stream: true, TTFTMs: &fastTTFT},
+		{Status: StatusSuccess, Stream: true, TTFTMs: &slowTTFT},
+		{Status: StatusFailed, Stream: true, TTFTMs: nil},
+		{Status: StatusSuccess, Stream: false, TTFTMs: &nonStreamTTFT},
+	}
+
+	overview := BuildDashboardOverview(logs)
+	ttft := overview.Performance.GatewayTTFT
+	if ttft.Scope != "project_application" || ttft.EligibleStreamRequests != 3 || ttft.ObservedRequests != 2 {
+		t.Fatalf("unexpected TTFT eligibility: %+v", ttft)
+	}
+	if ttft.AverageMs == nil || *ttft.AverageMs != 100 ||
+		ttft.P50Ms == nil || *ttft.P50Ms != 50 ||
+		ttft.P95Ms == nil || *ttft.P95Ms != 150 ||
+		ttft.P99Ms == nil || *ttft.P99Ms != 150 {
+		t.Fatalf("unexpected TTFT distribution: %+v", ttft)
+	}
+	if ttft.CoverageRate == nil || !floatEquals(*ttft.CoverageRate, 2.0/3.0) {
+		t.Fatalf("unexpected TTFT coverage: %+v", ttft.CoverageRate)
+	}
+}
+
 func TestBuildDashboardOverviewEmptyRangeReturnsZeroRatesAndNoLatency(t *testing.T) {
 	overview := BuildDashboardOverview(nil)
 
@@ -294,6 +321,9 @@ func TestBuildDashboardOverviewEmptyRangeReturnsZeroRatesAndNoLatency(t *testing
 	}
 	if overview.AverageLatencyMs != nil || overview.P95LatencyMs != nil {
 		t.Fatalf("expected nil latency metrics for empty range, got avg=%+v p95=%+v", overview.AverageLatencyMs, overview.P95LatencyMs)
+	}
+	if overview.Performance.GatewayTTFT.Scope != "project_application" || overview.Performance.GatewayTTFT.CoverageRate != nil {
+		t.Fatalf("empty TTFT coverage must be unknown, got %+v", overview.Performance.GatewayTTFT)
 	}
 	if overview.StatusCounts[StatusSuccess] != 0 || overview.MaskingActionCounts["none"] != 0 {
 		t.Fatalf("expected default zero count maps, got status=%+v masking=%+v", overview.StatusCounts, overview.MaskingActionCounts)

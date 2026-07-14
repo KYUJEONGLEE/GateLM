@@ -33,6 +33,7 @@
     "costUsd": "0.000000",
     "currency": "USD",
     "latencyMs": 12,
+    "ttftMs": null,
     "status": "success",
     "httpStatus": 200,
     "errorCode": null,

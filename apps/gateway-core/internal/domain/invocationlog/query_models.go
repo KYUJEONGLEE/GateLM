@@ -105,6 +105,7 @@ type LlmInvocationLog struct {
 	CostMicroUSD                int64
 	SavedCostMicroUSD           int64
 	LatencyMs                   int64
+	TTFTMs                      *int64
 	ProviderLatencyMs           *int64
 	Status                      string
 	TerminalStatus              string
@@ -166,6 +167,7 @@ type RequestLogListItem struct {
 	CostUSD          string
 	CostMicroUSD     int64
 	LatencyMs        int64
+	TTFTMs           *int64
 	CacheStatus      string
 	CacheType        string
 	RoutingReason    string
@@ -223,6 +225,7 @@ type CostFields struct {
 
 type LatencyFields struct {
 	LatencyMs         int64
+	TTFTMs            *int64
 	ProviderLatencyMs *int64
 }
 
@@ -272,6 +275,7 @@ type LatencySummaryFields struct {
 	GatewayInternalLatencyMs int64
 	ProviderLatencyMs        *int64
 	TotalLatencyMs           int64
+	TTFTMs                   *int64
 }
 
 type UsageSummaryFields struct {
@@ -508,6 +512,18 @@ type DashboardPerformance struct {
 	P95ProviderLatencyMs        *float64
 	P99ProviderLatencyMs        *float64
 	SystemErrorRate             float64
+	GatewayTTFT                 DashboardGatewayTTFT
+}
+
+type DashboardGatewayTTFT struct {
+	Scope                  string
+	AverageMs              *float64
+	P50Ms                  *float64
+	P95Ms                  *float64
+	P99Ms                  *float64
+	EligibleStreamRequests int64
+	ObservedRequests       int64
+	CoverageRate           *float64
 }
 
 type DashboardOverviewFields struct {
@@ -568,6 +584,12 @@ type DashboardOverviewAggregate struct {
 	P99GatewayInternalLatencyMs *float64
 	P95ProviderLatencyMs        *float64
 	P99ProviderLatencyMs        *float64
+	AverageTTFTMs               *float64
+	P50TTFTMs                   *float64
+	P95TTFTMs                   *float64
+	P99TTFTMs                   *float64
+	EligibleStreamRequests      int64
+	ObservedTTFTRequests        int64
 	MaskingActionCounts         map[string]int64
 	RoutingCountByModel         []RoutingCountByModel
 	StatusCounts                map[string]int64
@@ -815,6 +837,7 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		CostUSD:          FormatCostUSDFromMicroUSD(log.CostMicroUSD),
 		CostMicroUSD:     log.CostMicroUSD,
 		LatencyMs:        log.LatencyMs,
+		TTFTMs:           cloneNonNegativeInt64Pointer(log.TTFTMs),
 		CacheStatus:      defaultString(log.CacheStatus, CacheStatusBypass),
 		CacheType:        defaultString(log.CacheType, CacheTypeNone),
 		RoutingReason:    log.RoutingReason,
@@ -837,7 +860,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 			SanitizedErrorCode: domainOutcomes.Provider.SanitizedErrorCode,
 		}
 	}
-	latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs)
+	latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs, log.TTFTMs)
 	safetySummary := SafetySummaryFields{
 		Outcome:                 domainOutcomes.Safety.Outcome,
 		DetectedCount:           log.MaskingDetectedCount,
@@ -879,6 +902,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		},
 		Latency: LatencyFields{
 			LatencyMs:         log.LatencyMs,
+			TTFTMs:            cloneNonNegativeInt64Pointer(log.TTFTMs),
 			ProviderLatencyMs: log.ProviderLatencyMs,
 		},
 		LatencySummary: latencySummary,
@@ -1062,7 +1086,7 @@ func legacyCacheOutcome(cacheStatus string) string {
 	}
 }
 
-func BuildLatencySummary(totalLatencyMs int64, providerLatencyMs *int64) LatencySummaryFields {
+func BuildLatencySummary(totalLatencyMs int64, providerLatencyMs *int64, ttftMs *int64) LatencySummaryFields {
 	gatewayInternalLatencyMs := totalLatencyMs
 	if providerLatencyMs != nil {
 		gatewayInternalLatencyMs = totalLatencyMs - *providerLatencyMs
@@ -1074,6 +1098,7 @@ func BuildLatencySummary(totalLatencyMs int64, providerLatencyMs *int64) Latency
 		GatewayInternalLatencyMs: gatewayInternalLatencyMs,
 		ProviderLatencyMs:        providerLatencyMs,
 		TotalLatencyMs:           totalLatencyMs,
+		TTFTMs:                   cloneNonNegativeInt64Pointer(ttftMs),
 	}
 }
 
@@ -1081,6 +1106,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	var latencies []int64
 	var gatewayInternalLatencies []int64
 	var providerLatencies []int64
+	var ttftValues []int64
 	var maxCreatedAt time.Time
 	aggregate := DashboardOverviewAggregate{
 		StatusCounts:          defaultStatusCounts(),
@@ -1100,7 +1126,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, log.ApplicationID)
 		terminalStatus := NormalizeTerminalStatus(firstNonEmptyString(log.TerminalStatus, log.Status))
 		domainOutcomes := NormalizeDomainOutcomes(log)
-		latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs)
+		latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs, log.TTFTMs)
 		aggregate.TotalRequests++
 		incrementCount(aggregate.StatusCounts, terminalStatus)
 		incrementCount(aggregate.MaskingActionCounts, defaultString(log.MaskingAction, "none"))
@@ -1137,6 +1163,13 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		aggregate.TotalTokens += log.TotalTokens
 		aggregate.TotalCostMicroUSD += log.CostMicroUSD
 		aggregate.SavedCostMicroUSD += log.SavedCostMicroUSD
+		if log.Stream {
+			aggregate.EligibleStreamRequests++
+			if log.TTFTMs != nil && *log.TTFTMs >= 0 {
+				aggregate.ObservedTTFTRequests++
+				ttftValues = append(ttftValues, *log.TTFTMs)
+			}
+		}
 		if resolvedBudgetScope.ID != "" {
 			budgetKey := budgetScopeKey{
 				scopeType:  resolvedBudgetScope.Type,
@@ -1213,6 +1246,16 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		aggregate.P95ProviderLatencyMs = &p95
 		aggregate.P99ProviderLatencyMs = &p99
 	}
+	if len(ttftValues) > 0 {
+		average := averageInt64(ttftValues)
+		p50 := percentileDiscInt64(ttftValues, 0.50)
+		p95 := percentileDiscInt64(ttftValues, 0.95)
+		p99 := percentileDiscInt64(ttftValues, 0.99)
+		aggregate.AverageTTFTMs = &average
+		aggregate.P50TTFTMs = &p50
+		aggregate.P95TTFTMs = &p95
+		aggregate.P99TTFTMs = &p99
+	}
 	if !maxCreatedAt.IsZero() {
 		aggregate.LastLogCreatedAt = &maxCreatedAt
 	}
@@ -1276,7 +1319,20 @@ func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) D
 			P99GatewayInternalLatencyMs: aggregate.P99GatewayInternalLatencyMs,
 			P95ProviderLatencyMs:        aggregate.P95ProviderLatencyMs,
 			P99ProviderLatencyMs:        aggregate.P99ProviderLatencyMs,
+			GatewayTTFT: DashboardGatewayTTFT{
+				Scope:                  "project_application",
+				AverageMs:              aggregate.AverageTTFTMs,
+				P50Ms:                  aggregate.P50TTFTMs,
+				P95Ms:                  aggregate.P95TTFTMs,
+				P99Ms:                  aggregate.P99TTFTMs,
+				EligibleStreamRequests: aggregate.EligibleStreamRequests,
+				ObservedRequests:       aggregate.ObservedTTFTRequests,
+			},
 		},
+	}
+	if aggregate.EligibleStreamRequests > 0 {
+		coverageRate := float64(aggregate.ObservedTTFTRequests) / float64(aggregate.EligibleStreamRequests)
+		overview.Performance.GatewayTTFT.CoverageRate = &coverageRate
 	}
 	cacheHitRate := 0.0
 	if aggregate.CacheEligibleRequests > 0 {

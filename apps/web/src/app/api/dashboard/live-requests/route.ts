@@ -4,6 +4,7 @@ import {
   isProjectScopedForTenant,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import {
   getTenantChatLiveRequests,
@@ -23,10 +24,17 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedProjectId = optionalQueryValue(query, "projectId");
-  const [auth, projectsModel] = await Promise.all([
-    getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie")),
-    getProjectsModel(tenantId)
-  ]);
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
+
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!hasConsoleTenantAccess(auth, tenantId)) {
+    return NextResponse.json({ error: "Tenant access denied" }, { status: 403 });
+  }
+
+  const projectsModel = await getProjectsModel(tenantId);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,

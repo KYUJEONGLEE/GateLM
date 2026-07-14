@@ -180,7 +180,12 @@ perf_validate_env() {
     POSTGRES_DB \
     CONTROL_PLANE_AUTH_STATE_SECRET \
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN \
+    TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN \
+    TENANT_CHAT_WEB_SERVICE_TOKEN \
+    TENANT_CHAT_ACCESS_JWT_SECRET \
+    TENANT_CHAT_INTENT_SECRET \
     GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN \
+    GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
     GATEWAY_EXACT_CACHE_KEY_SECRET \
     GATELM_DEMO_API_KEY \
     GATELM_DEMO_APP_TOKEN \
@@ -199,13 +204,29 @@ perf_validate_env() {
     POSTGRES_PASSWORD \
     CONTROL_PLANE_AUTH_STATE_SECRET \
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN \
+    TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN \
+    TENANT_CHAT_WEB_SERVICE_TOKEN \
+    TENANT_CHAT_ACCESS_JWT_SECRET \
+    TENANT_CHAT_INTENT_SECRET \
     GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN \
+    GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
     GATEWAY_EXACT_CACHE_KEY_SECRET \
     GATELM_DEMO_API_KEY \
     GATELM_DEMO_APP_TOKEN; do
     value="${!name}"
     [[ "${value}" != *"replace-me"* ]] || \
       perf_fail "${name} is still a placeholder. Recreate .env.perf with perf-init.sh."
+  done
+
+  for name in \
+    GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
+    TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN \
+    TENANT_CHAT_WEB_SERVICE_TOKEN \
+    TENANT_CHAT_ACCESS_JWT_SECRET \
+    TENANT_CHAT_INTENT_SECRET; do
+    value="${!name}"
+    (( ${#value} >= 32 )) || \
+      perf_fail "${name} must contain at least 32 characters. Recreate .env.perf with perf-init.sh."
   done
 
   for name in \
@@ -231,6 +252,8 @@ perf_validate_env() {
     perf_fail "GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT cannot exceed 100000."
   [[ "${CONTROL_PLANE_INTERNAL_SERVICE_TOKEN}" == "${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN}" ]] || \
     perf_fail "Control Plane and Gateway internal tokens must match."
+  [[ "${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN}" != "${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN}" ]] || \
+    perf_fail "The Gateway observability token must be separate from the Control Plane internal token."
   case "${GATELM_PERF_REMOTE_LOADGEN_ENABLED}" in
     false)
       [[ "${AWS_TRIAGE_GATEWAY_BIND}" == "127.0.0.1" ]] || \
