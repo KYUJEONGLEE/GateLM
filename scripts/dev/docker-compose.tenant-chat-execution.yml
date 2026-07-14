@@ -6,7 +6,7 @@ services:
     environment:
       NODE_ENV: development
       CONTROL_PLANE_PORT: "3001"
-      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      DATABASE_URL: ${TENANT_CHAT_SMOKE_DATABASE_URL:-postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public}
       REDIS_URL: redis://redis:6379
       CONTROL_PLANE_AUTH_STATE_SECRET: ${CONTROL_PLANE_AUTH_STATE_SECRET:?CONTROL_PLANE_AUTH_STATE_SECRET is required}
       CONTROL_PLANE_ADMIN_AUTH_MODE: demo_admin_placeholder
@@ -26,7 +26,7 @@ services:
       dockerfile: infra/docker/gateway-core.Dockerfile
     environment:
       GATEWAY_PORT: "8080"
-      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      DATABASE_URL: ${TENANT_CHAT_SMOKE_DATABASE_URL:-postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public}
       REDIS_URL: redis://redis:6379
       GATEWAY_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
       GATEWAY_RUNTIME_SNAPSHOT_MODE: demo
@@ -65,7 +65,7 @@ services:
     environment:
       NODE_ENV: development
       CHAT_API_PORT: "3003"
-      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      DATABASE_URL: ${TENANT_CHAT_SMOKE_DATABASE_URL:-postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public}
       TENANT_CHAT_ACCESS_JWT_SECRET: ${TENANT_CHAT_ACCESS_JWT_SECRET:?TENANT_CHAT_ACCESS_JWT_SECRET is required}
       TENANT_CHAT_INTENT_SECRET: ${TENANT_CHAT_INTENT_SECRET:?TENANT_CHAT_INTENT_SECRET is required}
       TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}

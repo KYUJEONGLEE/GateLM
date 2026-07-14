@@ -60,14 +60,24 @@ describe('ConversationService turn fan-out', () => {
     });
     const secondResult = service.executeTurn(second, async () => undefined);
 
-    await expect(secondResult).resolves.toEqual({ message, replayed: false });
+    await expect(secondResult).resolves.toEqual({
+      message,
+      replayed: false,
+      quotaState: 'normal',
+      budgetState: 'normal',
+    });
     expect(providerFinished).toBe(true);
     expect(firstSettled).toBe(false);
     expect(bridge.complete).toHaveBeenCalledTimes(1);
     expect(store.persistAssistant).toHaveBeenCalledTimes(1);
 
     releaseSlow();
-    await expect(firstResult).resolves.toEqual({ message, replayed: false });
+    await expect(firstResult).resolves.toEqual({
+      message,
+      replayed: false,
+      quotaState: 'normal',
+      budgetState: 'normal',
+    });
   });
 
   it('retries a transient final persistence conflict while assistant content is available', async () => {
@@ -89,7 +99,12 @@ describe('ConversationService turn fan-out', () => {
     const service = serviceWith({ store, bridge, registry });
 
     await expect(service.executeTurn(prepared, async () => undefined))
-      .resolves.toEqual({ message, replayed: false });
+      .resolves.toEqual({
+        message,
+        replayed: false,
+        quotaState: 'normal',
+        budgetState: 'normal',
+      });
     expect(store.persistAssistant).toHaveBeenCalledTimes(2);
     expect(store.markTerminalFailure).not.toHaveBeenCalled();
   });
