@@ -33,6 +33,7 @@ export class WorkloadCredentialsService {
   private readonly activeKid?: string;
   private readonly privateJwkFile?: string;
   private readonly bindingKeysFile?: string;
+  private cachedLoad?: Promise<WorkloadCredentials>;
 
   constructor(config: ConfigService) {
     this.activeKid = config.get<string>('TENANT_CHAT_WORKLOAD_ACTIVE_KID')?.trim() || undefined;
@@ -49,26 +50,33 @@ export class WorkloadCredentialsService {
     }
   }
 
-  async load(): Promise<WorkloadCredentials> {
-    try {
-      if (!this.activeKid || !OPAQUE_ID.test(this.activeKid) || !this.privateJwkFile || !this.bindingKeysFile) {
-        throw new Error('missing execution credential setting');
-      }
-      const [privateDocument, bindingDocument] = await Promise.all([
-        readStrictJson(this.privateJwkFile),
-        readStrictJson(this.bindingKeysFile),
-      ]);
-      const jwk = parsePrivateJwk(privateDocument, this.activeKid);
-      const bindingKey = parseBindingKey(bindingDocument, this.activeKid);
-      const privateKey = createPrivateKey({ key: jwk, format: 'jwk' });
-      const derived = createPublicKey(privateKey).export({ format: 'jwk' });
-      if (derived.kty !== 'OKP' || derived.crv !== 'Ed25519' || derived.x !== jwk.x) {
-        throw new Error('private and public Ed25519 material do not match');
-      }
-      return Object.freeze({ kid: this.activeKid, privateKey, bindingKey });
-    } catch {
+  load(): Promise<WorkloadCredentials> {
+    if (this.cachedLoad) return this.cachedLoad;
+
+    const pending = this.loadAndValidate().catch(() => {
+      if (this.cachedLoad === pending) this.cachedLoad = undefined;
       throw new ExecutionConfigurationUnavailable();
+    });
+    this.cachedLoad = pending;
+    return pending;
+  }
+
+  private async loadAndValidate(): Promise<WorkloadCredentials> {
+    if (!this.activeKid || !OPAQUE_ID.test(this.activeKid) || !this.privateJwkFile || !this.bindingKeysFile) {
+      throw new Error('missing execution credential setting');
     }
+    const [privateDocument, bindingDocument] = await Promise.all([
+      readStrictJson(this.privateJwkFile),
+      readStrictJson(this.bindingKeysFile),
+    ]);
+    const jwk = parsePrivateJwk(privateDocument, this.activeKid);
+    const bindingKey = parseBindingKey(bindingDocument, this.activeKid);
+    const privateKey = createPrivateKey({ key: jwk, format: 'jwk' });
+    const derived = createPublicKey(privateKey).export({ format: 'jwk' });
+    if (derived.kty !== 'OKP' || derived.crv !== 'Ed25519' || derived.x !== jwk.x) {
+      throw new Error('private and public Ed25519 material do not match');
+    }
+    return Object.freeze({ kid: this.activeKid, privateKey, bindingKey });
   }
 }
 

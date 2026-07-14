@@ -108,28 +108,62 @@ describe('WorkloadSigner', () => {
     expect(verify(null, Buffer.from(firstToken.signingInput), publicKey, firstToken.signature)).toBe(true);
   });
 
+  it('shares one process-lifetime credential load across concurrent callers', async () => {
+    const credentials = createCredentials(privateJwkFile, bindingFile);
+    const firstLoad = credentials.load();
+    const concurrentLoad = credentials.load();
+
+    expect(concurrentLoad).toBe(firstLoad);
+    const [first, concurrent] = await Promise.all([firstLoad, concurrentLoad]);
+    expect(concurrent).toBe(first);
+
+    await Promise.all([rm(privateJwkFile), rm(bindingFile)]);
+    await expect(credentials.load()).resolves.toBe(first);
+    await expect(credentials.isReady()).resolves.toBe(true);
+  });
+
+  it('retries a failed credential load after secret files recover', async () => {
+    const bindingDocument = await readFile(bindingFile, 'utf8');
+    await rm(bindingFile);
+    const credentials = createCredentials(privateJwkFile, bindingFile);
+    const firstLoad = credentials.load();
+    const concurrentLoad = credentials.load();
+
+    expect(concurrentLoad).toBe(firstLoad);
+    await Promise.all([
+      expect(firstLoad).rejects.toMatchObject({ name: 'ExecutionConfigurationUnavailable' }),
+      expect(concurrentLoad).rejects.toMatchObject({ name: 'ExecutionConfigurationUnavailable' }),
+    ]);
+    await expect(credentials.isReady()).resolves.toBe(false);
+
+    await writeFile(bindingFile, bindingDocument, 'utf8');
+    await expect(credentials.isReady()).resolves.toBe(true);
+  });
+
   it('fails closed for a missing active kid binding', async () => {
-    const credentials = new WorkloadCredentialsService({
-      get: (key: string) => key === 'TENANT_CHAT_WORKLOAD_ACTIVE_KID'
-        ? 'wrong-kid'
-        : key === 'TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE'
-          ? privateJwkFile
-          : bindingFile,
-    } as ConfigService);
+    const credentials = createCredentials(privateJwkFile, bindingFile, 'wrong-kid');
     await expect(credentials.load()).rejects.toMatchObject({ name: 'ExecutionConfigurationUnavailable' });
     await expect(credentials.isReady()).resolves.toBe(false);
   });
 });
 
-function createSigner(privateFile: string, hmacFile: string): WorkloadSigner {
+function createCredentials(
+  privateFile: string,
+  hmacFile: string,
+  activeKid = 'local-kid',
+): WorkloadCredentialsService {
   const config = {
     get: (key: string) => ({
-      TENANT_CHAT_WORKLOAD_ACTIVE_KID: 'local-kid',
+      TENANT_CHAT_WORKLOAD_ACTIVE_KID: activeKid,
       TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: privateFile,
       TENANT_CHAT_BINDING_HMAC_KEYS_FILE: hmacFile,
     })[key as 'TENANT_CHAT_WORKLOAD_ACTIVE_KID'],
   } as ConfigService;
-  return new WorkloadSigner(new WorkloadCredentialsService(config));
+  return new WorkloadCredentialsService(config);
+}
+
+function createSigner(privateFile: string, hmacFile: string): WorkloadSigner {
+  return new WorkloadSigner(createCredentials(privateFile, hmacFile));
 }
 
 function parseToken(token: string) {

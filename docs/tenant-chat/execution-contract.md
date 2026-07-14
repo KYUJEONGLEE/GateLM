@@ -52,6 +52,8 @@ revision: `tenant-chat/v1`
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
 - Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
 - Chat API `readyz`는 DB와 workload signing/binding/private Gateway 설정을 함께 검사한다. key file, active `kid`, matching HMAC key 또는 Gateway URL이 없거나 잘못되면 `healthz`는 유지하되 readiness와 execution을 `503`으로 닫는다.
+- workload signing/binding credential은 최초 검증 성공 전까지 `readyz`와 execution 호출에서 fail closed로 다시 로드하며, 성공하면 private `KeyObject`, active `kid`, HMAC key만 프로세스 수명 동안 로컬 메모리에 캐시한다. 기존 프로세스는 재시작 전까지 캐시한 key를 계속 사용한다.
+- signing/binding key 변경은 새 `kid`를 포함한 Chat API rolling restart로 적용한다. 실행 중 file watch, TTL/mtime polling, Redis cache 또는 hot reload는 이 계약에 포함하지 않는다.
 
 ## 3.1 Active RuntimeSnapshot metadata reader
 
