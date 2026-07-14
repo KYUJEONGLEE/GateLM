@@ -254,6 +254,17 @@ func TestChatCompletionsExactCacheRoutingAwareRepeatedStreamUsesExactCache(t *te
 	}
 	assertRoutingAwarePublicStream(t, first.Body.String(), true)
 	assertRoutingAwarePublicStream(t, second.Body.String(), false)
+	if len(harness.logWriter.logs) != 2 {
+		t.Fatalf("stream miss와 cache hit는 각각 terminal log를 남겨야 한다. logs=%d", len(harness.logWriter.logs))
+	}
+	for index, logged := range harness.logWriter.logs {
+		if logged.TTFTMs == nil {
+			t.Fatalf("metrics registry 없이도 stream terminal log %d에 TTFT가 있어야 한다: %+v", index, logged)
+		}
+		if logged.LatencyMs < *logged.TTFTMs {
+			t.Fatalf("stream terminal log %d의 전체 응답 시간은 TTFT보다 짧을 수 없다: latency=%d ttft=%d", index, logged.LatencyMs, *logged.TTFTMs)
+		}
+	}
 }
 
 func TestChatCompletionsExactCacheRoutingAwareStreamCanUseExistingExactCache(t *testing.T) {

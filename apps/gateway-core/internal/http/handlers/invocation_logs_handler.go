@@ -254,11 +254,23 @@ type dashboardQueryBudgetResponse struct {
 }
 
 type dashboardPerformanceResponse struct {
-	P95GatewayInternalLatencyMs *float64 `json:"p95GatewayInternalLatencyMs"`
-	P99GatewayInternalLatencyMs *float64 `json:"p99GatewayInternalLatencyMs"`
-	P95ProviderLatencyMs        *float64 `json:"p95ProviderLatencyMs"`
-	P99ProviderLatencyMs        *float64 `json:"p99ProviderLatencyMs"`
-	SystemErrorRate             float64  `json:"systemErrorRate"`
+	P95GatewayInternalLatencyMs *float64                     `json:"p95GatewayInternalLatencyMs"`
+	P99GatewayInternalLatencyMs *float64                     `json:"p99GatewayInternalLatencyMs"`
+	P95ProviderLatencyMs        *float64                     `json:"p95ProviderLatencyMs"`
+	P99ProviderLatencyMs        *float64                     `json:"p99ProviderLatencyMs"`
+	SystemErrorRate             float64                      `json:"systemErrorRate"`
+	GatewayTTFT                 dashboardGatewayTTFTResponse `json:"gatewayTtft"`
+}
+
+type dashboardGatewayTTFTResponse struct {
+	Scope                  string   `json:"scope"`
+	AverageMs              *float64 `json:"averageMs"`
+	P50Ms                  *float64 `json:"p50Ms"`
+	P95Ms                  *float64 `json:"p95Ms"`
+	P99Ms                  *float64 `json:"p99Ms"`
+	EligibleStreamRequests int64    `json:"eligibleStreamRequests"`
+	ObservedRequests       int64    `json:"observedRequests"`
+	CoverageRate           *float64 `json:"coverageRate"`
 }
 
 type dashboardBreakdownsResponse struct {
@@ -435,12 +447,14 @@ type costResponse struct {
 type latencyResponse struct {
 	LatencyMs         int64  `json:"latencyMs"`
 	ProviderLatencyMs *int64 `json:"providerLatencyMs"`
+	TTFTMs            *int64 `json:"ttftMs"`
 }
 
 type latencySummaryResponse struct {
 	GatewayInternalLatencyMs int64  `json:"gatewayInternalLatencyMs"`
 	ProviderLatencyMs        *int64 `json:"providerLatencyMs"`
 	TotalLatencyMs           int64  `json:"totalLatencyMs"`
+	TTFTMs                   *int64 `json:"ttftMs"`
 }
 
 type cacheResponse struct {
@@ -506,30 +520,32 @@ type detailErrorResponse struct {
 }
 
 type requestLogListItemResponse struct {
-	RequestID        string                 `json:"requestId"`
-	ProjectID        string                 `json:"projectId"`
-	ApplicationID    string                 `json:"applicationId"`
-	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
-	UserRef          *string                `json:"userRef,omitempty"`
-	RequestedModel   string                 `json:"requestedModel"`
-	Category         string                 `json:"category"`
-	Difficulty       string                 `json:"difficulty"`
-	ModelRef         string                 `json:"modelRef"`
-	Status           string                 `json:"status"`
-	TerminalStatus   string                 `json:"terminalStatus"`
-	DomainOutcomes   domainOutcomesResponse `json:"domainOutcomes"`
-	HTTPStatus       int                    `json:"httpStatus"`
-	PromptTokens     int64                  `json:"promptTokens"`
-	CompletionTokens int64                  `json:"completionTokens"`
-	TotalTokens      int64                  `json:"totalTokens"`
-	CostUSD          string                 `json:"costUsd"`
-	CostMicroUSD     int64                  `json:"costMicroUsd"`
-	LatencyMs        int64                  `json:"latencyMs"`
-	CacheStatus      string                 `json:"cacheStatus"`
-	CacheType        string                 `json:"cacheType"`
-	RoutingReason    string                 `json:"routingReason"`
-	MaskingAction    string                 `json:"maskingAction"`
-	CreatedAt        time.Time              `json:"createdAt"`
+	RequestID        string                   `json:"requestId"`
+	ProjectID        string                   `json:"projectId"`
+	ApplicationID    string                   `json:"applicationId"`
+	BudgetScope      budgetScopeResponse      `json:"budgetScope"`
+	UserRef          *string                  `json:"userRef,omitempty"`
+	RequestedModel   string                   `json:"requestedModel"`
+	ProviderAttempt  *providerAttemptResponse `json:"providerAttempt"`
+	Category         string                   `json:"category"`
+	Difficulty       string                   `json:"difficulty"`
+	ModelRef         string                   `json:"modelRef"`
+	Status           string                   `json:"status"`
+	TerminalStatus   string                   `json:"terminalStatus"`
+	DomainOutcomes   domainOutcomesResponse   `json:"domainOutcomes"`
+	HTTPStatus       int                      `json:"httpStatus"`
+	PromptTokens     int64                    `json:"promptTokens"`
+	CompletionTokens int64                    `json:"completionTokens"`
+	TotalTokens      int64                    `json:"totalTokens"`
+	CostUSD          string                   `json:"costUsd"`
+	CostMicroUSD     int64                    `json:"costMicroUsd"`
+	LatencyMs        int64                    `json:"latencyMs"`
+	TTFTMs           *int64                   `json:"ttftMs"`
+	CacheStatus      string                   `json:"cacheStatus"`
+	CacheType        string                   `json:"cacheType"`
+	RoutingReason    string                   `json:"routingReason"`
+	MaskingAction    string                   `json:"maskingAction"`
+	CreatedAt        time.Time                `json:"createdAt"`
 }
 
 type paginationResponse struct {
@@ -788,6 +804,16 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 			P95ProviderLatencyMs:        overview.Performance.P95ProviderLatencyMs,
 			P99ProviderLatencyMs:        overview.Performance.P99ProviderLatencyMs,
 			SystemErrorRate:             overview.Performance.SystemErrorRate,
+			GatewayTTFT: dashboardGatewayTTFTResponse{
+				Scope:                  overview.Performance.GatewayTTFT.Scope,
+				AverageMs:              overview.Performance.GatewayTTFT.AverageMs,
+				P50Ms:                  overview.Performance.GatewayTTFT.P50Ms,
+				P95Ms:                  overview.Performance.GatewayTTFT.P95Ms,
+				P99Ms:                  overview.Performance.GatewayTTFT.P99Ms,
+				EligibleStreamRequests: overview.Performance.GatewayTTFT.EligibleStreamRequests,
+				ObservedRequests:       overview.Performance.GatewayTTFT.ObservedRequests,
+				CoverageRate:           overview.Performance.GatewayTTFT.CoverageRate,
+			},
 		},
 		Range: dashboardRangeResponse{
 			From: filter.From,
@@ -911,11 +937,13 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		Latency: latencyResponse{
 			LatencyMs:         detail.Latency.LatencyMs,
 			ProviderLatencyMs: detail.Latency.ProviderLatencyMs,
+			TTFTMs:            detail.Latency.TTFTMs,
 		},
 		LatencySummary: latencySummaryResponse{
 			GatewayInternalLatencyMs: detail.LatencySummary.GatewayInternalLatencyMs,
 			ProviderLatencyMs:        detail.LatencySummary.ProviderLatencyMs,
 			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
+			TTFTMs:                   detail.LatencySummary.TTFTMs,
 		},
 		Cache: cacheResponse{
 			CacheStatus:         detail.Cache.CacheStatus,
@@ -1061,6 +1089,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			BudgetScope:      budgetScopeResponseFromScope(item.BudgetScope, item.ApplicationID),
 			UserRef:          stringPointerOrNil(item.UserRef),
 			RequestedModel:   item.RequestedModel,
+			ProviderAttempt:  providerAttemptResponseFromDomain(item.ProviderAttempt),
 			Category:         item.Category,
 			Difficulty:       item.Difficulty,
 			ModelRef:         item.ModelRef,
@@ -1074,6 +1103,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			CostUSD:          item.CostUSD,
 			CostMicroUSD:     item.CostMicroUSD,
 			LatencyMs:        item.LatencyMs,
+			TTFTMs:           item.TTFTMs,
 			CacheStatus:      item.CacheStatus,
 			CacheType:        item.CacheType,
 			RoutingReason:    item.RoutingReason,

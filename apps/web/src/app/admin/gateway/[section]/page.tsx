@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
 import { GatewayAdminConsole } from "@/features/gateway-admin/components/gateway-admin-console";
 import {
+  getCurrentConsoleAuth,
+  isTenantAdminForTenant
+} from "@/lib/auth/current-console-auth";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import {
   getGatewayAdminModel,
   normalizeGatewayAdminRange,
   normalizeGatewayAdminSection,
@@ -24,10 +29,14 @@ export default async function GatewayAdminSectionPage({
   params,
   searchParams
 }: GatewayAdminSectionPageProps) {
-  const { section } = await params;
+  const [{ section }, auth] = await Promise.all([
+    params,
+    getCurrentConsoleAuth()
+  ]);
   const activeSection = normalizeGatewayAdminSection(section);
+  const tenantId = getControlPlaneTenantId();
 
-  if (!activeSection) {
+  if (!activeSection || !auth.isAuthenticated || !isTenantAdminForTenant(auth, tenantId)) {
     notFound();
   }
 

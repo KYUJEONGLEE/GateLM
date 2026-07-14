@@ -1,9 +1,11 @@
+import { notFound } from "next/navigation";
 import { ApiKeyManagement } from "@/features/api-keys/components/api-key-management";
 import {
   getCurrentConsoleAuth,
   isTenantAdminForTenant,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getApiKeysModel } from "@/lib/control-plane/api-keys-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -20,6 +22,11 @@ export default async function ApiKeysPage({ params }: ApiKeysPageProps) {
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
   const model = await getApiKeysModel(effectiveTenantId);
 
   return (

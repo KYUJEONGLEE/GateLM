@@ -5,9 +5,9 @@ import { DashboardCostOverTimeEChart } from "@/features/dashboard/components/das
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { Locale } from "@/lib/i18n/locale";
 
-const COST_OVER_TIME_POLLING_INTERVAL_MS = 3000;
-const COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS = 10000;
-const COST_OVER_TIME_REPEATED_FAILURE_BACKOFF_MS = 20000;
+const COST_OVER_TIME_POLLING_INTERVAL_MS = 30000;
+const COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS = 60000;
+const COST_OVER_TIME_REPEATED_FAILURE_BACKOFF_MS = 120000;
 
 type CostOverTimeRange = "5m" | "15m" | "1h" | "1d" | "1w";
 
@@ -78,8 +78,8 @@ export function CostOverTimeCard({
         budgetScopeType,
         projectId,
         range,
-          resolvedBy,
-          surface,
+        resolvedBy,
+        surface,
         tenantId
       }),
     [

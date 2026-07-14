@@ -83,6 +83,10 @@ model Tenant {
   tenantChatContentKeyState       TenantChatContentKeyState?
   tenantChatContentKeys           TenantChatContentKey[]
   tenantChatConversations         TenantChatConversation[]
+  dashboardRollupDirtyBuckets     DashboardRollupDirtyBucket[]
+  dashboardRollupBucketStates     DashboardRollupBucketState[]
+  dashboardRollupTotals           DashboardRollupTotal[]
+  dashboardRollupDimensions       DashboardRollupDimension[]
 
   @@map("tenants")
 }
@@ -1111,6 +1115,7 @@ model TenantChatInvocationLog {
   @@index([tenantId, userId, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_user_completed_idx")
   @@index([tenantId, terminalOutcome, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_outcome_completed_idx")
   @@index([userId, completedAt(sort: Desc)], map: "tenant_chat_log_user_idx")
+  @@index([updatedAt, requestId], map: "tenant_chat_log_rollup_discovery_idx")
   @@map("tenant_chat_invocation_logs")
 }
 
@@ -1243,6 +1248,168 @@ model TenantChatMessage {
   @@unique([turnId, role], map: "tenant_chat_message_turn_role_key")
   @@index([tenantId, userId, conversationId, sequence], map: "tenant_chat_message_history_idx")
   @@map("tenant_chat_messages")
+}
+
+model DashboardRollupSourceCursor {
+  source           String    @id
+  cursorAt         DateTime? @map("cursor_at") @db.Timestamptz(6)
+  cursorKey        String    @default("") @map("cursor_key")
+  lastDiscoveredAt DateTime? @map("last_discovered_at") @db.Timestamptz(6)
+  caughtUpAt       DateTime? @map("caught_up_at") @db.Timestamptz(6)
+  caughtUpThrough  DateTime? @map("caught_up_through") @db.Timestamptz(6)
+  lastReconciledAt DateTime? @map("last_reconciled_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("dashboard_rollup_source_cursors")
+}
+
+model DashboardRollupDirtyBucket {
+  tenantId    String   @map("tenant_id") @db.Uuid
+  surface     String
+  grain       String
+  bucketStart DateTime @map("bucket_start") @db.Timestamptz(6)
+  reasonCode  String   @map("reason_code")
+  availableAt DateTime @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "dashboard_rollup_dirty_buckets_tenant_fkey")
+
+  @@id([tenantId, surface, grain, bucketStart])
+  @@index([availableAt, grain, bucketStart, tenantId], map: "dashboard_rollup_dirty_claim_idx")
+  @@map("dashboard_rollup_dirty_buckets")
+}
+
+model DashboardRollupBucketState {
+  tenantId          String    @map("tenant_id") @db.Uuid
+  surface           String
+  grain             String
+  bucketStart       DateTime  @map("bucket_start") @db.Timestamptz(6)
+  state             String
+  sourceMaxAt       DateTime? @map("source_max_at") @db.Timestamptz(6)
+  aggregatedAt      DateTime? @map("aggregated_at") @db.Timestamptz(6)
+  histogramVersion  Int       @default(1) @map("histogram_version")
+  lastErrorCode     String?   @map("last_error_code")
+  totalRowCount     Int       @default(0) @map("total_row_count")
+  dimensionRowCount Int       @default(0) @map("dimension_row_count")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "dashboard_rollup_bucket_states_tenant_fkey")
+
+  @@id([tenantId, surface, grain, bucketStart])
+  @@map("dashboard_rollup_bucket_states")
+}
+
+model DashboardRollupTotal {
+  tenantId                        String    @map("tenant_id") @db.Uuid
+  surface                         String
+  grain                           String
+  bucketStart                     DateTime  @map("bucket_start") @db.Timestamptz(6)
+  projectId                       String    @default("") @map("project_id")
+  applicationId                   String    @default("") @map("application_id")
+  budgetScopeType                 String    @default("") @map("budget_scope_type")
+  budgetScopeId                   String    @default("") @map("budget_scope_id")
+  budgetScopeResolvedBy           String    @default("") @map("budget_scope_resolved_by")
+  requestCount                    BigInt    @default(0) @map("request_count")
+  successfulRequestCount          BigInt    @default(0) @map("successful_request_count")
+  failedRequestCount              BigInt    @default(0) @map("failed_request_count")
+  blockedRequestCount             BigInt    @default(0) @map("blocked_request_count")
+  rateLimitedRequestCount         BigInt    @default(0) @map("rate_limited_request_count")
+  cancelledRequestCount           BigInt    @default(0) @map("cancelled_request_count")
+  cacheHitRequestCount            BigInt    @default(0) @map("cache_hit_request_count")
+  cacheEligibleRequestCount       BigInt    @default(0) @map("cache_eligible_request_count")
+  fallbackSuccessRequestCount     BigInt    @default(0) @map("fallback_success_request_count")
+  promptTokens                    BigInt    @default(0) @map("prompt_tokens")
+  completionTokens                BigInt    @default(0) @map("completion_tokens")
+  totalTokens                     BigInt    @default(0) @map("total_tokens")
+  costMicroUsd                    BigInt    @default(0) @map("cost_micro_usd")
+  savedCostMicroUsd               BigInt    @default(0) @map("saved_cost_micro_usd")
+  attemptCount                    BigInt    @default(0) @map("attempt_count")
+  billableAttemptCount            BigInt    @default(0) @map("billable_attempt_count")
+  fallbackRequestCount            BigInt    @default(0) @map("fallback_request_count")
+  latencyCount                    BigInt    @default(0) @map("latency_count")
+  latencySumMs                    BigInt    @default(0) @map("latency_sum_ms")
+  latencyHistogram                BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("latency_histogram")
+  gatewayInternalLatencyCount     BigInt    @default(0) @map("gateway_internal_latency_count")
+  gatewayInternalLatencySumMs     BigInt    @default(0) @map("gateway_internal_latency_sum_ms")
+  gatewayInternalLatencyHistogram BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("gateway_internal_latency_histogram")
+  providerLatencyCount            BigInt    @default(0) @map("provider_latency_count")
+  providerLatencySumMs            BigInt    @default(0) @map("provider_latency_sum_ms")
+  providerLatencyHistogram        BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("provider_latency_histogram")
+  streamRequestCount              BigInt    @default(0) @map("stream_request_count")
+  ttftCount                       BigInt    @default(0) @map("ttft_count")
+  ttftSumMs                       BigInt    @default(0) @map("ttft_sum_ms")
+  ttftHistogram                   BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("ttft_histogram")
+  histogramVersion                Int       @default(1) @map("histogram_version")
+  sourceMaxAt                     DateTime? @map("source_max_at") @db.Timestamptz(6)
+  createdAt                       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "dashboard_rollup_totals_tenant_fkey")
+
+  @@id([tenantId, surface, grain, bucketStart, projectId, applicationId, budgetScopeType, budgetScopeId, budgetScopeResolvedBy])
+  @@index([tenantId, surface, projectId, grain, bucketStart], map: "dashboard_rollup_totals_project_idx")
+  @@index([tenantId, surface, applicationId, grain, bucketStart], map: "dashboard_rollup_totals_application_idx")
+  @@index([tenantId, surface, budgetScopeType, budgetScopeId, budgetScopeResolvedBy, grain, bucketStart], map: "dashboard_rollup_totals_budget_idx")
+  @@map("dashboard_rollup_totals")
+}
+
+model DashboardRollupDimension {
+  tenantId                        String    @map("tenant_id") @db.Uuid
+  surface                         String
+  grain                           String
+  bucketStart                     DateTime  @map("bucket_start") @db.Timestamptz(6)
+  projectId                       String    @default("") @map("project_id")
+  applicationId                   String    @default("") @map("application_id")
+  budgetScopeType                 String    @default("") @map("budget_scope_type")
+  budgetScopeId                   String    @default("") @map("budget_scope_id")
+  budgetScopeResolvedBy           String    @default("") @map("budget_scope_resolved_by")
+  dimensionType                   String    @map("dimension_type")
+  dimensionValue                  String    @default("") @map("dimension_value")
+  dimensionValue2                 String    @default("") @map("dimension_value_2")
+  dimensionValue3                 String    @default("") @map("dimension_value_3")
+  requestCount                    BigInt    @default(0) @map("request_count")
+  successfulRequestCount          BigInt    @default(0) @map("successful_request_count")
+  failedRequestCount              BigInt    @default(0) @map("failed_request_count")
+  cacheHitRequestCount            BigInt    @default(0) @map("cache_hit_request_count")
+  cacheEligibleRequestCount       BigInt    @default(0) @map("cache_eligible_request_count")
+  fallbackSuccessRequestCount     BigInt    @default(0) @map("fallback_success_request_count")
+  promptTokens                    BigInt    @default(0) @map("prompt_tokens")
+  completionTokens                BigInt    @default(0) @map("completion_tokens")
+  totalTokens                     BigInt    @default(0) @map("total_tokens")
+  costMicroUsd                    BigInt    @default(0) @map("cost_micro_usd")
+  savedCostMicroUsd               BigInt    @default(0) @map("saved_cost_micro_usd")
+  attemptCount                    BigInt    @default(0) @map("attempt_count")
+  billableAttemptCount            BigInt    @default(0) @map("billable_attempt_count")
+  fallbackRequestCount            BigInt    @default(0) @map("fallback_request_count")
+  latencyCount                    BigInt    @default(0) @map("latency_count")
+  latencySumMs                    BigInt    @default(0) @map("latency_sum_ms")
+  latencyHistogram                BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("latency_histogram")
+  gatewayInternalLatencyCount     BigInt    @default(0) @map("gateway_internal_latency_count")
+  gatewayInternalLatencySumMs     BigInt    @default(0) @map("gateway_internal_latency_sum_ms")
+  gatewayInternalLatencyHistogram BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("gateway_internal_latency_histogram")
+  providerLatencyCount            BigInt    @default(0) @map("provider_latency_count")
+  providerLatencySumMs            BigInt    @default(0) @map("provider_latency_sum_ms")
+  providerLatencyHistogram        BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("provider_latency_histogram")
+  streamRequestCount              BigInt    @default(0) @map("stream_request_count")
+  ttftCount                       BigInt    @default(0) @map("ttft_count")
+  ttftSumMs                       BigInt    @default(0) @map("ttft_sum_ms")
+  ttftHistogram                   BigInt[]  @default([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) @map("ttft_histogram")
+  histogramVersion                Int       @default(1) @map("histogram_version")
+  sourceMaxAt                     DateTime? @map("source_max_at") @db.Timestamptz(6)
+  createdAt                       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "dashboard_rollup_dimensions_tenant_fkey")
+
+  @@id([tenantId, surface, grain, bucketStart, projectId, applicationId, budgetScopeType, budgetScopeId, budgetScopeResolvedBy, dimensionType, dimensionValue, dimensionValue2, dimensionValue3])
+  @@index([tenantId, surface, dimensionType, grain, bucketStart], map: "dashboard_rollup_dimensions_lookup_idx")
+  @@index([tenantId, surface, projectId, dimensionType, grain, bucketStart], map: "dashboard_rollup_dimensions_project_idx")
+  @@index([tenantId, surface, applicationId, dimensionType, grain, bucketStart], map: "dashboard_rollup_dimensions_application_idx")
+  @@map("dashboard_rollup_dimensions")
 }
 
 model Conversation {

@@ -118,6 +118,87 @@ export function AnalyticsRankedBarChart({
   return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;
 }
 
+export function AnalyticsEmployeeTokenBarChart({
+  ariaLabel,
+  maxRows = 10,
+  rows
+}: {
+  ariaLabel: string;
+  maxRows?: number;
+  rows: AnalyticsValueRow[];
+}) {
+  const theme = useAnalyticsChartTheme();
+  const visibleRows = useMemo(
+    () => rows.filter((row) => row.value > 0).slice(0, maxRows),
+    [maxRows, rows]
+  );
+  const option = useMemo<AnalyticsEChartOption>(
+    () => ({
+      animationDuration: 360,
+      grid: { bottom: 74, left: 76, right: 24, top: 48 },
+      tooltip: analyticsTooltip(" tokens", theme),
+      xAxis: {
+        axisLabel: {
+          color: theme.label,
+          fontSize: 14,
+          fontWeight: 800,
+          formatter: (value: string) => value.length > 9 ? `${value.slice(0, 9)}…` : value,
+          interval: 0,
+          overflow: "truncate",
+          width: 96
+        },
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        data: visibleRows.map((row) => row.label),
+        type: "category"
+      },
+      yAxis: {
+        axisLabel: {
+          color: theme.axis,
+          fontSize: 13,
+          fontWeight: 700,
+          formatter: compactAxisNumber
+        },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        minInterval: 1,
+        splitLine: { lineStyle: { color: theme.grid } },
+        type: "value"
+      },
+      series: [
+        {
+          barMaxWidth: 54,
+          data: visibleRows.map((row, index) => ({
+            itemStyle: {
+              borderRadius: [5, 5, 0, 0],
+              color: palette[index % palette.length]
+            },
+            value: row.value
+          })),
+          label: {
+            color: theme.label,
+            fontSize: 14,
+            fontWeight: 900,
+            formatter: ({ value }: { value: number }) => formatValue(value, "tokens", false),
+            position: "top",
+            show: true
+          },
+          type: "bar"
+        }
+      ]
+    }),
+    [theme, visibleRows]
+  );
+
+  return (
+    <AnalyticsEChart
+      ariaLabel={ariaLabel}
+      className="analytics-v3-employee-token-chart"
+      option={option}
+    />
+  );
+}
+
 export function AnalyticsCompositionChart({
   ariaLabel,
   rows

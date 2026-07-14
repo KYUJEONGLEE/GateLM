@@ -35,6 +35,7 @@ export type CurrentConsoleAuth = {
 };
 
 const authCookieNames = ['gatelm_session', 'gatelm_onboarding'];
+const CONSOLE_AUTH_REQUEST_TIMEOUT_MS = 5000;
 
 export const getCurrentConsoleAuth = cache(async (): Promise<CurrentConsoleAuth> => {
   return getCurrentConsoleAuthForCookieHeader(await getConsoleAuthCookieHeader());
@@ -49,7 +50,8 @@ export async function getCurrentConsoleAuthForCookieHeader(cookieHeader?: string
     cache: 'no-store',
     headers: {
       cookie: cookieHeader
-    }
+    },
+    signal: AbortSignal.timeout(CONSOLE_AUTH_REQUEST_TIMEOUT_MS)
   }).catch(() => undefined);
 
   if (!response?.ok) {

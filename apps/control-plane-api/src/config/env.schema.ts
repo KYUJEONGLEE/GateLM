@@ -24,6 +24,13 @@ interface ControlPlaneEnv {
   SMTP_TLS_MODE?: string;
   SMTP_USER?: string;
   CONTROL_PLANE_ADMIN_AUTH_MODE: string;
+  DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE?: number;
+  DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE?: number;
+  DASHBOARD_ROLLUP_DISCOVERY_LAG_MS?: number;
+  DASHBOARD_ROLLUP_ENABLED?: string;
+  DASHBOARD_ROLLUP_INTERVAL_MS?: number;
+  DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS?: number;
+  DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS?: number;
   TENANT_CHAT_PROJECTOR_BATCH_SIZE?: number;
   TENANT_CHAT_PROJECTOR_ENABLED?: string;
   TENANT_CHAT_PROJECTOR_INTERVAL_MS?: number;
@@ -248,6 +255,42 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     SMTP_TLS_MODE: readSmtpTlsMode(config) ?? 'opportunistic',
     SMTP_USER: config.SMTP_USER,
     CONTROL_PLANE_ADMIN_AUTH_MODE: adminAuthMode,
+    DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE:
+      readOptionalInteger(config, 'DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE', 1, 100) ??
+      8,
+    DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE:
+      readOptionalInteger(
+        config,
+        'DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE',
+        1,
+        5000,
+      ) ?? 500,
+    DASHBOARD_ROLLUP_DISCOVERY_LAG_MS:
+      readOptionalInteger(
+        config,
+        'DASHBOARD_ROLLUP_DISCOVERY_LAG_MS',
+        1000,
+        600000,
+      ) ?? 60000,
+    DASHBOARD_ROLLUP_ENABLED:
+      readBooleanString(config, 'DASHBOARD_ROLLUP_ENABLED') ?? 'false',
+    DASHBOARD_ROLLUP_INTERVAL_MS:
+      readOptionalInteger(config, 'DASHBOARD_ROLLUP_INTERVAL_MS', 100, 60000) ??
+      1000,
+    DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS:
+      readOptionalInteger(
+        config,
+        'DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS',
+        1000,
+        3600000,
+      ) ?? 60000,
+    DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS:
+      readOptionalInteger(
+        config,
+        'DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS',
+        60000,
+        86400000,
+      ) ?? 900000,
     TENANT_CHAT_PROJECTOR_BATCH_SIZE:
       readOptionalInteger(config, 'TENANT_CHAT_PROJECTOR_BATCH_SIZE', 1, 500) ??
       50,

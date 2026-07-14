@@ -134,6 +134,13 @@ services:
       TENANT_CHAT_PROJECTOR_INTERVAL_MS: ${TENANT_CHAT_PROJECTOR_INTERVAL_MS:-1000}
       TENANT_CHAT_PROJECTOR_BATCH_SIZE: ${TENANT_CHAT_PROJECTOR_BATCH_SIZE:-50}
       TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS: ${TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS:-5}
+      DASHBOARD_ROLLUP_ENABLED: ${DASHBOARD_ROLLUP_ENABLED:-false}
+      DASHBOARD_ROLLUP_INTERVAL_MS: ${DASHBOARD_ROLLUP_INTERVAL_MS:-1000}
+      DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE: ${DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE:-500}
+      DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE: ${DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE:-8}
+      DASHBOARD_ROLLUP_DISCOVERY_LAG_MS: ${DASHBOARD_ROLLUP_DISCOVERY_LAG_MS:-60000}
+      DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS: ${DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS:-60000}
+      DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS: ${DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS:-900000}
       AUTH_EMAIL_TRANSPORT: ${AUTH_EMAIL_TRANSPORT:-smtp}
       CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: ${CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY:-false}
       SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
@@ -155,8 +162,8 @@ services:
       GATELM_DEMO_PROVIDER_MODE: ${GATELM_DEMO_PROVIDER_MODE:-mock}
       GATELM_DEMO_API_KEY: ${GATELM_DEMO_API_KEY:-}
       GATELM_DEMO_APP_TOKEN: ${GATELM_DEMO_APP_TOKEN:-}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${CONTROL_PLANE_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public}
+      REDIS_URL: ${CONTROL_PLANE_REDIS_URL:-redis://redis:6379}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - "${AWS_TRIAGE_CONTROL_PLANE_BIND:-127.0.0.1}:${AWS_TRIAGE_CONTROL_PLANE_PORT:-3001}:3001"
@@ -182,14 +189,16 @@ services:
     restart: unless-stopped
     environment:
       GATEWAY_PORT: "8080"
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      REDIS_URL: redis://redis:6379
-      GATEWAY_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
+      DATABASE_URL: ${GATEWAY_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public}
+      REDIS_URL: ${GATEWAY_REDIS_URL:-redis://redis:6379}
+      GATEWAY_CONTROL_PLANE_BASE_URL: ${GATEWAY_CONTROL_PLANE_BASE_URL:-http://control-plane-api:3001}
       GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN: ${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN:?GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN is required}
+      GATEWAY_OBSERVABILITY_INTERNAL_TOKEN: ${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN:?GATEWAY_OBSERVABILITY_INTERNAL_TOKEN is required}
+      GATEWAY_OBSERVABILITY_AUTH_REQUIRED: "true"
       GATEWAY_CONTROL_PLANE_TIMEOUT_MS: ${GATEWAY_CONTROL_PLANE_TIMEOUT_MS}
       GATEWAY_RUNTIME_SNAPSHOT_MODE: ${GATEWAY_RUNTIME_SNAPSHOT_MODE}
       GATEWAY_PROVIDER_TIMEOUT_MS: ${GATEWAY_PROVIDER_TIMEOUT_MS:-60000}
-      MOCK_PROVIDER_BASE_URL: http://mock-provider:8090
+      MOCK_PROVIDER_BASE_URL: ${MOCK_PROVIDER_BASE_URL:-http://mock-provider:8090}
       GATEWAY_DEFAULT_PROVIDER: ${GATEWAY_DEFAULT_PROVIDER}
       GATEWAY_DEFAULT_MODEL: ${GATEWAY_DEFAULT_MODEL}
       GATEWAY_LOW_COST_MODEL: ${GATEWAY_LOW_COST_MODEL}
@@ -215,8 +224,25 @@ services:
       GATELM_DEMO_API_KEY_ID: ${GATELM_DEMO_API_KEY_ID}
       GATELM_DEMO_APP_TOKEN_ID: ${GATELM_DEMO_APP_TOKEN_ID}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"
+      TENANT_CHAT_PRIVATE_LISTEN_ADDRESS: ":8081"
+      TENANT_CHAT_WORKLOAD_JWKS_FILE: /run/secrets/tenant-chat/jwks.json
+      TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+      TENANT_CHAT_CACHE_KEYSETS_FILE: /run/secrets/tenant-chat/cache-keysets.json
+      TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE: /run/secrets/tenant-chat/usage-receipt-token
     ports:
       - "${AWS_TRIAGE_GATEWAY_BIND:-127.0.0.1}:${AWS_TRIAGE_GATEWAY_PORT:-8080}:8080"
+    expose:
+      - "8081"
+    secrets:
+      - source: tenant_chat_workload_jwks
+        target: /run/secrets/tenant-chat/jwks.json
+      - source: tenant_chat_binding_hmac_keys
+        target: /run/secrets/tenant-chat/binding-hmac-keys.json
+      - source: tenant_chat_cache_keysets
+        target: /run/secrets/tenant-chat/cache-keysets.json
+      - source: tenant_chat_usage_receipt_token
+        target: /run/secrets/tenant-chat/usage-receipt-token
     depends_on:
       postgres:
         condition: service_healthy
@@ -279,8 +305,19 @@ services:
       TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}
       TENANT_CHAT_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
       TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
+      TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081
+      TENANT_CHAT_WORKLOAD_ACTIVE_KID: ${TENANT_CHAT_WORKLOAD_ACTIVE_KID:?TENANT_CHAT_WORKLOAD_ACTIVE_KID is required}
+      TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json
+      TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+    secrets:
+      - source: tenant_chat_workload_signing_jwk
+        target: /run/secrets/tenant-chat/signing.jwk.json
+      - source: tenant_chat_binding_hmac_keys
+        target: /run/secrets/tenant-chat/binding-hmac-keys.json
     depends_on:
       control-plane-api:
+        condition: service_healthy
+      gateway-core:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -333,6 +370,7 @@ services:
       GATELM_CHAT_WEB_ORIGIN: ${GATELM_CHAT_WEB_ORIGIN}
       GATELM_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
       GATELM_GATEWAY_BASE_URL: http://gateway-core:8080
+      GATELM_GATEWAY_OBSERVABILITY_INTERNAL_TOKEN: ${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN:?GATEWAY_OBSERVABILITY_INTERNAL_TOKEN is required}
       GATELM_CONTROL_PLANE_TENANT_ID: ${GATELM_CONTROL_PLANE_TENANT_ID:-${GATELM_DEMO_TENANT_ID}}
       GATELM_CONTROL_PLANE_PROJECT_ID: ${GATELM_CONTROL_PLANE_PROJECT_ID:-${GATELM_DEMO_PROJECT_ID}}
       GATELM_CONTROL_PLANE_APPLICATION_ID: ${GATELM_CONTROL_PLANE_APPLICATION_ID:-${GATELM_DEMO_APPLICATION_ID}}
@@ -359,6 +397,18 @@ services:
 volumes:
   postgres_data:
   redis_data:
+
+secrets:
+  tenant_chat_workload_signing_jwk:
+    file: .secrets/tenant-chat/signing.jwk.json
+  tenant_chat_workload_jwks:
+    file: .secrets/tenant-chat/jwks.json
+  tenant_chat_binding_hmac_keys:
+    file: .secrets/tenant-chat/binding-hmac-keys.json
+  tenant_chat_cache_keysets:
+    file: .secrets/tenant-chat/cache-keysets.json
+  tenant_chat_usage_receipt_token:
+    file: .secrets/tenant-chat/usage-receipt-token
 
 networks:
   gatelm_internal:

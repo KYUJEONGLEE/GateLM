@@ -553,6 +553,7 @@ func TestRawResponseCaptureRequiresExplicitSelfHostOrDemoOptIn(t *testing.T) {
 			t.Setenv("DEPLOYMENT_MODE", tc.deploymentMode)
 			t.Setenv("RAW_RESPONSE_CAPTURE_ENABLED", tc.rawOptIn)
 			t.Setenv("GATEWAY_RESPONSE_CAPTURE_ENABLED", tc.legacyOptIn)
+			t.Setenv("GATEWAY_OBSERVABILITY_INTERNAL_TOKEN", strongObservabilityTokenForTest)
 
 			cfg, err := LoadWithError()
 			if err != nil {
@@ -584,6 +585,7 @@ func TestRawResponseCaptureBlocksProductionLikeEnv(t *testing.T) {
 			t.Setenv("DEPLOYMENT_MODE", "demo")
 			t.Setenv("RAW_RESPONSE_CAPTURE_ENABLED", "true")
 			t.Setenv(tc.key, tc.val)
+			t.Setenv("GATEWAY_OBSERVABILITY_INTERNAL_TOKEN", strongObservabilityTokenForTest)
 
 			cfg, err := LoadWithError()
 			if err != nil {

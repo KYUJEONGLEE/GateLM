@@ -66,6 +66,7 @@ Production deployments should route public traffic through a reverse proxy and T
 - PostgreSQL database settings
 - Redis connection through Compose service name
 - Gateway cache and rate limit settings
+- separate Web-to-Gateway observability read token
 - provider mode, defaulting to mock mode
 - AI Service mode
 

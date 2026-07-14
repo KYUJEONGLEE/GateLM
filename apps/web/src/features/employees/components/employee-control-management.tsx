@@ -5,6 +5,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Save,
   Upload,
@@ -31,7 +32,8 @@ import type {
   EmployeeOrganizationCsvImportResult,
   EmployeeRecord,
   ProjectEmployeeAssignmentRecord,
-  ProjectEmployeeAssignmentValues
+  ProjectEmployeeAssignmentValues,
+  ProjectEmployeeQuotaStatus
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import {
@@ -41,10 +43,13 @@ import {
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
+import type { EmployeeUsageReadModel } from "../employee-usage-read-model";
 
 type EmployeeControlManagementProps = {
+  initialEmployeeId?: string;
   locale: Locale;
   model: EmployeeControlModel;
+  usage: EmployeeUsageReadModel;
 };
 
 type ProjectEmployeeAssignmentProps = {
@@ -70,7 +75,7 @@ type CompactUnitStepperProps = {
 };
 
 type EmployeeSortDirection = "asc" | "desc";
-type EmployeeSortField = "department" | "email" | "invitation" | "name" | "project";
+type EmployeeSortField = "department" | "name" | "project" | "rank" | "tokens";
 type EmployeeAddMethod = "csv" | "invite";
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned_department__";
 
@@ -123,9 +128,7 @@ const employeeText: Record<
     fixtureFallback: string;
     import: string;
     imported: string;
-    invitation: string;
-    inviteAll: string;
-    inviteResend: string;
+    inviteSelected: string;
     inviteSend: string;
     inviteSent: string;
     name: string;
@@ -139,6 +142,8 @@ const employeeText: Record<
     projectCount: string;
     remaining: string;
     save: string;
+    selectAll: string;
+    selectEmployee: string;
     sortBy: string;
     sortDepartment: string;
     sortName: string;
@@ -170,9 +175,7 @@ const employeeText: Record<
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     import: "Import",
     imported: "Imported",
-    invitation: "Chat invite",
-    inviteAll: "Send Chat invites",
-    inviteResend: "Resend Chat invite",
+    inviteSelected: "Send invite",
     inviteSend: "Send Chat invite",
     inviteSent: "Chat invitation email sent.",
     name: "Name",
@@ -186,6 +189,8 @@ const employeeText: Record<
     projectCount: "Projects",
     remaining: "Remaining",
     save: "Save",
+    selectAll: "Select all employees on this page",
+    selectEmployee: "Select employee",
     sortBy: "Sort",
     sortDepartment: "Department",
     sortName: "Name",
@@ -216,9 +221,7 @@ const employeeText: Record<
     fixtureFallback: "Control Plane을 사용할 수 없어 예시 직원을 표시 중입니다.",
     import: "등록",
     imported: "등록됨",
-    invitation: "채팅 초대",
-    inviteAll: "채팅 초대 일괄 발송",
-    inviteResend: "채팅 초대 재발송",
+    inviteSelected: "초대 발송",
     inviteSend: "채팅 초대 보내기",
     inviteSent: "채팅 초대 메일을 발송했습니다.",
     name: "이름",
@@ -232,6 +235,8 @@ const employeeText: Record<
     projectCount: "프로젝트",
     remaining: "잔여",
     save: "저장",
+    selectAll: "현재 페이지 직원 전체 선택",
+    selectEmployee: "직원 선택",
     sortBy: "정렬",
     sortDepartment: "부서순",
     sortName: "이름순",
@@ -242,6 +247,29 @@ const employeeText: Record<
     warning: "경고"
   }
 };
+
+const employeeUsageText = {
+  en: {
+    dailyLimit: "Daily token limit",
+    detail: "Employee usage and controls",
+    managePolicy: "Manage project policy",
+    noProjectUsage: "No active project usage.",
+    projects: "Project usage",
+    rank: "Rank",
+    tokens: "Tokens today (UTC)",
+    unlimited: "Unlimited"
+  },
+  ko: {
+    dailyLimit: "일일 토큰 한도",
+    detail: "직원 사용량 및 통제",
+    managePolicy: "프로젝트 정책 관리",
+    noProjectUsage: "활성 프로젝트 사용량이 없습니다.",
+    projects: "프로젝트별 사용량",
+    rank: "순위",
+    tokens: "오늘 사용 토큰 (UTC)",
+    unlimited: "무제한"
+  }
+} satisfies Record<Locale, Record<string, string>>;
 
 const projectEmployeeText: Record<
   Locale,
@@ -1281,9 +1309,15 @@ export function ProjectEmployeeAssignmentSection({
   );
 }
 
-export function EmployeeControlManagement({ locale, model }: EmployeeControlManagementProps) {
+export function EmployeeControlManagement({
+  initialEmployeeId,
+  locale,
+  model,
+  usage
+}: EmployeeControlManagementProps) {
   const router = useRouter();
   const text = employeeText[locale];
+  const usageText = employeeUsageText[locale];
   const [addMethod, setAddMethod] = useState<EmployeeAddMethod>("csv");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [employees, setEmployees] = useState<EmployeeRecord[]>(model.employees);
@@ -1296,13 +1330,19 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   );
   const [createValues, setCreateValues] = useState<EmployeeCreateValues>(emptyCreateValues);
   const [departmentEmployee, setDepartmentEmployee] = useState<EmployeeRecord | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
+    initialEmployeeId ?? null
+  );
+  const [selectedInvitationEmployeeIds, setSelectedInvitationEmployeeIds] = useState<string[]>(
+    []
+  );
   const [departmentValue, setDepartmentValue] = useState("");
   const [sortState, setSortState] = useState<{
     direction: EmployeeSortDirection;
     field: EmployeeSortField;
   }>({
     direction: "asc",
-    field: "name"
+    field: "rank"
   });
   const [pageIndex, setPageIndex] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -1321,6 +1361,13 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       ).sort((left, right) => left.localeCompare(right)),
     [employees]
   );
+  const usageByEmployeeId = useMemo(
+    () => new Map(usage.rows.map((row) => [row.employeeId, row])),
+    [usage.rows]
+  );
+  const selectedUsage = selectedEmployeeId
+    ? usageByEmployeeId.get(selectedEmployeeId) ?? null
+    : null;
 
   const projectNamesByEmployeeId = useMemo(() => {
     const projectsById = new Map(projects.map((project) => [project.id, project.name]));
@@ -1358,12 +1405,12 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
           projectNamesByEmployeeId.get(left.id),
           projectNamesByEmployeeId.get(right.id)
         );
-      } else if (sortState.field === "email") {
-        result = left.email.localeCompare(right.email);
-      } else if (sortState.field === "invitation") {
-        result = formatInvitationStatus(left.invitationStatus, locale).localeCompare(
-          formatInvitationStatus(right.invitationStatus, locale)
-        );
+      } else if (sortState.field === "rank") {
+        result = (usageByEmployeeId.get(left.id)?.rank ?? Number.MAX_SAFE_INTEGER) -
+          (usageByEmployeeId.get(right.id)?.rank ?? Number.MAX_SAFE_INTEGER);
+      } else if (sortState.field === "tokens") {
+        result = (usageByEmployeeId.get(left.id)?.dailyTokens ?? 0) -
+          (usageByEmployeeId.get(right.id)?.dailyTokens ?? 0);
       } else {
         result = compareEmployeeName(left, right);
       }
@@ -1376,7 +1423,7 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     });
 
     return nextEmployees;
-  }, [employees, locale, projectNamesByEmployeeId, sortState.direction, sortState.field]);
+  }, [employees, projectNamesByEmployeeId, sortState.direction, sortState.field, usageByEmployeeId]);
 
   const pageSize = 10;
   const pageCount = Math.max(1, Math.ceil(sortedEmployees.length / pageSize));
@@ -1384,12 +1431,30 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     pageIndex * pageSize,
     pageIndex * pageSize + pageSize
   );
+  const selectedInvitationEmployeeIdSet = new Set(selectedInvitationEmployeeIds);
+  const selectableCurrentPageEmployees = currentPageEmployees.filter(
+    (employee) => employee.invitationStatus !== "accepted"
+  );
+  const allCurrentPageEmployeesSelected =
+    selectableCurrentPageEmployees.length > 0 &&
+    selectableCurrentPageEmployees.every((employee) =>
+      selectedInvitationEmployeeIdSet.has(employee.id)
+    );
+  const selectedInvitationEmployeeCount = employees.filter(
+    (employee) =>
+      employee.invitationStatus !== "accepted" &&
+      selectedInvitationEmployeeIdSet.has(employee.id)
+  ).length;
 
   useEffect(() => {
     if (pageIndex >= pageCount) {
       setPageIndex(pageCount - 1);
     }
   }, [pageCount, pageIndex]);
+
+  useEffect(() => {
+    setSelectedEmployeeId(initialEmployeeId ?? null);
+  }, [initialEmployeeId]);
 
   async function handleCsvFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1505,22 +1570,6 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     router.refresh();
   }
 
-  async function sendInviteForEmployee(employee: EmployeeRecord) {
-    setPendingAction(`invite:${employee.id}`);
-    setSubmitState({ message: "", status: "idle" });
-
-    const invitation = await requestEmployeeInvitation(employee.id);
-    if (!invitation) {
-      setPendingAction(null);
-      return;
-    }
-
-    mergeEmployees([invitation.employee]);
-    setSubmitState({ message: text.inviteSent, status: "success" });
-    setPendingAction(null);
-    router.refresh();
-  }
-
   function openDepartmentDialog(employee: EmployeeRecord) {
     setDepartmentEmployee(employee);
     setDepartmentValue(employee.department?.trim() ?? "");
@@ -1570,20 +1619,24 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     router.refresh();
   }
 
-  async function sendInvitesForAllEmployees() {
-    const targets = employees.filter((employee) => employee.invitationStatus !== "accepted");
+  async function sendInvitesForSelectedEmployees() {
+    const selectedIds = new Set(selectedInvitationEmployeeIds);
+    const targets = employees.filter(
+      (employee) =>
+        selectedIds.has(employee.id) && employee.invitationStatus !== "accepted"
+    );
     if (targets.length === 0) {
       setSubmitState({
         message:
           locale === "ko"
-            ? "일괄 초대할 직원이 없습니다."
-            : "There are no employees to invite.",
-        status: "success"
+            ? "초대할 직원을 선택하세요."
+            : "Select employees to invite.",
+        status: "error"
       });
       return;
     }
 
-    setPendingAction("inviteAll");
+    setPendingAction("inviteSelected");
     setSubmitState({ message: "", status: "idle" });
 
     const invitations: EmployeeInvitationResult[] = [];
@@ -1604,6 +1657,12 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     }
 
     mergeEmployees(invitations.map((invitation) => invitation.employee));
+    const invitedEmployeeIds = new Set(
+      invitations.map((invitation) => invitation.employee.id)
+    );
+    setSelectedInvitationEmployeeIds((current) =>
+      current.filter((employeeId) => !invitedEmployeeIds.has(employeeId))
+    );
     const successCount = invitations.length;
     setSubmitState({
       message:
@@ -1618,6 +1677,27 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     });
     setPendingAction(null);
     router.refresh();
+  }
+
+  function toggleEmployeeInvitationSelection(employeeId: string, checked: boolean) {
+    setSelectedInvitationEmployeeIds((current) => {
+      if (checked) {
+        return current.includes(employeeId) ? current : [...current, employeeId];
+      }
+      return current.filter((currentEmployeeId) => currentEmployeeId !== employeeId);
+    });
+  }
+
+  function toggleCurrentPageInvitationSelection(checked: boolean) {
+    const currentPageIds = new Set(
+      selectableCurrentPageEmployees.map((employee) => employee.id)
+    );
+    setSelectedInvitationEmployeeIds((current) => {
+      if (checked) {
+        return Array.from(new Set([...current, ...currentPageIds]));
+      }
+      return current.filter((employeeId) => !currentPageIds.has(employeeId));
+    });
   }
 
   async function requestEmployeeInvitation(employeeId: string, reportError = true) {
@@ -1761,21 +1841,29 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
       ) : null}
+      <section aria-label={usageText.detail} className="employee-usage-overview">
+        <article>
+          <span>{usageText.tokens}</span>
+          <strong>{formatTokenCount(usage.totalDailyTokens, locale)}</strong>
+          <small>{usage.trackedEmployees} / {usage.activeEmployees} {text.employees}</small>
+        </article>
+        <article>
+          <span>{locale === "ko" ? "사용 직원 평균" : "Average per tracked employee"}</span>
+          <strong>{formatTokenCount(Math.round(usage.averageDailyTokens), locale)}</strong>
+          <small>{locale === "ko" ? "오늘(UTC)" : "Today (UTC)"}</small>
+        </article>
+      </section>
       <section className="employee-list-section">
         <div className="employee-list-toolbar employee-list-actions">
           <Button
-            className="employee-invite-all-mobile-button"
-            disabled={
-              pendingAction !== null ||
-              employees.every((employee) => employee.invitationStatus === "accepted")
-            }
-            onClick={() => void sendInvitesForAllEmployees()}
+            disabled={pendingAction !== null || selectedInvitationEmployeeCount === 0}
+            onClick={() => void sendInvitesForSelectedEmployees()}
             size="sm"
             type="button"
             variant="outline"
           >
             <UserPlus aria-hidden="true" />
-            {pendingAction === "inviteAll" ? "..." : text.inviteAll}
+            {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
           </Button>
           <Button
             className="employee-add-trigger"
@@ -1795,38 +1883,78 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
           <>
             <div className="employee-list-grid">
               <div className="employee-list-header">
+                <label className="employee-selection-control employee-selection-header">
+                  <input
+                    aria-label={text.selectAll}
+                    checked={allCurrentPageEmployeesSelected}
+                    disabled={selectableCurrentPageEmployees.length === 0}
+                    onChange={(event) =>
+                      toggleCurrentPageInvitationSelection(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                </label>
+                {renderEmployeeSortHeader("rank", usageText.rank)}
                 {renderEmployeeSortHeader("name", text.name)}
                 {renderEmployeeSortHeader("department", text.department)}
+                {renderEmployeeSortHeader("tokens", usageText.tokens)}
                 {renderEmployeeSortHeader("project", text.projectCount)}
-                {renderEmployeeSortHeader("email", text.email)}
-                <div className="employee-invitation-header">
-                  {renderEmployeeSortHeader("invitation", text.invitation)}
-                  <Button
-                    className="employee-invite-all-button"
-                    disabled={
-                      pendingAction !== null ||
-                      employees.every((employee) => employee.invitationStatus === "accepted")
-                    }
-                    onClick={() => void sendInvitesForAllEmployees()}
-                    size="xs"
-                    type="button"
-                    variant="outline"
-                  >
-                    <UserPlus aria-hidden="true" />
-                    {pendingAction === "inviteAll" ? "..." : text.inviteAll}
-                  </Button>
-                </div>
               </div>
               <div className="employee-list">
                 {currentPageEmployees.map((employee) => {
                   const projectNames = projectNamesByEmployeeId.get(employee.id) ?? [];
+                  const employeeUsage = usageByEmployeeId.get(employee.id);
+                  const isInvitationSelectable = employee.invitationStatus !== "accepted";
                   return (
                     <article className="employee-list-row" key={employee.id}>
+                      <label
+                        className="employee-selection-control employee-list-cell"
+                        data-label={text.selectEmployee}
+                      >
+                        <input
+                          aria-label={`${text.selectEmployee}: ${nullableText(employee.name, employee.email)}`}
+                          checked={selectedInvitationEmployeeIdSet.has(employee.id)}
+                          disabled={!isInvitationSelectable || pendingAction !== null}
+                          onChange={(event) =>
+                            toggleEmployeeInvitationSelection(employee.id, event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                      </label>
+                      <div
+                        className="employee-list-cell employee-rank-cell"
+                        data-label={usageText.rank}
+                      >
+                        <strong data-rank={employeeUsage?.rank ?? 0}>
+                          {employeeUsage?.rank ?? "-"}
+                        </strong>
+                      </div>
                       <div
                         className="employee-list-cell employee-name-cell"
                         data-label={text.name}
                       >
-                        <strong>{nullableText(employee.name, employee.email)}</strong>
+                        <button
+                          className="employee-detail-trigger"
+                          onClick={() => setSelectedEmployeeId(employee.id)}
+                          type="button"
+                        >
+                          <span>
+                            <strong>{nullableText(employee.name, employee.email)}</strong>
+                            <span className="employee-name-metadata">
+                              <span className="employee-email-reveal">
+                                <span aria-hidden="true" className="employee-email-mask">***</span>
+                                <span className="employee-email-value">{employee.email}</span>
+                              </span>
+                              <Badge
+                                className="employee-invitation-status"
+                                variant={invitationStatusVariant(employee.invitationStatus)}
+                              >
+                                {formatInvitationStatus(employee.invitationStatus, locale)}
+                              </Badge>
+                            </span>
+                          </span>
+                          <ChevronRight aria-hidden="true" size={17} />
+                        </button>
                       </div>
                       <div
                         className="employee-list-cell employee-department-cell"
@@ -1843,44 +1971,17 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
                         </button>
                       </div>
                       <div
+                        className="employee-list-cell employee-token-cell"
+                        data-label={usageText.tokens}
+                      >
+                        <strong>{formatTokenCount(employeeUsage?.dailyTokens ?? 0, locale)}</strong>
+                      </div>
+                      <div
                         className="employee-list-cell employee-project-cell"
                         data-label={text.projectCount}
+                        title={projectNames.join(", ")}
                       >
-                        <p>{projectNames.length > 0 ? projectNames.join(", ") : "-"}</p>
-                      </div>
-                      <div
-                        className="employee-list-cell employee-email-cell"
-                        data-label={text.email}
-                      >
-                        <p>{employee.email}</p>
-                      </div>
-                      <div
-                        className="employee-list-cell employee-invitation-cell"
-                        data-label={text.invitation}
-                      >
-                        <div className="employee-invitation-actions">
-                          <Badge
-                            className="employee-invitation-status"
-                            variant={invitationStatusVariant(employee.invitationStatus)}
-                          >
-                            {formatInvitationStatus(employee.invitationStatus, locale)}
-                          </Badge>
-                          {employee.invitationStatus !== "accepted" ? (
-                            <Button
-                              disabled={pendingAction !== null}
-                              onClick={() => void sendInviteForEmployee(employee)}
-                              type="button"
-                              variant="outline"
-                            >
-                              <UserPlus aria-hidden="true" />
-                              {pendingAction === `invite:${employee.id}`
-                                ? "..."
-                                : employee.invitationStatus === "pending"
-                                  ? text.inviteResend
-                                  : text.inviteSend}
-                            </Button>
-                          ) : null}
-                        </div>
+                        <p>{formatTokenCount(projectNames.length, locale)}</p>
                       </div>
                     </article>
                   );
@@ -2068,6 +2169,107 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedEmployeeId(null);
+          }
+        }}
+        open={selectedUsage !== null}
+      >
+        <DialogContent className="employee-usage-dialog">
+          {selectedUsage ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedUsage.name}</DialogTitle>
+              </DialogHeader>
+              <p className="employee-usage-dialog-subtitle">
+                {selectedUsage.department ?? "-"} ·{" "}
+                <span className="employee-email-reveal" tabIndex={0}>
+                  <span aria-hidden="true" className="employee-email-mask">***</span>
+                  <span className="employee-email-value">{selectedUsage.email}</span>
+                </span>
+              </p>
+
+              <div className="employee-usage-summary-grid">
+                <article>
+                  <span>{usageText.rank}</span>
+                  <strong>#{selectedUsage.rank}</strong>
+                </article>
+                <article>
+                  <span>{usageText.tokens}</span>
+                  <strong>{formatTokenCount(selectedUsage.dailyTokens, locale)}</strong>
+                </article>
+              </div>
+
+              <section className="employee-usage-projects">
+                <h3>{usageText.projects}</h3>
+                {selectedUsage.projects.length > 0 ? (
+                  <div className="employee-usage-project-list">
+                    {selectedUsage.projects.map((project) => (
+                      <article key={project.projectId}>
+                        <div className="employee-usage-project-heading">
+                          <strong>{project.projectName}</strong>
+                          <Badge data-quota-status={project.quotaStatus} variant="outline">
+                            {formatEmployeeQuotaStatus(project.quotaStatus, locale)}
+                          </Badge>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>{usageText.tokens}</dt>
+                            <dd>{formatTokenCount(project.dailyTokens, locale)}</dd>
+                          </div>
+                          <div>
+                            <dt>{usageText.dailyLimit}</dt>
+                            <dd>
+                              {project.dailyTokenLimit === null
+                                ? usageText.unlimited
+                                : formatTokenCount(project.dailyTokenLimit, locale)}
+                            </dd>
+                          </div>
+                        </dl>
+                        <Button
+                          onClick={() =>
+                            router.push(
+                              `/tenants/${model.routeTenantId}/projects/${project.projectId}/policies`
+                            )
+                          }
+                          type="button"
+                          variant="outline"
+                        >
+                          {usageText.managePolicy}
+                          <ChevronRight aria-hidden="true" size={16} />
+                        </Button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="project-empty">{usageText.noProjectUsage}</p>
+                )}
+              </section>
+
+              <div className="modal-actions">
+                <Button
+                  onClick={() => {
+                    const employee = employees.find(
+                      (candidate) => candidate.id === selectedUsage.employeeId
+                    );
+                    if (employee) {
+                      setSelectedEmployeeId(null);
+                      openDepartmentDialog(employee);
+                    }
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  {text.editDepartment}
+                </Button>
+              </div>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -2285,6 +2487,24 @@ function formatTokenCount(value: number, locale: Locale) {
   return new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", {
     maximumFractionDigits: 0
   }).format(Math.max(0, value));
+}
+
+function formatEmployeeQuotaStatus(status: ProjectEmployeeQuotaStatus, locale: Locale) {
+  const labels: Record<Locale, Record<ProjectEmployeeQuotaStatus, string>> = {
+    en: {
+      exceeded: "Exceeded",
+      not_configured: "No quota",
+      warning: "Near limit",
+      within_limit: "Within limit"
+    },
+    ko: {
+      exceeded: "한도 초과",
+      not_configured: "한도 없음",
+      warning: "한도 임박",
+      within_limit: "한도 내"
+    }
+  };
+  return labels[locale][status];
 }
 
 function formatTokenLimit(

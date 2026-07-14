@@ -175,7 +175,7 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 	if err != nil {
 		t.Fatalf("loadDifficultyShadowOptions returned error: %v", err)
 	}
-	longSimplePrompt := strings.Repeat("Summarize this synthetic note briefly. ", 5)
+	longSimplePrompt := strings.Repeat("Summarize this synthetic note briefly. ", 5) + "Then explain the owner."
 	records := []datasetRecord{
 		{
 			SampleID:           "long_simple",

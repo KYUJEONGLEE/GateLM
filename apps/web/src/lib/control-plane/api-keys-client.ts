@@ -6,7 +6,10 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import { listControlPlaneProjects } from "@/lib/control-plane/projects-client";
-import { attachProjectToApiKeys } from "@/lib/control-plane/api-keys-management-model";
+import {
+  attachProjectToApiKeys,
+  excludeRevokedApiKeys
+} from "@/lib/control-plane/api-keys-management-model";
 import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
@@ -94,10 +97,12 @@ export async function getApiKeysModel(routeTenantId: string): Promise<ApiKeysMod
     };
   }
 
-  const apiKeys = listResults.flatMap(({ project, result }) =>
-    result.ok
-      ? attachProjectToApiKeys(project, result.data)
-      : []
+  const apiKeys = excludeRevokedApiKeys(
+    listResults.flatMap(({ project, result }) =>
+      result.ok
+        ? attachProjectToApiKeys(project, result.data)
+        : []
+    )
   );
 
   return {
@@ -120,7 +125,7 @@ export async function getProjectApiKeysModel(
 
   if (listResult.ok) {
     return {
-      apiKeys: listResult.data,
+      apiKeys: excludeRevokedApiKeys(listResult.data),
       controlPlaneBaseUrl,
       controlPlaneProjectId: projectId,
       loadError: null,

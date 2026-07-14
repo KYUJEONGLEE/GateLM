@@ -86,9 +86,6 @@ services:
   ai-service:
     restart: "no"
 
-  application:
-    restart: "no"
-
   web:
     restart: "no"
 

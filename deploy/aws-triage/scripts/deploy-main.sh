@@ -36,6 +36,7 @@ chat_url="${GATELM_DEPLOY_CHAT_URL:-https://chat.gatelm.co.kr}"
 public_url="${public_url%/}"
 chat_url="${chat_url%/}"
 minimum_free_kb="${GATELM_DEPLOY_MINIMUM_FREE_KB:-5242880}"
+tenant_chat_secret_dir="${deploy_dir}/.secrets/tenant-chat"
 
 build_services=(
   ai-service
@@ -63,6 +64,13 @@ all_services=(
   web
   chat-api
   chat-web
+)
+tenant_chat_secret_files=(
+  signing.jwk.json
+  jwks.json
+  binding-hmac-keys.json
+  cache-keysets.json
+  usage-receipt-token
 )
 
 [[ "${public_url}" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || \
@@ -178,21 +186,60 @@ apply_sql_file() {
     'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < "${sql_file}"
 }
 
+validate_tenant_chat_secrets() {
+  local path mode name active_kid
+
+  [[ -d "${tenant_chat_secret_dir}" && ! -L "${tenant_chat_secret_dir}" ]] || \
+    deploy_fail "Tenant Chat secret directory not found: ${tenant_chat_secret_dir}"
+  mode="$(stat -c '%a' "${tenant_chat_secret_dir}" 2>/dev/null || true)"
+  if [[ ! "${mode}" =~ ^[0-7]{3,4}$ ]] || (( (8#${mode} & 077) != 0 )); then
+    deploy_fail "${tenant_chat_secret_dir} permissions are too open (${mode:-unknown}); expected 700."
+  fi
+
+  active_kid="$(awk -F= '$1 == "TENANT_CHAT_WORKLOAD_ACTIVE_KID" {sub(/^[^=]*=/, ""); print}' "${env_file}" | tail -n 1)"
+  if [[ ! "${active_kid}" =~ ^[A-Za-z0-9_-]{1,128}$ || "${active_kid}" == replace-me* ]]; then
+    deploy_fail "TENANT_CHAT_WORKLOAD_ACTIVE_KID must be a non-placeholder opaque ID."
+  fi
+
+  for name in "${tenant_chat_secret_files[@]}"; do
+    path="${tenant_chat_secret_dir}/${name}"
+    [[ -f "${path}" && ! -L "${path}" && -s "${path}" ]] || \
+      deploy_fail "Tenant Chat secret file is missing, empty, or not a regular file: ${path}"
+    mode="$(stat -c '%a' "${path}" 2>/dev/null || true)"
+    if [[ ! "${mode}" =~ ^[0-7]{3,4}$ ]] || (( (8#${mode} & 077) != 0 )); then
+      deploy_fail "${path} permissions are too open (${mode:-unknown}); expected 600."
+    fi
+  done
+}
+
 previous_sha=""
 backup_dir=""
 rollback_manifest=""
 deployment_succeeded=false
 cutover_started=false
 
+cleanup_rollback_tags() {
+  local service image_ref image_id rollback_ref
+
+  [[ -s "${rollback_manifest}" ]] || return 0
+  while IFS=$'\t' read -r service image_ref image_id rollback_ref; do
+    if [[ -n "${rollback_ref}" ]] && docker image inspect "${rollback_ref}" >/dev/null 2>&1; then
+      docker image rm "${rollback_ref}" >/dev/null 2>&1 || \
+        deploy_warn "Could not remove rollback image tag ${rollback_ref}."
+    fi
+  done < "${rollback_manifest}"
+}
+
 restore_previous_application() {
-  local restore_failed=false
-  local service image_ref image_id
+  local restore_failed=false source_ref
+  local service image_ref image_id rollback_ref
 
   if [[ -s "${rollback_manifest}" ]]; then
     deploy_warn "Restoring image tags from the pre-deployment manifest."
-    while IFS=$'\t' read -r service image_ref image_id; do
-      if ! docker image inspect "${image_id}" >/dev/null 2>&1 || \
-        ! docker image tag "${image_id}" "${image_ref}"; then
+    while IFS=$'\t' read -r service image_ref image_id rollback_ref; do
+      source_ref="${rollback_ref:-${image_id}}"
+      if ! docker image inspect "${source_ref}" >/dev/null 2>&1 || \
+        ! docker image tag "${source_ref}" "${image_ref}"; then
         deploy_warn "Could not restore ${service} image ${image_id}."
         restore_failed=true
       fi
@@ -230,6 +277,7 @@ restore_previous_application() {
     return 1
   fi
 
+  cleanup_rollback_tags
   deploy_warn "Previous application state restored. Database changes were not reversed."
   return 0
 }
@@ -268,6 +316,7 @@ available_kb="$(df -Pk "${repo_dir}" | awk 'NR == 2 {print $4}')"
 (( available_kb >= minimum_free_kb )) || \
   deploy_fail "Insufficient disk space: ${available_kb} KiB available, ${minimum_free_kb} KiB required."
 
+validate_tenant_chat_secrets
 compose config --quiet
 
 backup_dir="${backup_root}/${run_id}"
@@ -283,9 +332,13 @@ for service in "${runtime_services[@]}"; do
   [[ -n "${container_id}" ]] || deploy_fail "Running container not found for ${service}."
   image_ref="$(docker inspect --format '{{.Config.Image}}' "${container_id}")"
   image_id="$(docker inspect --format '{{.Image}}' "${container_id}")"
+  rollback_ref="gatelm/rollback:${run_id}-${service}"
   [[ -n "${image_ref}" && "${image_id}" =~ ^sha256:[0-9a-f]{64}$ ]] || \
     deploy_fail "Could not capture rollback image for ${service}."
-  printf '%s\t%s\t%s\n' "${service}" "${image_ref}" "${image_id}" >> "${rollback_manifest}"
+  docker image tag "${image_id}" "${rollback_ref}" || \
+    deploy_fail "Could not protect rollback image for ${service}."
+  printf '%s\t%s\t%s\t%s\n' \
+    "${service}" "${image_ref}" "${image_id}" "${rollback_ref}" >> "${rollback_manifest}"
 done
 
 deploy_log "Creating PostgreSQL backup."
@@ -325,6 +378,8 @@ apply_sql_file "${repo_dir}/db/migrations/012_create_model_pricing_catalog_compa
 apply_sql_file "${repo_dir}/db/migrations/013_seed_openai_canonical_pricing_aliases.sql"
 apply_sql_file "${repo_dir}/db/seeds/002_seed_dashboard_pricing_catalog.sql"
 apply_sql_file "${deploy_dir}/migrations/002_drop_legacy_selected_routing_columns.sql"
+apply_sql_file "${deploy_dir}/migrations/003_add_p0_invocation_log_ttft.sql"
+apply_sql_file "${deploy_dir}/migrations/004_add_p0_dashboard_rollup_indexes.sql"
 
 cutover_started=true
 deploy_log "Recreating application services."
@@ -375,6 +430,7 @@ cat > "${backup_dir}/deployment-evidence.json" <<EOF
 }
 EOF
 
+cleanup_rollback_tags
 deployment_succeeded=true
 deploy_log "Deployment passed for ${target_sha}."
 deploy_log "Backup: ${backup_dir}"

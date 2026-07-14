@@ -4,7 +4,7 @@
 |---|---|
 | Status | Active |
 | Authority | 문서 상태, 읽기 순서, 계약 변경 절차 |
-| Last verified | 2026-07-13 |
+| Last verified | 2026-07-14 |
 
 ## 1. Authority Model
 
@@ -74,6 +74,11 @@ plan/task/acceptance는 current backlog나 완료 evidence가 아니다. 실제 
 - [`../v2.1.0/schemas/category-evaluation-record.schema.json`](../v2.1.0/schemas/category-evaluation-record.schema.json)
 - [`../v2.1.0/difficulty-evaluation-dataset-contract.md`](../v2.1.0/difficulty-evaluation-dataset-contract.md)
 - [`../v2.1.0/schemas/difficulty-evaluation-record.schema.json`](../v2.1.0/schemas/difficulty-evaluation-record.schema.json)
+- [`../v2.1.0/difficulty-label-guide.md`](../v2.1.0/difficulty-label-guide.md)
+- [`../v2.1.0/schemas/difficulty-label-record.schema.json`](../v2.1.0/schemas/difficulty-label-record.schema.json)
+- [`../v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json`](../v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json)
+- [`../v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json`](../v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json)
+- [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json)
 - `../v2.1.0/fixtures/*.fixture.jsonl`
 - [`../v2.1.0/routing-advanced-plan.md`](../v2.1.0/routing-advanced-plan.md)
 - [`../v2.1.0/routing-performance-test-scenario.md`](../v2.1.0/routing-performance-test-scenario.md)

@@ -44,4 +44,11 @@ describe('Chat API environment', () => {
     expect(() => validateEnv({ ...base, TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: '17' }))
       .toThrow('TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN');
   });
+
+  it('rejects explicitly empty numeric settings instead of using defaults', () => {
+    expect(() => validateEnv({ ...base, CHAT_API_PORT: '' }))
+      .toThrow('CHAT_API_PORT');
+    expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '' }))
+      .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
+  });
 });

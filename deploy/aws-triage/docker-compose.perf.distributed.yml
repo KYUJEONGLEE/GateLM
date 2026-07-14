@@ -1,0 +1,210 @@
+name: gatelm-perf-distributed
+
+services:
+  postgres:
+    profiles: [data]
+    image: postgres:16
+    restart: "no"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${GATELM_PERF_DATA_PRIVATE_IP:?data private IP is required}:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [role_internal]
+
+  redis:
+    profiles: [data]
+    image: redis:7-alpine
+    restart: "no"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    ports:
+      - "${GATELM_PERF_DATA_PRIVATE_IP:?data private IP is required}:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [role_internal]
+
+  control-plane-api:
+    profiles: [data]
+    image: gatelm/control-plane-api:perf-distributed
+    build:
+      context: ../..
+      dockerfile: infra/docker/control-plane-api.Dockerfile
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      GATELM_DEPLOYMENT_ENV: perf
+      CONTROL_PLANE_PORT: "3001"
+      CONTROL_PLANE_ADMIN_AUTH_MODE: session_cookie
+      CONTROL_PLANE_WEB_ORIGIN: http://127.0.0.1
+      CONTROL_PLANE_AUTH_COOKIE_SECURE: "false"
+      CONTROL_PLANE_AUTH_STATE_SECRET: ${CONTROL_PLANE_AUTH_STATE_SECRET}
+      CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: ${CONTROL_PLANE_INTERNAL_SERVICE_TOKEN}
+      TENANT_CHAT_PROJECTOR_ENABLED: "false"
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN}
+      TENANT_CHAT_WEB_ORIGIN: http://127.0.0.1
+      AUTH_EMAIL_TRANSPORT: smtp
+      CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: "false"
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "2525"
+      SMTP_SECURE: "false"
+      SMTP_TLS_MODE: opportunistic
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: gatelm-perf@example.invalid
+      GATELM_DEMO_PROVIDER_MODE: mock
+      GATELM_DEMO_MOCK_PROVIDER_BASE_URL: http://${GATELM_PERF_MOCK_PRIVATE_IP}:8090
+      GATELM_DEMO_TENANT_ID: ${GATELM_DEMO_TENANT_ID}
+      GATELM_DEMO_PROJECT_ID: ${GATELM_DEMO_PROJECT_ID}
+      GATELM_DEMO_APPLICATION_ID: ${GATELM_DEMO_APPLICATION_ID}
+      GATELM_DEMO_API_KEY: ${GATELM_DEMO_API_KEY}
+      GATELM_DEMO_APP_TOKEN: ${GATELM_DEMO_APP_TOKEN}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ""
+      CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP: ""
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${GATELM_PERF_DATA_PRIVATE_IP}:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${GATELM_PERF_DATA_PRIVATE_IP}:6379
+      OPENAI_API_KEY: ""
+    ports:
+      - "${GATELM_PERF_DATA_PRIVATE_IP}:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks: [role_internal]
+
+  mock-provider:
+    profiles: [mock]
+    image: node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
+    restart: "no"
+    init: true
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      FAST_NOOP_MOCK_HOST: 0.0.0.0
+      FAST_NOOP_MOCK_PORT: "8090"
+      FAST_NOOP_MOCK_DEFAULT_LATENCY_MS: ${MOCK_PROVIDER_DEFAULT_LATENCY_MS}
+    command: ["node", "/workspace/scripts/dev/fast-noop-mock-provider.mjs"]
+    volumes:
+      - ../..:/workspace:ro
+    ports:
+      - "${GATELM_PERF_MOCK_PRIVATE_IP:?mock private IP is required}:8090:8090"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [role_internal]
+
+  gateway-core:
+    profiles: [gateway]
+    image: gatelm/gateway-core:perf-distributed
+    build:
+      context: ../..
+      dockerfile: infra/docker/gateway-core.Dockerfile
+    restart: "no"
+    environment:
+      GATELM_DEPLOYMENT_ENV: perf
+      GATEWAY_PORT: "8080"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${GATELM_PERF_DATA_PRIVATE_IP}:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${GATELM_PERF_DATA_PRIVATE_IP}:6379
+      GATEWAY_CONTROL_PLANE_BASE_URL: http://${GATELM_PERF_DATA_PRIVATE_IP}:3001
+      GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN: ${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN}
+      GATEWAY_CONTROL_PLANE_TIMEOUT_MS: "5000"
+      GATEWAY_RUNTIME_SNAPSHOT_MODE: strict
+      GATEWAY_PROVIDER_TIMEOUT_MS: "5000"
+      MOCK_PROVIDER_BASE_URL: http://${GATELM_PERF_MOCK_PRIVATE_IP}:8090
+      GATEWAY_DEFAULT_PROVIDER: mock
+      GATEWAY_DEFAULT_MODEL: mock-balanced
+      GATEWAY_LOW_COST_MODEL: mock-fast
+      GATEWAY_HIGH_QUALITY_MODEL: mock-smart
+      GATEWAY_EXACT_CACHE_KEY_SECRET: ${GATEWAY_EXACT_CACHE_KEY_SECRET}
+      GATEWAY_MAX_REQUEST_BODY_BYTES: "4194304"
+      GATEWAY_RATE_LIMIT_ENABLED: "true"
+      GATEWAY_RATE_LIMIT_BACKEND: redis
+      GATEWAY_RATE_LIMIT_ALGORITHM: token_bucket
+      GATEWAY_RATE_LIMIT_WINDOW_SECONDS: "60"
+      GATEWAY_RATE_LIMIT_LIMIT: ${GATELM_PERF_RUNTIME_RATE_LIMIT_LIMIT}
+      GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX: gatelm:perf:distributed:rate-limit
+      GATEWAY_AI_SAFETY_SIDECAR_ENABLED: "false"
+      GATEWAY_PROVIDER_MAX_IDLE_CONNS: ${GATELM_PERF_PROVIDER_MAX_IDLE_CONNS:-1024}
+      GATEWAY_PROVIDER_MAX_IDLE_CONNS_PER_HOST: ${GATELM_PERF_PROVIDER_MAX_IDLE_CONNS_PER_HOST:-512}
+      GATEWAY_PROVIDER_MAX_CONNS_PER_HOST: ${GATELM_PERF_PROVIDER_MAX_CONNS_PER_HOST:-512}
+      GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS: "90000"
+      GATEWAY_PROVIDER_DIAL_TIMEOUT_MS: "5000"
+      GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS: "30000"
+      GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS: "10000"
+      GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS: "5000"
+      GATEWAY_DATABASE_MAX_CONNS: ${GATELM_PERF_DATABASE_MAX_CONNS:-32}
+      GATEWAY_DATABASE_MIN_CONNS: ${GATELM_PERF_DATABASE_MIN_CONNS:-4}
+      GATEWAY_LOG_DATABASE_MAX_CONNS: ${GATELM_PERF_LOG_DATABASE_MAX_CONNS:-8}
+      GATEWAY_LOG_DATABASE_MIN_CONNS: ${GATELM_PERF_LOG_DATABASE_MIN_CONNS:-2}
+      GATEWAY_AUTH_CACHE_ENABLED: "true"
+      GATEWAY_AUTH_CACHE_TTL_MS: "1000"
+      GATEWAY_AUTH_CACHE_MAX_ENTRIES: "4096"
+      GATEWAY_PRICING_CACHE_ENABLED: "true"
+      GATEWAY_PRICING_CACHE_TTL_MS: "5000"
+      GATEWAY_PRICING_CACHE_MAX_ENTRIES: "1024"
+      GATEWAY_ASYNC_LOG_QUEUE_SIZE: ${GATELM_PERF_ASYNC_LOG_QUEUE_SIZE:-20000}
+      GATEWAY_ASYNC_LOG_WORKER_COUNT: ${GATELM_PERF_ASYNC_LOG_WORKER_COUNT:-4}
+      GATEWAY_ASYNC_LOG_BATCH_SIZE: ${GATELM_PERF_ASYNC_LOG_BATCH_SIZE:-100}
+      GATEWAY_ASYNC_LOG_BATCH_FLUSH_INTERVAL_MS: "10"
+      GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS: "5000"
+      GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS: "30000"
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ""
+      GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP: ""
+      GATELM_DEMO_API_KEY: ${GATELM_DEMO_API_KEY}
+      GATELM_DEMO_APP_TOKEN: ${GATELM_DEMO_APP_TOKEN}
+      GATELM_DEMO_TENANT_ID: ${GATELM_DEMO_TENANT_ID}
+      GATELM_DEMO_PROJECT_ID: ${GATELM_DEMO_PROJECT_ID}
+      GATELM_DEMO_APPLICATION_ID: ${GATELM_DEMO_APPLICATION_ID}
+      GATELM_DEMO_API_KEY_ID: ${GATELM_DEMO_API_KEY_ID}
+      GATELM_DEMO_APP_TOKEN_ID: ${GATELM_DEMO_APP_TOKEN_ID}
+      OPENAI_API_KEY: ""
+    ports:
+      - "${GATELM_PERF_GATEWAY_PRIVATE_IP:?gateway private IP is required}:18080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq gateway-core /proc/1/cmdline"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [role_internal]
+
+volumes:
+  postgres_data:
+    name: gatelm-perf-distributed-postgres-data
+  redis_data:
+    name: gatelm-perf-distributed-redis-data
+
+networks:
+  role_internal:
+    name: gatelm-perf-distributed-role-internal
+    driver: bridge

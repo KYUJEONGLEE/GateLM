@@ -12,7 +12,7 @@ export async function generateTenantChatLocalSecrets(options = {}) {
     throw new Error(`Refusing to overwrite existing Tenant Chat secrets at ${target}.`);
   }
   await mkdir(dirname(target), { recursive: true });
-  await mkdir(staging, { recursive: false });
+  await mkdir(staging, { recursive: false, mode: 0o700 });
   try {
     const pair = generateKeyPairSync('ed25519');
     const privateJwk = pair.privateKey.export({ format: 'jwk' });

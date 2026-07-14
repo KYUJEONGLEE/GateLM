@@ -11,6 +11,35 @@ describe('validateEnv', () => {
     expect(env.TENANT_CHAT_PROJECTOR_BATCH_SIZE).toBe(50);
     expect(env.TENANT_CHAT_PROJECTOR_INTERVAL_MS).toBe(1000);
     expect(env.TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS).toBe(5);
+    expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('false');
+    expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(1000);
+    expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(500);
+    expect(env.DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE).toBe(8);
+    expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(60000);
+    expect(env.DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS).toBe(60000);
+    expect(env.DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS).toBe(900000);
+  });
+
+  it('validates dashboard rollup bounds without changing ports', () => {
+    const env = validateEnv({
+      ...baseEnv(),
+      DASHBOARD_ROLLUP_ENABLED: 'true',
+      DASHBOARD_ROLLUP_INTERVAL_MS: '500',
+      DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE: '750',
+      DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE: '12',
+      DASHBOARD_ROLLUP_DISCOVERY_LAG_MS: '30000',
+      DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS: '120000',
+      DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS: '1800000',
+    });
+
+    expect(env.CONTROL_PLANE_PORT).toBe(3001);
+    expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('true');
+    expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(500);
+    expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(750);
+    expect(env.DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE).toBe(12);
+    expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(30000);
+    expect(env.DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS).toBe(120000);
+    expect(env.DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS).toBe(1800000);
   });
 
   it('validates Tenant Chat projector bounds without changing ports', () => {

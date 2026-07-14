@@ -51,7 +51,24 @@ func loadCategoryPolicy() categoryPolicyData {
 	if err := json.Unmarshal(categoryPolicyJSON, &policy); err != nil {
 		panic(err)
 	}
+	for category, rule := range policy.Rules {
+		rule.Contains = normalizeCategoryRulePhrases(rule.Contains)
+		rule.StrongSignals = normalizeCategoryRulePhrases(rule.StrongSignals)
+		rule.SoftSignals = normalizeCategoryRulePhrases(rule.SoftSignals)
+		rule.NegativeSignals = normalizeCategoryRulePhrases(rule.NegativeSignals)
+		rule.Tokens = normalizeCategoryRulePhrases(rule.Tokens)
+		rule.RequiresToken = collapseRoutingWhitespace(canonicalizeRoutingText(rule.RequiresToken))
+		rule.RequiresAnyToken = normalizeCategoryRulePhrases(rule.RequiresAnyToken)
+		policy.Rules[category] = rule
+	}
 	return policy
+}
+
+func normalizeCategoryRulePhrases(phrases []string) []string {
+	for index, phrase := range phrases {
+		phrases[index] = collapseRoutingWhitespace(canonicalizeRoutingText(phrase))
+	}
+	return phrases
 }
 
 type RuleBasedCategoryClassifier struct{}
@@ -211,11 +228,15 @@ func (d CategoryDiagnostics) HasData() bool {
 }
 
 func categoryScores(features PromptFeatures) []CategoryScore {
-	text := features.normalizedText
-	tokens := features.tokens
+	text := features.instructionText
+	tokens := features.instructionTokens
+	if text == "" && !features.hasCodeFence {
+		text = features.normalizedText
+		tokens = features.tokens
+	}
 	intentFeatures := extractCategoryFeatures(features)
 	code := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryCode])+weightedSignalScore(text,
-		[]string{"```", "stack trace", "syntax error", "race condition", "nil pointer", "compile error"},
+		[]string{"stack trace", "syntax error", "race condition", "nil pointer", "compile error"},
 		[]string{"typescript", "javascript", "python", "golang", " go ", "sql", "function", "class", "api", "debug", "refactor", "code", "bug", "코드", "버그", "함수"},
 	), intentFeatures.code)
 	translation := categoryIntentAdjustedScore(policyRuleScore(text, tokens, categoryPolicy.Rules[CategoryTranslation])+weightedSignalScore(text,
@@ -275,30 +296,49 @@ func extractCategoryIntentFeatures(features PromptFeatures, category string) Cat
 }
 
 func categoryIntentAdjustedScore(base int, features CategoryIntentFeatures) int {
-	if features.negativeContextScore > 0 {
+	// Negative context suppresses incidental category words such as menu or
+	// setting names. An explicit action-object pair is stronger evidence: the
+	// negative term can describe the payload being acted on (for example,
+	// translating code review text) rather than negate the requested intent.
+	if features.negativeContextScore > 0 && features.intentPairScore < 3 {
 		return 0
 	}
 
 	bonus := features.intentPairScore + minInt(features.structuralEvidenceScore, 2)
+	score := 0
 	if base > 0 {
-		return base + bonus
+		score = base + bonus
+	} else if features.intentPairScore > 0 {
+		score = features.actionScore + features.objectFitScore + bonus
+	} else if features.structuralEvidenceScore >= 3 {
+		score = features.structuralEvidenceScore
 	}
-	if features.intentPairScore > 0 {
-		return features.actionScore + features.objectFitScore + bonus
-	}
-	return 0
+	return maxInt(score-features.negativeContextScore, 0)
 }
 
 func categoryActionPhrases(category string) []string {
 	switch category {
 	case CategoryCode:
-		return []string{"fix", "debug", "refactor", "implement", "compile", "find the cause", "write code", "수정", "고쳐", "디버깅", "리팩터", "구현", "컴파일", "원인을", "버그를 찾아"}
+		return []string{
+			"fix", "debug", "refactor", "implement", "compile", "find the cause", "narrow the cause", "reproduce", "diagnose", "instrument", "rollback", "write code",
+			"수정", "고쳐", "디버깅", "리팩터", "구현", "컴파일", "원인을", "원인을 좁", "재현", "진단", "계측", "롤백", "버그를 찾아",
+		}
 	case CategoryTranslation:
-		return []string{"translate", "translation", "localize", "into korean", "into english", "to korean", "to english", "번역", "영문화", "현지화", "영어로", "한국어로", "일본어로", "중국어로"}
+		return []string{
+			"translate", "translation", "localize", "into korean", "into english", "into japanese", "into chinese", "into spanish", "into french", "into german",
+			"to korean", "to english", "to japanese", "to chinese", "to spanish", "to french", "to german",
+			"번역", "영문화", "현지화", "영어로", "한국어로", "일본어로", "중국어로", "스페인어로", "프랑스어로", "독일어로",
+		}
 	case CategorySummarization:
-		return []string{"summarize", "summary", "condense", "shorten", "key points", "요약", "압축", "줄여", "핵심만", "요점", "짧게 정리", "추려"}
+		return []string{
+			"summarize", "summary", "condense", "shorten", "synthesize", "deduplicate", "consolidate", "group", "retain", "key points",
+			"요약", "압축", "줄여", "핵심만", "요점", "짧게 정리", "추려", "종합", "중복 제거", "통합", "묶", "보존",
+		}
 	case CategoryReasoning:
-		return []string{"compare", "recommend", "evaluate", "decide", "prioritize", "tradeoff", "trade-off", "비교", "추천", "평가", "판단", "결정", "우선순위", "장단점", "트레이드오프"}
+		return []string{
+			"compare", "recommend", "evaluate", "decide", "choose", "select", "prioritize", "assess", "conclude", "tradeoff", "trade-off",
+			"비교", "추천", "평가", "판단", "결정", "선택", "골라", "정해", "검토", "우선순위", "결론", "장단점", "트레이드오프",
+		}
 	default:
 		return nil
 	}
@@ -307,13 +347,25 @@ func categoryActionPhrases(category string) []string {
 func categoryObjectPhrases(category string) []string {
 	switch category {
 	case CategoryCode:
-		return []string{"code", "function", "class", "api", "sql", "stack trace", "exception", "test failure", "typescript", "javascript", "python", "golang", "코드", "함수", "에러", "오류", "버그", "테스트 실패", "타입스크립트", "자바스크립트", "파이썬"}
+		return []string{
+			"code", "function", "class", "api", "sql", "stack trace", "exception", "log", "root cause", "regression test", "state transition", "race condition", "observability", "instrumentation", "rollback", "test failure", "typescript", "javascript", "python", "golang",
+			"코드", "함수", "에러", "오류", "버그", "로그", "원인", "회귀 테스트", "상태 전이", "경쟁 조건", "관측", "계측", "롤백", "테스트 실패", "타입스크립트", "자바스크립트", "파이썬",
+		}
 	case CategoryTranslation:
-		return []string{"sentence", "paragraph", "document", "email", "notice", "source text", "korean", "english", "japanese", "chinese", "문장", "문단", "문서", "메일", "안내문", "공지", "원문", "한국어", "영어", "일본어", "중국어"}
+		return []string{
+			"sentence", "paragraph", "document", "email", "notice", "text", "content", "copy", "review comment", "migration guide", "source text", "korean", "english", "japanese", "chinese", "spanish", "french", "german",
+			"문장", "문단", "문서", "메일", "안내문", "공지", "문구", "내용", "리뷰 의견", "가이드", "원문", "한국어", "영어", "일본어", "중국어", "스페인어", "프랑스어", "독일어",
+		}
 	case CategorySummarization:
-		return []string{"report", "document", "meeting notes", "record", "article", "conversation", "policy", "보고서", "문서", "회의록", "기록", "대화", "정책", "공지", "메모"}
+		return []string{
+			"report", "document", "meeting notes", "record", "article", "conversation", "policy", "source", "common pattern", "trend", "exception", "agreement", "conflict", "evidence", "follow-up", "unresolved item",
+			"보고서", "문서", "회의록", "기록", "대화", "정책", "공지", "메모", "자료", "공통 흐름", "추세", "예외", "합의점", "충돌점", "근거", "출처", "후속 조치", "미해결 항목",
+		}
 	case CategoryReasoning:
-		return []string{"option", "alternative", "plan", "strategy", "criteria", "constraint", "cost", "risk", "schedule", "대안", "방식", "계획", "전략", "기준", "제약", "비용", "위험", "일정"}
+		return []string{
+			"option", "alternative", "candidate", "backup", "plan", "strategy", "criteria", "constraint", "cost", "risk", "schedule", "budget", "prerequisite", "failure cost", "variable", "assumption", "conclusion",
+			"대안", "후보", "차선책", "대체값", "방식", "계획", "전략", "기준", "제약", "비용", "위험", "일정", "예산", "선행 조건", "실패 비용", "변수", "가정", "결론",
+		}
 	default:
 		return nil
 	}
@@ -329,26 +381,37 @@ func categoryNegativeContextPhrases(category string) []string {
 	case CategorySummarization:
 		return append(phrases, "summary page", "json output", "json 형태")
 	case CategoryReasoning:
-		return append(phrases, "comparison page", "priority field", "우선순위 필드", "json output", "json 형태")
+		return append(phrases,
+			"comparison page", "priority field", "without further analysis", "no alternative comparison", "analysis is not needed",
+			"우선순위 필드", "분석은 하지 말", "분석하지 말", "대안 비교는 필요 없", "json output", "json 형태",
+		)
 	default:
 		return phrases
 	}
 }
 
 func categoryStructuralEvidenceScore(features PromptFeatures, category string) int {
-	text := features.normalizedText
+	text := features.instructionText
 	switch category {
 	case CategoryCode:
 		score := 0
-		if features.hasCodeFence {
+		structuralText := features.payloadText
+		if structuralText == "" {
+			structuralText = text
+		}
+		if features.hasCodeFence && hasCodePayloadStructure(features.payloadText) {
 			score += 3
 		}
-		if hasAnyPhrase(text, []string{"stack trace", "syntax error", "compile error", "select * from", "insert into", "update ", "package main", "func ", "스택 트레이스", "컴파일 에러"}) {
+		if hasAnyPhrase(structuralText, []string{"stack trace", "syntax error", "compile error", "select * from", "insert into", "update", "package main", "func", "function", "class", "const", "def", "스택 트레이스", "컴파일 에러"}) {
 			score += 2
 		}
 		return minInt(score, 4)
 	case CategoryTranslation:
-		return minInt(countDistinctPhrases(text, []string{"to korean", "to english", "to japanese", "to chinese", "into korean", "into english", "영어로", "한국어로", "일본어로", "중국어로", "영문화"})*2, 4)
+		return minInt(countDistinctPhrases(text, []string{
+			"to korean", "to english", "to japanese", "to chinese", "to spanish", "to french", "to german",
+			"into korean", "into english", "into japanese", "into chinese", "into spanish", "into french", "into german",
+			"영어로", "한국어로", "일본어로", "중국어로", "스페인어로", "프랑스어로", "독일어로", "영문화",
+		})*2, 4)
 	case CategorySummarization:
 		if hasAnyPhrase(text, []string{"meeting notes", "long report", "multiple documents", "회의록", "긴 보고서", "여러 문서", "세 문서"}) {
 			return 2
@@ -370,32 +433,32 @@ func policyRuleScore(text string, tokens map[string]struct{}, rule categoryRuleD
 		score += 4
 	}
 	for _, signal := range rule.Contains {
-		if strings.Contains(text, strings.ToLower(signal)) {
+		if containsRoutingPhrase(text, signal) {
 			score += 3
 		}
 	}
 	for _, signal := range rule.StrongSignals {
-		if strings.Contains(text, strings.ToLower(signal)) {
+		if containsRoutingPhrase(text, signal) {
 			score += 3
 		}
 	}
 	for _, signal := range rule.SoftSignals {
-		if strings.Contains(text, strings.ToLower(signal)) {
+		if containsRoutingPhrase(text, signal) {
 			score++
 		}
 	}
 	for _, token := range rule.Tokens {
-		if containsRoutingToken(tokens, strings.ToLower(token)) {
+		if containsRoutingToken(tokens, token) {
 			score += 2
 		}
 	}
-	if rule.RequiresToken != "" && !containsRoutingToken(tokens, strings.ToLower(rule.RequiresToken)) {
+	if rule.RequiresToken != "" && !containsRoutingToken(tokens, rule.RequiresToken) {
 		return 0
 	}
 	if len(rule.RequiresAnyToken) > 0 {
 		matched := false
 		for _, token := range rule.RequiresAnyToken {
-			if containsRoutingToken(tokens, strings.ToLower(token)) {
+			if containsRoutingToken(tokens, token) {
 				matched = true
 				break
 			}
@@ -420,12 +483,12 @@ func weightedSignalScore(text string, strong []string, soft []string) int {
 	}
 	score := 0
 	for _, signal := range strong {
-		if strings.Contains(text, signal) {
+		if containsRoutingPhrase(text, signal) {
 			score += 3
 		}
 	}
 	for _, signal := range soft {
-		if strings.Contains(text, signal) {
+		if containsRoutingPhrase(text, signal) {
 			score++
 		}
 	}
@@ -460,11 +523,24 @@ func scoreForCategory(scores []CategoryScore, category string) int {
 
 func hasAnyPhrase(text string, phrases []string) bool {
 	for _, phrase := range phrases {
-		if strings.Contains(text, phrase) {
+		if containsRoutingPhrase(text, phrase) {
 			return true
 		}
 	}
 	return false
+}
+
+func hasCodePayloadStructure(text string) bool {
+	if text == "" {
+		return false
+	}
+	if hasAnyPhrase(text, []string{
+		"package main", "func", "function", "class", "const", "let", "var", "def", "import",
+		"select", "insert", "update", "stack trace", "syntax error", "compile error",
+	}) {
+		return true
+	}
+	return strings.Contains(text, ":=") || strings.Contains(text, "=>") || strings.Contains(text, "();")
 }
 
 func capabilityForCategory(category string) string {

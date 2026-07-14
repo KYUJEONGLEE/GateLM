@@ -50,7 +50,9 @@ Replace:
 - `TENANT_CHAT_WEB_SERVICE_TOKEN`
 - `TENANT_CHAT_ACCESS_JWT_SECRET`
 - `TENANT_CHAT_INTENT_SECRET`
+- `TENANT_CHAT_WORKLOAD_ACTIVE_KID`
 - `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` (use the same value)
+- `GATEWAY_OBSERVABILITY_INTERNAL_TOKEN` (use a separate value)
 - `GATELM_GATEWAY_API_KEY`
 - `GATEWAY_EXACT_CACHE_KEY_SECRET`
 - `GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY`
@@ -69,6 +71,7 @@ CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=false
 CONTROL_PLANE_AUTH_STATE_SECRET=<random-long-value>
 CONTROL_PLANE_INTERNAL_SERVICE_TOKEN=<random-long-value>
 GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN=<same-random-long-value>
+GATEWAY_OBSERVABILITY_INTERNAL_TOKEN=<separate-random-long-value>
 TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN=<separate-random-long-value>
 TENANT_CHAT_WEB_SERVICE_TOKEN=<separate-random-long-value>
 TENANT_CHAT_ACCESS_JWT_SECRET=<separate-random-long-value>
@@ -81,6 +84,23 @@ SMTP_USER=<smtp-user-if-required>
 SMTP_PASSWORD=<smtp-password-if-required>
 SMTP_FROM=<verified-sender>
 ```
+
+Generate the Tenant Chat workload signing, verification, cache, and usage
+receipt files once from `deploy/aws-triage`. The `kid` must exactly match
+`TENANT_CHAT_WORKLOAD_ACTIVE_KID` in `.env`:
+
+```bash
+node ../../scripts/dev/generate-tenant-chat-local-secrets.mjs \
+  --target=.secrets/tenant-chat \
+  --kid=tenant-chat-production-1
+chmod 700 .secrets/tenant-chat
+chmod 600 .secrets/tenant-chat/*
+```
+
+The generated directory is gitignored. Never copy its private JWK, HMAC keys,
+cache keys, or usage receipt token into `.env`, Git, logs, or deployment
+evidence. The deployment preflight rejects missing, empty, or group/world-readable
+secret files before building images.
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
@@ -130,6 +150,7 @@ Recommended public exposure:
 - Chat API `3003`: Docker-network only; never publish it on the host or Security Group
 - Control Plane `3001`: localhost-bound by default; do not expose publicly
 - Gateway `8080`: localhost-bound by default; do not expose publicly
+- Tenant Chat private Gateway `8081`: Docker-network only; never publish it on the host or Security Group
 
 When HTTPS is enabled through a host-level reverse proxy such as Caddy, open `80` and `443`, keep `22` restricted to your IP, and prefer closing public `3000`/`3002` access. Keep `3001` and `8080` blocked from the public internet even with `CONTROL_PLANE_ADMIN_AUTH_MODE=session_cookie`.
 
@@ -151,7 +172,10 @@ docker compose --env-file .env config --quiet
 docker compose --env-file .env build
 ```
 
-On a small instance, the first build can be slow. Keep `AI_SERVICE_INSTALL_ML_DEPS=false` unless you are intentionally testing the heavier AI safety path.
+Compose requires the five files under `.secrets/tenant-chat` and an active
+workload `kid` before it can start Gateway and Chat API. On a small instance,
+the first build can be slow. Keep `AI_SERVICE_INSTALL_ML_DEPS=false` unless you
+are intentionally testing the heavier AI safety path.
 
 ## Initialize Data
 
@@ -180,6 +204,8 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/002_drop_legacy_selected_routing_columns.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/003_add_p0_invocation_log_ttft.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/004_add_p0_dashboard_rollup_indexes.sql
 ```
 
 Do not run the demo seed in AWS/prod-like environments. The Control Plane now refuses the demo seed path there; create the tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API.
@@ -423,6 +449,156 @@ possible only when all of these conditions hold:
 The raw machine ID is never written to the bundle. Each script hashes it with
 the run ID, so the value cannot be correlated across runs.
 
+### Four-Host Distributed Capacity Environment
+
+The formal four-host path isolates the load generator, single Gateway node,
+data services, and the 100ms Mock Provider. It does not reuse the public GateLM
+VPC, instances, Security Groups, database, DNS, certificate, or SES resources.
+Use `aws/perf-distributed.template.yml` to create a dedicated `10.77.0.0/16`
+VPC in `ap-northeast-2`:
+
+```text
+10.77.1.10  load generator
+10.77.1.20  gateway-core
+10.77.1.30  PostgreSQL + Redis + control-plane-api
+10.77.1.40  100ms Mock Provider
+```
+
+The template exposes only SSH from the supplied operator `/32`. Gateway port
+`18080` accepts traffic only from the load-generator Security Group. The data
+ports accept traffic only from the Gateway Security Group or the co-located
+Control Plane, and Mock port `8090` accepts traffic only from the Gateway. No
+GateLM service port is open to `0.0.0.0/0`.
+
+From an authenticated AWS CloudShell, validate and create the stack:
+
+```bash
+aws cloudformation validate-template \
+  --region ap-northeast-2 \
+  --template-body file://deploy/aws-triage/aws/perf-distributed.template.yml
+
+aws cloudformation deploy \
+  --region ap-northeast-2 \
+  --stack-name gatelm-perf-distributed \
+  --template-file deploy/aws-triage/aws/perf-distributed.template.yml \
+  --parameter-overrides \
+    OperatorCidr=<trusted-public-ip>/32 \
+    SshKeyName=<existing-key-pair-name> \
+  --no-fail-on-empty-changeset
+```
+
+The default non-burstable instance types are `c7i.xlarge` for load generation,
+`c7i.xlarge` for the single Gateway node, `m7i.large` for the data role, and
+`c7i.large` for Mock. The instances use IMDSv2, termination protection, retained
+encrypted gp3 root volumes, and `DoNotDelete=true` tags. Public IPv4 addresses
+exist only for operator SSH and package/image installation; all measured
+service traffic uses the fixed private addresses above.
+
+Deploy exactly one clean Git commit to every host. A Git bundle is suitable
+when EC2 must not receive GitHub credentials:
+
+```bash
+git bundle create gatelm-perf.bundle perf/distributed-load-test
+```
+
+Clone that same bundle as `/home/ubuntu/GateLM` on all four hosts. On one trusted
+operator or data host, generate the isolated distributed environment once:
+
+```bash
+cd /home/ubuntu/GateLM/deploy/aws-triage
+GATELM_PERF_LOADGEN_PRIVATE_IP=10.77.1.10 \
+GATELM_PERF_GATEWAY_PRIVATE_IP=10.77.1.20 \
+GATELM_PERF_DATA_PRIVATE_IP=10.77.1.30 \
+GATELM_PERF_MOCK_PRIVATE_IP=10.77.1.40 \
+bash scripts/perf-distributed-init.sh
+bash scripts/perf-distributed-export-loadgen-env.sh
+```
+
+Copy `.env.perf.distributed` with mode `600` only to the data, Gateway, and Mock
+hosts. Copy only the generated `.env.loadgen` to the load-generator host; it
+contains the private Gateway URL, a non-secret topology ID, and isolated
+synthetic credentials. Do not print either file or include it in an evidence
+bundle.
+
+Start roles in dependency order. `--bootstrap` is first-run only and modifies
+only the dedicated `gatelm_perf` database:
+
+```bash
+# Mock host
+bash scripts/perf-distributed-up.sh --role mock
+
+# Data host
+bash scripts/perf-distributed-up.sh --role data --build --bootstrap
+
+# Gateway host
+bash scripts/perf-distributed-up.sh --role gateway --build
+```
+
+Run every preflight before load:
+
+```bash
+# Respective service hosts
+bash scripts/perf-distributed-preflight.sh --role mock
+bash scripts/perf-distributed-preflight.sh --role data
+bash scripts/perf-distributed-preflight.sh --role gateway
+
+# Load-generator host
+bash scripts/perf-distributed-loadgen-preflight.sh
+```
+
+Each successful preflight writes one safe file under
+`reports/perf/distributed-attestations/`. Before reconciliation, copy the
+`loadgen`, `data`, and `mock` attestation files into that directory on the
+Gateway host without overwriting `gateway.attestation.env`. Reconciliation
+requires all four files, the expected private IPs, one topology ID, one Git SHA,
+and four distinct machine hashes. The files contain no raw machine ID or
+credential.
+
+For each stage, run the 1-second Linux host sampler on all four hosts for a
+window that covers warm-up, load, and log drain:
+
+```bash
+bash scripts/perf-distributed-monitor.sh \
+  --role <loadgen|gateway|data|mock> \
+  --duration-seconds 150 \
+  --interval-seconds 1 \
+  --output-dir /home/ubuntu/GateLM/reports/perf/hosts/<run-id>
+```
+
+Run `250`, `300`, `400`, then `500 RPS`; do not advance after a failed stage.
+Use a two-minute duration for the formal 500 RPS claim:
+
+```bash
+GATELM_K6_TARGET_RPS=500 \
+GATELM_K6_DURATION=2m \
+GATELM_K6_PRE_ALLOCATED_VUS=750 \
+GATELM_K6_MAX_VUS=1000 \
+bash scripts/perf-loadgen-run.sh
+```
+
+Transfer the resulting bundle to the identical path on the Gateway host and
+run distributed target-side reconciliation there:
+
+```bash
+GATELM_PERF_DISTRIBUTED_ENV_FILE=/home/ubuntu/GateLM/deploy/aws-triage/.env.perf.distributed \
+bash scripts/perf-loadgen-reconcile.sh \
+  /home/ubuntu/GateLM/reports/perf/loadgen/<bundle>
+```
+
+Distributed reconciliation rechecks the active Mock-only RuntimeSnapshot,
+compares the load-generator and target Git SHAs, proves separate machine IDs,
+queries the remote PostgreSQL Request Logs, and evaluates async logging deltas.
+Only a clean `500 RPS` run of at least two minutes can produce
+`capacityClaimEligible=true`.
+
+After testing, preserve volumes and configuration while stopping role
+containers. Then stop all four EC2 instances rather than terminating them:
+
+```bash
+bash scripts/perf-distributed-down.sh --role <gateway|data|mock>
+aws ec2 stop-instances --region ap-northeast-2 --instance-ids <four-instance-ids>
+```
+
 For script integration checks on one development machine, set the load-generator
 URL to `http://gateway-core:8080` and run:
 
@@ -520,6 +696,8 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/002_drop_legacy_selected_routing_columns.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/003_add_p0_invocation_log_ttft.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/004_add_p0_dashboard_rollup_indexes.sql
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core web chat-api chat-web
 docker compose --env-file .env ps
 ```
@@ -577,10 +755,11 @@ only the resulting SSM command.
 
 The remote `scripts/deploy-main.sh` command keeps the existing containers alive
 while it builds each image sequentially. Before migrations it stores a custom
-PostgreSQL dump, the protected `.env`, the previous SHA, and previous image IDs
+PostgreSQL dump, the protected `.env`, the previous SHA, and protected rollback image tags
 under `/home/ubuntu/gatelm-deploy-backups`. A pre-cutover failure leaves the old
 containers running. A failed post-cutover health check restores the previous
-application image tags and recreates the previous containers.
+application image tags and recreates the previous containers. Temporary rollback
+tags are removed only after a successful deployment or successful rollback.
 
 Database migrations are forward-only. Application rollback does not reverse a
 schema migration; use the recorded PostgreSQL dump for a deliberate database
