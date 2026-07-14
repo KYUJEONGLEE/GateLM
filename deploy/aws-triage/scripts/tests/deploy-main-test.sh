@@ -10,6 +10,7 @@ DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
 WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/deploy-production.yml"
 TEMPLATE_FILE="${AWS_TRIAGE_DIR}/aws/github-actions-cd.template.json"
+COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.yml"
 
 fail() {
   printf '%s\n' "[deploy-main-test] ERROR: $*" >&2
@@ -93,6 +94,22 @@ fi
 
 grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
+grep -Fq 'validate_tenant_chat_secrets' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret files must be validated before the image build"
+grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
+  fail "Rollback images must be protected by a dedicated Docker tag"
+grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
+  fail "Temporary rollback image tags must be cleaned up"
+for required_setting in \
+  'TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"' \
+  'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \
+  'TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json' \
+  'TENANT_CHAT_WORKLOAD_JWKS_FILE: /run/secrets/tenant-chat/jwks.json' \
+  'TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json'
+do
+  grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
+    fail "Tenant Chat production Compose setting is missing: ${required_setting}"
+done
 grep -Fq 'http://127.0.0.1:8080/v1/chat/completions' "${DEPLOY_SCRIPT}" || \
   fail "Gateway authentication boundary must be verified through loopback"
 grep -Fq 'http://127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" || \

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -18,6 +18,9 @@ test('atomically creates split private/public and Gateway support secrets', asyn
     const publicJwks = JSON.parse(await readFile(join(target, 'jwks.json'), 'utf8'));
     assert.equal(privateJwk.d.length > 0, true);
     assert.equal('d' in publicJwks.keys[0], false);
+    if (process.platform !== 'win32') {
+      assert.equal((await stat(target)).mode & 0o777, 0o700);
+    }
     await assert.rejects(
       generateTenantChatLocalSecrets({ target, kid: 'test-kid' }),
       /Refusing to overwrite/,
