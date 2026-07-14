@@ -181,10 +181,10 @@ export async function GET(request: NextRequest) {
   }
 
   const projectMonthCostMicroUsd =
-    projectApplicationMonthToDate?.points.reduce(
+    (projectApplicationMonthToDate?.points ?? []).reduce(
       (sum, point) => sum + point.spendUsd * 1_000_000,
       0
-    ) ?? 0;
+    );
   const tenantChatMonthCostMicroUsd =
     tenantChatMonthToDate?.usage?.confirmedCostMicroUsd ?? 0;
   const hasMonthToDateData =
