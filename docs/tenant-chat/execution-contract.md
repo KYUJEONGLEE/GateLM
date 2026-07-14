@@ -155,6 +155,28 @@ Local Compose는 `.secrets/tenant-chat/signing.jwk.json`, `jwks.json`, `binding-
 
 Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness를 fail closed로 바꾼 뒤 새 `kid`로 재배포한다. 이미 발급된 token은 남은 TTL과 무관하게 거부한다.
 
+### 5.1 Content wrapping/integrity key 운영
+
+Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다.
+
+```json
+{
+  "schemaVersion": 1,
+  "activeVersion": 2,
+  "keys": [
+    { "version": 1, "wrappingKey": "<32-byte-base64url>", "integrityKey": "<32-byte-base64url>" },
+    { "version": 2, "wrappingKey": "<32-byte-base64url>", "integrityKey": "<32-byte-base64url>" }
+  ]
+}
+```
+
+- key set은 1~8개 unique positive version만 허용하고 active version이 반드시 포함돼야 한다.
+- `wrappingKey`는 tenant DEK wrapping에만, `integrityKey`는 cursor/create/turn binding MAC에만 사용한다. 목적 간 key reuse를 하지 않는다.
+- DEK wrapping AAD는 `schemaVersion`, `tenantId`, `contentKeyVersion`, `wrappingKeyVersion`, `contentKind=tenant_dek` exact key set을 JCS canonicalize한 UTF-8 bytes다.
+- create/turn row는 binding MAC과 함께 `bindingKeyVersion`을 저장한다. replay는 저장된 grace integrity key로 검증하며 active key로 다시 계산해 conflict를 만들지 않는다.
+- 새 version을 모든 reader에 먼저 배포하고 active version을 올린다. Chat API는 DEK rewrap과 DB rollback floor 증가를 같은 짧은 transaction으로 적용하며 crypto 연산 중 transaction을 열어두지 않는다.
+- active version이 DB floor보다 낮거나 필요한 grace key가 file에 없으면 readiness, encrypt/decrypt, cursor/idempotency를 fail closed한다.
+
 ## 6. RuntimeSnapshot digest와 pricing
 
 - Tenant Chat snapshot lookup key는 `tenantId` 하나이며 Project/Application field를 허용하지 않는다.

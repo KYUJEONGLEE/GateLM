@@ -12,7 +12,8 @@ test('atomically creates split private/public and Gateway support secrets', asyn
   try {
     const result = await generateTenantChatLocalSecrets({ target, kid: 'test-kid' });
     assert.deepEqual(result.files.sort(), [
-      'binding-hmac-keys.json', 'cache-keysets.json', 'jwks.json', 'signing.jwk.json', 'usage-receipt-token',
+      'binding-hmac-keys.json', 'cache-keysets.json', 'content-keys.json', 'jwks.json',
+      'signing.jwk.json', 'usage-receipt-token',
     ].sort());
     const privateJwk = JSON.parse(await readFile(join(target, 'signing.jwk.json'), 'utf8'));
     const publicJwks = JSON.parse(await readFile(join(target, 'jwks.json'), 'utf8'));

@@ -68,7 +68,7 @@ model Tenant {
   projectEmployeeAssignments      ProjectEmployeeAssignment[]
   conversations                   Conversation[]
   chatMessages                    ChatMessage[]
-  selectedTenantChatSessions      TenantChatSession[] @relation("TenantChatSelectedTenant")
+  selectedTenantChatSessions      TenantChatSession[]              @relation("TenantChatSelectedTenant")
   tenantChatPricingCatalogs       TenantChatPricingCatalog[]
   tenantChatRuntimeConfigs        TenantChatRuntimeConfig[]
   tenantChatRuntimeSnapshots      TenantChatRuntimeSnapshot[]
@@ -80,24 +80,29 @@ model Tenant {
   tenantChatUsageLedgerEntries    TenantChatUsageLedgerEntry[]
   tenantChatInvocationOutbox      TenantChatInvocationOutbox[]
   tenantChatInvocationLogs        TenantChatInvocationLog[]
+  tenantChatContentKeyState       TenantChatContentKeyState?
+  tenantChatContentKeys           TenantChatContentKey[]
+  tenantChatConversations         TenantChatConversation[]
+  tenantChatTurns                 TenantChatTurn[]
+  tenantChatMessages              TenantChatMessage[]
 
   @@map("tenants")
 }
 
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
-  email           String
-  name            String?
-  passwordHash    String?
-  authProvider    String    @default("local")
-  actorAuthzVersion Int     @default(1)
-  status          String    @default("pending_email_verification")
-  emailVerifiedAt DateTime?
-  lastLoginAt     DateTime?
-  metadata        Json      @default("{}")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String
+  name              String?
+  passwordHash      String?
+  authProvider      String    @default("local")
+  actorAuthzVersion Int       @default(1)
+  status            String    @default("pending_email_verification")
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
   emailVerificationCodes      EmailVerificationCode[]
   authSessions                AuthSession[]
@@ -111,6 +116,9 @@ model User {
   tenantChatRequestAdmissions TenantChatRequestAdmission[]
   tenantChatUserTokenPeriods  TenantChatUserTokenPeriod[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
+  tenantChatConversations     TenantChatConversation[]
+  tenantChatTurns             TenantChatTurn[]
+  tenantChatMessages          TenantChatMessage[]
 
   @@index([email])
   @@index([status])
@@ -162,8 +170,8 @@ model TenantChatSession {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  selectedTenant Tenant? @relation("TenantChatSelectedTenant", fields: [selectedTenantId], references: [id], onDelete: SetNull)
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedTenant Tenant?                  @relation("TenantChatSelectedTenant", fields: [selectedTenantId], references: [id], onDelete: SetNull)
   refreshTokens  TenantChatRefreshToken[]
 
   @@index([userId, revokedAt])
@@ -1108,6 +1116,141 @@ model TenantChatInvocationLog {
   @@index([tenantId, terminalOutcome, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_outcome_completed_idx")
   @@index([userId, completedAt(sort: Desc)], map: "tenant_chat_log_user_idx")
   @@map("tenant_chat_invocation_logs")
+}
+
+model TenantChatContentKeyState {
+  tenantId                 String   @id @map("tenant_id") @db.Uuid
+  activeContentKeyVersion  Int      @default(1) @map("active_content_key_version")
+  wrappingKeyRollbackFloor Int      @map("wrapping_key_rollback_floor")
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@map("tenant_chat_content_key_states")
+}
+
+model TenantChatContentKey {
+  tenantId           String    @map("tenant_id") @db.Uuid
+  contentKeyVersion  Int       @map("content_key_version")
+  wrappingKeyVersion Int       @map("wrapping_key_version")
+  algorithm          String    @default("A256GCM")
+  wrappedKey         Bytes     @map("wrapped_key")
+  wrapNonce          Bytes     @map("wrap_nonce")
+  wrapTag            Bytes     @map("wrap_tag")
+  status             String    @default("active")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  rewrappedAt        DateTime? @map("rewrapped_at") @db.Timestamptz(6)
+  retiredAt          DateTime? @map("retired_at") @db.Timestamptz(6)
+
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  conversationTitles TenantChatConversation[] @relation("TenantChatConversationTitleKey")
+  messages           TenantChatMessage[]
+
+  @@id([tenantId, contentKeyVersion])
+  @@map("tenant_chat_content_keys")
+}
+
+model TenantChatConversation {
+  id                        String    @id @db.Uuid
+  tenantId                  String    @map("tenant_id") @db.Uuid
+  userId                    String    @map("user_id") @db.Uuid
+  createIdempotencyKey      String    @map("create_idempotency_key")
+  creationBindingMac        String    @map("creation_binding_mac")
+  creationBindingKeyVersion Int       @map("creation_binding_key_version")
+  status                    String    @default("active")
+  version                   Int       @default(1)
+  cacheEpoch                BigInt    @default(1) @map("cache_epoch")
+  nextMessageSequence       BigInt    @default(1) @map("next_message_sequence")
+  historyRetentionDays      Int       @default(30) @map("history_retention_days")
+  titleCiphertext           Bytes?    @map("title_ciphertext")
+  titleNonce                Bytes?    @map("title_nonce")
+  titleTag                  Bytes?    @map("title_tag")
+  titleContentKeyVersion    Int?      @map("title_content_key_version")
+  titleSchemaVersion        Int?      @map("title_schema_version")
+  expiresAt                 DateTime? @map("expires_at") @db.Timestamptz(6)
+  deletedAt                 DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  titleContentKey TenantChatContentKey? @relation("TenantChatConversationTitleKey", fields: [tenantId, titleContentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction)
+  turns           TenantChatTurn[]
+  messages        TenantChatMessage[]
+
+  @@unique([id, tenantId, userId], map: "tenant_chat_conversation_actor_identity_key")
+  @@unique([tenantId, userId, createIdempotencyKey], map: "tenant_chat_conversation_create_idempotency_key")
+  @@map("tenant_chat_conversations")
+}
+
+model TenantChatTurn {
+  id                       String    @id @db.Uuid
+  conversationId           String    @map("conversation_id") @db.Uuid
+  tenantId                 String    @map("tenant_id") @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  requestId                String    @unique(map: "tenant_chat_turn_request_id_key") @map("request_id")
+  idempotencyKey           String    @map("idempotency_key")
+  requestBindingMac        String    @map("request_binding_mac")
+  requestBindingKeyVersion Int       @map("request_binding_key_version")
+  state                    String    @default("pending_admission")
+  capturedCacheEpoch       BigInt    @map("captured_cache_epoch")
+  actorKind                String?   @map("actor_kind")
+  employeeId               String?   @map("employee_id") @db.Uuid
+  actorAuthzVersion        Int?      @map("actor_authz_version")
+  tenantAuthzVersion       Int?      @map("tenant_authz_version")
+  sessionVersion           Int?      @map("session_version")
+  snapshotVersion          BigInt?   @map("snapshot_version")
+  snapshotDigest           String?   @map("snapshot_digest")
+  policyVersion            BigInt?   @map("policy_version")
+  employeeNoticeVersion    BigInt?   @map("employee_notice_version")
+  pricingVersion           BigInt?   @map("pricing_version")
+  admissionId              String?   @map("admission_id") @db.Uuid
+  admissionExpiresAt       DateTime? @map("admission_expires_at") @db.Timestamptz(6)
+  safeErrorCode            String?   @map("safe_error_code")
+  completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
+  cancelledAt              DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  conversation TenantChatConversation @relation(fields: [conversationId, tenantId, userId], references: [id, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
+  messages     TenantChatMessage[]
+
+  @@unique([id, conversationId, tenantId, userId], map: "tenant_chat_turn_actor_identity_key")
+  @@unique([tenantId, userId, idempotencyKey], map: "tenant_chat_turn_idempotency_key")
+  @@index([tenantId, userId, conversationId, createdAt(sort: Desc)], map: "tenant_chat_turn_conversation_created_idx")
+  @@map("tenant_chat_turns")
+}
+
+model TenantChatMessage {
+  id                String    @id @db.Uuid
+  conversationId    String    @map("conversation_id") @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  turnId            String    @map("turn_id") @db.Uuid
+  requestId         String    @map("request_id")
+  role              String
+  sequence          BigInt
+  ciphertext        Bytes
+  nonce             Bytes
+  tag               Bytes
+  contentKeyVersion Int       @map("content_key_version")
+  schemaVersion     Int       @default(1) @map("schema_version")
+  expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  conversation TenantChatConversation @relation(fields: [conversationId, tenantId, userId], references: [id, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
+  turn         TenantChatTurn         @relation(fields: [turnId, conversationId, tenantId, userId], references: [id, conversationId, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
+  contentKey   TenantChatContentKey   @relation(fields: [tenantId, contentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([conversationId, sequence], map: "tenant_chat_message_conversation_sequence_key")
+  @@unique([turnId, role], map: "tenant_chat_message_turn_role_key")
+  @@index([tenantId, userId, conversationId, sequence], map: "tenant_chat_message_history_idx")
+  @@map("tenant_chat_messages")
 }
 
 model Conversation {

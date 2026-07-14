@@ -41,6 +41,7 @@ CREATE TABLE tenant_chat_conversations (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   create_idempotency_key text NOT NULL,
   creation_binding_mac text NOT NULL,
+  creation_binding_key_version integer NOT NULL,
   status text NOT NULL DEFAULT 'active',
   version integer NOT NULL DEFAULT 1,
   cache_epoch bigint NOT NULL DEFAULT 1,
@@ -63,7 +64,7 @@ CREATE TABLE tenant_chat_conversations (
   ),
   CONSTRAINT tenant_chat_conversation_retention_check CHECK (history_retention_days IN (0, 7, 30, 90)),
   CONSTRAINT tenant_chat_conversation_creation_mac_check CHECK (
-    creation_binding_mac ~ '^hmac-sha256:[A-Za-z0-9_-]{43}$'
+    creation_binding_mac ~ '^hmac-sha256:[A-Za-z0-9_-]{43}$' AND creation_binding_key_version >= 1
   ),
   CONSTRAINT tenant_chat_conversation_title_shape_check CHECK (
     (
@@ -95,6 +96,7 @@ CREATE TABLE tenant_chat_turns (
   request_id text NOT NULL UNIQUE,
   idempotency_key text NOT NULL,
   request_binding_mac text NOT NULL,
+  request_binding_key_version integer NOT NULL,
   state text NOT NULL DEFAULT 'pending_admission',
   captured_cache_epoch bigint NOT NULL,
   actor_kind text,
@@ -119,7 +121,7 @@ CREATE TABLE tenant_chat_turns (
   CONSTRAINT tenant_chat_turn_conversation_fkey FOREIGN KEY (conversation_id, tenant_id, user_id)
     REFERENCES tenant_chat_conversations(id, tenant_id, user_id) ON DELETE CASCADE,
   CONSTRAINT tenant_chat_turn_request_mac_check CHECK (
-    request_binding_mac ~ '^hmac-sha256:[A-Za-z0-9_-]{43}$'
+    request_binding_mac ~ '^hmac-sha256:[A-Za-z0-9_-]{43}$' AND request_binding_key_version >= 1
   ),
   CONSTRAINT tenant_chat_turn_state_check CHECK (
     state IN ('pending_admission', 'user_persisted', 'streaming', 'completed', 'failed', 'cancelled', 'deleted')
