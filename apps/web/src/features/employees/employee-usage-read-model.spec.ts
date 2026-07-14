@@ -23,7 +23,11 @@ test("aggregates employee usage across active project assignments and ranks it",
     monthlyCostUsd: 3,
     projectCount: 2,
     quotaStatus: "warning",
-    tokenShare: 0.75
+    tokenShare: 0.75,
+    weeklyTokens: null
+  });
+  expect(usage.rows[0]?.projects[0]).toMatchObject({
+    dailyTokenStatus: "within_limit"
   });
 });
 
