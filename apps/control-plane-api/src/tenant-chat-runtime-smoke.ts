@@ -54,6 +54,36 @@ async function main(): Promise<void> {
       },
       update: { role: 'tenant_admin', status: 'active', deletedAt: null },
     });
+    await prisma.user.upsert({
+      where: { id: '00000000-0000-4000-8000-000000000903' },
+      create: {
+        id: '00000000-0000-4000-8000-000000000903',
+        email: 'tenant-chat-idor-smoke@example.invalid',
+        name: 'Tenant Chat IDOR Smoke',
+        passwordHash,
+        status: 'active',
+        actorAuthzVersion: 1,
+        emailVerifiedAt: new Date('2026-07-14T00:00:00.000Z'),
+      },
+      update: { passwordHash, status: 'active', actorAuthzVersion: 1, deletedAt: null },
+    });
+    await prisma.tenantMembership.upsert({
+      where: {
+        tenantId_userId: {
+          tenantId: DEMO_TENANT_ID,
+          userId: '00000000-0000-4000-8000-000000000903',
+        },
+      },
+      create: {
+        id: '00000000-0000-4000-8000-000000000904',
+        tenantId: DEMO_TENANT_ID,
+        userId: '00000000-0000-4000-8000-000000000903',
+        role: 'tenant_admin',
+        status: 'active',
+        joinedAt: new Date('2026-07-14T00:00:00.000Z'),
+      },
+      update: { role: 'tenant_admin', status: 'active', deletedAt: null },
+    });
     const service = app.get(TenantChatRuntimeService);
     const snapshot = smokeSnapshot();
     const published = await service.publishSnapshot({ snapshot });

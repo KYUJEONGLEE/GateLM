@@ -1,43 +1,41 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ArrowRight, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { buttonVariants } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   createRuntimePolicyRoleRoutes,
+  countRuntimePolicyModelRoleConversionChanges,
   getRuntimePolicyModelRoleConversion,
   getRuntimePolicyModelRoles,
   runtimeRoutingCategories,
   runtimeRoutingDifficulties,
   type RuntimePolicyDraftValues,
   type RuntimePolicyModel,
-  type RuntimePolicyModelRoles,
-  type RuntimePolicyProvider
+  type RuntimePolicyModelRoles
 } from "@/lib/control-plane/runtime-policy-types";
 
 import type {
   RuntimePolicyDraftValuesSetter,
   RuntimePolicyEditorText
 } from "../runtime-policy-editor-types";
-
-type ModelRefOption = {
-  family: string;
-  label: string;
-  modelRef: string;
-  providerName: string;
-};
+import {
+  getRoutingModelOptions,
+  type RoutingModelOption
+} from "../runtime-policy-editor-utils";
 
 export type RoutingPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   providerCatalog: RuntimePolicyModel["providerCatalog"];
+  providerConnections: ProviderConnectionRecord[];
   providerManagementHref?: string;
-  providers: RuntimePolicyProvider[];
   text: RuntimePolicyEditorText;
 };
 
@@ -45,18 +43,35 @@ export function RoutingPolicyPanel({
   draftValues,
   onDraftValuesChange,
   providerCatalog,
+  providerConnections,
   providerManagementHref,
-  providers,
   text
 }: RoutingPolicyPanelProps) {
-  const modelOptions = useMemo(() => createModelRefOptions(providers), [providers]);
+  const modelOptions = useMemo(
+    () => createModelRefOptions(providerConnections),
+    [providerConnections]
+  );
+  const [manualSetupRoles, setManualSetupRoles] = useState<RuntimePolicyModelRoles>({
+    complexModelRef: "",
+    fallbackModelRef: null,
+    simpleModelRef: ""
+  });
   const roles = getRuntimePolicyModelRoles(draftValues.routingPolicy.routes);
   const conversionRoles = getRuntimePolicyModelRoleConversion(
     draftValues.routingPolicy.routes
   );
+  const conversionChangeCount = conversionRoles
+    ? countRuntimePolicyModelRoleConversionChanges(
+        draftValues.routingPolicy.routes,
+        conversionRoles
+      )
+    : 0;
   const hasMockRoute = hasMockModelInRoutes(
     draftValues.routingPolicy.routes,
     modelOptions
+  );
+  const canApplyManualSetup = Boolean(
+    manualSetupRoles.simpleModelRef.trim() && manualSetupRoles.complexModelRef.trim()
   );
 
   function updateRoutingPolicy(
@@ -113,17 +128,123 @@ export function RoutingPolicyPanel({
       ) : null}
 
       {!roles ? (
-        <Alert variant="warning">
+        <Alert className="routing-migration-alert" variant="warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{text.routingConversionTitle}</AlertTitle>
           <AlertDescription>
-            <p>{text.routingAuthoringRequired}</p>
-            <button
-              className="secondary-button"
-              disabled={!conversionRoles}
-              onClick={() => conversionRoles && setRoles(conversionRoles)}
-              type="button"
-            >
-              {text.routingConvert}
-            </button>
+            <p>{text.routingConversionDescription}</p>
+            {conversionRoles ? (
+              <>
+                <dl className="routing-migration-preview">
+                  <div>
+                    <dt>{text.routingSimpleModel}</dt>
+                    <dd>{getModelRefLabel(conversionRoles.simpleModelRef, modelOptions)}</dd>
+                  </div>
+                  <div>
+                    <dt>{text.routingComplexModel}</dt>
+                    <dd>{getModelRefLabel(conversionRoles.complexModelRef, modelOptions)}</dd>
+                  </div>
+                  <div>
+                    <dt>{text.routingFallbackModel}</dt>
+                    <dd>
+                      {conversionRoles.fallbackModelRef
+                        ? getModelRefLabel(conversionRoles.fallbackModelRef, modelOptions)
+                        : text.routingFallbackNone}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="routing-migration-meta">
+                  <span>
+                    {text.routingConversionImpact.replace(
+                      "{count}",
+                      String(conversionChangeCount)
+                    )}
+                  </span>
+                  <span>{text.routingConversionDraftNote}</span>
+                </div>
+                <Button
+                  className="routing-migration-action"
+                  onClick={() => setRoles(conversionRoles)}
+                  type="button"
+                >
+                  {text.routingConvert}
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+              </>
+            ) : (
+              <div className="routing-migration-manual-setup">
+                <p>{text.routingConversionUnavailable}</p>
+                <div
+                  aria-label={text.routingManualSetup}
+                  className="routing-migration-manual-grid"
+                  role="group"
+                >
+                  <RoleModelSelect
+                    allowEmpty
+                    label={text.routingSimpleModel}
+                    modelOptions={modelOptions}
+                    noneLabel={text.routingSelectModel}
+                    onChange={(simpleModelRef) =>
+                      setManualSetupRoles((current) => ({
+                        ...current,
+                        fallbackModelRef:
+                          current.fallbackModelRef === simpleModelRef
+                            ? null
+                            : current.fallbackModelRef,
+                        simpleModelRef
+                      }))
+                    }
+                    value={manualSetupRoles.simpleModelRef}
+                  />
+                  <RoleModelSelect
+                    allowEmpty
+                    label={text.routingComplexModel}
+                    modelOptions={modelOptions}
+                    noneLabel={text.routingSelectModel}
+                    onChange={(complexModelRef) =>
+                      setManualSetupRoles((current) => ({
+                        ...current,
+                        complexModelRef,
+                        fallbackModelRef:
+                          current.fallbackModelRef === complexModelRef
+                            ? null
+                            : current.fallbackModelRef
+                      }))
+                    }
+                    value={manualSetupRoles.complexModelRef}
+                  />
+                  <RoleModelSelect
+                    allowEmpty
+                    excludedModelRefs={[
+                      manualSetupRoles.simpleModelRef,
+                      manualSetupRoles.complexModelRef
+                    ]}
+                    label={text.routingFallbackModel}
+                    modelOptions={modelOptions}
+                    noneLabel={text.routingFallbackNone}
+                    onChange={(fallbackModelRef) =>
+                      setManualSetupRoles((current) => ({
+                        ...current,
+                        fallbackModelRef: fallbackModelRef || null
+                      }))
+                    }
+                    value={manualSetupRoles.fallbackModelRef ?? ""}
+                  />
+                </div>
+                <div className="routing-migration-meta">
+                  <span>{text.routingConversionDraftNote}</span>
+                </div>
+                <Button
+                  className="routing-migration-action"
+                  disabled={!canApplyManualSetup}
+                  onClick={() => setRoles(manualSetupRoles)}
+                  type="button"
+                >
+                  {text.routingManualSetup}
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+              </div>
+            )}
           </AlertDescription>
         </Alert>
       ) : (
@@ -224,7 +345,7 @@ function RoleModelSelect({
   allowEmpty?: boolean;
   excludedModelRefs?: string[];
   label: string;
-  modelOptions: ModelRefOption[];
+  modelOptions: RoutingModelOption[];
   noneLabel?: string;
   onChange: (modelRef: string) => void;
   value: string;
@@ -250,7 +371,7 @@ function RoleModelSelect({
   return (
     <label className="tenant-routing-route">
       <span>{label}</span>
-      <span className="routing-model-ref-item">
+      <span className="routing-model-ref-item" data-has-icon={value ? "true" : "false"}>
         {value ? (
           <ProviderFamilyIcon
             className="tenant-routing-provider-icon"
@@ -271,20 +392,10 @@ function RoleModelSelect({
   );
 }
 
-function createModelRefOptions(providers: RuntimePolicyProvider[]): ModelRefOption[] {
-  const options = providers
-    .filter((provider) => provider.status !== "disabled")
-    .flatMap((provider) =>
-      provider.models.map((modelId) => ({
-        family: getProviderFamily(provider),
-        label: `${provider.displayName} / ${modelId}`,
-        modelRef:
-          provider.provider === "mock" && modelId === "mock-balanced"
-            ? "mock-balanced"
-            : `${provider.providerId}:${modelId}`,
-        providerName: provider.provider
-      }))
-    );
+function createModelRefOptions(
+  providerConnections: ProviderConnectionRecord[]
+): RoutingModelOption[] {
+  const options = getRoutingModelOptions(providerConnections);
 
   if (!options.some((option) => option.modelRef === "mock-balanced")) {
     options.unshift({
@@ -298,17 +409,15 @@ function createModelRefOptions(providers: RuntimePolicyProvider[]): ModelRefOpti
   return options;
 }
 
-function getProviderFamily(provider: RuntimePolicyProvider) {
-  const key = `${provider.provider} ${provider.displayName} ${provider.baseUrl}`.toLowerCase();
-  if (key.includes("anthropic") || key.includes("claude")) return "claude";
-  if (key.includes("gemini") || key.includes("google")) return "gemini";
-  if (key.includes("mock")) return "mock";
-  return "openai";
+function getModelRefLabel(modelRef: string, modelOptions: RoutingModelOption[]) {
+  return (
+    modelOptions.find((option) => option.modelRef === modelRef)?.label ?? modelRef
+  );
 }
 
 function hasMockModelInRoutes(
   routes: RuntimePolicyDraftValues["routingPolicy"]["routes"],
-  modelOptions: ModelRefOption[]
+  modelOptions: RoutingModelOption[]
 ) {
   return runtimeRoutingCategories.some((category) =>
     runtimeRoutingDifficulties.some((difficulty) =>
@@ -319,7 +428,7 @@ function hasMockModelInRoutes(
   );
 }
 
-function isMockModelRef(modelRef: string, modelOptions: ModelRefOption[]) {
+function isMockModelRef(modelRef: string, modelOptions: RoutingModelOption[]) {
   return (
     modelRef === "mock-balanced" ||
     modelOptions.find((option) => option.modelRef === modelRef)?.providerName === "mock"

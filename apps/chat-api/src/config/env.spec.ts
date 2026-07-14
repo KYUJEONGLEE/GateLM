@@ -33,6 +33,18 @@ describe('Chat API environment', () => {
       .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
   });
 
+  it('accepts only server-owned retention choices and bounds assistant persistence', () => {
+    expect(validateEnv(base).TENANT_CHAT_HISTORY_RETENTION_DAYS).toBe(30);
+    expect(validateEnv({ ...base, TENANT_CHAT_HISTORY_RETENTION_DAYS: '0' }).TENANT_CHAT_HISTORY_RETENTION_DAYS).toBe(0);
+    expect(() => validateEnv({ ...base, TENANT_CHAT_HISTORY_RETENTION_DAYS: '31' }))
+      .toThrow('TENANT_CHAT_HISTORY_RETENTION_DAYS');
+    expect(() => validateEnv({ ...base, TENANT_CHAT_ASSISTANT_MAX_BYTES: '1048577' }))
+      .toThrow('TENANT_CHAT_ASSISTANT_MAX_BYTES');
+    expect(validateEnv(base).TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN).toBe(4);
+    expect(() => validateEnv({ ...base, TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: '17' }))
+      .toThrow('TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN');
+  });
+
   it('rejects explicitly empty numeric settings instead of using defaults', () => {
     expect(() => validateEnv({ ...base, CHAT_API_PORT: '' }))
       .toThrow('CHAT_API_PORT');

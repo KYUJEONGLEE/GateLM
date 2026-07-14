@@ -25,6 +25,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { AnalyticsEmployeeTokenBarChart } from "@/features/analytics/components/analytics-charts";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
@@ -36,6 +37,7 @@ import type {
   ProjectEmployeeQuotaStatus
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
 import {
   getRateLimitRefillTokensPerSecond,
   getRateLimitWindowSeconds
@@ -49,6 +51,7 @@ type EmployeeControlManagementProps = {
   initialEmployeeId?: string;
   locale: Locale;
   model: EmployeeControlModel;
+  monthlyCostReport: ProjectMonthlyCostReport;
   usage: EmployeeUsageReadModel;
 };
 
@@ -75,8 +78,15 @@ type CompactUnitStepperProps = {
 };
 
 type EmployeeSortDirection = "asc" | "desc";
-type EmployeeSortField = "department" | "name" | "project" | "rank" | "tokens";
+type EmployeeSortField = "department" | "name" | "project" | "tokens";
 type EmployeeAddMethod = "csv" | "invite";
+type EmployeeTokenLimitDraft = {
+  enabled: boolean;
+  limit: number;
+};
+const EMPLOYEE_TOKEN_LIMIT_DEFAULT = 100000;
+const EMPLOYEE_TOKEN_LIMIT_MAX = 200000;
+const EMPLOYEE_TOKEN_LIMIT_MIN = 1000;
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned_department__";
 
 type EmployeeResponsePayload = {
@@ -250,24 +260,64 @@ const employeeText: Record<
 
 const employeeUsageText = {
   en: {
+    addProject: "Add to project",
+    chatUsage: "Chat usage",
     dailyLimit: "Daily token limit",
+    dailyUsage: "Usage today",
+    limitEnabled: "Limit daily tokens",
+    limitSaveFailed: "Daily token limit could not be saved.",
+    limitSaved: "Daily token limit saved.",
+    saveLimit: "Save limit",
     detail: "Employee usage and controls",
     managePolicy: "Manage project policy",
     noProjectUsage: "No active project usage.",
-    projects: "Project usage",
-    rank: "Rank",
-    tokens: "Tokens today (UTC)",
-    unlimited: "Unlimited"
+    noProjectsAvailable: "No projects are available to add.",
+    projectAddFailed: "Project could not be added.",
+    projectAdded: "Project added.",
+    projectBudget: "Project budget",
+    projectRemove: "Expel",
+    projectRemoveConfirm: "Remove this employee from the project?",
+    projectRemoveFailed: "Project could not be removed.",
+    projectRemoved: "Project removed.",
+    projects: "Project management",
+    selectProject: "Select project",
+    tokens: "Tokens today",
+    unlimited: "Unlimited",
+    usage: "Tokens used",
+    weeklyLimit: "Weekly token limit",
+    weeklyUnavailable: "Not available yet",
+    weeklyUsage: "Weekly usage",
+    weeklyTokens: "Tokens in the last 7 days"
   },
   ko: {
+    addProject: "프로젝트에 추가",
+    chatUsage: "채팅 사용량",
     dailyLimit: "일일 토큰 한도",
+    dailyUsage: "오늘의 사용량",
+    limitEnabled: "일일 토큰 제한",
+    limitSaveFailed: "일일 토큰 한도를 저장하지 못했습니다.",
+    limitSaved: "일일 토큰 한도를 저장했습니다.",
+    saveLimit: "한도 저장",
     detail: "직원 사용량 및 통제",
     managePolicy: "프로젝트 정책 관리",
     noProjectUsage: "활성 프로젝트 사용량이 없습니다.",
-    projects: "프로젝트별 사용량",
-    rank: "순위",
-    tokens: "오늘 사용 토큰 (UTC)",
-    unlimited: "무제한"
+    noProjectsAvailable: "추가할 수 있는 프로젝트가 없습니다.",
+    projectAddFailed: "프로젝트를 추가하지 못했습니다.",
+    projectAdded: "프로젝트를 추가했습니다.",
+    projectBudget: "프로젝트 예산",
+    projectRemove: "추방",
+    projectRemoveConfirm: "이 직원을 프로젝트에서 제거할까요?",
+    projectRemoveFailed: "프로젝트에서 제거하지 못했습니다.",
+    projectRemoved: "프로젝트에서 제거했습니다.",
+    projects: "프로젝트 관리",
+    selectProject: "프로젝트 선택",
+    tokens: "오늘 사용 토큰",
+    unlimited: "무제한",
+    usage: "사용 토큰",
+    weeklyLimit: "주간 토큰 한도",
+    weeklyUnavailable: "준비 중",
+    weeklyUsage: "주간 사용량",
+    weeklyTokens: "최근 7일 사용 토큰"
   }
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -1313,6 +1363,7 @@ export function EmployeeControlManagement({
   initialEmployeeId,
   locale,
   model,
+  monthlyCostReport,
   usage
 }: EmployeeControlManagementProps) {
   const router = useRouter();
@@ -1333,16 +1384,30 @@ export function EmployeeControlManagement({
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
     initialEmployeeId ?? null
   );
+  const [isProjectAssignmentOpen, setIsProjectAssignmentOpen] = useState(false);
+  const [candidateProjectId, setCandidateProjectId] = useState("");
+  const [projectAssignmentToRemoveId, setProjectAssignmentToRemoveId] = useState<
+    string | null
+  >(null);
   const [selectedInvitationEmployeeIds, setSelectedInvitationEmployeeIds] = useState<string[]>(
     []
   );
+  const [employeeTokenLimitDraft, setEmployeeTokenLimitDraft] =
+    useState<EmployeeTokenLimitDraft>({
+      enabled: false,
+      limit: EMPLOYEE_TOKEN_LIMIT_DEFAULT
+    });
+  const [tokenLimitSubmitState, setTokenLimitSubmitState] = useState<SubmitState>({
+    message: "",
+    status: "idle"
+  });
   const [departmentValue, setDepartmentValue] = useState("");
   const [sortState, setSortState] = useState<{
     direction: EmployeeSortDirection;
     field: EmployeeSortField;
   }>({
-    direction: "asc",
-    field: "rank"
+    direction: "desc",
+    field: "tokens"
   });
   const [pageIndex, setPageIndex] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -1365,9 +1430,52 @@ export function EmployeeControlManagement({
     () => new Map(usage.rows.map((row) => [row.employeeId, row])),
     [usage.rows]
   );
+  const employeeTokenChartRows = useMemo(
+    () => usage.rows.slice(0, 10).map((row) => ({
+      id: row.employeeId,
+      label: row.name,
+      value: row.dailyTokens
+    })),
+    [usage.rows]
+  );
   const selectedUsage = selectedEmployeeId
     ? usageByEmployeeId.get(selectedEmployeeId) ?? null
     : null;
+  const employeeDailyTokenStatus: ProjectEmployeeQuotaStatus = !employeeTokenLimitDraft.enabled
+    ? "not_configured"
+    : selectedUsage && selectedUsage.dailyTokens >= employeeTokenLimitDraft.limit
+      ? "exceeded"
+      : selectedUsage && selectedUsage.dailyTokens >= employeeTokenLimitDraft.limit * 0.8
+        ? "warning"
+        : "within_limit";
+  const monthlyProjectCostById = useMemo(
+    () => new Map(monthlyCostReport.projectCosts.map((row) => [row.projectId, row])),
+    [monthlyCostReport.projectCosts]
+  );
+  const availableProjectsForEmployee = selectedUsage
+    ? projects.filter(
+        (project) =>
+          project.status === "ACTIVE" &&
+          !selectedUsage.projects.some((usageProject) => usageProject.projectId === project.id)
+      )
+    : [];
+
+  useEffect(() => {
+    if (!selectedUsage) {
+      setEmployeeTokenLimitDraft({
+        enabled: false,
+        limit: EMPLOYEE_TOKEN_LIMIT_DEFAULT
+      });
+      return;
+    }
+
+    setEmployeeTokenLimitDraft({
+      enabled: selectedUsage.dailyTokenLimit !== null,
+      limit: clampEmployeeTokenLimit(
+        selectedUsage.dailyTokenLimit ?? EMPLOYEE_TOKEN_LIMIT_DEFAULT
+      )
+    });
+  }, [selectedUsage]);
 
   const projectNamesByEmployeeId = useMemo(() => {
     const projectsById = new Map(projects.map((project) => [project.id, project.name]));
@@ -1405,9 +1513,6 @@ export function EmployeeControlManagement({
           projectNamesByEmployeeId.get(left.id),
           projectNamesByEmployeeId.get(right.id)
         );
-      } else if (sortState.field === "rank") {
-        result = (usageByEmployeeId.get(left.id)?.rank ?? Number.MAX_SAFE_INTEGER) -
-          (usageByEmployeeId.get(right.id)?.rank ?? Number.MAX_SAFE_INTEGER);
       } else if (sortState.field === "tokens") {
         result = (usageByEmployeeId.get(left.id)?.dailyTokens ?? 0) -
           (usageByEmployeeId.get(right.id)?.dailyTokens ?? 0);
@@ -1769,6 +1874,113 @@ export function EmployeeControlManagement({
     });
   }
 
+  async function submitEmployeeProjectAssignment() {
+    if (!selectedUsage || !candidateProjectId) {
+      return;
+    }
+
+    const existingAssignment = assignmentsByProjectId[candidateProjectId]?.find(
+      (assignment) => assignment.employeeId === selectedUsage.employeeId
+    );
+    const values: ProjectEmployeeAssignmentValues = {
+      dailyTokenLimit: existingAssignment?.policy.dailyTokenLimit.limit ?? 0,
+      employeeId: selectedUsage.employeeId,
+      monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
+      policyNote: existingAssignment?.policy.note ?? "",
+      projectId: candidateProjectId,
+      rateLimitEnabled: existingAssignment?.policy.rateLimit.enabled ?? false,
+      rateLimitLimit: existingAssignment?.policy.rateLimit.limit ?? 60,
+      rateLimitWindowSeconds: existingAssignment?.policy.rateLimit.windowSeconds ?? 60,
+      status: "active",
+      warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
+    };
+
+    setPendingAction("assignProject");
+    setTokenLimitSubmitState({ message: "", status: "idle" });
+
+    try {
+      const response = await fetch("/api/control-plane/employees", {
+        body: JSON.stringify({ action: "assign", values }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response
+        .json()
+        .catch(() => ({}))) as ProjectEmployeeResponsePayload;
+
+      if (!response.ok || !payload.assignment) {
+        setTokenLimitSubmitState({
+          message: payload.error ?? usageText.projectAddFailed,
+          status: "error"
+        });
+        return;
+      }
+
+      mergeAssignments([payload.assignment]);
+      setCandidateProjectId("");
+      setIsProjectAssignmentOpen(false);
+      setTokenLimitSubmitState({ message: usageText.projectAdded, status: "success" });
+      router.refresh();
+    } catch {
+      setTokenLimitSubmitState({ message: usageText.projectAddFailed, status: "error" });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function submitEmployeeProjectRemoval(projectId: string) {
+    if (!selectedUsage) {
+      return;
+    }
+
+    const assignment = assignmentsByProjectId[projectId]?.find(
+      (candidate) =>
+        candidate.employeeId === selectedUsage.employeeId && candidate.status === "active"
+    );
+    if (!assignment) {
+      setTokenLimitSubmitState({ message: usageText.projectRemoveFailed, status: "error" });
+      return;
+    }
+
+    const action = `removeProject:${projectId}`;
+    setPendingAction(action);
+    setTokenLimitSubmitState({ message: "", status: "idle" });
+
+    try {
+      const response = await fetch("/api/control-plane/employees", {
+        body: JSON.stringify({
+          action: "disableAssignment",
+          values: {
+            employeeId: selectedUsage.employeeId,
+            projectId
+          }
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response
+        .json()
+        .catch(() => ({}))) as ProjectEmployeeResponsePayload;
+
+      if (!response.ok || !payload.assignment) {
+        setTokenLimitSubmitState({
+          message: payload.error ?? usageText.projectRemoveFailed,
+          status: "error"
+        });
+        return;
+      }
+
+      mergeAssignments([payload.assignment]);
+      setProjectAssignmentToRemoveId(null);
+      setTokenLimitSubmitState({ message: usageText.projectRemoved, status: "success" });
+      router.refresh();
+    } catch {
+      setTokenLimitSubmitState({ message: usageText.projectRemoveFailed, status: "error" });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   function openEmployeeAddDialog() {
     setAddMethod("csv");
     setSubmitState({ message: "", status: "idle" });
@@ -1841,17 +2053,26 @@ export function EmployeeControlManagement({
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
       ) : null}
-      <section aria-label={usageText.detail} className="employee-usage-overview">
-        <article>
-          <span>{usageText.tokens}</span>
-          <strong>{formatTokenCount(usage.totalDailyTokens, locale)}</strong>
-          <small>{usage.trackedEmployees} / {usage.activeEmployees} {text.employees}</small>
-        </article>
-        <article>
-          <span>{locale === "ko" ? "사용 직원 평균" : "Average per tracked employee"}</span>
-          <strong>{formatTokenCount(Math.round(usage.averageDailyTokens), locale)}</strong>
-          <small>{locale === "ko" ? "오늘(UTC)" : "Today (UTC)"}</small>
-        </article>
+      <section aria-label={usageText.detail} className="employee-usage-ranking">
+        <div className="employee-usage-ranking-heading">
+          <div>
+            <h3>{locale === "ko" ? "직원별 사용 토큰" : "Employee token usage"}</h3>
+            <p>{locale === "ko" ? "오늘 사용량 상위 10명" : "Top 10 by usage today"}</p>
+          </div>
+          <span>{locale === "ko" ? "토큰" : "Tokens"}</span>
+        </div>
+        {usage.totalDailyTokens > 0 ? (
+          <AnalyticsEmployeeTokenBarChart
+            ariaLabel={locale === "ko" ? "직원별 사용 토큰" : "Employee token usage"}
+            maxRows={10}
+            rows={employeeTokenChartRows}
+            totalValue={usage.totalDailyTokens}
+          />
+        ) : (
+          <p className="employee-usage-ranking-empty">
+            {locale === "ko" ? "오늘 집계된 직원 토큰 사용량이 없습니다." : "No employee token usage has been recorded today."}
+          </p>
+        )}
       </section>
       <section className="employee-list-section">
         <div className="employee-list-toolbar employee-list-actions">
@@ -1894,11 +2115,12 @@ export function EmployeeControlManagement({
                     type="checkbox"
                   />
                 </label>
-                {renderEmployeeSortHeader("rank", usageText.rank)}
                 {renderEmployeeSortHeader("name", text.name)}
                 {renderEmployeeSortHeader("department", text.department)}
                 {renderEmployeeSortHeader("tokens", usageText.tokens)}
+                <span className="employee-list-header-label">{usageText.weeklyTokens}</span>
                 {renderEmployeeSortHeader("project", text.projectCount)}
+                <span aria-hidden="true" className="employee-list-header-spacer" />
               </div>
               <div className="employee-list">
                 {currentPageEmployees.map((employee) => {
@@ -1906,7 +2128,17 @@ export function EmployeeControlManagement({
                   const employeeUsage = usageByEmployeeId.get(employee.id);
                   const isInvitationSelectable = employee.invitationStatus !== "accepted";
                   return (
-                    <article className="employee-list-row" key={employee.id}>
+                    <article
+                      className="employee-list-row"
+                      key={employee.id}
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement;
+                        if (target.closest("button, input, label, a")) {
+                          return;
+                        }
+                        setSelectedEmployeeId(employee.id);
+                      }}
+                    >
                       <label
                         className="employee-selection-control employee-list-cell"
                         data-label={text.selectEmployee}
@@ -1921,14 +2153,6 @@ export function EmployeeControlManagement({
                           type="checkbox"
                         />
                       </label>
-                      <div
-                        className="employee-list-cell employee-rank-cell"
-                        data-label={usageText.rank}
-                      >
-                        <strong data-rank={employeeUsage?.rank ?? 0}>
-                          {employeeUsage?.rank ?? "-"}
-                        </strong>
-                      </div>
                       <div
                         className="employee-list-cell employee-name-cell"
                         data-label={text.name}
@@ -1953,7 +2177,6 @@ export function EmployeeControlManagement({
                               </Badge>
                             </span>
                           </span>
-                          <ChevronRight aria-hidden="true" size={17} />
                         </button>
                       </div>
                       <div
@@ -1974,7 +2197,26 @@ export function EmployeeControlManagement({
                         className="employee-list-cell employee-token-cell"
                         data-label={usageText.tokens}
                       >
-                        <strong>{formatTokenCount(employeeUsage?.dailyTokens ?? 0, locale)}</strong>
+                        <strong
+                          data-rank={
+                            employeeUsage && employeeUsage.dailyTokens > 0 && employeeUsage.rank <= 3
+                              ? employeeUsage.rank
+                              : undefined
+                          }
+                        >
+                          {formatTokenCount(employeeUsage?.dailyTokens ?? 0, locale)}
+                        </strong>
+                      </div>
+                      <div
+                        className="employee-list-cell employee-token-cell"
+                        data-label={usageText.weeklyTokens}
+                      >
+                        <strong>
+                          {employeeUsage?.weeklyTokens === null ||
+                          employeeUsage?.weeklyTokens === undefined
+                            ? "-"
+                            : formatTokenCount(employeeUsage.weeklyTokens, locale)}
+                        </strong>
                       </div>
                       <div
                         className="employee-list-cell employee-project-cell"
@@ -1982,6 +2224,9 @@ export function EmployeeControlManagement({
                         title={projectNames.join(", ")}
                       >
                         <p>{formatTokenCount(projectNames.length, locale)}</p>
+                      </div>
+                      <div aria-hidden="true" className="employee-row-chevron">
+                        <ChevronRight size={18} />
                       </div>
                     </article>
                   );
@@ -2176,6 +2421,10 @@ export function EmployeeControlManagement({
         onOpenChange={(open) => {
           if (!open) {
             setSelectedEmployeeId(null);
+            setIsProjectAssignmentOpen(false);
+            setCandidateProjectId("");
+            setProjectAssignmentToRemoveId(null);
+            setTokenLimitSubmitState({ message: "", status: "idle" });
           }
         }}
         open={selectedUsage !== null}
@@ -2194,61 +2443,330 @@ export function EmployeeControlManagement({
                 </span>
               </p>
 
+              {tokenLimitSubmitState.message ? (
+                <Alert
+                  variant={
+                    tokenLimitSubmitState.status === "error" ? "destructive" : "success"
+                  }
+                >
+                  <AlertDescription>{tokenLimitSubmitState.message}</AlertDescription>
+                </Alert>
+              ) : null}
+
               <div className="employee-usage-summary-grid">
                 <article>
-                  <span>{usageText.rank}</span>
-                  <strong>#{selectedUsage.rank}</strong>
+                  <span>{usageText.tokens}</span>
+                  <strong
+                    data-rank={
+                      selectedUsage.dailyTokens > 0 && selectedUsage.rank <= 3
+                        ? selectedUsage.rank
+                        : undefined
+                    }
+                  >
+                    {formatTokenCount(selectedUsage.dailyTokens, locale)}
+                  </strong>
                 </article>
                 <article>
-                  <span>{usageText.tokens}</span>
-                  <strong>{formatTokenCount(selectedUsage.dailyTokens, locale)}</strong>
+                  <span>{usageText.weeklyTokens}</span>
+                  <strong>
+                    {selectedUsage.weeklyTokens === null
+                      ? "-"
+                      : formatTokenCount(selectedUsage.weeklyTokens, locale)}
+                  </strong>
                 </article>
               </div>
 
+              <section className="employee-chat-usage">
+                <h3>{usageText.chatUsage}</h3>
+                <div className="employee-chat-usage-grid">
+                  <article className="employee-chat-usage-card">
+                    <header>
+                      <div>
+                        <span aria-hidden="true" className="employee-usage-status-dot" />
+                        <strong>{usageText.dailyUsage}</strong>
+                      </div>
+                      <Badge data-quota-status={employeeDailyTokenStatus} variant="outline">
+                        {formatEmployeeQuotaStatus(employeeDailyTokenStatus, locale)}
+                      </Badge>
+                    </header>
+                    <dl className="employee-chat-usage-metrics">
+                      <div>
+                        <dt>{usageText.tokens}</dt>
+                        <dd>{formatTokenCount(selectedUsage.dailyTokens, locale)}</dd>
+                      </div>
+                      <div>
+                        <dt>{usageText.dailyLimit}</dt>
+                        <dd>
+                          {employeeTokenLimitDraft.enabled
+                            ? formatTokenCount(employeeTokenLimitDraft.limit, locale)
+                            : usageText.unlimited}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="employee-chat-usage-control">
+                      <div className="employee-token-limit-toggle">
+                        <span>{usageText.limitEnabled}</span>
+                        <Switch
+                          aria-label={usageText.limitEnabled}
+                          checked={employeeTokenLimitDraft.enabled}
+                          onCheckedChange={(checked) =>
+                            setEmployeeTokenLimitDraft((current) => ({
+                              ...current,
+                              enabled: checked
+                            }))
+                          }
+                        />
+                      </div>
+                      {employeeTokenLimitDraft.enabled ? (
+                        <div className="employee-token-limit-controls">
+                          <CompactUnitStepper
+                            ariaLabel={usageText.dailyLimit}
+                            max={EMPLOYEE_TOKEN_LIMIT_MAX / 1000}
+                            min={EMPLOYEE_TOKEN_LIMIT_MIN / 1000}
+                            onValueChange={(value) =>
+                              setEmployeeTokenLimitDraft((current) => ({
+                                ...current,
+                                enabled: true,
+                                limit: clampEmployeeTokenLimit(value * 1000)
+                              }))
+                            }
+                            step={1}
+                            unit="K"
+                            value={clampEmployeeTokenLimit(employeeTokenLimitDraft.limit) / 1000}
+                          />
+                          <input
+                            aria-label={usageText.dailyLimit}
+                            className="employee-token-limit-range"
+                            max={EMPLOYEE_TOKEN_LIMIT_MAX / 1000}
+                            min={EMPLOYEE_TOKEN_LIMIT_MIN / 1000}
+                            onChange={(event) =>
+                              setEmployeeTokenLimitDraft((current) => ({
+                                ...current,
+                                enabled: true,
+                                limit: clampEmployeeTokenLimit(
+                                  Number(event.target.value) * 1000
+                                )
+                              }))
+                            }
+                            step={1}
+                            type="range"
+                            value={clampEmployeeTokenLimit(employeeTokenLimitDraft.limit) / 1000}
+                          />
+                        </div>
+                      ) : (
+                        <span className="employee-token-limit-unlimited">
+                          {usageText.unlimited}
+                        </span>
+                      )}
+                      <Button disabled type="button">
+                        {usageText.weeklyUnavailable}
+                      </Button>
+                    </div>
+                  </article>
+
+                  <article className="employee-chat-usage-card" data-unavailable="true">
+                    <header>
+                      <div>
+                        <span aria-hidden="true" className="employee-usage-status-dot" />
+                        <strong>{usageText.weeklyUsage}</strong>
+                      </div>
+                      <Badge variant="outline">{usageText.weeklyUnavailable}</Badge>
+                    </header>
+                    <dl className="employee-chat-usage-metrics">
+                      <div>
+                        <dt>{usageText.weeklyTokens}</dt>
+                        <dd>
+                          {selectedUsage.weeklyTokens === null
+                            ? "-"
+                            : formatTokenCount(selectedUsage.weeklyTokens, locale)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{usageText.weeklyLimit}</dt>
+                        <dd>-</dd>
+                      </div>
+                    </dl>
+                    <div className="employee-chat-usage-control employee-weekly-usage-control">
+                      <strong>{usageText.weeklyLimit}</strong>
+                      <div aria-hidden="true" className="employee-weekly-limit-placeholder">
+                        <span>-</span>
+                        <span />
+                      </div>
+                      <Button disabled type="button">
+                        {usageText.weeklyUnavailable}
+                      </Button>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
               <section className="employee-usage-projects">
-                <h3>{usageText.projects}</h3>
+                <div className="employee-usage-section-heading">
+                  <h3>{usageText.projects}</h3>
+                  <Button
+                    onClick={() => {
+                      setCandidateProjectId(availableProjectsForEmployee[0]?.id ?? "");
+                      setIsProjectAssignmentOpen((current) => !current);
+                      setProjectAssignmentToRemoveId(null);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <UserPlus aria-hidden="true" size={16} />
+                    {usageText.addProject}
+                  </Button>
+                </div>
                 {selectedUsage.projects.length > 0 ? (
                   <div className="employee-usage-project-list">
-                    {selectedUsage.projects.map((project) => (
-                      <article key={project.projectId}>
-                        <div className="employee-usage-project-heading">
-                          <strong>{project.projectName}</strong>
-                          <Badge data-quota-status={project.quotaStatus} variant="outline">
-                            {formatEmployeeQuotaStatus(project.quotaStatus, locale)}
-                          </Badge>
-                        </div>
-                        <dl>
-                          <div>
-                            <dt>{usageText.tokens}</dt>
-                            <dd>{formatTokenCount(project.dailyTokens, locale)}</dd>
-                          </div>
-                          <div>
-                            <dt>{usageText.dailyLimit}</dt>
-                            <dd>
-                              {project.dailyTokenLimit === null
-                                ? usageText.unlimited
-                                : formatTokenCount(project.dailyTokenLimit, locale)}
-                            </dd>
-                          </div>
-                        </dl>
-                        <Button
-                          onClick={() =>
-                            router.push(
-                              `/tenants/${model.routeTenantId}/projects/${project.projectId}/policies`
-                            )
-                          }
-                          type="button"
-                          variant="outline"
+                    {selectedUsage.projects.map((project) => {
+                      const projectRecord = projects.find(
+                        (candidate) => candidate.id === project.projectId
+                      );
+                      const projectBudgetUsd = projectRecord?.totalBudgetUsd ?? 0;
+                      const projectCost = monthlyProjectCostById.get(project.projectId);
+                      const usageKnown = monthlyCostReport.source !== "unavailable";
+                      const projectUsedUsd = usageKnown
+                        ? (projectCost?.costMicroUsd ?? 0) / 1_000_000
+                        : null;
+                      const progress =
+                        projectUsedUsd === null
+                          ? 0
+                          : projectBudgetUsd > 0
+                            ? Math.min(100, (projectUsedUsd / projectBudgetUsd) * 100)
+                            : projectUsedUsd > 0
+                              ? 100
+                              : 0;
+                      const budgetStatus =
+                        progress >= 100
+                          ? "exceeded"
+                          : progress >= (projectRecord?.warningThresholdPercent ?? 80)
+                            ? "warning"
+                            : "within_limit";
+
+                      return (
+                        <article
+                          className="employee-usage-project-row"
+                          data-quota-status={budgetStatus}
+                          key={project.projectId}
                         >
-                          {usageText.managePolicy}
-                          <ChevronRight aria-hidden="true" size={16} />
-                        </Button>
-                      </article>
-                    ))}
+                          <button
+                            aria-label={`${usageText.managePolicy}: ${project.projectName}`}
+                            className="employee-usage-project-link"
+                            onClick={() =>
+                              router.push(
+                                `/tenants/${model.routeTenantId}/projects/${project.projectId}/policies`
+                              )
+                            }
+                            type="button"
+                          >
+                            <span className="employee-usage-project-heading">
+                              <strong>{project.projectName}</strong>
+                              <span>
+                                {projectUsedUsd === null
+                                  ? "-"
+                                  : formatBudgetUsd(projectUsedUsd)}{" "}
+                                / {formatBudgetUsd(projectBudgetUsd)}
+                              </span>
+                            </span>
+                            <span className="employee-usage-project-progress" aria-hidden="true">
+                              <span style={{ width: `${progress}%` }} />
+                            </span>
+                          </button>
+                          <Button
+                            className="employee-usage-project-remove"
+                            disabled={pendingAction !== null}
+                            onClick={() => {
+                              setProjectAssignmentToRemoveId(project.projectId);
+                              setIsProjectAssignmentOpen(false);
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="destructive"
+                          >
+                            {usageText.projectRemove}
+                          </Button>
+                        </article>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="project-empty">{usageText.noProjectUsage}</p>
                 )}
+                {projectAssignmentToRemoveId ? (
+                  <div className="employee-project-removal-confirmation">
+                    <strong>{usageText.projectRemoveConfirm}</strong>
+                    <div>
+                      <Button
+                        disabled={pendingAction !== null}
+                        onClick={() => setProjectAssignmentToRemoveId(null)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {text.cancel}
+                      </Button>
+                      <Button
+                        disabled={pendingAction !== null}
+                        onClick={() =>
+                          void submitEmployeeProjectRemoval(projectAssignmentToRemoveId)
+                        }
+                        size="sm"
+                        type="button"
+                        variant="destructive"
+                      >
+                        {pendingAction === `removeProject:${projectAssignmentToRemoveId}`
+                          ? "..."
+                          : usageText.projectRemove}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                {isProjectAssignmentOpen ? (
+                  <div className="employee-project-assignment-inline">
+                    {availableProjectsForEmployee.length > 0 ? (
+                      <div className="employee-project-assignment-list">
+                        {availableProjectsForEmployee.map((project) => (
+                          <button
+                            aria-pressed={candidateProjectId === project.id}
+                            key={project.id}
+                            onClick={() => setCandidateProjectId(project.id)}
+                            type="button"
+                          >
+                            <span>
+                              <strong>{project.name}</strong>
+                              <small>{project.description?.trim() || "-"}</small>
+                            </span>
+                            <span>{formatBudgetUsd(project.totalBudgetUsd)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="project-empty">{usageText.noProjectsAvailable}</p>
+                    )}
+                    <div className="modal-actions">
+                      <Button
+                        disabled={pendingAction === "assignProject"}
+                        onClick={() => {
+                          setIsProjectAssignmentOpen(false);
+                          setCandidateProjectId("");
+                        }}
+                        type="button"
+                        variant="outline"
+                      >
+                        {text.cancel}
+                      </Button>
+                      <Button
+                        disabled={pendingAction !== null || !candidateProjectId}
+                        onClick={() => void submitEmployeeProjectAssignment()}
+                        type="button"
+                      >
+                        <UserPlus aria-hidden="true" />
+                        {pendingAction === "assignProject" ? "..." : usageText.addProject}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </section>
 
               <div className="modal-actions">
@@ -2349,6 +2867,13 @@ function upsertAssignment(
 
   return assignments.map((assignment, index) =>
     index === existingIndex ? nextAssignment : assignment
+  );
+}
+
+function clampEmployeeTokenLimit(value: number) {
+  return Math.min(
+    EMPLOYEE_TOKEN_LIMIT_MAX,
+    Math.max(EMPLOYEE_TOKEN_LIMIT_MIN, Math.round(value))
   );
 }
 
