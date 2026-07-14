@@ -269,6 +269,14 @@ func TestExtractPromptFeaturesSeparatesGuardedBlockQuote(t *testing.T) {
 	if !strings.Contains(unguarded.instructionText, "summarize this someday") {
 		t.Fatalf("unguarded blockquote was removed from instruction: %q", unguarded.instructionText)
 	}
+
+	payloadActionOnly := ExtractPromptFeatures("```text\nsummarize this source\n```\n> quoted note")
+	if payloadActionOnly.payloadBlockCount != 1 || payloadActionOnly.payloadBoundaryEvidence != payloadBoundaryCodeFence {
+		t.Fatalf("action inside an earlier payload guarded a later blockquote: %#v", payloadActionOnly)
+	}
+	if !strings.Contains(payloadActionOnly.instructionText, "quoted note") {
+		t.Fatalf("blockquote without instruction action was removed: %q", payloadActionOnly.instructionText)
+	}
 }
 
 func TestExtractPromptFeaturesSeparatesLimitedPayloadCue(t *testing.T) {
@@ -325,6 +333,38 @@ func TestExtractPromptFeaturesLetsOutermostPayloadBoundaryOwnNestedMarkers(t *te
 	}
 	if strings.Contains(features.instructionText, "nested content") || !strings.Contains(features.payloadText, "nested content") {
 		t.Fatalf("nested payload ownership was not preserved: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesCombinesIndependentBoundaryEvidence(t *testing.T) {
+	t.Parallel()
+
+	prompt := "[request]\nSummarize the sources.\n[payload]\nfirst source\n[instruction]\nCompare the decisions.\n<document>second source</document>"
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 2 {
+		t.Fatalf("independent payload block count = %d, want 2: %#v", features.payloadBlockCount, features)
+	}
+	wantEvidence := payloadBoundaryHeading | payloadBoundaryTag
+	if features.payloadBoundaryEvidence != wantEvidence || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("independent evidence/confidence = (%d, %d), want (%d, high)", features.payloadBoundaryEvidence, features.payloadSplitConfidence, wantEvidence)
+	}
+	if features.instructionText != "summarize the sources. compare the decisions." || features.payloadText != "first source\nsecond source" {
+		t.Fatalf("independent boundaries were not separated: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesKeepsUnsupportedAndUnmatchedMarkersInInstruction(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Summarize this input.\n[output]\ncontext:\n</document>\n<document />"
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 0 || features.payloadText != "" || features.payloadSplitConfidence != payloadSplitConfidenceNone {
+		t.Fatalf("unsupported or unmatched markers created payload: %#v", features)
+	}
+	for _, marker := range []string{"[output]", "context:", "</document>", "<document />"} {
+		if !strings.Contains(features.instructionText, marker) {
+			t.Fatalf("marker %q was removed from instruction: %q", marker, features.instructionText)
+		}
 	}
 }
 

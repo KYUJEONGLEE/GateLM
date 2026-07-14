@@ -10,13 +10,87 @@ const fixturePath = "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.
 const trainingFixturePath =
   "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl";
 const splitManifestPath = "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json";
+const trainingSmokeManifestPath =
+  "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json";
 const splitManifestSchemaPath =
   "docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json";
+const labelSchemaPath = "docs/v2.1.0/schemas/difficulty-label-record.schema.json";
+const labelFixturePath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl";
+const labelManifestPath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json";
+const labelManifestSchemaPath =
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json";
 const modelArtifactSchemaPath = "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json";
 const trainingPolicyPath = "scripts/routing_difficulty_model/training-policy.v1.json";
 const activeSchemaVersion = "gatelm.difficulty-evaluation-record.v1";
+const activeLabelSchemaVersion = "gatelm.difficulty-label-record.v1";
+const activeLabelManifestSchemaVersion = "gatelm.difficulty-label-dataset-manifest.v1";
+const activeCategories = ["general", "code", "translation", "summarization", "reasoning"];
 const activeDifficulties = ["simple", "complex"];
 const requiredEvaluationFields = ["redactedPrompt", "expectedCategory", "expectedDifficulty", "language"];
+const requiredLabelFields = [
+  "expectedDifficulty",
+  "expectedCategory",
+  "taskBucket",
+  "constraintBucket",
+  "scopeBucket",
+  "dependencyBucket",
+  "expectedSemanticLabel",
+  "promptFamily",
+  "language",
+  "expectedInstructionPayloadBoundary",
+  "evaluationSlices",
+  "labelConfidence",
+  "reviewStatus",
+  "reviewerCount",
+];
+const requiredEvaluationSlices = [
+  "negation",
+  "indirect_expression",
+  "synonym",
+  "short_complex",
+  "long_simple",
+  "payload_contamination",
+  "korean",
+  "english",
+  "mixed_language",
+  "category_confusion",
+  "ood_terminology",
+];
+const semanticLabelsByCategory = {
+  general: [
+    "general_qa",
+    "general_explanation",
+    "general_extraction",
+    "general_support",
+    "general_transformation",
+    "general_other",
+  ],
+  code: [
+    "code_generation",
+    "code_debugging",
+    "code_refactoring",
+    "code_review",
+    "code_explanation",
+    "code_design",
+  ],
+  translation: ["translation_direct", "translation_localization", "translation_style_preserving"],
+  summarization: [
+    "summarization_direct",
+    "summarization_key_points",
+    "summarization_structured",
+    "summarization_multi_source",
+  ],
+  reasoning: [
+    "reasoning_comparison",
+    "reasoning_planning",
+    "reasoning_decision",
+    "reasoning_constraint_solving",
+    "reasoning_causal",
+  ],
+};
+const countBuckets = ["zero", "one", "two", "three_plus"];
+const scopeBuckets = ["zero", "one", "two_to_three", "four_plus"];
+const languageSliceByLanguage = { ko: "korean", en: "english", mixed: "mixed_language" };
 const sensitiveStringPattern =
   /(sk-[a-z0-9_-]{12,}|Bearer\s+[a-z0-9._-]{12,}|-----BEGIN\s+(RSA|OPENSSH|EC|PRIVATE)\s+KEY-----)/i;
 
@@ -49,6 +123,9 @@ function readJson(rootDir, relativePath, failures) {
 
 function isJsonType(value, type) {
   if (type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (type === "integer") return Number.isInteger(value);
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "array") return Array.isArray(value);
   if (type === "object") return value !== null && typeof value === "object" && !Array.isArray(value);
   return typeof value === type;
 }
@@ -82,6 +159,34 @@ function validateProperty(propertySchema, value, jsonPath, failures) {
     }
     if (sensitiveStringPattern.test(value)) {
       failures.push(`${jsonPath}: forbidden secret-shaped string`);
+    }
+  }
+
+  if (typeof value === "number") {
+    if (propertySchema.minimum !== undefined && value < propertySchema.minimum) {
+      failures.push(`${jsonPath}: expected minimum ${propertySchema.minimum}`);
+    }
+    if (propertySchema.maximum !== undefined && value > propertySchema.maximum) {
+      failures.push(`${jsonPath}: expected maximum ${propertySchema.maximum}`);
+    }
+  }
+
+  if (Array.isArray(value)) {
+    if (propertySchema.minItems !== undefined && value.length < propertySchema.minItems) {
+      failures.push(`${jsonPath}: expected minItems ${propertySchema.minItems}`);
+    }
+    if (propertySchema.maxItems !== undefined && value.length > propertySchema.maxItems) {
+      failures.push(`${jsonPath}: expected maxItems ${propertySchema.maxItems}`);
+    }
+    if (propertySchema.uniqueItems && new Set(value.map((item) => JSON.stringify(item))).size !== value.length) {
+      failures.push(`${jsonPath}: expected unique items`);
+    }
+    if (propertySchema.items?.enum) {
+      value.forEach((item, index) => {
+        if (!propertySchema.items.enum.includes(item)) {
+          failures.push(`${jsonPath}[${index}]: expected one of ${JSON.stringify(propertySchema.items.enum)}`);
+        }
+      });
     }
   }
 }
@@ -145,6 +250,420 @@ function validateSchemaShape(schema, failures) {
   }
 }
 
+function hasExactValues(actual, expected) {
+  return (
+    Array.isArray(actual) &&
+    actual.length === expected.length &&
+    expected.every((value) => actual.includes(value))
+  );
+}
+
+function validateLabelSchemaShape(schema, manifestSchema, failures) {
+  if (schema?.properties?.schemaVersion?.const !== activeLabelSchemaVersion) {
+    failures.push(`${labelSchemaPath}: schemaVersion const must be ${activeLabelSchemaVersion}`);
+  }
+  if (schema?.additionalProperties !== false) {
+    failures.push(`${labelSchemaPath}: top-level additionalProperties must be false`);
+  }
+  for (const field of requiredLabelFields) {
+    if (!schema?.required?.includes(field)) {
+      failures.push(`${labelSchemaPath}: canonical label schema must require ${field}`);
+    }
+  }
+  if (!hasExactValues(schema?.properties?.expectedCategory?.enum, activeCategories)) {
+    failures.push(`${labelSchemaPath}: expectedCategory enum must contain exactly the five active categories`);
+  }
+  if (!hasExactValues(schema?.properties?.expectedDifficulty?.enum, activeDifficulties)) {
+    failures.push(`${labelSchemaPath}: expectedDifficulty enum must contain exactly simple,complex`);
+  }
+  if (!hasExactValues(schema?.properties?.evaluationSlices?.items?.enum, requiredEvaluationSlices)) {
+    failures.push(`${labelSchemaPath}: evaluationSlices must contain exactly the required slice taxonomy`);
+  }
+  const semanticLabels = Object.values(semanticLabelsByCategory).flat();
+  if (!hasExactValues(schema?.properties?.expectedSemanticLabel?.enum, semanticLabels)) {
+    failures.push(`${labelSchemaPath}: expectedSemanticLabel enum does not match the category taxonomy`);
+  }
+  if (!hasExactValues(schema?.$defs?.countBucket?.enum, countBuckets)) {
+    failures.push(`${labelSchemaPath}: count bucket enum must be zero,one,two,three_plus`);
+  }
+  if (!hasExactValues(schema?.properties?.scopeBucket?.enum, scopeBuckets)) {
+    failures.push(`${labelSchemaPath}: scope bucket enum must be zero,one,two_to_three,four_plus`);
+  }
+  if (
+    manifestSchema?.properties?.schemaVersion?.const !== activeLabelManifestSchemaVersion ||
+    manifestSchema?.additionalProperties !== false
+  ) {
+    failures.push(`${labelManifestSchemaPath}: closed v1 label dataset manifest schema is required`);
+  }
+}
+
+function validateInstructionPayloadBoundary(boundary, prefix, failures) {
+  if (!boundary || typeof boundary !== "object" || Array.isArray(boundary)) {
+    failures.push(`${prefix}: expected instruction/payload boundary object`);
+    return;
+  }
+  const expectedKeys = ["kind", "boundaryType", "confidence", "payloadBlockCount"];
+  const actualKeys = Object.keys(boundary);
+  for (const key of expectedKeys) {
+    if (!(key in boundary)) failures.push(`${prefix}: missing boundary property ${key}`);
+  }
+  for (const key of actualKeys) {
+    if (!expectedKeys.includes(key)) failures.push(`${prefix}: unexpected boundary property ${key}`);
+  }
+
+  const supportedBoundaryTypes = [
+    "code_fence",
+    "role_tag",
+    "role_heading",
+    "begin_end",
+    "blockquote",
+    "inline_cue",
+    "multiple",
+  ];
+  const has = (values, value) => values.includes(value);
+  switch (boundary.kind) {
+    case "instruction_only":
+      if (
+        boundary.boundaryType !== "none" ||
+        boundary.confidence !== "none" ||
+        boundary.payloadBlockCount !== "zero"
+      ) {
+        failures.push(`${prefix}: instruction_only must use none + none + zero`);
+      }
+      break;
+    case "explicit_separation":
+      if (
+        !has(supportedBoundaryTypes, boundary.boundaryType) ||
+        !has(["low", "medium", "high"], boundary.confidence) ||
+        !has(["one", "multiple"], boundary.payloadBlockCount)
+      ) {
+        failures.push(`${prefix}: invalid explicit_separation boundary tuple`);
+      }
+      break;
+    case "ambiguous_separation":
+      if (
+        !has(["multiple", "unsupported"], boundary.boundaryType) ||
+        boundary.confidence !== "low" ||
+        !has(["zero", "one", "multiple"], boundary.payloadBlockCount)
+      ) {
+        failures.push(`${prefix}: invalid ambiguous_separation boundary tuple`);
+      }
+      break;
+    case "payload_only":
+      if (
+        !has([...supportedBoundaryTypes, "unsupported"], boundary.boundaryType) ||
+        !has(["low", "medium", "high"], boundary.confidence) ||
+        !has(["one", "multiple"], boundary.payloadBlockCount)
+      ) {
+        failures.push(`${prefix}: invalid payload_only boundary tuple`);
+      }
+      break;
+    default:
+      failures.push(`${prefix}: unsupported boundary kind ${JSON.stringify(boundary.kind)}`);
+  }
+}
+
+function validateReviewState(record, prefix, failures) {
+  if (record.reviewStatus === "pending" && record.reviewerCount !== 0) {
+    failures.push(`${prefix}: pending review must use reviewerCount=0`);
+  }
+  if (record.labelSource === "synthetic_fixture") {
+    if (record.reviewStatus !== "pending" || record.reviewerCount !== 0) {
+      failures.push(`${prefix}: synthetic fixture must remain pending with reviewerCount=0`);
+    }
+  }
+  if (["in_review", "approved", "rejected"].includes(record.reviewStatus)) {
+    if (record.labelSource !== "human_review" || !Number.isInteger(record.reviewerCount) || record.reviewerCount < 1) {
+      failures.push(`${prefix}: ${record.reviewStatus} requires human_review and at least one reviewer`);
+    }
+  }
+  if (record.reviewStatus === "needs_adjudication") {
+    if (record.labelSource !== "human_review" || !Number.isInteger(record.reviewerCount) || record.reviewerCount < 2) {
+      failures.push(`${prefix}: needs_adjudication requires human_review and at least two reviewers`);
+    }
+  }
+}
+
+function validateLabelRecord(schema, record, lineNumber, failures) {
+  const prefix = `${labelFixturePath}: line ${lineNumber}`;
+  validateRecord(schema, record, lineNumber, failures, labelFixturePath);
+  if (!record || typeof record !== "object" || Array.isArray(record)) return;
+
+  for (const field of ["taskBucket", "constraintBucket", "dependencyBucket"]) {
+    if (!countBuckets.includes(record[field])) {
+      failures.push(`${prefix}.${field}: expected one of ${JSON.stringify(countBuckets)}`);
+    }
+  }
+  if (!scopeBuckets.includes(record.scopeBucket)) {
+    failures.push(`${prefix}.scopeBucket: expected one of ${JSON.stringify(scopeBuckets)}`);
+  }
+  const semanticLabels = semanticLabelsByCategory[record.expectedCategory] ?? [];
+  if (!semanticLabels.includes(record.expectedSemanticLabel)) {
+    failures.push(
+      `${prefix}: semantic label ${JSON.stringify(record.expectedSemanticLabel)} is incompatible with category ${JSON.stringify(record.expectedCategory)}`,
+    );
+  }
+
+  const slices = Array.isArray(record.evaluationSlices) ? record.evaluationSlices : [];
+  if (new Set(slices).size !== slices.length) {
+    failures.push(`${prefix}: evaluationSlices must be unique`);
+  }
+  for (const slice of slices) {
+    if (!requiredEvaluationSlices.includes(slice)) {
+      failures.push(`${prefix}: unsupported evaluation slice ${JSON.stringify(slice)}`);
+    }
+  }
+  const expectedLanguageSlice = languageSliceByLanguage[record.language];
+  const languageSlices = Object.values(languageSliceByLanguage);
+  if (expectedLanguageSlice && !slices.includes(expectedLanguageSlice)) {
+    failures.push(`${prefix}: language=${record.language} requires slice ${expectedLanguageSlice}`);
+  }
+  for (const languageSlice of languageSlices) {
+    if (slices.includes(languageSlice) && languageSlice !== expectedLanguageSlice) {
+      failures.push(`${prefix}: slice ${languageSlice} conflicts with language=${record.language}`);
+    }
+  }
+
+  if (typeof record.redactedPrompt === "string") {
+    const runeLength = [...record.redactedPrompt].length;
+    const isShortComplex = record.expectedDifficulty === "complex" && runeLength <= 120;
+    const isLongSimple = record.expectedDifficulty === "simple" && runeLength > 120;
+    if (slices.includes("short_complex") !== isShortComplex) {
+      failures.push(`${prefix}: short_complex must exactly match complex with rune length <= 120 (got ${runeLength})`);
+    }
+    if (slices.includes("long_simple") !== isLongSimple) {
+      failures.push(`${prefix}: long_simple must exactly match simple with rune length > 120 (got ${runeLength})`);
+    }
+  }
+
+  validateInstructionPayloadBoundary(
+    record.expectedInstructionPayloadBoundary,
+    `${prefix}.expectedInstructionPayloadBoundary`,
+    failures,
+  );
+  if (
+    slices.includes("payload_contamination") &&
+    record.expectedInstructionPayloadBoundary?.kind === "instruction_only"
+  ) {
+    failures.push(`${prefix}: payload_contamination cannot use instruction_only boundary`);
+  }
+  if (typeof record.promptFamily === "string") {
+    const splitNamePattern = /(^|[._:-])(train|calibration|holdout)([._:-]|$)/;
+    const timestampPattern = /(^|[._:-])20\d{2}(?:[._:-]?\d{2}){1,5}([._:-]|$)/;
+    if (splitNamePattern.test(record.promptFamily) || timestampPattern.test(record.promptFamily)) {
+      failures.push(`${prefix}.promptFamily: family id must not encode a split name or timestamp`);
+    }
+  }
+  validateReviewState(record, prefix, failures);
+}
+
+function groupLabelFamilies(records, failures) {
+  const families = new Map();
+  for (const record of records) {
+    if (!families.has(record.promptFamily)) families.set(record.promptFamily, []);
+    families.get(record.promptFamily).push(record);
+  }
+  for (const [promptFamily, familyRecords] of families) {
+    const categories = new Set(familyRecords.map((record) => record.expectedCategory));
+    const semanticLabels = new Set(familyRecords.map((record) => record.expectedSemanticLabel));
+    if (categories.size !== 1) {
+      failures.push(`${labelFixturePath}: family ${promptFamily} crosses expectedCategory values`);
+    }
+    if (semanticLabels.size !== 1) {
+      failures.push(`${labelFixturePath}: family ${promptFamily} crosses expectedSemanticLabel values`);
+    }
+  }
+  return families;
+}
+
+function countFamilies(families, predicate) {
+  let count = 0;
+  for (const records of families.values()) {
+    if (records.some(predicate)) count += 1;
+  }
+  return count;
+}
+
+function computeLabelCoverage(families) {
+  const categoryFamilies = Object.fromEntries(
+    activeCategories.map((category) => [category, countFamilies(families, (record) => record.expectedCategory === category)]),
+  );
+  const difficultyFamilies = Object.fromEntries(
+    activeDifficulties.map((difficulty) => [
+      difficulty,
+      countFamilies(families, (record) => record.expectedDifficulty === difficulty),
+    ]),
+  );
+  const categoryDifficultyFamilies = Object.fromEntries(
+    activeCategories.map((category) => [
+      category,
+      Object.fromEntries(
+        activeDifficulties.map((difficulty) => [
+          difficulty,
+          countFamilies(
+            families,
+            (record) => record.expectedCategory === category && record.expectedDifficulty === difficulty,
+          ),
+        ]),
+      ),
+    ]),
+  );
+  const languageFamilies = Object.fromEntries(
+    ["ko", "en", "mixed", "unknown"].map((language) => [
+      language,
+      countFamilies(families, (record) => record.language === language),
+    ]),
+  );
+  const evaluationSliceFamilies = Object.fromEntries(
+    requiredEvaluationSlices.map((slice) => [
+      slice,
+      countFamilies(families, (record) => record.evaluationSlices?.includes(slice)),
+    ]),
+  );
+  return {
+    categoryFamilies,
+    difficultyFamilies,
+    categoryDifficultyFamilies,
+    languageFamilies,
+    evaluationSliceFamilies,
+  };
+}
+
+function aggregateFamilyReviewStatus(records) {
+  if (records.every((record) => record.reviewStatus === "approved")) return "approved";
+  if (records.some((record) => record.reviewStatus === "needs_adjudication")) return "needs_adjudication";
+  if (records.some((record) => record.reviewStatus === "rejected")) return "rejected";
+  if (records.some((record) => record.reviewStatus === "in_review" || record.labelSource === "human_review")) {
+    return "in_review";
+  }
+  return "pending";
+}
+
+export function verifyDifficultyLabelContract(options = {}) {
+  const rootDir = options.rootDir ?? defaultRootDir;
+  const failures = [];
+  const schema = readJson(rootDir, labelSchemaPath, failures);
+  const fixtureText = readText(rootDir, labelFixturePath, failures);
+  const manifest = readJson(rootDir, labelManifestPath, failures);
+  const manifestSchema = readJson(rootDir, labelManifestSchemaPath, failures);
+  if (!schema || fixtureText === null || !manifest || !manifestSchema) return failures;
+
+  validateLabelSchemaShape(schema, manifestSchema, failures);
+  const lines = fixtureText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const records = [];
+  lines.forEach((line, index) => {
+    try {
+      const record = JSON.parse(line);
+      records.push(record);
+      validateLabelRecord(schema, record, index + 1, failures);
+    } catch (error) {
+      failures.push(`${labelFixturePath}: line ${index + 1}: invalid JSON (${error.message})`);
+    }
+  });
+  if (records.length === 0) failures.push(`${labelFixturePath}: expected at least one JSONL record`);
+  if (new Set(records.map((record) => record.sampleId)).size !== records.length) {
+    failures.push(`${labelFixturePath}: sampleId values must be unique`);
+  }
+  if (new Set(records.map((record) => record.datasetVersion)).size !== 1) {
+    failures.push(`${labelFixturePath}: expected one datasetVersion`);
+  }
+
+  const families = groupLabelFamilies(records, failures);
+  const coverage = computeLabelCoverage(families);
+  for (const category of activeCategories) {
+    if (coverage.categoryFamilies[category] === 0) {
+      failures.push(`${labelFixturePath}: missing category family coverage for ${category}`);
+    }
+  }
+  for (const difficulty of activeDifficulties) {
+    if (coverage.difficultyFamilies[difficulty] === 0) {
+      failures.push(`${labelFixturePath}: missing difficulty family coverage for ${difficulty}`);
+    }
+  }
+  for (const slice of requiredEvaluationSlices) {
+    if (coverage.evaluationSliceFamilies[slice] === 0) {
+      failures.push(`${labelFixturePath}: missing required evaluation slice family coverage for ${slice}`);
+    }
+  }
+
+  validateRecord(manifestSchema, manifest, 1, failures, labelManifestPath);
+  if (manifest.datasetVersion !== records[0]?.datasetVersion) {
+    failures.push(`${labelManifestPath}: datasetVersion mismatch`);
+  }
+  if (manifest.recordSchemaVersion !== activeLabelSchemaVersion) {
+    failures.push(`${labelManifestPath}: recordSchemaVersion must be ${activeLabelSchemaVersion}`);
+  }
+  if (manifest.datasetPath !== labelFixturePath || manifest.datasetSha256 !== sha256(fixtureText)) {
+    failures.push(`${labelManifestPath}: dataset path or SHA-256 mismatch`);
+  }
+  if (
+    manifest.datasetPurpose !== "label_contract_smoke" ||
+    manifest.trainingEligible !== false ||
+    manifest.labelCoverageStatus !== "complete" ||
+    manifest.familyPolicyVersion !== "difficulty-prompt-family.v1" ||
+    manifest.trainingGate?.minimumFamilyPolicyStatus !== "decision_required"
+  ) {
+    failures.push(`${labelManifestPath}: label-contract smoke must be non-training-eligible with a decision_required family gate`);
+  }
+
+  const humanReviewedFamilies = [...families.values()].filter((familyRecords) =>
+    familyRecords.every((record) => record.labelSource === "human_review" && record.reviewerCount >= 1),
+  ).length;
+  const approvedHumanReviewedFamilies = [...families.values()].filter((familyRecords) =>
+    familyRecords.every(
+      (record) => record.labelSource === "human_review" && record.reviewStatus === "approved" && record.reviewerCount >= 1,
+    ),
+  ).length;
+  const expectedCounts = {
+    records: records.length,
+    families: families.size,
+    humanReviewedFamilies,
+    approvedHumanReviewedFamilies,
+  };
+  if (JSON.stringify(manifest.counts) !== JSON.stringify(expectedCounts)) {
+    failures.push(`${labelManifestPath}: family-level counts do not match the label records`);
+  }
+  if (JSON.stringify(manifest.coverage) !== JSON.stringify(coverage)) {
+    failures.push(`${labelManifestPath}: family-level coverage does not match the label records`);
+  }
+
+  const manifestFamilies = Array.isArray(manifest.families) ? manifest.families : [];
+  const manifestFamilyIds = new Set(manifestFamilies.map((family) => family.promptFamily));
+  if (manifestFamilyIds.size !== manifestFamilies.length) {
+    failures.push(`${labelManifestPath}: prompt family appears in more than one partition (family leakage)`);
+  }
+  if (manifestFamilies.length !== families.size) {
+    failures.push(`${labelManifestPath}: manifest family count does not match label records`);
+  }
+  for (const [promptFamily, familyRecords] of families) {
+    const row = manifestFamilies.find((family) => family.promptFamily === promptFamily);
+    if (!row) {
+      failures.push(`${labelManifestPath}: missing family row ${promptFamily}`);
+      continue;
+    }
+    const humanReviewed = familyRecords.every(
+      (record) => record.labelSource === "human_review" && record.reviewerCount >= 1,
+    );
+    if (
+      row.expectedCategory !== familyRecords[0].expectedCategory ||
+      row.expectedSemanticLabel !== familyRecords[0].expectedSemanticLabel ||
+      row.reviewStatus !== aggregateFamilyReviewStatus(familyRecords) ||
+      row.humanReviewed !== humanReviewed ||
+      row.records !== familyRecords.length ||
+      row.partition !== "smoke"
+    ) {
+      failures.push(`${labelManifestPath}: family row ${promptFamily} does not match its records`);
+    }
+  }
+  if (manifest.trainingEligible && approvedHumanReviewedFamilies !== families.size) {
+    failures.push(`${labelManifestPath}: unapproved family cannot be training eligible`);
+  }
+  if (manifest.trainingEligible && manifest.trainingGate?.minimumFamilyPolicyStatus !== "versioned") {
+    failures.push(`${labelManifestPath}: training eligibility requires a versioned minimum family policy`);
+  }
+  return failures;
+}
+
 export function verifyDifficultyEvaluationDataset(options = {}) {
   const rootDir = options.rootDir ?? defaultRootDir;
   const failures = [];
@@ -190,9 +709,20 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   const fixtureText = readText(rootDir, trainingFixturePath, failures);
   const manifest = readJson(rootDir, splitManifestPath, failures);
   const manifestSchema = readJson(rootDir, splitManifestSchemaPath, failures);
+  const smokeManifest = readJson(rootDir, trainingSmokeManifestPath, failures);
+  const labelManifestSchema = readJson(rootDir, labelManifestSchemaPath, failures);
   const artifactSchema = readJson(rootDir, modelArtifactSchemaPath, failures);
   const trainingPolicy = readJson(rootDir, trainingPolicyPath, failures);
-  if (!schema || fixtureText === null || !manifest || !manifestSchema || !artifactSchema || !trainingPolicy) {
+  if (
+    !schema ||
+    fixtureText === null ||
+    !manifest ||
+    !manifestSchema ||
+    !smokeManifest ||
+    !labelManifestSchema ||
+    !artifactSchema ||
+    !trainingPolicy
+  ) {
     return failures;
   }
 
@@ -302,6 +832,42 @@ export function verifyDifficultyTrainingPilot(options = {}) {
   ) {
     failures.push(`${splitManifestSchemaPath}: closed v1 manifest schema is required`);
   }
+  validateRecord(labelManifestSchema, smokeManifest, 1, failures, trainingSmokeManifestPath);
+  if (
+    smokeManifest.schemaVersion !== activeLabelManifestSchemaVersion ||
+    smokeManifest.datasetVersion !== "difficulty_eval_2026_07_13_pilot_500_v1" ||
+    smokeManifest.recordSchemaVersion !== activeSchemaVersion ||
+    smokeManifest.datasetPath !== trainingFixturePath ||
+    smokeManifest.datasetSha256 !== sha256(fixtureText) ||
+    smokeManifest.datasetPurpose !== "training_tooling_smoke" ||
+    smokeManifest.trainingEligible !== false ||
+    smokeManifest.labelCoverageStatus !== "unlabeled" ||
+    smokeManifest.familyPolicyVersion !== "difficulty-prompt-family.v1" ||
+    smokeManifest.trainingGate?.minimumFamilyPolicyStatus !== "decision_required" ||
+    smokeManifest.legacyPartitionManifestPath !== splitManifestPath
+  ) {
+    failures.push(`${trainingSmokeManifestPath}: 500-record pilot must remain an unlabeled, non-training-eligible tooling smoke dataset`);
+  }
+  if (
+    JSON.stringify(smokeManifest.counts) !==
+    JSON.stringify({
+      records: 500,
+      families: 25,
+      humanReviewedFamilies: 0,
+      approvedHumanReviewedFamilies: 0,
+    })
+  ) {
+    failures.push(`${trainingSmokeManifestPath}: 500-record smoke family counts must remain 500/25/0/0`);
+  }
+  if (
+    records.some(
+      (record) =>
+        record.labelSource !== "synthetic_fixture" ||
+        !record.reviewerNote?.toLowerCase().includes("human review pending"),
+    )
+  ) {
+    failures.push(`${trainingFixturePath}: every 500-record smoke sample must remain synthetic and human-review-pending`);
+  }
   const calibratorBranches = artifactSchema?.properties?.calibrator?.oneOf;
   const calibratorFields = {
     platt: ["type", "input", "coefficient", "intercept"],
@@ -363,6 +929,7 @@ export function verifyDifficultyTrainingPilot(options = {}) {
 function main() {
   const failures = [
     ...verifyDifficultyEvaluationDataset(),
+    ...verifyDifficultyLabelContract(),
     ...verifyDifficultyTrainingPilot(),
   ];
   if (failures.length > 0) {

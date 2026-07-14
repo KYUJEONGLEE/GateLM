@@ -4,8 +4,8 @@
 |---|---|
 | Status | Active issue register |
 | Authority | 확인된 문서/구현 불일치와 결정 대기 항목 |
-| Baseline | `origin/dev @ 79bf254d` |
-| Last verified | 2026-07-13 |
+| Baseline | `origin/dev @ 0b3d7f24` |
+| Last verified | 2026-07-14 |
 
 이 문서는 후보를 계약으로 승격하지 않는다. 확실한 불일치를 기록하고, 사람 결정이 필요한 항목을 구현 작업과 분리한다.
 
@@ -28,8 +28,9 @@
 | DOC-013 | Tenant Chat terminal replay에서 assistant content 복구 경계가 없다 | final SSE는 terminal facts만 포함하고 Gateway는 content를 저장하지 않아 Chat API가 ciphertext 저장 전에 장애가 나면 응답 본문을 복구할 계약이 없음 | encrypted final result handoff 또는 재처리 불변조건 확정 |
 | DOC-014 | `userId`별 quota override 의미는 있으나 실행 schema가 없다 | `contracts.md`는 audit 후 새 RuntimeSnapshot부터 override 적용을 요구하지만 RuntimeSnapshot에는 default quota만 있고 Gateway-owned period table을 Control Plane이 직접 수정할 수도 없음 | versioned user override schema, writer, audit, snapshot binding 및 Gateway materialization 규칙 추가 |
 | DOC-015 | primary realistic category fixture의 생성 provenance를 재현할 수 없다 | challenge/ambiguous fixture에는 checked-in generator가 있지만 `category-evaluation-dataset.fixture.jsonl`을 재생성하는 generator, seed 또는 manual review 기록은 확인되지 않음 | deterministic generator와 seed/version을 추가하거나 manual fixture라면 생성·검토 provenance를 명시 |
-| DOC-016 | Hybrid `ComplexityScore` target과 opt-in shadow scorer는 구현됐지만 model/calibrator artifact와 승격 evidence가 없다 | 2026-07-14 local feature branch에서 42차원 encoder, deterministic `0.0`/`1.0` sentinel, artifact-backed Logistic Regression·calibration scorer와 current rule-based 비교 evaluator가 존재하지만 checked-in artifact가 없고 500건 synthetic pilot은 `human review pending`임 | 승인된 dataset으로 versioned model/calibrator artifact와 family-disjoint train/calibration/holdout evidence를 만들고, current rule-based baseline 대비 전체·category별 `complex -> simple` 비악화 holdout gate 전에는 runtime을 변경하지 않음 |
+| DOC-016 | Hybrid `ComplexityScore` target과 opt-in shadow scorer는 구현됐지만 model/calibrator artifact와 승격 evidence가 없다 | 2026-07-14 local feature branch에서 42차원 encoder, deterministic `0.0`/`1.0` sentinel, artifact-backed Logistic Regression·calibration scorer와 current rule-based 비교 evaluator가 존재하지만 checked-in artifact가 없고 500건 synthetic pilot은 `human review pending`, `trainingEligible=false`인 tooling smoke임 | 승인된 dataset으로 versioned model/calibrator artifact와 family-disjoint train/calibration/holdout evidence를 만들고, current rule-based baseline 대비 전체·category별 `complex -> simple` 비악화 holdout gate 전에는 runtime을 변경하지 않음 |
 | DOC-017 | `difficulty-feature-vector.v2` semantic shadow contract는 제안됐지만 exact artifact bundle과 승격 evidence가 없다 | [`../routing/difficulty-feature-vector-v2-proposal.md`](../routing/difficulty-feature-vector-v2-proposal.md)는 v1 42D 불변, `instructionText`-only semantic input, deterministic payload statistics와 non-exposure 경계를 고정하지만 tokenizer/encoder/projection/head/calibrator, exact dimension과 approved dataset은 아직 pending임 | Exact component manifest와 feature layout을 승인하고 family-disjoint offline/holdout, data safety, latency·memory와 current baseline 비악화 evidence를 확보하기 전에는 proposal을 active contract나 runtime으로 승격하지 않음 |
+| DOC-018 | Difficulty training readiness의 최소 approved human-reviewed family 수가 결정되지 않았다 | `difficulty-label-record.v1`과 manifest는 전체/category/difficulty/language/slice별 family 수를 계산하지만 승인된 전체·cell·slice minimum policy가 없으며 현재 10건/500건 fixture는 모두 smoke-only임 | Dataset owner가 overall, category × difficulty, language와 required slice별 minimum을 versioned policy로 승인하기 전에는 모든 manifest를 `trainingEligible=false`로 유지 |
 
 ## Known Documentation Drift
 

@@ -6,7 +6,7 @@
 | Applies to | General Gateway routing, Control Plane routing policy, published RuntimeSnapshot routing |
 | Schema version | `gatelm.routing-policy.v2` |
 | Active entrypoint | [`../current/README.md`](../current/README.md) |
-| Last verified | 2026-07-13 |
+| Last verified | 2026-07-14 |
 
 이 폴더는 일반 Gateway 라우팅의 현재 기준이다. [`contracts.md`](contracts.md)가 의미 계약이고, [`classification-pipeline.md`](classification-pipeline.md)가 category·difficulty 분류의 active 구현 구조이며, `schemas/`와 `fixtures/`는 정책 계약의 machine-readable pairing이다.
 
@@ -17,7 +17,7 @@
 | [`contracts.md`](contracts.md) | category, difficulty, auto/manual, migration, event/log 경계 |
 | [`classification-pipeline.md`](classification-pipeline.md) | 공통 feature 추출, category 결과, category-aware difficulty 분류의 canonical 내부 구조 |
 | [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md) | `difficulty-feature-vector.v1`의 42차원 순서, scaling, enum과 zero-fill 계약 |
-| [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | 500건 synthetic pilot, family split, offline Python 학습과 generated Go artifact의 비활성 준비 경계 |
+| [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | 500건 smoke-only pilot, 향후 approved-family split, offline Python 학습과 generated Go artifact의 비활성 준비 경계 |
 | [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 5 category × 2 difficulty routing policy v2 schema |
 | [`fixtures/routing-policy.fixture.json`](fixtures/routing-policy.fixture.json) | 모든 셀이 `mock-balanced`인 안전한 bootstrap fixture |
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |

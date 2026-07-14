@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-label-record.schema.json",
+  "title": "GateLM Difficulty Label Record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "gatelm.difficulty-label-record.v1"
+    },
+    "datasetVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "sampleId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-zA-Z0-9._:-]+$"
+    },
+    "redactedPrompt": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 65536,
+      "description": "Synthetic or safety-masked annotation input. Customer raw prompt text and secrets are forbidden."
+    },
+    "expectedCategory": {
+      "type": "string",
+      "enum": ["general", "code", "translation", "summarization", "reasoning"]
+    },
+    "expectedDifficulty": {
+      "type": "string",
+      "enum": ["simple", "complex"]
+    },
+    "taskBucket": {
+      "$ref": "#/$defs/countBucket"
+    },
+    "constraintBucket": {
+      "$ref": "#/$defs/countBucket"
+    },
+    "scopeBucket": {
+      "type": "string",
+      "enum": ["zero", "one", "two_to_three", "four_plus"]
+    },
+    "dependencyBucket": {
+      "$ref": "#/$defs/countBucket"
+    },
+    "expectedSemanticLabel": {
+      "type": "string",
+      "enum": [
+        "general_qa",
+        "general_explanation",
+        "general_extraction",
+        "general_support",
+        "general_transformation",
+        "general_other",
+        "code_generation",
+        "code_debugging",
+        "code_refactoring",
+        "code_review",
+        "code_explanation",
+        "code_design",
+        "translation_direct",
+        "translation_localization",
+        "translation_style_preserving",
+        "summarization_direct",
+        "summarization_key_points",
+        "summarization_structured",
+        "summarization_multi_source",
+        "reasoning_comparison",
+        "reasoning_planning",
+        "reasoning_decision",
+        "reasoning_constraint_solving",
+        "reasoning_causal"
+      ]
+    },
+    "promptFamily": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._:-]+$",
+      "description": "Stable family id without prompt text, identity, secret, timestamp, or split name."
+    },
+    "language": {
+      "type": "string",
+      "enum": ["en", "ko", "mixed", "unknown"]
+    },
+    "expectedInstructionPayloadBoundary": {
+      "$ref": "#/$defs/instructionPayloadBoundary"
+    },
+    "evaluationSlices": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 11,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "negation",
+          "indirect_expression",
+          "synonym",
+          "short_complex",
+          "long_simple",
+          "payload_contamination",
+          "korean",
+          "english",
+          "mixed_language",
+          "category_confusion",
+          "ood_terminology"
+        ]
+      }
+    },
+    "labelSource": {
+      "type": "string",
+      "enum": ["human_review", "synthetic_fixture"]
+    },
+    "consentType": {
+      "type": "string",
+      "enum": ["synthetic", "internal_manual_review"]
+    },
+    "source": {
+      "type": "string",
+      "enum": ["synthetic_fixture", "manual_seed"]
+    },
+    "redactionVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "labelConfidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Human annotation confidence metadata, not a probability target or sample weight."
+    },
+    "reviewStatus": {
+      "type": "string",
+      "enum": ["pending", "in_review", "needs_adjudication", "approved", "rejected"]
+    },
+    "reviewerCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Completed human review count. Reviewer identity is forbidden."
+    },
+    "reviewerNote": {
+      "type": "string",
+      "maxLength": 240,
+      "description": "Safe short note without prompt fragments, reviewer identity, secrets, or provider errors."
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "datasetVersion",
+    "sampleId",
+    "redactedPrompt",
+    "expectedCategory",
+    "expectedDifficulty",
+    "taskBucket",
+    "constraintBucket",
+    "scopeBucket",
+    "dependencyBucket",
+    "expectedSemanticLabel",
+    "promptFamily",
+    "language",
+    "expectedInstructionPayloadBoundary",
+    "evaluationSlices",
+    "labelSource",
+    "consentType",
+    "source",
+    "redactionVersion",
+    "createdAt",
+    "labelConfidence",
+    "reviewStatus",
+    "reviewerCount"
+  ],
+  "allOf": [
+    {
+      "if": { "properties": { "source": { "const": "synthetic_fixture" } }, "required": ["source"] },
+      "then": {
+        "properties": {
+          "consentType": { "const": "synthetic" },
+          "labelSource": { "const": "synthetic_fixture" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "labelSource": { "const": "synthetic_fixture" } }, "required": ["labelSource"] },
+      "then": {
+        "properties": {
+          "reviewStatus": { "const": "pending" },
+          "reviewerCount": { "const": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "reviewStatus": { "enum": ["in_review", "approved", "rejected"] } }, "required": ["reviewStatus"] },
+      "then": {
+        "properties": {
+          "labelSource": { "const": "human_review" },
+          "reviewerCount": { "minimum": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "reviewStatus": { "const": "needs_adjudication" } }, "required": ["reviewStatus"] },
+      "then": {
+        "properties": {
+          "labelSource": { "const": "human_review" },
+          "reviewerCount": { "minimum": 2 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "expectedCategory": { "const": "general" } }, "required": ["expectedCategory"] },
+      "then": { "properties": { "expectedSemanticLabel": { "enum": ["general_qa", "general_explanation", "general_extraction", "general_support", "general_transformation", "general_other"] } } }
+    },
+    {
+      "if": { "properties": { "expectedCategory": { "const": "code" } }, "required": ["expectedCategory"] },
+      "then": { "properties": { "expectedSemanticLabel": { "enum": ["code_generation", "code_debugging", "code_refactoring", "code_review", "code_explanation", "code_design"] } } }
+    },
+    {
+      "if": { "properties": { "expectedCategory": { "const": "translation" } }, "required": ["expectedCategory"] },
+      "then": { "properties": { "expectedSemanticLabel": { "enum": ["translation_direct", "translation_localization", "translation_style_preserving"] } } }
+    },
+    {
+      "if": { "properties": { "expectedCategory": { "const": "summarization" } }, "required": ["expectedCategory"] },
+      "then": { "properties": { "expectedSemanticLabel": { "enum": ["summarization_direct", "summarization_key_points", "summarization_structured", "summarization_multi_source"] } } }
+    },
+    {
+      "if": { "properties": { "expectedCategory": { "const": "reasoning" } }, "required": ["expectedCategory"] },
+      "then": { "properties": { "expectedSemanticLabel": { "enum": ["reasoning_comparison", "reasoning_planning", "reasoning_decision", "reasoning_constraint_solving", "reasoning_causal"] } } }
+    },
+    {
+      "if": { "properties": { "language": { "const": "ko" } }, "required": ["language"] },
+      "then": { "properties": { "evaluationSlices": { "contains": { "const": "korean" } } } }
+    },
+    {
+      "if": { "properties": { "language": { "const": "en" } }, "required": ["language"] },
+      "then": { "properties": { "evaluationSlices": { "contains": { "const": "english" } } } }
+    },
+    {
+      "if": { "properties": { "language": { "const": "mixed" } }, "required": ["language"] },
+      "then": { "properties": { "evaluationSlices": { "contains": { "const": "mixed_language" } } } }
+    },
+    {
+      "if": { "properties": { "evaluationSlices": { "contains": { "const": "short_complex" } } }, "required": ["evaluationSlices"] },
+      "then": { "properties": { "expectedDifficulty": { "const": "complex" } } }
+    },
+    {
+      "if": { "properties": { "evaluationSlices": { "contains": { "const": "long_simple" } } }, "required": ["evaluationSlices"] },
+      "then": { "properties": { "expectedDifficulty": { "const": "simple" } } }
+    },
+    {
+      "if": { "properties": { "evaluationSlices": { "contains": { "const": "payload_contamination" } } }, "required": ["evaluationSlices"] },
+      "then": { "properties": { "expectedInstructionPayloadBoundary": { "properties": { "kind": { "enum": ["explicit_separation", "ambiguous_separation", "payload_only"] } } } } }
+    }
+  ],
+  "$defs": {
+    "countBucket": {
+      "type": "string",
+      "enum": ["zero", "one", "two", "three_plus"]
+    },
+    "instructionPayloadBoundary": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "instruction_only" },
+            "boundaryType": { "const": "none" },
+            "confidence": { "const": "none" },
+            "payloadBlockCount": { "const": "zero" }
+          },
+          "required": ["kind", "boundaryType", "confidence", "payloadBlockCount"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "explicit_separation" },
+            "boundaryType": { "enum": ["code_fence", "role_tag", "role_heading", "begin_end", "blockquote", "inline_cue", "multiple"] },
+            "confidence": { "enum": ["low", "medium", "high"] },
+            "payloadBlockCount": { "enum": ["one", "multiple"] }
+          },
+          "required": ["kind", "boundaryType", "confidence", "payloadBlockCount"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "ambiguous_separation" },
+            "boundaryType": { "enum": ["multiple", "unsupported"] },
+            "confidence": { "const": "low" },
+            "payloadBlockCount": { "enum": ["zero", "one", "multiple"] }
+          },
+          "required": ["kind", "boundaryType", "confidence", "payloadBlockCount"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "payload_only" },
+            "boundaryType": { "enum": ["code_fence", "role_tag", "role_heading", "begin_end", "blockquote", "inline_cue", "multiple", "unsupported"] },
+            "confidence": { "enum": ["low", "medium", "high"] },
+            "payloadBlockCount": { "enum": ["one", "multiple"] }
+          },
+          "required": ["kind", "boundaryType", "confidence", "payloadBlockCount"]
+        }
+      ]
+    }
+  }
+}
+

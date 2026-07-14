@@ -80,8 +80,9 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 	hasCodeFence := false
 	payloadState := routingPayloadBoundaryState{}
 	payloadEvidence := payloadBoundaryEvidence(0)
+	payloadLowConfidence := false
 
-	for _, segment := range scan.segments {
+	for segmentIndex, segment := range scan.segments {
 		canonical := canonicalizeRoutingText(segment)
 		if normalizedPart := collapseRoutingWhitespace(canonical); normalizedPart != "" {
 			normalizedParts = append(normalizedParts, normalizedPart)
@@ -89,6 +90,16 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 
 		if strings.Contains(canonical, "```") {
 			hasCodeFence = true
+		}
+		if scan.truncated && segmentIndex > 0 {
+			if payloadState.kind != 0 {
+				payloadLowConfidence = true
+			} else if inferredState, inferred := inferRoutingPayloadStateAtTruncatedTail(canonical); inferred {
+				payloadState = inferredState
+				payloadBlockCount++
+				payloadEvidence |= inferredState.kind
+				payloadLowConfidence = true
+			}
 		}
 		split := splitRoutingExplicitPayloadBlocksFromState(canonical, payloadState)
 		payloadState = split.state
@@ -118,7 +129,7 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 	payloadConfidence := payloadSplitConfidenceNone
 	if payloadBlockCount > 0 {
 		payloadConfidence = payloadSplitConfidenceHigh
-		if payloadState.kind == payloadBoundaryCodeFence || payloadState.kind == payloadBoundaryTag || payloadState.kind == payloadBoundaryBeginEnd {
+		if payloadLowConfidence || payloadState.kind == payloadBoundaryCodeFence || payloadState.kind == payloadBoundaryTag || payloadState.kind == payloadBoundaryBeginEnd {
 			payloadConfidence = payloadSplitConfidenceLow
 		}
 	}
@@ -144,6 +155,46 @@ func ExtractPromptFeatures(prompt string) PromptFeatures {
 
 		payloadBoundaryEvidence: payloadEvidence,
 		payloadSplitConfidence:  payloadConfidence,
+	}
+}
+
+func inferRoutingPayloadStateAtTruncatedTail(text string) (routingPayloadBoundaryState, bool) {
+	best := routingBoundaryToken{start: len(text) + 1}
+	found := false
+	consider := func(token routingBoundaryToken, ok bool) {
+		if ok && token.start < best.start {
+			best = token
+			found = true
+		}
+	}
+
+	if indexes := routingExplicitTagPattern.FindStringSubmatchIndex(text); indexes != nil {
+		marker := text[indexes[0]:indexes[1]]
+		role := normalizeRoutingRoleLabel(text[indexes[4]:indexes[5]])
+		closing := indexes[2] >= 0 && strings.TrimSpace(text[indexes[2]:indexes[3]]) == "/"
+		selfClosing := strings.HasSuffix(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(marker), ">")), "/")
+		if closing && !selfClosing && isRoutingPayloadRole(role) {
+			consider(routingBoundaryToken{start: indexes[0], end: indexes[1], kind: payloadBoundaryTag, tagName: role, closing: true}, true)
+		}
+	}
+
+	if marker, ok := nextRoutingBeginEndMarker(text, 0); ok && marker.closing && !marker.instruction {
+		consider(marker, true)
+	}
+	if heading, ok := nextRoutingRoleHeading(text, 0); ok && heading.instruction {
+		consider(heading, true)
+	}
+	if !found {
+		return routingPayloadBoundaryState{}, false
+	}
+
+	switch best.kind {
+	case payloadBoundaryTag, payloadBoundaryBeginEnd:
+		return routingPayloadBoundaryState{kind: best.kind, tagName: best.tagName, tagDepth: 1}, true
+	case payloadBoundaryHeading:
+		return routingPayloadBoundaryState{kind: payloadBoundaryHeading}, true
+	default:
+		return routingPayloadBoundaryState{}, false
 	}
 }
 
@@ -566,7 +617,9 @@ func nextRoutingBlockQuote(text string, cursor int) (routingBoundaryToken, bool)
 			blockEnd = nextTokenEnd
 		}
 
-		outside := text[:blockStart] + "\n" + text[blockEnd:]
+		// Text before cursor may belong to an already-consumed payload block.
+		// Only the still-unparsed prefix and suffix can guard this quote.
+		outside := text[cursor:blockStart] + "\n" + text[blockEnd:]
 		if collapseRoutingWhitespace(outside) != "" && hasApprovedRoutingPayloadAction(outside) {
 			return routingBoundaryToken{
 				start:   blockStart,
