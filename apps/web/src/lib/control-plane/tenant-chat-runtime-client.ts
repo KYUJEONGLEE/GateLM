@@ -80,11 +80,16 @@ async function requestTenantChatRuntime(
 function readTenantChatAdminRuntimeSetup(
   payload: unknown
 ): TenantChatAdminRuntimeSetup | null {
-  const candidate =
-    payload && typeof payload === "object" && !Array.isArray(payload)
-      ? ((payload as Record<string, unknown>).data ?? payload)
-      : payload;
-  return isTenantChatAdminRuntimeSetup(candidate) ? candidate : null;
+  if (isTenantChatAdminRuntimeSetup(payload)) {
+    return payload;
+  }
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const data = (payload as Record<string, unknown>).data;
+    if (isTenantChatAdminRuntimeSetup(data)) {
+      return data;
+    }
+  }
+  return null;
 }
 
 function isTenantChatAdminRuntimeSetup(value: unknown): value is TenantChatAdminRuntimeSetup {
