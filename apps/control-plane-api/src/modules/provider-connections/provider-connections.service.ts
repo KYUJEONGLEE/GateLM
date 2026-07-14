@@ -40,12 +40,16 @@ type ProviderModelsPayload = {
 
 type ProviderModelRecord = {
   baseModelId?: unknown;
+  capabilities?: unknown;
+  context_length?: unknown;
+  context_window?: unknown;
   created?: unknown;
   created_at?: unknown;
   displayName?: unknown;
   display_name?: unknown;
   id?: unknown;
   name?: unknown;
+  max_context_length?: unknown;
   object?: unknown;
   owned_by?: unknown;
   ownedBy?: unknown;
@@ -76,6 +80,9 @@ type StoredProviderCredentialRow = {
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/;
 const SAFE_CATALOG_TOKEN_PATTERN = /^[a-z][a-z0-9_:-]{0,79}$/;
 const SAFE_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,127}$/;
+const HEADER_SAFE_CREDENTIAL_PATTERN = /^[\x21-\x7e]+$/;
+const INVALID_PROVIDER_CREDENTIAL_MESSAGE =
+  'Provider credential must contain only printable ASCII characters without spaces.';
 const PROVIDED_CREDENTIAL_PREFIX = 'provided_';
 const FORBIDDEN_BASE_URL_QUERY_KEYS = new Set([
   'api_key',
@@ -752,10 +759,12 @@ export class ProviderConnectionsService {
       await this.resolveStoredProviderCredential(credentialRefs);
 
     if (storedCredential) {
-      return storedCredential;
+      return this.toHeaderSafeCredentialOrThrow(storedCredential);
     }
 
-    return this.resolveEnvironmentProviderCredential(credentialRefs);
+    return this.toHeaderSafeCredentialOrThrow(
+      this.resolveEnvironmentProviderCredential(credentialRefs),
+    );
   }
 
   private resolveEnvironmentProviderCredential(credentialRefs: string[]): string {
@@ -1056,7 +1065,17 @@ export class ProviderConnectionsService {
       return null;
     }
 
+    const capabilities = this.toRecordOrNull(record.capabilities);
+
     return {
+      chatCompletionSupported: this.toNullableBoolean(
+        capabilities?.completion_chat,
+      ),
+      contextWindowTokens: this.toPositiveInteger(
+        record.max_context_length ??
+          record.context_window ??
+          record.context_length,
+      ),
       createdAt: this.toUnixTimestampIsoString(record.created_at ?? record.created),
       displayName:
         typeof record.display_name === 'string' && record.display_name.trim()
@@ -1078,7 +1097,21 @@ export class ProviderConnectionsService {
       provider: providerConnection.provider,
       providerId: providerConnection.id,
       source: 'provider_models_endpoint',
+      supportsJsonMode: this.toNullableBoolean(capabilities?.json_mode),
+      supportsStreaming: this.toNullableBoolean(capabilities?.streaming),
     };
+  }
+
+  private toNullableBoolean(value: unknown): boolean | null {
+    return typeof value === 'boolean' ? value : null;
+  }
+
+  private toPositiveInteger(value: unknown): number | null {
+    return typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value > 0
+      ? value
+      : null;
   }
 
   private compareDiscoveryModels(
@@ -1411,7 +1444,24 @@ export class ProviderConnectionsService {
   }
 
   private toCredentialValue(dto: UpsertProviderDto): string | null {
-    return dto.credentialValue?.trim() || null;
+    const credentialValue = dto.credentialValue?.trim();
+
+    return credentialValue
+      ? this.toHeaderSafeCredentialOrThrow(credentialValue)
+      : null;
+  }
+
+  private toHeaderSafeCredentialOrThrow(credentialValue: string): string {
+    const normalizedCredential = credentialValue.trim();
+
+    if (
+      !normalizedCredential ||
+      !HEADER_SAFE_CREDENTIAL_PATTERN.test(normalizedCredential)
+    ) {
+      throw new BadRequestException(INVALID_PROVIDER_CREDENTIAL_MESSAGE);
+    }
+
+    return normalizedCredential;
   }
 
   private toCredentialLast4(credentialValue: string): string {
@@ -1486,7 +1536,7 @@ export class ProviderConnectionsService {
     return null;
   }
 
-  private toRecordOrNull(value: Prisma.JsonValue): Record<string, unknown> | null {
+  private toRecordOrNull(value: unknown): Record<string, unknown> | null {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       return value as Record<string, unknown>;
     }

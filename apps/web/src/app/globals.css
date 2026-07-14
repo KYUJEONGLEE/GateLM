@@ -6643,6 +6643,18 @@ html[data-theme="dark"] .provider-card-icon[data-family="openai"] img {
   color: var(--brand-blue);
 }
 
+.provider-card-icon[data-family="groq"] {
+  color: #ea580c;
+}
+
+.provider-card-icon[data-family="cerebras"] {
+  color: #7c3aed;
+}
+
+.provider-card-icon[data-family="mistral"] {
+  color: #0284c7;
+}
+
 .provider-card-icon[data-family="gemini"] img {
   width: 24px;
   height: 24px;

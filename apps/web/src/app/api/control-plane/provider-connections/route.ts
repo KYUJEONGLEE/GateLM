@@ -185,6 +185,7 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     typeof record.displayName === "string" &&
     typeof record.baseUrl === "string" &&
     typeof record.credentialRequired === "boolean" &&
+    isProviderModelMetadataMap(record.modelMetadata) &&
     typeof record.models === "string" &&
     (record.failureMode === "fail_closed" ||
       record.failureMode === "fail_open_to_fallback") &&
@@ -209,6 +210,62 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     typeof record.modelsEndpointPath === "string" &&
     isProviderStatus(record.status)
   );
+}
+
+function isProviderModelMetadataMap(value: unknown) {
+  if (value === undefined) {
+    return true;
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length > 200) {
+    return false;
+  }
+
+  return entries.every(([model, metadata]) => {
+    if (
+      !model.trim() ||
+      model.length > 200 ||
+      !metadata ||
+      typeof metadata !== "object" ||
+      Array.isArray(metadata)
+    ) {
+      return false;
+    }
+
+    const record = metadata as Record<string, unknown>;
+    const allowedKeys = new Set([
+      "contextWindowTokens",
+      "displayName",
+      "maxOutputTokens",
+      "supportsJsonMode",
+      "supportsStreaming"
+    ]);
+
+    return (
+      Object.keys(record).every((key) => allowedKeys.has(key)) &&
+      (record.contextWindowTokens === undefined ||
+        (typeof record.contextWindowTokens === "number" &&
+          Number.isSafeInteger(record.contextWindowTokens) &&
+          record.contextWindowTokens > 0 &&
+          record.contextWindowTokens <= 1000000)) &&
+      (record.maxOutputTokens === undefined ||
+        (typeof record.maxOutputTokens === "number" &&
+          Number.isSafeInteger(record.maxOutputTokens) &&
+          record.maxOutputTokens > 0 &&
+          record.maxOutputTokens <= 1000000)) &&
+      (record.displayName === undefined ||
+        (typeof record.displayName === "string" && record.displayName.length <= 120)) &&
+      (record.supportsJsonMode === undefined ||
+        typeof record.supportsJsonMode === "boolean") &&
+      (record.supportsStreaming === undefined ||
+        typeof record.supportsStreaming === "boolean")
+    );
+  });
 }
 
 function getProviderFromPayload(value: unknown) {

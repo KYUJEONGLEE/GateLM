@@ -467,6 +467,44 @@ describe('RuntimeConfigsService', () => {
     );
   });
 
+  it('preserves provider preset model capabilities in generated runtime models', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      provider: 'groq-main',
+      displayName: 'Groq Main',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      providerConfig: {
+        adapterType: 'openai_compatible',
+        models: ['llama-3.1-8b-instant'],
+        modelMetadata: {
+          'llama-3.1-8b-instant': {
+            contextWindowTokens: 131072,
+            displayName: 'Llama 3.1 8B Instant',
+            supportsJsonMode: true,
+            supportsStreaming: true,
+          },
+        },
+        providerFamily: 'groq',
+      },
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {});
+
+    expect(result.runtimeConfig.models).toContainEqual({
+      provider: 'groq-main',
+      model: 'llama-3.1-8b-instant',
+      displayName: 'Llama 3.1 8B Instant',
+      status: 'active',
+      contextWindowTokens: 131072,
+      supportsStreaming: true,
+      supportsJsonMode: true,
+    });
+  });
+
   it('normalizes legacy routing roles for reads without persisting', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
