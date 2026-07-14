@@ -119,7 +119,7 @@ do
   grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
     fail "Tenant Chat production Compose setting is missing: ${required_setting}"
 done
-[[ "$(grep -Fc 'target: /run/secrets/tenant-chat/content-keys.json' "${COMPOSE_FILE}")" == "1" ]] || \
+[[ "$(grep -v '^[[:space:]]*#' "${COMPOSE_FILE}" | grep -Fc 'target: /run/secrets/tenant-chat/content-keys.json')" == "1" ]] || \
   fail "Tenant Chat content keys must be mounted only into Chat API"
 [[ "$(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}")" == "2" ]] || \
   fail "Gateway and Chat API must run as the Tenant Chat secret owner"
