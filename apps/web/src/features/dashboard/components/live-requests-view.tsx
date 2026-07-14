@@ -336,7 +336,7 @@ export function LiveRequestsView({
                   </span>
                 </td>
                 <td>
-                  <PolicyBadges row={row} />
+                  <PolicyBadges locale={locale} row={row} />
                 </td>
                 <td>{formatLiveLatency(row.latencyMs)}</td>
                 <td>
@@ -373,8 +373,8 @@ export function LiveRequestsView({
   );
 }
 
-function PolicyBadges({ row }: { row: LiveRequestRow }) {
-  const result = primaryPolicyResult(row);
+function PolicyBadges({ locale, row }: { locale: Locale; row: LiveRequestRow }) {
+  const result = primaryPolicyResult(row, locale);
 
   if (!result) {
     return <span className="dashboard-live-muted-value">-</span>;

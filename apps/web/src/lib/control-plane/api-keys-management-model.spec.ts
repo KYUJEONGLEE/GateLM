@@ -4,8 +4,21 @@ import {
   attachProjectToApiKeys,
   compareApiKeyCreatedAtDescending,
   containsApiKey,
-  containsProject
+  containsProject,
+  excludeRevokedApiKeys
 } from "@/lib/control-plane/api-keys-management-model";
+
+test("excludes revoked API Keys from management lists", () => {
+  const active = apiKey("key-active");
+  const revoked = {
+    ...apiKey("key-revoked"),
+    status: "revoked" as const
+  };
+  const apiKeys = [revoked, active];
+
+  expect(excludeRevokedApiKeys(apiKeys)).toEqual([active]);
+  expect(apiKeys).toHaveLength(2);
+});
 
 test("sorts API Keys by newest creation date first", () => {
   expect(

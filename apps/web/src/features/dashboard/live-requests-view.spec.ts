@@ -61,6 +61,36 @@ test("returns no policy result when no outcome is present", () => {
   ).toBeNull();
 });
 
+test("localizes policy results for the Korean console", () => {
+  expect(
+    primaryPolicyResult(
+      {
+        cacheStatus: "MISS",
+        safetyAction: "REDACTED"
+      },
+      "ko"
+    )
+  ).toEqual({
+    kind: "safety",
+    label: "개인정보 마스킹",
+    value: "REDACTED"
+  });
+
+  expect(
+    primaryPolicyResult(
+      {
+        cacheStatus: "HIT",
+        safetyAction: "NONE"
+      },
+      "ko"
+    )
+  ).toEqual({
+    kind: "cache",
+    label: "캐시 적중",
+    value: "HIT"
+  });
+});
+
 test("returns a stable project pill tone when project identifiers are missing", () => {
   const missingTone = projectPillTone(undefined);
 
