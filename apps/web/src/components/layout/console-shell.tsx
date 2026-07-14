@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   Maximize2,
+  MessageSquareText,
   Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -84,6 +85,7 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
   policies: ScrollText,
   project: FolderKanban,
   provider: Plug,
+  "tenant-chat": MessageSquareText,
   tenant: Building2,
   teams: Users
 };
@@ -191,6 +193,14 @@ const navigationItems: Array<{
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
+      },
+      {
+        labels: {
+          en: "Tenant Chat",
+          ko: "Tenant Chat"
+        },
+        item: "tenant-chat",
+        path: (tenantId) => `/tenants/${tenantId}/tenant-chat`
       },
       {
         labels: {

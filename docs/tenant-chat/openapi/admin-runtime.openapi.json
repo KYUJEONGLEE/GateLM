@@ -1,0 +1,196 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "GateLM Tenant Chat Admin Runtime API",
+    "version": "tenant-chat/v1",
+    "description": "Tenant-admin setup and immutable RuntimeSnapshot activation contract. Credential material and RuntimeSnapshot bodies are never returned."
+  },
+  "security": [{ "adminSession": [] }],
+  "paths": {
+    "/admin/v1/tenants/{tenantId}/tenant-chat/runtime": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "format": "uuid" }
+        }
+      ],
+      "get": {
+        "operationId": "getTenantChatAdminRuntimeSetup",
+        "summary": "Read Tenant Chat Provider, model pricing support and readiness",
+        "responses": {
+          "200": {
+            "description": "Safe administrator setup model.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SetupEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" }
+        }
+      },
+      "put": {
+        "operationId": "activateTenantChatAdminRuntime",
+        "summary": "Activate a priced tenant Provider and model",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ActivateRuntimeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing equivalent snapshot or newly published active snapshot.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SetupEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "404": { "$ref": "#/components/responses/ProviderUnavailable" },
+          "409": { "$ref": "#/components/responses/PublishConflict" },
+          "422": { "$ref": "#/components/responses/PricingUnavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "adminSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "gatelm_session",
+        "description": "Full Control Plane admin session. The exact cookie name is implementation-owned and never exposed to application JavaScript."
+      }
+    },
+    "schemas": {
+      "ActivateRuntimeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["providerConnectionId", "modelKey"],
+        "properties": {
+          "providerConnectionId": { "type": "string", "format": "uuid" },
+          "modelKey": { "$ref": "#/components/schemas/ModelKey" }
+        }
+      },
+      "ModelKey": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$"
+      },
+      "SetupEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": { "data": { "$ref": "#/components/schemas/RuntimeSetup" } }
+      },
+      "RuntimeSetup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["readiness", "providers", "activeSnapshot"],
+        "properties": {
+          "readiness": {
+            "type": "string",
+            "enum": ["needs_provider", "needs_model", "needs_activation", "ready", "degraded"]
+          },
+          "providers": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/ProviderCandidate" }
+          },
+          "activeSnapshot": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ActiveSnapshot" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "ProviderCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["providerConnectionId", "providerKey", "providerFamily", "displayName", "models"],
+        "properties": {
+          "providerConnectionId": { "type": "string", "format": "uuid" },
+          "providerKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "providerFamily": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "models": {
+            "type": "array",
+            "maxItems": 200,
+            "items": { "$ref": "#/components/schemas/ModelCandidate" }
+          }
+        }
+      },
+      "ModelCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["modelKey", "activationStatus", "pricing"],
+        "properties": {
+          "modelKey": { "$ref": "#/components/schemas/ModelKey" },
+          "activationStatus": { "type": "string", "enum": ["available", "pricing_unavailable"] },
+          "pricing": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ModelPricing" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "ModelPricing": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["inputMicroUsdPerMillionTokens", "outputMicroUsdPerMillionTokens"],
+        "properties": {
+          "inputMicroUsdPerMillionTokens": { "type": "integer", "minimum": 0 },
+          "outputMicroUsdPerMillionTokens": { "type": "integer", "minimum": 0 },
+          "cacheReadInputMicroUsdPerMillionTokens": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ActiveSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus"],
+        "properties": {
+          "snapshotId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "version": { "type": "integer", "minimum": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+          "policyVersion": { "type": "integer", "minimum": 1 },
+          "pricingVersion": { "type": "integer", "minimum": 1 },
+          "providerConnectionId": { "type": "string", "format": "uuid" },
+          "modelKey": { "$ref": "#/components/schemas/ModelKey" },
+          "publishedAt": { "type": "string", "format": "date-time" },
+          "pricingStatus": { "type": "string", "enum": ["current", "update_available", "unavailable"] }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "statusCode": { "type": "integer" },
+          "message": { "type": ["string", "array"] },
+          "error": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": { "description": "Invalid tenant ID, body or unconfigured model.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "AuthenticationRequired": { "description": "Full admin session is required.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "TenantScopeForbidden": { "description": "The admin is outside this tenant scope.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "ProviderUnavailable": { "description": "The tenant-level ACTIVE Provider connection is unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "PublishConflict": { "description": "Concurrent monotonic publication did not converge.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+      "PricingUnavailable": { "description": "No exact standard text price exists for the persisted Provider family and model.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
+    }
+  }
+}

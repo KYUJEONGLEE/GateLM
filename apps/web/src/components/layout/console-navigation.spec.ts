@@ -14,3 +14,10 @@ test("API management route activates the API Key management nav item", () => {
     activeSection: "management"
   });
 });
+
+test("Tenant Chat route activates the Tenant Chat management nav item", () => {
+  expect(getConsoleNavigationState("/tenants/tenant_demo_acme/tenant-chat")).toEqual({
+    activeManagementItem: "tenant-chat",
+    activeSection: "management"
+  });
+});

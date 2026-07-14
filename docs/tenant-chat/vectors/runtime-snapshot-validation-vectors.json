@@ -50,6 +50,42 @@
       "path": "policies.safety.enabled",
       "value": "true",
       "valid": false
+    },
+    {
+      "id": "dotted-model-key-is-valid",
+      "paths": [
+        "policies.routing.routes.0.modelKey",
+        "pricing.routes.0.modelKey"
+      ],
+      "value": "gpt-5.4-mini",
+      "valid": true
+    },
+    {
+      "id": "slashed-model-key-is-valid",
+      "paths": [
+        "policies.routing.routes.0.modelKey",
+        "pricing.routes.0.modelKey"
+      ],
+      "value": "models/gemini-2.5-flash",
+      "valid": true
+    },
+    {
+      "id": "model-key-with-space-is-invalid",
+      "path": "policies.routing.routes.0.modelKey",
+      "value": "gpt 5.4-mini",
+      "valid": false
+    },
+    {
+      "id": "model-key-with-control-character-is-invalid",
+      "path": "pricing.routes.0.modelKey",
+      "value": "gpt-5.4\nmini",
+      "valid": false
+    },
+    {
+      "id": "model-key-over-200-characters-is-invalid",
+      "path": "policies.routing.routes.0.modelKey",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false
     }
   ]
 }
