@@ -415,12 +415,14 @@ export function DashboardOverviewView({
         if (!response.ok || !payload.data) {
           throw new Error("Failed to load dashboard snapshot");
         }
+        if (stopped) return;
         if (isNewerDashboardSnapshot(payload.data, latestGeneratedAtRef.current)) {
           latestGeneratedAtRef.current = payload.data.generatedAt;
           setSnapshot(payload.data);
         }
         setSnapshotError(false);
       } catch (error) {
+        if (stopped) return;
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           setSnapshotError(true);
         }
