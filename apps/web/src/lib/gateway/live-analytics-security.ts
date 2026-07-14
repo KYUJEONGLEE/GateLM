@@ -45,7 +45,7 @@ export async function getLiveAnalyticsSecurityEvidence(filters: {
       getLiveGatewayRequestDetail(record.requestId, {
         projectId: record.projectId,
         tenantId: filters.tenantId
-      })
+      }).catch(() => undefined)
     )));
   }
 
