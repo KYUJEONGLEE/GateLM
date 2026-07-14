@@ -8,6 +8,13 @@ source "${SCRIPT_DIR}/perf-lib.sh"
 # shellcheck source=deploy/aws-triage/scripts/perf-evidence-lib.sh
 source "${SCRIPT_DIR}/perf-evidence-lib.sh"
 
+DISTRIBUTED_MODE=false
+if [[ -n "${GATELM_PERF_DISTRIBUTED_ENV_FILE:-}" ]]; then
+  # shellcheck source=deploy/aws-triage/scripts/perf-distributed-lib.sh
+  source "${SCRIPT_DIR}/perf-distributed-lib.sh"
+  DISTRIBUTED_MODE=true
+fi
+
 LOADGEN_REPORT_ROOT="${REPO_ROOT}/reports/perf/loadgen"
 LOG_DRAIN_TIMEOUT_SECONDS="${GATELM_PERF_LOG_DRAIN_TIMEOUT_SECONDS:-60}"
 
@@ -51,6 +58,29 @@ reconcile_require_bundle_file() {
     perf_fail "Evidence bundle file is unexpectedly large: $(basename "${path}")"
 }
 
+reconcile_gateway_base_url() {
+  if [[ "${DISTRIBUTED_MODE}" == "true" ]]; then
+    dist_gateway_base_url
+  else
+    perf_gateway_host_base_url
+  fi
+}
+
+reconcile_psql() {
+  local sql="$1"
+  if [[ "${DISTRIBUTED_MODE}" == "true" ]]; then
+    dist_psql -tA -F '|' -c "${sql}"
+  else
+    perf_compose exec -T postgres psql \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}" \
+      -tA \
+      -F '|' \
+      -v ON_ERROR_STOP=1 \
+      -c "${sql}"
+  fi
+}
+
 [[ $# -eq 1 ]] || \
   perf_fail "Usage: bash scripts/perf-loadgen-reconcile.sh <bundle-directory>"
 [[ "${LOG_DRAIN_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]] || \
@@ -86,20 +116,36 @@ perf_evidence_read_k6_summary "${k6_summary_env_path}" "${GATELM_LOADGEN_RUN_ID}
   perf_fail "k6 and load-generator duration values do not match."
 
 perf_check_docker
-perf_load_env
-perf_validate_env
-perf_validate_compose
-perf_assert_isolated_postgres
-perf_assert_runtime_rate_limit
-perf_assert_no_live_provider_credentials
+if [[ "${DISTRIBUTED_MODE}" == "true" ]]; then
+  dist_load_env
+  dist_validate_env
+  dist_assert_git_sha
+  dist_assert_role_host gateway
+  dist_validate_compose gateway
+  [[ "$(perf_trim "$(dist_psql -tA -c 'select 1;')")" == "1" ]] || \
+    perf_fail "Distributed PostgreSQL reconciliation query failed."
+  dist_assert_runtime_configuration
+  dist_assert_no_live_provider_credentials gateway
+  dist_verify_topology_attestations
+else
+  perf_load_env
+  perf_validate_env
+  perf_validate_compose
+  perf_assert_isolated_postgres
+  perf_assert_runtime_rate_limit
+  perf_assert_no_live_provider_credentials
+fi
 
 target_machine_hash="$(perf_machine_identity_hash "${GATELM_LOADGEN_RUN_ID}")"
 hosts_separated=false
 [[ "${target_machine_hash}" != "${GATELM_LOADGEN_MACHINE_HASH}" ]] && hosts_separated=true
+target_git_sha="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+same_git_sha=false
+[[ -n "${GATELM_LOADGEN_GIT_SHA}" && "${target_git_sha}" == "${GATELM_LOADGEN_GIT_SHA}" ]] && same_git_sha=true
 
 current_metrics_path="$(mktemp "${bundle_dir}/.target-current-metrics.XXXXXX")"
 trap 'rm -f "${current_metrics_path}"' EXIT
-curl -fsS --max-time 5 "$(perf_gateway_host_base_url)/metrics" > "${current_metrics_path}"
+curl -fsS --max-time 5 "$(reconcile_gateway_base_url)/metrics" > "${current_metrics_path}"
 current_queue_depth="$(perf_evidence_metric_integer \
   "${current_metrics_path}" \
   'gatelm_async_log_queue_depth{operation="terminal"}')"
@@ -117,13 +163,7 @@ db_logging_outcome_written=0
 db_p95_latency_ms=0
 
 for ((elapsed = 0; elapsed <= LOG_DRAIN_TIMEOUT_SECONDS; elapsed++)); do
-  db_summary="$(perf_compose exec -T postgres psql \
-    -U "${POSTGRES_USER}" \
-    -d "${POSTGRES_DB}" \
-    -tA \
-    -F '|' \
-    -v ON_ERROR_STOP=1 \
-    -c "with matched as (select * from p0_llm_invocation_logs where left(request_id, length('${request_prefix}')) = '${request_prefix}') select count(*)::bigint, count(distinct request_id)::bigint, count(*) filter (where status = 'success')::bigint, count(*) filter (where http_status = 200)::bigint, count(*) filter (where metadata #>> '{domainOutcomes,logging,requestLogWritten}' = 'true')::bigint, count(*) filter (where metadata #>> '{domainOutcomes,logging,outcome}' = 'written')::bigint, coalesce(round((percentile_cont(0.95) within group (order by latency_ms))::numeric, 3), 0) from matched;")"
+  db_summary="$(reconcile_psql "with matched as (select * from p0_llm_invocation_logs where left(request_id, length('${request_prefix}')) = '${request_prefix}') select count(*)::bigint, count(distinct request_id)::bigint, count(*) filter (where status = 'success')::bigint, count(*) filter (where http_status = 200)::bigint, count(*) filter (where metadata #>> '{domainOutcomes,logging,requestLogWritten}' = 'true')::bigint, count(*) filter (where metadata #>> '{domainOutcomes,logging,outcome}' = 'written')::bigint, coalesce(round((percentile_cont(0.95) within group (order by latency_ms))::numeric, 3), 0) from matched;")"
   IFS='|' read -r \
     db_total \
     db_distinct \
@@ -204,14 +244,24 @@ duration_ms="$(reconcile_duration_ms "${GATELM_LOADGEN_DURATION}")"
 rps_goal_met=false
 duration_goal_met=false
 target_remote_enabled=false
+distributed_topology=false
 [[ "${GATELM_LOADGEN_TARGET_RPS}" == "500" ]] && rps_goal_met=true
 (( duration_ms >= 120000 )) && duration_goal_met=true
-[[ "${GATELM_PERF_REMOTE_LOADGEN_ENABLED}" == "true" ]] && target_remote_enabled=true
+if [[ "${DISTRIBUTED_MODE}" == "true" ]]; then
+  target_remote_enabled=true
+  distributed_topology=true
+else
+  [[ "${GATELM_PERF_REMOTE_LOADGEN_ENABLED}" == "true" ]] && target_remote_enabled=true
+fi
 
 eligibility_blockers=()
 [[ "${GATELM_LOADGEN_EXECUTION_MODE}" == "dedicated" ]] || eligibility_blockers+=("execution_mode_not_dedicated")
 [[ "${hosts_separated}" == "true" ]] || eligibility_blockers+=("loadgen_and_target_not_separated")
+[[ "${same_git_sha}" == "true" ]] || eligibility_blockers+=("loadgen_and_target_git_sha_mismatch")
 [[ "${target_remote_enabled}" == "true" ]] || eligibility_blockers+=("target_remote_loadgen_not_enabled")
+if [[ "${DISTRIBUTED_MODE}" == "true" ]]; then
+  [[ "${distributed_topology}" == "true" ]] || eligibility_blockers+=("distributed_topology_not_verified")
+fi
 [[ "${rps_goal_met}" == "true" ]] || eligibility_blockers+=("target_rps_not_500")
 [[ "${duration_goal_met}" == "true" ]] || eligibility_blockers+=("duration_below_2m")
 [[ "${evidence_status}" == "pass" ]] || eligibility_blockers+=("evidence_failed")
@@ -223,13 +273,15 @@ eligibility_blockers_json="$(reconcile_values_json "${eligibility_blockers[@]}")
 
 printf '%s\n' \
   '{' \
-  '  "schemaVersion": "gatelm.gateway-load-external-evidence.v1",' \
+  '  "schemaVersion": "gatelm.gateway-load-external-evidence.v2",' \
   "  \"status\": \"${evidence_status}\"," \
   "  \"runId\": \"${GATELM_LOADGEN_RUN_ID}\"," \
   "  \"generatedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," \
   "  \"executionMode\": \"${GATELM_LOADGEN_EXECUTION_MODE}\"," \
   "  \"capacityClaimEligible\": ${capacity_claim_eligible}," \
-  "  \"capacityCriteria\": {\"hostsSeparated\": ${hosts_separated}, \"targetRemoteLoadgenEnabled\": ${target_remote_enabled}, \"targetRps500\": ${rps_goal_met}, \"durationAtLeast2m\": ${duration_goal_met}}," \
+  "  \"gitSha\": \"${target_git_sha}\"," \
+  "  \"topology\": \"$([[ \"${DISTRIBUTED_MODE}\" == \"true\" ]] && printf distributed || printf dedicated-target)\"," \
+  "  \"capacityCriteria\": {\"hostsSeparated\": ${hosts_separated}, \"sameGitSha\": ${same_git_sha}, \"targetRemoteLoadgenEnabled\": ${target_remote_enabled}, \"distributedTopology\": ${distributed_topology}, \"targetRps500\": ${rps_goal_met}, \"durationAtLeast2m\": ${duration_goal_met}}," \
   "  \"load\": {\"targetRps\": ${GATELM_LOADGEN_TARGET_RPS}, \"duration\": \"${GATELM_LOADGEN_DURATION}\", \"completedRequests\": ${GATELM_EVIDENCE_LOAD_ITERATIONS}, \"droppedIterations\": ${GATELM_EVIDENCE_DROPPED_ITERATIONS}, \"failedChecks\": ${GATELM_EVIDENCE_CHECKS_FAILED}, \"httpFailureRate\": ${GATELM_EVIDENCE_HTTP_FAILED_RATE}, \"httpDurationP95Ms\": ${GATELM_EVIDENCE_HTTP_DURATION_P95_MS}, \"httpDurationP99Ms\": ${GATELM_EVIDENCE_HTTP_DURATION_P99_MS}}," \
   "  \"requestLogs\": {\"total\": ${db_total}, \"distinctRequestIds\": ${db_distinct}, \"success\": ${db_success}, \"http200\": ${db_http_200}, \"requestLogWritten\": ${db_logging_written}, \"loggingOutcomeWritten\": ${db_logging_outcome_written}, \"latencyP95Ms\": ${db_p95_latency_ms}}," \
   "  \"asyncLogging\": {\"bundleFinalQueueDepth\": ${bundle_queue_depth}, \"targetCurrentQueueDepth\": ${current_queue_depth}, \"enqueueQueueFullDelta\": ${enqueue_queue_full_delta}, \"enqueueClosedDelta\": ${enqueue_closed_delta}, \"droppedQueueFullDelta\": ${dropped_queue_full_delta}, \"droppedClosedDelta\": ${dropped_closed_delta}, \"persistErrorDelta\": ${persist_error_delta}, \"persistPanicDelta\": ${persist_panic_delta}}," \
