@@ -4,8 +4,8 @@
 |---|---|
 | Status | Active issue register |
 | Authority | 확인된 문서/구현 불일치와 결정 대기 항목 |
-| Baseline | `origin/dev @ 79bf254d` |
-| Last verified | 2026-07-13 |
+| Baseline | `origin/dev @ 02695ce9` |
+| Last verified | 2026-07-14 |
 
 이 문서는 후보를 계약으로 승격하지 않는다. 확실한 불일치를 기록하고, 사람 결정이 필요한 항목을 구현 작업과 분리한다.
 
@@ -29,6 +29,7 @@
 | DOC-014 | `userId`별 quota override 의미는 있으나 실행 schema가 없다 | `contracts.md`는 audit 후 새 RuntimeSnapshot부터 override 적용을 요구하지만 RuntimeSnapshot에는 default quota만 있고 Gateway-owned period table을 Control Plane이 직접 수정할 수도 없음 | versioned user override schema, writer, audit, snapshot binding 및 Gateway materialization 규칙 추가 |
 | DOC-015 | primary realistic category fixture의 생성 provenance를 재현할 수 없다 | challenge/ambiguous fixture에는 checked-in generator가 있지만 `category-evaluation-dataset.fixture.jsonl`을 재생성하는 generator, seed 또는 manual review 기록은 확인되지 않음 | deterministic generator와 seed/version을 추가하거나 manual fixture라면 생성·검토 provenance를 명시 |
 | DOC-016 | Hybrid `ComplexityScore` target과 opt-in shadow scorer는 구현됐지만 model/calibrator artifact와 승격 evidence가 없다 | 2026-07-14 local feature branch에서 42차원 encoder, deterministic `0.0`/`1.0` sentinel, artifact-backed Logistic Regression·calibration scorer와 current rule-based 비교 evaluator가 존재하지만 checked-in artifact가 없고 500건 synthetic pilot은 `human review pending`임 | 승인된 dataset으로 versioned model/calibrator artifact와 family-disjoint train/calibration/holdout evidence를 만들고, current rule-based baseline 대비 전체·category별 `complex -> simple` 비악화 holdout gate 전에는 runtime을 변경하지 않음 |
+| DOC-017 | PR #303에서 기존 전역 low/default/high/fallback 역할이 category별 ordered multi-fallback authoring으로 한 번에 대체되어 현재 제품의 예측 가능한 설정 의미와 충돌한다 | `docs/routing/contracts.md`의 `modelRefs[1..n]`, 10-cell Web 편집기, RuntimeConfig DTO가 제한 없는 fallback을 허용하며 별도 사람 계약 리뷰 기록이 없다 | RuntimeSnapshot v2 matrix는 유지하되 신규 authoring을 전역 Simple=low/default, Complex=high, optional 단일 fallback profile로 교정하고 기존 v2 data는 명시적 전환 전까지 read/execution compatibility로 보존 |
 
 ## Known Documentation Drift
 
