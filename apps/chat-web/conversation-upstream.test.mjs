@@ -121,10 +121,16 @@ test('SSE proxy disables compression and relays a delta before upstream completi
 
   assert.equal(response.headers.get('content-encoding'), 'identity');
   const reader = response.body.getReader();
-  const firstRead = await reader.read();
-  assert.equal(firstRead.done, false);
-  assert.deepEqual(firstRead.value, firstFrame);
-  releaseUpstream();
+  let firstFrameVerified = false;
+  try {
+    const firstRead = await reader.read();
+    assert.equal(firstRead.done, false);
+    assert.deepEqual(firstRead.value, firstFrame);
+    firstFrameVerified = true;
+  } finally {
+    releaseUpstream();
+    if (!firstFrameVerified) await reader.cancel();
+  }
   assert.equal((await reader.read()).done, true);
 });
 
