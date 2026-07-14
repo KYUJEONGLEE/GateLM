@@ -199,6 +199,7 @@ export function LiveRequestsCard({
   useEffect(() => {
     let stopped = false;
     let timeoutId: number | null = null;
+    let currentPollId = 0;
 
     function clearScheduledPoll() {
       if (timeoutId !== null) {
@@ -207,21 +208,25 @@ export function LiveRequestsCard({
       }
     }
 
-    function schedulePoll() {
+    function schedulePoll(pollId: number) {
       clearScheduledPoll();
       timeoutId = window.setTimeout(() => {
-        void poll();
+        void poll(pollId);
       }, LIVE_REQUESTS_POLL_INTERVAL_MS);
     }
 
-    async function poll() {
-      if (stopped || document.visibilityState !== "visible") {
+    async function poll(pollId: number) {
+      if (
+        stopped ||
+        pollId !== currentPollId ||
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
 
       await loadRequests({ silent: true });
-      if (!stopped) {
-        schedulePoll();
+      if (!stopped && pollId === currentPollId) {
+        schedulePoll(pollId);
       }
     }
 
@@ -229,20 +234,25 @@ export function LiveRequestsCard({
       clearScheduledPoll();
 
       if (document.visibilityState !== "visible") {
+        currentPollId += 1;
         abortRef.current?.abort();
         return;
       }
 
-      void poll();
+      currentPollId += 1;
+      void poll(currentPollId);
     }
 
     if (initialPayload && !skippedInitialFetchRef.current) {
       skippedInitialFetchRef.current = true;
-      schedulePoll();
+      currentPollId += 1;
+      schedulePoll(currentPollId);
     } else if (document.visibilityState === "visible") {
+      currentPollId += 1;
+      const pollId = currentPollId;
       void loadRequests({ silent: false }).finally(() => {
-        if (!stopped) {
-          schedulePoll();
+        if (!stopped && pollId === currentPollId) {
+          schedulePoll(pollId);
         }
       });
     }
@@ -251,6 +261,7 @@ export function LiveRequestsCard({
 
     return () => {
       stopped = true;
+      currentPollId += 1;
       clearScheduledPoll();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       abortRef.current?.abort();

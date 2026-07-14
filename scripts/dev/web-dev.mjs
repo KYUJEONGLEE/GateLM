@@ -70,9 +70,14 @@ function resolveNodeBinary() {
       return false;
     }
 
-    const version = spawnSync(candidate, ["-p", "process.versions.node"], {
+    const result = spawnSync(candidate, ["-p", "process.versions.node"], {
       encoding: "utf8"
-    }).stdout.trim();
+    });
+    if (result.error || result.status !== 0) {
+      return false;
+    }
+
+    const version = result.stdout?.trim() ?? "";
 
     return Number.parseInt(version.split(".")[0] ?? "", 10) === REQUIRED_NODE_MAJOR;
   });
