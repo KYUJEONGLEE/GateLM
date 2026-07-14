@@ -153,7 +153,7 @@ describeIntegration('Tenant Chat tenant isolation integration', () => {
         max_output_tokens, reserved_cost_micro_usd
       ) VALUES (
         ${requestId}, 1, ${reservationId}::uuid, ${tenantId}::uuid,
-        'primary', 'provider_test', 'model_test', 1, 100, 200, 300, 10, 20, 1
+        'primary', 'provider_test', 'model_test', 1, 100, 200, 50, 10, 20, 1
       )
     `;
 
@@ -167,7 +167,7 @@ describeIntegration('Tenant Chat tenant isolation integration', () => {
           max_output_tokens, reserved_cost_micro_usd
         ) VALUES (
           ${requestId}, 2, ${reservationId}::uuid, ${otherTenantId}::uuid,
-          'primary', 'provider_test', 'model_test', 1, 100, 200, 300, 10, 20, 1
+          'primary', 'provider_test', 'model_test', 1, 100, 200, 50, 10, 20, 1
         )
       `,
     ).rejects.toThrow('tenant_chat_attempt_reservation_request_fkey');

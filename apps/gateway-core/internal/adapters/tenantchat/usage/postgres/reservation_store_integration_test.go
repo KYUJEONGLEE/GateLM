@@ -308,7 +308,7 @@ func TestFinalizeUnconfirmedMovesExposureToIncidentHoldIntegration(t *testing.T)
 
 func TestPendingDeadlineAndLateReceiptExactlyOnceIntegration(t *testing.T) {
 	pool, fixture := setupUsageIntegration(t)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	admissionContext := fixture.admissionContext()
 	admissionContext.RequestID = "pending_late_request_001"
 	admissionContext.TurnID = "pending_late_turn_001"
