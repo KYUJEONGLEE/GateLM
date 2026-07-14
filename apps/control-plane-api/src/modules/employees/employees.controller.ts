@@ -28,12 +28,28 @@ import {
   UpdateEmployeeDto,
   UpsertProjectEmployeeAssignmentDto,
 } from './dto/employee.dto';
+import {
+  EmployeeUsageResponseDto,
+  ListEmployeeUsageQueryDto,
+} from './dto/employee-usage.dto';
+import { EmployeeUsageService } from './employee-usage.service';
 import { EmployeesService } from './employees.service';
 
 @UseGuards(AdminAuthGuard)
 @Controller('admin/v1')
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(
+    private readonly employeesService: EmployeesService,
+    private readonly employeeUsageService: EmployeeUsageService,
+  ) {}
+
+  @Get('tenants/:tenantId/employees/usage')
+  async listEmployeeUsage(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Query() query: ListEmployeeUsageQueryDto,
+  ): Promise<EmployeeUsageResponseDto> {
+    return this.employeeUsageService.listEmployeeUsage(tenantId, query);
+  }
 
   @Get('tenants/:tenantId/employees')
   async listEmployees(
