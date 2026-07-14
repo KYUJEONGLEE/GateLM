@@ -168,54 +168,54 @@ export class TenantContentKeyService {
         throw new ContentKeyUnavailable();
       }
       let key = unwrap(row, keySet);
-      if (row.wrappingKeyVersion !== keySet.activeVersion) {
-        if (row.wrappingKeyVersion > keySet.activeVersion) {
-          key.fill(0);
-          throw new ContentKeyUnavailable();
-        }
-        const active = keySet.keys.get(keySet.activeVersion);
-        if (!active) {
-          key.fill(0);
-          throw new ContentKeyUnavailable();
-        }
-        const rewrapped = wrapTenantKey(
-          key,
-          active.wrappingKey,
-          tenantId,
-          row.contentKeyVersion,
-          active.version,
-        );
-        const changed = await this.prisma.$transaction(async (tx) => {
-          const updated = await tx.tenantChatContentKey.updateMany({
-            where: {
-              tenantId,
-              contentKeyVersion: row!.contentKeyVersion,
-              wrappingKeyVersion: row!.wrappingKeyVersion,
-            },
-            data: {
-              wrappingKeyVersion: active.version,
-              wrappedKey: Uint8Array.from(rewrapped.wrappedKey),
-              wrapNonce: Uint8Array.from(rewrapped.wrapNonce),
-              wrapTag: Uint8Array.from(rewrapped.wrapTag),
-              rewrappedAt: new Date(),
-            },
+      try {
+        if (row.wrappingKeyVersion !== keySet.activeVersion) {
+          if (row.wrappingKeyVersion > keySet.activeVersion) {
+            throw new ContentKeyUnavailable();
+          }
+          const active = keySet.keys.get(keySet.activeVersion);
+          if (!active) throw new ContentKeyUnavailable();
+          const rewrapped = wrapTenantKey(
+            key,
+            active.wrappingKey,
+            tenantId,
+            row.contentKeyVersion,
+            active.version,
+          );
+          const changed = await this.prisma.$transaction(async (tx) => {
+            const updated = await tx.tenantChatContentKey.updateMany({
+              where: {
+                tenantId,
+                contentKeyVersion: row!.contentKeyVersion,
+                wrappingKeyVersion: row!.wrappingKeyVersion,
+              },
+              data: {
+                wrappingKeyVersion: active.version,
+                wrappedKey: Uint8Array.from(rewrapped.wrappedKey),
+                wrapNonce: Uint8Array.from(rewrapped.wrapNonce),
+                wrapTag: Uint8Array.from(rewrapped.wrapTag),
+                rewrappedAt: new Date(),
+              },
+            });
+            const floor = await tx.tenantChatContentKeyState.updateMany({
+              where: {
+                tenantId,
+                wrappingKeyRollbackFloor: { lte: active.version },
+              },
+              data: { wrappingKeyRollbackFloor: active.version },
+            });
+            return updated.count === 1 && floor.count === 1;
           });
-          const floor = await tx.tenantChatContentKeyState.updateMany({
-            where: {
-              tenantId,
-              wrappingKeyRollbackFloor: { lte: active.version },
-            },
-            data: { wrappingKeyRollbackFloor: active.version },
-          });
-          return updated.count === 1 && floor.count === 1;
-        });
-        if (!changed) {
-          key.fill(0);
-          continue;
+          if (!changed) {
+            key.fill(0);
+            continue;
+          }
         }
         return Object.freeze({ key, version: row.contentKeyVersion });
+      } catch (error) {
+        key.fill(0);
+        throw error;
       }
-      return Object.freeze({ key, version: row.contentKeyVersion });
     }
     throw new ContentKeyUnavailable();
   }

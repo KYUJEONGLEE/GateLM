@@ -15,7 +15,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { once } from 'node:events';
 
 import { ChatWebServiceGuard } from '@/auth/chat-web-service.guard';
 
@@ -109,8 +108,11 @@ export class ConversationController {
     response.flushHeaders();
     let sequence = 1;
     let finished = false;
+    let disconnecting: Promise<void> | undefined;
     const disconnect = () => {
-      if (!finished && !response.writableEnded) void this.conversations.disconnect(prepared);
+      if (!finished && !response.writableEnded) {
+        disconnecting ??= this.conversations.disconnect(prepared);
+      }
     };
     response.once('close', disconnect);
     request.socket.setNoDelay(true);
@@ -150,6 +152,10 @@ export class ConversationController {
       }
     } finally {
       response.off('close', disconnect);
+      if (!finished) {
+        disconnecting ??= this.conversations.disconnect(prepared);
+        await disconnecting;
+      }
       if (!response.writableEnded) response.end();
     }
   }
@@ -218,11 +224,31 @@ async function writeEvent(response: Response, turnId: string, event: Readonly<{ 
   const frame = `id: ${turnId}:${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
   if (Buffer.byteLength(frame) > 64 * 1024) throw new Error('SSE frame limit exceeded.');
   if (!response.write(frame, 'utf8')) {
-    await Promise.race([
-      once(response, 'drain'),
-      once(response, 'close').then(() => { throw new Error('SSE response closed.'); }),
-    ]);
+    await waitForDrain(response);
   }
+}
+
+function waitForDrain(response: Response): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      response.off('drain', onDrain);
+      response.off('close', onClose);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error('SSE response closed.'));
+    };
+    if (response.destroyed || response.writableEnded) {
+      reject(new Error('SSE response closed.'));
+      return;
+    }
+    response.once('drain', onDrain);
+    response.once('close', onClose);
+  });
 }
 
 function utf8Chunks(value: string, maximum: number): string[] {

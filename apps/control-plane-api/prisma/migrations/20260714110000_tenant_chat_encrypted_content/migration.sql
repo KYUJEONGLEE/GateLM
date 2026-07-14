@@ -177,16 +177,10 @@ ALTER TABLE "tenant_chat_conversations" ADD CONSTRAINT "tenant_chat_conversation
   FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "tenant_chat_conversations" ADD CONSTRAINT "tenant_chat_conversation_title_key_fkey"
   FOREIGN KEY ("tenant_id", "title_content_key_version") REFERENCES "tenant_chat_content_keys"("tenant_id", "content_key_version") ON DELETE RESTRICT ON UPDATE NO ACTION;
-ALTER TABLE "tenant_chat_turns" ADD CONSTRAINT "tenant_chat_turns_tenant_id_fkey"
-  FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
-ALTER TABLE "tenant_chat_turns" ADD CONSTRAINT "tenant_chat_turns_user_id_fkey"
-  FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+-- The actor identity is anchored through the conversation composite foreign key.
 ALTER TABLE "tenant_chat_turns" ADD CONSTRAINT "tenant_chat_turn_conversation_fkey"
   FOREIGN KEY ("conversation_id", "tenant_id", "user_id") REFERENCES "tenant_chat_conversations"("id", "tenant_id", "user_id") ON DELETE CASCADE ON UPDATE NO ACTION;
-ALTER TABLE "tenant_chat_messages" ADD CONSTRAINT "tenant_chat_messages_tenant_id_fkey"
-  FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
-ALTER TABLE "tenant_chat_messages" ADD CONSTRAINT "tenant_chat_messages_user_id_fkey"
-  FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+-- The actor identity is anchored through the conversation and turn composite foreign keys.
 ALTER TABLE "tenant_chat_messages" ADD CONSTRAINT "tenant_chat_message_conversation_fkey"
   FOREIGN KEY ("conversation_id", "tenant_id", "user_id") REFERENCES "tenant_chat_conversations"("id", "tenant_id", "user_id") ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE "tenant_chat_messages" ADD CONSTRAINT "tenant_chat_message_turn_fkey"

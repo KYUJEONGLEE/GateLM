@@ -83,8 +83,6 @@ model Tenant {
   tenantChatContentKeyState       TenantChatContentKeyState?
   tenantChatContentKeys           TenantChatContentKey[]
   tenantChatConversations         TenantChatConversation[]
-  tenantChatTurns                 TenantChatTurn[]
-  tenantChatMessages              TenantChatMessage[]
 
   @@map("tenants")
 }
@@ -117,8 +115,6 @@ model User {
   tenantChatUserTokenPeriods  TenantChatUserTokenPeriod[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
   tenantChatConversations     TenantChatConversation[]
-  tenantChatTurns             TenantChatTurn[]
-  tenantChatMessages          TenantChatMessage[]
 
   @@index([email])
   @@index([status])
@@ -1213,8 +1209,6 @@ model TenantChatTurn {
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   conversation TenantChatConversation @relation(fields: [conversationId, tenantId, userId], references: [id, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
   messages     TenantChatMessage[]
 
@@ -1241,8 +1235,6 @@ model TenantChatMessage {
   expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  user         User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   conversation TenantChatConversation @relation(fields: [conversationId, tenantId, userId], references: [id, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
   turn         TenantChatTurn         @relation(fields: [turnId, conversationId, tenantId, userId], references: [id, conversationId, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
   contentKey   TenantChatContentKey   @relation(fields: [tenantId, contentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction)
