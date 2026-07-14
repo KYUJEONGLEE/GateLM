@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
 const DASHBOARD_AUTO_REFRESH_INTERVAL_MS = 30000;
+const DASHBOARD_AUTO_REFRESH_ENABLED = process.env.NODE_ENV === "production";
 
 export function DashboardAutoRefresh() {
   const router = useRouter();
@@ -18,6 +19,10 @@ export function DashboardAutoRefresh() {
   }, [isPending]);
 
   useEffect(() => {
+    if (!DASHBOARD_AUTO_REFRESH_ENABLED) {
+      return;
+    }
+
     const refresh = () => {
       const now = Date.now();
       if (

@@ -20,7 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 const COMPACT_LIVE_REQUEST_LIMIT = 5;
 const FOCUS_LIVE_REQUEST_LIMIT = 9;
 
-export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
+export const LIVE_REQUESTS_POLL_INTERVAL_MS = 2000;
 
 type LiveRequestsCardFilters = {
   budgetScopeId: string;
@@ -197,18 +197,73 @@ export function LiveRequestsCard({
   );
 
   useEffect(() => {
-    if (initialPayload && !skippedInitialFetchRef.current) {
-      skippedInitialFetchRef.current = true;
-    } else {
-      void loadRequests({ silent: false });
+    let stopped = false;
+    let timeoutId: number | null = null;
+    let currentPollId = 0;
+
+    function clearScheduledPoll() {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     }
 
-    const interval = window.setInterval(() => {
-      void loadRequests({ silent: true });
-    }, LIVE_REQUESTS_POLL_INTERVAL_MS);
+    function schedulePoll(pollId: number) {
+      clearScheduledPoll();
+      timeoutId = window.setTimeout(() => {
+        void poll(pollId);
+      }, LIVE_REQUESTS_POLL_INTERVAL_MS);
+    }
+
+    async function poll(pollId: number) {
+      if (
+        stopped ||
+        pollId !== currentPollId ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+
+      await loadRequests({ silent: true });
+      if (!stopped && pollId === currentPollId) {
+        schedulePoll(pollId);
+      }
+    }
+
+    function handleVisibilityChange() {
+      clearScheduledPoll();
+
+      if (document.visibilityState !== "visible") {
+        currentPollId += 1;
+        abortRef.current?.abort();
+        return;
+      }
+
+      currentPollId += 1;
+      void poll(currentPollId);
+    }
+
+    if (initialPayload && !skippedInitialFetchRef.current) {
+      skippedInitialFetchRef.current = true;
+      currentPollId += 1;
+      schedulePoll(currentPollId);
+    } else if (document.visibilityState === "visible") {
+      currentPollId += 1;
+      const pollId = currentPollId;
+      void loadRequests({ silent: false }).finally(() => {
+        if (!stopped && pollId === currentPollId) {
+          schedulePoll(pollId);
+        }
+      });
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(interval);
+      stopped = true;
+      currentPollId += 1;
+      clearScheduledPoll();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       abortRef.current?.abort();
       inFlightQueryRef.current = null;
     };

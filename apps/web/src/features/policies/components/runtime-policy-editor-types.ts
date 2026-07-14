@@ -21,6 +21,7 @@ export type RuntimePolicyEditorProps = {
   locale: Locale;
   model: RuntimePolicyModel;
   moveBudgetToGeneral?: boolean;
+  providerManagementHref?: string;
 };
 
 export type RuntimePolicyApiKeyReadiness = {
@@ -123,6 +124,7 @@ export type RuntimePolicyEditorText = {
   promptCaptureMaxChars: string;
   promptPrice: string;
   provider: string;
+  providerAdd: string;
   providerCatalog: string;
   providerConnectionMissing: string;
   providerCount: string;

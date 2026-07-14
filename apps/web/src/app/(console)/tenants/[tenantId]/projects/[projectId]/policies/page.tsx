@@ -4,6 +4,7 @@ import { ProjectPolicyGeneralContent } from "@/features/policies/components/proj
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
 import {
   getCurrentConsoleAuth,
+  isTenantAdminForTenant,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectApiKeysModel } from "@/lib/control-plane/api-keys-client";
@@ -57,6 +58,11 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
       model={projectRuntime.policyModel}
       generalBudgetPanelPlacement="childSlot"
       moveBudgetToGeneral
+      providerManagementHref={
+        isTenantAdminForTenant(auth, effectiveTenantId)
+          ? `/tenants/${encodeURIComponent(effectiveTenantId)}/provider-connections`
+          : undefined
+      }
       employeeSection={
         <ProjectPolicyEmployeeContent
           locale={locale}

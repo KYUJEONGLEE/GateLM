@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
 import {
   verifyDifficultyEvaluationDataset,
+  verifyDifficultyLabelContract,
   verifyDifficultyTrainingPilot,
 } from "./verify-v2.1-difficulty-eval.mjs";
 
@@ -76,10 +77,16 @@ const versionedV21Docs = [
   "docs/v2.1.0/category-evaluation-dataset-contract.md",
   "docs/v2.1.0/schemas/category-evaluation-record.schema.json",
   "docs/v2.1.0/difficulty-evaluation-dataset-contract.md",
+  "docs/v2.1.0/difficulty-label-guide.md",
   "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json",
+  "docs/v2.1.0/schemas/difficulty-label-record.schema.json",
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json",
   "docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json",
   "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json",
+  "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl",
+  "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json",
   "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",
+  "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json",
   "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json",
   "docs/v2.1.0/routing-advanced-plan.md",
   "docs/v2.1.0/routing-performance-test-scenario.md",
@@ -1012,6 +1019,9 @@ function main() {
     fail(failure);
   }
   for (const failure of verifyDifficultyEvaluationDataset({ rootDir })) {
+    fail(failure);
+  }
+  for (const failure of verifyDifficultyLabelContract({ rootDir })) {
     fail(failure);
   }
   for (const failure of verifyDifficultyTrainingPilot({ rootDir })) {

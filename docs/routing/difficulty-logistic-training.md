@@ -14,8 +14,11 @@
 ## Dataset Roles
 
 - [`../v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl`](../v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl): 10건 contract smoke. 학습에 사용하지 않는다.
-- [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl): 500건 synthetic training pilot. `human review pending`이며 production promotion evidence가 아니다.
-- [`../v2.1.0/fixtures/difficulty-training-split-manifest.v1.json`](../v2.1.0/fixtures/difficulty-training-split-manifest.v1.json): 25개 cross-label family를 train 15개/300건, calibration 5개/100건, holdout 5개/100건으로 고정한다.
+- [`../v2.1.0/difficulty-label-guide.md`](../v2.1.0/difficulty-label-guide.md): 실제 학습 데이터가 따라야 하는 label, review, family와 slice 계약이다.
+- [`../v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl`](../v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl): 필수 label/slice wiring을 검증하는 10건/5-family smoke. 학습에 사용하지 않는다.
+- [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl): 500건 synthetic training-tooling smoke. 전부 `human review pending`이며 model/calibrator/threshold evidence가 아니다.
+- [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json): 500건을 `trainingEligible=false`, approved human-reviewed family 0으로 고정한다.
+- [`../v2.1.0/fixtures/difficulty-training-split-manifest.v1.json`](../v2.1.0/fixtures/difficulty-training-split-manifest.v1.json): 25개 cross-label family의 smoke tooling partition을 train 15개/300건, calibration 5개/100건, holdout 5개/100건으로 고정한다. 이 이름은 production evidence split을 뜻하지 않는다.
 
 500건은 다음 명령으로 결정론적으로 다시 만든다.
 
@@ -24,9 +27,11 @@ corepack pnpm run v2.1:routing:generate-difficulty-training-pilot
 corepack pnpm run verify:v2.1-difficulty-eval
 ```
 
-Family key는 `sampleId`의 category와 `fNN`만 사용한 `{category}/{fNN}`이다. `expectedDifficulty`와 `vNN`을 제외하므로 같은 family의 simple/complex contrast와 모든 variant가 항상 함께 이동한다.
+500건 smoke의 legacy family key는 `sampleId`의 category와 `fNN`만 사용한 `{category}/{fNN}`이다. `expectedDifficulty`와 `vNN`을 제외하므로 같은 family의 simple/complex contrast와 모든 variant가 항상 함께 이동한다. 향후 실제 dataset은 `difficulty-label-record.v1`의 `promptFamily`와 versioned minimum-family policy를 사용하며 legacy 25 family를 승인된 학습 family로 승격하지 않는다.
 
 ## Training Boundary
+
+실제 training candidate는 모든 포함 record가 `human_review + approved`이고, 독립 family 전체가 한 split에만 있으며, dataset manifest가 `trainingEligible=true`와 versioned minimum-family policy를 선언해야 한다. 현재 minimum family 수는 decision pending이므로 repository의 checked-in dataset은 이 조건을 만족하지 않는다. Record 수, synthetic 균형 또는 smoke partition만으로 이 gate를 통과할 수 없다.
 
 학습 입력은 offline Go exporter가 canonical Go pipeline으로 만든다.
 
@@ -48,12 +53,14 @@ Isotonic은 scikit-learn의 선형 interpolation predictor를 artifact 의미로
 
 ## Candidate Training Command
 
-아래 명령은 실제 학습을 실행하므로 이번 준비 작업에서는 실행하지 않는다. 승인된 다음 evidence run에서만 사용한다.
+아래 명령은 실제 학습을 실행하므로 승인된 dataset manifest와 별도 family-disjoint split manifest가 준비된 evidence run에서만 사용한다. 500건 smoke 경로를 인자로 넘기지 않는다.
 
 ```powershell
 python -m venv .tmp\difficulty-training-venv
 .tmp\difficulty-training-venv\Scripts\python.exe -m pip install -e scripts\routing_difficulty_model
 .tmp\difficulty-training-venv\Scripts\python.exe -m gatelm_difficulty_model.cli `
+  --dataset <approved-difficulty-evaluation.jsonl> `
+  --split-manifest <approved-family-split-manifest.json> `
   --artifact-version difficulty-logistic-v1-candidate `
   --artifact-output .tmp\difficulty-model-candidate.json `
   --report-output .tmp\difficulty-training-report.json
@@ -121,8 +128,9 @@ Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + com
 
 ## Prepared Tests
 
-- 500건 재생성, 균형, provenance와 dataset hash
-- simple/complex cross-label family의 split/fold 비누출
+- Label schema, 필수 slice, category-semantic 조합, review 상태와 family-level coverage
+- 500건 smoke 재생성, 균형, provenance, dataset hash와 `trainingEligible=false`
+- Smoke와 향후 candidate의 simple/complex cross-label family split/fold 비누출
 - actual category vector와 oracle category vector의 분리
 - deterministic sentinel과 Logistic Regression `modelPath` 학습·calibration 분리
 - 작은 in-memory synthetic matrix의 Logistic Regression/calibrator fit
@@ -133,4 +141,4 @@ Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + com
 - meaningless/hard-complex sentinel 우선순위와 remaining-request model path
 - opt-in shadow artifact load, runtime 비교, 긴 simple·짧은 complex segment와 민감 material 비노출
 
-실제 500건 학습, production artifact 생성, holdout promotion gate와 runtime cutover는 이 준비 범위에 포함하지 않는다.
+500건 smoke는 ephemeral tooling test에만 사용할 수 있다. Approved human-reviewed family dataset을 이용한 실제 학습, production artifact 생성, holdout promotion gate와 runtime cutover는 이 준비 범위에 포함하지 않는다.

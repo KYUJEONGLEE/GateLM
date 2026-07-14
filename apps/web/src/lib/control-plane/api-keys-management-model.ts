@@ -3,6 +3,12 @@ import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 
 type ApiKeyProject = Pick<ProjectRecord, "id" | "name">;
 
+export function excludeRevokedApiKeys(
+  apiKeys: ApiKeyListItem[]
+): ApiKeyListItem[] {
+  return apiKeys.filter((apiKey) => apiKey.status !== "revoked");
+}
+
 export function compareApiKeyCreatedAtDescending(
   left: Pick<ApiKeyListItem, "createdAt">,
   right: Pick<ApiKeyListItem, "createdAt">

@@ -26,7 +26,10 @@ import type {
   ApiKeyStatus,
   OneTimeApiKeyResponse
 } from "@/lib/control-plane/api-keys-types";
-import { compareApiKeyCreatedAtDescending } from "@/lib/control-plane/api-keys-management-model";
+import {
+  compareApiKeyCreatedAtDescending,
+  excludeRevokedApiKeys
+} from "@/lib/control-plane/api-keys-management-model";
 import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -148,7 +151,7 @@ const copy: Record<Locale, Record<string, string>> = {
 
 export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementProps) {
   const text = copy[locale];
-  const [apiKeys, setApiKeys] = useState(model.apiKeys);
+  const [apiKeys, setApiKeys] = useState(() => excludeRevokedApiKeys(model.apiKeys));
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [issueOpen, setIssueOpen] = useState(false);
@@ -243,9 +246,7 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
 
     setApiKeys((current) => [
       toListItem(payload.apiKey as OneTimeApiKeyResponse, apiKey.displayName, apiKey.projectId, apiKey.projectName),
-      ...current.map((item) => item.credentialId === apiKey.credentialId
-        ? { ...item, status: "revoked" as const }
-        : item)
+      ...current.filter((item) => item.credentialId !== apiKey.credentialId)
     ]);
     setOneTimeSecret({
       apiKey: payload.apiKey,
@@ -284,9 +285,9 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
       return;
     }
 
-    setApiKeys((current) => current.map((item) => item.credentialId === apiKey.credentialId
-      ? { ...item, status: "revoked" as const }
-      : item));
+    setApiKeys((current) => current.filter(
+      (item) => item.credentialId !== apiKey.credentialId
+    ));
     setConfirmAction(null);
     setPendingAction(null);
     setSubmitState({
@@ -352,7 +353,6 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
             >
               <option value="all">{text.allStatuses}</option>
               <option value="active">Active</option>
-              <option value="revoked">Revoked</option>
               <option value="disabled">Disabled</option>
               <option value="expired">Expired</option>
             </select>

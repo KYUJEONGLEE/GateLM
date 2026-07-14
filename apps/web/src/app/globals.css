@@ -8590,11 +8590,9 @@ html[data-theme="dark"] .request-log-screen {
 .request-log-hero {
   display: flex;
   align-items: center;
-  width: min(1180px, 100%);
+  width: 100%;
   min-height: 44px;
   min-width: 0;
-  margin-right: auto;
-  margin-left: 0;
 }
 
 .request-log-hero h2 {
@@ -8640,10 +8638,9 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-screen .request-log-workspace {
-  width: min(1180px, 100%);
+  width: 100%;
+  min-width: 0;
   margin-top: 0;
-  margin-right: auto;
-  margin-left: 0;
 }
 
 .request-log-screen .request-log-list-panel {
