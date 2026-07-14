@@ -228,6 +228,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     promptCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
+    providerAdd: "Add provider",
     providerConnectionMissing:
       "Connect at least one provider with configured models before saving or publishing this policy.",
     providerCount: "Providers",
@@ -352,6 +353,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     promptCaptureMaxChars: "최대 글자 수",
     promptPrice: "입력 단가(마이크로 USD)",
     provider: "프로바이더",
+    providerAdd: "프로바이더 추가",
     providerConnectionMissing:
       "정책을 저장하거나 게시하려면 모델이 설정된 프로바이더를 하나 이상 연결해야 합니다.",
     providerCount: "프로바이더",
@@ -461,7 +463,8 @@ export function RuntimePolicyEditor({
   hideStreamingTab = false,
   locale,
   model,
-  moveBudgetToGeneral = false
+  moveBudgetToGeneral = false,
+  providerManagementHref
 }: RuntimePolicyEditorProps) {
   const router = useRouter();
   const text = policyText[locale];
@@ -779,6 +782,7 @@ export function RuntimePolicyEditor({
               draftValues={draftValues}
               onDraftValuesChange={setDraftValues}
               providerCatalog={model.providerCatalog}
+              providerManagementHref={providerManagementHref}
               providers={model.activeConfig.providers}
               text={text}
             />

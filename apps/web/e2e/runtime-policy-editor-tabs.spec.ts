@@ -18,6 +18,7 @@ const policyTabs = [
 ] as const;
 const projectPolicyTabs = [
   "General",
+  "Employees",
   "Routing",
   "Rate Limit",
   "Cache",
@@ -204,10 +205,7 @@ test("policy detail modal lazy-loads only after click and shows modal fallback",
 test("project policy editor opens with project general tab before routing", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);
   await page.goto(projectsPath);
-  const editProjectLink = page.getByTestId("project-card").first().getByRole("link", {
-    exact: true,
-    name: "Edit project"
-  });
+  const editProjectLink = page.getByTestId("project-card").first();
 
   await Promise.all([
     page.waitForURL(/\/tenants\/[^/]+\/projects\/[^/]+\/policies$/),
@@ -228,7 +226,6 @@ test("project policy editor opens with project general tab before routing", asyn
   await expect(generalPanel.getByLabel("Name", { exact: true })).toBeVisible();
   await expect(generalPanel.getByRole("heading", { exact: true, name: "Budget policy" })).toBeVisible();
   await expect(generalPanel.getByRole("heading", { exact: true, name: "Project admins" })).toBeVisible();
-  await expect(generalPanel.getByRole("heading", { exact: true, name: "Project teams" })).toBeVisible();
   await expect(generalPanel.getByRole("heading", { exact: true, name: "Gateway API Key" })).toBeVisible();
   await expect(page.getByRole("tab", { exact: true, name: "Budget" })).toHaveCount(0);
 
@@ -239,9 +236,31 @@ test("project policy editor opens with project general tab before routing", asyn
     generalHeadings.indexOf("Project admins")
   );
 
+  await page.getByRole("tab", { exact: true, name: "Employees" }).click();
+  await expect(
+    page
+      .getByRole("tabpanel", { exact: true, name: "Employees" })
+      .getByRole("heading", { exact: true, name: "Employee list" })
+  ).toBeVisible();
+
   await page.getByRole("tab", { exact: true, name: "Routing" }).click();
-  await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
+  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
+  const addProviderLink = routingPanel.getByRole("link", {
+    exact: true,
+    name: "Add provider"
+  });
+  await expect(routingPanel).toBeVisible();
+  await expect(addProviderLink).toHaveAttribute(
+    "href",
+    /\/tenants\/[^/]+\/provider-connections$/
+  );
   await expect(page.locator("#policy-panel-general")).toHaveCount(0);
+
+  await Promise.all([
+    page.waitForURL(/\/tenants\/[^/]+\/provider-connections$/),
+    addProviderLink.click()
+  ]);
+  await expect(page.getByRole("heading", { exact: true, name: "Providers" })).toBeVisible();
 });
 
 test("safety detectors expose five editable categories and gray locked mandatory protection", async ({
