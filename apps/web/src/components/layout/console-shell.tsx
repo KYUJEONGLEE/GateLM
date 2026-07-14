@@ -163,7 +163,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Tenant",
-          ko: "테넌트"
+          ko: "회사 정책"
         },
         item: "tenant",
         path: (tenantId) => `/tenants/${tenantId}/tenants`
