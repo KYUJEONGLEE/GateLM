@@ -26,11 +26,25 @@ export class TenantContentKeyService {
   async isReady(): Promise<boolean> {
     try {
       const keySet = await this.provider.load();
-      const state = await this.prisma.tenantChatContentKeyState.findFirst({
-        select: { wrappingKeyRollbackFloor: true },
-        orderBy: { wrappingKeyRollbackFloor: 'desc' },
-      });
-      return !state || keySet.activeVersion >= state.wrappingKeyRollbackFloor;
+      const [state, contentKeys, conversations, turns] = await Promise.all([
+        this.prisma.tenantChatContentKeyState.findFirst({
+          select: { wrappingKeyRollbackFloor: true },
+          orderBy: { wrappingKeyRollbackFloor: 'desc' },
+        }),
+        this.prisma.tenantChatContentKey.groupBy({
+          by: ['wrappingKeyVersion'],
+          where: { status: { not: 'retired' } },
+        }),
+        this.prisma.tenantChatConversation.groupBy({ by: ['creationBindingKeyVersion'] }),
+        this.prisma.tenantChatTurn.groupBy({ by: ['requestBindingKeyVersion'] }),
+      ]);
+      if (state && keySet.activeVersion < state.wrappingKeyRollbackFloor) return false;
+      const requiredVersions = new Set([
+        ...contentKeys.map((row) => row.wrappingKeyVersion),
+        ...conversations.map((row) => row.creationBindingKeyVersion),
+        ...turns.map((row) => row.requestBindingKeyVersion),
+      ]);
+      return [...requiredVersions].every((version) => keySet.keys.has(version));
     } catch {
       return false;
     }

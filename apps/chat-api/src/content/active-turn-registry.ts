@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 
 import type { AdmissionHandle } from '@/execution/execution.types';
 
+export class TurnAttachmentLimitReached extends Error {}
+
 @Injectable()
 export class ActiveTurnRegistry {
   private readonly active = new Map<string, {
@@ -9,11 +11,12 @@ export class ActiveTurnRegistry {
     handles: Set<AdmissionHandle>;
   }>();
 
-  register(turnId: string, handle: AdmissionHandle): AbortSignal {
+  register(turnId: string, handle: AdmissionHandle, maximum: number): AbortSignal {
     const entry = this.active.get(turnId) ?? {
       controller: new AbortController(),
       handles: new Set<AdmissionHandle>(),
     };
+    if (entry.handles.size >= maximum) throw new TurnAttachmentLimitReached();
     entry.handles.add(handle);
     this.active.set(turnId, entry);
     return entry.controller.signal;

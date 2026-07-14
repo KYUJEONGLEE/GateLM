@@ -25,6 +25,7 @@ export type ChatApiEnv = {
   TENANT_CHAT_RETENTION_BATCH_SIZE: number;
   TENANT_CHAT_RETENTION_INTERVAL_MS: number;
   TENANT_CHAT_ASSISTANT_MAX_BYTES: number;
+  TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: number;
 };
 
 export function validateEnv(env: RawEnv): ChatApiEnv {
@@ -128,6 +129,13 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
       1024 * 1024,
       1024,
       1024 * 1024,
+    ),
+    TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: boundedInteger(
+      env,
+      'TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN',
+      4,
+      1,
+      16,
     ),
   };
 }

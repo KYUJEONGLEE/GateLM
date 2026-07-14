@@ -445,7 +445,8 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 6. private Gateway SSE를 strict consume하며 Chat API-facing `accepted -> delta* -> final|error|cancelled` 순서를 유지한다.
 7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
 
-- Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다.
+- Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다. 같은 turn의 HTTP attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다.
+- 느린 attachment의 response backpressure는 해당 응답에만 적용하며 공유 Provider stream과 final persistence를 막지 않는다. disconnect된 attachment handle은 취소 시도 결과와 무관하게 local registry에서 해제한다.
 - partial, interrupted, cancelled assistant와 Provider raw error는 저장하지 않는다. 이미 저장된 user message와 confirmed Gateway usage는 assistant persistence 실패 때문에 삭제·변조하지 않는다.
 - duplicate final은 `(turnId,role=assistant)` unique와 locked conversation state로 no-op/replay하며 다른 content면 fail closed한다.
 - DOC-013 결정: completed turn의 encrypted assistant가 있으면 Chat API가 이를 decrypt해 bounded delta로 재생한다. Gateway가 terminal facts만 replay했는데 local encrypted final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 종료하며 성공 content나 빈 assistant를 만들지 않는다.

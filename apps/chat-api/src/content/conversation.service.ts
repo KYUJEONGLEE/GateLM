@@ -9,7 +9,7 @@ import type { AdmissionHandle, UsageIntent } from '@/execution/execution.types';
 import { PrivateGatewayError } from '@/execution/private-gateway.client';
 import { TerminalReplayContentUnavailable } from '@/execution/sse-parser';
 
-import { ActiveTurnRegistry } from './active-turn-registry';
+import { ActiveTurnRegistry, TurnAttachmentLimitReached } from './active-turn-registry';
 import {
   ConversationNotFound,
   ConversationVersionConflict,
@@ -52,6 +52,7 @@ export type SafeStreamError = Readonly<{
 export class ConversationService {
   private readonly historyRetentionDays: 0 | 7 | 30 | 90;
   private readonly assistantMaxBytes: number;
+  private readonly maximumAttachmentsPerTurn: number;
   private readonly inFlight = new Map<string, TurnFlight>();
 
   constructor(
@@ -63,6 +64,7 @@ export class ConversationService {
   ) {
     this.historyRetentionDays = config.getOrThrow<0 | 7 | 30 | 90>('TENANT_CHAT_HISTORY_RETENTION_DAYS');
     this.assistantMaxBytes = config.getOrThrow<number>('TENANT_CHAT_ASSISTANT_MAX_BYTES');
+    this.maximumAttachmentsPerTurn = config.getOrThrow<number>('TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN');
   }
 
   create(accessToken: string, idempotencyKey: string, title: string) {
@@ -138,7 +140,11 @@ export class ConversationService {
         throw error;
       }
       const messages = await this.store.completionHistory(actor, conversationId, reserved.turnId);
-      const signal = this.activeTurns.register(reserved.turnId, handle);
+      const signal = this.activeTurns.register(
+        reserved.turnId,
+        handle,
+        this.maximumAttachmentsPerTurn,
+      );
       return Object.freeze({
         kind: 'execute' as const,
         actor,
@@ -167,7 +173,9 @@ export class ConversationService {
       this.inFlight.set(turnId, flight);
       flight.promise = this.runTurn(prepared, async (delta) => {
         flight!.chunks.push(delta);
-        await Promise.all([...flight!.listeners].map((current) => pump(flight!, current)));
+        for (const current of flight!.listeners) {
+          void pump(flight!, current).catch(() => undefined);
+        }
       }).finally(() => {
         if (this.inFlight.get(turnId) === flight) this.inFlight.delete(turnId);
       });
@@ -234,6 +242,7 @@ export class ConversationService {
         }
         throw error;
       }
+      if (prepared.signal.aborted) throw new TurnStateConflict();
       const persisted = await this.store.persistAssistant(
         prepared.actor,
         prepared.reserved,
@@ -276,6 +285,7 @@ export class ConversationService {
   async disconnect(prepared: PreparedTurn): Promise<void> {
     if (prepared.kind !== 'execute') return;
     this.activeTurns.abort(prepared.reserved.turnId);
+    this.activeTurns.release(prepared.reserved.turnId, prepared.handle);
     await Promise.allSettled([
       this.bridge.cancel(prepared.handle),
       this.store.cancelTurn(prepared.actor, prepared.reserved.conversationId, prepared.reserved.turnId),
@@ -316,6 +326,7 @@ function httpError(error: unknown): HttpException {
   if (error instanceof InvalidCursor) return failure(400, 'CHAT_CURSOR_INVALID', 'The cursor is invalid.');
   if (error instanceof TerminalReplayContentUnavailable) return failure(409, 'CHAT_TERMINAL_REPLAY_UNAVAILABLE', 'The completed response cannot be replayed safely.');
   if (error instanceof TurnStateConflict) return failure(409, 'CHAT_TURN_STATE_CONFLICT', 'The turn cannot continue from its current state.');
+  if (error instanceof TurnAttachmentLimitReached) return failure(429, 'CHAT_CONCURRENCY_LIMITED', 'Too many clients are attached to this turn.');
   if (error instanceof ContentKeyUnavailable) return failure(503, 'CHAT_CONTENT_KEY_UNAVAILABLE', 'Encrypted content is temporarily unavailable.');
   if (error instanceof ContentIntegrityError) return failure(500, 'CHAT_CONTENT_INTEGRITY_FAILED', 'Encrypted content integrity validation failed.');
   if (error instanceof PrivateGatewayError) {
@@ -353,6 +364,7 @@ type FlightListener = {
   nextIndex: number;
   send: (delta: string) => Promise<void>;
   pumping?: Promise<void>;
+  failure?: unknown;
 };
 
 type TurnFlight = {
@@ -362,6 +374,7 @@ type TurnFlight = {
 };
 
 function pump(flight: TurnFlight, listener: FlightListener): Promise<void> {
+  if (listener.failure) return Promise.reject(listener.failure);
   if (listener.pumping) return listener.pumping;
   listener.pumping = (async () => {
     while (listener.nextIndex < flight.chunks.length) {
@@ -369,8 +382,13 @@ function pump(flight: TurnFlight, listener: FlightListener): Promise<void> {
       listener.nextIndex += 1;
       await listener.send(flight.chunks[index]);
     }
-  })().finally(() => {
-    listener.pumping = undefined;
-  });
+  })()
+    .catch((error: unknown) => {
+      listener.failure = error;
+      throw error;
+    })
+    .finally(() => {
+      listener.pumping = undefined;
+    });
   return listener.pumping;
 }

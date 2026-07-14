@@ -486,15 +486,17 @@ export class EncryptedChatStore {
       const message = await this.prisma.$transaction(async (tx) => {
         const conversation = await lockActiveConversation(tx, actor, reserved.conversationId);
         if (conversation.cacheEpoch !== reserved.cacheEpoch) throw new TurnStateConflict();
-        const turn = await tx.tenantChatTurn.findFirst({
+        const completed = await tx.tenantChatTurn.updateMany({
           where: {
             id: reserved.turnId,
             conversationId: reserved.conversationId,
             tenantId: actor.tenantId,
             userId: actor.userId,
+            state: { in: ['user_persisted', 'streaming'] },
           },
+          data: { state: 'completed', safeErrorCode: null, completedAt: new Date() },
         });
-        if (!turn || !['user_persisted', 'streaming'].includes(turn.state)) throw new TurnStateConflict();
+        if (completed.count !== 1) throw new TurnStateConflict();
         const contentExpiresAt = expiry(conversation.historyRetentionDays);
         const created = await tx.tenantChatMessage.create({
           data: {
@@ -517,10 +519,6 @@ export class EncryptedChatStore {
         await tx.tenantChatConversation.update({
           where: { id: reserved.conversationId },
           data: { nextMessageSequence: { increment: 1 }, expiresAt: contentExpiresAt },
-        });
-        await tx.tenantChatTurn.update({
-          where: { id: reserved.turnId },
-          data: { state: 'completed', safeErrorCode: null, completedAt: new Date() },
         });
         return created;
       });
