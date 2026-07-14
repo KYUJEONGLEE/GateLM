@@ -15,7 +15,6 @@ onnx==1.18.0
 onnxruntime==1.22.1
 packaging==26.2
 protobuf==7.35.1
-psutil==7.0.0
 pyreadline3==3.5.6
 PyYAML==6.0.3
 regex==2026.7.10

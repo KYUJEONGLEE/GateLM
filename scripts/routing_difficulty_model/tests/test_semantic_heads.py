@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from gatelm_difficulty_model.encoder_artifacts import canonical_hash
+from gatelm_difficulty_model.encoder_runtime import canonical_hash
 from gatelm_difficulty_model.semantic_heads import (
     evaluate_semantic_head_probabilities,
     flatten_semantic_head_probabilities,

@@ -179,7 +179,7 @@ Evaluation slice는 stratified 평가와 coverage를 위한 metadata다. 4개 se
 | `approved` | 1 이상 | 최종 human review 승인 |
 | `rejected` | 1 이상 | 계약 위반, 중복 또는 품질 문제로 제외 |
 
-`approved`, `in_review`, `needs_adjudication`, `rejected`는 `labelSource=human_review`만 허용한다. Synthetic fixture는 항상 `pending + reviewerCount=0`이다. Reviewer identity, email 또는 이름은 record에 저장하지 않는다.
+`approved`, `in_review`, `needs_adjudication`, `rejected`는 `labelSource=human_review`만 허용한다. 검토되지 않은 synthetic fixture label은 항상 `pending + reviewerCount=0`이다. Synthetic prompt를 사람이 검토한 파생 training candidate는 `source=synthetic_fixture`, `consentType=synthetic`을 보존하면서 `labelSource=human_review`와 실제 review 상태를 기록할 수 있다. Reviewer identity, email 또는 이름은 record에 저장하지 않는다.
 
 Family가 training-eligible이려면 포함하려는 모든 record가 `human_review + approved`여야 한다. Dataset manifest는 최소한 다음 **독립 family 수**를 계산한다.
 
@@ -192,7 +192,7 @@ Family가 training-eligible이려면 포함하려는 모든 record가 `human_rev
 
 `semanticHeadEligibleFamilies`는 eligible record가 하나 이상 있는 고유 family 수이고, `emptyInstructionFamilies`는 empty-instruction record가 하나 이상 있는 고유 family 수다. 한 family에 두 상태의 variant가 함께 있으면 두 집계에 모두 포함될 수 있으며 family-disjoint split은 그대로 유지한다.
 
-현재 repository에는 승인된 최소 family 수가 없다. 따라서 `minimumFamilyPolicyStatus=decision_required`인 manifest는 `trainingEligible=false`여야 한다. 향후 owner가 전체/cell/language/slice별 minimum을 versioned policy로 승인하기 전에는 record 수가 많아도 training readiness를 선언하지 않는다.
+`minimumFamilyPolicyStatus=decision_required`인 manifest는 항상 `trainingEligible=false`여야 한다. Owner가 전체/cell/language/slice별 minimum을 versioned policy로 승인하고, 모든 포함 family가 human-reviewed·approved이며 family-disjoint partition이 만들어진 candidate만 training readiness를 선언할 수 있다.
 
 ## 10. 500건 pilot
 
@@ -203,6 +203,16 @@ Family가 training-eligible이려면 포함하려는 모든 record가 `human_rev
 - 실제 model coefficient, calibrator, threshold 선택, holdout 성능 주장 또는 runtime promotion 근거로 사용할 수 없다.
 - [`fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json`](fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json)이 `trainingEligible=false`를 machine-readable하게 고정한다.
 - 기존 [`fixtures/difficulty-training-split-manifest.v1.json`](fixtures/difficulty-training-split-manifest.v1.json)의 `train|calibration|holdout`은 smoke tooling 내부 partition일 뿐 production evidence split이 아니다.
+
+### 10.1 Owner-approved 500건 training candidate
+
+2026-07-14 dataset owner 승인을 근거로 smoke 원본을 변경하지 않고 별도 파생 candidate를 생성한다.
+
+- [`training/difficulty-training-candidate-500.owner-approved.jsonl`](training/difficulty-training-candidate-500.owner-approved.jsonl): 500 record 모두 `human_review + approved + reviewerCount=1`
+- [`training/difficulty-training-candidate-500.owner-approved.manifest.json`](training/difficulty-training-candidate-500.owner-approved.manifest.json): 89개 approved family, versioned minimum-family gate와 `difficulty-family-constrained-split.2026-07-15.v1`의 family-disjoint train 300/calibration 100/holdout 100
+- [`reviews/difficulty-training-candidate-500.owner-approval.json`](reviews/difficulty-training-candidate-500.owner-approval.json): 승인 범위, synthetic provenance 보존, dataset·manifest hash와 gate 결과
+
+`difficulty-training-minimum-family-policy.2026-07-14.v1`은 승인된 candidate의 관찰 최소값을 고정한다. 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 family 이상을 요구한다. Split seed는 `20260715`이며 한 prompt family 전체가 반드시 한 split에만 있어야 한다. Train 300건은 encoder PCA와 model fit에, calibration 100건은 calibrator 선택·fit에, untouched holdout 100건은 final gate에만 사용한다. 이 승격은 offline model 학습 input eligibility이며 학습 결과의 성능, threshold 선택, runtime 배포 또는 GA를 자동 승인하지 않는다.
 
 ## 11. 금지 데이터
 

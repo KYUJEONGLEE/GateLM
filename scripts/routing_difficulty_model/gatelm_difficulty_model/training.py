@@ -4,6 +4,7 @@ import hashlib
 import math
 import re
 import struct
+import warnings
 from collections.abc import Mapping, Sequence
 from collections import defaultdict
 from dataclasses import dataclass
@@ -31,6 +32,15 @@ THRESHOLD_POLICY_VERSION = "difficulty-threshold-v1"
 CALIBRATOR_CANDIDATES = ("platt", "isotonic")
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 DATASET_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+class _LogisticConvergenceError(ValueError):
+    def __init__(self, max_iterations: int, observed_iterations: int) -> None:
+        super().__init__(
+            "Logistic Regression failed to converge within the configured iteration limit"
+        )
+        self.max_iterations = int(max_iterations)
+        self.observed_iterations = int(observed_iterations)
 
 
 @dataclass(frozen=True)
@@ -370,6 +380,40 @@ def _group_folds(groups: Any, requested: int) -> Any:
     return GroupKFold(n_splits=requested)
 
 
+def _logistic_iteration_count(model: Any) -> int:
+    raw_iterations = getattr(model, "n_iter_", ())
+    if hasattr(raw_iterations, "tolist"):
+        raw_iterations = raw_iterations.tolist()
+    if isinstance(raw_iterations, (int, float)):
+        return int(raw_iterations)
+    return max((int(value) for value in raw_iterations), default=0)
+
+
+def _fit_with_convergence_gate(model: Any, x: Any, y: Any, max_iterations: int) -> Any:
+    from sklearn.exceptions import ConvergenceWarning
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always", ConvergenceWarning)
+        fitted = model.fit(x, y)
+    convergence_warnings = [
+        item for item in captured if issubclass(item.category, ConvergenceWarning)
+    ]
+    for item in captured:
+        if item not in convergence_warnings:
+            warnings.warn_explicit(
+                str(item.message),
+                item.category,
+                item.filename,
+                item.lineno,
+            )
+    if convergence_warnings:
+        raise _LogisticConvergenceError(
+            max_iterations=max_iterations,
+            observed_iterations=_logistic_iteration_count(fitted),
+        )
+    return fitted
+
+
 def _fit_logistic(x: Any, y: Any, c_value: float, config: dict[str, Any]) -> Any:
     from sklearn.linear_model import LogisticRegression
 
@@ -381,27 +425,55 @@ def _fit_logistic(x: Any, y: Any, c_value: float, config: dict[str, Any]) -> Any
         max_iter=config["maxIterations"],
         random_state=config["randomSeed"],
     )
-    return model.fit(x, y)
+    return _fit_with_convergence_gate(model, x, y, config["maxIterations"])
 
 
-def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) -> tuple[float, list[dict[str, float]]]:
+def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) -> tuple[float, list[dict[str, Any]]]:
     import numpy as np
 
     splitter = _group_folds(groups, config["groupFolds"])
-    evaluations: list[dict[str, float]] = []
+    evaluations: list[dict[str, Any]] = []
     selected_c: float | None = None
     selected_metrics: dict[str, float] | None = None
     selected_tie: tuple[Any, ...] | None = None
     for c_value in config["cCandidates"]:
         fold_metrics = []
-        for fit_indices, validation_indices in splitter.split(x, y, groups):
-            model = _fit_logistic(x[fit_indices], y[fit_indices], float(c_value), config)
+        fold_iterations = []
+        convergence_failure: dict[str, Any] | None = None
+        for fold, (fit_indices, validation_indices) in enumerate(
+            splitter.split(x, y, groups),
+            start=1,
+        ):
+            try:
+                model = _fit_logistic(x[fit_indices], y[fit_indices], float(c_value), config)
+            except _LogisticConvergenceError as error:
+                convergence_failure = {
+                    "c": float(c_value),
+                    "status": "failed",
+                    "failureReason": "failed_to_converge",
+                    "failedFold": fold,
+                    "maxIterations": error.max_iterations,
+                    "observedIterations": error.observed_iterations,
+                    "foldIterations": fold_iterations,
+                }
+                break
+            fold_iterations.append(
+                {
+                    "fold": fold,
+                    "iterations": _logistic_iteration_count(model),
+                }
+            )
             probabilities = model.predict_proba(x[validation_indices])[:, 1]
             fold_metrics.append(_metrics(y[validation_indices], probabilities))
+        if convergence_failure is not None:
+            evaluations.append(convergence_failure)
+            continue
         candidate = {
             "c": float(c_value),
+            "status": "valid",
             "logLoss": float(np.mean([item["logLoss"] for item in fold_metrics])),
             "brierScore": float(np.mean([item["brierScore"] for item in fold_metrics])),
+            "foldIterations": fold_iterations,
         }
         evaluations.append(candidate)
         score = {"logLoss": candidate["logLoss"], "brierScore": candidate["brierScore"]}
@@ -411,7 +483,7 @@ def _select_regularization(x: Any, y: Any, groups: Any, config: dict[str, Any]) 
             selected_metrics = score
             selected_tie = tie
     if selected_c is None:
-        raise ValueError("regularization selection produced no candidate")
+        raise ValueError("all regularization candidates failed to converge")
     return selected_c, evaluations
 
 
@@ -427,11 +499,17 @@ def _fit_calibrator(
     if kind == "platt":
         from sklearn.linear_model import LogisticRegression
 
-        platt = LogisticRegression(
+        platt_model = LogisticRegression(
             solver=config["platt"]["solver"],
             C=config["platt"]["c"],
             max_iter=config["platt"]["maxIterations"],
-        ).fit(raw.reshape(-1, 1), y)
+        )
+        platt = _fit_with_convergence_gate(
+            platt_model,
+            raw.reshape(-1, 1),
+            y,
+            config["platt"]["maxIterations"],
+        )
         material = {
             "type": "platt",
             "input": "raw_probability",
@@ -605,8 +683,17 @@ def _select_calibrator(raw: Any, y: Any, groups: Any, config: dict[str, Any]) ->
                             "minBlockSampleCount": diagnostics["minBlockSampleCount"],
                         }
                     )
-        except (ValueError, ArithmeticError):
-            evaluations.append({"type": kind, "status": "failed"})
+        except (ValueError, ArithmeticError) as error:
+            failure = {"type": kind, "status": "failed"}
+            if isinstance(error, _LogisticConvergenceError):
+                failure.update(
+                    {
+                        "failureReason": "failed_to_converge",
+                        "maxIterations": error.max_iterations,
+                        "observedIterations": error.observed_iterations,
+                    }
+                )
+            evaluations.append(failure)
             continue
         candidate = {
             "type": kind,
@@ -643,10 +730,18 @@ def _fit_selected_calibrator(
     for kind in [selected_kind, *valid_fallbacks]:
         try:
             apply, material, diagnostics = _fit_calibrator(kind, raw, y, config)
-        except (ValueError, ArithmeticError):
+        except (ValueError, ArithmeticError) as error:
             evaluation = next(item for item in evaluations if item["type"] == kind)
             evaluation["status"] = "failed"
             evaluation["failureStage"] = "final_fit"
+            if isinstance(error, _LogisticConvergenceError):
+                evaluation.update(
+                    {
+                        "failureReason": "failed_to_converge",
+                        "maxIterations": error.max_iterations,
+                        "observedIterations": error.observed_iterations,
+                    }
+                )
             continue
         return kind, apply, material, diagnostics
     raise ValueError("all configured calibrator candidates failed final fit")
@@ -831,10 +926,12 @@ def train_from_offline_feature_matrix(
         raise ValueError("offline candidates must reuse the difficulty-logistic-v1 policy")
     if provenance.training_policy_version != policy.get("policyVersion"):
         raise ValueError("offline training policy provenance does not match the fit policy")
+    if provenance.split_policy_version != policy.get("splitPolicyVersion"):
+        raise ValueError("offline split policy provenance does not match the fit policy")
     if provenance.projection_parameters["outputDimension"] != descriptor.projection_dimension:
         raise ValueError("offline projection parameters do not match descriptor P")
-    if provenance.projection_parameters["inputDimension"] != provenance.semantic_head_input_dimension:
-        raise ValueError("offline projection and semantic heads must consume the same encoder dimension")
+    if provenance.projection_parameters["outputDimension"] != provenance.semantic_head_input_dimension:
+        raise ValueError("offline semantic heads must consume the canonical projected dimension")
     fitted, report = _fit_candidate(
         samples,
         policy,
@@ -931,7 +1028,13 @@ def _fit_candidate(
     selected_c, regularization_evaluations = _select_regularization(
         train_x, train_y, train_groups, policy["regularization"]
     )
-    model = _fit_logistic(train_x, train_y, selected_c, policy["regularization"])
+    try:
+        model = _fit_logistic(train_x, train_y, selected_c, policy["regularization"])
+    except _LogisticConvergenceError as error:
+        raise ValueError(
+            "selected regularization candidate failed to converge during final fit"
+        ) from error
+    final_fit_iterations = _logistic_iteration_count(model)
 
     calibration_x, calibration_y, calibration_groups = arrays(model_samples_by_split["calibration"])
     calibration_raw = model.predict_proba(calibration_x)[:, 1]
@@ -1001,6 +1104,8 @@ def _fit_candidate(
         "regularizationSelection": {
             "selectedC": selected_c,
             "candidates": regularization_evaluations,
+            "finalFitIterations": final_fit_iterations,
+            "maxIterations": policy["regularization"]["maxIterations"],
         },
         "calibrationSelection": calibration_selection,
         "holdout": {

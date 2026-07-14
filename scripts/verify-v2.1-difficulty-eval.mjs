@@ -250,9 +250,6 @@ function validateRecord(schema, record, lineNumber, failures, recordPath = fixtu
     if (record.consentType !== "synthetic") {
       failures.push(`${prefix}: synthetic_fixture must use consentType=synthetic`);
     }
-    if (record.labelSource !== "synthetic_fixture") {
-      failures.push(`${prefix}: synthetic_fixture must use labelSource=synthetic_fixture`);
-    }
   }
 }
 
@@ -576,6 +573,21 @@ export function verifyDifficultyLabelRecords(records, options = {}) {
     failures.push("difficulty label records: expected one datasetVersion");
   }
   groupLabelFamilies(records, failures);
+  return failures;
+}
+
+export function verifyDifficultyLabelDatasetManifest(manifest, options = {}) {
+  const rootDir = options.rootDir ?? defaultRootDir;
+  const failures = [];
+  const schema = readJson(rootDir, labelManifestSchemaPath, failures);
+  if (!schema) return failures;
+  validateRecord(
+    schema,
+    manifest,
+    1,
+    failures,
+    options.manifestPath ?? "difficulty label dataset manifest",
+  );
   return failures;
 }
 

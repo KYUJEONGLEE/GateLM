@@ -76,7 +76,9 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 - `labelSource`: `human_review`, `synthetic_fixture`
 - `consentType`: `synthetic`, `internal_manual_review`
 - `source`: `synthetic_fixture`, `manual_seed`
-- `source=synthetic_fixture`이면 `consentType=synthetic`, `labelSource=synthetic_fixture`
+- `source=synthetic_fixture`이면 항상 `consentType=synthetic`을 유지한다.
+- 검토되지 않은 synthetic label은 `labelSource=synthetic_fixture + pending + reviewerCount=0`이다.
+- Synthetic prompt를 사람이 승인한 파생 training candidate는 source를 바꾸지 않고 `labelSource=human_review`와 실제 review 상태를 기록한다.
 
 ## 6. Fixture Provenance
 
@@ -94,7 +96,7 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 실제 training candidate는 record 수가 아니라 `difficulty-prompt-family.v1`의 독립 family를 기준으로 승인한다. 같은 primary intent의 paraphrase, synonym, language variant, negation, payload variant와 simple/complex contrast를 split 사이에 나누지 않는다. Manifest는 전체/승인 family 수뿐 아니라 category, difficulty, category × difficulty, language와 required evaluation slice별 family 수를 보고해야 한다.
 
-현재 전체 및 cell/slice별 최소 approved family 수는 owner가 승인하지 않았다. 따라서 `minimumFamilyPolicyStatus=decision_required`인 모든 manifest는 `trainingEligible=false`여야 한다. 최소 수치를 추측으로 채우지 않으며, versioned minimum-family policy가 승인된 뒤에만 training candidate manifest와 family-disjoint train/calibration/holdout split을 만들 수 있다.
+`minimumFamilyPolicyStatus=decision_required`인 모든 manifest는 `trainingEligible=false`여야 한다. 2026-07-14 owner-approved candidate는 `difficulty-training-minimum-family-policy.2026-07-14.v1`을 사용하며, 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 approved family 이상을 요구한다. [`training/difficulty-training-candidate-500.owner-approved.manifest.json`](training/difficulty-training-candidate-500.owner-approved.manifest.json)이 이 기준과 `difficulty-family-constrained-split.2026-07-15.v1`, seed `20260715`, family-disjoint train 300/calibration 100/holdout 100 partition을 고정한다.
 
 ## 7. Evaluation Report
 
@@ -129,7 +131,7 @@ Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexitySc
 - `calibration`: 단일 전역 calibrator 후보 비교, 선택과 최종 fit
 - `holdout`: 모든 선택이 끝난 뒤 final gate
 
-같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. `difficulty-family-split.v1`에서는 difficulty label을 family key에서 제외해 cross-label contrast 누출도 금지한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
+같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. Owner-approved candidate의 `difficulty-family-constrained-split.2026-07-15.v1`은 difficulty label을 family key에서 제외하고 train 300/calibration 100/holdout 100을 exact count로 배정해 cross-label contrast 누출도 금지한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
 
 Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용하며 log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 Platt를 고른다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
 

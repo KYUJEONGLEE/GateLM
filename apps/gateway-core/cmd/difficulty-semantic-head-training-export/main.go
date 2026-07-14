@@ -41,16 +41,24 @@ type semanticHeadDatasetRecord struct {
 }
 
 type semanticHeadDatasetManifest struct {
-	SchemaVersion       string                       `json:"schemaVersion"`
-	DatasetVersion      string                       `json:"datasetVersion"`
-	RecordSchemaVersion string                       `json:"recordSchemaVersion"`
-	DatasetSHA256       string                       `json:"datasetSha256"`
-	DatasetPurpose      string                       `json:"datasetPurpose"`
-	TrainingEligible    bool                         `json:"trainingEligible"`
-	LabelCoverageStatus string                       `json:"labelCoverageStatus"`
-	FamilyPolicyVersion string                       `json:"familyPolicyVersion"`
-	TrainingGate        semanticHeadTrainingGate     `json:"trainingGate"`
-	Families            []semanticHeadManifestFamily `json:"families"`
+	SchemaVersion       string                        `json:"schemaVersion"`
+	DatasetVersion      string                        `json:"datasetVersion"`
+	RecordSchemaVersion string                        `json:"recordSchemaVersion"`
+	DatasetSHA256       string                        `json:"datasetSha256"`
+	DatasetPurpose      string                        `json:"datasetPurpose"`
+	TrainingEligible    bool                          `json:"trainingEligible"`
+	LabelCoverageStatus string                        `json:"labelCoverageStatus"`
+	FamilyPolicyVersion string                        `json:"familyPolicyVersion"`
+	SplitPolicyVersion  string                        `json:"splitPolicyVersion"`
+	SplitSeed           int                           `json:"splitSeed"`
+	SplitCounts         map[string]semanticSplitCount `json:"splitCounts"`
+	TrainingGate        semanticHeadTrainingGate      `json:"trainingGate"`
+	Families            []semanticHeadManifestFamily  `json:"families"`
+}
+
+type semanticSplitCount struct {
+	Families int `json:"families"`
+	Records  int `json:"records"`
 }
 
 type semanticHeadTrainingGate struct {
@@ -75,26 +83,39 @@ type semanticHeadTrainingInput struct {
 	SchemaVersion                 string                            `json:"schemaVersion"`
 	DatasetVersion                string                            `json:"datasetVersion"`
 	DatasetSHA256                 string                            `json:"datasetSha256"`
+	ManifestSHA256                string                            `json:"manifestSha256"`
 	FamilyPolicyVersion           string                            `json:"familyPolicyVersion"`
 	FamilyPolicy                  string                            `json:"familyPolicy"`
+	SplitPolicyVersion            string                            `json:"splitPolicyVersion"`
+	SplitSeed                     int                               `json:"splitSeed"`
+	SplitCounts                   map[string]semanticSplitCount     `json:"splitCounts"`
+	FeatureVersion                string                            `json:"featureVersion"`
+	FeatureNames                  []string                          `json:"featureNames"`
+	CategorySource                string                            `json:"categorySource"`
 	SemanticHeads                 []semanticHeadSpec                `json:"semanticHeads"`
 	ExcludedEmptyInstructionCount int                               `json:"excludedEmptyInstructionCount"`
 	Samples                       []semanticHeadTrainingInputSample `json:"samples"`
 }
 
 type semanticHeadTrainingInputSample struct {
-	SampleID           string   `json:"sampleId"`
-	FamilyID           string   `json:"familyId"`
-	Split              string   `json:"split"`
-	ExpectedCategory   string   `json:"expectedCategory"`
-	ExpectedDifficulty string   `json:"expectedDifficulty"`
-	Language           string   `json:"language"`
-	EvaluationSlices   []string `json:"evaluationSlices"`
-	InstructionText    string   `json:"instructionText"`
-	TaskBucket         string   `json:"taskBucket"`
-	ConstraintBucket   string   `json:"constraintBucket"`
-	ScopeBucket        string   `json:"scopeBucket"`
-	DependencyBucket   string   `json:"dependencyBucket"`
+	SampleID           string    `json:"sampleId"`
+	FamilyID           string    `json:"familyId"`
+	Split              string    `json:"split"`
+	Label              int       `json:"label"`
+	ExpectedCategory   string    `json:"expectedCategory"`
+	ActualCategory     string    `json:"actualCategory"`
+	VectorCategory     string    `json:"vectorCategory"`
+	ExpectedDifficulty string    `json:"expectedDifficulty"`
+	RuleDifficulty     string    `json:"ruleDifficulty"`
+	ModelPath          bool      `json:"modelPath"`
+	RuleVectorV1       []float64 `json:"ruleVectorV1"`
+	Language           string    `json:"language"`
+	EvaluationSlices   []string  `json:"evaluationSlices"`
+	InstructionText    string    `json:"instructionText"`
+	TaskBucket         string    `json:"taskBucket"`
+	ConstraintBucket   string    `json:"constraintBucket"`
+	ScopeBucket        string    `json:"scopeBucket"`
+	DependencyBucket   string    `json:"dependencyBucket"`
 }
 
 var fixedSemanticHeadSpecs = []semanticHeadSpec{
@@ -143,6 +164,8 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 	if manifest.DatasetSHA256 != datasetSHA256 {
 		return semanticHeadTrainingInput{}, errors.New("semantic head dataset hash does not match manifest")
 	}
+	manifestHash := sha256.Sum256(manifestBytes)
+	manifestSHA256 := hex.EncodeToString(manifestHash[:])
 
 	partitions := make(map[string]string, len(manifest.Families))
 	expectedRecords := make(map[string]int, len(manifest.Families))
@@ -164,13 +187,22 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		SchemaVersion:       "gatelm.difficulty-semantic-head-training-input.v1",
 		DatasetVersion:      manifest.DatasetVersion,
 		DatasetSHA256:       datasetSHA256,
+		ManifestSHA256:      manifestSHA256,
 		FamilyPolicyVersion: manifest.FamilyPolicyVersion,
 		FamilyPolicy:        manifest.TrainingGate.PolicyVersion,
+		SplitPolicyVersion:  manifest.SplitPolicyVersion,
+		SplitSeed:           manifest.SplitSeed,
+		SplitCounts:         manifest.SplitCounts,
+		FeatureVersion:      routing.DifficultyFeatureVectorVersionV1,
+		FeatureNames:        routing.DifficultyFeatureNamesV1(),
+		CategorySource:      "actual",
 		SemanticHeads:       fixedSemanticHeadSpecs,
 		Samples:             make([]semanticHeadTrainingInputSample, 0),
 	}
 	actualRecords := make(map[string]int, len(manifest.Families))
 	eligibleByPartition := map[string]int{"train": 0, "calibration": 0, "holdout": 0}
+	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
+	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
 	scanner := bufio.NewScanner(bytes.NewReader(datasetBytes))
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for lineNumber := 1; scanner.Scan(); lineNumber++ {
@@ -219,12 +251,26 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		if !available {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has no semantic instruction input", lineNumber)
 		}
+		actualCategory := categoryClassifier.ClassifyFeatures(features).Category
+		difficultyFeatures := routing.ExtractDifficultyFeatures(features, actualCategory)
+		label := 0
+		if record.ExpectedDifficulty == routing.DifficultyComplex {
+			label = 1
+		} else if record.ExpectedDifficulty != routing.DifficultySimple {
+			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has an unsupported difficulty label", lineNumber)
+		}
 		result.Samples = append(result.Samples, semanticHeadTrainingInputSample{
 			SampleID:           record.SampleID,
 			FamilyID:           record.PromptFamily,
 			Split:              partition,
+			Label:              label,
 			ExpectedCategory:   record.ExpectedCategory,
+			ActualCategory:     actualCategory,
+			VectorCategory:     actualCategory,
 			ExpectedDifficulty: record.ExpectedDifficulty,
+			RuleDifficulty:     difficultyClassifier.ClassifyFeatures(difficultyFeatures).Difficulty,
+			ModelPath:          routing.UsesDifficultyModelPath(difficultyFeatures),
+			RuleVectorV1:       routing.VectorizeDifficultyFeaturesV1(difficultyFeatures),
 			Language:           record.Language,
 			EvaluationSlices:   append([]string(nil), record.EvaluationSlices...),
 			InstructionText:    instructionText,
@@ -247,6 +293,19 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		if eligibleByPartition[partition] == 0 {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head dataset has no eligible %s samples", partition)
 		}
+		declared := manifest.SplitCounts[partition]
+		if eligibleByPartition[partition] != declared.Records {
+			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head %s record count does not match manifest", partition)
+		}
+		familyCount := 0
+		for _, family := range manifest.Families {
+			if family.Partition == partition {
+				familyCount++
+			}
+		}
+		if familyCount != declared.Families {
+			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head %s family count does not match manifest", partition)
+		}
 	}
 	return result, nil
 }
@@ -266,6 +325,18 @@ func validateSemanticHeadManifest(manifest semanticHeadDatasetManifest) error {
 		manifest.TrainingGate.MinimumFamilyPolicyStatus != "versioned" ||
 		strings.TrimSpace(manifest.TrainingGate.PolicyVersion) == "" {
 		return errors.New("semantic head training requires a versioned family coverage policy")
+	}
+	if strings.TrimSpace(manifest.SplitPolicyVersion) == "" || manifest.SplitSeed <= 0 {
+		return errors.New("semantic head training requires a versioned deterministic split policy")
+	}
+	if len(manifest.SplitCounts) != 3 {
+		return errors.New("semantic head training requires train, calibration, and holdout split counts")
+	}
+	for _, partition := range []string{"train", "calibration", "holdout"} {
+		count, ok := manifest.SplitCounts[partition]
+		if !ok || count.Families <= 0 || count.Records <= 0 {
+			return errors.New("semantic head training manifest contains invalid split counts")
+		}
 	}
 	if manifest.DatasetVersion == "" || len(manifest.Families) == 0 {
 		return errors.New("semantic head manifest is missing dataset or family material")

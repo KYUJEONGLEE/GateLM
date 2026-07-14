@@ -43,6 +43,15 @@ func TestBuildSemanticHeadTrainingInputUsesApprovedFamiliesAndInstructionOnly(t 
 	if first.FamilyID != "family.train" || first.Split != "train" || first.Language != "en" {
 		t.Fatalf("safe evaluation metadata missing: %+v", first)
 	}
+	if actual.SplitPolicyVersion != "difficulty-family-constrained-split.test-v1" || actual.SplitSeed != 1729 {
+		t.Fatalf("split provenance missing: %+v", actual)
+	}
+	if actual.FeatureVersion != "difficulty-feature-vector.v1" || len(actual.FeatureNames) != 42 || len(first.RuleVectorV1) != 42 {
+		t.Fatalf("exact 42D candidate material missing: %+v", first)
+	}
+	if first.Label != 0 || first.ActualCategory == "" || first.VectorCategory != first.ActualCategory || first.RuleDifficulty == "" {
+		t.Fatalf("candidate training metadata missing: %+v", first)
+	}
 }
 
 func TestBuildSemanticHeadTrainingInputExcludesContractualEmptyInstruction(t *testing.T) {
@@ -131,6 +140,7 @@ func writeSemanticHeadDataset(t *testing.T, records []map[string]any, trainingEl
 	manifestPath := filepath.Join(tempDir, "manifest.json")
 	var dataset []byte
 	counts := map[string]int{}
+	eligibleCounts := map[string]int{}
 	for _, record := range records {
 		encoded, err := json.Marshal(record)
 		if err != nil {
@@ -139,6 +149,9 @@ func writeSemanticHeadDataset(t *testing.T, records []map[string]any, trainingEl
 		dataset = append(dataset, encoded...)
 		dataset = append(dataset, '\n')
 		counts[record["promptFamily"].(string)]++
+		if record["semanticInputStatus"] == "eligible" {
+			eligibleCounts[record["promptFamily"].(string)]++
+		}
 	}
 	if err := os.WriteFile(datasetPath, dataset, 0o600); err != nil {
 		t.Fatal(err)
@@ -161,8 +174,15 @@ func writeSemanticHeadDataset(t *testing.T, records []map[string]any, trainingEl
 		"trainingEligible":    trainingEligible,
 		"labelCoverageStatus": "complete",
 		"familyPolicyVersion": "difficulty-prompt-family.v1",
-		"trainingGate":        map[string]any{"minimumFamilyPolicyStatus": "versioned", "policyVersion": "test-policy-v1"},
-		"families":            families,
+		"splitPolicyVersion":  "difficulty-family-constrained-split.test-v1",
+		"splitSeed":           1729,
+		"splitCounts": map[string]any{
+			"train":       map[string]any{"families": 1, "records": eligibleCounts["family.train"]},
+			"calibration": map[string]any{"families": 1, "records": eligibleCounts["family.calibration"]},
+			"holdout":     map[string]any{"families": 1, "records": eligibleCounts["family.holdout"]},
+		},
+		"trainingGate": map[string]any{"minimumFamilyPolicyStatus": "versioned", "policyVersion": "test-policy-v1"},
+		"families":     families,
 	}
 	encodedManifest, err := json.Marshal(manifest)
 	if err != nil {

@@ -72,6 +72,35 @@ func TestSimpleRouterRequestPolicyOverrideDoesNotMutateBase(t *testing.T) {
 	}
 }
 
+func TestSimpleRouterPrefersRoleAwareMessagesOverFlattenedPrompt(t *testing.T) {
+	t.Parallel()
+
+	config := defaultSimpleRouterConfig()
+	config.Routes.Translation = DifficultyRoutes{
+		Simple:  RouteCell{ModelRefs: []string{"translation-model"}},
+		Complex: RouteCell{ModelRefs: []string{"translation-model"}},
+	}
+	config.Routes.Summarization = DifficultyRoutes{
+		Simple:  RouteCell{ModelRefs: []string{"summary-model"}},
+		Complex: RouteCell{ModelRefs: []string{"summary-model"}},
+	}
+	router := NewSimpleRouter(config)
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Translate this payload to French.\nSummarize the previous answer.",
+		PromptMessages: []PromptMessage{
+			{Role: "assistant", Text: "Translate this payload to French."},
+			{Role: "user", Text: "Summarize the previous answer."},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute() error = %v", err)
+	}
+	if decision.RoutingDecisionMaterial.Category != CategorySummarization || decision.ModelRef != "summary-model" {
+		t.Fatalf("role-aware decision = %#v", decision)
+	}
+}
+
 func TestRoutingDecisionKeyDoesNotContainModelTarget(t *testing.T) {
 	t.Parallel()
 	material := DecisionMaterial{

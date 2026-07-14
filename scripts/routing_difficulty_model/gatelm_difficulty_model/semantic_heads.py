@@ -11,7 +11,7 @@ from copy import deepcopy
 from math import isfinite
 from typing import Any
 
-from .encoder_artifacts import canonical_hash
+from .encoder_runtime import canonical_hash
 from .semantic_features import (
     PROBABILITY_SUM_TOLERANCE,
     SEMANTIC_HEAD_PROBABILITY_DIMENSION_V1,

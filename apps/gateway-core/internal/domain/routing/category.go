@@ -115,6 +115,13 @@ func (classifier RuleBasedPromptClassifier) Classify(prompt string) PromptClassi
 	return classifier.ClassifyFeatures(features)
 }
 
+// ClassifyMessages is the canonical chat entrypoint when upstream message
+// roles are available. It keeps role boundaries out of the raw prompt text.
+func (classifier RuleBasedPromptClassifier) ClassifyMessages(messages []PromptMessage) PromptClassificationResult {
+	features := ExtractPromptFeaturesFromMessages(messages)
+	return classifier.ClassifyFeatures(features)
+}
+
 func (classifier RuleBasedPromptClassifier) ClassifyFeatures(features PromptFeatures) PromptClassificationResult {
 	categoryResult := classifier.categoryClassifier.ClassifyFeatures(features)
 	difficultyFeatures := ExtractDifficultyFeatures(features, categoryResult.Category)
@@ -230,7 +237,7 @@ func (d CategoryDiagnostics) HasData() bool {
 func categoryScores(features PromptFeatures) []CategoryScore {
 	text := features.instructionText
 	tokens := features.instructionTokens
-	if text == "" && !features.hasCodeFence {
+	if text == "" && !features.hasCodeFence && !features.roleStructured {
 		text = features.normalizedText
 		tokens = features.tokens
 	}
@@ -273,7 +280,7 @@ func extractCategoryFeatures(features PromptFeatures) CategoryFeatures {
 
 func extractCategoryIntentFeatures(features PromptFeatures, category string) CategoryIntentFeatures {
 	text := features.instructionText
-	if text == "" {
+	if text == "" && !features.roleStructured {
 		text = features.normalizedText
 	}
 	actionScore := minInt(countDistinctPhrases(text, categoryActionPhrases(category))*2, 6)

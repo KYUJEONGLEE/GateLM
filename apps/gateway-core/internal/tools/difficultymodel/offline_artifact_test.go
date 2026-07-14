@@ -91,7 +91,7 @@ func TestValidateOfflineArtifactRejectsShapeAndNumericDrift(t *testing.T) {
 		"split hash":      func(artifact *OfflineArtifact) { artifact.SplitManifestSHA256 = "not-a-hash" },
 		"bundle hash":     func(artifact *OfflineArtifact) { artifact.BundleHash = "sha256:" + strings.Repeat("9", 64) },
 		"head parameter": func(artifact *OfflineArtifact) {
-			artifact.SemanticHeadParameters[0].Coefficient[0] = artifact.SemanticHeadParameters[0].Coefficient[0][:3]
+			artifact.SemanticHeadParameters[0].Coefficient[0] = artifact.SemanticHeadParameters[0].Coefficient[0][:2]
 		},
 		"threshold equality": func(artifact *OfflineArtifact) { artifact.ThresholdEquality = "greater_than" },
 	}
@@ -229,8 +229,8 @@ func validOfflineArtifact(t *testing.T, candidate string, projectionDimension in
 		ProjectionParameters:        validOfflineProjectionParameters(projectionDimension),
 		SemanticHeadsVersion:        "difficulty-semantic-heads.synthetic-test-v1",
 		SemanticHeadClassOrder:      cloneOfflineHeadOrder(canonicalOfflineSemanticHeadClassOrder),
-		SemanticHeadInputDimension:  4,
-		SemanticHeadParameters:      validOfflineSemanticHeadParameters(4),
+		SemanticHeadInputDimension:  projectionDimension,
+		SemanticHeadParameters:      validOfflineSemanticHeadParameters(projectionDimension),
 		SemanticHeadProbabilityRule: OfflineHeadProbabilityRule,
 		TotalDimension:              len(names),
 		FeatureNames:                names,

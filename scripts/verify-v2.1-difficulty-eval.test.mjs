@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   verifyDifficultyEvaluationDataset,
   verifyDifficultyLabelContract,
+  verifyDifficultyLabelRecords,
   verifyDifficultyTrainingPilot,
 } from "./verify-v2.1-difficulty-eval.mjs";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
@@ -85,7 +86,7 @@ test("difficulty records reject secret-shaped text even in redactedPrompt", () =
   );
 });
 
-test("synthetic difficulty fixtures require synthetic provenance labels", () => {
+test("synthetic difficulty sources require synthetic consent", () => {
   withDataset(
     difficultySchema(),
     [
@@ -100,10 +101,6 @@ test("synthetic difficulty fixtures require synthetic provenance labels", () => 
       assert.ok(
         failures.some((failure) => failure.includes("synthetic_fixture must use consentType=synthetic")),
         `invalid consent provenance was accepted: ${JSON.stringify(failures)}`,
-      );
-      assert.ok(
-        failures.some((failure) => failure.includes("synthetic_fixture must use labelSource=synthetic_fixture")),
-        `invalid label provenance was accepted: ${JSON.stringify(failures)}`,
       );
     },
   );
@@ -245,7 +242,7 @@ test("difficulty labels fail closed for empty semantic input", () => {
   );
 });
 
-test("difficulty labels reject invalid reviewer state and synthetic approval", () => {
+test("synthetic_fixture labels cannot claim human approval", () => {
   withLabelContract(
     ({ records }) => {
       records[0].reviewStatus = "approved";
@@ -259,6 +256,34 @@ test("difficulty labels reject invalid reviewer state and synthetic approval", (
       );
     },
   );
+});
+
+test("human-reviewed labels can approve records whose prompt source remains synthetic", () => {
+  const schema = JSON.parse(readFileSync(labelSchemaRelativePath, "utf8"));
+  const syntheticSourceRule = schema.allOf.find(
+    (rule) => rule.if?.properties?.source?.const === "synthetic_fixture",
+  );
+  assert.deepEqual(syntheticSourceRule?.then?.properties?.consentType, { const: "synthetic" });
+  assert.equal(
+    syntheticSourceRule?.then?.properties?.labelSource,
+    undefined,
+    "synthetic source provenance must not force labelSource=synthetic_fixture after human review",
+  );
+
+  const record = JSON.parse(
+    readFileSync(labelFixtureRelativePath, "utf8").split(/\r?\n/u).find((line) => line.trim() !== ""),
+  );
+  const approved = {
+    ...record,
+    datasetVersion: "difficulty_owner_approved_candidate_test_v1",
+    labelSource: "human_review",
+    consentType: "synthetic",
+    source: "synthetic_fixture",
+    reviewStatus: "approved",
+    reviewerCount: 1,
+    reviewerNote: "Dataset-owner approval recorded; source remains synthetic.",
+  };
+  assert.deepEqual(verifyDifficultyLabelRecords([approved]), []);
 });
 
 test("difficulty labels reject undeclared metadata and unsafe prompt-family ids", () => {

@@ -39,10 +39,15 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `fixtures/difficulty-label-contract-smoke.*` | 필수 label/slice를 검증하는 5개 family의 synthetic contract smoke와 manifest |
 | `fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl` | Human-review-pending synthetic training-tooling smoke; 학습 evidence가 아님 |
 | `fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json` | 500건 pilot의 `trainingEligible=false` sidecar |
+| `training/difficulty-training-candidate-500.owner-approved.jsonl` | Dataset owner가 승인한 500건 canonical v2 offline training candidate |
+| `training/difficulty-training-candidate-500.owner-approved.manifest.json` | 89개 approved family, versioned minimum-family gate와 family-disjoint partition을 고정하는 `trainingEligible=true` manifest |
+| `reviews/difficulty-training-candidate-500.owner-approval.json` | 승인 범위, synthetic source 보존, hash와 promotion gate evidence |
+| `../routing/difficulty-e5-encoder.md` | Pinned E5 QInt8, masked mean, train-only PCA 384→64와 local cache/Docker packaging을 고정하는 canonical offline component contract |
+| `../../scripts/routing_difficulty_model/artifacts/difficulty-e5-*` | Committed PCA NPZ와 immutable encoder/PCA manifest; large tokenizer/ONNX artifact는 제외 |
 | `schemas/difficulty-training-split-manifest.schema.json` | 500건 smoke tooling의 family-disjoint partition manifest schema |
 | `fixtures/difficulty-training-split-manifest.v1.json` | 500건 smoke tooling 내부 partition; production evidence split이 아님 |
 | `schemas/difficulty-model-artifact.schema.json` | Offline Logistic Regression·calibrator candidate artifact schema |
-| `schemas/difficulty-offline-model-artifact.schema.json` | Proposed semantic candidate `42 / 42+P / 54+P`의 component parameter, classifier/calibrator와 dataset/split/training provenance를 고정하는 별도 offline/shadow artifact schema; v1 parser와 runtime은 수용하지 않음 |
+| `schemas/difficulty-offline-model-artifact.schema.json` | Canonical P=64 semantic candidate `42 / 106 / 118`의 component parameter, classifier/calibrator와 dataset/split/training provenance를 고정하는 별도 offline/shadow artifact schema; v1 parser와 runtime은 수용하지 않음 |
 | `routing-advanced-plan.md` | Evaluation-based routing plan |
 | `routing-performance-test-scenario.md` | Performance evidence scenario |
 | `routing-random-probe.md` | Unlabeled synthetic distribution probe |
@@ -51,7 +56,7 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 
 일반 Gateway hot path의 현재 category × difficulty 라우팅 계약은 [`../routing/README.md`](../routing/README.md)를 따른다. Offline category와 difficulty record는 서로 다른 schema/fixture/verifier를 사용한다. category evaluation v1 schema가 남아 있더라도 non-active historical snapshot이며 verifier/evaluator 입력으로 허용하지 않는다.
 
-`difficulty-label-record.v2`는 두 evaluator schema를 합친 record가 아니라 difficulty용 human annotation source다. 네 bucket은 `semanticTaskBucket`, `semanticConstraintBucket`, `semanticScopeBucket`, `semanticDependencyBucket`의 고정 12-class output order와 일치한다. Empty instruction의 `not_applicable`은 head class가 아니며 initial offline candidate에서 fail closed한다. Category-only evaluator에는 계속 category projection만 전달한다. 현재 500건 pilot과 기존 train/calibration/holdout 이름은 tooling smoke에만 사용하며, 독립적인 approved human-reviewed family minimum이 versioned policy로 결정되기 전에는 어떤 dataset도 training-ready로 선언하지 않는다.
+`difficulty-label-record.v2`는 두 evaluator schema를 합친 record가 아니라 difficulty용 human annotation source다. 네 bucket은 `semanticTaskBucket`, `semanticConstraintBucket`, `semanticScopeBucket`, `semanticDependencyBucket`의 고정 12-class output order와 일치한다. Empty instruction의 `not_applicable`은 head class가 아니며 initial offline candidate에서 fail closed한다. Category-only evaluator에는 계속 category projection만 전달한다. 원본 500건 pilot과 기존 train/calibration/holdout 이름은 tooling smoke에만 사용한다. 별도 owner-approved 파생 candidate만 `difficulty-training-minimum-family-policy.2026-07-14.v1`과 canonical manifest를 충족해 offline training input으로 사용할 수 있다. 이 candidate는 `difficulty-family-constrained-split.2026-07-15.v1`, seed `20260715`로 family-disjoint train 300/calibration 100/holdout 100을 고정한다. 이는 downstream model 성능이나 runtime promotion을 자동 승인하지 않는다.
 
 ## Inherited Compatibility
 

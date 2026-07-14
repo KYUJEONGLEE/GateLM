@@ -10,6 +10,7 @@ import (
 type Request struct {
 	RequestedModel string
 	PromptText     string
+	PromptMessages []PromptMessage
 	Config         *SimpleRouterConfig
 }
 

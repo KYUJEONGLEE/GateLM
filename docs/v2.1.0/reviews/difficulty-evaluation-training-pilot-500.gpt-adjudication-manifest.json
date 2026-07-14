@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "gatelm.difficulty-gpt-adjudication-import-manifest.v1",
+  "status": "gpt_adjudication_and_slice_coverage_applied_human_approval_pending",
+  "sourceAdjudication": {
+    "records": 120,
+    "sha256": "a152f7910a1c53259b979d4c0be057feea7e743df31fa0ea59bdf661e2c2322d"
+  },
+  "proposedDatasetVersion": "difficulty_eval_2026_07_13_pilot_500_ai_review_v1",
+  "adjudicatedDatasetVersion": "difficulty_eval_2026_07_13_pilot_500_gpt_adjudicated_coverage_v1",
+  "trainingEligible": false,
+  "humanReviewClaimed": false,
+  "counts": {
+    "adjudications": 120,
+    "decisions": {
+      "accept": 26,
+      "correct": 94
+    },
+    "promptActions": {
+      "accept_proposed_rewrite": 3,
+      "keep_source": 76,
+      "replace": 41
+    },
+    "boundaryTypeNormalizations": 56,
+    "boundaryConfidenceNormalizations": 7,
+    "mergedRecords": 500,
+    "mergedFamilies": 89,
+    "removedRedundantRecords": 12,
+    "addedCoverageRecords": 12,
+    "humanReviewedRecords": 0,
+    "approvedRecords": 0
+  },
+  "changesFromAiProposal": {
+    "category": 0,
+    "difficulty": 0,
+    "semanticLabel": 16,
+    "buckets": 2,
+    "family": 10,
+    "boundary": 56,
+    "slices": 3,
+    "prompt": 41
+  },
+  "coverageReplacements": {
+    "policy": "replace_non_adjudicated_variants_while_preserving_category_difficulty_language_cells",
+    "records": [
+      {
+        "removedSampleId": "difficulty_summarization_simple_core_clear_f01_v01",
+        "addedSampleId": "difficulty_summarization_simple_slice_indirect_expression_f01_v01",
+        "addedSlice": "indirect_expression",
+        "expectedCategory": "summarization",
+        "expectedDifficulty": "simple",
+        "language": "ko",
+        "promptFamily": "pilot.summarization.simple.slice.indirect_expression.f01"
+      },
+      {
+        "removedSampleId": "difficulty_summarization_simple_core_clear_f01_v07",
+        "addedSampleId": "difficulty_summarization_simple_slice_indirect_expression_f01_v02",
+        "addedSlice": "indirect_expression",
+        "expectedCategory": "summarization",
+        "expectedDifficulty": "simple",
+        "language": "en",
+        "promptFamily": "pilot.summarization.simple.slice.indirect_expression.f01"
+      },
+      {
+        "removedSampleId": "difficulty_summarization_simple_core_clear_f01_v10",
+        "addedSampleId": "difficulty_summarization_simple_slice_indirect_expression_f01_v03",
+        "addedSlice": "indirect_expression",
+        "expectedCategory": "summarization",
+        "expectedDifficulty": "simple",
+        "language": "mixed",
+        "promptFamily": "pilot.summarization.simple.slice.indirect_expression.f01"
+      },
+      {
+        "removedSampleId": "difficulty_code_simple_core_clear_f01_v01",
+        "addedSampleId": "difficulty_code_simple_slice_synonym_f01_v01",
+        "addedSlice": "synonym",
+        "expectedCategory": "code",
+        "expectedDifficulty": "simple",
+        "language": "ko",
+        "promptFamily": "pilot.code.simple.slice.synonym.f01"
+      },
+      {
+        "removedSampleId": "difficulty_code_simple_core_clear_f01_v07",
+        "addedSampleId": "difficulty_code_simple_slice_synonym_f01_v02",
+        "addedSlice": "synonym",
+        "expectedCategory": "code",
+        "expectedDifficulty": "simple",
+        "language": "en",
+        "promptFamily": "pilot.code.simple.slice.synonym.f01"
+      },
+      {
+        "removedSampleId": "difficulty_code_simple_core_clear_f01_v10",
+        "addedSampleId": "difficulty_code_simple_slice_synonym_f01_v03",
+        "addedSlice": "synonym",
+        "expectedCategory": "code",
+        "expectedDifficulty": "simple",
+        "language": "mixed",
+        "promptFamily": "pilot.code.simple.slice.synonym.f01"
+      },
+      {
+        "removedSampleId": "difficulty_translation_simple_core_clear_f01_v01",
+        "addedSampleId": "difficulty_translation_simple_slice_payload_contamination_f01_v01",
+        "addedSlice": "payload_contamination",
+        "expectedCategory": "translation",
+        "expectedDifficulty": "simple",
+        "language": "ko",
+        "promptFamily": "pilot.translation.simple.slice.payload_contamination.f01"
+      },
+      {
+        "removedSampleId": "difficulty_translation_simple_core_clear_f01_v07",
+        "addedSampleId": "difficulty_translation_simple_slice_payload_contamination_f01_v02",
+        "addedSlice": "payload_contamination",
+        "expectedCategory": "translation",
+        "expectedDifficulty": "simple",
+        "language": "en",
+        "promptFamily": "pilot.translation.simple.slice.payload_contamination.f01"
+      },
+      {
+        "removedSampleId": "difficulty_translation_simple_core_clear_f01_v10",
+        "addedSampleId": "difficulty_translation_simple_slice_payload_contamination_f01_v03",
+        "addedSlice": "payload_contamination",
+        "expectedCategory": "translation",
+        "expectedDifficulty": "simple",
+        "language": "mixed",
+        "promptFamily": "pilot.translation.simple.slice.payload_contamination.f01"
+      },
+      {
+        "removedSampleId": "difficulty_reasoning_complex_core_clear_f01_v01",
+        "addedSampleId": "difficulty_reasoning_complex_slice_ood_terminology_f01_v01",
+        "addedSlice": "ood_terminology",
+        "expectedCategory": "reasoning",
+        "expectedDifficulty": "complex",
+        "language": "ko",
+        "promptFamily": "pilot.reasoning.complex.slice.ood_terminology.f01"
+      },
+      {
+        "removedSampleId": "difficulty_reasoning_complex_core_clear_f01_v07",
+        "addedSampleId": "difficulty_reasoning_complex_slice_ood_terminology_f01_v02",
+        "addedSlice": "ood_terminology",
+        "expectedCategory": "reasoning",
+        "expectedDifficulty": "complex",
+        "language": "en",
+        "promptFamily": "pilot.reasoning.complex.slice.ood_terminology.f01"
+      },
+      {
+        "removedSampleId": "difficulty_reasoning_complex_core_clear_f01_v10",
+        "addedSampleId": "difficulty_reasoning_complex_slice_ood_terminology_f01_v03",
+        "addedSlice": "ood_terminology",
+        "expectedCategory": "reasoning",
+        "expectedDifficulty": "complex",
+        "language": "mixed",
+        "promptFamily": "pilot.reasoning.complex.slice.ood_terminology.f01"
+      }
+    ]
+  },
+  "coverage": {
+    "requiredSliceRecordCounts": {
+      "negation": 97,
+      "indirect_expression": 3,
+      "synonym": 3,
+      "short_complex": 170,
+      "long_simple": 14,
+      "payload_contamination": 3,
+      "korean": 300,
+      "english": 150,
+      "mixed_language": 50,
+      "category_confusion": 23,
+      "ood_terminology": 3
+    },
+    "missingRequiredSlices": []
+  },
+  "datasetReadinessBlockers": [
+    "final_human_approval_pending",
+    "minimum_family_policy_decision_required"
+  ],
+  "artifacts": {
+    "rawAdjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudication.raw.jsonl",
+      "sha256": "a152f7910a1c53259b979d4c0be057feea7e743df31fa0ea59bdf661e2c2322d"
+    },
+    "normalizedAdjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudication.normalized.jsonl",
+      "sha256": "eefc780a40f439dc35fe5be616aba092da06f1315e7f754f2efdba9dec30b3e4"
+    },
+    "mergedLabels": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudicated-labels.jsonl",
+      "sha256": "e12bf0fcb0aa9918ce3121f5ccee9856572135e87c813ff9fb9d1003ff10f4b4"
+    }
+  },
+  "createdAt": "2026-07-14T00:00:00Z"
+}

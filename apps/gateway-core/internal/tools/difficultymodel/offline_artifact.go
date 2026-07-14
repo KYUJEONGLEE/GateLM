@@ -292,7 +292,7 @@ func immutableOfflineVersion(value string) bool {
 func validateOfflineProjectionParameters(artifact OfflineArtifact) error {
 	parameters := artifact.ProjectionParameters
 	if parameters.InputDimension <= 0 || parameters.OutputDimension != artifact.ProjectionDimension ||
-		parameters.InputDimension != artifact.SemanticHeadInputDimension {
+		parameters.OutputDimension != artifact.SemanticHeadInputDimension {
 		return errors.New("offline model artifact projection parameter dimensions are invalid")
 	}
 	if parameters.DType != "float32_le" || parameters.FitSplit != "train" || parameters.Whiten ||

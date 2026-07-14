@@ -29,6 +29,7 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	routeReq := routing.Request{
 		RequestedModel: gatewayCtx.Request.RequestedModel,
 		PromptText:     gatewayCtx.Request.PromptText,
+		PromptMessages: append([]routing.PromptMessage(nil), gatewayCtx.Request.PromptMessages...),
 	}
 	if gatewayCtx.Runtime.HasRoutingPolicy {
 		config := gatewayCtx.Runtime.RoutingPolicy.SimpleRouterConfig()

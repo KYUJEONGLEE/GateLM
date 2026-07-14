@@ -34,6 +34,7 @@ type RequestContext struct {
 	StartedAt      time.Time
 	RequestedModel string
 	PromptText     string
+	PromptMessages []routing.PromptMessage
 }
 
 type IdentityContext struct {

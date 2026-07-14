@@ -494,6 +494,9 @@ func difficultyInstructionText(features PromptFeatures) string {
 	if features.instructionText != "" {
 		return features.instructionText
 	}
+	if features.roleStructured {
+		return ""
+	}
 	return features.normalizedText
 }
 

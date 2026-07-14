@@ -38,6 +38,25 @@
     "familyPolicyVersion": {
       "const": "difficulty-prompt-family.v1"
     },
+    "splitPolicyVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "splitSeed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "splitCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "train": { "$ref": "#/$defs/splitCount" },
+        "calibration": { "$ref": "#/$defs/splitCount" },
+        "holdout": { "$ref": "#/$defs/splitCount" }
+      },
+      "required": ["train", "calibration", "holdout"]
+    },
     "trainingGate": {
       "oneOf": [
         {
@@ -140,7 +159,8 @@
         "properties": {
           "trainingEligible": { "const": false },
           "trainingGate": { "properties": { "minimumFamilyPolicyStatus": { "const": "decision_required" } } }
-        }
+        },
+        "required": ["splitPolicyVersion", "splitSeed", "splitCounts"]
       }
     },
     {
@@ -181,6 +201,15 @@
     }
   ],
   "$defs": {
+    "splitCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "families": { "type": "integer", "minimum": 1 },
+        "records": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["families", "records"]
+    },
     "countMapCategory": {
       "type": "object",
       "additionalProperties": false,

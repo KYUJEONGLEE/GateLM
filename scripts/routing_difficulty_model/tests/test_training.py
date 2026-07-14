@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from unittest import mock
 from pathlib import Path
 
@@ -350,6 +351,7 @@ class ToyTrainingTests(unittest.TestCase):
             "dimension": lambda export: export["samples"][0]["vector"].pop(),
             "feature names": lambda export: export["featureNames"].__setitem__(0, "duplicate"),
             "non-finite": lambda export: export["samples"][0]["vector"].__setitem__(0, float("nan")),
+            "out-of-range": lambda export: export["samples"][0]["vector"].__setitem__(0, 1.01),
         }
         for name, mutate in tests.items():
             with self.subTest(name=name):
@@ -357,6 +359,88 @@ class ToyTrainingTests(unittest.TestCase):
                 mutate(export)
                 with self.assertRaises(ValueError):
                     train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
+
+    def test_convergence_warning_is_promoted_to_training_failure(self) -> None:
+        import numpy as np
+        from sklearn.exceptions import ConvergenceWarning
+
+        class WarningModel:
+            n_iter_ = np.asarray([2000], dtype=int)
+
+            def fit(self, x, y):
+                del x, y
+                warnings.warn("synthetic non-convergence", ConvergenceWarning)
+                return self
+
+        with self.assertRaises(training._LogisticConvergenceError) as raised:
+            training._fit_with_convergence_gate(
+                WarningModel(),
+                np.asarray([[0.0], [1.0]], dtype=float),
+                np.asarray([0, 1], dtype=int),
+                2000,
+            )
+        self.assertEqual(raised.exception.max_iterations, 2000)
+        self.assertEqual(raised.exception.observed_iterations, 2000)
+
+    def test_regularization_excludes_c_when_any_fold_fails_to_converge(self) -> None:
+        import numpy as np
+
+        policy = toy_training_policy()
+        samples = [sample for sample in toy_vector_export()["samples"] if sample["split"] == "train"]
+        x = np.asarray([sample["vector"] for sample in samples], dtype=float)
+        y = np.asarray([sample["label"] for sample in samples], dtype=int)
+        groups = np.asarray([sample["familyId"] for sample in samples], dtype=object)
+        original_fit = training._fit_logistic
+
+        def fail_large_c(fit_x, fit_y, c_value, config):
+            if c_value == 1.0:
+                raise training._LogisticConvergenceError(config["maxIterations"], config["maxIterations"])
+            return original_fit(fit_x, fit_y, c_value, config)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=fail_large_c):
+            selected, evaluations = training._select_regularization(
+                x,
+                y,
+                groups,
+                policy["regularization"],
+            )
+        self.assertEqual(selected, 0.1)
+        failed = next(candidate for candidate in evaluations if candidate["c"] == 1.0)
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["failureReason"], "failed_to_converge")
+        self.assertEqual(failed["failedFold"], 1)
+
+    def test_regularization_fails_when_all_candidates_fail_to_converge(self) -> None:
+        import numpy as np
+
+        policy = toy_training_policy()
+        samples = [sample for sample in toy_vector_export()["samples"] if sample["split"] == "train"]
+        x = np.asarray([sample["vector"] for sample in samples], dtype=float)
+        y = np.asarray([sample["label"] for sample in samples], dtype=int)
+        groups = np.asarray([sample["familyId"] for sample in samples], dtype=object)
+        failure = training._LogisticConvergenceError(2000, 2000)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=failure):
+            with self.assertRaisesRegex(ValueError, "all regularization candidates failed"):
+                training._select_regularization(x, y, groups, policy["regularization"])
+
+    def test_final_logistic_fit_non_convergence_blocks_artifact(self) -> None:
+        policy = toy_training_policy()
+        export = toy_vector_export()
+        original_fit = training._fit_logistic
+        full_train_size = sum(
+            sample["split"] == "train" and sample["modelPath"]
+            for sample in export["samples"]
+        )
+
+        def fail_final_fit(x, y, c_value, config):
+            if len(x) == full_train_size:
+                raise training._LogisticConvergenceError(config["maxIterations"], config["maxIterations"])
+            return original_fit(x, y, c_value, config)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=fail_final_fit):
+            with self.assertRaisesRegex(ValueError, "final fit"):
+                train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
 
     def test_trains_all_offline_candidates_with_separate_fit_material(self) -> None:
         policy = toy_training_policy()
@@ -465,6 +549,32 @@ class ToyTrainingTests(unittest.TestCase):
             )
         self.assertEqual(selected, "isotonic")
         self.assertEqual(evaluations[0], {"type": "platt", "status": "failed"})
+
+    def test_platt_convergence_failure_is_reported_and_uses_isotonic(self) -> None:
+        policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
+        policy["calibration"]["groupFolds"] = 2
+        original_fit = training._fit_calibrator
+
+        def fail_platt_convergence(kind, raw_probabilities, labels, config):
+            if kind == "platt":
+                raise training._LogisticConvergenceError(
+                    config["platt"]["maxIterations"],
+                    config["platt"]["maxIterations"],
+                )
+            return original_fit(kind, raw_probabilities, labels, config)
+
+        with mock.patch.object(training, "_fit_calibrator", side_effect=fail_platt_convergence):
+            selected, evaluations = training._select_calibrator(
+                *calibration_arrays(),
+                policy["calibration"],
+            )
+        self.assertEqual(selected, "isotonic")
+        self.assertEqual(evaluations[0]["status"], "failed")
+        self.assertEqual(evaluations[0]["failureReason"], "failed_to_converge")
+        self.assertEqual(
+            evaluations[0]["observedIterations"],
+            policy["calibration"]["platt"]["maxIterations"],
+        )
 
     def test_fails_when_both_calibrator_candidates_fail(self) -> None:
         policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
@@ -596,11 +706,11 @@ def toy_offline_provenance() -> OfflineArtifactProvenance:
         encoder_version="difficulty-encoder.synthetic-test-v1",
         pooling_version="difficulty-pooling.synthetic-test-v1",
         projection_parameters=toy_projection_parameters(),
-        semantic_head_input_dimension=4,
+        semantic_head_input_dimension=3,
         semantic_head_parameters=toy_semantic_head_parameters(),
         training_dataset_version="difficulty-dataset.synthetic-test-v1",
         training_dataset_sha256="a" * 64,
-        split_policy_version="difficulty-family-split.synthetic-test-v1",
+        split_policy_version="difficulty-family-split.v1",
         split_manifest_sha256="b" * 64,
         training_policy_version="difficulty-logistic-training.v1",
         threshold_policy_version="difficulty-threshold.synthetic-test-v1",
@@ -642,7 +752,7 @@ def toy_semantic_head_parameters() -> list[dict]:
             "name": spec.name,
             "classes": list(spec.classes),
             "coefficient": [
-                [float(head_index + class_index + input_index) / 100.0 for input_index in range(4)]
+                [float(head_index + class_index + input_index) / 100.0 for input_index in range(3)]
                 for class_index in range(3)
             ],
             "intercept": [float(class_index - head_index) / 10.0 for class_index in range(3)],

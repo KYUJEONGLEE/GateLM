@@ -1,7 +1,7 @@
 [project]
 name = "gatelm-routing-difficulty-model"
 version = "0.0.0"
-description = "Offline-only GateLM difficulty Logistic Regression training tooling"
+description = "Offline-only GateLM E5 encoder and difficulty model training tooling"
 requires-python = ">=3.12"
 dependencies = [
   "numpy>=1.26,<3",
@@ -10,11 +10,12 @@ dependencies = [
 
 [project.scripts]
 gatelm-train-difficulty = "gatelm_difficulty_model.cli:main"
-gatelm-benchmark-difficulty-encoder = "gatelm_difficulty_model.encoder_benchmark:main"
+gatelm-difficulty-e5-encoder = "gatelm_difficulty_model.e5_encoder_cli:main"
 gatelm-train-difficulty-semantic-heads = "gatelm_difficulty_model.semantic_heads_cli:main"
+gatelm-train-difficulty-semantic-candidates = "gatelm_difficulty_model.candidate_cli:main"
 
 [project.optional-dependencies]
-encoder-benchmark = [
+e5-encoder = [
   "huggingface-hub==0.33.4",
   "numpy==2.2.6",
   "onnx==1.18.0",
