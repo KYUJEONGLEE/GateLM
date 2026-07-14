@@ -15,6 +15,7 @@ import {
   listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
 import {
+  createRuntimePolicyRoleRoutes,
   getRuntimePolicyDraftValues,
   isRuntimeRoutingPolicyHash,
   runtimeRoutingCategories,
@@ -538,6 +539,10 @@ export async function publishRuntimePolicyBootstrapForApplication(
     };
   }
 
+  if (activeConfig.routingPolicy.bootstrapState === "configured") {
+    return { ok: true };
+  }
+
   const selectedProvider = activeConfig.providers.find(
     (provider) => provider.providerId === selected.providerId
   );
@@ -556,10 +561,20 @@ export async function publishRuntimePolicyBootstrapForApplication(
   }
 
   const draftValues = getRuntimePolicyDraftValues(activeConfig);
+  const normalizedSelectedModelRef = selectedModelRef.trim();
   const nextValues = {
     ...draftValues,
     budgetWarningThresholdPercent:
-      options.warningThresholdPercent ?? draftValues.budgetWarningThresholdPercent
+      options.warningThresholdPercent ?? draftValues.budgetWarningThresholdPercent,
+    routingPolicy: {
+      ...draftValues.routingPolicy,
+      bootstrapState: "configured" as const,
+      routes: createRuntimePolicyRoleRoutes({
+        complexModelRef: normalizedSelectedModelRef,
+        fallbackModelRef: null,
+        simpleModelRef: normalizedSelectedModelRef
+      })
+    }
   };
   const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
   const draft = await writeRuntimeConfig("draft", nextValues, {

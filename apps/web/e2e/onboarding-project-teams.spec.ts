@@ -21,6 +21,8 @@ test("create project can select existing teams and create a team inline before a
   page,
   request
 }) => {
+  test.setTimeout(90_000);
+
   const issuedPlaintext = "gatelm_test_onboarding_team_demo";
   let apiKeyAction = "";
   let draftProjectValues: Record<string, unknown> = {};
@@ -29,6 +31,7 @@ test("create project can select existing teams and create a team inline before a
   let savedProviderValues: Record<string, unknown> = {};
   let firstAttachedTeamId = "";
   let projectCreateCallCount = 0;
+  let projectUpdateCallCount = 0;
   let updatedProjectValues: Record<string, unknown> = {};
 
   await page.route("**/api/control-plane/projects", async (route) => {
@@ -39,6 +42,7 @@ test("create project can select existing teams and create a team inline before a
     };
 
     if (body.action === "update") {
+      projectUpdateCallCount += 1;
       updatedProjectValues = body.values ?? {};
 
       await route.fulfill({
@@ -50,10 +54,14 @@ test("create project can select existing teams and create a team inline before a
             name: body.values?.name,
             runtimeApplicationId: "app_onboarding_team_demo",
             status: body.values?.status ?? "ACTIVE",
-            tenantId: "tenant_demo_acme",
+            tenantId: String(body.tenantId ?? draftTenantId),
             totalBudgetUsd: body.values?.totalBudgetUsd,
             updatedAt: "2026-07-06T00:10:00.000Z"
           },
+          policyError:
+            projectUpdateCallCount === 1
+              ? "Runtime Policy bootstrap publish failed."
+              : undefined,
           status: 200
         }),
         contentType: "application/json",
@@ -139,6 +147,7 @@ test("create project can select existing teams and create a team inline before a
   await page.route("**/api/control-plane/provider-connections", async (route) => {
     const body = route.request().postDataJSON() as {
       action?: string;
+      tenantId?: string;
       values?: Record<string, unknown>;
     };
 
@@ -244,7 +253,7 @@ test("create project can select existing teams and create a team inline before a
           },
           resolver: savedProviderValues.resolver,
           status: savedProviderValues.status,
-          tenantId: "tenant_demo_acme",
+          tenantId: String(body.tenantId ?? draftTenantId),
           timeoutMs: savedProviderValues.timeoutMs,
           updatedAt: "2026-07-06T00:00:00.000Z"
         },
@@ -366,7 +375,10 @@ test("create project can select existing teams and create a team inline before a
       name: /Register Provider model key \(optional\)|Provider 모델 Key 등록 \(선택\)/
     })
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Choose OpenAI" })).toBeVisible();
+  await page.getByRole("button", { name: "Choose OpenAI" }).click();
+  await page.getByLabel("Provider API Key").fill("test-key-not-a-secret");
+  await page.getByRole("button", { name: "Add selected model key" }).click();
+  await expect(page.getByText("Provider saved.")).toBeVisible();
 
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   await expect(page.locator(".onboarding-step").nth(2)).toHaveAttribute("data-active", "true");
@@ -424,11 +436,25 @@ test("create project can select existing teams and create a team inline before a
     (form as HTMLFormElement).requestSubmit();
   });
   await expect.poll(() => updatedProjectValues.status).toBe("ACTIVE");
+  await expect.poll(() => projectUpdateCallCount).toBe(1);
+  await expect(
+    page.getByText(
+      "Project saved / policy setup incomplete. Runtime Policy bootstrap publish failed."
+    )
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry policy setup" })).toBeVisible();
+  expect(projectCreateCallCount).toBe(0);
+  await page.locator("form.onboarding-form").evaluate((form) => {
+    (form as HTMLFormElement).requestSubmit();
+  });
+  await expect.poll(() => projectUpdateCallCount).toBe(2);
   expect(updatedProjectValues).toMatchObject({
     selectedModelKey: expect.any(String),
     status: "ACTIVE",
     warningThresholdPercent: 80
   });
+  expect(updatedProjectValues.projectId).toBe("project_onboarding_team_demo");
+  expect(projectCreateCallCount).toBe(0);
 });
 
 test("create project shows the Control Plane project conflict message", async ({

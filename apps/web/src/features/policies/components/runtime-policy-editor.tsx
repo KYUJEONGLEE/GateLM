@@ -17,6 +17,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import {
   getRuntimePolicyDraftValues,
+  isRuntimePolicyModelRoleProfile,
   type RuntimePolicyConfig,
   type RuntimePolicyDraftValues
 } from "@/lib/control-plane/runtime-policy-types";
@@ -243,6 +244,20 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     remove: "Remove",
     rollback: "Rollback",
     routing: "Routing",
+    routingAuthoringRequired:
+      "This saved policy uses the previous per-category routing format. It remains active until you explicitly convert it; draft save and publish are blocked meanwhile.",
+    routingComplexModel: "Complex model",
+    routingConvert: "Convert to global Simple/Complex policy",
+    routingFallbackModel: "Fallback model (optional)",
+    routingFallbackNone: "No fallback",
+    routingMockWarning:
+      "This policy still uses the Mock model. Replace it before using a live provider path.",
+    routingRoleDescription:
+      "Simple is the low-cost/default role. Complex is the high-cost role. One optional fallback is shared by every route.",
+    routingRoleHint:
+      "When enabled, requests are classified into the existing category and difficulty matrix, then resolved through these global roles.",
+    routingRoleModels: "Routing role models",
+    routingSimpleModel: "Simple model",
     runtimeSnapshot: "RuntimeSnapshot",
     responseCapture: "Response capture",
     responseCaptureHint:
@@ -353,6 +368,20 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     remove: "삭제",
     rollback: "되돌리기",
     routing: "라우팅",
+    routingAuthoringRequired:
+      "이 정책은 이전 카테고리별 라우팅 형식으로 저장되어 있습니다. 명시적으로 전환하기 전까지 기존 정책은 유지되며 임시 저장과 발행은 차단됩니다.",
+    routingComplexModel: "Complex 모델",
+    routingConvert: "전역 Simple/Complex 정책으로 전환",
+    routingFallbackModel: "Fallback 모델 (선택)",
+    routingFallbackNone: "Fallback 없음",
+    routingMockWarning:
+      "현재 정책에 Mock 모델이 포함되어 있습니다. 실제 Provider 경로를 사용하기 전에 교체하세요.",
+    routingRoleDescription:
+      "Simple은 low-cost/default 역할, Complex는 high-cost 역할입니다. 선택한 fallback 하나를 모든 경로가 공유합니다.",
+    routingRoleHint:
+      "활성화하면 기존 카테고리·난이도 분류 결과를 전역 Simple/Complex 역할에 연결합니다.",
+    routingRoleModels: "라우팅 역할 모델",
+    routingSimpleModel: "Simple 모델",
     runtimeSnapshot: "런타임 스냅샷",
     responseCapture: "응답 캡처",
     responseCaptureHint:
@@ -512,6 +541,9 @@ export function RuntimePolicyEditor({
     draftValues.routingPolicy,
     model.providerConnections.available
   );
+  const hasRoutingAuthoringProfile = isRuntimePolicyModelRoleProfile(
+    draftValues.routingPolicy.routes
+  );
 
   async function submitPolicy(action: "save-draft" | "publish") {
     if (!hasActiveApiKey) {
@@ -525,6 +557,14 @@ export function RuntimePolicyEditor({
     if (!hasRoutingCandidates) {
       setSubmitState({
         message: text.providerConnectionMissing,
+        status: "error"
+      });
+      return;
+    }
+
+    if (!hasRoutingAuthoringProfile) {
+      setSubmitState({
+        message: text.routingAuthoringRequired,
         status: "error"
       });
       return;
@@ -818,6 +858,11 @@ export function RuntimePolicyEditor({
           <span>{text.providerConnectionMissing}</span>
         </div>
       ) : null}
+      {!hasRoutingAuthoringProfile ? (
+        <div className="policy-alert runtime-credential-alert" data-status="error">
+          <span>{text.routingAuthoringRequired}</span>
+        </div>
+      ) : null}
       {submitState.message ? (
         <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
           <AlertDescription>{submitState.message}</AlertDescription>
@@ -856,7 +901,12 @@ export function RuntimePolicyEditor({
               }
               className="policy-draft-button"
               data-unsaved={hasUnsavedChanges}
-              disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+              disabled={
+                isSubmitting ||
+                !hasActiveApiKey ||
+                !hasRoutingCandidates ||
+                !hasRoutingAuthoringProfile
+              }
               onClick={() => void submitPolicy("save-draft")}
               type="button"
               variant="outline"
@@ -865,7 +915,12 @@ export function RuntimePolicyEditor({
               {text.saveDraft}
             </Button>
             <Button
-              disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+              disabled={
+                isSubmitting ||
+                !hasActiveApiKey ||
+                !hasRoutingCandidates ||
+                !hasRoutingAuthoringProfile
+              }
               onClick={() => void submitPolicy("publish")}
               type="button"
             >

@@ -139,6 +139,16 @@ export type RuntimePolicyEditorText = {
   responseCaptureMaxChars: string;
   rollback: string;
   routing: string;
+  routingAuthoringRequired: string;
+  routingComplexModel: string;
+  routingConvert: string;
+  routingFallbackModel: string;
+  routingFallbackNone: string;
+  routingMockWarning: string;
+  routingRoleDescription: string;
+  routingRoleHint: string;
+  routingRoleModels: string;
+  routingSimpleModel: string;
   runtimeSnapshot: string;
   safetyTab: string;
   saveDraft: string;

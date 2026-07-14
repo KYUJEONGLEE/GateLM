@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -146,6 +147,7 @@ export class RuntimeConfigResponseCapturePolicyDto {
 export class RuntimeConfigRoutingCellDto {
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(2)
   @IsString({ each: true })
   @MinLength(1, { each: true })
   @MaxLength(240, { each: true })
