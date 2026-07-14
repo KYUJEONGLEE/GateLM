@@ -125,6 +125,37 @@ describe('PrivateGatewayClient', () => {
     });
     expect(cancel).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    [
+      'an undefined top-level completion field',
+      { ...input, employeeId: undefined } as unknown as CompletionInput,
+      usageIntent,
+    ],
+    [
+      'an undefined usage intent field',
+      input,
+      { ...usageIntent, requestedTier: undefined } as unknown as UsageIntent,
+    ],
+    [
+      'an unknown usage intent field',
+      input,
+      { ...usageIntent, unknown: undefined } as unknown as UsageIntent,
+    ],
+    [
+      'a fractional usage token value',
+      input,
+      { ...usageIntent, estimatedInputTokens: 1.5 },
+    ],
+  ])('rejects %s before signing or transport', async (_, invalidInput, invalidUsageIntent) => {
+    const signer = signerMock();
+    global.fetch = jest.fn() as typeof fetch;
+
+    await expect(client(signer).complete(handle, invalidInput, invalidUsageIntent))
+      .rejects.toMatchObject({ code: 'CHAT_INVALID_REQUEST', status: 400 });
+    expect(signer.authorize).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });
 
 function client(signer: ReturnType<typeof signerMock>) {

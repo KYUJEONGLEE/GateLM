@@ -132,6 +132,7 @@ export class PrivateGatewayClient {
     options: CompleteOptions = {},
   ): Promise<CompletionResult> {
     validateCompletionInput(input);
+    validateUsageIntent(usageIntent);
     const parser = new StrictCompletionStreamParser(
       handle.requestId,
       handle.turnId,
@@ -274,21 +275,48 @@ function encodeBody(value: unknown, maximum: number): string {
   return body;
 }
 
-function validateCompletionInput(input: CompletionInput): void {
-  if (!input || input.stream !== true || !Array.isArray(input.messages) || input.messages.length < 1 || input.messages.length > 64) {
+function validateCompletionInput(input: unknown): void {
+  if (
+    !hasExactKeys(input, ['messages', 'stream']) ||
+    input.stream !== true ||
+    !Array.isArray(input.messages) ||
+    input.messages.length < 1 ||
+    input.messages.length > 64
+  ) {
     throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
   }
   for (const message of input.messages) {
     if (
-      !message ||
+      !hasExactKeys(message, ['content', 'role']) ||
+      typeof message.role !== 'string' ||
       !['system', 'user', 'assistant'].includes(message.role) ||
       typeof message.content !== 'string' ||
       message.content.length < 1 ||
-      message.content.length > 20_000 ||
-      Object.keys(message).sort().join(',') !== 'content,role'
+      message.content.length > 20_000
     ) {
       throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
     }
+  }
+}
+
+function validateUsageIntent(value: unknown): void {
+  if (
+    !hasExactKeys(value, [
+      'cacheStrategy',
+      'estimatedInputTokens',
+      'maxOutputTokens',
+      'requestedTier',
+    ]) ||
+    !Number.isInteger(value.estimatedInputTokens) ||
+    Number(value.estimatedInputTokens) < 0 ||
+    !Number.isInteger(value.maxOutputTokens) ||
+    Number(value.maxOutputTokens) < 1 ||
+    typeof value.requestedTier !== 'string' ||
+    !['auto', 'high_quality', 'standard', 'economy'].includes(value.requestedTier) ||
+    typeof value.cacheStrategy !== 'string' ||
+    !['off', 'exact'].includes(value.cacheStrategy)
+  ) {
+    throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
   }
 }
 
@@ -350,10 +378,15 @@ function parseJsonObject(text: string): Record<string, unknown> {
 }
 
 function assertExactKeys(value: Record<string, unknown>, expected: string[]): void {
-  const keys = Object.keys(value).sort();
-  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+  if (!hasExactKeys(value, expected)) {
     throw invalidResponse();
   }
+}
+
+function hasExactKeys(value: unknown, expected: string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
 function isContentType(response: Response, expected: string): boolean {
