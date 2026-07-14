@@ -192,6 +192,11 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
+	if overview, used, err := r.tryGetDashboardOverviewFromRollups(ctx, normalizedFilter, time.Now().UTC()); err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	} else if used {
+		return overview, nil
+	}
 	query, args := buildDashboardOverviewQuery(normalizedFilter)
 
 	var totalRequests int64
@@ -214,6 +219,12 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var p99GatewayInternalLatencyMs sql.NullFloat64
 	var p95ProviderLatencyMs sql.NullFloat64
 	var p99ProviderLatencyMs sql.NullFloat64
+	var averageTTFTMs sql.NullFloat64
+	var p50TTFTMs sql.NullFloat64
+	var p95TTFTMs sql.NullFloat64
+	var p99TTFTMs sql.NullFloat64
+	var eligibleStreamRequests int64
+	var observedTTFTRequests int64
 	var statusCountsJSON []byte
 	var maskingActionCountsJSON []byte
 	var safetyOutcomeCountsJSON []byte
@@ -247,6 +258,12 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&p99GatewayInternalLatencyMs,
 		&p95ProviderLatencyMs,
 		&p99ProviderLatencyMs,
+		&averageTTFTMs,
+		&p50TTFTMs,
+		&p95TTFTMs,
+		&p99TTFTMs,
+		&eligibleStreamRequests,
+		&observedTTFTRequests,
 		&statusCountsJSON,
 		&maskingActionCountsJSON,
 		&safetyOutcomeCountsJSON,
@@ -342,6 +359,12 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		P99GatewayInternalLatencyMs: p99GatewayInternalLatencyPointer,
 		P95ProviderLatencyMs:        p95ProviderLatencyPointer,
 		P99ProviderLatencyMs:        p99ProviderLatencyPointer,
+		AverageTTFTMs:               nullableFloat64Pointer(averageTTFTMs),
+		P50TTFTMs:                   nullableFloat64Pointer(p50TTFTMs),
+		P95TTFTMs:                   nullableFloat64Pointer(p95TTFTMs),
+		P99TTFTMs:                   nullableFloat64Pointer(p99TTFTMs),
+		EligibleStreamRequests:      eligibleStreamRequests,
+		ObservedTTFTRequests:        observedTTFTRequests,
 		MaskingActionCounts:         maskingActionCounts,
 		RoutingCountByModel:         routingCountByModel,
 		StatusCounts:                statusCounts,
@@ -366,6 +389,12 @@ func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.Co
 	normalizedFilter, err := invocationlog.NormalizeCostReportFilter(filter)
 	if err != nil {
 		return invocationlog.CostReportFields{}, err
+	}
+	generatedAt := time.Now().UTC()
+	if report, used, err := r.tryGetCostReportFromRollups(ctx, normalizedFilter, generatedAt); err != nil {
+		return invocationlog.CostReportFields{}, err
+	} else if used {
+		return report, nil
 	}
 
 	buckets, lastLogCreatedAt, err := r.queryCostReportBuckets(ctx, normalizedFilter)
@@ -401,7 +430,6 @@ func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.Co
 	totals.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.CostMicroUSD)
 	totals.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.SavedCostMicroUSD)
 
-	generatedAt := time.Now().UTC()
 	bucketConfig := costReportBucketConfig(normalizedFilter)
 	return invocationlog.CostReportFields{
 		Period:              normalizedFilter.Period,
@@ -1280,6 +1308,7 @@ select
   total_tokens,
   cost_micro_usd,
   latency_ms,
+  ttft_ms,
   cache_status,
   cache_type,
   routing_reason,
@@ -1398,6 +1427,8 @@ with filtered as (
     cost_micro_usd,
     saved_cost_micro_usd,
     latency_ms,
+    stream,
+    ttft_ms,
     greatest(latency_ms - coalesce(provider_latency_ms, 0), 0) as gateway_internal_latency_ms,
     provider_latency_ms,
     cache_status,
@@ -1439,6 +1470,12 @@ select
   (percentile_disc(0.99) within group (order by gateway_internal_latency_ms) filter (where terminal_status in ('success', 'failed')))::float8 as p99_gateway_internal_latency_ms,
   (percentile_disc(0.95) within group (order by provider_latency_ms) filter (where terminal_status in ('success', 'failed') and provider_latency_ms is not null))::float8 as p95_provider_latency_ms,
   (percentile_disc(0.99) within group (order by provider_latency_ms) filter (where terminal_status in ('success', 'failed') and provider_latency_ms is not null))::float8 as p99_provider_latency_ms,
+  (avg(ttft_ms) filter (where stream and ttft_ms is not null))::float8 as average_ttft_ms,
+  (percentile_disc(0.50) within group (order by ttft_ms) filter (where stream and ttft_ms is not null))::float8 as p50_ttft_ms,
+  (percentile_disc(0.95) within group (order by ttft_ms) filter (where stream and ttft_ms is not null))::float8 as p95_ttft_ms,
+  (percentile_disc(0.99) within group (order by ttft_ms) filter (where stream and ttft_ms is not null))::float8 as p99_ttft_ms,
+  count(*) filter (where stream)::bigint as eligible_stream_requests,
+  count(*) filter (where stream and ttft_ms is not null)::bigint as observed_ttft_requests,
   coalesce((
     select jsonb_object_agg(status_key, request_count)
     from (
@@ -1618,6 +1655,7 @@ select
   total_tokens,
   cost_micro_usd,
   latency_ms,
+  ttft_ms,
   provider_latency_ms,
   cache_status,
   cache_type,
@@ -1687,6 +1725,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var budgetScopeResolvedBy sql.NullString
 	var requestedModel sql.NullString
 	var routingReason sql.NullString
+	var ttftMs sql.NullInt64
 	var metadataJSON []byte
 	if err := rows.Scan(
 		&log.RequestID,
@@ -1706,6 +1745,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.TotalTokens,
 		&log.CostMicroUSD,
 		&log.LatencyMs,
+		&ttftMs,
 		&log.CacheStatus,
 		&log.CacheType,
 		&routingReason,
@@ -1725,6 +1765,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	}, log.ApplicationID)
 	log.RequestedModel = nullableString(requestedModel)
 	log.RoutingReason = nullableString(routingReason)
+	log.TTFTMs = nullableInt64Pointer(ttftMs)
 	var err error
 	applyInvocationMetadataFields(&log, metadataJSON)
 	log.DomainOutcomes, err = decodeDomainOutcomesMetadata(metadataJSON)
@@ -1746,6 +1787,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	var budgetScopeResolvedBy sql.NullString
 	var requestedModel sql.NullString
 	var routingReason sql.NullString
+	var ttftMs sql.NullInt64
 	var providerLatencyMs sql.NullInt64
 	var cacheKeyHash sql.NullString
 	var cacheHitRequestID sql.NullString
@@ -1777,6 +1819,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 		&log.TotalTokens,
 		&log.CostMicroUSD,
 		&log.LatencyMs,
+		&ttftMs,
 		&providerLatencyMs,
 		&log.CacheStatus,
 		&log.CacheType,
@@ -1809,6 +1852,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	}, log.ApplicationID)
 	log.RequestedModel = nullableString(requestedModel)
 	log.RoutingReason = nullableString(routingReason)
+	log.TTFTMs = nullableInt64Pointer(ttftMs)
 	log.ProviderLatencyMs = nullableInt64Pointer(providerLatencyMs)
 	log.CacheKeyHash = nullableString(cacheKeyHash)
 	log.CacheHitRequestID = nullableString(cacheHitRequestID)

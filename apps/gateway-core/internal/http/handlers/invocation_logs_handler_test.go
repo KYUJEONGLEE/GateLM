@@ -21,6 +21,7 @@ import (
 
 func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	createdAt := time.Date(2026, 6, 25, 1, 2, 3, 0, time.UTC)
+	ttftMs := int64(84)
 	reader := &recordingProjectLogsReader{
 		items: []invocationlog.RequestLogListItem{{
 			RequestID:      "request_001",
@@ -41,6 +42,7 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 			CostUSD:          "0.000001",
 			CostMicroUSD:     1,
 			LatencyMs:        132,
+			TTFTMs:           &ttftMs,
 			CacheStatus:      invocationlog.CacheStatusMiss,
 			CacheType:        invocationlog.CacheTypeExact,
 			RoutingReason:    routing.ReasonMatrixRoute,
@@ -85,6 +87,9 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	}
 	if item.ProviderAttempt == nil || item.ProviderAttempt.ProviderID != "provider_openai" || item.ProviderAttempt.ModelID != "gpt-4o-mini" {
 		t.Fatalf("unexpected provider attempt: %+v", item.ProviderAttempt)
+	}
+	if item.TTFTMs == nil || *item.TTFTMs != 84 {
+		t.Fatalf("unexpected TTFT: %+v", item.TTFTMs)
 	}
 
 	for _, forbidden := range []string{
@@ -327,6 +332,7 @@ func TestProjectLogsHandlerMapsUnexpectedReaderErrorToInternalError(t *testing.T
 
 func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testing.T) {
 	providerLatencyMs := int64(86)
+	ttftMs := int64(84)
 	completedAt := time.Date(2026, 6, 25, 1, 2, 4, 0, time.UTC)
 	reader := &recordingRequestDetailReader{
 		detail: invocationlog.RequestDetail{
@@ -351,6 +357,13 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 			Latency: invocationlog.LatencyFields{
 				LatencyMs:         132,
 				ProviderLatencyMs: &providerLatencyMs,
+				TTFTMs:            &ttftMs,
+			},
+			LatencySummary: invocationlog.LatencySummaryFields{
+				GatewayInternalLatencyMs: 46,
+				ProviderLatencyMs:        &providerLatencyMs,
+				TotalLatencyMs:           132,
+				TTFTMs:                   &ttftMs,
 			},
 			Cache: invocationlog.CacheFields{
 				CacheStatus:       invocationlog.CacheStatusMiss,
@@ -446,6 +459,9 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	}
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)
+	}
+	if response.Data.Latency.TTFTMs == nil || *response.Data.Latency.TTFTMs != 84 || response.Data.LatencySummary.TTFTMs == nil || *response.Data.LatencySummary.TTFTMs != 84 {
+		t.Fatalf("unexpected detail TTFT response: latency=%+v summary=%+v", response.Data.Latency, response.Data.LatencySummary)
 	}
 	if response.Data.RuntimeSnapshot == nil ||
 		response.Data.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_detail_test" ||
@@ -609,6 +625,11 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	cacheHitRate := 0.25
 	averageLatency := 50.0
 	p95Latency := 100.0
+	averageTTFT := 80.0
+	p50TTFT := 70.0
+	p95TTFT := 110.0
+	p99TTFT := 130.0
+	coverageRate := 0.75
 	lastLogCreatedAt := time.Date(2026, 6, 25, 0, 30, 0, 0, time.UTC)
 	generatedAt := time.Date(2026, 6, 25, 0, 31, 0, 0, time.UTC)
 	reader := &recordingDashboardOverviewReader{
@@ -631,6 +652,18 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 			AverageLatencyMs:      &averageLatency,
 			P95LatencyMs:          &p95Latency,
 			AverageResponseTimeMs: &averageLatency,
+			Performance: invocationlog.DashboardPerformance{
+				GatewayTTFT: invocationlog.DashboardGatewayTTFT{
+					Scope:                  "project_application",
+					AverageMs:              &averageTTFT,
+					P50Ms:                  &p50TTFT,
+					P95Ms:                  &p95TTFT,
+					P99Ms:                  &p99TTFT,
+					EligibleStreamRequests: 4,
+					ObservedRequests:       3,
+					CoverageRate:           &coverageRate,
+				},
+			},
 			MaskingActionCounts: map[string]int64{
 				"none":     4,
 				"redacted": 1,
@@ -714,6 +747,13 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	}
 	if response.Data.Totals.AverageResponseTimeMs == nil || *response.Data.Totals.AverageResponseTimeMs != 50 {
 		t.Fatalf("expected average response time compatibility field, got %+v", response.Data.Totals.AverageResponseTimeMs)
+	}
+	if response.Data.Performance.GatewayTTFT.Scope != "project_application" ||
+		response.Data.Performance.GatewayTTFT.P95Ms == nil || *response.Data.Performance.GatewayTTFT.P95Ms != 110 ||
+		response.Data.Performance.GatewayTTFT.EligibleStreamRequests != 4 ||
+		response.Data.Performance.GatewayTTFT.ObservedRequests != 3 ||
+		response.Data.Performance.GatewayTTFT.CoverageRate == nil || *response.Data.Performance.GatewayTTFT.CoverageRate != 0.75 {
+		t.Fatalf("unexpected gateway TTFT response: %+v", response.Data.Performance.GatewayTTFT)
 	}
 	if response.Data.Totals.StatusCounts[invocationlog.StatusRateLimited] != 1 || response.Data.Totals.MaskingActionCounts["blocked"] != 1 {
 		t.Fatalf("unexpected rollup counts: status=%+v masking=%+v", response.Data.Totals.StatusCounts, response.Data.Totals.MaskingActionCounts)

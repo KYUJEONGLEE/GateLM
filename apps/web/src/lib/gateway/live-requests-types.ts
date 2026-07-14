@@ -13,6 +13,7 @@ export type LiveRequestRow = {
   fallbackUsed?: boolean;
   id: string;
   latencyMs: number;
+  ttftMs?: number | null;
   modelRef: string | null;
   projectId: string;
   projectName: string;

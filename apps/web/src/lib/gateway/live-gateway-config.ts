@@ -20,6 +20,22 @@ export type LiveGatewayConfig = {
   rateLimitMaxAttempts: number;
 };
 
+export function getGatewayObservabilityHeaders(requestId: string): Record<string, string> {
+  const token = firstEnv(
+    "GATELM_GATEWAY_OBSERVABILITY_INTERNAL_TOKEN",
+    "GATEWAY_OBSERVABILITY_INTERNAL_TOKEN"
+  );
+  const headers: Record<string, string> = {
+    "X-GateLM-Request-Id": requestId
+  };
+
+  if (token) {
+    headers["X-GateLM-Observability-Token"] = token;
+  }
+
+  return headers;
+}
+
 export function getLiveGatewayConfig(options: { apiKey?: string } = {}): LiveGatewayConfig {
   return {
     apiKey: options.apiKey

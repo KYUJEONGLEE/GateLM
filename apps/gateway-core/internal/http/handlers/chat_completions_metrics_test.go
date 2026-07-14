@@ -2,17 +2,20 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 func TestChatCompletionsHandlerRecordsMetricsForSafeRequest(t *testing.T) {
@@ -40,6 +43,9 @@ func TestChatCompletionsHandlerRecordsMetricsForSafeRequest(t *testing.T) {
 	}
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].TTFTMs != nil {
+		t.Fatalf("non-stream request must keep TTFT unknown, got %+v", logWriter.logs[0].TTFTMs)
 	}
 
 	output := registry.RenderPrometheus()
@@ -180,6 +186,7 @@ func TestChatCompletionsHandlerRecordsLogWriteErrors(t *testing.T) {
 
 func TestChatCompletionsHandlerRecordsStreamingObservabilityMetrics(t *testing.T) {
 	registry := metrics.NewRegistry()
+	logWriter := &recordingTerminalLogWriter{}
 	streamingAdapter := &streamingProviderAdapter{
 		events: []provider.ChatCompletionStreamEvent{
 			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
@@ -189,8 +196,9 @@ func TestChatCompletionsHandlerRecordsStreamingObservabilityMetrics(t *testing.T
 		},
 	}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("mock", streamingAdapter),
-		MetricsRegistry: registry,
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
+		MetricsRegistry:   registry,
+		TerminalLogWriter: logWriter,
 	}
 	withTestAuth(&handler)
 
@@ -209,10 +217,17 @@ func TestChatCompletionsHandlerRecordsStreamingObservabilityMetrics(t *testing.T
 	assertHandlerMetricsContains(t, output, `gatelm_stream_duration_seconds_count{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
 	assertHandlerMetricsHasNoForbiddenLabels(t, output)
+	if len(logWriter.logs) != 1 || logWriter.logs[0].TTFTMs == nil {
+		t.Fatalf("expected one streaming terminal log with TTFT, got %+v", logWriter.logs)
+	}
+	if logWriter.logs[0].LatencyMs < *logWriter.logs[0].TTFTMs {
+		t.Fatalf("total latency must be at least TTFT, latency=%d ttft=%d", logWriter.logs[0].LatencyMs, *logWriter.logs[0].TTFTMs)
+	}
 }
 
 func TestChatCompletionsHandlerRecordsInterruptedStreamingMetricsWithoutTTFTBeforeContent(t *testing.T) {
 	registry := metrics.NewRegistry()
+	logWriter := &recordingTerminalLogWriter{}
 	streamingAdapter := &streamingProviderAdapter{
 		events: []provider.ChatCompletionStreamEvent{
 			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
@@ -220,8 +235,9 @@ func TestChatCompletionsHandlerRecordsInterruptedStreamingMetricsWithoutTTFTBefo
 		nextErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("stream interrupted")),
 	}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("mock", streamingAdapter),
-		MetricsRegistry: registry,
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
+		MetricsRegistry:   registry,
+		TerminalLogWriter: logWriter,
 	}
 	withTestAuth(&handler)
 
@@ -236,6 +252,44 @@ func TestChatCompletionsHandlerRecordsInterruptedStreamingMetricsWithoutTTFTBefo
 	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="provider_error",model="mock-balanced",provider="mock",stream_outcome="interrupted"} 1`)
 	assertHandlerMetricsNotContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"}`)
 	assertHandlerMetricsHasNoForbiddenLabels(t, output)
+	if len(logWriter.logs) != 1 || logWriter.logs[0].TTFTMs != nil {
+		t.Fatalf("stream without content must persist nullable TTFT, got %+v", logWriter.logs)
+	}
+}
+
+func TestStreamTTFTUsesGatewayRequestStartAndPersistsWithoutMetricRegistry(t *testing.T) {
+	requestStartedAt := time.Date(2026, 7, 14, 1, 2, 3, 0, time.UTC)
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{StartedAt: requestStartedAt})
+	recorder := newStreamTTFTRecorder(nil, reqCtx, "mock", "mock-balanced", requestStartedAt)
+
+	recorder.recordPayloadIfContent(
+		json.RawMessage(`{"choices":[{"delta":{"content":"첫 토큰"}}]}`),
+		requestStartedAt.Add(125*time.Millisecond),
+	)
+
+	if reqCtx.TTFTMs == nil || *reqCtx.TTFTMs != 125 {
+		t.Fatalf("TTFT must use gateway request start even without metrics registry, got %+v", reqCtx.TTFTMs)
+	}
+}
+
+func TestStreamTTFTMetricUsesGatewayRequestStartInsteadOfProviderRelayStart(t *testing.T) {
+	registry := metrics.NewRegistry()
+	requestStartedAt := time.Date(2026, 7, 14, 1, 2, 3, 0, time.UTC)
+	providerRelayStartedAt := requestStartedAt.Add(80 * time.Millisecond)
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{StartedAt: requestStartedAt})
+	handler := ChatCompletionsHandler{MetricsRegistry: registry}
+	recorder := handler.startStreamMetrics(reqCtx, "mock", "mock-balanced", requestStartedAt, providerRelayStartedAt)
+
+	recorder.recordTTFTIfContent(
+		json.RawMessage(`{"choices":[{"delta":{"content":"첫 토큰"}}]}`),
+		requestStartedAt.Add(125*time.Millisecond),
+	)
+	recorder.finish("completed", "none", requestStartedAt.Add(200*time.Millisecond))
+
+	if reqCtx.TTFTMs == nil || *reqCtx.TTFTMs != 125 {
+		t.Fatalf("persisted TTFT must include pre-provider gateway work, got %+v", reqCtx.TTFTMs)
+	}
+	assertHandlerMetricsContains(t, registry.RenderPrometheus(), `gatelm_stream_time_to_first_token_seconds_sum{model="mock-balanced",provider="mock"} 0.125`)
 }
 
 func TestChatCompletionsHandlerRecordsCancelledStreamingMetrics(t *testing.T) {

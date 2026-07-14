@@ -30,6 +30,7 @@ import {
   formatLatency
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import { formatRequestLogTtft } from "../request-log-latency";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
 import {
   RequestLogFilterForm,
@@ -125,6 +126,8 @@ const requestLogText: Record<
       project: string;
       status: string;
       time: string;
+      totalLatency: string;
+      ttft: string;
       unavailable: string;
     };
     title: string;
@@ -179,6 +182,8 @@ const requestLogText: Record<
       project: "Project",
       status: "Status",
       time: "Time",
+      totalLatency: "Total",
+      ttft: "TTFT",
       unavailable: "Live Gateway request logs are not available right now."
     },
     title: "Live Logs"
@@ -232,6 +237,8 @@ const requestLogText: Record<
       project: "프로젝트",
       status: "상태",
       time: "요청 시각",
+      totalLatency: "전체",
+      ttft: "TTFT",
       unavailable: "현재 Gateway 요청 로그를 불러올 수 없습니다."
     },
     title: "실시간 로그"
@@ -477,7 +484,18 @@ export function RequestLogTable({
                         <td>
                           <StatusBadge label={formatHttpStatus(record)} status={record.status} />
                         </td>
-                        <td>{formatLatency(record.latencyMs)}</td>
+                        <td>
+                          <dl className="request-log-latency-cell">
+                            <div>
+                              <dt>{text.table.totalLatency}</dt>
+                              <dd>{formatLatency(record.latencyMs)}</dd>
+                            </div>
+                            <div>
+                              <dt>{text.table.ttft}</dt>
+                              <dd>{formatRequestLogTtft(record.ttftMs)}</dd>
+                            </div>
+                          </dl>
+                        </td>
                         <td>{formatMicroUsd(record.costMicroUsd)}</td>
                         <td className="request-log-action-cell">
                           <Link

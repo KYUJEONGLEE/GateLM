@@ -125,6 +125,7 @@ func (w *TerminalLogWriter) statements(log invocationlog.TerminalLog) ([]termina
 			record.CostMicroUSD,
 			record.SavedCostMicroUSD,
 			record.LatencyMs,
+			nullableNonNegativeInt64Pointer(record.TTFTMs),
 			nullableInt64(record.ProviderLatencyMs),
 			record.Status,
 			record.HTTPStatus,
@@ -205,6 +206,7 @@ type terminalLogRecord struct {
 	CostMicroUSD             int64
 	SavedCostMicroUSD        int64
 	LatencyMs                int64
+	TTFTMs                   *int64
 	ProviderLatencyMs        *int64
 	Status                   string
 	HTTPStatus               int
@@ -299,6 +301,7 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		CostMicroUSD:             log.CostMicroUSD,
 		SavedCostMicroUSD:        log.SavedCostMicroUSD,
 		LatencyMs:                log.LatencyMs,
+		TTFTMs:                   log.TTFTMs,
 		ProviderLatencyMs:        log.ProviderLatencyMs,
 		Status:                   firstNonEmpty(log.Status, invocationlog.StatusFailed),
 		HTTPStatus:               log.HTTPStatus,
@@ -451,6 +454,13 @@ func nullableNonNegativeInt64(value int64) any {
 	return value
 }
 
+func nullableNonNegativeInt64Pointer(value *int64) any {
+	if value == nil || *value < 0 {
+		return nil
+	}
+	return *value
+}
+
 const insertTerminalLogSQL = `
 insert into p0_llm_invocation_logs (
   id,
@@ -478,6 +488,7 @@ insert into p0_llm_invocation_logs (
   cost_micro_usd,
   saved_cost_micro_usd,
   latency_ms,
+  ttft_ms,
   provider_latency_ms,
   status,
   http_status,
@@ -502,7 +513,7 @@ insert into p0_llm_invocation_logs (
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44
+  $41, $42, $43, $44, $45
 )
 on conflict (request_id) do nothing`
 

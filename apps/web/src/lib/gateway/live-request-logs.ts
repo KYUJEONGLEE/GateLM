@@ -7,7 +7,10 @@ import type {
 } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  getGatewayObservabilityHeaders,
+  getLiveGatewayConfig
+} from "@/lib/gateway/live-gateway-config";
 import {
   type LiveInvocationLogRecord,
   normalizeProviderAttempt,
@@ -35,6 +38,7 @@ type GatewayProjectLogItem = {
   domainOutcomes?: GatewayDomainOutcomes;
   httpStatus?: number;
   latencyMs?: number;
+  ttftMs?: number | null;
   maskingAction?: string;
   modelRef?: string;
   projectId?: string;
@@ -207,9 +211,7 @@ async function fetchProjectLogs(
   const response = await fetch(
     `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/logs?${query.toString()}`,
     {
-      headers: {
-        "X-GateLM-Request-Id": `request_web_logs_${Date.now()}`
-      },
+      headers: getGatewayObservabilityHeaders(`request_web_logs_${Date.now()}`),
       cache: "no-store"
     }
   ).catch(() => undefined);
@@ -449,6 +451,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Liv
     costMicroUsd,
     savedCostMicroUsd: cacheStatus === "hit" ? costMicroUsd : 0,
     latencyMs: item.latencyMs ?? 0,
+    ttftMs: normalizeNullableLatency(item.ttftMs),
     providerLatencyMs: null,
     status,
     terminalStatus: status,
@@ -478,6 +481,12 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Liv
       }
     }
   };
+}
+
+function normalizeNullableLatency(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function normalizeUserRef(value: string | null | undefined) {

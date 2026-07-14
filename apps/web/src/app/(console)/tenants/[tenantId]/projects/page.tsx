@@ -1,10 +1,14 @@
+import { notFound } from "next/navigation";
 import { ProjectManagement } from "@/features/projects/components/project-management";
+import { filterProjectMonthlyCostReport } from "@/features/projects/project-monthly-cost-visibility";
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
   isTenantAdminForTenant,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveMonthlyProjectCostReport } from "@/lib/gateway/live-cost-report";
 import { buildProjectUsagePreview } from "@/lib/gateway/project-usage-preview";
@@ -26,11 +30,17 @@ export default async function ProjectsPage({ params, searchParams }: ProjectsPag
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
   const [projectsModel, monthlyCostReport] = await Promise.all([
     getProjectsModel(effectiveTenantId),
     getLiveMonthlyProjectCostReport(effectiveTenantId)
   ]);
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const budgetThresholds = visibleProjects.map((project) => ({
     projectId: project.id,
     warningThresholdPercent: project.warningThresholdPercent
@@ -38,7 +48,12 @@ export default async function ProjectsPage({ params, searchParams }: ProjectsPag
   const canCreateProject = isTenantAdminForTenant(auth, effectiveTenantId);
   const usageReport = shouldUseUsagePreview(resolvedSearchParams.usagePreview)
     ? buildProjectUsagePreview(visibleProjects)
-    : monthlyCostReport;
+    : projectScoped
+      ? filterProjectMonthlyCostReport(
+          monthlyCostReport,
+          visibleProjects.map((project) => project.id)
+        )
+      : monthlyCostReport;
 
   return (
     <ProjectManagement

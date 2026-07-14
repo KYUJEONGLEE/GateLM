@@ -10,6 +10,7 @@ import { AppTokensModule } from './modules/app-tokens/app-tokens.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BudgetOperationsModule } from './modules/budget-operations/budget-operations.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
+import { DashboardRollupModule } from './modules/dashboard-rollup/dashboard-rollup.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
@@ -40,6 +41,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     AuthModule,
     BudgetOperationsModule,
     ConversationsModule,
+    DashboardRollupModule,
     EmployeesModule,
     RuntimeConfigsModule,
     TenantChatRuntimeModule,

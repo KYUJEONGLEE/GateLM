@@ -7,6 +7,7 @@ import {
   resolveConsoleTenantIdForAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { RequestLogDetailClient } from "@/features/request-logs/components/request-log-detail-client";
 import {
   type RequestLogCreatedFilter,
@@ -63,6 +64,11 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
   const [projectsModel, employees, providerConnections] = await Promise.all([
     getProjectsModel(effectiveTenantId),
     getTenantEmployees(effectiveTenantId),

@@ -132,6 +132,7 @@ function toLiveRequestRow(
     fallbackUsed: record.domainOutcomes?.fallback?.outcome === "success",
     id: record.requestId,
     latencyMs: record.latencyMs,
+    ttftMs: record.ttftMs ?? null,
     modelRef: record.modelRef,
     projectId,
     projectName: projectNames.get(projectId) ?? formatDisplayIdentifier(projectId),

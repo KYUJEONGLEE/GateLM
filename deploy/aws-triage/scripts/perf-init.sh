@@ -16,6 +16,11 @@ umask 077
 postgres_password="$(openssl rand -hex 24)"
 auth_state_secret="$(openssl rand -hex 32)"
 internal_service_token="$(openssl rand -hex 32)"
+observability_internal_token="$(openssl rand -hex 32)"
+tenant_chat_control_plane_service_token="$(openssl rand -hex 32)"
+tenant_chat_web_service_token="$(openssl rand -hex 32)"
+tenant_chat_access_jwt_secret="$(openssl rand -hex 32)"
+tenant_chat_intent_secret="$(openssl rand -hex 32)"
 cache_key_secret="$(openssl rand -hex 32)"
 demo_api_key="gsk_perf_$(openssl rand -hex 24)"
 demo_app_token="gat_perf_$(openssl rand -hex 24)"
@@ -24,6 +29,7 @@ cat > "${PERF_ENV_FILE}" <<EOF
 GATELM_PUBLIC_DOMAIN=127.0.0.1
 GATELM_PUBLIC_BASE_URL=http://127.0.0.1:13000
 GATELM_APPLICATION_BASE_URL=http://127.0.0.1:13002
+GATELM_CHAT_WEB_ORIGIN=http://chat.localhost:13003
 AWS_TRIAGE_WEB_BIND=127.0.0.1
 AWS_TRIAGE_WEB_PORT=13000
 AWS_TRIAGE_APPLICATION_BIND=127.0.0.1
@@ -40,6 +46,10 @@ CONTROL_PLANE_ADMIN_AUTH_MODE=session_cookie
 CONTROL_PLANE_AUTH_COOKIE_SECURE=false
 CONTROL_PLANE_AUTH_STATE_SECRET=${auth_state_secret}
 CONTROL_PLANE_INTERNAL_SERVICE_TOKEN=${internal_service_token}
+TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN=${tenant_chat_control_plane_service_token}
+TENANT_CHAT_WEB_SERVICE_TOKEN=${tenant_chat_web_service_token}
+TENANT_CHAT_ACCESS_JWT_SECRET=${tenant_chat_access_jwt_secret}
+TENANT_CHAT_INTENT_SECRET=${tenant_chat_intent_secret}
 AUTH_EMAIL_TRANSPORT=smtp
 CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=false
 SMTP_HOST=127.0.0.1
@@ -54,6 +64,7 @@ GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=http://127.0.0.1:13000/api/auth/google/callback
 GATEWAY_RUNTIME_SNAPSHOT_MODE=strict
 GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN=${internal_service_token}
+GATEWAY_OBSERVABILITY_INTERNAL_TOKEN=${observability_internal_token}
 GATEWAY_CONTROL_PLANE_TIMEOUT_MS=5000
 GATEWAY_PROVIDER_TIMEOUT_MS=5000
 GATEWAY_DEFAULT_PROVIDER=mock
@@ -106,7 +117,10 @@ AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 EOF
 
 chmod 600 "${PERF_ENV_FILE}"
-unset postgres_password auth_state_secret internal_service_token cache_key_secret demo_api_key demo_app_token
+unset postgres_password auth_state_secret internal_service_token observability_internal_token
+unset tenant_chat_control_plane_service_token tenant_chat_web_service_token
+unset tenant_chat_access_jwt_secret tenant_chat_intent_secret
+unset cache_key_secret demo_api_key demo_app_token
 
 perf_load_env
 perf_validate_env

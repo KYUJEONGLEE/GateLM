@@ -136,6 +136,7 @@ export interface LlmRequestLog {
   savedCostMicroUsd?: number;
   currency: "USD" | string;
   latencyMs: number;
+  ttftMs?: number | null;
 
   status: InvocationStatus;
   httpStatus: number;
@@ -177,6 +178,7 @@ export interface RequestLogListItem {
   costUsd: string;
   costMicroUsd: number;
   latencyMs: number;
+  ttftMs: number | null;
   cacheStatus: CacheStatus;
   cacheType: CacheType;
   routingReason: string | null;
@@ -206,6 +208,7 @@ export interface RequestDetailResponseData {
   };
   latency: {
     latencyMs: number;
+    ttftMs: number | null;
   };
   cache: {
     cacheStatus: CacheStatus;
@@ -248,6 +251,18 @@ export interface DashboardOverviewFields {
   totalCostMicroUsd: number;
   totalCostUsd: string;
   averageResponseTimeMs: number | null;
+  performance?: {
+    gatewayTtft?: {
+      scope: "project_application";
+      averageMs: number | null;
+      p50Ms: number | null;
+      p95Ms: number | null;
+      p99Ms: number | null;
+      eligibleStreamRequests: number;
+      observedRequests: number;
+      coverageRate: number | null;
+    };
+  };
 }
 
 export const REQUEST_LOG_LIST_FIELDS = [
@@ -266,6 +281,7 @@ export const REQUEST_LOG_LIST_FIELDS = [
   "costUsd",
   "costMicroUsd",
   "latencyMs",
+  "ttftMs",
   "cacheStatus",
   "cacheType",
   "routingReason",
@@ -312,6 +328,7 @@ export function toRequestLogListItem(
     costUsd: log.costUsd,
     costMicroUsd: log.costMicroUsd,
     latencyMs: log.latencyMs,
+    ttftMs: log.ttftMs ?? null,
     cacheStatus: log.cacheStatus,
     cacheType: log.cacheType,
     routingReason: log.routing.routingReason,
@@ -347,6 +364,7 @@ export function toRequestDetailResponseData(
     },
     latency: {
       latencyMs: log.latencyMs,
+      ttftMs: log.ttftMs ?? null,
     },
     cache: {
       cacheStatus: log.cacheStatus,

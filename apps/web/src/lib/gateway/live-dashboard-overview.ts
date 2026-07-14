@@ -2,7 +2,10 @@ import "server-only";
 
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  getGatewayObservabilityHeaders,
+  getLiveGatewayConfig
+} from "@/lib/gateway/live-gateway-config";
 import {
   type DashboardRoutingSummary,
   type ModelCostRow,
@@ -11,6 +14,10 @@ import {
   normalizeModelCostRows,
   normalizeProviderModelAggregates
 } from "@/lib/gateway/live-observability-contract";
+import {
+  type GatewayTtftPayload,
+  normalizeGatewayTtft
+} from "@/lib/dashboard/gateway-ttft";
 import { getAlignedLiveTimeRange } from "@/lib/gateway/time-series-range";
 
 type LiveDashboardOverviewResponse = {
@@ -73,6 +80,7 @@ type LiveDashboardOverviewResponse = {
       to?: string;
     };
     performance?: {
+      gatewayTtft?: GatewayTtftPayload;
       p95GatewayInternalLatencyMs?: number | null;
       p95ProviderLatencyMs?: number | null;
       p99GatewayInternalLatencyMs?: number | null;
@@ -203,9 +211,7 @@ export async function getLiveDashboardOverview(
   appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(`${config.baseUrl}/api/dashboard/overview?${query.toString()}`, {
-    headers: {
-      "X-GateLM-Request-Id": `request_web_dashboard_${Date.now()}`
-    },
+    headers: getGatewayObservabilityHeaders(`request_web_dashboard_${Date.now()}`),
     cache: "no-store"
   }).catch(() => undefined);
 
@@ -251,6 +257,12 @@ function toDashboardOverview(
   const freshness = data.dataFreshness ?? {};
   const v2Freshness = data.freshness;
   const performance = data.performance;
+  const queryBudgetStatus = normalizeQueryBudgetStatus(
+    data.queryBudget?.status,
+    v2Freshness?.isStale
+  );
+  const lastAggregatedAt =
+    v2Freshness?.lastAggregatedAt ?? freshness.generatedAt ?? fallbackTo;
   const applicationId = "live_gateway_application";
   const totalRequests = totals.totalRequests ?? totals.requestCount ?? 0;
   const successfulRequests = totals.successfulRequests ?? totals.successCount ?? 0;
@@ -309,6 +321,12 @@ function toDashboardOverview(
     savedCostUsd: totals.savedCostUsd ?? formatMicroUsd(totals.savedCostMicroUsd ?? 0),
     averageLatencyMs: totals.averageLatencyMs ?? totals.averageResponseTimeMs ?? 0,
     p95LatencyMs: totals.p95LatencyMs ?? 0,
+    gatewayTtft: normalizeGatewayTtft(performance?.gatewayTtft),
+    latencyBySurface: {
+      projectApplicationAverageMs:
+        totals.averageLatencyMs ?? totals.averageResponseTimeMs ?? 0,
+      projectApplicationP95Ms: totals.p95LatencyMs ?? 0
+    },
     maskingActionCounts: totals.maskingActionCounts ?? {},
     routingSummaries: normalizeDashboardRoutingSummaries(totals.routingSummaries),
     statusCounts,
@@ -319,10 +337,12 @@ function toDashboardOverview(
       source: v2Freshness?.source ?? freshness.source ?? "gateway-postgresql",
       recordCount: freshness.recordCount ?? 0,
       lastLogCreatedAt: v2Freshness?.lastIngestedAt ?? freshness.lastLogCreatedAt ?? freshness.generatedAt ?? fallbackTo,
-      generatedAt: freshness.generatedAt ?? v2Freshness?.lastAggregatedAt ?? fallbackTo
+      generatedAt: freshness.generatedAt ?? v2Freshness?.lastAggregatedAt ?? fallbackTo,
+      lastAggregatedAt,
+      isStale: v2Freshness?.isStale ?? queryBudgetStatus === "stale"
     },
     queryBudget: {
-      status: data.queryBudget?.status ?? "ok",
+      status: queryBudgetStatus,
       maxRangeHours: data.queryBudget?.maxRangeHours ?? 24,
       maxBreakdownItems: data.queryBudget?.maxBreakdownItems ?? 50,
       guidance: data.queryBudget?.guidance ?? null
@@ -345,6 +365,17 @@ function toDashboardOverview(
     },
     notes: ["Live Gateway overview. Raw prompt, raw response, and credentials are not exposed."]
   };
+}
+
+function normalizeQueryBudgetStatus(
+  status: NonNullable<DashboardOverview["queryBudget"]>["status"] | undefined,
+  isStale: boolean | undefined
+): NonNullable<DashboardOverview["queryBudget"]>["status"] {
+  if (isStale && (!status || status === "ok")) {
+    return "stale";
+  }
+
+  return status ?? "ok";
 }
 
 function normalizeOutcomeRows(rows: Array<{ outcome?: string; requestCount?: number }> | undefined) {
