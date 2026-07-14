@@ -1,0 +1,336 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GateLM Tenant Chat conversation API",
+    "version": "tenant-chat/v1",
+    "description": "Private Chat Web BFF to Chat API wire. It is not the public Gateway /v1 API."
+  },
+  "servers": [{ "url": "http://chat-api:3003" }],
+  "security": [
+    { "ChatWebService": [], "ChatAccess": [] }
+  ],
+  "paths": {
+    "/internal/v1/tenant-chat/conversations": {
+      "post": {
+        "operationId": "createTenantChatConversation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateConversationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/ConversationCreated" },
+          "200": { "$ref": "#/components/responses/ConversationReplayed" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      },
+      "get": {
+        "operationId": "listTenantChatConversations",
+        "parameters": [
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/ConversationLimit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actor-owned active conversations.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationPage" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/conversations/{conversationId}": {
+      "parameters": [{ "$ref": "#/components/parameters/ConversationId" }],
+      "get": {
+        "operationId": "getTenantChatConversation",
+        "responses": {
+          "200": { "$ref": "#/components/responses/ConversationFound" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      },
+      "patch": {
+        "operationId": "renameTenantChatConversation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RenameConversationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/ConversationFound" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTenantChatConversation",
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "responses": {
+          "204": { "description": "Ciphertext was deleted or an actor-owned tombstone was replayed." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/conversations/{conversationId}/messages": {
+      "get": {
+        "operationId": "listTenantChatMessages",
+        "parameters": [
+          { "$ref": "#/components/parameters/ConversationId" },
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/MessageLimit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decrypted actor-owned completed history.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessagePage" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/conversations/{conversationId}/turns": {
+      "post": {
+        "operationId": "streamTenantChatTurn",
+        "parameters": [{ "$ref": "#/components/parameters/ConversationId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateTurnRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. Success final is sent only after assistant ciphertext commit.",
+            "headers": {
+              "Cache-Control": { "schema": { "type": "string", "const": "no-store" } },
+              "X-Accel-Buffering": { "schema": { "type": "string", "const": "no" } }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" },
+                "x-event-schema": "../schemas/chat-turn-sse-event.schema.json"
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/conversations/{conversationId}/turns/{turnId}/cancel": {
+      "post": {
+        "operationId": "cancelTenantChatTurn",
+        "parameters": [
+          { "$ref": "#/components/parameters/ConversationId" },
+          { "$ref": "#/components/parameters/TurnId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancellation was applied or replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["cancelled"],
+                  "properties": { "cancelled": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ChatWebService": { "type": "apiKey", "in": "header", "name": "X-GateLM-Chat-Web-Service-Token" },
+      "ChatAccess": { "type": "apiKey", "in": "header", "name": "X-GateLM-Chat-Access" }
+    },
+    "parameters": {
+      "ConversationId": {
+        "name": "conversationId", "in": "path", "required": true,
+        "schema": { "$ref": "#/components/schemas/Uuid" }
+      },
+      "TurnId": {
+        "name": "turnId", "in": "path", "required": true,
+        "schema": { "$ref": "#/components/schemas/Uuid" }
+      },
+      "Cursor": {
+        "name": "cursor", "in": "query", "required": false,
+        "schema": { "type": "string", "minLength": 32, "maxLength": 2048, "pattern": "^[A-Za-z0-9_.-]+$" }
+      },
+      "ConversationLimit": {
+        "name": "limit", "in": "query", "required": false,
+        "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+      },
+      "MessageLimit": {
+        "name": "limit", "in": "query", "required": false,
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+      },
+      "IfMatch": {
+        "name": "If-Match", "in": "header", "required": true,
+        "schema": { "type": "string", "pattern": "^\\\"[1-9][0-9]*\\\"$" }
+      }
+    },
+    "schemas": {
+      "Uuid": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      },
+      "OpaqueKey": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+      "Conversation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "version", "historyRetentionDays", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Uuid" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "version": { "type": "integer", "minimum": 1 },
+          "historyRetentionDays": { "enum": [0, 7, 30, 90] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateConversationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["idempotencyKey", "title"],
+        "properties": {
+          "idempotencyKey": { "$ref": "#/components/schemas/OpaqueKey" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 }
+        }
+      },
+      "RenameConversationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "expectedVersion"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "expectedVersion": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ConversationPage": {
+        "type": "object", "additionalProperties": false, "required": ["items", "nextCursor"],
+        "properties": {
+          "items": { "type": "array", "maxItems": 50, "items": { "$ref": "#/components/schemas/Conversation" } },
+          "nextCursor": { "type": ["string", "null"], "maxLength": 2048 }
+        }
+      },
+      "Message": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "turnId", "role", "content", "sequence", "createdAt"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Uuid" },
+          "turnId": { "$ref": "#/components/schemas/Uuid" },
+          "role": { "enum": ["user", "assistant"] },
+          "content": { "type": "string", "minLength": 1, "maxLength": 1048576 },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MessagePage": {
+        "type": "object", "additionalProperties": false, "required": ["items", "nextCursor"],
+        "properties": {
+          "items": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/Message" } },
+          "nextCursor": { "type": ["string", "null"], "maxLength": 2048 }
+        }
+      },
+      "UsageIntent": {
+        "type": "object", "additionalProperties": false,
+        "required": ["requestedTier", "maxOutputTokens", "cacheStrategy"],
+        "properties": {
+          "requestedTier": { "enum": ["auto", "high_quality", "standard", "economy"] },
+          "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 8192 },
+          "cacheStrategy": { "enum": ["off", "exact"] }
+        }
+      },
+      "CreateTurnRequest": {
+        "type": "object", "additionalProperties": false,
+        "required": ["idempotencyKey", "content", "usageIntent"],
+        "properties": {
+          "idempotencyKey": { "$ref": "#/components/schemas/OpaqueKey" },
+          "content": { "type": "string", "minLength": 1, "maxLength": 20000 },
+          "usageIntent": { "$ref": "#/components/schemas/UsageIntent" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object", "additionalProperties": false, "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^CHAT_[A-Z0-9_]{1,59}$" },
+          "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "retryAfterSeconds": { "type": "integer", "minimum": 1, "maximum": 60 }
+        }
+      }
+    },
+    "responses": {
+      "ConversationCreated": {
+        "description": "Conversation ciphertext created.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Conversation" } } }
+      },
+      "ConversationReplayed": {
+        "description": "Same actor, idempotency key, and request binding replayed.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Conversation" } } }
+      },
+      "ConversationFound": {
+        "description": "Actor-owned active conversation.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Conversation" } } }
+      },
+      "BadRequest": {
+        "description": "Validation or cursor failure.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "AuthRequired": {
+        "description": "Service or user authentication failed.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "NotFound": {
+        "description": "Foreign, deleted, and missing conversations share this response.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "Conflict": {
+        "description": "Idempotency, version, or terminal replay conflict.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RateLimited": {
+        "description": "Admission rate or concurrency limit.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "Unavailable": {
+        "description": "Entitlement, key, runtime, usage guard, or storage is unavailable.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      }
+    }
+  }
+}

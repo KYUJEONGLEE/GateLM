@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/chat-conversation.schema.json",
+  "title": "Tenant Chat conversation resource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "version", "historyRetentionDays", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "integer", "minimum": 1 },
+    "historyRetentionDays": { "enum": [0, 7, 30, 90] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }
+  }
+}

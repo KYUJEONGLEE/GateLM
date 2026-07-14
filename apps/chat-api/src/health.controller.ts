@@ -1,5 +1,6 @@
 import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from './database/prisma.service';
+import { TenantContentKeyService } from './content/tenant-content-key.service';
 import { PrivateGatewayClient } from './execution/private-gateway.client';
 import { WorkloadCredentialsService } from './execution/workload-credentials';
 
@@ -9,6 +10,7 @@ export class HealthController {
     private readonly prisma: PrismaService,
     private readonly credentials: WorkloadCredentialsService,
     private readonly gateway: PrivateGatewayClient,
+    private readonly contentKeys: TenantContentKeyService,
   ) {}
 
   @Get('healthz')
@@ -20,7 +22,11 @@ export class HealthController {
   async ready() {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-      if (!this.gateway.isConfigured() || !(await this.credentials.isReady())) {
+      if (
+        !this.gateway.isConfigured() ||
+        !(await this.credentials.isReady()) ||
+        !(await this.contentKeys.isReady())
+      ) {
         throw new Error('execution credentials unavailable');
       }
       return { status: 'ready' };

@@ -9,6 +9,7 @@ import type {
   CompletionResult,
   UsageIntent,
 } from './execution.types';
+import { MAX_EPHEMERAL_MESSAGE_CHARACTERS } from './execution.types';
 import {
   CompletionStreamDisconnected,
   StrictCompletionStreamParser,
@@ -295,7 +296,7 @@ function validateCompletionInput(input: unknown): void {
       !['system', 'user', 'assistant'].includes(message.role) ||
       typeof message.content !== 'string' ||
       message.content.length < 1 ||
-      message.content.length > 20_000
+      message.content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS
     ) {
       throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
     }
