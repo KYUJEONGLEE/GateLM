@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v1",
+  "datasetVersion": "difficulty_eval_2026_07_13_pilot_500_v1",
+  "recordSchemaVersion": "gatelm.difficulty-evaluation-record.v1",
+  "datasetPath": "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",
+  "datasetSha256": "278be4bcf7764ed760b8f5e67858bf1587ad53a41d0bec71652f0b73b2ca8bc8",
+  "datasetPurpose": "training_tooling_smoke",
+  "trainingEligible": false,
+  "labelCoverageStatus": "unlabeled",
+  "familyPolicyVersion": "difficulty-prompt-family.v1",
+  "trainingGate": {
+    "minimumFamilyPolicyStatus": "decision_required"
+  },
+  "counts": {
+    "records": 500,
+    "families": 25,
+    "humanReviewedFamilies": 0,
+    "approvedHumanReviewedFamilies": 0
+  },
+  "legacyPartitionManifestPath": "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json",
+  "createdAt": "2026-07-14T00:00:00Z"
+}

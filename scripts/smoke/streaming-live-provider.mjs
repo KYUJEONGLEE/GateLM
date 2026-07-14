@@ -66,6 +66,7 @@ const controller = new AbortController();
 const timeout = setTimeout(() => controller.abort(), timeoutMs);
 const startedAt = Date.now();
 let firstChunkAt = null;
+let firstContentAt = null;
 let chunkCount = 0;
 let done = false;
 const streamedText = [];
@@ -125,6 +126,7 @@ try {
   console.log("\n\n요약");
   console.log(`- chunk 수: ${chunkCount}`);
   console.log(`- 첫 chunk까지 걸린 시간: ${firstChunkAt === null ? "수신 없음" : `${firstChunkAt - startedAt}ms`}`);
+  console.log(`- 첫 실제 content까지 걸린 시간(TTFT): ${firstContentAt === null ? "수신 없음" : `${firstContentAt - startedAt}ms`}`);
   console.log(`- 전체 소요 시간: ${durationMs}ms`);
   console.log(`- 완료 여부: ${done ? "DONE 수신" : "DONE 미수신"}`);
 
@@ -175,6 +177,10 @@ function handleData(data) {
   }
 
   if (pieces.length > 0) {
+    if (firstContentAt === null) {
+      firstContentAt = Date.now();
+      console.log(`첫 실제 content 수신(TTFT): ${firstContentAt - startedAt}ms\n`);
+    }
     const text = pieces.join("");
     streamedText.push(text);
     process.stdout.write(text);

@@ -35,7 +35,12 @@ set_valid_perf_env() {
   export POSTGRES_DB=gatelm_perf
   export CONTROL_PLANE_AUTH_STATE_SECRET=test-auth-state
   export CONTROL_PLANE_INTERNAL_SERVICE_TOKEN=test-internal-token
+  export TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN=test-chat-control-plane-token-at-least-32-bytes
+  export TENANT_CHAT_WEB_SERVICE_TOKEN=test-chat-web-token-at-least-32-bytes
+  export TENANT_CHAT_ACCESS_JWT_SECRET=test-chat-access-secret-at-least-32-bytes
+  export TENANT_CHAT_INTENT_SECRET=test-chat-intent-secret-at-least-32-bytes
   export GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN=test-internal-token
+  export GATEWAY_OBSERVABILITY_INTERNAL_TOKEN=test-observability-token-at-least-32-bytes
   export GATEWAY_EXACT_CACHE_KEY_SECRET=test-cache-secret
   export GATELM_DEMO_API_KEY=gsk_perf_test
   export GATELM_DEMO_APP_TOKEN=gat_perf_test
@@ -81,6 +86,28 @@ if (
   perf_validate_env
 ) >/dev/null 2>&1; then
   printf '%s\n' "expected private Gateway binding without opt-in to fail" >&2
+  exit 1
+fi
+
+if (
+  set_valid_perf_env
+  export GATELM_PERF_REMOTE_LOADGEN_ENABLED=false
+  export AWS_TRIAGE_GATEWAY_BIND=127.0.0.1
+  export GATEWAY_OBSERVABILITY_INTERNAL_TOKEN="${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN}"
+  perf_validate_env
+) >/dev/null 2>&1; then
+  printf '%s\n' "expected a reused observability token to fail" >&2
+  exit 1
+fi
+
+if (
+  set_valid_perf_env
+  export GATELM_PERF_REMOTE_LOADGEN_ENABLED=false
+  export AWS_TRIAGE_GATEWAY_BIND=127.0.0.1
+  export GATEWAY_OBSERVABILITY_INTERNAL_TOKEN=too-short
+  perf_validate_env
+) >/dev/null 2>&1; then
+  printf '%s\n' "expected a short observability token to fail" >&2
   exit 1
 fi
 

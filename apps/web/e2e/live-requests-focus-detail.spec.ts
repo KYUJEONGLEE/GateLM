@@ -38,7 +38,7 @@ test.beforeEach(async ({ context, page, request }) => {
       body: JSON.stringify({
         data: {
           generatedAt: "2026-07-11T00:10:06.000Z",
-          requestedModelOptions: ["auto"],
+          requestedModelOptions: ["gpt-4o-mini"],
           projectNameSource: "control-plane",
           rows: liveRows()
         }
@@ -68,7 +68,14 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
 
   const compact = page.locator('.dashboard-live-requests-panel[data-live-view="compact"]');
   await expect(compact).toBeVisible();
-  await expect(compact.locator("tbody tr")).toHaveCount(4);
+  await expect(compact.locator("tbody tr")).toHaveCount(5);
+  const executedModelCell = compact.locator("tbody tr").filter({
+    hasText: "gpt-4o-mini"
+  }).first();
+  await expect(executedModelCell.getByText("gpt-4o-mini", { exact: true })).toBeVisible();
+  await expect(
+    executedModelCell.locator('.dashboard-live-provider-icon[data-family="openai"]')
+  ).toHaveCount(1);
 
   await compact.getByRole("button", { name: "실시간 요청 확대 화면 열기" }).click();
 
@@ -118,7 +125,7 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   for (const label of [
     "요청 시각",
     "프로젝트",
-    "요청 모델",
+    "실행 모델",
     "최종 결과",
     "총 처리 시간",
     "사용 토큰",
@@ -126,6 +133,11 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   ]) {
     await expect(requestSummary.getByText(label, { exact: true })).toBeVisible();
   }
+  await expect(requestSummary.getByText("gpt-4o-mini", { exact: true })).toBeVisible();
+  await expect(requestSummary.getByText("OpenAI · Auto routing", { exact: true })).toBeVisible();
+  await expect(
+    requestSummary.locator('.request-detail-provider-icon[data-family="openai"]')
+  ).toHaveCount(1);
   await expect(drawer.locator(".gateway-pipeline-stage")).toHaveCount(7);
   await expect(drawer.locator(".gateway-pipeline-flow-dot")).toHaveCount(1);
   await expect(drawer.locator('.gateway-pipeline[data-route="provider"]')).toHaveCount(1);
@@ -244,7 +256,7 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
   const compact = page.locator(
     '.dashboard-live-requests-panel[data-live-view="compact"]'
   );
-  await expect(compact.locator("tbody tr")).toHaveCount(4);
+  await expect(compact.locator("tbody tr")).toHaveCount(5);
   await compact
     .getByRole("button", { name: "실시간 요청 확대 화면 열기" })
     .click();
@@ -265,6 +277,8 @@ test("follows cache-hit and terminal guardrail routes without inventing later st
     drawer.locator('.gateway-pipeline-stage[data-stage="adapter"][data-tone="skipped"]')
   ).toHaveCount(1);
   await expect(drawer.locator(".gateway-pipeline-flow-dot")).toHaveCSS("opacity", "0");
+  await expect(drawer.getByText("프로바이더 호출 없음", { exact: true })).toBeVisible();
+  await expect(drawer.locator(".request-detail-provider-icon")).toHaveCount(0);
   await drawer.getByRole("button", { name: "요청 상세 닫기" }).click();
 
   await focus.getByRole("button", { name: "요청 상세 열기 req-live-3" }).click();
@@ -298,11 +312,15 @@ function liveRows(): LiveRequestRow[] {
       category: sequence === 3 ? "code" : "general",
       costUsd: 0.00012 * sequence,
       difficulty: sequence === 3 ? "complex" : "simple",
+      executedModel: sequence === 2 ? null : "gpt-4o-mini",
       id: `req-live-${sequence}`,
       latencyMs: sequence === 2 ? 18 : 310 + sequence * 37,
       modelRef: sequence === 3 ? "catalog:code-complex" : "catalog:general-simple",
       projectId: "project-demo",
       projectName: "Customer Support",
+      providerFamily: sequence === 2 ? null : "openai",
+      providerId: sequence === 2 ? null : "provider-openai",
+      providerName: sequence === 2 ? null : "OpenAI",
       requestedModel: "auto",
       requestId: `req-live-${sequence}`,
       routingReason: "category_difficulty_matrix",
@@ -369,7 +387,7 @@ function detailRecord(requestId: string): InvocationLogRecord {
     promptHash: "sanitized-hash",
     promptTokens: 48,
     providerAttempt: {
-      providerId: "openai",
+      providerId: "provider-openai",
       modelId: "gpt-4o-mini",
       outcome: "succeeded",
       latencyMs: 360,

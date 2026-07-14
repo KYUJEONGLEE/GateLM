@@ -1,47 +1,29 @@
 "use client";
 
-import {
-  BrainCircuit,
-  ChevronDown,
-  ChevronUp,
-  Code2,
-  FileText,
-  Languages,
-  MessageSquareMore,
-  Plus,
-  Trash2
-} from "lucide-react";
+import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import {
+  createRuntimePolicyRoleRoutes,
+  getRuntimePolicyModelRoleConversion,
+  getRuntimePolicyModelRoles,
   runtimeRoutingCategories,
   runtimeRoutingDifficulties,
   type RuntimePolicyDraftValues,
   type RuntimePolicyModel,
-  type RuntimePolicyProvider,
-  type RuntimeRoutingCategory,
-  type RuntimeRoutingDifficulty
+  type RuntimePolicyModelRoles,
+  type RuntimePolicyProvider
 } from "@/lib/control-plane/runtime-policy-types";
 
 import type {
   RuntimePolicyDraftValuesSetter,
   RuntimePolicyEditorText
 } from "../runtime-policy-editor-types";
-
-const categoryRows: Array<{
-  icon: typeof MessageSquareMore;
-  id: RuntimeRoutingCategory;
-  label: string;
-}> = [
-  { icon: MessageSquareMore, id: "general", label: "일반" },
-  { icon: Code2, id: "code", label: "코드" },
-  { icon: Languages, id: "translation", label: "번역" },
-  { icon: FileText, id: "summarization", label: "요약" },
-  { icon: BrainCircuit, id: "reasoning", label: "추론" }
-];
 
 type ModelRefOption = {
   family: string;
@@ -54,6 +36,7 @@ export type RoutingPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   providerCatalog: RuntimePolicyModel["providerCatalog"];
+  providerManagementHref?: string;
   providers: RuntimePolicyProvider[];
   text: RuntimePolicyEditorText;
 };
@@ -62,16 +45,18 @@ export function RoutingPolicyPanel({
   draftValues,
   onDraftValuesChange,
   providerCatalog,
+  providerManagementHref,
   providers,
   text
 }: RoutingPolicyPanelProps) {
   const modelOptions = useMemo(() => createModelRefOptions(providers), [providers]);
-  const hasMockRoute = runtimeRoutingCategories.some((category) =>
-    runtimeRoutingDifficulties.some((difficulty) =>
-      draftValues.routingPolicy.routes[category][difficulty].modelRefs.some((modelRef) =>
-        isMockModelRef(modelRef, modelOptions)
-      )
-    )
+  const roles = getRuntimePolicyModelRoles(draftValues.routingPolicy.routes);
+  const conversionRoles = getRuntimePolicyModelRoleConversion(
+    draftValues.routingPolicy.routes
+  );
+  const hasMockRoute = hasMockModelInRoutes(
+    draftValues.routingPolicy.routes,
+    modelOptions
   );
 
   function updateRoutingPolicy(
@@ -97,13 +82,9 @@ export function RoutingPolicyPanel({
     });
   }
 
-  function setCellModelRefs(
-    category: RuntimeRoutingCategory,
-    difficulty: RuntimeRoutingDifficulty,
-    modelRefs: string[]
-  ) {
+  function setRoles(nextRoles: RuntimePolicyModelRoles) {
     updateRoutingPolicy((policy) => {
-      policy.routes[category][difficulty].modelRefs = modelRefs;
+      policy.routes = createRuntimePolicyRoleRoutes(nextRoles);
     });
   }
 
@@ -112,10 +93,7 @@ export function RoutingPolicyPanel({
       <section className="tenant-routing-enable-card" aria-labelledby="policy-auto-routing-title">
         <div>
           <h3 id="policy-auto-routing-title">Auto routing</h3>
-          <p>
-            ON이면 요청의 카테고리와 난이도를 판정해 10개 경로 중 하나를 사용합니다.
-            OFF이면 호출자가 명시한 모델만 사용하며 저장된 10개 경로는 유지됩니다.
-          </p>
+          <p>{text.routingRoleHint}</p>
         </div>
         <div className="tenant-routing-switch-control">
           <Switch
@@ -130,78 +108,79 @@ export function RoutingPolicyPanel({
 
       {hasMockRoute ? (
         <Alert variant="warning">
-          <AlertDescription>
-            현재 Mock 모델이 포함되어 있습니다. 모든 셀에서 Mock을 실제 모델로 교체할
-            때까지 실행은 Mock으로 표시됩니다.
-          </AlertDescription>
+          <AlertDescription>{text.routingMockWarning}</AlertDescription>
         </Alert>
       ) : null}
 
-      {draftValues.routingPolicy.mode === "auto" ? (
+      {!roles ? (
+        <Alert variant="warning">
+          <AlertDescription>
+            <p>{text.routingAuthoringRequired}</p>
+            <button
+              className="secondary-button"
+              disabled={!conversionRoles}
+              onClick={() => conversionRoles && setRoles(conversionRoles)}
+              type="button"
+            >
+              {text.routingConvert}
+            </button>
+          </AlertDescription>
+        </Alert>
+      ) : (
         <section
+          aria-labelledby="policy-routing-role-model-title"
           className="tenant-routing-model-card policy-category-model-card"
-          aria-labelledby="policy-routing-category-model-title"
         >
           <header className="tenant-routing-model-heading">
             <div className="tenant-routing-model-heading-copy">
-              <h3 id="policy-routing-category-model-title">카테고리 × 난이도 모델 설정</h3>
-              <p>
-                각 셀의 첫 모델이 기본 대상이며, 다음 모델은 위에서 아래 순서로 fallback
-                됩니다.
-              </p>
+              <h3 id="policy-routing-role-model-title">{text.routingRoleModels}</h3>
+              <p>{text.routingRoleDescription}</p>
             </div>
           </header>
 
-          <div className="tenant-routing-table" role="table" aria-label="카테고리 난이도 모델 설정">
-            <div className="tenant-routing-table-head" role="row">
-              <span role="columnheader">카테고리</span>
-              <span role="columnheader">Simple</span>
-              <span role="columnheader">Complex</span>
-            </div>
-            {categoryRows.map((row) => {
-              const CategoryIcon = row.icon;
-
-              return (
-                <div className="tenant-routing-table-row" key={row.id} role="row">
-                  <div className="tenant-routing-category" role="rowheader">
-                    <CategoryIcon aria-hidden="true" />
-                    <span>{row.label}</span>
-                  </div>
-                  {runtimeRoutingDifficulties.map((difficulty) => (
-                    <OrderedModelRefEditor
-                      category={row.id}
-                      categoryLabel={row.label}
-                      difficulty={difficulty}
-                      key={difficulty}
-                      modelOptions={modelOptions}
-                      modelRefs={
-                        draftValues.routingPolicy.routes[row.id][difficulty].modelRefs
-                      }
-                      onChange={(modelRefs) =>
-                        setCellModelRefs(row.id, difficulty, modelRefs)
-                      }
-                    />
-                  ))}
-                </div>
-              );
-            })}
+          <div className="tenant-routing-table" role="group" aria-label={text.routingRoleModels}>
+            <RoleModelSelect
+              label={text.routingSimpleModel}
+              modelOptions={modelOptions}
+              onChange={(simpleModelRef) => setRoles({ ...roles, simpleModelRef })}
+              value={roles.simpleModelRef}
+            />
+            <RoleModelSelect
+              label={text.routingComplexModel}
+              modelOptions={modelOptions}
+              onChange={(complexModelRef) => setRoles({ ...roles, complexModelRef })}
+              value={roles.complexModelRef}
+            />
+            <RoleModelSelect
+              allowEmpty
+              excludedModelRefs={[roles.simpleModelRef, roles.complexModelRef]}
+              label={text.routingFallbackModel}
+              modelOptions={modelOptions}
+              noneLabel={text.routingFallbackNone}
+              onChange={(fallbackModelRef) =>
+                setRoles({
+                  ...roles,
+                  fallbackModelRef: fallbackModelRef || null
+                })
+              }
+              value={roles.fallbackModelRef ?? ""}
+            />
           </div>
-        </section>
-      ) : (
-        <section className="tenant-routing-off-default-card">
-          <header className="tenant-routing-off-default-heading">
-            <h3>Manual model selection</h3>
-            <p>
-              이 모드에서는 <code>model: &quot;auto&quot;</code> 요청이 거부됩니다. 호출자는 명시적인
-              modelRef를 보내야 하며, Auto routing을 다시 켜면 저장된 10개 셀이 복원됩니다.
-            </p>
-          </header>
         </section>
       )}
 
       <article className="console-panel policy-editor-panel">
         <div className="panel-heading">
           <h3>{text.providerCatalog}</h3>
+          {providerManagementHref ? (
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href={providerManagementHref}
+            >
+              <Plus aria-hidden="true" />
+              {text.providerAdd}
+            </Link>
+          ) : null}
         </div>
         {providerCatalog.loadError ? (
           <Alert variant="warning">
@@ -233,110 +212,62 @@ export function RoutingPolicyPanel({
   );
 }
 
-function OrderedModelRefEditor({
-  category,
-  categoryLabel,
-  difficulty,
+function RoleModelSelect({
+  allowEmpty = false,
+  excludedModelRefs = [],
+  label,
   modelOptions,
-  modelRefs,
-  onChange
+  noneLabel = "None",
+  onChange,
+  value
 }: {
-  category: RuntimeRoutingCategory;
-  categoryLabel: string;
-  difficulty: RuntimeRoutingDifficulty;
+  allowEmpty?: boolean;
+  excludedModelRefs?: string[];
+  label: string;
   modelOptions: ModelRefOption[];
-  modelRefs: string[];
-  onChange: (modelRefs: string[]) => void;
+  noneLabel?: string;
+  onChange: (modelRef: string) => void;
+  value: string;
 }) {
-  const availableToAdd = modelOptions.find(
-    (option) => !modelRefs.includes(option.modelRef)
+  const availableOptions = modelOptions.filter(
+    (option) =>
+      !excludedModelRefs.includes(option.modelRef) || option.modelRef === value
   );
+  const selectedOption = modelOptions.find((option) => option.modelRef === value);
+  const options =
+    value && !selectedOption
+      ? [
+          {
+            family: "mock",
+            label: `${value} (unavailable)`,
+            modelRef: value,
+            providerName: "unavailable"
+          },
+          ...availableOptions
+        ]
+      : availableOptions;
 
   return (
-    <div className="tenant-routing-route" data-column-label={difficulty} role="cell">
-      <ol className="routing-model-ref-list">
-        {modelRefs.map((modelRef, index) => {
-          const selectedOption = modelOptions.find(
-            (option) => option.modelRef === modelRef
-          );
-          const options = selectedOption
-            ? modelOptions
-            : [
-                {
-                  family: "mock",
-                  label: modelRef,
-                  modelRef,
-                  providerName: modelRef === "mock-balanced" ? "mock" : "unavailable"
-                },
-                ...modelOptions
-              ];
-
-          return (
-            <li className="routing-model-ref-item" key={`${modelRef}:${index}`}>
-              <ProviderFamilyIcon
-                className="tenant-routing-provider-icon"
-                family={selectedOption?.family ?? "mock"}
-                size={20}
-              />
-              <label>
-                <span className="sr-only">
-                  {categoryLabel} {difficulty} {index === 0 ? "primary" : `fallback ${index}`}
-                </span>
-                <select
-                  aria-label={`${categoryLabel} ${difficulty} ${index === 0 ? "primary" : `fallback ${index}`}`}
-                  onChange={(event) => {
-                    const next = [...modelRefs];
-                    next[index] = event.target.value;
-                    onChange(Array.from(new Set(next)));
-                  }}
-                  value={modelRef}
-                >
-                  {options.map((option) => (
-                    <option key={option.modelRef} value={option.modelRef}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="routing-model-ref-actions">
-                <button
-                  aria-label={`${category} ${difficulty} move up`}
-                  disabled={index === 0}
-                  onClick={() => onChange(moveItem(modelRefs, index, index - 1))}
-                  type="button"
-                >
-                  <ChevronUp aria-hidden="true" />
-                </button>
-                <button
-                  aria-label={`${category} ${difficulty} move down`}
-                  disabled={index === modelRefs.length - 1}
-                  onClick={() => onChange(moveItem(modelRefs, index, index + 1))}
-                  type="button"
-                >
-                  <ChevronDown aria-hidden="true" />
-                </button>
-                <button
-                  aria-label={`${category} ${difficulty} remove model`}
-                  disabled={modelRefs.length === 1}
-                  onClick={() => onChange(modelRefs.filter((_, itemIndex) => itemIndex !== index))}
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-      <button
-        className="secondary-button routing-model-ref-add"
-        disabled={!availableToAdd}
-        onClick={() => availableToAdd && onChange([...modelRefs, availableToAdd.modelRef])}
-        type="button"
-      >
-        <Plus aria-hidden="true" /> fallback
-      </button>
-    </div>
+    <label className="tenant-routing-route">
+      <span>{label}</span>
+      <span className="routing-model-ref-item">
+        {value ? (
+          <ProviderFamilyIcon
+            className="tenant-routing-provider-icon"
+            family={selectedOption?.family ?? "mock"}
+            size={20}
+          />
+        ) : null}
+        <select aria-label={label} onChange={(event) => onChange(event.target.value)} value={value}>
+          {allowEmpty ? <option value="">{noneLabel}</option> : null}
+          {options.map((option) => (
+            <option key={option.modelRef} value={option.modelRef}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </label>
   );
 }
 
@@ -393,11 +324,4 @@ function isMockModelRef(modelRef: string, modelOptions: ModelRefOption[]) {
     modelRef === "mock-balanced" ||
     modelOptions.find((option) => option.modelRef === modelRef)?.providerName === "mock"
   );
-}
-
-function moveItem(items: string[], from: number, to: number) {
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
 }

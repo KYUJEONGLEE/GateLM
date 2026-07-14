@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v1",
+  "datasetVersion": "difficulty_label_contract_smoke_2026_07_14_v1",
+  "recordSchemaVersion": "gatelm.difficulty-label-record.v1",
+  "datasetPath": "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl",
+  "datasetSha256": "8ff1edca6078e7acb5146965be821b890b99fb6bec9d24ff9df3f462911e9765",
+  "datasetPurpose": "label_contract_smoke",
+  "trainingEligible": false,
+  "labelCoverageStatus": "complete",
+  "familyPolicyVersion": "difficulty-prompt-family.v1",
+  "trainingGate": {
+    "minimumFamilyPolicyStatus": "decision_required"
+  },
+  "counts": {
+    "records": 10,
+    "families": 5,
+    "humanReviewedFamilies": 0,
+    "approvedHumanReviewedFamilies": 0
+  },
+  "coverage": {
+    "categoryFamilies": {
+      "general": 1,
+      "code": 1,
+      "translation": 1,
+      "summarization": 1,
+      "reasoning": 1
+    },
+    "difficultyFamilies": {
+      "simple": 5,
+      "complex": 5
+    },
+    "categoryDifficultyFamilies": {
+      "general": { "simple": 1, "complex": 1 },
+      "code": { "simple": 1, "complex": 1 },
+      "translation": { "simple": 1, "complex": 1 },
+      "summarization": { "simple": 1, "complex": 1 },
+      "reasoning": { "simple": 1, "complex": 1 }
+    },
+    "languageFamilies": {
+      "ko": 4,
+      "en": 4,
+      "mixed": 2,
+      "unknown": 0
+    },
+    "evaluationSliceFamilies": {
+      "negation": 2,
+      "indirect_expression": 2,
+      "synonym": 1,
+      "short_complex": 4,
+      "long_simple": 2,
+      "payload_contamination": 1,
+      "korean": 4,
+      "english": 4,
+      "mixed_language": 2,
+      "category_confusion": 2,
+      "ood_terminology": 1
+    }
+  },
+  "families": [
+    {
+      "promptFamily": "fixture.code.explain_flow.f01",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "smoke",
+      "records": 2
+    },
+    {
+      "promptFamily": "fixture.general.account_recovery.f01",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "smoke",
+      "records": 2
+    },
+    {
+      "promptFamily": "fixture.reasoning.choose_option.f01",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "smoke",
+      "records": 2
+    },
+    {
+      "promptFamily": "fixture.summarization.status.f01",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_structured",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "smoke",
+      "records": 2
+    },
+    {
+      "promptFamily": "fixture.translation.preserve_style.f01",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "smoke",
+      "records": 2
+    }
+  ],
+  "createdAt": "2026-07-14T00:00:00Z"
+}

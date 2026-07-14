@@ -44,6 +44,20 @@ export function formatLatency(value: number | null) {
   return `${formatInteger(value)} ms`;
 }
 
+export function formatResponseTimeSeconds(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "—";
+  }
+
+  const seconds = value / 1000;
+  const formatted = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: value < 1000 ? 3 : 2,
+    minimumFractionDigits: 2
+  }).format(seconds);
+
+  return `${formatted} s`;
+}
+
 export function formatPercent(value: number) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 1,

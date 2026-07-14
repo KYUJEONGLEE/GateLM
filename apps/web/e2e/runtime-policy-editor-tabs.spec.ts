@@ -18,6 +18,7 @@ const policyTabs = [
 ] as const;
 const projectPolicyTabs = [
   "General",
+  "Employees",
   "Routing",
   "Rate Limit",
   "Cache",
@@ -53,6 +54,11 @@ test.beforeEach(async ({ context, request }) => {
 
   await context.addCookies([
     {
+      name: "gatelm_locale",
+      url: e2eBaseUrl,
+      value: "en"
+    },
+    {
       name: "gatelm_session",
       url: e2eBaseUrl,
       value: sessionCookie
@@ -60,38 +66,46 @@ test.beforeEach(async ({ context, request }) => {
   ]);
 });
 
-test("routing matrix persists and manual mode keeps the saved ten cells", async ({ page }) => {
+test("routing roles persist and manual mode keeps the projected ten cells", async ({ page }) => {
+  test.setTimeout(60_000);
+
   const runtimeConfigPosts = await prepareRuntimeConfigPostRoute(page);
   await page.goto(policyPath);
 
   const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
-  const categoryModelTable = routingPanel.getByRole("table", {
+  const roleModels = routingPanel.getByRole("group", {
     exact: true,
-    name: "카테고리 난이도 모델 설정"
+    name: "Routing role models"
   });
-  const categoryLabels = ["일반", "코드", "번역", "요약", "추론"];
 
-  await expect(categoryModelTable).toBeVisible();
-  await expect(categoryModelTable.getByRole("columnheader")).toHaveText([
-    "카테고리",
-    "Simple",
-    "Complex"
-  ]);
-  await expect(categoryModelTable.getByRole("rowheader")).toHaveText(categoryLabels);
+  await expect(roleModels).toBeVisible();
+  await expect(routingPanel.getByLabel("Simple model", { exact: true })).toHaveValue(
+    "mock-balanced"
+  );
+  await expect(routingPanel.getByLabel("Complex model", { exact: true })).toHaveValue(
+    "mock-balanced"
+  );
+  const fallbackModelSelect = routingPanel.getByLabel("Fallback model (optional)", {
+    exact: true
+  });
+  await expect(fallbackModelSelect).toHaveValue("");
+  await expect(
+    fallbackModelSelect.locator("..").locator(".tenant-routing-provider-icon")
+  ).toHaveCount(0);
 
-  for (const categoryLabel of categoryLabels) {
-    for (const difficulty of ["simple", "complex"]) {
-      await expect(
-        routingPanel.getByLabel(`${categoryLabel} ${difficulty} primary`, { exact: true })
-      ).toBeVisible();
+  const autoRoutingSwitch = routingPanel.getByRole("switch", {
+    exact: true,
+    name: "Auto routing"
+  });
+  await expect(async () => {
+    if (await autoRoutingSwitch.isChecked()) {
+      await autoRoutingSwitch.click();
     }
-  }
+    await expect(autoRoutingSwitch).not.toBeChecked();
+  }).toPass();
+  await expect(roleModels).toBeVisible();
 
-  await routingPanel.getByRole("switch", { exact: true, name: "Auto routing" }).click();
-  await expect(categoryModelTable).toHaveCount(0);
-  await expect(routingPanel.getByText(/model: "auto"/)).toBeVisible();
-
-  await page.getByRole("button", { exact: true, name: "Save draft" }).click();
+  await page.getByRole("button", { name: /^Save draft/ }).click();
   await expect.poll(() => runtimeConfigPosts.length).toBe(1);
   const savedValues = asRecord(runtimeConfigPosts[0]?.values);
   const savedRoutingPolicy = asRecord(savedValues.routingPolicy);
@@ -99,9 +113,14 @@ test("routing matrix persists and manual mode keeps the saved ten cells", async 
   expect(savedRoutingPolicy.defaultModel).toBeUndefined();
   expect(savedRoutingPolicy.highQualityModel).toBeUndefined();
 
-  await routingPanel.getByRole("switch", { exact: true, name: "Auto routing" }).click();
-  await expect(categoryModelTable).toBeVisible();
-  await expect(routingPanel.getByLabel("일반 simple primary", { exact: true })).toHaveValue(
+  await expect(async () => {
+    if (!(await autoRoutingSwitch.isChecked())) {
+      await autoRoutingSwitch.click();
+    }
+    await expect(autoRoutingSwitch).toBeChecked();
+  }).toPass();
+  await expect(roleModels).toBeVisible();
+  await expect(routingPanel.getByLabel("Simple model", { exact: true })).toHaveValue(
     "mock-balanced"
   );
 });
@@ -117,7 +136,7 @@ test("policy editor exposes category tabs and category panels", async ({ page })
 
   await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
   await expect(
-    page.getByRole("table", { exact: true, name: "카테고리 난이도 모델 설정" })
+    page.getByRole("group", { exact: true, name: "Routing role models" })
   ).toBeVisible();
 
   await page.getByRole("tab", { exact: true, name: "Safety" }).click();
@@ -131,7 +150,7 @@ test("lazy policy tab panel mounts only for active tab and shows loading fallbac
   await delayRuntimePolicyLazyChunk(page, "safety-panel");
   await page.goto(policyPath);
   await expect(
-    page.getByRole("table", { exact: true, name: "카테고리 난이도 모델 설정" })
+    page.getByRole("group", { exact: true, name: "Routing role models" })
   ).toBeVisible();
   await expect(page.locator("#policy-panel-routing")).toHaveCount(1);
   await expect(page.locator("#policy-panel-safety")).toHaveCount(0);
@@ -167,7 +186,7 @@ test("policy detail modal lazy-loads only after click and shows modal fallback",
 
   await page.goto(policyPath);
   await expect(
-    page.getByRole("table", { exact: true, name: "카테고리 난이도 모델 설정" })
+    page.getByRole("group", { exact: true, name: "Routing role models" })
   ).toBeVisible();
   expect(detailChunkRequests).toHaveLength(0);
 
@@ -186,10 +205,7 @@ test("policy detail modal lazy-loads only after click and shows modal fallback",
 test("project policy editor opens with project general tab before routing", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);
   await page.goto(projectsPath);
-  const editProjectLink = page.getByTestId("project-card").first().getByRole("link", {
-    exact: true,
-    name: "Edit project"
-  });
+  const editProjectLink = page.getByTestId("project-card").first();
 
   await Promise.all([
     page.waitForURL(/\/tenants\/[^/]+\/projects\/[^/]+\/policies$/),
@@ -210,7 +226,6 @@ test("project policy editor opens with project general tab before routing", asyn
   await expect(generalPanel.getByLabel("Name", { exact: true })).toBeVisible();
   await expect(generalPanel.getByRole("heading", { exact: true, name: "Budget policy" })).toBeVisible();
   await expect(generalPanel.getByRole("heading", { exact: true, name: "Project admins" })).toBeVisible();
-  await expect(generalPanel.getByRole("heading", { exact: true, name: "Project teams" })).toBeVisible();
   await expect(generalPanel.getByRole("heading", { exact: true, name: "Gateway API Key" })).toBeVisible();
   await expect(page.getByRole("tab", { exact: true, name: "Budget" })).toHaveCount(0);
 
@@ -221,9 +236,31 @@ test("project policy editor opens with project general tab before routing", asyn
     generalHeadings.indexOf("Project admins")
   );
 
+  await page.getByRole("tab", { exact: true, name: "Employees" }).click();
+  await expect(
+    page
+      .getByRole("tabpanel", { exact: true, name: "Employees" })
+      .getByRole("heading", { exact: true, name: "Employee list" })
+  ).toBeVisible();
+
   await page.getByRole("tab", { exact: true, name: "Routing" }).click();
-  await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
+  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
+  const addProviderLink = routingPanel.getByRole("link", {
+    exact: true,
+    name: "Add provider"
+  });
+  await expect(routingPanel).toBeVisible();
+  await expect(addProviderLink).toHaveAttribute(
+    "href",
+    /\/tenants\/[^/]+\/provider-connections$/
+  );
   await expect(page.locator("#policy-panel-general")).toHaveCount(0);
+
+  await Promise.all([
+    page.waitForURL(/\/tenants\/[^/]+\/provider-connections$/),
+    addProviderLink.click()
+  ]);
+  await expect(page.getByRole("heading", { exact: true, name: "Providers" })).toBeVisible();
 });
 
 test("safety detectors expose five editable categories and gray locked mandatory protection", async ({

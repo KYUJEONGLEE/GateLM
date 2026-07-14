@@ -194,11 +194,13 @@ function validateSchema(schema, failures) {
       if (
         modelRefs?.type !== "array" ||
         modelRefs.minItems !== 1 ||
+        modelRefs.maxItems !== 2 ||
+        modelRefs.uniqueItems !== true ||
         modelRefs.items?.type !== "string" ||
         modelRefs.items?.minLength !== 1
       ) {
         failures.push(
-          `${schemaPath}: routes.${category}.${difficulty}.modelRefs must be a non-empty string array`,
+          `${schemaPath}: routes.${category}.${difficulty}.modelRefs must contain one primary and at most one fallback`,
         );
       }
     }
@@ -334,6 +336,9 @@ function validateFixture(policy, failures) {
   }
 
   let containsMockBalanced = false;
+  let simplePrimary;
+  let complexPrimary;
+  let fallbackModelRef;
   for (const category of routingCategories) {
     const categoryRoute = policy.routes[category];
     if (!isObject(categoryRoute)) {
@@ -354,15 +359,50 @@ function validateFixture(policy, failures) {
       if (
         !Array.isArray(modelRefs) ||
         modelRefs.length === 0 ||
+        modelRefs.length > 2 ||
         modelRefs.some((modelRef) => typeof modelRef !== "string" || modelRef.length === 0)
       ) {
-        failures.push(`${fixturePath}: routes.${category}.${difficulty}.modelRefs must be non-empty`);
+        failures.push(`${fixturePath}: routes.${category}.${difficulty}.modelRefs must contain one primary and at most one fallback`);
         continue;
       }
       if (new Set(modelRefs).size !== modelRefs.length) {
         failures.push(`${fixturePath}: routes.${category}.${difficulty}.modelRefs must not repeat`);
       }
       if (modelRefs.includes("mock-balanced")) containsMockBalanced = true;
+
+      const expectedPrimary = difficulty === "simple" ? simplePrimary : complexPrimary;
+      if (expectedPrimary === undefined) {
+        if (difficulty === "simple") simplePrimary = modelRefs[0];
+        else complexPrimary = modelRefs[0];
+      } else if (modelRefs[0] !== expectedPrimary) {
+        failures.push(`${fixturePath}: all ${difficulty} cells must share one primary modelRef`);
+      }
+
+      const cellFallback = modelRefs[1];
+      if (fallbackModelRef === undefined && cellFallback !== undefined) {
+        fallbackModelRef = cellFallback;
+      }
+      if (
+        fallbackModelRef !== undefined &&
+        cellFallback !== undefined &&
+        cellFallback !== fallbackModelRef
+      ) {
+        failures.push(`${fixturePath}: every cell must share the same optional fallback modelRef`);
+      }
+    }
+  }
+
+  if (fallbackModelRef !== undefined) {
+    const hasMissingGlobalFallback = routingCategories.some((category) =>
+      routingDifficulties.some(
+        (difficulty) => policy.routes[category]?.[difficulty]?.modelRefs?.[1] === undefined,
+      ),
+    );
+    if (hasMissingGlobalFallback) {
+      failures.push(`${fixturePath}: fallback must be present in all cells or omitted from all cells`);
+    }
+    if (fallbackModelRef === simplePrimary || fallbackModelRef === complexPrimary) {
+      failures.push(`${fixturePath}: fallback must differ from both primary modelRefs`);
     }
   }
 
@@ -417,6 +457,17 @@ function validateDocumentation(rootDir, failures) {
   }
   if (!texts.get("docs/routing/contracts.md")?.includes("difficulty-feature-vector-v1.md")) {
     failures.push("docs/routing/contracts.md: difficulty feature vector v1 contract link is missing");
+  }
+  for (const marker of [
+    "Simple model",
+    "Complex model",
+    "Fallback model",
+    "default/balanced",
+    "read/execution compatibility",
+  ]) {
+    if (!texts.get("docs/routing/contracts.md")?.includes(marker)) {
+      failures.push(`docs/routing/contracts.md: transitional authoring marker is missing: ${marker}`);
+    }
   }
   if (!texts.get("docs/routing/classification-pipeline.md")?.includes("difficulty-feature-vector-v1.md")) {
     failures.push("docs/routing/classification-pipeline.md: difficulty feature vector v1 contract link is missing");

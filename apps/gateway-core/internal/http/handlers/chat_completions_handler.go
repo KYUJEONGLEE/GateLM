@@ -350,7 +350,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	h.writeExactCache(r.Context(), reqCtx, providerResp)
 	h.writeSemanticCache(r.Context(), reqCtx, chatReq, promptText, semanticCacheLookupVector, providerResp)
-	h.writeChatCompletionResponse(r.Context(), w, reqCtx, providerResp)
+	h.writeChatCompletionResponse(r.Context(), w, reqCtx, providerResp, startedAt)
 }
 
 func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
@@ -928,7 +928,7 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 			Reason:  stringPointerValue(code),
 		}
 
-		h.writeChatCompletionResponse(r.Context(), w, reqCtx, fallbackResp)
+		h.writeChatCompletionResponse(r.Context(), w, reqCtx, fallbackResp, startedAt)
 		return
 	}
 }
@@ -951,7 +951,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		return
 	}
 
-	streamMetrics := h.startStreamMetrics(reqCtx.Provider, reqCtx.Model, providerStartedAt)
+	streamMetrics := h.startStreamMetrics(reqCtx, reqCtx.Provider, reqCtx.Model, startedAt, providerStartedAt)
 	started, usage, cacheableResp, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	providerDuration := time.Since(providerStartedAt)
 	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, providerDuration)
@@ -1164,7 +1164,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 
 	reqCtx.FallbackOccurred = true
 
-	streamMetrics := h.startStreamMetrics(fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackStartedAt)
+	streamMetrics := h.startStreamMetrics(reqCtx, fallbackTarget.ProviderName, fallbackTarget.ModelID, startedAt, fallbackStartedAt)
 	started, usage, _, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	fallbackDuration := time.Since(fallbackStartedAt)
 	reqCtx.ProviderLatencyMs = fallbackDuration.Milliseconds()
@@ -2039,7 +2039,7 @@ func semanticResponseContainsDynamicStateMarker(payloadText string) bool {
 	return false
 }
 
-func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
+func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse, startedAt time.Time) {
 	if reqCtx == nil || providerResp == nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, provider.ErrorCodeProviderError, "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
 		return
@@ -2057,7 +2057,8 @@ func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context
 		return
 	}
 
-	started, err := writeStreamingChatCompletion(ctx, w, reqCtx, providerResp)
+	ttftRecorder := newStreamTTFTRecorder(h.MetricsRegistry, reqCtx, reqCtx.Provider, reqCtx.Model, startedAt)
+	started, err := writeStreamingChatCompletion(ctx, w, reqCtx, providerResp, ttftRecorder)
 	if err == nil {
 		reqCtx.Status = invocationlog.StatusSuccess
 		reqCtx.HTTPStatus = http.StatusOK
@@ -2112,7 +2113,7 @@ type streamingDelta struct {
 	Content string `json:"content,omitempty"`
 }
 
-func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) (bool, error) {
+func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse, ttftRecorder *streamTTFTRecorder) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -2133,6 +2134,7 @@ func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, re
 			return true, err
 		}
 		flushResponse(w)
+		ttftRecorder.recordChunkIfContent(chunk, time.Now())
 	}
 	if err := ctx.Err(); err != nil {
 		return true, err
@@ -2145,60 +2147,126 @@ func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, re
 }
 
 type streamRelayMetricsRecorder struct {
-	registry     *metrics.Registry
-	providerName string
-	modelID      string
-	startedAt    time.Time
-	ttftRecorded bool
-	finished     bool
+	registry       *metrics.Registry
+	providerName   string
+	modelID        string
+	relayStartedAt time.Time
+	ttftRecorder   *streamTTFTRecorder
+	finished       bool
 }
 
-func (h *ChatCompletionsHandler) startStreamMetrics(providerName string, modelID string, startedAt time.Time) *streamRelayMetricsRecorder {
-	if h == nil || h.MetricsRegistry == nil {
-		return nil
+func (h *ChatCompletionsHandler) startStreamMetrics(reqCtx *pipeline.RequestContext, providerName string, modelID string, requestStartedAt time.Time, relayStartedAt time.Time) *streamRelayMetricsRecorder {
+	if relayStartedAt.IsZero() {
+		relayStartedAt = time.Now()
 	}
-	if startedAt.IsZero() {
-		startedAt = time.Now()
+	var registry *metrics.Registry
+	if h != nil {
+		registry = h.MetricsRegistry
 	}
-	h.MetricsRegistry.StreamStarted(providerName, modelID)
+	if registry != nil {
+		registry.StreamStarted(providerName, modelID)
+	}
 	return &streamRelayMetricsRecorder{
-		registry:     h.MetricsRegistry,
-		providerName: providerName,
-		modelID:      modelID,
-		startedAt:    startedAt,
+		registry:       registry,
+		providerName:   providerName,
+		modelID:        modelID,
+		relayStartedAt: relayStartedAt,
+		ttftRecorder:   newStreamTTFTRecorder(registry, reqCtx, providerName, modelID, requestStartedAt),
 	}
 }
 
 func (r *streamRelayMetricsRecorder) recordTTFTIfContent(payload json.RawMessage, observedAt time.Time) {
-	if r == nil || r.registry == nil || r.ttftRecorded || !streamEventHasContentDelta(payload) {
+	if r == nil {
 		return
 	}
-	if observedAt.IsZero() {
-		observedAt = time.Now()
-	}
-	r.ttftRecorded = true
-	r.registry.StreamTimeToFirstToken(metrics.StreamTimeToFirstToken{
-		Provider:        r.providerName,
-		Model:           r.modelID,
-		DurationSeconds: observedAt.Sub(r.startedAt).Seconds(),
-	})
+	r.ttftRecorder.recordPayloadIfContent(payload, observedAt)
 }
 
 func (r *streamRelayMetricsRecorder) finish(outcome string, errorCode string, completedAt time.Time) {
-	if r == nil || r.registry == nil || r.finished {
+	if r == nil || r.finished {
 		return
 	}
 	if completedAt.IsZero() {
 		completedAt = time.Now()
 	}
 	r.finished = true
+	if r.registry == nil {
+		return
+	}
 	r.registry.StreamFinished(metrics.StreamRelay{
 		Provider:        r.providerName,
 		Model:           r.modelID,
 		Outcome:         outcome,
 		ErrorCode:       errorCode,
-		DurationSeconds: completedAt.Sub(r.startedAt).Seconds(),
+		DurationSeconds: completedAt.Sub(r.relayStartedAt).Seconds(),
 	})
+}
+
+type streamTTFTRecorder struct {
+	registry         *metrics.Registry
+	requestContext   *pipeline.RequestContext
+	providerName     string
+	modelID          string
+	requestStartedAt time.Time
+	recorded         bool
+}
+
+func newStreamTTFTRecorder(registry *metrics.Registry, reqCtx *pipeline.RequestContext, providerName string, modelID string, requestStartedAt time.Time) *streamTTFTRecorder {
+	if requestStartedAt.IsZero() && reqCtx != nil {
+		requestStartedAt = reqCtx.StartedAt
+	}
+	if requestStartedAt.IsZero() {
+		requestStartedAt = time.Now()
+	}
+	return &streamTTFTRecorder{
+		registry:         registry,
+		requestContext:   reqCtx,
+		providerName:     providerName,
+		modelID:          modelID,
+		requestStartedAt: requestStartedAt,
+		recorded:         reqCtx != nil && reqCtx.TTFTMs != nil,
+	}
+}
+
+func (r *streamTTFTRecorder) recordPayloadIfContent(payload json.RawMessage, observedAt time.Time) {
+	if !streamEventHasContentDelta(payload) {
+		return
+	}
+	r.record(observedAt)
+}
+
+func (r *streamTTFTRecorder) recordChunkIfContent(chunk streamingChatCompletionChunk, observedAt time.Time) {
+	for _, choice := range chunk.Choices {
+		if choice.Delta.Content != "" {
+			r.record(observedAt)
+			return
+		}
+	}
+}
+
+func (r *streamTTFTRecorder) record(observedAt time.Time) {
+	if r == nil || r.recorded {
+		return
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now()
+	}
+	duration := observedAt.Sub(r.requestStartedAt)
+	if duration < 0 {
+		duration = 0
+	}
+	r.recorded = true
+	ttftMs := duration.Milliseconds()
+	if r.requestContext != nil {
+		r.requestContext.TTFTMs = &ttftMs
+	}
+	if r.registry != nil {
+		r.registry.StreamTimeToFirstToken(metrics.StreamTimeToFirstToken{
+			Provider:        r.providerName,
+			Model:           r.modelID,
+			DurationSeconds: duration.Seconds(),
+		})
+	}
 }
 
 func streamEventHasContentDelta(payload json.RawMessage) bool {
@@ -2716,7 +2784,8 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(ctx context.Cont
 		cachedResp.Model = reqCtx.Model
 	}
 	cachedResp.Usage = &provider.Usage{}
-	h.writeChatCompletionResponse(ctx, w, reqCtx, cachedResp)
+	h.writeChatCompletionResponse(ctx, w, reqCtx, cachedResp, startedAt)
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	return true
 }
 
@@ -3759,6 +3828,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		SavedCostMicroUSD:           reqCtx.SavedCostMicroUSD,
 		CostingResult:               reqCtx.CostingResult,
 		LatencyMs:                   reqCtx.LatencyMs,
+		TTFTMs:                      reqCtx.TTFTMs,
 		ProviderLatencyMs:           providerLatencyMs,
 		ProviderCalled:              reqCtx.ProviderAttemptStarted,
 		Status:                      reqCtx.Status,

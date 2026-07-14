@@ -24,4 +24,19 @@ describe('Chat API environment', () => {
   it('rejects a non-PostgreSQL database URL', () => {
     expect(() => validateEnv({ ...base, DATABASE_URL: 'https://db.example.test/gatelm' })).toThrow('PostgreSQL');
   });
+
+  it('keeps execution configuration optional for liveness but bounds transport settings', () => {
+    const value = validateEnv(base);
+    expect(value.TENANT_CHAT_GATEWAY_BASE_URL).toBeUndefined();
+    expect(value.TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS).toBe(130_000);
+    expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '300001' }))
+      .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
+  });
+
+  it('rejects explicitly empty numeric settings instead of using defaults', () => {
+    expect(() => validateEnv({ ...base, CHAT_API_PORT: '' }))
+      .toThrow('CHAT_API_PORT');
+    expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '' }))
+      .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
+  });
 });

@@ -41,7 +41,7 @@ loadgen_validate_env_file_keys() {
       perf_fail ".env.loadgen contains a malformed line."
     key="$(perf_trim "${line%%=*}")"
     case "${key}" in
-      GATELM_LOADGEN_GATEWAY_BASE_URL|GATELM_DEMO_API_KEY|GATELM_DEMO_APP_TOKEN) ;;
+      GATELM_LOADGEN_GATEWAY_BASE_URL|GATELM_PERF_TOPOLOGY_ID|GATELM_DEMO_API_KEY|GATELM_DEMO_APP_TOKEN) ;;
       *) perf_fail ".env.loadgen contains a forbidden key: ${key}" ;;
     esac
   done < "${LOADGEN_ENV_FILE}"
@@ -121,7 +121,12 @@ for name in \
   POSTGRES_PASSWORD \
   CONTROL_PLANE_AUTH_STATE_SECRET \
   CONTROL_PLANE_INTERNAL_SERVICE_TOKEN \
+  TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN \
+  TENANT_CHAT_WEB_SERVICE_TOKEN \
+  TENANT_CHAT_ACCESS_JWT_SECRET \
+  TENANT_CHAT_INTENT_SECRET \
   GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN \
+  GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
   GATEWAY_EXACT_CACHE_KEY_SECRET; do
   [[ -z "${!name-}" ]] || \
     perf_fail "${name} must not be present on the load-generator process."
@@ -175,7 +180,16 @@ esac
 
 perf_check_docker
 perf_need_command "curl" "Install curl."
+perf_need_command "git" "Install git."
 [[ -f "${K6_SCRIPT_PATH}" ]] || perf_fail "k6 script not found: ${K6_SCRIPT_PATH}"
+
+loadgen_git_sha="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+[[ "${loadgen_git_sha}" =~ ^[a-f0-9]{40}$ ]] || \
+  perf_fail "Could not resolve a full load-generator Git SHA."
+git -C "${REPO_ROOT}" diff --quiet || \
+  perf_fail "Tracked working-tree changes prevent exact load-generator Git SHA evidence."
+git -C "${REPO_ROOT}" diff --cached --quiet || \
+  perf_fail "Staged changes prevent exact load-generator Git SHA evidence."
 
 if [[ "${LOADGEN_EXECUTION_MODE}" == "local_validation" ]]; then
   network_project="$(docker network inspect \
@@ -312,12 +326,13 @@ preliminary_failures=()
 (( ${#preliminary_failures[@]} == 0 )) || preliminary_status=fail
 
 printf '%s\n' \
-  'GATELM_LOADGEN_STATUS_SCHEMA=gatelm.gateway-load-loadgen-status.v1' \
+  'GATELM_LOADGEN_STATUS_SCHEMA=gatelm.gateway-load-loadgen-status.v2' \
   "GATELM_LOADGEN_RUN_ID=${run_id}" \
   "GATELM_LOADGEN_EXECUTION_MODE=${LOADGEN_EXECUTION_MODE}" \
   "GATELM_LOADGEN_K6_EXIT_CODE=${k6_exit_code}" \
   "GATELM_LOADGEN_TARGET_RPS=${K6_TARGET_RPS}" \
   "GATELM_LOADGEN_DURATION=${K6_DURATION}" \
+  "GATELM_LOADGEN_GIT_SHA=${loadgen_git_sha}" \
   "GATELM_LOADGEN_MACHINE_HASH=${loadgen_machine_hash}" \
   "GATELM_LOADGEN_PRELIMINARY_STATUS=${preliminary_status}" \
   > "${status_path}"
@@ -327,10 +342,11 @@ topology_declared=false
 failures_json="$(loadgen_failures_json "${preliminary_failures[@]}")"
 printf '%s\n' \
   '{' \
-  '  "schemaVersion": "gatelm.gateway-load-loadgen-manifest.v1",' \
+  '  "schemaVersion": "gatelm.gateway-load-loadgen-manifest.v2",' \
   "  \"status\": \"${preliminary_status}\"," \
   "  \"runId\": \"${run_id}\"," \
   "  \"generatedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," \
+  "  \"gitSha\": \"${loadgen_git_sha}\"," \
   "  \"executionMode\": \"${LOADGEN_EXECUTION_MODE}\"," \
   "  \"dedicatedTopologyDeclared\": ${topology_declared}," \
   '  "capacityClaimEligible": false,' \

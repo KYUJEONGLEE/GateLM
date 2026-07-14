@@ -120,6 +120,7 @@ perf_evidence_read_loadgen_status() {
   GATELM_LOADGEN_K6_EXIT_CODE=""
   GATELM_LOADGEN_TARGET_RPS=""
   GATELM_LOADGEN_DURATION=""
+  GATELM_LOADGEN_GIT_SHA=""
   GATELM_LOADGEN_MACHINE_HASH=""
   GATELM_LOADGEN_PRELIMINARY_STATUS=""
 
@@ -137,13 +138,15 @@ perf_evidence_read_loadgen_status() {
       GATELM_LOADGEN_K6_EXIT_CODE) GATELM_LOADGEN_K6_EXIT_CODE="${value}" ;;
       GATELM_LOADGEN_TARGET_RPS) GATELM_LOADGEN_TARGET_RPS="${value}" ;;
       GATELM_LOADGEN_DURATION) GATELM_LOADGEN_DURATION="${value}" ;;
+      GATELM_LOADGEN_GIT_SHA) GATELM_LOADGEN_GIT_SHA="${value}" ;;
       GATELM_LOADGEN_MACHINE_HASH) GATELM_LOADGEN_MACHINE_HASH="${value}" ;;
       GATELM_LOADGEN_PRELIMINARY_STATUS) GATELM_LOADGEN_PRELIMINARY_STATUS="${value}" ;;
       *) perf_fail "Unexpected key in load-generator status: ${key}" ;;
     esac
   done < "${status_path}"
 
-  [[ "${GATELM_LOADGEN_STATUS_SCHEMA}" == "gatelm.gateway-load-loadgen-status.v1" ]] || \
+  [[ "${GATELM_LOADGEN_STATUS_SCHEMA}" == "gatelm.gateway-load-loadgen-status.v1" || \
+     "${GATELM_LOADGEN_STATUS_SCHEMA}" == "gatelm.gateway-load-loadgen-status.v2" ]] || \
     perf_fail "Unexpected load-generator status schema."
   [[ "${GATELM_LOADGEN_RUN_ID}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$ ]] || \
     perf_fail "Load-generator status contains an invalid run id."
@@ -156,6 +159,13 @@ perf_evidence_read_loadgen_status() {
     perf_fail "Load-generator status contains an invalid target RPS."
   [[ "${GATELM_LOADGEN_DURATION}" =~ ^[1-9][0-9]{0,7}(ms|s|m|h)$ ]] || \
     perf_fail "Load-generator status contains an invalid duration."
+  if [[ "${GATELM_LOADGEN_STATUS_SCHEMA}" == "gatelm.gateway-load-loadgen-status.v2" ]]; then
+    [[ "${GATELM_LOADGEN_GIT_SHA}" =~ ^[a-f0-9]{40}$ ]] || \
+      perf_fail "Load-generator v2 status requires a full Git SHA."
+  elif [[ -n "${GATELM_LOADGEN_GIT_SHA}" ]]; then
+    [[ "${GATELM_LOADGEN_GIT_SHA}" =~ ^[a-f0-9]{40}$ ]] || \
+      perf_fail "Load-generator status contains an invalid Git SHA."
+  fi
   [[ "${GATELM_LOADGEN_MACHINE_HASH}" =~ ^[a-f0-9]{64}$ ]] || \
     perf_fail "Load-generator status contains an invalid machine identity hash."
   [[ "${GATELM_LOADGEN_PRELIMINARY_STATUS}" == "pass" || \

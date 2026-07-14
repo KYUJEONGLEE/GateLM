@@ -7,7 +7,10 @@ import type {
   TerminalStatus
 } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  getGatewayObservabilityHeaders,
+  getLiveGatewayConfig
+} from "@/lib/gateway/live-gateway-config";
 import {
   type LiveInvocationLogRecord,
   normalizeProviderAttempt,
@@ -40,11 +43,13 @@ type GatewayRequestDetailResponse = {
     latency?: {
       latencyMs?: number;
       providerLatencyMs?: number | null;
+      ttftMs?: number | null;
     };
     latencySummary?: {
       gatewayInternalLatencyMs?: number;
       providerLatencyMs?: number | null;
       totalLatencyMs?: number;
+      ttftMs?: number | null;
     };
     masking?: {
       maskingAction?: "none" | "redacted" | "blocked";
@@ -135,9 +140,7 @@ export async function getLiveGatewayRequestDetail(
   const response = await fetch(
     `${config.baseUrl}/api/llm-requests/${encodeURIComponent(requestId)}${serializedQuery ? `?${serializedQuery}` : ""}`,
     {
-      headers: {
-        "X-GateLM-Request-Id": `request_web_detail_${Date.now()}`
-      },
+      headers: getGatewayObservabilityHeaders(`request_web_detail_${Date.now()}`),
       cache: "no-store"
     }
   ).catch(() => undefined);
@@ -187,10 +190,14 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     legacyDomainOutcomes(status, cacheStatus, maskingAction, data.latency?.providerLatencyMs ?? null, data.error?.errorCode ?? null)
   );
   const stream = data.stream ?? isStreamingOutcome(domainOutcomes.streaming.outcome);
+  const ttftMs = normalizeNullableLatency(
+    data.latencySummary?.ttftMs ?? data.latency?.ttftMs
+  );
   const latencySummary = {
     gatewayInternalLatencyMs: data.latencySummary?.gatewayInternalLatencyMs ?? Math.max((data.latency?.latencyMs ?? 0) - (data.latency?.providerLatencyMs ?? 0), 0),
     providerLatencyMs: data.latencySummary?.providerLatencyMs ?? data.latency?.providerLatencyMs ?? null,
-    totalLatencyMs: data.latencySummary?.totalLatencyMs ?? data.latency?.latencyMs ?? 0
+    totalLatencyMs: data.latencySummary?.totalLatencyMs ?? data.latency?.latencyMs ?? 0,
+    ttftMs
   };
   const usageSummary = {
     promptTokens: data.usageSummary?.promptTokens ?? data.usage?.promptTokens ?? 0,
@@ -254,6 +261,7 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     costMicroUsd: usageSummary.estimatedCostMicroUsd,
     savedCostMicroUsd: usageSummary.savedCostMicroUsd,
     latencyMs: latencySummary.totalLatencyMs,
+    ttftMs,
     providerLatencyMs: latencySummary.providerLatencyMs,
     status,
     terminalStatus: status,
@@ -282,6 +290,12 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       }
     }
   };
+}
+
+function normalizeNullableLatency(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function normalizePromptCapture(

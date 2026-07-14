@@ -52,6 +52,30 @@ describe('UpsertRuntimeConfigDraftDto routing policy v2', () => {
     ).resolves.toEqual(payload);
   });
 
+  it('rejects more than one fallback candidate in a route cell', async () => {
+    const routingRoutes = routes(`${providerId}:mock-balanced`);
+    routingRoutes.general.simple.modelRefs = [
+      `${providerId}:mock-balanced`,
+      `${providerId}:mock-fallback`,
+      `${providerId}:mock-last`,
+    ];
+
+    await expect(
+      validationPipe.transform(
+        {
+          routingPolicy: {
+            mode: 'auto',
+            routes: routingRoutes,
+          },
+        },
+        {
+          type: 'body',
+          metatype: UpsertRuntimeConfigDraftDto,
+        },
+      ),
+    ).rejects.toThrow('Bad Request Exception');
+  });
+
   it('rejects legacy tier model fields instead of accepting a v1 bridge', async () => {
     await expect(
       validationPipe.transform(

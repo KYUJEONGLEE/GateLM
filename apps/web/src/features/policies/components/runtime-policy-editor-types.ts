@@ -21,6 +21,7 @@ export type RuntimePolicyEditorProps = {
   locale: Locale;
   model: RuntimePolicyModel;
   moveBudgetToGeneral?: boolean;
+  providerManagementHref?: string;
 };
 
 export type RuntimePolicyApiKeyReadiness = {
@@ -123,6 +124,7 @@ export type RuntimePolicyEditorText = {
   promptCaptureMaxChars: string;
   promptPrice: string;
   provider: string;
+  providerAdd: string;
   providerCatalog: string;
   providerConnectionMissing: string;
   providerCount: string;
@@ -139,6 +141,16 @@ export type RuntimePolicyEditorText = {
   responseCaptureMaxChars: string;
   rollback: string;
   routing: string;
+  routingAuthoringRequired: string;
+  routingComplexModel: string;
+  routingConvert: string;
+  routingFallbackModel: string;
+  routingFallbackNone: string;
+  routingMockWarning: string;
+  routingRoleDescription: string;
+  routingRoleHint: string;
+  routingRoleModels: string;
+  routingSimpleModel: string;
   runtimeSnapshot: string;
   safetyTab: string;
   saveDraft: string;

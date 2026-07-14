@@ -1,6 +1,13 @@
 import "server-only";
 
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
+import { resolveControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import { listTenantProviderConnections } from "@/lib/control-plane/provider-connections-client";
+import {
+  buildProviderDisplayDirectory,
+  resolveProviderDisplay,
+  type ProviderDisplayDirectory
+} from "@/lib/control-plane/provider-display";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
@@ -30,17 +37,18 @@ export type LiveOverviewRequestsOptions = {
   projects?: ProjectRecord[];
 };
 
-const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
-const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
+const LIVE_REQUESTS_DISPLAY_LIMIT = 9;
+const LIVE_REQUESTS_FETCH_LIMIT = 50;
 export async function getLiveOverviewRequests(
   tenantId: string,
   filters: LiveOverviewRequestsFilters = {},
   options: LiveOverviewRequestsOptions = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const liveRange = getDashboardLiveRange(filters.range);
-  const [projectsModel, employees] = await Promise.all([
+  const [projectsModel, employees, providerConnections] = await Promise.all([
     options.projects ? Promise.resolve(undefined) : getProjectsModel(tenantId),
-    getTenantEmployees(tenantId)
+    getTenantEmployees(tenantId),
+    listTenantProviderConnections(resolveControlPlaneTenantId(tenantId))
   ]);
   const projects = options.projects ?? projectsModel?.projects ?? [];
   const projectIds = options.projectIds ?? projects.map((project) => project.id).filter(Boolean);
@@ -48,11 +56,10 @@ export async function getLiveOverviewRequests(
     budgetScopeId: filters.budgetScopeId,
     budgetScopeType: filters.budgetScopeType,
     from: liveRange.from,
-    limit: filters.model ? LIVE_REQUESTS_FILTER_FETCH_LIMIT : LIVE_REQUESTS_DISPLAY_LIMIT,
+    limit: LIVE_REQUESTS_FETCH_LIMIT,
     projectId: filters.projectId,
     projectIds,
     resolvedBy: filters.resolvedBy,
-    requestedModel: filters.model,
     status: filters.status || undefined,
     tenantId,
     to: liveRange.to
@@ -64,10 +71,15 @@ export async function getLiveOverviewRequests(
 
   const projectNames = buildProjectNameMap(projects);
   const employeeNames = buildEmployeeNameMap(employees);
-  const allRows = records.map((record) => toLiveRequestRow(record, projectNames, employeeNames));
+  const providerDirectory = buildProviderDisplayDirectory(
+    providerConnections.ok ? providerConnections.data : []
+  );
+  const allRows = records.map((record) =>
+    toLiveRequestRow(record, projectNames, employeeNames, providerDirectory)
+  );
   const modelFilter = normalizeModelFilter(filters.model);
   const rows = allRows
-    .filter((row) => !modelFilter || normalizeModelFilter(row.requestedModel) === modelFilter)
+    .filter((row) => !modelFilter || normalizeModelFilter(displayModel(row)) === modelFilter)
     .slice(0, LIVE_REQUESTS_DISPLAY_LIMIT);
   const requestedModelOptions = buildModelOptions(allRows, filters.model);
 
@@ -103,22 +115,30 @@ function buildEmployeeNameMap(
 function toLiveRequestRow(
   record: LiveInvocationLogRecord,
   projectNames: Map<string, string>,
-  employeeNames: Map<string, string>
+  employeeNames: Map<string, string>,
+  providerDirectory: ProviderDisplayDirectory
 ) {
   const projectId = record.projectId;
   const statusCode = record.httpStatus || statusToFallbackCode(record.status);
+  const providerId = record.providerAttempt?.providerId ?? null;
+  const providerDisplay = resolveProviderDisplay(providerDirectory, providerId);
 
   return {
     cacheStatus: normalizeCacheStatus(record.cacheStatus),
     category: record.category,
     costUsd: record.costMicroUsd / 1_000_000,
     difficulty: record.difficulty,
+    executedModel: record.providerAttempt?.modelId ?? null,
     fallbackUsed: record.domainOutcomes?.fallback?.outcome === "success",
     id: record.requestId,
     latencyMs: record.latencyMs,
+    ttftMs: record.ttftMs ?? null,
     modelRef: record.modelRef,
     projectId,
     projectName: projectNames.get(projectId) ?? formatDisplayIdentifier(projectId),
+    providerFamily: providerDisplay?.family ?? null,
+    providerId,
+    providerName: providerDisplay?.name ?? null,
     requestedModel: record.requestedModel ?? "auto",
     requestId: record.requestId,
     routingReason: record.routingReason,
@@ -226,7 +246,7 @@ function statusLabel(statusCode: number, status: string) {
 }
 
 function buildModelOptions(
-  rows: Array<{ requestedModel: string }>,
+  rows: Array<{ executedModel: string | null; requestedModel: string }>,
   modelFilter: string | undefined
 ) {
   const models = new Set<string>();
@@ -236,12 +256,17 @@ function buildModelOptions(
   }
 
   rows.forEach((row) => {
-    if (row.requestedModel && row.requestedModel !== "auto") {
-      models.add(row.requestedModel);
+    const model = displayModel(row);
+    if (model && model !== "auto") {
+      models.add(model);
     }
   });
 
   return Array.from(models).sort((first, second) => first.localeCompare(second));
+}
+
+function displayModel(row: { executedModel: string | null; requestedModel: string }) {
+  return row.executedModel ?? row.requestedModel;
 }
 
 function normalizeModelFilter(value: string | undefined) {

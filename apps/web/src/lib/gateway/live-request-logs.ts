@@ -7,11 +7,16 @@ import type {
 } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import {
+  getGatewayObservabilityHeaders,
+  getLiveGatewayConfig
+} from "@/lib/gateway/live-gateway-config";
 import {
   type LiveInvocationLogRecord,
+  normalizeProviderAttempt,
   normalizeRequestRouting
 } from "@/lib/gateway/live-observability-contract";
+import { matchesRequestLogSafetyOutcome } from "@/lib/gateway/request-log-safety-filter";
 
 type GatewayProjectLogsResponse = {
   data?: GatewayProjectLogItem[];
@@ -33,10 +38,18 @@ type GatewayProjectLogItem = {
   domainOutcomes?: GatewayDomainOutcomes;
   httpStatus?: number;
   latencyMs?: number;
+  ttftMs?: number | null;
   maskingAction?: string;
   modelRef?: string;
   projectId?: string;
   promptTokens?: number;
+  providerAttempt?: {
+    latencyMs?: number | null;
+    modelId?: string;
+    outcome?: string;
+    providerId?: string;
+    sanitizedErrorCode?: string | null;
+  } | null;
   requestId?: string;
   requestedModel?: string;
   routingReason?: string;
@@ -73,6 +86,7 @@ export type LiveGatewayRequestLogFilters = {
   projectIds?: string[];
   requestId?: string;
   resolvedBy?: string;
+  safetyOutcome?: string;
   status?: string;
   tenantId?: string;
   to?: string;
@@ -159,6 +173,7 @@ async function getLiveGatewayRequestLogsPayload(
   const records = flattenedRecords
     .filter((record) => matchesBudgetScopeFilter(record.budgetScope, filters))
     .filter((record) => matchesRequestedModelFilter(record, filters.requestedModel))
+    .filter((record) => matchesRequestLogSafetyOutcome(record, filters.safetyOutcome))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, finalLimit);
 
@@ -196,9 +211,7 @@ async function fetchProjectLogs(
   const response = await fetch(
     `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/logs?${query.toString()}`,
     {
-      headers: {
-        "X-GateLM-Request-Id": `request_web_logs_${Date.now()}`
-      },
+      headers: getGatewayObservabilityHeaders(`request_web_logs_${Date.now()}`),
       cache: "no-store"
     }
   ).catch(() => undefined);
@@ -307,7 +320,8 @@ function hasInMemoryFilters(filters: LiveGatewayRequestLogFilters) {
     filters.budgetScopeType?.trim() ||
       filters.budgetScopeId?.trim() ||
       filters.resolvedBy?.trim() ||
-      filters.requestedModel?.trim()
+      filters.requestedModel?.trim() ||
+      filters.safetyOutcome?.trim()
   );
 }
 
@@ -408,7 +422,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Liv
     difficulty: routing.difficulty,
     modelRef: routing.modelRef,
     routingReason: routing.routingReason,
-    providerAttempt: null,
+    providerAttempt: normalizeProviderAttempt(item.providerAttempt),
     cacheStatus,
     cacheType: item.cacheType ?? "none",
     cacheDecisionReason: null,
@@ -437,6 +451,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Liv
     costMicroUsd,
     savedCostMicroUsd: cacheStatus === "hit" ? costMicroUsd : 0,
     latencyMs: item.latencyMs ?? 0,
+    ttftMs: normalizeNullableLatency(item.ttftMs),
     providerLatencyMs: null,
     status,
     terminalStatus: status,
@@ -466,6 +481,12 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Liv
       }
     }
   };
+}
+
+function normalizeNullableLatency(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function normalizeUserRef(value: string | null | undefined) {

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
 import {
   verifyDifficultyEvaluationDataset,
+  verifyDifficultyLabelContract,
   verifyDifficultyTrainingPilot,
 } from "./verify-v2.1-difficulty-eval.mjs";
 
@@ -36,6 +37,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/contracts.md",
   "docs/tenant-chat/execution-contract.md",
   "docs/tenant-chat/openapi/chat-auth.openapi.json",
+  "docs/tenant-chat/openapi/private-control-plane.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
   "docs/tenant-chat/db/tenant-chat-usage.sql",
   "docs/tenant-chat/schemas/*.schema.json",
@@ -75,10 +77,16 @@ const versionedV21Docs = [
   "docs/v2.1.0/category-evaluation-dataset-contract.md",
   "docs/v2.1.0/schemas/category-evaluation-record.schema.json",
   "docs/v2.1.0/difficulty-evaluation-dataset-contract.md",
+  "docs/v2.1.0/difficulty-label-guide.md",
   "docs/v2.1.0/schemas/difficulty-evaluation-record.schema.json",
+  "docs/v2.1.0/schemas/difficulty-label-record.schema.json",
+  "docs/v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json",
   "docs/v2.1.0/schemas/difficulty-training-split-manifest.schema.json",
   "docs/v2.1.0/schemas/difficulty-model-artifact.schema.json",
+  "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl",
+  "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json",
   "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",
+  "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json",
   "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json",
   "docs/v2.1.0/routing-advanced-plan.md",
   "docs/v2.1.0/routing-performance-test-scenario.md",
@@ -619,6 +627,7 @@ function sha256Base64Url(value) {
 
 function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
+  const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
@@ -644,6 +653,33 @@ function assertTenantChatExecutableContract() {
     ]) {
       if (!authOpenApi.paths?.[apiPath]?.[method]) {
         fail(`${authOpenApiPath}: missing ${method.toUpperCase()} ${apiPath}`);
+      }
+    }
+  }
+
+  const controlPlaneOpenApi = readJson(controlPlaneOpenApiPath);
+  if (controlPlaneOpenApi) {
+    if (controlPlaneOpenApi.openapi !== "3.1.0") {
+      fail(`${controlPlaneOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+    const operation = controlPlaneOpenApi.paths?.[
+      "/internal/v1/tenant-chat/runtime/snapshots/{tenantId}/active"
+    ]?.get;
+    if (!operation?.responses?.["200"] || !operation?.responses?.["401"] || !operation?.responses?.["503"]) {
+      fail(`${controlPlaneOpenApiPath}: active snapshot metadata reader responses are incomplete`);
+    }
+    const metadata = controlPlaneOpenApi.components?.schemas?.ActiveRuntimeSnapshotMetadata;
+    const required = new Set(metadata?.required ?? []);
+    for (const field of [
+      "tenantId",
+      "version",
+      "digest",
+      "policyVersion",
+      "employeeNoticeVersion",
+      "pricingVersion",
+    ]) {
+      if (!required.has(field)) {
+        fail(`${controlPlaneOpenApiPath}: metadata must require ${field}`);
       }
     }
   }
@@ -945,6 +981,7 @@ function assertTenantChatExecutableContract() {
 
   for (const expectedText of [
     "openapi/chat-auth.openapi.json",
+    "openapi/private-control-plane.openapi.json",
     "openapi/private-gateway.openapi.json",
     "db/tenant-chat-usage.sql",
     "vectors/binding-digest-vectors.json",
@@ -982,6 +1019,9 @@ function main() {
     fail(failure);
   }
   for (const failure of verifyDifficultyEvaluationDataset({ rootDir })) {
+    fail(failure);
+  }
+  for (const failure of verifyDifficultyLabelContract({ rootDir })) {
     fail(failure);
   }
   for (const failure of verifyDifficultyTrainingPilot({ rootDir })) {

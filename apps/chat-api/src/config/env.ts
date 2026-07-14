@@ -8,6 +8,18 @@ export type ChatApiEnv = {
   TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: string;
   TENANT_CHAT_INTENT_SECRET: string;
   TENANT_CHAT_WEB_SERVICE_TOKEN: string;
+  TENANT_CHAT_GATEWAY_BASE_URL?: string;
+  TENANT_CHAT_WORKLOAD_ACTIVE_KID?: string;
+  TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE?: string;
+  TENANT_CHAT_BINDING_HMAC_KEYS_FILE?: string;
+  TENANT_CHAT_CONTROL_PLANE_TIMEOUT_MS: number;
+  TENANT_CHAT_GATEWAY_ADMISSION_TIMEOUT_MS: number;
+  TENANT_CHAT_GATEWAY_CANCEL_TIMEOUT_MS: number;
+  TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: number;
+  TENANT_CHAT_GATEWAY_JSON_MAX_BYTES: number;
+  TENANT_CHAT_GATEWAY_REQUEST_MAX_BYTES: number;
+  TENANT_CHAT_GATEWAY_SSE_FRAME_MAX_BYTES: number;
+  TENANT_CHAT_GATEWAY_STREAM_MAX_BYTES: number;
 };
 
 export function validateEnv(env: RawEnv): ChatApiEnv {
@@ -29,6 +41,66 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
     ),
     TENANT_CHAT_INTENT_SECRET: strong(env, 'TENANT_CHAT_INTENT_SECRET'),
     TENANT_CHAT_WEB_SERVICE_TOKEN: strong(env, 'TENANT_CHAT_WEB_SERVICE_TOKEN'),
+    TENANT_CHAT_GATEWAY_BASE_URL: optionalHttpOrigin(env, 'TENANT_CHAT_GATEWAY_BASE_URL'),
+    TENANT_CHAT_WORKLOAD_ACTIVE_KID: optional(env, 'TENANT_CHAT_WORKLOAD_ACTIVE_KID'),
+    TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: optional(env, 'TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE'),
+    TENANT_CHAT_BINDING_HMAC_KEYS_FILE: optional(env, 'TENANT_CHAT_BINDING_HMAC_KEYS_FILE'),
+    TENANT_CHAT_CONTROL_PLANE_TIMEOUT_MS: boundedInteger(
+      env,
+      'TENANT_CHAT_CONTROL_PLANE_TIMEOUT_MS',
+      1500,
+      100,
+      10_000,
+    ),
+    TENANT_CHAT_GATEWAY_ADMISSION_TIMEOUT_MS: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_ADMISSION_TIMEOUT_MS',
+      2000,
+      100,
+      10_000,
+    ),
+    TENANT_CHAT_GATEWAY_CANCEL_TIMEOUT_MS: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_CANCEL_TIMEOUT_MS',
+      2000,
+      100,
+      10_000,
+    ),
+    TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS',
+      130_000,
+      1000,
+      300_000,
+    ),
+    TENANT_CHAT_GATEWAY_JSON_MAX_BYTES: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_JSON_MAX_BYTES',
+      64 * 1024,
+      1024,
+      1024 * 1024,
+    ),
+    TENANT_CHAT_GATEWAY_REQUEST_MAX_BYTES: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_REQUEST_MAX_BYTES',
+      4 * 1024 * 1024,
+      64 * 1024,
+      8 * 1024 * 1024,
+    ),
+    TENANT_CHAT_GATEWAY_SSE_FRAME_MAX_BYTES: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_SSE_FRAME_MAX_BYTES',
+      64 * 1024,
+      1024,
+      256 * 1024,
+    ),
+    TENANT_CHAT_GATEWAY_STREAM_MAX_BYTES: boundedInteger(
+      env,
+      'TENANT_CHAT_GATEWAY_STREAM_MAX_BYTES',
+      8 * 1024 * 1024,
+      64 * 1024,
+      16 * 1024 * 1024,
+    ),
   };
 }
 
@@ -48,6 +120,10 @@ function required(env: RawEnv, key: string): string {
   return value;
 }
 
+function optional(env: RawEnv, key: string): string | undefined {
+  return env[key]?.trim() || undefined;
+}
+
 function strong(env: RawEnv, key: string): string {
   const value = required(env, key);
   if (value.length < 32 || /replace-me|placeholder/i.test(value)) {
@@ -63,4 +139,22 @@ function httpOrigin(env: RawEnv, key: string): string {
     throw new Error(`${key} must be an http(s) URL without credentials.`);
   }
   return url.toString().replace(/\/$/, '');
+}
+
+function optionalHttpOrigin(env: RawEnv, key: string): string | undefined {
+  return optional(env, key) ? httpOrigin(env, key) : undefined;
+}
+
+function boundedInteger(
+  env: RawEnv,
+  key: string,
+  defaultValue: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const value = Number(env[key] ?? defaultValue);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}.`);
+  }
+  return value;
 }

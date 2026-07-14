@@ -44,11 +44,16 @@ export async function getTenantChatLiveRequests(
         category: "general" as const,
         costUsd: invocation.confirmedCostMicroUsd / 1_000_000,
         difficulty: "simple" as const,
+        executedModel: invocation.modelKey ?? null,
         id: invocation.requestId,
         latencyMs: invocation.latencyMs,
+        ttftMs: null,
         modelRef: null,
         projectId: "",
         projectName: "Tenant Chat",
+        providerFamily: null,
+        providerId: null,
+        providerName: null,
         requestedModel: invocation.modelKey ?? "auto",
         requestId: invocation.requestId,
         routingReason: "tenant_chat",
@@ -71,17 +76,18 @@ export async function getTenantChatLiveRequests(
     .filter(
       (row) =>
         !filters.model ||
-        row.requestedModel.trim().toLowerCase() === filters.model.trim().toLowerCase()
+        (row.executedModel ?? row.requestedModel).trim().toLowerCase() ===
+          filters.model.trim().toLowerCase()
     )
     .filter((row) => !filters.status || row.status === filters.status)
-    .slice(0, 5);
+    .slice(0, 9);
 
   return {
     generatedAt: new Date().toISOString(),
     requestedModelOptions: [
       ...new Set(
         rows
-          .map((row) => row.requestedModel)
+          .map((row) => row.executedModel ?? row.requestedModel)
           .filter((model) => model !== "auto")
       )
     ],
@@ -108,7 +114,7 @@ export function mergeLiveRequestPayloads(
     projectNameSource: projectApplication.projectNameSource,
     rows: [...projectApplication.rows, ...tenantChat.rows]
       .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
-      .slice(0, 5)
+      .slice(0, 9)
   };
 }
 

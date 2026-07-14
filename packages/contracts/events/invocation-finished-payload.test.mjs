@@ -22,6 +22,7 @@ test("invocation-finished v2 fixture keeps actual identity inside attempt and co
 
   assert.equal(fixture.eventVersion, 2);
   assert.equal(fixture.request.schemaVersion, 2);
+  assert.equal(fixture.request.ttftMs, null);
   assert.doesNotMatch(serialized, /selectedProvider|selectedModel/);
   assert.equal(fixture.request.routing.category, "general");
   assert.equal(fixture.request.routing.difficulty, "simple");

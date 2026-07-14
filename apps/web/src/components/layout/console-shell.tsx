@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleHelp,
   FolderKanban,
+  KeyRound,
   Globe2,
   LayoutDashboard,
   LogOut,
@@ -73,7 +74,7 @@ const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
 };
 
 const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
-  "api-keys": SettingsIcon,
+  "api-keys": KeyRound,
   "app-tokens": SettingsIcon,
   employees: Users,
   alerts: Bell,
@@ -190,6 +191,14 @@ const navigationItems: Array<{
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
+      },
+      {
+        labels: {
+          en: "API Management",
+          ko: "API 관리"
+        },
+        item: "api-keys",
+        path: (tenantId) => `/tenants/${tenantId}/api-keys`
       }
     ],
     section: "management"
@@ -597,23 +606,6 @@ export function ConsoleShell({
           <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
             <GateLMLogo compact={isSidebarCollapsed} />
           </Link>
-          <div className="console-sidebar-product-row">
-            <span className="console-sidebar-product-label">Web Console</span>
-            <button
-              aria-expanded={!isSidebarCollapsed}
-              aria-label={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
-              className="console-sidebar-toggle"
-              onClick={toggleSidebar}
-              title={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
-              type="button"
-            >
-              {isSidebarCollapsed ? (
-                <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
-              ) : (
-                <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
-              )}
-            </button>
-          </div>
         </div>
 
         <nav className="console-nav">
@@ -628,12 +620,33 @@ export function ConsoleShell({
                     <div
                       aria-level={3}
                       className="console-nav-link"
+                      data-has-sidebar-toggle={item.section === "monitoring"}
                       data-open="true"
                       data-static="true"
                       role="heading"
                     >
                       <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                       <span>{label}</span>
+                      {item.section === "monitoring" ? (
+                        <button
+                          aria-expanded={!isSidebarCollapsed}
+                          aria-label={
+                            isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                          }
+                          className="console-sidebar-toggle console-nav-sidebar-toggle"
+                          onClick={toggleSidebar}
+                          title={
+                            isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                          }
+                          type="button"
+                        >
+                          {isSidebarCollapsed ? (
+                            <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
+                          ) : (
+                            <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
+                          )}
+                        </button>
+                      ) : null}
                     </div>
 
                     <div className="console-subnav" aria-label={`${label} ${text.navigation}`}>

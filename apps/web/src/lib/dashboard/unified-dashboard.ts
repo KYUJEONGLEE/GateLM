@@ -7,6 +7,41 @@ import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 
 export type DashboardSurface = "all" | "project_application" | "tenant_chat";
 
+export function selectDashboardSurfaceOverview(
+  surface: DashboardSurface,
+  projectApplication: DashboardOverview | undefined,
+  tenantChat: DashboardOverview | undefined,
+  options: { tenantChatNotConfigured?: boolean } = {}
+): DashboardOverview | undefined {
+  if (surface === "project_application") {
+    return projectApplication;
+  }
+  if (surface === "tenant_chat") {
+    return tenantChat;
+  }
+  if (projectApplication && tenantChat) {
+    return mergeDashboardOverviews(projectApplication, tenantChat);
+  }
+  if (projectApplication && options.tenantChatNotConfigured) {
+    return { ...projectApplication, surface: "all" };
+  }
+  const partial = projectApplication ?? tenantChat;
+  return partial
+    ? {
+        ...partial,
+        surface: "all",
+        queryBudget: mergeDashboardQueryBudgets(partial.queryBudget, {
+          status: "partial",
+          maxRangeHours: partial.queryBudget?.maxRangeHours ?? 24,
+          maxBreakdownItems: partial.queryBudget?.maxBreakdownItems ?? 50,
+          guidance: projectApplication
+            ? "Tenant Chat aggregate is unavailable."
+            : "Project/Application aggregate is unavailable."
+        })
+      }
+    : undefined;
+}
+
 export function toTenantChatDashboardOverview(
   tenantId: string,
   dashboard: TenantChatDashboard
@@ -89,7 +124,10 @@ export function toTenantChatDashboardOverview(
     savedCostUsd: formatMicroUsd(0),
     averageLatencyMs: dashboard.latency.averageMs,
     p95LatencyMs: dashboard.latency.p95Ms,
-    latencyBySurface: { tenantChatP95Ms: dashboard.latency.p95Ms },
+    latencyBySurface: {
+      tenantChatAverageMs: dashboard.latency.averageMs,
+      tenantChatP95Ms: dashboard.latency.p95Ms
+    },
     maskingActionCounts: {},
     routingSummaries: [],
     statusCounts,
@@ -100,10 +138,17 @@ export function toTenantChatDashboardOverview(
       source: "tenant-chat-invocation-log",
       recordCount: dashboard.requests.total,
       lastLogCreatedAt: dashboard.freshness.projectedAt,
-      generatedAt: dashboard.freshness.projectedAt
+      generatedAt: dashboard.freshness.projectedAt,
+      lastAggregatedAt: dashboard.freshness.projectedAt,
+      isStale: dashboard.freshness.state === "stale"
     },
     queryBudget: {
-      status: dashboard.freshness.state === "fresh" ? "ok" : "partial",
+      status:
+        dashboard.freshness.state === "fresh"
+          ? "ok"
+          : dashboard.freshness.state === "stale"
+            ? "stale"
+            : "partial",
       maxRangeHours: 24 * 7,
       maxBreakdownItems: 100,
       guidance:
@@ -201,15 +246,13 @@ export function mergeDashboardOverviews(
       projectApplication.completionTokens + tenantChat.completionTokens,
     totalCostMicroUsd,
     totalCostUsd: formatMicroUsd(totalCostMicroUsd),
-    averageLatencyMs: weightedAverage(
-      projectApplication.averageLatencyMs,
-      projectApplication.totalRequests,
-      tenantChat.averageLatencyMs,
-      tenantChat.totalRequests
-    ),
-    p95LatencyMs: tenantChat.p95LatencyMs,
+    averageLatencyMs: projectApplication.averageLatencyMs,
+    p95LatencyMs: projectApplication.p95LatencyMs,
+    gatewayTtft: projectApplication.gatewayTtft,
     latencyBySurface: {
+      projectApplicationAverageMs: projectApplication.averageLatencyMs,
       projectApplicationP95Ms: projectApplication.p95LatencyMs,
+      tenantChatAverageMs: tenantChat.averageLatencyMs,
       tenantChatP95Ms: tenantChat.p95LatencyMs
     },
     routingSummaries: mergeKeyedRows(
@@ -235,15 +278,23 @@ export function mergeDashboardOverviews(
         projectApplication.dataFreshness.lastLogCreatedAt,
         tenantChat.dataFreshness.lastLogCreatedAt
       ),
-      generatedAt: latestIso(
+      generatedAt: earliestIso(
         projectApplication.dataFreshness.generatedAt,
         tenantChat.dataFreshness.generatedAt
+      ),
+      lastAggregatedAt: earliestIso(
+        projectApplication.dataFreshness.lastAggregatedAt ??
+          projectApplication.dataFreshness.generatedAt,
+        tenantChat.dataFreshness.lastAggregatedAt ?? tenantChat.dataFreshness.generatedAt
+      ),
+      isStale: Boolean(
+        projectApplication.dataFreshness.isStale || tenantChat.dataFreshness.isStale
       )
     },
-    queryBudget:
-      tenantChat.queryBudget?.status === "partial"
-        ? tenantChat.queryBudget
-        : projectApplication.queryBudget,
+    queryBudget: mergeDashboardQueryBudgets(
+      projectApplication.queryBudget,
+      tenantChat.queryBudget
+    ),
     breakdowns: {
       byApplication: projectApplication.breakdowns?.byApplication ?? [],
       byBudgetScope: [
@@ -385,9 +436,40 @@ function mergeKeyedRows<T extends Record<K, number>, K extends keyof T>(
   return [...rows.values()];
 }
 
-function weightedAverage(left: number, leftCount: number, right: number, rightCount: number) {
-  const total = leftCount + rightCount;
-  return total > 0 ? (left * leftCount + right * rightCount) / total : 0;
+type DashboardQueryBudget = NonNullable<DashboardOverview["queryBudget"]>;
+type DashboardQueryBudgetStatus = DashboardQueryBudget["status"];
+
+const queryBudgetStatusRank: Record<DashboardQueryBudgetStatus, number> = {
+  ok: 0,
+  stale: 1,
+  partial: 2,
+  too_broad: 3,
+  unavailable: 4
+};
+
+function mergeDashboardQueryBudgets(
+  left: DashboardOverview["queryBudget"],
+  right: DashboardOverview["queryBudget"]
+): DashboardOverview["queryBudget"] {
+  if (!left) return right;
+  if (!right) return left;
+
+  const status =
+    queryBudgetStatusRank[left.status] >= queryBudgetStatusRank[right.status]
+      ? left.status
+      : right.status;
+
+  return {
+    status,
+    maxRangeHours: Math.min(left.maxRangeHours, right.maxRangeHours),
+    maxBreakdownItems: Math.min(left.maxBreakdownItems, right.maxBreakdownItems),
+    guidance: mergeGuidance(left.guidance, right.guidance)
+  };
+}
+
+function mergeGuidance(left: string | null, right: string | null) {
+  const messages = [...new Set([left, right].filter((value): value is string => Boolean(value?.trim())))];
+  return messages.length > 0 ? messages.join(" ") : null;
 }
 
 function safeRate(numerator: number, denominator: number) {

@@ -62,7 +62,7 @@ export default async function ApplicationPoliciesPage({
           label: "Projects"
         },
         {
-          href: `/tenants/${effectiveTenantId}/projects/${project.id}`,
+          href: `/tenants/${effectiveTenantId}/projects/${project.id}/policies`,
           label: project.name
         },
         {

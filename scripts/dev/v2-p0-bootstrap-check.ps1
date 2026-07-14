@@ -339,7 +339,9 @@ try {
             "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
             "db/migrations/009_alter_p0_invocation_logs_api_key_fk.sql",
             "db/migrations/010_create_budget_ledger.sql",
-            "db/migrations/011_create_gateway_rate_limit_scope_counters.sql"
+            "db/migrations/011_create_gateway_rate_limit_scope_counters.sql",
+            "db/migrations/016_add_p0_invocation_log_ttft.sql",
+            "db/migrations/017_add_p0_dashboard_rollup_indexes.sql"
         )
         foreach ($file in $gatewaySqlFiles) {
             Invoke-GatewaySqlFile -Path $file

@@ -10,6 +10,7 @@ import {
 } from "@/features/dashboard/live-requests-history";
 import { RequestLogDetailClient } from "@/features/request-logs/components/request-log-detail-client";
 import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
+import type { ProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import type {
   LiveRequestRow,
   LiveRequestsPayload,
@@ -17,7 +18,10 @@ import type {
 } from "@/lib/gateway/live-requests-types";
 import type { Locale } from "@/lib/i18n/locale";
 
-export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
+const COMPACT_LIVE_REQUEST_LIMIT = 5;
+const FOCUS_LIVE_REQUEST_LIMIT = 9;
+
+export const LIVE_REQUESTS_POLL_INTERVAL_MS = 2000;
 
 type LiveRequestsCardFilters = {
   budgetScopeId: string;
@@ -42,6 +46,9 @@ type LiveRequestsApiResponse = {
 
 type SelectedRequest = {
   projectId: string;
+  providerFamily: string | null;
+  providerId: string | null;
+  providerName: string | null;
   requestId: string;
 };
 
@@ -194,18 +201,73 @@ export function LiveRequestsCard({
   );
 
   useEffect(() => {
-    if (initialPayload && !skippedInitialFetchRef.current) {
-      skippedInitialFetchRef.current = true;
-    } else {
-      void loadRequests({ silent: false });
+    let stopped = false;
+    let timeoutId: number | null = null;
+    let currentPollId = 0;
+
+    function clearScheduledPoll() {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     }
 
-    const interval = window.setInterval(() => {
-      void loadRequests({ silent: true });
-    }, LIVE_REQUESTS_POLL_INTERVAL_MS);
+    function schedulePoll(pollId: number) {
+      clearScheduledPoll();
+      timeoutId = window.setTimeout(() => {
+        void poll(pollId);
+      }, LIVE_REQUESTS_POLL_INTERVAL_MS);
+    }
+
+    async function poll(pollId: number) {
+      if (
+        stopped ||
+        pollId !== currentPollId ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+
+      await loadRequests({ silent: true });
+      if (!stopped && pollId === currentPollId) {
+        schedulePoll(pollId);
+      }
+    }
+
+    function handleVisibilityChange() {
+      clearScheduledPoll();
+
+      if (document.visibilityState !== "visible") {
+        currentPollId += 1;
+        abortRef.current?.abort();
+        return;
+      }
+
+      currentPollId += 1;
+      void poll(currentPollId);
+    }
+
+    if (initialPayload && !skippedInitialFetchRef.current) {
+      skippedInitialFetchRef.current = true;
+      currentPollId += 1;
+      schedulePoll(currentPollId);
+    } else if (document.visibilityState === "visible") {
+      currentPollId += 1;
+      const pollId = currentPollId;
+      void loadRequests({ silent: false }).finally(() => {
+        if (!stopped && pollId === currentPollId) {
+          schedulePoll(pollId);
+        }
+      });
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(interval);
+      stopped = true;
+      currentPollId += 1;
+      clearScheduledPoll();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       abortRef.current?.abort();
       inFlightQueryRef.current = null;
     };
@@ -271,6 +333,9 @@ export function LiveRequestsCard({
     const selectRequest = () => {
       setSelectedRequest({
         projectId: row.projectId,
+        providerFamily: row.providerFamily,
+        providerId: row.providerId,
+        providerName: row.providerName,
         requestId: row.requestId
       });
       detailOpenTimerRef.current = null;
@@ -306,8 +371,9 @@ export function LiveRequestsCard({
           onOpenFocus={openFocusView}
           onOpenRequest={openRequestDetail}
           onStatusFilterChange={setStatusFilter}
-          rows={rows.slice(0, 4)}
+          rows={rows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)}
           statusFilter={statusFilter}
+          tenantId={tenantId}
           viewAllLogsHref={viewAllLogsHref}
         />
       </div>
@@ -333,14 +399,16 @@ export function LiveRequestsCard({
           onOpenRequest={openRequestDetail}
           onStatusFilterChange={setStatusFilter}
           pendingCount={pendingCount}
-          rows={focusRows}
+          rows={focusRows.slice(0, FOCUS_LIVE_REQUEST_LIMIT)}
           selectedRequestId={selectedRequest?.requestId}
           statusFilter={statusFilter}
+          tenantId={tenantId}
           viewAllLogsHref={viewAllLogsHref}
         />
         <RequestLogDetailClient
           locale={locale}
           onClose={closeRequestDetail}
+          providerDirectory={selectedRequestProviderDirectory(selectedRequest)}
           selectedProjectId={selectedRequest?.projectId}
           selectedRequestId={selectedRequest?.requestId}
           tenantId={tenantId}
@@ -459,4 +527,23 @@ function normalizeModelOptions(options: string[] | undefined) {
     .filter((option): option is string => typeof option === "string")
     .map((option) => option.trim())
     .filter(Boolean);
+}
+
+function selectedRequestProviderDirectory(
+  selectedRequest: SelectedRequest | null
+): ProviderDisplayDirectory {
+  if (
+    !selectedRequest?.providerId ||
+    !selectedRequest.providerFamily ||
+    !selectedRequest.providerName
+  ) {
+    return {};
+  }
+
+  return {
+    [selectedRequest.providerId]: {
+      family: selectedRequest.providerFamily,
+      name: selectedRequest.providerName
+    }
+  };
 }

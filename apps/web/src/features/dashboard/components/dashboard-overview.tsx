@@ -2,7 +2,8 @@ import {
   Activity,
   CheckCircle2,
   DollarSign,
-  RotateCcw
+  RotateCcw,
+  Timer
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -35,6 +36,7 @@ import {
   formatInteger,
   formatLatency,
   formatPercent,
+  formatResponseTimeSeconds,
   formatUsd
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
@@ -92,8 +94,6 @@ const dashboardText: Record<
     overviewWorkspace: string;
     refreshDashboard: string;
     metrics: {
-      averageLatency: string;
-      averageP95Latency: string;
       budgetLedgerCost: string;
       budgetScope: string;
       blocked: string;
@@ -101,7 +101,6 @@ const dashboardText: Record<
       cancelled: string;
       failed: string;
       fallbackSuccess: string;
-      p95Latency: string;
       rateLimited: string;
       records: string;
       savedCost: string;
@@ -137,6 +136,8 @@ const dashboardText: Record<
     rateLimitEvidence: string;
     routingSummary: string;
     statusDistribution: string;
+    ttftDetail: string;
+    ttftTitle: string;
     tabs: Record<DashboardTab, string>;
     title: string;
   }
@@ -168,8 +169,6 @@ const dashboardText: Record<
       traffic: "Requests"
     },
     metrics: {
-      averageLatency: "Average latency",
-      averageP95Latency: "Average/P95 latency",
       budgetLedgerCost: "Budget ledger cost",
       budgetScope: "Project budget",
       blocked: "Blocked",
@@ -177,7 +176,6 @@ const dashboardText: Record<
       cancelled: "Cancelled",
       failed: "Failed",
       fallbackSuccess: "Fallback success",
-      p95Latency: "P95 latency",
       rateLimited: "Rate limited",
       records: "Records",
       savedCost: "Saved cost",
@@ -203,6 +201,8 @@ const dashboardText: Record<
     rateLimitEvidence: "Rate limit evidence",
     routingSummary: "Routing by category and difficulty",
     statusDistribution: "Status distribution",
+    ttftDetail: "Average response time",
+    ttftTitle: "Response time",
     tabs: {
       overview: "Overview",
       requests: "Requests",
@@ -240,8 +240,6 @@ const dashboardText: Record<
       traffic: "Requests"
     },
     metrics: {
-      averageLatency: "평균 지연",
-      averageP95Latency: "평균/P95 지연",
       budgetLedgerCost: "Budget ledger 비용",
       budgetScope: "Project budget",
       blocked: "차단",
@@ -249,7 +247,6 @@ const dashboardText: Record<
       cancelled: "취소",
       failed: "실패",
       fallbackSuccess: "Fallback 성공",
-      p95Latency: "P95 지연",
       rateLimited: "Rate limit",
       records: "레코드",
       savedCost: "절감 비용",
@@ -275,6 +272,8 @@ const dashboardText: Record<
     rateLimitEvidence: "Rate limit 증거",
     routingSummary: "카테고리·난이도별 라우팅",
     statusDistribution: "상태 분포",
+    ttftDetail: "평균 응답 시간",
+    ttftTitle: "응답 시간",
     tabs: {
       overview: "Overview",
       requests: "Requests",
@@ -311,6 +310,7 @@ export function DashboardOverviewView({
       overview.range.to,
     locale
   );
+  const queryBudgetWarning = dashboardQueryBudgetWarning(overview.queryBudget, locale);
   const kpiCards = [
     {
       detail: `${formatInteger(overview.totalRequests)} ${locale === "ko" ? "건" : "requests"} · ${rangeLabel(filters.range, locale)}`,
@@ -320,7 +320,7 @@ export function DashboardOverviewView({
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful} · ${text.metrics.averageLatency} ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
+      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful}`,
       icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.successRate,
       tone: "green",
@@ -334,6 +334,17 @@ export function DashboardOverviewView({
       value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
+
+  if (overview.gatewayTtft?.scope === "project_application") {
+    const ttft = overview.gatewayTtft;
+    kpiCards.push({
+      detail: text.ttftDetail,
+      icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: text.ttftTitle,
+      tone: "violet",
+      value: formatTtftLatency(ttft.averageMs)
+    });
+  }
 
   return (
     <main
@@ -369,9 +380,13 @@ export function DashboardOverviewView({
             value: range
           }))}
         />
-        {overview.queryBudget?.status === "partial" && overview.queryBudget.guidance ? (
-          <div className="dashboard-source-warning" role="status">
-            {overview.queryBudget.guidance}
+        {queryBudgetWarning ? (
+          <div
+            className="dashboard-source-warning"
+            data-status={overview.queryBudget?.status ?? "ok"}
+            role="status"
+          >
+            {queryBudgetWarning}
           </div>
         ) : null}
         <div className="dashboard-data-freshness">
@@ -428,6 +443,41 @@ function ratio(numerator: number, denominator: number) {
   }
 
   return numerator / denominator;
+}
+
+function formatTtftLatency(value: number | null) {
+  return formatResponseTimeSeconds(value);
+}
+
+function dashboardQueryBudgetWarning(
+  queryBudget: DashboardOverview["queryBudget"],
+  locale: Locale
+) {
+  if (!queryBudget || queryBudget.status === "ok") {
+    return null;
+  }
+
+  const guidance = queryBudget.guidance?.trim();
+  if (guidance) {
+    return guidance;
+  }
+
+  const fallback = {
+    en: {
+      partial: "Some aggregate data is unavailable.",
+      stale: "Aggregate data is delayed.",
+      too_broad: "The selected range exceeds the current query budget.",
+      unavailable: "Aggregate data is unavailable."
+    },
+    ko: {
+      partial: "일부 집계 데이터를 사용할 수 없습니다.",
+      stale: "집계 데이터 반영이 지연되고 있습니다.",
+      too_broad: "선택한 범위가 현재 조회 한도를 초과했습니다.",
+      unavailable: "집계 데이터를 사용할 수 없습니다."
+    }
+  } as const;
+
+  return fallback[locale][queryBudget.status];
 }
 
 function formatDashboardDataAsOf(value: string, locale: Locale) {
@@ -898,8 +948,8 @@ function DashboardTabPanel({
           <FocusStat label={text.metrics.successful} value={formatInteger(overview.successfulRequests)} />
           <FocusStat label={text.metrics.failed} value={formatInteger(overview.failedRequests)} />
           <FocusStat
-            label={text.metrics.averageP95Latency}
-            value={formatLatencyPair(overview.averageLatencyMs, overview.p95LatencyMs)}
+            label={text.ttftTitle}
+            value={formatTtftLatency(overview.gatewayTtft?.averageMs ?? null)}
           />
         </div>
       </section>
@@ -1429,10 +1479,6 @@ function RequestTrendRangeToggle({
       ))}
     </div>
   );
-}
-
-function formatLatencyPair(averageLatencyMs: number, p95LatencyMs: number) {
-  return `${formatInteger(averageLatencyMs)} / ${formatInteger(p95LatencyMs)} ms`;
 }
 
 function sumBudgetScopeCostMicroUsd(overview: DashboardOverview) {

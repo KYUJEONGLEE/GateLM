@@ -2,8 +2,13 @@
 
 import { Eye, Info, Maximize2, RotateCw, X } from "lucide-react";
 import Link from "next/link";
-import { projectPillTone } from "@/features/dashboard/live-requests-format";
+import {
+  primaryPolicyResult,
+  projectPillTone
+} from "@/features/dashboard/live-requests-format";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { formatResponseTimeSeconds } from "@/lib/formatting/formatters";
 import type {
   LiveRequestRow,
   LiveRequestStatusFilter
@@ -29,6 +34,7 @@ type LiveRequestsViewProps = {
   rows: LiveRequestRow[];
   selectedRequestId?: string;
   statusFilter: LiveRequestStatusFilter;
+  tenantId: string;
   viewAllLogsHref: string;
 };
 
@@ -140,6 +146,7 @@ export function LiveRequestsView({
   rows,
   selectedRequestId,
   statusFilter,
+  tenantId,
   viewAllLogsHref
 }: LiveRequestsViewProps) {
   const isFocus = mode === "focus";
@@ -254,8 +261,8 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
               <th scope="col">{locale === "ko" ? "라우팅" : "Routing"}</th>
               <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
-              <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Results"}</th>
-              <th scope="col">{locale === "ko" ? "지연 시간" : "Latency"}</th>
+              <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Result"}</th>
+              <th scope="col">{locale === "ko" ? "응답 시간" : "Response time"}</th>
               <th scope="col">{text.detail}</th>
             </tr>
           </thead>
@@ -299,13 +306,25 @@ export function LiveRequestsView({
                   )}
                 </td>
                 <td>
-                  <span
-                    className="dashboard-live-project-pill"
-                    data-project-tone={projectPillTone(row.projectId || row.projectName)}
-                    title={projectTitle(row)}
-                  >
-                    {row.projectName || "-"}
-                  </span>
+                  {row.projectId ? (
+                    <Link
+                      aria-label={`${row.projectName || row.projectId} ${locale === "ko" ? "프로젝트 열기" : "Open project"}`}
+                      className="dashboard-live-project-pill"
+                      data-project-tone={projectPillTone(row.projectId || row.projectName)}
+                      href={`/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(row.projectId)}/policies`}
+                      title={projectTitle(row)}
+                    >
+                      {row.projectName || row.projectId}
+                    </Link>
+                  ) : (
+                    <span
+                      className="dashboard-live-project-pill"
+                      data-project-tone={projectPillTone(row.projectName)}
+                      title={projectTitle(row)}
+                    >
+                      {row.projectName || "-"}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <LiveRequestRouting row={row} />
@@ -319,9 +338,9 @@ export function LiveRequestsView({
                   </span>
                 </td>
                 <td>
-                  <PolicyBadges row={row} />
+                  <PolicyBadges locale={locale} row={row} />
                 </td>
-                <td>{formatLiveLatency(row.latencyMs)}</td>
+                <td>{formatResponseTimeSeconds(row.ttftMs)}</td>
                 <td>
                   {row.surface === "tenant_chat" ? (
                     <span className="dashboard-live-muted-value">-</span>
@@ -356,46 +375,53 @@ export function LiveRequestsView({
   );
 }
 
-function PolicyBadges({ row }: { row: LiveRequestRow }) {
-  if (row.cacheStatus === "NONE" && row.safetyAction === "NONE") {
+function PolicyBadges({ locale, row }: { locale: Locale; row: LiveRequestRow }) {
+  const result = primaryPolicyResult(row, locale);
+
+  if (!result) {
     return <span className="dashboard-live-muted-value">-</span>;
   }
 
   return (
     <span className="dashboard-live-policy-badges">
-      {row.safetyAction !== "NONE" ? (
-        <span
-          className="dashboard-live-mini-badge"
-          data-kind="safety"
-          data-value={row.safetyAction}
-        >
-          {"PII " + row.safetyAction}
-        </span>
-      ) : null}
-      {row.cacheStatus !== "NONE" ? (
-        <span
-          className="dashboard-live-mini-badge"
-          data-kind="cache"
-          data-value={row.cacheStatus}
-        >
-          {"CACHE " + row.cacheStatus}
-        </span>
-      ) : null}
+      <span
+        className="dashboard-live-mini-badge"
+        data-kind={result.kind}
+        data-value={result.value}
+      >
+        {result.label}
+      </span>
     </span>
   );
 }
 
 function LiveRequestRouting({ row }: { row: LiveRequestRow }) {
-  const model = formatModelDisplayName(row.requestedModel, "auto");
+  const model = formatModelDisplayName(
+    row.executedModel ?? row.requestedModel,
+    "auto"
+  );
+  const requestMode = row.requestedModel === "auto"
+    ? "Auto routing"
+    : formatModelDisplayName(row.requestedModel, "Manual routing");
+  const executionLabel = row.providerName
+    ? `${row.providerName} · ${requestMode}`
+    : `${row.category} / ${row.difficulty} / ${row.modelRef ?? "-"}`;
   const routingLabel = `${row.category} / ${row.difficulty} / ${row.modelRef ?? "no-model-ref"} / ${row.routingReason ?? "not-set"}`;
   return (
     <span
       className="dashboard-live-provider-model"
       title={routingLabel + " · " + model}
     >
+      {row.providerFamily ? (
+        <ProviderFamilyIcon
+          className="dashboard-live-provider-icon"
+          family={row.providerFamily}
+          size={24}
+        />
+      ) : null}
       <span className="dashboard-live-provider-copy">
         <strong>{model}</strong>
-        <small>{row.category} / {row.difficulty} / {row.modelRef ?? "-"}</small>
+        <small>{executionLabel}</small>
       </span>
     </span>
   );
@@ -440,14 +466,4 @@ function formatLiveTime(value: string) {
 function formatLiveDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : dateFormatter.format(date);
-}
-
-function formatLiveLatency(value: number) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-  if (value >= 1000) {
-    return (value / 1000).toFixed(2) + " s";
-  }
-  return integerFormatter.format(Math.max(0, Math.round(value))) + " ms";
 }

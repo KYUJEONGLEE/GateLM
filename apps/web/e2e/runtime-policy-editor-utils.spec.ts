@@ -6,6 +6,10 @@ import type {
   RuntimePolicyModelConfig
 } from "../src/lib/control-plane/runtime-policy-types";
 import {
+  createRuntimePolicyRoleRoutes,
+  getRuntimePolicyModelRoles
+} from "../src/lib/control-plane/runtime-policy-types";
+import {
   createMockBootstrapRoutingPolicy,
   getRoutingModelRef,
   getRoutingProviderOptions,
@@ -70,6 +74,17 @@ test("mock is resolvable without a tenant provider and unknown refs are not", ()
 
   policy.routes.reasoning.complex.modelRefs = ["missing:model"];
   expect(hasResolvableRoutingMatrix(policy, [])).toBe(false);
+});
+
+test("fallback cannot duplicate either primary role", () => {
+  const routes = createRuntimePolicyRoleRoutes({
+    complexModelRef: "provider-a:model-a",
+    fallbackModelRef: "provider-a:model-a",
+    simpleModelRef: "provider-a:model-a"
+  });
+
+  expect(routes.general.simple.modelRefs).toEqual(["provider-a:model-a"]);
+  expect(getRuntimePolicyModelRoles(routes)?.fallbackModelRef).toBeNull();
 });
 
 test("routing provider options use display names and provider families", () => {

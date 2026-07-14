@@ -5,18 +5,31 @@ import {
   Gauge,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles
+  Sparkles,
+  Users
 } from "lucide-react";
+import { notFound } from "next/navigation";
 import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link";
 import {
   AnalyticsCachePanel,
   AnalyticsCostPanel,
+  AnalyticsEmployeeUsagePanel,
   AnalyticsPerformancePanel,
   AnalyticsReliabilityPanel,
   AnalyticsUsagePanel
 } from "@/features/analytics/components/analytics-panels";
 import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
+import { buildEmployeeUsageReadModel } from "@/features/employees/employee-usage-read-model";
+import {
+  getCurrentConsoleAuth,
+  getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
+  resolveConsoleTenantIdForAuth,
+  resolveProjectIdForConsoleAuth
+} from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
+import { getEmployeeControlModel } from "@/lib/control-plane/employees-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
@@ -46,7 +59,7 @@ type AnalyticsPageProps = {
   }>;
 };
 
-type AnalyticsTab = "impact" | "usage" | "cost" | "performance" | "reliability" | "cache";
+type AnalyticsTab = "impact" | "usage" | "employees" | "cost" | "performance" | "reliability" | "cache";
 
 type AnalyticsFilterState = {
   model: string;
@@ -58,6 +71,7 @@ type AnalyticsFilterState = {
 const tabConfig: Array<{ icon: typeof Activity; id: AnalyticsTab }> = [
   { icon: Sparkles, id: "impact" },
   { icon: Activity, id: "usage" },
+  { icon: Users, id: "employees" },
   { icon: Coins, id: "cost" },
   { icon: Gauge, id: "performance" },
   { icon: ShieldCheck, id: "reliability" },
@@ -82,6 +96,7 @@ const pageText = {
     tabs: {
       cache: "Cache",
       cost: "Cost",
+      employees: "Employees",
       impact: "Policy impact",
       performance: "Performance",
       reliability: "Reliability",
@@ -104,6 +119,7 @@ const pageText = {
     tabs: {
       cache: "캐시",
       cost: "비용",
+      employees: "직원",
       impact: "정책 효과",
       performance: "성능",
       reliability: "안정성",
@@ -117,22 +133,47 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
-  const filters = buildFilters(resolvedSearchParams);
+  const requestedFilters = buildFilters(resolvedSearchParams);
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
+  const projectsModel = await getProjectsModel(effectiveTenantId);
+  const effectiveProjectId = resolveProjectIdForConsoleAuth({
+    auth,
+    projects: projectsModel.projects,
+    requestedProjectId: requestedFilters.projectId,
+    routeTenantId: effectiveTenantId
+  });
+
+  if (effectiveProjectId === null) {
+    notFound();
+  }
+
+  const filters = {
+    ...requestedFilters,
+    projectId: effectiveProjectId ?? requestedFilters.projectId
+  };
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
   const needsReliabilityEvidence = activeTab === "reliability";
+  const needsEmployeeUsage = activeTab === "employees";
   const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
-  const [locale, projectsModel, overview, performance, costTrend, v5Evidence, reliabilityRecords] = await Promise.all([
-    getRequestLocale(),
-    getProjectsModel(tenantId),
-    getLiveDashboardOverview(tenantId, {
+  const [overview, performance, costTrend, v5Evidence, reliabilityRecords, employeeControl] = await Promise.all([
+    getLiveDashboardOverview(effectiveTenantId, {
       projectId: filters.projectId || undefined,
       range: filters.range
     }),
     needsPerformance
-      ? getLiveAnalyticsPerformance(tenantId, {
+      ? getLiveAnalyticsPerformance(effectiveTenantId, {
           model: activeTab === "performance" ? filters.model || undefined : undefined,
           projectId: filters.projectId || undefined,
           provider: activeTab === "performance" ? filters.provider || undefined : undefined,
@@ -140,13 +181,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })
       : Promise.resolve(undefined),
     needsCostTrend
-      ? getLiveCostOverTime(tenantId, {
+      ? getLiveCostOverTime(effectiveTenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
         })
       : Promise.resolve(undefined),
     needsV5Evidence
-      ? getLiveAnalyticsV5Evidence(tenantId, {
+      ? getLiveAnalyticsV5Evidence(effectiveTenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
         })
@@ -156,19 +197,30 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           from: reliabilityRange.from,
           limit: 100,
           projectId: filters.projectId || undefined,
-          tenantId,
+          tenantId: effectiveTenantId,
           to: reliabilityRange.to
         })
+      : Promise.resolve(undefined),
+    needsEmployeeUsage
+      ? getEmployeeControlModel(effectiveTenantId)
       : Promise.resolve(undefined)
   ]);
 
   const text = pageText[locale];
-  const projects = projectsModel.projects.filter((project) => project.status !== "ARCHIVED");
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
+  const projects = getVisibleProjectsForConsoleAuth(
+    projectsModel.projects,
+    auth,
+    effectiveTenantId
+  ).filter((project) => project.status !== "ARCHIVED");
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const model = buildAnalyticsReadModel(overview);
   const providerOptions = buildProviderOptions(overview, performance, filters.provider);
   const modelOptions = buildModelOptions(overview, performance, filters.model);
   const showProviderModelFilters = activeTab === "performance";
+  const employeeUsage = employeeControl
+    ? buildEmployeeUsageReadModel(employeeControl)
+    : undefined;
 
   return (
     <main className="console-content analytics-v3-page analytics-v4-page analytics-v5-page">
@@ -178,8 +230,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           <p>{text.subtitle}</p>
         </div>
 
-        <form
-          action={`/tenants/${tenantId}/analytics`}
+        {activeTab !== "employees" ? <form
+          action={`/tenants/${effectiveTenantId}/analytics`}
           aria-label={text.filterAria}
           className="analytics-v3-filter-bar"
         >
@@ -195,7 +247,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           <label className="analytics-v3-project-filter">
             <span>{text.project}</span>
             <select defaultValue={filters.projectId} name="projectId">
-              <option value="">{text.allProjects}</option>
+              {projectScoped ? null : <option value="">{text.allProjects}</option>}
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
@@ -227,7 +279,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
             <SlidersHorizontal aria-hidden="true" size={19} />
             <span>{text.apply}</span>
           </button>
-        </form>
+        </form> : null}
       </header>
 
       <nav aria-label="Analytics sections" className="analytics-v3-tabs">
@@ -238,7 +290,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               aria-current={tab.id === activeTab ? "page" : undefined}
               className="analytics-v3-tab"
               data-active={tab.id === activeTab}
-              href={tabHref(tenantId, tab.id, filters)}
+              href={tabHref(effectiveTenantId, tab.id, filters)}
               key={tab.id}
             >
               <Icon aria-hidden="true" size={18} />
@@ -263,6 +315,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           performance={performance}
           projectNameById={projectNameById}
         />
+      ) : activeTab === "employees" && employeeUsage ? (
+        <AnalyticsEmployeeUsagePanel
+          locale={locale}
+          source={employeeControl?.source ?? "fixture"}
+          tenantId={effectiveTenantId}
+          usage={employeeUsage}
+        />
       ) : activeTab === "cost" ? (
         <AnalyticsCostPanel
           costTrend={costTrend}
@@ -277,7 +336,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           performance={performance}
           projectNameById={projectNameById}
           range={filters.range}
-          tenantId={tenantId}
+          tenantId={effectiveTenantId}
         />
       ) : activeTab === "reliability" ? (
         <AnalyticsReliabilityPanel
@@ -286,7 +345,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           projectNameById={projectNameById}
           records={reliabilityRecords}
           range={filters.range}
-          tenantId={tenantId}
+          tenantId={effectiveTenantId}
         />
       ) : (
         <AnalyticsCachePanel locale={locale} model={model} />
@@ -314,6 +373,7 @@ function normalizeRange(value: string | undefined): LiveAnalyticsRange {
 
 function normalizeTab(value: string | undefined): AnalyticsTab {
   return value === "usage" ||
+    value === "employees" ||
     value === "cost" ||
     value === "performance" ||
     value === "reliability" ||

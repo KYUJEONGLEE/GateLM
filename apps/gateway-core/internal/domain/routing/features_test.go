@@ -100,11 +100,377 @@ func TestExtractPromptFeaturesDerivesExpandedCommonSignals(t *testing.T) {
 	if features.promptRuneLength == 0 || features.wordCount == 0 || features.clauseCount < 2 {
 		t.Fatalf("length and clause features were not derived: %#v", features)
 	}
-	if features.taskCount < 3 || features.constraintCount < 2 || features.scopeCount != 2 || features.dependencyDepth < 2 {
+	if features.taskCount < 2 || features.constraintCount < 2 || features.scopeCount != 2 || features.dependencyDepth < 2 {
 		t.Fatalf("workload features were not derived: %#v", features)
 	}
 	if features.languageBucket != "ko" || features.hasCodeFence || features.isMeaningless {
 		t.Fatalf("language/shape features were not derived: %#v", features)
+	}
+}
+
+func TestRoutingPhraseMatchingUsesLatinWordBoundaries(t *testing.T) {
+	t.Parallel()
+
+	features := ExtractPromptFeatures("Show information so readers understand the result.")
+	if features.taskCount != 1 {
+		t.Fatalf("taskCount = %d, want 1: %#v", features.taskCount, features)
+	}
+	if features.constraintCount != 0 {
+		t.Fatalf("constraintCount matched format/under substrings: %#v", features)
+	}
+	if containsRoutingPhrase("showcase the result", "show") {
+		t.Fatal("show must not match inside showcase")
+	}
+	if !containsRoutingPhrase("show the result", "show") {
+		t.Fatal("show must match at word boundaries")
+	}
+}
+
+func TestTaskCountUsesInstructionUnitsInsteadOfDistinctVerbKinds(t *testing.T) {
+	t.Parallel()
+
+	repeatedAction := ExtractPromptFeatures("A를 수정하고 B를 수정해줘.")
+	if repeatedAction.taskCount != 2 {
+		t.Fatalf("repeated action taskCount = %d, want 2: %#v", repeatedAction.taskCount, repeatedAction)
+	}
+
+	aliasedAction := ExtractPromptFeatures("Refactor(리팩터링) this function.")
+	if aliasedAction.taskCount != 1 {
+		t.Fatalf("aliased action taskCount = %d, want 1: %#v", aliasedAction.taskCount, aliasedAction)
+	}
+
+	repeatedIdentical := ExtractPromptFeatures(strings.Repeat("Summarize this note. ", 5))
+	if repeatedIdentical.taskCount != 1 {
+		t.Fatalf("identical repeated taskCount = %d, want 1: %#v", repeatedIdentical.taskCount, repeatedIdentical)
+	}
+}
+
+func TestConstraintCountDeduplicatesSemanticFamilies(t *testing.T) {
+	t.Parallel()
+
+	formatAliases := ExtractPromptFeatures("Preserve format, 포맷, 형식.")
+	if formatAliases.constraintCount != 1 {
+		t.Fatalf("format alias constraintCount = %d, want 1: %#v", formatAliases.constraintCount, formatAliases)
+	}
+
+	twoTargets := ExtractPromptFeatures("Preserve tone and format.")
+	if twoTargets.constraintCount != 2 {
+		t.Fatalf("two target constraintCount = %d, want 2: %#v", twoTargets.constraintCount, twoTargets)
+	}
+}
+
+func TestDependencyDepthDeduplicatesAliasesWithinOneUnit(t *testing.T) {
+	t.Parallel()
+
+	aliased := ExtractPromptFeatures("Then(그다음) continue.")
+	if aliased.dependencyDepth != 1 {
+		t.Fatalf("aliased dependencyDepth = %d, want 1: %#v", aliased.dependencyDepth, aliased)
+	}
+
+	separateBranches := ExtractPromptFeatures("If ready, otherwise stop.")
+	if separateBranches.dependencyDepth != 2 {
+		t.Fatalf("separate dependencyDepth = %d, want 2: %#v", separateBranches.dependencyDepth, separateBranches)
+	}
+}
+
+func TestExtractPromptFeaturesParsesEveryCodeFence(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Fix the first example. ```go\nfunc first() {}\n``` Then explain the second. ```sql\nselect * from items\n``` Finally summarize the changes."
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 2 || features.scopeCount != 2 {
+		t.Fatalf("multi-fence source counts were not preserved: %#v", features)
+	}
+	if strings.Contains(features.instructionText, "func first") || strings.Contains(features.instructionText, "select *") {
+		t.Fatalf("payload leaked into instruction: %q", features.instructionText)
+	}
+	if !strings.Contains(features.payloadText, "func first") || !strings.Contains(features.payloadText, "select *") {
+		t.Fatalf("payload blocks were not retained: %q", features.payloadText)
+	}
+	if features.taskCount != 3 {
+		t.Fatalf("multi-fence taskCount = %d, want 3: %#v", features.taskCount, features)
+	}
+}
+
+func TestExtractPromptFeaturesSeparatesPairedPayloadTag(t *testing.T) {
+	t.Parallel()
+
+	features := ExtractPromptFeatures(`<instruction>Summarize in three lines.</instruction><document id="meeting-1">security risk and deadline</document>`)
+	if features.instructionText != "summarize in three lines." {
+		t.Fatalf("tagged instruction = %q, want instruction body only", features.instructionText)
+	}
+	if features.payloadText != "security risk and deadline" || features.payloadBlockCount != 1 {
+		t.Fatalf("tagged payload was not separated: %#v", features)
+	}
+	if features.payloadBoundaryEvidence&payloadBoundaryTag == 0 || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("tagged payload evidence/confidence = (%d, %d), want tag/high", features.payloadBoundaryEvidence, features.payloadSplitConfidence)
+	}
+}
+
+func TestExtractPromptFeaturesTreatsUnclosedPayloadTagAsLowConfidence(t *testing.T) {
+	t.Parallel()
+
+	features := ExtractPromptFeatures("Summarize in three lines. <document>security risk and deadline")
+	if features.instructionText != "summarize in three lines." || features.payloadText != "security risk and deadline" {
+		t.Fatalf("unclosed tagged payload was not separated: %#v", features)
+	}
+	if features.payloadBlockCount != 1 || features.payloadSplitConfidence != payloadSplitConfidenceLow {
+		t.Fatalf("unclosed tagged payload block/confidence = (%d, %d), want (1, low)", features.payloadBlockCount, features.payloadSplitConfidence)
+	}
+}
+
+func TestExtractPromptFeaturesAlternatesRoleHeadingSections(t *testing.T) {
+	t.Parallel()
+
+	prompt := "[명령]\n세 줄로 요약해줘.\n[원문]\n첫 번째 회의록\n[request]\nInclude the decision.\n[payload]\nsecond source"
+	features := ExtractPromptFeatures(prompt)
+	if features.instructionText != "세 줄로 요약해줘. include the decision." {
+		t.Fatalf("heading instruction = %q, want only instruction sections", features.instructionText)
+	}
+	if features.payloadText != "첫 번째 회의록\nsecond source" || features.payloadBlockCount != 2 {
+		t.Fatalf("heading payload sections were not separated: %#v", features)
+	}
+	if features.payloadBoundaryEvidence&payloadBoundaryHeading == 0 || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("heading payload evidence/confidence = (%d, %d), want heading/high", features.payloadBoundaryEvidence, features.payloadSplitConfidence)
+	}
+}
+
+func TestExtractPromptFeaturesSeparatesBeginEndPayloadBlock(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Analyze the differences.\n--- BEGIN SOURCE ---\nfirst fact\nsecond fact\n--- END SOURCE ---\nThen summarize the result."
+	features := ExtractPromptFeatures(prompt)
+	if features.instructionText != "analyze the differences. then summarize the result." {
+		t.Fatalf("begin/end instruction = %q, want surrounding instructions", features.instructionText)
+	}
+	if features.payloadText != "first fact second fact" || features.payloadBlockCount != 1 {
+		t.Fatalf("begin/end payload was not separated: %#v", features)
+	}
+	if features.payloadBoundaryEvidence&payloadBoundaryBeginEnd == 0 || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("begin/end evidence/confidence = (%d, %d), want begin-end/high", features.payloadBoundaryEvidence, features.payloadSplitConfidence)
+	}
+}
+
+func TestExtractPromptFeaturesSeparatesGuardedBlockQuote(t *testing.T) {
+	t.Parallel()
+
+	features := ExtractPromptFeatures("Summarize this passage:\n> first fact\n> second fact")
+	if features.instructionText != "summarize this passage:" || features.payloadText != "first fact second fact" {
+		t.Fatalf("guarded blockquote was not separated: %#v", features)
+	}
+	if features.payloadBlockCount != 1 || features.payloadBoundaryEvidence&payloadBoundaryBlockQuote == 0 || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("blockquote count/evidence/confidence were not preserved: %#v", features)
+	}
+
+	unguarded := ExtractPromptFeatures("A quoted note:\n> summarize this someday")
+	if unguarded.payloadBlockCount != 0 || unguarded.payloadText != "" {
+		t.Fatalf("unguarded blockquote became payload: %#v", unguarded)
+	}
+	if !strings.Contains(unguarded.instructionText, "summarize this someday") {
+		t.Fatalf("unguarded blockquote was removed from instruction: %q", unguarded.instructionText)
+	}
+
+	payloadActionOnly := ExtractPromptFeatures("```text\nsummarize this source\n```\n> quoted note")
+	if payloadActionOnly.payloadBlockCount != 1 || payloadActionOnly.payloadBoundaryEvidence != payloadBoundaryCodeFence {
+		t.Fatalf("action inside an earlier payload guarded a later blockquote: %#v", payloadActionOnly)
+	}
+	if !strings.Contains(payloadActionOnly.instructionText, "quoted note") {
+		t.Fatalf("blockquote without instruction action was removed: %q", payloadActionOnly.instructionText)
+	}
+}
+
+func TestExtractPromptFeaturesSeparatesLimitedPayloadCue(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		prompt      string
+		instruction string
+		payload     string
+	}{
+		{
+			name:        "english",
+			prompt:      "Summarize the following content:\nsecurity risk and deadline",
+			instruction: "summarize the following content:",
+			payload:     "security risk and deadline",
+		},
+		{
+			name:        "korean",
+			prompt:      "다음 내용을 세 줄로 요약해줘:\n보안 위험과 마감 일정",
+			instruction: "다음 내용을 세 줄로 요약해줘:",
+			payload:     "보안 위험과 마감 일정",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			features := ExtractPromptFeatures(test.prompt)
+			if features.instructionText != test.instruction || features.payloadText != test.payload {
+				t.Fatalf("limited cue was not separated: %#v", features)
+			}
+			if features.payloadBlockCount != 1 || features.payloadBoundaryEvidence&payloadBoundaryCue == 0 || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+				t.Fatalf("cue count/evidence/confidence were not preserved: %#v", features)
+			}
+		})
+	}
+
+	unguarded := ExtractPromptFeatures("Summarize content when ready: security risk and deadline")
+	if unguarded.payloadBlockCount != 0 || unguarded.payloadText != "" {
+		t.Fatalf("non-whitelisted cue became payload: %#v", unguarded)
+	}
+}
+
+func TestExtractPromptFeaturesLetsOutermostPayloadBoundaryOwnNestedMarkers(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Summarize this source.\n<document>\n[payload]\n```text\nnested content\n```\n</document>\nThen explain the result."
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 1 {
+		t.Fatalf("nested payload markers created extra blocks: %#v", features)
+	}
+	if features.payloadBoundaryEvidence != payloadBoundaryTag {
+		t.Fatalf("nested payload evidence = %d, want outer tag only", features.payloadBoundaryEvidence)
+	}
+	if strings.Contains(features.instructionText, "nested content") || !strings.Contains(features.payloadText, "nested content") {
+		t.Fatalf("nested payload ownership was not preserved: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesCombinesIndependentBoundaryEvidence(t *testing.T) {
+	t.Parallel()
+
+	prompt := "[request]\nSummarize the sources.\n[payload]\nfirst source\n[instruction]\nCompare the decisions.\n<document>second source</document>"
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 2 {
+		t.Fatalf("independent payload block count = %d, want 2: %#v", features.payloadBlockCount, features)
+	}
+	wantEvidence := payloadBoundaryHeading | payloadBoundaryTag
+	if features.payloadBoundaryEvidence != wantEvidence || features.payloadSplitConfidence != payloadSplitConfidenceHigh {
+		t.Fatalf("independent evidence/confidence = (%d, %d), want (%d, high)", features.payloadBoundaryEvidence, features.payloadSplitConfidence, wantEvidence)
+	}
+	if features.instructionText != "summarize the sources. compare the decisions." || features.payloadText != "first source\nsecond source" {
+		t.Fatalf("independent boundaries were not separated: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesKeepsUnsupportedAndUnmatchedMarkersInInstruction(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Summarize this input.\n[output]\ncontext:\n</document>\n<document />"
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 0 || features.payloadText != "" || features.payloadSplitConfidence != payloadSplitConfidenceNone {
+		t.Fatalf("unsupported or unmatched markers created payload: %#v", features)
+	}
+	for _, marker := range []string{"[output]", "context:", "</document>", "<document />"} {
+		if !strings.Contains(features.instructionText, marker) {
+			t.Fatalf("marker %q was removed from instruction: %q", marker, features.instructionText)
+		}
+	}
+}
+
+func TestExtractPromptFeaturesMarksTruncatedPayloadBoundaryLowConfidence(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Review this source. <document>" + strings.Repeat("x", maxCategoryScanBytes*2) + "</document> Summarize the result."
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 1 || features.payloadSplitConfidence != payloadSplitConfidenceLow {
+		t.Fatalf("truncated cross-gap boundary count/confidence = (%d, %d), want (1, low)", features.payloadBlockCount, features.payloadSplitConfidence)
+	}
+	if strings.Contains(features.instructionText, strings.Repeat("x", 32)) || !strings.Contains(features.instructionText, "summarize the result") {
+		t.Fatalf("truncated payload contaminated or removed instruction: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesInfersPayloadOpeningInsideTruncatedGap(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Review this source. " + strings.Repeat("a", maxCategoryScanBytes) + "<document>" + strings.Repeat("z", maxCategoryScanBytes) + "</document> Summarize the result."
+	features := ExtractPromptFeatures(prompt)
+	if features.payloadBlockCount != 1 || features.payloadSplitConfidence != payloadSplitConfidenceLow {
+		t.Fatalf("gap-inferred payload count/confidence = (%d, %d), want (1, low)", features.payloadBlockCount, features.payloadSplitConfidence)
+	}
+	if strings.Contains(features.instructionText, strings.Repeat("z", 32)) || !strings.Contains(features.payloadText, strings.Repeat("z", 32)) {
+		t.Fatalf("gap-inferred payload was not kept out of instruction: %#v", features)
+	}
+	if !strings.Contains(features.instructionText, "summarize the result") {
+		t.Fatalf("tail instruction after inferred close was lost: %q", features.instructionText)
+	}
+}
+
+func TestExtractPromptFeaturesUsesBoundedHeadAndTailScan(t *testing.T) {
+	t.Parallel()
+
+	prompt := strings.Repeat("x", maxCategoryScanBytes*2) + " Summarize the result."
+	features := ExtractPromptFeatures(prompt)
+	if !features.wasTruncated {
+		t.Fatal("long prompt must record bounded truncation")
+	}
+	if !strings.Contains(features.instructionText, "summarize the result") {
+		t.Fatalf("tail instruction was not retained: %q", features.instructionText)
+	}
+	if actual := NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category; actual != CategorySummarization {
+		t.Fatalf("tail instruction category = %q, want summarization", actual)
+	}
+
+	fencedPrompt := "Review this source. ```text\n" + strings.Repeat("x", maxCategoryScanBytes*2) + "\n``` Summarize the result."
+	fencedFeatures := ExtractPromptFeatures(fencedPrompt)
+	if fencedFeatures.payloadBlockCount != 1 || !strings.Contains(fencedFeatures.instructionText, "summarize the result") {
+		t.Fatalf("truncated fenced tail boundary was not retained: %#v", fencedFeatures)
+	}
+	if strings.Contains(fencedFeatures.instructionText, strings.Repeat("x", 32)) {
+		t.Fatalf("truncated fenced payload leaked into instruction: %q", fencedFeatures.instructionText)
+	}
+}
+
+func TestExtractPromptFeaturesPreservesListStructure(t *testing.T) {
+	t.Parallel()
+
+	prompt := "Handle these items:\n1. Explain A\n2. Explain B\n3. Explain C"
+	features := ExtractPromptFeatures(prompt)
+	if features.listItemCount != 3 || features.scopeCount != 3 {
+		t.Fatalf("list scope was not derived: %#v", features)
+	}
+	if features.taskCount != 3 || features.clauseCount < 3 {
+		t.Fatalf("list task units were not derived: %#v", features)
+	}
+}
+
+func TestExtractPromptFeaturesCountsNumericAndNamedScope(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		prompt string
+		want   int
+	}{
+		{prompt: "Compare 5 documents.", want: 5},
+		{prompt: "2개 파일을 분석해줘.", want: 2},
+		{prompt: "A와 B를 비교해줘.", want: 2},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.prompt, func(t *testing.T) {
+			t.Parallel()
+			if actual := ExtractPromptFeatures(test.prompt).scopeCount; actual != test.want {
+				t.Fatalf("scopeCount = %d, want %d", actual, test.want)
+			}
+		})
+	}
+}
+
+func TestCategoryIntentIgnoresNonCodeFencedPayload(t *testing.T) {
+	t.Parallel()
+
+	features := ExtractPromptFeatures("Summarize this source. ```translate the notice to korean```")
+	if actual := NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category; actual != CategorySummarization {
+		t.Fatalf("category = %q, want summarization", actual)
+	}
+
+	codeFeatures := ExtractPromptFeatures("```go\nfunc main() {}\n```")
+	if codeFeatures.scopeCount != 1 {
+		t.Fatalf("fenced code scopeCount = %d, want 1", codeFeatures.scopeCount)
+	}
+	if actual := NewRuleBasedCategoryClassifier().ClassifyFeatures(codeFeatures).Category; actual != CategoryCode {
+		t.Fatalf("fenced code category = %q, want code", actual)
 	}
 }
 

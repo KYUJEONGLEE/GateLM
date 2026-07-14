@@ -13,6 +13,7 @@ import {
   resolveConsoleTenantIdForAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import {
   type DashboardRange,
   type DashboardFilterState,
@@ -22,7 +23,7 @@ import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getTenantChatDashboard } from "@/lib/control-plane/tenant-chat-observability-client";
 import {
   type DashboardSurface,
-  mergeDashboardOverviews,
+  selectDashboardSurfaceOverview,
   toTenantChatDashboardOverview
 } from "@/lib/dashboard/unified-dashboard";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
@@ -68,6 +69,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const projectsPromise = getProjectsModel(effectiveTenantId);
   let projectsModel: Awaited<ReturnType<typeof getProjectsModel>>;
@@ -127,10 +133,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const tenantChatOverview = tenantChatDashboard
     ? toTenantChatDashboardOverview(effectiveTenantId, tenantChatDashboard)
     : undefined;
-  const overview = selectSurfaceOverview(
+  const overview = selectDashboardSurfaceOverview(
     scopedDashboardFilters.surface,
     projectApplicationOverview,
-    tenantChatOverview
+    tenantChatOverview,
+    { tenantChatNotConfigured: tenantChatDashboard === null }
   );
 
   if (!overview) {
@@ -189,6 +196,7 @@ async function MonthToDateSpendValue({
       : getLiveCostOverTime(tenantId, {
           ...filters,
           from: monthToDateRange.from,
+          range: "1w",
           to: monthToDateRange.to
         }),
     surface === "project_application"
@@ -198,8 +206,9 @@ async function MonthToDateSpendValue({
   const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
   const totalMicroUsd =
     (totalSpendUsd === undefined ? 0 : totalSpendUsd * 1_000_000) +
-    (tenantChat?.usage.confirmedCostMicroUsd ?? 0);
-  const hasCurrentData = summary !== undefined || tenantChat !== undefined;
+    (tenantChat?.usage?.confirmedCostMicroUsd ?? 0);
+  const hasCurrentData =
+    summary !== undefined || (tenantChat !== undefined && tenantChat !== null);
 
   return <>{formatDashboardMicroUsd(hasCurrentData ? totalMicroUsd : fallbackMicroUsd)}</>;
 }
@@ -245,37 +254,6 @@ function normalizeDashboardSurface(value: string | undefined): DashboardSurface 
     return value;
   }
   return "all";
-}
-
-function selectSurfaceOverview(
-  surface: DashboardSurface,
-  projectApplication: Awaited<ReturnType<typeof getLiveDashboardOverview>>,
-  tenantChat: ReturnType<typeof toTenantChatDashboardOverview> | undefined
-) {
-  if (surface === "project_application") {
-    return projectApplication;
-  }
-  if (surface === "tenant_chat") {
-    return tenantChat;
-  }
-  if (projectApplication && tenantChat) {
-    return mergeDashboardOverviews(projectApplication, tenantChat);
-  }
-  const partial = projectApplication ?? tenantChat;
-  return partial
-    ? {
-        ...partial,
-        surface: "all" as const,
-        queryBudget: {
-          status: "partial" as const,
-          maxRangeHours: partial.queryBudget?.maxRangeHours ?? 24,
-          maxBreakdownItems: partial.queryBudget?.maxBreakdownItems ?? 50,
-          guidance: projectApplication
-            ? "Tenant Chat aggregate is unavailable."
-            : "Project/Application aggregate is unavailable."
-        }
-      }
-    : undefined;
 }
 
 function normalizeDashboardRange(
