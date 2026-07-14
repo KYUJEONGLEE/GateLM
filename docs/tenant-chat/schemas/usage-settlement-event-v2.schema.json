@@ -60,6 +60,7 @@
   ],
   "$defs": {
     "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+    "modelKey": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$" },
     "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
     "executionScope": {
       "type": "object", "additionalProperties": false,
@@ -94,7 +95,7 @@
       "required": ["attemptNo", "kind", "providerId", "modelKey", "outcome", "usageQuality", "inputTokens", "outputTokens", "costMicroUsd"],
       "properties": {
         "attemptNo": { "type": "integer", "minimum": 1, "maximum": 4 }, "kind": { "type": "string", "enum": ["primary", "fallback"] },
-        "providerId": { "$ref": "#/$defs/opaqueId" }, "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "providerId": { "$ref": "#/$defs/opaqueId" }, "modelKey": { "$ref": "#/$defs/modelKey" },
         "outcome": { "type": "string", "enum": ["succeeded", "failed_pre_delta", "failed_post_delta", "cancelled", "timed_out"] },
         "usageQuality": { "type": "string", "enum": ["confirmed", "pending_unconfirmed", "not_available"] },
         "inputTokens": { "type": "integer", "minimum": 0 }, "outputTokens": { "type": "integer", "minimum": 0 }, "costMicroUsd": { "type": "integer", "minimum": 0 }

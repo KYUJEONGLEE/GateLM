@@ -464,7 +464,12 @@ export class DashboardRollupService
         now(), now()
       )
       ON CONFLICT (tenant_id, surface, grain, bucket_start)
-      DO UPDATE SET state = 'building', last_error_code = NULL, updated_at = now()
+      DO UPDATE SET
+        state = 'building',
+        employee_usage_ready = false,
+        employee_usage_row_count = 0,
+        last_error_code = NULL,
+        updated_at = now()
     `);
   }
 
@@ -472,6 +477,13 @@ export class DashboardRollupService
     tx: RollupTransaction,
     bucket: DirtyBucketRow,
   ): Promise<void> {
+    await tx.$executeRaw(Prisma.sql`
+      DELETE FROM employee_usage_rollups
+      WHERE tenant_id = ${bucket.tenant_id}::uuid
+        AND surface = ${bucket.surface}
+        AND grain = ${bucket.grain}
+        AND bucket_start = ${bucket.bucket_start}
+    `);
     await tx.$executeRaw(Prisma.sql`
       DELETE FROM dashboard_rollup_dimensions
       WHERE tenant_id = ${bucket.tenant_id}::uuid
@@ -505,7 +517,12 @@ export class DashboardRollupService
     bucket: DirtyBucketRow,
   ): Promise<void> {
     const counts = await tx.$queryRaw<
-      Array<{ total_count: bigint; dimension_count: bigint; source_max_at: Date | null }>
+      Array<{
+        total_count: bigint;
+        dimension_count: bigint;
+        employee_usage_count: bigint;
+        source_max_at: Date | null;
+      }>
     >(Prisma.sql`
       SELECT
         (SELECT count(*)::bigint FROM dashboard_rollup_totals
@@ -518,15 +535,28 @@ export class DashboardRollupService
             AND surface = ${bucket.surface}
             AND grain = ${bucket.grain}
             AND bucket_start = ${bucket.bucket_start}) AS dimension_count,
-        (SELECT max(source_max_at) FROM dashboard_rollup_totals
+        (SELECT count(*)::bigint FROM employee_usage_rollups
           WHERE tenant_id = ${bucket.tenant_id}::uuid
             AND surface = ${bucket.surface}
             AND grain = ${bucket.grain}
-            AND bucket_start = ${bucket.bucket_start}) AS source_max_at
+            AND bucket_start = ${bucket.bucket_start}) AS employee_usage_count,
+        greatest(
+          (SELECT max(source_max_at) FROM dashboard_rollup_totals
+            WHERE tenant_id = ${bucket.tenant_id}::uuid
+              AND surface = ${bucket.surface}
+              AND grain = ${bucket.grain}
+              AND bucket_start = ${bucket.bucket_start}),
+          (SELECT max(source_max_at) FROM employee_usage_rollups
+          WHERE tenant_id = ${bucket.tenant_id}::uuid
+            AND surface = ${bucket.surface}
+            AND grain = ${bucket.grain}
+            AND bucket_start = ${bucket.bucket_start})
+        ) AS source_max_at
     `);
     const state = counts[0] ?? {
       total_count: 0n,
       dimension_count: 0n,
+      employee_usage_count: 0n,
       source_max_at: null,
     };
     await tx.$executeRaw(Prisma.sql`
@@ -538,6 +568,8 @@ export class DashboardRollupService
           last_error_code = NULL,
           total_row_count = ${Number(state.total_count)},
           dimension_row_count = ${Number(state.dimension_count)},
+          employee_usage_ready = true,
+          employee_usage_row_count = ${Number(state.employee_usage_count)},
           updated_at = now()
       WHERE tenant_id = ${bucket.tenant_id}::uuid
         AND surface = ${bucket.surface}
@@ -821,6 +853,81 @@ export class DashboardRollupService
         budget_scope_type, budget_scope_id, budget_scope_resolved_by,
         dimension_type, dimension_value, dimension_value_2, dimension_value_3
     `);
+
+    await tx.$executeRaw(Prisma.sql`
+      WITH identity_candidates AS (
+        SELECT id AS employee_id, lower(id::text) AS identity_key, 1 AS priority
+        FROM employees
+        WHERE "tenantId" = ${bucket.tenant_id}::uuid
+          AND "deletedAt" IS NULL
+        UNION ALL
+        SELECT id, lower("userId"::text), 2
+        FROM employees
+        WHERE "tenantId" = ${bucket.tenant_id}::uuid
+          AND "userId" IS NOT NULL
+          AND "deletedAt" IS NULL
+        UNION ALL
+        SELECT id, lower(btrim(email)), 3
+        FROM employees
+        WHERE "tenantId" = ${bucket.tenant_id}::uuid
+          AND "deletedAt" IS NULL
+      ), candidate_groups AS (
+        SELECT
+          identity_key,
+          priority,
+          min(employee_id::text)::uuid AS employee_id,
+          count(*)::bigint AS candidate_count
+        FROM identity_candidates
+        GROUP BY identity_key, priority
+      ), preferred_keys AS (
+        SELECT DISTINCT ON (identity_key)
+          identity_key, employee_id, candidate_count
+        FROM candidate_groups
+        ORDER BY identity_key, priority
+      ), resolved_keys AS (
+        SELECT identity_key, employee_id
+        FROM preferred_keys
+        WHERE candidate_count = 1
+      ), attributed AS (
+        SELECT
+          resolved.employee_id,
+          log.project_id::text AS project_id,
+          log.prompt_tokens,
+          log.completion_tokens,
+          log.total_tokens,
+          log.cost_micro_usd,
+          log.ingested_at AS source_max_at
+        FROM p0_llm_invocation_logs log
+        JOIN resolved_keys resolved
+          ON resolved.identity_key = lower(btrim(log.end_user_id))
+        WHERE log.tenant_id = ${bucket.tenant_id}::uuid
+          AND log.created_at >= ${bucket.bucket_start}
+          AND log.created_at < ${bucketEnd}
+          AND log.end_user_id IS NOT NULL
+      )
+      INSERT INTO employee_usage_rollups (
+        tenant_id, employee_id, surface, grain, bucket_start, project_id,
+        request_count, input_tokens, output_tokens, total_tokens,
+        cost_micro_usd, source_max_at, created_at, updated_at
+      )
+      SELECT
+        ${bucket.tenant_id}::uuid,
+        employee_id,
+        'project_application',
+        'hour',
+        ${bucket.bucket_start},
+        project_id,
+        count(*)::bigint,
+        coalesce(sum(prompt_tokens), 0)::bigint,
+        coalesce(sum(completion_tokens), 0)::bigint,
+        coalesce(sum(total_tokens), 0)::bigint,
+        coalesce(sum(cost_micro_usd), 0)::bigint,
+        max(source_max_at),
+        now(),
+        now()
+      FROM attributed
+      GROUP BY employee_id, project_id
+    `);
   }
 
   private async rebuildTenantChatHour(
@@ -952,6 +1059,48 @@ export class DashboardRollupService
 
     await this.rebuildTenantChatLogDimensions(tx, bucket, bucketEnd);
     await this.rebuildTenantChatAttemptDimensions(tx, bucket, bucketEnd);
+    await this.rebuildTenantChatEmployeeUsage(tx, bucket, bucketEnd);
+  }
+
+  private async rebuildTenantChatEmployeeUsage(
+    tx: RollupTransaction,
+    bucket: DirtyBucketRow,
+    bucketEnd: Date,
+  ): Promise<void> {
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO employee_usage_rollups (
+        tenant_id, employee_id, surface, grain, bucket_start, project_id,
+        request_count, input_tokens, output_tokens, total_tokens,
+        cost_micro_usd, source_max_at, created_at, updated_at
+      )
+      SELECT
+        logs.tenant_id,
+        logs.employee_id,
+        'tenant_chat',
+        'hour',
+        ${bucket.bucket_start},
+        '',
+        count(*)::bigint,
+        coalesce(sum(logs.confirmed_input_tokens), 0)::bigint,
+        coalesce(sum(logs.confirmed_output_tokens), 0)::bigint,
+        coalesce(sum(logs.confirmed_total_tokens), 0)::bigint,
+        coalesce(sum(logs.confirmed_cost_micro_usd), 0)::bigint,
+        max(logs.updated_at),
+        now(),
+        now()
+      FROM tenant_chat_invocation_logs logs
+      JOIN employees employee
+        ON employee.id = logs.employee_id
+       AND employee."tenantId" = logs.tenant_id
+       AND employee."deletedAt" IS NULL
+      WHERE logs.tenant_id = ${bucket.tenant_id}::uuid
+        AND logs.surface = 'tenant_chat'
+        AND logs.execution_scope_kind = 'tenant_chat'
+        AND logs.employee_id IS NOT NULL
+        AND logs.completed_at >= ${bucket.bucket_start}
+        AND logs.completed_at < ${bucketEnd}
+      GROUP BY logs.tenant_id, logs.employee_id
+    `);
   }
 
   private async rebuildTenantChatLogDimensions(
@@ -1279,6 +1428,36 @@ export class DashboardRollupService
         tenant_id, surface, project_id, application_id,
         budget_scope_type, budget_scope_id, budget_scope_resolved_by,
         dimension_type, dimension_value, dimension_value_2, dimension_value_3
+    `);
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO employee_usage_rollups (
+        tenant_id, employee_id, surface, grain, bucket_start, project_id,
+        request_count, input_tokens, output_tokens, total_tokens,
+        cost_micro_usd, source_max_at, created_at, updated_at
+      )
+      SELECT
+        tenant_id,
+        employee_id,
+        surface,
+        ${bucket.grain},
+        ${bucket.bucket_start},
+        project_id,
+        coalesce(sum(request_count), 0)::bigint,
+        coalesce(sum(input_tokens), 0)::bigint,
+        coalesce(sum(output_tokens), 0)::bigint,
+        coalesce(sum(total_tokens), 0)::bigint,
+        coalesce(sum(cost_micro_usd), 0)::bigint,
+        max(source_max_at),
+        now(),
+        now()
+      FROM employee_usage_rollups
+      WHERE tenant_id = ${bucket.tenant_id}::uuid
+        AND surface = ${bucket.surface}
+        AND grain = ${childGrain}
+        AND bucket_start >= ${bucket.bucket_start}
+        AND bucket_start < ${bucketEnd}
+      GROUP BY tenant_id, employee_id, surface, project_id
     `);
   }
 }

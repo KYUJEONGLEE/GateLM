@@ -206,20 +206,30 @@ func ContentHash(artifact Artifact) string {
 	for _, weight := range artifact.Weights {
 		parts = append(parts, floatBits(weight))
 	}
-	parts = append(parts, artifact.CalibrationVersion, artifact.Calibrator.Type, artifact.Calibrator.Input)
-	if artifact.Calibrator.Coefficient != nil {
-		parts = append(parts, floatBits(*artifact.Calibrator.Coefficient))
-	}
-	if artifact.Calibrator.Intercept != nil {
-		parts = append(parts, floatBits(*artifact.Calibrator.Intercept))
-	}
-	for _, value := range artifact.Calibrator.XThresholds {
-		parts = append(parts, floatBits(value))
-	}
-	for _, value := range artifact.Calibrator.YThresholds {
-		parts = append(parts, floatBits(value))
-	}
+	parts = append(parts, artifact.CalibrationVersion)
+	parts = appendCalibratorHashParts(parts, artifact.Calibrator)
 	parts = append(parts, artifact.ThresholdPolicyVersion, floatBits(artifact.Threshold), artifact.ContentHashAlgorithm)
+	return lengthPrefixedContentHash(parts)
+}
+
+func appendCalibratorHashParts(parts []string, calibrator Calibrator) []string {
+	parts = append(parts, calibrator.Type, calibrator.Input)
+	if calibrator.Coefficient != nil {
+		parts = append(parts, floatBits(*calibrator.Coefficient))
+	}
+	if calibrator.Intercept != nil {
+		parts = append(parts, floatBits(*calibrator.Intercept))
+	}
+	for _, value := range calibrator.XThresholds {
+		parts = append(parts, floatBits(value))
+	}
+	for _, value := range calibrator.YThresholds {
+		parts = append(parts, floatBits(value))
+	}
+	return parts
+}
+
+func lengthPrefixedContentHash(parts []string) string {
 	var material strings.Builder
 	for _, part := range parts {
 		material.WriteString(strconv.Itoa(len([]byte(part))))

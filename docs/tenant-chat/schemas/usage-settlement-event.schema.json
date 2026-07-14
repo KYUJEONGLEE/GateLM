@@ -190,6 +190,12 @@
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9_-]+$"
     },
+    "modelKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$"
+    },
     "executionScope": {
       "type": "object",
       "additionalProperties": false,
@@ -269,7 +275,7 @@
         "attemptNo": { "type": "integer", "minimum": 1, "maximum": 4 },
         "kind": { "type": "string", "enum": ["primary", "fallback"] },
         "providerId": { "$ref": "#/$defs/opaqueId" },
-        "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "modelKey": { "$ref": "#/$defs/modelKey" },
         "outcome": {
           "type": "string",
           "enum": ["succeeded", "failed_pre_delta", "failed_post_delta", "cancelled", "timed_out"]

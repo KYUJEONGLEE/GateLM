@@ -20,6 +20,7 @@ import {
 } from 'class-validator';
 
 export const RUNTIME_CONFIG_VERSION_PATTERN = /^[a-zA-Z0-9._-]+$/;
+export const MAX_RUNTIME_MODEL_CONTEXT_WINDOW_TOKENS = 10_000_000;
 const RUNTIME_CONFIG_VERSION_MESSAGE =
   'must contain only alphanumeric characters, dashes, underscores, or dots.';
 export const RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES = [
@@ -253,7 +254,7 @@ export class RuntimeConfigModelDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(1000000)
+  @Max(MAX_RUNTIME_MODEL_CONTEXT_WINDOW_TOKENS)
   contextWindowTokens?: number;
 
   @IsOptional()

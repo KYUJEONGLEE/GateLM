@@ -9,6 +9,7 @@ const expectedPnpmVersion = "9.15.0";
 
 const skipDirs = new Set([
   ".cache",
+  ".codex",
   ".git",
   ".next",
   ".turbo",
@@ -69,6 +70,16 @@ const commands = [
     name: "v2 docs",
     packageManager: true,
     args: ["run", "verify:v2-docs"],
+  },
+  {
+    name: "v2.1 difficulty training candidate",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-training-candidate"],
+  },
+  {
+    name: "v2.1 difficulty semantic candidates",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-semantic-candidates"],
   },
   {
     name: "control-plane typecheck",

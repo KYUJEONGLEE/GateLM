@@ -104,6 +104,10 @@ try {
   Invoke-Compose run --rm control-plane-api node node_modules/prisma/build/index.js migrate deploy
   Invoke-Compose run --rm control-plane-api node node_modules/ts-node/dist/bin.js --transpile-only prisma/seed.ts
 
+  Write-Phase 'runtime: seed isolated conversation database'
+  $env:TENANT_CHAT_SMOKE_DATABASE_URL = "postgresql://gatelm:gatelm@postgres:5432/${cleanDatabase}?schema=public"
+  Invoke-Compose run --rm control-plane-api node node_modules/ts-node/dist/bin.js --transpile-only prisma/seed.ts
+
   Write-Phase 'runtime: publish snapshot and start private execution services'
   Invoke-Compose up --detach control-plane-api
   Invoke-Compose exec -T control-plane-api node dist/src/tenant-chat-runtime-smoke.js

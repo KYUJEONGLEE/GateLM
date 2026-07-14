@@ -19,7 +19,13 @@ const runtimeSnapshotValidationVectors = JSON.parse(
     'utf8',
   ),
 ) as {
-  cases: Array<{ id: string; path: string; value: unknown; valid: boolean }>;
+  cases: Array<{
+    id: string;
+    path?: string;
+    paths?: string[];
+    value: unknown;
+    valid: boolean;
+  }>;
 };
 
 describe('Tenant Chat runtime contract', () => {
@@ -70,6 +76,34 @@ describe('Tenant Chat runtime contract', () => {
     );
   });
 
+  it.each(['gpt-5.4-mini', 'models/gemini-2.5-flash', 'vendor:model.v1'])(
+    'accepts catalog model key %s',
+    (modelKey) => {
+      const snapshot = contractSnapshotFixture();
+      snapshot.pricing.routes[0]!.modelKey = modelKey;
+      snapshot.policies.routing.routes[0]!.modelKey = modelKey;
+      snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
+      snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+
+      expect(() => validateTenantChatRuntimeSnapshot(snapshot)).not.toThrow();
+    },
+  );
+
+  it.each(['model key', 'model\nkey', `m${'x'.repeat(200)}`])(
+    'rejects invalid catalog model key %p',
+    (modelKey) => {
+      const snapshot = contractSnapshotFixture();
+      snapshot.pricing.routes[0]!.modelKey = modelKey;
+      snapshot.policies.routing.routes[0]!.modelKey = modelKey;
+      snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
+      snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+
+      expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
+        TenantChatRuntimeContractError,
+      );
+    },
+  );
+
   it('rejects a cache-read input price above the regular input price', () => {
     const snapshot = contractSnapshotFixture();
     snapshot.pricing.routes[0]!.cacheReadInputMicroUsdPerMillionTokens =
@@ -84,9 +118,15 @@ describe('Tenant Chat runtime contract', () => {
 
   it.each(runtimeSnapshotValidationVectors.cases)(
     'enforces RuntimeSnapshot validation vector $id',
-    ({ path, value, valid }) => {
+    ({ path, paths, value, valid }) => {
       const snapshot = contractSnapshotFixture();
-      setValueAtPath(snapshot, path, value);
+      const mutationPaths = paths ?? (path ? [path] : []);
+      if (mutationPaths.length === 0) {
+        throw new Error('Validation vector requires path or paths.');
+      }
+      for (const mutationPath of mutationPaths) {
+        setValueAtPath(snapshot, mutationPath, value);
+      }
       snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
       snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
 

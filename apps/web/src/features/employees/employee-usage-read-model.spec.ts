@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { buildEmployeeUsageReadModel } from "./employee-usage-read-model";
+import {
+  buildEmployeeUsagePeriods,
+  buildEmployeeUsageReadModel
+} from "./employee-usage-read-model";
 import type { EmployeeControlModel } from "@/lib/control-plane/employees-types";
+import type {
+  EmployeeUsageMetric,
+  EmployeeUsageRecord,
+  EmployeeUsageResponse
+} from "@/lib/control-plane/employee-usage-types";
 
 test("aggregates employee usage across active project assignments and ranks it", () => {
   const model = buildModel();
@@ -61,6 +69,59 @@ test("keeps the aggregate daily token limit unlimited when any project is unlimi
   const usage = buildEmployeeUsageReadModel(model);
 
   expect(usage.rows.find((row) => row.employeeId === "employee-a")?.dailyTokenLimit).toBeNull();
+});
+
+test("uses unified today, seven-day, and month-to-date usage when available", () => {
+  const model = buildModel();
+  const usage = buildEmployeeUsageReadModel(model, {
+    monthToDate: buildUsageResponse([
+      buildUsageRow("employee-a", 1, { costMicroUsd: 7_500_000 }),
+      buildUsageRow("employee-b", 2, { costMicroUsd: 2_500_000 })
+    ]),
+    today: buildUsageResponse([
+      buildUsageRow("employee-b", 1, { totalTokens: 600 }),
+      buildUsageRow("employee-a", 2, { totalTokens: 400 })
+    ]),
+    trailingSevenDays: buildUsageResponse([
+      buildUsageRow("employee-b", 1, { totalTokens: 3_000 }),
+      buildUsageRow("employee-a", 2, { totalTokens: 2_000 })
+    ])
+  });
+
+  expect(usage).toMatchObject({
+    averageDailyTokens: 500,
+    totalDailyTokens: 1_000,
+    totalMonthlyCostUsd: 10,
+    trackedEmployees: 2
+  });
+  expect(usage.rows.map((row) => [row.rank, row.employeeId])).toEqual([
+    [1, "employee-b"],
+    [2, "employee-a"]
+  ]);
+  expect(usage.rows[0]).toMatchObject({
+    dailyTokens: 600,
+    monthlyCostUsd: 2.5,
+    weeklyTokens: 3_000
+  });
+});
+
+test("builds UTC today, trailing seven-day, and month-to-date periods", () => {
+  const periods = buildEmployeeUsagePeriods(new Date("2026-07-14T12:34:56.000Z"));
+
+  expect(periods).toEqual({
+    monthToDate: {
+      from: "2026-07-01T00:00:00.000Z",
+      to: "2026-07-14T12:34:56.000Z"
+    },
+    today: {
+      from: "2026-07-14T00:00:00.000Z",
+      to: "2026-07-14T12:34:56.000Z"
+    },
+    trailingSevenDays: {
+      from: "2026-07-07T12:34:56.000Z",
+      to: "2026-07-14T12:34:56.000Z"
+    }
+  });
 });
 
 function buildModel() {
@@ -167,4 +228,54 @@ function buildModel() {
     routeTenantId: "tenant-a",
     source: "control-plane"
   } as unknown as EmployeeControlModel;
+}
+
+function buildUsageResponse(data: EmployeeUsageRecord[]): EmployeeUsageResponse {
+  return {
+    data,
+    pagination: { hasMore: false, limit: 100, nextCursor: null },
+    period: {
+      from: "2026-07-01T00:00:00.000Z",
+      timezone: "UTC",
+      to: "2026-07-14T12:34:56.000Z"
+    },
+    provenance: {
+      generatedAt: "2026-07-14T12:35:00.000Z",
+      lastSourceAt: "2026-07-14T12:34:56.000Z",
+      source: "hybrid"
+    },
+    unattributed: {
+      sources: { projectApplication: metric(), tenantChat: metric() },
+      total: metric()
+    }
+  };
+}
+
+function buildUsageRow(
+  employeeId: string,
+  rank: number,
+  totalOverrides: Partial<EmployeeUsageMetric>
+): EmployeeUsageRecord {
+  const total = metric(totalOverrides);
+  return {
+    department: "Platform",
+    email: `${employeeId}@example.invalid`,
+    employeeId,
+    name: employeeId,
+    rank,
+    sources: { projectApplication: total, tenantChat: metric() },
+    status: "active",
+    total
+  };
+}
+
+function metric(overrides: Partial<EmployeeUsageMetric> = {}): EmployeeUsageMetric {
+  return {
+    costMicroUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    requestCount: 0,
+    totalTokens: 0,
+    ...overrides
+  };
 }

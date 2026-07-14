@@ -6,6 +6,11 @@ import (
 	"math"
 )
 
+var (
+	errDifficultyScorerDimension = errors.New("difficulty scorer vector dimension mismatch")
+	errDifficultyScorerNonFinite = errors.New("difficulty scorer material must be finite")
+)
+
 type difficultyCalibratorKind string
 
 const (
@@ -59,12 +64,55 @@ type difficultyLogisticInference struct {
 	difficulty      string
 }
 
+// difficultyLinearScorer owns the dimension-independent Logistic Regression
+// math shared by the fixed v1 adapter and offline candidate adapters. Artifact
+// and feature-shape validation remain adapter responsibilities.
+type difficultyLinearScorer struct {
+	bias    float64
+	weights []float64
+}
+
+func newDifficultyLinearScorer(bias float64, weights []float64) (difficultyLinearScorer, error) {
+	if !finiteDifficultyFloat(bias) {
+		return difficultyLinearScorer{}, fmt.Errorf("%w: bias", errDifficultyScorerNonFinite)
+	}
+	if len(weights) == 0 {
+		return difficultyLinearScorer{}, errors.New("difficulty scorer weights must not be empty")
+	}
+	ownedWeights := append([]float64(nil), weights...)
+	for index, weight := range ownedWeights {
+		if !finiteDifficultyFloat(weight) {
+			return difficultyLinearScorer{}, fmt.Errorf("%w: weight %d", errDifficultyScorerNonFinite, index)
+		}
+	}
+	return difficultyLinearScorer{bias: bias, weights: ownedWeights}, nil
+}
+
+func (scorer difficultyLinearScorer) score(vector []float64) (float64, error) {
+	if len(vector) != len(scorer.weights) {
+		return 0, fmt.Errorf(
+			"%w: vector=%d weights=%d",
+			errDifficultyScorerDimension,
+			len(vector),
+			len(scorer.weights),
+		)
+	}
+	logit := scorer.bias
+	for index, value := range vector {
+		if !finiteDifficultyFloat(value) {
+			return 0, fmt.Errorf("%w: vector value %d", errDifficultyScorerNonFinite, index)
+		}
+		logit += value * scorer.weights[index]
+		if !finiteDifficultyFloat(logit) {
+			return 0, fmt.Errorf("%w: dot product", errDifficultyScorerNonFinite)
+		}
+	}
+	return stableSigmoid(logit), nil
+}
+
 func newDifficultyLogisticModel(material DifficultyClassifierMaterial) (difficultyLogisticModel, error) {
 	if material.ArtifactVersion == "" || material.ContentHash == "" {
 		return difficultyLogisticModel{}, errors.New("difficulty model provenance is required")
-	}
-	if !finiteDifficultyFloat(material.Bias) {
-		return difficultyLogisticModel{}, errors.New("difficulty model bias must be finite")
 	}
 	if len(material.Weights) != DifficultyFeatureVectorDimensionV1 {
 		return difficultyLogisticModel{}, fmt.Errorf("difficulty model must contain exactly %d weights", DifficultyFeatureVectorDimensionV1)
@@ -72,17 +120,21 @@ func newDifficultyLogisticModel(material DifficultyClassifierMaterial) (difficul
 	if material.Threshold != difficultyThresholdV1 {
 		return difficultyLogisticModel{}, errors.New("difficulty threshold policy must remain global 0.45")
 	}
+	scorer, err := newDifficultyLinearScorer(material.Bias, material.Weights)
+	if err != nil {
+		if !finiteDifficultyFloat(material.Bias) {
+			return difficultyLogisticModel{}, errors.New("difficulty model bias must be finite")
+		}
+		return difficultyLogisticModel{}, fmt.Errorf("difficulty model: %w", err)
+	}
 
 	model := difficultyLogisticModel{
 		artifactVersion: material.ArtifactVersion,
 		contentHash:     material.ContentHash,
-		bias:            material.Bias,
+		bias:            scorer.bias,
 		threshold:       material.Threshold,
 	}
-	for index, weight := range material.Weights {
-		if !finiteDifficultyFloat(weight) {
-			return difficultyLogisticModel{}, fmt.Errorf("difficulty model weight %d must be finite", index)
-		}
+	for index, weight := range scorer.weights {
 		model.weights[index] = weight
 	}
 
@@ -130,23 +182,23 @@ func newDifficultyCalibrator(material DifficultyCalibratorMaterial) (difficultyC
 // infer assumes code generation already validated the immutable artifact and
 // the caller supplied the canonical v1 vector. It intentionally performs no
 // JSON parsing or repeated artifact-shape validation on the hot path.
-func (model *difficultyLogisticModel) infer(vector []float64) difficultyLogisticInference {
-	rawProbability := model.score(vector)
+func (model *difficultyLogisticModel) infer(vector []float64) (difficultyLogisticInference, error) {
+	rawProbability, err := model.score(vector)
+	if err != nil {
+		return difficultyLogisticInference{}, err
+	}
 	calibratedScore := model.calibrator.calibrate(rawProbability)
 	difficulty := difficultyFromScore(calibratedScore, model.threshold)
 	return difficultyLogisticInference{
 		rawProbability:  rawProbability,
 		calibratedScore: calibratedScore,
 		difficulty:      difficulty,
-	}
+	}, nil
 }
 
-func (model *difficultyLogisticModel) score(vector []float64) float64 {
-	logit := model.bias
-	for index := 0; index < DifficultyFeatureVectorDimensionV1; index++ {
-		logit += vector[index] * model.weights[index]
-	}
-	return stableSigmoid(logit)
+func (model *difficultyLogisticModel) score(vector []float64) (float64, error) {
+	scorer := difficultyLinearScorer{bias: model.bias, weights: model.weights[:]}
+	return scorer.score(vector)
 }
 
 func finiteDifficultyFloat(value float64) bool {

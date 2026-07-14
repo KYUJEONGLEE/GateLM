@@ -13,6 +13,7 @@ const TENANT_ID = '00000000-0000-4000-8000-000000000100';
 const PRIMARY_USER_ID = '00000000-0000-4000-8000-000000000900';
 const SERVICE_TOKEN = required('TENANT_CHAT_WEB_SERVICE_TOKEN');
 const MARKER = process.env.TENANT_CHAT_SMOKE_MARKER || `smoke-${randomBytes(32).toString('base64url')}`;
+let apiJsonSequence = 0;
 const USAGE_INTENT = Object.freeze({
   maxOutputTokens: 64,
   requestedTier: 'standard',
@@ -399,8 +400,9 @@ async function apiJson(
   expectedStatus: number,
   extraHeaders: Record<string, string> = {},
 ): Promise<Record<string, unknown>> {
+  apiJsonSequence += 1;
   const response = await apiRaw(method, path, accessToken, body, extraHeaders);
-  assert(response.status === expectedStatus, 'ApiJsonStatus');
+  assert(response.status === expectedStatus, `ApiJsonStatus:${apiJsonSequence}:${method}:${expectedStatus}:${response.status}`);
   const value = await response.json() as unknown;
   assert(isRecord(value), 'ApiJsonShape');
   return value;

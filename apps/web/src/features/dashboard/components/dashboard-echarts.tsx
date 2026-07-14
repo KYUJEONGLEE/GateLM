@@ -49,6 +49,14 @@ export function DashboardLineEChart({
   labels: string[];
   series: DashboardLineSeries[];
 }) {
+  const updateKey = JSON.stringify({
+    labels,
+    series: series.map((row) => ({
+      color: row.color,
+      data: row.data,
+      name: row.name
+    }))
+  });
   const option = useMemo<EChartOption>(
     () => ({
       animation: false,
@@ -120,7 +128,7 @@ export function DashboardLineEChart({
         },
         type: "value"
       },
-      series: series.map((row) => ({
+      series: series.map((row, index) => ({
         data: row.data,
         blur: {
           lineStyle: {
@@ -130,6 +138,7 @@ export function DashboardLineEChart({
         emphasis: {
           focus: "none"
         },
+        id: `dashboard-line-${index}`,
         lineStyle: {
           width: 3
         },
@@ -145,7 +154,14 @@ export function DashboardLineEChart({
     [labels, series]
   );
 
-  return <DashboardEChart ariaLabel={ariaLabel} className="dashboard-line-chart" option={option} />;
+  return (
+    <DashboardEChart
+      ariaLabel={ariaLabel}
+      className="dashboard-line-chart"
+      option={option}
+      updateKey={updateKey}
+    />
+  );
 }
 
 export function DashboardPieEChart({
@@ -164,6 +180,13 @@ export function DashboardPieEChart({
   totalLabel?: string;
 }) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const updateKey = JSON.stringify({
+    centerSubtextColor,
+    centerTextColor,
+    rows,
+    showCenterTitle,
+    totalLabel
+  });
   const option = useMemo<EChartOption>(
     () => ({
       animation: false,
@@ -219,6 +242,7 @@ export function DashboardPieEChart({
           emphasis: {
             scale: false
           },
+          id: "dashboard-pie-usage",
           label: {
             show: false
           },
@@ -234,7 +258,14 @@ export function DashboardPieEChart({
     [centerSubtextColor, centerTextColor, rows, showCenterTitle, total, totalLabel]
   );
 
-  return <DashboardEChart ariaLabel={ariaLabel} className="dashboard-pie-chart" option={option} />;
+  return (
+    <DashboardEChart
+      ariaLabel={ariaLabel}
+      className="dashboard-pie-chart"
+      option={option}
+      updateKey={updateKey}
+    />
+  );
 }
 
 export function DashboardCostOverTimeEChart({
@@ -250,6 +281,7 @@ export function DashboardCostOverTimeEChart({
   const values = points.map((point) => point.spendUsd);
   const averageValues = points.map(() => averageSpendUsd);
   const xAxisLabelInterval = readableCategoryInterval(labels.length);
+  const updateKey = JSON.stringify({ averageSpendUsd, points });
   const option = useMemo<EChartOption>(
     () => ({
       animation: false,
@@ -325,6 +357,7 @@ export function DashboardCostOverTimeEChart({
           emphasis: {
             focus: "none"
           },
+          id: "dashboard-cost-spend",
           itemStyle: {
             borderRadius: [6, 6, 0, 0],
             color: "#3b82f6"
@@ -351,6 +384,7 @@ export function DashboardCostOverTimeEChart({
           emphasis: {
             focus: "none"
           },
+          id: "dashboard-cost-average",
           lineStyle: {
             color: "#94a3b8",
             type: "dashed",
@@ -366,30 +400,67 @@ export function DashboardCostOverTimeEChart({
     [averageSpendUsd, averageValues, labels, values, xAxisLabelInterval]
   );
 
-  return <DashboardEChart ariaLabel={ariaLabel} className="dashboard-cost-over-time-chart" option={option} />;
+  return (
+    <DashboardEChart
+      ariaLabel={ariaLabel}
+      className="dashboard-cost-over-time-chart"
+      option={option}
+      updateKey={updateKey}
+    />
+  );
 }
 
 function DashboardEChart({
   ariaLabel,
   className,
-  option
+  option,
+  updateKey
 }: {
   ariaLabel: string;
   className: string;
   option: EChartOption;
+  updateKey: string;
 }) {
   const chartRef = useRef<EChartInstance | null>(null);
   const nodeRef = useRef<HTMLDivElement | null>(null);
-  const optionRef = useRef(option);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const renderedOption = useMemo<EChartOption>(
+    () => ({
+      ...option,
+      animation: !reducedMotion,
+      animationDuration: reducedMotion ? 0 : 350,
+      animationDurationUpdate: reducedMotion ? 0 : 280,
+      animationEasingUpdate: "cubicOut"
+    }),
+    [option, reducedMotion]
+  );
+  const renderedOptionKey = `${updateKey}|motion:${reducedMotion ? "reduced" : "full"}`;
+  const optionRef = useRef(renderedOption);
+  const optionKeyRef = useRef(renderedOptionKey);
+  const appliedOptionKeyRef = useRef<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    optionRef.current = option;
-    chartRef.current?.setOption(option, {
+    optionRef.current = renderedOption;
+    optionKeyRef.current = renderedOptionKey;
+    const chart = chartRef.current;
+    if (!chart || appliedOptionKeyRef.current === renderedOptionKey) {
+      return;
+    }
+    chart.setOption(renderedOption, {
       lazyUpdate: true,
-      notMerge: true
+      notMerge: false
     });
-  }, [option]);
+    appliedOptionKeyRef.current = renderedOptionKey;
+  }, [renderedOption, renderedOptionKey]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setReducedMotion(media.matches);
+    updatePreference();
+    media.addEventListener("change", updatePreference);
+    return () => media.removeEventListener("change", updatePreference);
+  }, []);
 
   useEffect(() => {
     let isDisposed = false;
@@ -413,6 +484,7 @@ function DashboardEChart({
         lazyUpdate: true,
         notMerge: true
       });
+      appliedOptionKeyRef.current = optionKeyRef.current;
       setIsReady(true);
 
       resizeObserver = new ResizeObserver(() => {
@@ -426,6 +498,7 @@ function DashboardEChart({
       resizeObserver?.disconnect();
       chartRef.current?.dispose();
       chartRef.current = null;
+      appliedOptionKeyRef.current = null;
     };
   }, []);
 

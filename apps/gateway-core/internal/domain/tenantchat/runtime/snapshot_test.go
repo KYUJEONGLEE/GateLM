@@ -13,10 +13,11 @@ import (
 
 type validationVectors struct {
 	Cases []struct {
-		ID    string `json:"id"`
-		Path  string `json:"path"`
-		Value any    `json:"value"`
-		Valid bool   `json:"valid"`
+		ID    string   `json:"id"`
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+		Value any      `json:"value"`
+		Valid bool     `json:"valid"`
 	} `json:"cases"`
 }
 
@@ -59,7 +60,16 @@ func TestRuntimeSnapshotValidationVectors(t *testing.T) {
 			if err := decoder.Decode(&document); err != nil {
 				t.Fatalf("decode fixture: %v", err)
 			}
-			setJSONPath(t, document, strings.Split(vector.Path, "."), vector.Value)
+			paths := vector.Paths
+			if len(paths) == 0 {
+				paths = []string{vector.Path}
+			}
+			for _, path := range paths {
+				if path == "" {
+					t.Fatal("validation vector requires path or paths")
+				}
+				setJSONPath(t, document, strings.Split(path, "."), vector.Value)
+			}
 			mutated, err := json.Marshal(document)
 			if err != nil {
 				t.Fatalf("encode mutated fixture: %v", err)

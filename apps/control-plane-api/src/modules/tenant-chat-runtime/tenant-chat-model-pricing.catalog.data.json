@@ -1,0 +1,77 @@
+{
+  "catalogVersion": "2026-07-14",
+  "entries": [
+    {
+      "providerFamily": "mock",
+      "modelKey": "mock-fast",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 0,
+      "outputMicroUsdPerMillionTokens": 0,
+      "cacheReadInputMicroUsdPerMillionTokens": 0,
+      "sourceUrl": "repo://GateLM/mock-provider"
+    },
+    {
+      "providerFamily": "mock",
+      "modelKey": "mock-balanced",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 0,
+      "outputMicroUsdPerMillionTokens": 0,
+      "cacheReadInputMicroUsdPerMillionTokens": 0,
+      "sourceUrl": "repo://GateLM/mock-provider"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.4-mini",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 750000,
+      "outputMicroUsdPerMillionTokens": 4500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 75000,
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.4-nano",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 200000,
+      "outputMicroUsdPerMillionTokens": 1250000,
+      "cacheReadInputMicroUsdPerMillionTokens": 20000,
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+    },
+    {
+      "providerFamily": "gemini",
+      "modelKey": "gemini-2.5-flash",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 300000,
+      "outputMicroUsdPerMillionTokens": 2500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 30000,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    {
+      "providerFamily": "gemini",
+      "modelKey": "gemini-2.5-flash-lite",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 10000,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-sonnet-4-6",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 3000000,
+      "outputMicroUsdPerMillionTokens": 15000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 300000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-haiku-4-5-20251001",
+      "effectiveAt": "2026-07-14T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1000000,
+      "outputMicroUsdPerMillionTokens": 5000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 100000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    }
+  ]
+}

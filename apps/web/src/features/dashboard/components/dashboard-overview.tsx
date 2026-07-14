@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Activity,
   CheckCircle2,
@@ -6,9 +8,8 @@ import {
   Timer
 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CostOverTimeCard } from "@/features/dashboard/components/cost-over-time-card";
-import { DashboardAutoRefresh } from "@/features/dashboard/components/dashboard-auto-refresh";
 import {
   DashboardLineEChart,
   DashboardPieEChart
@@ -22,10 +23,19 @@ import {
   type ProviderModelUsageRow
 } from "@/features/dashboard/components/provider-model-usage-card";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import {
+  buildLiveDashboardSnapshotQuery,
+  DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS,
+  isNewerDashboardSnapshot,
+  type LiveDashboardSnapshot
+} from "@/lib/dashboard/live-dashboard-snapshot";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { LiveDashboardOverview as DashboardOverview } from "@/lib/gateway/live-dashboard-overview";
 import type { LiveInvocationLogRecord as InvocationLogRecord } from "@/lib/gateway/live-observability-contract";
-import type { LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
+import type {
+  LiveRequestsPayload,
+  LiveRequestStatusFilter
+} from "@/lib/gateway/live-requests-types";
 import {
   formatBudgetScopeDisplayName,
   formatBudgetScopeTypeDisplayName,
@@ -290,17 +300,35 @@ type DashboardCopy = (typeof dashboardText)[Locale];
 
 export function DashboardOverviewView({
   allowAllProjects = true,
-  costOverTime,
+  costOverTime: initialCostOverTime,
   detailPanel,
   filters,
-  liveRequests,
+  liveRequests: initialLiveRequests,
   locale,
   monthToDateOverview,
   monthToDateSpendValue,
-  overview,
+  overview: initialOverview,
   projects = [],
   suppressContentMotion = false
 }: DashboardOverviewProps) {
+  const [snapshot, setSnapshot] = useState<LiveDashboardSnapshot | null>(null);
+  const [snapshotError, setSnapshotError] = useState(false);
+  const [liveStatusFilter, setLiveStatusFilter] = useState<LiveRequestStatusFilter>("");
+  const [liveModelFilter, setLiveModelFilter] = useState("");
+  const latestGeneratedAtRef = useRef<string | null>(null);
+  const snapshotQueryString = useMemo(
+    () =>
+      buildLiveDashboardSnapshotQuery({
+        ...filters,
+        liveModel: liveModelFilter,
+        liveStatus: liveStatusFilter,
+        tenantId: initialOverview.filters.tenantId
+      }),
+    [filters, initialOverview.filters.tenantId, liveModelFilter, liveStatusFilter]
+  );
+  const overview = snapshot?.overview ?? initialOverview;
+  const costOverTime = snapshot?.costOverTime ?? initialCostOverTime;
+  const liveRequests = snapshot?.liveRequests ?? initialLiveRequests;
   const text = dashboardText[locale];
   const monthToDate = monthToDateOverview ?? overview;
   const successRate = ratio(overview.successfulRequests, overview.totalRequests);
@@ -331,7 +359,9 @@ export function DashboardOverviewView({
       icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.monthCost,
       tone: "orange",
-      value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
+      value: snapshot
+        ? formatMicroUsd(snapshot.monthToDateCostMicroUsd)
+        : monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
 
@@ -346,13 +376,96 @@ export function DashboardOverviewView({
     });
   }
 
+  useEffect(() => {
+    let stopped = false;
+    let timeoutId: number | null = null;
+    let controller: AbortController | null = null;
+
+    function clearScheduledPoll() {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    }
+
+    function schedulePoll() {
+      clearScheduledPoll();
+      if (stopped || document.visibilityState !== "visible") {
+        return;
+      }
+      timeoutId = window.setTimeout(() => {
+        void poll();
+      }, DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS);
+    }
+
+    async function poll() {
+      if (stopped || controller || document.visibilityState !== "visible") {
+        return;
+      }
+
+      controller = new AbortController();
+      try {
+        const response = await fetch(`/api/dashboard/snapshot?${snapshotQueryString}`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          data?: LiveDashboardSnapshot;
+        };
+        if (!response.ok || !payload.data) {
+          throw new Error("Failed to load dashboard snapshot");
+        }
+        if (stopped) return;
+        if (isNewerDashboardSnapshot(payload.data, latestGeneratedAtRef.current)) {
+          latestGeneratedAtRef.current = payload.data.generatedAt;
+          setSnapshot(payload.data);
+        }
+        setSnapshotError(false);
+      } catch (error) {
+        if (stopped) return;
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setSnapshotError(true);
+        }
+      } finally {
+        controller = null;
+        schedulePoll();
+      }
+    }
+
+    function handleVisibilityChange() {
+      clearScheduledPoll();
+      if (document.visibilityState !== "visible") {
+        controller?.abort();
+        controller = null;
+        return;
+      }
+      void poll();
+    }
+
+    void poll();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      stopped = true;
+      clearScheduledPoll();
+      controller?.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [snapshotQueryString]);
+
   return (
     <main
       className="console-content dashboard-overview-content"
+      data-live-snapshot={snapshotError ? "stale" : snapshot ? "live" : "loading"}
       data-motion={suppressContentMotion ? "none" : undefined}
     >
       <DashboardRangePreferenceSync range={filters.range} />
-      <DashboardAutoRefresh />
+      <span aria-live="polite" className="sr-only" role="status">
+        {snapshotError
+          ? locale === "ko"
+            ? "마지막 정상 대시보드 데이터를 표시 중입니다."
+            : "Showing the last successful dashboard snapshot."
+          : ""}
+      </span>
       <section className="dashboard-main-header">
         <div>
           <h1>{text.title}</h1>
@@ -417,6 +530,7 @@ export function DashboardOverviewView({
               }}
               initialSummary={costOverTime}
               locale={locale}
+              pollingEnabled={false}
               rangeLabel={rangeLabel(filters.range, locale)}
             />
             <ProviderModelUsageCard locale={locale} rows={buildProviderModelUsageRows(overview)} />
@@ -428,6 +542,11 @@ export function DashboardOverviewView({
             }}
             initialPayload={liveRequests}
             locale={locale}
+            onFiltersChange={({ model, status }) => {
+              setLiveModelFilter(model);
+              setLiveStatusFilter(status);
+            }}
+            pollingEnabled={false}
           />
         </div>
       </section>

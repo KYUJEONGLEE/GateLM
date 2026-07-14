@@ -12,6 +12,7 @@ revision: `tenant-chat/v1`
 |---|---|
 | Browser/session auth wire | [`openapi/chat-auth.openapi.json`](./openapi/chat-auth.openapi.json) |
 | Private Control Plane metadata wire | [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json) |
+| Admin Runtime wire | [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json) |
 | Conversation/turn wire | [`openapi/chat-conversation.openapi.json`](./openapi/chat-conversation.openapi.json) |
 | Private Gateway wire contract | [`openapi/private-gateway.openapi.json`](./openapi/private-gateway.openapi.json) |
 | Content DB record | [`db/tenant-chat-content.sql`](./db/tenant-chat-content.sql) |
@@ -59,6 +60,7 @@ revision: `tenant-chat/v1`
 - successful final 저장의 retryable PostgreSQL timeout/connection/transaction conflict는 동일 assistant content를 유지한 채 최대 3회 재시도한다. unique `(turn_id,role)`와 decrypt/compare가 commit 후 응답 유실도 same-content replay로 수렴시킨다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
 - DOC-013은 Chat API의 encrypted final을 authoritative replay source로 사용해 닫는다. local final이 있으면 `accepted`, bounded reconstructed `delta`, `final`을 재생한다. Gateway terminal replay만 있고 local final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 fail closed하며 성공 content를 만들지 않는다.
+- Chat API-facing fresh success `chat.turn.final`은 private final의 bounded `quotaState`와 `budgetState`를 그대로 전달한다. local encrypted replay는 해당 usage state를 DB에 중복 저장하지 않으므로 두 필드를 생략할 수 있고, browser는 마지막으로 확인한 상태만 유지한다.
 - client disconnect는 local attachment handle을 즉시 해제하고 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
 - Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
@@ -192,6 +194,9 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. safety는 cache/routing/Provider보다 먼저 실행하고 redacted input만 다음 단계에 전달한다.
 - `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
 - `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
+- 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, exact cache off, email redact/API-key block safety, streaming `120s`와 required final이다.
+- 관리자 재발행은 active snapshot의 비라우팅 정책과 `employeeNoticeVersion`을 보존한다. 선택 Provider/model에 대한 standard/economy route, disabled fallback, provider token rate와 pinned pricing만 교체한다.
+- Admin Runtime publisher는 full-session tenant admin의 server-side user ID를 `publishedBy`로 사용하며 client가 publisher를 공급하지 못하게 한다.
 
 예약 계산은 integer arithmetic만 사용한다.
 

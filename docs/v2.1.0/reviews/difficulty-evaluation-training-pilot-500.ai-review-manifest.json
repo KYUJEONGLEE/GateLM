@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "gatelm.difficulty-ai-review-manifest.v1",
+  "reviewToolVersion": "difficulty-pilot-ai-review.v1",
+  "status": "ai_review_complete_human_approval_pending",
+  "sourceDatasetPath": "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl",
+  "sourceDatasetVersion": "difficulty_eval_2026_07_13_pilot_500_v1",
+  "sourceDatasetSha256": "278be4bcf7764ed760b8f5e67858bf1587ad53a41d0bec71652f0b73b2ca8bc8",
+  "proposedDatasetVersion": "difficulty_eval_2026_07_13_pilot_500_ai_review_v1",
+  "trainingEligible": false,
+  "humanReviewClaimed": false,
+  "counts": {
+    "reviewedRecords": 500,
+    "aiReviewCompleteRecords": 380,
+    "humanJudgmentQueueRecords": 120,
+    "finalHumanApprovalPendingRecords": 500,
+    "promptRewriteSuggestions": 4,
+    "proposedFamilies": 80,
+    "humanReviewedRecords": 0,
+    "approvedRecords": 0
+  },
+  "byCategory": {
+    "general": {
+      "reviewed": 100,
+      "humanJudgment": 24
+    },
+    "code": {
+      "reviewed": 100,
+      "humanJudgment": 24
+    },
+    "translation": {
+      "reviewed": 100,
+      "humanJudgment": 24
+    },
+    "summarization": {
+      "reviewed": 100,
+      "humanJudgment": 24
+    },
+    "reasoning": {
+      "reviewed": 100,
+      "humanJudgment": 24
+    }
+  },
+  "byReasonCode": {
+    "difficulty_threshold": 100,
+    "prompt_template_artifact_corrected": 3,
+    "single_added_constraint_boundary": 10,
+    "single_added_task_boundary": 10
+  },
+  "coverage": {
+    "requiredSliceRecordCounts": {
+      "negation": 95,
+      "indirect_expression": 0,
+      "synonym": 0,
+      "short_complex": 169,
+      "long_simple": 15,
+      "payload_contamination": 0,
+      "korean": 300,
+      "english": 150,
+      "mixed_language": 50,
+      "category_confusion": 20,
+      "ood_terminology": 0
+    },
+    "missingRequiredSlices": [
+      "indirect_expression",
+      "synonym",
+      "payload_contamination",
+      "ood_terminology"
+    ]
+  },
+  "datasetReadinessBlockers": [
+    "final_human_approval_pending",
+    "human_judgment_queue_pending",
+    "minimum_family_policy_decision_required",
+    "required_slice_coverage_missing"
+  ],
+  "artifacts": {
+    "fullReview": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.ai-review.jsonl",
+      "sha256": "10212f43fb0cbe531afd821d189aa3b7091ec10ffb2ff2c895270b231d091c70"
+    },
+    "proposedLabels": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.ai-proposed-labels.jsonl",
+      "sha256": "7697a5c033c65bb615b34aa4d5839edf33ef592c11319675c79b704c94371799"
+    },
+    "humanJudgmentQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.human-judgment.jsonl",
+      "sha256": "dacec76618c072bddfa0f2e27906748a20c97e78c734ef2f84c940b39477778b"
+    },
+    "humanReadableQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.human-judgment.md",
+      "sha256": "cf589bfc0054d354ec03bddf28d122834de9d495802d6f0a4ba4c0b14006ced3"
+    },
+    "gptAdjudicationPacket": {
+      "path": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudication-packet.md",
+      "sha256": "d4f4a2cbde45232872ecfbdf36ba11c446630dca511c1fd947e4623e2fd83814"
+    }
+  },
+  "createdAt": "2026-07-14T00:00:00Z"
+}

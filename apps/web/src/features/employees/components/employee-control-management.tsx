@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ChevronUp,
   Save,
+  Trash2,
   Upload,
   UserPlus,
   Users,
@@ -130,6 +131,10 @@ const employeeText: Record<
     department: string;
     departmentPlaceholder: string;
     departmentRequired: string;
+    deleteConfirm: (count: number) => string;
+    deleteFailed: string;
+    deleteSelected: string;
+    deleted: (successCount: number, failedCount: number) => string;
     disable: string;
     editDepartment: string;
     email: string;
@@ -138,6 +143,10 @@ const employeeText: Record<
     fixtureFallback: string;
     import: string;
     imported: string;
+    invitationDeleteConfirm: (count: number) => string;
+    invitationDeleteFailed: string;
+    invitationDeleteSelected: string;
+    invitationDeleted: (successCount: number, failedCount: number) => string;
     inviteSelected: string;
     inviteSend: string;
     inviteSent: string;
@@ -177,6 +186,13 @@ const employeeText: Record<
     department: "Department",
     departmentPlaceholder: "Select or enter a department",
     departmentRequired: "Department is required.",
+    deleteConfirm: (count) => `Delete ${count} selected employees? Their access will be revoked.`,
+    deleteFailed: "Selected employees could not be deleted.",
+    deleteSelected: "Delete",
+    deleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount} deleted, ${failedCount} failed`
+        : `${successCount} employees deleted.`,
     disable: "Disable",
     editDepartment: "Edit department",
     email: "Email",
@@ -185,6 +201,14 @@ const employeeText: Record<
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     import: "Import",
     imported: "Imported",
+    invitationDeleteConfirm: (count) =>
+      `Delete ${count} pending invitations? Employee records and project assignments will remain, but existing invitation links will stop working.`,
+    invitationDeleteFailed: "Selected invitations could not be deleted.",
+    invitationDeleteSelected: "Delete invite",
+    invitationDeleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount} invitations deleted, ${failedCount} failed`
+        : `${successCount} invitations deleted.`,
     inviteSelected: "Send invite",
     inviteSend: "Send Chat invite",
     inviteSent: "Chat invitation email sent.",
@@ -223,6 +247,14 @@ const employeeText: Record<
     department: "부서",
     departmentPlaceholder: "기존 부서 선택 또는 새 부서 입력",
     departmentRequired: "부서를 입력하세요.",
+    deleteConfirm: (count) =>
+      `선택한 직원 ${count}명을 삭제할까요? 해당 직원의 접근 권한이 해제됩니다.`,
+    deleteFailed: "선택한 직원을 삭제하지 못했습니다.",
+    deleteSelected: "삭제",
+    deleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount}명 삭제, ${failedCount}명 실패`
+        : `${successCount}명의 직원을 삭제했습니다.`,
     disable: "비활성화",
     editDepartment: "부서 설정",
     email: "이메일",
@@ -231,6 +263,14 @@ const employeeText: Record<
     fixtureFallback: "Control Plane을 사용할 수 없어 예시 직원을 표시 중입니다.",
     import: "등록",
     imported: "등록됨",
+    invitationDeleteConfirm: (count) =>
+      `선택한 대기 초대 ${count}개를 삭제할까요? 직원과 프로젝트 배정은 유지되고 기존 초대 링크만 무효화됩니다.`,
+    invitationDeleteFailed: "선택한 초대를 삭제하지 못했습니다.",
+    invitationDeleteSelected: "초대 삭제",
+    invitationDeleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount}개 초대 삭제, ${failedCount}개 실패`
+        : `${successCount}개의 초대를 삭제했습니다.`,
     inviteSelected: "초대 발송",
     inviteSend: "채팅 초대 보내기",
     inviteSent: "채팅 초대 메일을 발송했습니다.",
@@ -1389,9 +1429,7 @@ export function EmployeeControlManagement({
   const [projectAssignmentToRemoveId, setProjectAssignmentToRemoveId] = useState<
     string | null
   >(null);
-  const [selectedInvitationEmployeeIds, setSelectedInvitationEmployeeIds] = useState<string[]>(
-    []
-  );
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [employeeTokenLimitDraft, setEmployeeTokenLimitDraft] =
     useState<EmployeeTokenLimitDraft>({
       enabled: false,
@@ -1536,19 +1574,25 @@ export function EmployeeControlManagement({
     pageIndex * pageSize,
     pageIndex * pageSize + pageSize
   );
-  const selectedInvitationEmployeeIdSet = new Set(selectedInvitationEmployeeIds);
-  const selectableCurrentPageEmployees = currentPageEmployees.filter(
-    (employee) => employee.invitationStatus !== "accepted"
-  );
+  const selectedEmployeeIdSet = new Set(selectedEmployeeIds);
+  const selectableCurrentPageEmployees = currentPageEmployees;
   const allCurrentPageEmployeesSelected =
     selectableCurrentPageEmployees.length > 0 &&
     selectableCurrentPageEmployees.every((employee) =>
-      selectedInvitationEmployeeIdSet.has(employee.id)
+      selectedEmployeeIdSet.has(employee.id)
     );
+  const selectedEmployeeCount = employees.filter((employee) =>
+    selectedEmployeeIdSet.has(employee.id)
+  ).length;
   const selectedInvitationEmployeeCount = employees.filter(
     (employee) =>
       employee.invitationStatus !== "accepted" &&
-      selectedInvitationEmployeeIdSet.has(employee.id)
+      selectedEmployeeIdSet.has(employee.id)
+  ).length;
+  const selectedPendingInvitationEmployeeCount = employees.filter(
+    (employee) =>
+      employee.invitationStatus === "pending" &&
+      selectedEmployeeIdSet.has(employee.id)
   ).length;
 
   useEffect(() => {
@@ -1725,7 +1769,7 @@ export function EmployeeControlManagement({
   }
 
   async function sendInvitesForSelectedEmployees() {
-    const selectedIds = new Set(selectedInvitationEmployeeIds);
+    const selectedIds = new Set(selectedEmployeeIds);
     const targets = employees.filter(
       (employee) =>
         selectedIds.has(employee.id) && employee.invitationStatus !== "accepted"
@@ -1765,7 +1809,7 @@ export function EmployeeControlManagement({
     const invitedEmployeeIds = new Set(
       invitations.map((invitation) => invitation.employee.id)
     );
-    setSelectedInvitationEmployeeIds((current) =>
+    setSelectedEmployeeIds((current) =>
       current.filter((employeeId) => !invitedEmployeeIds.has(employeeId))
     );
     const successCount = invitations.length;
@@ -1784,8 +1828,162 @@ export function EmployeeControlManagement({
     router.refresh();
   }
 
-  function toggleEmployeeInvitationSelection(employeeId: string, checked: boolean) {
-    setSelectedInvitationEmployeeIds((current) => {
+  async function deleteInvitationsForSelectedEmployees() {
+    const selectedIds = new Set(selectedEmployeeIds);
+    const targets = employees.filter(
+      (employee) =>
+        selectedIds.has(employee.id) && employee.invitationStatus === "pending"
+    );
+
+    if (
+      targets.length === 0 ||
+      !window.confirm(text.invitationDeleteConfirm(targets.length))
+    ) {
+      return;
+    }
+
+    setPendingAction("deleteInvitations");
+    setSubmitState({ message: "", status: "idle" });
+
+    try {
+      const revokedEmployees: EmployeeRecord[] = [];
+      let failedCount = 0;
+
+      for (let index = 0; index < targets.length; index += 5) {
+        const batch = targets.slice(index, index + 5);
+        const results = await Promise.all(
+          batch.map(async (employee) => {
+            try {
+              const response = await fetch("/api/control-plane/employees", {
+                body: JSON.stringify({
+                  action: "deleteInvitation",
+                  values: {
+                    employeeId: employee.id,
+                    tenantId: model.controlPlaneTenantId
+                  }
+                }),
+                headers: { "Content-Type": "application/json" },
+                method: "POST"
+              });
+              const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
+
+              return response.ok && payload.employee?.invitationStatus === "revoked"
+                ? payload.employee
+                : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        for (const employee of results) {
+          if (employee) {
+            revokedEmployees.push(employee);
+          } else {
+            failedCount += 1;
+          }
+        }
+      }
+
+      mergeEmployees(revokedEmployees);
+      const revokedEmployeeIds = new Set(
+        revokedEmployees.map((employee) => employee.id)
+      );
+      setSelectedEmployeeIds((current) =>
+        current.filter((employeeId) => !revokedEmployeeIds.has(employeeId))
+      );
+      setSubmitState({
+        message:
+          revokedEmployees.length > 0
+            ? text.invitationDeleted(revokedEmployees.length, failedCount)
+            : text.invitationDeleteFailed,
+        status: failedCount > 0 || revokedEmployees.length === 0 ? "error" : "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({ message: text.invitationDeleteFailed, status: "error" });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function deleteSelectedEmployees() {
+    const selectedIds = new Set(selectedEmployeeIds);
+    const targets = employees.filter((employee) => selectedIds.has(employee.id));
+
+    if (targets.length === 0 || !window.confirm(text.deleteConfirm(targets.length))) {
+      return;
+    }
+
+    setPendingAction("deleteSelected");
+    setSubmitState({ message: "", status: "idle" });
+
+    try {
+      const deletedEmployeeIds: string[] = [];
+      let failedCount = 0;
+
+      for (let index = 0; index < targets.length; index += 5) {
+        const batch = targets.slice(index, index + 5);
+        const results = await Promise.all(
+          batch.map(async (employee) => {
+            try {
+              const response = await fetch("/api/control-plane/employees", {
+                body: JSON.stringify({
+                  action: "update",
+                  values: {
+                    employeeId: employee.id,
+                    status: "archived",
+                    tenantId: model.controlPlaneTenantId
+                  }
+                }),
+                headers: { "Content-Type": "application/json" },
+                method: "POST"
+              });
+              const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
+
+              return response.ok && payload.employee?.status === "archived"
+                ? employee.id
+                : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        for (const employeeId of results) {
+          if (employeeId) {
+            deletedEmployeeIds.push(employeeId);
+          } else {
+            failedCount += 1;
+          }
+        }
+      }
+
+      const deletedIdSet = new Set(deletedEmployeeIds);
+      setEmployees((current) => current.filter((employee) => !deletedIdSet.has(employee.id)));
+      setSelectedEmployeeIds((current) =>
+        current.filter((employeeId) => !deletedIdSet.has(employeeId))
+      );
+      setSelectedEmployeeId((current) =>
+        current && deletedIdSet.has(current) ? null : current
+      );
+      setSubmitState({
+        message:
+          deletedEmployeeIds.length > 0
+            ? text.deleted(deletedEmployeeIds.length, failedCount)
+            : text.deleteFailed,
+        status: failedCount > 0 || deletedEmployeeIds.length === 0 ? "error" : "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({ message: text.deleteFailed, status: "error" });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  function toggleEmployeeSelection(employeeId: string, checked: boolean) {
+    setSelectedEmployeeIds((current) => {
       if (checked) {
         return current.includes(employeeId) ? current : [...current, employeeId];
       }
@@ -1793,11 +1991,11 @@ export function EmployeeControlManagement({
     });
   }
 
-  function toggleCurrentPageInvitationSelection(checked: boolean) {
+  function toggleCurrentPageEmployeeSelection(checked: boolean) {
     const currentPageIds = new Set(
       selectableCurrentPageEmployees.map((employee) => employee.id)
     );
-    setSelectedInvitationEmployeeIds((current) => {
+    setSelectedEmployeeIds((current) => {
       if (checked) {
         return Array.from(new Set([...current, ...currentPageIds]));
       }
@@ -2076,16 +2274,38 @@ export function EmployeeControlManagement({
       </section>
       <section className="employee-list-section">
         <div className="employee-list-toolbar employee-list-actions">
-          <Button
-            disabled={pendingAction !== null || selectedInvitationEmployeeCount === 0}
-            onClick={() => void sendInvitesForSelectedEmployees()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <UserPlus aria-hidden="true" />
-            {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
-          </Button>
+          <div className="employee-selection-actions">
+            <Button
+              disabled={pendingAction !== null || selectedInvitationEmployeeCount === 0}
+              onClick={() => void sendInvitesForSelectedEmployees()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <UserPlus aria-hidden="true" />
+              {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || selectedPendingInvitationEmployeeCount === 0}
+              onClick={() => void deleteInvitationsForSelectedEmployees()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 aria-hidden="true" />
+              {pendingAction === "deleteInvitations" ? "..." : text.invitationDeleteSelected}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || selectedEmployeeCount === 0}
+              onClick={() => void deleteSelectedEmployees()}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              <Trash2 aria-hidden="true" />
+              {pendingAction === "deleteSelected" ? "..." : text.deleteSelected}
+            </Button>
+          </div>
           <Button
             className="employee-add-trigger"
             disabled={pendingAction !== null}
@@ -2110,7 +2330,7 @@ export function EmployeeControlManagement({
                     checked={allCurrentPageEmployeesSelected}
                     disabled={selectableCurrentPageEmployees.length === 0}
                     onChange={(event) =>
-                      toggleCurrentPageInvitationSelection(event.target.checked)
+                      toggleCurrentPageEmployeeSelection(event.target.checked)
                     }
                     type="checkbox"
                   />
@@ -2126,7 +2346,6 @@ export function EmployeeControlManagement({
                 {currentPageEmployees.map((employee) => {
                   const projectNames = projectNamesByEmployeeId.get(employee.id) ?? [];
                   const employeeUsage = usageByEmployeeId.get(employee.id);
-                  const isInvitationSelectable = employee.invitationStatus !== "accepted";
                   return (
                     <article
                       className="employee-list-row"
@@ -2145,10 +2364,10 @@ export function EmployeeControlManagement({
                       >
                         <input
                           aria-label={`${text.selectEmployee}: ${nullableText(employee.name, employee.email)}`}
-                          checked={selectedInvitationEmployeeIdSet.has(employee.id)}
-                          disabled={!isInvitationSelectable || pendingAction !== null}
+                          checked={selectedEmployeeIdSet.has(employee.id)}
+                          disabled={pendingAction !== null}
                           onChange={(event) =>
-                            toggleEmployeeInvitationSelection(employee.id, event.target.checked)
+                            toggleEmployeeSelection(employee.id, event.target.checked)
                           }
                           type="checkbox"
                         />

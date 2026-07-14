@@ -1,21 +1,33 @@
 "use client";
 
-import { Check, ChevronDown, KeyRound, PlugZap, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, KeyRound, PlugZap, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle
+} from "@/components/ui/dialog";
 import {
   getProviderConnectionFamily,
   getProviderFamilyFromKey,
   ProviderFamilyIcon
 } from "@/features/provider-connections/components/provider-family-icon";
+import {
+  getTenantChatProviderCreatedHref,
+  type TenantChatProviderSetupContext
+} from "@/features/provider-connections/tenant-chat-setup-return";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
   ProviderConnectionsModel,
   ProviderConnectionStatus,
+  ProviderModelMetadata,
   ProviderModelDiscovery,
   ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
@@ -25,6 +37,7 @@ import type { Locale } from "@/lib/i18n/locale";
 type ProviderConnectionManagementProps = {
   locale: Locale;
   model: ProviderConnectionsModel;
+  tenantChatSetupContext?: TenantChatProviderSetupContext | null;
 };
 
 type SubmitState = {
@@ -35,6 +48,7 @@ type SubmitState = {
 type ProviderDiscoveryPreview = {
   chatModels: string[];
   discoveredAt: string;
+  modelMetadata: Record<string, ProviderModelMetadata>;
   modelReleaseDates: Record<string, string | null>;
   selectedModels: string[];
   skippedModelCount: number;
@@ -57,6 +71,7 @@ type ProviderModalState =
     };
 
 const providerKeyPattern = /^[a-z][a-z0-9_-]{1,63}$/;
+const providerCredentialPattern = /^[\x21-\x7e]+$/;
 const minProviderTimeoutMs = 1000;
 const maxProviderTimeoutMs = 120000;
 const providerModelPageSize = 10;
@@ -71,6 +86,7 @@ const emptyProviderForm: ProviderConnectionFormValues = {
   credentialValue: "",
   displayName: "",
   failureMode: "fail_closed",
+  modelMetadata: {},
   models: "",
   modelsEndpointPath: "/models",
   presetProviderKey: "openai",
@@ -212,12 +228,17 @@ const providerText: Record<
 
 export function ProviderConnectionManagement({
   locale,
-  model
+  model,
+  tenantChatSetupContext = null
 }: ProviderConnectionManagementProps) {
   const router = useRouter();
   const text = providerText[locale];
   const [providers, setProviders] = useState<ProviderConnectionRecord[]>(model.providers);
-  const [formValues, setFormValues] = useState<ProviderConnectionFormValues>(emptyProviderForm);
+  const [formValues, setFormValues] = useState<ProviderConnectionFormValues>(() =>
+    tenantChatSetupContext
+      ? getProviderFormValuesFromPreset(model.providerPresets.items[0] ?? null, model.providers)
+      : emptyProviderForm
+  );
   const [, setModelOptionsByProvider] = useState<Record<string, string[]>>(
     () => getInitialModelOptions(model.providers)
   );
@@ -227,7 +248,9 @@ export function ProviderConnectionManagement({
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
-  const [providerModal, setProviderModal] = useState<ProviderModalState | null>(null);
+  const [providerModal, setProviderModal] = useState<ProviderModalState | null>(() =>
+    tenantChatSetupContext ? { mode: "create" } : null
+  );
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
@@ -304,7 +327,56 @@ export function ProviderConnectionManagement({
       return;
     }
 
-    const savedProvider = payload.provider;
+    let savedProvider = payload.provider;
+
+    if (
+      tenantChatSetupContext &&
+      providerModal?.mode === "create" &&
+      isDiscoverSupportedProvider(valuesToSubmit.adapterType)
+    ) {
+      const discoveryResponse = await fetch("/api/control-plane/provider-connections", {
+        body: JSON.stringify({
+          action: "discover-models",
+          tenantId: model.routeTenantId,
+          values: { provider: savedProvider.provider }
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const discoveryPayload = (await discoveryResponse.json().catch(() => ({}))) as ProviderResponsePayload;
+      const discoveredChatModels = discoveryPayload.discovery
+        ? filterDiscoveredChatCompletionModels(discoveryPayload.discovery.models)
+        : [];
+      const discoveredModelMetadata = discoveryPayload.discovery
+        ? getDiscoveredModelMetadata(discoveryPayload.discovery.models)
+        : {};
+
+      if (discoveryResponse.ok && discoveredChatModels.length > 0) {
+        const configuredValues = {
+          ...getProviderFormValues(savedProvider),
+          credentialValue: "",
+          isEdit: true,
+          modelMetadata: {
+            ...valuesToSubmit.modelMetadata,
+            ...discoveredModelMetadata
+          },
+          models: discoveredChatModels.join(", ")
+        };
+        const configureResponse = await fetch("/api/control-plane/provider-connections", {
+          body: JSON.stringify({
+            action: "upsert",
+            tenantId: model.routeTenantId,
+            values: configuredValues
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST"
+        });
+        const configurePayload = (await configureResponse.json().catch(() => ({}))) as ProviderResponsePayload;
+        if (configureResponse.ok && configurePayload.provider) {
+          savedProvider = configurePayload.provider;
+        }
+      }
+    }
 
     setProviders((current) => [
       ...current.filter(
@@ -334,12 +406,20 @@ export function ProviderConnectionManagement({
       credentialValue: ""
     });
     setEditingProviderId(null);
+    const shouldReturnToTenantChat =
+      Boolean(tenantChatSetupContext) && providerModal?.mode === "create";
     setProviderModal(null);
     setSubmitState({
       message: locale === "ko" ? "Provider가 저장되었습니다." : "Provider saved.",
       status: "success"
     });
     setPendingAction(false);
+    if (shouldReturnToTenantChat && tenantChatSetupContext) {
+      router.push(
+        getTenantChatProviderCreatedHref(tenantChatSetupContext, savedProvider.id)
+      );
+      return;
+    }
     router.refresh();
   }
 
@@ -414,13 +494,18 @@ export function ProviderConnectionManagement({
     const discoveredModels = payload.discovery.models.map((item) =>
       normalizeDiscoveredModelName(item.modelName)
     );
+    const discoveredModelMetadata = getDiscoveredModelMetadata(
+      payload.discovery.models
+    );
     const modelReleaseDates = Object.fromEntries(
       payload.discovery.models.map((item) => [
         normalizeDiscoveredModelName(item.modelName),
         item.createdAt
       ])
     );
-    const chatModels = filterChatCompletionModels(discoveredModels);
+    const chatModels = filterDiscoveredChatCompletionModels(
+      payload.discovery.models
+    );
     const existingSelectedModels = splitModelNames(baseValues.models).filter((modelName) =>
       chatModels.includes(modelName)
     );
@@ -445,6 +530,7 @@ export function ProviderConnectionManagement({
       [normalizedProvider]: {
         chatModels,
         discoveredAt: payload.discovery?.discoveredAt ?? new Date().toISOString(),
+        modelMetadata: discoveredModelMetadata,
         modelReleaseDates,
         selectedModels,
         skippedModelCount
@@ -468,6 +554,10 @@ export function ProviderConnectionManagement({
           adapterType: payload.discovery?.adapterType ?? current.adapterType,
           baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
           credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
+          modelMetadata: {
+            ...current.modelMetadata,
+            ...discoveredModelMetadata
+          },
           models: selectedModels.join(", ")
         };
       });
@@ -631,6 +721,11 @@ export function ProviderConnectionManagement({
   }
 
   function closeRegistrationModal() {
+    if (tenantChatSetupContext && providerModal?.mode === "create") {
+      setProviderModal(null);
+      router.push(tenantChatSetupContext.returnTo);
+      return;
+    }
     setProviderModal(null);
     if (!editingProviderId) {
       setFormValues(emptyProviderForm);
@@ -750,7 +845,11 @@ export function ProviderConnectionManagement({
                         {activeDiscoveryModelList?.visibleModels.map((modelName) => {
                           const isSelected = activeDiscovery.selectedModels.includes(modelName);
                           const isRecommended = isRecommendedModel(modelName, activeProviderFamily);
-                          const capabilities = getModelCapabilities(modelName);
+                          const modelMetadata = activeDiscovery.modelMetadata[modelName];
+                          const capabilities = getModelCapabilities(
+                            modelName,
+                            modelMetadata
+                          );
 
                           return (
                             <tr
@@ -797,7 +896,7 @@ export function ProviderConnectionManagement({
                                   ))}
                                 </span>
                               </td>
-                              <td>{getModelContextWindow(modelName)}</td>
+                              <td>{getModelContextWindow(modelName, modelMetadata)}</td>
                               <td>
                                 <span className="provider-model-route" data-enabled={isRecommended}>
                                   {isRecommended
@@ -952,6 +1051,9 @@ export function ProviderConnectionManagement({
 
   function renderProviderModels(provider: ProviderConnectionRecord) {
     const discovery = discoveryByProvider[provider.provider];
+    const configuredModelMetadata = getProviderConfigModelMetadata(
+      provider.providerConfig
+    );
     const modelNames = Array.from(
       new Set(
         discovery
@@ -984,7 +1086,10 @@ export function ProviderConnectionManagement({
           </thead>
           <tbody>
             {modelNames.map((modelName) => {
-              const capabilities = getModelCapabilities(modelName);
+              const modelMetadata =
+                discovery?.modelMetadata[modelName] ??
+                configuredModelMetadata[modelName];
+              const capabilities = getModelCapabilities(modelName, modelMetadata);
               const providerFamily = getProviderConnectionFamily(provider);
               const isRecommended = isRecommendedModel(modelName, providerFamily);
 
@@ -1000,7 +1105,7 @@ export function ProviderConnectionManagement({
                       ))}
                     </span>
                   </td>
-                  <td>{getModelContextWindow(modelName)}</td>
+                  <td>{getModelContextWindow(modelName, modelMetadata)}</td>
                   <td>
                     <span className="provider-model-route" data-enabled={isRecommended}>
                       {isRecommended
@@ -1024,6 +1129,24 @@ export function ProviderConnectionManagement({
 
   return (
     <main className="console-content management-line-content">
+      {tenantChatSetupContext ? (
+        <Alert className="mb-4" variant="neutral">
+          <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-3">
+            <span>
+              {locale === "ko"
+                ? "Tenant Chat 설정에 사용할 tenant-level Provider를 등록하세요."
+                : "Register a tenant-level Provider for Tenant Chat setup."}
+            </span>
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href={tenantChatSetupContext.returnTo}
+            >
+              <ArrowLeft aria-hidden="true" />
+              {locale === "ko" ? "Tenant Chat으로 돌아가기" : "Back to Tenant Chat"}
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <section className="dashboard-hero provider-page-header">
         <div>
           <h2>{text.title}</h2>
@@ -1171,20 +1294,21 @@ export function ProviderConnectionManagement({
         )}
       </section>
       {providerModal ? (
-        <div
-          className="modal-backdrop provider-registration-backdrop"
-          onClick={closeRegistrationModal}
-          role="presentation"
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              closeRegistrationModal();
+            }
+          }}
+          open
         >
-          <section
-            aria-modal="true"
+          <DialogContent
+            backdropClassName="provider-registration-backdrop"
             className="modal-panel provider-registration-modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
           >
             <div className="panel-heading provider-registration-heading">
               <div>
-                <h3>
+                <DialogTitle>
                   {providerModal.mode === "create"
                     ? locale === "ko"
                       ? "Provider 모델 Key 등록"
@@ -1192,17 +1316,11 @@ export function ProviderConnectionManagement({
                     : locale === "ko"
                       ? "API key 변경"
                       : "Change API key"}
-                </h3>
-                <p className="project-muted">{text.registerDescription}</p>
+                </DialogTitle>
+                <DialogDescription className="project-muted">
+                  {text.registerDescription}
+                </DialogDescription>
               </div>
-              <button
-                aria-label={locale === "ko" ? "닫기" : "Close"}
-                className="icon-button"
-                onClick={closeRegistrationModal}
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
             </div>
             {submitState.message ? (
               <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
@@ -1305,8 +1423,8 @@ export function ProviderConnectionManagement({
                 {providerModal.mode === "create" ? text.registerAction : text.apiKeyChange}
               </Button>
             </div>
-          </section>
-        </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </main>
   );
@@ -1333,6 +1451,7 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     credentialValue: "",
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
+    modelMetadata: getProviderConfigModelMetadata(providerConfig),
     models: getProviderConfigModels(provider.providerConfig)
       .filter(isChatCompletionModelName)
       .join(", "),
@@ -1378,6 +1497,18 @@ function getProviderFamilyLabel(providerFamily: string) {
     return "Claude";
   }
 
+  if (providerFamily === "groq") {
+    return "Groq";
+  }
+
+  if (providerFamily === "cerebras") {
+    return "Cerebras";
+  }
+
+  if (providerFamily === "mistral") {
+    return "Mistral AI";
+  }
+
   if (providerFamily === "mock") {
     return "Mock";
   }
@@ -1414,6 +1545,7 @@ function getProviderFormValuesFromPreset(
     baseUrl: preset.baseUrl,
     credentialRequired: preset.credentialRequired,
     displayName: getDefaultProviderDisplayName(preset, provider),
+    modelMetadata: getProviderConfigModelMetadata(preset.providerConfig),
     models: "",
     modelsEndpointPath: preset.modelsEndpointPath,
     presetProviderKey: preset.providerKey,
@@ -1484,6 +1616,12 @@ function getProviderDiscoveryErrorMessage(
 ) {
   const message = error ?? "Provider model discovery failed.";
 
+  if (message.includes("Provider credential must contain only printable ASCII")) {
+    return locale === "ko"
+      ? "API 키에는 공백이나 한글을 넣을 수 없습니다. Provider에서 발급한 Key 원문을 다시 입력하세요."
+      : "The API key cannot contain spaces or non-ASCII characters. Enter the original key issued by the provider.";
+  }
+
   if (
     provider.includes("gemini") &&
     message.includes("Provider credential reference is not bound")
@@ -1528,14 +1666,52 @@ function splitModelNames(value: string) {
     .filter(isChatCompletionModelName);
 }
 
-function filterChatCompletionModels(modelNames: string[]) {
+function filterDiscoveredChatCompletionModels(
+  models: ProviderModelDiscovery["models"]
+) {
   return Array.from(
     new Set(
-      modelNames
-        .map((modelName) => normalizeDiscoveredModelName(modelName))
-        .filter(Boolean)
-        .filter(isChatCompletionModelName)
+      models.flatMap((model) => {
+        const modelName = normalizeDiscoveredModelName(model.modelName);
+
+        if (!modelName || model.chatCompletionSupported === false) {
+          return [];
+        }
+
+        return model.chatCompletionSupported === true ||
+          isChatCompletionModelName(modelName)
+          ? [modelName]
+          : [];
+      })
     )
+  );
+}
+
+function getDiscoveredModelMetadata(
+  models: ProviderModelDiscovery["models"]
+): Record<string, ProviderModelMetadata> {
+  return Object.fromEntries(
+    models.flatMap((model) => {
+      const modelName = normalizeDiscoveredModelName(model.modelName);
+      const metadata: ProviderModelMetadata = {};
+
+      if (model.contextWindowTokens && model.contextWindowTokens > 0) {
+        metadata.contextWindowTokens = model.contextWindowTokens;
+      }
+      if (model.displayName && model.displayName !== model.modelName) {
+        metadata.displayName = model.displayName;
+      }
+      if (model.supportsJsonMode !== null) {
+        metadata.supportsJsonMode = model.supportsJsonMode;
+      }
+      if (model.supportsStreaming !== null) {
+        metadata.supportsStreaming = model.supportsStreaming;
+      }
+
+      return Object.keys(metadata).length > 0
+        ? [[modelName, metadata] as const]
+        : [];
+    })
   );
 }
 
@@ -1670,6 +1846,27 @@ function getPreferredModelRules(providerFamily: string) {
     ];
   }
 
+  if (providerFamily === "groq") {
+    return [
+      { matches: (model: string) => model === "llama-3.1-8b-instant" },
+      { matches: (model: string) => model === "llama-3.3-70b-versatile" },
+      { matches: (model: string) => model === "openai/gpt-oss-120b" },
+      { matches: (model: string) => model === "openai/gpt-oss-20b" }
+    ];
+  }
+
+  if (providerFamily === "cerebras") {
+    return [{ matches: (model: string) => model === "gpt-oss-120b" }];
+  }
+
+  if (providerFamily === "mistral") {
+    return [
+      { matches: (model: string) => model === "mistral-small-latest" },
+      { matches: (model: string) => model === "mistral-large-latest" },
+      { matches: (model: string) => model === "mistral-medium-latest" }
+    ];
+  }
+
   return [];
 }
 
@@ -1701,6 +1898,16 @@ function isChatCompletionModelName(modelName: string) {
     normalizedModelName.startsWith("o4") ||
     normalizedModelName.startsWith("claude-") ||
     normalizedModelName.startsWith("gemini-") ||
+    normalizedModelName.startsWith("llama-") ||
+    normalizedModelName.startsWith("openai/gpt-") ||
+    normalizedModelName.startsWith("mistral-") ||
+    normalizedModelName.startsWith("ministral-") ||
+    normalizedModelName.startsWith("magistral-") ||
+    normalizedModelName.startsWith("devstral-") ||
+    normalizedModelName.startsWith("codestral-") ||
+    normalizedModelName.startsWith("qwen-") ||
+    normalizedModelName.startsWith("gemma-") ||
+    normalizedModelName.startsWith("zai-") ||
     normalizedModelName.startsWith("chat-") ||
     normalizedModelName.startsWith("chatgpt-")
   );
@@ -1721,6 +1928,14 @@ function validateProviderForm(values: ProviderConnectionFormValues, locale: Loca
     return locale === "ko"
       ? "Provider key는 소문자로 시작하고 영문/숫자/_/- 조합 2~64자여야 합니다."
       : "Provider key must start with a lowercase letter and use only lowercase letters, numbers, underscores, or hyphens, 2-64 characters.";
+  }
+
+  const credentialValue = values.credentialValue?.trim();
+
+  if (credentialValue && !providerCredentialPattern.test(credentialValue)) {
+    return locale === "ko"
+      ? "API 키에는 공백이나 한글을 넣을 수 없습니다. Provider에서 발급한 Key 원문을 다시 입력하세요."
+      : "The API key cannot contain spaces or non-ASCII characters. Enter the original key issued by the provider.";
   }
 
   if (
@@ -1829,7 +2044,49 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
     : [];
 }
 
-function getModelCapabilities(modelName: string) {
+function getProviderConfigModelMetadata(
+  providerConfig: Record<string, unknown> | null
+): Record<string, ProviderModelMetadata> {
+  const value = providerConfig?.modelMetadata;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([model, rawMetadata]) => {
+      if (!rawMetadata || typeof rawMetadata !== "object" || Array.isArray(rawMetadata)) {
+        return [];
+      }
+
+      const record = rawMetadata as Record<string, unknown>;
+      const metadata: ProviderModelMetadata = {};
+      if (typeof record.contextWindowTokens === "number") {
+        metadata.contextWindowTokens = record.contextWindowTokens;
+      }
+      if (typeof record.displayName === "string") {
+        metadata.displayName = record.displayName;
+      }
+      if (typeof record.maxOutputTokens === "number") {
+        metadata.maxOutputTokens = record.maxOutputTokens;
+      }
+      if (typeof record.supportsJsonMode === "boolean") {
+        metadata.supportsJsonMode = record.supportsJsonMode;
+      }
+      if (typeof record.supportsStreaming === "boolean") {
+        metadata.supportsStreaming = record.supportsStreaming;
+      }
+
+      return Object.keys(metadata).length > 0
+        ? [[model, metadata] as const]
+        : [];
+    })
+  );
+}
+
+function getModelCapabilities(
+  modelName: string,
+  metadata?: ProviderModelMetadata
+) {
   const normalized = modelName.toLowerCase();
   const capabilities = ["chat"];
 
@@ -1842,10 +2099,25 @@ function getModelCapabilities(modelName: string) {
     capabilities.push("vision");
   }
 
+  if (metadata?.supportsStreaming) {
+    capabilities.push("stream");
+  }
+
+  if (metadata?.supportsJsonMode) {
+    capabilities.push("json");
+  }
+
   return capabilities;
 }
 
-function getModelContextWindow(modelName: string) {
+function getModelContextWindow(
+  modelName: string,
+  metadata?: ProviderModelMetadata
+) {
+  if (metadata?.contextWindowTokens) {
+    return formatContextWindowTokens(metadata.contextWindowTokens);
+  }
+
   const normalized = modelName.toLowerCase();
 
   if (normalized.includes("embedding")) {
@@ -1860,9 +2132,25 @@ function getModelContextWindow(modelName: string) {
     return "200k";
   }
 
+  if (normalized.includes("mistral")) {
+    return "256k";
+  }
+
+  if (normalized.includes("llama-") || normalized.includes("gpt-oss")) {
+    return "128k";
+  }
+
   if (normalized.includes("4o") || normalized.includes("o3") || normalized.includes("o4")) {
     return "128k";
   }
 
   return "-";
+}
+
+function formatContextWindowTokens(tokens: number) {
+  if (tokens >= 1000000) {
+    return `${Number((tokens / 1000000).toFixed(1))}M`;
+  }
+
+  return `${Math.round(tokens / 1000)}k`;
 }

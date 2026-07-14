@@ -55,7 +55,7 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gatewayCtx := newGatewayContext(reqCtx, "")
+	gatewayCtx := newGatewayContext(reqCtx, "", nil)
 	if err := h.RuntimePolicyPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 		applyGatewayContext(reqCtx, gatewayCtx)
 		writeGatewayPipelineFailure(w, reqCtx, err)

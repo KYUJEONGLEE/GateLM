@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def parse_args() -> argparse.Namespace:
 
 def load_vector_export(dataset: Path, manifest: Path) -> dict:
     command = [
-        "go",
+        os.environ.get("GATELM_GO_EXECUTABLE", "go"),
         "run",
         "./apps/gateway-core/cmd/difficulty-training-vector-export",
         "-dataset",

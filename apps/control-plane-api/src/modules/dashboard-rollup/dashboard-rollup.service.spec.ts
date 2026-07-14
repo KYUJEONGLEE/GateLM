@@ -23,6 +23,10 @@ const discoveryIndexMigrationPath = resolve(
   __dirname,
   '../../../prisma/migrations/20260714113100_dashboard_rollup_tenant_chat_discovery_index/migration.sql',
 );
+const employeeUsageMigrationPath = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260714190000_employee_usage_rollups/migration.sql',
+);
 
 describe('DashboardRollupService', () => {
   it('aligns hour, day, and month buckets in UTC', () => {
@@ -260,17 +264,60 @@ describe('DashboardRollupService', () => {
       new Date('2026-07-14T13:00:00Z'),
     );
 
-    expect(executeRaw).toHaveBeenCalledTimes(2);
-    for (const [query] of executeRaw.mock.calls) {
+    expect(executeRaw).toHaveBeenCalledTimes(3);
+    for (const [query] of executeRaw.mock.calls.slice(0, 2)) {
       const sql = rawQuery(query).sql;
       expect(sql).toContain('WHEN ttft_ms IS NOT NULL THEN ttft_ms::bigint');
       expect(sql).not.toContain('to_jsonb(p0_llm_invocation_logs)');
     }
+    const employeeUsageSql = rawQuery(executeRaw.mock.calls[2]?.[0]).sql;
+    expect(employeeUsageSql).toContain('INSERT INTO employee_usage_rollups');
+    expect(employeeUsageSql).toContain('WHERE candidate_count = 1');
+    expect(employeeUsageSql).toContain('"deletedAt" IS NULL');
+  });
+
+  it('rolls up only projected confirmed Tenant Chat employee usage', async () => {
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw };
+    const service = createService();
+    const internals = service as unknown as {
+      rebuildTenantChatEmployeeUsage: (
+        client: typeof tx,
+        bucket: {
+          tenant_id: string;
+          surface: 'tenant_chat';
+          grain: 'hour';
+          bucket_start: Date;
+        },
+        bucketEnd: Date,
+      ) => Promise<void>;
+    };
+
+    await internals.rebuildTenantChatEmployeeUsage(
+      tx,
+      {
+        tenant_id: tenantA,
+        surface: 'tenant_chat',
+        grain: 'hour',
+        bucket_start: new Date('2026-07-14T12:00:00Z'),
+      },
+      new Date('2026-07-14T13:00:00Z'),
+    );
+
+    const sql = rawQuery(executeRaw.mock.calls[0]?.[0]).sql;
+    expect(sql).toContain('logs.confirmed_input_tokens');
+    expect(sql).toContain('logs.confirmed_output_tokens');
+    expect(sql).toContain('logs.confirmed_cost_micro_usd');
+    expect(sql).toContain('logs.employee_id IS NOT NULL');
+    expect(sql).toContain('employee."deletedAt" IS NULL');
+    expect(sql).not.toContain('reserved_tokens');
+    expect(sql).not.toContain('unconfirmed_tokens');
   });
 
   it('keeps the migration additive, tenant-first, and content-free', () => {
     const sql = readFileSync(migrationPath, 'utf8');
     const discoveryIndexSql = readFileSync(discoveryIndexMigrationPath, 'utf8');
+    const employeeUsageSql = readFileSync(employeeUsageMigrationPath, 'utf8');
 
     expect(sql).not.toMatch(/\b(?:DROP|TRUNCATE)\b/i);
     expect(sql).toContain(
@@ -288,6 +335,15 @@ describe('DashboardRollupService', () => {
     );
     expect(sql).not.toContain("'active_user'");
     expect(sql).not.toMatch(/raw_prompt|raw_response|authorization|api_key|app_token/i);
+    expect(employeeUsageSql).not.toMatch(/\b(?:DROP|TRUNCATE)\b/i);
+    expect(employeeUsageSql).toContain('CREATE TABLE employee_usage_rollups');
+    expect(employeeUsageSql).toContain(
+      'FOREIGN KEY (employee_id, tenant_id)',
+    );
+    expect(employeeUsageSql).toContain('employee_usage_rollups_period_idx');
+    expect(employeeUsageSql).not.toMatch(
+      /raw_prompt|raw_response|authorization|api_key|app_token/i,
+    );
   });
 });
 

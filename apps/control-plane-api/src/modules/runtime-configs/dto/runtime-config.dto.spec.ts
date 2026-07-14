@@ -52,6 +52,45 @@ describe('UpsertRuntimeConfigDraftDto routing policy v2', () => {
     ).resolves.toEqual(payload);
   });
 
+  it('accepts model context windows up to 10M tokens', async () => {
+    const payload = {
+      models: [
+        {
+          provider: 'gemini',
+          model: 'large-context-model',
+          contextWindowTokens: 10_000_000,
+        },
+      ],
+    };
+
+    await expect(
+      validationPipe.transform(payload, {
+        type: 'body',
+        metatype: UpsertRuntimeConfigDraftDto,
+      }),
+    ).resolves.toEqual(payload);
+  });
+
+  it('rejects model context windows above 10M tokens', async () => {
+    await expect(
+      validationPipe.transform(
+        {
+          models: [
+            {
+              provider: 'gemini',
+              model: 'oversized-context-model',
+              contextWindowTokens: 10_000_001,
+            },
+          ],
+        },
+        {
+          type: 'body',
+          metatype: UpsertRuntimeConfigDraftDto,
+        },
+      ),
+    ).rejects.toThrow('Bad Request Exception');
+  });
+
   it('rejects more than one fallback candidate in a route cell', async () => {
     const routingRoutes = routes(`${providerId}:mock-balanced`);
     routingRoutes.general.simple.modelRefs = [

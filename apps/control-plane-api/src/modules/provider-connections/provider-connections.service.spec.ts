@@ -290,6 +290,25 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
+  it('rejects a provider credential that cannot be used in an HTTP authorization header', async () => {
+    const { service, prisma } = createService();
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+
+    await expect(
+      service.upsertTenantProvider(tenantId, {
+        provider: 'mistral-main',
+        displayName: 'Mistral Main',
+        baseUrl: 'https://api.mistral.ai/v1',
+        credentialValue: 'Mistral API 키를 나중에 입력',
+        resolver: 'environment',
+      }),
+    ).rejects.toThrow(
+      'Provider credential must contain only printable ASCII characters without spaces.',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
   it('updates an existing tenant-level provider when registering it again', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000924';
@@ -768,6 +787,46 @@ describe('ProviderConnectionsService', () => {
     expect(JSON.stringify(result)).not.toContain(providerCredential);
   });
 
+  it('rejects an invalid stored provider credential before model discovery', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000933';
+    const credentialRefId = `provider_credential:${providerId}`;
+    const invalidProviderCredential = '실제 Mistral API 키가 아님';
+    process.env.GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = encryptionKey;
+    const encrypted = encryptProviderCredential(
+      invalidProviderCredential,
+      credentialRefId,
+    );
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        credentialRefId,
+        status: 'ACTIVE',
+        encryptedValue: encrypted.encryptedValue,
+        encryptionNonce: encrypted.encryptionNonce,
+        encryptionTag: encrypted.encryptionTag,
+        encryptionKeyVersion: encrypted.encryptionKeyVersion,
+      },
+    ]);
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.mistral.ai/v1',
+        provider: 'mistral-main',
+        resolver: 'control_plane_secret_store',
+        secretRef: credentialRefId,
+        providerConfig: { adapterType: 'openai_compatible' },
+      }),
+    );
+    global.fetch = jest.fn();
+
+    await expect(
+      service.discoverProviderModels(projectId, 'mistral-main'),
+    ).rejects.toThrow(
+      'Provider credential must contain only printable ASCII characters without spaces.',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('discovers provider models with an environment credential binding fallback', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000905';
@@ -790,7 +849,13 @@ describe('ProviderConnectionsService', () => {
       json: jest.fn().mockResolvedValue({
         data: [
           {
+            capabilities: {
+              completion_chat: true,
+              json_mode: true,
+              streaming: true,
+            },
             id: 'gpt-4o-mini',
+            max_context_length: 128000,
             object: 'model',
             created: 1715367049,
             owned_by: 'openai',
@@ -819,10 +884,14 @@ describe('ProviderConnectionsService', () => {
       modelCount: 1,
       models: [
         expect.objectContaining({
+          chatCompletionSupported: true,
+          contextWindowTokens: 128000,
           modelName: 'gpt-4o-mini',
           ownedBy: 'openai',
           provider: 'openai-main',
           providerId,
+          supportsJsonMode: true,
+          supportsStreaming: true,
         }),
       ],
       provider: 'openai-main',

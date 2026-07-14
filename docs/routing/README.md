@@ -17,7 +17,7 @@
 | [`contracts.md`](contracts.md) | category, difficulty, auto/manual, migration, event/log 경계 |
 | [`classification-pipeline.md`](classification-pipeline.md) | 공통 feature 추출, category 결과, category-aware difficulty 분류의 canonical 내부 구조 |
 | [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md) | `difficulty-feature-vector.v1`의 42차원 순서, scaling, enum과 zero-fill 계약 |
-| [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | 500건 smoke-only pilot, 향후 approved-family split, offline Python 학습과 generated Go artifact의 비활성 준비 경계 |
+| [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | Owner-approved 500건의 300/100/100 split, exact 42D·106D·118D offline candidate 학습·artifact·비활성 selection evidence 경계 |
 | [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 전역 Simple/Complex/단일 fallback을 5 category × 2 difficulty에 투영하는 routing policy v2 schema |
 | [`fixtures/routing-policy.fixture.json`](fixtures/routing-policy.fixture.json) | 모든 셀이 `mock-balanced`인 안전한 bootstrap fixture |
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |
@@ -27,7 +27,8 @@
 
 | Path | Status | Scope |
 |---|---|---|
-| [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | `instructionText` semantic representation과 deterministic payload statistics를 사용하는 offline/shadow difficulty candidate |
+| [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | Exact v1 42D를 보존하고 `instructionText` projection과 4-head/12D probability를 분리해 비교하는 offline/shadow difficulty candidate |
+| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Canonical offline component; not active in Gateway | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64, local artifact cache와 Docker build 포함 계약 |
 
 이 표의 문서는 active contract가 아니다. 별도 승인과 source-of-truth 승격 전에는 Gateway hot path, routing policy 또는 제품 surface의 근거로 사용할 수 없다.
 

@@ -12,6 +12,7 @@ import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
   ProviderConnectionsModel,
+  ProviderModelMetadata,
   ProviderModelDiscovery,
   ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
@@ -55,6 +56,7 @@ type SubmitState = {
 type ProviderDiscoveryPreview = {
   chatModels: string[];
   discoveredAt: string;
+  modelMetadata: Record<string, ProviderModelMetadata>;
   providerKey: string;
   selectedModels: string[];
   skippedModelCount: number;
@@ -70,6 +72,7 @@ const emptyProviderForm: ProviderConnectionFormValues = {
   credentialValue: "",
   displayName: "",
   failureMode: "fail_closed",
+  modelMetadata: {},
   models: "",
   modelsEndpointPath: "/models",
   presetProviderKey: "openai",
@@ -122,13 +125,38 @@ const onboardingProviderText: Record<
   }
 };
 
-const preferredProviderOrder = ["openai", "claude", "anthropic", "gemini", "cohere", "local", "mock"];
+const preferredProviderOrder = [
+  "openai",
+  "gemini",
+  "groq",
+  "cerebras",
+  "mistral",
+  "claude",
+  "anthropic",
+  "cohere",
+  "local",
+  "mock"
+];
 const providerModelSummaryVisibleCount = 3;
-const onboardingPresetProviderKeys = ["openai", "gemini", "claude"];
+const onboardingPresetProviderKeys = [
+  "openai",
+  "gemini",
+  "groq",
+  "cerebras",
+  "mistral",
+  "claude"
+];
 const onboardingProviderModelPageSize = 10;
 const onboardingDefaultProviderModels: Record<string, string[]> = {
   claude: ["claude-3.5-sonnet", "claude-3-haiku"],
+  cerebras: ["gpt-oss-120b"],
   gemini: ["gemini-3.5-flash", "gemini-2.5-pro"],
+  groq: [
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-120b"
+  ],
+  mistral: ["mistral-small-latest", "mistral-large-latest"],
   openai: ["chat-latest", "gpt-4o", "gpt-4o-mini"]
 };
 
@@ -327,7 +355,10 @@ export function OnboardingProviderRegistration({
     const discoveredModels = (payload.discovery?.models ?? []).map((item) =>
       normalizeDiscoveredModelName(item.modelName)
     );
-    const chatModels = getUniqueChatModels(discoveredModels);
+    const discoveredModelMetadata = getDiscoveredModelMetadata(
+      payload.discovery.models
+    );
+    const chatModels = getUniqueDiscoveredChatModels(payload.discovery.models);
     const providerFamily = getProviderFamilyFromKey(provider.provider, provider.baseUrl);
     const selectedModels = getDefaultDiscoveredSelectedModels(
       chatModels,
@@ -340,6 +371,7 @@ export function OnboardingProviderRegistration({
       [provider.provider]: {
         chatModels,
         discoveredAt: payload.discovery?.discoveredAt ?? new Date().toISOString(),
+        modelMetadata: discoveredModelMetadata,
         providerKey: provider.provider,
         selectedModels,
         skippedModelCount: discoveredModels.length - chatModels.length
@@ -429,13 +461,18 @@ export function OnboardingProviderRegistration({
     setPendingAction(true);
     setSubmitState({ message: "", status: "idle" });
 
+    const providerFormValues = getProviderFormValues(provider);
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
         tenantId: model.routeTenantId,
         values: {
-          ...getProviderFormValues(provider),
+          ...providerFormValues,
           isEdit: true,
+          modelMetadata: {
+            ...providerFormValues.modelMetadata,
+            ...discoveryPreview.modelMetadata
+          },
           models: discoveryPreview.selectedModels.join(", ")
         }
       }),
@@ -623,7 +660,8 @@ export function OnboardingProviderRegistration({
                         modelName,
                         selectedRow?.family ?? getProviderFamilyFromKey(discoveryPreview.providerKey)
                       );
-                      const capabilities = getModelCapabilities(modelName);
+                      const modelMetadata = discoveryPreview.modelMetadata[modelName];
+                      const capabilities = getModelCapabilities(modelName, modelMetadata);
 
                       return (
                         <tr
@@ -664,7 +702,7 @@ export function OnboardingProviderRegistration({
                               ))}
                             </span>
                           </td>
-                          <td>{getModelContextWindow(modelName)}</td>
+                          <td>{getModelContextWindow(modelName, modelMetadata)}</td>
                           <td>
                             <span className="provider-model-route" data-enabled={isRecommended}>
                               {isRecommended
@@ -868,6 +906,7 @@ function getProviderFormValuesForRow(
       baseUrl: row.preset.baseUrl,
       credentialRequired: row.preset.credentialRequired,
       displayName: getDefaultProviderDisplayName(row.preset, provider),
+      modelMetadata: getProviderConfigModelMetadata(row.preset.providerConfig),
       models: selectedModel,
       modelsEndpointPath: row.preset.modelsEndpointPath,
       presetProviderKey: row.preset.providerKey,
@@ -902,6 +941,7 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     credentialValue: "",
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
+    modelMetadata: getProviderConfigModelMetadata(providerConfig),
     models: getProviderConfigModels(provider.providerConfig).join(", "),
     modelsEndpointPath: getProviderConfigString(providerConfig, "modelsEndpointPath", "/models"),
     presetProviderKey: getProviderConfigString(providerConfig, "providerFamily", provider.provider),
@@ -929,6 +969,45 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
     : [];
 }
 
+function getProviderConfigModelMetadata(
+  providerConfig: Record<string, unknown> | null
+): Record<string, ProviderModelMetadata> {
+  const value = providerConfig?.modelMetadata;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([model, rawMetadata]) => {
+      if (!rawMetadata || typeof rawMetadata !== "object" || Array.isArray(rawMetadata)) {
+        return [];
+      }
+
+      const record = rawMetadata as Record<string, unknown>;
+      const metadata: ProviderModelMetadata = {};
+      if (typeof record.contextWindowTokens === "number") {
+        metadata.contextWindowTokens = record.contextWindowTokens;
+      }
+      if (typeof record.displayName === "string") {
+        metadata.displayName = record.displayName;
+      }
+      if (typeof record.maxOutputTokens === "number") {
+        metadata.maxOutputTokens = record.maxOutputTokens;
+      }
+      if (typeof record.supportsJsonMode === "boolean") {
+        metadata.supportsJsonMode = record.supportsJsonMode;
+      }
+      if (typeof record.supportsStreaming === "boolean") {
+        metadata.supportsStreaming = record.supportsStreaming;
+      }
+
+      return Object.keys(metadata).length > 0
+        ? [[model, metadata] as const]
+        : [];
+    })
+  );
+}
+
 function getPresetModelOptions(providerKey: string) {
   if (providerKey === "openai") {
     return onboardingDefaultProviderModels.openai;
@@ -936,6 +1015,18 @@ function getPresetModelOptions(providerKey: string) {
 
   if (providerKey === "gemini") {
     return onboardingDefaultProviderModels.gemini;
+  }
+
+  if (providerKey === "groq") {
+    return onboardingDefaultProviderModels.groq;
+  }
+
+  if (providerKey === "cerebras") {
+    return onboardingDefaultProviderModels.cerebras;
+  }
+
+  if (providerKey === "mistral") {
+    return onboardingDefaultProviderModels.mistral;
   }
 
   if (providerKey === "claude" || providerKey === "anthropic") {
@@ -967,10 +1058,49 @@ function normalizeDiscoveredModelName(modelName: string) {
   return normalized;
 }
 
-function getUniqueChatModels(models: string[]) {
+function getUniqueDiscoveredChatModels(models: ProviderModelDiscovery["models"]) {
   return Array.from(
-    new Set(models.map((model) => normalizeDiscoveredModelName(model)).filter(Boolean))
-  ).filter(isChatCompletionModelName);
+    new Set(
+      models.flatMap((model) => {
+        const modelName = normalizeDiscoveredModelName(model.modelName);
+
+        if (!modelName || model.chatCompletionSupported === false) {
+          return [];
+        }
+
+        return model.chatCompletionSupported === true ||
+          isChatCompletionModelName(modelName)
+          ? [modelName]
+          : [];
+      })
+    )
+  );
+}
+
+function getDiscoveredModelMetadata(
+  models: ProviderModelDiscovery["models"]
+): Record<string, ProviderModelMetadata> {
+  return Object.fromEntries(
+    models.flatMap((model) => {
+      const metadata: ProviderModelMetadata = {};
+      if (model.contextWindowTokens && model.contextWindowTokens > 0) {
+        metadata.contextWindowTokens = model.contextWindowTokens;
+      }
+      if (model.displayName && model.displayName !== model.modelName) {
+        metadata.displayName = model.displayName;
+      }
+      if (model.supportsJsonMode !== null) {
+        metadata.supportsJsonMode = model.supportsJsonMode;
+      }
+      if (model.supportsStreaming !== null) {
+        metadata.supportsStreaming = model.supportsStreaming;
+      }
+
+      return Object.keys(metadata).length > 0
+        ? [[normalizeDiscoveredModelName(model.modelName), metadata] as const]
+        : [];
+    })
+  );
 }
 
 function getModelDisplayList(
@@ -1089,6 +1219,26 @@ function getPreferredModelRules(providerFamily: string) {
     ];
   }
 
+  if (providerFamily === "groq") {
+    return [
+      { matches: (model: string) => model === "llama-3.1-8b-instant" },
+      { matches: (model: string) => model === "llama-3.3-70b-versatile" },
+      { matches: (model: string) => model === "openai/gpt-oss-120b" }
+    ];
+  }
+
+  if (providerFamily === "cerebras") {
+    return [{ matches: (model: string) => model === "gpt-oss-120b" }];
+  }
+
+  if (providerFamily === "mistral") {
+    return [
+      { matches: (model: string) => model === "mistral-small-latest" },
+      { matches: (model: string) => model === "mistral-large-latest" },
+      { matches: (model: string) => model === "mistral-medium-latest" }
+    ];
+  }
+
   return [];
 }
 
@@ -1107,7 +1257,10 @@ function isSameOrVariantModel(model: string, target: string) {
   return model === target || model.startsWith(`${target}-`);
 }
 
-function getModelCapabilities(modelName: string) {
+function getModelCapabilities(
+  modelName: string,
+  metadata?: ProviderModelMetadata
+) {
   const normalized = modelName.toLowerCase();
   const capabilities = ["chat"];
 
@@ -1120,10 +1273,25 @@ function getModelCapabilities(modelName: string) {
     capabilities.push("vision");
   }
 
+  if (metadata?.supportsStreaming) {
+    capabilities.push("stream");
+  }
+
+  if (metadata?.supportsJsonMode) {
+    capabilities.push("json");
+  }
+
   return capabilities;
 }
 
-function getModelContextWindow(modelName: string) {
+function getModelContextWindow(
+  modelName: string,
+  metadata?: ProviderModelMetadata
+) {
+  if (metadata?.contextWindowTokens) {
+    return formatContextWindowTokens(metadata.contextWindowTokens);
+  }
+
   const normalized = modelName.toLowerCase();
 
   if (normalized.includes("embedding")) {
@@ -1138,11 +1306,27 @@ function getModelContextWindow(modelName: string) {
     return "200k";
   }
 
+  if (normalized.includes("mistral")) {
+    return "256k";
+  }
+
+  if (normalized.includes("llama-") || normalized.includes("gpt-oss")) {
+    return "128k";
+  }
+
   if (normalized.includes("4o") || normalized.includes("o3") || normalized.includes("o4")) {
     return "128k";
   }
 
   return "-";
+}
+
+function formatContextWindowTokens(tokens: number) {
+  if (tokens >= 1000000) {
+    return `${Number((tokens / 1000000).toFixed(1))}M`;
+  }
+
+  return `${Math.round(tokens / 1000)}k`;
 }
 
 function isChatCompletionModelName(modelName: string) {

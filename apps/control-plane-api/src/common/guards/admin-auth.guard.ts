@@ -13,6 +13,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { hashSecret } from '@/modules/auth/auth.crypto';
 import { AUTH_COOKIE_NAMES } from '@/modules/auth/auth.tokens';
+import { setAuthenticatedAdminUserId } from '@/common/authenticated-admin';
 
 const ADMIN_PATH_PREFIX = '/admin/v1';
 const INTERNAL_SERVICE_TOKEN_HEADER =
@@ -73,6 +74,8 @@ export class AdminAuthGuard implements CanActivate {
     if (routeTenantId && !adminTenantIds.has(routeTenantId)) {
       throw new ForbiddenException('Control Plane resource is outside admin scope.');
     }
+
+    setAuthenticatedAdminUserId(request, session.userId);
 
     return true;
   }

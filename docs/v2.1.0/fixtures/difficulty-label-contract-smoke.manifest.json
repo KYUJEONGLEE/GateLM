@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v1",
-  "datasetVersion": "difficulty_label_contract_smoke_2026_07_14_v1",
-  "recordSchemaVersion": "gatelm.difficulty-label-record.v1",
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v2",
+  "datasetVersion": "difficulty_label_contract_smoke_2026_07_14_v2",
+  "recordSchemaVersion": "gatelm.difficulty-label-record.v2",
   "datasetPath": "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl",
-  "datasetSha256": "8ff1edca6078e7acb5146965be821b890b99fb6bec9d24ff9df3f462911e9765",
+  "datasetSha256": "ab9305583a424793efd94afec420198f36d6214c79fa7a855ae2eacf846549ca",
   "datasetPurpose": "label_contract_smoke",
   "trainingEligible": false,
   "labelCoverageStatus": "complete",
@@ -15,7 +15,11 @@
     "records": 10,
     "families": 5,
     "humanReviewedFamilies": 0,
-    "approvedHumanReviewedFamilies": 0
+    "approvedHumanReviewedFamilies": 0,
+    "semanticHeadEligibleRecords": 10,
+    "semanticHeadEligibleFamilies": 5,
+    "emptyInstructionRecords": 0,
+    "emptyInstructionFamilies": 0
   },
   "coverage": {
     "categoryFamilies": {

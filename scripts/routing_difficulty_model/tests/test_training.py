@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from unittest import mock
 from pathlib import Path
 
@@ -26,7 +27,19 @@ if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
 import gatelm_difficulty_model.training as training
-from gatelm_difficulty_model.training import artifact_content_hash, train_from_vector_export
+from gatelm_difficulty_model.semantic_features import (
+    RULE_VECTOR_V1_FEATURE_NAMES,
+    SEMANTIC_HEAD_SPECS_V1,
+    OfflineFeatureCandidate,
+    OfflineFeatureShape,
+    OfflineFeatureValues,
+)
+from gatelm_difficulty_model.training import (
+    OfflineArtifactProvenance,
+    artifact_content_hash,
+    train_from_offline_feature_matrix,
+    train_from_vector_export,
+)
 
 
 class ArtifactHashTests(unittest.TestCase):
@@ -110,6 +123,69 @@ class ArtifactHashTests(unittest.TestCase):
                     generated = output_path.read_text(encoding="utf-8")
                     self.assertIn(artifact["contentHash"], generated)
                     self.assertIn("generatedDifficultyLogisticModelV1", generated)
+
+    def test_python_offline_artifact_hash_is_accepted_by_go_codegen(self) -> None:
+        environment = os.environ.copy()
+        environment["GOCACHE"] = str(REPO_ROOT / ".gocache")
+        environment["GOTELEMETRY"] = "off"
+        artifact = toy_offline_artifact()
+        artifact["contentHash"] = artifact_content_hash(artifact)
+        with tempfile.TemporaryDirectory(prefix="gatelm-offline-difficulty-codegen-") as temp_dir:
+            artifact_path = Path(temp_dir) / "offline-artifact.json"
+            output_path = Path(temp_dir) / "offline-model-generated.go"
+            report_path = Path(temp_dir) / "offline-validation-report.json"
+            artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+            subprocess.run(
+                [
+                    "go",
+                    "run",
+                    "./apps/gateway-core/cmd/difficulty-model-codegen",
+                    "-artifact",
+                    str(artifact_path),
+                    "-output",
+                    str(output_path),
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            generated = output_path.read_text(encoding="utf-8")
+            self.assertIn("generatedDifficultyLogisticOfflineModel", generated)
+            self.assertIn(artifact["candidateName"], generated)
+            self.assertIn(artifact["contentHash"], generated)
+            subprocess.run(
+                [
+                    "go",
+                    "run",
+                    "./apps/gateway-core/cmd/difficulty-model-verify",
+                    "-artifact",
+                    str(artifact_path),
+                    "-report",
+                    str(report_path),
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "valid")
+            self.assertEqual(report["totalDimension"], artifact["totalDimension"])
+            serialized_report = json.dumps(report, sort_keys=True)
+            for forbidden in (
+                "weights",
+                "projectionParameters",
+                "semanticHeadParameters",
+                "calibrator",
+                "coefficient",
+                "intercept",
+            ):
+                self.assertNotIn(forbidden, serialized_report)
 
 
 class CalibrationMathTests(unittest.TestCase):
@@ -222,6 +298,8 @@ class ToyTrainingTests(unittest.TestCase):
         self.assertIn(artifact["calibrator"]["type"], {"platt", "isotonic"})
         self.assertTrue(artifact["contentHash"].startswith("sha256:"))
         self.assertEqual(report["modelPathSplitCounts"]["holdout"]["samples"], 4)
+        self.assertNotIn("holdout", report)
+        self.assertTrue(report["holdoutEvaluationDeferred"])
         self.assertFalse(report["runtimePromotionEvaluated"])
         serialized_report = json.dumps(report, sort_keys=True)
         for forbidden in (
@@ -269,6 +347,181 @@ class ToyTrainingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "boolean modelPath"):
             train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
 
+    def test_v1_training_keeps_exact_dimension_names_and_finite_values(self) -> None:
+        policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
+        tests = {
+            "dimension": lambda export: export["samples"][0]["vector"].pop(),
+            "feature names": lambda export: export["featureNames"].__setitem__(0, "duplicate"),
+            "non-finite": lambda export: export["samples"][0]["vector"].__setitem__(0, float("nan")),
+            "out-of-range": lambda export: export["samples"][0]["vector"].__setitem__(0, 1.01),
+        }
+        for name, mutate in tests.items():
+            with self.subTest(name=name):
+                export = toy_vector_export()
+                mutate(export)
+                with self.assertRaises(ValueError):
+                    train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
+
+    def test_convergence_warning_is_promoted_to_training_failure(self) -> None:
+        import numpy as np
+        from sklearn.exceptions import ConvergenceWarning
+
+        class WarningModel:
+            n_iter_ = np.asarray([2000], dtype=int)
+
+            def fit(self, x, y):
+                del x, y
+                warnings.warn("synthetic non-convergence", ConvergenceWarning)
+                return self
+
+        with self.assertRaises(training._LogisticConvergenceError) as raised:
+            training._fit_with_convergence_gate(
+                WarningModel(),
+                np.asarray([[0.0], [1.0]], dtype=float),
+                np.asarray([0, 1], dtype=int),
+                2000,
+            )
+        self.assertEqual(raised.exception.max_iterations, 2000)
+        self.assertEqual(raised.exception.observed_iterations, 2000)
+
+    def test_regularization_excludes_c_when_any_fold_fails_to_converge(self) -> None:
+        import numpy as np
+
+        policy = toy_training_policy()
+        samples = [sample for sample in toy_vector_export()["samples"] if sample["split"] == "train"]
+        x = np.asarray([sample["vector"] for sample in samples], dtype=float)
+        y = np.asarray([sample["label"] for sample in samples], dtype=int)
+        groups = np.asarray([sample["familyId"] for sample in samples], dtype=object)
+        original_fit = training._fit_logistic
+
+        def fail_large_c(fit_x, fit_y, c_value, config):
+            if c_value == 1.0:
+                raise training._LogisticConvergenceError(config["maxIterations"], config["maxIterations"])
+            return original_fit(fit_x, fit_y, c_value, config)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=fail_large_c):
+            selected, evaluations = training._select_regularization(
+                x,
+                y,
+                groups,
+                policy["regularization"],
+            )
+        self.assertEqual(selected, 0.1)
+        failed = next(candidate for candidate in evaluations if candidate["c"] == 1.0)
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["failureReason"], "failed_to_converge")
+        self.assertEqual(failed["failedFold"], 1)
+
+    def test_regularization_fails_when_all_candidates_fail_to_converge(self) -> None:
+        import numpy as np
+
+        policy = toy_training_policy()
+        samples = [sample for sample in toy_vector_export()["samples"] if sample["split"] == "train"]
+        x = np.asarray([sample["vector"] for sample in samples], dtype=float)
+        y = np.asarray([sample["label"] for sample in samples], dtype=int)
+        groups = np.asarray([sample["familyId"] for sample in samples], dtype=object)
+        failure = training._LogisticConvergenceError(2000, 2000)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=failure):
+            with self.assertRaisesRegex(ValueError, "all regularization candidates failed"):
+                training._select_regularization(x, y, groups, policy["regularization"])
+
+    def test_final_logistic_fit_non_convergence_blocks_artifact(self) -> None:
+        policy = toy_training_policy()
+        export = toy_vector_export()
+        original_fit = training._fit_logistic
+        full_train_size = sum(
+            sample["split"] == "train" and sample["modelPath"]
+            for sample in export["samples"]
+        )
+
+        def fail_final_fit(x, y, c_value, config):
+            if len(x) == full_train_size:
+                raise training._LogisticConvergenceError(config["maxIterations"], config["maxIterations"])
+            return original_fit(x, y, c_value, config)
+
+        with mock.patch.object(training, "_fit_logistic", side_effect=fail_final_fit):
+            with self.assertRaisesRegex(ValueError, "final fit"):
+                train_from_vector_export(export, policy, "difficulty-logistic-v1-toy")
+
+    def test_trains_all_offline_candidates_with_separate_fit_material(self) -> None:
+        policy = toy_training_policy()
+        shape = toy_offline_shape()
+        artifacts = []
+        with mock.patch.object(
+            training,
+            "_fit_selected_calibrator",
+            wraps=training._fit_selected_calibrator,
+        ) as calibrator_fit:
+            for candidate in OfflineFeatureCandidate:
+                descriptor = shape.descriptor(candidate)
+                samples = toy_offline_samples(shape, candidate)
+                artifact, report = train_from_offline_feature_matrix(
+                    samples,
+                    descriptor,
+                    policy,
+                    f"difficulty-offline.{candidate.value}.synthetic-test-v1",
+                    toy_offline_provenance(),
+                )
+                self.assertEqual(len(artifact["weights"]), descriptor.total_dimension)
+                self.assertEqual(artifact["featureNames"], list(descriptor.feature_names))
+                self.assertEqual(artifact["candidateName"], candidate.value)
+                self.assertIn(artifact["calibrator"]["type"], {"platt", "isotonic"})
+                self.assertEqual(
+                    report["offlineCandidate"]["totalDimension"],
+                    descriptor.total_dimension,
+                )
+                serialized_report = json.dumps(report, sort_keys=True)
+                for forbidden in (
+                    "rawProbability",
+                    "raw_probability",
+                    "logit",
+                    "featureNames",
+                    "weights",
+                    "semanticHeadProbabilities",
+                    "projectedEmbedding",
+                ):
+                    self.assertNotIn(forbidden, serialized_report)
+                artifacts.append(artifact)
+        self.assertEqual(calibrator_fit.call_count, len(OfflineFeatureCandidate))
+        self.assertEqual([len(artifact["weights"]) for artifact in artifacts], [42, 45, 57])
+        self.assertEqual(len({artifact["contentHash"] for artifact in artifacts}), 3)
+        self.assertTrue(
+            all(
+                artifacts[index]["calibrator"] is not artifacts[index + 1]["calibrator"]
+                for index in range(len(artifacts) - 1)
+            )
+        )
+
+    def test_offline_matrix_rejects_shape_numeric_and_sensitive_material_errors(self) -> None:
+        shape = toy_offline_shape()
+        descriptor = shape.descriptor(
+            OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS
+        )
+        policy = toy_training_policy()
+
+        cases = {
+            "mixed dimension": lambda samples: samples[0]["vector"].pop(),
+            "non-finite": lambda samples: samples[0]["vector"].__setitem__(42, float("inf")),
+            "invalid head": lambda samples: samples[0]["vector"].__setitem__(45, 0.4),
+            "sensitive field": lambda samples: samples[0].__setitem__("projectedEmbedding", [0.1]),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name=name):
+                samples = toy_offline_samples(
+                    shape,
+                    OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS,
+                )
+                mutate(samples)
+                with self.assertRaises(ValueError):
+                    train_from_offline_feature_matrix(
+                        samples,
+                        descriptor,
+                        policy,
+                        "difficulty-offline.synthetic-test-v1",
+                        toy_offline_provenance(),
+                    )
+
     def test_rejects_identity_calibrator_policy(self) -> None:
         policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
         policy["calibration"]["candidates"] = ["identity", "platt", "isotonic"]
@@ -298,6 +551,32 @@ class ToyTrainingTests(unittest.TestCase):
             )
         self.assertEqual(selected, "isotonic")
         self.assertEqual(evaluations[0], {"type": "platt", "status": "failed"})
+
+    def test_platt_convergence_failure_is_reported_and_uses_isotonic(self) -> None:
+        policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
+        policy["calibration"]["groupFolds"] = 2
+        original_fit = training._fit_calibrator
+
+        def fail_platt_convergence(kind, raw_probabilities, labels, config):
+            if kind == "platt":
+                raise training._LogisticConvergenceError(
+                    config["platt"]["maxIterations"],
+                    config["platt"]["maxIterations"],
+                )
+            return original_fit(kind, raw_probabilities, labels, config)
+
+        with mock.patch.object(training, "_fit_calibrator", side_effect=fail_platt_convergence):
+            selected, evaluations = training._select_calibrator(
+                *calibration_arrays(),
+                policy["calibration"],
+            )
+        self.assertEqual(selected, "isotonic")
+        self.assertEqual(evaluations[0]["status"], "failed")
+        self.assertEqual(evaluations[0]["failureReason"], "failed_to_converge")
+        self.assertEqual(
+            evaluations[0]["observedIterations"],
+            policy["calibration"]["platt"]["maxIterations"],
+        )
 
     def test_fails_when_both_calibrator_candidates_fail(self) -> None:
         policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
@@ -400,10 +679,191 @@ def toy_vector_export() -> dict:
         "splitPolicyVersion": "difficulty-family-split.v1",
         "familyRuleVersion": "difficulty-sample-family.v1",
         "featureVersion": "difficulty-feature-vector.v1",
-        "featureNames": [f"feature{index:02d}" for index in range(42)],
+        "featureNames": list(RULE_VECTOR_V1_FEATURE_NAMES),
         "categorySource": "actual",
         "samples": samples,
     }
+
+
+def toy_training_policy() -> dict:
+    policy = json.loads((TOOL_DIR / "training-policy.v1.json").read_text(encoding="utf-8"))
+    policy["regularization"]["cCandidates"] = [0.1, 1.0]
+    policy["regularization"]["groupFolds"] = 2
+    policy["calibration"]["groupFolds"] = 2
+    return policy
+
+
+def toy_offline_shape() -> OfflineFeatureShape:
+    return OfflineFeatureShape(
+        projection_dimension=3,
+        projection_version="difficulty-projection.synthetic-test-v1",
+        semantic_heads_version="difficulty-semantic-heads.synthetic-test-v1",
+    )
+
+
+def toy_offline_provenance() -> OfflineArtifactProvenance:
+    return OfflineArtifactProvenance(
+        preprocessing_version="difficulty-preprocessing.synthetic-test-v1",
+        tokenizer_version="difficulty-tokenizer.synthetic-test-v1",
+        encoder_version="difficulty-encoder.synthetic-test-v1",
+        pooling_version="difficulty-pooling.synthetic-test-v1",
+        projection_parameters=toy_projection_parameters(),
+        semantic_head_input_dimension=3,
+        semantic_head_parameters=toy_semantic_head_parameters(),
+        training_dataset_version="difficulty-dataset.synthetic-test-v1",
+        training_dataset_sha256="a" * 64,
+        split_policy_version="difficulty-family-split.v1",
+        split_manifest_sha256="b" * 64,
+        training_policy_version="difficulty-logistic-training.v1",
+        threshold_policy_version="difficulty-threshold.synthetic-test-v1",
+        threshold=0.45,
+        component_hashes={
+            "ruleVector": "sha256:" + "1" * 64,
+            "tokenizer": "sha256:" + "2" * 64,
+            "encoder": "sha256:" + "3" * 64,
+            "projection": "sha256:" + "4" * 64,
+            "semanticHeads": "sha256:" + "5" * 64,
+        },
+        bundle_version="difficulty-feature-bundle.synthetic-test-v1",
+    )
+
+
+def toy_projection_parameters() -> dict:
+    return {
+        "kind": "pca_full_svd",
+        "inputDimension": 4,
+        "outputDimension": 3,
+        "dtype": "float32_le",
+        "fitSplit": "train",
+        "randomSeed": 20260714,
+        "whiten": False,
+        "l2Position": "after_projection",
+        "l2Epsilon": 1e-12,
+        "mean": [0.1, 0.2, 0.3, 0.4],
+        "components": [
+            [0.1, 0.2, 0.3, 0.4],
+            [0.2, 0.3, 0.4, 0.5],
+            [0.3, 0.4, 0.5, 0.6],
+        ],
+    }
+
+
+def toy_semantic_head_parameters() -> list[dict]:
+    return [
+        {
+            "name": spec.name,
+            "classes": list(spec.classes),
+            "coefficient": [
+                [float(head_index + class_index + input_index) / 100.0 for input_index in range(3)]
+                for class_index in range(3)
+            ],
+            "intercept": [float(class_index - head_index) / 10.0 for class_index in range(3)],
+        }
+        for head_index, spec in enumerate(SEMANTIC_HEAD_SPECS_V1)
+    ]
+
+
+def toy_offline_samples(
+    shape: OfflineFeatureShape,
+    candidate: OfflineFeatureCandidate,
+) -> list[dict]:
+    result = []
+    for sample_index, sample in enumerate(toy_vector_export()["samples"]):
+        rule = tuple(float(value) for value in sample["vector"])
+        projection = (
+            float(sample["label"]),
+            float(sample_index % 3) / 2.0,
+            -0.25 if sample["label"] else 0.25,
+        )
+        heads = {
+            spec.name: (
+                (0.0, 0.0, 1.0)
+                if sample["label"]
+                else (1.0, 0.0, 0.0)
+            )
+            for spec in SEMANTIC_HEAD_SPECS_V1
+        }
+        if candidate is OfflineFeatureCandidate.RULE_VECTOR_V1:
+            values = OfflineFeatureValues(rule_vector_v1=rule)
+        elif candidate is OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION:
+            values = OfflineFeatureValues(
+                rule_vector_v1=rule,
+                semantic_projection=projection,
+            )
+        else:
+            values = OfflineFeatureValues(
+                rule_vector_v1=rule,
+                semantic_projection=projection,
+                semantic_head_probabilities=heads,
+            )
+        record = dict(sample)
+        record["vector"] = list(shape.assemble(candidate, values))
+        result.append(record)
+    return result
+
+
+def toy_offline_artifact() -> dict:
+    descriptor = toy_offline_shape().descriptor(
+        OfflineFeatureCandidate.RULE_VECTOR_V1_PLUS_PROJECTION_AND_HEADS
+    )
+    provenance = toy_offline_provenance()
+    artifact = {
+        "schemaVersion": "gatelm.difficulty-offline-model-artifact.v1",
+        "artifactVersion": "difficulty-offline.synthetic-test-v1",
+        "modelVersion": "difficulty-logistic-v1",
+        "offlineFeatureShapeVersion": descriptor.shape_version,
+        "candidateName": descriptor.candidate.value,
+        "ruleVectorVersion": descriptor.rule_vector_version,
+        "preprocessingVersion": provenance.preprocessing_version,
+        "tokenizerVersion": provenance.tokenizer_version,
+        "encoderVersion": provenance.encoder_version,
+        "poolingVersion": provenance.pooling_version,
+        "projectionVersion": descriptor.projection_version,
+        "projectionDimension": descriptor.projection_dimension,
+        "projectionParameters": dict(provenance.projection_parameters),
+        "semanticHeadsVersion": descriptor.semantic_heads_version,
+        "semanticHeadClassOrder": [
+            {"name": spec.name, "classes": list(spec.classes)}
+            for spec in descriptor.semantic_head_specs
+        ],
+        "semanticHeadInputDimension": provenance.semantic_head_input_dimension,
+        "semanticHeadParameters": [dict(head) for head in provenance.semantic_head_parameters],
+        "semanticHeadProbabilityRule": "multinomial_linear_softmax.v1",
+        "totalDimension": descriptor.total_dimension,
+        "featureNames": list(descriptor.feature_names),
+        "weights": [float(index - 20) / 100.0 for index in range(descriptor.total_dimension)],
+        "bias": -0.25,
+        "calibrationVersion": "difficulty-calibration-v1",
+        "calibrator": {
+            "type": "platt",
+            "input": "raw_probability",
+            "coefficient": 1.25,
+            "intercept": -0.1,
+        },
+        "thresholdPolicyVersion": provenance.threshold_policy_version,
+        "threshold": provenance.threshold,
+        "thresholdEquality": "greater_than_or_equal",
+        "trainingDatasetVersion": provenance.training_dataset_version,
+        "trainingDatasetSha256": provenance.training_dataset_sha256,
+        "splitPolicyVersion": provenance.split_policy_version,
+        "splitManifestSha256": provenance.split_manifest_sha256,
+        "trainingPolicyVersion": provenance.training_policy_version,
+        "regularization": {
+            "policyVersion": "difficulty-logistic-training.v1",
+            "penalty": "l2",
+            "solver": "liblinear",
+            "selectedC": 1.0,
+            "groupFolds": 2,
+            "randomSeed": 1729,
+        },
+        "componentHashes": dict(provenance.component_hashes),
+        "bundleVersion": provenance.bundle_version,
+        "bundleHashAlgorithm": "difficulty-feature-bundle-material.v1",
+        "contentHashAlgorithm": "difficulty-offline-model-inference-material.v1",
+    }
+
+    artifact["bundleHash"] = training.offline_bundle_hash(artifact)
+    return artifact
 
 
 def calibration_arrays():
@@ -434,7 +894,7 @@ def toy_artifact() -> dict:
             "randomSeed": 1729,
         },
         "bias": -0.25,
-        "featureNames": [f"feature{index:02d}" for index in range(42)],
+        "featureNames": list(RULE_VECTOR_V1_FEATURE_NAMES),
         "weights": [index / 100 for index in range(42)],
         "calibrationVersion": "difficulty-calibration-v1",
         "calibrator": {

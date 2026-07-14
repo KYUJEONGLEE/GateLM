@@ -88,6 +88,36 @@ export const PROVIDER_PRESETS = [
     sortOrder: 20,
   },
   {
+    providerKey: 'groq',
+    displayName: 'Groq',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
+    status: ResourceStatus.ACTIVE,
+    sortOrder: 30,
+  },
+  {
+    providerKey: 'cerebras',
+    displayName: 'Cerebras',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
+    status: ResourceStatus.ACTIVE,
+    sortOrder: 40,
+  },
+  {
+    providerKey: 'mistral',
+    displayName: 'Mistral AI',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.mistral.ai/v1',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
+    status: ResourceStatus.ACTIVE,
+    sortOrder: 50,
+  },
+  {
     providerKey: 'claude',
     displayName: 'Claude',
     adapterType: 'anthropic',
@@ -95,7 +125,7 @@ export const PROVIDER_PRESETS = [
     requestFormat: 'anthropic_messages',
     modelDiscoveryType: 'anthropic_models',
     status: ResourceStatus.DISABLED,
-    sortOrder: 30,
+    sortOrder: 60,
   },
 ] as const;
 
@@ -904,11 +934,14 @@ function providerPresetConfig(
   preset: (typeof PROVIDER_PRESETS)[number],
 ): Prisma.InputJsonObject {
   const models = providerPresetDefaultModels(preset.providerKey);
+  const modelMetadata = providerPresetModelMetadata(preset.providerKey);
   return {
     providerKey: preset.providerKey,
+    providerFamily: preset.providerKey,
     adapterType: preset.adapterType,
     requestFormat: preset.requestFormat,
     ...(models.length > 0 ? { models } : {}),
+    ...(Object.keys(modelMetadata).length > 0 ? { modelMetadata } : {}),
     modelsEndpointPath: '/models',
     credentialRequired: true,
     modelDiscovery: {
@@ -932,7 +965,99 @@ function providerPresetDefaultModels(providerKey: string): string[] {
   if (providerKey === 'claude') {
     return ['claude-3.5-sonnet', 'claude-3-haiku'];
   }
+  if (providerKey === 'groq') {
+    return [
+      'llama-3.1-8b-instant',
+      'llama-3.3-70b-versatile',
+      'openai/gpt-oss-20b',
+      'openai/gpt-oss-120b',
+    ];
+  }
+  if (providerKey === 'cerebras') {
+    return ['gpt-oss-120b'];
+  }
+  if (providerKey === 'mistral') {
+    return [
+      'mistral-small-latest',
+      'mistral-medium-latest',
+      'mistral-large-latest',
+    ];
+  }
   return [];
+}
+
+function providerPresetModelMetadata(
+  providerKey: string,
+): Prisma.InputJsonObject {
+  if (providerKey === 'groq') {
+    return {
+      'llama-3.1-8b-instant': {
+        contextWindowTokens: 131072,
+        displayName: 'Llama 3.1 8B Instant',
+        maxOutputTokens: 131072,
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+      'llama-3.3-70b-versatile': {
+        contextWindowTokens: 131072,
+        displayName: 'Llama 3.3 70B Versatile',
+        maxOutputTokens: 32768,
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+      'openai/gpt-oss-20b': {
+        contextWindowTokens: 131072,
+        displayName: 'GPT-OSS 20B',
+        maxOutputTokens: 65536,
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+      'openai/gpt-oss-120b': {
+        contextWindowTokens: 131072,
+        displayName: 'GPT-OSS 120B',
+        maxOutputTokens: 65536,
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+    };
+  }
+
+  if (providerKey === 'cerebras') {
+    return {
+      'gpt-oss-120b': {
+        contextWindowTokens: 131072,
+        displayName: 'GPT-OSS 120B',
+        maxOutputTokens: 40960,
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+    };
+  }
+
+  if (providerKey === 'mistral') {
+    return {
+      'mistral-small-latest': {
+        contextWindowTokens: 256000,
+        displayName: 'Mistral Small',
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+      'mistral-medium-latest': {
+        contextWindowTokens: 256000,
+        displayName: 'Mistral Medium',
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+      'mistral-large-latest': {
+        contextWindowTokens: 256000,
+        displayName: 'Mistral Large',
+        supportsJsonMode: true,
+        supportsStreaming: true,
+      },
+    };
+  }
+
+  return {};
 }
 
 function buildDemoRuntimeSnapshot(

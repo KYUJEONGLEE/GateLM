@@ -104,6 +104,7 @@ export class ConversationController {
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Connection', 'keep-alive');
+    response.setHeader('Content-Encoding', 'identity');
     response.setHeader('X-Accel-Buffering', 'no');
     response.flushHeaders();
     let sequence = 1;
@@ -134,7 +135,13 @@ export class ConversationController {
           sequence = await writeDeltas(response, prepared, delta, sequence);
         });
         sequence += 1;
-        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, result.message.id, result.replayed));
+        await writeEvent(response, prepared.reserved.turnId, finalEvent(
+          prepared,
+          sequence,
+          result.message.id,
+          result.replayed,
+          result,
+        ));
       }
       finished = true;
     } catch (error) {
@@ -207,7 +214,19 @@ async function writeDeltas(
   return sequence;
 }
 
-function finalEvent(prepared: PreparedTurn, sequence: number, messageId: string, replayed: boolean) {
+function finalEvent(
+  prepared: PreparedTurn,
+  sequence: number,
+  messageId: string,
+  replayed: boolean,
+  policy?: Readonly<{
+    quotaState?: 'normal' | 'warning' | 'economy' | 'blocked';
+    budgetState?: 'normal' | 'warning' | 'economy' | 'blocked';
+  }>,
+) {
+  const policyState = policy?.quotaState && policy.budgetState
+    ? { quotaState: policy.quotaState, budgetState: policy.budgetState }
+    : {};
   return {
     type: 'chat.turn.final',
     schemaVersion: 1,
@@ -217,6 +236,7 @@ function finalEvent(prepared: PreparedTurn, sequence: number, messageId: string,
     messageId,
     terminalOutcome: 'succeeded',
     replayed,
+    ...policyState,
   } as const;
 }
 

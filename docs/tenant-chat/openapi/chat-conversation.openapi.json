@@ -123,7 +123,7 @@
         },
         "responses": {
           "200": {
-            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. Success final is sent only after assistant ciphertext commit.",
+            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. Success final is sent only after assistant ciphertext commit. Fresh success includes bounded quotaState and budgetState; encrypted-content replay may omit them.",
             "headers": {
               "Cache-Control": { "schema": { "type": "string", "const": "no-store" } },
               "X-Accel-Buffering": { "schema": { "type": "string", "const": "no" } }

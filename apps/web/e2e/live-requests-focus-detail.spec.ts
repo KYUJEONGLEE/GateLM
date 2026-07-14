@@ -33,14 +33,26 @@ test.beforeEach(async ({ context, page, request }) => {
     }
   ]);
 
-  await page.route("**/api/dashboard/live-requests?**", async (route) => {
+  await page.route("**/api/dashboard/snapshot?**", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      data?: {
+        liveRequests?: unknown;
+      };
+    };
+
+    expect(response.ok()).toBeTruthy();
+    expect(body.data).toBeTruthy();
     await route.fulfill({
       body: JSON.stringify({
         data: {
-          generatedAt: "2026-07-11T00:10:06.000Z",
-          requestedModelOptions: ["gpt-4o-mini"],
-          projectNameSource: "control-plane",
-          rows: liveRows()
+          ...body.data,
+          liveRequests: {
+            generatedAt: "2026-07-11T00:10:06.000Z",
+            requestedModelOptions: ["gpt-4o-mini"],
+            projectNameSource: "control-plane",
+            rows: liveRows()
+          }
         }
       }),
       contentType: "application/json",
@@ -59,6 +71,10 @@ test.beforeEach(async ({ context, page, request }) => {
       status: 200
     });
   });
+});
+
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("opens Focus View and nested Request Detail drawer at the intended desktop sizes", async ({

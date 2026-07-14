@@ -207,6 +207,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Content-Encoding", "identity")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("Idempotency-Replayed", fmt.Sprintf("%t", execution.IsReplay()))
 	w.WriteHeader(http.StatusOK)

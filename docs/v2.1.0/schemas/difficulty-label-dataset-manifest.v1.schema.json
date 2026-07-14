@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/difficulty-label-dataset-manifest.v1.schema.json",
+  "title": "GateLM Difficulty Label Dataset Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "gatelm.difficulty-label-dataset-manifest.v1"
+    },
+    "datasetVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "recordSchemaVersion": {
+      "enum": ["gatelm.difficulty-label-record.v1", "gatelm.difficulty-evaluation-record.v1"]
+    },
+    "datasetPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[a-zA-Z0-9._/-]+$"
+    },
+    "datasetSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "datasetPurpose": {
+      "enum": ["label_contract_smoke", "training_tooling_smoke", "training_candidate"]
+    },
+    "trainingEligible": {
+      "type": "boolean"
+    },
+    "labelCoverageStatus": {
+      "enum": ["complete", "unlabeled"]
+    },
+    "familyPolicyVersion": {
+      "const": "difficulty-prompt-family.v1"
+    },
+    "trainingGate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minimumFamilyPolicyStatus": { "const": "decision_required" }
+          },
+          "required": ["minimumFamilyPolicyStatus"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minimumFamilyPolicyStatus": { "const": "versioned" },
+            "policyVersion": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "minApprovedFamilies": { "type": "integer", "minimum": 1 },
+            "minFamiliesPerCategory": { "type": "integer", "minimum": 1 },
+            "minFamiliesPerCategoryDifficulty": { "type": "integer", "minimum": 1 },
+            "minFamiliesPerLanguage": { "type": "integer", "minimum": 1 },
+            "minFamiliesPerSlice": { "type": "integer", "minimum": 1 }
+          },
+          "required": [
+            "minimumFamilyPolicyStatus",
+            "policyVersion",
+            "minApprovedFamilies",
+            "minFamiliesPerCategory",
+            "minFamiliesPerCategoryDifficulty",
+            "minFamiliesPerLanguage",
+            "minFamiliesPerSlice"
+          ]
+        }
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "records": { "type": "integer", "minimum": 1 },
+        "families": { "type": "integer", "minimum": 1 },
+        "humanReviewedFamilies": { "type": "integer", "minimum": 0 },
+        "approvedHumanReviewedFamilies": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["records", "families", "humanReviewedFamilies", "approvedHumanReviewedFamilies"]
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "families": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "promptFamily": { "type": "string", "minLength": 3, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._:-]+$" },
+          "expectedCategory": { "enum": ["general", "code", "translation", "summarization", "reasoning"] },
+          "expectedSemanticLabel": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "reviewStatus": { "enum": ["pending", "in_review", "needs_adjudication", "approved", "rejected"] },
+          "humanReviewed": { "type": "boolean" },
+          "partition": { "enum": ["smoke", "train", "calibration", "holdout"] },
+          "records": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["promptFamily", "expectedCategory", "expectedSemanticLabel", "reviewStatus", "humanReviewed", "partition", "records"]
+      }
+    },
+    "legacyPartitionManifestPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[a-zA-Z0-9._/-]+$"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "datasetVersion",
+    "recordSchemaVersion",
+    "datasetPath",
+    "datasetSha256",
+    "datasetPurpose",
+    "trainingEligible",
+    "labelCoverageStatus",
+    "familyPolicyVersion",
+    "trainingGate",
+    "counts",
+    "createdAt"
+  ],
+  "allOf": [
+    {
+      "if": { "properties": { "datasetPurpose": { "enum": ["label_contract_smoke", "training_tooling_smoke"] } }, "required": ["datasetPurpose"] },
+      "then": {
+        "properties": {
+          "trainingEligible": { "const": false },
+          "trainingGate": { "properties": { "minimumFamilyPolicyStatus": { "const": "decision_required" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "labelCoverageStatus": { "const": "complete" } }, "required": ["labelCoverageStatus"] },
+      "then": {
+        "properties": { "recordSchemaVersion": { "const": "gatelm.difficulty-label-record.v1" } },
+        "required": ["coverage", "families"]
+      }
+    },
+    {
+      "if": { "properties": { "labelCoverageStatus": { "const": "unlabeled" } }, "required": ["labelCoverageStatus"] },
+      "then": {
+        "properties": {
+          "recordSchemaVersion": { "const": "gatelm.difficulty-evaluation-record.v1" },
+          "trainingEligible": { "const": false }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "trainingEligible": { "const": true } }, "required": ["trainingEligible"] },
+      "then": {
+        "properties": {
+          "datasetPurpose": { "const": "training_candidate" },
+          "labelCoverageStatus": { "const": "complete" },
+          "trainingGate": { "properties": { "minimumFamilyPolicyStatus": { "const": "versioned" } } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "countMapCategory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "general": { "type": "integer", "minimum": 0 },
+        "code": { "type": "integer", "minimum": 0 },
+        "translation": { "type": "integer", "minimum": 0 },
+        "summarization": { "type": "integer", "minimum": 0 },
+        "reasoning": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["general", "code", "translation", "summarization", "reasoning"]
+    },
+    "countMapDifficulty": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "simple": { "type": "integer", "minimum": 0 },
+        "complex": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["simple", "complex"]
+    },
+    "categoryDifficultyCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "general": { "$ref": "#/$defs/countMapDifficulty" },
+        "code": { "$ref": "#/$defs/countMapDifficulty" },
+        "translation": { "$ref": "#/$defs/countMapDifficulty" },
+        "summarization": { "$ref": "#/$defs/countMapDifficulty" },
+        "reasoning": { "$ref": "#/$defs/countMapDifficulty" }
+      },
+      "required": ["general", "code", "translation", "summarization", "reasoning"]
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "categoryFamilies": { "$ref": "#/$defs/countMapCategory" },
+        "difficultyFamilies": { "$ref": "#/$defs/countMapDifficulty" },
+        "categoryDifficultyFamilies": { "$ref": "#/$defs/categoryDifficultyCounts" },
+        "languageFamilies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ko": { "type": "integer", "minimum": 0 },
+            "en": { "type": "integer", "minimum": 0 },
+            "mixed": { "type": "integer", "minimum": 0 },
+            "unknown": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["ko", "en", "mixed", "unknown"]
+        },
+        "evaluationSliceFamilies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "negation": { "type": "integer", "minimum": 0 },
+            "indirect_expression": { "type": "integer", "minimum": 0 },
+            "synonym": { "type": "integer", "minimum": 0 },
+            "short_complex": { "type": "integer", "minimum": 0 },
+            "long_simple": { "type": "integer", "minimum": 0 },
+            "payload_contamination": { "type": "integer", "minimum": 0 },
+            "korean": { "type": "integer", "minimum": 0 },
+            "english": { "type": "integer", "minimum": 0 },
+            "mixed_language": { "type": "integer", "minimum": 0 },
+            "category_confusion": { "type": "integer", "minimum": 0 },
+            "ood_terminology": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["negation", "indirect_expression", "synonym", "short_complex", "long_simple", "payload_contamination", "korean", "english", "mixed_language", "category_confusion", "ood_terminology"]
+        }
+      },
+      "required": ["categoryFamilies", "difficultyFamilies", "categoryDifficultyFamilies", "languageFamilies", "evaluationSliceFamilies"]
+    }
+  }
+}

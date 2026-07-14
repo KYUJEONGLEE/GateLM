@@ -182,6 +182,7 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 			RedactedPrompt:     stringPtr(longSimplePrompt),
 			ExpectedCategory:   routing.CategorySummarization,
 			ExpectedDifficulty: routing.DifficultySimple,
+			EvaluationSlices:   []string{"negation", "payload_contamination"},
 		},
 		{
 			SampleID:           "short_hard_complex",
@@ -210,11 +211,41 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 	if segment := report.Shadow.Segments.ShortComplex; segment.Total != 1 || segment.RuntimeCorrect != 1 || segment.ShadowCorrect != 1 {
 		t.Fatalf("unexpected short-complex segment: %#v", segment)
 	}
+	if segment := report.Shadow.Segments.Negation; segment.Total != 1 || segment.RuntimeCorrect != 0 || segment.ShadowCorrect != 1 {
+		t.Fatalf("unexpected negation segment: %#v", segment)
+	}
+	if segment := report.Shadow.Segments.PayloadContamination; segment.Total != 1 || segment.RuntimeCorrect != 0 || segment.ShadowCorrect != 1 {
+		t.Fatalf("unexpected payload-contamination segment: %#v", segment)
+	}
+	if gate := report.Shadow.PromotionGate; !gate.Applicable || gate.Policy != "difficulty-shadow-promotion-gate.v1.fail-closed" || gate.Passed {
+		t.Fatalf("unexpected promotion gate summary: %#v", gate)
+	}
+	assertPromotionCheck(t, report.Shadow.PromotionGate, "complex_to_simple_non_regression_overall", true)
+	assertPromotionCheck(t, report.Shadow.PromotionGate, "negation_improvement", true)
+	assertPromotionCheck(t, report.Shadow.PromotionGate, "payload_contamination_improvement", true)
+	assertPromotionCheck(t, report.Shadow.PromotionGate, "semantic_head_quality", false)
+	assertPromotionCheck(t, report.Shadow.PromotionGate, "memory_budget", false)
+	assertPromotionCheck(t, report.Shadow.PromotionGate, "sensitive_data_non_exposure", false)
 	if report.Samples[0].ComplexityScore == nil || *report.Samples[0].ComplexityScore >= difficultymodel.ThresholdValue || report.Samples[0].ShadowDifficulty != routing.DifficultySimple {
 		t.Fatalf("expected model-path shadow result for long simple sample: %#v", report.Samples[0])
 	}
 	if report.Samples[1].ComplexityScore == nil || *report.Samples[1].ComplexityScore != 1 || report.Samples[1].ShadowDifficulty != routing.DifficultyComplex {
 		t.Fatalf("expected hard-complex sentinel for short sample: %#v", report.Samples[1])
+	}
+	if report.Samples[0].ModelPath == nil || !*report.Samples[0].ModelPath || report.Samples[1].ModelPath == nil || *report.Samples[1].ModelPath {
+		t.Fatalf("expected explicit model-path boundaries: %#v", report.Samples)
+	}
+	if calibration := report.Shadow.Calibration; !calibration.Valid || calibration.Samples != 1 || calibration.SentinelExcluded != 1 || calibration.BinPolicy != "equal-width-10-v1" {
+		t.Fatalf("unexpected calibration evidence: %#v", calibration)
+	}
+	if report.Calibration.Applicable || report.Calibration.Reason == "" {
+		t.Fatalf("rule calibration must be unavailable: %#v", report.Calibration)
+	}
+	if report.ClassificationLatency.Total.WarmupIterations != defaultLatencyWarmupIterations || report.Shadow.TotalLatency.WarmupIterations != defaultLatencyWarmupIterations || report.ClassificationLatency.Total.BatchSize != defaultLatencyBatchSize || report.Shadow.TotalLatency.BatchSize != defaultLatencyBatchSize {
+		t.Fatalf("missing latency warm-up provenance: runtime=%#v shadow=%#v", report.ClassificationLatency.Total, report.Shadow.TotalLatency)
+	}
+	if report.ClassificationLatency.Difficulty.BatchSize != defaultDifficultyLatencyBatchSize || report.Shadow.DifficultyLatency.BatchSize != defaultDifficultyLatencyBatchSize {
+		t.Fatalf("missing difficulty-only latency batch provenance: runtime=%#v shadow=%#v", report.ClassificationLatency.Difficulty, report.Shadow.DifficultyLatency)
 	}
 
 	payload, err := marshalDifficultyReport(report, false)
@@ -227,6 +258,32 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 			t.Fatalf("shadow report must not include %s: %s", forbiddenField, output)
 		}
 	}
+}
+
+func TestSummarizeDifficultyCalibrationUsesFixedBins(t *testing.T) {
+	report := summarizeDifficultyCalibration([]difficultyCalibrationObservation{
+		{ExpectedCategory: routing.CategoryGeneral, Label: 0, Score: 0.2},
+		{ExpectedCategory: routing.CategoryCode, Label: 1, Score: 0.8},
+	}, 3)
+	if !report.Valid || report.Samples != 2 || report.SentinelExcluded != 3 || report.LogLoss != 0.223144 || report.BrierScore != 0.04 {
+		t.Fatalf("unexpected calibration summary: %#v", report)
+	}
+	if len(report.Bins) != 10 || report.Bins[2].Samples != 1 || report.Bins[8].Samples != 1 {
+		t.Fatalf("unexpected calibration bins: %#v", report.Bins)
+	}
+}
+
+func assertPromotionCheck(t *testing.T, gate difficultyPromotionGateReport, name string, wantPassed bool) {
+	t.Helper()
+	for _, check := range gate.Checks {
+		if check.Name == name {
+			if check.Passed != wantPassed {
+				t.Fatalf("promotion check %s passed=%v, want %v: %#v", name, check.Passed, wantPassed, check)
+			}
+			return
+		}
+	}
+	t.Fatalf("promotion check %s was not reported: %#v", name, gate)
 }
 
 func TestLoadDatasetHandlesUTF8BOMJSONFile(t *testing.T) {

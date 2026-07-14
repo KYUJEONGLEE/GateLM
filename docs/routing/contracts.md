@@ -36,6 +36,12 @@ Prompt
 
 공통 전처리는 한 번만 실행한다. 난이도 판정은 먼저 확정된 category를 반드시 참고하고, 해당 category의 난이도 feature만 선택적으로 계산한다. Prompt 길이는 보조 신호일 뿐 단독 판정 기준이 아니다. 기존 prompt 직접 분류 메서드는 compatibility wrapper일 뿐 제품 런타임과 신규 평가 코드의 표준 진입점이 아니다.
 
+### Request input boundary
+
+`/v1/chat/completions`는 모든 role의 `messages[].content`에 JSON string만 허용한다. Array형 content part, object, `null`, 누락 content와 이미지·오디오·파일 attachment는 문자열로 flatten하거나 추출하지 않으며 masking, routing, cache, provider 호출 전에 HTTP `400 invalid_request_error`로 거부한다. 이 text-only 제한은 별도 upstream 구현 backlog가 아니다. 향후 지원은 기존 요청을 암묵적으로 확장하지 않고 active 계약을 명시적으로 대체해야 한다.
+
+Masking 이후 라우팅 입력은 message role을 보존한다. `system | developer`의 string content는 request-local private instruction context이면서 분류용 instruction에 포함된다. `user`와 알 수 없는 role의 delimiter 없는 string content는 전체가 instruction이고, `assistant | tool | function` string content는 대화 context payload다. Raw role별 content와 분리 결과는 외부 surface에 노출하지 않는다.
+
 ### 2.1 Category
 
 허용 category는 정확히 다섯 개다.

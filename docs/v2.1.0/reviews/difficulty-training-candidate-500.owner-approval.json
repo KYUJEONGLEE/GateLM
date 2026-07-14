@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "gatelm.difficulty-training-promotion-evidence.v1",
+  "status": "owner_approved_training_eligible",
+  "approvedOn": "2026-07-14",
+  "approval": {
+    "scope": "all_500_records_and_all_prompt_families",
+    "basis": "explicit_dataset_owner_approval_in_current_codex_task",
+    "humanReviewerCount": 1,
+    "reviewerIdentityStored": false
+  },
+  "source": {
+    "datasetVersion": "difficulty_eval_2026_07_13_pilot_500_gpt_adjudicated_coverage_v1",
+    "datasetPath": "docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudicated-labels.jsonl",
+    "datasetSha256": "e12bf0fcb0aa9918ce3121f5ccee9856572135e87c813ff9fb9d1003ff10f4b4",
+    "promptsRemainSynthetic": true
+  },
+  "promotedDataset": {
+    "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
+    "datasetPath": "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl",
+    "datasetSha256": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "manifestPath": "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json",
+    "manifestSha256": "7e6e81a79741eb5f1b1aeec33dcd7cb92621bc2832feb57414e425157b51a6f3"
+  },
+  "minimumFamilyPolicy": {
+    "minimumFamilyPolicyStatus": "versioned",
+    "policyVersion": "difficulty-training-minimum-family-policy.2026-07-14.v1",
+    "minApprovedFamilies": 89,
+    "minFamiliesPerCategory": 15,
+    "minFamiliesPerCategoryDifficulty": 9,
+    "minFamiliesPerLanguage": 50,
+    "minFamiliesPerSlice": 1,
+    "thresholdBasis": "observed_minimums_of_owner_approved_candidate",
+    "requiredLanguages": [
+      "ko",
+      "en",
+      "mixed"
+    ],
+    "requiredSlices": [
+      "negation",
+      "indirect_expression",
+      "synonym",
+      "short_complex",
+      "long_simple",
+      "payload_contamination",
+      "korean",
+      "english",
+      "mixed_language",
+      "category_confusion",
+      "ood_terminology"
+    ]
+  },
+  "partitions": {
+    "train": {
+      "families": 51,
+      "records": 300
+    },
+    "calibration": {
+      "families": 20,
+      "records": 100
+    },
+    "holdout": {
+      "families": 18,
+      "records": 100
+    }
+  },
+  "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
+  "splitSeed": 20260715,
+  "gates": {
+    "allRecordsHumanApproved": true,
+    "sourceProvenancePreserved": true,
+    "requiredSliceCoverageComplete": true,
+    "familyDisjointPartitions": true,
+    "minimumFamilyPolicySatisfied": true,
+    "trainingEligible": true
+  }
+}

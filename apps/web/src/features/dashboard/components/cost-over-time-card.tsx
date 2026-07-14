@@ -25,6 +25,7 @@ type CostOverTimeCardProps = {
   filters: CostOverTimeCardFilters;
   initialSummary?: CostOverTimeSummary;
   locale: Locale;
+  pollingEnabled?: boolean;
   rangeLabel: string;
 };
 
@@ -59,6 +60,7 @@ export function CostOverTimeCard({
   filters,
   initialSummary,
   locale,
+  pollingEnabled = true,
   rangeLabel
 }: CostOverTimeCardProps) {
   const text = costOverTimeText[locale];
@@ -97,7 +99,13 @@ export function CostOverTimeCard({
   const [status, setStatus] = useState<CostOverTimeStatus>(normalizedInitialSummary ? "success" : "loading");
   const latestSummaryRef = useRef<CostOverTimeSummary | undefined>(normalizedInitialSummary);
   const latestSummarySignatureRef = useRef(getCostOverTimeSummarySignature(normalizedInitialSummary));
-  const hasCostData = summary?.points.some((point) => point.spendUsd > 0) ?? false;
+  const displayedSummary = pollingEnabled ? summary : normalizedInitialSummary;
+  const displayedStatus = pollingEnabled
+    ? status
+    : displayedSummary
+      ? "success"
+      : "loading";
+  const hasCostData = displayedSummary?.points.some((point) => point.spendUsd > 0) ?? false;
 
   useEffect(() => {
     latestSummaryRef.current = summary;
@@ -112,6 +120,10 @@ export function CostOverTimeCard({
   }, [normalizedInitialSummary, queryString]);
 
   useEffect(() => {
+    if (!pollingEnabled) {
+      return;
+    }
+
     const controller = new AbortController();
     let cancelled = false;
     let failureCount = 0;
@@ -227,7 +239,7 @@ export function CostOverTimeCard({
       controller.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [normalizedInitialSummary, queryString]);
+  }, [normalizedInitialSummary, pollingEnabled, queryString]);
 
   return (
     <section className="dashboard-cost-over-time-panel" aria-label={text.aria}>
@@ -236,22 +248,22 @@ export function CostOverTimeCard({
           <h2>{text.title}</h2>
           <p>{text.subtitle}</p>
         </div>
-        <span>{formatCostGranularity(summary, locale)}</span>
+        <span>{formatCostGranularity(displayedSummary, locale)}</span>
       </div>
       <div className="dashboard-cost-over-time-legend">
         <span data-kind="spend">{text.spend}</span>
-        <span data-kind="average">{text.average}: {formatUsd(summary?.averageSpendUsd ?? 0)}</span>
+        <span data-kind="average">{text.average}: {formatUsd(displayedSummary?.averageSpendUsd ?? 0)}</span>
         <strong>{rangeLabel}</strong>
       </div>
-      {status === "loading" && !summary ? (
+      {displayedStatus === "loading" && !displayedSummary ? (
         <div className="dashboard-cost-over-time-skeleton" aria-label={text.loading} />
-      ) : status === "error" && !summary ? (
+      ) : displayedStatus === "error" && !displayedSummary ? (
         <div className="dashboard-cost-over-time-state">{text.error}</div>
-      ) : hasCostData && summary ? (
+      ) : hasCostData && displayedSummary ? (
         <DashboardCostOverTimeEChart
           ariaLabel={text.chartAria}
-          averageSpendUsd={summary.averageSpendUsd}
-          points={summary.points}
+          averageSpendUsd={displayedSummary.averageSpendUsd}
+          points={displayedSummary.points}
         />
       ) : (
         <div className="dashboard-cost-over-time-state">{text.empty}</div>
