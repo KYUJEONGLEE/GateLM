@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 
 import { COMPLETION_EVENT_SCHEMA } from './completion-event-schema';
 import type { CompletionFinalEvent } from './execution.types';
+import { canonicalizeJson, type JsonValue } from './jcs';
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateEvent = ajv.compile(COMPLETION_EVENT_SCHEMA);
@@ -149,7 +150,7 @@ export class StrictCompletionStreamParser {
       throw new InvalidCompletionStream();
     }
     const fingerprint = createHash('sha256')
-      .update(JSON.stringify(event), 'utf8')
+      .update(canonicalizeJson(event as unknown as JsonValue), 'utf8')
       .digest('base64url');
     if (this.finalEvent) throw new InvalidCompletionStream();
     if (event.sequence <= this.lastSequence) {

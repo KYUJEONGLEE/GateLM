@@ -40,6 +40,7 @@
               }
             }
           },
+          "400": { "$ref": "#/components/responses/InvalidTenantId" },
           "401": { "$ref": "#/components/responses/ServiceAuthenticationRequired" },
           "503": { "$ref": "#/components/responses/RuntimeUnavailable" }
         }
@@ -86,7 +87,7 @@
             "additionalProperties": false,
             "required": ["code", "message", "details", "requestId", "retryable"],
             "properties": {
-              "code": { "type": "string", "enum": ["CHAT_AUTH_REQUIRED", "CHAT_RUNTIME_UNAVAILABLE"] },
+              "code": { "type": "string", "enum": ["VALIDATION_ERROR", "CHAT_AUTH_REQUIRED", "CHAT_RUNTIME_UNAVAILABLE"] },
               "message": { "type": "string", "minLength": 1, "maxLength": 256 },
               "details": { "type": "null" },
               "requestId": { "type": ["string", "null"] },
@@ -97,6 +98,11 @@
       }
     },
     "responses": {
+      "InvalidTenantId": {
+        "description": "The tenantId path parameter is not a UUID.",
+        "x-error-codes": ["VALIDATION_ERROR"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
       "ServiceAuthenticationRequired": {
         "description": "Dedicated Tenant Chat service token is missing or invalid.",
         "x-error-codes": ["CHAT_AUTH_REQUIRED"],

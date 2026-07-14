@@ -1,4 +1,11 @@
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request = require('supertest');
+
+import { HttpExceptionFilter } from '../../common/filters/http-exception.filter';
+import { TenantChatServiceAuthGuard } from '../tenant-chat-identity/tenant-chat-service-auth.guard';
 import { TenantChatRuntimeController } from './tenant-chat-runtime.controller';
+import { TenantChatRuntimeService } from './tenant-chat-runtime.service';
 
 const snapshot = {
   tenantId: '00000000-0000-4000-8000-000000000001',
@@ -40,4 +47,30 @@ describe('TenantChatRuntimeController', () => {
       status: 503,
     });
   });
+
+  it('rejects a malformed tenant id before querying the runtime service', async () => {
+    const getActiveSnapshot = jest.fn();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [TenantChatRuntimeController],
+      providers: [{ provide: TenantChatRuntimeService, useValue: { getActiveSnapshot } }],
+    })
+      .overrideGuard(TenantChatServiceAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    const app: INestApplication = moduleRef.createNestApplication();
+    app.useGlobalFilters(new HttpExceptionFilter());
+    await app.init();
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/internal/v1/tenant-chat/runtime/snapshots/not-a-uuid/active')
+        .expect(400);
+      expect(response.body).toMatchObject({
+        error: { code: 'VALIDATION_ERROR', retryable: false },
+      });
+      expect(getActiveSnapshot).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  }, 15_000);
 });

@@ -1,4 +1,5 @@
 import {
+  CompletionStreamDisconnected,
   InvalidCompletionStream,
   StrictCompletionStreamParser,
   TerminalReplayContentUnavailable,
@@ -39,6 +40,27 @@ describe('StrictCompletionStreamParser', () => {
     const parser = new StrictCompletionStreamParser(requestId, turnId, 128, 1024 * 1024);
     await expect(parser.consume(stream([frame(delta(1, 'x'.repeat(200)))]), false))
       .rejects.toBeInstanceOf(InvalidCompletionStream);
+  });
+
+  it('accepts a semantically identical replay event with reordered JSON keys', async () => {
+    const parser = new StrictCompletionStreamParser(requestId, turnId, 64 * 1024, 1024 * 1024);
+    await expect(parser.consume(stream([frame(delta(1, 'stable'))]), false))
+      .rejects.toBeInstanceOf(CompletionStreamDisconnected);
+
+    const reorderedDelta = {
+      delta: 'stable',
+      sequence: 1,
+      turnId,
+      requestId,
+      schemaVersion: 1,
+      type: 'tenant_chat.delta',
+    };
+    await parser.consume(
+      stream([frame(reorderedDelta), frame({ ...final(2), replayed: true })]),
+      true,
+    );
+
+    expect(parser.finish()).toMatchObject({ assistantContent: 'stable', final: { sequence: 2 } });
   });
 });
 

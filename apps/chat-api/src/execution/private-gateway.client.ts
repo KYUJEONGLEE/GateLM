@@ -317,7 +317,10 @@ async function discardLimited(response: Response, maximum: number): Promise<void
 
 async function readLimited(response: Response, maximum: number): Promise<string> {
   const length = Number(response.headers.get('content-length') ?? '0');
-  if (Number.isFinite(length) && length > maximum) throw invalidResponse();
+  if (Number.isFinite(length) && length > maximum) {
+    await response.body?.cancel().catch(() => undefined);
+    throw invalidResponse();
+  }
   if (!response.body) return '';
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -328,7 +331,10 @@ async function readLimited(response: Response, maximum: number): Promise<string>
       if (done) break;
       if (!value) continue;
       size += value.byteLength;
-      if (size > maximum) throw invalidResponse();
+      if (size > maximum) {
+        await reader.cancel().catch(() => undefined);
+        throw invalidResponse();
+      }
       chunks.push(value);
     }
   } finally {

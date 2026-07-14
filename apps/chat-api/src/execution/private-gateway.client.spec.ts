@@ -106,6 +106,25 @@ describe('PrivateGatewayClient', () => {
     await expect(client(signer).cancel(handle)).rejects.toMatchObject({ code: 'CHAT_ADMISSION_EXPIRED' });
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it('cancels an oversized streaming JSON response before rejecting it', async () => {
+    const cancel = jest.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Buffer.alloc(70_000, 'x'));
+      },
+      cancel,
+    });
+    global.fetch = jest.fn().mockResolvedValue(new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch;
+
+    await expect(client(signerMock()).admit(seed)).rejects.toMatchObject({
+      code: 'CHAT_PRIVATE_RESPONSE_INVALID',
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
 });
 
 function client(signer: ReturnType<typeof signerMock>) {

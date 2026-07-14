@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
 
@@ -28,7 +29,7 @@ export class TenantChatRuntimeController {
 
   @Get(':tenantId/active')
   async activeSnapshot(
-    @Param('tenantId') tenantId: string,
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
   ): Promise<DataEnvelope<TenantChatRuntimeSnapshotMetadata>> {
     try {
       const snapshot = await this.service.getActiveSnapshot(tenantId);
