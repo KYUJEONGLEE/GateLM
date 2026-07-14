@@ -120,6 +120,9 @@ export function unwrapTenantKey(
   tenantId: string,
   contentKeyVersion: number,
 ): Buffer {
+  let updated: Buffer | undefined;
+  let finalized: Buffer | undefined;
+  let key: Buffer | undefined;
   try {
     assertKey(wrappingKey);
     if (
@@ -136,11 +139,17 @@ export function unwrapTenantKey(
       wrappingAadBytes(tenantId, contentKeyVersion, encrypted.wrappingKeyVersion),
     );
     decipher.setAuthTag(encrypted.wrapTag);
-    const key = Buffer.concat([decipher.update(encrypted.wrappedKey), decipher.final()]);
+    updated = decipher.update(encrypted.wrappedKey);
+    finalized = decipher.final();
+    key = Buffer.concat([updated, finalized]);
     assertKey(key);
     return key;
   } catch {
+    key?.fill(0);
     throw new ContentIntegrityError();
+  } finally {
+    updated?.fill(0);
+    finalized?.fill(0);
   }
 }
 

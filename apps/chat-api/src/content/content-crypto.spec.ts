@@ -115,4 +115,31 @@ describe('Tenant Chat content crypto', () => {
       newWrapping.fill(0);
     }
   });
+
+  it('clears temporary key material after unwrap success and authentication failure', () => {
+    const tenantKey = newTenantKey();
+    const wrappingKey = randomBytes(32);
+    const wrongWrappingKey = randomBytes(32);
+    const envelope = wrapTenantKey(tenantKey, wrappingKey, aad.tenantId, 1, 1);
+    const fillSpy = jest.spyOn(Buffer.prototype, 'fill');
+    let unwrapped: Buffer | undefined;
+
+    try {
+      unwrapped = unwrapTenantKey(envelope, wrappingKey, aad.tenantId, 1);
+      expect(unwrapped.equals(tenantKey)).toBe(true);
+      expect(fillSpy).toHaveBeenCalledWith(0);
+
+      fillSpy.mockClear();
+      expect(() => unwrapTenantKey(envelope, wrongWrappingKey, aad.tenantId, 1)).toThrow(
+        ContentIntegrityError,
+      );
+      expect(fillSpy).toHaveBeenCalledWith(0);
+    } finally {
+      fillSpy.mockRestore();
+      unwrapped?.fill(0);
+      tenantKey.fill(0);
+      wrappingKey.fill(0);
+      wrongWrappingKey.fill(0);
+    }
+  });
 });
