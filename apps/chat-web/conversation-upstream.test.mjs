@@ -127,3 +127,15 @@ test('expired access refreshes once and retries the identical idempotent request
   assert.equal(calls[0].body, requestBody);
   assert.equal(calls[2].body, requestBody);
 });
+
+test('browser fetch keeps the global receiver instead of the retry options object', async () => {
+  const response = await fetchWithSessionRefresh('/api/tenant-chat/auth/session', undefined, {
+    fetchImpl: function fetchImpl() {
+      assert.equal(this, globalThis);
+      return Promise.resolve(Response.json({ state: 'authenticated' }));
+    },
+    prepare: (value) => value,
+  });
+
+  assert.equal(response.status, 200);
+});
