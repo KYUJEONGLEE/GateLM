@@ -70,6 +70,7 @@ export function RequestDetailDrawer({
       <DialogContent
         backdropClassName="request-detail-drawer-backdrop"
         className="request-detail-drawer"
+        positioning="custom"
         showClose={false}
       >
         <div className="request-detail-drawer-header">

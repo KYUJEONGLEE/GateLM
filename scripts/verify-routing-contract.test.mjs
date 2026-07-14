@@ -19,6 +19,76 @@ test("active routing contract accepts one complete 5 x 2 v2 policy", () => {
   }
 });
 
+test("active routing contract rejects more than one fallback", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-fallback-count-"));
+  try {
+    const policy = validPolicy();
+    policy.routes.general.simple.modelRefs = ["mock-balanced", "provider:fallback-a", "provider:fallback-b"];
+    writeContractFiles(rootDir, validSchema(), policy);
+
+    const failures = verifyRoutingContract({ rootDir, verifyDocumentation: false });
+    assert.ok(failures.some((failure) => failure.includes("at most one fallback")));
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing contract rejects category-specific primary models", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-primary-profile-"));
+  try {
+    const policy = validPolicy();
+    policy.routes.code.simple.modelRefs = ["provider:code-simple"];
+    writeContractFiles(rootDir, validSchema(), policy);
+
+    const failures = verifyRoutingContract({ rootDir, verifyDocumentation: false });
+    assert.ok(failures.some((failure) => failure.includes("all simple cells must share")));
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing contract rejects a fallback that is not global", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-global-fallback-"));
+  try {
+    const policy = validPolicy();
+    policy.routes.general.simple.modelRefs = ["mock-balanced", "provider:fallback"];
+    writeContractFiles(rootDir, validSchema(), policy);
+
+    const failures = verifyRoutingContract({ rootDir, verifyDocumentation: false });
+    assert.ok(failures.some((failure) => failure.includes("fallback must be present in all cells")));
+    assert.equal(
+      failures.some((failure) => failure.includes("every cell must share the same optional fallback")),
+      false,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("active routing contract rejects different fallback models without reporting a missing fallback", () => {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-fallback-profile-"));
+  try {
+    const policy = validPolicy();
+    for (const route of Object.values(policy.routes)) {
+      route.simple.modelRefs.push("provider:fallback");
+      route.complex.modelRefs.push("provider:fallback");
+    }
+    policy.routes.code.simple.modelRefs[1] = "provider:different-fallback";
+    writeContractFiles(rootDir, validSchema(), policy);
+
+    const failures = verifyRoutingContract({ rootDir, verifyDocumentation: false });
+    assert.ok(
+      failures.some((failure) => failure.includes("every cell must share the same optional fallback")),
+    );
+    assert.equal(
+      failures.some((failure) => failure.includes("fallback must be present in all cells")),
+      false,
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("active routing documentation declares the feature-based classification pipeline", () => {
   const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-docs-"));
   try {
@@ -272,7 +342,17 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
   ];
   const documents = {
     "docs/routing/README.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md\ndifficulty-logistic-training.md",
-    "docs/routing/contracts.md": "classification-pipeline.md\ndifficulty-feature-vector-v1.md\ndifficulty-threshold-v1 = 0.45\nComplexityScore >= 0.45",
+    "docs/routing/contracts.md": [
+      "classification-pipeline.md",
+      "difficulty-feature-vector-v1.md",
+      "difficulty-threshold-v1 = 0.45",
+      "ComplexityScore >= 0.45",
+      "Simple model",
+      "Complex model",
+      "Fallback model",
+      "default/balanced",
+      "read/execution compatibility",
+    ].join("\n"),
     "docs/routing/classification-pipeline.md": [
       "Active routing target contract",
       "ExtractPromptFeatures",
@@ -381,6 +461,8 @@ function validSchema() {
       modelRefs: {
         type: "array",
         minItems: 1,
+        maxItems: 2,
+        uniqueItems: true,
         items: { type: "string", minLength: 1 },
       },
     },

@@ -74,7 +74,7 @@ export async function getTenantChatLiveRequests(
         row.requestedModel.trim().toLowerCase() === filters.model.trim().toLowerCase()
     )
     .filter((row) => !filters.status || row.status === filters.status)
-    .slice(0, 5);
+    .slice(0, 9);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -108,7 +108,7 @@ export function mergeLiveRequestPayloads(
     projectNameSource: projectApplication.projectNameSource,
     rows: [...projectApplication.rows, ...tenantChat.rows]
       .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
-      .slice(0, 5)
+      .slice(0, 9)
   };
 }
 

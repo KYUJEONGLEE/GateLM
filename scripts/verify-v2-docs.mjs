@@ -37,6 +37,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/contracts.md",
   "docs/tenant-chat/execution-contract.md",
   "docs/tenant-chat/openapi/chat-auth.openapi.json",
+  "docs/tenant-chat/openapi/private-control-plane.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
   "docs/tenant-chat/db/tenant-chat-usage.sql",
   "docs/tenant-chat/schemas/*.schema.json",
@@ -626,6 +627,7 @@ function sha256Base64Url(value) {
 
 function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
+  const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
@@ -655,6 +657,33 @@ function assertTenantChatExecutableContract() {
     }
   }
 
+  const controlPlaneOpenApi = readJson(controlPlaneOpenApiPath);
+  if (controlPlaneOpenApi) {
+    if (controlPlaneOpenApi.openapi !== "3.1.0") {
+      fail(`${controlPlaneOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+    const operation = controlPlaneOpenApi.paths?.[
+      "/internal/v1/tenant-chat/runtime/snapshots/{tenantId}/active"
+    ]?.get;
+    if (!operation?.responses?.["200"] || !operation?.responses?.["401"] || !operation?.responses?.["503"]) {
+      fail(`${controlPlaneOpenApiPath}: active snapshot metadata reader responses are incomplete`);
+    }
+    const metadata = controlPlaneOpenApi.components?.schemas?.ActiveRuntimeSnapshotMetadata;
+    const required = new Set(metadata?.required ?? []);
+    for (const field of [
+      "tenantId",
+      "version",
+      "digest",
+      "policyVersion",
+      "employeeNoticeVersion",
+      "pricingVersion",
+    ]) {
+      if (!required.has(field)) {
+        fail(`${controlPlaneOpenApiPath}: metadata must require ${field}`);
+      }
+    }
+  }
+
   const openApi = readJson(openApiPath);
   if (openApi) {
     if (openApi.openapi !== "3.1.0") {
@@ -665,6 +694,7 @@ function assertTenantChatExecutableContract() {
       "/internal/v1/tenant-chat/admissions": ["200", "201", "400", "401", "409", "429", "503"],
       "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
       "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
+      "/internal/v1/tenant-chat/usage-receipts": ["200", "400", "401", "409", "503"],
     };
     const errorStatus = new Map([
       ["CHAT_INVALID_REQUEST", "400"],
@@ -674,6 +704,7 @@ function assertTenantChatExecutableContract() {
       ["CHAT_TENANT_DISABLED", "403"],
       ["CHAT_MEMBERSHIP_DISABLED", "403"],
       ["CHAT_EMPLOYEE_DISABLED", "403"],
+      ["CHAT_SAFETY_BLOCKED", "403"],
       ["CHAT_QUOTA_HARD_LIMIT", "403"],
       ["CHAT_BUDGET_HARD_LIMIT", "403"],
       ["CHAT_POLICY_ACK_REQUIRED", "409"],
@@ -950,6 +981,7 @@ function assertTenantChatExecutableContract() {
 
   for (const expectedText of [
     "openapi/chat-auth.openapi.json",
+    "openapi/private-control-plane.openapi.json",
     "openapi/private-gateway.openapi.json",
     "db/tenant-chat-usage.sql",
     "vectors/binding-digest-vectors.json",

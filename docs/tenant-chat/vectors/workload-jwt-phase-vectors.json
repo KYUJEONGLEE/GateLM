@@ -49,7 +49,7 @@
       "sessionVersion": 3,
       "snapshotVersion": 12,
       "snapshotDigest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
-      "bindingDigest": "hmac-sha256:wip0OBmQCUFausq7QgVoOecQB22pauanKV0FDKS3Zlc",
+      "bindingDigest": "hmac-sha256:9q5GSRXGlGvD0AG0P367oxDQVoYsLusfPsRQpxOYZh0",
       "admissionId": "admission_fixture_001"
     },
     {

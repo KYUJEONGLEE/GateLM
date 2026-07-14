@@ -128,7 +128,7 @@ func TestExecutorUsesExactTenantLevelProviderConnection(t *testing.T) {
 		Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "안녕하세요"}}, Stream: true,
 	}
 
-	got, err := executor.OpenStream(context.Background(), requestContext, tenantchat.SelectedRoute{
+	got, startStatus, err := executor.OpenStream(context.Background(), requestContext, tenantchat.SelectedRoute{
 		ProviderID: "connection-primary", ModelKey: "gpt-test",
 	}, input)
 	if err != nil {
@@ -136,6 +136,9 @@ func TestExecutorUsesExactTenantLevelProviderConnection(t *testing.T) {
 	}
 	if got != stream {
 		t.Fatal("executor returned a different provider stream")
+	}
+	if startStatus != tenantchat.ProviderCallStartedOrUnknown {
+		t.Fatalf("unexpected provider start status: %s", startStatus)
 	}
 	if len(queryer.args) != 2 || queryer.args[0] != "tenant-primary" || queryer.args[1] != "connection-primary" {
 		t.Fatalf("provider lookup is not tenant/provider bound: %#v", queryer.args)
@@ -165,7 +168,7 @@ func TestExecutorDoesNotFallBackToAnotherProviderConnection(t *testing.T) {
 		provider.NewRegistry("tenant-test", &executorAdapter{}),
 		nil,
 	)
-	_, err := executor.OpenStream(
+	_, startStatus, err := executor.OpenStream(
 		context.Background(),
 		tenantchat.RequestContext{
 			ExecutionScope: tenantchat.ExecutionScope{TenantID: "tenant-primary"},
@@ -176,6 +179,33 @@ func TestExecutorDoesNotFallBackToAnotherProviderConnection(t *testing.T) {
 	)
 	if !errors.Is(err, tenantchat.ErrNoEligibleRoute) {
 		t.Fatalf("want no eligible route, got %v", err)
+	}
+	if startStatus != tenantchat.ProviderCallNotStarted {
+		t.Fatalf("unexpected provider start status: %s", startStatus)
+	}
+}
+
+func TestExecutorTreatsNilProviderStreamAsStartedOrUnknownFailure(t *testing.T) {
+	executor := NewExecutor(
+		&executorQueryer{row: executorRow{
+			id: "connection-primary", providerName: "mock", displayName: "Synthetic Mock",
+			baseURL: "http://127.0.0.1:18090", timeoutMs: 30_000, resolver: "none",
+			providerConfig: []byte(`{"adapterType":"tenant-test","requestFormat":"mock_chat_completions"}`),
+		}},
+		provider.NewRegistry("tenant-test", &executorAdapter{}),
+		nil,
+	)
+	stream, startStatus, err := executor.OpenStream(
+		context.Background(),
+		tenantchat.RequestContext{
+			RequestID: "request_nil_stream", ExecutionScope: tenantchat.ExecutionScope{TenantID: "tenant-primary"},
+			UsageIntent: &tenantchat.UsageIntent{MaxOutputTokens: 32},
+		},
+		tenantchat.SelectedRoute{ProviderID: "connection-primary", ModelKey: "mock-test"},
+		tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "synthetic"}}, Stream: true},
+	)
+	if stream != nil || err == nil || startStatus != tenantchat.ProviderCallStartedOrUnknown {
+		t.Fatalf("nil provider stream must be conservative: stream=%v status=%s err=%v", stream, startStatus, err)
 	}
 }
 

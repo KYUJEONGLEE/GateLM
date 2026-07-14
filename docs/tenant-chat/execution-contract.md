@@ -11,6 +11,7 @@ revision: `tenant-chat/v1`
 | 범위 | 기준 |
 |---|---|
 | Browser/session auth wire | [`openapi/chat-auth.openapi.json`](./openapi/chat-auth.openapi.json) |
+| Private Control Plane metadata wire | [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json) |
 | Private Gateway wire contract | [`openapi/private-gateway.openapi.json`](./openapi/private-gateway.openapi.json) |
 | Usage DB record | [`db/tenant-chat-usage.sql`](./db/tenant-chat-usage.sql) |
 | RuntimeSnapshot | [`schemas/tenant-runtime-snapshot.schema.json`](./schemas/tenant-runtime-snapshot.schema.json) |
@@ -19,13 +20,19 @@ revision: `tenant-chat/v1`
 | SSE | [`schemas/completion-sse-event.schema.json`](./schemas/completion-sse-event.schema.json) |
 | Usage outbox payload | [`schemas/usage-settlement-event.schema.json`](./schemas/usage-settlement-event.schema.json) |
 | Pre-ledger terminal payload | [`schemas/invocation-terminal-event.schema.json`](./schemas/invocation-terminal-event.schema.json) |
+| Mixed/late usage outbox payload | [`schemas/usage-settlement-event-v2.schema.json`](./schemas/usage-settlement-event-v2.schema.json) |
+| Pre-ledger terminal payload v2 | [`schemas/invocation-terminal-event-v2.schema.json`](./schemas/invocation-terminal-event-v2.schema.json) |
 | Binding vectors | [`vectors/binding-digest-vectors.json`](./vectors/binding-digest-vectors.json) |
 | Event transition vectors | [`vectors/usage-event-vectors.json`](./vectors/usage-event-vectors.json) |
+| Mixed/late event vectors | [`vectors/usage-event-v2-vectors.json`](./vectors/usage-event-v2-vectors.json) |
 
 ## 2. API idempotency와 retry
 
 - Chat API는 logical turn에 `turnId`, Gateway execution에 `requestId`, logical retry에 `idempotencyKey`를 한 번 생성한다.
 - transport retry는 세 값을 유지하고 새 `jti`, `iat`, `nbf`, `exp`로 JWT만 다시 발급한다.
+- Chat API transport는 최대 2회 시도한다. response header 전 network/timeout 또는 짧은 `503`만 한 번 재시도하고, `4xx`, `429`, Provider terminal 오류는 재시도하지 않는다.
+- completion stream이 final 전에 비정상 종료되면 같은 실행 ID로 한 번만 reattach한다. reattach도 새 JWT/JTI를 사용한다.
+- caller abort는 transport failure로 재시도하거나 reattach하지 않는다. Chat API private client는 내부 `499 CHAT_REQUEST_CANCELLED`로 즉시 중단하고 execution bridge가 admission/Provider cancel을 best effort로 시도한다.
 - 같은 `(tenantId,userId,idempotencyKey)`와 같은 binding은 provider를 다시 호출하지 않는다.
 - admission 최초 생성은 `201`, 같은 binding replay는 `200`과 `replayed=true`다.
 - cancel 최초·동일 replay는 모두 `200`이다. 이미 consume/expire된 admission의 첫 cancel은 `409 CHAT_ADMISSION_EXPIRED`다.
@@ -37,12 +44,24 @@ revision: `tenant-chat/v1`
 ## 3. SSE wire 규칙
 
 - response는 UTF-8 `text/event-stream`이며 각 event는 `id`, `event`, 단일-line JSON `data`와 빈 줄로 끝난다.
+- stream 시작·event 사이·종료의 field 없는 빈 event block은 무시한다. 공백, comment, unknown/duplicate field가 있는 frame은 빈 event로 취급하지 않고 거부한다.
 - `id`는 `<requestId>:<sequence>`다. sequence는 request별 1부터 단조 증가한다.
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
+- DOC-013이 해결되기 전 interim 규칙으로, terminal replay가 sequence 1부터 assistant content를 재구성할 수 없으면 Chat API는 성공 content를 만들지 않고 내부 `TerminalReplayContentUnavailable`로 fail closed한다. encrypted final handoff 또는 복구 불변조건은 후속 EncryptedChatStore contract에서 확정한다.
 - client disconnect는 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
+- Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
+- Chat API `readyz`는 DB와 workload signing/binding/private Gateway 설정을 함께 검사한다. key file, active `kid`, matching HMAC key 또는 Gateway URL이 없거나 잘못되면 `healthz`는 유지하되 readiness와 execution을 `503`으로 닫는다.
+- workload signing/binding credential은 최초 검증 성공 전까지 `readyz`와 execution 호출에서 fail closed로 다시 로드하며, 성공하면 private `KeyObject`, active `kid`, HMAC key만 프로세스 수명 동안 로컬 메모리에 캐시한다. 기존 프로세스는 재시작 전까지 캐시한 key를 계속 사용한다.
+- signing/binding key 변경은 새 `kid`를 포함한 Chat API rolling restart로 적용한다. 실행 중 file watch, TTL/mtime polling, Redis cache 또는 hot reload는 이 계약에 포함하지 않는다.
+
+## 3.1 Active RuntimeSnapshot metadata reader
+
+- Chat API는 admission 전에 service token으로 보호된 `GET /internal/v1/tenant-chat/runtime/snapshots/{tenantId}/active`를 호출한다. wire shape는 [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json)을 따른다.
+- Control Plane은 기존 active pointer와 `TenantChatRuntimeService`를 재사용하며 `tenantId`, `version`, `digest`, `policyVersion`, `employeeNoticeVersion`, `pricingVersion`만 반환한다. snapshot body, Provider credential 또는 policy detail을 반환하지 않는다.
+- active snapshot이 없거나 tenant가 다르거나 저장 body가 active schema에 맞지 않으면 `503 CHAT_RUNTIME_UNAVAILABLE`로 fail closed한다. Chat API는 이 metadata와 authoritative entitlement를 admission handle에 immutable하게 pin한다.
 
 ## 4. `bindingDigest`
 
@@ -55,7 +74,7 @@ revision: `tenant-chat/v1`
 
 ### 4.2 Binding object
 
-아래 필드만 포함한다. `admissionId`가 없는 admission은 JSON `null`을 넣는다.
+아래 필드만 포함한다. `admissionId`가 없는 admission은 JSON `null`을 넣고 `usageIntent`는 completion phase에만 포함한다.
 
 ```json
 {
@@ -67,7 +86,13 @@ revision: `tenant-chat/v1`
   "requestId": "<opaque>",
   "snapshotDigest": "sha256:<base64url>",
   "snapshotVersion": 1,
-  "turnId": "<opaque>"
+  "turnId": "<opaque>",
+  "usageIntent": {
+    "estimatedInputTokens": 1,
+    "maxOutputTokens": 1,
+    "requestedTier": "standard",
+    "cacheStrategy": "exact"
+  }
 }
 ```
 
@@ -133,6 +158,9 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 - Gateway는 DB body를 다시 digest하고 요청의 version/digest와 exact match할 때만 실행한다.
 - pricing은 snapshot에 `version`, `digest`, `effectiveAt`, USD micro-unit 단가를 immutable하게 pin한다. pricing digest는 pricing object에서 `digest`를 제거한 뒤 같은 RFC 8785/SHA-256/base64url 규칙으로 계산한다.
 - attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
+- `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. safety는 cache/routing/Provider보다 먼저 실행하고 redacted input만 다음 단계에 전달한다.
+- `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
+- `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
 
 예약 계산은 integer arithmetic만 사용한다.
 
@@ -158,18 +186,24 @@ Reservation transition:
 ```text
 admitted -> reserved -> settled
                     -> released
+                    -> pending_unconfirmed(reserved + usage_pending_at)
                     -> unconfirmed
 ```
 
 - top-up은 `reserved` self-transition이며 ledger version을 증가시킨다.
+- `pending_unconfirmed`은 별도 reservation state가 아니라 unresolved attempt의 `usage_quality`와 reservation의 `usage_pending_at`으로 표현한다. 이 동안 reserved balance와 ledger version은 유지한다.
+- Gateway reconciliation worker는 `usage_pending_at <= now()-15m` row를 bounded batch와 `FOR UPDATE SKIP LOCKED`로 claim한다.
 - terminal state에서 다른 terminal state로 전이하지 않는다. late provider usage는 `unconfirmed`의 incident exposure를 역분개하고 original period/pricing으로 별도 exactly-once settle한다.
 - writer는 period rows와 reservation을 lock하고 expected `ledgerVersion` CAS, ledger insert, outbox insert를 한 transaction에서 수행한다.
 - provider attempt와 ledger row는 `(reservationId,requestId)` 복합 FK로 reservation identity를 검증한다. 두 ID를 각각 다른 reservation에 연결하는 독립 FK는 허용하지 않는다.
 - outbox idempotency key는 `(aggregateId=requestId,eventType,eventVersion=ledgerVersion)`다.
 - consumer는 version이 현재 이하이면 duplicate로 no-op한다. 정확히 `current+1`만 적용한다.
 - version gap이면 뒤 event를 적용하지 않고 aggregate replay를 요청한다. 재시도 후에도 gap이면 DLQ/incident로 보내며 quota correctness source에는 영향이 없다.
-- event별 signed delta 조건은 schema와 `usage-event-vectors.json`을 따른다.
+- v1 event 의미는 변경하지 않는다. mixed confirmed/unconfirmed deadline transition과 late negative unconfirmed delta만 schemaVersion 2를 사용하며 signed delta 조건은 v2 schema/vector를 따른다.
+- projector는 일반 terminal event를 snapshot 값으로 투영하고, `schemaVersion=2`, `eventType=usage_settled`, `lateUsage=true`에 한해 기존 confirmed 합계에 delta를 누적한다.
 - ledger 이전 rate/concurrency/policy/runtime block은 `invocation_terminal`을 admission transaction의 outbox에 기록한다. content와 usage delta는 없으며 Dashboard projector만 소비한다.
+
+Transaction 경계는 `BeginExecution`(admission consume, period reservation, reservation, primary attempt, `usage_reserved` ledger/outbox), `BeginFallback`(이전 attempt 결과, fallback top-up, fallback attempt), terminal/reconciliation transaction으로 나눈다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
 
 ## 8. 구현 소유권
 

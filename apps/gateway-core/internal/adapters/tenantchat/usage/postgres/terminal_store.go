@@ -25,8 +25,11 @@ func (s *ReservationStore) ReadTerminal(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err = readSettlement(ctx, tx, requestContext, reservationID)
-	if err != nil || result.RequestID != requestContext.RequestID || result.State == "reserved" {
+	if err != nil || result.RequestID != requestContext.RequestID {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if result.State == "reserved" {
+		return s.readPendingTerminal(ctx, tx, requestContext, reservationID)
 	}
 	attempts, _, _, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
 	if err != nil {
@@ -43,6 +46,8 @@ func (s *ReservationStore) FinalizeReleased(
 	reservationID string,
 	terminalOutcome string,
 ) (result tenantchat.UsageSettlement, err error) {
+	started := time.Now()
+	defer s.observeTransaction("finalize_released", started)
 	if s == nil || s.pool == nil || !validTerminalOutcome(terminalOutcome) {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -112,6 +117,104 @@ func (s *ReservationStore) FinalizeReleased(
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "released",
 		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+	}, nil
+}
+
+func (s *ReservationStore) FinalizePreCall(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	attemptNo int,
+	terminalOutcome string,
+) (result tenantchat.UsageSettlement, err error) {
+	started := time.Now()
+	defer s.observeTransaction("finalize_pre_call", started)
+	if s == nil || s.pool == nil || attemptNo < 1 || attemptNo > 4 ||
+		(terminalOutcome != "rate_limited" && terminalOutcome != "failed") {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	if err = lockUsageActors(ctx, tx, requestContext); err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	reservation, err := lockReservationForSettlement(ctx, tx, requestContext, reservationID)
+	if err != nil || reservation.State != "reserved" {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	attempt, err := lockAttempt(ctx, tx, requestContext, reservationID, attemptNo)
+	if err != nil || attempt.CompletedAt != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrIdempotencyConflict
+	}
+	now := s.now().UTC()
+	tag, err := tx.Exec(ctx, `
+		UPDATE tenant_chat_provider_attempts
+		SET confirmed_input_tokens = 0, confirmed_output_tokens = 0,
+		    confirmed_cache_read_input_tokens = 0, confirmed_cost_micro_usd = 0,
+		    outcome = 'failed_pre_delta', usage_quality = 'confirmed',
+		    completed_at = $4, updated_at = $4
+		WHERE request_id = $1 AND attempt_no = $2
+		  AND reservation_id = $3::uuid AND tenant_id = $5::uuid
+	`, requestContext.RequestID, attemptNo, reservationID, now, requestContext.ExecutionScope.TenantID)
+	if err != nil || tag.RowsAffected() != 1 {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	attempts, totals, pending, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
+	if err != nil || pending || len(attempts) != attemptNo {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	userPeriod, tenantPeriod, err := lockSettlementPeriods(ctx, tx, requestContext, reservation)
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	quotaExposure := userPeriod.Confirmed + userPeriod.Unconfirmed + totals.InputTokens + totals.OutputTokens + userPeriod.Reserved - reservation.ReservedTokens
+	budgetExposure := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + totals.CostMicroUSD + tenantPeriod.Reserved - reservation.ReservedCostMicroUSD
+	if quotaExposure < 0 || budgetExposure < 0 {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	quotaState := usageState(quotaExposure, userPeriod.Warning, userPeriod.Economy, userPeriod.HardStop)
+	budgetState := usageState(budgetExposure, tenantPeriod.Warning, tenantPeriod.Economy, tenantPeriod.HardStop)
+	eventID, err := newUUID()
+	if err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	nextVersion := reservation.LedgerVersion + 1
+	if totals.InputTokens > 0 || totals.OutputTokens > 0 || totals.CostMicroUSD > 0 {
+		if err = persistSettlement(
+			ctx, tx, requestContext, reservationID, reservation, userPeriod, tenantPeriod,
+			attempts, totals, quotaState, budgetState, eventID, nextVersion, now,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		return tenantchat.UsageSettlement{
+			RequestID: requestContext.RequestID, ReservationID: reservationID, State: "settled",
+			ConfirmedInputTokens: totals.InputTokens, ConfirmedOutputTokens: totals.OutputTokens,
+			ConfirmedCostMicroUSD: totals.CostMicroUSD, QuotaState: quotaState, BudgetState: budgetState,
+			LedgerVersion: nextVersion, Attempts: attempts,
+		}, nil
+	}
+	if err = persistReleased(
+		ctx, tx, requestContext, reservationID, reservation, userPeriod, tenantPeriod,
+		quotaState, budgetState, eventID, nextVersion, terminalOutcome, now,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	return tenantchat.UsageSettlement{
+		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "released",
+		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion, Attempts: attempts,
 	}, nil
 }
 
@@ -464,7 +567,7 @@ func terminalUsageEventPayload(
 
 func validTerminalOutcome(value string) bool {
 	switch value {
-	case "failed", "cancelled", "quota_blocked", "budget_blocked":
+	case "failed", "cancelled", "rate_limited", "quota_blocked", "budget_blocked":
 		return true
 	default:
 		return false

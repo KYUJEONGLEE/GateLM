@@ -15,7 +15,13 @@ import {
   verifyAccessJwt,
   type AccessClaims,
 } from './auth.crypto';
-import type { IdentityResult, IssuedSession, PublicSession, TenantEntitlement } from './auth.types';
+import type {
+  AuthorizedExecution,
+  IdentityResult,
+  IssuedSession,
+  PublicSession,
+  TenantEntitlement,
+} from './auth.types';
 import { ControlPlaneClient } from './control-plane.client';
 
 const ACCESS_TTL_SECONDS = 5 * 60;
@@ -125,6 +131,30 @@ export class SessionService {
     });
     const identity = await this.controlPlane.entitlements(current.claims.sub);
     return this.issueForExistingSession(current.session.id, identity, undefined);
+  }
+
+  async authorizeExecution(accessToken: string): Promise<AuthorizedExecution> {
+    const current = await this.requireSession(accessToken);
+    const tenantId = current.session.selectedTenantId;
+    if (!tenantId || current.claims.tenantId !== tenantId) {
+      this.fail(
+        HttpStatus.CONFLICT,
+        'CHAT_TENANT_SELECTION_REQUIRED',
+        'A Tenant Chat tenant must be selected.',
+      );
+    }
+    const entitlement = await this.controlPlane.entitlement(current.claims.sub, tenantId);
+    this.assertFreshSelectedEntitlement(current.claims, entitlement);
+    return {
+      actorAuthzVersion: entitlement.actorAuthzVersion,
+      actorKind: entitlement.actorKind,
+      ...(entitlement.employeeId ? { employeeId: entitlement.employeeId } : {}),
+      sessionId: current.session.id,
+      sessionVersion: current.session.sessionVersion,
+      tenantAuthzVersion: entitlement.tenantAuthzVersion,
+      tenantId: entitlement.tenantId,
+      userId: entitlement.userId,
+    };
   }
 
   async refresh(refreshToken: string): Promise<IssuedSession> {
@@ -350,6 +380,27 @@ export class SessionService {
           selected.tenantAuthzVersion !== claims.tenantAuthzVersion ||
           selected.actorKind !== claims.actorKind ||
           (selected.employeeId ?? undefined) !== claims.employeeId))
+    ) {
+      this.fail(
+        HttpStatus.UNAUTHORIZED,
+        'CHAT_ACCESS_STALE',
+        'The Chat access token must be refreshed.',
+      );
+    }
+  }
+
+  private assertFreshSelectedEntitlement(
+    claims: AccessClaims,
+    entitlement: TenantEntitlement,
+  ): void {
+    if (
+      entitlement.status !== 'active' ||
+      entitlement.userId !== claims.sub ||
+      entitlement.tenantId !== claims.tenantId ||
+      entitlement.actorAuthzVersion !== claims.actorAuthzVersion ||
+      entitlement.tenantAuthzVersion !== claims.tenantAuthzVersion ||
+      entitlement.actorKind !== claims.actorKind ||
+      (entitlement.employeeId ?? undefined) !== claims.employeeId
     ) {
       this.fail(
         HttpStatus.UNAUTHORIZED,

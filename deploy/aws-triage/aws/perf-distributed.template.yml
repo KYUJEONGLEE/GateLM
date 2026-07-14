@@ -1,0 +1,493 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GateLM isolated four-host distributed performance environment.
+
+Parameters:
+  OperatorCidr:
+    Type: String
+    AllowedPattern: "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$"
+    Description: Current trusted operator IPv4 address in /32 form for SSH only.
+  SshKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair that matches the operator PEM file.
+  UbuntuAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+  LoadGeneratorInstanceType:
+    Type: String
+    Default: c7i.xlarge
+  GatewayInstanceType:
+    Type: String
+    Default: c7i.xlarge
+  DataInstanceType:
+    Type: String
+    Default: m7i.large
+  MockInstanceType:
+    Type: String
+    Default: c7i.large
+
+Resources:
+  PerfVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.77.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-vpc
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PerfInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-igw
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  PerfInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref PerfInternetGateway
+      VpcId: !Ref PerfVpc
+
+  PerfSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.77.1.0/24
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref PerfVpc
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-subnet
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  PerfRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PerfVpc
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-routes
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  PerfDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: PerfInternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref PerfInternetGateway
+      RouteTableId: !Ref PerfRouteTable
+
+  PerfSubnetRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PerfRouteTable
+      SubnetId: !Ref PerfSubnet
+
+  LoadGeneratorSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM performance load generator; SSH from operator only.
+      GroupName: gatelm-perf-distributed-loadgen
+      VpcId: !Ref PerfVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref OperatorCidr
+          Description: SSH from current trusted operator IPv4 only
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Package install, image pull, and private test traffic
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-loadgen
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  GatewaySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM dedicated performance Gateway node.
+      GroupName: gatelm-perf-distributed-gateway
+      VpcId: !Ref PerfVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref OperatorCidr
+          Description: SSH from current trusted operator IPv4 only
+        - IpProtocol: tcp
+          FromPort: 18080
+          ToPort: 18080
+          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: k6 load traffic from dedicated load generator
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Image pull and explicitly permitted private dependencies
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-gateway
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  DataSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM isolated performance PostgreSQL Redis and Control Plane.
+      GroupName: gatelm-perf-distributed-data
+      VpcId: !Ref PerfVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref OperatorCidr
+          Description: SSH from current trusted operator IPv4 only
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: PostgreSQL from Gateway only
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: Redis from Gateway only
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: Control Plane from Gateway only
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Image pull and local role traffic
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-data
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  DataPostgresSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DataSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Control Plane to co-located PostgreSQL
+
+  DataRedisSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DataSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Control Plane to co-located Redis
+
+  MockSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM isolated 100ms Mock Provider.
+      GroupName: gatelm-perf-distributed-mock
+      VpcId: !Ref PerfVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref OperatorCidr
+          Description: SSH from current trusted operator IPv4 only
+        - IpProtocol: tcp
+          FromPort: 8090
+          ToPort: 8090
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: Mock Provider requests from Gateway only
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Package install and pinned image pull
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-mock
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  LoadGeneratorInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PerfSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref LoadGeneratorInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref LoadGeneratorSecurityGroup]
+          PrivateIpAddress: 10.77.1.10
+          SubnetId: !Ref PerfSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 24
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' loadgen > /etc/gatelm-perf-role
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-loadgen
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: Role
+          Value: loadgen
+        - Key: DoNotDelete
+          Value: "true"
+
+  GatewayInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PerfSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref GatewayInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref GatewaySecurityGroup]
+          PrivateIpAddress: 10.77.1.20
+          SubnetId: !Ref PerfSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 30
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' gateway > /etc/gatelm-perf-role
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-gateway
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: Role
+          Value: gateway
+        - Key: DoNotDelete
+          Value: "true"
+
+  DataInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PerfSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref DataInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref DataSecurityGroup]
+          PrivateIpAddress: 10.77.1.30
+          SubnetId: !Ref PerfSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 40
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' data > /etc/gatelm-perf-role
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-data
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: Role
+          Value: data
+        - Key: DoNotDelete
+          Value: "true"
+
+  MockInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PerfSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref MockInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref MockSecurityGroup]
+          PrivateIpAddress: 10.77.1.40
+          SubnetId: !Ref PerfSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 24
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' mock > /etc/gatelm-perf-role
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-mock
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: Role
+          Value: mock
+        - Key: DoNotDelete
+          Value: "true"
+
+Outputs:
+  VpcId:
+    Value: !Ref PerfVpc
+  SubnetId:
+    Value: !Ref PerfSubnet
+  LoadGeneratorInstanceId:
+    Value: !Ref LoadGeneratorInstance
+  LoadGeneratorPrivateIp:
+    Value: !GetAtt LoadGeneratorInstance.PrivateIp
+  LoadGeneratorPublicIp:
+    Value: !GetAtt LoadGeneratorInstance.PublicIp
+  GatewayInstanceId:
+    Value: !Ref GatewayInstance
+  GatewayPrivateIp:
+    Value: !GetAtt GatewayInstance.PrivateIp
+  GatewayPublicIp:
+    Value: !GetAtt GatewayInstance.PublicIp
+  DataInstanceId:
+    Value: !Ref DataInstance
+  DataPrivateIp:
+    Value: !GetAtt DataInstance.PrivateIp
+  DataPublicIp:
+    Value: !GetAtt DataInstance.PublicIp
+  MockInstanceId:
+    Value: !Ref MockInstance
+  MockPrivateIp:
+    Value: !GetAtt MockInstance.PrivateIp
+  MockPublicIp:
+    Value: !GetAtt MockInstance.PublicIp
+  LoadGeneratorSecurityGroupId:
+    Value: !Ref LoadGeneratorSecurityGroup
+  GatewaySecurityGroupId:
+    Value: !Ref GatewaySecurityGroup
+  DataSecurityGroupId:
+    Value: !Ref DataSecurityGroup
+  MockSecurityGroupId:
+    Value: !Ref MockSecurityGroup

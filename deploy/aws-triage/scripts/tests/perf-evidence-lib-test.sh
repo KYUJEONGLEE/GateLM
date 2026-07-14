@@ -96,6 +96,21 @@ printf '%s\n' \
   > "${loadgen_status_path}"
 perf_evidence_read_loadgen_status "${loadgen_status_path}"
 [[ "${GATELM_LOADGEN_TARGET_RPS}" == "500" ]]
+[[ -z "${GATELM_LOADGEN_GIT_SHA}" ]]
+
+printf '%s\n' \
+  'GATELM_LOADGEN_STATUS_SCHEMA=gatelm.gateway-load-loadgen-status.v2' \
+  'GATELM_LOADGEN_RUN_ID=run_test_2' \
+  'GATELM_LOADGEN_EXECUTION_MODE=dedicated' \
+  'GATELM_LOADGEN_K6_EXIT_CODE=0' \
+  'GATELM_LOADGEN_TARGET_RPS=500' \
+  'GATELM_LOADGEN_DURATION=2m' \
+  'GATELM_LOADGEN_GIT_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  'GATELM_LOADGEN_MACHINE_HASH=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  'GATELM_LOADGEN_PRELIMINARY_STATUS=pass' \
+  > "${loadgen_status_path}"
+perf_evidence_read_loadgen_status "${loadgen_status_path}"
+[[ "${GATELM_LOADGEN_GIT_SHA}" == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]]
 
 printf '%s\n' 'GATELM_LOADGEN_TARGET_RPS=501' >> "${loadgen_status_path}"
 if (perf_evidence_read_loadgen_status "${loadgen_status_path}") >/dev/null 2>&1; then

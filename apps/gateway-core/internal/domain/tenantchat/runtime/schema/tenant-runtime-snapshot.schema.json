@@ -90,7 +90,7 @@
     "policies": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rateLimit", "concurrency", "quota", "budget", "routing", "fallback", "cache", "safety", "streaming"],
+      "required": ["rateLimit", "concurrency", "quota", "budget", "routing", "fallback", "providerTokenRate", "cache", "safety", "streaming"],
       "properties": {
         "rateLimit": { "$ref": "#/$defs/rateLimit" },
         "concurrency": { "$ref": "#/$defs/concurrency" },
@@ -98,6 +98,7 @@
         "budget": { "$ref": "#/$defs/budget" },
         "routing": { "$ref": "#/$defs/routing" },
         "fallback": { "$ref": "#/$defs/fallback" },
+        "providerTokenRate": { "$ref": "#/$defs/providerTokenRate" },
         "cache": { "$ref": "#/$defs/cache" },
         "safety": { "$ref": "#/$defs/safety" },
         "streaming": { "$ref": "#/$defs/streaming" }
@@ -197,24 +198,66 @@
         }
       }
     },
+    "providerTokenRate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providers"],
+      "properties": {
+        "providers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/providerTokenWindow" }
+        }
+      }
+    },
+    "providerTokenWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerId", "limitTokens", "windowSeconds"],
+      "properties": {
+        "providerId": { "$ref": "#/$defs/opaqueId" },
+        "limitTokens": { "$ref": "#/$defs/positiveInteger" },
+        "windowSeconds": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
     "cache": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["strategy", "enabled", "ttlSeconds", "maxEntriesPerUser"],
+      "required": ["strategy", "enabled", "ttlSeconds", "maxEntriesPerUser", "keySetId"],
       "properties": {
         "strategy": { "type": "string", "enum": ["off", "exact"] },
         "enabled": { "type": "boolean" },
         "ttlSeconds": { "$ref": "#/$defs/positiveInteger" },
-        "maxEntriesPerUser": { "$ref": "#/$defs/positiveInteger" }
+        "maxEntriesPerUser": { "$ref": "#/$defs/positiveInteger" },
+        "keySetId": { "$ref": "#/$defs/opaqueId" }
       }
     },
     "safety": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "policyDigest"],
+      "required": ["enabled", "policyDigest", "detectorSet"],
       "properties": {
         "enabled": { "type": "boolean" },
-        "policyDigest": { "$ref": "#/$defs/sha256Digest" }
+        "policyDigest": { "$ref": "#/$defs/sha256Digest" },
+        "detectorSet": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/safetyDetector" }
+        }
+      }
+    },
+    "safetyDetector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detectorType", "action"],
+      "properties": {
+        "detectorType": {
+          "type": "string",
+          "enum": ["email", "phone_number", "postal_address", "person_name", "organization_name", "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key"]
+        },
+        "action": { "type": "string", "enum": ["allow", "redact", "block"] }
       }
     },
     "streaming": {

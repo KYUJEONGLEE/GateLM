@@ -46,6 +46,7 @@ export function LiveRequestsFocusDialog({
         anchorStyle={focusOriginStyle(origin)}
         backdropClassName="live-requests-focus-backdrop"
         className="live-requests-focus-dialog"
+        positioning="custom"
         showClose={false}
       >
         <DialogTitle className="sr-only">

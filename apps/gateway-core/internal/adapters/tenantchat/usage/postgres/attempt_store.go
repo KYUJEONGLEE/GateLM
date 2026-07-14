@@ -106,7 +106,29 @@ func (s *ReservationStore) StartAttempt(
 		}
 	}
 
-	_, err = tx.Exec(ctx, `
+	if err = insertAttemptRow(
+		ctx, tx, requestContext, reservationID, route, attemptNo, kind, exposureCost, now,
+	); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	return nil
+}
+
+func insertAttemptRow(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	route tenantchat.SelectedRoute,
+	attemptNo int,
+	kind string,
+	exposureCost int64,
+	now time.Time,
+) error {
+	_, err := tx.Exec(ctx, `
 		INSERT INTO tenant_chat_provider_attempts (
 		  request_id, attempt_no, reservation_id, tenant_id, kind, provider_id, model_key,
 		  pricing_version, input_micro_usd_per_million_tokens,
@@ -123,13 +145,7 @@ func (s *ReservationStore) StartAttempt(
 		route.CacheReadInputMicroUSDPerMillionTokens,
 		requestContext.UsageIntent.EstimatedInputTokens, requestContext.UsageIntent.MaxOutputTokens,
 		exposureCost, now)
-	if err != nil {
-		return tenantchat.ErrUsageGuardUnavailable
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return tenantchat.ErrUsageGuardUnavailable
-	}
-	return nil
+	return err
 }
 
 func (s *ReservationStore) topUpFallback(

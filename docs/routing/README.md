@@ -18,7 +18,7 @@
 | [`classification-pipeline.md`](classification-pipeline.md) | 공통 feature 추출, category 결과, category-aware difficulty 분류의 canonical 내부 구조 |
 | [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md) | `difficulty-feature-vector.v1`의 42차원 순서, scaling, enum과 zero-fill 계약 |
 | [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | 500건 smoke-only pilot, 향후 approved-family split, offline Python 학습과 generated Go artifact의 비활성 준비 경계 |
-| [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 5 category × 2 difficulty routing policy v2 schema |
+| [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 전역 Simple/Complex/단일 fallback을 5 category × 2 difficulty에 투영하는 routing policy v2 schema |
 | [`fixtures/routing-policy.fixture.json`](fixtures/routing-policy.fixture.json) | 모든 셀이 `mock-balanced`인 안전한 bootstrap fixture |
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |
 | [`fixtures/runtime-snapshot-routing.fixture.json`](fixtures/runtime-snapshot-routing.fixture.json) | routingPolicyHash를 포함한 RuntimeSnapshot routing bootstrap fixture |
@@ -34,6 +34,8 @@
 ## Authority And Boundaries
 
 이 계약은 일반 Gateway 라우팅 범위에서 `docs/v2.0.0`의 `category -> tier -> model`, legacy `routingPolicy` provider/model 필드, `selectedProvider`/`selectedModel` 의미를 대체한다. `docs/v2.0.0` 원문은 historical baseline으로 보존하며 이 문서로 새 의미를 읽는다.
+
+현재 authoring profile은 Simple, Complex와 선택 사항인 전역 fallback 하나만 노출한다. 저장·발행 shape는 향후 category별 또는 검증된 ML 기반 routing으로 확장할 수 있도록 완전한 5 × 2 matrix를 유지한다.
 
 다음은 이 계약의 범위 밖이다.
 

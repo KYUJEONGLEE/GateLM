@@ -4,14 +4,25 @@ import type { IdentityResult, TenantEntitlement } from './auth.types';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
+export type ActiveRuntimeSnapshotMetadata = {
+  tenantId: string;
+  version: number;
+  digest: string;
+  policyVersion: number;
+  employeeNoticeVersion: number;
+  pricingVersion: number;
+};
+
 @Injectable()
 export class ControlPlaneClient {
   private readonly baseUrl: string;
   private readonly serviceToken: string;
+  private readonly timeoutMs: number;
 
   constructor(config: ConfigService) {
     this.baseUrl = config.getOrThrow<string>('TENANT_CHAT_CONTROL_PLANE_BASE_URL');
     this.serviceToken = config.getOrThrow<string>('TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN');
+    this.timeoutMs = config.getOrThrow<number>('TENANT_CHAT_CONTROL_PLANE_TIMEOUT_MS');
   }
 
   password(email: string, password: string): Promise<IdentityResult> {
@@ -66,6 +77,36 @@ export class ControlPlaneClient {
     );
   }
 
+  async activeRuntimeSnapshot(tenantId: string): Promise<ActiveRuntimeSnapshotMetadata> {
+    try {
+      const value = await this.request<Record<string, unknown>>(
+        `/internal/v1/tenant-chat/runtime/snapshots/${encodeURIComponent(tenantId)}/active`,
+      );
+      const keys = Object.keys(value).sort();
+      if (
+        keys.join(',') !== 'digest,employeeNoticeVersion,policyVersion,pricingVersion,tenantId,version' ||
+        value.tenantId !== tenantId ||
+        typeof value.digest !== 'string' ||
+        !/^sha256:[A-Za-z0-9_-]{43}$/.test(value.digest) ||
+        !positiveInteger(value.version) ||
+        !positiveInteger(value.policyVersion) ||
+        !positiveInteger(value.employeeNoticeVersion) ||
+        !positiveInteger(value.pricingVersion)
+      ) {
+        throw new Error('invalid_runtime_metadata');
+      }
+      return value as ActiveRuntimeSnapshotMetadata;
+    } catch {
+      throw new HttpException(
+        {
+          code: 'CHAT_RUNTIME_UNAVAILABLE',
+          message: 'Tenant Chat runtime metadata is unavailable.',
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
   private async request<T>(
     path: string,
     options: { body?: unknown; method?: 'GET' | 'POST' } = {},
@@ -80,7 +121,7 @@ export class ControlPlaneClient {
         },
         method: options.method ?? 'GET',
         redirect: 'error',
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
       const contentLength = Number(response.headers.get('content-length') ?? '0');
       if (contentLength > MAX_RESPONSE_BYTES) throw new Error('response_too_large');
@@ -101,4 +142,8 @@ export class ControlPlaneClient {
       );
     }
   }
+}
+
+function positiveInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) > 0;
 }

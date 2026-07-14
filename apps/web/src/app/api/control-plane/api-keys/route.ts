@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { getCurrentConsoleAuthForCookieHeader, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
 import {
   issueApiKey,
+  listApiKeysForProjectWithAuth,
   revokeApiKey,
   rotateApiKey
 } from "@/lib/control-plane/api-keys-client";
+import {
+  containsApiKey,
+  containsProject
+} from "@/lib/control-plane/api-keys-management-model";
 import type {
   ApiKeyIssueValues,
   OnboardingDraftProjectApiKeyIssueValues
@@ -18,7 +23,11 @@ import {
   controlPlaneTenantReadCacheTag,
   revalidateControlPlaneRead
 } from "@/lib/control-plane/read-cache";
-import { createProject, updateProject } from "@/lib/control-plane/projects-client";
+import {
+  createProject,
+  listControlPlaneProjects,
+  updateProject
+} from "@/lib/control-plane/projects-client";
 import type { ProjectFormValues, ProjectStatus } from "@/lib/control-plane/projects-types";
 import { attachProjectTeam } from "@/lib/control-plane/teams-client";
 import { issueApiKeyForOnboardingDraftProject } from "./onboarding-draft-project";
@@ -26,6 +35,8 @@ import { issueApiKeyForOnboardingDraftProject } from "./onboarding-draft-project
 type RequestPayload = {
   action?: unknown;
   apiKeyId?: unknown;
+  projectId?: unknown;
+  routeTenantId?: unknown;
   values?: unknown;
 };
 
@@ -93,6 +104,71 @@ export async function POST(request: Request) {
       project: result.data.project,
       status: result.status
     });
+  }
+
+  if (typeof payload.routeTenantId !== "string" || !payload.routeTenantId.trim()) {
+    return NextResponse.json({ error: "Tenant context is required." }, { status: 400 });
+  }
+
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isTenantAdminForTenant(auth, payload.routeTenantId)) {
+    return NextResponse.json(
+      { error: "API Key is outside tenant admin scope." },
+      { status: 403 }
+    );
+  }
+
+  const projectId = payload.action === "issue"
+    ? isApiKeyIssueValues(payload.values)
+      ? payload.values.projectId
+      : undefined
+    : typeof payload.projectId === "string"
+      ? payload.projectId
+      : undefined;
+
+  if (!projectId) {
+    return NextResponse.json({ error: "Project context is required." }, { status: 400 });
+  }
+
+  const controlPlaneTenantId = resolveControlPlaneTenantId(payload.routeTenantId);
+  const projects = await listControlPlaneProjects(controlPlaneTenantId, requestOptions);
+
+  if (!projects.ok) {
+    return NextResponse.json(
+      { error: projects.error },
+      { status: projects.status > 0 ? projects.status : 502 }
+    );
+  }
+
+  if (!containsProject(projects.data, projectId)) {
+    return NextResponse.json(
+      { error: "Project is outside tenant scope." },
+      { status: 403 }
+    );
+  }
+
+  if (payload.action === "rotate" || payload.action === "revoke") {
+    if (typeof payload.apiKeyId !== "string") {
+      return NextResponse.json({ error: "API Key context is required." }, { status: 400 });
+    }
+
+    const apiKeys = await listApiKeysForProjectWithAuth(projectId, requestOptions);
+    if (!apiKeys.ok) {
+      return NextResponse.json(
+        { error: apiKeys.error },
+        { status: apiKeys.status > 0 ? apiKeys.status : 502 }
+      );
+    }
+    if (!containsApiKey(apiKeys.data, payload.apiKeyId)) {
+      return NextResponse.json(
+        { error: "API Key is outside project scope." },
+        { status: 403 }
+      );
+    }
   }
 
   const result =

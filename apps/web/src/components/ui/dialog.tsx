@@ -30,10 +30,12 @@ function DialogContent({
   showClose = true,
   anchorStyle,
   backdropClassName,
+  positioning = "centered",
   ...props
 }: DialogPrimitive.Popup.Props & {
   anchorStyle?: React.CSSProperties
   backdropClassName?: string
+  positioning?: "centered" | "custom"
   showClose?: boolean
 }) {
   return (
@@ -49,7 +51,9 @@ function DialogContent({
         data-slot="dialog-content"
         style={anchorStyle}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-lg",
+          "fixed z-50 grid w-full max-w-lg gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-lg",
+          positioning === "centered" &&
+            "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
           "transition-all data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
           className
         )}

@@ -40,7 +40,7 @@
 Browser auth wire는 [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)를 따른다.
 
 - Browser는 `chat-web`의 same-origin BFF만 호출한다. `chat-api`와 Control Plane은 private service network에만 둔다.
-- Chat Web BFF는 `TENANT_CHAT_WEB_SERVICE_TOKEN`으로 Chat API를 인증한다. Chat API는 별도 `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`으로 Control Plane의 Tenant Chat identity endpoint만 호출한다. 기존 Gateway용 internal token 권한을 mutation으로 넓히지 않는다.
+- Chat Web BFF는 `TENANT_CHAT_WEB_SERVICE_TOKEN`으로 Chat API를 인증한다. Chat API는 별도 `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`으로 Control Plane의 Tenant Chat identity endpoint와 active RuntimeSnapshot metadata reader만 호출한다. 기존 Gateway용 internal token 권한을 mutation으로 넓히지 않는다.
 - access token은 별도 signing key set으로 서명한 5분 JWT다. refresh token은 30일 opaque random token이며 PostgreSQL에는 hash만 저장한다.
 - refresh는 매번 rotate한다. consumed token 재사용이 발견되면 해당 family와 session을 모두 revoke하고 `sessionVersion`을 증가시킨다.
 - Chat API는 session table만 직접 소유·조회한다. User/Tenant/Membership/Employee identity는 Control Plane private entitlement API에서 authoritative하게 확인한다.
@@ -224,7 +224,8 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
     "strategy": "exact",
     "enabled": true,
     "ttlSeconds": 300,
-    "maxEntriesPerUser": 100
+    "maxEntriesPerUser": 100,
+    "keySetId": "tenant_chat_cache_keys_001"
   }
 }
 ```
@@ -233,6 +234,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - Semantic Cache는 닫힌 non-goal이 아니라 follow-up capability지만, backend API와 Gateway adapter가 없으므로 현재 DTO, published RuntimeSnapshot, Admin UI에 선택지를 노출하지 않는다.
 - cache adapter/interface, versioned policy discriminator, capabilities response는 후속 contract revision에서 `semantic` 전략을 추가할 수 있어야 한다.
 - exact cache는 tenant+user scoped, encrypted, history disabled면 off다.
+- exact cache outer key는 tenant+user namespace만 포함하고 keyed fingerprint는 Redis hash field로만 사용한다. value는 AES-256-GCM으로 암호화하며 confirmed primary 성공만 저장한다.
 - Semantic Cache를 구현할 때 tenant isolation, embedding/version, safety/policy/snapshot binding, content retention, invalidation, false-hit evaluation과 Admin API/UI를 별도 contract revision으로 고정한다.
 
 ## 8. Quota와 budget 정책
@@ -321,7 +323,7 @@ Idempotency rules:
 - provider attempt는 `(requestId,attemptNo)` unique다.
 - ledger transition은 expected `ledgerVersion` CAS로 한 번만 적용한다.
 - outbox insert는 ledger transaction과 같은 DB transaction이다.
-- event `schemaVersion=1`, `eventVersion=ledgerVersion`이며 consumer는 `(aggregateId=requestId,eventType,eventVersion)` duplicate를 no-op한다.
+- 기존 event는 `schemaVersion=1`을 유지한다. mixed deadline/late transition만 `schemaVersion=2`, `eventVersion=ledgerVersion`이며 consumer는 `(aggregateId=requestId,eventType,eventVersion)` duplicate를 no-op한다.
 
 ## 10. 오류 계약
 
@@ -339,6 +341,7 @@ Idempotency rules:
 | 403 | `CHAT_TENANT_DISABLED` | Tenant inactive |
 | 403 | `CHAT_MEMBERSHIP_DISABLED` | active membership 없음 |
 | 403 | `CHAT_EMPLOYEE_DISABLED` | employee actor의 linked Employee inactive/missing |
+| 403 | `CHAT_SAFETY_BLOCKED` | executable safety policy가 content를 차단; detected value는 비노출 |
 | 403 | `CHAT_QUOTA_HARD_LIMIT` | user hard stop; cache miss provider call 불가 |
 | 403 | `CHAT_BUDGET_HARD_LIMIT` | tenant hard stop; 금액은 직원에게 비노출 |
 | 409 | `CHAT_POLICY_ACK_REQUIRED` | employee notice acknowledgement 필요 |

@@ -12,5 +12,6 @@ import { TenantChatServiceAuthGuard } from './tenant-chat-service-auth.guard';
   controllers: [TenantChatIdentityController],
   imports: [ConfigModule, DatabaseModule, AuthModule],
   providers: [TenantChatIdentityService, TenantChatServiceAuthGuard],
+  exports: [TenantChatServiceAuthGuard],
 })
 export class TenantChatIdentityModule {}

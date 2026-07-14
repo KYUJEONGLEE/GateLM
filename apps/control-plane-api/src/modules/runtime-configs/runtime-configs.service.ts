@@ -325,6 +325,19 @@ export class RuntimeConfigsService {
       );
     }
 
+    if (
+      this.isPersistedLegacyRuntimeSnapshot(activeSnapshot.runtimeSnapshot)
+    ) {
+      const compatibility =
+        this.toLegacyRuntimeSnapshotCompatibilityResponse(
+          activeSnapshot.runtimeSnapshot,
+        );
+      return this.toProviderCatalogResponse(
+        compatibility.runtimeConfig,
+        compatibility.document,
+      );
+    }
+
     return this.toPersistedProviderCatalogResponse(
       activeSnapshot.runtimeSnapshot,
     );
@@ -365,6 +378,22 @@ export class RuntimeConfigsService {
       );
     }
 
+    if (this.isPersistedLegacyRuntimeSnapshot(runtimeSnapshot)) {
+      const compatibility =
+        this.toLegacyRuntimeSnapshotCompatibilityResponse(runtimeSnapshot);
+      const catalog = this.toProviderCatalogResponse(
+        compatibility.runtimeConfig,
+        compatibility.document,
+      );
+      if (
+        catalog.catalogId !== args.catalogId ||
+        catalog.catalogVersion !== args.catalogVersion
+      ) {
+        throw new NotFoundException('Provider Catalog not found.');
+      }
+      return catalog;
+    }
+
     const snapshot = this.toPersistedRuntimeSnapshotResponse(
       runtimeSnapshot,
     );
@@ -395,7 +424,11 @@ export class RuntimeConfigsService {
           },
         },
         include: {
-          runtimeSnapshot: true,
+          runtimeSnapshot: {
+            include: {
+              runtimeConfig: true,
+            },
+          },
         },
       });
 
@@ -412,6 +445,14 @@ export class RuntimeConfigsService {
       throw new InternalServerErrorException(
         'RuntimeSnapshot body is inconsistent.',
       );
+    }
+
+    if (
+      this.isPersistedLegacyRuntimeSnapshot(activeSnapshot.runtimeSnapshot)
+    ) {
+      return this.toLegacyRuntimeSnapshotCompatibilityResponse(
+        activeSnapshot.runtimeSnapshot,
+      ).snapshot;
     }
 
     const snapshot = this.toPersistedRuntimeSnapshotResponse(
@@ -1377,11 +1418,21 @@ export class RuntimeConfigsService {
     const providerNames = new Set(
       providers.map((provider) => provider.provider),
     );
+    const hasRegisteredMockProvider = providerNames.has(
+      BUILTIN_MOCK_PROVIDER_NAME,
+    );
 
     if (dtoModels?.length) {
       const modelKeys = new Set<string>();
       for (const model of dtoModels) {
-        if (!providerNames.has(model.provider)) {
+        const isInjectedBuiltinMockModel =
+          !hasRegisteredMockProvider &&
+          model.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+          model.model === BUILTIN_MOCK_MODEL_REF;
+        if (
+          !isInjectedBuiltinMockModel &&
+          !providerNames.has(model.provider)
+        ) {
           throw new ConflictException(
             'Runtime Config model provider is not registered.',
           );
@@ -1396,15 +1447,22 @@ export class RuntimeConfigsService {
         modelKeys.add(modelKey);
       }
 
-      const models = dtoModels.map((model) => ({
-        provider: model.provider,
-        model: model.model,
-        displayName: model.displayName ?? model.model,
-        status: model.status ?? 'active',
-        contextWindowTokens: model.contextWindowTokens ?? 8192,
-        supportsStreaming: model.supportsStreaming ?? false,
-        supportsJsonMode: model.supportsJsonMode ?? false,
-      }));
+      const models = dtoModels
+        .filter(
+          (model) =>
+            hasRegisteredMockProvider ||
+            model.provider !== BUILTIN_MOCK_PROVIDER_NAME ||
+            model.model !== BUILTIN_MOCK_MODEL_REF,
+        )
+        .map((model) => ({
+          provider: model.provider,
+          model: model.model,
+          displayName: model.displayName ?? model.model,
+          status: model.status ?? 'active',
+          contextWindowTokens: model.contextWindowTokens ?? 8192,
+          supportsStreaming: model.supportsStreaming ?? false,
+          supportsJsonMode: model.supportsJsonMode ?? false,
+        }));
 
       for (const provider of providers) {
         if (models.some((model) => model.provider === provider.provider)) {
@@ -1635,9 +1693,9 @@ export class RuntimeConfigsService {
   private normalizeRoutingRoutes(
     routes: RuntimeConfigRoutingRoutesDto,
   ): RuntimeConfigRoutingRoutesDto {
-    if (!this.isRoutingRoutesShape(routes)) {
+    if (!this.isRoutingAuthoringProfile(routes)) {
       throw new ConflictException(
-        'Runtime Config routing policy requires all category and difficulty cells.',
+        'Runtime Config routing policy must use one global Simple model, one global Complex model, and at most one global fallback model.',
       );
     }
 
@@ -1659,15 +1717,70 @@ export class RuntimeConfigsService {
   }
 
   private buildUniformRoutingRoutes(modelRef: string): RuntimeConfigRoutingRoutesDto {
+    return this.buildRoutingAuthoringRoutes(modelRef, modelRef);
+  }
+
+  private buildRoutingAuthoringRoutes(
+    simpleModelRef: string,
+    complexModelRef: string,
+    fallbackModelRef?: string,
+  ): RuntimeConfigRoutingRoutesDto {
+    const simpleModelRefs = fallbackModelRef
+      ? [simpleModelRef, fallbackModelRef]
+      : [simpleModelRef];
+    const complexModelRefs = fallbackModelRef
+      ? [complexModelRef, fallbackModelRef]
+      : [complexModelRef];
+
     return Object.fromEntries(
       RUNTIME_CONFIG_ROUTING_CATEGORIES.map((category) => [
         category,
         {
-          simple: { modelRefs: [modelRef] },
-          complex: { modelRefs: [modelRef] },
+          simple: { modelRefs: [...simpleModelRefs] },
+          complex: { modelRefs: [...complexModelRefs] },
         },
       ]),
     ) as unknown as RuntimeConfigRoutingRoutesDto;
+  }
+
+  private isRoutingAuthoringProfile(
+    value: unknown,
+  ): value is RuntimeConfigRoutingRoutesDto {
+    if (!this.isRoutingRoutesShape(value)) {
+      return false;
+    }
+
+    const generalSimple = value.general.simple.modelRefs;
+    const generalComplex = value.general.complex.modelRefs;
+    if (generalSimple.length > 2 || generalComplex.length > 2) {
+      return false;
+    }
+
+    const simpleModelRef = generalSimple[0];
+    const complexModelRef = generalComplex[0];
+    const fallbackModelRef = generalSimple[1];
+    if (
+      !simpleModelRef ||
+      !complexModelRef ||
+      (fallbackModelRef !== undefined &&
+        (fallbackModelRef === simpleModelRef ||
+          fallbackModelRef === complexModelRef))
+    ) {
+      return false;
+    }
+
+    return RUNTIME_CONFIG_ROUTING_CATEGORIES.every((category) =>
+      ROUTING_DIFFICULTIES.every((difficulty) => {
+        const modelRefs = value[category][difficulty].modelRefs;
+        const expectedPrimary =
+          difficulty === 'simple' ? simpleModelRef : complexModelRef;
+        return (
+          modelRefs.length === (fallbackModelRef ? 2 : 1) &&
+          modelRefs[0] === expectedPrimary &&
+          modelRefs[1] === fallbackModelRef
+        );
+      }),
+    );
   }
 
   private isRoutingRoutesShape(value: unknown): value is RuntimeConfigRoutingRoutesDto {
@@ -2195,6 +2308,78 @@ export class RuntimeConfigsService {
     this.assertNoForbiddenRuntimeConfigKeys(document);
 
     return document;
+  }
+
+  private isPersistedLegacyRuntimeSnapshot(
+    runtimeSnapshot: Pick<RuntimeSnapshot, 'snapshotBody'>,
+  ): boolean {
+    return (
+      this.isRecord(runtimeSnapshot.snapshotBody) &&
+      runtimeSnapshot.snapshotBody.schemaVersion ===
+        'gatelm.runtime-snapshot.v1'
+    );
+  }
+
+  private toLegacyRuntimeSnapshotCompatibilityResponse(
+    runtimeSnapshot: RuntimeSnapshot & {
+      runtimeConfig?: RuntimeConfig | null;
+    },
+  ): {
+    runtimeConfig: RuntimeConfig;
+    document: ActiveRuntimeConfigResponseDto;
+    snapshot: RuntimeSnapshotResponseDto;
+  } {
+    const snapshotBody = runtimeSnapshot.snapshotBody;
+    const persistedVersion = Number(runtimeSnapshot.version);
+    if (
+      !this.isRecord(snapshotBody) ||
+      snapshotBody.schemaVersion !== 'gatelm.runtime-snapshot.v1' ||
+      !Number.isSafeInteger(persistedVersion) ||
+      snapshotBody.runtimeSnapshotId !== runtimeSnapshot.id ||
+      snapshotBody.runtimeSnapshotVersion !== persistedVersion ||
+      snapshotBody.contentHash !== runtimeSnapshot.contentHash ||
+      !this.isRecord(snapshotBody.lookupKey) ||
+      snapshotBody.lookupKey.tenantId !== runtimeSnapshot.tenantId ||
+      snapshotBody.lookupKey.projectId !== runtimeSnapshot.projectId ||
+      snapshotBody.lookupKey.applicationId !== runtimeSnapshot.applicationId
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+    this.assertNoForbiddenRuntimeConfigKeys(snapshotBody);
+
+    const runtimeConfig = runtimeSnapshot.runtimeConfig;
+    if (
+      !runtimeConfig ||
+      runtimeConfig.id !== runtimeSnapshot.runtimeConfigId ||
+      runtimeConfig.tenantId !== runtimeSnapshot.tenantId ||
+      runtimeConfig.projectId !== runtimeSnapshot.projectId ||
+      runtimeConfig.applicationId !== runtimeSnapshot.applicationId
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    const compatibility = this.readRuntimeConfigDocument(runtimeConfig);
+    const snapshot = this.toRuntimeSnapshotResponse(
+      compatibility.runtimeConfig,
+      compatibility.document,
+    );
+    if (
+      snapshot.runtimeSnapshotId !== runtimeSnapshot.id ||
+      snapshot.runtimeSnapshotVersion !== persistedVersion
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+    return {
+      runtimeConfig: compatibility.runtimeConfig,
+      document: compatibility.document,
+      snapshot,
+    };
   }
 
   private toPersistedProviderCatalogResponse(
@@ -2950,33 +3135,67 @@ export class RuntimeConfigsService {
       };
     }
 
-    const legacyDefaultModel =
-      this.toNonEmptyTrimmedString(rawPolicy?.defaultModel) ??
-      this.toNonEmptyTrimmedString(runtimeDocument.defaultModel);
-    const matchedProvider = legacyDefaultModel
-      ? providers
-          .filter(
-            (provider) =>
-              provider.status === 'active' &&
-              models.some(
-                (model) =>
-                  model.status === 'active' &&
-                  model.provider === provider.provider &&
-                  model.model === legacyDefaultModel,
-              ),
-          )
-          .sort((left, right) =>
-            left.providerId.localeCompare(right.providerId),
-          )[0]
-      : undefined;
-    const modelRef =
-      matchedProvider && legacyDefaultModel
-        ? matchedProvider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
-          legacyDefaultModel === BUILTIN_MOCK_MODEL_REF
-          ? BUILTIN_MOCK_MODEL_REF
-          : `${matchedProvider.providerId}:${legacyDefaultModel}`
-        : BUILTIN_MOCK_MODEL_REF;
-    const routes = this.buildUniformRoutingRoutes(modelRef);
+    const legacyModelRef = (
+      providerField: (typeof LEGACY_ROUTING_FIELDS)[number],
+      modelField: (typeof LEGACY_ROUTING_FIELDS)[number],
+    ): string | null => {
+      const providerName =
+        this.toNonEmptyTrimmedString(rawPolicy?.[providerField]) ??
+        this.toNonEmptyTrimmedString(runtimeDocument[providerField]);
+      const modelName =
+        this.toNonEmptyTrimmedString(rawPolicy?.[modelField]) ??
+        this.toNonEmptyTrimmedString(runtimeDocument[modelField]);
+      if (!modelName) {
+        return null;
+      }
+
+      const matchedProvider = providers
+        .filter(
+          (provider) =>
+            provider.status === 'active' &&
+            (!providerName || provider.provider === providerName) &&
+            models.some(
+              (model) =>
+                model.status === 'active' &&
+                model.provider === provider.provider &&
+                model.model === modelName,
+            ),
+        )
+        .sort((left, right) =>
+          left.providerId.localeCompare(right.providerId),
+        )[0];
+      if (!matchedProvider) {
+        return null;
+      }
+
+      return matchedProvider.provider === BUILTIN_MOCK_PROVIDER_NAME &&
+        modelName === BUILTIN_MOCK_MODEL_REF
+        ? BUILTIN_MOCK_MODEL_REF
+        : `${matchedProvider.providerId}:${modelName}`;
+    };
+
+    const simpleModelRef =
+      legacyModelRef('lowCostProvider', 'lowCostModel') ??
+      legacyModelRef('defaultProvider', 'defaultModel') ??
+      BUILTIN_MOCK_MODEL_REF;
+    const complexModelRef =
+      legacyModelRef('highQualityProvider', 'highQualityModel') ??
+      simpleModelRef;
+    const legacyFallbackModelRef = legacyModelRef(
+      'fallbackProvider',
+      'fallbackModel',
+    );
+    const fallbackModelRef =
+      legacyFallbackModelRef &&
+      legacyFallbackModelRef !== simpleModelRef &&
+      legacyFallbackModelRef !== complexModelRef
+        ? legacyFallbackModelRef
+        : undefined;
+    const routes = this.buildRoutingAuthoringRoutes(
+      simpleModelRef,
+      complexModelRef,
+      fallbackModelRef,
+    );
     const policyWithoutHash = {
       schemaVersion: 'gatelm.routing-policy.v2',
       mode: 'auto',

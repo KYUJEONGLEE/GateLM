@@ -62,15 +62,37 @@ export interface TenantChatRuntimePolicies {
     maxAttempts: number;
     allowedReasons: Array<'provider_timeout' | 'provider_error_pre_delta'>;
   };
+  providerTokenRate: {
+    providers: Array<{
+      providerId: string;
+      limitTokens: number;
+      windowSeconds: number;
+    }>;
+  };
   cache: {
     strategy: TenantChatCacheStrategy;
     enabled: boolean;
     ttlSeconds: number;
     maxEntriesPerUser: number;
+    keySetId: string;
   };
   safety: {
     enabled: boolean;
     policyDigest: string;
+    detectorSet: Array<{
+      detectorType:
+        | 'email'
+        | 'phone_number'
+        | 'postal_address'
+        | 'person_name'
+        | 'organization_name'
+        | 'resident_registration_number'
+        | 'api_key'
+        | 'authorization_header'
+        | 'jwt'
+        | 'private_key';
+      action: 'allow' | 'redact' | 'block';
+    }>;
   };
   streaming: {
     enabled: boolean;

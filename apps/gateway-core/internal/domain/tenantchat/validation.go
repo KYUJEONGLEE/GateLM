@@ -11,6 +11,16 @@ var (
 	hmacPattern     = regexp.MustCompile(`^hmac-sha256:[A-Za-z0-9_-]{43}$`)
 )
 
+func ValidateUsageReceipt(receipt UsageReceipt) error {
+	if !opaqueIDPattern.MatchString(receipt.RequestID) || !opaqueIDPattern.MatchString(receipt.ProviderID) ||
+		receipt.AttemptNo < 1 || receipt.AttemptNo > 4 ||
+		receipt.InputTokens < 0 || receipt.OutputTokens < 0 ||
+		receipt.CacheReadInputTokens < 0 || receipt.CacheReadInputTokens > receipt.InputTokens {
+		return fmt.Errorf("usage receipt is invalid")
+	}
+	return nil
+}
+
 func ValidateContext(value RequestContext, expectedPhase Phase) error {
 	if value.Surface != "tenant_chat" || value.Phase != expectedPhase {
 		return fmt.Errorf("invalid tenant chat surface or phase")

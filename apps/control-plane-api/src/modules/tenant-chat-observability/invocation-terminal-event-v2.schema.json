@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v2/invocation-terminal-event.schema.json",
+  "title": "Tenant Chat content-free terminal invocation event v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "schemaVersion", "eventType", "eventVersion", "occurredAt", "aggregateId", "requestId", "turnId", "idempotencyKey", "executionScope", "snapshotVersion", "terminalOutcome", "quotaState", "budgetState", "cacheOutcome", "latencyMs"],
+  "properties": {
+    "eventId": { "$ref": "#/$defs/opaqueId" }, "schemaVersion": { "const": 2 }, "eventType": { "const": "invocation_terminal" }, "eventVersion": { "type": "integer", "minimum": 1 }, "occurredAt": { "type": "string", "format": "date-time" },
+    "aggregateId": { "$ref": "#/$defs/opaqueId" }, "requestId": { "$ref": "#/$defs/opaqueId" }, "turnId": { "$ref": "#/$defs/opaqueId" }, "idempotencyKey": { "$ref": "#/$defs/opaqueId" }, "executionScope": { "$ref": "#/$defs/executionScope" },
+    "snapshotVersion": { "type": "integer", "minimum": 1 }, "pricingVersion": { "type": "integer", "minimum": 1 },
+    "terminalOutcome": { "type": "string", "enum": ["rate_limited", "concurrency_limited", "safety_blocked", "quota_blocked", "budget_blocked", "policy_ack_required", "runtime_unavailable", "no_eligible_route", "provider_failed", "provider_timeout", "cancelled", "cache_hit"] },
+    "errorCode": { "type": "string", "enum": ["CHAT_RATE_LIMITED", "CHAT_CONCURRENCY_LIMITED", "CHAT_SAFETY_BLOCKED", "CHAT_POLICY_ACK_REQUIRED", "CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT", "CHAT_RUNTIME_UNAVAILABLE", "CHAT_NO_ELIGIBLE_ROUTE", "CHAT_PROVIDER_FAILED", "CHAT_PROVIDER_TIMEOUT"] },
+    "quotaState": { "$ref": "#/$defs/policyState" }, "budgetState": { "$ref": "#/$defs/policyState" }, "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] }, "latencyMs": { "type": "integer", "minimum": 0 }
+  },
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" }, "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
+    "executionScope": { "type": "object", "additionalProperties": false, "required": ["kind", "tenantId", "userId", "actorKind"], "properties": { "kind": { "const": "tenant_chat" }, "tenantId": { "$ref": "#/$defs/opaqueId" }, "userId": { "$ref": "#/$defs/opaqueId" }, "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] }, "employeeId": { "$ref": "#/$defs/opaqueId" } }, "allOf": [{ "if": { "properties": { "actorKind": { "const": "employee" } }, "required": ["actorKind"] }, "then": { "required": ["employeeId"] } }] }
+  }
+}

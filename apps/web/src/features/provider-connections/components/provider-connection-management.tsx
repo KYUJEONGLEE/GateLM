@@ -154,7 +154,7 @@ const providerText: Record<
     providerConfig: "Provider config",
     providerId: "Provider ID",
     register: "Register provider",
-    registerAction: "Register",
+    registerAction: "Register models",
     registerDescription: "Register the provider API key at the tenant level.",
     requestFormat: "Request format",
     resolver: "Resolver",
@@ -195,7 +195,7 @@ const providerText: Record<
     providerConfig: "프로바이더 설정",
     providerId: "프로바이더 ID",
     register: "프로바이더 등록",
-    registerAction: "등록",
+    registerAction: "모델 등록",
     registerDescription: "프로바이더 API 키를 테넌트 공통으로 등록합니다.",
     requestFormat: "요청 형식",
     resolver: "인증 정보 해석 방식",
@@ -1050,7 +1050,6 @@ export function ProviderConnectionManagement({
 
       <section className="console-panel provider-line-panel">
         <div className="panel-heading provider-panel-heading">
-          <h3>{text.title}</h3>
           <Button
             disabled={pendingAction || discoveringProvider !== null || model.providerPresets.items.length === 0}
             onClick={openCreateModal}

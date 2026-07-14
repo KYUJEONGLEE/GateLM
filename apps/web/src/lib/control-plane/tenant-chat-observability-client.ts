@@ -3,6 +3,8 @@ import "server-only";
 import { getControlPlaneBaseUrl } from "@/lib/control-plane/control-plane-config";
 import { buildControlPlaneHeaders } from "@/lib/control-plane/control-plane-request";
 
+const tenantChatRuntimeUnavailableMessage = "Tenant Chat runtime provenance is unavailable.";
+
 export type TenantChatInvocation = {
   requestId: string;
   surface: "tenant_chat";
@@ -110,12 +112,21 @@ export async function getTenantChatDashboard(
   tenantId: string,
   from: string,
   to: string
-): Promise<TenantChatDashboard | undefined> {
+): Promise<TenantChatDashboard | null | undefined> {
   const query = new URLSearchParams({ from, surface: "tenant_chat", to });
-  const payload = await getJson<{ data?: TenantChatDashboard }>(
+  const result = await getJson<{ data?: TenantChatDashboard }>(
     `/admin/v1/tenants/${encodeURIComponent(tenantId)}/tenant-chat/dashboard?${query}`
   );
-  return payload?.data?.surface === "tenant_chat" ? payload.data : undefined;
+  if (result.payload?.data?.surface === "tenant_chat") {
+    return result.payload.data;
+  }
+  if (
+    result.status === 503 &&
+    result.errorMessage === tenantChatRuntimeUnavailableMessage
+  ) {
+    return null;
+  }
+  return undefined;
 }
 
 export async function getTenantChatInvocations(
@@ -132,7 +143,7 @@ export async function getTenantChatInvocations(
   });
   if (filters.modelKey) query.set("modelKey", filters.modelKey);
   if (filters.status) query.set("status", filters.status);
-  const payload = await getJson<{ data?: TenantChatInvocation[] }>(
+  const { payload } = await getJson<{ data?: TenantChatInvocation[] }>(
     `/admin/v1/tenants/${encodeURIComponent(tenantId)}/tenant-chat/invocations?${query}`
   );
   return Array.isArray(payload?.data) ? payload.data : undefined;
@@ -145,30 +156,75 @@ export async function getTenantChatCostSeries(
   bucket: TenantChatCostSeries["bucket"]
 ): Promise<TenantChatCostSeries | undefined> {
   const query = new URLSearchParams({ bucket, from, to });
-  const payload = await getJson<{ data?: TenantChatCostSeries }>(
+  const { payload } = await getJson<{ data?: TenantChatCostSeries }>(
     `/admin/v1/tenants/${encodeURIComponent(tenantId)}/tenant-chat/cost-series?${query}`
   );
   return payload?.data?.surface === "tenant_chat" ? payload.data : undefined;
 }
 
-async function getJson<T>(path: string): Promise<T | undefined> {
+type ControlPlaneJsonResult<T> = {
+  errorMessage?: string;
+  payload?: T;
+  status?: number;
+};
+
+async function getJson<T>(path: string): Promise<ControlPlaneJsonResult<T>> {
   try {
     const response = await fetch(`${getControlPlaneBaseUrl()}${path}`, {
       cache: "no-store",
       headers: await buildControlPlaneHeaders()
     });
     if (!response.ok) {
-      console.error("Tenant Chat Control Plane request failed", {
+      const errorPayload = (await response.json().catch(() => undefined)) as unknown;
+      const errorMessage = readErrorMessage(errorPayload);
+      const expectedRuntimeUnavailable =
+        response.status === 503 && errorMessage === tenantChatRuntimeUnavailableMessage;
+
+      if (!expectedRuntimeUnavailable) {
+        console.warn("Tenant Chat Control Plane request unavailable", {
+          status: response.status
+        });
+      }
+
+      return {
+        errorMessage,
         status: response.status
-      });
-      return undefined;
+      };
     }
-    return (await response.json()) as T;
+    return {
+      payload: (await response.json()) as T,
+      status: response.status
+    };
   } catch (error) {
-    console.error("Tenant Chat Control Plane request failed", {
+    console.warn("Tenant Chat Control Plane request unavailable", {
       errorType: error instanceof Error ? error.name : "UnknownError",
       errorMessage: error instanceof Error ? error.message : "Unknown error"
     });
+    return {};
+  }
+}
+
+function readErrorMessage(value: unknown) {
+  if (!value || typeof value !== "object") {
     return undefined;
   }
+
+  const record = value as { error?: unknown; message?: unknown };
+  if (typeof record.message === "string") {
+    return record.message;
+  }
+
+  if (Array.isArray(record.message)) {
+    const message = record.message.find((item): item is string => typeof item === "string");
+    if (message) {
+      return message;
+    }
+  }
+
+  const error = record.error;
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" ? message : undefined;
 }

@@ -41,7 +41,9 @@ export class TenantChatRuntimeService {
       throw new NotFoundException('Active Tenant Chat runtime snapshot not found.');
     }
 
-    return this.toSnapshotDocument(pointer.snapshot.snapshotBody);
+    const snapshot = this.toSnapshotDocument(pointer.snapshot.snapshotBody);
+    validateTenantChatRuntimeSnapshot(snapshot);
+    return snapshot;
   }
 
   async publishSnapshot(

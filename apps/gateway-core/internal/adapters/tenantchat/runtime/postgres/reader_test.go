@@ -144,7 +144,7 @@ func runtimeContextFixture() tenantchat.RequestContext {
 		ExecutionScope: tenantchat.ExecutionScope{TenantID: "tenant_fixture_001"},
 		Snapshot: tenantchat.SnapshotReference{
 			Version:               12,
-			Digest:                "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+			Digest:                "sha256:bkdxdG94ChFSQxch7b_LGnstjbozBj4ngd3uWIRdD7c",
 			PolicyVersion:         8,
 			EmployeeNoticeVersion: 3,
 			PricingVersion:        5,

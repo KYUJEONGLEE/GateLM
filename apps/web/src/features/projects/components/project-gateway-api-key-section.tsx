@@ -12,6 +12,11 @@ import type {
 } from "@/lib/control-plane/api-keys-types";
 import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import {
+  getProjectGatewayApiKeyIssuePayload,
+  getProjectGatewayApiKeyRotatePayload,
+  PRIMARY_GATEWAY_API_KEY_DISPLAY_NAME
+} from "./project-gateway-api-key-request";
 
 type ProjectGatewayApiKeySectionProps = {
   locale: Locale;
@@ -27,8 +32,6 @@ type ApiKeyResponsePayload = {
   apiKey?: OneTimeApiKeyResponse;
   error?: string;
 };
-
-const PRIMARY_GATEWAY_API_KEY_DISPLAY_NAME = "Primary Gateway API Key";
 
 const gatewayApiKeyText: Record<
   Locale,
@@ -114,22 +117,14 @@ export function ProjectGatewayApiKeyPanel({
     status: "idle"
   });
   const representativeKey = getRepresentativeActiveKey(apiKeys);
-  const actionsDisabled = model.source === "fixture";
+  const actionsDisabled = model.source !== "control-plane";
 
   async function submitIssueApiKey() {
     setPendingAction("issue");
     setSubmitState({ message: "", status: "idle" });
 
     const response = await fetch("/api/control-plane/api-keys", {
-      body: JSON.stringify({
-        action: "issue",
-        values: {
-          displayName: PRIMARY_GATEWAY_API_KEY_DISPLAY_NAME,
-          expiresAt: "",
-          projectId: model.controlPlaneProjectId,
-          scopes: "gateway:invoke"
-        }
-      }),
+      body: JSON.stringify(getProjectGatewayApiKeyIssuePayload(model)),
       headers: {
         "Content-Type": "application/json"
       },
@@ -164,10 +159,7 @@ export function ProjectGatewayApiKeyPanel({
     setSubmitState({ message: "", status: "idle" });
 
     const response = await fetch("/api/control-plane/api-keys", {
-      body: JSON.stringify({
-        action: "rotate",
-        apiKeyId: apiKey.credentialId
-      }),
+      body: JSON.stringify(getProjectGatewayApiKeyRotatePayload(model, apiKey.credentialId)),
       headers: {
         "Content-Type": "application/json"
       },
@@ -208,7 +200,7 @@ export function ProjectGatewayApiKeyPanel({
           </div>
 
           <div className="gateway-api-key-main">
-            {model.source === "fixture" ? (
+            {model.source === "error" ? (
               <Alert variant="warning">
                 <AlertDescription>
                   {text.fixtureFallback} {model.loadError}
@@ -319,6 +311,8 @@ function toListItem(apiKey: OneTimeApiKeyResponse, displayName: string): ApiKeyL
     last4: apiKey.last4,
     lastUsedAt: null,
     prefix: apiKey.prefix,
+    projectId: "",
+    projectName: "",
     scopes: apiKey.scopes,
     status: apiKey.status
   };
