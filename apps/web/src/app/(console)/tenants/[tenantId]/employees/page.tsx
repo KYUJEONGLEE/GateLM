@@ -1,9 +1,11 @@
+import { notFound } from "next/navigation";
 import { EmployeeControlManagement } from "@/features/employees/components/employee-control-management";
 import { buildEmployeeUsageReadModel } from "@/features/employees/employee-usage-read-model";
 import {
   getCurrentConsoleAuth,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getEmployeeControlModel } from "@/lib/control-plane/employees-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -24,6 +26,11 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
   const model = await getEmployeeControlModel(effectiveTenantId);
   const usage = buildEmployeeUsageReadModel(model);
 

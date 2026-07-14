@@ -32,4 +32,11 @@ describe('Chat API environment', () => {
     expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '300001' }))
       .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
   });
+
+  it('rejects explicitly empty numeric settings instead of using defaults', () => {
+    expect(() => validateEnv({ ...base, CHAT_API_PORT: '' }))
+      .toThrow('CHAT_API_PORT');
+    expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '' }))
+      .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
+  });
 });
