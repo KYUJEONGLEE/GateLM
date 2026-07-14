@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
       0
     ) ?? 0;
   const tenantChatMonthCostMicroUsd =
-    tenantChatMonthToDate?.usage.confirmedCostMicroUsd ?? 0;
+    tenantChatMonthToDate?.usage?.confirmedCostMicroUsd ?? 0;
   const hasMonthToDateData =
     projectApplicationMonthToDate !== undefined ||
     (tenantChatMonthToDate !== undefined && tenantChatMonthToDate !== null);
