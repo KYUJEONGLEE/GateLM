@@ -25,6 +25,17 @@ describe('ActiveTurnRegistry', () => {
     registry.release('turn', first);
     expect(registry.register('turn', second, 1).aborted).toBe(false);
   });
+
+  it('reserves capacity before an admission handle exists', () => {
+    const registry = new ActiveTurnRegistry();
+    const reservation = registry.reserve('turn', 1);
+
+    expect(() => registry.reserve('turn', 1)).toThrow(TurnAttachmentLimitReached);
+    const signal = registry.activate('turn', reservation, handle('first'));
+    expect(signal.aborted).toBe(false);
+    expect(registry.releaseReservation('turn', reservation)).toBe(true);
+    expect(() => registry.reserve('turn', 1)).not.toThrow();
+  });
 });
 
 function handle(value: string): AdmissionHandle {

@@ -43,6 +43,7 @@ revision: `tenant-chat/v1`
 - cancel 최초·동일 replay는 모두 `200`이다. 이미 consume/expire된 admission의 첫 cancel은 `409 CHAT_ADMISSION_EXPIRED`다.
 - completion의 in-flight replay는 같은 실행 stream에 attach한다. terminal replay는 provider 호출 없이 final event만 다시 보낸다. 둘 다 `200`이며 `Idempotency-Replayed: true`다.
 - Chat API는 같은 logical turn의 concurrent HTTP attachment를 하나의 completion promise와 AbortSignal로 fan-out한다. attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다. 늦게 attach한 응답은 이미 관측된 bounded delta부터 순서대로 replay하며 별도 Provider call을 만들지 않는다. 느린 attachment의 response backpressure는 해당 응답에만 적용하고 공유 Provider stream과 final persistence를 막지 않는다.
+- Chat API는 attachment capacity를 admission 전에 reserve한다. admission 이후 준비 실패는 local reservation을 항상 해제하고, 다른 attachment가 없는 경우에만 admission과 turn을 best effort cancel한다.
 - process recovery 중 안전한 attach/replay를 증명할 수 없으면 `503 CHAT_USAGE_GUARD_UNAVAILABLE`와 bounded `retryAfterSeconds`를 반환한다.
 - 같은 key와 다른 binding은 항상 `409 CHAT_IDEMPOTENCY_CONFLICT`이며 기존 request 상태를 노출하지 않는다.
 - 오류 body는 OpenAPI의 `ErrorResponse`만 사용한다. Provider raw error, request body, JWT, 내부 stack과 비용 금액을 넣지 않는다.
@@ -54,6 +55,8 @@ revision: `tenant-chat/v1`
 - `id`는 `<requestId>:<sequence>`다. sequence는 request별 1부터 단조 증가한다.
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.
+- Chat API는 public turn request에서 `estimatedInputTokens`를 받지 않는다. private completion에 실제 포함되는 bounded message content의 UTF-8 byte length 합계(최소 1)를 계산해 completion `usageIntent`와 binding에 사용한다.
+- successful final 저장의 retryable PostgreSQL timeout/connection/transaction conflict는 동일 assistant content를 유지한 채 최대 3회 재시도한다. unique `(turn_id,role)`와 decrypt/compare가 commit 후 응답 유실도 same-content replay로 수렴시킨다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
 - DOC-013은 Chat API의 encrypted final을 authoritative replay source로 사용해 닫는다. local final이 있으면 `accepted`, bounded reconstructed `delta`, `final`을 재생한다. Gateway terminal replay만 있고 local final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 fail closed하며 성공 content를 만들지 않는다.
 - client disconnect는 local attachment handle을 즉시 해제하고 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
@@ -255,12 +258,12 @@ Chat API는 Control Plane-owned identity table을 직접 읽지 않는다. sessi
 
 ### 8.1 Content transaction ordering
 
-- new turn reserve는 content-free `tenant_chat_turns` row만 만든다. unique `(tenant_id,user_id,idempotency_key)`와 keyed request MAC이 logical IDs를 고정한다.
+- new turn reserve는 actor-scoped active conversation을 `FOR UPDATE`로 잠근 같은 transaction에서 content-free `tenant_chat_turns` row만 만든다. unique `(tenant_id,user_id,idempotency_key)`와 keyed request MAC이 logical IDs를 고정하며 delete가 lock을 먼저 획득하면 insert하지 않는다.
 - admission 성공 뒤 user ciphertext insert와 turn admission metadata update를 한 transaction에서 수행한다. transaction 실패 시 Gateway cancel을 best effort로 호출하고 completion을 호출하지 않는다.
 - assistant final은 conversation row를 `FOR UPDATE`로 잠그고 `deleted_at IS NULL`, captured `cache_epoch`, turn state를 확인한 뒤 message insert, next sequence increment, turn completed transition을 한 transaction에서 수행한다.
 - assistant insert unique key는 `(turn_id,role)`다. duplicate는 기존 ciphertext를 decrypt/compare한 뒤 same content만 replay하고, mismatch는 integrity failure다.
 - delete는 conversation lock, tombstone/version/cache epoch update, message ciphertext delete, unfinished turn cancel transition을 한 transaction에서 수행한다. 외부 Gateway cancel은 commit 뒤 best effort다.
-- retention은 마지막 ciphertext commit 기준 sliding expiry와 같은 delete primitive의 bounded batch다. active in-process handle은 commit 뒤 best-effort cancel하며 worker crash/replay가 content를 복구하거나 epoch를 낮추지 않는다.
+- retention은 마지막 ciphertext commit 기준 sliding expiry와 같은 delete primitive의 bounded batch다. selection cutoff를 고정하고 conversation lock 안에서 expiry를 다시 확인해 그 사이 연장된 row를 건너뛴다. active in-process handle은 commit 뒤 best-effort cancel하며 worker crash/replay가 content를 복구하거나 epoch를 낮추지 않는다.
 
 ## 9. 구현 및 연동 순서
 

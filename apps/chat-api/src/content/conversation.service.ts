@@ -5,7 +5,12 @@ import { Prisma } from '@prisma/client';
 import { SessionService } from '@/auth/session.service';
 import type { AuthorizedExecution } from '@/auth/auth.types';
 import { ExecutionBridgeService } from '@/execution/execution-bridge.service';
-import type { AdmissionHandle, UsageIntent } from '@/execution/execution.types';
+import type {
+  AdmissionHandle,
+  ClientUsageIntent,
+  EphemeralMessage,
+  UsageIntent,
+} from '@/execution/execution.types';
 import { PrivateGatewayError } from '@/execution/private-gateway.client';
 import { TerminalReplayContentUnavailable } from '@/execution/sse-parser';
 
@@ -114,7 +119,7 @@ export class ConversationService {
   async prepareTurn(
     accessToken: string,
     conversationId: string,
-    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: UsageIntent }>,
+    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
   ): Promise<PreparedTurn> {
     return this.guard(async () => {
       const authorized = await this.sessions.authorizeExecution(accessToken);
@@ -128,32 +133,40 @@ export class ConversationService {
       if (['failed', 'cancelled', 'deleted'].includes(reserved.state)) {
         throw new TurnStateConflict();
       }
-      const handle = await this.bridge.admitAuthorized(authorized, {
-        requestId: reserved.requestId,
-        turnId: reserved.turnId,
-        idempotencyKey: reserved.idempotencyKey,
-      });
-      try {
-        await this.store.persistAdmittedUser(actor, reserved, input.content, handle);
-      } catch (error) {
-        await this.bridge.cancel(handle).catch(() => undefined);
-        throw error;
-      }
-      const messages = await this.store.completionHistory(actor, conversationId, reserved.turnId);
-      const signal = this.activeTurns.register(
+      const attachment = this.activeTurns.reserve(
         reserved.turnId,
-        handle,
         this.maximumAttachmentsPerTurn,
       );
-      return Object.freeze({
-        kind: 'execute' as const,
-        actor,
-        reserved,
-        handle,
-        messages,
-        usageIntent: input.usageIntent,
-        signal,
-      });
+      let handle: AdmissionHandle | undefined;
+      try {
+        handle = await this.bridge.admitAuthorized(authorized, {
+          requestId: reserved.requestId,
+          turnId: reserved.turnId,
+          idempotencyKey: reserved.idempotencyKey,
+        });
+        await this.store.persistAdmittedUser(actor, reserved, input.content, handle);
+        const messages = await this.store.completionHistory(actor, conversationId, reserved.turnId);
+        const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
+        if (signal.aborted) throw new TurnStateConflict();
+        return Object.freeze({
+          kind: 'execute' as const,
+          actor,
+          reserved,
+          handle,
+          messages,
+          usageIntent: internalUsageIntent(input.usageIntent, messages),
+          signal,
+        });
+      } catch (error) {
+        const lastAttachment = this.activeTurns.releaseReservation(reserved.turnId, attachment);
+        if (handle && lastAttachment) {
+          await Promise.allSettled([
+            this.bridge.cancel(handle),
+            this.store.cancelTurn(actor, conversationId, reserved.turnId),
+          ]);
+        }
+        throw error;
+      }
     });
   }
 
@@ -243,11 +256,7 @@ export class ConversationService {
         throw error;
       }
       if (prepared.signal.aborted) throw new TurnStateConflict();
-      const persisted = await this.store.persistAssistant(
-        prepared.actor,
-        prepared.reserved,
-        result.assistantContent,
-      );
+      const persisted = await this.persistAssistantWithRetry(prepared, result.assistantContent);
       return Object.freeze({ message: persisted.message, replayed: persisted.replayed });
     } catch (error) {
       if (error instanceof AssistantTooLarge) {
@@ -305,6 +314,25 @@ export class ConversationService {
     await Promise.allSettled(handles.map((handle) => this.bridge.cancel(handle)));
   }
 
+  private async persistAssistantWithRetry(
+    prepared: Extract<PreparedTurn, { kind: 'execute' }>,
+    content: string,
+  ) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.store.persistAssistant(
+          prepared.actor,
+          prepared.reserved,
+          content,
+        );
+      } catch (error) {
+        if (attempt === 3 || !isRetryableStorageError(error)) throw error;
+        await delay(attempt * 25);
+      }
+    }
+    throw new Error('Assistant persistence retry loop exhausted.');
+  }
+
   private async guard<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -333,7 +361,7 @@ function httpError(error: unknown): HttpException {
     const status = error.status >= 400 && error.status <= 599 ? error.status : 502;
     return failure(status, safeCode(error.code), 'Tenant Chat execution could not be completed.');
   }
-  if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientInitializationError) {
+  if (isStorageError(error)) {
     return failure(503, 'CHAT_STORAGE_UNAVAILABLE', 'Encrypted content storage is temporarily unavailable.');
   }
   return failure(500, 'CHAT_INTERNAL_ERROR', 'The request could not be completed.');
@@ -345,6 +373,7 @@ function safeStreamError(error: unknown, aborted: boolean): SafeStreamError {
   if (error instanceof TerminalReplayContentUnavailable) return Object.freeze({ code: 'CHAT_TERMINAL_REPLAY_UNAVAILABLE', message: 'The completed response cannot be replayed safely.', cancelled: false });
   if (error instanceof ContentIntegrityError) return Object.freeze({ code: 'CHAT_CONTENT_INTEGRITY_FAILED', message: 'Encrypted content integrity validation failed.', cancelled: false });
   if (error instanceof ContentKeyUnavailable) return Object.freeze({ code: 'CHAT_CONTENT_KEY_UNAVAILABLE', message: 'Encrypted content is temporarily unavailable.', cancelled: false });
+  if (isStorageError(error)) return Object.freeze({ code: 'CHAT_STORAGE_UNAVAILABLE', message: 'Encrypted content storage is temporarily unavailable.', cancelled: false });
   if (error instanceof TurnStateConflict) return Object.freeze({ code: 'CHAT_TURN_STATE_CONFLICT', message: 'The turn cannot continue from its current state.', cancelled: false });
   if (error instanceof PrivateGatewayError) return Object.freeze({ code: safeCode(error.code), message: 'Tenant Chat execution could not be completed.', cancelled: error.code === 'CHAT_REQUEST_CANCELLED' });
   return Object.freeze({ code: 'CHAT_INTERNAL_ERROR', message: 'The request could not be completed.', cancelled: false });
@@ -359,6 +388,37 @@ function safeCode(value: string): string {
 }
 
 class AssistantTooLarge extends Error {}
+
+const RETRYABLE_STORAGE_CODES = new Set(['P1008', 'P1017', 'P2024', 'P2034', 'P2037']);
+
+function internalUsageIntent(
+  input: ClientUsageIntent,
+  messages: readonly EphemeralMessage[],
+): UsageIntent {
+  return Object.freeze({
+    ...input,
+    estimatedInputTokens: Math.max(
+      1,
+      messages.reduce((total, message) => total + Buffer.byteLength(message.content, 'utf8'), 0),
+    ),
+  });
+}
+
+function isStorageError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError ||
+    error instanceof Prisma.PrismaClientInitializationError ||
+    error instanceof Prisma.PrismaClientUnknownRequestError;
+}
+
+function isRetryableStorageError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientInitializationError ||
+    error instanceof Prisma.PrismaClientUnknownRequestError ||
+    (error instanceof Prisma.PrismaClientKnownRequestError && RETRYABLE_STORAGE_CODES.has(error.code));
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 type FlightListener = {
   nextIndex: number;

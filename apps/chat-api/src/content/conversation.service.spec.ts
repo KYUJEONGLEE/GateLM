@@ -1,4 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 
 import type { AdmissionHandle, CompleteOptions, CompletionResult } from '@/execution/execution.types';
 
@@ -68,24 +69,148 @@ describe('ConversationService turn fan-out', () => {
     releaseSlow();
     await expect(firstResult).resolves.toEqual({ message, replayed: false });
   });
+
+  it('retries a transient final persistence conflict while assistant content is available', async () => {
+    const registry = new ActiveTurnRegistry();
+    const prepared = execution(registry, 'first');
+    const message = assistantMessage();
+    const store = {
+      markStreaming: jest.fn().mockResolvedValue(undefined),
+      persistAssistant: jest.fn()
+        .mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('retry', {
+          code: 'P2034',
+          clientVersion: '6.1.0',
+        }))
+        .mockResolvedValue({ message, replayed: false }),
+      markTerminalFailure: jest.fn().mockResolvedValue(undefined),
+      cancelTurn: jest.fn().mockResolvedValue({ cancelled: true }),
+    };
+    const bridge = { complete: jest.fn().mockResolvedValue(completion('delta')) };
+    const service = serviceWith({ store, bridge, registry });
+
+    await expect(service.executeTurn(prepared, async () => undefined))
+      .resolves.toEqual({ message, replayed: false });
+    expect(store.persistAssistant).toHaveBeenCalledTimes(2);
+    expect(store.markTerminalFailure).not.toHaveBeenCalled();
+  });
+
+  it('derives the internal input estimate from the exact bounded completion messages', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const messages = Object.freeze([
+      Object.freeze({ role: 'assistant' as const, content: '한' }),
+      Object.freeze({ role: 'user' as const, content: 'abc' }),
+    ]);
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ replayed: false }),
+      completionHistory: jest.fn().mockResolvedValue(messages),
+    };
+    const bridge = { admitAuthorized: jest.fn().mockResolvedValue(handle) };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'abc',
+      usageIntent: { maxOutputTokens: 8192, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(prepared.kind).toBe('execute');
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(prepared.usageIntent).toEqual({
+      estimatedInputTokens: Buffer.byteLength('한abc', 'utf8'),
+      maxOutputTokens: 8192,
+      requestedTier: 'standard',
+      cacheStrategy: 'exact',
+    });
+    registry.release(reserved.turnId, handle);
+  });
+
+  it('cleans up the last admitted attachment when history preparation fails', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ replayed: false }),
+      completionHistory: jest.fn().mockRejectedValue(new Error('history failed')),
+      cancelTurn: jest.fn().mockResolvedValue({ cancelled: true }),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      cancel: jest.fn().mockResolvedValue({ state: 'cancelled' }),
+    };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'abc',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).rejects.toMatchObject({ status: 500 });
+
+    expect(bridge.cancel).toHaveBeenCalledWith(handle);
+    expect(store.cancelTurn).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved.conversationId,
+      reserved.turnId,
+    );
+    const replacement = registry.reserve(reserved.turnId, 1);
+    expect(registry.releaseReservation(reserved.turnId, replacement)).toBe(true);
+  });
+
+  it('rejects an excess attachment before creating another admission', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const occupied = registry.reserve(reserved.turnId, 1);
+    const store = { reserveTurn: jest.fn().mockResolvedValue(reserved) };
+    const bridge = { admitAuthorized: jest.fn() };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+      maximumAttachmentsPerTurn: 1,
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'abc',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).rejects.toMatchObject({ status: 429 });
+    expect(bridge.admitAuthorized).not.toHaveBeenCalled();
+    registry.releaseReservation(reserved.turnId, occupied);
+  });
 });
 
 function serviceWith(input: {
   store: object;
   bridge: object;
   registry: ActiveTurnRegistry;
+  sessions?: object;
+  maximumAttachmentsPerTurn?: number;
 }): ConversationService {
   const values: Record<string, number> = {
     TENANT_CHAT_HISTORY_RETENTION_DAYS: 30,
     TENANT_CHAT_ASSISTANT_MAX_BYTES: 1024 * 1024,
-    TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: 4,
+    TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN: input.maximumAttachmentsPerTurn ?? 4,
   };
   const config = {
     getOrThrow: (name: string) => values[name],
   } as ConfigService;
   return new ConversationService(
     config,
-    {} as never,
+    (input.sessions ?? {}) as never,
     input.store as never,
     input.bridge as never,
     input.registry,
@@ -158,5 +283,30 @@ function completion(assistantContent: string): CompletionResult {
       cacheOutcome: 'miss' as const,
       replayed: false,
     }),
+  });
+}
+
+function reservedTurn(state: string) {
+  return Object.freeze({
+    conversationId: '00000000-0000-4000-8000-000000000300',
+    turnId: '00000000-0000-4000-8000-000000000301',
+    requestId: '00000000-0000-4000-8000-000000000302',
+    idempotencyKey: 'idempotency-key',
+    cacheEpoch: 1n,
+    state,
+    replayed: false,
+  });
+}
+
+function authorized() {
+  return Object.freeze({
+    actorAuthzVersion: 1,
+    actorKind: 'employee' as const,
+    employeeId: '00000000-0000-4000-8000-000000000201',
+    sessionId: 'session',
+    sessionVersion: 1,
+    tenantAuthzVersion: 1,
+    tenantId: '00000000-0000-4000-8000-000000000100',
+    userId: '00000000-0000-4000-8000-000000000200',
   });
 }

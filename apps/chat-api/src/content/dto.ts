@@ -13,6 +13,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import { MAX_EPHEMERAL_MESSAGE_CHARACTERS } from '@/execution/execution.types';
+
 const trim = (value: unknown) => (typeof value === 'string' ? value.trim() : value);
 
 export class ConversationIdParams {
@@ -81,13 +83,8 @@ export class MessagePageQueryDto extends CursorQueryDto {
 
 export class UsageIntentDto {
   @IsInt()
-  @Min(0)
-  @Max(1_000_000)
-  estimatedInputTokens!: number;
-
-  @IsInt()
   @Min(1)
-  @Max(1_000_000)
+  @Max(8192)
   maxOutputTokens!: number;
 
   @IsIn(['auto', 'high_quality', 'standard', 'economy'])
@@ -106,7 +103,7 @@ export class CreateTurnDto {
 
   @IsString()
   @MinLength(1)
-  @MaxLength(20_000)
+  @MaxLength(MAX_EPHEMERAL_MESSAGE_CHARACTERS)
   content!: string;
 
   @Type(() => UsageIntentDto)

@@ -14,7 +14,6 @@ const PRIMARY_USER_ID = '00000000-0000-4000-8000-000000000900';
 const SERVICE_TOKEN = required('TENANT_CHAT_WEB_SERVICE_TOKEN');
 const MARKER = process.env.TENANT_CHAT_SMOKE_MARKER || `smoke-${randomBytes(32).toString('base64url')}`;
 const USAGE_INTENT = Object.freeze({
-  estimatedInputTokens: 16,
   maxOutputTokens: 64,
   requestedTier: 'standard',
   cacheStrategy: 'exact',

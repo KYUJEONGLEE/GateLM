@@ -4,35 +4,77 @@ import type { AdmissionHandle } from '@/execution/execution.types';
 
 export class TurnAttachmentLimitReached extends Error {}
 
+export type TurnAttachmentReservation = Readonly<{ token: symbol }>;
+
 @Injectable()
 export class ActiveTurnRegistry {
   private readonly active = new Map<string, {
     controller: AbortController;
-    handles: Set<AdmissionHandle>;
+    attachments: Map<symbol, AdmissionHandle | undefined>;
   }>();
 
-  register(turnId: string, handle: AdmissionHandle, maximum: number): AbortSignal {
+  reserve(turnId: string, maximum: number): TurnAttachmentReservation {
     const entry = this.active.get(turnId) ?? {
       controller: new AbortController(),
-      handles: new Set<AdmissionHandle>(),
+      attachments: new Map<symbol, AdmissionHandle | undefined>(),
     };
-    if (entry.handles.size >= maximum) throw new TurnAttachmentLimitReached();
-    entry.handles.add(handle);
+    if (entry.attachments.size >= maximum) throw new TurnAttachmentLimitReached();
+    const token = Symbol(turnId);
+    entry.attachments.set(token, undefined);
     this.active.set(turnId, entry);
+    return Object.freeze({ token });
+  }
+
+  activate(
+    turnId: string,
+    reservation: TurnAttachmentReservation,
+    handle: AdmissionHandle,
+  ): AbortSignal {
+    const entry = this.active.get(turnId);
+    if (!entry?.attachments.has(reservation.token)) throw new TurnAttachmentLimitReached();
+    entry.attachments.set(reservation.token, handle);
     return entry.controller.signal;
+  }
+
+  register(turnId: string, handle: AdmissionHandle, maximum: number): AbortSignal {
+    const reservation = this.reserve(turnId, maximum);
+    try {
+      return this.activate(turnId, reservation, handle);
+    } catch (error) {
+      this.releaseReservation(turnId, reservation);
+      throw error;
+    }
   }
 
   abort(turnId: string): readonly AdmissionHandle[] {
     const entry = this.active.get(turnId);
     if (!entry) return Object.freeze([]);
     entry.controller.abort();
-    return Object.freeze([...entry.handles]);
+    return Object.freeze(
+      [...entry.attachments.values()].filter(
+        (handle): handle is AdmissionHandle => handle !== undefined,
+      ),
+    );
+  }
+
+  releaseReservation(turnId: string, reservation: TurnAttachmentReservation): boolean {
+    const entry = this.active.get(turnId);
+    if (!entry) return true;
+    entry.attachments.delete(reservation.token);
+    const empty = entry.attachments.size === 0;
+    if (empty) this.active.delete(turnId);
+    return empty;
   }
 
   release(turnId: string, handle: AdmissionHandle): void {
     const entry = this.active.get(turnId);
     if (!entry) return;
-    entry.handles.delete(handle);
-    if (entry.handles.size === 0) this.active.delete(turnId);
+    for (const [token, attached] of entry.attachments) {
+      if (attached === handle) {
+        entry.attachments.delete(token);
+        break;
+      }
+    }
+    if (entry.attachments.size === 0) this.active.delete(turnId);
   }
 }

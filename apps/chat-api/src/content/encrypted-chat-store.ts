@@ -3,7 +3,12 @@ import { Prisma, type TenantChatMessage } from '@prisma/client';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '@/database/prisma.service';
-import type { AdmissionHandle, EphemeralMessage, UsageIntent } from '@/execution/execution.types';
+import {
+  MAX_EPHEMERAL_MESSAGE_CHARACTERS,
+  type AdmissionHandle,
+  type ClientUsageIntent,
+  type EphemeralMessage,
+} from '@/execution/execution.types';
 import type { JsonValue } from '@/execution/jcs';
 
 import {
@@ -202,10 +207,15 @@ export class EncryptedChatStore {
     actor: ChatActor,
     conversationId: string,
     expectedVersion?: number,
-  ): Promise<Readonly<{ replayed: boolean; cancelledTurnIds: readonly string[] }>> {
+    retentionCutoff?: Date,
+  ): Promise<Readonly<{
+    deleted: boolean;
+    replayed: boolean;
+    cancelledTurnIds: readonly string[];
+  }>> {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<LockedConversation[]>(Prisma.sql`
-        SELECT id, status, version, cache_epoch AS "cacheEpoch"
+        SELECT id, status, version, cache_epoch AS "cacheEpoch", expires_at AS "expiresAt"
         FROM tenant_chat_conversations
         WHERE id = ${conversationId}::uuid
           AND tenant_id = ${actor.tenantId}::uuid
@@ -215,10 +225,24 @@ export class EncryptedChatStore {
       const row = rows[0];
       if (!row) throw new ConversationNotFound();
       if (row.status === 'deleted') {
-        return Object.freeze({ replayed: true, cancelledTurnIds: Object.freeze([] as string[]) });
+        return Object.freeze({
+          deleted: false,
+          replayed: true,
+          cancelledTurnIds: Object.freeze([] as string[]),
+        });
       }
       if (expectedVersion !== undefined && row.version !== expectedVersion) {
         throw new ConversationVersionConflict();
+      }
+      if (
+        retentionCutoff &&
+        (!row.expiresAt || row.expiresAt.getTime() > retentionCutoff.getTime())
+      ) {
+        return Object.freeze({
+          deleted: false,
+          replayed: false,
+          cancelledTurnIds: Object.freeze([] as string[]),
+        });
       }
       const activeTurns = await tx.tenantChatTurn.findMany({
         where: {
@@ -258,6 +282,7 @@ export class EncryptedChatStore {
         data: { state: 'deleted', cancelledAt: now, safeErrorCode: 'CHAT_REQUEST_CANCELLED' },
       });
       return Object.freeze({
+        deleted: true,
         replayed: false,
         cancelledTurnIds: Object.freeze(activeTurns.map((turn) => turn.id)),
       });
@@ -304,38 +329,43 @@ export class EncryptedChatStore {
   async reserveTurn(
     actor: ChatActor,
     conversationId: string,
-    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: UsageIntent }>,
+    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
   ): Promise<ReservedTurn> {
-    const conversation = await this.activeConversation(actor, conversationId);
     const binding = turnBinding(actor, conversationId, input);
     const signed = await this.integrity.sign(binding);
     const turnId = randomUUID();
     const requestId = randomUUID();
     try {
-      const turn = await this.prisma.tenantChatTurn.create({
-        data: {
-          id: turnId,
-          conversationId,
-          tenantId: actor.tenantId,
-          userId: actor.userId,
-          requestId,
-          idempotencyKey: input.idempotencyKey,
-          requestBindingMac: signed.mac,
-          requestBindingKeyVersion: signed.keyVersion,
-          capturedCacheEpoch: conversation.cacheEpoch,
-        },
+      const turn = await this.prisma.$transaction(async (tx) => {
+        const conversation = await lockActiveConversation(tx, actor, conversationId);
+        return tx.tenantChatTurn.create({
+          data: {
+            id: turnId,
+            conversationId,
+            tenantId: actor.tenantId,
+            userId: actor.userId,
+            requestId,
+            idempotencyKey: input.idempotencyKey,
+            requestBindingMac: signed.mac,
+            requestBindingKeyVersion: signed.keyVersion,
+            capturedCacheEpoch: conversation.cacheEpoch,
+          },
+        });
       });
       return reservedView(turn, false);
     } catch (error) {
       if (!uniqueConflict(error)) throw error;
-      const turn = await this.prisma.tenantChatTurn.findUnique({
-        where: {
-          tenantId_userId_idempotencyKey: {
-            tenantId: actor.tenantId,
-            userId: actor.userId,
-            idempotencyKey: input.idempotencyKey,
+      const turn = await this.prisma.$transaction(async (tx) => {
+        await lockActiveConversation(tx, actor, conversationId);
+        return tx.tenantChatTurn.findUnique({
+          where: {
+            tenantId_userId_idempotencyKey: {
+              tenantId: actor.tenantId,
+              userId: actor.userId,
+              idempotencyKey: input.idempotencyKey,
+            },
           },
-        },
+        });
       });
       if (!turn || turn.conversationId !== conversationId) throw new IdempotencyConflict();
       await this.verifyBinding(binding, turn.requestBindingKeyVersion, turn.requestBindingMac);
@@ -447,6 +477,7 @@ export class EncryptedChatStore {
     let bytesUsed = 0;
     for (const row of rows) {
       const content = await this.decryptMessage(row);
+      if (content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS) break;
       const contentBytes = Buffer.byteLength(content, 'utf8');
       if (bytesUsed + contentBytes > MAX_HISTORY_BYTES) break;
       bytesUsed += contentBytes;
@@ -592,8 +623,9 @@ export class EncryptedChatStore {
     deleted: number;
     cancelledTurnIds: readonly string[];
   }>> {
+    const cutoff = new Date();
     const expired = await this.prisma.tenantChatConversation.findMany({
-      where: { status: 'active', deletedAt: null, expiresAt: { lte: new Date() } },
+      where: { status: 'active', deletedAt: null, expiresAt: { lte: cutoff } },
       orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
       take: limit,
       select: { id: true, tenantId: true, userId: true },
@@ -605,8 +637,10 @@ export class EncryptedChatStore {
         const result = await this.deleteConversation(
           { tenantId: row.tenantId, userId: row.userId },
           row.id,
+          undefined,
+          cutoff,
         );
-        if (!result.replayed) {
+        if (result.deleted) {
           deleted += 1;
           cancelledTurnIds.push(...result.cancelledTurnIds);
         }
@@ -760,6 +794,7 @@ type LockedConversation = Readonly<{
   status: string;
   version: number;
   cacheEpoch: bigint;
+  expiresAt: Date | null;
 }>;
 
 function createBinding(actor: ChatActor, idempotencyKey: string, title: string): JsonValue {
@@ -769,7 +804,7 @@ function createBinding(actor: ChatActor, idempotencyKey: string, title: string):
 function turnBinding(
   actor: ChatActor,
   conversationId: string,
-  input: Readonly<{ idempotencyKey: string; content: string; usageIntent: UsageIntent }>,
+  input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
 ): JsonValue {
   return {
     actor: actorValue(actor),
