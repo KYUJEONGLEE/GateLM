@@ -21,6 +21,16 @@ test("bridges legacy masking action when safety outcome is unavailable", () => {
   expect(matchesRequestLogSafetyOutcome(record, "blocked")).toBe(true);
 });
 
+test("handles request logs with no safety domain outcome", () => {
+  const record = {
+    domainOutcomes: {},
+    maskingAction: "none"
+  } as Pick<LiveInvocationLogRecord, "domainOutcomes" | "maskingAction">;
+
+  expect(requestLogSafetyOutcome(record)).toBe("passed");
+  expect(matchesRequestLogSafetyOutcome(record, "passed")).toBe(true);
+});
+
 test("rejects unsupported safety filter values", () => {
   expect(normalizeRequestLogSafetyOutcomeFilter("filtered")).toBe("");
   expect(normalizeRequestLogSafetyOutcomeFilter("not_checked")).toBe("not_checked");

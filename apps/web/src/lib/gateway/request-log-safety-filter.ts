@@ -29,7 +29,7 @@ export function matchesRequestLogSafetyOutcome(
 export function requestLogSafetyOutcome(
   record: Pick<LiveInvocationLogRecord, "domainOutcomes" | "maskingAction">
 ): RequestLogSafetyOutcomeFilter {
-  const outcome = record.domainOutcomes?.safety.outcome?.trim().toLowerCase();
+  const outcome = record.domainOutcomes?.safety?.outcome?.trim().toLowerCase();
   if (requestLogSafetyOutcomeFilters.includes(outcome as RequestLogSafetyOutcomeFilter)) {
     return outcome as RequestLogSafetyOutcomeFilter;
   }

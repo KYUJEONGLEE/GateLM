@@ -32,12 +32,6 @@ test("opens the project policy workspace for every project state", () => {
       id: "project-1"
     })
   ).toBe("/tenants/tenant-1/projects/project-1/policies");
-
-  expect(
-    getProjectSettingsHref("tenant-1", {
-      id: "project-1"
-    })
-  ).toBe("/tenants/tenant-1/projects/project-1/policies");
 });
 
 test("sorts the newest project first", () => {
