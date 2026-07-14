@@ -35,6 +35,12 @@
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9_-]+$"
     },
+    "modelKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$"
+    },
     "sha256Digest": {
       "type": "string",
       "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
@@ -78,7 +84,7 @@
       "properties": {
         "routeId": { "$ref": "#/$defs/opaqueId" },
         "providerId": { "$ref": "#/$defs/opaqueId" },
-        "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "modelKey": { "$ref": "#/$defs/modelKey" },
         "inputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" },
         "outputMicroUsdPerMillionTokens": { "$ref": "#/$defs/nonNegativeInteger" },
         "cacheReadInputMicroUsdPerMillionTokens": {
@@ -176,7 +182,7 @@
         "routeId": { "$ref": "#/$defs/opaqueId" },
         "tier": { "type": "string", "enum": ["high_quality", "standard", "economy"] },
         "providerId": { "$ref": "#/$defs/opaqueId" },
-        "modelKey": { "$ref": "#/$defs/opaqueId" },
+        "modelKey": { "$ref": "#/$defs/modelKey" },
         "enabled": { "type": "boolean" }
       }
     },

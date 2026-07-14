@@ -11,6 +11,7 @@ import { hashSecret } from '@/modules/auth/auth.crypto';
 import { AUTH_COOKIE_NAMES } from '@/modules/auth/auth.tokens';
 
 import { AdminAuthGuard } from './admin-auth.guard';
+import { getAuthenticatedAdminUserId } from '@/common/authenticated-admin';
 
 describe('AdminAuthGuard', () => {
   const sessionToken = 'session-token-for-test';
@@ -96,9 +97,12 @@ describe('AdminAuthGuard', () => {
     prisma.tenantAdmin.findMany.mockResolvedValue([]);
     const guard = newGuard(prisma);
 
-    await expect(
-      guard.canActivate(contextFor({ cookie: sessionCookie(), params: { tenantId } })),
-    ).resolves.toBe(true);
+    const context = contextFor({ cookie: sessionCookie(), params: { tenantId } });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(
+      getAuthenticatedAdminUserId(context.switchToHttp().getRequest<Request>()),
+    ).toBe(userId);
   });
 
   it('scopes provider catalog reads through the catalog application id', async () => {
