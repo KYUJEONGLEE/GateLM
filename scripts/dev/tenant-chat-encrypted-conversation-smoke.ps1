@@ -129,7 +129,8 @@ try {
   Write-Phase 'forbidden data: scan database result, Redis values, and container logs'
   if ($contentResult.databasePlaintext -ne $false) { throw 'Database plaintext scan failed.' }
   if (Test-RedisPlaintext $marker) { throw 'Redis retained the smoke content marker in plaintext.' }
-  $metrics = (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8080/metrics' -TimeoutSec 10).Content
+  $metrics = (& docker compose @composeFiles exec -T chat-api node -e "fetch('http://gateway-core:8080/metrics').then(async r=>{if(!r.ok)process.exit(1);process.stdout.write(await r.text())}).catch(()=>process.exit(1))") -join "`n"
+  if ($LASTEXITCODE -ne 0) { throw 'Gateway metrics read failed.' }
   if ($metrics.Contains($marker)) { throw 'A metric retained the smoke content marker in plaintext.' }
   $logs = (& docker compose @composeFiles logs --no-color control-plane-api gateway-core chat-api mock-provider) -join "`n"
   if ($LASTEXITCODE -ne 0) { throw 'Container log read failed.' }

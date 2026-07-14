@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { generateTenantChatLocalSecrets } from './generate-tenant-chat-local-secrets.mjs';
 
@@ -26,4 +27,10 @@ test('atomically creates split private/public and Gateway support secrets', asyn
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('keeps generated local secrets out of Docker build contexts', async () => {
+  const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+  const dockerignore = await readFile(join(repositoryRoot, '.dockerignore'), 'utf8');
+  assert.match(dockerignore, /^\.secrets\/?$/m);
 });

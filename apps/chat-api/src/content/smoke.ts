@@ -118,7 +118,7 @@ async function main(): Promise<void> {
     await assertRollbackFloorFails(app.get(TenantContentKeyService), app.get(WrappingKeyProvider), prisma, primary, conversationId);
 
     const cancellationConversation = await createConversation(primary, `${MARKER}-title-cancel`);
-    await assertCancellation(primary, cancellationConversation);
+    await assertCancellation(prisma, primary, cancellationConversation);
 
     const retentionConversation = await createConversation(primary, `${MARKER}-title-retention`);
     await prisma.tenantChatConversation.update({
@@ -176,7 +176,11 @@ async function createConversation(accessToken: string, title: string): Promise<s
   return stringField(value, 'id');
 }
 
-async function assertCancellation(accessToken: string, conversationId: string): Promise<void> {
+async function assertCancellation(
+  prisma: PrismaService,
+  accessToken: string,
+  conversationId: string,
+): Promise<void> {
   const response = await apiRaw('POST', `/internal/v1/tenant-chat/conversations/${conversationId}/turns`, accessToken, {
     idempotencyKey: opaque(),
     content: `${MARKER}-prompt-cancel`,
@@ -200,6 +204,13 @@ async function assertCancellation(accessToken: string, conversationId: string): 
   }
   const terminal = parseSse(text).at(-1);
   assert(terminal?.type === 'chat.turn.cancelled', 'CancelTerminalMissing');
+  const turnId = stringField(acceptedEvent, 'turnId');
+  const turn = await prisma.tenantChatTurn.findUniqueOrThrow({ where: { id: turnId } });
+  assert(turn.state === 'cancelled', 'CancelStateNotDurable');
+  assert(
+    await prisma.tenantChatMessage.count({ where: { turnId, role: 'assistant' } }) === 0,
+    'CancelAssistantPersisted',
+  );
 }
 
 async function assertRecordSwapFails(
