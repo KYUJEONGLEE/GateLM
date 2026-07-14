@@ -123,6 +123,26 @@ test("legacy conversion uses general primaries and drops non-uniform fallback", 
   expect(countRuntimePolicyModelRoleConversionChanges(policy.routes, conversion!)).toBe(10);
 });
 
+test("legacy routes without General roles can be initialized from explicit model choices", () => {
+  const policy = createMockBootstrapRoutingPolicy();
+  policy.routes.general.simple.modelRefs = [];
+  policy.routes.general.complex.modelRefs = [];
+
+  expect(getRuntimePolicyModelRoleConversion(policy.routes)).toBeNull();
+
+  const routes = createRuntimePolicyRoleRoutes({
+    complexModelRef: "provider-b:premium",
+    fallbackModelRef: null,
+    simpleModelRef: "provider-a:cheap"
+  });
+
+  expect(getRuntimePolicyModelRoles(routes)).toEqual({
+    complexModelRef: "provider-b:premium",
+    fallbackModelRef: null,
+    simpleModelRef: "provider-a:cheap"
+  });
+});
+
 test("conversion change count is zero for an existing global role profile", () => {
   const routes = createRuntimePolicyRoleRoutes({
     complexModelRef: "provider-b:premium",

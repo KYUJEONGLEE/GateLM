@@ -256,9 +256,10 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     routingConversionImpact: "{count} of 10 route cells will use the new global roles.",
     routingConversionTitle: "One-time routing update",
     routingConversionUnavailable:
-      "This policy cannot be converted automatically because its General Simple or Complex route is missing.",
+      "This policy cannot be converted automatically because its General Simple or Complex route is missing. Select both roles manually to continue.",
     routingFallbackModel: "Fallback model (optional)",
     routingFallbackNone: "No fallback",
+    routingManualSetup: "Apply manual choices to draft",
     routingMockWarning:
       "This policy still uses the Mock model. Replace it before using a live provider path.",
     routingRoleDescription:
@@ -266,6 +267,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     routingRoleHint:
       "When enabled, requests are classified into the existing category and difficulty matrix, then resolved through these global roles.",
     routingRoleModels: "Routing role models",
+    routingSelectModel: "Select a model",
     routingSimpleModel: "Simple model",
     runtimeSnapshot: "RuntimeSnapshot",
     responseCapture: "Response capture",
@@ -389,9 +391,10 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     routingConversionImpact: "전체 10개 경로 중 {count}개가 새 전역 역할로 변경됩니다.",
     routingConversionTitle: "라우팅 정책 1회 업데이트",
     routingConversionUnavailable:
-      "General Simple 또는 Complex 경로가 없어 이 정책을 자동으로 전환할 수 없습니다.",
+      "General Simple 또는 Complex 경로가 없어 자동으로 전환할 수 없습니다. 계속하려면 두 역할을 직접 선택하세요.",
     routingFallbackModel: "Fallback 모델 (선택)",
     routingFallbackNone: "Fallback 없음",
+    routingManualSetup: "선택한 모델로 초안 전환",
     routingMockWarning:
       "현재 정책에 Mock 모델이 포함되어 있습니다. 실제 Provider 경로를 사용하기 전에 교체하세요.",
     routingRoleDescription:
@@ -399,6 +402,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     routingRoleHint:
       "활성화하면 기존 카테고리·난이도 분류 결과를 전역 Simple/Complex 역할에 연결합니다.",
     routingRoleModels: "라우팅 역할 모델",
+    routingSelectModel: "모델 선택",
     routingSimpleModel: "Simple 모델",
     runtimeSnapshot: "런타임 스냅샷",
     responseCapture: "응답 캡처",

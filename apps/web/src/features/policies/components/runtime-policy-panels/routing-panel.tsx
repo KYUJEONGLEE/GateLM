@@ -2,7 +2,7 @@
 
 import { ArrowRight, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -51,6 +51,11 @@ export function RoutingPolicyPanel({
   text
 }: RoutingPolicyPanelProps) {
   const modelOptions = useMemo(() => createModelRefOptions(providers), [providers]);
+  const [manualSetupRoles, setManualSetupRoles] = useState<RuntimePolicyModelRoles>({
+    complexModelRef: "",
+    fallbackModelRef: null,
+    simpleModelRef: ""
+  });
   const roles = getRuntimePolicyModelRoles(draftValues.routingPolicy.routes);
   const conversionRoles = getRuntimePolicyModelRoleConversion(
     draftValues.routingPolicy.routes
@@ -64,6 +69,9 @@ export function RoutingPolicyPanel({
   const hasMockRoute = hasMockModelInRoutes(
     draftValues.routingPolicy.routes,
     modelOptions
+  );
+  const canApplyManualSetup = Boolean(
+    manualSetupRoles.simpleModelRef.trim() && manualSetupRoles.complexModelRef.trim()
   );
 
   function updateRoutingPolicy(
@@ -164,7 +172,78 @@ export function RoutingPolicyPanel({
                 </Button>
               </>
             ) : (
-              <p>{text.routingConversionUnavailable}</p>
+              <div className="routing-migration-manual-setup">
+                <p>{text.routingConversionUnavailable}</p>
+                <div
+                  aria-label={text.routingManualSetup}
+                  className="routing-migration-manual-grid"
+                  role="group"
+                >
+                  <RoleModelSelect
+                    allowEmpty
+                    label={text.routingSimpleModel}
+                    modelOptions={modelOptions}
+                    noneLabel={text.routingSelectModel}
+                    onChange={(simpleModelRef) =>
+                      setManualSetupRoles((current) => ({
+                        ...current,
+                        fallbackModelRef:
+                          current.fallbackModelRef === simpleModelRef
+                            ? null
+                            : current.fallbackModelRef,
+                        simpleModelRef
+                      }))
+                    }
+                    value={manualSetupRoles.simpleModelRef}
+                  />
+                  <RoleModelSelect
+                    allowEmpty
+                    label={text.routingComplexModel}
+                    modelOptions={modelOptions}
+                    noneLabel={text.routingSelectModel}
+                    onChange={(complexModelRef) =>
+                      setManualSetupRoles((current) => ({
+                        ...current,
+                        complexModelRef,
+                        fallbackModelRef:
+                          current.fallbackModelRef === complexModelRef
+                            ? null
+                            : current.fallbackModelRef
+                      }))
+                    }
+                    value={manualSetupRoles.complexModelRef}
+                  />
+                  <RoleModelSelect
+                    allowEmpty
+                    excludedModelRefs={[
+                      manualSetupRoles.simpleModelRef,
+                      manualSetupRoles.complexModelRef
+                    ]}
+                    label={text.routingFallbackModel}
+                    modelOptions={modelOptions}
+                    noneLabel={text.routingFallbackNone}
+                    onChange={(fallbackModelRef) =>
+                      setManualSetupRoles((current) => ({
+                        ...current,
+                        fallbackModelRef: fallbackModelRef || null
+                      }))
+                    }
+                    value={manualSetupRoles.fallbackModelRef ?? ""}
+                  />
+                </div>
+                <div className="routing-migration-meta">
+                  <span>{text.routingConversionDraftNote}</span>
+                </div>
+                <Button
+                  className="routing-migration-action"
+                  disabled={!canApplyManualSetup}
+                  onClick={() => setRoles(manualSetupRoles)}
+                  type="button"
+                >
+                  {text.routingManualSetup}
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+              </div>
             )}
           </AlertDescription>
         </Alert>
@@ -292,7 +371,7 @@ function RoleModelSelect({
   return (
     <label className="tenant-routing-route">
       <span>{label}</span>
-      <span className="routing-model-ref-item">
+      <span className="routing-model-ref-item" data-has-icon={value ? "true" : "false"}>
         {value ? (
           <ProviderFamilyIcon
             className="tenant-routing-provider-icon"

@@ -151,10 +151,12 @@ export type RuntimePolicyEditorText = {
   routingConversionUnavailable: string;
   routingFallbackModel: string;
   routingFallbackNone: string;
+  routingManualSetup: string;
   routingMockWarning: string;
   routingRoleDescription: string;
   routingRoleHint: string;
   routingRoleModels: string;
+  routingSelectModel: string;
   routingSimpleModel: string;
   runtimeSnapshot: string;
   safetyTab: string;
