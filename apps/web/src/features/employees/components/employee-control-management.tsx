@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ChevronUp,
   Save,
+  Trash2,
   Upload,
   UserPlus,
   Users,
@@ -130,6 +131,10 @@ const employeeText: Record<
     department: string;
     departmentPlaceholder: string;
     departmentRequired: string;
+    deleteConfirm: (count: number) => string;
+    deleteFailed: string;
+    deleteSelected: string;
+    deleted: (successCount: number, failedCount: number) => string;
     disable: string;
     editDepartment: string;
     email: string;
@@ -177,6 +182,13 @@ const employeeText: Record<
     department: "Department",
     departmentPlaceholder: "Select or enter a department",
     departmentRequired: "Department is required.",
+    deleteConfirm: (count) => `Delete ${count} selected employees? Their access will be revoked.`,
+    deleteFailed: "Selected employees could not be deleted.",
+    deleteSelected: "Delete",
+    deleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount} deleted, ${failedCount} failed`
+        : `${successCount} employees deleted.`,
     disable: "Disable",
     editDepartment: "Edit department",
     email: "Email",
@@ -223,6 +235,14 @@ const employeeText: Record<
     department: "부서",
     departmentPlaceholder: "기존 부서 선택 또는 새 부서 입력",
     departmentRequired: "부서를 입력하세요.",
+    deleteConfirm: (count) =>
+      `선택한 직원 ${count}명을 삭제할까요? 해당 직원의 접근 권한이 해제됩니다.`,
+    deleteFailed: "선택한 직원을 삭제하지 못했습니다.",
+    deleteSelected: "삭제",
+    deleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount}명 삭제, ${failedCount}명 실패`
+        : `${successCount}명의 직원을 삭제했습니다.`,
     disable: "비활성화",
     editDepartment: "부서 설정",
     email: "이메일",
@@ -1389,9 +1409,7 @@ export function EmployeeControlManagement({
   const [projectAssignmentToRemoveId, setProjectAssignmentToRemoveId] = useState<
     string | null
   >(null);
-  const [selectedInvitationEmployeeIds, setSelectedInvitationEmployeeIds] = useState<string[]>(
-    []
-  );
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [employeeTokenLimitDraft, setEmployeeTokenLimitDraft] =
     useState<EmployeeTokenLimitDraft>({
       enabled: false,
@@ -1536,19 +1554,20 @@ export function EmployeeControlManagement({
     pageIndex * pageSize,
     pageIndex * pageSize + pageSize
   );
-  const selectedInvitationEmployeeIdSet = new Set(selectedInvitationEmployeeIds);
-  const selectableCurrentPageEmployees = currentPageEmployees.filter(
-    (employee) => employee.invitationStatus !== "accepted"
-  );
+  const selectedEmployeeIdSet = new Set(selectedEmployeeIds);
+  const selectableCurrentPageEmployees = currentPageEmployees;
   const allCurrentPageEmployeesSelected =
     selectableCurrentPageEmployees.length > 0 &&
     selectableCurrentPageEmployees.every((employee) =>
-      selectedInvitationEmployeeIdSet.has(employee.id)
+      selectedEmployeeIdSet.has(employee.id)
     );
+  const selectedEmployeeCount = employees.filter((employee) =>
+    selectedEmployeeIdSet.has(employee.id)
+  ).length;
   const selectedInvitationEmployeeCount = employees.filter(
     (employee) =>
       employee.invitationStatus !== "accepted" &&
-      selectedInvitationEmployeeIdSet.has(employee.id)
+      selectedEmployeeIdSet.has(employee.id)
   ).length;
 
   useEffect(() => {
@@ -1725,7 +1744,7 @@ export function EmployeeControlManagement({
   }
 
   async function sendInvitesForSelectedEmployees() {
-    const selectedIds = new Set(selectedInvitationEmployeeIds);
+    const selectedIds = new Set(selectedEmployeeIds);
     const targets = employees.filter(
       (employee) =>
         selectedIds.has(employee.id) && employee.invitationStatus !== "accepted"
@@ -1765,7 +1784,7 @@ export function EmployeeControlManagement({
     const invitedEmployeeIds = new Set(
       invitations.map((invitation) => invitation.employee.id)
     );
-    setSelectedInvitationEmployeeIds((current) =>
+    setSelectedEmployeeIds((current) =>
       current.filter((employeeId) => !invitedEmployeeIds.has(employeeId))
     );
     const successCount = invitations.length;
@@ -1784,8 +1803,78 @@ export function EmployeeControlManagement({
     router.refresh();
   }
 
-  function toggleEmployeeInvitationSelection(employeeId: string, checked: boolean) {
-    setSelectedInvitationEmployeeIds((current) => {
+  async function deleteSelectedEmployees() {
+    const selectedIds = new Set(selectedEmployeeIds);
+    const targets = employees.filter((employee) => selectedIds.has(employee.id));
+
+    if (targets.length === 0 || !window.confirm(text.deleteConfirm(targets.length))) {
+      return;
+    }
+
+    setPendingAction("deleteSelected");
+    setSubmitState({ message: "", status: "idle" });
+
+    const deletedEmployeeIds: string[] = [];
+    let failedCount = 0;
+
+    for (let index = 0; index < targets.length; index += 5) {
+      const batch = targets.slice(index, index + 5);
+      const results = await Promise.all(
+        batch.map(async (employee) => {
+          try {
+            const response = await fetch("/api/control-plane/employees", {
+              body: JSON.stringify({
+                action: "update",
+                values: {
+                  employeeId: employee.id,
+                  status: "archived",
+                  tenantId: model.controlPlaneTenantId
+                }
+              }),
+              headers: { "Content-Type": "application/json" },
+              method: "POST"
+            });
+            const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
+
+            return response.ok && payload.employee?.status === "archived"
+              ? employee.id
+              : null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      for (const employeeId of results) {
+        if (employeeId) {
+          deletedEmployeeIds.push(employeeId);
+        } else {
+          failedCount += 1;
+        }
+      }
+    }
+
+    const deletedIdSet = new Set(deletedEmployeeIds);
+    setEmployees((current) => current.filter((employee) => !deletedIdSet.has(employee.id)));
+    setSelectedEmployeeIds((current) =>
+      current.filter((employeeId) => !deletedIdSet.has(employeeId))
+    );
+    if (selectedEmployeeId && deletedIdSet.has(selectedEmployeeId)) {
+      setSelectedEmployeeId(null);
+    }
+    setSubmitState({
+      message:
+        deletedEmployeeIds.length > 0
+          ? text.deleted(deletedEmployeeIds.length, failedCount)
+          : text.deleteFailed,
+      status: failedCount > 0 || deletedEmployeeIds.length === 0 ? "error" : "success"
+    });
+    setPendingAction(null);
+    router.refresh();
+  }
+
+  function toggleEmployeeSelection(employeeId: string, checked: boolean) {
+    setSelectedEmployeeIds((current) => {
       if (checked) {
         return current.includes(employeeId) ? current : [...current, employeeId];
       }
@@ -1793,11 +1882,11 @@ export function EmployeeControlManagement({
     });
   }
 
-  function toggleCurrentPageInvitationSelection(checked: boolean) {
+  function toggleCurrentPageEmployeeSelection(checked: boolean) {
     const currentPageIds = new Set(
       selectableCurrentPageEmployees.map((employee) => employee.id)
     );
-    setSelectedInvitationEmployeeIds((current) => {
+    setSelectedEmployeeIds((current) => {
       if (checked) {
         return Array.from(new Set([...current, ...currentPageIds]));
       }
@@ -2076,16 +2165,28 @@ export function EmployeeControlManagement({
       </section>
       <section className="employee-list-section">
         <div className="employee-list-toolbar employee-list-actions">
-          <Button
-            disabled={pendingAction !== null || selectedInvitationEmployeeCount === 0}
-            onClick={() => void sendInvitesForSelectedEmployees()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <UserPlus aria-hidden="true" />
-            {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
-          </Button>
+          <div className="employee-selection-actions">
+            <Button
+              disabled={pendingAction !== null || selectedInvitationEmployeeCount === 0}
+              onClick={() => void sendInvitesForSelectedEmployees()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <UserPlus aria-hidden="true" />
+              {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || selectedEmployeeCount === 0}
+              onClick={() => void deleteSelectedEmployees()}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              <Trash2 aria-hidden="true" />
+              {pendingAction === "deleteSelected" ? "..." : text.deleteSelected}
+            </Button>
+          </div>
           <Button
             className="employee-add-trigger"
             disabled={pendingAction !== null}
@@ -2110,7 +2211,7 @@ export function EmployeeControlManagement({
                     checked={allCurrentPageEmployeesSelected}
                     disabled={selectableCurrentPageEmployees.length === 0}
                     onChange={(event) =>
-                      toggleCurrentPageInvitationSelection(event.target.checked)
+                      toggleCurrentPageEmployeeSelection(event.target.checked)
                     }
                     type="checkbox"
                   />
@@ -2126,7 +2227,6 @@ export function EmployeeControlManagement({
                 {currentPageEmployees.map((employee) => {
                   const projectNames = projectNamesByEmployeeId.get(employee.id) ?? [];
                   const employeeUsage = usageByEmployeeId.get(employee.id);
-                  const isInvitationSelectable = employee.invitationStatus !== "accepted";
                   return (
                     <article
                       className="employee-list-row"
@@ -2145,10 +2245,10 @@ export function EmployeeControlManagement({
                       >
                         <input
                           aria-label={`${text.selectEmployee}: ${nullableText(employee.name, employee.email)}`}
-                          checked={selectedInvitationEmployeeIdSet.has(employee.id)}
-                          disabled={!isInvitationSelectable || pendingAction !== null}
+                          checked={selectedEmployeeIdSet.has(employee.id)}
+                          disabled={pendingAction !== null}
                           onChange={(event) =>
-                            toggleEmployeeInvitationSelection(employee.id, event.target.checked)
+                            toggleEmployeeSelection(employee.id, event.target.checked)
                           }
                           type="checkbox"
                         />

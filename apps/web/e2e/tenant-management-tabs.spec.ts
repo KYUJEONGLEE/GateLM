@@ -27,19 +27,21 @@ test.beforeEach(async ({ context, request }) => {
   ]);
 });
 
-test("auto routing starts with the required five by two mock matrix", async ({ page }) => {
+test("company policy opens routing with Claude as the company default", async ({ page }) => {
   await page.goto(tenantManagementPath);
 
-  await expect(page.getByRole("heading", { exact: true, name: "Tenant management" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { exact: true, name: "Tenant" })
+  ).toBeVisible();
 
-  const tabs = page.getByRole("tablist", { exact: true, name: "Tenant management sections" });
-  await expect(tabs.getByRole("tab")).toHaveText(["Budget", "Routing"]);
-  await expect(tabs.getByRole("tab", { exact: true, name: "Routing" })).toHaveAttribute(
+  const tabs = page.getByRole("tablist", { exact: true, name: "Company policy sections" });
+  await expect(tabs.getByRole("tab")).toHaveText(["Routing policy", "Budget policy"]);
+  await expect(tabs.getByRole("tab", { exact: true, name: "Routing policy" })).toHaveAttribute(
     "aria-selected",
     "true"
   );
 
-  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
+  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing policy" });
   const routingForm = routingPanel.locator(".tenant-routing-panel");
   const routingSwitch = routingPanel.getByRole("switch", {
     exact: true,
@@ -47,8 +49,14 @@ test("auto routing starts with the required five by two mock matrix", async ({ p
   });
   await expect(routingSwitch).toHaveAttribute("aria-checked", "true");
   await expectSwitchThumbInsideTrack(routingSwitch);
-  await expect(routingForm).toHaveAttribute("data-bootstrap-state", "mock_bootstrap");
-  await expect(routingPanel.getByRole("alert")).toContainText("mock-balanced");
+  await expect(routingForm).toHaveAttribute("data-policy-state", "company_default");
+  await expect(routingPanel.getByText("Company default model", { exact: true })).toBeVisible();
+  await expect(
+    routingPanel.getByText(
+      "The organization-wide baseline for workloads without an explicit override. All current routes inherit this model.",
+      { exact: true }
+    )
+  ).toBeVisible();
   await expect(routingPanel.getByRole("columnheader")).toHaveText([
     "Category",
     "Simple",
@@ -62,64 +70,65 @@ test("auto routing starts with the required five by two mock matrix", async ({ p
     "Reasoning"
   ]);
 
-  const modelRefInputs = routingPanel.getByRole("combobox", { name: /modelRef/ });
+  const modelRefInputs = routingPanel.locator(".tenant-routing-table").getByRole("combobox");
   await expect(modelRefInputs).toHaveCount(10);
   for (let index = 0; index < 10; index += 1) {
-    await expect(modelRefInputs.nth(index)).toHaveValue("mock-balanced");
+    await expect(modelRefInputs.nth(index)).toHaveValue("anthropic:claude-sonnet");
   }
+  await expect(routingPanel.locator(".tenant-routing-provider-icon-large")).toHaveCount(12);
 
   for (const retiredLabel of [
     "Default model",
     "High-quality model",
-    "Fallback model",
     "Auto routing OFF default model"
   ]) {
     await expect(routingPanel.getByText(retiredLabel, { exact: true })).toHaveCount(0);
   }
 });
 
-test("each route cell maintains an ordered primary and fallback modelRef list", async ({ page }) => {
+test("company default and fallback models are independently selectable", async ({ page }) => {
   await page.goto(tenantManagementPath);
 
-  const routeCell = page.locator('[data-route-cell="general:simple"]');
-  const modelRefInputs = routeCell.getByRole("combobox", { name: /modelRef/ });
-  await expect(modelRefInputs).toHaveCount(1);
-  await expect(modelRefInputs.nth(0)).toHaveValue("mock-balanced");
+  const companyDefault = page.getByRole("combobox", {
+    exact: true,
+    name: "Company default model"
+  });
+  const fallbackModel = page.getByRole("combobox", {
+    exact: true,
+    name: "Fallback model"
+  });
+  const routeModels = page.locator(".tenant-routing-table").getByRole("combobox");
 
-  await routeCell
-    .getByRole("button", { exact: true, name: "Add fallback modelRef to General Simple" })
-    .click();
-  await expect(modelRefInputs).toHaveCount(2);
-  await expect(modelRefInputs.nth(0)).toHaveValue("mock-balanced");
-  await expect(modelRefInputs.nth(1)).toHaveValue("openai:gpt-4o");
-
-  await routeCell
-    .getByRole("button", { exact: true, name: "Move General Simple fallback 1 up" })
-    .click();
-  await expect(modelRefInputs.nth(0)).toHaveValue("openai:gpt-4o");
-  await expect(modelRefInputs.nth(1)).toHaveValue("mock-balanced");
-
-  await routeCell
-    .getByRole("button", { exact: true, name: "Remove General Simple fallback 1" })
-    .click();
-  await expect(modelRefInputs).toHaveCount(1);
-  await expect(modelRefInputs.nth(0)).toHaveValue("openai:gpt-4o");
+  await expect(companyDefault).toHaveValue("anthropic:claude-sonnet");
+  await expect(fallbackModel).toHaveValue("anthropic:claude-haiku");
+  await companyDefault.selectOption("openai:gpt-4o");
+  for (let index = 0; index < 10; index += 1) {
+    await expect(routeModels.nth(index)).toHaveValue("openai:gpt-4o");
+  }
+  await fallbackModel.selectOption("openai:gpt-4o-mini");
+  await expect(fallbackModel).toHaveValue("openai:gpt-4o-mini");
+  await expect(page.getByRole("button", { name: /move|remove|add fallback/i })).toHaveCount(0);
 });
 
-test("mock bootstrap warning clears only after every mock modelRef is replaced", async ({ page }) => {
+test("general chat can be overridden to the registered GPT 4o-mini model", async ({ page }) => {
   await page.goto(tenantManagementPath);
 
-  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
+  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing policy" });
   const routingForm = routingPanel.locator(".tenant-routing-panel");
-  const modelRefInputs = routingPanel.getByRole("combobox", { name: /modelRef/ });
-  await expect(modelRefInputs).toHaveCount(10);
+  await routingPanel
+    .getByRole("combobox", { exact: true, name: "General Simple model" })
+    .selectOption("openai:gpt-4o-mini");
+  await routingPanel
+    .getByRole("combobox", { exact: true, name: "General Complex model" })
+    .selectOption("openai:gpt-4o-mini");
 
-  for (let index = 0; index < 10; index += 1) {
-    await modelRefInputs.nth(index).selectOption("anthropic:claude-sonnet");
-  }
-
-  await expect(routingPanel.getByRole("alert")).toHaveCount(0);
-  await expect(routingForm).toHaveAttribute("data-bootstrap-state", "configured");
+  await expect(routingForm).toHaveAttribute("data-policy-state", "category_override");
+  await expect(
+    routingPanel.getByText(
+      "Explicit workload routes are active. Requests without an override continue to inherit the company default.",
+      { exact: true }
+    )
+  ).toBeVisible();
 });
 
 test("manual mode hides model configuration while preserving the matrix", async ({
@@ -130,7 +139,7 @@ test("manual mode hides model configuration while preserving the matrix", async 
   const routingSwitch = page.getByRole("switch", { exact: true, name: "Auto routing" });
   const generalSimplePrimary = page.getByRole("combobox", {
     exact: true,
-    name: "General Simple primary modelRef"
+    name: "General Simple model"
   });
   await generalSimplePrimary.selectOption("google:gemini-flash");
 
@@ -138,10 +147,10 @@ test("manual mode hides model configuration while preserving the matrix", async 
   await expect(routingSwitch).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".tenant-routing-model-card")).toHaveCount(0);
   await expect(page.getByText("Manual model selection", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("table", { name: "Category by difficulty modelRef matrix" })).toHaveCount(
+  await expect(page.getByRole("table", { name: "Workload routing policy" })).toHaveCount(
     0
   );
-  await expect(page.getByText("Fallback model", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Fallback model" })).toBeVisible();
   await expect(page.getByText("Default model", { exact: true })).toHaveCount(0);
 
   await routingSwitch.click();
@@ -153,9 +162,9 @@ test("manual mode hides model configuration while preserving the matrix", async 
   await expect(page.getByRole("button", { exact: true, name: "Saved" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveText("Routing settings saved.");
 
-  await page.getByRole("tab", { exact: true, name: "Budget" }).click();
+  await page.getByRole("tab", { exact: true, name: "Budget policy" }).click();
   await expect(page.locator(".tenant-routing-panel")).toHaveCount(0);
-  await page.getByRole("tab", { exact: true, name: "Routing" }).click();
+  await page.getByRole("tab", { exact: true, name: "Routing policy" }).click();
 
   await expect(routingSwitch).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".tenant-routing-model-card")).toHaveCount(0);
@@ -163,32 +172,34 @@ test("manual mode hides model configuration while preserving the matrix", async 
   await expect(generalSimplePrimary).toHaveValue("google:gemini-flash");
 });
 
-test("reset restores guarded mock bootstrap without reusing a manual model", async ({ page }) => {
+test("reset restores the Claude company default without reusing a manual model", async ({ page }) => {
   await page.goto(tenantManagementPath);
 
   await page
-    .getByRole("combobox", { exact: true, name: "General Simple primary modelRef" })
+    .getByRole("combobox", { exact: true, name: "General Simple model" })
     .selectOption("openai:gpt-4o-mini");
-  await page
-    .getByRole("button", { exact: true, name: "Add fallback modelRef to General Simple" })
-    .click();
+  await page.getByRole("combobox", { exact: true, name: "Fallback model" }).selectOption(
+    "google:gemini-flash"
+  );
   await page.getByRole("switch", { exact: true, name: "Auto routing" }).click();
   await page.getByRole("button", { exact: true, name: "Reset" }).click();
 
-  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing" });
+  const routingPanel = page.getByRole("tabpanel", { exact: true, name: "Routing policy" });
   const routingForm = routingPanel.locator(".tenant-routing-panel");
   await expect(routingPanel.getByRole("switch", { exact: true, name: "Auto routing" })).toHaveAttribute(
     "aria-checked",
     "true"
   );
-  await expect(routingForm).toHaveAttribute("data-bootstrap-state", "mock_bootstrap");
-  await expect(routingPanel.getByRole("alert")).toContainText("mock-balanced");
+  await expect(routingForm).toHaveAttribute("data-policy-state", "company_default");
 
-  const modelRefInputs = routingPanel.getByRole("combobox", { name: /modelRef/ });
+  const modelRefInputs = routingPanel.locator(".tenant-routing-table").getByRole("combobox");
   await expect(modelRefInputs).toHaveCount(10);
   for (let index = 0; index < 10; index += 1) {
-    await expect(modelRefInputs.nth(index)).toHaveValue("mock-balanced");
+    await expect(modelRefInputs.nth(index)).toHaveValue("anthropic:claude-sonnet");
   }
+  await expect(routingPanel.getByRole("combobox", { name: "Fallback model" })).toHaveValue(
+    "anthropic:claude-haiku"
+  );
 });
 
 test("routing matrix stacks without horizontal overflow on mobile", async ({ page }) => {
@@ -199,7 +210,7 @@ test("routing matrix stacks without horizontal overflow on mobile", async ({ pag
   await expect(routingPanel).toBeVisible();
   await expect(page.getByRole("button", { exact: true, name: "Save changes" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { exact: true, name: "Category × difficulty routing matrix" })
+    page.getByRole("heading", { exact: true, name: "Workload routing policy" })
   ).toBeVisible();
   await expectNoHorizontalOverflow(routingPanel);
 });
