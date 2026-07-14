@@ -12,12 +12,16 @@ revision: `tenant-chat/v1`
 |---|---|
 | Browser/session auth wire | [`openapi/chat-auth.openapi.json`](./openapi/chat-auth.openapi.json) |
 | Private Control Plane metadata wire | [`openapi/private-control-plane.openapi.json`](./openapi/private-control-plane.openapi.json) |
+| Conversation/turn wire | [`openapi/chat-conversation.openapi.json`](./openapi/chat-conversation.openapi.json) |
 | Private Gateway wire contract | [`openapi/private-gateway.openapi.json`](./openapi/private-gateway.openapi.json) |
+| Content DB record | [`db/tenant-chat-content.sql`](./db/tenant-chat-content.sql) |
 | Usage DB record | [`db/tenant-chat-usage.sql`](./db/tenant-chat-usage.sql) |
 | RuntimeSnapshot | [`schemas/tenant-runtime-snapshot.schema.json`](./schemas/tenant-runtime-snapshot.schema.json) |
 | Workload JWT | [`schemas/workload-jwt-claims.schema.json`](./schemas/workload-jwt-claims.schema.json) |
 | Request context | [`schemas/gateway-request-context.schema.json`](./schemas/gateway-request-context.schema.json) |
 | SSE | [`schemas/completion-sse-event.schema.json`](./schemas/completion-sse-event.schema.json) |
+| Chat API-facing SSE | [`schemas/chat-turn-sse-event.schema.json`](./schemas/chat-turn-sse-event.schema.json) |
+| Conversation resource | [`schemas/chat-conversation.schema.json`](./schemas/chat-conversation.schema.json) |
 | Usage outbox payload | [`schemas/usage-settlement-event.schema.json`](./schemas/usage-settlement-event.schema.json) |
 | Pre-ledger terminal payload | [`schemas/invocation-terminal-event.schema.json`](./schemas/invocation-terminal-event.schema.json) |
 | Mixed/late usage outbox payload | [`schemas/usage-settlement-event-v2.schema.json`](./schemas/usage-settlement-event-v2.schema.json) |
@@ -29,6 +33,7 @@ revision: `tenant-chat/v1`
 ## 2. API idempotency와 retry
 
 - Chat API는 logical turn에 `turnId`, Gateway execution에 `requestId`, logical retry에 `idempotencyKey`를 한 번 생성한다.
+- Chat conversation create/turn API는 actor-bound keyed request MAC을 PostgreSQL에 먼저 reserve해 concurrent duplicate가 같은 logical IDs를 사용하게 한다. MAC, canonical bytes와 content는 log/response/metric에 넣지 않는다.
 - transport retry는 세 값을 유지하고 새 `jti`, `iat`, `nbf`, `exp`로 JWT만 다시 발급한다.
 - Chat API transport는 최대 2회 시도한다. response header 전 network/timeout 또는 짧은 `503`만 한 번 재시도하고, `4xx`, `429`, Provider terminal 오류는 재시도하지 않는다.
 - completion stream이 final 전에 비정상 종료되면 같은 실행 ID로 한 번만 reattach한다. reattach도 새 JWT/JTI를 사용한다.
@@ -49,7 +54,7 @@ revision: `tenant-chat/v1`
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
-- DOC-013이 해결되기 전 interim 규칙으로, terminal replay가 sequence 1부터 assistant content를 재구성할 수 없으면 Chat API는 성공 content를 만들지 않고 내부 `TerminalReplayContentUnavailable`로 fail closed한다. encrypted final handoff 또는 복구 불변조건은 후속 EncryptedChatStore contract에서 확정한다.
+- DOC-013은 Chat API의 encrypted final을 authoritative replay source로 사용해 닫는다. local final이 있으면 `accepted`, bounded reconstructed `delta`, `final`을 재생한다. Gateway terminal replay만 있고 local final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 fail closed하며 성공 content를 만들지 않는다.
 - client disconnect는 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
 - Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
@@ -218,12 +223,21 @@ Transaction 경계는 `BeginExecution`(admission consume, period reservation, re
 | User/Tenant/Membership/Employee entitlement | Control Plane/Auth | Auth/admin flows | Chat API entitlement resolver |
 | Tenant Chat session/refresh family | Chat API | Chat API auth service | Chat API auth service |
 | Browser auth cookie/CSRF boundary | Chat Web BFF | Chat Web BFF | Browser and Chat API proxy only |
-| conversation/message ciphertext | Chat API | Chat API only | Chat API only |
+| conversation/message/turn/content-key record | Chat API workstream | Chat API only | Chat API only |
 | Workload JWT | Chat API | Chat API signer | Gateway verifier |
 
 Chat API는 8개 usage table을 직접 갱신하지 않는다. Gateway는 conversation ciphertext나 Employee record를 쓰지 않는다. 모든 usage record는 `tenant_id`를 가지며 writer query와 update predicate는 항상 tenant ID를 포함한다.
 
 Chat API는 Control Plane-owned identity table을 직접 읽지 않는다. session/refresh table만 직접 읽고 쓰며, identity authentication·invitation binding·entitlement는 전용 Tenant Chat service token으로 보호된 Control Plane private API를 사용한다. Gateway용 internal token은 이 mutation route에 허용하지 않는다.
+
+### 8.1 Content transaction ordering
+
+- new turn reserve는 content-free `tenant_chat_turns` row만 만든다. unique `(tenant_id,user_id,idempotency_key)`와 keyed request MAC이 logical IDs를 고정한다.
+- admission 성공 뒤 user ciphertext insert와 turn admission metadata update를 한 transaction에서 수행한다. transaction 실패 시 Gateway cancel을 best effort로 호출하고 completion을 호출하지 않는다.
+- assistant final은 conversation row를 `FOR UPDATE`로 잠그고 `deleted_at IS NULL`, captured `cache_epoch`, turn state를 확인한 뒤 message insert, next sequence increment, turn completed transition을 한 transaction에서 수행한다.
+- assistant insert unique key는 `(turn_id,role)`다. duplicate는 기존 ciphertext를 decrypt/compare한 뒤 same content만 replay하고, mismatch는 integrity failure다.
+- delete는 conversation lock, tombstone/version/cache epoch update, message ciphertext delete, unfinished turn cancel transition을 한 transaction에서 수행한다. 외부 Gateway cancel은 commit 뒤 best effort다.
+- retention은 같은 delete primitive의 bounded batch다. worker crash/replay가 content를 복구하거나 epoch를 낮추지 않는다.
 
 ## 9. 구현 및 연동 순서
 

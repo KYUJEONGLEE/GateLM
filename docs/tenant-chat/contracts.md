@@ -123,7 +123,8 @@ Browser
 -> exact immutable tenant RuntimeSnapshot pin
 -> workload JWT(admission) 발급
 -> private Gateway admission: request rate + active concurrency
--> Chat API가 prior context를 bounded decrypt하고 current user message를 encrypted store에 기록
+-> Chat API가 current user message를 encrypted store에 durable 기록
+-> Chat API가 completed prior context만 bounded decrypt
 -> workload JWT(completion) 발급
 -> private Gateway completion이 admission/body/snapshot binding consume
 -> safety
@@ -146,6 +147,8 @@ Hard ordering rules:
 - provider call은 quota/budget reservation이 성공한 뒤에만 시작한다.
 - assistant partial delta는 영구 저장하지 않는다.
 - raw content, body binding digest, JWT/JTI는 structured log나 metric label에 남기지 않는다.
+- Chat API-facing 성공 terminal은 assistant ciphertext commit 뒤에만 보낸다.
+- user ciphertext commit 실패는 admission을 best-effort cancel하고 Provider completion을 시작하지 않는다.
 
 ## 5. Private Gateway API
 
@@ -333,6 +336,7 @@ Idempotency rules:
 |---:|---|---|
 | 400 | `CHAT_INVALID_REQUEST` | body/size/field validation 실패 |
 | 400 | `CHAT_SCOPE_FIELD_FORBIDDEN` | browser가 tenant/user/employee/quota/budget scope를 보냄 |
+| 400 | `CHAT_CURSOR_INVALID` | cursor tamper, scope/limit/epoch binding 불일치 |
 | 401 | `CHAT_AUTH_REQUIRED` | user session 없음/만료 |
 | 401 | `CHAT_CSRF_INVALID` | exact Origin 또는 CSRF header/cookie 검증 실패 |
 | 401 | `CHAT_REFRESH_REUSED` | consumed refresh token 재사용; family/session revoke |
@@ -346,6 +350,8 @@ Idempotency rules:
 | 403 | `CHAT_BUDGET_HARD_LIMIT` | tenant hard stop; 금액은 직원에게 비노출 |
 | 409 | `CHAT_POLICY_ACK_REQUIRED` | employee notice acknowledgement 필요 |
 | 409 | `CHAT_IDEMPOTENCY_CONFLICT` | 같은 key와 다른 binding |
+| 409 | `CHAT_CONVERSATION_VERSION_CONFLICT` | stale rename/delete compare-and-swap |
+| 409 | `CHAT_TERMINAL_REPLAY_UNAVAILABLE` | terminal facts는 있으나 성공 content를 안전하게 복구할 수 없음 |
 | 409 | `CHAT_ADMISSION_EXPIRED` | admission 30초 만료/consume됨 |
 | 409 | `CHAT_INVITATION_INVALID` | invitation intent가 없거나 token이 유효하지 않음 |
 | 409 | `CHAT_INVITATION_EXPIRED` | invitation 만료 |
@@ -360,6 +366,8 @@ Idempotency rules:
 | 503 | `CHAT_NO_ELIGIBLE_ROUTE` | policy에 실행 가능한 route 없음; publish validator가 선제 차단해야 함 |
 | 503 | `CHAT_ENTITLEMENT_UNAVAILABLE` | Control Plane entitlement를 안전하게 확인할 수 없음 |
 | 504 | `CHAT_PROVIDER_TIMEOUT` | provider hard timeout |
+| 404 | `CHAT_CONVERSATION_NOT_FOUND` | foreign/deleted/missing conversation의 동일 경계 |
+| 503 | `CHAT_CONTENT_KEY_UNAVAILABLE` | active/grace content key를 안전하게 사용할 수 없음 |
 
 ## 11. Dashboard와 metrics
 
@@ -400,7 +408,55 @@ Paired [Dashboard schema](./schemas/dashboard-aggregate.schema.json)는 content-
 - Full Content Logging 기본 off, 활성 시 기본 7일 별도 encrypted retention이다.
 - legal hold는 소송/감사 때문에 정상 삭제를 보류하는 기능이며 MVP에서는 지원하지 않는다. retention/hard delete가 정상 동작한다.
 
-### 12.1 Admin diagnostic
+### 12.1 Conversation과 turn API
+
+Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./openapi/chat-conversation.openapi.json)를 따른다. Browser가 이 route를 직접 호출하거나 tenant/user/employee scope를 body/query로 제공하지 않는다.
+
+- conversation create/list/get/rename/delete와 message history read는 매 요청의 authoritative `(tenantId,userId)`에 binding한다.
+- conversation, turn, message ID는 UUID v4 opaque ID다. foreign tenant, 다른 user, deleted row와 존재하지 않는 row는 모두 같은 `404 CHAT_CONVERSATION_NOT_FOUND`를 반환한다.
+- create와 turn은 caller가 만든 bounded `idempotencyKey`를 사용한다. Chat API는 actor와 canonical request binding을 keyed MAC으로 저장하며 same key/different binding은 `409 CHAT_IDEMPOTENCY_CONFLICT`다.
+- rename/delete는 conversation `version`을 compare-and-swap한다. stale mutation은 `409 CHAT_CONVERSATION_VERSION_CONFLICT`이며 title plaintext를 conflict response에 포함하지 않는다.
+- list/history cursor는 version, actor, scope, conversation, boundary, requested limit, `cacheEpoch`를 MAC으로 binding한다. tamper, scope 변경, epoch 불일치는 `400 CHAT_CURSOR_INVALID`다.
+- history page는 최대 100개, completion context는 최근 completed message 최대 32개와 복호화 plaintext 최대 256 KiB다. request user content는 UTF-8 1~20,000자, title은 1~120자다.
+- exact route와 response field는 OpenAPI, resource shape는 [conversation schema](./schemas/chat-conversation.schema.json), SSE는 [turn event schema](./schemas/chat-turn-sse-event.schema.json)를 따른다.
+
+### 12.2 Envelope encryption과 key rotation
+
+- 저장 format과 column은 [content DDL contract](./db/tenant-chat-content.sql)를 따른다. legacy `conversations`/`chat_messages`를 재사용하거나 dual-write하지 않는다.
+- tenant content key(DEK)는 random 32-byte key이며 title/message마다 random 96-bit nonce를 사용해 AES-256-GCM으로 암호화한다. ciphertext, nonce, 128-bit tag만 content row에 저장한다.
+- DEK는 versioned wrapping key로 AES-256-GCM wrapping한다. wrapping key file은 active version과 active+grace reader key를 포함하며 Chat API 외 서비스에 mount하지 않는다.
+- canonical AAD는 `schemaVersion`, `tenantId`, `conversationId`, `recordId`, `contentKind=title|message`, `role=none|user|assistant`, `contentKeyVersion`을 exact key set과 JCS UTF-8로 binding한다.
+- wrong tenant/AAD/key version, tag/ciphertext tamper와 record swap은 `CHAT_CONTENT_INTEGRITY_FAILED`로 fail closed한다. 원인 detail이나 key metadata를 caller/log/metric에 포함하지 않는다.
+- rotation은 reader-first다. 새 wrapping key를 reader set에 배포한 뒤 active version을 올리고 DEK를 rewrap한다. DB의 monotonic `wrappingKeyRollbackFloor` 아래 active version은 readiness와 write 모두 거부한다.
+- content DEK rotation은 새 version을 writer로 선택하고 이전 DEK를 grace reader로 유지한다. row의 `contentKeyVersion`이 없는 key를 가리키면 fail closed한다.
+- readiness는 key file shape, active key, 모든 DB rollback floor 이상 여부를 검사한다. actual key, unwrapped DEK와 canonical plaintext를 log/fixture/metric/artifact에 남기지 않는다.
+
+### 12.3 Turn lifecycle, SSE와 DOC-013
+
+1. session/device와 authoritative entitlement를 확인한다.
+2. conversation ownership, request binding, cursor/idempotency bound를 확인한다.
+3. content-free turn identity를 reserve하고 기존 `authorizeAndAdmit`을 호출한다.
+4. admission 성공 뒤 user message ciphertext를 commit한다.
+5. user commit 뒤 completed prior history만 bounded decrypt하고 `complete`를 호출한다.
+6. private Gateway SSE를 strict consume하며 Chat API-facing `accepted -> delta* -> final|error|cancelled` 순서를 유지한다.
+7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
+
+- Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다.
+- partial, interrupted, cancelled assistant와 Provider raw error는 저장하지 않는다. 이미 저장된 user message와 confirmed Gateway usage는 assistant persistence 실패 때문에 삭제·변조하지 않는다.
+- duplicate final은 `(turnId,role=assistant)` unique와 locked conversation state로 no-op/replay하며 다른 content면 fail closed한다.
+- DOC-013 결정: completed turn의 encrypted assistant가 있으면 Chat API가 이를 decrypt해 bounded delta로 재생한다. Gateway가 terminal facts만 replay했는데 local encrypted final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 종료하며 성공 content나 빈 assistant를 만들지 않는다.
+- HTTP header 전 auth/ownership/admission/user persistence 실패는 safe HTTP error다. stream 시작 뒤 실패는 safe `chat.turn.error` 또는 `chat.turn.cancelled` terminal이다.
+
+### 12.4 Retention, delete와 cache epoch
+
+- history retention은 server/tenant policy만 결정하며 `disabled|7|30|90`일이다. 기본은 30일이고 browser request가 바꾸지 못한다.
+- delete는 conversation row를 actor-scoped lock하고 deleted tombstone/version/cache epoch를 먼저 commit한 뒤 title/message ciphertext를 synchronous hard delete한다. tombstone에는 content를 남기지 않는다.
+- final persistence는 같은 conversation row의 active 상태와 captured cache epoch를 lock/check하므로 delete 뒤 late assistant가 다시 나타날 수 없다.
+- active turn은 delete/caller disconnect에서 best-effort Gateway cancel하고 Chat API turn state를 terminal cancel로 만든다. billable usage 정산은 되돌리지 않는다.
+- retention worker는 expiry 순서의 bounded batch를 같은 hard-delete primitive로 처리한다. tombstone/이미 삭제된 row replay는 no-op이며 destructive down이나 plaintext export rollback을 제공하지 않는다.
+- history cursor와 any future cache entry는 `cacheEpoch`를 binding한다. delete epoch 이전 값은 재사용할 수 없다.
+
+### 12.5 Admin diagnostic
 
 MVP에서 다른 관리자의 승인은 요구하지 않는다.
 

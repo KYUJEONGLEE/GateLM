@@ -26,13 +26,15 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 2. `docs/tenant-chat/execution-contract.md`
 3. `docs/tenant-chat/openapi/chat-auth.openapi.json`
 4. `docs/tenant-chat/openapi/private-control-plane.openapi.json`
-5. `docs/tenant-chat/openapi/private-gateway.openapi.json`
-6. `docs/tenant-chat/db/tenant-chat-usage.sql`
-7. `docs/tenant-chat/schemas/*.schema.json`
-8. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
-9. `docs/tenant-chat/implementation-plan.md`
-10. `docs/tenant-chat/handoffs/*.md`
-11. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
+5. `docs/tenant-chat/openapi/chat-conversation.openapi.json`
+6. `docs/tenant-chat/openapi/private-gateway.openapi.json`
+7. `docs/tenant-chat/db/tenant-chat-content.sql`
+8. `docs/tenant-chat/db/tenant-chat-usage.sql`
+9. `docs/tenant-chat/schemas/*.schema.json`
+10. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
+11. `docs/tenant-chat/implementation-plan.md`
+12. `docs/tenant-chat/handoffs/*.md`
+13. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
 
 `contracts.md`와 schema/fixture가 충돌하면 `contracts.md`를 먼저 고치고 schema/fixture를 함께 맞춘다. 로컬 PR packet은 구현 순서와 acceptance를 제공하지만 active contract를 덮어쓰지 않는다.
 
@@ -83,11 +85,15 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Executable integration contract](./execution-contract.md)
 - [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)
 - [Private Control Plane OpenAPI](./openapi/private-control-plane.openapi.json)
+- [Chat conversation OpenAPI](./openapi/chat-conversation.openapi.json)
 - [Private Gateway OpenAPI](./openapi/private-gateway.openapi.json)
+- [Tenant Chat content DDL contract](./db/tenant-chat-content.sql)
 - [Tenant Chat usage DDL contract](./db/tenant-chat-usage.sql)
 - [Employee usage integration handoff](./handoffs/employee-usage-integration.md)
 - [Tenant RuntimeSnapshot schema](./schemas/tenant-runtime-snapshot.schema.json)
 - [Completion SSE event schema](./schemas/completion-sse-event.schema.json)
+- [Chat turn SSE event schema](./schemas/chat-turn-sse-event.schema.json)
+- [Chat conversation schema](./schemas/chat-conversation.schema.json)
 - [Binding digest test vectors](./vectors/binding-digest-vectors.json)
 - [Usage event transition vectors](./vectors/usage-event-vectors.json)
 - [Workload JWT phase vectors](./vectors/workload-jwt-phase-vectors.json)
