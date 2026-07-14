@@ -88,6 +88,12 @@ export type RuntimePolicyRoutingRoutes = Record<
   Record<RuntimeRoutingDifficulty, RuntimePolicyRouteCell>
 >;
 
+export type RuntimePolicyModelRoles = {
+  complexModelRef: string;
+  fallbackModelRef: string | null;
+  simpleModelRef: string;
+};
+
 export type RuntimePolicyRoutingDraft = {
   bootstrapState: "mock_bootstrap" | "configured";
   mode: "auto" | "manual";
@@ -417,11 +423,135 @@ export function cloneRuntimePolicyRoutingRoutes(
   ) as RuntimePolicyRoutingRoutes;
 }
 
+export function createRuntimePolicyRoleRoutes(
+  roles: RuntimePolicyModelRoles
+): RuntimePolicyRoutingRoutes {
+  const fallbackModelRef = normalizeRuntimePolicyModelRef(roles.fallbackModelRef);
+  const simpleModelRef = normalizeRuntimePolicyModelRef(roles.simpleModelRef);
+  const complexModelRef = normalizeRuntimePolicyModelRef(roles.complexModelRef);
+  const usableFallback =
+    fallbackModelRef &&
+    fallbackModelRef !== simpleModelRef &&
+    fallbackModelRef !== complexModelRef
+      ? fallbackModelRef
+      : null;
+
+  return Object.fromEntries(
+    runtimeRoutingCategories.map((category) => [
+      category,
+      {
+        simple: {
+          modelRefs: usableFallback
+            ? [simpleModelRef, usableFallback]
+            : [simpleModelRef]
+        },
+        complex: {
+          modelRefs: usableFallback
+            ? [complexModelRef, usableFallback]
+            : [complexModelRef]
+        }
+      }
+    ])
+  ) as RuntimePolicyRoutingRoutes;
+}
+
+export function getRuntimePolicyModelRoles(
+  routes: RuntimePolicyRoutingRoutes
+): RuntimePolicyModelRoles | null {
+  const proposed = getRuntimePolicyModelRoleConversion(routes);
+
+  if (!proposed) {
+    return null;
+  }
+
+  const expectedRoutes = createRuntimePolicyRoleRoutes(proposed);
+  const matches = runtimeRoutingCategories.every((category) =>
+    runtimeRoutingDifficulties.every((difficulty) => {
+      const current = routes[category]?.[difficulty]?.modelRefs;
+      const expected = expectedRoutes[category][difficulty].modelRefs;
+
+      return (
+        Array.isArray(current) &&
+        current.length === expected.length &&
+        current.every(
+          (modelRef, index) =>
+            normalizeRuntimePolicyModelRef(modelRef) === expected[index]
+        )
+      );
+    })
+  );
+
+  return matches ? proposed : null;
+}
+
+export function getRuntimePolicyModelRoleConversion(
+  routes: RuntimePolicyRoutingRoutes
+): RuntimePolicyModelRoles | null {
+  const simpleModelRef = normalizeRuntimePolicyModelRef(
+    routes.general?.simple?.modelRefs?.[0]
+  );
+  const complexModelRef = normalizeRuntimePolicyModelRef(
+    routes.general?.complex?.modelRefs?.[0]
+  );
+
+  if (!simpleModelRef || !complexModelRef) {
+    return null;
+  }
+
+  let sharedFallback: string | null | undefined;
+  for (const category of runtimeRoutingCategories) {
+    for (const difficulty of runtimeRoutingDifficulties) {
+      const modelRefs = routes[category]?.[difficulty]?.modelRefs;
+      const candidate =
+        Array.isArray(modelRefs) && modelRefs.length === 2
+          ? normalizeRuntimePolicyModelRef(modelRefs[1])
+          : null;
+
+      if (!candidate) {
+        sharedFallback = null;
+        break;
+      }
+      if (sharedFallback === undefined) {
+        sharedFallback = candidate;
+      } else if (sharedFallback !== candidate) {
+        sharedFallback = null;
+        break;
+      }
+    }
+    if (sharedFallback === null) {
+      break;
+    }
+  }
+
+  const fallbackModelRef =
+    sharedFallback &&
+    sharedFallback !== simpleModelRef &&
+    sharedFallback !== complexModelRef
+      ? sharedFallback
+      : null;
+
+  return {
+    complexModelRef,
+    fallbackModelRef,
+    simpleModelRef
+  };
+}
+
+export function isRuntimePolicyModelRoleProfile(
+  routes: RuntimePolicyRoutingRoutes
+) {
+  return getRuntimePolicyModelRoles(routes) !== null;
+}
+
 export function toRuntimePolicyRoutingWriteInput(policy: RuntimePolicyRoutingDraft) {
   return {
     mode: policy.mode,
     routes: cloneRuntimePolicyRoutingRoutes(policy.routes)
   };
+}
+
+function normalizeRuntimePolicyModelRef(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 export function getRateLimitRefillTokensPerSecond(limit: number, windowSeconds: number) {
