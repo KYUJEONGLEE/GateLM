@@ -36,6 +36,7 @@ import {
   formatInteger,
   formatLatency,
   formatPercent,
+  formatResponseTimeSeconds,
   formatUsd
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
@@ -135,7 +136,7 @@ const dashboardText: Record<
     rateLimitEvidence: string;
     routingSummary: string;
     statusDistribution: string;
-    ttftCoverage: string;
+    ttftDetail: string;
     ttftTitle: string;
     tabs: Record<DashboardTab, string>;
     title: string;
@@ -200,7 +201,7 @@ const dashboardText: Record<
     rateLimitEvidence: "Rate limit evidence",
     routingSummary: "Routing by category and difficulty",
     statusDistribution: "Status distribution",
-    ttftCoverage: "Coverage",
+    ttftDetail: "Average response time",
     ttftTitle: "Response time",
     tabs: {
       overview: "Overview",
@@ -271,7 +272,7 @@ const dashboardText: Record<
     rateLimitEvidence: "Rate limit 증거",
     routingSummary: "카테고리·난이도별 라우팅",
     statusDistribution: "상태 분포",
-    ttftCoverage: "관측률",
+    ttftDetail: "평균 응답 시간",
     ttftTitle: "응답 시간",
     tabs: {
       overview: "Overview",
@@ -337,7 +338,7 @@ export function DashboardOverviewView({
   if (overview.gatewayTtft?.scope === "project_application") {
     const ttft = overview.gatewayTtft;
     kpiCards.push({
-      detail: formatTtftCoverage(ttft, text.ttftCoverage),
+      detail: text.ttftDetail,
       icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.ttftTitle,
       tone: "violet",
@@ -445,15 +446,7 @@ function ratio(numerator: number, denominator: number) {
 }
 
 function formatTtftLatency(value: number | null) {
-  return value === null ? "—" : formatLatency(Math.round(value));
-}
-
-function formatTtftCoverage(
-  ttft: NonNullable<DashboardOverview["gatewayTtft"]>,
-  label: string
-) {
-  const rate = ttft.coverageRate === null ? "—" : formatPercent(ttft.coverageRate);
-  return `${label} ${rate} (${formatInteger(ttft.observedRequests)}/${formatInteger(ttft.eligibleStreamRequests)})`;
+  return formatResponseTimeSeconds(value);
 }
 
 function dashboardQueryBudgetWarning(
