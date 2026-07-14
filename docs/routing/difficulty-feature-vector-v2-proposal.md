@@ -151,6 +151,14 @@ semanticHeads[12]
 
 Canonical offline assembly 구현은 [`../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py`](../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_features.py)다. 이 구현은 assembled vector 또는 head probability의 JSON/report serializer를 제공하지 않는다.
 
+비활성 offline 준비 tooling은 다음 경계를 추가로 구현한다.
+
+- [`../../apps/gateway-core/cmd/difficulty-semantic-head-training-export`](../../apps/gateway-core/cmd/difficulty-semantic-head-training-export)는 `trainingEligible=true`, complete label coverage, versioned family policy와 human-approved record/family만 받아들이고 canonical `instructionText`, 고정 4-head label과 low-cardinality evaluation metadata를 process-local JSON pipe로 전달한다. Empty instruction은 `not_applicable` label을 확인한 뒤 encoder 입력에서 제외한다.
+- [`../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_heads.py`](../../scripts/routing_difficulty_model/gatelm_difficulty_model/semantic_heads.py)는 frozen pooled encoder representation에서 4개의 3-class linear-softmax candidate head를 train split으로만 fit하고, exact head/class order, 총 12차원, immutable weight hash와 aggregate macro-F1·class recall·Brier/ECE·language/slice report를 검증한다. Embedding과 per-sample probability serializer는 제공하지 않는다.
+- `gatelm-train-difficulty-semantic-heads` CLI는 pinned local encoder lock과 network-disabled inference를 사용하며 artifact와 aggregate report만 쓴다.
+
+이 candidate architecture의 구현 존재는 semantic head architecture open decision을 승인하거나 해소하지 않는다. 현재 저장소에는 `trainingEligible=true`인 approved dataset, checked-in semantic-head weight artifact, difficulty decision head, calibrator 또는 compatible runtime bundle이 없으므로 CLI를 기존 smoke fixture로 실행하면 artifact를 만들지 않고 fail closed한다.
+
 첫 offline dataflow는 다음과 같다.
 
 ```text

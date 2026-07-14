@@ -11,6 +11,7 @@ dependencies = [
 [project.scripts]
 gatelm-train-difficulty = "gatelm_difficulty_model.cli:main"
 gatelm-benchmark-difficulty-encoder = "gatelm_difficulty_model.encoder_benchmark:main"
+gatelm-train-difficulty-semantic-heads = "gatelm_difficulty_model.semantic_heads_cli:main"
 
 [project.optional-dependencies]
 encoder-benchmark = [
