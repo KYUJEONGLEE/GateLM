@@ -8,6 +8,10 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, TenantChatInvocationOutbox } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
+import {
+  enqueueDashboardRollupDirtyHierarchy,
+  utcBucketStart,
+} from '@/modules/dashboard-rollup/dashboard-rollup.service';
 
 import {
   TENANT_CHAT_EVENT_TYPES,
@@ -214,6 +218,7 @@ export class TenantChatProjectionService
         confirmedOutputTokens: true,
         confirmedTotalTokens: true,
         confirmedCostMicroUsd: true,
+        completedAt: true,
       },
     });
     if (existing) {
@@ -433,6 +438,24 @@ export class TenantChatProjectionService
         projectedEventVersion: BigInt(event.eventVersion),
       },
     });
+    if (this.config.get<string>('DASHBOARD_ROLLUP_ENABLED') === 'true') {
+      const dirtyHours = new Map<string, Date>();
+      for (const completedAt of [existing?.completedAt, occurredAt]) {
+        if (!completedAt) {
+          continue;
+        }
+        const hour = utcBucketStart(completedAt, 'hour');
+        dirtyHours.set(hour.toISOString(), hour);
+      }
+      for (const hour of dirtyHours.values()) {
+        await enqueueDashboardRollupDirtyHierarchy(tx, {
+          tenantId: event.executionScope.tenantId,
+          surface: 'tenant_chat',
+          occurredAt: hour,
+          reasonCode: 'PROJECTION_CHANGED',
+        });
+      }
+    }
   }
 
   private async recordFailure(

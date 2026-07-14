@@ -38,8 +38,11 @@ func TestTerminalLogWriterSendsMultipleLogsInOnePostgresBatch(t *testing.T) {
 		if !strings.Contains(queued.SQL, "insert into p0_llm_invocation_logs") {
 			t.Fatalf("unexpected batched statement: %s", queued.SQL)
 		}
-		if len(queued.Arguments) != 44 {
-			t.Fatalf("expected 44 terminal insert arguments, got %d", len(queued.Arguments))
+		if len(queued.Arguments) != 45 {
+			t.Fatalf("expected 45 terminal insert arguments, got %d", len(queued.Arguments))
+		}
+		if queued.Arguments[25] != nil {
+			t.Fatalf("terminal log without observed first content must persist TTFT as null, got %#v", queued.Arguments[25])
 		}
 	}
 	if db.calls != 0 {
@@ -178,6 +181,7 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 		ApplicationID: "00000000-0000-4000-8000-000000000300",
 	})
 	providerLatencyMs := int64(42)
+	ttftMs := int64(64)
 	startedAt := time.Date(2026, 6, 26, 1, 2, 3, 0, time.UTC)
 	completedAt := startedAt.Add(100 * time.Millisecond)
 
@@ -200,6 +204,7 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 		TotalTokens:             7,
 		CostMicroUSD:            1,
 		LatencyMs:               100,
+		TTFTMs:                  &ttftMs,
 		ProviderLatencyMs:       &providerLatencyMs,
 		Status:                  invocationlog.StatusSuccess,
 		HTTPStatus:              200,
@@ -231,8 +236,8 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 		t.Fatalf("expected budget ledger upsert, got %s", execer.queries[1])
 	}
 	args := execer.argsHistory[0]
-	if len(args) != 44 {
-		t.Fatalf("expected 44 insert args, got %d", len(args))
+	if len(args) != 45 {
+		t.Fatalf("expected 45 insert args, got %d", len(args))
 	}
 
 	assertUUIDArg(t, args, 0)
@@ -248,17 +253,18 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	assertArg(t, args, 20, 3)
 	assertArg(t, args, 21, 7)
 	assertArg(t, args, 22, int64(1))
-	assertArg(t, args, 25, int64(42))
-	assertArg(t, args, 26, invocationlog.StatusSuccess)
-	assertArg(t, args, 27, 200)
-	assertArg(t, args, 31, invocationlog.CacheStatusMiss)
-	assertArg(t, args, 32, invocationlog.CacheTypeExact)
-	assertArg(t, args, 33, "hmac-sha256:cache-key")
-	assertArg(t, args, 35, "redacted")
-	assertArg(t, args, 37, 1)
-	assertHashArg(t, args, 38)
+	assertArg(t, args, 25, int64(64))
+	assertArg(t, args, 26, int64(42))
+	assertArg(t, args, 27, invocationlog.StatusSuccess)
+	assertArg(t, args, 28, 200)
+	assertArg(t, args, 32, invocationlog.CacheStatusMiss)
+	assertArg(t, args, 33, invocationlog.CacheTypeExact)
+	assertArg(t, args, 34, "hmac-sha256:cache-key")
+	assertArg(t, args, 36, "redacted")
+	assertArg(t, args, 38, 1)
 	assertHashArg(t, args, 39)
-	assertArg(t, args, 40, "Send a reply to [EMAIL_1].")
+	assertHashArg(t, args, 40)
+	assertArg(t, args, 41, "Send a reply to [EMAIL_1].")
 
 	ledgerArgs := execer.argsHistory[1]
 	if len(ledgerArgs) != 10 {
@@ -272,9 +278,9 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	assertArg(t, ledgerArgs, 5, "00000000-0000-4000-8000-000000000300")
 	assertArg(t, ledgerArgs, 7, int64(1))
 
-	metadata, ok := args[41].([]byte)
+	metadata, ok := args[42].([]byte)
 	if !ok {
-		t.Fatalf("expected metadata JSON []byte, got %T", args[41])
+		t.Fatalf("expected metadata JSON []byte, got %T", args[42])
 	}
 	var decoded map[string]any
 	if err := json.Unmarshal(metadata, &decoded); err != nil {

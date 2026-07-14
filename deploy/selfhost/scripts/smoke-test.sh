@@ -32,6 +32,7 @@ gatelm_require_env_vars \
   SELFHOST_MOCK_PROVIDER_PORT \
   GATELM_DEMO_API_KEY \
   GATELM_DEMO_APP_TOKEN \
+  GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
   GATELM_DEMO_TENANT_ID \
   GATELM_DEMO_PROJECT_ID \
   GATELM_DEMO_APPLICATION_ID
@@ -97,6 +98,7 @@ for ((attempt = 1; attempt <= 15; attempt++)); do
   if curl -fsS \
     --max-time 10 \
     -o "${logs_body_file}" \
+    -H "X-GateLM-Observability-Token: ${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN}" \
     --get "${gateway_base}/api/projects/${GATELM_DEMO_PROJECT_ID}/logs" \
     --data-urlencode "from=2000-01-01T00:00:00Z" \
     --data-urlencode "to=2100-01-01T00:00:00Z" \

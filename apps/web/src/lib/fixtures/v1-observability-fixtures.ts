@@ -127,6 +127,7 @@ export type InvocationLogRecord = {
   costMicroUsd: number;
   savedCostMicroUsd: number;
   latencyMs: number;
+  ttftMs?: number | null;
   providerLatencyMs: number | null;
   status: TerminalStatus;
   terminalStatus?: TerminalStatus;
@@ -135,6 +136,7 @@ export type InvocationLogRecord = {
     gatewayInternalLatencyMs: number;
     providerLatencyMs: number | null;
     totalLatencyMs: number;
+    ttftMs?: number | null;
   };
   usageSummary?: {
     promptTokens: number;
@@ -207,8 +209,20 @@ export type DashboardOverview = {
   savedCostUsd: string;
   averageLatencyMs: number;
   p95LatencyMs: number;
+  gatewayTtft?: {
+    scope: "project_application";
+    averageMs: number | null;
+    p50Ms: number | null;
+    p95Ms: number | null;
+    p99Ms: number | null;
+    eligibleStreamRequests: number;
+    observedRequests: number;
+    coverageRate: number | null;
+  };
   latencyBySurface?: {
+    projectApplicationAverageMs?: number;
     projectApplicationP95Ms?: number;
+    tenantChatAverageMs?: number;
     tenantChatP95Ms?: number;
   };
   maskingActionCounts: Record<string, number>;
@@ -242,6 +256,8 @@ export type DashboardOverview = {
     recordCount: number;
     lastLogCreatedAt: string;
     generatedAt: string;
+    lastAggregatedAt?: string;
+    isStale?: boolean;
   };
   queryBudget?: {
     status: "ok" | "too_broad" | "partial" | "stale" | "unavailable";

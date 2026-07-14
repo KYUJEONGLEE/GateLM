@@ -13,6 +13,7 @@ import {
   resolveConsoleTenantIdForAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import {
   type DashboardRange,
   type DashboardFilterState,
@@ -68,6 +69,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const projectsPromise = getProjectsModel(effectiveTenantId);
   let projectsModel: Awaited<ReturnType<typeof getProjectsModel>>;
@@ -190,6 +196,7 @@ async function MonthToDateSpendValue({
       : getLiveCostOverTime(tenantId, {
           ...filters,
           from: monthToDateRange.from,
+          range: "1w",
           to: monthToDateRange.to
         }),
     surface === "project_application"
@@ -200,7 +207,8 @@ async function MonthToDateSpendValue({
   const totalMicroUsd =
     (totalSpendUsd === undefined ? 0 : totalSpendUsd * 1_000_000) +
     (tenantChat?.usage.confirmedCostMicroUsd ?? 0);
-  const hasCurrentData = summary !== undefined || tenantChat !== undefined;
+  const hasCurrentData =
+    summary !== undefined || (tenantChat !== undefined && tenantChat !== null);
 
   return <>{formatDashboardMicroUsd(hasCurrentData ? totalMicroUsd : fallbackMicroUsd)}</>;
 }

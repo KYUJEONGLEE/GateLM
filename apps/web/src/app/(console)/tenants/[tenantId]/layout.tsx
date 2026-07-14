@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ConsoleTenantLayoutProps = {
@@ -23,6 +25,10 @@ export default async function ConsoleTenantLayout({
     getCurrentConsoleAuth()
   ]);
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
 
   return (
     <ConsoleShell currentUser={auth.currentUser} locale={locale} tenantId={effectiveTenantId}>

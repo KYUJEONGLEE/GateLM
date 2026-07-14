@@ -1,6 +1,7 @@
 const gatewayBaseUrl = "http://gateway-core:8080";
 const apiKey = requiredEnv("GATELM_DEMO_API_KEY");
 const appToken = requiredEnv("GATELM_DEMO_APP_TOKEN");
+const observabilityToken = requiredEnv("GATEWAY_OBSERVABILITY_INTERNAL_TOKEN");
 const tenantId = requiredEnv("GATELM_DEMO_TENANT_ID");
 const projectId = requiredEnv("GATELM_DEMO_PROJECT_ID");
 const requestId = `request_perf_preflight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -60,6 +61,11 @@ async function waitForRequestDetail(id) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const response = await fetch(
       `${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(id)}?${query}`,
+      {
+        headers: {
+          "X-GateLM-Observability-Token": observabilityToken,
+        },
+      },
     );
     if (response.status === 200) {
       const body = await safeJson(response);

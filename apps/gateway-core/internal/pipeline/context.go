@@ -134,6 +134,7 @@ type RequestContext struct {
 	SavedCostMicroUSD int64
 	CostingResult     costing.Result
 	LatencyMs         int64
+	TTFTMs            *int64
 
 	Status           string
 	HTTPStatus       int

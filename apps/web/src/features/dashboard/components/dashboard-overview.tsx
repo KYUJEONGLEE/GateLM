@@ -2,7 +2,8 @@ import {
   Activity,
   CheckCircle2,
   DollarSign,
-  RotateCcw
+  RotateCcw,
+  Timer
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -102,11 +103,14 @@ const dashboardText: Record<
       failed: string;
       fallbackSuccess: string;
       p95Latency: string;
+      p95LatencyBySurface: string;
+      projectApplication: string;
       rateLimited: string;
       records: string;
       savedCost: string;
       systemErrorRate: string;
       successful: string;
+      tenantChat: string;
       totalCost: string;
       totalRequests: string;
       totalTokens: string;
@@ -137,6 +141,8 @@ const dashboardText: Record<
     rateLimitEvidence: string;
     routingSummary: string;
     statusDistribution: string;
+    ttftCoverage: string;
+    ttftTitle: string;
     tabs: Record<DashboardTab, string>;
     title: string;
   }
@@ -178,11 +184,14 @@ const dashboardText: Record<
       failed: "Failed",
       fallbackSuccess: "Fallback success",
       p95Latency: "P95 latency",
+      p95LatencyBySurface: "P95 latency by surface",
+      projectApplication: "Project/Application",
       rateLimited: "Rate limited",
       records: "Records",
       savedCost: "Saved cost",
       systemErrorRate: "System error rate",
       successful: "Successful",
+      tenantChat: "Tenant Chat",
       totalCost: "Total cost",
       totalRequests: "Total requests",
       totalTokens: "Total tokens"
@@ -203,6 +212,8 @@ const dashboardText: Record<
     rateLimitEvidence: "Rate limit evidence",
     routingSummary: "Routing by category and difficulty",
     statusDistribution: "Status distribution",
+    ttftCoverage: "Coverage",
+    ttftTitle: "Project/Application TTFT",
     tabs: {
       overview: "Overview",
       requests: "Requests",
@@ -250,11 +261,14 @@ const dashboardText: Record<
       failed: "실패",
       fallbackSuccess: "Fallback 성공",
       p95Latency: "P95 지연",
+      p95LatencyBySurface: "Surface별 P95 지연",
+      projectApplication: "Project·Application",
       rateLimited: "Rate limit",
       records: "레코드",
       savedCost: "절감 비용",
       systemErrorRate: "시스템 오류율",
       successful: "성공",
+      tenantChat: "Tenant Chat",
       totalCost: "총 비용",
       totalRequests: "총 요청",
       totalTokens: "총 토큰"
@@ -275,6 +289,8 @@ const dashboardText: Record<
     rateLimitEvidence: "Rate limit 증거",
     routingSummary: "카테고리·난이도별 라우팅",
     statusDistribution: "상태 분포",
+    ttftCoverage: "관측률",
+    ttftTitle: "Project·Application TTFT",
     tabs: {
       overview: "Overview",
       requests: "Requests",
@@ -311,6 +327,7 @@ export function DashboardOverviewView({
       overview.range.to,
     locale
   );
+  const queryBudgetWarning = dashboardQueryBudgetWarning(overview.queryBudget, locale);
   const kpiCards = [
     {
       detail: `${formatInteger(overview.totalRequests)} ${locale === "ko" ? "건" : "requests"} · ${rangeLabel(filters.range, locale)}`,
@@ -320,7 +337,7 @@ export function DashboardOverviewView({
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful} · ${text.metrics.averageLatency} ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
+      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful} · ${formatDashboardLatencySummary(overview, text)}`,
       icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.successRate,
       tone: "green",
@@ -334,6 +351,17 @@ export function DashboardOverviewView({
       value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
+
+  if (overview.gatewayTtft?.scope === "project_application") {
+    const ttft = overview.gatewayTtft;
+    kpiCards.push({
+      detail: `p50 ${formatTtftLatency(ttft.p50Ms)} · p99 ${formatTtftLatency(ttft.p99Ms)} · ${formatTtftCoverage(ttft, text.ttftCoverage)}`,
+      icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: text.ttftTitle,
+      tone: "violet",
+      value: `p95 ${formatTtftLatency(ttft.p95Ms)}`
+    });
+  }
 
   return (
     <main
@@ -369,9 +397,13 @@ export function DashboardOverviewView({
             value: range
           }))}
         />
-        {overview.queryBudget?.status === "partial" && overview.queryBudget.guidance ? (
-          <div className="dashboard-source-warning" role="status">
-            {overview.queryBudget.guidance}
+        {queryBudgetWarning ? (
+          <div
+            className="dashboard-source-warning"
+            data-status={overview.queryBudget?.status ?? "ok"}
+            role="status"
+          >
+            {queryBudgetWarning}
           </div>
         ) : null}
         <div className="dashboard-data-freshness">
@@ -428,6 +460,108 @@ function ratio(numerator: number, denominator: number) {
   }
 
   return numerator / denominator;
+}
+
+function formatTtftLatency(value: number | null) {
+  return value === null ? "—" : formatLatency(Math.round(value));
+}
+
+function formatDashboardLatencySummary(
+  overview: DashboardOverview,
+  text: DashboardCopy
+) {
+  if (overview.surface !== "all") {
+    return `${text.metrics.averageLatency} ${formatLatency(Math.round(overview.averageLatencyMs))} · p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`;
+  }
+
+  const rows = dashboardSurfaceP95Rows(overview, text);
+  return rows.length > 0
+    ? rows
+        .map((row) => `${row.label} p95 ${formatLatency(Math.round(row.value))}`)
+        .join(" · ")
+    : `${text.metrics.p95Latency} —`;
+}
+
+function formatDashboardLatencyBySurface(
+  overview: DashboardOverview,
+  text: DashboardCopy
+) {
+  const rows = dashboardSurfaceP95Rows(overview, text);
+  return rows.length > 0
+    ? rows
+        .map((row) => `${row.label} ${formatLatency(Math.round(row.value))}`)
+        .join(" · ")
+    : "—";
+}
+
+function dashboardSurfaceP95Rows(
+  overview: DashboardOverview,
+  text: DashboardCopy
+) {
+  const rows: Array<{ label: string; value: number }> = [];
+  const projectApplicationP95Ms = validLatency(
+    overview.latencyBySurface?.projectApplicationP95Ms
+  );
+  const tenantChatP95Ms = validLatency(
+    overview.latencyBySurface?.tenantChatP95Ms
+  );
+
+  if (projectApplicationP95Ms !== undefined) {
+    rows.push({
+      label: text.metrics.projectApplication,
+      value: projectApplicationP95Ms
+    });
+  }
+  if (tenantChatP95Ms !== undefined) {
+    rows.push({ label: text.metrics.tenantChat, value: tenantChatP95Ms });
+  }
+
+  return rows;
+}
+
+function validLatency(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function formatTtftCoverage(
+  ttft: NonNullable<DashboardOverview["gatewayTtft"]>,
+  label: string
+) {
+  const rate = ttft.coverageRate === null ? "—" : formatPercent(ttft.coverageRate);
+  return `${label} ${rate} (${formatInteger(ttft.observedRequests)}/${formatInteger(ttft.eligibleStreamRequests)})`;
+}
+
+function dashboardQueryBudgetWarning(
+  queryBudget: DashboardOverview["queryBudget"],
+  locale: Locale
+) {
+  if (!queryBudget || queryBudget.status === "ok") {
+    return null;
+  }
+
+  const guidance = queryBudget.guidance?.trim();
+  if (guidance) {
+    return guidance;
+  }
+
+  const fallback = {
+    en: {
+      partial: "Some aggregate data is unavailable.",
+      stale: "Aggregate data is delayed.",
+      too_broad: "The selected range exceeds the current query budget.",
+      unavailable: "Aggregate data is unavailable."
+    },
+    ko: {
+      partial: "일부 집계 데이터를 사용할 수 없습니다.",
+      stale: "집계 데이터 반영이 지연되고 있습니다.",
+      too_broad: "선택한 범위가 현재 조회 한도를 초과했습니다.",
+      unavailable: "집계 데이터를 사용할 수 없습니다."
+    }
+  } as const;
+
+  return fallback[locale][queryBudget.status];
 }
 
 function formatDashboardDataAsOf(value: string, locale: Locale) {
@@ -898,8 +1032,16 @@ function DashboardTabPanel({
           <FocusStat label={text.metrics.successful} value={formatInteger(overview.successfulRequests)} />
           <FocusStat label={text.metrics.failed} value={formatInteger(overview.failedRequests)} />
           <FocusStat
-            label={text.metrics.averageP95Latency}
-            value={formatLatencyPair(overview.averageLatencyMs, overview.p95LatencyMs)}
+            label={
+              overview.surface === "all"
+                ? text.metrics.p95LatencyBySurface
+                : text.metrics.averageP95Latency
+            }
+            value={
+              overview.surface === "all"
+                ? formatDashboardLatencyBySurface(overview, text)
+                : formatLatencyPair(overview.averageLatencyMs, overview.p95LatencyMs)
+            }
           />
         </div>
       </section>

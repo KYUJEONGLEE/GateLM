@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   Sparkles
 } from "lucide-react";
+import { notFound } from "next/navigation";
 import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link";
 import {
   AnalyticsCachePanel,
@@ -17,6 +18,14 @@ import {
 } from "@/features/analytics/components/analytics-panels";
 import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
+import {
+  getCurrentConsoleAuth,
+  getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
+  resolveConsoleTenantIdForAuth,
+  resolveProjectIdForConsoleAuth
+} from "@/lib/auth/current-console-auth";
+import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
@@ -117,22 +126,46 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
-  const filters = buildFilters(resolvedSearchParams);
+  const requestedFilters = buildFilters(resolvedSearchParams);
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+
+  if (!hasConsoleTenantAccess(auth, effectiveTenantId)) {
+    notFound();
+  }
+
+  const projectsModel = await getProjectsModel(effectiveTenantId);
+  const effectiveProjectId = resolveProjectIdForConsoleAuth({
+    auth,
+    projects: projectsModel.projects,
+    requestedProjectId: requestedFilters.projectId,
+    routeTenantId: effectiveTenantId
+  });
+
+  if (effectiveProjectId === null) {
+    notFound();
+  }
+
+  const filters = {
+    ...requestedFilters,
+    projectId: effectiveProjectId ?? requestedFilters.projectId
+  };
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
   const needsReliabilityEvidence = activeTab === "reliability";
   const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
-  const [locale, projectsModel, overview, performance, costTrend, v5Evidence, reliabilityRecords] = await Promise.all([
-    getRequestLocale(),
-    getProjectsModel(tenantId),
-    getLiveDashboardOverview(tenantId, {
+  const [overview, performance, costTrend, v5Evidence, reliabilityRecords] = await Promise.all([
+    getLiveDashboardOverview(effectiveTenantId, {
       projectId: filters.projectId || undefined,
       range: filters.range
     }),
     needsPerformance
-      ? getLiveAnalyticsPerformance(tenantId, {
+      ? getLiveAnalyticsPerformance(effectiveTenantId, {
           model: activeTab === "performance" ? filters.model || undefined : undefined,
           projectId: filters.projectId || undefined,
           provider: activeTab === "performance" ? filters.provider || undefined : undefined,
@@ -140,13 +173,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })
       : Promise.resolve(undefined),
     needsCostTrend
-      ? getLiveCostOverTime(tenantId, {
+      ? getLiveCostOverTime(effectiveTenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
         })
       : Promise.resolve(undefined),
     needsV5Evidence
-      ? getLiveAnalyticsV5Evidence(tenantId, {
+      ? getLiveAnalyticsV5Evidence(effectiveTenantId, {
           projectId: filters.projectId || undefined,
           range: filters.range
         })
@@ -156,14 +189,19 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           from: reliabilityRange.from,
           limit: 100,
           projectId: filters.projectId || undefined,
-          tenantId,
+          tenantId: effectiveTenantId,
           to: reliabilityRange.to
         })
       : Promise.resolve(undefined)
   ]);
 
   const text = pageText[locale];
-  const projects = projectsModel.projects.filter((project) => project.status !== "ARCHIVED");
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
+  const projects = getVisibleProjectsForConsoleAuth(
+    projectsModel.projects,
+    auth,
+    effectiveTenantId
+  ).filter((project) => project.status !== "ARCHIVED");
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
   const model = buildAnalyticsReadModel(overview);
   const providerOptions = buildProviderOptions(overview, performance, filters.provider);
@@ -179,7 +217,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         </div>
 
         <form
-          action={`/tenants/${tenantId}/analytics`}
+          action={`/tenants/${effectiveTenantId}/analytics`}
           aria-label={text.filterAria}
           className="analytics-v3-filter-bar"
         >
@@ -195,7 +233,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           <label className="analytics-v3-project-filter">
             <span>{text.project}</span>
             <select defaultValue={filters.projectId} name="projectId">
-              <option value="">{text.allProjects}</option>
+              {projectScoped ? null : <option value="">{text.allProjects}</option>}
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
@@ -238,7 +276,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               aria-current={tab.id === activeTab ? "page" : undefined}
               className="analytics-v3-tab"
               data-active={tab.id === activeTab}
-              href={tabHref(tenantId, tab.id, filters)}
+              href={tabHref(effectiveTenantId, tab.id, filters)}
               key={tab.id}
             >
               <Icon aria-hidden="true" size={18} />
@@ -277,7 +315,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           performance={performance}
           projectNameById={projectNameById}
           range={filters.range}
-          tenantId={tenantId}
+          tenantId={effectiveTenantId}
         />
       ) : activeTab === "reliability" ? (
         <AnalyticsReliabilityPanel
@@ -286,7 +324,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           projectNameById={projectNameById}
           records={reliabilityRecords}
           range={filters.range}
-          tenantId={tenantId}
+          tenantId={effectiveTenantId}
         />
       ) : (
         <AnalyticsCachePanel locale={locale} model={model} />

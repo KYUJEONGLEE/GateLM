@@ -35,6 +35,14 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
+  it('does not add rollup writes while the dashboard rollup flag is disabled', async () => {
+    const harness = createHarness(settledRow());
+
+    await expect(harness.service.runOnce()).resolves.toBe(1);
+
+    expect(harness.tx.$executeRaw).not.toHaveBeenCalled();
+  });
+
   it('retries a version gap without projecting the terminal event', async () => {
     const harness = createHarness(settledRow());
     harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([]);
@@ -231,6 +239,29 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
+  it('marks both old and new UTC hours dirty when a late correction moves buckets', async () => {
+    const row = lateSettledRow();
+    row.payload.occurredAt = '2026-07-13T14:00:02Z';
+    const harness = createHarness(row, true);
+    harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([
+      { eventVersion: 1n, publishedAt: new Date(), lastErrorCode: null },
+      { eventVersion: 2n, publishedAt: new Date(), lastErrorCode: null },
+    ]);
+    harness.tx.tenantChatInvocationLog.findUnique.mockResolvedValue({
+      projectedEventVersion: 2n,
+      tenantId,
+      confirmedInputTokens: 20n,
+      confirmedOutputTokens: 10n,
+      confirmedTotalTokens: 30n,
+      confirmedCostMicroUsd: 50n,
+      completedAt: new Date('2026-07-12T12:00:02Z'),
+    });
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.$executeRaw).toHaveBeenCalledTimes(6);
+  });
+
   it('does not schedule another batch after module destruction', async () => {
     jest.useFakeTimers();
     const harness = createHarness(settledRow());
@@ -255,9 +286,13 @@ describe('TenantChatProjectionService', () => {
   });
 });
 
-function createHarness(row: ReturnType<typeof settledRow>) {
+function createHarness(
+  row: ReturnType<typeof settledRow>,
+  dashboardRollupEnabled = false,
+) {
   const tx = {
     $queryRaw: jest.fn().mockResolvedValueOnce([row]).mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
     tenantChatInvocationOutbox: {
       findMany: jest.fn().mockResolvedValue([
         {
@@ -297,6 +332,7 @@ function createHarness(row: ReturnType<typeof settledRow>) {
     TENANT_CHAT_PROJECTOR_ENABLED: 'false',
     TENANT_CHAT_PROJECTOR_INTERVAL_MS: 1000,
     TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS: 5,
+    DASHBOARD_ROLLUP_ENABLED: dashboardRollupEnabled ? 'true' : 'false',
   };
   const config = {
     get: jest.fn((key: string) => values[key]),

@@ -100,6 +100,8 @@ try {
         "db/migrations/004_create_provider_and_models.sql",
         "db/migrations/005_harden_config_store_constraints.sql",
         "db/migrations/006_create_p0_invocation_logs_fallback.sql",
+        "db/migrations/016_add_p0_invocation_log_ttft.sql",
+        "db/migrations/017_add_p0_dashboard_rollup_indexes.sql",
         "db/seeds/001_seed_p0_demo_data.sql"
     )
     Invoke-SqlFiles -SqlFiles $sqlFiles

@@ -182,6 +182,8 @@ if (-not $SkipDbPrepare) {
         "db/migrations/006_create_p0_invocation_logs_fallback.sql",
         "db/migrations/007_create_gateway_rate_limit_counters.sql",
         "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
+        "db/migrations/016_add_p0_invocation_log_ttft.sql",
+        "db/migrations/017_add_p0_dashboard_rollup_indexes.sql",
         "db/seeds/001_seed_p0_demo_data.sql"
     )
     Push-Location $repoRoot

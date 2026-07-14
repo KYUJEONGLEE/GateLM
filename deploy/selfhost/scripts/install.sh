@@ -21,6 +21,7 @@ gatelm_require_env_vars \
   POSTGRES_USER \
   POSTGRES_PASSWORD \
   POSTGRES_DB \
+  GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
   GATEWAY_EXACT_CACHE_KEY_SECRET \
   GATELM_DEMO_API_KEY \
   GATELM_DEMO_APP_TOKEN
@@ -29,6 +30,23 @@ gatelm_warn_placeholder_values \
   GATEWAY_EXACT_CACHE_KEY_SECRET \
   GATELM_DEMO_API_KEY \
   GATELM_DEMO_APP_TOKEN
+
+observability_token="${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN}"
+observability_token_compact="$(
+  printf '%s' "${observability_token}" \
+    | tr '[:upper:]' '[:lower:]' \
+    | tr -d '[:space:]_-'
+)"
+if (( ${#observability_token} < 32 )); then
+  gatelm_fail "GATEWAY_OBSERVABILITY_INTERNAL_TOKEN must contain at least 32 characters."
+fi
+for marker in changeme demo devonly example placeholder replaceme redacted; do
+  if [[ "${observability_token_compact}" == *"${marker}"* ]]; then
+    gatelm_fail "GATEWAY_OBSERVABILITY_INTERNAL_TOKEN must be replaced with a strong random value."
+  fi
+done
+unset observability_token observability_token_compact marker
+
 gatelm_check_docker
 gatelm_validate_compose
 
