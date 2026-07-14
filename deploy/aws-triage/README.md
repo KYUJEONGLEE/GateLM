@@ -85,8 +85,8 @@ SMTP_PASSWORD=<smtp-password-if-required>
 SMTP_FROM=<verified-sender>
 ```
 
-Generate the Tenant Chat workload signing, verification, content encryption,
-cache, and usage receipt files once from `deploy/aws-triage`. The `kid` must exactly match
+Generate the Tenant Chat workload signing, verification, request binding,
+content encryption, cache, and usage receipt files once from `deploy/aws-triage`. The `kid` must exactly match
 `TENANT_CHAT_WORKLOAD_ACTIVE_KID` in `.env`:
 
 ```bash
