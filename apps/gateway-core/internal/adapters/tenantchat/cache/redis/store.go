@@ -218,7 +218,7 @@ func normalizeImmediateRepeatedTurn(input tenantchat.CompletionInput) tenantchat
 func estimatedInputBytes(messages []tenantchat.EphemeralMessage) int64 {
 	var total int64
 	for _, message := range messages {
-		total += int64(len([]byte(message.Content)))
+		total += int64(len(message.Content))
 	}
 	if total < 1 {
 		return 1
