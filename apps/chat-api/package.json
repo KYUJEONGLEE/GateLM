@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "GateLM Tenant Chat private auth and session API",
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "node --env-file=../../.env node_modules/@nestjs/cli/bin/nest.js start --watch",
     "start": "node dist/main.js",
     "build": "nest build",
     "smoke:execution": "ts-node -r tsconfig-paths/register src/execution/smoke.ts",
