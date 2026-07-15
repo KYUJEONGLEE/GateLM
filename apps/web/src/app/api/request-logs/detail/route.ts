@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getCurrentConsoleAuthForCookieHeader,
   getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getTenantChatInvocation } from "@/lib/control-plane/tenant-chat-observability-client";
+import { toTenantChatRequestLog } from "@/lib/control-plane/tenant-chat-request-log";
 import { getLiveGatewayRequestDetail } from "@/lib/gateway/live-request-detail";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 
@@ -27,6 +30,13 @@ export async function GET(request: NextRequest) {
 
   if (!hasConsoleTenantAccess(auth, tenantId)) {
     return NextResponse.json({ error: "Tenant access denied" }, { status: 403 });
+  }
+
+  if (!isProjectScopedForTenant(auth, tenantId) && !requestedProjectId) {
+    const tenantChatInvocation = await getTenantChatInvocation(tenantId, requestId);
+    if (tenantChatInvocation) {
+      return NextResponse.json({ data: toTenantChatRequestLog(tenantChatInvocation) });
+    }
   }
 
   const projectsModel = await getProjectsModel(tenantId);

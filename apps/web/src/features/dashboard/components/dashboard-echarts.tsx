@@ -21,6 +21,7 @@ type EChartsRuntime = {
 const chartAxisColor = "#64748b";
 const chartBorderColor = "#d8dee6";
 const chartForegroundColor = "#111827";
+const visibleCostBucketCount = 60;
 let dashboardEchartsRuntimePromise: Promise<EChartsRuntime> | null = null;
 
 export type DashboardLineSeries = {
@@ -280,14 +281,37 @@ export function DashboardCostOverTimeEChart({
   const labels = points.map((point) => point.label);
   const values = points.map((point) => point.spendUsd);
   const averageValues = points.map(() => averageSpendUsd);
-  const xAxisLabelInterval = readableCategoryInterval(labels.length);
+  const usesCostWindow = labels.length > visibleCostBucketCount;
+  const xAxisLabelInterval = readableCategoryInterval(
+    usesCostWindow ? visibleCostBucketCount : labels.length
+  );
   const updateKey = JSON.stringify({ averageSpendUsd, points });
   const option = useMemo<EChartOption>(
     () => ({
       animation: false,
       color: ["#3b82f6", "#94a3b8"],
+      dataZoom: usesCostWindow
+        ? [
+            {
+              endValue: labels.length - 1,
+              filterMode: "none",
+              startValue: labels.length - visibleCostBucketCount,
+              type: "inside"
+            },
+            {
+              bottom: 2,
+              brushSelect: false,
+              endValue: labels.length - 1,
+              filterMode: "none",
+              height: 18,
+              showDetail: false,
+              startValue: labels.length - visibleCostBucketCount,
+              type: "slider"
+            }
+          ]
+        : undefined,
       grid: {
-        bottom: 26,
+        bottom: usesCostWindow ? 48 : 26,
         left: 50,
         right: 14,
         top: 24
@@ -353,6 +377,7 @@ export function DashboardCostOverTimeEChart({
       series: [
         {
           barMaxWidth: 34,
+          barWidth: "70%",
           data: values,
           emphasis: {
             focus: "none"
@@ -397,7 +422,7 @@ export function DashboardCostOverTimeEChart({
         }
       ]
     }),
-    [averageSpendUsd, averageValues, labels, values, xAxisLabelInterval]
+    [averageSpendUsd, averageValues, labels, usesCostWindow, values, xAxisLabelInterval]
   );
 
   return (
@@ -525,6 +550,7 @@ function loadDashboardEchartsRuntime() {
       charts.LineChart,
       charts.PieChart,
       components.GridComponent,
+      components.DataZoomComponent,
       components.LegendComponent,
       components.TitleComponent,
       components.TooltipComponent,

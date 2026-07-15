@@ -446,7 +446,7 @@ export function RequestLogTable({
                     const isSelected = selectedRequestId === record.requestId;
                     const detailHref = requestLogDetailHref(tenantId, record.requestId, filters);
                     const displayRequestId = formatDisplayIdentifier(record.requestId);
-                    const projectName = projectNameById.get(record.projectId) ?? formatDisplayIdentifier(record.projectId);
+                    const projectName = record.projectName ?? projectNameById.get(record.projectId) ?? formatDisplayIdentifier(record.projectId);
                     const employee = record.endUserId
                       ? employeeDirectory[record.endUserId.trim().toLocaleLowerCase()]
                       : undefined;

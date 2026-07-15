@@ -342,20 +342,16 @@ export function LiveRequestsView({
                 </td>
                 <td>{formatResponseTimeSeconds(row.ttftMs)}</td>
                 <td>
-                  {row.surface === "tenant_chat" ? (
-                    <span className="dashboard-live-muted-value">-</span>
-                  ) : (
-                    <button
-                      aria-label={text.openDetail + " " + row.requestId}
-                      className="dashboard-live-detail-button"
-                      onClick={() => onOpenRequest(row)}
-                      ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
-                      type="button"
-                    >
-                      <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
-                      <span>{text.detail}</span>
-                    </button>
-                  )}
+                  <button
+                    aria-label={text.openDetail + " " + row.requestId}
+                    className="dashboard-live-detail-button"
+                    onClick={() => onOpenRequest(row)}
+                    ref={detailFocusRequestId === row.requestId ? detailFocusRef : undefined}
+                    type="button"
+                  >
+                    <Eye aria-hidden="true" size={16} strokeWidth={2.2} />
+                    <span>{text.detail}</span>
+                  </button>
                 </td>
               </tr>
             ))}

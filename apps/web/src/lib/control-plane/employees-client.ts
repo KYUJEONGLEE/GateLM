@@ -9,12 +9,6 @@ import {
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
 import { buildProjectEmployeeAssignmentRequestBody } from "@/lib/control-plane/employee-assignment-request";
-import {
-  cachedControlPlaneRead,
-  CONTROL_PLANE_READ_CACHE_SECONDS,
-  controlPlaneReadCacheTags,
-  controlPlaneTenantReadCacheTag
-} from "@/lib/control-plane/read-cache";
 import { listControlPlaneProjectsFresh } from "@/lib/control-plane/projects-client";
 import type {
   EmployeeControlModel,
@@ -175,27 +169,8 @@ export async function getEmployeeControlModel(
 
 export async function getTenantEmployees(routeTenantId: string): Promise<EmployeeRecord[]> {
   const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
-  try {
-    return await cachedControlPlaneRead(
-      ["control-plane", "employees", controlPlaneTenantId],
-      async () => {
-        const result = await listEmployees(controlPlaneTenantId);
-        if (!result.ok) {
-          throw new Error(result.error);
-        }
-        return result.data;
-      },
-      {
-        revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.employees,
-        tags: [
-          controlPlaneReadCacheTags.employees,
-          controlPlaneTenantReadCacheTag("employees", controlPlaneTenantId)
-        ]
-      }
-    );
-  } catch {
-    return getFixtureEmployees(controlPlaneTenantId);
-  }
+  const result = await listEmployees(controlPlaneTenantId);
+  return result.ok ? result.data : getFixtureEmployees(controlPlaneTenantId);
 }
 
 export async function getProjectEmployeeControlModel(

@@ -751,7 +751,7 @@ func TestQueryReaderGetCostReportFillsExpectedTimeSeriesBuckets(t *testing.T) {
 		expectedCount    int
 		expectedUnitSQL  string
 	}{
-		{name: "last 5 minutes", duration: 5 * time.Minute, expectedInterval: "7s", expectedCount: 43, expectedUnitSQL: "extract(epoch from created_at) / 7"},
+		{name: "last 5 minutes", duration: 5 * time.Minute, expectedInterval: "1s", expectedCount: 300, expectedUnitSQL: "date_trunc('second', created_at)"},
 		{name: "last 15 minutes", duration: 15 * time.Minute, expectedInterval: "1m", expectedCount: 15, expectedUnitSQL: "date_trunc('minute', created_at)"},
 		{name: "last 1 hour", duration: time.Hour, expectedInterval: "5m", expectedCount: 12, expectedUnitSQL: "interval '5 minutes'"},
 		{name: "last 24 hours", duration: 24 * time.Hour, expectedInterval: "1h", expectedCount: 24, expectedUnitSQL: "date_trunc('hour', created_at)"},
@@ -762,7 +762,12 @@ func TestQueryReaderGetCostReportFillsExpectedTimeSeriesBuckets(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			to := time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)
 			from := to.Add(-tc.duration)
-			config := invocationlog.TimeSeriesBucketConfigForRange(from, to)
+			config := costReportBucketConfig(invocationlog.CostReportFilter{
+				TenantID: "tenant_demo",
+				Period:   "hour",
+				From:     from,
+				To:       to,
+			})
 			firstBucket := invocationlog.AlignTimeSeriesBucketStart(to.Add(-time.Nanosecond), config).
 				Add(-time.Duration(config.ExpectedBucketCount-1) * config.Interval)
 			lastLogCreatedAt := firstBucket.Add(30 * time.Second)
