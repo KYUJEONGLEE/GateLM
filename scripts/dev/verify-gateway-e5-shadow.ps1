@@ -20,12 +20,13 @@ if (-not $Python) {
     $Python = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { "python" }
 }
 
-# The checked-in v3 model is pinned to the historical payload-empty / separate
-# score-3 sentinel boundary. The current Gateway uses the semantic-empty /
-# combined-score-8 boundary, so model replay and live shadow must fail closed.
-# Go compatibility tests below pin both identities; change this flag only with
-# a newly trained and explicitly approved exact-boundary artifact.
+# The checked-in v3 model remains incompatible with the current deterministic
+# boundary, so it is not eligible for Holdout replay or quality promotion. The
+# routing owner approved one exact, non-reusable waiver solely for optional-image
+# startup and request-shadow E2E wiring verification.
 $shadowModelCompatible = $false
+$baselineE2EWaiver = "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1"
+$shadowRuntimeAdmitted = $shadowModelCompatible -or ($baselineE2EWaiver -eq "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1")
 
 & (Join-Path $PSScriptRoot "prepare-gateway-e5-shadow-bundle.ps1") `
     -EncoderArtifactRoot $ArtifactRoot `
@@ -114,7 +115,7 @@ try {
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 initialization isolation tests failed" }
             & go test ./apps/gateway-core/internal/domain/routing `
-                -run "TestSimpleRouter.*Shadow|TestDifficultySemanticShadow|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely|TestGeneratedDifficultySemanticModelIsIncompatibleAfterDecisionBoundaryChange" `
+                -run "TestSimpleRouter.*Shadow|TestDifficultySemanticShadow|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely|TestGeneratedDifficultySemanticModel(IsIncompatibleAfterDecisionBoundaryChange|AcceptsOnlyPinnedBaselineE2EWaiver)" `
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 request isolation tests failed" }
         } finally {
@@ -137,6 +138,17 @@ try {
         bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./internal/adapters/routing/e5onnx -run TestNativeEncoderMatchesCanonicalPythonPooledOutput -count=1"
     if ($LASTEXITCODE -ne 0) {
         throw "Gateway native/Python E5 parity failed"
+    }
+
+    & docker run --rm --platform linux/amd64 `
+        -v "$(Join-Path $repoRoot 'apps/gateway-core'):/src/apps/gateway-core:ro" `
+        -v "${bundlePath}:/bundle:ro" `
+        -w /src/apps/gateway-core `
+        -e GATELM_E5_INTEGRATION_BUNDLE_ROOT=/bundle `
+        golang:1.24-bookworm `
+        bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./cmd/gateway -run '^TestBaselineWaiverNativeRequestShadowE2E$' -count=1"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gateway baseline waiver native request-shadow E2E failed"
     }
 
     if ($shadowModelCompatible) {
@@ -216,13 +228,14 @@ try {
                 -e DATABASE_URL=invalid `
                 -e GATEWAY_LOG_DATABASE_URL=invalid `
                 -e GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES=tenant_smoke/application_smoke `
+                -e "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER=$baselineE2EWaiver" `
                 $ImageTag 2>&1
             $smokeExitCode = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousErrorActionPreference
         }
         $safeSmoke = $smokeOutput -join "`n"
-        $expectedShadowStatus = if ($shadowModelCompatible) {
+        $expectedShadowStatus = if ($shadowRuntimeAdmitted) {
             "difficulty E5 shadow initialized; product routing unchanged"
         } else {
             "difficulty E5 shadow unavailable; product routing unchanged"
@@ -236,6 +249,8 @@ try {
 
     if ($shadowModelCompatible) {
         Write-Host "Gateway E5 shadow and Holdout replay verification passed"
+    } elseif ($shadowRuntimeAdmitted) {
+        Write-Host "Gateway E5 baseline waiver startup and request-shadow E2E verification passed; quality promotion remains failed"
     } else {
         Write-Host "Gateway E5 optional image verification passed with historical model shadow disabled"
     }

@@ -177,6 +177,21 @@ func TestGeneratedDifficultySemanticModelIsIncompatibleAfterDecisionBoundaryChan
 	}
 }
 
+func TestGeneratedDifficultySemanticModelAcceptsOnlyPinnedBaselineE2EWaiver(t *testing.T) {
+	if !DifficultySemanticShadowBaselineWaiverAccepted(DifficultySemanticShadowBaselineE2EWaiverV3) {
+		t.Fatal("pinned v3 baseline E2E waiver was rejected")
+	}
+	for _, waiver := range []string{
+		"",
+		"difficulty-shadow-baseline-e2e-v3-2026-07-15-typo",
+		"difficulty-shadow-baseline-e2e-v4-2026-07-15",
+	} {
+		if DifficultySemanticShadowBaselineWaiverAccepted(waiver) {
+			t.Fatalf("unexpected baseline E2E waiver accepted: %q", waiver)
+		}
+	}
+}
+
 func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing.T) {
 	features := syntheticDifficultySemanticModelFeatures()
 	pooled := syntheticDifficultySemanticPooled()

@@ -100,9 +100,9 @@ Automated verification is not label review. The frozen review report still conta
 
 ## Runtime consequence
 
-The checked-in v3 Go material now carries the historical decision-boundary identity separately from its immutable inference hashes. Gateway compares that identity with the current boundary before creating the optional encoder. The pair is incompatible, so even an existing development allowlist degrades to `shadow unavailable` and product routing remains rule-only. The previous owner guardrails are retained as historical evidence but cannot activate the current runtime; see [`difficulty-live-shadow-boundary-supersession.json`](difficulty-live-shadow-boundary-supersession.json).
+The checked-in v3 Go material carries the historical decision-boundary identity separately from its immutable inference hashes. Gateway compares that identity with the current boundary before creating the optional encoder. The pair remains incompatible and fails closed by default. After this audit, the routing owner approved one exact v3 baseline E2E exception in [`difficulty-live-shadow-baseline-e2e-waiver.json`](difficulty-live-shadow-baseline-e2e-waiver.json). Only the pinned waiver plus global enable and an exact development pair may bypass the compatibility rejection for non-authoritative shadow wiring; product routing remains rule-only. The supersession record remains authoritative for the historical approval by itself.
 
-Optional-image verification still checks the pinned tokenizer, QInt8 encoder, native runtime, Python/Go pooled-output parity, image contents, startup isolation, and rule-only degradation. Historical v3 Holdout replay is intentionally skipped because replaying it through the new model-path membership would no longer be the approved exact pair.
+Optional-image verification checks the pinned tokenizer, QInt8 encoder, native runtime, Python/Go pooled-output parity, image contents, startup isolation, and an actual native request-shadow observation with rule decision/modelRef invariance under the exact waiver. Historical v3 Holdout replay remains intentionally skipped because replaying it through the new model-path membership would no longer be the approved exact pair.
 
 ## Verification
 

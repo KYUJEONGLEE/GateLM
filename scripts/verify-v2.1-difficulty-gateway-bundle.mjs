@@ -110,6 +110,13 @@ const holdoutIntegration = readFileSync(
   ),
   "utf8",
 );
+const baselineWaiverIntegration = readFileSync(
+  path.join(
+    rootDir,
+    "apps/gateway-core/cmd/gateway/difficulty_e5_baseline_waiver_integration_test.go",
+  ),
+  "utf8",
+);
 if (!defaultDockerfile.includes("CGO_ENABLED=0") || defaultDockerfile.includes("difficulty_e5_onnx")) {
   throw new Error("default Gateway image must remain CGO-free and E5-inactive");
 }
@@ -118,9 +125,20 @@ for (const requiredText of [
   "sha256sum --check",
   "-tags=difficulty_e5_onnx",
   "GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true",
+  "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER=difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
 ]) {
   if (!e5Dockerfile.includes(requiredText)) {
     throw new Error(`optional Gateway E5 image omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "TestBaselineWaiverNativeRequestShadowE2E",
+  "DifficultySemanticShadowBaselineE2EWaiverV3",
+  "DifficultySemanticShadowReady",
+  "authoritative route changed",
+]) {
+  if (!baselineWaiverIntegration.includes(requiredText)) {
+    throw new Error(`Gateway baseline waiver native integration omitted ${requiredText}`);
   }
 }
 for (const requiredText of [
@@ -130,6 +148,9 @@ for (const requiredText of [
   "EvidenceOutput",
   ":/src/apps/gateway-core:ro",
   "GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES=tenant_smoke/application_smoke",
+  "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
+  "difficulty E5 shadow initialized; product routing unchanged",
+  "TestBaselineWaiverNativeRequestShadowE2E",
 ]) {
   if (!verifyNativeScript.includes(requiredText)) {
     throw new Error(`Gateway E5 native verifier omitted ${requiredText}`);

@@ -50,6 +50,7 @@ USER gatelm
 
 ENV GATEWAY_PORT=8080 \
     GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true \
+    GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER=difficulty-shadow-baseline-e2e-v3.2026-07-15.v1 \
     GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS=100 \
     GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT=/opt/gatelm/difficulty-e5 \
     GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST=/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json \

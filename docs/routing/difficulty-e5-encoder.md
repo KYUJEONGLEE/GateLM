@@ -74,7 +74,7 @@ Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[
 
 그 뒤 v1에서 소비한 10 family를 제외한 새 whole-family Holdout 10 family/100건을 score access 전에 고정했다. 첫 평가 결과는 accuracy `0.56`, `complex -> simple=0`, `simple -> complex=44`로 accuracy gate를 실패했다. 따라서 calibration의 threshold-only operating point는 새 family로 일반화되지 않았고 v4는 Go bundle, parity replay, live shadow 또는 product routing으로 승격하지 않는다. 새 Holdout도 이제 소비됐으며 재튜닝에 사용할 수 없다. 상세 aggregate evidence와 다음 경계는 [`../testing/difficulty-threshold-v4-evaluation.md`](../testing/difficulty-threshold-v4-evaluation.md)에 기록한다.
 
-이후 canonical sentinel 경계가 `semantic-empty / combined score-8` v2로 변경되어 v3가 학습된 historical model-path membership과 달라졌다. Generated v3 material은 historical boundary identity를 별도로 pin하고 Gateway는 encoder 생성 전에 current boundary와 비교한다. 현재는 불일치하므로 optional image가 존재해도 request shadow는 `unavailable`로 내려가며 rule routing만 유지한다. 기존 owner guardrail 승인은 historical evidence로 보존하지만 current boundary 활성화 권한은 없고, 새 exact-boundary artifact와 별도 승인이 필요하다.
+이후 canonical sentinel 경계가 `semantic-empty / combined score-8` v2로 변경되어 v3가 학습된 historical model-path membership과 달라졌다. Generated v3 material은 historical boundary identity를 별도로 pin하고 Gateway는 encoder 생성 전에 current boundary와 비교한다. 정상 경로에서는 불일치가 `unavailable`로 fail closed된다. 다만 routing owner는 정확도 승격이 아니라 Gateway E2E 배선 검증만을 위해 exact v3 artifact/bundle/content hash와 `difficulty-threshold-v1 = 0.45`에 한정된 one-time waiver `difficulty-shadow-baseline-e2e-v3.2026-07-15.v1`를 승인했다. Global enable, exact-pair allowlist와 waiver가 모두 일치할 때만 optional shadow를 시작하며 rule routing은 계속 authoritative다. 이 waiver는 v4나 future artifact에 재사용할 수 없고, 새 artifact는 기존 accuracy·directional error·category·owner approval gate를 모두 통과해야 한다.
 
 ## 3. Artifact And Distribution Contract
 

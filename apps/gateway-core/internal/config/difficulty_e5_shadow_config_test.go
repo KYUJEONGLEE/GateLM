@@ -13,6 +13,7 @@ func TestDifficultyE5ShadowRequiresExplicitOptIn(t *testing.T) {
 		"GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST",
 		"GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK",
 		"GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS",
+		"GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER",
 	} {
 		t.Setenv(key, "")
 	}
@@ -26,6 +27,20 @@ func TestDifficultyE5ShadowRequiresExplicitOptIn(t *testing.T) {
 	}
 	if cfg.DifficultyE5Shadow.Timeout != 100*time.Millisecond {
 		t.Fatalf("default difficulty E5 shadow timeout = %s, want 100ms", cfg.DifficultyE5Shadow.Timeout)
+	}
+}
+
+func TestDifficultyE5ShadowLoadsExplicitBaselineWaiver(t *testing.T) {
+	t.Setenv("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", "true")
+	t.Setenv("GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES", "tenant_dev/application_dev")
+	t.Setenv("GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER", "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DifficultyE5Shadow.BaselineWaiver != "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1" {
+		t.Fatalf("baseline waiver = %q", cfg.DifficultyE5Shadow.BaselineWaiver)
 	}
 }
 

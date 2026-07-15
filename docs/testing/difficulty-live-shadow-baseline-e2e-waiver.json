@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "gatelm.difficulty-live-shadow-baseline-e2e-waiver.v1",
+  "status": "owner_approved_one_time_baseline_e2e_shadow_waiver",
+  "approvedOn": "2026-07-15",
+  "approval": {
+    "scope": "limited_development_exact_pair_baseline_e2e_shadow_only",
+    "basis": "explicit_routing_owner_instruction_in_current_codex_task",
+    "humanReviewerCount": 1,
+    "reviewerIdentityStored": false
+  },
+  "waiver": {
+    "id": "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
+    "purpose": "gateway_tokenizer_encoder_pooling_pca_118d_score_aggregate_metric_e2e_only",
+    "exactArtifactIdentityOnly": true,
+    "decisionBoundaryMismatchAcknowledged": true,
+    "reusableForOtherArtifacts": false,
+    "activationEnvironmentVariable": "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER",
+    "defaultEnabled": false
+  },
+  "priorGuardrails": {
+    "ownerApprovalFileSha256": "c7ab4966510bc7a87184a1b9a6ebe81c1a4c6b240aebb06276f9683b186426c4",
+    "boundarySupersessionFileSha256": "ebb1af38f2d12b9cb86e189a44ec6380fe929653a04b0f51c45576eb171f5ffc",
+    "ownerReconfirmedWithoutWidening": true
+  },
+  "scope": {
+    "limitedDevelopmentExactPairsOnly": true,
+    "authoritativeRouting": "rule_based",
+    "productRoutingPromotionApproved": false,
+    "qualityPromotionApproved": false,
+    "failedAccuracyGateWaivedForThisBaselineE2EOnly": true,
+    "futureArtifactAccuracyGateRequired": true,
+    "futureMinimumAccuracy": 0.91,
+    "futureMaximumComplexToSimpleCount": 1,
+    "futureCategoryNonRegressionRequired": true,
+    "liveEvidenceStillRequired": true
+  },
+  "artifact": {
+    "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",
+    "bundleHash": "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220",
+    "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
+    "artifactFileSha256": "008a149ef935e763d2905c0b98e5e9ea5718a163f2f260270eae5ff194e05cb6",
+    "thresholdPolicyVersion": "difficulty-threshold-v1",
+    "threshold": 0.45,
+    "totalDimension": 118,
+    "artifactTrainingBoundaryVersion": "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1",
+    "currentGatewayBoundaryVersion": "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2"
+  },
+  "qualityEvidence": {
+    "holdoutRecords": 100,
+    "observedAccuracy": 0.7,
+    "minimumAccuracy": 0.91,
+    "observedSimpleToComplexCount": 30,
+    "observedComplexToSimpleCount": 0,
+    "maximumComplexToSimpleCount": 1,
+    "promotionGatePassed": false,
+    "evidenceRole": "failed_baseline_quality_evidence_not_overridden"
+  },
+  "ownerApprovedMemoryGuardrails": {
+    "containerHardLimitBytes": 2147483648,
+    "processRssRollbackThresholdBytes": 1342177280,
+    "cgroupCurrentRollbackThresholdBytes": 1879048192,
+    "sustainSeconds": 300,
+    "enforcement": "deployment_platform_required_before_enable"
+  },
+  "rollback": {
+    "immediateTriggers": [
+      "container_oom_or_restart",
+      "authoritative_routing_or_model_ref_mismatch_count_gte_1",
+      "sensitive_data_exposure_count_gte_1",
+      "shadow_failure_affects_request_or_provider_path_count_gte_1"
+    ],
+    "sustainedTriggers": [
+      "process_rss_bytes_gt_1342177280_for_300_seconds",
+      "cgroup_current_bytes_gt_1879048192_for_300_seconds"
+    ],
+    "actions": [
+      "clear_exact_pair_allowlist_or_set_shadow_enabled_false",
+      "clear_baseline_waiver",
+      "restart_gateway",
+      "confirm_rule_only_routing_and_provider_health_before_reenable"
+    ],
+    "automaticProductPromotion": false
+  },
+  "activation": {
+    "requiresGlobalEnable": true,
+    "requiresNonEmptyExactPairAllowlist": true,
+    "requiresExactBaselineWaiver": true,
+    "wildcardsAllowed": false,
+    "maximumDevelopmentPairs": 3,
+    "startupSmokeTimeoutSeconds": 30,
+    "requestTimeoutMilliseconds": 100,
+    "shadowFailureMayAffectRequestOrProvider": false
+  },
+  "doesNotApprove": [
+    "ml_authoritative_routing",
+    "runtime_model_selection_change",
+    "quality_gate_pass",
+    "future_artifact_waiver",
+    "production_or_global_shadow_enablement",
+    "ga_or_release"
+  ],
+  "dataSafety": {
+    "aggregateOnly": true,
+    "containsRawPromptOrResponse": false,
+    "containsEmbeddingOrFeatureMaterial": false,
+    "containsModelParameters": false,
+    "containsIndividualScores": false,
+    "containsTenantOrApplicationIdentifiers": false
+  }
+}

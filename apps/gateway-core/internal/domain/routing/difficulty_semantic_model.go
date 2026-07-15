@@ -6,12 +6,13 @@ import (
 )
 
 const (
-	difficultySemanticPooledDimension          = 384
-	difficultySemanticProjectionDimension      = 64
-	difficultySemanticHeadCount                = 4
-	difficultySemanticHeadClassCount           = 3
-	difficultySemanticHeadProbabilityDimension = difficultySemanticHeadCount * difficultySemanticHeadClassCount
-	difficultySemanticTotalDimension           = DifficultyFeatureVectorDimensionV1 + difficultySemanticProjectionDimension + difficultySemanticHeadProbabilityDimension
+	difficultySemanticPooledDimension           = 384
+	difficultySemanticProjectionDimension       = 64
+	difficultySemanticHeadCount                 = 4
+	difficultySemanticHeadClassCount            = 3
+	difficultySemanticHeadProbabilityDimension  = difficultySemanticHeadCount * difficultySemanticHeadClassCount
+	difficultySemanticTotalDimension            = DifficultyFeatureVectorDimensionV1 + difficultySemanticProjectionDimension + difficultySemanticHeadProbabilityDimension
+	DifficultySemanticShadowBaselineE2EWaiverV3 = "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1"
 )
 
 var (
@@ -53,6 +54,23 @@ type difficultySemanticModelIdentity struct {
 func DifficultySemanticShadowModelCompatible() bool {
 	return generatedDifficultySemanticModel118D.identity.decisionBoundaryVersion != "" &&
 		generatedDifficultySemanticModel118D.identity.decisionBoundaryVersion == DifficultyDecisionBoundaryVersion
+}
+
+// DifficultySemanticShadowBaselineWaiverAccepted permits one immutable,
+// non-authoritative v3 bundle to exercise the limited-development E2E shadow
+// path despite its historical decision boundary. Any artifact regeneration,
+// threshold change, boundary change, or waiver typo fails closed.
+func DifficultySemanticShadowBaselineWaiverAccepted(waiver string) bool {
+	identity := generatedDifficultySemanticModel118D.identity
+	return waiver == DifficultySemanticShadowBaselineE2EWaiverV3 &&
+		identity.artifactVersion == "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3" &&
+		identity.bundleHash == "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220" &&
+		identity.contentHash == "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd" &&
+		identity.thresholdPolicyVersion == "difficulty-threshold-v1" &&
+		generatedDifficultySemanticModel118D.threshold == difficultyThresholdV1 &&
+		identity.decisionBoundaryVersion == "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1" &&
+		DifficultyDecisionBoundaryVersion == "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2" &&
+		!DifficultySemanticShadowModelCompatible()
 }
 
 type difficultySemanticModelMaterial struct {

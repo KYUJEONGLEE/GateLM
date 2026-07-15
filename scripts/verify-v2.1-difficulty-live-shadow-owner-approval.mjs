@@ -19,7 +19,16 @@ export const approvalPaths = Object.freeze({
     root,
     "docs/testing/difficulty-live-shadow-boundary-supersession.json",
   ),
+  baselineWaiver: path.join(
+    root,
+    "docs/testing/difficulty-live-shadow-baseline-e2e-waiver.json",
+  ),
   runbook: path.join(root, "docs/testing/difficulty-live-shadow-runbook.md"),
+  semanticModel: path.join(
+    root,
+    "apps/gateway-core/internal/domain/routing/difficulty_semantic_model.go",
+  ),
+  gatewayConfig: path.join(root, "apps/gateway-core/internal/config/config.go"),
 });
 
 const expectedMemoryGuardrails = Object.freeze({
@@ -44,6 +53,13 @@ const expectedSustainedTriggers = Object.freeze([
 
 const expectedRollbackActions = Object.freeze([
   "clear_exact_pair_allowlist_or_set_shadow_enabled_false",
+  "restart_gateway",
+  "confirm_rule_only_routing_and_provider_health_before_reenable",
+]);
+
+const expectedBaselineRollbackActions = Object.freeze([
+  "clear_exact_pair_allowlist_or_set_shadow_enabled_false",
+  "clear_baseline_waiver",
   "restart_gateway",
   "confirm_rule_only_routing_and_provider_health_before_reenable",
 ]);
@@ -104,8 +120,12 @@ export function validateApproval({
   promotionReport,
   approvalBytes,
   approval,
+  supersessionBytes,
   supersession,
+  baselineWaiver,
   runbook,
+  semanticModel,
+  gatewayConfig,
 }) {
   const artifact = JSON.parse(artifactBytes.toString("utf8"));
 
@@ -262,6 +282,146 @@ export function validateApproval({
   );
   assertNoForbiddenApprovalKeys(supersession);
 
+  requireValue(
+    baselineWaiver?.schemaVersion ===
+      "gatelm.difficulty-live-shadow-baseline-e2e-waiver.v1" &&
+      baselineWaiver.status === "owner_approved_one_time_baseline_e2e_shadow_waiver" &&
+      baselineWaiver.approvedOn === "2026-07-15" &&
+      baselineWaiver.approval?.scope ===
+        "limited_development_exact_pair_baseline_e2e_shadow_only" &&
+      baselineWaiver.approval?.basis ===
+        "explicit_routing_owner_instruction_in_current_codex_task" &&
+      baselineWaiver.approval?.humanReviewerCount === 1 &&
+      baselineWaiver.approval?.reviewerIdentityStored === false,
+    "baseline E2E waiver approval provenance drifted",
+  );
+  requireValue(
+    baselineWaiver.waiver?.id ===
+      "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1" &&
+      baselineWaiver.waiver?.purpose ===
+        "gateway_tokenizer_encoder_pooling_pca_118d_score_aggregate_metric_e2e_only" &&
+      baselineWaiver.waiver?.exactArtifactIdentityOnly === true &&
+      baselineWaiver.waiver?.decisionBoundaryMismatchAcknowledged === true &&
+      baselineWaiver.waiver?.reusableForOtherArtifacts === false &&
+      baselineWaiver.waiver?.activationEnvironmentVariable ===
+        "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER" &&
+      baselineWaiver.waiver?.defaultEnabled === false,
+    "baseline E2E waiver widened or drifted",
+  );
+  requireValue(
+    baselineWaiver.priorGuardrails?.ownerApprovalFileSha256 === sha256(approvalBytes) &&
+      baselineWaiver.priorGuardrails?.boundarySupersessionFileSha256 ===
+        sha256(supersessionBytes) &&
+      baselineWaiver.priorGuardrails?.ownerReconfirmedWithoutWidening === true,
+    "baseline E2E waiver guardrail provenance drifted",
+  );
+  for (const field of [
+    "artifactVersion",
+    "bundleHash",
+    "contentHash",
+    "artifactFileSha256",
+    "thresholdPolicyVersion",
+    "threshold",
+    "totalDimension",
+  ]) {
+    requireValue(
+      baselineWaiver.artifact?.[field] === approval.artifact?.[field],
+      `baseline E2E waiver artifact ${field} drifted`,
+    );
+  }
+  requireValue(
+    baselineWaiver.artifact?.artifactTrainingBoundaryVersion ===
+      supersession.decisionBoundary?.artifactTrainingBoundaryVersion &&
+      baselineWaiver.artifact?.currentGatewayBoundaryVersion ===
+        supersession.decisionBoundary?.currentGatewayBoundaryVersion,
+    "baseline E2E waiver boundary identity drifted",
+  );
+  requireValue(
+    baselineWaiver.scope?.limitedDevelopmentExactPairsOnly === true &&
+      baselineWaiver.scope?.authoritativeRouting === "rule_based" &&
+      baselineWaiver.scope?.productRoutingPromotionApproved === false &&
+      baselineWaiver.scope?.qualityPromotionApproved === false &&
+      baselineWaiver.scope?.failedAccuracyGateWaivedForThisBaselineE2EOnly === true &&
+      baselineWaiver.scope?.futureArtifactAccuracyGateRequired === true &&
+      baselineWaiver.scope?.futureMinimumAccuracy === 0.91 &&
+      baselineWaiver.scope?.futureMaximumComplexToSimpleCount === 1 &&
+      baselineWaiver.scope?.futureCategoryNonRegressionRequired === true &&
+      baselineWaiver.scope?.liveEvidenceStillRequired === true,
+    "baseline E2E waiver scope widened",
+  );
+  requireValue(
+    baselineWaiver.qualityEvidence?.holdoutRecords === 100 &&
+      baselineWaiver.qualityEvidence?.observedAccuracy ===
+        promotionReport.selectedCandidateClassification?.accuracy &&
+      baselineWaiver.qualityEvidence?.minimumAccuracy ===
+        promotionReport.gate?.minimumAccuracy?.minimum &&
+      baselineWaiver.qualityEvidence?.observedSimpleToComplexCount ===
+        promotionReport.selectedCandidateClassification?.simpleToComplexCount &&
+      baselineWaiver.qualityEvidence?.observedComplexToSimpleCount ===
+        promotionReport.selectedCandidateClassification?.complexToSimpleCount &&
+      baselineWaiver.qualityEvidence?.maximumComplexToSimpleCount ===
+        promotionReport.gate?.maximumComplexToSimpleCount?.maximum &&
+      baselineWaiver.qualityEvidence?.promotionGatePassed === false &&
+      baselineWaiver.qualityEvidence?.evidenceRole ===
+        "failed_baseline_quality_evidence_not_overridden",
+    "baseline E2E waiver quality failure evidence drifted",
+  );
+  requireExactObject(
+    baselineWaiver.ownerApprovedMemoryGuardrails,
+    expectedMemoryGuardrails,
+    "baseline E2E waiver memory guardrails drifted",
+  );
+  requireExactObject(
+    baselineWaiver.rollback?.immediateTriggers,
+    expectedImmediateTriggers,
+    "baseline E2E waiver immediate rollback triggers drifted",
+  );
+  requireExactObject(
+    baselineWaiver.rollback?.sustainedTriggers,
+    expectedSustainedTriggers,
+    "baseline E2E waiver sustained rollback triggers drifted",
+  );
+  requireExactObject(
+    baselineWaiver.rollback?.actions,
+    expectedBaselineRollbackActions,
+    "baseline E2E waiver rollback actions drifted",
+  );
+  requireValue(
+    baselineWaiver.rollback?.automaticProductPromotion === false &&
+      baselineWaiver.activation?.requiresGlobalEnable === true &&
+      baselineWaiver.activation?.requiresNonEmptyExactPairAllowlist === true &&
+      baselineWaiver.activation?.requiresExactBaselineWaiver === true &&
+      baselineWaiver.activation?.wildcardsAllowed === false &&
+      baselineWaiver.activation?.maximumDevelopmentPairs === 3 &&
+      baselineWaiver.activation?.startupSmokeTimeoutSeconds === 30 &&
+      baselineWaiver.activation?.requestTimeoutMilliseconds === 100 &&
+      baselineWaiver.activation?.shadowFailureMayAffectRequestOrProvider === false &&
+      baselineWaiver.doesNotApprove?.includes("ml_authoritative_routing") &&
+      baselineWaiver.doesNotApprove?.includes("runtime_model_selection_change") &&
+      baselineWaiver.doesNotApprove?.includes("quality_gate_pass") &&
+      baselineWaiver.doesNotApprove?.includes("future_artifact_waiver") &&
+      baselineWaiver.doesNotApprove?.includes("production_or_global_shadow_enablement"),
+    "baseline E2E waiver activation or exclusion guardrails drifted",
+  );
+  requireValue(
+    baselineWaiver.dataSafety?.aggregateOnly === true &&
+      baselineWaiver.dataSafety?.containsRawPromptOrResponse === false &&
+      baselineWaiver.dataSafety?.containsEmbeddingOrFeatureMaterial === false &&
+      baselineWaiver.dataSafety?.containsModelParameters === false &&
+      baselineWaiver.dataSafety?.containsIndividualScores === false &&
+      baselineWaiver.dataSafety?.containsTenantOrApplicationIdentifiers === false,
+    "baseline E2E waiver data-safety declaration is unsafe",
+  );
+  assertNoForbiddenApprovalKeys(baselineWaiver);
+  requireValue(
+    semanticModel.includes(
+      'DifficultySemanticShadowBaselineE2EWaiverV3 = "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1"',
+    ) &&
+      semanticModel.includes("DifficultySemanticShadowBaselineWaiverAccepted") &&
+      gatewayConfig.includes('envString("GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER", "")'),
+    "baseline E2E waiver runtime admission drifted",
+  );
+
   for (const requiredText of [
     "owner guardrails approved, live evidence pending",
     "2 GiB",
@@ -274,6 +434,10 @@ export function validateApproval({
     "GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES",
     "GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false",
     "failed promotion gate",
+    "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
+    "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER",
+    "accuracy `0.70`",
+    "future artifact",
   ]) {
     requireValue(runbook.includes(requiredText), `live-shadow runbook is missing ${requiredText}`);
   }
@@ -284,22 +448,30 @@ export function verifyCanonicalApproval(paths = approvalPaths) {
   const promotionReport = JSON.parse(readFileSync(paths.promotionReport, "utf8"));
   const approvalBytes = readFileSync(paths.approval);
   const approval = JSON.parse(approvalBytes.toString("utf8"));
-  const supersession = JSON.parse(readFileSync(paths.supersession, "utf8"));
+  const supersessionBytes = readFileSync(paths.supersession);
+  const supersession = JSON.parse(supersessionBytes.toString("utf8"));
+  const baselineWaiver = JSON.parse(readFileSync(paths.baselineWaiver, "utf8"));
   const runbook = readFileSync(paths.runbook, "utf8");
+  const semanticModel = readFileSync(paths.semanticModel, "utf8");
+  const gatewayConfig = readFileSync(paths.gatewayConfig, "utf8");
   validateApproval({
     artifactBytes,
     promotionReport,
     approvalBytes,
     approval,
+    supersessionBytes,
     supersession,
+    baselineWaiver,
     runbook,
+    semanticModel,
+    gatewayConfig,
   });
-  return { approval, supersession };
+  return { approval, supersession, baselineWaiver };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { approval, supersession } = verifyCanonicalApproval();
+  const { approval, supersession, baselineWaiver } = verifyCanonicalApproval();
   console.log(
-    `difficulty live-shadow historical owner approval verified (${approval.status}, hard limit ${approval.ownerApprovedMemoryGuardrails.containerHardLimitBytes} bytes; current status ${supersession.status})`,
+    `difficulty live-shadow owner guardrails and baseline E2E waiver verified (${approval.status}; ${supersession.status}; ${baselineWaiver.status}; hard limit ${approval.ownerApprovedMemoryGuardrails.containerHardLimitBytes} bytes)`,
   );
 }

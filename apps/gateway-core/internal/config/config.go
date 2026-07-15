@@ -139,6 +139,7 @@ type Config struct {
 type DifficultyE5ShadowConfig struct {
 	Enabled             bool
 	AllowedScopes       []DifficultyE5ShadowScope
+	BaselineWaiver      string
 	ArtifactRoot        string
 	EncoderManifestPath string
 	RuntimeLockPath     string
@@ -419,6 +420,7 @@ func LoadWithError() (Config, error) {
 		DifficultyE5Shadow: DifficultyE5ShadowConfig{
 			Enabled:             difficultyE5ShadowEnabled,
 			AllowedScopes:       difficultyE5ShadowScopes,
+			BaselineWaiver:      strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER", "")),
 			ArtifactRoot:        strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT", "/opt/gatelm/difficulty-e5")),
 			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json")),
 			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")),

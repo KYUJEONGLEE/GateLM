@@ -372,7 +372,7 @@ func main() {
 
 const (
 	difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
-	difficultyE5StartupSmokeTimeout     = 10 * time.Second
+	difficultyE5StartupSmokeTimeout     = 30 * time.Second
 )
 
 const (
@@ -422,7 +422,8 @@ func initializeDifficultyE5ShadowWithCompatibility(
 	if !cfg.HasAllowedScopes() {
 		return nil, nil
 	}
-	if compatible == nil || !compatible() {
+	if compatible == nil ||
+		(!compatible() && !routingdomain.DifficultySemanticShadowBaselineWaiverAccepted(cfg.BaselineWaiver)) {
 		return nil, errors.New("unavailable")
 	}
 	if factory == nil {

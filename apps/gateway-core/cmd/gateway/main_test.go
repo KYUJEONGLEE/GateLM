@@ -105,6 +105,32 @@ func TestInitializeDifficultyE5ShadowRejectsHistoricalDecisionBoundaryBeforeEnco
 	}
 }
 
+func TestInitializeDifficultyE5ShadowAcceptsPinnedBaselineE2EWaiver(t *testing.T) {
+	called := false
+	encoder := &fakeDifficultyE5Encoder{}
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:        true,
+			AllowedScopes:  difficultyE5ShadowTestScopes(),
+			BaselineWaiver: routing.DifficultySemanticShadowBaselineE2EWaiverV3,
+		},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return encoder, nil
+		},
+	)
+	if err != nil || evaluator == nil || !called {
+		t.Fatalf("pinned baseline waiver not admitted: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+	if encoder.instruction != difficultyE5StartupSmokeInstruction {
+		t.Fatalf("baseline startup smoke input = %q", encoder.instruction)
+	}
+	if err := evaluator.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) {
 	encoder := &fakeDifficultyE5Encoder{}
 	evaluator, err := initializeDifficultyE5ShadowWithCompatibility(
