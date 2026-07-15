@@ -81,6 +81,24 @@ describe('TenantChatObservabilityService', () => {
     });
   });
 
+  it('uses the bounded one-second interval for a five-minute cost series', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw.mockResolvedValue([]);
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getCostSeries(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T12:05:00Z',
+      bucket: '1s',
+    });
+
+    const query = prisma.$queryRaw.mock.calls[0]?.[0] as { values?: unknown[] };
+    expect(query.values).toContain('1 second');
+    expect(result.data.bucket).toBe('1s');
+  });
+
   it('guards routing JSON before expanding provider breakdown routes', async () => {
     const prisma = createPrisma();
     prisma.$queryRaw.mockResolvedValue([]);

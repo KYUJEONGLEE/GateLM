@@ -70,6 +70,6 @@ export class TenantChatCostSeriesQueryDto {
   @IsDateString()
   to!: string;
 
-  @IsIn(['7s', '1m', '5m', '1h', '1d'])
-  bucket!: '7s' | '1m' | '5m' | '1h' | '1d';
+  @IsIn(['1s', '7s', '1m', '5m', '1h', '1d'])
+  bucket!: '1s' | '7s' | '1m' | '5m' | '1h' | '1d';
 }

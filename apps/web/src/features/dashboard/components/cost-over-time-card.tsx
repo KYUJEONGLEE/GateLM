@@ -304,6 +304,10 @@ function formatUsd(value: number) {
 }
 
 function formatCostGranularity(summary: CostOverTimeSummary | undefined, locale: Locale) {
+  if (summary?.bucketInterval === "1s") {
+    return locale === "ko" ? "1초 단위" : "1-second";
+  }
+
   if (summary?.bucketInterval === "7s") {
     return locale === "ko" ? "7초 단위" : "7-second";
   }

@@ -94,6 +94,67 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	}
 }
 
+func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.T) {
+	client := &fakeCacheClient{}
+	store := NewStore(client, &KeySets{byID: map[string]KeySet{
+		"keys_001": {ID: "keys_001", FingerprintKey: bytesOf(1), EncryptionKey: bytesOf(2)},
+	}})
+	store.now = func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
+	store.rand = strings.NewReader("0123456789ab")
+	snapshot := tenantruntime.Snapshot{
+		Digest: "sha256:synthetic", Policies: tenantruntime.Policies{Cache: tenantruntime.CachePolicy{
+			Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 10, KeySetID: "keys_001",
+		}},
+	}
+	initialInput := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{
+		{Role: "system", Content: "synthetic system context"},
+		{Role: "user", Content: "repeat this exact question"},
+	}, Stream: true}
+	requestContext := tenantchat.RequestContext{
+		ExecutionScope: tenantchat.ExecutionScope{
+			TenantID: "tenant_001", Actor: tenantchat.Actor{UserID: "user_001"},
+		},
+		UsageIntent: &tenantchat.UsageIntent{
+			EstimatedInputTokens: estimatedInputBytes(initialInput.Messages),
+			MaxOutputTokens:      32, RequestedTier: "standard", CacheStrategy: "exact",
+		},
+	}
+	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
+	if err := store.Put(context.Background(), requestContext, snapshot, initialInput, entry); err != nil {
+		t.Fatalf("put initial exact cache: %v", err)
+	}
+
+	repeatedInput := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{
+		{Role: "system", Content: "synthetic system context"},
+		{Role: "user", Content: "repeat this exact question"},
+		{Role: "assistant", Content: "synthetic private response"},
+		{Role: "user", Content: "repeat this exact question"},
+	}, Stream: true}
+	repeatedContext := requestContext
+	repeatedContext.UsageIntent = &tenantchat.UsageIntent{
+		EstimatedInputTokens: estimatedInputBytes(repeatedInput.Messages),
+		MaxOutputTokens:      32, RequestedTier: "standard", CacheStrategy: "exact",
+	}
+	got, hit, err := store.Get(context.Background(), repeatedContext, snapshot, repeatedInput)
+	if err != nil || !hit || got != entry {
+		t.Fatalf("get repeated-turn exact cache: hit=%t err=%v entry=%+v", hit, err, got)
+	}
+
+	differentInput := repeatedInput
+	differentInput.Messages = append([]tenantchat.EphemeralMessage(nil), repeatedInput.Messages...)
+	differentInput.Messages[len(differentInput.Messages)-1].Content = "a different question"
+	if _, hit, err := store.Get(context.Background(), repeatedContext, snapshot, differentInput); err != nil || hit {
+		t.Fatalf("different latest question must miss: hit=%t err=%v", hit, err)
+	}
+
+	differentContext := repeatedInput
+	differentContext.Messages = append([]tenantchat.EphemeralMessage(nil), repeatedInput.Messages...)
+	differentContext.Messages[0].Content = "synthetic system contexx"
+	if _, hit, err := store.Get(context.Background(), repeatedContext, snapshot, differentContext); err != nil || hit {
+		t.Fatalf("different earlier context must miss: hit=%t err=%v", hit, err)
+	}
+}
+
 func bytesOf(value byte) []byte {
 	result := make([]byte, 32)
 	for index := range result {

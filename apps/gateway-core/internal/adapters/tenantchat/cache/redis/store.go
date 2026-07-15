@@ -169,10 +169,13 @@ func (s *Store) resolve(
 	if tenantID == "" || userID == "" {
 		return KeySet{}, "", "", ErrCacheUnavailable
 	}
+	fingerprintInput := normalizeImmediateRepeatedTurn(input)
+	fingerprintUsageIntent := *requestContext.UsageIntent
+	fingerprintUsageIntent.EstimatedInputTokens = estimatedInputBytes(fingerprintInput.Messages)
 	material, err := json.Marshal(fingerprintMaterial{
 		SnapshotDigest: snapshot.Digest,
-		UsageIntent:    requestContext.UsageIntent,
-		Input:          input,
+		UsageIntent:    &fingerprintUsageIntent,
+		Input:          fingerprintInput,
 	})
 	if err != nil {
 		return KeySet{}, "", "", ErrCacheUnavailable
@@ -182,6 +185,45 @@ func (s *Store) resolve(
 	fingerprint := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	namespace := strings.Join([]string{s.keyPrefix, tenantID, userID}, ":")
 	return keySet, namespace, fingerprint, nil
+}
+
+// A repeated latest user turn should address the cache entry created before its
+// assistant response was appended. Other conversation context remains bound.
+func normalizeImmediateRepeatedTurn(input tenantchat.CompletionInput) tenantchat.CompletionInput {
+	messages := input.Messages
+	if len(messages) < 3 || messages[len(messages)-1].Role != "user" {
+		return input
+	}
+	latest := messages[len(messages)-1]
+	previousUser := -1
+	for index := len(messages) - 2; index >= 0; index-- {
+		if messages[index].Role == "user" {
+			previousUser = index
+			break
+		}
+	}
+	if previousUser < 0 || messages[previousUser].Content != latest.Content {
+		return input
+	}
+	for index := previousUser + 1; index < len(messages)-1; index++ {
+		if messages[index].Role != "assistant" {
+			return input
+		}
+	}
+	normalized := input
+	normalized.Messages = append([]tenantchat.EphemeralMessage(nil), messages[:previousUser+1]...)
+	return normalized
+}
+
+func estimatedInputBytes(messages []tenantchat.EphemeralMessage) int64 {
+	var total int64
+	for _, message := range messages {
+		total += int64(len(message.Content))
+	}
+	if total < 1 {
+		return 1
+	}
+	return total
 }
 
 func newGCM(key []byte) (cipher.AEAD, error) {

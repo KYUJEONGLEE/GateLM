@@ -505,7 +505,7 @@ function formatBucketLabel(value: string, interval: string) {
     hour12: false,
     minute: interval === "1d" ? undefined : "2-digit",
     month: interval === "1d" ? "short" : undefined,
-    second: interval === "7s" ? "2-digit" : undefined,
+    second: interval === "1s" || interval === "7s" ? "2-digit" : undefined,
     timeZone: "Asia/Seoul"
   }).format(date);
 }

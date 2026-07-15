@@ -19,7 +19,6 @@ import { DashboardRangePreferenceSync } from "@/features/dashboard/components/da
 import { LiveRequestsCard } from "@/features/dashboard/components/live-requests-card";
 import {
   ProviderModelUsageCard,
-  type ProviderModelUsageProvider,
   type ProviderModelUsageRow
 } from "@/features/dashboard/components/provider-model-usage-card";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
@@ -40,7 +39,8 @@ import {
   formatBudgetScopeDisplayName,
   formatBudgetScopeTypeDisplayName,
   formatDisplayIdentifier,
-  formatModelDisplayName
+  formatModelDisplayName,
+  resolveProviderDisplay
 } from "@/lib/formatting/display-identifiers";
 import {
   formatInteger,
@@ -660,62 +660,21 @@ function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModel
   const rowMap = new Map<string, ProviderModelUsageRow>();
 
   for (const row of rows) {
-    const provider = normalizeProviderUsageProvider(row.provider);
     const model = formatModelDisplayName(row.model, "Unknown");
+    const providerDisplay = resolveProviderDisplay(row.provider, model);
+    const provider = providerDisplay.family;
     const key = `${provider}:${model}`;
     const existing = rowMap.get(key);
 
     rowMap.set(key, {
       model,
       provider,
-      providerLabel: providerUsageLabel(provider, row.provider),
+      providerLabel: providerDisplay.label,
       requestCount: Math.max(row.requestCount, 0) + (existing?.requestCount ?? 0)
     });
   }
 
   return Array.from(rowMap.values()).sort((first, second) => second.requestCount - first.requestCount);
-}
-
-function normalizeProviderUsageProvider(value: string): ProviderModelUsageProvider {
-  const provider = value.toLowerCase();
-
-  if (provider.includes("openai")) {
-    return "openai";
-  }
-
-  if (provider.includes("anthropic") || provider.includes("claude")) {
-    return "anthropic";
-  }
-
-  if (provider.includes("google") || provider.includes("gemini")) {
-    return "google";
-  }
-
-  if (provider.includes("mock")) {
-    return "mock";
-  }
-
-  return "unknown";
-}
-
-function providerUsageLabel(provider: ProviderModelUsageProvider, fallback: string) {
-  if (provider === "openai") {
-    return "OpenAI";
-  }
-
-  if (provider === "anthropic") {
-    return "Anthropic";
-  }
-
-  if (provider === "google") {
-    return "Google";
-  }
-
-  if (provider === "mock") {
-    return "Mock";
-  }
-
-  return formatDisplayIdentifier(fallback || "Unknown");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

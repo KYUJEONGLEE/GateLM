@@ -317,6 +317,7 @@ export function ChatShell() {
               ...message,
               id: terminal.messageId ?? message.id,
               turnId: terminal.turnId,
+              ...(terminal.cacheOutcome ? { cacheOutcome: terminal.cacheOutcome } : {}),
               ...(terminal.effectiveModelKey ? { effectiveModelKey: terminal.effectiveModelKey } : {}),
             }
           : message));
@@ -460,7 +461,11 @@ export function ChatShell() {
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
                       {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
-                      {message.effectiveModelKey && <div className="message-meta" aria-label={`응답 모델: ${message.effectiveModelKey}`}>모델 · {message.effectiveModelKey}로 생성됨</div>}
+                      {message.cacheOutcome === 'hit'
+                        ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
+                        : message.effectiveModelKey
+                          ? <div className="message-meta" aria-label={`응답 모델: ${message.effectiveModelKey}`}>모델 · {message.effectiveModelKey}로 생성됨</div>
+                          : null}
                     </article>
                   </>}
                 </li>)}
@@ -493,7 +498,11 @@ export function ChatShell() {
 
 type ConversationPage = Readonly<{ items: readonly Conversation[]; nextCursor: string | null }>;
 type MessagePage = Readonly<{ items: readonly Message[]; nextCursor: string | null }>;
-type DisplayMessage = Message & Readonly<{ localId?: string; notice?: SafeChatError }>;
+type DisplayMessage = Message & Readonly<{
+  cacheOutcome?: 'off' | 'hit' | 'miss';
+  localId?: string;
+  notice?: SafeChatError;
+}>;
 
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');

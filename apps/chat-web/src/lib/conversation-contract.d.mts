@@ -11,6 +11,7 @@ export type TurnEvent = Readonly<Record<string, unknown> & {
   budgetState?: PolicyState;
   messageId?: string;
   effectiveModelKey?: string;
+  cacheOutcome?: 'off' | 'hit' | 'miss';
 }>;
 
 export class ConversationContractError extends Error { code: string; status: number }
