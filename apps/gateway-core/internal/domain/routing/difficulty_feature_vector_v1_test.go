@@ -38,6 +38,38 @@ func TestDifficultyFeatureVectorV1ContractMetadata(t *testing.T) {
 	}
 }
 
+func TestFixedDifficultyFeatureVectorV1MatchesPublicContractWithoutAllocating(t *testing.T) {
+	features := DifficultyFeatures{
+		category: CategoryCode,
+		common: CommonDifficultyFeatures{
+			payloadSizeBucket: "medium",
+			taskCount:         2,
+			constraintCount:   3,
+			scopeCount:        2,
+			dependencyDepth:   1,
+		},
+		code: &CodeDifficultyFeatures{
+			codeOperationKind:          "debug",
+			codeScopeBreadth:           2,
+			causalComplexity:           1,
+			engineeringConstraintCount: 3,
+		},
+	}
+	want := VectorizeDifficultyFeaturesV1(features)
+	got := vectorizeDifficultyFeaturesV1Fixed(features)
+	if !reflect.DeepEqual(got[:], want) {
+		t.Fatalf("fixed vector = %#v, want %#v", got, want)
+	}
+	if allocations := testing.AllocsPerRun(1000, func() {
+		vector := vectorizeDifficultyFeaturesV1Fixed(features)
+		if vector[difficultyFeatureIndexCodeOperationDebug] != 1 {
+			panic("unexpected fixed vector")
+		}
+	}); allocations != 0 {
+		t.Fatalf("fixed vector allocations = %v, want 0", allocations)
+	}
+}
+
 func TestVectorizeDifficultyFeaturesV1RepresentativeCategoryVectors(t *testing.T) {
 	t.Parallel()
 

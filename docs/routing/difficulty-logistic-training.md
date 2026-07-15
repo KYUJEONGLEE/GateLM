@@ -2,14 +2,14 @@
 
 | Field | Value |
 |---|---|
-| Status | 42D/106D/118D offline selection candidates trained; not runtime-promoted |
+| Status | Candidate C 118D selected and generated as an inactive Go shadow-preparation bundle; not runtime-promoted |
 | Model policy | `difficulty-logistic-v1` |
 | Feature contract | `difficulty-feature-vector.v1` (42 dimensions) |
 | Calibration policy | `difficulty-calibration-v1` |
 | Threshold policy | `difficulty-threshold-v1 = 0.45` |
 | Runtime status | Existing rule-based difficulty classifier remains active |
 
-이 문서는 [`classification-pipeline.md`](classification-pipeline.md)의 target 계산을 실제 offline 학습과 generated Go artifact로 연결하는 준비 경계를 설명한다. 이 문서와 tooling의 존재는 coefficient, calibrator parameter, holdout evidence 또는 runtime 승격을 뜻하지 않는다.
+이 문서는 [`classification-pipeline.md`](classification-pipeline.md)의 target 계산을 실제 offline 학습과 generated Go artifact로 연결하는 준비 경계를 설명한다. Selected coefficient, calibrator와 holdout selection evidence가 존재하더라도 이 문서와 tooling만으로 product runtime 승격을 뜻하지 않는다.
 
 ## Dataset Roles
 
@@ -143,6 +143,19 @@ Code generation은 feature/model/calibration version, exact 42개 이름·순서
 
 같은 command가 별도 offline artifact도 schema identity로 분기해 생성할 수 있다. 이 경우 candidate, feature shape, total dimension, feature order와 content hash를 검증하고 package-private `generatedDifficultyLogisticOfflineModel`을 만든다. 생성 파일에는 offline/shadow 전용이며 product routing에 등록되지 않는다는 주석이 포함된다. v1 artifact는 계속 exact 42D code를 만들며, 두 schema의 교차 입력과 unsupported candidate/dimension은 codegen 단계에서 실패한다.
 
+Selected Candidate C는 별도 strict profile로 전체 inference material을 checked-in Go data literal로 생성한다.
+
+```powershell
+go run ./apps/gateway-core/cmd/difficulty-model-codegen `
+  -profile gateway-shadow-118d `
+  -artifact scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v2.json `
+  -output apps/gateway-core/internal/domain/routing/difficulty_model_118d_generated.go
+
+corepack pnpm run verify:v2.1-difficulty-gateway-bundle
+```
+
+Strict profile은 exact artifact version, Candidate C, 384→64 PCA, 4-head/12D order, 118 final weights, Platt, `>= 0.45`, component/bundle/content hash를 고정한다. Generated 파일에는 PCA `float32` mean/components, semantic-head coefficient/intercept, final classifier, calibrator와 safe identity만 있으며 계산 로직과 JSON loader는 없다. Handwritten package-private Go inference가 `DifficultyFeatures + pooled float32[384]`를 받아 sentinel 밖 model path만 계산한다. Regeneration `-check`, compiled PCA bit hash, Python-Go synthetic parity와 success-path zero-allocation test가 drift를 차단한다.
+
 Offline artifact 자체는 다음 독립 verifier로 code generation 없이 검증할 수 있다.
 
 ```powershell
@@ -162,7 +175,7 @@ corepack pnpm run v2.1:routing:evaluate:difficulty -- `
 
 Shadow classifier는 empty/meaningless `0.0 + simple`과 hard-complex `1.0 + complex` sentinel을 먼저 적용하고 나머지 요청만 artifact의 Logistic Regression·calibrator·global `0.45` threshold로 판정한다. Report는 current rule-based runtime 대비 변경, 전체·category별 `complex -> simple` 비악화 gate, 긴 simple과 짧은 complex segment, candidate latency와 최종 `ComplexityScore`만 제공한다. Raw probability, logit, vector와 coefficient는 투영하지 않으며 `productRuntimeChanged`는 항상 `false`다.
 
-생성된 candidate를 checked-in active generated model로 옮기거나 `SimpleRouter`의 rule-based classifier를 교체하는 작업은 별도 promotion 단계다. Offline constructor와 evaluator가 존재하더라도 checked-in active artifact와 runtime behavior는 추가하지 않는다.
+Checked-in shadow-preparation bundle을 active product model로 등록하거나 `SimpleRouter`의 rule-based classifier를 교체하는 작업은 별도 promotion 단계다. Generated bundle과 offline evaluator가 존재하더라도 current runtime behavior는 변경되지 않는다.
 
 ## Current Tooling-Smoke Baseline
 
@@ -187,7 +200,10 @@ The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testi
 - 잘못된 feature order/count, threshold, calibrator와 content hash의 codegen 거부
 - meaningless/hard-complex sentinel 우선순위와 remaining-request model path
 - opt-in shadow artifact load, runtime 비교, 긴 simple·짧은 complex segment와 민감 material 비노출
+- Selected C 118D full Go material generation, exact identity pin과 byte-for-byte regeneration check
+- Pooled 384D부터 PCA 64D·semantic-head 12D·final calibrated score까지 Python-Go numeric parity
+- Pure Go model path safe error와 success-path zero allocation
 
 500건 smoke는 ephemeral tooling test에만 사용할 수 있다. 실제 후보는 owner-approved 500건/89-family와 exact 300/100/100 partition만 사용한다. 현재 holdout 100건은 세 조합을 비교하는 selection evidence이며, 이 결과로 조합을 선택한 뒤에는 final runtime promotion evidence로 재사용할 수 없다.
 
-현재 artifact는 semantic head, 후보별 difficulty decision head와 calibrator를 포함하지만 API, DB, Event, Metrics, RuntimeSnapshot, routing policy와 제품 `DifficultyResult` shape를 변경하지 않는다. Gateway shadow 실행 위치, image packaging, 새 untouched promotion holdout과 runtime 승격은 포함하지 않는다.
+현재 selected artifact와 generated Go bundle은 PCA, semantic head, difficulty decision head와 Platt calibrator를 포함하지만 API, DB, Event, Metrics, RuntimeSnapshot, routing policy와 제품 `DifficultyResult` shape를 변경하지 않는다. Gateway shadow 실행 위치, tokenizer/ONNX image packaging, 새 untouched promotion holdout과 runtime 승격은 포함하지 않는다.

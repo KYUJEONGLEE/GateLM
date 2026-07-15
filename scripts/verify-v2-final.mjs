@@ -82,6 +82,11 @@ const commands = [
     args: ["run", "verify:v2.1-difficulty-semantic-candidates"],
   },
   {
+    name: "v2.1 difficulty Gateway shadow bundle",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-gateway-bundle"],
+  },
+  {
     name: "control-plane typecheck",
     packageManager: true,
     args: ["--filter", "@gatelm/control-plane-api", "typecheck"],

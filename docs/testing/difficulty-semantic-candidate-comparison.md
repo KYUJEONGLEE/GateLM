@@ -20,3 +20,9 @@
 Current rule-based holdout accuracy는 `0.86`이다. 이 결과는 Candidate C의 runtime 승격 결정을 뜻하지 않는다. 이 holdout으로 조합을 선택하면 해당 100건은 selection에 사용된 것이므로 final promotion gate에는 새로운 untouched holdout이 필요하다.
 
 Machine-readable artifact와 aggregate report는 `scripts/routing_difficulty_model/artifacts/candidates/`에 있다. Raw prompt, instruction text, token, embedding, assembled vector, semantic head probability와 sample별 calibrated score는 artifact 또는 report에 저장하지 않는다.
+
+## Go Shadow-Preparation Bundle
+
+Selected Candidate C는 exact artifact version과 `bundleHash=sha256:4835d722bba348416693eda83bc33ff0328d93bb4e806c762481df94f57ec5ed`, `contentHash=sha256:b41ed845c7b6931c7ad5738c7ef95e3013d5b1708ccd09440a86db5cd158efa0`을 pin한 checked-in Go data bundle로 생성된다. Bundle은 pooled synthetic `float32[384]`에서 PCA 64D, four-head 12D, final 118D Logistic Regression과 Platt score까지 Python canonical implementation과 numeric tolerance 및 label parity를 검증한다. 실제 prompt, embedding, vector 또는 head output fixture/report는 만들지 않는다.
+
+이 bundle은 Gateway shadow 실행 준비물이며 `SimpleRouter`, RuntimeSnapshot 또는 product request path에 등록되지 않았다. `Runtime changed`는 계속 `false`이고 selection에 사용된 holdout은 final promotion evidence로 재사용하지 않는다.

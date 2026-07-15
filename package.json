@@ -12,6 +12,7 @@
     "verify:v2.1-category-eval": "node --test scripts/verify-v2.1-category-eval.test.mjs && node scripts/verify-v2.1-category-eval.mjs",
     "verify:v2.1-difficulty-eval": "node --test scripts/verify-v2.1-difficulty-eval.test.mjs && node scripts/verify-v2.1-difficulty-eval.mjs",
     "verify:v2.1-difficulty-semantic-candidates": "node --test scripts/verify-v2.1-difficulty-semantic-candidates.test.mjs && node scripts/verify-v2.1-difficulty-semantic-candidates.mjs",
+    "verify:v2.1-difficulty-gateway-bundle": "node scripts/verify-v2.1-difficulty-gateway-bundle.mjs",
     "v2.1:routing:generate-difficulty-training-pilot": "node scripts/dev/generate-v2.1-difficulty-training-pilot.mjs",
     "v2.1:routing:review-difficulty-training-pilot": "node scripts/dev/review-v2.1-difficulty-training-pilot.mjs",
     "v2.1:routing:verify-difficulty-artifact": "go run ./apps/gateway-core/cmd/difficulty-model-verify",

@@ -90,7 +90,7 @@ corepack pnpm run verify:v2.1-e5-encoder
 
 ## 6. Runtime Boundary
 
-이 encoder는 offline evaluation과 후속 semantic-head/difficulty-head artifact 생성에만 사용한다. Gateway의 current `difficulty-feature-vector.v1`, rule-based classifier, `DifficultyResult`, RuntimeSnapshot, routing policy, API, DB, Event와 Metrics는 변경하지 않는다.
+이 encoder는 offline evaluation과 semantic-head/difficulty-head artifact 생성에만 사용하며 Gateway request path에서는 아직 실행하지 않는다. Selected 118D checked-in Go bundle은 이 encoder의 attention-mask mean-pooled `float32[384]` 출력 이후 PCA·L2·semantic-head·final score만 재현한다. Tokenizer/ONNX 호출, image packaging과 request-level shadow adapter는 포함하지 않는다. Gateway의 current `difficulty-feature-vector.v1`, rule-based classifier, `DifficultyResult`, RuntimeSnapshot, routing policy, API, DB, Event와 Metrics는 변경하지 않는다.
 
 Gateway hot path 승격 전에는 다음 경계를 모두 충족해야 한다.
 
