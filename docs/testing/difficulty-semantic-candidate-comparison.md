@@ -17,7 +17,7 @@
 | Frozen C: `ruleVectorV1 + semanticProjection + semanticHeads` | 118 | Platt | 0.91 | 1 |
 | Current rule baseline | 42 rule features | n/a | 0.86 | 10 |
 
-이 100건은 과거 artifact 결과를 이미 확인한 Holdout이므로 새 v3 artifact에는 diagnostic replay일 뿐이다. `general` category의 `complex -> simple` 비악화 gate도 실패한다. 따라서 final promotion gate에는 artifact 생성 후 수집한 새로운 untouched Holdout이 필요하다.
+이 100건은 과거 artifact 결과를 이미 확인한 Holdout이므로 새 v3 artifact에는 diagnostic replay일 뿐이다. `general` category의 `complex -> simple` 비악화 gate도 실패한다. 별도로 artifact 생성 후 준비한 score-independent promotion Holdout 100건은 [`difficulty-promotion-holdout-100-result.json`](difficulty-promotion-holdout-100-result.json)에 기록했으며 accuracy `0.70`으로 `>=0.91` gate를 실패했다. 같은 Holdout을 재튜닝에 사용하지 않는다.
 
 Machine-readable artifact와 aggregate report는 `scripts/routing_difficulty_model/artifacts/candidates/`에 있다. Raw prompt, instruction text, token, embedding, assembled vector, semantic head probability와 sample별 calibrated score는 artifact 또는 report에 저장하지 않는다.
 

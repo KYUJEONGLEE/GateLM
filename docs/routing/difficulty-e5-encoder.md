@@ -60,7 +60,13 @@ Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[
 
 기존에 선택된 Candidate C 118D 구조는 `fixed_candidate_retrain`으로 유지하고, encoder/PCA·semantic head·difficulty head·calibrator를 single-request execution shape로 다시 생성한다. 이 작업은 42D·106D·118D architecture를 재선택하는 단계가 아니다. Calibration은 단건 결과만 사용하며 Holdout accuracy로 model, calibrator 또는 threshold를 바꾸면 안 된다.
 
-새 immutable artifact는 `difficulty-candidate-c-118d.owner-approved-500.v3.json`이며 weight 118개, bias, Platt coefficient/intercept, `difficulty-threshold-v1 = 0.45`, PCA와 semantic-head hash를 고정한다. 기존 Holdout 100건은 이전 결과를 이미 확인했으므로 이 artifact에는 diagnostic replay로만 사용할 수 있다. Diagnostic 결과 `accuracy=0.91`, `complex -> simple=1`은 구현 parity 확인값이며 promotion evidence가 아니다. 승격에는 이 artifact가 생성된 뒤 수집한 새 untouched Holdout이 필요하다.
+새 immutable artifact는 `difficulty-candidate-c-118d.owner-approved-500.v3.json`이며 weight 118개, bias, Platt coefficient/intercept, `difficulty-threshold-v1 = 0.45`, PCA와 semantic-head hash를 고정한다. 기존 Holdout 100건은 이전 결과를 이미 확인했으므로 이 artifact에는 diagnostic replay로만 사용할 수 있다. Diagnostic 결과 `accuracy=0.91`, `complex -> simple=1`은 구현 parity 확인값이며 promotion evidence가 아니다.
+
+### 2.2 새 promotion Holdout 결과
+
+[`../v2.1.0/evaluation/difficulty-promotion-holdout-100.v1.json`](../v2.1.0/evaluation/difficulty-promotion-holdout-100.v1.json)은 owner-approved expansion의 아직 보지 않은 holdout 40 family/400건에서 model score를 읽기 전에 category별 SHA-256 rank 상위 whole family 2개씩을 선택한다. 선택된 10 family/100건은 이전 500건 family와 겹치지 않고 category마다 20건, simple/complex 각각 10건이다. Artifact version, bundle/content hash, `0.45`, accuracy `>=0.91`, 전체 `complex -> simple <=1`과 category별 rule baseline 비악화 gate도 첫 score access 전에 고정했다.
+
+2026-07-15 첫 single-request evaluation은 [`../testing/difficulty-promotion-holdout-100-result.json`](../testing/difficulty-promotion-holdout-100-result.json)에 aggregate로만 보존한다. 결과는 candidate accuracy `0.70`/rule baseline `0.78`, candidate `complex -> simple=0`이며 category별 complex-to-simple 비악화는 모두 통과했다. 그러나 accuracy gate가 실패했으므로 현재 artifact는 promotion eligible이 아니다. 이 결과를 확인한 Holdout으로 model, PCA, semantic head, calibrator, threshold 또는 subset을 바꾸지 않는다.
 
 ## 3. Artifact And Distribution Contract
 
@@ -94,11 +100,12 @@ corepack pnpm run verify:v2.1-e5-encoder
 corepack pnpm run v2.1:routing:setup-gateway-e5-shadow-native
 corepack pnpm run v2.1:routing:prepare-gateway-e5-shadow
 corepack pnpm run verify:v2.1-difficulty-gateway-bundle
+corepack pnpm run verify:v2.1-difficulty-promotion-holdout
 corepack pnpm run v2.1:routing:measure-gateway-holdout
 corepack pnpm run verify:v2.1-gateway-e5-shadow
 ```
 
-`prepare`는 large artifact를 로컬 cache에 만들기 때문에 별도 단계다. Gateway bundle 준비 명령은 이미 존재하는 pinned encoder cache, tokenizer native archive와 ONNX Runtime NuGet package를 검증해 `.tmp` 아래 Docker build context로 조립한다. Native package가 없는 개발 환경은 명시적인 `setup-gateway-e5-shadow-native` 명령에서만 pinned GitHub release/NuGet URL을 사용하며 다운로드 완료 전 임시 파일의 size와 SHA-256을 검증한다. Encoder/model artifact는 기존 `prepare-e5-encoder` 단계가 소유한다. 일반 verifier와 container runtime은 network download를 대신 수행하지 않는다.
+`prepare`는 large artifact를 로컬 cache에 만들기 때문에 별도 단계다. Gateway bundle 준비 명령은 이미 존재하는 pinned encoder cache, tokenizer native archive와 ONNX Runtime NuGet package를 검증해 `.tmp` 아래 Docker build context로 조립한다. Native package가 없는 개발 환경은 명시적인 `setup-gateway-e5-shadow-native` 명령에서만 pinned GitHub release/NuGet URL을 사용하며 다운로드 완료 전 임시 파일의 size와 SHA-256을 검증한다. Encoder/model artifact는 기존 `prepare-e5-encoder` 단계가 소유한다. 일반 verifier와 container runtime은 network download를 대신 수행하지 않는다. Promotion Holdout evaluator는 이미 첫 결과를 기록했으므로 같은 canonical output에 다시 실행하면 fail closed한다. 정기 검증은 score를 다시 계산하지 않고 freeze·source·artifact·aggregate report hash와 gate 산술만 검사한다.
 
 ## 6. Runtime Boundary
 

@@ -88,6 +88,11 @@ const commands = [
     args: ["run", "verify:v2.1-difficulty-gateway-bundle"],
   },
   {
+    name: "v2.1 difficulty promotion holdout evidence",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-promotion-holdout"],
+  },
+  {
     name: "control-plane typecheck",
     packageManager: true,
     args: ["--filter", "@gatelm/control-plane-api", "typecheck"],

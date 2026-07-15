@@ -45,6 +45,8 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl` | Dataset owner가 전체 승인한 2,000건/200-family canonical v2 offline training candidate |
 | `training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json` | versioned minimum-family gate와 기존 1,200/400/400 family-disjoint partition을 고정하는 `trainingEligible=true` manifest |
 | `reviews/difficulty-training-candidate-expansion-2000.owner-approval.json` | 명시적 전체 승인, 3차 GPT 검토, synthetic provenance와 artifact hash를 분리 기록한 promotion evidence |
+| `evaluation/difficulty-promotion-holdout-100.v1.json` | Expansion holdout에서 score access 전에 category-balanced whole-family 100건과 v3 artifact·gate를 고정한 promotion freeze |
+| `../testing/difficulty-promotion-holdout-100-result.json` | 첫 single-request promotion evaluation의 aggregate-only 실패 evidence; accuracy 0.70, complex→simple 0, category 비악화 통과 |
 | `../routing/difficulty-e5-encoder.md` | Pinned E5 QInt8, masked mean, train-only PCA 384→64와 local cache/Docker packaging을 고정하는 canonical offline component contract |
 | `../../scripts/routing_difficulty_model/artifacts/difficulty-e5-*` | Committed PCA NPZ와 immutable encoder/PCA manifest; large tokenizer/ONNX artifact는 제외 |
 | `schemas/difficulty-training-split-manifest.schema.json` | 500건 smoke tooling의 family-disjoint partition manifest schema |

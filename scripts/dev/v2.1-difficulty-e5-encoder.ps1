@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Setup", "Prepare", "Fit", "Candidates", "Test", "Verify")]
+    [ValidateSet("Setup", "Prepare", "Fit", "Candidates", "PromotionHoldout", "Test", "Verify")]
     [string]$Mode = "Test",
     [string]$Python = "",
     [string]$ArtifactRoot = ".tmp/difficulty-semantic-encoder-artifacts"
@@ -51,6 +51,9 @@ try {
         }
         "Candidates" {
             & $Python -m gatelm_difficulty_model.candidate_cli --artifact-root $ResolvedArtifactRoot --encoder-manifest $Manifest
+        }
+        "PromotionHoldout" {
+            & $Python -m gatelm_difficulty_model.promotion_holdout --artifact-root $ResolvedArtifactRoot --encoder-manifest $Manifest
         }
         "Test" {
             & $Python -m unittest discover -s scripts/routing_difficulty_model/tests -p "test_*.py" -v

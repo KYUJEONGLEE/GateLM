@@ -112,6 +112,8 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 [`training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json`](training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json)은 `difficulty-training-expansion-minimum-family-policy.2026-07-15.v1`, 200 approved family와 원본의 family-disjoint 1,200/400/400 partition을 고정한다. [`reviews/difficulty-training-candidate-expansion-2000.owner-approval.json`](reviews/difficulty-training-candidate-expansion-2000.owner-approval.json)은 250건 3차 GPT 확인과 잔여 queue 0건을 보조 evidence로 연결하되, GPT 검토 자체를 human approval로 주장하지 않는다. 이 승격은 training input eligibility만 충족하며 model coefficient, PCA, semantic head, calibrator, threshold, holdout 성능, runtime promotion 또는 release를 승인하지 않는다.
 
+[`evaluation/difficulty-promotion-holdout-100.v1.json`](evaluation/difficulty-promotion-holdout-100.v1.json)은 위 expansion의 아직 보지 않은 holdout 400건에서 category마다 SHA-256 rank가 앞선 whole family 2개씩을 model score access 전에 선택해 10 family/100건을 고정한다. 이전 500건과 family overlap은 0이며 category별 20건, simple/complex 각 10건이다. 기존 v3 118D artifact identity와 accuracy `>=0.91`, 전체 `complex -> simple <=1`, category별 rule baseline 비악화 gate를 동시에 고정한다. 첫 결과는 [`../testing/difficulty-promotion-holdout-100-result.json`](../testing/difficulty-promotion-holdout-100-result.json)에 aggregate로만 남겼고 accuracy `0.70`, `complex -> simple=0`, category directional 비악화 통과로 accuracy gate를 실패했다. 이 Holdout은 소비됐으며 이후 tuning·selection·threshold 변경에 사용할 수 없다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.

@@ -206,4 +206,4 @@ The reproducible rule-versus-42D instrumentation smoke is recorded in [`../testi
 
 500건 smoke는 ephemeral tooling test에만 사용할 수 있다. 실제 후보는 owner-approved 500건/89-family와 exact 300/100/100 partition만 사용한다. 현재 holdout 100건은 세 조합을 비교하는 selection evidence이며, 이 결과로 조합을 선택한 뒤에는 final runtime promotion evidence로 재사용할 수 없다.
 
-현재 selected artifact와 generated Go bundle은 PCA, semantic head, difficulty decision head와 Platt calibrator를 포함하지만 API, DB, Event, Metrics, RuntimeSnapshot, routing policy와 제품 `DifficultyResult` shape를 변경하지 않는다. Gateway shadow 실행 위치, tokenizer/ONNX image packaging, 새 untouched promotion holdout과 runtime 승격은 포함하지 않는다.
+현재 selected artifact와 generated Go bundle은 PCA, semantic head, difficulty decision head와 Platt calibrator를 포함하지만 API, DB, Event, Metrics, RuntimeSnapshot, routing policy와 제품 `DifficultyResult` shape를 변경하지 않는다. Gateway shadow 실행 위치와 tokenizer/ONNX image packaging은 별도 optional profile이다. 새 promotion Holdout은 고정 v3 artifact로 한 번 평가됐고 accuracy `0.70`으로 gate를 실패했으므로 runtime 승격 근거가 되지 않는다.
