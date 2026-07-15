@@ -93,6 +93,11 @@ const commands = [
     args: ["run", "verify:v2.1-difficulty-promotion-holdout"],
   },
   {
+    name: "v2.1 difficulty live-shadow owner approval",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-live-shadow-owner-approval"],
+  },
+  {
     name: "control-plane typecheck",
     packageManager: true,
     args: ["--filter", "@gatelm/control-plane-api", "typecheck"],

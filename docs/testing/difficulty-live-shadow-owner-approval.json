@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "gatelm.difficulty-live-shadow-owner-approval.v1",
+  "status": "owner_approved_limited_development_shadow_guardrails",
+  "approvedOn": "2026-07-15",
+  "approval": {
+    "scope": "limited_development_exact_pair_live_shadow_guardrails",
+    "basis": "explicit_routing_owner_approval_in_current_codex_task",
+    "humanReviewerCount": 1,
+    "reviewerIdentityStored": false
+  },
+  "integratedBaselineCommit": "b0815249b1b79b253a8c4216dc6705eb98c95af4",
+  "scope": {
+    "limitedDevelopmentExactPairsOnly": true,
+    "authoritativeRouting": "rule_based",
+    "productRoutingPromotionApproved": false,
+    "holdoutPromotionGatePassed": false,
+    "liveEvidenceStillRequired": true
+  },
+  "artifact": {
+    "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",
+    "bundleHash": "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220",
+    "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
+    "artifactFileSha256": "008a149ef935e763d2905c0b98e5e9ea5718a163f2f260270eae5ff194e05cb6",
+    "thresholdPolicyVersion": "difficulty-threshold-v1",
+    "threshold": 0.45,
+    "totalDimension": 118,
+    "executionShapePolicyVersion": "difficulty-e5-single-request-execution.2026-07-15.v1",
+    "executionUnit": "single_request",
+    "batchSize": 1
+  },
+  "diagnosticMemoryEvidence": {
+    "runCount": 3,
+    "observedPeakRssBytes": 1008566272,
+    "observedPeakCgroupCurrentBytes": 1540128768,
+    "evidenceRole": "diagnostic_runtime_measurement_not_promotion_evidence"
+  },
+  "ownerApprovedMemoryGuardrails": {
+    "containerHardLimitBytes": 2147483648,
+    "processRssRollbackThresholdBytes": 1342177280,
+    "cgroupCurrentRollbackThresholdBytes": 1879048192,
+    "sustainSeconds": 300,
+    "enforcement": "deployment_platform_required_before_enable"
+  },
+  "rollback": {
+    "immediateTriggers": [
+      "container_oom_or_restart",
+      "authoritative_routing_or_model_ref_mismatch_count_gte_1",
+      "sensitive_data_exposure_count_gte_1",
+      "shadow_failure_affects_request_or_provider_path_count_gte_1"
+    ],
+    "sustainedTriggers": [
+      "process_rss_bytes_gt_1342177280_for_300_seconds",
+      "cgroup_current_bytes_gt_1879048192_for_300_seconds"
+    ],
+    "actions": [
+      "clear_exact_pair_allowlist_or_set_shadow_enabled_false",
+      "restart_gateway",
+      "confirm_rule_only_routing_and_provider_health_before_reenable"
+    ],
+    "automaticProductPromotion": false
+  },
+  "doesNotApprove": [
+    "ml_authoritative_routing",
+    "runtime_model_selection_change",
+    "retuning_on_consumed_holdout",
+    "production_or_global_shadow_enablement",
+    "ga_or_release"
+  ],
+  "dataSafety": {
+    "aggregateOnly": true,
+    "containsRawPromptOrResponse": false,
+    "containsEmbeddingOrFeatureMaterial": false,
+    "containsModelParameters": false,
+    "containsIndividualScores": false,
+    "containsTenantOrApplicationIdentifiers": false
+  }
+}

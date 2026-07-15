@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Operational runbook; live evidence pending |
+| Status | Operational runbook; owner guardrails approved, live evidence pending |
 | Applies to | Limited development tenant/application request shadow |
 | Product routing | Rule-based and authoritative |
 | Active contract | [`../routing/contracts.md`](../routing/contracts.md) |
@@ -23,7 +23,27 @@ Use exact development tenant/application pairs supplied through deployment-local
 
 Rollback clears the allowlist or sets `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false`, then restarts the Gateway process.
 
-## 2. Rollout
+## 2. Owner-Approved Guardrails
+
+The routing owner approved the exact artifact, threshold and runtime guardrails in [`difficulty-live-shadow-owner-approval.json`](difficulty-live-shadow-owner-approval.json) on 2026-07-15. This approval applies only to limited development exact-pair live shadow. The untouched promotion Holdout accuracy gate remains failed, so it does not approve ML-authoritative routing, product model selection changes, production/global enablement or release.
+
+Before enabling any pair, the deployment platform must enforce a container memory hard limit of `2 GiB` (`2147483648` bytes). The diagnostic three-run replay observed peak process RSS `1008566272` bytes and peak cgroup current `1540128768` bytes; these measurements are runtime context, not promotion evidence.
+
+Rollback immediately when any one of these occurs:
+
+- container OOM or Gateway restart
+- one or more authoritative rule routing or `modelRef` mismatches
+- one or more sensitive-data exposures
+- one or more cases where shadow failure affects the request or provider path
+
+Rollback when either memory condition persists for 5 minutes:
+
+- process RSS greater than `1.25 GiB` (`1342177280` bytes)
+- cgroup current greater than `1.75 GiB` (`1879048192` bytes)
+
+To roll back, clear `GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES` or set `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false`, restart Gateway, and confirm rule-only routing and provider health before re-enabling. Memory and restart observations come from deployment-platform operational telemetry; this runbook does not add a product metric contract.
+
+## 3. Rollout
 
 1. Deploy the candidate image with shadow disabled.
 2. Enable one exact development tenant/application pair.
@@ -34,7 +54,7 @@ Rollback clears the allowlist or sets `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=fals
 
 Do not set a disagreement pass threshold in this phase. Live observations do not promote the model, calibrator or threshold.
 
-## 3. Aggregate Disagreement
+## 4. Aggregate Disagreement
 
 The denominator contains only comparable `ready` results: `match`, `rule_simple_shadow_complex` and `rule_complex_shadow_simple`. `not_compared` and non-ready statuses are excluded.
 
@@ -54,7 +74,7 @@ sum(
 )
 ```
 
-## 4. Category Direction
+## 5. Category Direction
 
 ```promql
 sum by (category, comparison) (
@@ -75,7 +95,7 @@ sum by (category) (
 
 Live requests do not have ground-truth difficulty labels. Report these values as baseline-relative directional disagreement, not accuracy, false-positive rate or false-negative rate.
 
-## 5. Evidence Record
+## 6. Evidence Record
 
 Record only:
 
@@ -88,4 +108,4 @@ Record only:
 
 Do not record tenant/application IDs, request/trace IDs, prompt or response content, tokens, embedding/vector material, score, modelRef, provider/model or error detail.
 
-Existing shadow status and duration metrics may be used only as operational isolation guardrails. They are not model-quality outcomes. Any authoritative routing change, process instability or sensitive-data exposure stops the rollout and triggers rollback. Promotion remains a separate owner-approved contract change with a new untouched holdout and explicit rollback criteria.
+Existing shadow status and duration metrics may be used only as operational isolation guardrails. They are not model-quality outcomes. The owner-approved triggers in section 2 stop the rollout and require rollback. Promotion remains a separate owner-approved contract change with a new untouched holdout; this live-shadow approval cannot bypass the failed promotion gate.
