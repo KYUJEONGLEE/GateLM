@@ -35,15 +35,15 @@ const providerModelUsageText = {
     title: "Provider / Model Usage"
   },
   ko: {
-    allProviders: "전체 프로바이더",
-    aria: "프로바이더 및 모델 사용량",
+    allProviders: "전체 Provider",
+    aria: "모델 사용량",
     chartAria: "프로바이더별 모델 사용량 도넛 차트",
-    empty: "선택한 프로젝트에 프로바이더 또는 모델 사용량이 없습니다",
-    filterAria: "프로바이더로 모델 사용량 필터링",
-    mock: "모의 프로바이더",
+    empty: "선택한 프로젝트에 Provider 또는 모델 사용량이 없습니다",
+    filterAria: "Provider으로 모델 사용량 필터링",
+    mock: "모의 Provider",
     others: "기타",
     requests: "요청",
-    title: "프로바이더 및 모델 사용량"
+    title: "모델 사용량"
   }
 } as const;
 

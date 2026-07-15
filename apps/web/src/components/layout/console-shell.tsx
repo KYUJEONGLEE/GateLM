@@ -124,7 +124,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Overview",
-          ko: "개요"
+          ko: "대시보드"
         },
         item: "overview",
         path: (tenantId) => `/tenants/${tenantId}/dashboard`
@@ -132,7 +132,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Live Logs",
-          ko: "실시간 로그"
+          ko: "로그"
         },
         item: "live-logs",
         path: (tenantId) => `/tenants/${tenantId}/request-logs`
@@ -189,7 +189,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Providers",
-          ko: "프로바이더"
+          ko: "Provider"
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
@@ -197,7 +197,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Tenant Chat",
-          ko: "Tenant Chat"
+          ko: "Tenant 채팅"
         },
         item: "tenant-chat",
         path: (tenantId) => `/tenants/${tenantId}/tenant-chat`

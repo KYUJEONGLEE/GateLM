@@ -94,8 +94,7 @@ const RoutingPolicyPanel = dynamic<RoutingPolicyPanelProps>(() =>
       <PolicyPanelFallbackGroup
         panels={[
           { heading: "카테고리별 모델 설정" },
-          { heading: "Advanced routing", lineCount: 1 },
-          { heading: "Provider catalog" }
+          { heading: "Advanced routing", lineCount: 1 }
         ]}
       />
     )
@@ -452,8 +451,7 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
         <PolicyPanelFallbackGroup
           panels={[
             { heading: "Auto routing", lineCount: 1 },
-            { heading: "카테고리 × 난이도 모델 설정" },
-            { heading: text.providerCatalog }
+            { heading: "카테고리 × 난이도 모델 설정" }
           ]}
         />
       );
@@ -483,8 +481,7 @@ export function RuntimePolicyEditor({
   hideStreamingTab = false,
   locale,
   model,
-  moveBudgetToGeneral = false,
-  providerManagementHref
+  moveBudgetToGeneral = false
 }: RuntimePolicyEditorProps) {
   const router = useRouter();
   const text = policyText[locale];
@@ -801,9 +798,7 @@ export function RuntimePolicyEditor({
             <RoutingPolicyPanel
               draftValues={draftValues}
               onDraftValuesChange={setDraftValues}
-              providerCatalog={model.providerCatalog}
               providerConnections={model.providerConnections.available}
-              providerManagementHref={providerManagementHref}
               text={text}
             />
           </Suspense>

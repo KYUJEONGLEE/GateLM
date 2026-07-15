@@ -248,7 +248,7 @@ export function CostOverTimeCard({
           <h2>{text.title}</h2>
           <p>{text.subtitle}</p>
         </div>
-        <span>{formatCostGranularity(displayedSummary, locale)}</span>
+        
       </div>
       <div className="dashboard-cost-over-time-legend">
         <span data-kind="spend">{text.spend}</span>
@@ -301,22 +301,6 @@ function formatUsd(value: number) {
     minimumFractionDigits: 2,
     style: "currency"
   }).format(Number.isFinite(value) ? value : 0);
-}
-
-function formatCostGranularity(summary: CostOverTimeSummary | undefined, locale: Locale) {
-  if (summary?.bucketInterval === "1s") {
-    return locale === "ko" ? "1초 단위" : "1-second";
-  }
-
-  if (summary?.bucketInterval === "7s") {
-    return locale === "ko" ? "7초 단위" : "7-second";
-  }
-
-  if (summary?.period === "day") {
-    return locale === "ko" ? "일간" : "Daily";
-  }
-
-  return locale === "ko" ? "시간별" : "Hourly";
 }
 
 function normalizeCostOverTimeSummary(summary: CostOverTimeSummary | undefined): CostOverTimeSummary | undefined {
