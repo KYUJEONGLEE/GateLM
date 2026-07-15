@@ -88,6 +88,8 @@ model Tenant {
   dashboardRollupTotals           DashboardRollupTotal[]
   dashboardRollupDimensions       DashboardRollupDimension[]
   employeeUsageRollups            EmployeeUsageRollup[]
+  employeeCostPolicies            TenantEmployeeCostPolicy[]
+  employeeCostPolicyAudits        TenantEmployeeCostPolicyAudit[]
 
   @@map("tenants")
 }
@@ -383,12 +385,14 @@ model Employee {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
-  tenant                      Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user                        User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant                      Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                        User?                           @relation(fields: [userId], references: [id], onDelete: SetNull)
   projectAssignments          ProjectEmployeeAssignment[]
   tenantChatRequestAdmissions TenantChatRequestAdmission[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
   usageRollups                EmployeeUsageRollup[]
+  costPolicy                  TenantEmployeeCostPolicy?
+  costPolicyAudits            TenantEmployeeCostPolicyAudit[]
 
   @@unique([id, tenantId], map: "employees_identity_tenant_key")
   @@index([tenantId, status])
@@ -419,6 +423,53 @@ model ProjectEmployeeAssignment {
   @@index([projectId, status])
   @@index([employeeId, status])
   @@map("project_employee_assignments")
+}
+
+model TenantEmployeeCostPolicy {
+  tenantId                String   @map("tenant_id") @db.Uuid
+  employeeId              String   @map("employee_id") @db.Uuid
+  dailyEnabled            Boolean  @default(false) @map("daily_enabled")
+  dailyLimitMicroUsd      BigInt   @default(0) @map("daily_limit_micro_usd")
+  weeklyEnabled           Boolean  @default(false) @map("weekly_enabled")
+  weeklyLimitMicroUsd     BigInt   @default(0) @map("weekly_limit_micro_usd")
+  currency                String   @default("USD")
+  periodTimezone          String   @default("Asia/Seoul") @map("period_timezone")
+  warningThresholdPercent Int      @default(80) @map("warning_threshold_percent")
+  enforcementMode         String   @default("monitor") @map("enforcement_mode")
+  version                 Int      @default(1)
+  updatedBy               String   @map("updated_by") @db.Uuid
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "tenant_employee_cost_policies_tenant_fkey")
+  employee Employee                        @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_employee_cost_policies_employee_tenant_fkey")
+  audits   TenantEmployeeCostPolicyAudit[]
+
+  @@id([tenantId, employeeId])
+  @@unique([employeeId, tenantId], map: "tenant_employee_cost_policies_employee_tenant_key")
+  @@index([tenantId, enforcementMode], map: "tenant_employee_cost_policies_mode_idx")
+  @@map("tenant_employee_cost_policies")
+}
+
+model TenantEmployeeCostPolicyAudit {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  employeeId     String   @map("employee_id") @db.Uuid
+  actorId        String   @map("actor_id") @db.Uuid
+  policyVersion  Int      @map("policy_version")
+  action         String   @default("policy_updated")
+  previousPolicy Json     @default("{}") @map("previous_policy")
+  nextPolicy     Json     @map("next_policy")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "tenant_employee_cost_policy_audits_tenant_fkey")
+  employee Employee                 @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_employee_cost_policy_audits_employee_tenant_fkey")
+  policy   TenantEmployeeCostPolicy @relation(fields: [tenantId, employeeId], references: [tenantId, employeeId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_employee_cost_policy_audits_policy_fkey")
+
+  @@unique([tenantId, employeeId, policyVersion], map: "tenant_employee_cost_policy_audits_version_key")
+  @@index([tenantId, createdAt], map: "tenant_employee_cost_policy_audits_tenant_created_idx")
+  @@index([tenantId, employeeId, createdAt], map: "tenant_employee_cost_policy_audits_employee_created_idx")
+  @@map("tenant_employee_cost_policy_audits")
 }
 
 model Application {
