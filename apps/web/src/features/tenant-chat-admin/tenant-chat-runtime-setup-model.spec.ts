@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 import type { TenantChatAdminRuntimeSetup } from "@/lib/control-plane/tenant-chat-runtime-types";
@@ -117,4 +118,16 @@ test("active snapshot wins on reload", () => {
       readiness: readySetup.readiness
     })
   ).toBe(3);
+});
+
+test("degraded routing selections render unavailable options instead of an available model", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source.match(/<UnavailableModelOption/g)).toHaveLength(2);
+  expect(source).toContain('value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}');
+  expect(source).toContain('<UnavailableModelOption locale={locale} models={models} value={value} />');
+  expect(source).toContain('return <option disabled value={value}>{copy[locale].modelUnavailable}</option>');
+  expect(source).toContain('modelUnavailable: "Selected model unavailable"');
+  expect(source).toContain('modelUnavailable: "선택된 모델 사용 불가"');
 });

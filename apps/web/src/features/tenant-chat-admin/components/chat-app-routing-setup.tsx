@@ -55,6 +55,7 @@ const copy = {
     manual: "Fixed model",
     manualDescription: "Use one model for every message while preserving the automatic routing matrix for later.",
     model: "Model",
+    modelUnavailable: "Selected model unavailable",
     noModel: "No chat model is configured on an active tenant-level provider.",
     noProvider: "Register an active tenant-level provider to configure the Chat App.",
     priceUnknown: "Price unavailable · usage allowed · monetary ledger uses 0 (not a free-price claim)",
@@ -79,6 +80,7 @@ const copy = {
     manual: "고정 모델",
     manualDescription: "모든 메시지에 하나의 모델을 사용합니다. 자동 라우팅 매트릭스는 그대로 보존됩니다.",
     model: "모델",
+    modelUnavailable: "선택된 모델 사용 불가",
     noModel: "활성 tenant-level Provider에 채팅 모델이 설정되어 있지 않습니다.",
     noProvider: "채팅 앱을 설정하려면 활성 tenant-level Provider를 등록하세요.",
     priceUnknown: "가격 미확인 · 모델 사용 가능 · 금액 ledger는 0 사용(무료라는 뜻이 아님)",
@@ -218,7 +220,22 @@ export function ChatAppRoutingSetup({
                   <thead><tr><th className="border-b p-3 text-left">{locale === "ko" ? "작업 유형" : "Workload"}</th>{difficulties.map((item) => <th className="border-b p-3 text-left" key={item.id}>{item[locale]}</th>)}</tr></thead>
                   <tbody>{categories.map((category) => (
                     <tr key={category.id}><th className="border-b p-3 text-left font-medium">{category[locale]}</th>{difficulties.map((difficulty) => (
-                      <td className="border-b p-3" key={difficulty.id}><select aria-label={`${category[locale]} ${difficulty[locale]}`} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" disabled={routingMode === "manual"} onChange={(event) => updateRoute(category.id, difficulty.id, event.target.value)} value={routes[category.id][difficulty.id].modelRefs[0]}>{models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}</select></td>
+                      <td className="border-b p-3" key={difficulty.id}>
+                        <select
+                          aria-label={`${category[locale]} ${difficulty[locale]}`}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          disabled={routingMode === "manual"}
+                          onChange={(event) => updateRoute(category.id, difficulty.id, event.target.value)}
+                          value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
+                        >
+                          <UnavailableModelOption
+                            locale={locale}
+                            models={models}
+                            value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
+                          />
+                          {models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}
+                        </select>
+                      </td>
                     ))}</tr>
                   ))}</tbody>
                 </table>
@@ -243,7 +260,16 @@ function ModelSelect({ label, locale, models, onChange, value }: {
   value: string;
 }) {
   const selected = models.find((model) => model.modelRef === value);
-  return <div className="space-y-2"><label className="text-sm font-medium" htmlFor="chat-app-manual-model">{label}</label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" id="chat-app-manual-model" onChange={(event) => onChange(event.target.value)} value={value}>{models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}</select>{selected?.pricing ? <p className="text-xs text-muted-foreground">input {formatPrice(selected.pricing.inputMicroUsdPerMillionTokens, locale)} · output {formatPrice(selected.pricing.outputMicroUsdPerMillionTokens, locale)}</p> : selected?.pricingStatus === "unavailable" ? <p className="text-xs text-warning-text">{copy[locale].priceUnknown}</p> : null}</div>;
+  return <div className="space-y-2"><label className="text-sm font-medium" htmlFor="chat-app-manual-model">{label}</label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" id="chat-app-manual-model" onChange={(event) => onChange(event.target.value)} value={value}><UnavailableModelOption locale={locale} models={models} value={value} />{models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}</select>{selected?.pricing ? <p className="text-xs text-muted-foreground">input {formatPrice(selected.pricing.inputMicroUsdPerMillionTokens, locale)} · output {formatPrice(selected.pricing.outputMicroUsdPerMillionTokens, locale)}</p> : selected?.pricingStatus === "unavailable" ? <p className="text-xs text-warning-text">{copy[locale].priceUnknown}</p> : null}</div>;
+}
+
+function UnavailableModelOption({ locale, models, value }: {
+  locale: Locale;
+  models: Array<{ modelRef: string }>;
+  value: string;
+}) {
+  if (models.some((model) => model.modelRef === value)) return null;
+  return <option disabled value={value}>{copy[locale].modelUnavailable}</option>;
 }
 
 function firstModelRef(setup: TenantChatAdminRuntimeSetup | null) {
