@@ -6,6 +6,7 @@ import type {
   EmployeeCostPolicy,
   EmployeeCostPolicyListItem,
   EmployeeCostPolicyPeriod,
+  EmployeeCostRolloutMode,
   EmployeeCostPolicyState
 } from "@/lib/control-plane/employee-cost-policy-types";
 import { MAX_EMPLOYEE_COST_LIMIT_MICRO_USD } from "@/lib/control-plane/employee-cost-policy-types";
@@ -20,6 +21,7 @@ const EXPOSURE_SOURCES = new Set<EmployeeCostExposureSource>([
   "authoritative_ledger",
   "confirmed_read_model"
 ]);
+const ROLLOUT_MODES = new Set<EmployeeCostRolloutMode>(["off", "shadow", "enforce"]);
 const POLICY_STATES = new Set<EmployeeCostPolicyState>([
   "exceeded",
   "normal",
@@ -110,7 +112,9 @@ function parseListItem(
     !isUuid(value.employeeId) ||
     typeof value.enforcementReady !== "boolean" ||
     typeof value.exposureSource !== "string" ||
-    !EXPOSURE_SOURCES.has(value.exposureSource as EmployeeCostExposureSource)
+    !EXPOSURE_SOURCES.has(value.exposureSource as EmployeeCostExposureSource) ||
+    typeof value.rolloutMode !== "string" ||
+    !ROLLOUT_MODES.has(value.rolloutMode as EmployeeCostRolloutMode)
   ) {
     return null;
   }
@@ -128,6 +132,7 @@ function parseListItem(
     enforcementReady: value.enforcementReady,
     exposureSource: value.exposureSource as EmployeeCostExposureSource,
     policy,
+    rolloutMode: value.rolloutMode as EmployeeCostRolloutMode,
     weekly
   } satisfies EmployeeCostPolicyListItem;
 
@@ -156,6 +161,8 @@ function parsePeriod(value: unknown): EmployeeCostPolicyPeriod | null {
     !isIsoTimestamp(value.periodStart) ||
     !isIsoTimestamp(value.periodEnd) ||
     !isIsoTimestamp(value.resetAt) ||
+    typeof value.periodTimezone !== "string" ||
+    !isIanaTimezone(value.periodTimezone) ||
     new Date(value.periodStart).getTime() >= new Date(value.periodEnd).getTime() ||
     value.resetAt !== value.periodEnd ||
     !isNonNegativeSafeInteger(value.confirmedCostMicroUsd) ||
@@ -171,6 +178,7 @@ function parsePeriod(value: unknown): EmployeeCostPolicyPeriod | null {
     confirmedCostMicroUsd: value.confirmedCostMicroUsd,
     periodEnd: value.periodEnd,
     periodStart: value.periodStart,
+    periodTimezone: value.periodTimezone,
     reservedCostMicroUsd: value.reservedCostMicroUsd,
     resetAt: value.resetAt,
     state: value.state as EmployeeCostPolicyState,
@@ -198,9 +206,18 @@ function parsePagination(value: unknown): EmployeeCostPoliciesResponse["paginati
 }
 
 function isConsistentExposure(item: EmployeeCostPolicyListItem) {
-  if (item.enforcementReady) {
+  if (
+    item.daily.periodTimezone !== item.policy.periodTimezone ||
+    item.weekly.periodTimezone !== item.policy.periodTimezone ||
+    (item.enforcementReady && item.rolloutMode !== "enforce") ||
+    (item.rolloutMode === "off" && item.exposureSource !== "confirmed_read_model")
+  ) {
+    return false;
+  }
+
+  if (item.exposureSource === "authoritative_ledger") {
     return (
-      item.exposureSource === "authoritative_ledger" &&
+      item.rolloutMode !== "off" &&
       isAuthoritativePeriod(
         item.daily,
         item.policy.daily,
@@ -215,7 +232,7 @@ function isConsistentExposure(item: EmployeeCostPolicyListItem) {
   }
 
   return (
-    item.exposureSource === "confirmed_read_model" &&
+    !item.enforcementReady &&
     isPendingPeriod(item.daily, item.policy.daily) &&
     isPendingPeriod(item.weekly, item.policy.weekly)
   );

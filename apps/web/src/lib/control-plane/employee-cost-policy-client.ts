@@ -121,12 +121,13 @@ function employeeCostPolicyPeriodSignature(
   row: EmployeeCostPoliciesResponse["data"][number]
 ) {
   return [
-    row.policy.periodTimezone,
+    row.daily.periodTimezone,
     row.daily.periodStart,
     row.daily.periodEnd,
     row.daily.resetAt,
     row.weekly.periodStart,
     row.weekly.periodEnd,
+    row.weekly.periodTimezone,
     row.weekly.resetAt
   ].join("|");
 }

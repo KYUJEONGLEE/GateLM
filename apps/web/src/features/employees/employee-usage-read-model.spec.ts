@@ -228,6 +228,7 @@ function buildCostPolicy(
       warningThresholdPercent: 80,
       weekly: { enabled: false, limitMicroUsd: 0 }
     },
+    rolloutMode: "off",
     weekly: period(weeklyCostMicroUsd)
   };
 }
@@ -237,6 +238,7 @@ function period(confirmedCostMicroUsd: number) {
     confirmedCostMicroUsd,
     periodEnd: "2026-07-15T15:00:00.000Z",
     periodStart: "2026-07-14T15:00:00.000Z",
+    periodTimezone: "Asia/Seoul",
     reservedCostMicroUsd: null,
     resetAt: "2026-07-15T15:00:00.000Z",
     state: "not_configured" as const,

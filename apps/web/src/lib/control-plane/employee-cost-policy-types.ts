@@ -10,6 +10,7 @@ export type EmployeeCostPolicyState =
 export type EmployeeCostExposureSource =
   | "authoritative_ledger"
   | "confirmed_read_model";
+export type EmployeeCostRolloutMode = "off" | "shadow" | "enforce";
 
 export type EmployeeCostLimit = {
   enabled: boolean;
@@ -35,6 +36,7 @@ export type EmployeeCostPolicyPeriod = {
   confirmedCostMicroUsd: number;
   periodEnd: string;
   periodStart: string;
+  periodTimezone: string;
   reservedCostMicroUsd: number | null;
   resetAt: string;
   state: EmployeeCostPolicyState;
@@ -47,6 +49,7 @@ export type EmployeeCostPolicyListItem = {
   enforcementReady: boolean;
   exposureSource: EmployeeCostExposureSource;
   policy: EmployeeCostPolicy;
+  rolloutMode: EmployeeCostRolloutMode;
   weekly: EmployeeCostPolicyPeriod;
 };
 

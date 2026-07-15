@@ -3038,6 +3038,8 @@ function EmployeeCostPolicyEditor({
     draft.enforcementMode !== policy.enforcementMode ||
     !sameEmployeeCostLimit(draft.daily, policy.daily) ||
     !sameEmployeeCostLimit(draft.weekly, policy.weekly);
+  const hasAuthoritativeExposure =
+    costPolicyItem.exposureSource === "authoritative_ledger";
 
   async function submitCostPolicy() {
     if (!policy || pending) {
@@ -3135,13 +3137,23 @@ function EmployeeCostPolicyEditor({
       {!costPolicyItem.enforcementReady ? (
         <Alert variant="warning">
           <AlertDescription>
-            {text.ledgerPending}. {locale === "ko"
-              ? draft.enforcementMode === "restrict_high_cost"
-                ? "현재 화면에는 확정 비용만 표시되며 실제 라우팅 제한은 다음 원장 연결 단계부터 적용됩니다."
-                : "현재 화면에는 확정 비용만 표시됩니다. 원장 연결 후에도 라우팅은 제한하지 않고 모니터링만 합니다."
-              : draft.enforcementMode === "restrict_high_cost"
-                ? "Only confirmed cost is shown; routing restrictions begin after the ledger is connected."
-                : "Only confirmed cost is shown. Routing remains monitor-only after the ledger is connected."}
+            {hasAuthoritativeExposure
+              ? costPolicyItem.rolloutMode === "shadow"
+                ? locale === "ko"
+                  ? "두 실행 경로의 공통 원장을 대조 중입니다. 현재는 shadow 상태라 라우팅 제한을 적용하지 않습니다."
+                  : "The shared ledger is reconciling both execution paths. Routing restrictions stay off in shadow mode."
+                : locale === "ko"
+                  ? "공통 원장 집계는 준비됐고 설정된 활성화 경계를 기다리고 있습니다."
+                  : "Shared-ledger accounting is ready and waiting for its activation boundary."
+              : `${text.ledgerPending}. ${
+                  locale === "ko"
+                    ? draft.enforcementMode === "restrict_high_cost"
+                      ? "현재 화면에는 확정 비용만 표시되며 실제 라우팅 제한은 다음 원장 연결 단계부터 적용됩니다."
+                      : "현재 화면에는 확정 비용만 표시됩니다. 원장 연결 후에도 라우팅은 제한하지 않고 모니터링만 합니다."
+                    : draft.enforcementMode === "restrict_high_cost"
+                      ? "Only confirmed cost is shown; routing restrictions begin after the ledger is connected."
+                      : "Only confirmed cost is shown. Routing remains monitor-only after the ledger is connected."
+                }`}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -3153,7 +3165,7 @@ function EmployeeCostPolicyEditor({
 
       <div className="employee-chat-usage-grid">
         {limitCards.map((card) => {
-          const state = costPolicyItem.enforcementReady
+          const state = hasAuthoritativeExposure
             ? card.period.state
             : card.limit.enabled
               ? "pending_ledger"

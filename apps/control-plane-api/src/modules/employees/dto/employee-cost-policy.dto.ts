@@ -24,12 +24,15 @@ export const EMPLOYEE_COST_POLICY_STATES = [
   'warning',
   'exceeded',
 ] as const;
+export const EMPLOYEE_COST_ROLLOUT_MODES = ['off', 'shadow', 'enforce'] as const;
 export const MAX_EMPLOYEE_COST_LIMIT_MICRO_USD = 100_000_000_000_000;
 
 export type EmployeeCostEnforcementMode =
   (typeof EMPLOYEE_COST_ENFORCEMENT_MODES)[number];
 export type EmployeeCostPolicyState =
   (typeof EMPLOYEE_COST_POLICY_STATES)[number];
+export type EmployeeCostRolloutMode =
+  (typeof EMPLOYEE_COST_ROLLOUT_MODES)[number];
 
 export class EmployeeCostLimitDto {
   @IsBoolean()
@@ -105,6 +108,7 @@ export interface EmployeeCostPolicyResponseDto {
 export interface EmployeeCostPeriodStateResponseDto {
   periodStart: string;
   periodEnd: string;
+  periodTimezone: string;
   confirmedCostMicroUsd: number;
   reservedCostMicroUsd: number | null;
   unconfirmedCostMicroUsd: number | null;
@@ -117,6 +121,7 @@ export interface EmployeeCostPolicyListItemResponseDto {
   enforcementReady: boolean;
   exposureSource: 'authoritative_ledger' | 'confirmed_read_model';
   policy: EmployeeCostPolicyResponseDto;
+  rolloutMode: EmployeeCostRolloutMode;
   daily: EmployeeCostPeriodStateResponseDto;
   weekly: EmployeeCostPeriodStateResponseDto;
 }

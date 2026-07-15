@@ -20,6 +20,7 @@ test("parses pending-ledger employee cost policies without turning unknown expos
   expect(response.data[0]).toMatchObject({
     enforcementReady: false,
     exposureSource: "confirmed_read_model",
+    rolloutMode: "off",
     daily: {
       reservedCostMicroUsd: null,
       state: "pending_ledger",
@@ -35,6 +36,14 @@ test("parses an authoritative employee cost policy and its exposure amounts", ()
   expect(parseEmployeeCostPolicy(response.data[0]?.policy, tenantId, employeeId)).toEqual(
     response.data[0]?.policy
   );
+});
+
+test("parses authoritative shadow exposure without claiming enforcement readiness", () => {
+  const response = buildAuthoritativeResponse();
+  response.data[0]!.enforcementReady = false;
+  response.data[0]!.rolloutMode = "shadow";
+
+  expect(parseEmployeeCostPoliciesResponse(response, tenantId)).toEqual(response);
 });
 
 test("validates authoritative state from confirmed, reserved, and unconfirmed exposure", () => {
@@ -70,6 +79,10 @@ test("rejects inconsistent enforcement readiness and exposure sources", () => {
   const pendingAuthoritativeState = buildAuthoritativeResponse();
   pendingAuthoritativeState.data[0]!.daily.state = "pending_ledger";
   expect(parseEmployeeCostPoliciesResponse(pendingAuthoritativeState, tenantId)).toBeNull();
+
+  const shadowClaimsEnforcement = buildAuthoritativeResponse();
+  shadowClaimsEnforcement.data[0]!.rolloutMode = "shadow";
+  expect(parseEmployeeCostPoliciesResponse(shadowClaimsEnforcement, tenantId)).toBeNull();
 });
 
 test("rejects unsafe costs, invalid limits, identities, and timezone data", () => {
@@ -109,6 +122,7 @@ function buildPendingResponse(): EmployeeCostPoliciesResponse {
         enforcementReady: false,
         exposureSource: "confirmed_read_model",
         policy: policy(),
+        rolloutMode: "off",
         weekly: period("not_configured", null)
       }
     ],
@@ -125,6 +139,7 @@ function buildAuthoritativeResponse(): EmployeeCostPoliciesResponse {
         enforcementReady: true,
         exposureSource: "authoritative_ledger",
         policy: policy(),
+        rolloutMode: "enforce",
         weekly: period("not_configured", 0)
       }
     ],
@@ -157,6 +172,7 @@ function period(
     confirmedCostMicroUsd: 1_000_000,
     periodEnd: "2026-07-16T15:00:00.000Z",
     periodStart: "2026-07-15T15:00:00.000Z",
+    periodTimezone: "Asia/Seoul",
     reservedCostMicroUsd: exposure,
     resetAt: "2026-07-16T15:00:00.000Z",
     state,

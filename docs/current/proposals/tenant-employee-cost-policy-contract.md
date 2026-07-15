@@ -139,7 +139,7 @@ surface별 high-cost 의미는 섞지 않는다.
 - Tenant Chat: active RuntimeSnapshot route의 exact `tier=high_quality`다.
 - Project/Application: 검증된 published Provider Catalog model의 exact `routing.costTier=premium`이다. 모델명, provider family, category, difficulty 문자열로 추정하지 않는다.
 - Project/Application catalog publisher는 active routing authoring role에서 canonical cost tier를 만든다. Simple-only primary는 `low`, Complex-only primary와 routing profile에 없는 일반 model은 `premium`, Simple/Complex shared primary와 configured fallback 및 `mock-balanced`는 `balanced`다.
-- published catalog의 cost tier가 없거나 허용값이 아니면 `enforce`에서 fail closed한다. `shadow`에서는 요청을 유지하되 rollout coverage를 invalid 상태로 내려 authoritative/enforcement-ready로 표시하지 않는다.
+- enabled limit이 있는 직원에서 published catalog의 cost tier가 없거나 허용값이 아니면 `enforce`에서 fail closed한다. day/week limit이 모두 disabled인 직원은 비용 evidence를 계속 기록하되 route를 제한하지 않고 coverage를 invalid 상태로 내려 이후 limit 활성화 전 복구가 필요함을 표시한다. `shadow`에서도 요청을 유지하되 rollout coverage를 invalid 상태로 내려 authoritative/enforcement-ready로 표시하지 않는다.
 - Manual explicit model도 같은 catalog cost tier를 사용한다. exceeded 상태의 explicit premium model은 다른 model로 암묵 치환하지 않고 public `403 employee_cost_route_restricted`를 반환한다.
 - Auto 후보에서 premium을 제외한 뒤 eligible target이 없을 때도 public `403 employee_cost_route_restricted`를 반환한다. Tenant Chat은 기존 `503 CHAT_NO_ELIGIBLE_ROUTE`를 유지한다.
 
@@ -264,8 +264,8 @@ Migration은 additive이며 기존 migration checksum을 변경하지 않는다.
 `tenant_employee_cost_provider_attempts`:
 
 - reservation, bounded attempt number와 `primary|fallback`
-- provider/model opaque identifiers, pinned pricing rule/version와 input/output 단가
-- estimated input/max output, reserved/confirmed/unconfirmed cost
+- provider/model opaque identifiers, pinned pricing rule/version와 regular input/output 및 nullable Provider cache-read input 단가
+- estimated input/max output, confirmed regular/cache-read/output token split, reserved/confirmed/unconfirmed cost
 - bounded outcome, usage quality, started/completed timestamp
 - unique `(surface,request_id,attempt_no)` idempotency
 
@@ -299,8 +299,8 @@ Public reservation input은 다음처럼 결정한다.
 
 1. `estimatedInputTokens`는 masking 이후 실제 Provider에 전달할 text message content의 UTF-8 byte length 합계이며 최소 `1`이다. 원문이나 canonical bytes는 저장하지 않고 `estimateVersion=utf8_message_bytes_v1`만 pin한다.
 2. `maxOutputTokens`는 `max_completion_tokens`, `max_tokens`, published catalog `capabilities.maxOutputTokens` 순서다. request field가 존재하면 positive integer여야 하며 non-positive 또는 catalog 상한 초과는 기존 public invalid-request `400`이다. 어느 값도 결정할 수 없으면 guard unavailable이다.
-3. request 시작 시점에 main pricing catalog에서 exact provider/model pricing rule을 조회해 rule/version/input/output micro-USD 단가를 pin한다.
-4. reserved input/output cost는 각각 `ceil(tokens * price / 1_000_000)` 후 합한다. confirmed cost도 pinned rule과 Provider-confirmed split usage로 같은 방식으로 계산한다.
+3. request 시작 시점에 main pricing catalog에서 exact provider/model pricing rule을 조회해 rule/version/regular input/output 및 지원되는 Provider cache-read input micro-USD 단가를 pin한다.
+4. reservation은 cache discount를 가정하지 않고 input/output cost를 각각 `ceil(tokens * price / 1_000_000)` 후 합한다. confirmed cache-read token이 있으면 Tenant Chat active 계약처럼 regular input, cache-read input, output을 각각 pinned 단가로 올림 계산하며, cache-read 단가가 없으면 모든 input을 regular input으로 계산한다. `cacheReadInputTokens <= inputTokens`, `cacheReadInputPrice <= regularInputPrice`를 검증한다.
 5. enabled `enforce`에서 estimate/pricing을 pin할 수 없으면 Provider를 호출하지 않고 public `503 employee_cost_guard_unavailable`로 fail closed한다.
 6. public Provider adapter는 bounded `not_started|started` dispatch evidence를 accounting path에 반환한다. credential/validation/serialization처럼 `not_started`인 오류만 release할 수 있고, transport dispatch 뒤 usage가 없으면 pending이다. 기존 `ProviderAttemptStarted` boolean이나 async terminal log는 dispatch evidence가 아니다.
 
