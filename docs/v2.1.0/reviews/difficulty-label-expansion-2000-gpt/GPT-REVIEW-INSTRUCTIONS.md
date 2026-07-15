@@ -100,4 +100,3 @@ Rationale code 허용 값:
 - Confidence는 이 판정에 대한 `0.0~1.0`의 신뢰도이며 difficulty probability가 아니다.
 - 확신이 낮아도 행을 생략하지 말고 최선의 판정과 `insufficient_context`를 반환한다.
 - 출력하기 전 JSON parse 가능 여부, 정확히 100줄인지, sampleId 중복·누락이 없는지 자체 확인한다.
-

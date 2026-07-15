@@ -48,4 +48,3 @@ test("merges unanimous third-review confirmations and leaves no row-level review
   assert.equal(result.remainingQueue.length, 0);
   assert.equal(result.thirdCandidate.length, 2000);
 });
-
