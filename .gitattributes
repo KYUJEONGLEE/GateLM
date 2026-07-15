@@ -3,4 +3,7 @@ docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl text eol=lf
 docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json text eol=lf
+scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json text eol=lf
+scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json text eol=lf
+scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256 text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256 text eol=lf

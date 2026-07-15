@@ -42,8 +42,8 @@ func TestNativeEncoderMatchesCanonicalPythonPooledOutput(t *testing.T) {
 
 	encoder, err := NewEncoder(BundleConfig{
 		ArtifactRoot:        root,
-		EncoderManifestPath: root + "/difficulty-e5-encoder-manifest.v1.json",
-		RuntimeLockPath:     root + "/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json",
+		EncoderManifestPath: root + "/difficulty-e5-encoder-manifest.v2.json",
+		RuntimeLockPath:     root + "/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json",
 	})
 	if err != nil {
 		t.Fatal("initialize native encoder")

@@ -11,6 +11,8 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from .encoder_runtime import (
+    EXECUTION_SHAPE_POLICY_VERSION,
+    encode_pooled_single_requests,
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_MANIFEST_PATH,
     REPO_ROOT,
@@ -21,18 +23,18 @@ from .encoder_runtime import (
 from .semantic_heads_cli import load_training_input
 
 
-REFERENCE_SCHEMA = "gatelm.difficulty-gateway-holdout-reference.v1"
-AGGREGATE_SCHEMA = "gatelm.difficulty-gateway-holdout-replay-evidence.v1"
+REFERENCE_SCHEMA = "gatelm.difficulty-gateway-holdout-reference.v2"
+AGGREGATE_SCHEMA = "gatelm.difficulty-gateway-holdout-replay-evidence.v2"
 EXPECTED_DATASET_VERSION = "difficulty_training_2026_07_15_owner_approved_500_v2"
 EXPECTED_DATASET_SHA256 = "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f"
 EXPECTED_SPLIT_POLICY_VERSION = "difficulty-family-constrained-split.2026-07-15.v1"
 EXPECTED_SPLIT_SEED = 20260715
 EXPECTED_ARTIFACT_VERSION = (
-    "difficulty-offline.owner-approved-500.2026-07-15."
-    "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v2"
+    "difficulty-offline.owner-approved-500.single-request.2026-07-15."
+    "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3"
 )
-EXPECTED_BUNDLE_HASH = "sha256:4835d722bba348416693eda83bc33ff0328d93bb4e806c762481df94f57ec5ed"
-EXPECTED_CONTENT_HASH = "sha256:b41ed845c7b6931c7ad5738c7ef95e3013d5b1708ccd09440a86db5cd158efa0"
+EXPECTED_BUNDLE_HASH = "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220"
+EXPECTED_CONTENT_HASH = "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd"
 EXPECTED_THRESHOLD_POLICY_VERSION = "difficulty-threshold-v1"
 EXPECTED_THRESHOLD = 0.45
 EXPECTED_HOLDOUT_RECORDS = 100
@@ -55,7 +57,7 @@ DEFAULT_DATASET_MANIFEST = (
 DEFAULT_ARTIFACT = (
     REPO_ROOT
     / "scripts/routing_difficulty_model/artifacts/candidates/"
-    "difficulty-candidate-c-118d.owner-approved-500.v2.json"
+    "difficulty-candidate-c-118d.owner-approved-500.v3.json"
 )
 
 
@@ -221,14 +223,15 @@ def build_reference(
     if runtime.projection is None:
         raise ValueError("canonical Gateway runtime is missing the frozen PCA projection")
 
+    execution_shape = runtime_manifest.get("executionShape", {})
+    if execution_shape.get("policyVersion") != EXECUTION_SHAPE_POLICY_VERSION or execution_shape.get(
+        "batchSize"
+    ) != 1:
+        raise ValueError("canonical Gateway reference requires single-request execution shape")
     all_instruction_texts = [str(sample["instructionText"]) for sample in exported["samples"]]
-    offline_batches = [
-        runtime.encode_pooled(all_instruction_texts[index : index + 16])
-        for index in range(0, len(all_instruction_texts), 16)
-    ]
-    offline_pooled = np.concatenate(offline_batches, axis=0)
+    offline_pooled = encode_pooled_single_requests(runtime, all_instruction_texts)
     if offline_pooled.shape != (500, 384) or not np.all(np.isfinite(offline_pooled)):
-        raise ValueError("canonical offline batch-16 E5 output shape drifted")
+        raise ValueError("canonical offline single-request E5 output shape drifted")
     offline_projected = runtime.projection.transform(offline_pooled)
     exported_index = {
         str(sample["sampleId"]): index for index, sample in enumerate(exported["samples"])
@@ -295,7 +298,9 @@ def build_reference(
         "complexExpectedSamples": 53,
         "complexToSimpleCount": EXPECTED_SELECTED_COMPLEX_TO_SIMPLE,
     }:
-        raise ValueError("canonical batch-16 Python offline result no longer reproduces 0.91/1")
+        raise ValueError("canonical single-request Python offline result drifted")
+    if gateway_selected != offline_selected:
+        raise ValueError("offline and Gateway single-request aggregate results diverged")
     if baseline["correct"] != EXPECTED_RULE_CORRECT or baseline["accuracy"] != EXPECTED_RULE_ACCURACY:
         raise ValueError("canonical Gateway rule baseline no longer reproduces accuracy 0.86")
     if baseline["complexToSimpleCount"] != EXPECTED_RULE_COMPLEX_TO_SIMPLE:
@@ -316,10 +321,11 @@ def build_reference(
         "contentHash": EXPECTED_CONTENT_HASH,
         "thresholdPolicyVersion": EXPECTED_THRESHOLD_POLICY_VERSION,
         "threshold": EXPECTED_THRESHOLD,
+        "executionShapePolicyVersion": EXECUTION_SHAPE_POLICY_VERSION,
         "scoreTolerance": {"relative": 0.0, "absolute": 1e-5},
-        "offlineBatch16Classification": offline_selected,
+        "offlineSingleRequestClassification": offline_selected,
         "gatewaySingleClassification": gateway_selected,
-        "offlineBatchShape": 16,
+        "offlineBatchShape": 1,
         "gatewayBatchShape": 1,
         "ruleBaselineClassification": baseline,
         "samples": reference_samples,
@@ -344,7 +350,7 @@ def aggregate_reports(report_paths: Sequence[Path]) -> dict[str, Any]:
         raise ValueError("Gateway replay evidence requires exactly three independent process runs")
     reports = [json.loads(path.read_text(encoding="utf-8")) for path in report_paths]
     for report in reports:
-        if report.get("schemaVersion") != "gatelm.difficulty-gateway-holdout-replay-run.v1":
+        if report.get("schemaVersion") != "gatelm.difficulty-gateway-holdout-replay-run.v2":
             raise ValueError("Gateway replay run schema mismatch")
         parity = report.get("parity", {})
         routing = report.get("routingInvariance", {})
@@ -356,6 +362,8 @@ def aggregate_reports(report_paths: Sequence[Path]) -> dict[str, Any]:
             or float(parity.get("maxAbsoluteScoreDelta", math.inf)) > 1e-5
             or routing.get("matched") != 100
             or routing.get("mismatched") != 0
+            or report.get("executionShapePolicyVersion") != EXECUTION_SHAPE_POLICY_VERSION
+            or report.get("offlineAggregateReproduced") is not True
             or selected.get("complexToSimpleCount") != EXPECTED_SELECTED_COMPLEX_TO_SIMPLE
             or baseline.get("accuracy") != EXPECTED_RULE_ACCURACY
             or baseline.get("complexToSimpleCount") != EXPECTED_RULE_COMPLEX_TO_SIMPLE
@@ -408,6 +416,7 @@ def aggregate_reports(report_paths: Sequence[Path]) -> dict[str, Any]:
         "contentHash": EXPECTED_CONTENT_HASH,
         "thresholdPolicyVersion": EXPECTED_THRESHOLD_POLICY_VERSION,
         "threshold": EXPECTED_THRESHOLD,
+        "executionShapePolicyVersion": EXECUTION_SHAPE_POLICY_VERSION,
         "parity": {
             "labelMatches": 100,
             "labelMismatches": 0,
@@ -419,12 +428,12 @@ def aggregate_reports(report_paths: Sequence[Path]) -> dict[str, Any]:
         },
         "routingInvariance": {"matched": 100, "mismatched": 0},
         "selectedClassification": reports[0]["selectedClassification"],
-        "offlineBatch16Classification": reports[0]["offlineBatch16Classification"],
+        "offlineSingleRequestClassification": reports[0]["offlineSingleRequestClassification"],
         "offlineAggregateReproduced": reports[0]["offlineAggregateReproduced"],
         "ruleBaselineClassification": reports[0]["ruleBaselineClassification"],
         "promotionSafetyGate": {
             "passed": False,
-            "reason": "existing_general_category_complex_to_simple_regression",
+            "reason": "new_untouched_holdout_required_after_single_request_artifact_change",
         },
         "latencyMicros": latency,
         "memoryBytes": memory,

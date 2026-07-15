@@ -7,12 +7,12 @@ FROM debian:bookworm-slim AS e5-bundle
 COPY --from=difficulty_e5 / /opt/gatelm/difficulty-e5/
 WORKDIR /opt/gatelm/difficulty-e5
 RUN find . -type f -printf '%P\n' | sort > /tmp/e5-actual-files \
-  && awk '{print $2}' difficulty-e5-gateway-image.linux-amd64.v1.sha256 \
-    | { cat; echo difficulty-e5-gateway-image.linux-amd64.v1.sha256; } \
+  && awk '{print $2}' difficulty-e5-gateway-image.linux-amd64.v2.sha256 \
+    | { cat; echo difficulty-e5-gateway-image.linux-amd64.v2.sha256; } \
     | sort > /tmp/e5-expected-files \
   && diff -u /tmp/e5-expected-files /tmp/e5-actual-files \
   && test -z "$(find . -type l -print -quit)" \
-  && sha256sum --check difficulty-e5-gateway-image.linux-amd64.v1.sha256
+  && sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256
 
 FROM e5-bundle AS e5-runtime
 RUN rm native/libtokenizers.a
@@ -52,8 +52,8 @@ ENV GATEWAY_PORT=8080 \
     GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true \
     GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS=100 \
     GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT=/opt/gatelm/difficulty-e5 \
-    GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST=/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v1.json \
-    GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK=/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json
+    GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST=/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json \
+    GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK=/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json
 
 EXPOSE 8080
 

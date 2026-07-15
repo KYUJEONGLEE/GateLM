@@ -11,7 +11,7 @@ $ToolRoot = Join-Path $RepoRoot "scripts/routing_difficulty_model"
 $VenvRoot = Join-Path $RepoRoot ".tmp/difficulty-semantic-encoder-venv"
 $VenvPython = Join-Path $VenvRoot "Scripts/python.exe"
 $RequirementsLock = Join-Path $ToolRoot "e5-encoder-requirements.lock.txt"
-$Manifest = Join-Path $ToolRoot "artifacts/difficulty-e5-encoder-manifest.v1.json"
+$Manifest = Join-Path $ToolRoot "artifacts/difficulty-e5-encoder-manifest.v2.json"
 $ResolvedArtifactRoot = Join-Path $RepoRoot $ArtifactRoot
 
 if ($Mode -eq "Setup") {

@@ -154,6 +154,23 @@ class CandidateTrainingTest(unittest.TestCase):
             "candidate-b",
         )
 
+    def test_retrains_an_explicitly_frozen_candidate_without_reselection(self) -> None:
+        reports = {
+            "candidate-b": candidate_report(106, 0.20, 0.05),
+            "candidate-c": candidate_report(118, 0.40, 0.12),
+        }
+        policy = {
+            **candidate_selection_policy(),
+            "selectionMode": "fixed_candidate_retrain",
+            "fixedCandidate": "candidate-c",
+            "holdoutUsage": "diagnostic_only_after_candidate_freeze_new_untouched_holdout_required",
+        }
+
+        self.assertEqual(
+            select_candidate_by_calibration_evidence(reports, policy),
+            "candidate-c",
+        )
+
     def test_validates_exact_300_100_100_and_assembles_42_106_118(self) -> None:
         exported = candidate_export()
         samples = validate_candidate_training_input(exported)

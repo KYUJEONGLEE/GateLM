@@ -420,8 +420,8 @@ func LoadWithError() (Config, error) {
 			Enabled:             difficultyE5ShadowEnabled,
 			AllowedScopes:       difficultyE5ShadowScopes,
 			ArtifactRoot:        strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT", "/opt/gatelm/difficulty-e5")),
-			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v1.json")),
-			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json")),
+			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json")),
+			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")),
 			Timeout:             difficultyE5ShadowTimeout,
 		},
 		TenantChatPrivate: TenantChatPrivateConfig{

@@ -71,15 +71,16 @@ function Ensure-PinnedDownload(
     }
 }
 
-$manifestPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json"
-$lockPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json"
-$checksumsPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256"
-Assert-File $manifestPath 4624 "11874ae0bd8524d47d1bf9532b4080bbd1c1f44beaf14dd0a4af067de3a2272b"
-Assert-File $lockPath 1334 "fbefa4952b0a29ae9b5263a94e64abdfcd86ef7296c5c5b5e766b778b14ef6b0"
+$manifestPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json"
+$lockPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json"
+$checksumsPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256"
+Assert-File $manifestPath 5073 "893aa885bdbe2a66d71f6c1da9e6d32ee9ba50a8b062db10177040ce587ec549"
+Assert-File $lockPath 1364 "6a94f74fcd003a6cd048f88cdce98cd661972124fc8f205da14a25cda7092099"
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-if ($manifest.schemaVersion -ne "gatelm.difficulty-e5-encoder-manifest.v1" -or
-    $manifest.bundleSha256 -ne "8282e6f9475edcd6b9f8a87b4fd1e627fe7ee17d568ad038090f2e7a80487413") {
+if ($manifest.schemaVersion -ne "gatelm.difficulty-e5-encoder-manifest.v2" -or
+    $manifest.executionShape.batchSize -ne 1 -or
+    $manifest.bundleSha256 -ne "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e") {
     throw "Pinned encoder manifest identity mismatch"
 }
 $sourceRoot = Resolve-RepoPath $EncoderArtifactRoot
@@ -131,8 +132,8 @@ Assert-File $onnxLibrary 21087472 "3907398e408dae083deb3439e8f643d9e26180ed614b2
 Copy-Item -LiteralPath $onnxLibrary -Destination (Join-Path $nativeDirectory "libonnxruntime.so")
 Remove-Item -LiteralPath $onnxExtract -Recurse -Force
 
-Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $outputPath "difficulty-e5-encoder-manifest.v1.json")
-Copy-Item -LiteralPath $lockPath -Destination (Join-Path $outputPath "difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json")
-Copy-Item -LiteralPath $checksumsPath -Destination (Join-Path $outputPath "difficulty-e5-gateway-image.linux-amd64.v1.sha256")
+Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $outputPath "difficulty-e5-encoder-manifest.v2.json")
+Copy-Item -LiteralPath $lockPath -Destination (Join-Path $outputPath "difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")
+Copy-Item -LiteralPath $checksumsPath -Destination (Join-Path $outputPath "difficulty-e5-gateway-image.linux-amd64.v2.sha256")
 
 Write-Host "Prepared verified Gateway E5 shadow bundle: $outputPath"

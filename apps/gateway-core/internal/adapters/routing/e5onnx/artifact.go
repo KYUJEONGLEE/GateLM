@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	encoderManifestSchema                       = "gatelm.difficulty-e5-encoder-manifest.v1"
-	runtimeLockSchema                           = "gatelm.difficulty-e5-gateway-runtime-lock.v1"
-	canonicalEncoderBundleVersion               = "difficulty-e5-encoder-pca64.2026-07-15.v1"
-	canonicalEncoderBundleSHA256                = "8282e6f9475edcd6b9f8a87b4fd1e627fe7ee17d568ad038090f2e7a80487413"
-	canonicalGatewayRuntimeVersion              = "difficulty-e5-gateway-runtime.linux-amd64.2026-07-15.v1"
+	encoderManifestSchema                       = "gatelm.difficulty-e5-encoder-manifest.v2"
+	runtimeLockSchema                           = "gatelm.difficulty-e5-gateway-runtime-lock.v2"
+	canonicalEncoderBundleVersion               = "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2"
+	canonicalEncoderBundleSHA256                = "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e"
+	canonicalGatewayRuntimeVersion              = "difficulty-e5-gateway-runtime.linux-amd64.single-request.2026-07-15.v2"
 	pinnedTokenizerBindingModule                = "github.com/daulet/tokenizers"
 	pinnedTokenizerBindingVersion               = "v1.23.0"
 	pinnedTokenizerCoreVersion                  = "0.22.0"

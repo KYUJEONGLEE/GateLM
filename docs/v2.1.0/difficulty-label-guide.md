@@ -228,6 +228,16 @@ Family가 training-eligible이려면 포함하려는 모든 record가 `human_rev
 
 Per-row embedding, probability, calibrated score, threshold distance 또는 실제 split score를 추가 field로 저장하지 않는다. 모두 process-local 계산 또는 aggregate report의 책임이다. 모든 expansion record는 human review 전이므로 `pending`이며, 승인 전에는 기존 owner-approved 500건과 합쳐 training input으로 사용하지 않는다.
 
+### 10.3 Owner-approved 2,000건 expansion training candidate
+
+2026-07-15 dataset owner의 명시적 전체 승인을 근거로 원본 fixture와 GPT 검토 candidate를 변경하지 않고 별도 파생 candidate를 생성한다.
+
+- [`training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl`](training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl): 2,000 record 모두 `human_review + approved + reviewerCount=1`; `source=synthetic_fixture`와 `consentType=synthetic`은 보존
+- [`training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json`](training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json): 200 approved family, `difficulty-training-expansion-minimum-family-policy.2026-07-15.v1`, family-disjoint train 1,200/calibration 400/holdout 400
+- [`reviews/difficulty-training-candidate-expansion-2000.owner-approval.json`](reviews/difficulty-training-candidate-expansion-2000.owner-approval.json): 승인 범위, 검토자 identity 비저장, 3차 GPT 검토 hash, 빈 잔여 queue, dataset·manifest hash와 gate 결과
+
+정책은 관찰된 승인 coverage를 고정해 전체 200 family, category별 40, category × difficulty별 40, 지원 language별 200, required slice별 200 family 이상을 요구한다. 기존 `difficulty-expansion-family-split.2026-07-15.v1`과 seed `20260715`를 그대로 사용하므로 같은 family의 10개 contrast variant는 한 split에만 남는다. 3단계 GPT 검토는 label 일관성을 확인하는 보조 evidence이며 human approval로 간주하지 않는다. Human approval의 근거는 dataset owner가 현재 작업에서 명시한 전체 승인이다. 이 승격은 offline training input eligibility만 승인하며 model 성능, calibrator·threshold 선택, runtime 배포 또는 GA를 자동 승인하지 않는다.
+
 ## 11. 금지 데이터
 
 Schema, fixture, manifest, reviewer note와 report에 다음을 저장하지 않는다.
@@ -243,6 +253,7 @@ Schema, fixture, manifest, reviewer note와 report에 다음을 저장하지 않
 
 ```powershell
 node scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs --check
+corepack pnpm run verify:v2.1-difficulty-expansion-training-candidate
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2-docs

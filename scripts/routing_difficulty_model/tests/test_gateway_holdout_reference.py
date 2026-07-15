@@ -42,7 +42,8 @@ class GatewayHoldoutReferenceTests(unittest.TestCase):
 
     def test_aggregate_requires_three_passing_runs(self) -> None:
         run = {
-            "schemaVersion": "gatelm.difficulty-gateway-holdout-replay-run.v1",
+            "schemaVersion": "gatelm.difficulty-gateway-holdout-replay-run.v2",
+            "executionShapePolicyVersion": "difficulty-e5-single-request-execution.2026-07-15.v1",
             "parity": {
                 "labelMatches": 100,
                 "labelMismatches": 0,
@@ -50,8 +51,8 @@ class GatewayHoldoutReferenceTests(unittest.TestCase):
             },
             "routingInvariance": {"matched": 100, "mismatched": 0},
             "selectedClassification": {"accuracy": 0.9, "complexToSimpleCount": 1},
-            "offlineBatch16Classification": {"accuracy": 0.91, "complexToSimpleCount": 1},
-            "offlineAggregateReproduced": False,
+            "offlineSingleRequestClassification": {"accuracy": 0.9, "complexToSimpleCount": 1},
+            "offlineAggregateReproduced": True,
             "ruleBaselineClassification": {"accuracy": 0.86, "complexToSimpleCount": 10},
             "latencyMicros": {
                 "shadowCompletion": {"p95": 10.0, "p99": 12.0, "max": 13.0},
@@ -79,7 +80,8 @@ class GatewayHoldoutReferenceTests(unittest.TestCase):
             paths = []
             for index in range(3):
                 run = {
-                    "schemaVersion": "gatelm.difficulty-gateway-holdout-replay-run.v1",
+                    "schemaVersion": "gatelm.difficulty-gateway-holdout-replay-run.v2",
+                    "executionShapePolicyVersion": "difficulty-e5-single-request-execution.2026-07-15.v1",
                     "parity": {
                         "labelMatches": 99,
                         "labelMismatches": 1,
@@ -87,8 +89,8 @@ class GatewayHoldoutReferenceTests(unittest.TestCase):
                     },
                     "routingInvariance": {"matched": 100, "mismatched": 0},
                     "selectedClassification": {"accuracy": 0.9, "complexToSimpleCount": 1},
-                    "offlineBatch16Classification": {"accuracy": 0.91, "complexToSimpleCount": 1},
-                    "offlineAggregateReproduced": False,
+                    "offlineSingleRequestClassification": {"accuracy": 0.9, "complexToSimpleCount": 1},
+                    "offlineAggregateReproduced": True,
                     "ruleBaselineClassification": {"accuracy": 0.86, "complexToSimpleCount": 10},
                     "latencyMicros": {},
                     "memoryBytes": {},

@@ -32,11 +32,11 @@ const (
 	OfflineCandidateProjectionAndHeads = "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities"
 
 	GatewayShadow118DProfileName       = "gateway-shadow-118d"
-	GatewayShadow118DArtifactVersion   = "difficulty-offline.owner-approved-500.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v2"
-	GatewayShadow118DBundleHash        = "sha256:4835d722bba348416693eda83bc33ff0328d93bb4e806c762481df94f57ec5ed"
-	GatewayShadow118DContentHash       = "sha256:b41ed845c7b6931c7ad5738c7ef95e3013d5b1708ccd09440a86db5cd158efa0"
-	GatewayShadow118DProjectionHash    = "sha256:cddd5ea36ab6ee5bae0144e04f3faabe1c593857c5f53e058aa184ae790e2e12"
-	GatewayShadow118DSemanticHeadsHash = "sha256:64b0590af9a9cbb8bfc62d43bdcb2930ae584eee59e2707aa9c4af7b358ef9fb"
+	GatewayShadow118DArtifactVersion   = "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3"
+	GatewayShadow118DBundleHash        = "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220"
+	GatewayShadow118DContentHash       = "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd"
+	GatewayShadow118DProjectionHash    = "sha256:a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa"
+	GatewayShadow118DSemanticHeadsHash = "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386"
 	GatewayShadow118DGeneratedName     = "generatedDifficultySemanticModel118D"
 )
 

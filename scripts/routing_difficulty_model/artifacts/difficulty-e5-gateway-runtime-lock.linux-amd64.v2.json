@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "gatelm.difficulty-e5-gateway-runtime-lock.v2",
+  "runtimeVersion": "difficulty-e5-gateway-runtime.linux-amd64.single-request.2026-07-15.v2",
+  "platform": "linux-amd64",
+  "encoderManifestSha256": "893aa885bdbe2a66d71f6c1da9e6d32ee9ba50a8b062db10177040ce587ec549",
+  "encoderBundleVersion": "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2",
+  "encoderBundleSha256": "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e",
+  "tokenizerBindingModule": "github.com/daulet/tokenizers",
+  "tokenizerBindingVersion": "v1.23.0",
+  "tokenizerCoreVersion": "0.22.0",
+  "tokenizerNativeArchiveSha256": "c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0",
+  "tokenizerNativeArchiveSizeBytes": 14300699,
+  "tokenizerNativeLibrarySha256": "0b968ecbb84eb12a02c9cd51fd80d2b57a6f3fec0f78090d1fe8f347e6cc6845",
+  "tokenizerNativeLibrarySizeBytes": 50013964,
+  "onnxRuntimeBindingModule": "github.com/yalue/onnxruntime_go",
+  "onnxRuntimeBindingVersion": "v1.22.0",
+  "onnxRuntimeVersion": "1.22.1",
+  "onnxRuntimePackageSha256": "2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58",
+  "onnxRuntimePackageSizeBytes": 121484102,
+  "onnxRuntime": {
+    "relativePath": "native/libonnxruntime.so",
+    "sha256": "3907398e408dae083deb3439e8f643d9e26180ed614b29cc7d5ec342ce5ce06f",
+    "sizeBytes": 21087472
+  }
+}

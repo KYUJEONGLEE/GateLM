@@ -110,6 +110,7 @@ def select_candidate_by_calibration_evidence(
 
     if not candidate_reports:
         raise ValueError("candidate selection requires at least one candidate report")
+    selection_mode = selection_policy.get("selectionMode", "calibration_ranking")
     if (
         selection_policy.get("evidenceSplit") != "calibration"
         or selection_policy.get("selectionMetric")
@@ -117,9 +118,19 @@ def select_candidate_by_calibration_evidence(
         or selection_policy.get("tieBreakers")
         != ["selected_calibrator_group_cv_brier_score", "lower_dimension"]
         or selection_policy.get("holdoutUsage")
-        != "final_evaluation_after_candidate_freeze_only"
+        not in {
+            "final_evaluation_after_candidate_freeze_only",
+            "diagnostic_only_after_candidate_freeze_new_untouched_holdout_required",
+        }
     ):
         raise ValueError("candidate selection policy must keep holdout final and untouched")
+    if selection_mode == "fixed_candidate_retrain":
+        fixed_candidate = selection_policy.get("fixedCandidate")
+        if not isinstance(fixed_candidate, str) or fixed_candidate not in candidate_reports:
+            raise ValueError("fixed candidate retraining requires an existing candidate name")
+        return fixed_candidate
+    if selection_mode != "calibration_ranking":
+        raise ValueError("unsupported candidate selection mode")
     tolerance = _finite_metric(selection_policy.get("tieTolerance"), "candidate tie tolerance")
 
     scored: list[tuple[str, float, float, int]] = []
@@ -532,6 +543,7 @@ def build_component_hashes(
         "tokenizer": _sha256_identity(
             {
                 "preprocessing": encoder_manifest.get("preprocessing"),
+                "executionShape": encoder_manifest.get("executionShape"),
                 "artifacts": tokenizer_material,
             }
         ),
@@ -561,6 +573,24 @@ def train_candidate_suite(
     samples = validate_candidate_training_input(exported_input)
     if policy.get("splitPolicyVersion") != exported_input["splitPolicyVersion"]:
         raise ValueError("semantic candidate policy does not match the canonical split policy")
+    execution_shape = encoder_manifest.get("executionShape")
+    if not isinstance(execution_shape, Mapping) or execution_shape.get("batchSize") != 1:
+        raise ValueError("semantic candidates require the canonical single-request execution shape")
+    if policy.get("embeddingExecution") != {
+        "policyVersion": execution_shape.get("policyVersion"),
+        "unit": "single_request",
+        "batchSize": 1,
+        "paddingScope": "within_request_only",
+        "appliesTo": [
+            "pca_fit",
+            "semantic_head_training",
+            "difficulty_candidate_training",
+            "calibration",
+            "diagnostic_evaluation",
+            "gateway_replay",
+        ],
+    }:
+        raise ValueError("semantic candidate policy execution shape does not match the encoder")
     dataset_manifest = encoder_manifest.get("dataset")
     if not isinstance(dataset_manifest, Mapping) or any(
         (
@@ -647,7 +677,7 @@ def train_candidate_suite(
     candidate_reports: dict[str, Any] = {}
     for candidate in OfflineFeatureCandidate:
         descriptor = shape.descriptor(candidate)
-        artifact_version = artifact_version_prefix + "." + candidate.value + ".v2"
+        artifact_version = artifact_version_prefix + "." + candidate.value + ".v3"
         artifact, training_report = train_from_offline_feature_matrix(
             candidate_samples[candidate],
             descriptor,
@@ -691,8 +721,8 @@ def train_candidate_suite(
         selected_classification, baseline_summary
     )
     final_holdout_evaluation = {
-        "status": "evaluated_after_candidate_freeze",
-        "accessPolicy": "selected_candidate_only_after_freeze",
+        "status": "diagnostic_replay_after_single_request_artifact_change",
+        "accessPolicy": "previously_observed_holdout_diagnostic_only_not_promotion",
         "candidateName": selected_candidate,
         "artifactVersion": selected_artifact["artifactVersion"],
         "contentHash": selected_artifact["contentHash"],
@@ -711,12 +741,13 @@ def train_candidate_suite(
 
     comparison_report = {
         "schemaVersion": CANDIDATE_COMPARISON_SCHEMA,
-        "status": "offline_selection_and_untouched_holdout_evidence_not_runtime_promotion",
+        "status": "offline_single_request_retraining_with_diagnostic_holdout_not_runtime_promotion",
         "datasetVersion": exported_input["datasetVersion"],
         "datasetSha256": exported_input["datasetSha256"],
         "splitPolicyVersion": exported_input["splitPolicyVersion"],
         "splitSeed": exported_input["splitSeed"],
         "splitCounts": exported_input["splitCounts"],
+        "executionShape": dict(execution_shape),
         "membershipHash": membership_hash,
         "candidateDimensions": {
             candidate.value: EXPECTED_CANDIDATE_DIMENSIONS[candidate]
@@ -737,9 +768,10 @@ def train_candidate_suite(
         "holdoutUsedForCandidateSelection": False,
         "finalHoldoutEvaluation": final_holdout_evaluation,
         "productRuntimeChanged": False,
-        "finalPromotionHoldoutRequiredAfterSelection": False,
+        "finalPromotionHoldoutRequiredAfterSelection": True,
         "runtimePromotionEligible": False,
         "runtimePromotionBlockers": [
+            "new_untouched_holdout_required_after_single_request_artifact_change",
             *(
                 []
                 if promotion_safety_gate["passed"]

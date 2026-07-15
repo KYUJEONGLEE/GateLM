@@ -292,7 +292,7 @@ class CalibrationMathTests(unittest.TestCase):
 class TrainingPolicyContractTests(unittest.TestCase):
     def test_semantic_candidate_policy_fixes_l2_c_grid_and_family_folds(self) -> None:
         policy = json.loads(
-            (TOOL_DIR / "training-policy.semantic-candidates.v2.json").read_text(
+            (TOOL_DIR / "training-policy.semantic-candidates.v3.json").read_text(
                 encoding="utf-8"
             )
         )

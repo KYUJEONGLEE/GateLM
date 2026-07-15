@@ -6,10 +6,11 @@
 | Model | `intfloat/multilingual-e5-small` |
 | Source revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Runtime | Canonical Python ORT CPU + optional Go/Linux amd64 native ORT CPU, dynamic QInt8 |
-| Canonical output | L2-normalized `float32[batch,64]` |
-| Manifest | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json) |
-| Gateway runtime lock | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json) |
-| PCA artifact | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.npz`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.npz) |
+| Canonical output | L2-normalized `float32[1,64]`; one request per encoder invocation |
+| Execution shape | `difficulty-e5-single-request-execution.2026-07-15.v1` (`batchSize=1`) |
+| Manifest | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json) |
+| Gateway runtime lock | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json) |
+| PCA artifact | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.v2.npz`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.v2.npz) |
 | Last reviewed | 2026-07-15 |
 
 이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Optional Gateway image는 같은 경로를 process-local startup smoke와 request shadow에서 검증하지만 요청별 결과를 제품 routing decision에 연결하지 않는다. 이 component의 존재는 model promotion을 뜻하지 않는다.
@@ -24,16 +25,18 @@ PromptFeatures.instructionText
      - special tokens 포함
      - max_length=128
      - right truncation
-     - batch-longest right padding
+     - one request only; padding scope is within that request
   -> int64 input_ids + attention_mask (+ token_type_ids)
   -> pinned multilingual-e5-small dynamic-QInt8 ONNX
-  -> float32 last_hidden_state[batch,sequence,384]
+  -> float32 last_hidden_state[1,sequence,384]
   -> attention-mask mean pooling
-  -> raw pooled float32[batch,384]
+  -> raw pooled float32[1,384]
   -> train-only PCA: (pooled - mean[384]) @ components[64,384].T
   -> L2 normalization(epsilon=1e-12)
-  -> float32[batch,64]
+  -> float32[1,64]
 ```
+
+Training, calibration, diagnostic evaluation과 Gateway replay는 모두 요청 하나마다 tokenizer와 QInt8 encoder를 한 번 호출한다. 여러 요청을 한 ONNX batch로 묶거나 batch-longest padding을 공유한 뒤 결과를 학습 material로 사용하면 안 된다. 여러 sample의 matrix가 필요한 단계는 단건 결과를 순서대로 계산한 뒤에만 stack한다.
 
 Attention-mask mean pooling은 mask가 `1`인 token만 합산하고 각 sample의 유효 token 수로 나눈다. Padding 위치는 pooling에서 제외한다. 모든 token mask가 `0`이거나 intermediate가 non-finite이면 `invalid_embedding`으로 fail closed한다.
 
@@ -45,7 +48,7 @@ PCA는 owner-approved dataset의 `train` 300건에서 얻은 **L2 정규화 전 
 
 ```python
 pca = PCA(n_components=64, svd_solver="full", whiten=False)
-pca.fit(train_embeddings)  # exact shape [300,384]
+pca.fit(train_embeddings)  # 300 single-request results stacked to exact shape [300,384]
 
 projected = (pooled_embedding - pca.mean_) @ pca.components_.T
 projected /= max(np.linalg.norm(projected), 1e-12)
@@ -53,11 +56,11 @@ projected /= max(np.linalg.norm(projected), 1e-12)
 
 Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[64,384]`만 포함한다. 두 array는 finite `float32`여야 한다. PCA parameter, file, source dataset과 runtime component hash는 manifest로 검증한다. Projection norm이 finite가 아니거나 `1e-12` 이하이면 zero vector를 반환하지 않고 `invalid_embedding`으로 처리한다.
 
-### 2.1 Candidate selection과 untouched Holdout
+### 2.1 Frozen 118D retraining과 diagnostic Holdout
 
-42D·106D·118D candidate는 `difficulty-semantic-candidate-selection.2026-07-15.v1`에 따라 calibration split의 selected-calibrator family-grouped CV log loss로 선택한다. Tie는 Brier score, lower dimension 순서로만 해소한다. Candidate별 Holdout metric을 생성하거나 Holdout accuracy로 candidate를 선택하면 안 된다.
+기존에 선택된 Candidate C 118D 구조는 `fixed_candidate_retrain`으로 유지하고, encoder/PCA·semantic head·difficulty head·calibrator를 single-request execution shape로 다시 생성한다. 이 작업은 42D·106D·118D architecture를 재선택하는 단계가 아니다. Calibration은 단건 결과만 사용하며 Holdout accuracy로 model, calibrator 또는 threshold를 바꾸면 안 된다.
 
-선택된 candidate의 model, calibrator, threshold, encoder/PCA/semantic-head hash를 먼저 freeze한 다음 그 candidate만 untouched Holdout 100건에 한 번 적용한다. Non-selected candidate report에는 Holdout outcome을 남기지 않는다. Holdout 결과를 확인한 뒤 feature, model, calibrator 또는 threshold 중 하나라도 변경하면 기존 final evidence를 폐기하고 새 evidence run으로 취급한다. 이때 새 immutable artifact version과 기존에 결과를 확인한 Holdout을 포함하지 않는 새 untouched Holdout으로 다시 검증해야 하며, 현재 Holdout을 반복 튜닝에 사용하면 leakage다.
+새 immutable artifact는 `difficulty-candidate-c-118d.owner-approved-500.v3.json`이며 weight 118개, bias, Platt coefficient/intercept, `difficulty-threshold-v1 = 0.45`, PCA와 semantic-head hash를 고정한다. 기존 Holdout 100건은 이전 결과를 이미 확인했으므로 이 artifact에는 diagnostic replay로만 사용할 수 있다. Diagnostic 결과 `accuracy=0.91`, `complex -> simple=1`은 구현 parity 확인값이며 promotion evidence가 아니다. 승격에는 이 artifact가 생성된 뒤 수집한 새 untouched Holdout이 필요하다.
 
 ## 3. Artifact And Distribution Contract
 
@@ -69,10 +72,10 @@ Optional Gateway shadow 배포 환경은 다음 규칙을 지켜야 한다.
 - Optional image build 단계에서 manifest에 나열된 tokenizer 파일, dynamic-QInt8 ONNX model, encoder manifest, Linux amd64 runtime lock과 ONNX Runtime shared library를 포함한다.
 - Rust tokenizer static library는 image build에만 사용하고 최종 runtime image에는 넣지 않는다. 최종 image에는 request inference에 필요한 model/tokenizer와 ONNX Runtime shared library만 둔다.
 - Container/runtime 시작 이후 Hugging Face 또는 다른 network source에서 artifact를 다운로드하면 안 된다.
-- Image build는 [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256)의 exact file allowlist와 전체 checksum을 검증하며 추가 파일과 symlink를 거부한다. Gateway 시작은 runtime lock, 모든 encoder artifact와 ONNX Runtime library의 path, byte size와 SHA-256을 다시 검증한다.
+- Image build는 [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256)의 exact file allowlist와 전체 checksum을 검증하며 추가 파일과 symlink를 거부한다. Gateway 시작은 runtime lock, 모든 encoder artifact와 ONNX Runtime library의 path, byte size와 SHA-256을 다시 검증한다.
 - 누락, hash mismatch, shape mismatch 또는 지원하지 않는 revision이면 encoder를 실행하지 않고 fail closed한다.
 
-Gateway Linux amd64 profile은 `github.com/daulet/tokenizers v1.23.0`과 그 release의 Rust tokenizer core `0.22.0`, `github.com/yalue/onnxruntime_go v1.22.0`, ONNX Runtime `1.22.1`을 고정한다. Canonical Python environment의 tokenizer는 `0.21.2`이므로 버전 문자열을 동일하다고 가정하지 않는다. 대신 Gateway와 동일한 단건 shape에서 고정된 비민감 English/Korean/right-truncation instruction 3건의 pooled 384개 값을 모두 `1e-5` tolerance로 비교한다. QInt8 결과는 batch shape에 따라 미세하게 달라질 수 있으므로 batch와 단건 결과를 직접 parity 기준으로 섞지 않는다. Padding mask 제외는 별도의 순수 pooling test로 검증한다.
+Gateway Linux amd64 profile은 `github.com/daulet/tokenizers v1.23.0`과 그 release의 Rust tokenizer core `0.22.0`, `github.com/yalue/onnxruntime_go v1.22.0`, ONNX Runtime `1.22.1`을 고정한다. Canonical Python environment의 tokenizer는 `0.21.2`이므로 버전 문자열을 동일하다고 가정하지 않는다. 대신 Gateway와 동일한 단건 shape에서 고정된 비민감 English/Korean/right-truncation instruction 3건의 pooled 384개 값을 모두 `1e-5` tolerance로 비교한다. Offline fit·training·calibration·evaluation도 이 단건 shape만 사용하므로 batch와 단건 reference를 섞는 경로가 없다. Padding mask 제외는 별도의 순수 pooling test로 검증한다.
 
 `prepare`는 개발 또는 image build처럼 명시적으로 허용된 artifact 준비 단계에서만 network를 사용할 수 있다. `fit-pca`, `verify`, semantic-head training과 실제 inference는 local-only이며 network-disabled 상태로 실행한다.
 
@@ -91,6 +94,7 @@ corepack pnpm run verify:v2.1-e5-encoder
 corepack pnpm run v2.1:routing:setup-gateway-e5-shadow-native
 corepack pnpm run v2.1:routing:prepare-gateway-e5-shadow
 corepack pnpm run verify:v2.1-difficulty-gateway-bundle
+corepack pnpm run v2.1:routing:measure-gateway-holdout
 corepack pnpm run verify:v2.1-gateway-e5-shadow
 ```
 
@@ -107,8 +111,8 @@ Selected 118D checked-in Go bundle은 pooled 384D 이후 `42D rule + PCA 64D + f
 Gateway hot path 승격 전에는 다음 경계를 모두 충족해야 한다.
 
 - 실패한 per-category safety regression을 새 evidence run에서 해결
-- request-level latency·memory와 timeout 후 native inference 자원 회수 evidence
-- supported runtime의 latency, memory와 failure isolation evidence
+- 새 immutable artifact를 생성한 뒤 수집한 untouched Holdout과 category별 safety evidence
+- 제한된 개발 scope live shadow의 aggregate disagreement와 directional error evidence
 - 새 promotion artifact에 대한 supported runtime별 end-to-end label parity
 - [`contracts.md`](contracts.md), [`classification-pipeline.md`](classification-pipeline.md)와 필요한 verifier를 포함한 active runtime contract 승인
 

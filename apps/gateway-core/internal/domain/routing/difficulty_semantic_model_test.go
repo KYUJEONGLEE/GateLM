@@ -28,16 +28,16 @@ func TestDifficultySemanticModelAssemblesExact118DBlocks(t *testing.T) {
 	if vector[0] != 0 || vector[1] != 1 || vector[8] != 1 || vector[41] != 0 {
 		t.Fatalf("rule block offsets drifted")
 	}
-	if delta := math.Abs(vector[42] - -0.3578607439994812); delta > 2e-6 {
+	if delta := math.Abs(vector[42] - -0.37483188509941101); delta > 2e-6 {
 		t.Fatalf("projection block start delta=%g exceeds tolerance", delta)
 	}
-	if delta := math.Abs(vector[105] - 0.08702966570854187); delta > 2e-6 {
+	if delta := math.Abs(vector[105] - -0.038661021739244461); delta > 2e-6 {
 		t.Fatalf("projection block end delta=%g exceeds tolerance", delta)
 	}
-	if delta := math.Abs(vector[106] - 0.6659214847694449); delta > 1e-6 {
+	if delta := math.Abs(vector[106] - 0.55001317602471400); delta > 1e-6 {
 		t.Fatalf("semantic head block start delta=%g exceeds tolerance", delta)
 	}
-	if delta := math.Abs(vector[117] - 0.18833381597465082); delta > 1e-6 {
+	if delta := math.Abs(vector[117] - 0.25060946552348867); delta > 1e-6 {
 		t.Fatalf("semantic head block end delta=%g exceeds tolerance", delta)
 	}
 }
@@ -137,11 +137,11 @@ func (*blockingDifficultyPooledEncoder) Close() error { return nil }
 
 func TestGeneratedDifficultySemanticModelIdentityAndProjectionBitsArePinned(t *testing.T) {
 	identity := generatedDifficultySemanticModel118D.identity
-	if identity.artifactVersion != "difficulty-offline.owner-approved-500.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v2" ||
-		identity.bundleHash != "sha256:4835d722bba348416693eda83bc33ff0328d93bb4e806c762481df94f57ec5ed" ||
-		identity.contentHash != "sha256:b41ed845c7b6931c7ad5738c7ef95e3013d5b1708ccd09440a86db5cd158efa0" ||
-		identity.projectionHash != "sha256:cddd5ea36ab6ee5bae0144e04f3faabe1c593857c5f53e058aa184ae790e2e12" ||
-		identity.semanticHeadsHash != "sha256:64b0590af9a9cbb8bfc62d43bdcb2930ae584eee59e2707aa9c4af7b358ef9fb" {
+	if identity.artifactVersion != "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3" ||
+		identity.bundleHash != "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220" ||
+		identity.contentHash != "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd" ||
+		identity.projectionHash != "sha256:a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa" ||
+		identity.semanticHeadsHash != "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386" {
 		t.Fatalf("generated semantic model identity drifted: %+v", identity)
 	}
 	digest := sha256.New()
@@ -172,10 +172,10 @@ func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing
 		t.Fatal(err)
 	}
 	projectionCheckpoints := map[int]float64{
-		0:  -0.3578607439994812,
-		1:  0.08811639994382858,
-		17: 0.10118965059518814,
-		63: 0.08702966570854187,
+		0:  -0.37483188509941101,
+		1:  0.072362005710601807,
+		17: -0.0067495238035917282,
+		63: -0.038661021739244461,
 	}
 	for index, expected := range projectionCheckpoints {
 		if delta := math.Abs(float64(projection[index]) - expected); delta > 2e-6 {
@@ -188,10 +188,10 @@ func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing
 		t.Fatal(err)
 	}
 	expectedHeads := [difficultySemanticHeadProbabilityDimension]float64{
-		0.6659214847694449, 0.08796352028738748, 0.24611499494316752,
-		0.7228245820524181, 0.06442186710978645, 0.21275355083779557,
-		0.29936366865553737, 0.45518764862537853, 0.24544868271908407,
-		0.3856842812246019, 0.42598190280074716, 0.18833381597465082,
+		0.55001317602471400, 0.13263457652561014, 0.31735224744967583,
+		0.71046708713372431, 0.080707222910201590, 0.20882568995607415,
+		0.21611276066293320, 0.48002860629757499, 0.30385863303949184,
+		0.28619441938197709, 0.46319611509453423, 0.25060946552348867,
 	}
 	for index, expected := range expectedHeads {
 		if delta := math.Abs(heads[index] - expected); delta > 1e-6 {
@@ -212,7 +212,7 @@ func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if delta := math.Abs(result.ComplexityScore - 0.9999474611528935); delta > 2e-8 {
+	if delta := math.Abs(result.ComplexityScore - 0.99948949361896144); delta > 2e-8 {
 		t.Fatalf("calibrated score=%v delta=%g exceeds tolerance", result.ComplexityScore, delta)
 	}
 	if result.Difficulty != DifficultyComplex {

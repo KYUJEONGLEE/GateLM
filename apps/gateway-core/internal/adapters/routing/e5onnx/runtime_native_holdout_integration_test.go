@@ -24,12 +24,13 @@ import (
 )
 
 const (
-	holdoutReferenceSchema = "gatelm.difficulty-gateway-holdout-reference.v1"
-	holdoutRunSchema       = "gatelm.difficulty-gateway-holdout-replay-run.v1"
+	holdoutReferenceSchema = "gatelm.difficulty-gateway-holdout-reference.v2"
+	holdoutRunSchema       = "gatelm.difficulty-gateway-holdout-replay-run.v2"
 	holdoutDatasetVersion  = "difficulty_training_2026_07_15_owner_approved_500_v2"
 	holdoutDatasetSHA256   = "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f"
 	holdoutSplitPolicy     = "difficulty-family-constrained-split.2026-07-15.v1"
 	holdoutSplitSeed       = 20260715
+	holdoutExecutionShape  = "difficulty-e5-single-request-execution.2026-07-15.v1"
 	holdoutRecordCount     = 100
 	holdoutFamilyCount     = 18
 	holdoutModelPathCount  = 64
@@ -40,23 +41,24 @@ const (
 )
 
 type gatewayHoldoutReference struct {
-	SchemaVersion                string                          `json:"schemaVersion"`
-	DatasetVersion               string                          `json:"datasetVersion"`
-	DatasetSHA256                string                          `json:"datasetSha256"`
-	SplitPolicyVersion           string                          `json:"splitPolicyVersion"`
-	SplitSeed                    int                             `json:"splitSeed"`
-	HoldoutRecords               int                             `json:"holdoutRecords"`
-	HoldoutFamilies              int                             `json:"holdoutFamilies"`
-	ModelPathRecords             int                             `json:"modelPathRecords"`
-	ArtifactVersion              string                          `json:"artifactVersion"`
-	BundleHash                   string                          `json:"bundleHash"`
-	ContentHash                  string                          `json:"contentHash"`
-	ThresholdPolicyVersion       string                          `json:"thresholdPolicyVersion"`
-	Threshold                    float64                         `json:"threshold"`
-	OfflineBatch16Classification holdoutClassificationSummary    `json:"offlineBatch16Classification"`
-	GatewaySingleClassification  holdoutClassificationSummary    `json:"gatewaySingleClassification"`
-	RuleBaselineClassification   holdoutClassificationSummary    `json:"ruleBaselineClassification"`
-	Samples                      []gatewayHoldoutReferenceSample `json:"samples"`
+	SchemaVersion               string                          `json:"schemaVersion"`
+	DatasetVersion              string                          `json:"datasetVersion"`
+	DatasetSHA256               string                          `json:"datasetSha256"`
+	SplitPolicyVersion          string                          `json:"splitPolicyVersion"`
+	SplitSeed                   int                             `json:"splitSeed"`
+	HoldoutRecords              int                             `json:"holdoutRecords"`
+	HoldoutFamilies             int                             `json:"holdoutFamilies"`
+	ModelPathRecords            int                             `json:"modelPathRecords"`
+	ArtifactVersion             string                          `json:"artifactVersion"`
+	BundleHash                  string                          `json:"bundleHash"`
+	ContentHash                 string                          `json:"contentHash"`
+	ThresholdPolicyVersion      string                          `json:"thresholdPolicyVersion"`
+	Threshold                   float64                         `json:"threshold"`
+	ExecutionShapePolicyVersion string                          `json:"executionShapePolicyVersion"`
+	OfflineSingleClassification holdoutClassificationSummary    `json:"offlineSingleRequestClassification"`
+	GatewaySingleClassification holdoutClassificationSummary    `json:"gatewaySingleClassification"`
+	RuleBaselineClassification  holdoutClassificationSummary    `json:"ruleBaselineClassification"`
+	Samples                     []gatewayHoldoutReferenceSample `json:"samples"`
 }
 
 type gatewayHoldoutReferenceSample struct {
@@ -139,45 +141,46 @@ type holdoutMemorySnapshot struct {
 }
 
 type gatewayHoldoutReplayRun struct {
-	SchemaVersion                string                              `json:"schemaVersion"`
-	Status                       string                              `json:"status"`
-	MeasuredAt                   string                              `json:"measuredAt"`
-	Environment                  map[string]string                   `json:"environment"`
-	DatasetVersion               string                              `json:"datasetVersion"`
-	DatasetSHA256                string                              `json:"datasetSha256"`
-	HoldoutRecords               int                                 `json:"holdoutRecords"`
-	HoldoutFamilies              int                                 `json:"holdoutFamilies"`
-	ArtifactVersion              string                              `json:"artifactVersion"`
-	BundleHash                   string                              `json:"bundleHash"`
-	ContentHash                  string                              `json:"contentHash"`
-	ThresholdPolicyVersion       string                              `json:"thresholdPolicyVersion"`
-	Threshold                    float64                             `json:"threshold"`
-	Parity                       gatewayHoldoutParity                `json:"parity"`
-	RoutingInvariance            gatewayHoldoutRoutingInvariance     `json:"routingInvariance"`
-	SelectedClassification       holdoutClassificationSummary        `json:"selectedClassification"`
-	OfflineBatch16Classification holdoutClassificationSummary        `json:"offlineBatch16Classification"`
-	OfflineAggregateReproduced   bool                                `json:"offlineAggregateReproduced"`
-	RuleBaselineClassification   holdoutClassificationSummary        `json:"ruleBaselineClassification"`
-	LatencyMicros                map[string]holdoutLatencySummary    `json:"latencyMicros"`
-	MemoryBytes                  map[string]holdoutMemorySnapshot    `json:"memoryBytes"`
-	ShadowStatuses               map[string]int                      `json:"shadowStatuses"`
-	BusySaturation               gatewayHoldoutBusySaturation        `json:"busySaturation"`
-	NativeTimeoutRecovery        gatewayHoldoutNativeTimeoutRecovery `json:"nativeTimeoutRecovery"`
+	SchemaVersion               string                              `json:"schemaVersion"`
+	Status                      string                              `json:"status"`
+	MeasuredAt                  string                              `json:"measuredAt"`
+	Environment                 map[string]string                   `json:"environment"`
+	DatasetVersion              string                              `json:"datasetVersion"`
+	DatasetSHA256               string                              `json:"datasetSha256"`
+	HoldoutRecords              int                                 `json:"holdoutRecords"`
+	HoldoutFamilies             int                                 `json:"holdoutFamilies"`
+	ArtifactVersion             string                              `json:"artifactVersion"`
+	BundleHash                  string                              `json:"bundleHash"`
+	ContentHash                 string                              `json:"contentHash"`
+	ThresholdPolicyVersion      string                              `json:"thresholdPolicyVersion"`
+	Threshold                   float64                             `json:"threshold"`
+	ExecutionShapePolicyVersion string                              `json:"executionShapePolicyVersion"`
+	Parity                      gatewayHoldoutParity                `json:"parity"`
+	RoutingInvariance           gatewayHoldoutRoutingInvariance     `json:"routingInvariance"`
+	SelectedClassification      holdoutClassificationSummary        `json:"selectedClassification"`
+	OfflineSingleClassification holdoutClassificationSummary        `json:"offlineSingleRequestClassification"`
+	OfflineAggregateReproduced  bool                                `json:"offlineAggregateReproduced"`
+	RuleBaselineClassification  holdoutClassificationSummary        `json:"ruleBaselineClassification"`
+	LatencyMicros               map[string]holdoutLatencySummary    `json:"latencyMicros"`
+	MemoryBytes                 map[string]holdoutMemorySnapshot    `json:"memoryBytes"`
+	ShadowStatuses              map[string]int                      `json:"shadowStatuses"`
+	BusySaturation              gatewayHoldoutBusySaturation        `json:"busySaturation"`
+	NativeTimeoutRecovery       gatewayHoldoutNativeTimeoutRecovery `json:"nativeTimeoutRecovery"`
 }
 
 type gatewayHoldoutParity struct {
-	LabelMatches              int      `json:"labelMatches"`
-	LabelMismatches           int      `json:"labelMismatches"`
-	MismatchSampleIDs         []string `json:"mismatchSampleIds,omitempty"`
-	OfflineLabelMatches       int      `json:"offlineLabelMatches"`
-	OfflineLabelMismatches    int      `json:"offlineLabelMismatches"`
-	OfflineMismatchSampleIDs  []string `json:"offlineMismatchSampleIds,omitempty"`
-	MaxAbsoluteScoreDelta     float64  `json:"maxAbsoluteScoreDelta"`
-	P50AbsoluteScoreDelta     float64  `json:"p50AbsoluteScoreDelta"`
-	P95AbsoluteScoreDelta     float64  `json:"p95AbsoluteScoreDelta"`
-	MaxOfflineBatchScoreDelta float64  `json:"maxOfflineBatchScoreDelta"`
-	AbsoluteTolerance         float64  `json:"absoluteTolerance"`
-	RelativeTolerance         float64  `json:"relativeTolerance"`
+	LabelMatches               int      `json:"labelMatches"`
+	LabelMismatches            int      `json:"labelMismatches"`
+	MismatchSampleIDs          []string `json:"mismatchSampleIds,omitempty"`
+	OfflineLabelMatches        int      `json:"offlineLabelMatches"`
+	OfflineLabelMismatches     int      `json:"offlineLabelMismatches"`
+	OfflineMismatchSampleIDs   []string `json:"offlineMismatchSampleIds,omitempty"`
+	MaxAbsoluteScoreDelta      float64  `json:"maxAbsoluteScoreDelta"`
+	P50AbsoluteScoreDelta      float64  `json:"p50AbsoluteScoreDelta"`
+	P95AbsoluteScoreDelta      float64  `json:"p95AbsoluteScoreDelta"`
+	MaxOfflineSingleScoreDelta float64  `json:"maxOfflineSingleRequestScoreDelta"`
+	AbsoluteTolerance          float64  `json:"absoluteTolerance"`
+	RelativeTolerance          float64  `json:"relativeTolerance"`
 }
 
 type gatewayHoldoutRoutingInvariance struct {
@@ -214,8 +217,8 @@ func TestNativeGatewayHoldoutReplay(t *testing.T) {
 
 	encoder, err := NewEncoder(BundleConfig{
 		ArtifactRoot:        bundleRoot,
-		EncoderManifestPath: bundleRoot + "/difficulty-e5-encoder-manifest.v1.json",
-		RuntimeLockPath:     bundleRoot + "/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json",
+		EncoderManifestPath: bundleRoot + "/difficulty-e5-encoder-manifest.v2.json",
+		RuntimeLockPath:     bundleRoot + "/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json",
 	})
 	if err != nil {
 		t.Fatal("initialize native holdout encoder")
@@ -382,18 +385,18 @@ func TestNativeGatewayHoldoutReplay(t *testing.T) {
 	selectedSummary := summarizeGatewayHoldoutObserved(observed, "go")
 	baselineSummary := summarizeGatewayHoldoutObserved(observed, "rule")
 	parity := gatewayHoldoutParity{
-		LabelMatches:              labelMatches,
-		LabelMismatches:           len(records) - labelMatches,
-		MismatchSampleIDs:         labelMismatchIDs,
-		OfflineLabelMatches:       offlineLabelMatches,
-		OfflineLabelMismatches:    len(records) - offlineLabelMatches,
-		OfflineMismatchSampleIDs:  offlineMismatchIDs,
-		MaxAbsoluteScoreDelta:     maximumFloat(scoreDeltas),
-		P50AbsoluteScoreDelta:     percentileFloat(scoreDeltas, 0.50),
-		P95AbsoluteScoreDelta:     percentileFloat(scoreDeltas, 0.95),
-		MaxOfflineBatchScoreDelta: maximumFloat(offlineScoreDeltas),
-		AbsoluteTolerance:         holdoutScoreTolerance,
-		RelativeTolerance:         0,
+		LabelMatches:               labelMatches,
+		LabelMismatches:            len(records) - labelMatches,
+		MismatchSampleIDs:          labelMismatchIDs,
+		OfflineLabelMatches:        offlineLabelMatches,
+		OfflineLabelMismatches:     len(records) - offlineLabelMatches,
+		OfflineMismatchSampleIDs:   offlineMismatchIDs,
+		MaxAbsoluteScoreDelta:      maximumFloat(scoreDeltas),
+		P50AbsoluteScoreDelta:      percentileFloat(scoreDeltas, 0.50),
+		P95AbsoluteScoreDelta:      percentileFloat(scoreDeltas, 0.95),
+		MaxOfflineSingleScoreDelta: maximumFloat(offlineScoreDeltas),
+		AbsoluteTolerance:          holdoutScoreTolerance,
+		RelativeTolerance:          0,
 	}
 	if parity.LabelMatches != holdoutRecordCount || parity.MaxAbsoluteScoreDelta > holdoutScoreTolerance {
 		t.Fatalf("same-shape Python/Go holdout parity failed: labels=%d maxDelta=%g", parity.LabelMatches, parity.MaxAbsoluteScoreDelta)
@@ -419,21 +422,22 @@ func TestNativeGatewayHoldoutReplay(t *testing.T) {
 			"commit":    os.Getenv("GATELM_EVIDENCE_COMMIT"),
 			"run":       os.Getenv("GATELM_EVIDENCE_RUN"),
 		},
-		DatasetVersion:               holdoutDatasetVersion,
-		DatasetSHA256:                holdoutDatasetSHA256,
-		HoldoutRecords:               holdoutRecordCount,
-		HoldoutFamilies:              holdoutFamilyCount,
-		ArtifactVersion:              difficultymodel.GatewayShadow118DArtifactVersion,
-		BundleHash:                   difficultymodel.GatewayShadow118DBundleHash,
-		ContentHash:                  difficultymodel.GatewayShadow118DContentHash,
-		ThresholdPolicyVersion:       reference.ThresholdPolicyVersion,
-		Threshold:                    reference.Threshold,
-		Parity:                       parity,
-		RoutingInvariance:            gatewayHoldoutRoutingInvariance{Matched: routeMatches, Mismatched: len(routeMismatchIDs), MismatchSampleIDs: routeMismatchIDs},
-		SelectedClassification:       selectedSummary,
-		OfflineBatch16Classification: reference.OfflineBatch16Classification,
-		OfflineAggregateReproduced:   selectedSummary == reference.OfflineBatch16Classification,
-		RuleBaselineClassification:   baselineSummary,
+		DatasetVersion:              holdoutDatasetVersion,
+		DatasetSHA256:               holdoutDatasetSHA256,
+		HoldoutRecords:              holdoutRecordCount,
+		HoldoutFamilies:             holdoutFamilyCount,
+		ArtifactVersion:             difficultymodel.GatewayShadow118DArtifactVersion,
+		BundleHash:                  difficultymodel.GatewayShadow118DBundleHash,
+		ContentHash:                 difficultymodel.GatewayShadow118DContentHash,
+		ThresholdPolicyVersion:      reference.ThresholdPolicyVersion,
+		Threshold:                   reference.Threshold,
+		ExecutionShapePolicyVersion: holdoutExecutionShape,
+		Parity:                      parity,
+		RoutingInvariance:           gatewayHoldoutRoutingInvariance{Matched: routeMatches, Mismatched: len(routeMismatchIDs), MismatchSampleIDs: routeMismatchIDs},
+		SelectedClassification:      selectedSummary,
+		OfflineSingleClassification: reference.OfflineSingleClassification,
+		OfflineAggregateReproduced:  selectedSummary == reference.OfflineSingleClassification,
+		RuleBaselineClassification:  baselineSummary,
 		LatencyMicros: map[string]holdoutLatencySummary{
 			"routeShadowDisabled": summarizeHoldoutLatency(disabledRouteLatencies),
 			"routeShadowEnabled":  summarizeHoldoutLatency(enabledRouteLatencies),
@@ -478,6 +482,7 @@ func loadGatewayHoldoutReference(t *testing.T, path string) gatewayHoldoutRefere
 		reference.ArtifactVersion != difficultymodel.GatewayShadow118DArtifactVersion ||
 		reference.BundleHash != difficultymodel.GatewayShadow118DBundleHash ||
 		reference.ContentHash != difficultymodel.GatewayShadow118DContentHash ||
+		reference.ExecutionShapePolicyVersion != holdoutExecutionShape ||
 		reference.ThresholdPolicyVersion != "difficulty-threshold-v1" ||
 		reference.Threshold != 0.45 || len(reference.Samples) != holdoutRecordCount {
 		t.Fatal("ephemeral Gateway holdout reference identity mismatch")

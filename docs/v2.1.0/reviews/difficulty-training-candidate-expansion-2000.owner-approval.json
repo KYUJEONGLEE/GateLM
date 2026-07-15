@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "gatelm.difficulty-training-promotion-evidence.v1",
+  "status": "owner_approved_training_eligible",
+  "approvedOn": "2026-07-15",
+  "approval": {
+    "scope": "all_2000_expansion_records_and_all_200_prompt_families",
+    "basis": "explicit_dataset_owner_approval_in_current_codex_task",
+    "humanReviewerCount": 1,
+    "reviewerIdentityStored": false
+  },
+  "source": {
+    "datasetVersion": "difficulty_label_2026_07_15_expansion_2000_gpt_third_review_candidate_v1",
+    "datasetPath": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-confirmed-candidate.jsonl",
+    "datasetSha256": "4970f66da626366200bb568f7ac0ddf653a898dc9d17af3928493061250891e0",
+    "promptsRemainSynthetic": true
+  },
+  "reviewEvidence": {
+    "thirdReviewReport": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-report.json",
+      "sha256": "91154c6140e4e09f64f317ace3a5187a898196c4dfce6712e2f99f2474968f98"
+    },
+    "thirdReviewConfirmations": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-confirmations.jsonl",
+      "records": 250,
+      "sha256": "f6e65ed1571ad0ac4505444565bf5e7a30946b22b656806b434c7f027426f6e1"
+    },
+    "remainingReviewQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.remaining-review-queue.jsonl",
+      "records": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "gptReviewIsHumanApproval": false,
+    "datasetOwnerApprovalRecordedSeparately": true
+  },
+  "promotedDataset": {
+    "datasetVersion": "difficulty_training_2026_07_15_expansion_2000_owner_approved_v1",
+    "datasetPath": "docs/v2.1.0/training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl",
+    "datasetSha256": "9bd448240d3479072c5daf9517abd6ea7fc0797d204354d6d636a33111a0b9de",
+    "manifestPath": "docs/v2.1.0/training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json",
+    "manifestSha256": "2306f0d74aec619c166018e6fb43d9b8a95c184731141eda3237309140dc356f"
+  },
+  "minimumFamilyPolicy": {
+    "minimumFamilyPolicyStatus": "versioned",
+    "policyVersion": "difficulty-training-expansion-minimum-family-policy.2026-07-15.v1",
+    "minApprovedFamilies": 200,
+    "minFamiliesPerCategory": 40,
+    "minFamiliesPerCategoryDifficulty": 40,
+    "minFamiliesPerLanguage": 200,
+    "minFamiliesPerSlice": 200,
+    "thresholdBasis": "observed_minimums_of_owner_approved_expansion_candidate",
+    "requiredLanguages": [
+      "ko",
+      "en",
+      "mixed"
+    ],
+    "requiredSlices": [
+      "negation",
+      "indirect_expression",
+      "synonym",
+      "short_complex",
+      "long_simple",
+      "payload_contamination",
+      "korean",
+      "english",
+      "mixed_language",
+      "category_confusion",
+      "ood_terminology"
+    ]
+  },
+  "partitions": {
+    "train": {
+      "families": 120,
+      "records": 1200
+    },
+    "calibration": {
+      "families": 40,
+      "records": 400
+    },
+    "holdout": {
+      "families": 40,
+      "records": 400
+    }
+  },
+  "splitPolicyVersion": "difficulty-expansion-family-split.2026-07-15.v1",
+  "splitSeed": 20260715,
+  "gates": {
+    "allRecordsHumanApproved": true,
+    "sourceProvenancePreserved": true,
+    "requiredSliceCoverageComplete": true,
+    "familyDisjointPartitions": true,
+    "minimumFamilyPolicySatisfied": true,
+    "trainingEligible": true
+  },
+  "doesNotApprove": [
+    "model_performance",
+    "calibrator_or_threshold_selection",
+    "runtime_promotion",
+    "ga_or_release"
+  ]
+}

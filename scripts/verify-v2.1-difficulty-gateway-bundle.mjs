@@ -8,15 +8,15 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const goCache = path.join(rootDir, ".cache", "go-build");
 const encoderManifestPath = path.join(
   rootDir,
-  "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json",
+  "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json",
 );
 const runtimeLockPath = path.join(
   rootDir,
-  "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json",
+  "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json",
 );
 const imageChecksumsPath = path.join(
   rootDir,
-  "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256",
+  "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256",
 );
 
 function sha256(payload) {
@@ -24,14 +24,25 @@ function sha256(payload) {
 }
 
 const encoderManifestPayload = readFileSync(encoderManifestPath);
+const encoderManifest = JSON.parse(encoderManifestPayload);
+if (
+  encoderManifest.schemaVersion !== "gatelm.difficulty-e5-encoder-manifest.v2" ||
+  encoderManifest.executionShape?.policyVersion !==
+    "difficulty-e5-single-request-execution.2026-07-15.v1" ||
+  encoderManifest.executionShape?.unit !== "single_request" ||
+  encoderManifest.executionShape?.batchSize !== 1 ||
+  encoderManifest.executionShape?.paddingScope !== "within_request_only"
+) {
+  throw new Error("Gateway E5 encoder manifest does not pin runtime-equivalent single requests");
+}
 const runtimeLock = JSON.parse(readFileSync(runtimeLockPath, "utf8"));
 const expectedLock = {
-  schemaVersion: "gatelm.difficulty-e5-gateway-runtime-lock.v1",
-  runtimeVersion: "difficulty-e5-gateway-runtime.linux-amd64.2026-07-15.v1",
+  schemaVersion: "gatelm.difficulty-e5-gateway-runtime-lock.v2",
+  runtimeVersion: "difficulty-e5-gateway-runtime.linux-amd64.single-request.2026-07-15.v2",
   platform: "linux-amd64",
   encoderManifestSha256: sha256(encoderManifestPayload),
-  encoderBundleVersion: "difficulty-e5-encoder-pca64.2026-07-15.v1",
-  encoderBundleSha256: "8282e6f9475edcd6b9f8a87b4fd1e627fe7ee17d568ad038090f2e7a80487413",
+  encoderBundleVersion: "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2",
+  encoderBundleSha256: "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e",
   tokenizerBindingModule: "github.com/daulet/tokenizers",
   tokenizerBindingVersion: "v1.23.0",
   tokenizerCoreVersion: "0.22.0",
@@ -126,7 +137,8 @@ for (const requiredText of [
 }
 for (const requiredText of [
   "difficulty_training_2026_07_15_owner_approved_500_v2",
-  "offlineBatch16Classification",
+  "offlineSingleRequestClassification",
+  "EXECUTION_SHAPE_POLICY_VERSION",
   "gatewaySingleClassification",
   "maxAbsoluteScoreDeltaAcrossRuns",
 ]) {
@@ -135,7 +147,7 @@ for (const requiredText of [
   }
 }
 for (const requiredText of [
-  "gatelm.difficulty-gateway-holdout-replay-run.v1",
+  "gatelm.difficulty-gateway-holdout-replay-run.v2",
   "OfflineAggregateReproduced",
   "routeShadowDisabled",
   "nativeTimeoutRecovery",
@@ -165,7 +177,7 @@ const commands = [
       "-profile",
       "gateway-shadow-118d",
       "-artifact",
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v2.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json",
       "-output",
       "apps/gateway-core/internal/domain/routing/difficulty_model_118d_generated.go",
       "-check",

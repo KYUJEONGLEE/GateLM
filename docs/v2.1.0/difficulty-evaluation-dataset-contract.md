@@ -106,6 +106,12 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 모든 record는 `synthetic_fixture + pending + reviewerCount=0`이고 manifest는 `trainingEligible=false`다. 따라서 generator·schema·split·feature wiring과 ephemeral tooling에는 사용할 수 있지만 model coefficient, PCA, semantic head, calibrator, threshold 선택, holdout 성능 또는 runtime promotion evidence에는 사용할 수 없다. 실제 training candidate로 파생하려면 family 전체를 human review하고 owner-approved minimum-family policy와 새 immutable split/evidence version을 별도로 승인해야 한다.
 
+### 6.3 Owner-approved 2,000-record expansion derivative
+
+2026-07-15 dataset owner의 명시적 전체 승인은 원본 fixture가 아니라 별도 [`training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl`](training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl)에 기록한다. 원본 2,000건과 GPT 검토 candidate는 계속 `pending`으로 보존한다. 파생 record는 모두 `human_review + approved + reviewerCount=1`이며 synthetic source와 consent provenance를 바꾸지 않는다.
+
+[`training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json`](training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json)은 `difficulty-training-expansion-minimum-family-policy.2026-07-15.v1`, 200 approved family와 원본의 family-disjoint 1,200/400/400 partition을 고정한다. [`reviews/difficulty-training-candidate-expansion-2000.owner-approval.json`](reviews/difficulty-training-candidate-expansion-2000.owner-approval.json)은 250건 3차 GPT 확인과 잔여 queue 0건을 보조 evidence로 연결하되, GPT 검토 자체를 human approval로 주장하지 않는다. 이 승격은 training input eligibility만 충족하며 model coefficient, PCA, semantic head, calibrator, threshold, holdout 성능, runtime promotion 또는 release를 승인하지 않는다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.
@@ -181,6 +187,7 @@ Difficulty 계약, schema 또는 fixture를 변경하면 다음을 실행한다.
 
 ```powershell
 node scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs --check
+corepack pnpm run verify:v2.1-difficulty-expansion-training-candidate
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2-docs

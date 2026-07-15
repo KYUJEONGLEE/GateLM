@@ -21,11 +21,11 @@ from typing import Any, Mapping, Sequence
 TOOL_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOL_DIR.parents[1]
 DEFAULT_ARTIFACT_ROOT = REPO_ROOT / ".tmp/difficulty-semantic-encoder-artifacts"
-DEFAULT_PCA_PATH = TOOL_DIR / "artifacts/difficulty-e5-pca-64.npz"
-DEFAULT_MANIFEST_PATH = TOOL_DIR / "artifacts/difficulty-e5-encoder-manifest.v1.json"
+DEFAULT_PCA_PATH = TOOL_DIR / "artifacts/difficulty-e5-pca-64.v2.npz"
+DEFAULT_MANIFEST_PATH = TOOL_DIR / "artifacts/difficulty-e5-encoder-manifest.v2.json"
 
-MANIFEST_SCHEMA = "gatelm.difficulty-e5-encoder-manifest.v1"
-BUNDLE_VERSION = "difficulty-e5-encoder-pca64.2026-07-15.v1"
+MANIFEST_SCHEMA = "gatelm.difficulty-e5-encoder-manifest.v2"
+BUNDLE_VERSION = "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2"
 MODEL_ID = "intfloat/multilingual-e5-small"
 SOURCE_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
 ARTIFACT_DIRECTORY = f"multilingual-e5-small/{SOURCE_REVISION}"
@@ -39,8 +39,10 @@ NATIVE_DIMENSION = 384
 PROJECTION_DIMENSION = 64
 L2_EPSILON = 1e-12
 POOLING_VERSION = "difficulty-attention-masked-mean.v2"
-PROJECTION_VERSION = "difficulty-e5-pca-full-svd-64.v1"
-PREPROCESSING_VERSION = "difficulty-e5-query-prefix-right-truncation-128.v1"
+PROJECTION_VERSION = "difficulty-e5-pca-full-svd-64.single-request.v2"
+PREPROCESSING_VERSION = "difficulty-e5-query-prefix-right-truncation-128.single-request.v2"
+EXECUTION_SHAPE_POLICY_VERSION = "difficulty-e5-single-request-execution.2026-07-15.v1"
+RUNTIME_REQUEST_BATCH_SIZE = 1
 
 RUNTIME_ARTIFACT_ROLES = (
     ("model_config", "config.json"),
@@ -159,6 +161,29 @@ def masked_mean(hidden_states: Any, attention_mask: Any) -> Any:
     if pooled.shape != (hidden.shape[0], NATIVE_DIMENSION) or not np.all(np.isfinite(pooled)):
         raise InvalidEmbedding("masked mean returned invalid material")
     return pooled
+
+
+def encode_pooled_single_requests(runtime: Any, instruction_texts: Sequence[str]) -> Any:
+    """Encode every record with the exact online Gateway request shape.
+
+    Dynamic-QInt8 output is shape-sensitive. Training, calibration and evaluation
+    material must therefore never share an ONNX batch across requests.
+    """
+
+    import numpy as np
+
+    if isinstance(instruction_texts, (str, bytes)) or not instruction_texts:
+        raise SemanticInputNotApplicable("at least one single-request instruction is required")
+    rows = [
+        np.asarray(runtime.encode_pooled_one(instruction_text), dtype=np.float32)
+        for instruction_text in instruction_texts
+    ]
+    values = np.stack(rows, axis=0).astype(np.float32, copy=False)
+    if values.shape != (len(instruction_texts), NATIVE_DIMENSION) or not np.all(
+        np.isfinite(values)
+    ):
+        raise InvalidEmbedding("single-request encoder returned invalid pooled material")
+    return values
 
 
 def _parameter_hash(mean: Any, components: Any) -> str:
@@ -311,6 +336,8 @@ class E5EncoderRuntime:
 
         if isinstance(instruction_texts, (str, bytes)) or not instruction_texts:
             raise SemanticInputNotApplicable("at least one non-empty instruction is required")
+        if len(instruction_texts) != RUNTIME_REQUEST_BATCH_SIZE:
+            raise ValueError("canonical E5 runtime accepts exactly one request per invocation")
         if any(not isinstance(text, str) or not text.strip() for text in instruction_texts):
             raise SemanticInputNotApplicable("empty instructionText is not applicable to E5 encoding")
         prefixed = [INPUT_PREFIX + text for text in instruction_texts]
@@ -329,7 +356,7 @@ class E5EncoderRuntime:
         if input_ids.ndim != 2 or input_ids.shape != attention_mask.shape:
             raise ValueError("tokenizer input IDs and attention mask must have identical 2D shape")
         if input_ids.shape[0] != len(instruction_texts) or input_ids.shape[1] > MAXIMUM_TOKEN_LENGTH:
-            raise ValueError("tokenizer violated the batch or maximum-length contract")
+            raise ValueError("tokenizer violated the single-request or maximum-length contract")
         token_type_ids = np.asarray(
             encoded.get("token_type_ids", np.zeros_like(input_ids)),
             dtype=np.int64,
@@ -422,6 +449,20 @@ def build_manifest(
             "padding": "batch_longest",
             "emptyInput": "not_applicable_before_tokenizer",
         },
+        "executionShape": {
+            "policyVersion": EXECUTION_SHAPE_POLICY_VERSION,
+            "unit": "single_request",
+            "batchSize": RUNTIME_REQUEST_BATCH_SIZE,
+            "paddingScope": "within_request_only",
+            "appliesTo": [
+                "pca_fit",
+                "semantic_head_training",
+                "difficulty_candidate_training",
+                "calibration",
+                "diagnostic_evaluation",
+                "gateway_replay",
+            ],
+        },
         "encoder": {
             "version": "difficulty-encoder.multilingual-e5-small-qint8.v1",
             "runtime": "onnxruntime_cpu",
@@ -466,7 +507,7 @@ def build_manifest(
             "splitSeed": dataset_manifest["splitSeed"],
             "splitCounts": split_counts,
         },
-        "output": {"shape": ["batch", PROJECTION_DIMENSION], "dtype": "float32"},
+        "output": {"shape": ["request", PROJECTION_DIMENSION], "dtype": "float32"},
         "dependencyVersions": {
             package: importlib.metadata.version(package) for package in DEPENDENCY_PACKAGES
         },
@@ -504,6 +545,21 @@ def validate_manifest(
         "emptyInput": "not_applicable_before_tokenizer",
     }:
         raise ValueError("E5 preprocessing contract mismatch")
+    if manifest.get("executionShape") != {
+        "policyVersion": EXECUTION_SHAPE_POLICY_VERSION,
+        "unit": "single_request",
+        "batchSize": RUNTIME_REQUEST_BATCH_SIZE,
+        "paddingScope": "within_request_only",
+        "appliesTo": [
+            "pca_fit",
+            "semantic_head_training",
+            "difficulty_candidate_training",
+            "calibration",
+            "diagnostic_evaluation",
+            "gateway_replay",
+        ],
+    }:
+        raise ValueError("E5 execution shape contract mismatch")
     model_directory = artifact_root / str(manifest.get("artifactDirectory", ""))
     artifacts = manifest.get("runtimeArtifacts")
     if not isinstance(artifacts, list) or not all(isinstance(item, Mapping) for item in artifacts):
@@ -582,7 +638,7 @@ def validate_manifest(
         for split in ("train", "calibration", "holdout")
     } != {"train": 300, "calibration": 100, "holdout": 100}:
         raise ValueError("E5 dataset split contract mismatch")
-    if manifest.get("output") != {"shape": ["batch", PROJECTION_DIMENSION], "dtype": "float32"}:
+    if manifest.get("output") != {"shape": ["request", PROJECTION_DIMENSION], "dtype": "float32"}:
         raise ValueError("E5 output contract mismatch")
     pca_path = REPO_ROOT / str(projection_material.get("relativePath", ""))
     if not pca_path.is_file() or sha256_file(pca_path) != projection_material.get("fileSha256"):

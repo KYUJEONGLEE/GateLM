@@ -148,7 +148,7 @@ Selected Candidate C는 별도 strict profile로 전체 inference material을 ch
 ```powershell
 go run ./apps/gateway-core/cmd/difficulty-model-codegen `
   -profile gateway-shadow-118d `
-  -artifact scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v2.json `
+  -artifact scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json `
   -output apps/gateway-core/internal/domain/routing/difficulty_model_118d_generated.go
 
 corepack pnpm run verify:v2.1-difficulty-gateway-bundle

@@ -81,9 +81,9 @@ try {
     & $Python -m gatelm_difficulty_model.gateway_holdout_reference reference `
         --dataset (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl") `
         --manifest (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json") `
-        --artifact (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v2.json") `
+        --artifact (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json") `
         --artifact-root $artifactPath `
-        --encoder-manifest (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json") `
+        --encoder-manifest (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json") `
         --output $holdoutReferencePath
     if ($LASTEXITCODE -ne 0) {
         throw "canonical Python Gateway holdout reference failed"

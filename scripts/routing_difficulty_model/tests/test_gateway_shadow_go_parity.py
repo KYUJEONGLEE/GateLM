@@ -17,7 +17,7 @@ ARTIFACT_PATH = (
     / "routing_difficulty_model"
     / "artifacts"
     / "candidates"
-    / "difficulty-candidate-c-118d.owner-approved-500.v2.json"
+    / "difficulty-candidate-c-118d.owner-approved-500.v3.json"
 )
 
 
@@ -95,4 +95,3 @@ class GatewayShadowGoParityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

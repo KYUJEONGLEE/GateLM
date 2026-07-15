@@ -11,7 +11,7 @@ func TestRunGeneratesAndChecksGatewayShadow118DBundle(t *testing.T) {
 	artifactPath := filepath.Join(
 		"..", "..", "..", "..",
 		"scripts", "routing_difficulty_model", "artifacts", "candidates",
-		"difficulty-candidate-c-118d.owner-approved-500.v2.json",
+		"difficulty-candidate-c-118d.owner-approved-500.v3.json",
 	)
 	outputPath := filepath.Join(t.TempDir(), "difficulty_model_118d_generated.go")
 	var stdout bytes.Buffer
