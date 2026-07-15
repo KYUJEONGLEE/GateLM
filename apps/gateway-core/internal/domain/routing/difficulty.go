@@ -48,8 +48,9 @@ type ReasoningDifficultyFeatures struct {
 // DifficultyFeatures contains common complexity evidence and only the
 // selected category's feature set. Exactly one category pointer is non-nil.
 type DifficultyFeatures struct {
-	category string
-	common   CommonDifficultyFeatures
+	category                 string
+	common                   CommonDifficultyFeatures
+	semanticInstructionEmpty bool
 
 	general       *GeneralDifficultyFeatures
 	code          *CodeDifficultyFeatures
@@ -129,7 +130,7 @@ func difficultyFromScore(score float64, threshold float64) string {
 }
 
 func isMeaninglessDifficultyInput(features DifficultyFeatures) bool {
-	return features.common.payloadSizeBucket == "empty"
+	return features.semanticInstructionEmpty || features.common.payloadSizeBucket == "empty"
 }
 
 // UsesDifficultyModelPath is exposed only for approved offline training and
@@ -139,8 +140,46 @@ func UsesDifficultyModelPath(features DifficultyFeatures) bool {
 	return !isMeaninglessDifficultyInput(features) && !hasHardComplexEvidence(features)
 }
 
+const (
+	DifficultyDecisionRouteSimpleSentinel = "simple_sentinel"
+	DifficultyDecisionRouteHardSentinel   = "hard_sentinel"
+	DifficultyDecisionRouteModel          = "model"
+)
+
+// DifficultyDecisionEvidence contains only bounded, low-cardinality reason
+// codes and scores. It is safe for approved offline audits and deliberately
+// excludes prompt text and individual feature values.
+type DifficultyDecisionEvidence struct {
+	Route                 string `json:"route"`
+	CommonEvidenceScore   int    `json:"commonEvidenceScore"`
+	CategoryEvidenceScore int    `json:"categoryEvidenceScore"`
+}
+
+// DifficultyDecisionEvidenceForOffline exposes the canonical deterministic
+// bypass decision without exposing request text or mutable classifier state.
+func DifficultyDecisionEvidenceForOffline(features DifficultyFeatures) DifficultyDecisionEvidence {
+	if isMeaninglessDifficultyInput(features) {
+		return DifficultyDecisionEvidence{Route: DifficultyDecisionRouteSimpleSentinel}
+	}
+	commonScore := commonComplexityEvidenceScore(features.common)
+	categoryScore := categoryComplexityEvidenceScore(features)
+	if commonScore+categoryScore >= hardComplexCombinedEvidenceThreshold {
+		return DifficultyDecisionEvidence{
+			Route:                 DifficultyDecisionRouteHardSentinel,
+			CommonEvidenceScore:   commonScore,
+			CategoryEvidenceScore: categoryScore,
+		}
+	}
+	return DifficultyDecisionEvidence{
+		Route:                 DifficultyDecisionRouteModel,
+		CommonEvidenceScore:   commonScore,
+		CategoryEvidenceScore: categoryScore,
+	}
+}
+
 func ExtractDifficultyFeatures(features PromptFeatures, category string) DifficultyFeatures {
 	category = canonicalCategory(category)
+	_, semanticInputAvailable := difficultyEmbeddingInput(features)
 	common := CommonDifficultyFeatures{
 		payloadSizeBucket: routingPayloadSizeBucket(features),
 		taskCount:         features.taskCount,
@@ -148,7 +187,11 @@ func ExtractDifficultyFeatures(features PromptFeatures, category string) Difficu
 		scopeCount:        features.scopeCount,
 		dependencyDepth:   features.dependencyDepth,
 	}
-	result := DifficultyFeatures{category: category, common: common}
+	result := DifficultyFeatures{
+		category:                 category,
+		common:                   common,
+		semanticInstructionEmpty: !semanticInputAvailable,
+	}
 
 	switch category {
 	case CategoryCode:
@@ -500,11 +543,14 @@ func difficultyInstructionText(features PromptFeatures) string {
 	return features.normalizedText
 }
 
-const hardComplexEvidenceThreshold = 3
+const (
+	DifficultyDecisionBoundaryVersion    = "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2"
+	hardComplexCombinedEvidenceThreshold = 8
+)
 
 func hasHardComplexEvidence(features DifficultyFeatures) bool {
-	return commonComplexityEvidenceScore(features.common) >= hardComplexEvidenceThreshold ||
-		categoryComplexityEvidenceScore(features) >= hardComplexEvidenceThreshold
+	return commonComplexityEvidenceScore(features.common)+categoryComplexityEvidenceScore(features) >=
+		hardComplexCombinedEvidenceThreshold
 }
 
 func hasRuleComplexEvidence(features DifficultyFeatures) bool {

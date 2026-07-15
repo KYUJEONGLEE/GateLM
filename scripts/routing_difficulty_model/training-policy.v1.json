@@ -32,6 +32,7 @@
       "algorithm": "pava",
       "tieGrouping": "exact_float64",
       "weighting": "sample_count",
+      "blockCanonicalization": "maximal_constant",
       "lookup": "inclusive_lower_floor",
       "outOfBounds": "clip",
       "smallBlockMerge": "disabled"

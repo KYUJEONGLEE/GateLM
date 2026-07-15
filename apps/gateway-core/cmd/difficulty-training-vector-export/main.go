@@ -48,15 +48,16 @@ type familyAssignment struct {
 }
 
 type vectorExport struct {
-	SchemaVersion      string               `json:"schemaVersion"`
-	DatasetVersion     string               `json:"datasetVersion"`
-	DatasetSHA256      string               `json:"datasetSha256"`
-	SplitPolicyVersion string               `json:"splitPolicyVersion"`
-	FamilyRuleVersion  string               `json:"familyRuleVersion"`
-	FeatureVersion     string               `json:"featureVersion"`
-	FeatureNames       []string             `json:"featureNames"`
-	CategorySource     string               `json:"categorySource"`
-	Samples            []vectorExportSample `json:"samples"`
+	SchemaVersion           string               `json:"schemaVersion"`
+	DatasetVersion          string               `json:"datasetVersion"`
+	DatasetSHA256           string               `json:"datasetSha256"`
+	SplitPolicyVersion      string               `json:"splitPolicyVersion"`
+	FamilyRuleVersion       string               `json:"familyRuleVersion"`
+	FeatureVersion          string               `json:"featureVersion"`
+	FeatureNames            []string             `json:"featureNames"`
+	DecisionBoundaryVersion string               `json:"decisionBoundaryVersion"`
+	CategorySource          string               `json:"categorySource"`
+	Samples                 []vectorExportSample `json:"samples"`
 }
 
 type vectorExportSample struct {
@@ -127,15 +128,16 @@ func buildVectorExport(datasetPath string, manifestPath string, categorySource s
 	}
 
 	result := vectorExport{
-		SchemaVersion:      "gatelm.difficulty-training-vector-export.v1",
-		DatasetVersion:     manifest.DatasetVersion,
-		DatasetSHA256:      datasetSHA256,
-		SplitPolicyVersion: manifest.SplitPolicyVersion,
-		FamilyRuleVersion:  manifest.FamilyRuleVersion,
-		FeatureVersion:     routing.DifficultyFeatureVectorVersionV1,
-		FeatureNames:       routing.DifficultyFeatureNamesV1(),
-		CategorySource:     categorySource,
-		Samples:            make([]vectorExportSample, 0, 500),
+		SchemaVersion:           "gatelm.difficulty-training-vector-export.v1",
+		DatasetVersion:          manifest.DatasetVersion,
+		DatasetSHA256:           datasetSHA256,
+		SplitPolicyVersion:      manifest.SplitPolicyVersion,
+		FamilyRuleVersion:       manifest.FamilyRuleVersion,
+		FeatureVersion:          routing.DifficultyFeatureVectorVersionV1,
+		FeatureNames:            routing.DifficultyFeatureNamesV1(),
+		DecisionBoundaryVersion: routing.DifficultyDecisionBoundaryVersion,
+		CategorySource:          categorySource,
+		Samples:                 make([]vectorExportSample, 0, 500),
 	}
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
 	scanner := bufio.NewScanner(bytes.NewReader(datasetBytes))

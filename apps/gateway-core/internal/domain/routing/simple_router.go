@@ -59,13 +59,28 @@ type RouteCandidateStatus struct {
 type SimpleRouter struct {
 	config           SimpleRouterConfig
 	promptClassifier RuleBasedPromptClassifier
+	difficultyShadow *DifficultySemanticShadowRunner
 }
 
-func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
-	return &SimpleRouter{
+type SimpleRouterOption func(*SimpleRouter)
+
+func WithDifficultySemanticShadow(runner *DifficultySemanticShadowRunner) SimpleRouterOption {
+	return func(router *SimpleRouter) {
+		router.difficultyShadow = runner
+	}
+}
+
+func NewSimpleRouter(config SimpleRouterConfig, options ...SimpleRouterOption) *SimpleRouter {
+	router := &SimpleRouter{
 		config:           normalizeSimpleRouterConfig(config),
 		promptClassifier: NewRuleBasedPromptClassifier(),
 	}
+	for _, option := range options {
+		if option != nil {
+			option(router)
+		}
+	}
+	return router
 }
 
 func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
@@ -134,6 +149,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	decision.CandidateModelRefs = candidates
 	decision.RoutingDecisionMaterial = material
 	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(material)
+	if r != nil && r.difficultyShadow != nil && req.DifficultyShadowEligible {
+		r.difficultyShadow.Submit(features, category, difficulty)
+	}
 	return decision, nil
 }
 

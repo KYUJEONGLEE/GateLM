@@ -6,6 +6,7 @@ Only immutable model parameters and aggregate evaluation material are returned.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from math import isfinite
@@ -91,6 +92,7 @@ def train_semantic_heads(
     """Fit the fixed four heads without accepting encoder parameters."""
 
     import numpy as np
+    from sklearn.exceptions import ConvergenceWarning
     from sklearn.linear_model import LogisticRegression
 
     embeddings = _finite_matrix(train_embeddings, "semantic head training embeddings")
@@ -126,7 +128,24 @@ def train_semantic_heads(
             max_iter=int(max_iterations),
             random_state=SEMANTIC_HEAD_RANDOM_SEED,
         )
-        classifier.fit(embeddings, encoded)
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always", ConvergenceWarning)
+            classifier.fit(embeddings, encoded)
+        convergence_warnings = [
+            item for item in captured if issubclass(item.category, ConvergenceWarning)
+        ]
+        for item in captured:
+            if item not in convergence_warnings:
+                warnings.warn_explicit(
+                    str(item.message),
+                    item.category,
+                    item.filename,
+                    item.lineno,
+                )
+        if convergence_warnings:
+            raise ValueError(
+                f"Logistic Regression failed to converge for semantic head {spec.name}"
+            )
         if tuple(int(value) for value in classifier.classes_) != (0, 1, 2):
             raise ValueError(f"semantic head {spec.name!r} fit changed the fixed class order")
         coefficient = np.asarray(classifier.coef_, dtype=np.float64)

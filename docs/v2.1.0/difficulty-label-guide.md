@@ -214,6 +214,41 @@ Family가 training-eligible이려면 포함하려는 모든 record가 `human_rev
 
 `difficulty-training-minimum-family-policy.2026-07-14.v1`은 승인된 candidate의 관찰 최소값을 고정한다. 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 family 이상을 요구한다. Split seed는 `20260715`이며 한 prompt family 전체가 반드시 한 split에만 있어야 한다. Train 300건은 encoder PCA와 model fit에, calibration 100건은 calibrator 선택·fit과 42D·106D·118D feature candidate 선택에 사용한다. Candidate 선택은 calibration family-grouped CV log loss, Brier score, lower dimension 순서로만 수행한다. Untouched holdout 100건은 candidate·calibrator·threshold·component hash를 freeze한 뒤 선택된 단 하나의 candidate에 대한 final gate에만 사용한다. 이 승격은 offline model 학습 input eligibility이며 학습 결과의 성능, threshold 선택, runtime 배포 또는 GA를 자동 승인하지 않는다.
 
+### 10.2 Synthetic 2,000건 expansion
+
+[`fixtures/difficulty-label-expansion-2000.fixture.jsonl`](fixtures/difficulty-label-expansion-2000.fixture.jsonl)은 기존 500건에 row를 덧붙이거나 schema column을 추가하지 않는 별도 v2 label dataset이다. 200 family마다 10개 contrast variant를 함께 두고 family 전체를 하나의 partition에만 배정한다. Manifest의 1,200/400/400 partition은 split leakage, calibrator wiring과 threshold tooling을 검증하기 위한 synthetic partition이며 승인된 학습 evidence가 아니다.
+
+이 데이터는 기존 field로 pipeline 단계를 관찰한다.
+
+- `redactedPrompt`, `expectedCategory`, `expectedDifficulty`: category, 42D rule vector, 최종 decision label
+- `expectedInstructionPayloadBoundary`, `semanticInputStatus`: instruction/payload parser와 empty-instruction sentinel
+- 네 bucket field: PCA 64D를 입력으로 받는 4-head/12D target
+- `promptFamily`: train/calibration/holdout leakage 방지
+- `evaluationSlices`: 취약 slice별 aggregate 평가
+
+Per-row embedding, probability, calibrated score, threshold distance 또는 실제 split score를 추가 field로 저장하지 않는다. 모두 process-local 계산 또는 aggregate report의 책임이다. 모든 expansion record는 human review 전이므로 `pending`이며, 승인 전에는 기존 owner-approved 500건과 합쳐 training input으로 사용하지 않는다.
+
+### 10.3 Owner-approved 2,000건 expansion training candidate
+
+2026-07-15 dataset owner의 명시적 전체 승인을 근거로 원본 fixture와 GPT 검토 candidate를 변경하지 않고 별도 파생 candidate를 생성한다.
+
+- [`training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl`](training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl): 2,000 record 모두 `human_review + approved + reviewerCount=1`; `source=synthetic_fixture`와 `consentType=synthetic`은 보존
+- [`training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json`](training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json): 200 approved family, `difficulty-training-expansion-minimum-family-policy.2026-07-15.v1`, family-disjoint train 1,200/calibration 400/holdout 400
+- [`reviews/difficulty-training-candidate-expansion-2000.owner-approval.json`](reviews/difficulty-training-candidate-expansion-2000.owner-approval.json): 승인 범위, 검토자 identity 비저장, 3차 GPT 검토 hash, 빈 잔여 queue, dataset·manifest hash와 gate 결과
+
+정책은 관찰된 승인 coverage를 고정해 전체 200 family, category별 40, category × difficulty별 40, 지원 language별 200, required slice별 200 family 이상을 요구한다. 기존 `difficulty-expansion-family-split.2026-07-15.v1`과 seed `20260715`를 그대로 사용하므로 같은 family의 10개 contrast variant는 한 split에만 남는다. 3단계 GPT 검토는 label 일관성을 확인하는 보조 evidence이며 human approval로 간주하지 않는다. Human approval의 근거는 dataset owner가 현재 작업에서 명시한 전체 승인이다. 이 승격은 offline training input eligibility만 승인하며 model 성능, calibrator·threshold 선택, runtime 배포 또는 GA를 자동 승인하지 않는다.
+
+### 10.4 Owner-approved model-path 5,000건
+
+2026-07-16 dataset owner의 명시적 전체 승인을 근거로 기존 owner-approved 2,500건을 변경하지 않고 별도 model-path 전용 파생 dataset을 생성한다.
+
+- [`training/difficulty-model-path-expansion-3120.owner-approved.jsonl`](training/difficulty-model-path-expansion-3120.owner-approved.jsonl): family-first GPT 검토와 owner-stage adjudication을 거친 신규 3,120건/624 family
+- [`training/difficulty-model-path-5000.owner-approved.jsonl`](training/difficulty-model-path-5000.owner-approved.jsonl): 기존 owner-approved train/calibration의 실제 Go `modelPath=true` 1,880건과 신규 3,120건을 합친 정확히 5,000건/855 family
+- [`training/difficulty-model-path-5000.roles.json`](training/difficulty-model-path-5000.roles.json): Train 3,000, Calibration 1,000, Evaluation holdout 750, Final promotion holdout 250을 family 단위로 고정
+- [`reviews/difficulty-model-path-expansion-3120/final-owner-approval/difficulty-model-path-3120-and-5000.owner-approval.json`](reviews/difficulty-model-path-expansion-3120/final-owner-approval/difficulty-model-path-3120-and-5000.owner-approval.json): owner 승인 문구, 검토·Go gate와 promoted hash evidence
+
+기존 legacy holdout은 5,000건에 재사용하지 않는다. 기존 semantic-empty simple sentinel과 hard-complex sentinel은 원래 owner-approved regression dataset에 남으며 Logistic Regression fit·calibration 대상에서 제외한다. Standard v2 manifest는 두 신규 holdout을 합쳐 `holdout=1,000`으로 표현하고, `difficulty-model-path-role-manifest.v1`이 evaluation 750과 promotion 250을 별도로 고정한다. Promotion holdout은 label review만 끝난 상태로 동결되며 model, calibrator 또는 threshold 선택 결과를 확인하기 전까지 접근하지 않는다. 이 dataset 승인은 학습 입력 자격만 승인하고 model 성능, threshold, runtime 승격 또는 GA를 승인하지 않는다.
+
 ## 11. 금지 데이터
 
 Schema, fixture, manifest, reviewer note와 report에 다음을 저장하지 않는다.
@@ -228,6 +263,9 @@ Schema, fixture, manifest, reviewer note와 report에 다음을 저장하지 않
 ## 12. 검증
 
 ```powershell
+node scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs --check
+corepack pnpm run verify:v2.1-difficulty-expansion-training-candidate
+corepack pnpm run verify:v2.1-difficulty-model-path-5000
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2-docs

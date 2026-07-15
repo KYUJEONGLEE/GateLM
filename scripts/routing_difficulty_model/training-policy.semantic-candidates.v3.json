@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "gatelm.difficulty-training-policy.v1",
+  "policyVersion": "difficulty-logistic-training.semantic-candidates.single-request.2026-07-15.v3",
+  "modelVersion": "difficulty-logistic-v1",
+  "featureVersion": "difficulty-offline-feature-shape.v1",
+  "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
+  "embeddingExecution": {
+    "policyVersion": "difficulty-e5-single-request-execution.2026-07-15.v1",
+    "unit": "single_request",
+    "batchSize": 1,
+    "paddingScope": "within_request_only",
+    "appliesTo": [
+      "pca_fit",
+      "semantic_head_training",
+      "difficulty_candidate_training",
+      "calibration",
+      "diagnostic_evaluation",
+      "gateway_replay"
+    ]
+  },
+  "regularization": {
+    "penalty": "l2",
+    "solver": "liblinear",
+    "cCandidates": [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0],
+    "groupFolds": 5,
+    "selectionMetric": "mean_log_loss",
+    "tieTolerance": 0.000001,
+    "tieBreakers": ["mean_brier_score", "stronger_regularization"],
+    "maxIterations": 2000,
+    "randomSeed": 1729
+  },
+  "calibration": {
+    "policyVersion": "difficulty-calibration-v1",
+    "candidates": ["platt", "isotonic"],
+    "groupFolds": 5,
+    "selectionMetric": "mean_log_loss",
+    "tieTolerance": 0.000001,
+    "tieBreakers": ["mean_brier_score", "simplicity_order"],
+    "simplicityOrder": ["platt", "isotonic"],
+    "platt": {
+      "solver": "lbfgs",
+      "c": 1000000.0,
+      "maxIterations": 2000
+    },
+    "isotonic": {
+      "algorithm": "pava",
+      "tieGrouping": "exact_float64",
+      "weighting": "sample_count",
+      "blockCanonicalization": "maximal_constant",
+      "lookup": "inclusive_lower_floor",
+      "outOfBounds": "clip",
+      "smallBlockMerge": "disabled"
+    }
+  },
+  "candidateSelection": {
+    "policyVersion": "difficulty-semantic-candidate-selection.single-request.2026-07-15.v2",
+    "selectionMode": "fixed_candidate_retrain",
+    "fixedCandidate": "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities",
+    "freezeReason": "retrain_the_previously_selected_118d_architecture_with_runtime_equivalent_single_request_execution",
+    "evidenceSplit": "calibration",
+    "selectionMetric": "selected_calibrator_group_cv_log_loss",
+    "tieTolerance": 0.000001,
+    "tieBreakers": ["selected_calibrator_group_cv_brier_score", "lower_dimension"],
+    "holdoutUsage": "diagnostic_only_after_candidate_freeze_new_untouched_holdout_required"
+  },
+  "threshold": {
+    "policyVersion": "difficulty-threshold-v1",
+    "value": 0.45,
+    "selection": "fixed_not_optimized"
+  }
+}

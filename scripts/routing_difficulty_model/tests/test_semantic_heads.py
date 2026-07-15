@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
+import warnings
+from unittest.mock import patch
 
 import numpy as np
 
@@ -41,6 +43,36 @@ def evaluation_targets() -> dict[str, list[str]]:
 
 
 class SemanticHeadsTest(unittest.TestCase):
+    def test_convergence_warning_fails_closed_for_semantic_head(self) -> None:
+        from sklearn.exceptions import ConvergenceWarning
+
+        class WarningModel:
+            def __init__(self, *args, **kwargs) -> None:
+                del args, kwargs
+
+            def fit(self, embeddings, encoded):
+                del embeddings, encoded
+                warnings.warn("synthetic non-convergence", ConvergenceWarning)
+                return self
+
+        embeddings = np.asarray(
+            [[index, index % 3, (index * 2) % 5, 1.0] for index in range(12)],
+            dtype=np.float32,
+        )
+        with patch("sklearn.linear_model.LogisticRegression", WarningModel):
+            with self.assertRaisesRegex(
+                ValueError,
+                "Logistic Regression failed to converge for semantic head semanticTaskBucket",
+            ):
+                train_semantic_heads(
+                    embeddings,
+                    training_labels(),
+                    artifact_version="difficulty-semantic-heads.test-v1",
+                    encoder_version="difficulty-encoder.test-v1",
+                    encoder_hash="a" * 64,
+                    pooling_version="difficulty-pooling.test-v1",
+                )
+
     def test_trains_four_ordered_heads_and_replays_twelve_probabilities(self) -> None:
         embeddings = np.asarray(
             [[index, index % 3, (index * 2) % 5, 1.0] for index in range(12)],

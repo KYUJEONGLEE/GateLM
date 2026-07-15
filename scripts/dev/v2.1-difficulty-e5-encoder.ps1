@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Setup", "Prepare", "Fit", "Candidates", "Test", "Verify")]
+    [ValidateSet("Setup", "Prepare", "Fit", "Candidates", "CalibrationFeasibility", "ThresholdCandidate", "PromotionHoldout", "PromotionHoldoutV2", "Test", "Verify")]
     [string]$Mode = "Test",
     [string]$Python = "",
     [string]$ArtifactRoot = ".tmp/difficulty-semantic-encoder-artifacts"
@@ -11,7 +11,7 @@ $ToolRoot = Join-Path $RepoRoot "scripts/routing_difficulty_model"
 $VenvRoot = Join-Path $RepoRoot ".tmp/difficulty-semantic-encoder-venv"
 $VenvPython = Join-Path $VenvRoot "Scripts/python.exe"
 $RequirementsLock = Join-Path $ToolRoot "e5-encoder-requirements.lock.txt"
-$Manifest = Join-Path $ToolRoot "artifacts/difficulty-e5-encoder-manifest.v1.json"
+$Manifest = Join-Path $ToolRoot "artifacts/difficulty-e5-encoder-manifest.v2.json"
 $ResolvedArtifactRoot = Join-Path $RepoRoot $ArtifactRoot
 
 if ($Mode -eq "Setup") {
@@ -51,6 +51,23 @@ try {
         }
         "Candidates" {
             & $Python -m gatelm_difficulty_model.candidate_cli --artifact-root $ResolvedArtifactRoot --encoder-manifest $Manifest
+        }
+        "CalibrationFeasibility" {
+            & $Python -m gatelm_difficulty_model.calibration_feasibility_cli --artifact-root $ResolvedArtifactRoot --encoder-manifest $Manifest
+        }
+        "ThresholdCandidate" {
+            & $Python -m gatelm_difficulty_model.threshold_candidate_cli
+        }
+        "PromotionHoldout" {
+            & $Python -m gatelm_difficulty_model.promotion_holdout --artifact-root $ResolvedArtifactRoot --encoder-manifest $Manifest
+        }
+        "PromotionHoldoutV2" {
+            & $Python -m gatelm_difficulty_model.promotion_holdout `
+                --artifact-root $ResolvedArtifactRoot `
+                --encoder-manifest $Manifest `
+                --freeze (Join-Path $RepoRoot "docs/v2.1.0/evaluation/difficulty-promotion-holdout-100.v2.json") `
+                --artifact (Join-Path $ToolRoot "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v4.json") `
+                --output (Join-Path $RepoRoot "docs/testing/difficulty-promotion-holdout-100-v4-result.json")
         }
         "Test" {
             & $Python -m unittest discover -s scripts/routing_difficulty_model/tests -p "test_*.py" -v

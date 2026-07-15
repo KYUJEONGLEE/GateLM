@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "gatelm.difficulty-expansion-verification-summary.v1",
+  "status": "passed",
+  "counts": {
+    "records": 3120,
+    "families": 624,
+    "batches": 9,
+    "modelPath": 3120,
+    "hardSentinel": 0,
+    "simpleSentinel": 0,
+    "categoryClassifierMismatches": 1133,
+    "exactDuplicates": 0,
+    "familyCollisions": 0,
+    "strictCrossPartitionOrExistingNearDuplicates": 0,
+    "broadNearDuplicateCandidates": 305,
+    "simpleStrongBucketConflicts": 0,
+    "simpleOverloadedBucketConflicts": 0,
+    "complexUnderloadedBucketConflicts": 0,
+    "securityPatternHits": 0
+  },
+  "failures": [],
+  "batchReports": [
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t1/t1.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t2/t2.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t3/t3.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t4/t4.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c1/c1.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c2/c2.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e1/e1.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e2/e2.verification-report.json",
+    "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/p1/p1.verification-report.json"
+  ],
+  "nearDuplicateReport": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/near-duplicate-report.json"
+}

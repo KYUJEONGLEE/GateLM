@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "gatelm.difficulty-expansion-third-review-report.v1",
+  "status": "third_gpt_review_merged_owner_approval_pending",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "sourceZipSha256": "05f049c6b2a3d6e6ed3b3442ca0a07222f759ffa54c67d5723463d06b37dc492",
+  "candidateDatasetVersion": "difficulty_label_2026_07_15_expansion_2000_gpt_third_review_candidate_v1",
+  "trainingEligible": false,
+  "humanReviewClaimed": false,
+  "integrity": {
+    "batches": 5,
+    "records": 250,
+    "uniqueSampleIds": 250,
+    "missingSampleIds": 0,
+    "duplicateSampleIds": 0,
+    "unexpectedSampleIds": 0,
+    "orderMismatches": 0,
+    "parseErrors": 0
+  },
+  "recommendations": {
+    "approve_second_candidate": 250
+  },
+  "confidence": {
+    "minimum": 0.99,
+    "maximum": 0.99,
+    "below090": 0
+  },
+  "checks": {
+    "fields": [
+      "instructionMeaningPreserved",
+      "requestedPayloadCountSatisfied",
+      "boundaryStructurePreserved",
+      "familyIntentPreserved",
+      "lengthAndLanguageSlicesValid"
+    ],
+    "true": 1250,
+    "falseOrMissing": 0
+  },
+  "validation": {
+    "canonicalRecordFailures": 0,
+    "familyConflicts": 0,
+    "families": 200
+  },
+  "confirmations": {
+    "records": 250
+  },
+  "remainingReviewQueue": {
+    "records": 0
+  },
+  "ownerApproval": {
+    "status": "pending",
+    "approvedRecords": 0,
+    "requiredAction": "dataset_owner_explicit_bulk_approval"
+  },
+  "artifacts": {
+    "rawReview": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-merged.raw.jsonl",
+      "records": 250,
+      "sha256": "ad2778bd23afb835ebd73a09eb91154467df258376bd5f18e202df87b14ce517"
+    },
+    "thirdCandidate": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-confirmed-candidate.jsonl",
+      "records": 2000,
+      "sha256": "4970f66da626366200bb568f7ac0ddf653a898dc9d17af3928493061250891e0"
+    },
+    "confirmations": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-confirmations.jsonl",
+      "records": 250,
+      "sha256": "f6e65ed1571ad0ac4505444565bf5e7a30946b22b656806b434c7f027426f6e1"
+    },
+    "remainingReviewQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.remaining-review-queue.jsonl",
+      "records": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

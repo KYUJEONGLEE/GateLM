@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "gatelm.difficulty-generation-report.v1",
+  "batchId": "e1",
+  "partitionRole": "evaluation",
+  "manifestPartition": "holdout",
+  "datasetVersion": "difficulty_model_path_expansion_3120_2026_07_15_e1_candidate_v1",
+  "datasetSha256": "108a428daea77515b08a7476acefdb12e7119b03d61f0617724c103ebbd62583",
+  "decisionBoundaryVersion": "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2",
+  "trainingPolicyVersion": "difficulty-training-policy.single-request-model-path.2026-07-15.v2",
+  "reviewStatus": "pending_owner_review",
+  "trainingEligible": false,
+  "counts": {
+    "records": 375,
+    "families": 75
+  },
+  "distributions": {
+    "category": {
+      "code": 75,
+      "general": 75,
+      "reasoning": 75,
+      "summarization": 75,
+      "translation": 75
+    },
+    "difficulty": {
+      "complex": 188,
+      "simple": 187
+    },
+    "language": {
+      "en": 126,
+      "ko": 140,
+      "mixed": 109
+    },
+    "semanticLabel": {
+      "code_debugging": 20,
+      "code_design": 10,
+      "code_explanation": 10,
+      "code_generation": 5,
+      "code_refactoring": 20,
+      "code_review": 10,
+      "general_explanation": 15,
+      "general_extraction": 10,
+      "general_other": 10,
+      "general_qa": 15,
+      "general_support": 10,
+      "general_transformation": 15,
+      "reasoning_causal": 15,
+      "reasoning_comparison": 20,
+      "reasoning_constraint_solving": 10,
+      "reasoning_decision": 5,
+      "reasoning_planning": 25,
+      "summarization_direct": 20,
+      "summarization_key_points": 10,
+      "summarization_multi_source": 25,
+      "summarization_structured": 20,
+      "translation_direct": 10,
+      "translation_localization": 35,
+      "translation_style_preserving": 30
+    },
+    "taskBucket": {
+      "count_1": 182,
+      "count_2": 117,
+      "count_3_plus": 76
+    },
+    "constraintBucket": {
+      "count_0_to_1": 210,
+      "count_2": 113,
+      "count_3_plus": 52
+    },
+    "scopeBucket": {
+      "count_1": 184,
+      "count_2_to_3": 113,
+      "count_4_plus": 78
+    },
+    "dependencyBucket": {
+      "depth_0_to_1": 190,
+      "depth_2": 111,
+      "depth_3_plus": 74
+    },
+    "slices": {
+      "negation": 59,
+      "indirect_expression": 71,
+      "synonym": 73,
+      "short_complex": 65,
+      "long_simple": 50,
+      "payload_contamination": 38,
+      "korean": 140,
+      "english": 126,
+      "mixed_language": 109,
+      "category_confusion": 66,
+      "ood_terminology": 65
+    },
+    "boundary": {
+      "explicit_separation": 38,
+      "instruction_only": 337
+    }
+  },
+  "generatedAt": "2026-07-15T00:00:00Z"
+}

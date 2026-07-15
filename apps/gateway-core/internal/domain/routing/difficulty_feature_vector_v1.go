@@ -106,31 +106,39 @@ func DifficultyFeatureNamesV1() []string {
 // difficulty-feature-vector.v1 Logistic Regression input. The model intercept
 // is stored separately and is not part of this vector.
 func VectorizeDifficultyFeaturesV1(features DifficultyFeatures) []float64 {
+	fixed := vectorizeDifficultyFeaturesV1Fixed(features)
 	vector := make([]float64, DifficultyFeatureVectorDimensionV1)
+	copy(vector, fixed[:])
+	return vector
+}
 
-	encodePayloadSizeBucketV1(vector, features.common.payloadSizeBucket)
-	vector[difficultyFeatureIndexTaskCount] = scaleDifficultyFeatureV1(features.common.taskCount, 5)
-	vector[difficultyFeatureIndexConstraintCount] = scaleDifficultyFeatureV1(features.common.constraintCount, 6)
-	vector[difficultyFeatureIndexScopeCount] = scaleDifficultyFeatureV1(features.common.scopeCount, 4)
-	vector[difficultyFeatureIndexDependencyDepth] = scaleDifficultyFeatureV1(features.common.dependencyDepth, 5)
+func vectorizeDifficultyFeaturesV1Fixed(features DifficultyFeatures) [DifficultyFeatureVectorDimensionV1]float64 {
+	var vector [DifficultyFeatureVectorDimensionV1]float64
+	values := vector[:]
+
+	encodePayloadSizeBucketV1(values, features.common.payloadSizeBucket)
+	values[difficultyFeatureIndexTaskCount] = scaleDifficultyFeatureV1(features.common.taskCount, 5)
+	values[difficultyFeatureIndexConstraintCount] = scaleDifficultyFeatureV1(features.common.constraintCount, 6)
+	values[difficultyFeatureIndexScopeCount] = scaleDifficultyFeatureV1(features.common.scopeCount, 4)
+	values[difficultyFeatureIndexDependencyDepth] = scaleDifficultyFeatureV1(features.common.dependencyDepth, 5)
 
 	category := canonicalCategory(features.category)
 	switch category {
 	case CategoryCode:
-		vector[difficultyFeatureIndexCategoryCode] = 1
-		encodeCodeDifficultyFeaturesV1(vector, features.code)
+		values[difficultyFeatureIndexCategoryCode] = 1
+		encodeCodeDifficultyFeaturesV1(values, features.code)
 	case CategoryTranslation:
-		vector[difficultyFeatureIndexCategoryTranslation] = 1
-		encodeTranslationDifficultyFeaturesV1(vector, features.translation)
+		values[difficultyFeatureIndexCategoryTranslation] = 1
+		encodeTranslationDifficultyFeaturesV1(values, features.translation)
 	case CategorySummarization:
-		vector[difficultyFeatureIndexCategorySummarization] = 1
-		encodeSummarizationDifficultyFeaturesV1(vector, features.summarization)
+		values[difficultyFeatureIndexCategorySummarization] = 1
+		encodeSummarizationDifficultyFeaturesV1(values, features.summarization)
 	case CategoryReasoning:
-		vector[difficultyFeatureIndexCategoryReasoning] = 1
-		encodeReasoningDifficultyFeaturesV1(vector, features.reasoning)
+		values[difficultyFeatureIndexCategoryReasoning] = 1
+		encodeReasoningDifficultyFeaturesV1(values, features.reasoning)
 	default:
-		vector[difficultyFeatureIndexCategoryGeneral] = 1
-		encodeGeneralDifficultyFeaturesV1(vector, features.general)
+		values[difficultyFeatureIndexCategoryGeneral] = 1
+		encodeGeneralDifficultyFeaturesV1(values, features.general)
 	}
 
 	return vector

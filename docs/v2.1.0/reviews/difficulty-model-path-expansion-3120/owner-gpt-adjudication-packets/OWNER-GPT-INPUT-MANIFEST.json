@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-gpt-adjudication-packet-manifest.v1",
+  "reviewMode": "owner_stage_gpt_recommendation_pending_human_owner_confirmation",
+  "records": 3120,
+  "families": 624,
+  "batches": [
+    {
+      "batchId": "t1",
+      "partitionRole": "train",
+      "records": 400,
+      "families": 80,
+      "inputFile": "t1.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "740a10efe1ede348f975b7be1a93530958e2059988c73167b8964286892401f2",
+      "expectedOutputFile": "t1.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "t2",
+      "partitionRole": "train",
+      "records": 400,
+      "families": 80,
+      "inputFile": "t2.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "2ccc2300ecd4dae7b61efe46d32707b4967e2559794da3a989f85bd5afb5f8fc",
+      "expectedOutputFile": "t2.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "t3",
+      "partitionRole": "train",
+      "records": 400,
+      "families": 80,
+      "inputFile": "t3.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "22cd4f660ac2d4535a33319165bd29df28f45d7d25fd0afe9ec7276efaf69363",
+      "expectedOutputFile": "t3.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "t4",
+      "partitionRole": "train",
+      "records": 395,
+      "families": 79,
+      "inputFile": "t4.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "957bd7852939279741ffbb28d1108be479e476205b29d5c364eb2c0746f02950",
+      "expectedOutputFile": "t4.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "c1",
+      "partitionRole": "calibration",
+      "records": 275,
+      "families": 55,
+      "inputFile": "c1.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "bb64617214cb1d4996162d87057e30e2c6da90473f5cb7d1f46f497f862ad100",
+      "expectedOutputFile": "c1.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "c2",
+      "partitionRole": "calibration",
+      "records": 250,
+      "families": 50,
+      "inputFile": "c2.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "acac62a2b405b932dcb2ec3961dcbff1b0e5e323e70c87d7506e4f9a2426b0cf",
+      "expectedOutputFile": "c2.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "e1",
+      "partitionRole": "evaluation",
+      "records": 375,
+      "families": 75,
+      "inputFile": "e1.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "93b9e19869fbfb9fdd8c1152635b012b305fe05e0b7a40fadcc229d28c11bbc7",
+      "expectedOutputFile": "e1.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "e2",
+      "partitionRole": "evaluation",
+      "records": 375,
+      "families": 75,
+      "inputFile": "e2.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "8de5c2cf8b3e4b3457450184ce3eb5f51a1def034fce2256da32f98680edf96c",
+      "expectedOutputFile": "e2.owner-gpt-adjudication.output.jsonl"
+    },
+    {
+      "batchId": "p1",
+      "partitionRole": "promotion",
+      "records": 250,
+      "families": 50,
+      "inputFile": "p1.owner-gpt-adjudication.input.jsonl",
+      "inputSha256": "a3ad4968164c62be7decdf9a4c90a29a9a6f02debd1e37804be76bd2d60cfad9",
+      "expectedOutputFile": "p1.owner-gpt-adjudication.output.jsonl"
+    }
+  ],
+  "proposedRouteBlockers": 3,
+  "strictCrossPartitionOrExistingNearDuplicates": 0,
+  "labelGuideFile": "LABEL-GUIDE.md",
+  "labelGuideSha256": "0c08df68f833e002817fcc9766a5b71b685f348f1e61bbf42a578ebb20d4a401",
+  "instructionsFile": "OWNER-GPT-ADJUDICATION-INSTRUCTIONS.md",
+  "instructionsSha256": "53aef4958cc873be1be8e8804fa3c4a13e9039d6d6f5aaef0ae25854bada0973",
+  "chatgptCommandFile": "CHATGPT-COMMAND.md",
+  "chatgptCommandSha256": "7601aaca07b9bd2a61296ee34ae3a93354598a5d6282c47865ac7e4682b57b3d",
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}
