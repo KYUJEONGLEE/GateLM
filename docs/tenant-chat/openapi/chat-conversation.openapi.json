@@ -284,6 +284,11 @@
         "properties": {
           "idempotencyKey": { "$ref": "#/components/schemas/OpaqueKey" },
           "content": { "type": "string", "minLength": 1, "maxLength": 20000 },
+          "contextMode": {
+            "enum": ["conversation", "single_turn"],
+            "default": "conversation",
+            "description": "Controls only the messages sent to this turn. single_turn keeps encrypted history stored but sends only the current user message."
+          },
           "usageIntent": { "$ref": "#/components/schemas/UsageIntent" }
         }
       },

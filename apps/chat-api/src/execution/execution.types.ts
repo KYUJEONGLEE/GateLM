@@ -22,6 +22,8 @@ export type SnapshotReference = Readonly<{
 
 export const MAX_EPHEMERAL_MESSAGE_CHARACTERS = 20_000;
 
+export type TenantChatContextMode = 'conversation' | 'single_turn';
+
 export type ClientUsageIntent = Readonly<{
   maxOutputTokens: number;
   requestedTier: 'auto' | 'high_quality' | 'standard' | 'economy';

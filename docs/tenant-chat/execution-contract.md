@@ -56,7 +56,7 @@ revision: `tenant-chat/v1`
 - `id`는 `<requestId>:<sequence>`다. sequence는 request별 1부터 단조 증가한다.
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.
-- Chat API는 public turn request에서 `estimatedInputTokens`를 받지 않는다. private completion에 실제 포함되는 bounded message content의 UTF-8 byte length 합계(최소 1)를 계산해 completion `usageIntent`와 binding에 사용한다.
+- Chat API는 public turn request에서 `estimatedInputTokens`를 받지 않는다. optional `contextMode=conversation|single_turn`을 받고 미지정 시 `conversation`으로 처리한다. `single_turn`에서는 encrypted prior history를 decrypt하지 않으며 current user message만 private completion에 포함한다. 실제 포함되는 bounded message content의 UTF-8 byte length 합계(최소 1)를 계산해 completion `usageIntent`와 binding에 사용한다.
 - successful final 저장의 retryable PostgreSQL timeout/connection/transaction conflict는 동일 assistant content를 유지한 채 최대 3회 재시도한다. unique `(turn_id,role)`와 decrypt/compare가 commit 후 응답 유실도 same-content replay로 수렴시킨다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
 - DOC-013은 Chat API의 encrypted final을 authoritative replay source로 사용해 닫는다. local final이 있으면 `accepted`, bounded reconstructed `delta`, `final`을 재생한다. Gateway terminal replay만 있고 local final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 fail closed하며 성공 content를 만들지 않는다.

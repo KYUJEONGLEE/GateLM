@@ -128,7 +128,7 @@ Browser
 -> workload JWT(admission) 발급
 -> private Gateway admission: request rate + active concurrency
 -> Chat API가 current user message를 encrypted store에 durable 기록
--> Chat API가 completed prior context만 bounded decrypt
+-> Chat API가 turn contextMode에 따라 completed prior context를 bounded decrypt하거나 current user message만 선택
 -> workload JWT(completion) 발급
 -> private Gateway completion이 admission/body/snapshot binding consume
 -> safety
@@ -256,7 +256,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - 현재 runtime/API/schema/UI 지원 전략은 `off|exact`다.
 - Semantic Cache는 닫힌 non-goal이 아니라 follow-up capability지만, backend API와 Gateway adapter가 없으므로 현재 DTO, published RuntimeSnapshot, Admin UI에 선택지를 노출하지 않는다.
 - cache adapter/interface, versioned policy discriminator, capabilities response는 후속 contract revision에서 `semantic` 전략을 추가할 수 있어야 한다.
-- exact cache는 tenant+user scoped, encrypted, history disabled면 off다.
+- exact cache는 tenant+user scoped, encrypted이며 실제 private completion에 전달된 message 배열을 fingerprint한다. `contextMode=single_turn`은 current user message만 fingerprint하므로 context 유지 여부와 cache hit을 독립적으로 검증할 수 있다.
 - exact cache outer key는 tenant+user namespace만 포함하고 keyed fingerprint는 Redis hash field로만 사용한다. value는 AES-256-GCM으로 암호화하며 confirmed primary 성공만 저장한다.
 - Semantic Cache를 구현할 때 tenant isolation, embedding/version, safety/policy/snapshot binding, content retention, invalidation, false-hit evaluation과 Admin API/UI를 별도 contract revision으로 고정한다.
 
@@ -463,7 +463,7 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 2. conversation ownership, request binding, cursor/idempotency bound를 확인한다.
 3. content-free turn identity를 reserve하고 기존 `authorizeAndAdmit`을 호출한다.
 4. admission 성공 뒤 user message ciphertext를 commit한다.
-5. user commit 뒤 completed prior history만 bounded decrypt하고 `complete`를 호출한다.
+5. user commit 뒤 `conversation`이면 completed prior history를 bounded decrypt하고, `single_turn`이면 history를 decrypt하지 않고 current user message만으로 `complete`를 호출한다.
 6. private Gateway SSE를 strict consume하며 Chat API-facing `accepted -> delta* -> final|error|cancelled` 순서를 유지한다.
 7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
 
@@ -471,7 +471,9 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - fresh successful `chat.turn.final`은 Gateway가 확정한 bounded `quotaState`와 `budgetState`를 전달한다. encrypted assistant만으로 재생하는 completed turn은 두 상태를 복원할 Chat API-owned 근거가 없으므로 생략할 수 있으며, browser는 이를 새 정책 상태로 추정하지 않는다.
 - successful assistant history와 `chat.turn.final`은 Gateway가 확정한 bounded `effectiveModelKey`를 선택적으로 포함한다. Chat API는 이를 assistant message와 함께 저장하며 legacy row 또는 Gateway가 모델을 확정하지 못한 경우 생략한다. Provider connection, fallback attempt, credential과 비용 상세는 직원 응답에 포함하지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 `cacheOutcome`을 선택적으로 포함한다. exact cache hit에서는 assistant history의 모델 표시를 생략하고 browser는 모델 호출이 없었다고 표시한다.
-- public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다.
+- public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. 별도 optional `contextMode`는 `conversation|single_turn`이며 미지정 시 기존 호환을 위해 `conversation`이다. `conversation`은 completed prior context와 current user message를 전달하고, `single_turn`은 encrypted history를 삭제하거나 변경하지 않은 채 current user message만 전달한다.
+- Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다. context mode는 actor, employee, tenant usage 귀속을 바꾸지 않으므로 confirmed ledger와 향후 DB-backed employee usage/cost aggregate는 동일 identity 경계를 유지한다.
+- context mode는 keyed turn request binding에 포함한다. legacy/default `conversation` binding shape는 그대로 유지하고 `single_turn`만 explicit discriminator를 추가해 같은 idempotency key로 mode를 바꾸는 replay를 `409 CHAT_IDEMPOTENCY_CONFLICT`로 거절한다.
 - attachment capacity는 admission 전에 reserve한다. admission 뒤 user persistence, history preparation 또는 local attachment activation이 실패하면 마지막 local attachment만 admission과 turn을 best effort cancel하고 reservation을 반드시 해제한다.
 - 느린 attachment의 response backpressure는 해당 응답에만 적용하며 공유 Provider stream과 final persistence를 막지 않는다. disconnect된 attachment handle은 취소 시도 결과와 무관하게 local registry에서 해제한다.
 - partial, interrupted, cancelled assistant와 Provider raw error는 저장하지 않는다. 이미 저장된 user message와 confirmed Gateway usage는 assistant persistence 실패 때문에 삭제·변조하지 않는다.

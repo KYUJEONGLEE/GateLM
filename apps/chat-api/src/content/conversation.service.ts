@@ -10,6 +10,7 @@ import type {
   ClientUsageIntent,
   CompletionFinalEvent,
   EphemeralMessage,
+  TenantChatContextMode,
   UsageIntent,
 } from '@/execution/execution.types';
 import { PrivateGatewayError } from '@/execution/private-gateway.client';
@@ -128,12 +129,19 @@ export class ConversationService {
   async prepareTurn(
     accessToken: string,
     conversationId: string,
-    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
+    input: Readonly<{
+      idempotencyKey: string;
+      content: string;
+      contextMode?: TenantChatContextMode;
+      usageIntent: ClientUsageIntent;
+    }>,
   ): Promise<PreparedTurn> {
     return this.guard(async () => {
       const authorized = await this.sessions.authorizeExecution(accessToken);
       const actor = actorOf(authorized);
-      const reserved = await this.store.reserveTurn(actor, conversationId, input);
+      const contextMode = input.contextMode ?? 'conversation';
+      const turnInput = Object.freeze({ ...input, contextMode });
+      const reserved = await this.store.reserveTurn(actor, conversationId, turnInput);
       if (reserved.state === 'completed') {
         const message = await this.store.readCompletedReplay(actor, reserved);
         if (!message) throw new TerminalReplayContentUnavailable();
@@ -154,7 +162,9 @@ export class ConversationService {
           idempotencyKey: reserved.idempotencyKey,
         });
         await this.store.persistAdmittedUser(actor, reserved, input.content, handle);
-        const messages = await this.store.completionHistory(actor, conversationId, reserved.turnId);
+        const messages = contextMode === 'single_turn'
+          ? Object.freeze([Object.freeze({ role: 'user' as const, content: input.content })])
+          : await this.store.completionHistory(actor, conversationId, reserved.turnId);
         const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
         if (signal.aborted) throw new TurnStateConflict();
         return Object.freeze({
