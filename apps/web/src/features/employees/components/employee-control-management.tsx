@@ -26,7 +26,13 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { AnalyticsEmployeeTokenBarChart } from "@/features/analytics/components/analytics-charts";
+import { AnalyticsRankedBarChart } from "@/features/analytics/components/analytics-charts";
+import { parseEmployeeCostPolicy } from "@/lib/control-plane/employee-cost-policy-parser";
+import type {
+  EmployeeCostLimit,
+  EmployeeCostPolicy,
+  EmployeeCostPolicyState
+} from "@/lib/control-plane/employee-cost-policy-types";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
@@ -34,8 +40,7 @@ import type {
   EmployeeOrganizationCsvImportResult,
   EmployeeRecord,
   ProjectEmployeeAssignmentRecord,
-  ProjectEmployeeAssignmentValues,
-  ProjectEmployeeQuotaStatus
+  ProjectEmployeeAssignmentValues
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
@@ -43,10 +48,13 @@ import {
   getRateLimitRefillTokensPerSecond,
   getRateLimitWindowSeconds
 } from "@/lib/control-plane/runtime-policy-types";
-import { nullableText } from "@/lib/formatting/formatters";
+import { formatMicroUsdCurrency, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
-import type { EmployeeUsageReadModel } from "../employee-usage-read-model";
+import type {
+  EmployeeUsageReadModel,
+  EmployeeUsageRow
+} from "../employee-usage-read-model";
 
 type EmployeeControlManagementProps = {
   initialEmployeeId?: string;
@@ -70,6 +78,7 @@ type SubmitState = {
 type CompactUnitStepperProps = {
   ariaLabel: string;
   decimals?: number;
+  disabled?: boolean;
   max: number;
   min: number;
   onValueChange: (value: number) => void;
@@ -79,15 +88,21 @@ type CompactUnitStepperProps = {
 };
 
 type EmployeeSortDirection = "asc" | "desc";
-type EmployeeSortField = "department" | "name" | "project" | "tokens";
+type EmployeeSortField = "cost" | "department" | "name" | "project";
 type EmployeeAddMethod = "csv" | "invite";
-type EmployeeTokenLimitDraft = {
+type EmployeeCostLimitDraft = {
   enabled: boolean;
-  limit: number;
+  limitUsd: number;
 };
-const EMPLOYEE_TOKEN_LIMIT_DEFAULT = 100000;
-const EMPLOYEE_TOKEN_LIMIT_MAX = 200000;
-const EMPLOYEE_TOKEN_LIMIT_MIN = 1000;
+type EmployeeCostPolicyDraft = {
+  daily: EmployeeCostLimitDraft;
+  enforcementMode: EmployeeCostPolicy["enforcementMode"];
+  weekly: EmployeeCostLimitDraft;
+};
+const EMPLOYEE_DAILY_COST_LIMIT_DEFAULT_USD = 5;
+const EMPLOYEE_WEEKLY_COST_LIMIT_DEFAULT_USD = 25;
+const EMPLOYEE_COST_LIMIT_MAX_USD = 100_000_000;
+const EMPLOYEE_COST_LIMIT_MIN_USD = 0.000001;
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned_department__";
 
 type EmployeeResponsePayload = {
@@ -108,6 +123,12 @@ type EmployeeInvitationResponsePayload = {
 type ProjectEmployeeResponsePayload = {
   assignment?: ProjectEmployeeAssignmentRecord;
   error?: string;
+};
+
+type EmployeeCostPolicyResponsePayload = {
+  costPolicy?: unknown;
+  error?: string;
+  status?: number;
 };
 
 const emptyCreateValues: EmployeeCreateValues = {
@@ -301,12 +322,19 @@ const employeeText: Record<
 const employeeUsageText = {
   en: {
     addProject: "Add to project",
-    chatUsage: "Chat usage",
-    dailyLimit: "Daily token limit",
-    dailyUsage: "Usage today",
-    limitEnabled: "Limit daily tokens",
-    limitSaveFailed: "Daily token limit could not be saved.",
-    limitSaved: "Daily token limit saved.",
+    chatUsage: "Cost limits",
+    costLoadFailed: "Employee cost data could not be loaded.",
+    dailyLimit: "Daily cost limit",
+    dailyUsage: "Cost today",
+    exposureState: "Exposure state",
+    ledgerPending: "Enforcement ledger connection pending",
+    limitConflict: "This policy changed elsewhere. Reload and try again.",
+    limitDisabled: "No limit",
+    limitEnabled: "Enable daily cost limit",
+    limitSaveFailed: "Employee cost limits could not be saved.",
+    limitSaved: "Employee cost limits saved.",
+    monitorMode: "Costs are monitored without restricting model routing.",
+    restrictionMode: "High-cost models are restricted after the limit is reached.",
     saveLimit: "Save limit",
     detail: "Employee usage and controls",
     managePolicy: "Manage project policy",
@@ -321,22 +349,30 @@ const employeeUsageText = {
     projectRemoved: "Project removed.",
     projects: "Project management",
     selectProject: "Select project",
-    tokens: "Tokens today",
+    tokens: "Confirmed cost today",
     unlimited: "Unlimited",
-    usage: "Tokens used",
-    weeklyLimit: "Weekly token limit",
-    weeklyUnavailable: "Not available yet",
-    weeklyUsage: "Weekly usage",
-    weeklyTokens: "Tokens in the last 7 days"
+    usage: "Cost used",
+    weeklyLimit: "Weekly cost limit",
+    weeklyLimitEnabled: "Enable weekly cost limit",
+    weeklyUnavailable: "Ledger pending",
+    weeklyUsage: "Weekly cost",
+    weeklyTokens: "Confirmed cost this week"
   },
   ko: {
     addProject: "프로젝트에 추가",
-    chatUsage: "채팅 사용량",
-    dailyLimit: "일일 토큰 한도",
-    dailyUsage: "오늘의 사용량",
-    limitEnabled: "일일 토큰 제한",
-    limitSaveFailed: "일일 토큰 한도를 저장하지 못했습니다.",
-    limitSaved: "일일 토큰 한도를 저장했습니다.",
+    chatUsage: "비용 한도",
+    costLoadFailed: "직원 비용 데이터를 불러오지 못했습니다.",
+    dailyLimit: "일일 비용 제한",
+    dailyUsage: "오늘 사용 비용",
+    exposureState: "노출 상태",
+    ledgerPending: "집행 원장 연결 전",
+    limitConflict: "다른 관리자가 정책을 변경했습니다. 새로고침 후 다시 시도하세요.",
+    limitDisabled: "한도 없음",
+    limitEnabled: "일일 비용 제한 사용",
+    limitSaveFailed: "직원 비용 한도를 저장하지 못했습니다.",
+    limitSaved: "직원 비용 한도를 저장했습니다.",
+    monitorMode: "모델 라우팅을 제한하지 않고 비용만 모니터링합니다.",
+    restrictionMode: "한도 도달 후 고비용 모델 사용을 제한합니다.",
     saveLimit: "한도 저장",
     detail: "직원 사용량 및 통제",
     managePolicy: "프로젝트 정책 관리",
@@ -351,13 +387,14 @@ const employeeUsageText = {
     projectRemoved: "프로젝트에서 제거했습니다.",
     projects: "프로젝트 관리",
     selectProject: "프로젝트 선택",
-    tokens: "오늘 사용 토큰",
+    tokens: "오늘 확정 비용",
     unlimited: "무제한",
-    usage: "사용 토큰",
-    weeklyLimit: "주간 토큰 한도",
-    weeklyUnavailable: "준비 중",
-    weeklyUsage: "주간 사용량",
-    weeklyTokens: "최근 7일 사용 토큰"
+    usage: "사용 비용",
+    weeklyLimit: "주간 비용 한도",
+    weeklyLimitEnabled: "주간 비용 한도 사용",
+    weeklyUnavailable: "원장 연결 전",
+    weeklyUsage: "주간 사용 비용",
+    weeklyTokens: "이번 주 확정 비용"
   }
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -1430,11 +1467,6 @@ export function EmployeeControlManagement({
     string | null
   >(null);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
-  const [employeeTokenLimitDraft, setEmployeeTokenLimitDraft] =
-    useState<EmployeeTokenLimitDraft>({
-      enabled: false,
-      limit: EMPLOYEE_TOKEN_LIMIT_DEFAULT
-    });
   const [tokenLimitSubmitState, setTokenLimitSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
@@ -1445,7 +1477,7 @@ export function EmployeeControlManagement({
     field: EmployeeSortField;
   }>({
     direction: "desc",
-    field: "tokens"
+    field: "cost"
   });
   const [pageIndex, setPageIndex] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -1468,24 +1500,18 @@ export function EmployeeControlManagement({
     () => new Map(usage.rows.map((row) => [row.employeeId, row])),
     [usage.rows]
   );
-  const employeeTokenChartRows = useMemo(
-    () => usage.rows.slice(0, 10).map((row) => ({
-      id: row.employeeId,
-      label: row.name,
-      value: row.dailyTokens
-    })),
+  const employeeCostChartRows = useMemo(
+    () =>
+      usage.rows.slice(0, 10).map((row) => ({
+        id: row.employeeId,
+        label: row.name,
+        value: row.dailyCostMicroUsd ?? 0
+      })),
     [usage.rows]
   );
   const selectedUsage = selectedEmployeeId
     ? usageByEmployeeId.get(selectedEmployeeId) ?? null
     : null;
-  const employeeDailyTokenStatus: ProjectEmployeeQuotaStatus = !employeeTokenLimitDraft.enabled
-    ? "not_configured"
-    : selectedUsage && selectedUsage.dailyTokens >= employeeTokenLimitDraft.limit
-      ? "exceeded"
-      : selectedUsage && selectedUsage.dailyTokens >= employeeTokenLimitDraft.limit * 0.8
-        ? "warning"
-        : "within_limit";
   const monthlyProjectCostById = useMemo(
     () => new Map(monthlyCostReport.projectCosts.map((row) => [row.projectId, row])),
     [monthlyCostReport.projectCosts]
@@ -1497,23 +1523,6 @@ export function EmployeeControlManagement({
           !selectedUsage.projects.some((usageProject) => usageProject.projectId === project.id)
       )
     : [];
-
-  useEffect(() => {
-    if (!selectedUsage) {
-      setEmployeeTokenLimitDraft({
-        enabled: false,
-        limit: EMPLOYEE_TOKEN_LIMIT_DEFAULT
-      });
-      return;
-    }
-
-    setEmployeeTokenLimitDraft({
-      enabled: selectedUsage.dailyTokenLimit !== null,
-      limit: clampEmployeeTokenLimit(
-        selectedUsage.dailyTokenLimit ?? EMPLOYEE_TOKEN_LIMIT_DEFAULT
-      )
-    });
-  }, [selectedUsage]);
 
   const projectNamesByEmployeeId = useMemo(() => {
     const projectsById = new Map(projects.map((project) => [project.id, project.name]));
@@ -1551,9 +1560,10 @@ export function EmployeeControlManagement({
           projectNamesByEmployeeId.get(left.id),
           projectNamesByEmployeeId.get(right.id)
         );
-      } else if (sortState.field === "tokens") {
-        result = (usageByEmployeeId.get(left.id)?.dailyTokens ?? 0) -
-          (usageByEmployeeId.get(right.id)?.dailyTokens ?? 0);
+      } else if (sortState.field === "cost") {
+        result =
+          (usageByEmployeeId.get(left.id)?.dailyCostMicroUsd ?? -1) -
+          (usageByEmployeeId.get(right.id)?.dailyCostMicroUsd ?? -1);
       } else {
         result = compareEmployeeName(left, right);
       }
@@ -2254,21 +2264,31 @@ export function EmployeeControlManagement({
       <section aria-label={usageText.detail} className="employee-usage-ranking">
         <div className="employee-usage-ranking-heading">
           <div>
-            <h3>{locale === "ko" ? "직원별 사용 토큰" : "Employee token usage"}</h3>
-            <p>{locale === "ko" ? "오늘 사용량 상위 10명" : "Top 10 by usage today"}</p>
+            <h3>{locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}</h3>
+            <p>
+              {locale === "ko"
+                ? "오늘 확정 비용 상위 10명"
+                : "Top 10 by confirmed cost today"}
+              {usage.periodTimezone ? ` · ${usage.periodTimezone}` : ""}
+            </p>
           </div>
-          <span>{locale === "ko" ? "토큰" : "Tokens"}</span>
+          <span>USD</span>
         </div>
-        {usage.totalDailyTokens > 0 ? (
-          <AnalyticsEmployeeTokenBarChart
-            ariaLabel={locale === "ko" ? "직원별 사용 토큰" : "Employee token usage"}
+        {usage.totalDailyCostMicroUsd === null ? (
+          <p className="employee-usage-ranking-empty">{usageText.costLoadFailed}</p>
+        ) : usage.totalDailyCostMicroUsd > 0 ? (
+          <AnalyticsRankedBarChart
+            ariaLabel={locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}
+            className="employee-cost-ranking-chart"
+            kind="micro-usd"
             maxRows={10}
-            rows={employeeTokenChartRows}
-            totalValue={usage.totalDailyTokens}
+            rows={employeeCostChartRows}
           />
         ) : (
           <p className="employee-usage-ranking-empty">
-            {locale === "ko" ? "오늘 집계된 직원 토큰 사용량이 없습니다." : "No employee token usage has been recorded today."}
+            {locale === "ko"
+              ? "오늘 확정된 직원 사용 비용이 없습니다."
+              : "No confirmed employee cost has been recorded today."}
           </p>
         )}
       </section>
@@ -2337,7 +2357,7 @@ export function EmployeeControlManagement({
                 </label>
                 {renderEmployeeSortHeader("name", text.name)}
                 {renderEmployeeSortHeader("department", text.department)}
-                {renderEmployeeSortHeader("tokens", usageText.tokens)}
+                {renderEmployeeSortHeader("cost", usageText.tokens)}
                 <span className="employee-list-header-label">{usageText.weeklyTokens}</span>
                 {renderEmployeeSortHeader("project", text.projectCount)}
                 <span aria-hidden="true" className="employee-list-header-spacer" />
@@ -2418,12 +2438,14 @@ export function EmployeeControlManagement({
                       >
                         <strong
                           data-rank={
-                            employeeUsage && employeeUsage.dailyTokens > 0 && employeeUsage.rank <= 3
+                            employeeUsage &&
+                            (employeeUsage.dailyCostMicroUsd ?? 0) > 0 &&
+                            employeeUsage.rank <= 3
                               ? employeeUsage.rank
                               : undefined
                           }
                         >
-                          {formatTokenCount(employeeUsage?.dailyTokens ?? 0, locale)}
+                          {formatMicroUsd(employeeUsage?.dailyCostMicroUsd ?? null, locale)}
                         </strong>
                       </div>
                       <div
@@ -2431,10 +2453,10 @@ export function EmployeeControlManagement({
                         data-label={usageText.weeklyTokens}
                       >
                         <strong>
-                          {employeeUsage?.weeklyTokens === null ||
-                          employeeUsage?.weeklyTokens === undefined
-                            ? "-"
-                            : formatTokenCount(employeeUsage.weeklyTokens, locale)}
+                          {formatMicroUsd(
+                            employeeUsage?.weeklyCostMicroUsd ?? null,
+                            locale
+                          )}
                         </strong>
                       </div>
                       <div
@@ -2677,147 +2699,28 @@ export function EmployeeControlManagement({
                   <span>{usageText.tokens}</span>
                   <strong
                     data-rank={
-                      selectedUsage.dailyTokens > 0 && selectedUsage.rank <= 3
+                      (selectedUsage.dailyCostMicroUsd ?? 0) > 0 &&
+                      selectedUsage.rank <= 3
                         ? selectedUsage.rank
                         : undefined
                     }
                   >
-                    {formatTokenCount(selectedUsage.dailyTokens, locale)}
+                    {formatMicroUsd(selectedUsage.dailyCostMicroUsd, locale)}
                   </strong>
                 </article>
                 <article>
                   <span>{usageText.weeklyTokens}</span>
-                  <strong>
-                    {selectedUsage.weeklyTokens === null
-                      ? "-"
-                      : formatTokenCount(selectedUsage.weeklyTokens, locale)}
-                  </strong>
+                  <strong>{formatMicroUsd(selectedUsage.weeklyCostMicroUsd, locale)}</strong>
                 </article>
               </div>
 
-              <section className="employee-chat-usage">
-                <h3>{usageText.chatUsage}</h3>
-                <div className="employee-chat-usage-grid">
-                  <article className="employee-chat-usage-card">
-                    <header>
-                      <div>
-                        <span aria-hidden="true" className="employee-usage-status-dot" />
-                        <strong>{usageText.dailyUsage}</strong>
-                      </div>
-                      <Badge data-quota-status={employeeDailyTokenStatus} variant="outline">
-                        {formatEmployeeQuotaStatus(employeeDailyTokenStatus, locale)}
-                      </Badge>
-                    </header>
-                    <dl className="employee-chat-usage-metrics">
-                      <div>
-                        <dt>{usageText.tokens}</dt>
-                        <dd>{formatTokenCount(selectedUsage.dailyTokens, locale)}</dd>
-                      </div>
-                      <div>
-                        <dt>{usageText.dailyLimit}</dt>
-                        <dd>
-                          {employeeTokenLimitDraft.enabled
-                            ? formatTokenCount(employeeTokenLimitDraft.limit, locale)
-                            : usageText.unlimited}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="employee-chat-usage-control">
-                      <div className="employee-token-limit-toggle">
-                        <span>{usageText.limitEnabled}</span>
-                        <Switch
-                          aria-label={usageText.limitEnabled}
-                          checked={employeeTokenLimitDraft.enabled}
-                          onCheckedChange={(checked) =>
-                            setEmployeeTokenLimitDraft((current) => ({
-                              ...current,
-                              enabled: checked
-                            }))
-                          }
-                        />
-                      </div>
-                      {employeeTokenLimitDraft.enabled ? (
-                        <div className="employee-token-limit-controls">
-                          <CompactUnitStepper
-                            ariaLabel={usageText.dailyLimit}
-                            max={EMPLOYEE_TOKEN_LIMIT_MAX / 1000}
-                            min={EMPLOYEE_TOKEN_LIMIT_MIN / 1000}
-                            onValueChange={(value) =>
-                              setEmployeeTokenLimitDraft((current) => ({
-                                ...current,
-                                enabled: true,
-                                limit: clampEmployeeTokenLimit(value * 1000)
-                              }))
-                            }
-                            step={1}
-                            unit="K"
-                            value={clampEmployeeTokenLimit(employeeTokenLimitDraft.limit) / 1000}
-                          />
-                          <input
-                            aria-label={usageText.dailyLimit}
-                            className="employee-token-limit-range"
-                            max={EMPLOYEE_TOKEN_LIMIT_MAX / 1000}
-                            min={EMPLOYEE_TOKEN_LIMIT_MIN / 1000}
-                            onChange={(event) =>
-                              setEmployeeTokenLimitDraft((current) => ({
-                                ...current,
-                                enabled: true,
-                                limit: clampEmployeeTokenLimit(
-                                  Number(event.target.value) * 1000
-                                )
-                              }))
-                            }
-                            step={1}
-                            type="range"
-                            value={clampEmployeeTokenLimit(employeeTokenLimitDraft.limit) / 1000}
-                          />
-                        </div>
-                      ) : (
-                        <span className="employee-token-limit-unlimited">
-                          {usageText.unlimited}
-                        </span>
-                      )}
-                      <Button disabled type="button">
-                        {usageText.weeklyUnavailable}
-                      </Button>
-                    </div>
-                  </article>
-
-                  <article className="employee-chat-usage-card" data-unavailable="true">
-                    <header>
-                      <div>
-                        <span aria-hidden="true" className="employee-usage-status-dot" />
-                        <strong>{usageText.weeklyUsage}</strong>
-                      </div>
-                      <Badge variant="outline">{usageText.weeklyUnavailable}</Badge>
-                    </header>
-                    <dl className="employee-chat-usage-metrics">
-                      <div>
-                        <dt>{usageText.weeklyTokens}</dt>
-                        <dd>
-                          {selectedUsage.weeklyTokens === null
-                            ? "-"
-                            : formatTokenCount(selectedUsage.weeklyTokens, locale)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>{usageText.weeklyLimit}</dt>
-                        <dd>-</dd>
-                      </div>
-                    </dl>
-                    <div className="employee-chat-usage-control employee-weekly-usage-control">
-                      <strong>{usageText.weeklyLimit}</strong>
-                      <div aria-hidden="true" className="employee-weekly-limit-placeholder">
-                        <span>-</span>
-                        <span />
-                      </div>
-                      <Button disabled type="button">
-                        {usageText.weeklyUnavailable}
-                      </Button>
-                    </div>
-                  </article>
-                </div>
-              </section>
+              <EmployeeCostPolicyEditor
+                employee={selectedUsage}
+                key={`${selectedUsage.employeeId}:${selectedUsage.costPolicy?.policy.version ?? "unavailable"}`}
+                locale={locale}
+                onSaved={() => router.refresh()}
+                routeTenantId={model.controlPlaneTenantId}
+              />
 
               <section className="employee-usage-projects">
                 <div className="employee-usage-section-heading">
@@ -3072,6 +2975,277 @@ export function EmployeeControlManagement({
   );
 }
 
+function EmployeeCostPolicyEditor({
+  employee,
+  locale,
+  onSaved,
+  routeTenantId
+}: {
+  employee: EmployeeUsageRow;
+  locale: Locale;
+  onSaved: () => void;
+  routeTenantId: string;
+}) {
+  const text = employeeUsageText[locale];
+  const costPolicyItem = employee.costPolicy;
+  const sourcePolicy = costPolicyItem?.policy ?? null;
+  const [policy, setPolicy] = useState<EmployeeCostPolicy | null>(sourcePolicy);
+  const [draft, setDraft] = useState<EmployeeCostPolicyDraft>(() =>
+    buildEmployeeCostPolicyDraft(sourcePolicy)
+  );
+  const [pending, setPending] = useState(false);
+  const [submitState, setSubmitState] = useState<SubmitState>({
+    message: "",
+    status: "idle"
+  });
+
+  if (!costPolicyItem || !policy) {
+    return (
+      <section className="employee-chat-usage">
+        <h3>{text.chatUsage}</h3>
+        <Alert variant="destructive">
+          <AlertDescription>{text.costLoadFailed}</AlertDescription>
+        </Alert>
+      </section>
+    );
+  }
+
+  const limitCards = [
+    {
+      defaultLimitUsd: EMPLOYEE_DAILY_COST_LIMIT_DEFAULT_USD,
+      draft: draft.daily,
+      limit: policy.daily,
+      period: costPolicyItem.daily,
+      periodKey: "daily" as const,
+      title: text.dailyUsage,
+      toggleLabel: text.limitEnabled,
+      usageLabel: text.tokens,
+      limitLabel: text.dailyLimit
+    },
+    {
+      defaultLimitUsd: EMPLOYEE_WEEKLY_COST_LIMIT_DEFAULT_USD,
+      draft: draft.weekly,
+      limit: policy.weekly,
+      period: costPolicyItem.weekly,
+      periodKey: "weekly" as const,
+      title: text.weeklyUsage,
+      toggleLabel: text.weeklyLimitEnabled,
+      usageLabel: text.weeklyTokens,
+      limitLabel: text.weeklyLimit
+    }
+  ];
+  const changed =
+    draft.enforcementMode !== policy.enforcementMode ||
+    !sameEmployeeCostLimit(draft.daily, policy.daily) ||
+    !sameEmployeeCostLimit(draft.weekly, policy.weekly);
+
+  async function submitCostPolicy() {
+    if (!policy || pending) {
+      return;
+    }
+    setPending(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    try {
+      const response = await fetch("/api/control-plane/employees", {
+        body: JSON.stringify({
+          action: "updateCostPolicy",
+          values: {
+            daily: toEmployeeCostLimit(draft.daily),
+            employeeId: employee.employeeId,
+            enforcementMode: draft.enforcementMode,
+            expectedVersion: policy.version,
+            tenantId: routeTenantId,
+            warningThresholdPercent: policy.warningThresholdPercent,
+            weekly: toEmployeeCostLimit(draft.weekly)
+          }
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response
+        .json()
+        .catch(() => ({}))) as EmployeeCostPolicyResponsePayload;
+      if (!response.ok) {
+        setSubmitState({
+          message: response.status === 409 ? text.limitConflict : payload.error ?? text.limitSaveFailed,
+          status: "error"
+        });
+        if (response.status === 409) {
+          onSaved();
+        }
+        return;
+      }
+
+      const saved = parseEmployeeCostPolicy(
+        payload.costPolicy,
+        routeTenantId,
+        employee.employeeId
+      );
+      if (!saved) {
+        setSubmitState({ message: text.limitSaveFailed, status: "error" });
+        return;
+      }
+
+      setPolicy(saved);
+      setDraft(buildEmployeeCostPolicyDraft(saved));
+      setSubmitState({ message: text.limitSaved, status: "success" });
+      onSaved();
+    } catch {
+      setSubmitState({ message: text.limitSaveFailed, status: "error" });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <section className="employee-chat-usage">
+      <div className="employee-usage-section-heading">
+        <div>
+          <h3>{text.chatUsage}</h3>
+          <p className="employee-cost-policy-description">
+            {draft.enforcementMode === "restrict_high_cost"
+              ? text.restrictionMode
+              : text.monitorMode}
+          </p>
+        </div>
+        <label className="employee-cost-policy-mode">
+          <span>{locale === "ko" ? "한도 도달 시" : "When limit is reached"}</span>
+          <select
+            aria-label={locale === "ko" ? "비용 한도 집행 방식" : "Cost limit enforcement"}
+            disabled={pending}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                enforcementMode: event.target.value as EmployeeCostPolicyDraft["enforcementMode"]
+              }))
+            }
+            value={draft.enforcementMode}
+          >
+            <option value="restrict_high_cost">
+              {locale === "ko" ? "고비용 모델 제한" : "Restrict high-cost models"}
+            </option>
+            <option value="monitor">
+              {locale === "ko" ? "모니터링만" : "Monitor only"}
+            </option>
+          </select>
+        </label>
+      </div>
+
+      {!costPolicyItem.enforcementReady ? (
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.ledgerPending}. {locale === "ko"
+              ? draft.enforcementMode === "restrict_high_cost"
+                ? "현재 화면에는 확정 비용만 표시되며 실제 라우팅 제한은 다음 원장 연결 단계부터 적용됩니다."
+                : "현재 화면에는 확정 비용만 표시됩니다. 원장 연결 후에도 라우팅은 제한하지 않고 모니터링만 합니다."
+              : draft.enforcementMode === "restrict_high_cost"
+                ? "Only confirmed cost is shown; routing restrictions begin after the ledger is connected."
+                : "Only confirmed cost is shown. Routing remains monitor-only after the ledger is connected."}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {submitState.message ? (
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="employee-chat-usage-grid">
+        {limitCards.map((card) => {
+          const state = costPolicyItem.enforcementReady
+            ? card.period.state
+            : card.limit.enabled
+              ? "pending_ledger"
+              : "not_configured";
+          return (
+            <article className="employee-chat-usage-card" key={card.periodKey}>
+              <header>
+                <div>
+                  <span aria-hidden="true" className="employee-usage-status-dot" />
+                  <strong>{card.title}</strong>
+                </div>
+                <Badge data-cost-policy-state={state} variant="outline">
+                  {text.exposureState}: {formatEmployeeCostPolicyState(state, locale)}
+                </Badge>
+              </header>
+              <dl className="employee-chat-usage-metrics">
+                <div>
+                  <dt>{card.usageLabel}</dt>
+                  <dd>{formatMicroUsd(card.period.confirmedCostMicroUsd, locale)}</dd>
+                </div>
+                <div>
+                  <dt>{card.limitLabel}</dt>
+                  <dd>
+                    {card.draft.enabled
+                      ? formatUsd(card.draft.limitUsd, locale)
+                      : text.limitDisabled}
+                  </dd>
+                </div>
+              </dl>
+              <div className="employee-chat-usage-control">
+                <div className="employee-token-limit-toggle">
+                  <span>{card.toggleLabel}</span>
+                  <Switch
+                    aria-label={card.toggleLabel}
+                    checked={card.draft.enabled}
+                    disabled={pending}
+                    onCheckedChange={(enabled) =>
+                      setDraft((current) => ({
+                        ...current,
+                        [card.periodKey]: {
+                          ...current[card.periodKey],
+                          enabled,
+                          limitUsd:
+                            enabled && current[card.periodKey].limitUsd <= 0
+                              ? card.defaultLimitUsd
+                              : current[card.periodKey].limitUsd
+                        }
+                      }))
+                    }
+                  />
+                </div>
+                {card.draft.enabled ? (
+                  <CompactUnitStepper
+                    ariaLabel={card.limitLabel}
+                    decimals={6}
+                    disabled={pending}
+                    max={EMPLOYEE_COST_LIMIT_MAX_USD}
+                    min={EMPLOYEE_COST_LIMIT_MIN_USD}
+                    onValueChange={(limitUsd) =>
+                      setDraft((current) => ({
+                        ...current,
+                        [card.periodKey]: { enabled: true, limitUsd }
+                      }))
+                    }
+                    step={1}
+                    unit=" USD"
+                    value={card.draft.limitUsd}
+                  />
+                ) : (
+                  <span className="employee-token-limit-unlimited">
+                    {text.limitDisabled}
+                  </span>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="modal-actions employee-cost-policy-actions">
+        <Button
+          disabled={pending || !changed}
+          onClick={() => void submitCostPolicy()}
+          type="button"
+        >
+          <Save aria-hidden="true" />
+          {pending ? "..." : text.saveLimit}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 function upsertAssignment(
   assignments: ProjectEmployeeAssignmentRecord[],
   nextAssignment: ProjectEmployeeAssignmentRecord
@@ -3089,16 +3263,53 @@ function upsertAssignment(
   );
 }
 
-function clampEmployeeTokenLimit(value: number) {
-  return Math.min(
-    EMPLOYEE_TOKEN_LIMIT_MAX,
-    Math.max(EMPLOYEE_TOKEN_LIMIT_MIN, Math.round(value))
+function buildEmployeeCostPolicyDraft(
+  policy: EmployeeCostPolicy | null
+): EmployeeCostPolicyDraft {
+  return {
+    daily: {
+      enabled: policy?.daily.enabled ?? false,
+      limitUsd: (policy?.daily.limitMicroUsd ?? 0) / 1_000_000
+    },
+    enforcementMode: policy?.enforcementMode ?? "monitor",
+    weekly: {
+      enabled: policy?.weekly.enabled ?? false,
+      limitUsd: (policy?.weekly.limitMicroUsd ?? 0) / 1_000_000
+    }
+  };
+}
+
+function sameEmployeeCostLimit(
+  draft: EmployeeCostLimitDraft,
+  current: EmployeeCostLimit
+) {
+  return (
+    draft.enabled === current.enabled &&
+    (!draft.enabled || toMicroUsd(draft.limitUsd) === current.limitMicroUsd)
+  );
+}
+
+function toEmployeeCostLimit(draft: EmployeeCostLimitDraft): EmployeeCostLimit {
+  return {
+    enabled: draft.enabled,
+    limitMicroUsd:
+      !draft.enabled && draft.limitUsd <= 0 ? 0 : toMicroUsd(draft.limitUsd)
+  };
+}
+
+function toMicroUsd(valueUsd: number) {
+  return Math.round(
+    Math.min(
+      EMPLOYEE_COST_LIMIT_MAX_USD,
+      Math.max(EMPLOYEE_COST_LIMIT_MIN_USD, valueUsd)
+    ) * 1_000_000
   );
 }
 
 function CompactUnitStepper({
   ariaLabel,
   decimals = 0,
+  disabled = false,
   max,
   min,
   onValueChange,
@@ -3135,6 +3346,7 @@ function CompactUnitStepper({
         aria-valuemax={max}
         aria-valuemin={min}
         aria-valuenow={value}
+        disabled={disabled}
         inputMode={decimals > 0 ? "decimal" : "numeric"}
         onBlur={() => {
           const numericValue = parseCompactStepperInput(draftValue, unit);
@@ -3161,7 +3373,7 @@ function CompactUnitStepper({
       <span className="employee-policy-stepper-buttons">
         <button
           aria-label={`${ariaLabel} +${step}${unit}`}
-          disabled={value >= max}
+          disabled={disabled || value >= max}
           onClick={() => changeBy(1)}
           type="button"
         >
@@ -3169,7 +3381,7 @@ function CompactUnitStepper({
         </button>
         <button
           aria-label={`${ariaLabel} -${step}${unit}`}
-          disabled={value <= min}
+          disabled={disabled || value <= min}
           onClick={() => changeBy(-1)}
           type="button"
         >
@@ -3233,24 +3445,6 @@ function formatTokenCount(value: number, locale: Locale) {
   }).format(Math.max(0, value));
 }
 
-function formatEmployeeQuotaStatus(status: ProjectEmployeeQuotaStatus, locale: Locale) {
-  const labels: Record<Locale, Record<ProjectEmployeeQuotaStatus, string>> = {
-    en: {
-      exceeded: "Exceeded",
-      not_configured: "No quota",
-      warning: "Near limit",
-      within_limit: "Within limit"
-    },
-    ko: {
-      exceeded: "한도 초과",
-      not_configured: "한도 없음",
-      warning: "한도 임박",
-      within_limit: "한도 내"
-    }
-  };
-  return labels[locale][status];
-}
-
 function formatTokenLimit(
   value: number,
   locale: Locale,
@@ -3264,6 +3458,44 @@ function formatTokenLimit(
     return `${formatTokenCount(value / 1000, locale)}K`;
   }
   return formatTokenCount(value, locale);
+}
+
+function formatMicroUsd(value: number | null, locale: Locale) {
+  return value === null
+    ? "-"
+    : formatMicroUsdCurrency(value, locale === "ko" ? "ko-KR" : "en-US");
+}
+
+function formatUsd(value: number, locale: Locale) {
+  return new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    currency: "USD",
+    maximumFractionDigits: value > 0 && value < 1 ? 6 : 2,
+    minimumFractionDigits: 0,
+    style: "currency"
+  }).format(Number.isFinite(value) ? Math.max(0, value) : 0);
+}
+
+function formatEmployeeCostPolicyState(
+  state: EmployeeCostPolicyState,
+  locale: Locale
+) {
+  const labels: Record<Locale, Record<EmployeeCostPolicyState, string>> = {
+    en: {
+      exceeded: "Limit reached",
+      normal: "Within limit",
+      not_configured: "No limit",
+      pending_ledger: "Ledger pending",
+      warning: "Near limit"
+    },
+    ko: {
+      exceeded: "한도 도달",
+      normal: "한도 내",
+      not_configured: "한도 없음",
+      pending_ledger: "원장 연결 전",
+      warning: "한도 임박"
+    }
+  };
+  return labels[locale][state];
 }
 
 function formatBudgetUsd(value: number) {

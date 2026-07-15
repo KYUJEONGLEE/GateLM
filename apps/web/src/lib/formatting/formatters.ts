@@ -65,6 +65,17 @@ export function formatPercent(value: number) {
   }).format(value);
 }
 
+export function formatMicroUsdCurrency(value: number, locale = "en-US") {
+  const usd = (Number.isFinite(value) ? Math.max(0, value) : 0) / 1_000_000;
+
+  return new Intl.NumberFormat(locale, {
+    currency: "USD",
+    maximumFractionDigits: usd > 0 && usd < 1 ? 6 : 2,
+    minimumFractionDigits: 0,
+    style: "currency"
+  }).format(usd);
+}
+
 export function formatUsd(value: string) {
   return `$${value}`;
 }

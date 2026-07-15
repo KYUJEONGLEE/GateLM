@@ -17361,6 +17361,11 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   height: 350px;
 }
 
+.employee-usage-ranking .employee-cost-ranking-chart {
+  width: 100%;
+  height: 320px;
+}
+
 .employee-usage-ranking-empty {
   display: grid;
   min-height: 220px;
@@ -17778,6 +17783,47 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 .employee-chat-usage {
   display: grid;
   gap: 16px;
+}
+
+.employee-cost-policy-description {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+  font-weight: var(--font-weight-medium);
+}
+
+.employee-cost-policy-mode {
+  display: grid;
+  min-width: min(260px, 100%);
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
+}
+
+.employee-cost-policy-mode select {
+  min-height: 38px;
+  padding: 0 34px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.employee-cost-policy-actions {
+  padding-top: 0;
+}
+
+.employee-chat-usage-card [data-cost-policy-state="warning"],
+.employee-chat-usage-card [data-cost-policy-state="pending_ledger"] {
+  border-color: color-mix(in srgb, var(--warning-indicator) 48%, var(--border));
+  color: var(--warning-indicator);
+}
+
+.employee-chat-usage-card [data-cost-policy-state="exceeded"] {
+  border-color: color-mix(in srgb, var(--destructive) 48%, var(--border));
+  color: var(--destructive);
 }
 
 .employee-chat-usage-grid {
