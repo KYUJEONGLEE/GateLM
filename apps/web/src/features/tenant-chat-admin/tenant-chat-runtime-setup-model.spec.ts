@@ -124,10 +124,26 @@ test("degraded routing selections render unavailable options instead of an avail
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
 
-  expect(source.match(/<UnavailableModelOption/g)).toHaveLength(2);
+  expect(source.match(/<UnavailableModelOption/g)).toHaveLength(1);
+  expect(source).toContain("function TenantRoutingModelSelect");
   expect(source).toContain('value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}');
   expect(source).toContain('<UnavailableModelOption locale={locale} models={models} value={value} />');
   expect(source).toContain('return <option disabled value={value}>{copy[locale].modelUnavailable}</option>');
   expect(source).toContain('modelUnavailable: "Selected model unavailable"');
   expect(source).toContain('modelUnavailable: "선택된 모델 사용 불가"');
+});
+
+test("Chat App routing reuses the original routing policy presentation", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source).toContain('className="console-content management-line-content tenant-management-content"');
+  expect(source).toContain('className="tenant-routing-enable-card"');
+  expect(source).toContain('className="tenant-routing-switch"');
+  expect(source).toContain('className="tenant-routing-model-card"');
+  expect(source).toContain('className="tenant-routing-table"');
+  expect(source).toContain('className="tenant-routing-model-choice-copy"');
+  expect(source).toContain("MessageSquareMore");
+  expect(source).toContain("BrainCircuit");
+  expect(source).toContain("ProviderFamilyIcon");
 });

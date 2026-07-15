@@ -1,15 +1,27 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, LoaderCircle, MessageSquareText, PlugZap, RefreshCw, Save } from "lucide-react";
+import {
+  AlertTriangle,
+  BrainCircuit,
+  Check,
+  Code2,
+  FileText,
+  Languages,
+  LoaderCircle,
+  MessageSquareMore,
+  MessageSquareText,
+  PlugZap,
+  RefreshCw
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Switch } from "@/components/ui/switch";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { getTenantChatReturnPath } from "@/features/provider-connections/tenant-chat-setup-return";
 import type {
   TenantChatAdminRuntimeSetup,
@@ -19,7 +31,6 @@ import type {
   TenantChatRoutingMode
 } from "@/lib/control-plane/tenant-chat-runtime-types";
 import type { Locale } from "@/lib/i18n/locale";
-import { cn } from "@/lib/utils";
 
 type Props = {
   initialLoadError: string | null;
@@ -30,21 +41,33 @@ type Props = {
   tenantId: string;
 };
 
-const categories: Array<{ id: TenantChatRoutingCategory; en: string; ko: string }> = [
-  { id: "general", en: "General", ko: "일반" },
-  { id: "code", en: "Code", ko: "코드" },
-  { id: "translation", en: "Translation", ko: "번역" },
-  { id: "summarization", en: "Summarization", ko: "요약" },
-  { id: "reasoning", en: "Reasoning", ko: "추론" }
-];
+const categories = [
+  { icon: MessageSquareMore, id: "general", en: "General", ko: "일반" },
+  { icon: Code2, id: "code", en: "Code", ko: "코드" },
+  { icon: Languages, id: "translation", en: "Translation", ko: "번역" },
+  { icon: FileText, id: "summarization", en: "Summarization", ko: "요약" },
+  { icon: BrainCircuit, id: "reasoning", en: "Reasoning", ko: "추론" }
+] satisfies Array<{
+  icon: typeof MessageSquareMore;
+  id: TenantChatRoutingCategory;
+  en: string;
+  ko: string;
+}>;
 const difficulties: Array<{ id: TenantChatRoutingDifficulty; en: string; ko: string }> = [
   { id: "simple", en: "Simple", ko: "단순" },
-  { id: "complex", en: "Complex", ko: "복잡" }
+  { id: "complex", en: "Complex", ko: "복합" }
 ];
+
+type RoutingModelOption = TenantChatAdminRuntimeSetup["providers"][number]["models"][number] & {
+  label: string;
+  providerFamily: string;
+  providerName: string;
+};
 
 const copy = {
   en: {
     active: "Active runtime",
+    autoLabel: "Auto",
     auto: "Automatic routing",
     autoDescription: "Classify messages into five workloads and simple or complex, then use the model assigned to that cell.",
     breadcrumb: "Chat App",
@@ -53,6 +76,7 @@ const copy = {
     description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing policy.",
     loadError: "The Chat App policy could not be loaded.",
     manual: "Fixed model",
+    manualLabel: "Manual",
     manualDescription: "Use one model for every message while preserving the automatic routing matrix for later.",
     model: "Model",
     modelUnavailable: "Selected model unavailable",
@@ -63,6 +87,8 @@ const copy = {
     publishing: "Publishing…",
     ready: "The Chat App routing policy is active.",
     refresh: "Try again",
+    reset: "Reset",
+    resetMessage: "Unsaved changes were reset to the active routing policy.",
     routing: "Routing policy",
     routingDescription: "Each cell is an explicit modelRef assignment. Difficulty is independent from budget or quota state.",
     title: "Chat App",
@@ -70,6 +96,7 @@ const copy = {
   },
   ko: {
     active: "현재 적용 중",
+    autoLabel: "자동",
     auto: "자동 라우팅",
     autoDescription: "메시지를 5개 작업 유형과 단순·복잡 난이도로 분류한 뒤 해당 셀에 지정한 모델을 사용합니다.",
     breadcrumb: "채팅 앱",
@@ -78,6 +105,7 @@ const copy = {
     description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 정책을 관리합니다.",
     loadError: "채팅 앱 정책을 불러오지 못했습니다.",
     manual: "고정 모델",
+    manualLabel: "수동",
     manualDescription: "모든 메시지에 하나의 모델을 사용합니다. 자동 라우팅 매트릭스는 그대로 보존됩니다.",
     model: "모델",
     modelUnavailable: "선택된 모델 사용 불가",
@@ -88,6 +116,8 @@ const copy = {
     publishing: "발행 중…",
     ready: "채팅 앱 라우팅 정책이 적용되었습니다.",
     refresh: "다시 시도",
+    reset: "초기화",
+    resetMessage: "저장하지 않은 변경사항을 현재 라우팅 정책으로 되돌렸습니다.",
     routing: "라우팅 정책",
     routingDescription: "각 셀은 명시적인 modelRef 배정입니다. 난이도는 예산 또는 quota 상태와 독립적입니다.",
     title: "채팅 앱",
@@ -109,14 +139,19 @@ export function ChatAppRoutingSetup({
   const [loadError, setLoadError] = useState(initialLoadError);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
-  const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
+  const [feedback, setFeedback] = useState<{ message: string; error: boolean; published?: boolean } | null>(null);
   const initialRef = firstModelRef(initialSetup);
   const [routingMode, setRoutingMode] = useState<TenantChatRoutingMode>(initialSetup?.activeSnapshot?.routingMode ?? "auto");
   const [manualModelRef, setManualModelRef] = useState(initialSetup?.activeSnapshot?.manualModelRef ?? initialRef);
   const [routes, setRoutes] = useState<TenantChatRoutingMatrix>(initialSetup?.activeSnapshot?.routes ?? uniformRoutingMatrix(initialRef));
 
   const models = useMemo(
-    () => (setup?.providers ?? []).flatMap((provider) => provider.models.map((model) => ({ ...model, label: `${provider.displayName} · ${model.modelKey}` }))),
+    () => (setup?.providers ?? []).flatMap((provider) => provider.models.map((model) => ({
+      ...model,
+      label: `${provider.displayName} / ${model.modelKey}`,
+      providerFamily: provider.providerFamily,
+      providerName: provider.displayName
+    }))),
     [setup]
   );
   const providerManagementHref = `/tenants/${encodeURIComponent(tenantId)}/provider-connections?${new URLSearchParams({
@@ -167,7 +202,7 @@ export function ChatAppRoutingSetup({
       setFeedback({ error: true, message: readPayloadError(payload, "Chat App routing policy publish failed.") });
     } else {
       applySetup(payload, setSetup, setRoutingMode, setManualModelRef, setRoutes);
-      setFeedback({ error: false, message: text.ready });
+      setFeedback({ error: false, message: text.ready, published: true });
     }
     setPending(false);
   }
@@ -180,87 +215,177 @@ export function ChatAppRoutingSetup({
     setFeedback(null);
   }
 
+  function changeMode(autoRoutingEnabled: boolean) {
+    setRoutingMode(autoRoutingEnabled ? "auto" : "manual");
+    setFeedback(null);
+  }
+
+  function resetDraft() {
+    if (setup) {
+      applySetup(setup, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+    }
+    setFeedback({ error: false, message: text.resetMessage });
+  }
+
   const readiness = setup?.readiness ?? "degraded";
   const refs = new Set(models.map((model) => model.modelRef));
   const canPublish = refs.has(manualModelRef) && matrixUsesOnly(routes, refs);
 
   return (
-    <main className="console-content management-line-content space-y-5">
-      <Breadcrumb items={[{ label: locale === "ko" ? "관리" : "Management" }, { label: text.breadcrumb }]} />
-      <section className="dashboard-hero flex flex-wrap items-start justify-between gap-4">
-        <div><h2>{text.title}</h2><p className="mt-1 max-w-3xl text-sm text-muted-foreground">{text.description}</p></div>
-        <ReadinessBadge readiness={readiness} locale={locale} />
-      </section>
+    <main className="console-content management-line-content tenant-management-content">
+      <header className="project-page-header">
+        <h2>{text.title}</h2>
+      </header>
+      <div className="tenant-page-header-rule" aria-hidden="true" />
+      <div className="policy-section-toolbar">
+        <div aria-label={text.breadcrumb} className="policy-section-tabs tenant-management-tabs" role="tablist">
+          <button aria-controls="chat-app-routing-panel" aria-selected="true" data-active="true" id="chat-app-routing-tab" role="tab" type="button">{text.routing}</button>
+        </div>
+        <div className="policy-actions flex flex-wrap items-center gap-2">
+          <ReadinessBadge readiness={readiness} locale={locale} />
+          {setup?.activeSnapshot ? <Badge variant="outline">{text.version}{setup.activeSnapshot.version}</Badge> : null}
+        </div>
+      </div>
 
-      {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
-      {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
-      {feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <CheckCircle2 />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
+      <div aria-labelledby="chat-app-routing-tab" className="policy-tab-panel space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
+        {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
+        {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
+        {feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <Check />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
 
-      {!setup?.providers.length ? (
-        <EmptyState action={<Link className={buttonVariants()} href={providerManagementHref}><PlugZap />{text.configureProvider}</Link>} description={text.noProvider} icon={PlugZap} title={text.title} />
-      ) : models.length === 0 ? (
-        <EmptyState action={<Link className={buttonVariants()} href={providerManagementHref}>{text.configureProvider}</Link>} description={text.noModel} icon={MessageSquareText} title={text.model} />
-      ) : (
-        <div className="space-y-5">
-          <Card>
-            <CardHeader><CardTitle>{text.routing}</CardTitle><CardDescription>{text.routingDescription}</CardDescription></CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={text.routing}>
-                {([["auto", text.auto, text.autoDescription], ["manual", text.manual, text.manualDescription]] as const).map(([mode, label, description]) => (
-                  <button aria-checked={routingMode === mode} className={cn("rounded-xl border p-4 text-left transition-colors hover:bg-muted/60", routingMode === mode && "border-primary bg-primary/5")} key={mode} onClick={() => setRoutingMode(mode)} role="radio" type="button">
-                    <strong className="block">{label}</strong><span className="mt-1 block text-xs text-muted-foreground">{description}</span>
-                  </button>
-                ))}
+        {!setup?.providers.length ? (
+          <EmptyState action={<Link className={buttonVariants()} href={providerManagementHref}><PlugZap />{text.configureProvider}</Link>} description={text.noProvider} icon={PlugZap} title={text.title} />
+        ) : models.length === 0 ? (
+          <EmptyState action={<Link className={buttonVariants()} href={providerManagementHref}>{text.configureProvider}</Link>} description={text.noModel} icon={MessageSquareText} title={text.model} />
+        ) : (
+          <form className="tenant-routing-panel" onSubmit={(event) => { event.preventDefault(); void publish(); }}>
+            <section className="tenant-routing-enable-card" aria-labelledby="tenant-auto-routing-title">
+              <div>
+                <h3 id="tenant-auto-routing-title">{text.auto}</h3>
+                <p>{text.autoDescription}</p>
               </div>
+              <div className="tenant-routing-switch-control">
+                <Switch
+                  aria-label={text.auto}
+                  checked={routingMode === "auto"}
+                  className="tenant-routing-switch"
+                  onCheckedChange={changeMode}
+                />
+                <span>{routingMode === "auto" ? text.autoLabel : text.manualLabel}</span>
+              </div>
+            </section>
 
-              <ModelSelect label={text.manual} locale={locale} models={models} onChange={setManualModelRef} value={manualModelRef} />
+            <section className="tenant-routing-enable-card tenant-routing-default-card">
+              <div>
+                <h3>{text.manual}</h3>
+                <p>{text.manualDescription}</p>
+              </div>
+              <TenantRoutingModelSelect
+                ariaLabel={text.manual}
+                className="tenant-routing-model-choice-prominent"
+                locale={locale}
+                models={models}
+                onChange={(value) => { setManualModelRef(value); setFeedback(null); }}
+                value={manualModelRef}
+              />
+            </section>
 
-              <div className={cn("overflow-x-auto", routingMode === "manual" && "opacity-60")}>
-                <table className="w-full min-w-[46rem] border-separate border-spacing-0 text-sm">
-                  <thead><tr><th className="border-b p-3 text-left">{locale === "ko" ? "작업 유형" : "Workload"}</th>{difficulties.map((item) => <th className="border-b p-3 text-left" key={item.id}>{item[locale]}</th>)}</tr></thead>
-                  <tbody>{categories.map((category) => (
-                    <tr key={category.id}><th className="border-b p-3 text-left font-medium">{category[locale]}</th>{difficulties.map((difficulty) => (
-                      <td className="border-b p-3" key={difficulty.id}>
-                        <select
-                          aria-label={`${category[locale]} ${difficulty[locale]}`}
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                          disabled={routingMode === "manual"}
-                          onChange={(event) => updateRoute(category.id, difficulty.id, event.target.value)}
-                          value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
-                        >
-                          <UnavailableModelOption
+            {routingMode === "auto" ? (
+              <section className="tenant-routing-model-card" aria-labelledby="tenant-routing-model-title">
+                <header className="tenant-routing-model-heading">
+                  <div className="tenant-routing-model-heading-copy">
+                    <h3 id="tenant-routing-model-title">{text.routing}</h3>
+                    <p>{text.routingDescription}</p>
+                  </div>
+                </header>
+                <div aria-label={text.routing} className="tenant-routing-table" role="table">
+                  <div className="tenant-routing-table-head" role="row">
+                    <span role="columnheader">{locale === "ko" ? "카테고리" : "Category"}</span>
+                    {difficulties.map((difficulty) => <span key={difficulty.id} role="columnheader">{difficulty[locale]}</span>)}
+                  </div>
+                  {categories.map((category) => {
+                    const CategoryIcon = category.icon;
+                    return (
+                      <div className="tenant-routing-table-row" key={category.id} role="row">
+                        <div className="tenant-routing-category" role="rowheader">
+                          <CategoryIcon aria-hidden="true" />
+                          <span>{category[locale]}</span>
+                        </div>
+                        {difficulties.map((difficulty) => (
+                          <RoutingCellEditor
+                            ariaLabel={`${category[locale]} ${difficulty[locale]}`}
+                            columnLabel={difficulty[locale]}
+                            key={difficulty.id}
                             locale={locale}
                             models={models}
+                            onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
                             value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
                           />
-                          {models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}
-                        </select>
-                      </td>
-                    ))}</tr>
-                  ))}</tbody>
-                </table>
-              </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
-              <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{models.some((model) => model.pricingStatus === "unavailable") ? text.priceUnknown : ""}</p><Button disabled={!canPublish || pending || loading} onClick={() => void publish()}>{pending ? <LoaderCircle className="animate-spin" /> : <Save />}{pending ? text.publishing : text.publish}</Button></div>
-            </CardContent>
-          </Card>
+            {models.some((model) => model.pricingStatus === "unavailable") ? (
+              <div className="tenant-routing-mock-warning"><AlertTriangle aria-hidden="true" /><div><strong>{text.model}</strong><span>{text.priceUnknown}</span></div></div>
+            ) : null}
 
-          {setup.activeSnapshot ? <Card className="border-success-border"><CardHeader><CardTitle className="flex items-center gap-2"><CheckCircle2 className="size-4 text-success" />{text.active}</CardTitle><CardDescription>{text.version}{setup.activeSnapshot.version}</CardDescription></CardHeader><CardContent className="flex flex-wrap gap-2 text-sm"><Badge variant="success">{setup.activeSnapshot.routingMode}</Badge><Badge variant={setup.activeSnapshot.pricingStatus === "current" ? "success" : "warning"}>{setup.activeSnapshot.pricingStatus}</Badge><Badge variant="outline">policy v{setup.activeSnapshot.policyVersion}</Badge><Badge variant="outline">pricing v{setup.activeSnapshot.pricingVersion}</Badge><span className="w-full text-xs text-muted-foreground">{formatPublishedAt(setup.activeSnapshot.publishedAt, locale)}</span></CardContent></Card> : null}
-        </div>
-      )}
+            <div className="tenant-routing-actions">
+              <button className="secondary-button tenant-routing-reset-button" disabled={pending || loading} onClick={resetDraft} type="button">{text.reset}</button>
+              <button className="primary-button tenant-routing-save-button" data-save-confirmed={feedback?.published ? "true" : undefined} disabled={!canPublish || pending || loading} type="submit">
+                {pending ? <LoaderCircle className="animate-spin" /> : feedback?.published ? <Check aria-hidden="true" /> : null}
+                {pending ? text.publishing : feedback?.published ? text.active : text.publish}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </main>
   );
 }
 
-function ModelSelect({ label, locale, models, onChange, value }: {
-  label: string;
+function RoutingCellEditor({ ariaLabel, columnLabel, locale, models, onChange, value }: {
+  ariaLabel: string;
+  columnLabel: string;
   locale: Locale;
-  models: Array<{ label: string; modelRef: string; pricing: { inputMicroUsdPerMillionTokens: number; outputMicroUsdPerMillionTokens: number } | null; pricingStatus: "available" | "unavailable" }>;
+  models: RoutingModelOption[];
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <div className="tenant-routing-route tenant-routing-model-ref-cell" data-column-label={columnLabel} role="cell">
+      <TenantRoutingModelSelect ariaLabel={ariaLabel} locale={locale} models={models} onChange={onChange} value={value} />
+    </div>
+  );
+}
+
+function TenantRoutingModelSelect({ ariaLabel, className, locale, models, onChange, value }: {
+  ariaLabel: string;
+  className?: string;
+  locale: Locale;
+  models: RoutingModelOption[];
   onChange: (value: string) => void;
   value: string;
 }) {
   const selected = models.find((model) => model.modelRef === value);
-  return <div className="space-y-2"><label className="text-sm font-medium" htmlFor="chat-app-manual-model">{label}</label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" id="chat-app-manual-model" onChange={(event) => onChange(event.target.value)} value={value}><UnavailableModelOption locale={locale} models={models} value={value} />{models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}</select>{selected?.pricing ? <p className="text-xs text-muted-foreground">input {formatPrice(selected.pricing.inputMicroUsdPerMillionTokens, locale)} · output {formatPrice(selected.pricing.outputMicroUsdPerMillionTokens, locale)}</p> : selected?.pricingStatus === "unavailable" ? <p className="text-xs text-warning-text">{copy[locale].priceUnknown}</p> : null}</div>;
+  return (
+    <label className={`tenant-routing-model-choice ${className ?? ""}`.trim()}>
+      <ProviderFamilyIcon
+        className="tenant-routing-provider-icon tenant-routing-provider-icon-large"
+        family={selected?.providerFamily ?? "unknown"}
+        size={36}
+      />
+      <span className="tenant-routing-model-choice-copy">
+        <span className="tenant-routing-model-provider">{selected?.providerName ?? copy[locale].modelUnavailable}</span>
+        <select aria-label={ariaLabel} onChange={(event) => onChange(event.target.value)} value={value}>
+          <UnavailableModelOption locale={locale} models={models} value={value} />
+          {models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}
+        </select>
+      </span>
+    </label>
+  );
 }
 
 function UnavailableModelOption({ locale, models, value }: {
@@ -309,13 +434,6 @@ function ReadinessBadge({ readiness, locale }: { readiness: TenantChatAdminRunti
   return <Badge variant={readiness === "ready" ? "success" : readiness === "degraded" ? "destructive" : "warning"}>{labels[readiness][locale]}</Badge>;
 }
 
-function formatPrice(value: number, locale: Locale) {
-  return `${new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", { currency: "USD", maximumFractionDigits: 4, style: "currency" }).format(value / 1_000_000)} / 1M`;
-}
-function formatPublishedAt(value: string, locale: Locale) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
 function readPayloadError(payload: unknown, fallback: string) {
   const error = payload && typeof payload === "object" ? (payload as Record<string, unknown>).error : null;
   return typeof error === "string" && error.trim() ? error : fallback;
