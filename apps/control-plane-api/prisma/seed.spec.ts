@@ -462,6 +462,7 @@ describe('Control Plane demo seed baseline', () => {
           resolver: 'environment',
           secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
           providerConfig: expect.objectContaining({
+            providerFamily: 'openai',
             adapterType: 'openai_compatible',
             requestFormat: 'openai_chat_completions',
             credentialRequired: true,
