@@ -66,6 +66,9 @@ func TestChatCompletionsHandlerBlocksWhenAiSafetySidecarBlocks(t *testing.T) {
 					"mode":         "enforce",
 				},
 			},
+			"executionSummary": map[string]any{
+				"executionMode": "hybrid", "modelInvocationCount": 1, "acceptedModelDetectionCount": 1,
+			},
 			"latencyMs": 3,
 		})
 	}))
@@ -161,6 +164,9 @@ func TestChatCompletionsHandlerUsesAiSafetySidecarRedactedPrompt(t *testing.T) {
 					"mode":         "enforce",
 				},
 			},
+			"executionSummary": map[string]any{
+				"executionMode": "hybrid", "modelInvocationCount": 1, "acceptedModelDetectionCount": 1,
+			},
 			"latencyMs": 4,
 		})
 	}))
@@ -239,7 +245,10 @@ func TestChatCompletionsHandlerContinuesWhenAiSafetySidecarPasses(t *testing.T) 
 				"detectorCategories": []string{},
 			},
 			"detections": []map[string]any{},
-			"latencyMs":  2,
+			"executionSummary": map[string]any{
+				"executionMode": "rules_only", "modelInvocationCount": 0, "acceptedModelDetectionCount": 0,
+			},
+			"latencyMs": 2,
 		})
 	}))
 	defer sidecar.Close()
@@ -287,16 +296,23 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarTimesOu
 		time.Sleep(50 * time.Millisecond)
 		writeTestJSON(t, w, http.StatusOK, map[string]any{
 			"contractVersion": "ai-safety-detector.v1",
-			"outcome":         "passed",
-			"mode":            "enforce",
-			"redactedPrompt":  "late sidecar result",
-			"logSafePrompt":   "late sidecar result",
+			"model": map[string]any{
+				"modelId": "openai/privacy-filter",
+				"runtime": "cpu_only",
+			},
+			"outcome":        "passed",
+			"mode":           "enforce",
+			"redactedPrompt": "late sidecar result",
+			"logSafePrompt":  "late sidecar result",
 			"detectorSummary": map[string]any{
 				"detectedCount":      0,
 				"detectorCategories": []string{},
 			},
 			"detections": []map[string]any{},
-			"latencyMs":  50,
+			"executionSummary": map[string]any{
+				"executionMode": "rules_only", "modelInvocationCount": 0, "acceptedModelDetectionCount": 0,
+			},
+			"latencyMs": 50,
 		})
 	}))
 	defer sidecar.Close()

@@ -4,6 +4,7 @@ import json
 import os
 import threading
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -121,6 +122,12 @@ DEFAULT_LABEL_MAP: Mapping[str, str] = {
 }
 
 
+@dataclass(frozen=True)
+class AdapterBatchResult:
+    detections: list[list[Detection]]
+    model_invocation_count: int
+
+
 class PrivacyFilterAdapter:
     def __init__(
         self,
@@ -136,6 +143,7 @@ class PrivacyFilterAdapter:
     ) -> None:
         self._lock = threading.Lock()
         self._classifier = classifier
+        self._classifier_was_injected = classifier is not None
         self.model_name = model_name
         self.source = source or source_for_model(model_name)
         self.label_map = label_map if label_map is not None else label_map_for_model(model_name)
@@ -159,6 +167,45 @@ class PrivacyFilterAdapter:
                 detections.append(detection)
         return detections
 
+    def detect_many(self, texts: list[str], *, batch_size: int = 4) -> AdapterBatchResult:
+        if not texts:
+            return AdapterBatchResult(detections=[], model_invocation_count=0)
+
+        bounded_batch_size = max(1, min(batch_size, 64))
+        detected: list[list[Detection]] = [[] for _ in texts]
+        non_empty = [(index, text) for index, text in enumerate(texts) if text != ""]
+        if not non_empty:
+            return AdapterBatchResult(detections=detected, model_invocation_count=0)
+
+        classifier = self._classifier_instance()
+        classifier_batch_limit = getattr(classifier, "max_safe_batch_size", 64)
+        if isinstance(classifier_batch_limit, int):
+            bounded_batch_size = min(bounded_batch_size, max(1, classifier_batch_limit))
+        invocation_count = 0
+        for chunk_start in range(0, len(non_empty), bounded_batch_size):
+            chunk = non_empty[chunk_start : chunk_start + bounded_batch_size]
+            chunk_texts = [text for _, text in chunk]
+            supports_batch = callable(getattr(classifier, "classify_many", None)) or not self._classifier_was_injected
+            raw_results = self._run_classifier_many(classifier, chunk_texts)
+            invocation_count += 1 if supports_batch else len(chunk_texts)
+            for (original_index, text), raw_items in zip(chunk, raw_results, strict=True):
+                for item in raw_items:
+                    detection = self._detection_from_item(item, len(text))
+                    if detection is not None:
+                        detected[original_index].append(detection)
+        return AdapterBatchResult(
+            detections=detected,
+            model_invocation_count=invocation_count,
+        )
+
+    @property
+    def supported_detector_types(self) -> frozenset[str]:
+        return frozenset(
+            detector_type
+            for detector_type in self.label_map.values()
+            if detector_type in ALLOWED_DETECTOR_TYPES
+        )
+
     @property
     def load_state(self) -> str:
         return "loaded" if self._classifier is not None else "configured"
@@ -167,6 +214,14 @@ class PrivacyFilterAdapter:
         self._run_classifier(MODEL_WARMUP_TEXT)
 
     def _run_classifier(self, text: str) -> list[Mapping[str, Any]]:
+        classifier = self._classifier_instance()
+
+        result = classifier(text)
+        if not isinstance(result, list):
+            raise RuntimeError("AI safety model output is invalid.")
+        return [item for item in result if isinstance(item, Mapping)]
+
+    def _classifier_instance(self) -> Callable[[str], object]:
         classifier = self._classifier
         if classifier is None:
             with self._lock:
@@ -174,11 +229,31 @@ class PrivacyFilterAdapter:
                 if classifier is None:
                     classifier = self._load_classifier()
                     self._classifier = classifier
+        return classifier
 
-        result = classifier(text)
-        if not isinstance(result, list):
-            return []
-        return [item for item in result if isinstance(item, Mapping)]
+    def _run_classifier_many(
+        self,
+        classifier: Callable[[str], object],
+        texts: list[str],
+    ) -> list[list[Mapping[str, Any]]]:
+        classify_many = getattr(classifier, "classify_many", None)
+        if callable(classify_many):
+            raw_results = classify_many(texts)
+        elif self._classifier_was_injected:
+            raw_results = [classifier(text) for text in texts]
+        else:
+            raw_results = classifier(texts, batch_size=len(texts))  # type: ignore[call-arg]
+
+        if not isinstance(raw_results, list) or len(raw_results) != len(texts):
+            raise RuntimeError("AI safety model batch output is invalid.")
+        normalized: list[list[Mapping[str, Any]]] = []
+        for raw_result in raw_results:
+            if not isinstance(raw_result, list):
+                raise RuntimeError("AI safety model batch output is invalid.")
+            normalized.append(
+                [item for item in raw_result if isinstance(item, Mapping)]
+            )
+        return normalized
 
     def _load_classifier(self) -> Callable[[str], object]:
         if self.runtime == PRIVACY_FILTER_RUNTIME_ONNX:
@@ -203,6 +278,9 @@ class PrivacyFilterAdapter:
         model_dir = _local_openai_privacy_filter_onnx_dir(self.model_name)
         if model_dir is not None:
             return _OpenAIPrivacyFilterOnnxClassifier(model_dir)
+        model_dir = _local_koelectra_privacy_ner_onnx_dir(self.model_name)
+        if model_dir is not None:
+            return _KoElectraPrivacyNerOnnxClassifier(model_dir)
 
         try:
             from optimum.onnxruntime import ORTModelForTokenClassification
@@ -268,36 +346,58 @@ class _OpenAIPrivacyFilterOnnxClassifier:
     def __call__(self, text: str) -> list[Mapping[str, Any]]:
         if text == "":
             return []
-        tokenizer = self._load_tokenizer()
-        encoding = tokenizer.encode(text)
-        if not encoding.ids:
+        return self.classify_many([text])[0]
+
+    def classify_many(self, texts: list[str]) -> list[list[Mapping[str, Any]]]:
+        if not texts:
             return []
+        tokenizer = self._load_tokenizer()
+        encodings = tokenizer.encode_batch(texts)
 
         try:
             import numpy as np
         except ImportError as exc:
             raise RuntimeError("OpenAI privacy-filter ONNX runtime requires numpy.") from exc
 
-        input_ids = np.asarray([encoding.ids], dtype=np.int64)
-        attention_mask = np.ones_like(input_ids, dtype=np.int64)
+        max_length = max((len(encoding.ids) for encoding in encodings), default=0)
+        if max_length == 0:
+            return [[] for _ in texts]
+        input_ids = np.zeros((len(encodings), max_length), dtype=np.int64)
+        attention_mask = np.zeros_like(input_ids, dtype=np.int64)
+        for index, encoding in enumerate(encodings):
+            length = len(encoding.ids)
+            if length == 0:
+                continue
+            input_ids[index, :length] = np.asarray(encoding.ids, dtype=np.int64)
+            attention_mask[index, :length] = 1
         logits = self._load_session().run(
             None,
             {
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
             },
-        )[0][0]
-        predicted_ids = logits.argmax(axis=-1)
-        shifted_logits = logits - logits.max(axis=-1, keepdims=True)
-        probabilities = np.exp(shifted_logits)
-        probabilities = probabilities / probabilities.sum(axis=-1, keepdims=True)
-        token_confidences = probabilities[np.arange(len(predicted_ids)), predicted_ids]
-        return _decode_openai_privacy_filter_spans(
-            id_to_label=self._id_to_label,
-            predicted_ids=[int(predicted_id) for predicted_id in predicted_ids],
-            confidences=[float(confidence) for confidence in token_confidences],
-            offsets=[tuple(offset) for offset in encoding.offsets],
-        )
+        )[0]
+        results: list[list[Mapping[str, Any]]] = []
+        for index, encoding in enumerate(encodings):
+            length = len(encoding.ids)
+            if length == 0:
+                results.append([])
+                continue
+            item_logits = logits[index, :length]
+            predicted_ids = item_logits.argmax(axis=-1)
+            shifted_logits = item_logits - item_logits.max(axis=-1, keepdims=True)
+            probabilities = np.exp(shifted_logits)
+            probabilities = probabilities / probabilities.sum(axis=-1, keepdims=True)
+            token_confidences = probabilities[np.arange(len(predicted_ids)), predicted_ids]
+            results.append(
+                _decode_openai_privacy_filter_spans(
+                    id_to_label=self._id_to_label,
+                    predicted_ids=[int(predicted_id) for predicted_id in predicted_ids],
+                    confidences=[float(confidence) for confidence in token_confidences],
+                    offsets=[tuple(offset) for offset in encoding.offsets],
+                )
+            )
+        return results
 
     def _load_session(self) -> Any:
         session = self._session
@@ -327,6 +427,111 @@ class _OpenAIPrivacyFilterOnnxClassifier:
             except ImportError as exc:
                 raise RuntimeError("OpenAI privacy-filter ONNX runtime requires tokenizers.") from exc
             tokenizer = Tokenizer.from_file(str(self.model_dir / "tokenizer.json"))
+            self._tokenizer = tokenizer
+        return tokenizer
+
+
+class _KoElectraPrivacyNerOnnxClassifier:
+    # The supplied dynamic-QInt8 graph accepts a batch axis, but padded multi-item
+    # inference changed accepted labels in the 2026-07-16 equivalence probe.
+    # Keep item boundaries in one HTTP request while running this adapter one by one.
+    max_safe_batch_size = 1
+
+    def __init__(self, model_dir: Path) -> None:
+        self.model_dir = model_dir
+        self._session: Any | None = None
+        self._tokenizer: Any | None = None
+        config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
+        self._id_to_label = {int(index): str(label) for index, label in config["id2label"].items()}
+
+    def __call__(self, text: str) -> list[Mapping[str, Any]]:
+        if text == "":
+            return []
+        return self.classify_many([text])[0]
+
+    def classify_many(self, texts: list[str]) -> list[list[Mapping[str, Any]]]:
+        if not texts:
+            return []
+        try:
+            import numpy as np
+        except ImportError as exc:
+            raise RuntimeError("KoELECTRA privacy NER ONNX runtime requires numpy.") from exc
+
+        encoded = self._load_tokenizer()(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_offsets_mapping=True,
+            return_tensors="np",
+        )
+        offsets = encoded.pop("offset_mapping")
+        session = self._load_session()
+        input_names = {item.name for item in session.get_inputs()}
+        feed = {
+            key: value.astype(np.int64)
+            for key, value in encoded.items()
+            if key in input_names
+        }
+        logits = session.run(None, feed)[0]
+        results: list[list[Mapping[str, Any]]] = []
+        for item_index in range(len(texts)):
+            length = int(encoded["attention_mask"][item_index].sum())
+            item_logits = logits[item_index, :length]
+            predicted_ids = item_logits.argmax(axis=-1)
+            shifted_logits = item_logits - item_logits.max(axis=-1, keepdims=True)
+            probabilities = np.exp(shifted_logits)
+            probabilities = probabilities / probabilities.sum(axis=-1, keepdims=True)
+            token_confidences = probabilities[np.arange(len(predicted_ids)), predicted_ids]
+            items: list[Mapping[str, Any]] = []
+            for predicted_id, confidence, offset in zip(
+                predicted_ids,
+                token_confidences,
+                offsets[item_index, :length],
+                strict=True,
+            ):
+                start, end = int(offset[0]), int(offset[1])
+                label = self._id_to_label.get(int(predicted_id), "O")
+                if label == "O" or end <= start:
+                    continue
+                items.append(
+                    {
+                        "entity": label,
+                        "score": float(confidence),
+                        "start": start,
+                        "end": end,
+                    }
+                )
+            results.append(items)
+        return results
+
+    def _load_session(self) -> Any:
+        session = self._session
+        if session is None:
+            try:
+                import onnxruntime as ort
+            except ImportError as exc:
+                raise RuntimeError("KoELECTRA privacy NER ONNX runtime requires onnxruntime.") from exc
+            session_kwargs: dict[str, object] = {"providers": ["CPUExecutionProvider"]}
+            session_options = _onnx_session_options()
+            if session_options is not None:
+                session_kwargs["sess_options"] = session_options
+            session = ort.InferenceSession(str(self.model_dir / "model.onnx"), **session_kwargs)
+            self._session = session
+        return session
+
+    def _load_tokenizer(self) -> Any:
+        tokenizer = self._tokenizer
+        if tokenizer is None:
+            try:
+                from transformers import AutoTokenizer
+            except ImportError as exc:
+                raise RuntimeError("KoELECTRA privacy NER ONNX runtime requires transformers.") from exc
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_dir,
+                local_files_only=True,
+                use_fast=True,
+            )
             self._tokenizer = tokenizer
         return tokenizer
 
@@ -453,7 +658,8 @@ def _is_default_privacy_filter_model(model_name: str) -> bool:
 
 def _local_openai_privacy_filter_onnx_dir(model_name: str) -> Path | None:
     candidates = [Path(model_name)]
-    if _is_default_privacy_filter_model(model_name):
+    normalized_model_name = model_name.replace("\\", "/").rstrip("/")
+    if normalized_model_name == DEFAULT_PRIVACY_FILTER_MODEL:
         candidates.extend(
             [
                 Path(".cache") / "onnx" / DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME,
@@ -465,6 +671,30 @@ def _local_openai_privacy_filter_onnx_dir(model_name: str) -> Path | None:
             (candidate / "config.json").is_file()
             and (candidate / "tokenizer.json").is_file()
             and (candidate / "onnx" / "model_quantized.onnx").is_file()
+        ):
+            return candidate
+    return None
+
+
+def _local_koelectra_privacy_ner_onnx_dir(model_name: str) -> Path | None:
+    candidates = [Path(model_name)]
+    normalized_model_name = model_name.replace("\\", "/").rstrip("/")
+    if normalized_model_name == KOELECTRA_PRIVACY_NER_MODEL:
+        candidates.extend(
+            [
+                Path(".cache") / "onnx" / KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME,
+                Path("apps")
+                / "ai-service"
+                / ".cache"
+                / "onnx"
+                / KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME,
+            ]
+        )
+    for candidate in candidates:
+        if (
+            (candidate / "config.json").is_file()
+            and (candidate / "tokenizer.json").is_file()
+            and (candidate / "model.onnx").is_file()
         ):
             return candidate
     return None

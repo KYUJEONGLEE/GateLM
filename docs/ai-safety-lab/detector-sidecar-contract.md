@@ -13,6 +13,15 @@ contractVersion = ai-safety-detector.v1
 POST /internal/ai-safety/v1/detect
 ```
 
+Tenant Chat multi-message input uses the additive ordered batch contract:
+
+```text
+contractVersion = ai-safety-detector-batch.v1
+POST /internal/ai-safety/v1/detect/batch
+```
+
+The single and batch routes share model, policy, shadow/enforce, and forbidden-data semantics.
+
 이 endpoint는 Gateway와 같은 trusted runtime boundary 안의 CPU-only local process/container/pod에서 호출하는 후보 경로다. Hosted inference API로 raw prompt를 보내지 않는다.
 
 ## 3. Request Semantics
@@ -46,7 +55,29 @@ Top-level request 후보:
 
 `promptText` example은 synthetic placeholder만 사용한다. 실제 고객 문장, 실제 이메일, 실제 전화번호, 실제 token, 실제 credential을 문서나 fixture에 넣지 않는다.
 
+The batch request replaces `input` with `inputs`. It accepts 1 through 64 items. `itemIndex` starts at zero, is contiguous, and matches array order. Gateway runs local P0 masking for every message in original order with one shared request-scoped entity scope, then sends only those local-redacted transient values. It does not concatenate messages and does not send role, tenant, user, request, or conversation identifiers.
+Whitespace-only messages retain their local result and are omitted from the sidecar request. Remaining nonblank messages are assigned dense `itemIndex` values and sidecar results are mapped back to their original Tenant Chat positions, so a blank history item cannot disable model checks for later messages.
+
+```json
+{
+  "contractVersion": "ai-safety-detector-batch.v1",
+  "mode": "enforce",
+  "model": {"modelId": "openai/privacy-filter", "runtime": "cpu_only"},
+  "inputs": [
+    {"itemIndex": 0, "promptText": "Contact [EMAIL_1].", "locale": "ko-KR"},
+    {"itemIndex": 1, "promptText": "Write a synthetic safe note.", "locale": "ko-KR"}
+  ],
+  "detectorConfig": {
+    "detectorSet": "privacy-filter-default",
+    "returnConfidence": false,
+    "detectorPolicies": [{"detectorType": "email", "action": "redact"}]
+  }
+}
+```
+
 `mode=shadow`는 sanitized observation과 log-safe redaction만 제공하며 Provider에 전달할 prompt와 최종 action을 변경하지 않는다. `mode=enforce`에서만 Gateway가 sidecar의 redaction/block을 실행 결과에 반영한다. `detectorPolicies`가 있으면 같은 detector type의 sidecar 기본 action보다 우선하며 Tenant Chat RuntimeSnapshot의 `allow|redact|block`을 보존한다.
+
+Long prompts are split into candidate-centered model windows of at most 480 characters; overlapping windows merge only when the merged value remains within that bound. A request is rejected with the sanitized unavailable response before any model call when uncovered model work exceeds 128 candidates or 64 windows across all items/adapters. Gateway treats that non-success response as one batch failure and uses the complete local P0 result set.
 
 ## 4. Response Semantics
 
@@ -57,6 +88,10 @@ Success response 후보:
 ```json
 {
   "contractVersion": "ai-safety-detector.v1",
+  "model": {
+    "modelId": "openai/privacy-filter",
+    "runtime": "cpu_only"
+  },
   "outcome": "redacted",
   "mode": "enforce",
   "redactedPrompt": "Contact [EMAIL_REDACTED].",
@@ -69,20 +104,29 @@ Success response 후보:
   "detections": [
     {
       "detectorType": "email",
-      "source": "privacy_filter_adapter",
+      "source": "openai_privacy_filter",
       "confidence": 0.91,
       "action": "redact",
-      "mode": "enforce",
-      "modelLabel": "private_email",
-      "modelId": "openai/privacy-filter",
-      "runtime": "cpu_only"
+      "mode": "enforce"
     }
   ],
+  "executionSummary": {
+    "executionMode": "hybrid",
+    "modelInvocationCount": 1,
+    "acceptedModelDetectionCount": 1
+  },
   "latencyMs": 42
 }
 ```
 
 `redactedPrompt` is the Provider-safe policy result and can retain a value explicitly marked `allow`. `logSafePrompt` and `redactedPromptPreview` always redact detected values, including `allow`, and are the only prompt-shaped fields permitted in logs or reports.
+
+`executionSummary` is required on both single and batch success responses. `rules_only` requires `modelInvocationCount=0`; `hybrid` requires at least one actual model adapter invocation. `acceptedModelDetectionCount` counts model detections that survive label/confidence/span normalization and contribute to sanitized final signals. Metrics consume these bounded counts and must not infer model execution from latency, detector category, or source names.
+
+Batch response `results` has exactly the request item count and preserves `itemIndex` order. Any missing, duplicate, reordered, partial, invalid-mode, invalid-version, or invalid-summary response causes Gateway to discard every sidecar item and use the complete local P0 result set. A 750 ms timeout has the same all-local fallback behavior.
+Only the batch response's top-level `latencyMs` reports end-to-end batch evaluation time. Individual result items deliberately omit latency because shared micro-batch inference cannot provide truthful per-item timings.
+For both routes, response `model.modelId` must exactly match the model ID sent by Gateway and `model.runtime` must be `cpu_only`. Missing or mismatched model identity is an invalid response and triggers the same local-only fallback.
+For both routes, `outcome=redacted` requires a nonblank `redactedPrompt`. An empty redaction result is invalid rather than falling through to an unredacted local prompt; single requests use local fallback and batch requests discard the full remote result set.
 
 Outside the policy-governed `redactedPrompt`, the response MUST NOT include:
 
@@ -158,4 +202,12 @@ The response shape is described by:
 
 ```text
 docs/ai-safety-lab/schemas/detector-sidecar-response.schema.json
+docs/ai-safety-lab/schemas/detector-sidecar-batch-request.schema.json
+docs/ai-safety-lab/schemas/detector-sidecar-batch-response.schema.json
 ```
+
+## 10. Batch inference boundary
+
+The sidecar keeps message boundaries during rules, contextual policy, redaction, and response mapping. It flattens only eligible model windows, executes bounded dynamic ONNX micro-batches, then restores each detection to its original item/window before policy evaluation. Current micro-batch size defaults to 4 and is bounded to 1 through 64 by `AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE`.
+
+Model candidate routing is detector-type aware. A configured adapter is invoked only when its accepted label map intersects an uncovered typed candidate. The pinned models do not advertise `person_name` or `organization_name`, so name/organization-only prompts remain rules-only. Message concatenation, last-message-only inspection, history safety caching, and raw text/value/offset response fields are forbidden.

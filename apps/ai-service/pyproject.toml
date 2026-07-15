@@ -11,6 +11,9 @@ dependencies = [
 
 [project.scripts]
 gatelm-ai-service = "app.main:run"
+gatelm-ai-safety-promotion-gate = "app.services.ai_safety_promotion_gate:main"
+gatelm-ai-safety-repeated-cold = "app.services.ai_safety_repeated_cold_runner:main"
+gatelm-pii-model-sync = "app.model_artifacts.cli:run"
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -20,6 +23,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["app*"]
 exclude = ["app.tests*"]
+
+[tool.setuptools.package-data]
+"app.model_artifacts.releases" = ["*.json"]
 
 [project.optional-dependencies]
 test = [

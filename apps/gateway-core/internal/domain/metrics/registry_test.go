@@ -47,6 +47,19 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		ErrorCode:       "none",
 		DurationSeconds: 1.25,
 	})
+	registry.RecordAISafetySidecarCall(AISafetySidecarCall{
+		Surface:         "tenant_chat",
+		Mode:            "enforce",
+		Outcome:         "redacted",
+		InferencePath:   "hybrid",
+		DurationSeconds: 0.125,
+	})
+	registry.RecordAISafetySidecarFallback(AISafetySidecarFallback{
+		Surface: "tenant_chat",
+		Mode:    "enforce",
+		Reason:  "timeout",
+	})
+	registry.SetGatewayDependencyReady("ai_safety_sidecar", false, true)
 
 	first := registry.RenderPrometheus()
 	second := registry.RenderPrometheus()
@@ -67,6 +80,10 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_stream_relay_total{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
 	assertMetricsContains(t, first, `gatelm_stream_duration_seconds_count{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
 	assertMetricsContains(t, first, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
+	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_calls_total{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 1`)
+	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_call_duration_seconds_sum{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 0.125`)
+	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_fallback_total{mode="enforce",reason="timeout",surface="tenant_chat"} 1`)
+	assertMetricsContains(t, first, `gatelm_gateway_dependency_ready{dependency="ai_safety_sidecar",required="false"} 1`)
 	assertMetricsDoesNotContainForbiddenLabels(t, first)
 }
 
@@ -98,8 +115,38 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		TenantChatCompletionTotal,
 		TenantChatUsageReconciliationTotal,
 		TenantChatAccountingTransactionSeconds,
+		AISafetySidecarCallsTotal,
+		AISafetySidecarCallDurationSeconds,
+		AISafetySidecarFallbackTotal,
+		GatewayDependencyReady,
 	} {
 		assertMetricsContains(t, output, "# TYPE "+metricName)
+	}
+}
+
+func TestAISafetyMetricsNormalizeUntrustedValuesToBoundedLabels(t *testing.T) {
+	registry := NewRegistry()
+	unsafeValue := "sensitive value with newline\nand id"
+	registry.RecordAISafetySidecarCall(AISafetySidecarCall{
+		Surface:         unsafeValue,
+		Mode:            unsafeValue,
+		Outcome:         unsafeValue,
+		InferencePath:   unsafeValue,
+		DurationSeconds: 0.01,
+	})
+	registry.RecordAISafetySidecarFallback(AISafetySidecarFallback{
+		Surface: unsafeValue,
+		Mode:    unsafeValue,
+		Reason:  unsafeValue,
+	})
+	registry.SetGatewayDependencyReady(unsafeValue, true, false)
+
+	output := registry.RenderPrometheus()
+	assertMetricsContains(t, output, `gatelm_ai_safety_sidecar_calls_total{inference_path="unknown",mode="unknown",outcome="invalid_response",surface="unknown"} 1`)
+	assertMetricsContains(t, output, `gatelm_ai_safety_sidecar_fallback_total{mode="unknown",reason="invalid_response",surface="unknown"} 1`)
+	assertMetricsContains(t, output, `gatelm_gateway_dependency_ready{dependency="unknown",required="true"} 0`)
+	if strings.Contains(output, unsafeValue) || strings.Contains(output, "sensitive value") {
+		t.Fatal("AI safety metrics must not render request-derived values")
 	}
 }
 

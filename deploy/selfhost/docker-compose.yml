@@ -280,6 +280,25 @@ services:
     networks:
       - gatelm_internal
 
+  pii-model-init:
+    image: ${GATELM_IMAGE_REGISTRY}/ai-service:${GATELM_IMAGE_TAG}
+    restart: "no"
+    command: ["gatelm-pii-model-sync"]
+    environment:
+      AI_SERVICE_PII_MODEL_SYNC_ENABLED: ${AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED:-false}
+      AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE: /run/secrets/pii_model_bundle_url
+      AI_SERVICE_PII_MODEL_RUNTIME_ROOT: /models
+      AI_SERVICE_PII_MODEL_RELEASE_ID: tenant-chat-pii-models-20260715
+    read_only: true
+    tmpfs:
+      - /tmp
+    secrets:
+      - pii_model_bundle_url
+    volumes:
+      - pii_model_data:/models
+    networks:
+      - gatelm_internal
+
   ai-service:
     image: ${GATELM_IMAGE_REGISTRY}/ai-service:${GATELM_IMAGE_TAG}
     build:
@@ -298,16 +317,19 @@ services:
       HF_HUB_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
       AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: ${AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME}
       AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED: ${AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED}
-      AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED: ${AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED}
+      AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE: ${AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE}
       AI_SERVICE_ONNX_INTRA_OP_THREADS: ${AI_SERVICE_ONNX_INTRA_OP_THREADS}
       AI_SERVICE_ONNX_INTER_OP_THREADS: ${AI_SERVICE_ONNX_INTER_OP_THREADS}
       AI_SERVICE_ONNX_ALLOW_SPINNING: ${AI_SERVICE_ONNX_ALLOW_SPINNING}
       AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: ${AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID}
       AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS}
     volumes:
-      - ../../apps/ai-service/.cache/onnx:/app/.cache/onnx:ro
+      - pii_model_data:/models:ro
     ports:
       - "${SELFHOST_AI_SERVICE_PORT}:8001"
+    depends_on:
+      pii-model-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=2).read()\""]
       interval: 10s
@@ -353,6 +375,11 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  pii_model_data:
+
+secrets:
+  pii_model_bundle_url:
+    file: ${AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE:-./secrets/pii-model-bundle-url.example}
 
 networks:
   gatelm_internal:

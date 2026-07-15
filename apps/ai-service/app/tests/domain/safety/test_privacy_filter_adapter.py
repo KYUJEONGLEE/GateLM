@@ -13,6 +13,7 @@ from pathlib import Path
 
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator
 from app.adapters.safety.privacy_filter_adapter import (
+    DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_MODEL,
     KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_SOURCE,
@@ -28,7 +29,109 @@ from app.adapters.safety.privacy_filter_adapter import (
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
 
+class FakeBatchClassifier:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, text: str) -> list[object]:
+        return self.classify_many([text])[0]
+
+    def classify_many(self, texts: list[str]) -> list[list[object]]:
+        self.calls += 1
+        results: list[list[object]] = []
+        for text in texts:
+            marker = "alpha-value" if "alpha-value" in text else "beta-value"
+            start = text.index(marker)
+            results.append(
+                [
+                    {
+                        "entity_group": "private_url",
+                        "score": 0.99,
+                        "start": start,
+                        "end": start + len(marker),
+                    }
+                ]
+            )
+        return results
+
+
+class MalformedBatchClassifier:
+    def __call__(self, _text: str) -> list[object]:
+        return []
+
+    def classify_many(self, _texts: list[str]) -> list[list[object]]:
+        return []
+
+
+class MalformedSingleClassifier:
+    def __call__(self, _text: str) -> object:
+        return {"entity_group": "private_email"}
+
+
+class SequentialOnlyBatchClassifier(FakeBatchClassifier):
+    max_safe_batch_size = 1
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch_sizes: list[int] = []
+
+    def classify_many(self, texts: list[str]) -> list[list[object]]:
+        self.batch_sizes.append(len(texts))
+        return super().classify_many(texts)
+
+
 class PrivacyFilterAdapterTests(unittest.TestCase):
+    def test_adapter_reports_model_supported_detector_types(self) -> None:
+        openai_adapter = PrivacyFilterAdapter(classifier=lambda _text: [])
+        koelectra_adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [],
+            model_name=KOELECTRA_PRIVACY_NER_MODEL,
+        )
+
+        self.assertIn("private_url", openai_adapter.supported_detector_types)
+        self.assertNotIn("person_name", openai_adapter.supported_detector_types)
+        self.assertIn("resident_registration_number", koelectra_adapter.supported_detector_types)
+        self.assertNotIn("organization_name", koelectra_adapter.supported_detector_types)
+
+    def test_adapter_dynamic_batch_preserves_input_order_and_counts_one_invocation(self) -> None:
+        classifier = FakeBatchClassifier()
+        adapter = PrivacyFilterAdapter(classifier=classifier)
+        texts = ["Review private URL alpha-value.", "Review private URL beta-value."]
+
+        result = adapter.detect_many(texts, batch_size=4)
+
+        self.assertEqual(classifier.calls, 1)
+        self.assertEqual(result.model_invocation_count, 1)
+        self.assertEqual(len(result.detections), 2)
+        self.assertEqual(
+            [detections[0].detector_type for detections in result.detections],
+            ["private_url", "private_url"],
+        )
+
+    def test_adapter_rejects_malformed_batch_output(self) -> None:
+        adapter = PrivacyFilterAdapter(classifier=MalformedBatchClassifier())
+
+        with self.assertRaisesRegex(RuntimeError, "batch output is invalid"):
+            adapter.detect_many(["Review private URL alpha-value."], batch_size=4)
+
+    def test_adapter_rejects_malformed_single_output(self) -> None:
+        adapter = PrivacyFilterAdapter(classifier=MalformedSingleClassifier())
+
+        with self.assertRaisesRegex(RuntimeError, "output is invalid"):
+            adapter.detect("Review synthetic input.")
+
+    def test_adapter_respects_model_specific_safe_batch_limit(self) -> None:
+        classifier = SequentialOnlyBatchClassifier()
+        adapter = PrivacyFilterAdapter(classifier=classifier)
+
+        result = adapter.detect_many(
+            ["Review private URL alpha-value.", "Review private URL beta-value."],
+            batch_size=4,
+        )
+
+        self.assertEqual(classifier.batch_sizes, [1, 1])
+        self.assertEqual(result.model_invocation_count, 2)
+
     def test_adapter_normalizes_pipeline_labels_without_storing_word(self) -> None:
         raw_email = "alex@example.test"
         prompt = f"Contact {raw_email} for the synthetic demo."
@@ -412,14 +515,20 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.source, KOELECTRA_PRIVACY_NER_SOURCE)
 
     def test_onnx_runtime_requires_onnx_dependencies(self) -> None:
-        with mock.patch.dict(sys.modules, {"optimum.onnxruntime": None}):
-            adapter = PrivacyFilterAdapter(
-                model_name=f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}",
-                runtime="onnx",
-            )
+        local_dir_names = [
+            DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME,
+            KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
+        ]
+        for local_dir_name in local_dir_names:
+            with self.subTest(local_dir_name=local_dir_name):
+                with mock.patch.dict(sys.modules, {"optimum.onnxruntime": None}):
+                    adapter = PrivacyFilterAdapter(
+                        model_name=f"C:/models/onnx/{local_dir_name}",
+                        runtime="onnx",
+                    )
 
-            with self.assertRaisesRegex(RuntimeError, "onnx dependencies"):
-                adapter._load_classifier()
+                    with self.assertRaisesRegex(RuntimeError, "onnx dependencies"):
+                        adapter._load_classifier()
 
 
 def remote_context() -> RemoteSafetyContext:

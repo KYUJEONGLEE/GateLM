@@ -44,13 +44,19 @@ def main() -> None:
 
     repo_root = Path(__file__).resolve().parents[2]
     ai_service_root = repo_root / "apps" / "ai-service"
-    model_root = ai_service_root / ".cache" / "onnx"
+    model_root = (
+        ai_service_root
+        / ".cache"
+        / "onnx"
+        / "releases"
+        / "tenant-chat-pii-models-20260715"
+    )
     sys.path.insert(0, str(ai_service_root))
 
     import psutil
 
     from app.services.ai_safety_detector import AiSafetyDetectorService
-    from app.schemas.safety import AiSafetyDetectRequest
+    from app.schemas.safety import AiSafetyBatchDetectRequest, AiSafetyDetectRequest
 
     service = AiSafetyDetectorService(
         model_id=str(model_root / "openai--privacy-filter"),
@@ -153,8 +159,142 @@ def main() -> None:
             adapter.detect(probe_text)
         sequential_samples_ms.append((perf_counter() - started) * 1000)
 
+    ordered_batch_probe_texts = (
+        "Review synthetic email alpha.batch@synthetic.test.",
+        "Review synthetic phone +82-10-0000-0001.",
+        "Review synthetic resident number 900101-1234567.",
+        "Review synthetic URL https://synthetic.test/private-beta.",
+    )
+    expected_batch_invocations = {
+        "openai_privacy_filter": 1,
+        "koelectra_privacy_ner": 4,
+    }
+    adapter_batch_comparison: dict[str, dict[str, object]] = {}
+    adapter_batch_comparison_passed = True
+    comparison_iterations = max(5, args.iterations)
+    for adapter in service.adapters:
+        # Warm both four-item execution shapes before measuring either one.
+        for text in ordered_batch_probe_texts:
+            adapter.detect(text)
+        adapter.detect_many(
+            list(ordered_batch_probe_texts),
+            batch_size=len(ordered_batch_probe_texts),
+        )
+
+        sequential_measurements_ms: list[float] = []
+        batch_measurements_ms: list[float] = []
+        equivalent = True
+        batch_invocation_counts: list[int] = []
+        for iteration in range(comparison_iterations):
+            if iteration % 2 == 0:
+                sequential_started = perf_counter()
+                sequential_detections = [
+                    adapter.detect(text) for text in ordered_batch_probe_texts
+                ]
+                sequential_measurements_ms.append(
+                    (perf_counter() - sequential_started) * 1000
+                )
+
+                batch_started = perf_counter()
+                batch_detections = adapter.detect_many(
+                    list(ordered_batch_probe_texts),
+                    batch_size=len(ordered_batch_probe_texts),
+                )
+                batch_measurements_ms.append((perf_counter() - batch_started) * 1000)
+            else:
+                batch_started = perf_counter()
+                batch_detections = adapter.detect_many(
+                    list(ordered_batch_probe_texts),
+                    batch_size=len(ordered_batch_probe_texts),
+                )
+                batch_measurements_ms.append((perf_counter() - batch_started) * 1000)
+
+                sequential_started = perf_counter()
+                sequential_detections = [
+                    adapter.detect(text) for text in ordered_batch_probe_texts
+                ]
+                sequential_measurements_ms.append(
+                    (perf_counter() - sequential_started) * 1000
+                )
+
+            sequential_signatures = [
+                sorted(
+                    (
+                        detection.detector_type,
+                        detection.start,
+                        detection.end,
+                        detection.source,
+                    )
+                    for detection in detections
+                )
+                for detections in sequential_detections
+            ]
+            batch_signatures = [
+                sorted(
+                    (
+                        detection.detector_type,
+                        detection.start,
+                        detection.end,
+                        detection.source,
+                    )
+                    for detection in detections
+                )
+                for detections in batch_detections.detections
+            ]
+            equivalent = equivalent and sequential_signatures == batch_signatures
+            batch_invocation_counts.append(batch_detections.model_invocation_count)
+
+        expected_invocations = expected_batch_invocations.get(adapter.source)
+        invocation_count_matches = (
+            expected_invocations is None
+            or all(
+                invocation_count == expected_invocations
+                for invocation_count in batch_invocation_counts
+            )
+        )
+        adapter_batch_comparison_passed = (
+            adapter_batch_comparison_passed
+            and equivalent
+            and invocation_count_matches
+        )
+        adapter_batch_comparison[adapter.source] = {
+            "equivalent": equivalent,
+            "measurementIterations": comparison_iterations,
+            "sequentialP50Ms": round(percentile(sequential_measurements_ms, 0.50), 2),
+            "batchP50Ms": round(percentile(batch_measurements_ms, 0.50), 2),
+            "sequentialModelInvocationCount": len(ordered_batch_probe_texts),
+            "batchModelInvocationCount": batch_invocation_counts[-1],
+        }
+
     models_loaded = bool(states_after) and all(
         state["loadState"] == "loaded" for state in states_after
+    )
+
+    batch_marker = "runtime.probe@privacy.local"
+    batch_response = service.detect_batch(
+        AiSafetyBatchDetectRequest.model_validate(
+            {
+                "contractVersion": "ai-safety-detector-batch.v1",
+                "mode": "enforce",
+                "inputs": [
+                    {
+                        "itemIndex": 0,
+                        "promptText": f"email: {batch_marker}; secret reference alpha",
+                        "locale": "en-US",
+                    }
+                ],
+                "detectorConfig": {
+                    "detectorSet": "privacy-filter-default",
+                },
+            }
+        )
+    )
+    batch_result = batch_response.results[0]
+    batch_passed = (
+        batch_response.execution_summary.execution_mode == "hybrid"
+        and batch_response.execution_summary.model_invocation_count >= 1
+        and batch_marker not in batch_result.redacted_prompt
+        and batch_marker not in batch_result.log_safe_prompt
     )
     cases_passed = all(
         bool(item["detected"]) and bool(item["redactionApplied"])
@@ -172,6 +312,20 @@ def main() -> None:
             "detectorTypes": probe_response.detector_summary.detector_categories,
             "sources": sorted({detection.source for detection in probe_response.detections}),
         },
+        "batchEvidence": {
+            "executionMode": batch_response.execution_summary.execution_mode,
+            "modelInvocationCount": (
+                batch_response.execution_summary.model_invocation_count
+            ),
+            "acceptedModelDetectionCount": (
+                batch_response.execution_summary.accepted_model_detection_count
+            ),
+            "outcome": batch_result.outcome,
+            "maskingApplied": (
+                batch_marker not in batch_result.redacted_prompt
+                and batch_marker not in batch_result.log_safe_prompt
+            ),
+        },
         "startupWarmupMs": round(warmup_ms, 2),
         "rssBeforeMiB": round(rss_before / (1024 * 1024), 2),
         "rssAfterMiB": round(rss_after / (1024 * 1024), 2),
@@ -179,8 +333,14 @@ def main() -> None:
         "warmModelPath": latency_summary(warm_samples_ms),
         "adapterPaths": adapter_paths,
         "sequentialAdaptersPath": latency_summary(sequential_samples_ms),
+        "adapterBatchComparison": adapter_batch_comparison,
         "cases": results,
-        "passed": models_loaded and cases_passed,
+        "passed": (
+            models_loaded
+            and cases_passed
+            and batch_passed
+            and adapter_batch_comparison_passed
+        ),
     }
     print(json.dumps(output, ensure_ascii=False, indent=2))
     raise SystemExit(0 if output["passed"] else 1)

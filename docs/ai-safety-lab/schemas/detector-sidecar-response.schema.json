@@ -52,6 +52,9 @@
         "$ref": "#/$defs/detection"
       }
     },
+    "executionSummary": {
+      "$ref": "#/$defs/executionSummary"
+    },
     "latencyMs": {
       "type": "integer",
       "minimum": 0
@@ -69,6 +72,7 @@
         "logSafePrompt",
         "detectorSummary",
         "detections",
+        "executionSummary",
         "latencyMs"
       ],
       "not": {
@@ -107,12 +111,76 @@
             "required": [
               "detections"
             ]
+          },
+          {
+            "required": [
+              "executionSummary"
+            ]
           }
         ]
       }
     }
   ],
   "$defs": {
+    "executionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executionMode",
+        "modelInvocationCount",
+        "acceptedModelDetectionCount"
+      ],
+      "properties": {
+        "executionMode": {
+          "enum": [
+            "rules_only",
+            "hybrid"
+          ]
+        },
+        "modelInvocationCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acceptedModelDetectionCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "executionMode": {
+                "const": "rules_only"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "modelInvocationCount": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "executionMode": {
+                "const": "hybrid"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "modelInvocationCount": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
     "detectorSummary": {
       "type": "object",
       "additionalProperties": false,

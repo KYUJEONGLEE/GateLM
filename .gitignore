@@ -42,5 +42,7 @@ desktop.ini
 
 .cache/
 .secrets/
+deploy/selfhost/secrets/*
+!deploy/selfhost/secrets/*.example
 .tmp/
 .playwright-cli/

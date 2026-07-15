@@ -59,30 +59,42 @@ class HttpBenchmarkTarget:
                 ),
                 timeout=timeout_ms / 1000,
             )
-            full_latency_ms = elapsed_ms(started)
+            target_latency_ms = elapsed_ms(started)
         except httpx.TimeoutException:
             return TargetResult(
+                target_kind="direct_sidecar_http",
+                target_latency_ms=elapsed_ms(started),
+                target_outcome="timeout",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=elapsed_ms(started),
                 sidecar_outcome="timeout",
-                fallback_mode="regex_only",
+                sidecar_observation="observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
                 sanitized_error_code="timeout",
             )
         except httpx.HTTPError:
             return TargetResult(
+                target_kind="direct_sidecar_http",
+                target_latency_ms=elapsed_ms(started),
+                target_outcome="error",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=elapsed_ms(started),
                 sidecar_outcome="error",
-                fallback_mode="regex_only",
+                sidecar_observation="observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
                 sanitized_error_code="http_error",
             )
 
         if response.status_code != 200:
             return TargetResult(
+                target_kind="direct_sidecar_http",
+                target_latency_ms=target_latency_ms,
+                target_outcome="error",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=full_latency_ms,
                 sidecar_outcome="error",
-                fallback_mode="regex_only",
+                sidecar_observation="observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
                 sanitized_error_code=f"http_{response.status_code}",
             )
 
@@ -90,13 +102,22 @@ class HttpBenchmarkTarget:
             body = response.json()
         except ValueError:
             return TargetResult(
+                target_kind="direct_sidecar_http",
+                target_latency_ms=target_latency_ms,
+                target_outcome="invalid_response",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=full_latency_ms,
                 sidecar_outcome="invalid_response",
-                fallback_mode="regex_only",
+                sidecar_observation="observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
                 sanitized_error_code="invalid_json",
             )
-        return result_from_response_body(body, full_latency_ms=full_latency_ms, timeout_ms=timeout_ms)
+        return result_from_response_body(
+            body,
+            target_kind="direct_sidecar_http",
+            target_latency_ms=target_latency_ms,
+            timeout_ms=timeout_ms,
+        )
 
 
 @dataclass
@@ -130,23 +151,36 @@ class InProcessBenchmarkTarget:
             response = self.service.detect(request)
         except Exception:
             return TargetResult(
+                target_kind="in_process_sidecar",
+                target_latency_ms=elapsed_ms(started),
+                target_outcome="error",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=elapsed_ms(started),
                 sidecar_outcome="error",
-                fallback_mode="regex_only",
+                sidecar_observation="observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
                 sanitized_error_code="in_process_error",
             )
-        full_latency_ms = elapsed_ms(started)
-        if full_latency_ms > timeout_ms:
+        target_latency_ms = elapsed_ms(started)
+        if target_latency_ms > timeout_ms:
             return TargetResult(
+                target_kind="in_process_sidecar",
+                target_latency_ms=target_latency_ms,
+                target_outcome="timeout",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=full_latency_ms,
                 sidecar_outcome="timeout",
-                fallback_mode="regex_only",
+                sidecar_observation="observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
                 sanitized_error_code="timeout",
             )
         body = response.model_dump(by_alias=True)
-        return result_from_response_body(body, full_latency_ms=full_latency_ms, timeout_ms=timeout_ms)
+        return result_from_response_body(
+            body,
+            target_kind="in_process_sidecar",
+            target_latency_ms=target_latency_ms,
+            timeout_ms=timeout_ms,
+        )
 
 
 @dataclass
@@ -170,47 +204,53 @@ class GatewayHttpBenchmarkTarget:
                 headers=self._headers(locale=locale),
                 timeout=timeout_ms / 1000,
             )
-            full_latency_ms = elapsed_ms(started)
+            target_latency_ms = elapsed_ms(started)
         except httpx.TimeoutException:
             return TargetResult(
+                target_kind="gateway_http",
+                target_latency_ms=elapsed_ms(started),
+                target_outcome="timeout",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=elapsed_ms(started),
-                sidecar_outcome="timeout",
-                fallback_mode="regex_only",
-                sanitized_error_code="timeout",
+                sidecar_outcome="unobserved",
+                sidecar_observation="not_observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
+                sanitized_error_code="gateway_timeout",
             )
         except httpx.HTTPError:
             return TargetResult(
+                target_kind="gateway_http",
+                target_latency_ms=elapsed_ms(started),
+                target_outcome="error",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=elapsed_ms(started),
-                sidecar_outcome="error",
-                fallback_mode="regex_only",
-                sanitized_error_code="http_error",
+                sidecar_outcome="unobserved",
+                sidecar_observation="not_observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
+                sanitized_error_code="gateway_http_error",
             )
 
         if response.status_code not in {200, 403}:
             return TargetResult(
+                target_kind="gateway_http",
+                target_latency_ms=target_latency_ms,
+                target_outcome="error",
                 sidecar_latency_ms=None,
-                full_safety_latency_ms=full_latency_ms,
-                sidecar_outcome="error",
-                fallback_mode="regex_only",
-                sanitized_error_code=f"http_{response.status_code}",
-            )
-
-        reported_latency_ms = gateway_reported_latency_ms(response, fallback_latency_ms=full_latency_ms)
-        if full_latency_ms > timeout_ms:
-            return TargetResult(
-                sidecar_latency_ms=None,
-                full_safety_latency_ms=full_latency_ms,
-                sidecar_outcome="timeout",
-                fallback_mode="regex_only",
-                sanitized_error_code="timeout",
+                sidecar_outcome="unobserved",
+                sidecar_observation="not_observed",
+                fallback_mode="not_observed",
+                fallback_observation="not_observed",
+                sanitized_error_code="gateway_non_terminal_status",
             )
         return TargetResult(
-            sidecar_latency_ms=reported_latency_ms,
-            full_safety_latency_ms=full_latency_ms,
-            sidecar_outcome="success",
-            fallback_mode="none",
+            target_kind="gateway_http",
+            target_latency_ms=target_latency_ms,
+            target_outcome="success" if response.status_code == 200 else "blocked",
+            sidecar_latency_ms=None,
+            sidecar_outcome="unobserved",
+            sidecar_observation="not_observed",
+            fallback_mode="not_observed",
+            fallback_observation="not_observed",
         )
 
     def _headers(self, *, locale: str | None) -> dict[str, str]:
@@ -269,62 +309,72 @@ def build_gateway_chat_payload(prompt_text: str, *, model: str = "auto") -> dict
     }
 
 
-def gateway_reported_latency_ms(response: Any, *, fallback_latency_ms: int) -> int:
-    try:
-        body = response.json()
-    except ValueError:
-        return fallback_latency_ms
-    if not isinstance(body, dict):
-        return fallback_latency_ms
-    gate_lm = body.get("gate_lm")
-    if not isinstance(gate_lm, dict):
-        return fallback_latency_ms
-    latency_ms = gate_lm.get("latencyMs")
-    if isinstance(latency_ms, int) and latency_ms >= 0:
-        return latency_ms
-    return fallback_latency_ms
-
-
-def result_from_response_body(body: Any, *, full_latency_ms: int, timeout_ms: int) -> TargetResult:
+def result_from_response_body(
+    body: Any,
+    *,
+    target_kind: str,
+    target_latency_ms: int,
+    timeout_ms: int,
+) -> TargetResult:
     if not isinstance(body, dict):
         return TargetResult(
+            target_kind=target_kind,
+            target_latency_ms=target_latency_ms,
+            target_outcome="invalid_response",
             sidecar_latency_ms=None,
-            full_safety_latency_ms=full_latency_ms,
             sidecar_outcome="invalid_response",
-            fallback_mode="regex_only",
+            sidecar_observation="observed",
+            fallback_mode="not_observed",
+            fallback_observation="not_observed",
             sanitized_error_code="non_object_response",
         )
     forbidden_field = first_forbidden_response_field(body)
     if forbidden_field is not None:
         return TargetResult(
+            target_kind=target_kind,
+            target_latency_ms=target_latency_ms,
+            target_outcome="invalid_response",
             sidecar_latency_ms=None,
-            full_safety_latency_ms=full_latency_ms,
             sidecar_outcome="invalid_response",
-            fallback_mode="regex_only",
+            sidecar_observation="observed",
+            fallback_mode="not_observed",
+            fallback_observation="not_observed",
             sanitized_error_code="forbidden_response_field",
         )
     latency_ms = body.get("latencyMs")
     if not isinstance(latency_ms, int) or latency_ms < 0:
         return TargetResult(
+            target_kind=target_kind,
+            target_latency_ms=target_latency_ms,
+            target_outcome="invalid_response",
             sidecar_latency_ms=None,
-            full_safety_latency_ms=full_latency_ms,
             sidecar_outcome="invalid_response",
-            fallback_mode="regex_only",
+            sidecar_observation="observed",
+            fallback_mode="not_observed",
+            fallback_observation="not_observed",
             sanitized_error_code="missing_latency",
         )
-    if full_latency_ms > timeout_ms:
+    if target_latency_ms > timeout_ms:
         return TargetResult(
+            target_kind=target_kind,
+            target_latency_ms=target_latency_ms,
+            target_outcome="timeout",
             sidecar_latency_ms=None,
-            full_safety_latency_ms=full_latency_ms,
             sidecar_outcome="timeout",
-            fallback_mode="regex_only",
+            sidecar_observation="observed",
+            fallback_mode="not_observed",
+            fallback_observation="not_observed",
             sanitized_error_code="timeout",
         )
     return TargetResult(
+        target_kind=target_kind,
+        target_latency_ms=target_latency_ms,
+        target_outcome="success",
         sidecar_latency_ms=latency_ms,
-        full_safety_latency_ms=full_latency_ms,
         sidecar_outcome="success",
+        sidecar_observation="observed",
         fallback_mode="none",
+        fallback_observation="not_applicable",
         sanitized_error_code=None,
     )
 

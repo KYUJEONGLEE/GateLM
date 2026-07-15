@@ -31,6 +31,8 @@ AI Safety Lab은 아래 질문에 답하기 위한 문서와 근거를 모은다
 | Schema scope | `safety-detection`, `safety-summary`, `detector-sidecar-response`, `eval-case`, `master-eval-case` schema를 둔다. |
 | Sidecar version | `contractVersion="ai-safety-detector.v1"` |
 | Sidecar path candidate | `POST /internal/ai-safety/v1/detect` |
+| Ordered batch version | `contractVersion="ai-safety-detector-batch.v1"` |
+| Ordered batch path | `POST /internal/ai-safety/v1/detect/batch` (1~64 items) |
 | Confidence visibility | Lab/eval response에는 허용, Gateway/API/UI summary에는 기본 비노출 |
 | Preview | `redactedPromptPreview`는 sanitized preview로 둔다. |
 | Corpus data | synthetic placeholder 기반만 허용한다. 실제 고객 문장, 실제 이메일/전화번호/토큰은 금지한다. |

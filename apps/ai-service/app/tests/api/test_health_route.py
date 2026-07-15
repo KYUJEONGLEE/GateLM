@@ -85,6 +85,24 @@ class HealthRouteTests(unittest.TestCase):
         self.assertTrue(detector["required"])
         self.assertEqual(detector["status"], "loaded")
 
+    def test_readyz_returns_not_ready_when_required_detector_is_not_loaded(self) -> None:
+        settings = Settings(ai_safety_preload_enabled=True)
+        app = create_app(Settings())
+        app.state.settings = settings
+        client = TestClient(app)
+
+        response = client.get("/readyz")
+
+        self.assertEqual(response.status_code, 503)
+        body = response.json()
+        self.assertEqual(body["status"], "not_ready")
+        detector = body["dependencies"]["aiSafetyDetector"]
+        self.assertTrue(detector["required"])
+        self.assertEqual(detector["status"], "configured")
+        body_text = str(body)
+        self.assertNotIn(".cache", body_text)
+        self.assertNotIn("model_quantized", body_text)
+
 
 def _loaded_detector_service():
     from app.adapters.safety.privacy_filter_adapter import PrivacyFilterAdapter

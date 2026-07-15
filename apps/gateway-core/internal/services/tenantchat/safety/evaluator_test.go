@@ -60,8 +60,64 @@ func TestEvaluatorUsesInjectedMaskingEngineForEveryMessage(t *testing.T) {
 	}
 }
 
+func TestEvaluatorUsesOptionalBatchEngineOnceAndKeepsSharedEntityScope(t *testing.T) {
+	engine := &recordingBatchMaskingEngine{}
+	evaluator := NewEvaluatorWithEngine(engine)
+	snapshot := tenantruntime.Snapshot{Policies: tenantruntime.Policies{Safety: tenantruntime.SafetyPolicy{
+		Enabled: true, PolicyDigest: "sha256:synthetic",
+		DetectorSet: []tenantruntime.SafetyDetector{{DetectorType: "email", Action: "redact"}},
+	}}}
+	result, err := evaluator.Evaluate(context.Background(), snapshot, tenantchat.CompletionInput{
+		Messages: []tenantchat.EphemeralMessage{
+			{Role: "system", Content: "synthetic system message"},
+			{Role: "user", Content: "synthetic user message"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("evaluate with batch engine: %v", err)
+	}
+	if engine.batchCalls != 1 || engine.applyCalls != 0 || len(engine.requests) != 2 {
+		t.Fatalf("expected one batch and zero single calls: %+v", engine)
+	}
+	if engine.requests[0].EntityScope == nil || engine.requests[0].EntityScope != engine.requests[1].EntityScope {
+		t.Fatal("batch requests must share the request-scoped entity scope")
+	}
+	for _, message := range result.Input.Messages {
+		if message.Content != "[BATCH_REDACTED]" {
+			t.Fatalf("expected batch output, got %q", message.Content)
+		}
+	}
+}
+
 type recordingMaskingEngine struct {
 	prompts []string
+}
+
+type recordingBatchMaskingEngine struct {
+	applyCalls int
+	batchCalls int
+	requests   []masking.ApplyRequest
+}
+
+func (e *recordingBatchMaskingEngine) Apply(_ context.Context, _ masking.ApplyRequest) (masking.Result, error) {
+	e.applyCalls++
+	return masking.Result{}, nil
+}
+
+func (e *recordingBatchMaskingEngine) ApplyBatch(
+	_ context.Context,
+	requests []masking.ApplyRequest,
+) ([]masking.Result, error) {
+	e.batchCalls++
+	e.requests = append([]masking.ApplyRequest(nil), requests...)
+	results := make([]masking.Result, len(requests))
+	for index, request := range requests {
+		results[index] = masking.Result{
+			Action: masking.ActionRedacted, RedactedPrompt: "[BATCH_REDACTED]",
+			LogSafePrompt: "[BATCH_REDACTED]", SecurityPolicyVersionID: request.SecurityPolicyVersionID,
+		}
+	}
+	return results, nil
 }
 
 func (e *recordingMaskingEngine) Apply(_ context.Context, req masking.ApplyRequest) (masking.Result, error) {

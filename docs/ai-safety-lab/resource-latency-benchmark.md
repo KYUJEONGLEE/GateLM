@@ -19,10 +19,10 @@ Benchmark runner는 `apps/ai-service/app/services/ai_safety_latency_benchmark_ru
 | Warmup 요청 수 | 10 |
 | 측정 요청 수 | runtime profile별 100회 |
 | Sidecar p95 목표 후보 | `<= 300 ms` |
-| Full safety stage good 기준 후보 | `<= 800 ms` |
-| Full safety stage warning 구간 후보 | `> 800 ms` 그리고 `<= 1200 ms` |
-| Full safety stage fail 기준 후보 | `> 1200 ms` |
-| Timeout 동작 | ML 결과를 포기하고 regex-only fallback으로 계속 진행 |
+| Measured target latency good 기준 후보 | `<= 800 ms` |
+| Measured target latency warning 구간 후보 | `> 800 ms` 그리고 `<= 1200 ms` |
+| Measured target latency fail 기준 후보 | `> 1200 ms` |
+| Timeout 동작 | caller timeout과 실제 Gateway fallback을 별도 관측; 추정 금지 |
 
 `300 ms`와 `800~1200 ms`는 평가용 후보 gate이며 production 계약값으로 확정하지 않는다.
 
@@ -32,13 +32,16 @@ Benchmark runner는 `apps/ai-service/app/services/ai_safety_latency_benchmark_ru
 cd apps/ai-service
 python -m app.services.ai_safety_latency_benchmark_runner `
   --target http `
-  --endpoint-url http://127.0.0.1:8000/internal/ai-safety/v1/detect `
+  --endpoint-url http://127.0.0.1:8001/internal/ai-safety/v1/detect `
   --runtime-profile cpu_local_pipeline `
   --timeout-ms 300 `
   --request-timeout-ms 3000 `
+  --artifact-verification <artifact-verification-json> `
   --corpus ../../docs/ai-safety-lab/fixtures/resource-latency-benchmark-corpus.jsonl `
   --out ../../reports/ai-safety-lab
 ```
+
+Production promotion evidence로 사용할 때는 checksum verifier가 만든 `pii-artifact-verification.v1` 파일을 `--artifact-verification`으로 반드시 전달한다. Runner는 성공한 파일 count와 nested `evidenceBinding`을 검증하고 report root에 복사한다. `metadata.gitSha`는 binding의 lowercase full Git object ID와 같아야 한다. `--evidence-binding` 직접 입력은 격리 테스트용이며 checksum 성공을 runner가 추정하지 않는다.
 
 ## 3. 런타임 프로파일
 
@@ -90,12 +93,13 @@ runtimeProfile
 1. 모델을 로드하고 cold start / model load latency를 별도로 기록한다.
 2. Warmup 요청 10회를 실행한다. Warmup 측정값은 percentile 계산에서 제외한다.
 3. Runtime profile별 측정 요청 100회를 실행한다. Synthetic corpus를 순환하며 사용한다.
-4. Endpoint를 사용하는 경우 response의 `latencyMs`를 primary sidecar latency로 기록한다.
-5. 요청 또는 in-process call 바깥에서 잰 client-observed latency를 secondary metric으로 기록한다.
+4. Direct sidecar endpoint 또는 in-process target만 response의 `latencyMs`를 sidecar latency로 기록한다.
+5. 요청 바깥에서 잰 wall-clock 값은 `targetLatencyMs`다. Gateway 전체 응답 시간은 sidecar latency로 재표기하지 않는다.
 6. p50과 p95는 nearest-rank 방식으로 계산한다.
 7. Timeout scenario에서는 `300 ms` sidecar timeout 후보를 적용한다.
-8. Timeout이 발생하면 `sidecarOutcome=timeout`, `fallbackMode=regex_only`로 기록한다.
+8. Direct sidecar timeout은 `sidecarOutcome=timeout`, `fallbackObservation=not_observed`로 기록한다. Gateway timeout은 sidecar 결과 자체가 `unobserved`다.
 9. 리포트에는 raw prompt, raw detected value, raw span, raw model `word`, raw response, raw error body, hash, request ID, trace ID를 기록하지 않는다.
+10. Gateway의 200/403 응답만으로 sidecar 성공 또는 fallback 성공을 추정하지 않는다. 별도 bounded telemetry가 없으면 sidecar와 fallback을 모두 `not_observed`로 남긴다.
 
 Percentile 계산 방식:
 
@@ -109,9 +113,10 @@ value = sorted[rank - 1]
 
 | Gate | Pass 기준 | Warn 기준 | Fail 기준 |
 |---|---|---|---|
-| Sidecar latency | p95 sidecar `<= 300 ms` | p95 sidecar `> 300 ms`지만 fallback 동작 확인 | p95 sidecar `> 300 ms`이고 fallback 근거 없음 |
-| Full safety stage | p95 full safety `<= 800 ms` | p95 full safety `> 800 ms` 그리고 `<= 1200 ms` | p95 full safety `> 1200 ms` |
-| Timeout fallback | timeout 시 regex-only fallback 수가 일치 | fallback 근거가 일부만 있음 | timeout 경로가 raw value를 노출하거나 요청을 예측 불가능하게 실패시킴 |
+| Sidecar latency | 실제 관측된 p95 sidecar `<= 300 ms`, timeout 0 | 관측된 timeout마다 fallback 증거가 있음 | sidecar latency 미관측, 기준 초과 또는 fallback 근거 없음 |
+| Measured target latency | p95 target `<= 800 ms` | p95 target `> 800 ms` 그리고 `<= 1200 ms` | p95 target `> 1200 ms` |
+| Timeout fallback | 관측된 sidecar timeout마다 실제 regex-only fallback이 관측됨 | timeout scenario 미실행 | timeout이 있지만 fallback은 추정 또는 미관측 |
+| Evidence completeness | 모든 sample의 sidecar 실행 결과가 직접 또는 bounded telemetry로 관측됨 | 없음 | Gateway total latency/상태만 있고 sidecar 결과가 미관측 |
 | Raw value exposure | report에 금지된 내용 없음 | 수동 검토 필요 | raw prompt/value/span/model word/error body 존재 |
 
 초기 권장 판단:
@@ -119,7 +124,7 @@ value = sorted[rank - 1]
 ```text
 sidecar p95 <= 300ms -> ML sidecar 후보 유지
 sidecar p95 > 300ms -> shadow unavailable로 보고 runtime path는 regex-only fallback
-full safety p95 > 1200ms -> ML sidecar를 enforce path로 승격하지 않음
+measured target p95 > 1200ms -> ML sidecar를 enforce path로 승격하지 않음
 ```
 
 ## 7. 리포트 템플릿
@@ -148,17 +153,18 @@ full safety p95 > 1200ms -> ML sidecar를 enforce path로 승격하지 않음
 | Gate | 결과 | 근거 |
 |---|---|---|
 | sidecar p95 <= 300ms | pass/warn/fail | p95SidecarLatencyMs |
-| full safety stage <= 800~1200ms | pass/warn/fail | p95FullSafetyStageMs |
-| timeout fallback 동작 | pass/fail | timeoutCount + regexOnlyFallbackCount |
+| measured target p95 <= 800~1200ms | pass/warn/fail | p95TargetLatencyMs |
+| timeout fallback 관측 | pass/fail/not_exercised | timeoutCount + observedFallbackCount |
+| sidecar evidence completeness | pass/fail | unobservedSidecarCount |
 | raw value 노출 여부 | pass/fail | report에 raw prompt/value/span 없음 |
 
 ## 지연시간 요약
-| Runtime | p50 sidecar | p95 sidecar | p50 full safety | p95 full safety | timeout rate |
+| Runtime | p50 sidecar | p95 sidecar | p50 target | p95 target | timeout rate |
 |---|---:|---:|---:|---:|---:|
 
 ## Case Group 요약
-| Group | requests | p50 | p95 | max | timeoutCount | fallbackCount |
-|---|---:|---:|---:|---:|---:|---:|
+| Group | requests | p50 target | p95 target | max target | timeoutCount | observedFallbackCount | unobservedSidecarCount |
+|---|---:|---:|---:|---:|---:|---:|---:|
 
 ## 리소스 요약
 | Runtime | peakRssMb | avgCpuPct | peakGpuMemoryMb | notes |
@@ -167,7 +173,7 @@ full safety p95 > 1200ms -> ML sidecar를 enforce path로 승격하지 않음
 ## Fallback 권장안
 - sidecar p95 <= 300ms인 경우:
 - sidecar p95 > 300ms인 경우:
-- full safety p95 > 1200ms인 경우:
+- measured target p95 > 1200ms인 경우:
 - 권장 production posture:
 
 ## Raw Value 안전성 확인
@@ -184,7 +190,15 @@ JSON 리포트 shape는 runner 후보이며 아직 locked schema가 아니다.
 
 ```json
 {
+  "evidenceBinding": {
+    "schemaVersion": "pii-promotion-evidence-binding.v1",
+    "manifestVersion": "<manifest-version>",
+    "modelRevisions": {"<model-id>": "<immutable-model-revision>"},
+    "artifactChecksumsVerified": true,
+    "gitRevision": "<full-lowercase-git-object-id>"
+  },
   "metadata": {
+    "reportVersion": "ai-safety-resource-latency-benchmark.v2",
     "runId": "",
     "date": "",
     "gitSha": "",
@@ -199,8 +213,13 @@ JSON 리포트 shape는 runner 후보이며 아직 locked schema가 아니다.
       "status": "pass",
       "p50SidecarLatencyMs": 0,
       "p95SidecarLatencyMs": 0,
-      "p50FullSafetyStageMs": 0,
-      "p95FullSafetyStageMs": 0,
+      "p50TargetLatencyMs": 0,
+      "p95TargetLatencyMs": 0,
+      "observedFallbackCount": 0,
+      "unobservedFallbackCount": 0,
+      "unobservedSidecarCount": 0,
+      "sidecarObservationCounts": {"observed": 100},
+      "fallbackObservationCounts": {"not_applicable": 100},
       "timeoutRate": 0
     }
   ],
@@ -212,19 +231,21 @@ JSON 리포트 shape는 runner 후보이며 아직 locked schema가 아니다.
       "p95LatencyMs": 0,
       "maxLatencyMs": 0,
       "timeoutCount": 0,
-      "fallbackCount": 0
+      "observedFallbackCount": 0,
+      "unobservedSidecarCount": 0
     }
   ],
   "decisionSummary": {
     "sidecarLatencyGate": "pass",
-    "fullSafetyStageGate": "pass",
-    "timeoutFallbackGate": "pass",
+    "targetLatencyGate": "pass",
+    "timeoutFallbackGate": "not_exercised",
+    "evidenceCompletenessGate": "pass",
     "rawValueExposureGate": "pass"
   },
   "fallbackRecommendation": {
     "sidecarP95Under300Ms": "",
     "sidecarP95Over300Ms": "",
-    "fullSafetyP95Over1200Ms": "",
+    "targetP95Over1200Ms": "",
     "recommendedProductionPosture": ""
   }
 }
@@ -241,8 +262,10 @@ JSON 리포트 shape는 runner 후보이며 아직 locked schema가 아니다.
 [ ] p50/p95 계산 방식은 nearest-rank이며 재현 가능하다.
 [ ] GPU runtime은 측정했거나 not_run으로 명확히 표시했다.
 [ ] Quantized runtime은 측정했거나 not_run으로 명확히 표시했다.
-[ ] Timeout scenario는 sidecarOutcome=timeout을 기록한다.
-[ ] Timeout scenario는 fallbackMode=regex_only를 기록한다.
+[ ] Direct sidecar timeout은 sidecarOutcome=timeout을 기록한다.
+[ ] Direct timeout만으로 Gateway fallback을 추정하지 않는다.
+[ ] Gateway target latency를 sidecar latency로 기록하지 않는다.
+[ ] Gateway fallback 검증은 bounded telemetry로 실제 관측한다.
 [ ] Report에 raw prompt가 없다.
 [ ] Report에 raw detected value가 없다.
 [ ] Report에 raw span 또는 offset이 없다.

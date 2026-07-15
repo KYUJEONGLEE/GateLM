@@ -4,14 +4,21 @@ import unittest
 
 from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL, PrivacyFilterAdapter
 from app.schemas.safety import (
+    AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
     AI_SAFETY_DETECTOR_CONTRACT_VERSION,
+    AiSafetyBatchDetectRequest,
+    AiSafetyBatchInput,
     AiSafetyDetectRequest,
     AiSafetyDetectorConfig,
     AiSafetyDetectorInput,
     AiSafetyDetectorPolicy,
     SafetyDetector,
 )
-from app.services.ai_safety_detector import AiSafetyDetectorService
+from app.services.ai_safety_detector import (
+    ML_MAX_CANDIDATES_PER_REQUEST,
+    ML_WINDOW_MAX_CHARS,
+    AiSafetyDetectorService,
+)
 
 
 class AiSafetyDetectorServiceTests(unittest.TestCase):
@@ -233,6 +240,130 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
             ["sensitive_health_context"],
         )
 
+    def test_batch_skips_models_for_person_and_organization_only_candidates(self) -> None:
+        classifier = RecordingBatchClassifier(fail_if_called=True)
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+
+        response = service.detect_batch(
+            batch_request(
+                "Candidate name is Alex Kim.",
+                "Organization is Acme Synthetic.",
+            )
+        )
+
+        self.assertEqual(classifier.calls, 0)
+        self.assertEqual(response.execution_summary.execution_mode, "rules_only")
+        self.assertEqual(response.execution_summary.model_invocation_count, 0)
+        self.assertEqual([item.item_index for item in response.results], [0, 1])
+
+    def test_batch_runs_supported_candidate_in_one_dynamic_model_invocation(self) -> None:
+        value = "tenant-link-value"
+        classifier = RecordingBatchClassifier(
+            detector_label="private_url",
+            detected_value=value,
+        )
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+
+        response = service.detect_batch(
+            batch_request(
+                f"Review private URL {value} before handoff.",
+                f"Rotate secret {value} before handoff.",
+            )
+        )
+
+        self.assertEqual(classifier.calls, 1)
+        self.assertEqual(response.execution_summary.execution_mode, "hybrid")
+        self.assertEqual(response.execution_summary.model_invocation_count, 1)
+        self.assertGreaterEqual(response.execution_summary.accepted_model_detection_count, 1)
+        self.assertEqual([item.item_index for item in response.results], [0, 1])
+        self.assertNotIn(value, response.results[0].log_safe_prompt)
+
+    def test_batch_results_match_single_detection_semantics(self) -> None:
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=lambda _text: []),
+        )
+        prompts = (
+            "Contact batch-equivalence@example.test.",
+            "Write a safe handoff note.",
+        )
+
+        batch = service.detect_batch(batch_request(*prompts))
+        singles = [service.detect(detect_request(prompt)) for prompt in prompts]
+
+        for batch_item, single in zip(batch.results, singles, strict=True):
+            self.assertEqual(batch_item.outcome, single.outcome)
+            self.assertEqual(batch_item.redacted_prompt, single.redacted_prompt)
+            self.assertEqual(batch_item.log_safe_prompt, single.log_safe_prompt)
+            self.assertEqual(batch_item.detector_summary, single.detector_summary)
+
+    def test_long_prompt_model_window_excludes_covered_unrelated_rule_signal(self) -> None:
+        private_url_value = "tenant-link-value"
+        covered_email = "covered-window@example.test"
+        classifier = RecordingBatchClassifier(
+            detector_label="private_url",
+            detected_value=private_url_value,
+        )
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+        prompt = (
+            f"Contact {covered_email}. "
+            + ("neutral context " * 120)
+            + f"Review private URL {private_url_value}."
+        )
+
+        response = service.detect_batch(batch_request(prompt))
+
+        self.assertEqual(response.execution_summary.execution_mode, "hybrid")
+        self.assertTrue(classifier.seen_texts)
+        self.assertTrue(all(covered_email not in text for text in classifier.seen_texts))
+
+    def test_long_prompt_keeps_late_candidate_in_a_bounded_model_window(self) -> None:
+        late_value = "late-model-value"
+        classifier = RecordingBatchClassifier(
+            detector_label="private_url",
+            detected_value=late_value,
+        )
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+        prompt = (
+            "Review private URL early-model-value. "
+            + ("neutral context " * 180)
+            + f"Review private URL {late_value}."
+        )
+
+        response = service.detect_batch(batch_request(prompt))
+
+        self.assertTrue(classifier.seen_texts)
+        self.assertTrue(all(len(text) <= ML_WINDOW_MAX_CHARS for text in classifier.seen_texts))
+        self.assertTrue(any(late_value in text for text in classifier.seen_texts))
+        self.assertNotIn(late_value, response.results[0].log_safe_prompt)
+
+    def test_excessive_model_candidates_fail_before_classifier_invocation(self) -> None:
+        private_marker = "private-window-marker"
+        classifier = RecordingBatchClassifier()
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+        prompt = (
+            f"Review private URL {private_marker}. "
+            * (ML_MAX_CANDIDATES_PER_REQUEST + 1)
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "^AI safety model work limit exceeded[.]$",
+        ) as raised:
+            service.detect_batch(batch_request(prompt))
+
+        self.assertEqual(classifier.calls, 0)
+        self.assertNotIn(private_marker, str(raised.exception))
+
 
 def detect_request(prompt: str) -> AiSafetyDetectRequest:
     return AiSafetyDetectRequest(
@@ -240,6 +371,59 @@ def detect_request(prompt: str) -> AiSafetyDetectRequest:
         input=AiSafetyDetectorInput(promptText=prompt),
         detectorConfig=AiSafetyDetectorConfig(returnConfidence=False),
     )
+
+
+def batch_request(*prompts: str) -> AiSafetyBatchDetectRequest:
+    return AiSafetyBatchDetectRequest(
+        contractVersion=AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
+        mode="enforce",
+        inputs=[
+            AiSafetyBatchInput(itemIndex=index, promptText=prompt)
+            for index, prompt in enumerate(prompts)
+        ],
+        detectorConfig=AiSafetyDetectorConfig(returnConfidence=False),
+    )
+
+
+class RecordingBatchClassifier:
+    def __init__(
+        self,
+        *,
+        detector_label: str = "private_url",
+        detected_value: str = "",
+        fail_if_called: bool = False,
+    ) -> None:
+        self.detector_label = detector_label
+        self.detected_value = detected_value
+        self.fail_if_called = fail_if_called
+        self.calls = 0
+        self.seen_texts: list[str] = []
+
+    def __call__(self, text: str) -> list[object]:
+        return self.classify_many([text])[0]
+
+    def classify_many(self, texts: list[str]) -> list[list[object]]:
+        self.calls += 1
+        self.seen_texts.extend(texts)
+        if self.fail_if_called:
+            raise AssertionError("model classifier must not be called")
+        results: list[list[object]] = []
+        for text in texts:
+            start = text.find(self.detected_value)
+            if self.detected_value == "" or start < 0:
+                results.append([])
+                continue
+            results.append(
+                [
+                    {
+                        "entity_group": self.detector_label,
+                        "score": 0.99,
+                        "start": start,
+                        "end": start + len(self.detected_value),
+                    }
+                ]
+            )
+        return results
 
 
 def detector(detector_type: str, action: str, placeholder: str) -> SafetyDetector:

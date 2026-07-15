@@ -31,6 +31,7 @@ The app images are pulled from a registry. Customers do not need to build source
 - `bash`
 - `curl`
 - Access to the image registry that hosts `gatelm/<service>:2.1.0`
+- At least 4 GiB of temporary free space when optional PII models are enabled
 
 Check Docker:
 
@@ -89,6 +90,37 @@ Minimum values to review:
 | `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` | Gateway copy of the Control Plane internal read token |
 | `GATEWAY_OBSERVABILITY_INTERNAL_TOKEN` | Separate server-only Web-to-Gateway observability read token |
 
+PII model inference is disabled by default and is not required for a normal
+self-host install. To opt in:
+
+1. Obtain the approved release's presigned HTTPS bundle URL through your normal
+   artifact delivery process.
+2. Copy `secrets/pii-model-bundle-url.example` to
+   `secrets/pii-model-bundle-url` and restrict it to the installing user.
+3. Open the new file in an editor and put exactly one HTTPS URL on one line.
+4. Set the two feature flags and the secret file path shown below.
+
+```bash
+cp secrets/pii-model-bundle-url.example secrets/pii-model-bundle-url
+chmod 600 secrets/pii-model-bundle-url
+${EDITOR:-vi} secrets/pii-model-bundle-url
+```
+
+```text
+GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true
+AI_SERVICE_INSTALL_ML_DEPS=true
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
+AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE=./secrets/pii-model-bundle-url
+```
+
+Do not put the presigned URL itself in `.env`, a command argument, a support
+ticket, or shared logs. The install initializer reads it only from the mounted
+Compose secret. It verifies the pinned outer bundle hash, embedded manifest,
+and all runtime file hashes before atomically exposing the versioned model
+directory to AI Service. `AI_SERVICE_INSTALL_ML_DEPS=true` is mandatory for
+this opt-in because an image without the pinned ONNX dependencies cannot load
+the verified files.
+
 Demo seed is disabled for self-host/prod-like deployments. Keep demo UUID values only for non-prod local seed experiments:
 
 ```text
@@ -113,6 +145,7 @@ What it does:
 - checks Docker and Compose
 - warns if placeholder secrets remain
 - pulls images
+- downloads and verifies the pinned PII model release when the opt-in is enabled
 - starts the Compose stack
 
 Manual equivalent:
@@ -170,6 +203,17 @@ The smoke test checks:
 - Request Log lookup for that request
 
 The script does not print request body, response body, Authorization header, API key, app token, provider key, or raw model output.
+
+When optional PII models are enabled, run the separate model-runtime smoke:
+
+```bash
+bash scripts/pii-model-smoke.sh
+```
+
+This proves both configured model processes are loaded and that one sanitized
+batch request takes the hybrid inference path and masks its fixed synthetic
+value. It is not a Tenant Chat end-to-end test because the Self-host bundle does
+not include the Tenant Chat API/Web applications.
 
 ## 7. Open The Services
 

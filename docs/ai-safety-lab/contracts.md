@@ -255,6 +255,9 @@ Sidecar draft API:
 ```text
 contractVersion = ai-safety-detector.v1
 POST /internal/ai-safety/v1/detect
+
+contractVersion = ai-safety-detector-batch.v1
+POST /internal/ai-safety/v1/detect/batch
 ```
 
 Sidecar 원칙:
@@ -264,6 +267,8 @@ Sidecar 원칙:
 - Gateway는 sidecar의 `redactedPrompt`와 sanitized result만 사용한다.
 - sidecar는 raw prompt, raw span, raw detected value를 log/response/error에 남기지 않는다.
 - sidecar response는 `redactedPrompt`를 반환하여 Gateway가 runtime별 offset 차이를 해석하지 않게 한다.
+- single/batch success response는 실제 model 실행 여부를 나타내는 sanitized `executionSummary`를 반환한다.
+- batch는 1~64개 항목의 순서와 경계를 유지하며 partial/mismatch 응답 전체를 폐기하고 local P0 결과로 fallback한다.
 
 Sidecar API의 자세한 request/response shape는 `detector-sidecar-contract.md`에서 별도로 작성한다.
 

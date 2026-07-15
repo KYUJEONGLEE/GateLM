@@ -59,12 +59,12 @@ The primary sidecar detector model defaults to `openai/privacy-filter`. For ligh
 AI_SERVICE_TRANSFORMERS_OFFLINE=1
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
-AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED=false
+AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4
 AI_SERVICE_ONNX_INTER_OP_THREADS=1
 AI_SERVICE_ONNX_ALLOW_SPINNING=false
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/releases/tenant-chat-pii-models-20260715/amoeba04--koelectra-small-v3-privacy-ner-quantized
 ```
 
 Both models are loaded through local ONNX Runtime pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/onnx` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
@@ -78,7 +78,23 @@ python scripts/tenant_chat_pii_models/import_bundle.py \
   apps/ai-service/.cache/bundles/tenant-chat-pii-model-bundle-20260715.zip
 ```
 
-The imported `.cache/onnx` files are runtime assets and are ignored by Git. The manifest, evaluation summary, third-party notices, and Apache-2.0 text remain versioned in the repository. See `docs/ai-safety-lab/tenant-chat-pii-model-integration-20260715.md` for measured evidence and promotion limits.
+The importer verifies the outer bundle pin and installs into `.cache/onnx/releases/tenant-chat-pii-models-20260715` only after every manifest-listed file passes size and SHA-256 verification. These runtime assets are ignored by Git. The manifest, evaluation summary, release descriptor, third-party notices, and Apache-2.0 text remain versioned in the repository. See `docs/ai-safety-lab/tenant-chat-pii-model-integration-20260715.md` for measured evidence and promotion limits.
+
+To produce the artifact-integrity input for the production promotion gate, bind
+the verification to the same Git revision used by the other evidence runs:
+
+```bash
+python scripts/tenant_chat_pii_models/import_bundle.py \
+  apps/ai-service/.cache/bundles/tenant-chat-pii-model-bundle-20260715.zip \
+  --evidence-out .tmp/pii-artifact-verification.json \
+  --git-revision <deployed-full-git-object-id>
+```
+
+Evidence is written only after another complete checksum verification. The JSON
+contains aggregate file counts plus manifest/model/Git provenance binding; it
+does not contain the bundle source, artifact paths, or artifact digests. The Git
+revision must be the immutable full lowercase 40- or 64-hex object ID used by
+every other promotion evidence run; branch names and abbreviated SHAs fail closed.
 
 ## AI Safety Detector Sidecar
 
@@ -86,9 +102,12 @@ The local detector sidecar endpoint is available at:
 
 ```text
 POST /internal/ai-safety/v1/detect
+POST /internal/ai-safety/v1/detect/batch
 ```
 
-It uses the `ai-safety-detector.v1` draft contract and returns Provider-safe `redactedPrompt`, storage-safe `logSafePrompt`, `detectorSummary`, and sanitized `detections`. The endpoint accepts `shadow` and `enforce`: shadow observations do not change the Provider prompt or final action, while enforce results can redact or block before Provider execution. `logSafePrompt` and the preview redact detections even when the Provider policy action is `allow`. `openai/privacy-filter` remains the primary default adapter, and additional adapters such as KoELECTRA can be enabled through configuration. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+The single route uses `ai-safety-detector.v1`; the ordered 1-to-64 item route uses `ai-safety-detector-batch.v1`. Both return Provider-safe `redactedPrompt`, storage-safe `logSafePrompt`, sanitized detections, and an `executionSummary` that distinguishes `rules_only` from actual `hybrid` model execution. The endpoint accepts `shadow` and `enforce`: shadow observations do not change the Provider prompt or final action, while enforce results can redact or block before Provider execution. `logSafePrompt` and the preview redact detections even when the Provider policy action is `allow`. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+
+Tenant Chat sends all local-P0-redacted messages in one batch without concatenating message text. The sidecar preserves item boundaries and order, runs detector-type-aware dynamic ONNX micro-batches, and maps every result back to its `itemIndex`. The pinned models do not support person or organization labels, so name/organization-only candidates stay rules-only. A malformed or partial batch is rejected so Gateway can use the complete local result set.
 
 Example request shape:
 
@@ -119,12 +138,12 @@ python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true \
-AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED=false \
+AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4 \
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
 AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
 AI_SERVICE_ONNX_ALLOW_SPINNING=false \
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/releases/tenant-chat-pii-models-20260715/amoeba04--koelectra-small-v3-privacy-ner-quantized \
 python -m app.main
 ```
 
@@ -135,8 +154,8 @@ cd apps/ai-service
 python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/releases/tenant-chat-pii-models-20260715/amoeba04--koelectra-small-v3-privacy-ner-quantized \
 python -m app.main
 ```
 

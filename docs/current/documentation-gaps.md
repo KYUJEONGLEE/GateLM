@@ -4,8 +4,8 @@
 |---|---|
 | Status | Active issue register |
 | Authority | 확인된 문서/구현 불일치와 결정 대기 항목 |
-| Baseline | `origin/dev @ dace68488` |
-| Last verified | 2026-07-15 |
+| Baseline | `origin/dev @ 0c637455` |
+| Last verified | 2026-07-16 |
 
 이 문서는 후보를 계약으로 승격하지 않는다. 확실한 불일치를 기록하고, 사람 결정이 필요한 항목을 구현 작업과 분리한다.
 
@@ -31,6 +31,7 @@
 | DOC-016 | Hybrid `ComplexityScore`의 offline candidate 선택과 untouched Holdout evidence는 생성됐지만 runtime 승격 gate를 통과하지 못했다 | Owner-approved 500건/89-family의 family-disjoint 300/100/100 partition에서 42D·106D·118D 후보를 calibration family-grouped CV log loss/Brier/lower-dimension 순서로만 선택한다. 선택된 118D candidate의 model·Platt calibrator·threshold·component hash를 freeze한 뒤 그 candidate만 untouched Holdout 100건에 적용했다. 전체 accuracy는 rule baseline `0.86`에서 `0.91`, 전체 `complex -> simple`은 `10`에서 `1`로 개선됐지만 `general` category는 `0`에서 `1`로 악화되어 per-category 비악화 gate가 실패했다. Runtime latency/failure-isolation과 active contract 승인도 아직 없음 | 현재 artifact를 runtime으로 승격하지 않음. Holdout 결과를 근거로 component를 바꾸거나 재선택하면 현재 Holdout은 소비된 것으로 보고 새 artifact version과 새 untouched Holdout으로 다시 검증 |
 | DOC-017 | PR #303에서 기존 전역 low/default/high/fallback 역할이 category별 ordered multi-fallback authoring으로 한 번에 대체되어 현재 제품의 예측 가능한 설정 의미와 충돌한다 | `docs/routing/contracts.md`의 `modelRefs[1..n]`, 10-cell Web 편집기, RuntimeConfig DTO가 제한 없는 fallback을 허용하며 별도 사람 계약 리뷰 기록이 없다 | RuntimeSnapshot v2 matrix는 유지하되 신규 authoring을 전역 Simple=low/default, Complex=high, optional 단일 fallback profile로 교정하고 기존 v2 data는 명시적 전환 전까지 read/execution compatibility로 보존 |
 | DOC-018 | `difficulty-feature-vector.v2`의 complete offline bundle은 생성됐지만 runtime packaging과 승격 evidence가 없다 | [`../routing/difficulty-e5-encoder.md`](../routing/difficulty-e5-encoder.md)의 pinned QInt8 encoder/PCA 64D, fixed 4-head/12D와 calibration-only candidate selection으로 고정한 118D decision head·calibrator가 exact component hash를 가진 offline artifact로 생성됐다. 선택 후 단일 frozen candidate의 untouched Holdout evidence는 존재하지만 per-category safety gate가 실패했고 Docker packaging, supported-runtime numeric tolerance와 active runtime contract도 pending임 | 현재 bundle을 active contract나 Gateway runtime으로 승격하지 않음. 후속 candidate는 새 version, 새 untouched Holdout, image packaging, deterministic replay와 latency/memory/failure-isolation evidence를 모두 요구 |
+| DOC-020 | Tenant Chat PII ONNX bundle의 production 승격 기준과 승인 evidence가 없다 | 2026-07-15 전달본은 public checkpoint 그대로이며 combined rule+model synthetic pass rate `65.6%`, email precision `12.83%`다. 평가는 untouched holdout·span-level·model ablation이 아니고 person/organization 결과도 model이 아닌 rule backstop이다. 반복 cold p50/p95, peak RSS, realistic history/concurrency와 timeout/fallback evidence도 승인 기준을 충족하지 않는다. | 제품·보안 owner가 locale/detector별 최소 precision/recall/F1, false-redaction budget, latency/resource budget과 승인된 untouched holdout을 확정하기 전에는 production-grade 또는 DLP로 승격하지 않는다. 저장소의 자동 gate는 evidence 완전성과 owner 승인 없이는 fail closed해야 한다. |
 
 ## Resolved Decisions
 

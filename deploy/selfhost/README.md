@@ -69,12 +69,14 @@ Production deployments should route public traffic through a reverse proxy and T
 - separate Web-to-Gateway observability read token
 - provider mode, defaulting to mock mode
 - AI Service mode
+- optional PII model source secret file path; the URL itself never belongs in `.env`
 
-PostgreSQL and Redis use named volumes:
+PostgreSQL, Redis, and verified PII model releases use named volumes:
 
 ```text
 postgres_data
 redis_data
+pii_model_data
 ```
 
 ## Health Checks
@@ -102,6 +104,13 @@ bash scripts/smoke-test.sh
 | 1 | `scripts/install.sh` | validates `.env`, pulls images, and starts the Compose stack |
 | 2 | `scripts/migrate.sh` | runs Control Plane Prisma migrations and Gateway runtime table SQL |
 | 3 | `scripts/smoke-test.sh` | checks health endpoints, sends one Gateway request, and verifies the Request Log after real runtime resources exist |
+| Optional | `scripts/pii-model-smoke.sh` | checks both PII models are loaded and one sanitized batch probe uses hybrid inference and masking |
+
+PII models are disabled by default. When enabled, the one-shot
+`pii-model-init` container downloads the bundle from a URL read through a
+Compose secret, verifies the release's fixed hashes, and writes a versioned
+directory to `pii_model_data`. AI Service mounts that volume read-only. This
+runtime smoke is model-path evidence only, not Tenant Chat end-to-end evidence.
 
 The Gateway runtime SQL lives in:
 

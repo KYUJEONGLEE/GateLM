@@ -35,6 +35,10 @@ const (
 	TenantChatCompletionTotal              = "gatelm_tenant_chat_completion_total"
 	TenantChatUsageReconciliationTotal     = "gatelm_tenant_chat_usage_reconciliation_total"
 	TenantChatAccountingTransactionSeconds = "gatelm_tenant_chat_accounting_transaction_seconds"
+	AISafetySidecarCallsTotal              = "gatelm_ai_safety_sidecar_calls_total"
+	AISafetySidecarCallDurationSeconds     = "gatelm_ai_safety_sidecar_call_duration_seconds"
+	AISafetySidecarFallbackTotal           = "gatelm_ai_safety_sidecar_fallback_total"
+	GatewayDependencyReady                 = "gatelm_gateway_dependency_ready"
 	PrometheusTextContentType              = "text/plain; version=0.0.4; charset=utf-8"
 )
 
@@ -95,6 +99,10 @@ var metricSpecs = map[string]metricSpec{
 	TenantChatCompletionTotal:              {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
 	TenantChatUsageReconciliationTotal:     {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
 	TenantChatAccountingTransactionSeconds: {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},
+	AISafetySidecarCallsTotal:              {"counter", "Total AI safety sidecar calls by bounded execution outcome."},
+	AISafetySidecarCallDurationSeconds:     {"histogram", "AI safety sidecar call duration in seconds by bounded execution outcome."},
+	AISafetySidecarFallbackTotal:           {"counter", "Total AI safety sidecar fallbacks by bounded reason."},
+	GatewayDependencyReady:                 {"gauge", "Last readiness-check result for a bounded Gateway dependency."},
 }
 
 var allowedLabels = map[string]struct{}{
@@ -115,6 +123,12 @@ var allowedLabels = map[string]struct{}{
 	"outcome":            {},
 	"result":             {},
 	"transition":         {},
+	"surface":            {},
+	"mode":               {},
+	"inference_path":     {},
+	"reason":             {},
+	"dependency":         {},
+	"required":           {},
 }
 
 var forbiddenLabels = map[string]struct{}{

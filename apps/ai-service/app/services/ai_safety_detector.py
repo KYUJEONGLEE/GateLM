@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from time import perf_counter
 
@@ -19,15 +18,20 @@ from app.domain.safety.policy import (
 )
 from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import (
+    AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
     AI_SAFETY_DETECTOR_CONTRACT_VERSION,
     AI_SAFETY_DETECTOR_MODEL_ID,
     AI_SAFETY_DETECTOR_RUNTIME,
+    AiSafetyBatchDetectRequest,
+    AiSafetyBatchDetectResponse,
+    AiSafetyBatchResult,
     AiSafetyDetectRequest,
     AiSafetyDetectResponse,
     AiSafetyDetection,
     AiSafetyDetectorModel,
     AiSafetyDetectorPolicy,
     AiSafetyDetectorSummary,
+    AiSafetyExecutionSummary,
     SafetyDetector,
 )
 
@@ -69,17 +73,11 @@ FAST_RULE_DETECTOR_TYPES = frozenset(
     }
 )
 CHEAP_RULE_DETECTOR_TYPES = FAST_RULE_DETECTOR_TYPES | {"person_name"}
-ML_WINDOWING_MIN_CHARS = 1000
 ML_WINDOW_CONTEXT_CHARS = 240
-ML_CONTEXT_PATTERN = re.compile(
-    r"\b(?:"
-    r"account(?:[_ -]?(?:id|number))?|address|applicant|birthday|candidate|"
-    r"company|date|doctor|dob|employer|interviewer|manager|"
-    r"name|organization|organisation|patient|postal|resident(?:[_ -]?registration)?"
-    r"(?:[_ -]?number)?|secret|shipping|url"
-    r")\b",
-    re.IGNORECASE,
-)
+ML_WINDOW_MAX_CHARS = ML_WINDOW_CONTEXT_CHARS * 2
+ML_MAX_CANDIDATES_PER_REQUEST = 128
+ML_MAX_WINDOWS_PER_REQUEST = 64
+ML_WORK_LIMIT_ERROR = "AI safety model work limit exceeded."
 TITLE_CASE_PERSON_CANDIDATE_PATTERN = re.compile(
     r"(?<![A-Za-z])"
     r"[A-Z][a-z]{1,24}(?:\s+[A-Z][a-z]{1,24}){1,2}"
@@ -100,9 +98,29 @@ ROLE_CONTEXT_PATTERN = re.compile(
     ),
     re.IGNORECASE,
 )
-ML_CANDIDATE_PATTERNS = (
-    ML_CONTEXT_PATTERN,
-    ROLE_CONTEXT_PATTERN,
+ML_TYPED_CANDIDATE_PATTERNS = (
+    (frozenset({"account_number"}), re.compile(r"\baccount(?:[_ -]?number)?\b", re.IGNORECASE)),
+    (frozenset({"postal_address"}), re.compile(r"\b(?:address|postal|shipping)\b", re.IGNORECASE)),
+    (frozenset({"private_date"}), re.compile(r"\b(?:birthday|date|dob)\b", re.IGNORECASE)),
+    (frozenset({"private_url"}), re.compile(r"\burl\b", re.IGNORECASE)),
+    (frozenset({"secret"}), re.compile(r"\bsecret\b", re.IGNORECASE)),
+    (
+        frozenset({"resident_registration_number"}),
+        re.compile(r"\bresident(?:[_ -]?registration)?(?:[_ -]?number)?\b", re.IGNORECASE),
+    ),
+    (frozenset({"email"}), re.compile(r"\b(?:email|e-mail)\b", re.IGNORECASE)),
+    (frozenset({"phone_number"}), re.compile(r"\b(?:phone|telephone|mobile)\b", re.IGNORECASE)),
+    (
+        frozenset({"organization_name"}),
+        re.compile(r"\b(?:company|employer|organization|organisation)\b", re.IGNORECASE),
+    ),
+    (
+        frozenset({"person_name"}),
+        re.compile(r"\b(?:applicant|candidate|doctor|interviewer|manager|name|patient)\b", re.IGNORECASE),
+    ),
+    (frozenset({"person_name"}), ROLE_CONTEXT_PATTERN),
+    (frozenset({"person_name"}), TITLE_CASE_PERSON_CANDIDATE_PATTERN),
+    (frozenset({"person_name"}), KOREAN_PERSON_CANDIDATE_PATTERN),
 )
 NON_REAL_CONTEXT_CHARS = 80
 NON_REAL_ALLOW_DETECTOR_TYPES = frozenset(
@@ -186,7 +204,7 @@ ACTION_REDACT_CONTEXT_PATTERN = re.compile(
     r"\uc0c1\ub2f4|\uc9c0\uc6d0)",
     re.IGNORECASE,
 )
-PARALLEL_ADAPTERS_ENV = "AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED"
+MICRO_BATCH_SIZE_ENV = "AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE"
 
 
 @dataclass(frozen=True)
@@ -194,6 +212,21 @@ class MlWindow:
     start: int
     end: int
     text: str
+
+
+@dataclass(frozen=True)
+class MlCandidate:
+    start: int
+    end: int
+    detector_types: frozenset[str]
+
+
+@dataclass
+class BatchWorkItem:
+    item_index: int
+    prompt_text: str
+    rule_signals: list[SafetySignal]
+    model_detections: list[Detection]
 
 
 DEFAULT_PRIVACY_FILTER_DETECTORS = (
@@ -343,38 +376,21 @@ class AiSafetyDetectorService:
 
     def detect(self, request: AiSafetyDetectRequest) -> AiSafetyDetectResponse:
         started = perf_counter()
-        prompt_text = request.input.prompt_text
         detector_config = _detector_config_with_policy_overrides(
             self.detectors,
             request.detector_config.detector_policies,
         )
-        rule_signals = _fast_rule_signals(prompt_text, detector_config, self.fast_rule_detectors)
-        ml_signals: list[SafetySignal] = []
-        if _should_run_ml_adapters(prompt_text, detector_config, rule_signals):
-            detections = _ml_detections(prompt_text, rule_signals, self.adapters)
-            ml_signals = safety_signals_from_detections(
-                detections,
-                detector_config,
-            )
-            rule_signals = _rule_signals_not_covered_by_ml(rule_signals, ml_signals)
-        signals = effective_signals(
-            [*rule_signals, *ml_signals],
-            prompt_text=prompt_text,
+        work_items, model_invocation_count = self._detect_work_items(
+            [(0, request.input.prompt_text)],
+            detector_config,
         )
-        signals = _apply_non_real_data_allow_guard(prompt_text, signals)
-        signals = _apply_contextual_action_policy(prompt_text, signals)
-        signals = _apply_request_policy_actions(
-            signals,
-            request.detector_config.detector_policies,
-        )
-        enforcement_signals = _enforcement_signals(signals)
-        redacted_prompt = redact_prompt(prompt_text, enforcement_signals)
-        log_safe_prompt = redact_prompt(prompt_text, _log_safe_signals(signals))
-        type_counts = Counter(
-            signal.detector_type for signal in signals
-        )
-        outcome = _outcome_from_signals(enforcement_signals)
         latency_ms = max(0, round((perf_counter() - started) * 1000))
+        result, accepted_model_detection_count = self._build_batch_result(
+            work_items[0],
+            mode=request.mode,
+            policies=request.detector_config.detector_policies,
+            return_confidence=request.detector_config.return_confidence,
+        )
 
         return AiSafetyDetectResponse(
             contractVersion=AI_SAFETY_DETECTOR_CONTRACT_VERSION,
@@ -382,26 +398,176 @@ class AiSafetyDetectorService:
                 modelId=self.model_id,
                 runtime=AI_SAFETY_DETECTOR_RUNTIME,
             ),
-            outcome=outcome,
+            outcome=result.outcome,
             mode=request.mode,
-            redactedPrompt=redacted_prompt,
-            logSafePrompt=log_safe_prompt,
-            redactedPromptPreview=preview_redacted_prompt(log_safe_prompt),
-            detectorSummary=AiSafetyDetectorSummary(
-                detectedCount=len(signals),
-                detectorCategories=sorted(type_counts),
+            redactedPrompt=result.redacted_prompt,
+            logSafePrompt=result.log_safe_prompt,
+            redactedPromptPreview=result.redacted_prompt_preview,
+            detectorSummary=result.detector_summary,
+            detections=result.detections,
+            executionSummary=AiSafetyExecutionSummary(
+                executionMode="hybrid" if model_invocation_count > 0 else "rules_only",
+                modelInvocationCount=model_invocation_count,
+                acceptedModelDetectionCount=accepted_model_detection_count,
             ),
-            detections=[
-                AiSafetyDetection(
-                    detectorType=signal.detector_type,
-                    source=signal.source,
-                    confidence=signal.confidence if request.detector_config.return_confidence else None,
-                    action=signal.action,
-                    mode=request.mode,
-                )
-                for signal in signals
-            ],
             latencyMs=latency_ms,
+        )
+
+    def detect_batch(self, request: AiSafetyBatchDetectRequest) -> AiSafetyBatchDetectResponse:
+        started = perf_counter()
+        detector_config = _detector_config_with_policy_overrides(
+            self.detectors,
+            request.detector_config.detector_policies,
+        )
+        work_items, model_invocation_count = self._detect_work_items(
+            [(item.item_index, item.prompt_text) for item in request.inputs],
+            detector_config,
+        )
+        results: list[AiSafetyBatchResult] = []
+        accepted_model_detection_count = 0
+        for work_item in work_items:
+            result, accepted_count = self._build_batch_result(
+                work_item,
+                mode=request.mode,
+                policies=request.detector_config.detector_policies,
+                return_confidence=request.detector_config.return_confidence,
+            )
+            results.append(result)
+            accepted_model_detection_count += accepted_count
+        total_latency_ms = max(0, round((perf_counter() - started) * 1000))
+        return AiSafetyBatchDetectResponse(
+            contractVersion=AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
+            model=AiSafetyDetectorModel(
+                modelId=self.model_id,
+                runtime=AI_SAFETY_DETECTOR_RUNTIME,
+            ),
+            mode=request.mode,
+            results=results,
+            executionSummary=AiSafetyExecutionSummary(
+                executionMode="hybrid" if model_invocation_count > 0 else "rules_only",
+                modelInvocationCount=model_invocation_count,
+                acceptedModelDetectionCount=accepted_model_detection_count,
+            ),
+            latencyMs=total_latency_ms,
+        )
+
+    def _detect_work_items(
+        self,
+        inputs: list[tuple[int, str]],
+        detector_config: dict[str, SafetyDetector],
+    ) -> tuple[list[BatchWorkItem], int]:
+        work_items = [
+            BatchWorkItem(
+                item_index=item_index,
+                prompt_text=prompt_text,
+                rule_signals=_fast_rule_signals(
+                    prompt_text,
+                    detector_config,
+                    self.fast_rule_detectors,
+                ),
+                model_detections=[],
+            )
+            for item_index, prompt_text in inputs
+        ]
+        model_invocation_count = 0
+        model_plans: list[tuple[PrivacyFilterAdapter, list[tuple[int, MlWindow]]]] = []
+        total_model_candidates = 0
+        total_model_windows = 0
+        for adapter in self.adapters:
+            supported_types = adapter.supported_detector_types.intersection(detector_config)
+            if not supported_types:
+                continue
+            window_refs: list[tuple[int, MlWindow]] = []
+            for work_index, work_item in enumerate(work_items):
+                candidates = _ml_context_candidates(work_item.prompt_text, supported_types)
+                uncovered_candidates = _uncovered_ml_candidates(
+                    work_item.prompt_text, work_item.rule_signals, candidates
+                )
+                if not uncovered_candidates:
+                    continue
+                total_model_candidates += len(uncovered_candidates)
+                if total_model_candidates > ML_MAX_CANDIDATES_PER_REQUEST:
+                    raise RuntimeError(ML_WORK_LIMIT_ERROR)
+                item_windows = _ml_windows_for_prompt(
+                    work_item.prompt_text,
+                    uncovered_candidates,
+                )
+                total_model_windows += len(item_windows)
+                if total_model_windows > ML_MAX_WINDOWS_PER_REQUEST:
+                    raise RuntimeError(ML_WORK_LIMIT_ERROR)
+                window_refs.extend((work_index, window) for window in item_windows)
+            if not window_refs:
+                continue
+            model_plans.append((adapter, window_refs))
+
+        for adapter, window_refs in model_plans:
+            adapter_result = adapter.detect_many(
+                [window.text for _, window in window_refs],
+                batch_size=_micro_batch_size(),
+            )
+            model_invocation_count += adapter_result.model_invocation_count
+            for (work_index, window), detections in zip(
+                window_refs,
+                adapter_result.detections,
+                strict=True,
+            ):
+                prompt_length = len(work_items[work_index].prompt_text)
+                for detection in detections:
+                    offset_detection = _offset_detection(detection, window.start, prompt_length)
+                    if offset_detection is not None:
+                        work_items[work_index].model_detections.append(offset_detection)
+        return work_items, model_invocation_count
+
+    def _build_batch_result(
+        self,
+        work_item: BatchWorkItem,
+        *,
+        mode: str,
+        policies: list[AiSafetyDetectorPolicy],
+        return_confidence: bool,
+    ) -> tuple[AiSafetyBatchResult, int]:
+        detector_config = _detector_config_with_policy_overrides(self.detectors, policies)
+        ml_signals = safety_signals_from_detections(
+            work_item.model_detections,
+            detector_config,
+        )
+        rule_signals = _rule_signals_not_covered_by_ml(work_item.rule_signals, ml_signals)
+        signals = effective_signals(
+            [*rule_signals, *ml_signals],
+            prompt_text=work_item.prompt_text,
+        )
+        signals = _apply_non_real_data_allow_guard(work_item.prompt_text, signals)
+        signals = _apply_contextual_action_policy(work_item.prompt_text, signals)
+        signals = _apply_request_policy_actions(signals, policies)
+        enforcement_signals = _enforcement_signals(signals)
+        redacted_prompt = redact_prompt(work_item.prompt_text, enforcement_signals)
+        log_safe_prompt = redact_prompt(work_item.prompt_text, _log_safe_signals(signals))
+        type_counts = Counter(signal.detector_type for signal in signals)
+        model_sources = {adapter.source for adapter in self.adapters}
+        accepted_count = sum(1 for signal in signals if signal.source in model_sources)
+        return (
+            AiSafetyBatchResult(
+                itemIndex=work_item.item_index,
+                outcome=_outcome_from_signals(enforcement_signals),
+                redactedPrompt=redacted_prompt,
+                logSafePrompt=log_safe_prompt,
+                redactedPromptPreview=preview_redacted_prompt(log_safe_prompt),
+                detectorSummary=AiSafetyDetectorSummary(
+                    detectedCount=len(signals),
+                    detectorCategories=sorted(type_counts),
+                ),
+                detections=[
+                    AiSafetyDetection(
+                        detectorType=signal.detector_type,
+                        source=signal.source,
+                        confidence=signal.confidence if return_confidence else None,
+                        action=signal.action,
+                        mode=mode,
+                    )
+                    for signal in signals
+                ],
+            ),
+            accepted_count,
         )
 
 
@@ -555,86 +721,53 @@ def _fast_rule_signals(
     return signals
 
 
-def _should_run_ml_adapters(
-    prompt_text: str,
-    detector_config: dict[str, SafetyDetector],
-    rule_signals: list[SafetySignal],
-) -> bool:
-    ml_enabled = any(
-        detector_type not in FAST_RULE_DETECTOR_TYPES
-        for detector_type in detector_config
-    )
-    if not ml_enabled:
-        return False
-    return any(
-        not _ml_candidate_covered_by_rule(prompt_text, start, end, rule_signals)
-        for start, end in _ml_context_candidate_spans(prompt_text)
-    )
-
-
-def _ml_detections(
+def _uncovered_ml_candidates(
     prompt_text: str,
     rule_signals: list[SafetySignal],
-    adapters: tuple[PrivacyFilterAdapter, ...],
-) -> list[Detection]:
-    detections: list[Detection] = []
-    windows = _ml_windows_for_prompt(prompt_text, rule_signals)
-    if len(adapters) == 1 or not _parallel_adapters_enabled():
-        for window in windows:
-            for adapter in adapters:
-                for detection in adapter.detect(window.text):
-                    offset_detection = _offset_detection(detection, window.start, len(prompt_text))
-                    if offset_detection is not None:
-                        detections.append(offset_detection)
-        return detections
-
-    with ThreadPoolExecutor(max_workers=len(adapters), thread_name_prefix="pii-detector") as executor:
-        for window in windows:
-            adapter_results = executor.map(
-                _detect_with_adapter,
-                ((adapter, window.text) for adapter in adapters),
-            )
-            for result in adapter_results:
-                for detection in result:
-                    offset_detection = _offset_detection(detection, window.start, len(prompt_text))
-                    if offset_detection is not None:
-                        detections.append(offset_detection)
-    return detections
-
-
-def _detect_with_adapter(
-    adapter_and_text: tuple[PrivacyFilterAdapter, str],
-) -> list[Detection]:
-    adapter, text = adapter_and_text
-    return adapter.detect(text)
-
-
-def _parallel_adapters_enabled() -> bool:
-    value = os.environ.get(PARALLEL_ADAPTERS_ENV, "false").strip().lower()
-    return value not in {"0", "false", "no", "off"}
+    candidates: list[MlCandidate],
+) -> list[MlCandidate]:
+    return [
+        candidate
+        for candidate in candidates
+        if not _ml_candidate_covered_by_rule(prompt_text, candidate, rule_signals)
+    ]
 
 
 def _ml_windows_for_prompt(
     prompt_text: str,
-    rule_signals: list[SafetySignal],
+    candidates: list[MlCandidate],
 ) -> tuple[MlWindow, ...]:
-    if len(prompt_text) <= ML_WINDOWING_MIN_CHARS:
+    if len(prompt_text) <= ML_WINDOW_MAX_CHARS:
         return (MlWindow(0, len(prompt_text), prompt_text),)
 
-    windows = [
-        (
-            max(0, start - ML_WINDOW_CONTEXT_CHARS),
-            min(len(prompt_text), end + ML_WINDOW_CONTEXT_CHARS),
-        )
-        for start, end in _ml_candidate_spans(prompt_text, rule_signals)
-        if 0 <= start < end <= len(prompt_text)
-    ]
+    windows = []
+    for start, end in _ml_candidate_spans(candidates):
+        if not 0 <= start < end <= len(prompt_text):
+            continue
+        candidate_chars = end - start
+        if candidate_chars > ML_WINDOW_MAX_CHARS:
+            raise RuntimeError(ML_WORK_LIMIT_ERROR)
+        context_chars = ML_WINDOW_MAX_CHARS - candidate_chars
+        left_context = min(ML_WINDOW_CONTEXT_CHARS, context_chars // 2)
+        right_context = context_chars - left_context
+        window_start = max(0, start - left_context)
+        window_end = min(len(prompt_text), end + right_context)
+        missing_chars = ML_WINDOW_MAX_CHARS - (window_end - window_start)
+        if missing_chars > 0:
+            window_start = max(0, window_start - missing_chars)
+            missing_chars = ML_WINDOW_MAX_CHARS - (window_end - window_start)
+            window_end = min(len(prompt_text), window_end + missing_chars)
+        windows.append((window_start, window_end))
     if not windows:
         return ()
 
     merged: list[tuple[int, int]] = []
-    for start, end in sorted(windows):
-        if not merged or start > merged[-1][1]:
+    for start, end in sorted(set(windows)):
+        if (
+            not merged
+            or start > merged[-1][1]
+            or max(merged[-1][1], end) - merged[-1][0] > ML_WINDOW_MAX_CHARS
+        ):
             merged.append((start, end))
             continue
         previous_start, previous_end = merged[-1]
@@ -648,30 +781,44 @@ def _ml_windows_for_prompt(
 
 
 def _ml_candidate_spans(
-    prompt_text: str,
-    rule_signals: list[SafetySignal],
+    candidates: list[MlCandidate],
 ) -> list[tuple[int, int]]:
-    spans = [(signal.start, signal.end) for signal in rule_signals]
-    for pattern in ML_CANDIDATE_PATTERNS:
-        spans.extend(match.span() for match in pattern.finditer(prompt_text))
-    return spans
+    return [(candidate.start, candidate.end) for candidate in candidates]
 
 
-def _ml_context_candidate_spans(prompt_text: str) -> list[tuple[int, int]]:
-    spans: list[tuple[int, int]] = []
-    for pattern in ML_CANDIDATE_PATTERNS:
-        spans.extend(match.span() for match in pattern.finditer(prompt_text))
-    return spans
+def _ml_context_candidates(
+    prompt_text: str,
+    supported_types: frozenset[str] | set[str],
+) -> list[MlCandidate]:
+    candidates: list[MlCandidate] = []
+    for detector_types, pattern in ML_TYPED_CANDIDATE_PATTERNS:
+        effective_types = frozenset(detector_types.intersection(supported_types))
+        if not effective_types:
+            continue
+        candidates.extend(
+            MlCandidate(
+                start=match.start(),
+                end=match.end(),
+                detector_types=effective_types,
+            )
+            for match in pattern.finditer(prompt_text)
+        )
+    return candidates
 
 
 def _ml_candidate_covered_by_rule(
     prompt_text: str,
-    start: int,
-    end: int,
+    candidate: MlCandidate,
     rule_signals: list[SafetySignal],
 ) -> bool:
     return any(
-        _ml_candidate_covered_by_rule_signal(prompt_text, start, end, signal)
+        signal.detector_type in candidate.detector_types
+        and _ml_candidate_covered_by_rule_signal(
+            prompt_text,
+            candidate.start,
+            candidate.end,
+            signal,
+        )
         for signal in rule_signals
     )
 
@@ -761,5 +908,10 @@ def _model_ids(model_id: str, additional_model_ids: tuple[str, ...]) -> tuple[st
     return tuple(ordered)
 
 
-def _positive_int(value: int, fallback: int) -> int:
-    return value if value > 0 else fallback
+def _micro_batch_size() -> int:
+    raw_value = os.environ.get(MICRO_BATCH_SIZE_ENV, "4").strip()
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return 4
+    return max(1, min(parsed, 64))

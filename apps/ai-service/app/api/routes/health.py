@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response, status
 
 from app.api.dependencies import get_ai_safety_detector_service
 from app.core.config import Settings
@@ -18,7 +18,7 @@ def healthz() -> dict[str, str]:
 
 
 @router.get("/readyz")
-def readyz(request: Request) -> dict[str, object]:
+def readyz(request: Request, response: Response) -> dict[str, object]:
     settings = request.app.state.settings
     if not isinstance(settings, Settings):
         return {
@@ -26,8 +26,15 @@ def readyz(request: Request) -> dict[str, object]:
             "service": "ai-service",
             "dependencies": {},
         }
+    detector_dependency = _ai_safety_detector_dependency(request, settings)
+    detector_ready = (
+        not detector_dependency["required"]
+        or detector_dependency["status"] == "loaded"
+    )
+    if not detector_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {
-        "status": "ready",
+        "status": "ready" if detector_ready else "not_ready",
         "service": "ai-service",
         "dependencies": {
             "remoteSafety": {
@@ -35,7 +42,7 @@ def readyz(request: Request) -> dict[str, object]:
                 "required": False,
                 "mode": settings.remote_safety_mode,
             },
-            "aiSafetyDetector": _ai_safety_detector_dependency(request, settings),
+            "aiSafetyDetector": detector_dependency,
         },
     }
 

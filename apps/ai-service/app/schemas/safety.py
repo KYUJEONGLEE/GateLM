@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
@@ -11,6 +11,7 @@ from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
 CONTRACT_VERSION = "remote-safety.v1"
 ENGINE_VERSION = "safety-lab-local"
 AI_SAFETY_DETECTOR_CONTRACT_VERSION = "ai-safety-detector.v1"
+AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION = "ai-safety-detector-batch.v1"
 AI_SAFETY_DETECTOR_MODEL_ID = "openai/privacy-filter"
 AI_SAFETY_DETECTOR_RUNTIME = "cpu_only"
 
@@ -150,6 +151,12 @@ class AiSafetyDetection(CamelModel):
     mode: Literal["shadow", "enforce"] = "shadow"
 
 
+class AiSafetyExecutionSummary(CamelModel):
+    execution_mode: Literal["rules_only", "hybrid"] = Field(alias="executionMode")
+    model_invocation_count: int = Field(alias="modelInvocationCount", ge=0)
+    accepted_model_detection_count: int = Field(alias="acceptedModelDetectionCount", ge=0)
+
+
 class AiSafetyDetectResponse(CamelModel):
     contract_version: str = Field(
         alias="contractVersion",
@@ -163,4 +170,58 @@ class AiSafetyDetectResponse(CamelModel):
     redacted_prompt_preview: str | None = Field(alias="redactedPromptPreview")
     detector_summary: AiSafetyDetectorSummary = Field(alias="detectorSummary")
     detections: list[AiSafetyDetection]
+    execution_summary: AiSafetyExecutionSummary = Field(alias="executionSummary")
+    latency_ms: int = Field(alias="latencyMs", ge=0)
+
+
+class AiSafetyBatchInput(AiSafetyDetectorInput):
+    item_index: int = Field(alias="itemIndex", ge=0, le=63)
+
+
+class AiSafetyBatchDetectRequest(CamelModel):
+    contract_version: str = Field(alias="contractVersion")
+    mode: Literal["shadow", "enforce"] = "shadow"
+    model: AiSafetyDetectorModel = Field(default_factory=AiSafetyDetectorModel)
+    inputs: list[AiSafetyBatchInput] = Field(min_length=1, max_length=64)
+    detector_config: AiSafetyDetectorConfig = Field(
+        alias="detectorConfig",
+        default_factory=AiSafetyDetectorConfig,
+    )
+
+    @field_validator("contract_version")
+    @classmethod
+    def validate_batch_contract_version(cls, value: str) -> str:
+        if value != AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION:
+            raise PydanticCustomError("invalid_contract_version", "Invalid contract version.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_contiguous_item_indexes(self) -> AiSafetyBatchDetectRequest:
+        if [item.item_index for item in self.inputs] != list(range(len(self.inputs))):
+            raise PydanticCustomError(
+                "invalid_item_indexes",
+                "Batch item indexes must be contiguous and ordered.",
+            )
+        return self
+
+
+class AiSafetyBatchResult(CamelModel):
+    item_index: int = Field(alias="itemIndex", ge=0, le=63)
+    outcome: Literal["passed", "redacted", "blocked"]
+    redacted_prompt: str = Field(alias="redactedPrompt")
+    log_safe_prompt: str = Field(alias="logSafePrompt")
+    redacted_prompt_preview: str | None = Field(alias="redactedPromptPreview")
+    detector_summary: AiSafetyDetectorSummary = Field(alias="detectorSummary")
+    detections: list[AiSafetyDetection]
+
+
+class AiSafetyBatchDetectResponse(CamelModel):
+    contract_version: str = Field(
+        alias="contractVersion",
+        default=AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
+    )
+    model: AiSafetyDetectorModel
+    mode: Literal["shadow", "enforce"] = "shadow"
+    results: list[AiSafetyBatchResult] = Field(min_length=1, max_length=64)
+    execution_summary: AiSafetyExecutionSummary = Field(alias="executionSummary")
     latency_ms: int = Field(alias="latencyMs", ge=0)

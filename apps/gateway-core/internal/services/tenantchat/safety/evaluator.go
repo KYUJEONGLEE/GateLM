@@ -15,6 +15,10 @@ type MaskingEngine interface {
 	Apply(ctx context.Context, req masking.ApplyRequest) (masking.Result, error)
 }
 
+type BatchMaskingEngine interface {
+	ApplyBatch(ctx context.Context, requests []masking.ApplyRequest) ([]masking.Result, error)
+}
+
 type Evaluator struct {
 	engine MaskingEngine
 }
@@ -51,13 +55,33 @@ func (e *Evaluator) Evaluate(
 	}
 	result := cloneInput(input)
 	entityScope := masking.NewEntityScope()
-	for index, message := range result.Messages {
-		masked, err := e.engine.Apply(ctx, masking.ApplyRequest{
+	requests := make([]masking.ApplyRequest, 0, len(result.Messages))
+	for _, message := range result.Messages {
+		requests = append(requests, masking.ApplyRequest{
 			Prompt:                  message.Content,
 			SecurityPolicyVersionID: snapshot.Policies.Safety.PolicyDigest,
 			EntityScope:             entityScope,
 			DetectorPolicies:        policies,
 		})
+	}
+	if batchEngine, ok := e.engine.(BatchMaskingEngine); ok {
+		maskedResults, err := batchEngine.ApplyBatch(ctx, requests)
+		if err != nil {
+			return tenantchat.SafetyEvaluation{}, ErrUnavailable
+		}
+		if len(maskedResults) != len(result.Messages) {
+			return tenantchat.SafetyEvaluation{}, ErrUnavailable
+		}
+		for index, masked := range maskedResults {
+			if masked.Action == masking.ActionBlocked {
+				return tenantchat.SafetyEvaluation{Blocked: true}, nil
+			}
+			result.Messages[index].Content = masked.RedactedPrompt
+		}
+		return tenantchat.SafetyEvaluation{Input: result}, nil
+	}
+	for index, request := range requests {
+		masked, err := e.engine.Apply(ctx, request)
 		if err != nil {
 			return tenantchat.SafetyEvaluation{}, ErrUnavailable
 		}

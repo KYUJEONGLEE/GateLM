@@ -1,5 +1,5 @@
 ARG PYTHON_VERSION=3.12
-ARG AI_SERVICE_INSTALL_ML_DEPS=false
+ARG AI_SERVICE_INSTALL_ML_DEPS=true
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
@@ -39,7 +39,9 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN groupadd --system gatelm \
-  && useradd --system --gid gatelm --home-dir /nonexistent --shell /usr/sbin/nologin gatelm
+  && useradd --system --gid gatelm --home-dir /nonexistent --shell /usr/sbin/nologin gatelm \
+  && mkdir -p /models \
+  && chown gatelm:gatelm /models
 
 COPY --from=builder --chown=gatelm:gatelm /opt/venv /opt/venv
 

@@ -55,6 +55,13 @@ type Result struct {
 	LogSafePrompt           string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
+	ExecutionSummary        *ExecutionSummary
+}
+
+type ExecutionSummary struct {
+	ExecutionMode               string
+	ModelInvocationCount        int
+	AcceptedModelDetectionCount int
 }
 
 type DetectorPolicy struct {

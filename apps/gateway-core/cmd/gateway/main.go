@@ -163,6 +163,16 @@ func main() {
 			Check:          handlers.HTTPHealthCheck(&http.Client{Timeout: cfg.ControlPlaneTimeout}, cfg.ControlPlaneBaseURL),
 		}
 	}
+	if cfg.AISafetySidecar.Enabled {
+		readinessChecks["ai_safety_sidecar"] = handlers.ReadinessCheck{
+			Required:       false,
+			FailureMessage: "not ready",
+			Check: handlers.HTTPReadinessCheck(
+				&http.Client{Timeout: cfg.AISafetySidecar.Timeout},
+				cfg.AISafetySidecar.EndpointURL,
+			),
+		}
+	}
 
 	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(logPostgresPool, postgresinvocationlog.AuthFailureDefaults{
 		TenantID:      cfg.DemoTenantID,
@@ -286,6 +296,8 @@ func main() {
 				DetectorSet: cfg.AISafetySidecar.DetectorSet,
 				Locale:      cfg.AISafetySidecar.Locale,
 				Mode:        cfg.AISafetySidecar.Mode,
+				Surface:     "tenant_chat",
+				Metrics:     metricsRegistry,
 			})
 		}
 		tenantChatCompletions := completionservice.New(

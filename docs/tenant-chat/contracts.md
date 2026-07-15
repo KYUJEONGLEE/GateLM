@@ -394,6 +394,16 @@ Idempotency rules:
 - legacy union API는 discriminated union으로만 합친다.
 - Prometheus label에는 bounded `surface="tenant_chat"`만 추가한다.
 - tenantId/userId/employeeId/requestId/turnId/JTI/digest/error detail은 metric label 금지다.
+- AI safety sidecar metric은 원문, 탐지값, span/offset, 모델 경로·버전, URL, 오류 문자열을 포함하지 않는다. 허용 label은 아래 bounded enum만 사용하고 그 밖의 입력은 `unknown` 또는 `invalid_response`로 정규화한다.
+
+| Metric | Bounded labels | Meaning |
+|---|---|---|
+| `gatelm_ai_safety_sidecar_calls_total` | `surface=gateway_v1|tenant_chat|unknown`, `mode=shadow|enforce|unknown`, `outcome=passed|redacted|blocked|timeout|transport_error|http_error|invalid_response|cancelled`, `inference_path=rules_only|hybrid|unknown` | sidecar 호출의 terminal aggregate |
+| `gatelm_ai_safety_sidecar_call_duration_seconds` | calls와 동일 | sidecar 호출 wall-clock duration; Gateway 전체 요청 지연이 아님 |
+| `gatelm_ai_safety_sidecar_fallback_total` | `surface`, `mode`, `reason=timeout|transport_error|http_error|invalid_response` | 실제 local-rule fallback이 실행된 횟수 |
+| `gatelm_gateway_dependency_ready` | `dependency=postgres|postgres_log|redis|mock_provider|control_plane|ai_safety_sidecar|unknown`, `required=true|false` | `/readyz`가 마지막으로 관측한 dependency 상태(1/0) |
+
+`inference_path=hybrid`는 sidecar가 안전한 실행 요약으로 모델 호출을 명시한 경우에만 사용한다. 응답이 그 증거를 제공하지 않으면 `unknown`이며 detection source나 응답 지연으로 추정하지 않는다. readiness gauge는 능동 probe가 아니라 `/readyz` poll 시점의 마지막 관측값이다.
 
 ### 11.2 Required aggregate
 
