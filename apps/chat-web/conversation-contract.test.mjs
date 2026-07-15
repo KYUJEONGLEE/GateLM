@@ -84,6 +84,7 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
       messageId,
       terminalOutcome: 'succeeded',
       effectiveModelKey: 'gpt-5.4-mini',
+      cacheOutcome: 'miss',
       quotaState: 'economy',
       budgetState: 'warning',
       replayed: false,
@@ -93,6 +94,21 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
   assert.equal(terminal.type, 'chat.turn.final');
   assert.equal(terminal.quotaState, 'economy');
   assert.equal(terminal.effectiveModelKey, 'gpt-5.4-mini');
+  assert.equal(terminal.cacheOutcome, 'miss');
+});
+
+test('SSE parser accepts an exact cache hit', async () => {
+  const terminal = await consumeTurnSse(stream([
+    frame('chat.turn.accepted', 1, { replayed: false }),
+    frame('chat.turn.final', 2, {
+      messageId,
+      terminalOutcome: 'succeeded',
+      cacheOutcome: 'hit',
+      replayed: false,
+    }),
+  ]), { conversationId });
+  assert.equal(terminal.cacheOutcome, 'hit');
+  assert.equal(terminal.effectiveModelKey, undefined);
 });
 
 test('SSE parser rejects invalid effective model metadata', async () => {

@@ -59,6 +59,7 @@ export type CompletedTurn = Readonly<{
   replayed: boolean;
   quotaState?: CompletionFinalEvent['quotaState'];
   budgetState?: CompletionFinalEvent['budgetState'];
+  cacheOutcome?: CompletionFinalEvent['cacheOutcome'];
 }>;
 
 @Injectable()
@@ -267,13 +268,14 @@ export class ConversationService {
       const persisted = await this.persistAssistantWithRetry(
         prepared,
         result.assistantContent,
-        result.final.effectiveModelKey,
+        result.final.cacheOutcome === 'hit' ? null : result.final.effectiveModelKey,
       );
       return Object.freeze({
         message: persisted.message,
         replayed: persisted.replayed,
         quotaState: result.final.quotaState,
         budgetState: result.final.budgetState,
+        cacheOutcome: result.final.cacheOutcome,
       });
     } catch (error) {
       if (error instanceof AssistantTooLarge) {

@@ -101,6 +101,7 @@
             "messageId": { "$ref": "#/$defs/uuid" },
             "terminalOutcome": { "const": "succeeded" },
             "effectiveModelKey": { "$ref": "#/$defs/modelKey" },
+            "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] },
             "quotaState": { "$ref": "#/$defs/policyState" },
             "budgetState": { "$ref": "#/$defs/policyState" },
             "replayed": { "type": "boolean" }

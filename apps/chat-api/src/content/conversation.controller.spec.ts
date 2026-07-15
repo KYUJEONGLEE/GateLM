@@ -74,6 +74,7 @@ describe('ConversationController SSE cleanup', () => {
         replayed: false,
         quotaState: 'economy',
         budgetState: 'warning',
+        cacheOutcome: 'miss',
       }),
       disconnect: jest.fn().mockResolvedValue(undefined),
       streamError: jest.fn(),
@@ -94,6 +95,7 @@ describe('ConversationController SSE cleanup', () => {
       effectiveModelKey: 'mock-model',
       quotaState: 'economy',
       budgetState: 'warning',
+      cacheOutcome: 'miss',
       replayed: false,
     });
   });
@@ -122,6 +124,7 @@ describe('ConversationController SSE cleanup', () => {
     });
     expect(finalPayload(response)).not.toHaveProperty('quotaState');
     expect(finalPayload(response)).not.toHaveProperty('budgetState');
+    expect(finalPayload(response)).not.toHaveProperty('cacheOutcome');
   });
 });
 

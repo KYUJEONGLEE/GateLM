@@ -65,6 +65,7 @@ describe('ConversationService turn fan-out', () => {
       replayed: false,
       quotaState: 'normal',
       budgetState: 'normal',
+      cacheOutcome: 'miss',
     });
     expect(providerFinished).toBe(true);
     expect(firstSettled).toBe(false);
@@ -83,6 +84,7 @@ describe('ConversationService turn fan-out', () => {
       replayed: false,
       quotaState: 'normal',
       budgetState: 'normal',
+      cacheOutcome: 'miss',
     });
   });
 
@@ -110,6 +112,7 @@ describe('ConversationService turn fan-out', () => {
         replayed: false,
         quotaState: 'normal',
         budgetState: 'normal',
+        cacheOutcome: 'miss',
       });
     expect(store.persistAssistant).toHaveBeenCalledTimes(2);
     expect(store.persistAssistant).toHaveBeenLastCalledWith(
