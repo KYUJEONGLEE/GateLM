@@ -142,3 +142,35 @@ func TestEconomyStateExcludesHighQualityRoute(t *testing.T) {
 		t.Fatalf("want no eligible route, got %v", err)
 	}
 }
+
+func TestRoutingV2SelectionUsesServerDecisionAndAllowsUnavailablePricing(t *testing.T) {
+	snapshot := tenantruntime.Snapshot{
+		Pricing: tenantruntime.Pricing{Version: 7, Routes: []tenantruntime.PriceRoute{{
+			RouteID: "route_unknown", ProviderID: "provider", ModelKey: "new-model",
+			PricingStatus: "unavailable", PricingSource: "unavailable",
+		}}},
+		Policies: tenantruntime.Policies{Routing: tenantruntime.RoutingPolicy{
+			Routes: []tenantruntime.RuntimeRoute{{
+				RouteID: "route_unknown", ModelRef: "tc_unknown", ProviderID: "provider", ModelKey: "new-model", Enabled: true,
+			}},
+			Policy: &tenantruntime.RoutingPolicyV2Bridge{Mode: "auto"},
+		}},
+	}
+	requestContext := tenantchat.RequestContext{
+		UsageIntent: &tenantchat.UsageIntent{RequestedTier: "economy"},
+		Routing:     &tenantchat.RoutingDecision{ModelRef: "tc_unknown"},
+	}
+
+	route, err := selectExecutionRoute(snapshot, requestContext, "economy", "economy")
+	if err != nil {
+		t.Fatalf("select Routing v2 modelRef: %v", err)
+	}
+	if route.ModelKey != "new-model" || route.PricingStatus != "unavailable" ||
+		route.InputMicroUSDPerMillionTokens != 0 || route.OutputMicroUSDPerMillionTokens != 0 {
+		t.Fatalf("unexpected price-unavailable route: %+v", route)
+	}
+	cost, err := reservationCost(1000, 1000, route.InputMicroUSDPerMillionTokens, route.OutputMicroUSDPerMillionTokens)
+	if err != nil || cost != 0 {
+		t.Fatalf("unknown monetary price must reserve zero cost, cost=%d err=%v", cost, err)
+	}
+}

@@ -129,7 +129,7 @@ func (s *ReservationStore) consumeAndReserve(
 		return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
 	}
 
-	route, err := selectRoute(snapshot, requestContext.UsageIntent.RequestedTier, userPeriod.State, tenantPeriod.State)
+	route, err := selectExecutionRoute(snapshot, requestContext, userPeriod.State, tenantPeriod.State)
 	if err != nil {
 		return tenantchat.UsageReservation{}, err
 	}

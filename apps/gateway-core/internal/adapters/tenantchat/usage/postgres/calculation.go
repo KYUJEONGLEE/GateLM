@@ -27,12 +27,58 @@ func selectRoute(snapshot tenantruntime.Snapshot, requestedTier, quotaState, bud
 				}
 				return tenantchat.SelectedRoute{
 					RouteID: route.RouteID, Tier: route.Tier, ProviderID: route.ProviderID, ModelKey: route.ModelKey,
+					PricingStatus:                          price.PricingStatus,
 					PricingVersion:                         snapshot.Pricing.Version,
 					InputMicroUSDPerMillionTokens:          price.InputMicroUSDPerMillionTokens,
 					OutputMicroUSDPerMillionTokens:         price.OutputMicroUSDPerMillionTokens,
 					CacheReadInputMicroUSDPerMillionTokens: price.CacheReadInputMicroUSDPerMillionTokens,
 				}, nil
 			}
+		}
+	}
+	return tenantchat.SelectedRoute{}, tenantchat.ErrNoEligibleRoute
+}
+
+func selectExecutionRoute(
+	snapshot tenantruntime.Snapshot,
+	requestContext tenantchat.RequestContext,
+	quotaState string,
+	budgetState string,
+) (tenantchat.SelectedRoute, error) {
+	if snapshot.Policies.Routing.Policy != nil {
+		if requestContext.Routing == nil {
+			return tenantchat.SelectedRoute{}, tenantchat.ErrNoEligibleRoute
+		}
+		return selectModelRefRoute(snapshot, requestContext.Routing.ModelRef)
+	}
+	return selectRoute(
+		snapshot,
+		requestContext.UsageIntent.RequestedTier,
+		quotaState,
+		budgetState,
+	)
+}
+
+func selectModelRefRoute(
+	snapshot tenantruntime.Snapshot,
+	modelRef string,
+) (tenantchat.SelectedRoute, error) {
+	for _, route := range snapshot.Policies.Routing.Routes {
+		if !route.Enabled || route.ModelRef != modelRef {
+			continue
+		}
+		for _, price := range snapshot.Pricing.Routes {
+			if price.RouteID != route.RouteID || price.ProviderID != route.ProviderID || price.ModelKey != route.ModelKey {
+				continue
+			}
+			return tenantchat.SelectedRoute{
+				RouteID: route.RouteID, Tier: route.Tier, ProviderID: route.ProviderID, ModelKey: route.ModelKey,
+				PricingStatus:                          price.PricingStatus,
+				PricingVersion:                         snapshot.Pricing.Version,
+				InputMicroUSDPerMillionTokens:          price.InputMicroUSDPerMillionTokens,
+				OutputMicroUSDPerMillionTokens:         price.OutputMicroUSDPerMillionTokens,
+				CacheReadInputMicroUSDPerMillionTokens: price.CacheReadInputMicroUSDPerMillionTokens,
+			}, nil
 		}
 	}
 	return tenantchat.SelectedRoute{}, tenantchat.ErrNoEligibleRoute

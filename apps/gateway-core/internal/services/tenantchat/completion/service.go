@@ -10,6 +10,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
 )
@@ -296,6 +297,13 @@ func (s *Service) Prepare(
 		}
 		input = evaluation.Input
 	}
+	if snapshot.Policies.Routing.Policy != nil {
+		routingDecision, routingErr := decideTenantChatRoute(ctx, snapshot, input)
+		if routingErr != nil {
+			return nil, tenantchat.ErrNoEligibleRoute
+		}
+		request.Context.Routing = &routingDecision
+	}
 	cacheEligible := snapshot.Policies.Cache.Enabled && request.Context.UsageIntent != nil &&
 		request.Context.UsageIntent.CacheStrategy == "exact"
 	if cacheEligible {
@@ -406,6 +414,62 @@ func (s *Service) Prepare(
 		preCall:        s.preCall,
 		metrics:        s.metrics,
 	}, nil
+}
+
+func decideTenantChatRoute(
+	ctx context.Context,
+	snapshot tenantruntime.Snapshot,
+	input tenantchat.CompletionInput,
+) (tenantchat.RoutingDecision, error) {
+	policy := snapshot.Policies.Routing.Policy
+	if policy == nil {
+		return tenantchat.RoutingDecision{}, tenantchat.ErrNoEligibleRoute
+	}
+	requestedModel := "auto"
+	if policy.Mode == routing.RoutingPolicyModeManual {
+		requestedModel = snapshot.Policies.Routing.ManualModelRef
+	}
+	messages := make([]routing.PromptMessage, 0, len(input.Messages))
+	for _, message := range input.Messages {
+		messages = append(messages, routing.PromptMessage{
+			Role: message.Role,
+			Text: message.Content,
+		})
+	}
+	config := routing.SimpleRouterConfig{
+		Mode:           policy.Mode,
+		BootstrapState: policy.BootstrapState,
+		PolicyHash:     policy.RoutingPolicyHash,
+		Routes: routing.RoutingMatrix{
+			General:       toRoutingDifficulty(policy.Routes.General),
+			Code:          toRoutingDifficulty(policy.Routes.Code),
+			Translation:   toRoutingDifficulty(policy.Routes.Translation),
+			Summarization: toRoutingDifficulty(policy.Routes.Summarization),
+			Reasoning:     toRoutingDifficulty(policy.Routes.Reasoning),
+		},
+	}
+	decision, err := routing.NewSimpleRouter(config).DecideRoute(ctx, routing.Request{
+		RequestedModel: requestedModel,
+		PromptMessages: messages,
+	})
+	if err != nil {
+		return tenantchat.RoutingDecision{}, err
+	}
+	return tenantchat.RoutingDecision{
+		ModelRef:               decision.ModelRef,
+		CandidateModelRefs:     append([]string(nil), decision.CandidateModelRefs...),
+		Category:               decision.RoutingDecisionMaterial.Category,
+		Difficulty:             decision.RoutingDecisionMaterial.Difficulty,
+		RoutingDecisionKeyHash: decision.RoutingDecisionKeyHash,
+		RoutingPolicyHash:      decision.PolicyHash,
+	}, nil
+}
+
+func toRoutingDifficulty(value tenantruntime.RoutingDifficulty) routing.DifficultyRoutes {
+	return routing.DifficultyRoutes{
+		Simple:  routing.RouteCell{ModelRefs: append([]string(nil), value.Simple.ModelRefs...)},
+		Complex: routing.RouteCell{ModelRefs: append([]string(nil), value.Complex.ModelRefs...)},
+	}
 }
 
 func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error {
@@ -621,6 +685,18 @@ func (e *PreparedExecution) canFallback(err error) bool {
 }
 
 func (e *PreparedExecution) nextFallbackRoute() (tenantchat.SelectedRoute, bool) {
+	if e.requestContext.Routing != nil {
+		for _, modelRef := range e.requestContext.Routing.CandidateModelRefs {
+			route, ok := resolveSnapshotModelRef(e.snapshot, modelRef)
+			if !ok {
+				continue
+			}
+			if _, exists := e.usedRouteIDs[route.RouteID]; !exists {
+				return route, true
+			}
+		}
+		return tenantchat.SelectedRoute{}, false
+	}
 	for _, routeID := range e.snapshot.Policies.Fallback.RouteIDs {
 		if _, exists := e.usedRouteIDs[routeID]; exists {
 			continue
@@ -628,6 +704,15 @@ func (e *PreparedExecution) nextFallbackRoute() (tenantchat.SelectedRoute, bool)
 		route, ok := resolveSnapshotRoute(e.snapshot, routeID)
 		if ok {
 			return route, true
+		}
+	}
+	return tenantchat.SelectedRoute{}, false
+}
+
+func resolveSnapshotModelRef(snapshot tenantruntime.Snapshot, modelRef string) (tenantchat.SelectedRoute, bool) {
+	for _, route := range snapshot.Policies.Routing.Routes {
+		if route.Enabled && route.ModelRef == modelRef {
+			return resolveSnapshotRoute(snapshot, route.RouteID)
 		}
 	}
 	return tenantchat.SelectedRoute{}, false
@@ -650,6 +735,7 @@ func resolveSnapshotRoute(snapshot tenantruntime.Snapshot, routeID string) (tena
 			return tenantchat.SelectedRoute{
 				RouteID: routeID, Tier: runtimeRoute.Tier, ProviderID: runtimeRoute.ProviderID,
 				ModelKey: runtimeRoute.ModelKey, PricingVersion: snapshot.Pricing.Version,
+				PricingStatus:                          price.PricingStatus,
 				InputMicroUSDPerMillionTokens:          price.InputMicroUSDPerMillionTokens,
 				OutputMicroUSDPerMillionTokens:         price.OutputMicroUSDPerMillionTokens,
 				CacheReadInputMicroUSDPerMillionTokens: price.CacheReadInputMicroUSDPerMillionTokens,

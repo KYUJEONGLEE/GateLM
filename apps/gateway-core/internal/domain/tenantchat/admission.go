@@ -47,6 +47,7 @@ type SelectedRoute struct {
 	Tier                                   string
 	ProviderID                             string
 	ModelKey                               string
+	PricingStatus                          string
 	PricingVersion                         int64
 	InputMicroUSDPerMillionTokens          int64
 	OutputMicroUSDPerMillionTokens         int64
