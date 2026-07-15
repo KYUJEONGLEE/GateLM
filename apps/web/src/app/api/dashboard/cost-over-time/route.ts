@@ -117,7 +117,7 @@ function normalizeSurface(value: string | null): DashboardSurface {
 }
 
 function costBucketForRange(range: LiveDashboardRange) {
-  if (range === "5m") return "7s" as const;
+  if (range === "5m") return "1s" as const;
   if (range === "15m") return "1m" as const;
   if (range === "1h") return "5m" as const;
   if (range === "1d") return "1h" as const;

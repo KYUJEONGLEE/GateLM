@@ -98,7 +98,7 @@ export type TenantChatCostSeries = {
   surface: "tenant_chat";
   from: string;
   to: string;
-  bucket: "7s" | "1m" | "5m" | "1h" | "1d";
+  bucket: "1s" | "7s" | "1m" | "5m" | "1h" | "1d";
   generatedAt: string;
   points: Array<{
     periodStart: string;
