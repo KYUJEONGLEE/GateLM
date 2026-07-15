@@ -88,16 +88,26 @@ func main() {
 	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneInternalToken) == "" {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
-	difficultyE5Shadow, err := initializeDifficultyE5Shadow(
-		context.Background(),
+	metricsRegistry := metrics.NewRegistry()
+	difficultyE5InitCtx, difficultyE5InitCancel := context.WithTimeout(context.Background(), cfg.DifficultyE5Shadow.Timeout)
+	difficultyE5ShadowRunner, difficultyE5ShadowStatus := initializeDifficultyE5ShadowRunner(
+		difficultyE5InitCtx,
 		cfg.DifficultyE5Shadow,
 		e5onnx.NewEncoder,
+		routingdomain.DifficultySemanticShadowObserverFunc(func(observation routingdomain.DifficultySemanticShadowObservation) {
+			metricsRegistry.RoutingDifficultyShadow(metrics.RoutingDifficultyShadow{
+				Status:          observation.Status,
+				Category:        observation.Category,
+				Comparison:      observation.Comparison,
+				DurationSeconds: observation.Duration.Seconds(),
+			})
+		}),
 	)
-	if err != nil {
-		log.Fatalf("gateway-core difficulty E5 shadow initialization failed: %v", err)
+	difficultyE5InitCancel()
+	if difficultyE5ShadowStatus == DifficultyE5ShadowRuntimeUnavailable {
+		log.Printf("gateway-core difficulty E5 shadow unavailable; product routing unchanged")
 	}
-	if difficultyE5Shadow != nil {
-		defer difficultyE5Shadow.Close()
+	if difficultyE5ShadowRunner != nil {
 		log.Printf("gateway-core difficulty E5 shadow initialized; product routing unchanged")
 	}
 
@@ -119,7 +129,6 @@ func main() {
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
 	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter, anthropicAdapter)
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
-	metricsRegistry := metrics.NewRegistry()
 
 	postgresPool, err := newPostgresPool(context.Background(), cfg.DatabaseURL, cfg.DatabasePool, "gatelm-gateway-main")
 	if err != nil {
@@ -221,6 +230,9 @@ func main() {
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
 		),
 		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
+	}
+	if difficultyE5ShadowRunner != nil {
+		routerOptions = append(routerOptions, app.WithDifficultySemanticShadow(difficultyE5ShadowRunner))
 	}
 	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
 		gatewayCredentials := cachedauth.NewStore(postgresauth.NewStore(postgresPool), cachedauth.Config{
@@ -342,6 +354,13 @@ func main() {
 			log.Printf("gateway-core tenant chat private shutdown failed: %v", err)
 		}
 	}
+	if difficultyE5ShadowRunner != nil {
+		shadowCloseCtx, shadowCloseCancel := context.WithTimeout(context.Background(), time.Second)
+		if err := difficultyE5ShadowRunner.Close(shadowCloseCtx); err != nil {
+			log.Printf("gateway-core difficulty E5 shadow shutdown incomplete; product routing unchanged")
+		}
+		shadowCloseCancel()
+	}
 	if asyncTerminalLogWriter != nil {
 		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)
 		defer logCloseCancel()
@@ -353,7 +372,29 @@ func main() {
 
 const difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
 
+const (
+	DifficultyE5ShadowRuntimeDisabled    = "disabled"
+	DifficultyE5ShadowRuntimeReady       = "ready"
+	DifficultyE5ShadowRuntimeUnavailable = "unavailable"
+)
+
 type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
+
+func initializeDifficultyE5ShadowRunner(
+	ctx context.Context,
+	cfg config.DifficultyE5ShadowConfig,
+	factory difficultyE5EncoderFactory,
+	observer routingdomain.DifficultySemanticShadowObserver,
+) (*routingdomain.DifficultySemanticShadowRunner, string) {
+	evaluator, err := initializeDifficultyE5Shadow(ctx, cfg, factory)
+	if err != nil {
+		return nil, DifficultyE5ShadowRuntimeUnavailable
+	}
+	if evaluator == nil {
+		return nil, DifficultyE5ShadowRuntimeDisabled
+	}
+	return routingdomain.NewDifficultySemanticShadowRunner(evaluator, cfg.Timeout, observer), DifficultyE5ShadowRuntimeReady
+}
 
 func initializeDifficultyE5Shadow(
 	ctx context.Context,

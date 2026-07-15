@@ -115,6 +115,9 @@ func (encoder *nativeEncoder) EncodePooled(
 	}
 	encoder.mu.Lock()
 	defer encoder.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return empty, ErrInferenceFailed
+	}
 	if encoder.closed || encoder.tokenizer == nil || encoder.session == nil {
 		return empty, ErrUnavailable
 	}
@@ -165,7 +168,16 @@ func (encoder *nativeEncoder) EncodePooled(
 		inputs[index] = inputByName[name]
 	}
 	outputs := []ort.Value{nil}
+	if err := ctx.Err(); err != nil {
+		return empty, ErrInferenceFailed
+	}
 	if err := encoder.session.Run(inputs, outputs); err != nil {
+		return empty, ErrInferenceFailed
+	}
+	if err := ctx.Err(); err != nil {
+		if outputs[0] != nil {
+			outputs[0].Destroy()
+		}
 		return empty, ErrInferenceFailed
 	}
 	if outputs[0] == nil {

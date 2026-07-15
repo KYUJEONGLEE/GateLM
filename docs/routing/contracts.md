@@ -88,6 +88,19 @@ Model path의 `ComplexityScore`는 평가 모집단에서 비슷한 score를 받
 
 Score, raw probability, logit, calibrator material과 threshold는 package-private deterministic material이다. API, DB, Event, Metrics, RuntimeConfig, RuntimeSnapshot, routing policy, response, structured/request log, invocation summary, provider-attempt, 비용 정산, cache key와 제품 diagnostics에 추가하지 않는다. Provider, model, modelRef, tier, catalog metadata, resolved target, 실제 가격 또는 tenant budget과 결합하지 않는다. Synthetic 또는 안전하게 redacted된 approved offline evaluation만 최종 `ComplexityScore`를 명시적으로 투영할 수 있다. 외부 surface의 score 사용은 별도 contract proposal이 필요하다.
 
+### 2.1 Opt-in 118D request shadow
+
+Optional Linux amd64 E5 profile은 masking 이후 정상적으로 확정된 `model: "auto"` 요청에 한해 118D difficulty를 비권위 shadow로 실행할 수 있다. Manual modelRef, auto disabled와 route 실패 요청에는 실행하지 않는다. Category와 실제 difficulty는 기존 rule classifier가 확정하며 routing matrix, `modelRef`, candidate 순서, decision key, cache key, catalog resolution과 provider 호출은 항상 그 rule 결과만 사용한다. Shadow difficulty를 matrix에 다시 넣어 가상 modelRef를 계산하지 않는다.
+
+Shadow submit은 요청을 기다리게 하지 않는 non-blocking 경계다. 구현은 동시 worker 1개와 대기 job 1개만 허용하고, 기본 `100ms`, 허용 범위 `1..1000ms`의 shadow 전용 timeout을 사용한다. 초기화 실패, `busy`, `timeout`, invalid embedding, inference failure와 recovered panic은 shadow만 포기하며 Gateway 시작, 실제 요청, cache와 provider 호출을 실패·취소·fallback시키지 않는다. 기능은 기본 disabled이고 optional readiness dependency가 아니다.
+
+Request별 log, event, response 또는 DB record를 추가하지 않는다. 허용되는 제품 관측은 다음 두 aggregate metric뿐이다.
+
+- `gatelm_routing_difficulty_shadow_total{status,category,comparison}`
+- `gatelm_routing_difficulty_shadow_duration_seconds{status}`
+
+`status`는 `ready | not_applicable | unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`, `category`는 active 5 category, `comparison`은 `match | rule_simple_shadow_complex | rule_complex_shadow_simple | not_compared`로 고정한다. Raw/redacted prompt 본문, instruction/payload text, token, embedding, vector, weight, raw probability, logit, 개별 `ComplexityScore`, artifact hash, request/trace ID, modelRef, provider/model과 error detail은 metric 또는 다른 외부 surface에 넣지 않는다.
+
 ## 3. Routing Policy v2
 
 신규 authoring/publish policy의 canonical schema는 [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json)이다.

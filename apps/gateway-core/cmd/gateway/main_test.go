@@ -54,6 +54,20 @@ func TestInitializeDifficultyE5ShadowIsDisabledWithoutConstructingEncoder(t *tes
 	}
 }
 
+func TestInitializeDifficultyE5ShadowRunnerDegradesInitializationFailureToRuleOnly(t *testing.T) {
+	runner, status := initializeDifficultyE5ShadowRunner(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{Enabled: true, Timeout: 10 * time.Millisecond},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			return nil, errors.New("sensitive initialization detail")
+		},
+		nil,
+	)
+	if runner != nil || status != DifficultyE5ShadowRuntimeUnavailable {
+		t.Fatalf("initialization failure did not degrade safely: runner=%v status=%q", runner, status)
+	}
+}
+
 func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) {
 	encoder := &fakeDifficultyE5Encoder{}
 	evaluator, err := initializeDifficultyE5Shadow(

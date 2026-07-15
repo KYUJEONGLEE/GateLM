@@ -12,6 +12,7 @@ const skipDirs = new Set([
   ".codex",
   ".git",
   ".next",
+  ".pytest_cache",
   ".turbo",
   ".tmp",
   ".venv",

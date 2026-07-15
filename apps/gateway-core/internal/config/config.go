@@ -141,6 +141,7 @@ type DifficultyE5ShadowConfig struct {
 	ArtifactRoot        string
 	EncoderManifestPath string
 	RuntimeLockPath     string
+	Timeout             time.Duration
 }
 
 type TenantChatPrivateConfig struct {
@@ -244,6 +245,15 @@ func Load() Config {
 
 func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
+	difficultyE5ShadowTimeout, difficultyE5ShadowTimeoutErr := envDurationMillisInRange(
+		"GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS",
+		100,
+		1,
+		1000,
+	)
+	if difficultyE5ShadowTimeoutErr != nil {
+		return Config{}, difficultyE5ShadowTimeoutErr
+	}
 	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
 	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
 	providerTimeout := envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000)
@@ -382,6 +392,7 @@ func LoadWithError() (Config, error) {
 			ArtifactRoot:        strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT", "/opt/gatelm/difficulty-e5")),
 			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v1.json")),
 			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json")),
+			Timeout:             difficultyE5ShadowTimeout,
 		},
 		TenantChatPrivate: TenantChatPrivateConfig{
 			Enabled:               envBool("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED", false),
@@ -768,6 +779,18 @@ func envDurationMillis(key string, fallback int) time.Duration {
 	}
 
 	return time.Duration(millis) * time.Millisecond
+}
+
+func envDurationMillisInRange(key string, fallback int, minimum int, maximum int) (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return time.Duration(fallback) * time.Millisecond, nil
+	}
+	millis, err := strconv.Atoi(value)
+	if err != nil || millis < minimum || millis > maximum {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d milliseconds", key, minimum, maximum)
+	}
+	return time.Duration(millis) * time.Millisecond, nil
 }
 
 func envDurationSeconds(key string, fallback int) time.Duration {

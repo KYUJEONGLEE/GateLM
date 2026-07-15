@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
@@ -150,6 +151,87 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	}
 	if resp.GateLM.RoutingReason != routing.ReasonMatrixRoute {
 		t.Fatalf("expected %s, got %s", routing.ReasonMatrixRoute, resp.GateLM.RoutingReason)
+	}
+}
+
+func TestNewRouterDoesNotWaitForDifficultyShadowBeforeProviderCall(t *testing.T) {
+	providerCalled := make(chan struct{}, 1)
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerCalled <- struct{}{}
+		var providerRequest provider.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&providerRequest); err != nil {
+			t.Errorf("decode provider request: %v", err)
+		}
+		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{
+			ID:      "mock_chatcmpl_shadow_non_blocking",
+			Object:  "chat.completion",
+			Created: 1782108000,
+			Model:   providerRequest.Model,
+		})
+	}))
+	defer mockServer.Close()
+
+	shadowEntered := make(chan struct{})
+	shadowRelease := make(chan struct{})
+	shadow := &blockingRouterDifficultyShadowEvaluation{
+		entered: shadowEntered,
+		release: shadowRelease,
+	}
+	shadowRunner := routing.NewDifficultySemanticShadowRunner(shadow, time.Second, nil)
+
+	registry := provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client()))
+	router := NewRouter(config.Config{
+		RoutingPolicyHash:   "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		DemoTenantID:        "tenant_demo",
+		DemoProjectID:       "project_demo",
+		DemoApplicationID:   "app_demo",
+	}, registry, nil,
+		WithGatewayAuth(
+			&routerTestAPIKeyAuthenticator{identity: routerTestValidAPIKeyIdentity()},
+			&routerTestAppTokenValidator{identity: routerTestValidAppTokenIdentity()},
+		),
+		WithDifficultySemanticShadow(shadowRunner),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "Explain OAuth briefly."}],
+		"stream": false
+	}`))
+	req.Header.Set("Authorization", "Bearer glm_api_test_redacted")
+	req.Header.Set("X-GateLM-App-Token", "glm_app_token_test_redacted")
+	rr := httptest.NewRecorder()
+	requestDone := make(chan struct{})
+	go func() {
+		router.ServeHTTP(rr, req)
+		close(requestDone)
+	}()
+
+	select {
+	case <-shadowEntered:
+	case <-time.After(time.Second):
+		t.Fatal("difficulty shadow did not start")
+	}
+	select {
+	case <-providerCalled:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("provider call waited for difficulty shadow")
+	}
+	select {
+	case <-requestDone:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("request completion waited for difficulty shadow")
+	}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 while shadow is blocked, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	close(shadowRelease)
+	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := shadowRunner.Close(closeCtx); err != nil {
+		t.Fatalf("shadow runner Close() error = %v", err)
 	}
 }
 
@@ -601,6 +683,28 @@ type routerTestAPIKeyAuthenticator struct {
 	err      error
 	calls    int
 }
+
+type blockingRouterDifficultyShadowEvaluation struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (evaluation *blockingRouterDifficultyShadowEvaluation) Evaluate(
+	_ context.Context,
+	_ routing.PromptFeatures,
+	_ string,
+) routing.DifficultySemanticShadowResult {
+	close(evaluation.entered)
+	<-evaluation.release
+	return routing.DifficultySemanticShadowResult{
+		Status: routing.DifficultySemanticShadowReady,
+		Difficulty: routing.DifficultyResult{
+			Difficulty: routing.DifficultyComplex,
+		},
+	}
+}
+
+func (*blockingRouterDifficultyShadowEvaluation) Close() error { return nil }
 
 func (f *routerTestAPIKeyAuthenticator) AuthenticateAPIKey(_ context.Context, _ string) (auth.APIKeyIdentity, error) {
 	f.calls++

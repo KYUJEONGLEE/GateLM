@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Canonical offline component + opt-in Gateway startup shadow; 제품 request/routing에는 미활성 |
+| Status | Canonical offline component + opt-in Gateway request shadow; product route decision에는 미활성 |
 | Model | `intfloat/multilingual-e5-small` |
 | Source revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
 | Runtime | Canonical Python ORT CPU + optional Go/Linux amd64 native ORT CPU, dynamic QInt8 |
@@ -12,7 +12,7 @@
 | PCA artifact | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.npz`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.npz) |
 | Last reviewed | 2026-07-15 |
 
-이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Optional Gateway image는 같은 경로를 process-local startup shadow로 검증하지만 요청별 결과를 제품 routing에 연결하지 않는다. 이 component의 존재는 active routing contract의 변경을 뜻하지 않는다.
+이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Optional Gateway image는 같은 경로를 process-local startup smoke와 request shadow에서 검증하지만 요청별 결과를 제품 routing decision에 연결하지 않는다. 이 component의 존재는 model promotion을 뜻하지 않는다.
 
 ## 1. Canonical Pipeline
 
@@ -98,16 +98,16 @@ corepack pnpm run verify:v2.1-gateway-e5-shadow
 
 ## 6. Runtime Boundary
 
-Gateway에는 build tag `difficulty_e5_onnx && linux && cgo`로 제한된 local tokenizer/ONNX adapter와 request-independent startup shadow가 존재한다. `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true`일 때만 artifact를 검증하고 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → 4 semantic head/12D → final 118D score를 한 번 실행한다. 실패하면 Gateway 시작을 중단한다. 지원하지 않는 기본 CGO-free build에서 enable하면 `unavailable`로 fail closed한다.
+Gateway에는 build tag `difficulty_e5_onnx && linux && cgo`로 제한된 local tokenizer/ONNX adapter가 존재한다. `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true`일 때만 artifact를 검증하고 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → 4 semantic head/12D → final 118D score를 한 번 smoke 실행한 뒤 request shadow runner를 만든다. 초기화·smoke 실패와 지원하지 않는 기본 CGO-free build는 shadow만 `unavailable`로 내리고 Gateway는 기존 rule-only mode로 시작한다. Shadow는 readiness 필수 dependency가 아니다.
 
-Package-level evaluator는 실제 `PromptFeatures.instructionText`만 받으며 동시 ONNX 실행을 1개로 제한한다. 빈 instruction은 tokenizer 전 `not_applicable`, 경합은 `busy`, runtime 실패는 안전한 상태 코드로 반환하고 raw text, token, embedding, head output 또는 native error detail을 노출하지 않는다. 현재 Gateway router는 이 evaluator를 제품 요청에 등록하지 않는다. 따라서 startup shadow 결과는 routing, RuntimeSnapshot, API, DB, Event, Metrics, log schema와 `difficulty-feature-vector.v1` 42차원 외부 계약을 변경하지 않는다.
+Package-level evaluator는 masking 이후 실제 `PromptFeatures.instructionText`만 받으며 동시 ONNX 실행을 1개로 제한한다. 빈 instruction은 tokenizer 전 `not_applicable`, 경합은 `busy`, timeout·runtime 실패·panic은 안전한 상태 코드로 반환하고 raw text, token, embedding, head output, 개별 score 또는 native error detail을 노출하지 않는다. Gateway router는 정상 auto route를 rule 결과로 완성한 뒤에만 worker 1개와 대기 job 1개의 runner에 non-blocking submit한다. Default timeout은 `100ms`, 허용 범위는 `1..1000ms`이며 manual/route failure 요청은 제출하지 않는다. Shadow 결과는 routing, modelRef, cache, provider 호출, RuntimeSnapshot, API, DB, Event와 log schema를 변경하지 않으며 [`contracts.md`](contracts.md)가 허용한 두 aggregate metric에만 반영한다.
 
 Selected 118D checked-in Go bundle은 pooled 384D 이후 `42D rule + PCA 64D + fixed 4-head probability 12D`를 고정 배열로 정확히 조립하고 final difficulty head, Platt calibration과 threshold를 적용한다.
 
 Gateway hot path 승격 전에는 다음 경계를 모두 충족해야 한다.
 
 - 실패한 per-category safety regression을 새 evidence run에서 해결
-- request-level shadow 실행 위치와 bounded overhead 정책 승인
+- request-level latency·memory와 timeout 후 native inference 자원 회수 evidence
 - supported runtime의 latency, memory와 failure isolation evidence
 - 새 promotion artifact에 대한 supported runtime별 end-to-end label parity
 - [`contracts.md`](contracts.md), [`classification-pipeline.md`](classification-pipeline.md)와 필요한 verifier를 포함한 active runtime contract 승인

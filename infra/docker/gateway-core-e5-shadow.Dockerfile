@@ -50,6 +50,7 @@ USER gatelm
 
 ENV GATEWAY_PORT=8080 \
     GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true \
+    GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS=100 \
     GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT=/opt/gatelm/difficulty-e5 \
     GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST=/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v1.json \
     GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK=/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json

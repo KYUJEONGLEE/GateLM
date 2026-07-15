@@ -14,6 +14,7 @@ const (
 	DifficultySemanticShadowNotApplicable    = "not_applicable"
 	DifficultySemanticShadowUnavailable      = "unavailable"
 	DifficultySemanticShadowBusy             = "busy"
+	DifficultySemanticShadowTimeout          = "timeout"
 	DifficultySemanticShadowInvalidEmbedding = "invalid_embedding"
 	DifficultySemanticShadowInferenceFailed  = "inference_failed"
 )
@@ -59,7 +60,13 @@ func (evaluator *DifficultySemanticShadowEvaluator) Evaluate(
 	}
 	pooled, err := evaluator.encoder.EncodePooled(ctx, instructionText)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return DifficultySemanticShadowResult{Status: DifficultySemanticShadowTimeout}
+		}
 		return DifficultySemanticShadowResult{Status: DifficultySemanticShadowInferenceFailed}
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		return DifficultySemanticShadowResult{Status: DifficultySemanticShadowTimeout}
 	}
 	result, err := generatedDifficultySemanticModel118D.inferModelPath(difficultyFeatures, pooled)
 	if err != nil {
