@@ -23,6 +23,17 @@ function New-LocalSecret {
   }
 }
 
+function New-ProviderCredentialEncryptionKey {
+  $bytes = New-Object byte[] 32
+  $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $generator.GetBytes($bytes)
+    return -join ($bytes | ForEach-Object { $_.ToString('x2') })
+  } finally {
+    $generator.Dispose()
+  }
+}
+
 function Invoke-Compose {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
   & docker compose @composeFiles @Arguments
@@ -46,6 +57,9 @@ try {
   if (-not $env:TENANT_CHAT_ACCESS_JWT_SECRET) { $env:TENANT_CHAT_ACCESS_JWT_SECRET = New-LocalSecret }
   if (-not $env:TENANT_CHAT_INTENT_SECRET) { $env:TENANT_CHAT_INTENT_SECRET = New-LocalSecret }
   if (-not $env:TENANT_CHAT_WEB_SERVICE_TOKEN) { $env:TENANT_CHAT_WEB_SERVICE_TOKEN = New-LocalSecret }
+  if (-not $env:GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY) {
+    $env:GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = New-ProviderCredentialEncryptionKey
+  }
   $config = (& docker compose @composeFiles config) -join "`n"
   if ($LASTEXITCODE -ne 0) { throw 'Compose contract validation failed.' }
   if ($config -match 'published:\s*["'']?8081' -or $config -match '8081:8081') {
