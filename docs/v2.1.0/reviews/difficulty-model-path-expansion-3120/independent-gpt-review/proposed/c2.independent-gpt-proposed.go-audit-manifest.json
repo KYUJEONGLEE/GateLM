@@ -1,0 +1,259 @@
+{
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v2",
+  "datasetVersion": "difficulty_model_path_expansion_3120_2026_07_15_c2_candidate_v1_independent_gpt_proposed_v1",
+  "recordSchemaVersion": "gatelm.difficulty-label-record.v2",
+  "datasetSha256": "70341118c5b7b0be4e9be91eec25f86053eb15e4828fd7fc1209b8c54cce14df",
+  "trainingEligible": false,
+  "families": [
+    {
+      "promptFamily": "modelpath3120.code_debugging.scenario.f0346",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_design.scenario.f0348",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_design.scenario.f0351",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_explanation.scenario.f0352",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0356",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0358",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_refactoring.scenario.f0359",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_refactoring.scenario.f0360",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0363",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0365",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0366",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0321",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0325",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0327",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0329",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_qa.scenario.f0333",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_qa.scenario.f0334",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_support.scenario.f0336",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_support.scenario.f0337",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_support.scenario.f0338",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0339",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0341",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0367",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0368",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0369",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0370",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0371",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0372",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0373",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0376",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0380",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_planning.scenario.f0384",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0390",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0391",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0392",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0393",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0394",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0395",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0398",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0399",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0400",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0407",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0410",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0411",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0412",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0416",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0421",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0422",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0423",
+      "partition": "calibration",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0424",
+      "partition": "calibration",
+      "records": 5
+    }
+  ]
+}

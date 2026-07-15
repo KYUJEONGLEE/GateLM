@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-review-validation.v1",
+  "records": 3120,
+  "families": 624,
+  "batches": [
+    {
+      "batchId": "t1",
+      "input": 400,
+      "output": 400,
+      "families": 80,
+      "accepted": 179,
+      "revised": 221,
+      "simple": 193,
+      "complex": 207
+    },
+    {
+      "batchId": "t2",
+      "input": 400,
+      "output": 400,
+      "families": 80,
+      "accepted": 182,
+      "revised": 218,
+      "simple": 183,
+      "complex": 217
+    },
+    {
+      "batchId": "t3",
+      "input": 400,
+      "output": 400,
+      "families": 80,
+      "accepted": 180,
+      "revised": 220,
+      "simple": 197,
+      "complex": 203
+    },
+    {
+      "batchId": "t4",
+      "input": 395,
+      "output": 395,
+      "families": 79,
+      "accepted": 171,
+      "revised": 224,
+      "simple": 196,
+      "complex": 199
+    },
+    {
+      "batchId": "c1",
+      "input": 275,
+      "output": 275,
+      "families": 55,
+      "accepted": 110,
+      "revised": 165,
+      "simple": 140,
+      "complex": 135
+    },
+    {
+      "batchId": "c2",
+      "input": 250,
+      "output": 250,
+      "families": 50,
+      "accepted": 115,
+      "revised": 135,
+      "simple": 123,
+      "complex": 127
+    },
+    {
+      "batchId": "e1",
+      "input": 375,
+      "output": 375,
+      "families": 75,
+      "accepted": 149,
+      "revised": 226,
+      "simple": 177,
+      "complex": 198
+    },
+    {
+      "batchId": "e2",
+      "input": 375,
+      "output": 375,
+      "families": 75,
+      "accepted": 156,
+      "revised": 219,
+      "simple": 184,
+      "complex": 191
+    },
+    {
+      "batchId": "p1",
+      "input": 250,
+      "output": 250,
+      "families": 50,
+      "accepted": 112,
+      "revised": 138,
+      "simple": 122,
+      "complex": 128
+    }
+  ],
+  "checks": {
+    "jsonParseable": true,
+    "rowCountsMatch": true,
+    "sampleIdsUniqueAndComplete": true,
+    "orderUnchanged": true,
+    "familyBatchPreserved": true,
+    "familyLabelsConsistent": true
+  }
+}

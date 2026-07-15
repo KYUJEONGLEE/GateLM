@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "gatelm.difficulty-model-path-5000-owner-approval-evidence.v1",
+  "status": "owner_approved_training_eligible",
+  "approvedOn": "2026-07-16",
+  "approval": {
+    "scope": "all_3120_owner_gpt_recommended_records_and_the_5000_model_path_four_role_derivative",
+    "basis": "explicit_dataset_owner_approval_in_current_codex_task",
+    "exactApprovalText": "최종 3,120건 전체 승인",
+    "humanReviewerCount": 1,
+    "reviewerIdentityStored": false
+  },
+  "reviewEvidence": {
+    "ownerGptRecommendationIsHumanApproval": false,
+    "datasetOwnerApprovalRecordedSeparately": true,
+    "finalVerificationSummary": {
+      "path": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/owner-gpt-adjudication-review/final-verification-summary.json",
+      "sha256": "9452451074f1a5306c59d8bc77efbbde5219e516fd79eb38b3473b7af58e3bcc"
+    },
+    "pendingDecisionTemplate": {
+      "path": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/owner-gpt-adjudication-review/FINAL-HUMAN-OWNER-DECISION-TEMPLATE.json",
+      "sha256": "a0265e4cabf55a511bd73b51c7661f54345a88016e3d58be01105452a4c290d2"
+    },
+    "importedOwnerGptArchive": "8e1c2424112e59cdc11a416710c262b5a530209c275c925163b25ba7bdc7b142"
+  },
+  "approvedExpansion": {
+    "records": 3120,
+    "families": 624,
+    "datasetVersion": "difficulty_model_path_expansion_3120_2026_07_16_owner_approved_v1",
+    "datasetPath": "docs/v2.1.0/training/difficulty-model-path-expansion-3120.owner-approved.jsonl",
+    "datasetSha256": "156fca66b6aaccdb83ce6238e2fe89b2de3b97807f6b55a6e2c81bd4cbcb2a9d",
+    "manifestPath": "docs/v2.1.0/training/difficulty-model-path-expansion-3120.owner-approved.manifest.json"
+  },
+  "approvedModelPathTarget": {
+    "records": 5000,
+    "families": 855,
+    "datasetVersion": "difficulty_model_path_5000_2026_07_16_owner_approved_v1",
+    "datasetPath": "docs/v2.1.0/training/difficulty-model-path-5000.owner-approved.jsonl",
+    "datasetSha256": "b29f2de446f540266572acd84b44ace5cf2084a3321a1f542d928abeadce45cf",
+    "manifestPath": "docs/v2.1.0/training/difficulty-model-path-5000.owner-approved.manifest.json",
+    "roleManifestPath": "docs/v2.1.0/training/difficulty-model-path-5000.roles.json",
+    "roles": {
+      "train": {
+        "records": 3000,
+        "families": 490
+      },
+      "calibration": {
+        "records": 1000,
+        "families": 165
+      },
+      "evaluation_holdout": {
+        "records": 750,
+        "families": 150
+      },
+      "promotion_holdout": {
+        "records": 250,
+        "families": 50
+      }
+    }
+  },
+  "gates": {
+    "allRecordsHumanApproved": true,
+    "sourceProvenancePreserved": true,
+    "actualGoModelPathTarget": 5000,
+    "familyDisjointRoles": true,
+    "exactDuplicatesZero": true,
+    "strictSplitOrExistingNearDuplicatesZero": true,
+    "promotionHoldoutSeparated": true,
+    "trainingEligible": true
+  },
+  "doesNotApprove": [
+    "model_performance",
+    "model_or_calibrator_selection",
+    "threshold_selection",
+    "runtime_promotion",
+    "ga_or_release"
+  ]
+}

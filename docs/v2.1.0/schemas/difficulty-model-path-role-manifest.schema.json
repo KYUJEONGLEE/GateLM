@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.dev/schemas/v2.1.0/difficulty-model-path-role-manifest.schema.json",
+  "title": "GateLM Difficulty Model-Path Four-Role Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "datasetVersion",
+    "datasetPath",
+    "datasetSha256",
+    "decisionBoundaryVersion",
+    "rolePolicyVersion",
+    "familyPolicyVersion",
+    "records",
+    "families",
+    "roles",
+    "standardManifestProjection",
+    "sourceSelection",
+    "ownerApprovalStatus",
+    "trainingEligible",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "gatelm.difficulty-model-path-role-manifest.v1" },
+    "datasetVersion": { "type": "string", "minLength": 1 },
+    "datasetPath": { "type": "string", "minLength": 1 },
+    "datasetSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "decisionBoundaryVersion": { "type": "string", "minLength": 1 },
+    "rolePolicyVersion": { "const": "difficulty-model-path-four-role-split.2026-07-16.v1" },
+    "familyPolicyVersion": { "const": "difficulty-prompt-family.v1" },
+    "records": { "const": 5000 },
+    "families": { "type": "integer", "minimum": 1 },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "calibration", "evaluation_holdout", "promotion_holdout"],
+      "properties": {
+        "train": { "$ref": "#/$defs/trainRole" },
+        "calibration": { "$ref": "#/$defs/calibrationRole" },
+        "evaluation_holdout": { "$ref": "#/$defs/evaluationRole" },
+        "promotion_holdout": { "$ref": "#/$defs/promotionRole" }
+      }
+    },
+    "standardManifestProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "calibration", "evaluation_holdout", "promotion_holdout"],
+      "properties": {
+        "train": { "const": "train" },
+        "calibration": { "const": "calibration" },
+        "evaluation_holdout": { "const": "holdout" },
+        "promotion_holdout": { "const": "holdout" }
+      }
+    },
+    "sourceSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingOwnerApproved", "newOwnerApprovedBatches", "legacyHoldoutPolicy", "sentinelPolicy"],
+      "properties": {
+        "existingOwnerApproved": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/existingSource" }
+        },
+        "newOwnerApprovedBatches": {
+          "type": "array",
+          "minItems": 9,
+          "items": { "$ref": "#/$defs/newBatch" }
+        },
+        "legacyHoldoutPolicy": { "type": "string", "minLength": 1 },
+        "sentinelPolicy": { "type": "string", "minLength": 1 }
+      }
+    },
+    "families": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/family" }
+    },
+    "ownerApprovalStatus": { "const": "approved" },
+    "trainingEligible": { "const": true },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "baseRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "families", "purpose"],
+      "properties": {
+        "records": { "type": "integer", "minimum": 1 },
+        "families": { "type": "integer", "minimum": 1 },
+        "purpose": { "type": "string", "minLength": 1 }
+      }
+    },
+    "trainRole": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRole" },
+        {
+          "type": "object",
+          "properties": {
+            "records": { "const": 3000 },
+            "purpose": { "const": "logistic_weight_fit" }
+          }
+        }
+      ]
+    },
+    "calibrationRole": {
+      "allOf": [
+        { "$ref": "#/$defs/baseRole" },
+        {
+          "type": "object",
+          "properties": {
+            "records": { "const": 1000 },
+            "purpose": { "const": "calibrator_and_threshold_selection" }
+          }
+        }
+      ]
+    },
+    "evaluationRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "families", "purpose", "frozenBeforeModelSelection"],
+      "properties": {
+        "records": { "const": 750 },
+        "families": { "type": "integer", "minimum": 1 },
+        "purpose": { "const": "model_combination_evaluation" },
+        "frozenBeforeModelSelection": { "const": true }
+      }
+    },
+    "promotionRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "families", "purpose", "frozenBeforeModelSelection", "modelOrThresholdSelectionAccessed"],
+      "properties": {
+        "records": { "const": 250 },
+        "families": { "type": "integer", "minimum": 1 },
+        "purpose": { "const": "final_runtime_promotion_evidence" },
+        "frozenBeforeModelSelection": { "const": true },
+        "modelOrThresholdSelectionAccessed": { "const": false }
+      }
+    },
+    "existingSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "datasetPath", "datasetSha256", "totalRecords", "selectedModelPathTrain", "selectedModelPathCalibration", "excludedLegacyModelPathHoldout", "excludedSentinels"],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1 },
+        "datasetPath": { "type": "string", "minLength": 1 },
+        "datasetSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "totalRecords": { "type": "integer", "minimum": 1 },
+        "selectedModelPathTrain": { "type": "integer", "minimum": 0 },
+        "selectedModelPathCalibration": { "type": "integer", "minimum": 0 },
+        "excludedLegacyModelPathHoldout": { "type": "integer", "minimum": 0 },
+        "excludedSentinels": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "newBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["batchId", "role", "records", "families", "sourceDatasetSha256"],
+      "properties": {
+        "batchId": { "enum": ["t1", "t2", "t3", "t4", "c1", "c2", "e1", "e2", "p1"] },
+        "role": { "enum": ["train", "calibration", "evaluation_holdout", "promotion_holdout"] },
+        "records": { "type": "integer", "minimum": 1 },
+        "families": { "type": "integer", "minimum": 1 },
+        "sourceDatasetSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promptFamily", "role", "manifestPartition", "source", "expectedCategory", "expectedSemanticLabel", "records"],
+      "properties": {
+        "promptFamily": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]*$" },
+        "role": { "enum": ["train", "calibration", "evaluation_holdout", "promotion_holdout"] },
+        "manifestPartition": { "enum": ["train", "calibration", "holdout"] },
+        "source": { "type": "string", "minLength": 1 },
+        "expectedCategory": { "enum": ["general", "code", "translation", "summarization", "reasoning"] },
+        "expectedSemanticLabel": { "type": "string", "minLength": 1 },
+        "records": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

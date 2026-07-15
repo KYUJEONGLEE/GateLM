@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-gpt-source-review-summary.v1",
+  "records": 3120,
+  "families": 624,
+  "independentReview": {
+    "decisions": {
+      "accept": 1354,
+      "revise_prompt": 1766
+    },
+    "confidence": {
+      "high": 2600,
+      "medium": 520
+    },
+    "promptChanges": 1766,
+    "representationalBoundaryNormalizations": 322,
+    "labelConflictRecords": 2472,
+    "labelFieldChanges": {
+      "constraintBucket": 424,
+      "dependencyBucket": 20,
+      "evaluationSlices": 2348,
+      "expectedDifficulty": 81,
+      "taskBucket": 510
+    },
+    "ownerAdjudicationRecords": 2525,
+    "promptRevisionBatchApprovalRecords": 308,
+    "decisionPromptInconsistencies": 0,
+    "proposedSchemaFailures": 0,
+    "securityPatternHits": 0,
+    "issueCodes": {
+      "awkward_audience_expression": 315,
+      "broken_korean_expression": 72,
+      "compressed_shorthand": 343,
+      "duplicated_word": 19,
+      "punctuation_artifact": 202,
+      "template_dependency_artifact": 981
+    }
+  },
+  "proposedVerification": {
+    "records": 3120,
+    "families": 624,
+    "batches": 9,
+    "modelPath": 3117,
+    "hardSentinel": 3,
+    "simpleSentinel": 0,
+    "categoryClassifierMismatches": 1157,
+    "exactDuplicates": 0,
+    "familyCollisions": 0,
+    "strictCrossPartitionOrExistingNearDuplicates": 0,
+    "broadNearDuplicateCandidates": 450,
+    "simpleStrongBucketConflicts": 3,
+    "simpleOverloadedBucketConflicts": 17,
+    "complexUnderloadedBucketConflicts": 74,
+    "securityPatternHits": 0
+  },
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

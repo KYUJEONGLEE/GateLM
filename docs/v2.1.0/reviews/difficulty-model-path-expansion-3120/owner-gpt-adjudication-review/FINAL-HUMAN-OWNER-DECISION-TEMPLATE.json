@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "gatelm.difficulty-human-owner-final-decision.v1",
+  "decision": "pending",
+  "scope": {
+    "records": 3120,
+    "families": 624,
+    "batches": [
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+      "c1",
+      "c2",
+      "e1",
+      "e2",
+      "p1"
+    ]
+  },
+  "verifiedDatasetSha256ByBatch": {
+    "t1": "94ba420bc432ddc7c2cefac2c33205988b2c271cee23dbf6e43992c2aeecf1c5",
+    "t2": "d5abc3616c91f41b23b389c9a217d0a52d74442eb63049995afcbf9af7c32310",
+    "t3": "93328043dbc912a9ab8d3883eda3bcbd14abb7ce6baf1d9800494ae501d95e56",
+    "t4": "25d84dd5104b7fecbba38c76467af21f3734fd537403506db9bc4e2bd641503f",
+    "c1": "d050552ff99995d28aa63392d9a6c90f19031a7bb8e585202b7a19cdf0699169",
+    "c2": "9fb46e62d9c782db6aa3e4ff4b1f18eac3f65752954fc9eee7fbd5ef9328ab40",
+    "e1": "05c8f6fb6619d71229a8df7019ac04330d2c6c674b3c456cd00075fe6c8c3a26",
+    "e2": "3334ddf1cd2824b0326552b85c432cf20fda80e7cca633e78232a4d42f5d0236",
+    "p1": "770ffd2b451311e25cca66a0eaa73e05679ea61f6dae2726e125d3f8d33b39d7"
+  },
+  "confirmations": {
+    "actualGoModelPathAllRecords": true,
+    "exactDuplicatesZero": true,
+    "familyCollisionsZero": true,
+    "strictSplitOrExistingLeakageZero": true,
+    "difficultyNotDerivedFromBucketSum": true,
+    "securityPatternHitsZero": true,
+    "promotionHoldoutLabelReviewOnly": true
+  },
+  "ownerNote": ""
+}

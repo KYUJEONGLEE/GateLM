@@ -34,6 +34,7 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `difficulty-label-guide.md` | 모델 작업보다 먼저 적용하는 label taxonomy, reviewer와 family readiness 계약 |
 | `schemas/difficulty-label-record.schema.json` | 4-head·12차원 target class order와 empty-instruction fail-closed를 포함하는 canonical v2 annotation schema |
 | `schemas/difficulty-label-dataset-manifest.schema.json` | Semantic-head eligibility, family 수, slice coverage와 training gate를 관리하는 canonical v2 manifest schema |
+| `schemas/difficulty-model-path-role-manifest.schema.json` | Owner-approved model-path 5,000건의 weight-fit, calibration, evaluation holdout, promotion holdout 역할과 freeze 경계를 고정하는 schema |
 | `schemas/difficulty-label-record.v1.schema.json` | 이전 bucket taxonomy의 non-active historical snapshot |
 | `schemas/difficulty-label-dataset-manifest.v1.schema.json` | 이전 label manifest의 non-active historical snapshot |
 | `fixtures/difficulty-label-contract-smoke.*` | 필수 label/slice를 검증하는 5개 family의 synthetic contract smoke와 manifest |
