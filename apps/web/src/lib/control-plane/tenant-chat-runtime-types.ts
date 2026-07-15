@@ -12,10 +12,26 @@ export type TenantChatAdminModelPricing = {
 };
 
 export type TenantChatAdminModelCandidate = {
-  activationStatus: "available" | "pricing_unavailable";
+  activationStatus: "available";
+  modelRef: string;
   modelKey: string;
+  pricingStatus: "available" | "unavailable";
   pricing: TenantChatAdminModelPricing | null;
 };
+
+export type TenantChatRoutingMode = "auto" | "manual";
+export type TenantChatRoutingCategory =
+  | "general"
+  | "code"
+  | "translation"
+  | "summarization"
+  | "reasoning";
+export type TenantChatRoutingDifficulty = "simple" | "complex";
+export type TenantChatRoutingCell = { modelRefs: string[] };
+export type TenantChatRoutingMatrix = Record<
+  TenantChatRoutingCategory,
+  Record<TenantChatRoutingDifficulty, TenantChatRoutingCell>
+>;
 
 export type TenantChatAdminProviderCandidate = {
   displayName: string;
@@ -35,6 +51,9 @@ export type TenantChatAdminActiveSnapshot = {
   publishedAt: string;
   snapshotId: string;
   version: number;
+  manualModelRef: string;
+  routes: TenantChatRoutingMatrix;
+  routingMode: TenantChatRoutingMode;
 };
 
 export type TenantChatAdminRuntimeSetup = {
@@ -44,6 +63,7 @@ export type TenantChatAdminRuntimeSetup = {
 };
 
 export type TenantChatRuntimeActivationValues = {
-  modelKey: string;
-  providerConnectionId: string;
+  manualModelRef: string;
+  routes: TenantChatRoutingMatrix;
+  routingMode: TenantChatRoutingMode;
 };

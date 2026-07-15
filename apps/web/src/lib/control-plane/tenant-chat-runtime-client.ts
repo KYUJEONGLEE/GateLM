@@ -130,9 +130,11 @@ function isModelCandidate(value: unknown) {
   }
   const record = value as Record<string, unknown>;
   return (
+    typeof record.modelRef === "string" &&
     typeof record.modelKey === "string" &&
-    (record.activationStatus === "available" ||
-      record.activationStatus === "pricing_unavailable") &&
+    record.activationStatus === "available" &&
+    (record.pricingStatus === "available" ||
+      record.pricingStatus === "unavailable") &&
     (record.pricing === null || isPricing(record.pricing))
   );
 }
@@ -164,10 +166,48 @@ function isActiveSnapshot(value: unknown) {
     Number.isSafeInteger(record.version) &&
     Number.isSafeInteger(record.policyVersion) &&
     Number.isSafeInteger(record.pricingVersion) &&
+    (record.routingMode === "auto" || record.routingMode === "manual") &&
+    typeof record.manualModelRef === "string" &&
+    isRoutingMatrix(record.routes) &&
     (record.pricingStatus === "current" ||
       record.pricingStatus === "update_available" ||
       record.pricingStatus === "unavailable")
   );
+}
+
+const routingCategories = [
+  "general",
+  "code",
+  "translation",
+  "summarization",
+  "reasoning"
+] as const;
+
+function isRoutingMatrix(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const routes = value as Record<string, unknown>;
+  return routingCategories.every((category) => {
+    const difficulty = routes[category];
+    if (!difficulty || typeof difficulty !== "object" || Array.isArray(difficulty)) {
+      return false;
+    }
+    const cells = difficulty as Record<string, unknown>;
+    return ["simple", "complex"].every((key) => {
+      const cell = cells[key];
+      if (!cell || typeof cell !== "object" || Array.isArray(cell)) {
+        return false;
+      }
+      const modelRefs = (cell as Record<string, unknown>).modelRefs;
+      return (
+        Array.isArray(modelRefs) &&
+        modelRefs.length >= 1 &&
+        modelRefs.length <= 4 &&
+        modelRefs.every((modelRef) => typeof modelRef === "string")
+      );
+    });
+  });
 }
 
 function readErrorMessage(payload: unknown, status: number) {
