@@ -4,7 +4,7 @@
 |---|---|
 | Status | Active issue register |
 | Authority | 확인된 문서/구현 불일치와 결정 대기 항목 |
-| Baseline | `origin/dev @ dace68488` |
+| Baseline | `origin/dev @ c1976294e` |
 | Last verified | 2026-07-15 |
 
 이 문서는 후보를 계약으로 승격하지 않는다. 확실한 불일치를 기록하고, 사람 결정이 필요한 항목을 구현 작업과 분리한다.
