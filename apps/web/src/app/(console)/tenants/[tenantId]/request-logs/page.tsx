@@ -28,6 +28,8 @@ import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import { resolveControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { listTenantProviderConnections } from "@/lib/control-plane/provider-connections-client";
 import { buildProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
+import { getTenantChatInvocations } from "@/lib/control-plane/tenant-chat-observability-client";
+import { toTenantChatRequestLog } from "@/lib/control-plane/tenant-chat-request-log";
 import type { EmployeeRecord } from "@/lib/control-plane/employees-types";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 import { normalizeRequestLogSafetyOutcomeFilter } from "@/lib/gateway/request-log-safety-filter";
@@ -99,11 +101,27 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   };
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId)
     .filter((project) => project.status !== "ARCHIVED");
-  const logsResult = await getLiveGatewayRequestLogsWithMeta({
-    ...scopedLogFilters,
-    tenantId: effectiveTenantId
-  });
-  const rawRecords = logsResult?.records;
+  const includeTenantChat = !projectScoped && !scopedLogFilters.projectId && !scopedLogFilters.applicationId;
+  const [logsResult, tenantChatInvocations] = await Promise.all([
+    getLiveGatewayRequestLogsWithMeta({
+      ...scopedLogFilters,
+      tenantId: effectiveTenantId
+    }),
+    includeTenantChat
+      ? getTenantChatInvocations(
+          effectiveTenantId,
+          scopedLogFilters.from ?? new Date(0).toISOString(),
+          scopedLogFilters.to ?? new Date().toISOString(),
+          scopedLogFilters.limit ?? 100
+        )
+      : Promise.resolve([])
+  ]);
+  const gatewayRecords = logsResult?.records;
+  const tenantChatRecords = tenantChatInvocations?.map(toTenantChatRequestLog);
+  const rawRecords = gatewayRecords || tenantChatRecords
+    ? [...(gatewayRecords ?? []), ...(tenantChatRecords ?? [])]
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    : undefined;
   const employeeDirectory = buildRequestLogEmployeeDirectory(employees);
   const providerDirectory = buildProviderDisplayDirectory(
     providerConnections.ok ? providerConnections.data : []
@@ -313,6 +331,18 @@ function filterRequestLogRecords(
   const search = normalizeSearchValue(filters.search);
 
   return records.filter((record) => {
+    if (filters.status && record.status !== filters.status) {
+      return false;
+    }
+    if (filters.cacheStatus && record.cacheStatus !== filters.cacheStatus) {
+      return false;
+    }
+    if (
+      filters.safetyOutcome &&
+      record.domainOutcomes?.safety.outcome !== filters.safetyOutcome
+    ) {
+      return false;
+    }
     const model = displayedModel(record);
     if (filters.model && !valuesMatch(model, filters.model)) {
       return false;
