@@ -240,6 +240,9 @@ func (s *Store) MarkDispatched(ctx context.Context, tx pgx.Tx, ref AttemptRef) (
 	if err != nil || tag.RowsAffected() != 1 {
 		return TransitionResult{}, ErrInvariantViolation
 	}
+	if err = refreshReservationPendingMarker(ctx, tx, ref); err != nil {
+		return TransitionResult{}, err
+	}
 	return transitionFromReservation(reservation, false), nil
 }
 
@@ -444,6 +447,9 @@ func (s *Store) RecordPreCallFailure(
 	`, string(ref.Surface), ref.RequestID, ref.AttemptNo, ref.Now)
 	if err != nil || tag.RowsAffected() != 1 {
 		return TransitionResult{}, ErrInvariantViolation
+	}
+	if err = refreshReservationPendingMarker(ctx, tx, ref); err != nil {
+		return TransitionResult{}, err
 	}
 	return transitionFromReservation(reservation, false), nil
 }

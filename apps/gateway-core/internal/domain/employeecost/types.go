@@ -1,6 +1,11 @@
 package employeecost
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrGuardUnavailable = errors.New("employee cost guard unavailable")
 
 const (
 	CurrencyUSD           = "USD"

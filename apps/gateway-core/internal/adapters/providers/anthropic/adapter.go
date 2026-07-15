@@ -73,6 +73,7 @@ func (a *Adapter) ListModels(ctx context.Context, config provider.ExecutionConfi
 }
 
 func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	req.DispatchTracker.Observe()
 	config = normalizeConfig(config)
 	if err := validateConfig(config, true); err != nil {
 		return nil, err
@@ -96,6 +97,12 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("build provider chat request: %w", err))
 	}
 	setAnthropicHeaders(httpReq, config, true, req.RequestID)
+	if req.BeforeDispatch != nil {
+		if err := req.BeforeDispatch(reqCtx); err != nil {
+			return nil, provider.NewNotStartedError(err)
+		}
+	}
+	req.DispatchTracker.MarkStarted()
 
 	resp, err := a.httpClient.Do(httpReq)
 	if err != nil {
@@ -116,6 +123,7 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 }
 
 func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	req.DispatchTracker.Observe()
 	config = normalizeConfig(config)
 	if err := validateConfig(config, true); err != nil {
 		return nil, err
@@ -137,6 +145,13 @@ func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provide
 	}
 	setAnthropicHeaders(httpReq, config, true, req.RequestID)
 	httpReq.Header.Set("Accept", "text/event-stream")
+	if req.BeforeDispatch != nil {
+		if err := req.BeforeDispatch(reqCtx); err != nil {
+			cancel()
+			return nil, provider.NewNotStartedError(err)
+		}
+	}
+	req.DispatchTracker.MarkStarted()
 	resp, err := a.httpClient.Do(httpReq)
 	if err != nil {
 		cancel()
