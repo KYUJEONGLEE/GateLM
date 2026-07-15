@@ -313,7 +313,12 @@ export function ChatShell() {
       });
       if (terminal.type === 'chat.turn.final') {
         setMessages((current) => current.map((message) => message.id === draftId
-          ? { ...message, id: terminal.messageId ?? message.id, turnId: terminal.turnId }
+          ? {
+              ...message,
+              id: terminal.messageId ?? message.id,
+              turnId: terminal.turnId,
+              ...(terminal.effectiveModelKey ? { effectiveModelKey: terminal.effectiveModelKey } : {}),
+            }
           : message));
         if (terminal.quotaState && terminal.budgetState) {
           setPolicyState(strongestPolicyState(terminal.quotaState, terminal.budgetState));
@@ -455,6 +460,7 @@ export function ChatShell() {
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
                       {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
+                      {message.effectiveModelKey && <div className="message-meta" aria-label={`응답 모델: ${message.effectiveModelKey}`}>모델 · {message.effectiveModelKey}로 생성됨</div>}
                     </article>
                   </>}
                 </li>)}

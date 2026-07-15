@@ -125,6 +125,7 @@ a { color: inherit; }
 .message-warning > svg { flex: 0 0 auto; margin-top: 2px; }
 .message-warning strong { display: block; font-size: 14px; }
 .message-warning p { margin-top: 2px; color: #9e4c45; font-size: 14px; line-height: 1.55; }
+.message-meta { margin-top: 8px; color: var(--g-text-muted); font-size: 12px; line-height: 1.45; }
 .history-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px; color: var(--g-text-muted); font-size: 14px; }
 .history-more { justify-self: center; margin: 0 0 14px; }
 .composer-area { flex: 0 0 auto; border-top: 1px solid var(--g-border); background: rgb(248 249 251 / 92%); padding: 14px 24px 12px; }

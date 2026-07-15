@@ -6,6 +6,7 @@ import {
   conversationPage,
   createConversationBody,
   createTurnBody,
+  messagePage,
   parseIfMatch,
   parsePageQuery,
   strongestPolicyState,
@@ -54,6 +55,26 @@ test('policy reducer uses the most severe bounded state', () => {
   assert.equal(strongestPolicyState('normal', 'blocked'), 'blocked');
 });
 
+test('history accepts bounded assistant model metadata and rejects it on user messages', () => {
+  const assistant = messagePage({
+    items: [{
+      id: messageId,
+      turnId,
+      role: 'assistant',
+      content: 'answer',
+      effectiveModelKey: 'gpt-5.4-mini',
+      sequence: 2,
+      createdAt: '2026-07-15T00:00:00.000Z',
+    }],
+    nextCursor: null,
+  });
+  assert.equal(assistant.items[0].effectiveModelKey, 'gpt-5.4-mini');
+  assert.throws(() => messagePage({
+    items: [{ ...assistant.items[0], role: 'user' }],
+    nextCursor: null,
+  }));
+});
+
 test('SSE parser enforces accepted, contiguous deltas, and one terminal event', async () => {
   const deltas = [];
   const terminal = await consumeTurnSse(stream([
@@ -62,6 +83,7 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
     frame('chat.turn.final', 3, {
       messageId,
       terminalOutcome: 'succeeded',
+      effectiveModelKey: 'gpt-5.4-mini',
       quotaState: 'economy',
       budgetState: 'warning',
       replayed: false,
@@ -70,6 +92,19 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
   assert.deepEqual(deltas, ['안녕']);
   assert.equal(terminal.type, 'chat.turn.final');
   assert.equal(terminal.quotaState, 'economy');
+  assert.equal(terminal.effectiveModelKey, 'gpt-5.4-mini');
+});
+
+test('SSE parser rejects invalid effective model metadata', async () => {
+  await assert.rejects(() => consumeTurnSse(stream([
+    frame('chat.turn.accepted', 1, { replayed: false }),
+    frame('chat.turn.final', 2, {
+      messageId,
+      terminalOutcome: 'succeeded',
+      effectiveModelKey: '<provider raw>',
+      replayed: false,
+    }),
+  ]), { conversationId }));
 });
 
 test('SSE parser rejects gaps, mismatched ids, and oversized frames', async () => {

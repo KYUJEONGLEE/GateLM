@@ -91,6 +91,7 @@ describe('ConversationController SSE cleanup', () => {
     expect(response.setHeader).toHaveBeenCalledWith('Content-Encoding', 'identity');
     expect(finalPayload(response)).toMatchObject({
       type: 'chat.turn.final',
+      effectiveModelKey: 'mock-model',
       quotaState: 'economy',
       budgetState: 'warning',
       replayed: false,
@@ -116,6 +117,7 @@ describe('ConversationController SSE cleanup', () => {
 
     expect(finalPayload(response)).toMatchObject({
       type: 'chat.turn.final',
+      effectiveModelKey: 'mock-model',
       replayed: true,
     });
     expect(finalPayload(response)).not.toHaveProperty('quotaState');
@@ -178,6 +180,7 @@ function replay(): Extract<PreparedTurn, { kind: 'replay' }> {
       turnId: '00000000-0000-4000-8000-000000000301',
       role: 'assistant' as const,
       content: '',
+      effectiveModelKey: 'mock-model',
       sequence: 2,
       createdAt: '2026-07-14T00:00:00.000Z',
     }),

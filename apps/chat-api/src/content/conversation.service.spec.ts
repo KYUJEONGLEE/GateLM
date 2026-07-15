@@ -70,6 +70,12 @@ describe('ConversationService turn fan-out', () => {
     expect(firstSettled).toBe(false);
     expect(bridge.complete).toHaveBeenCalledTimes(1);
     expect(store.persistAssistant).toHaveBeenCalledTimes(1);
+    expect(store.persistAssistant).toHaveBeenCalledWith(
+      first.actor,
+      first.reserved,
+      'delta',
+      'mock',
+    );
 
     releaseSlow();
     await expect(firstResult).resolves.toEqual({
@@ -106,6 +112,12 @@ describe('ConversationService turn fan-out', () => {
         budgetState: 'normal',
       });
     expect(store.persistAssistant).toHaveBeenCalledTimes(2);
+    expect(store.persistAssistant).toHaveBeenLastCalledWith(
+      prepared.actor,
+      prepared.reserved,
+      'delta',
+      'mock',
+    );
     expect(store.markTerminalFailure).not.toHaveBeenCalled();
   });
 
@@ -271,6 +283,7 @@ function assistantMessage(): MessageView {
     turnId: '00000000-0000-4000-8000-000000000301',
     role: 'assistant' as const,
     content: 'delta',
+    effectiveModelKey: 'mock',
     sequence: 2,
     createdAt: '2026-07-14T00:00:00.000Z',
   });
