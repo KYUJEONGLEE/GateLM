@@ -16,6 +16,7 @@
     "v2.1:routing:prepare-gateway-e5-shadow": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/prepare-gateway-e5-shadow-bundle.ps1",
     "v2.1:routing:setup-gateway-e5-shadow-native": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/prepare-gateway-e5-shadow-bundle.ps1 -DownloadMissingNativePackages",
     "verify:v2.1-gateway-e5-shadow": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/verify-gateway-e5-shadow.ps1",
+    "v2.1:routing:measure-gateway-holdout": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/verify-gateway-e5-shadow.ps1 -SkipImageBuild -EvidenceOutput .tmp/gateway-e5-holdout-evidence.json",
     "v2.1:routing:generate-difficulty-training-pilot": "node scripts/dev/generate-v2.1-difficulty-training-pilot.mjs",
     "v2.1:routing:review-difficulty-training-pilot": "node scripts/dev/review-v2.1-difficulty-training-pilot.mjs",
     "v2.1:routing:verify-difficulty-artifact": "go run ./apps/gateway-core/cmd/difficulty-model-verify",

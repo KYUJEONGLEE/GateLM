@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 type stubDifficultySemanticShadowEvaluation struct {
 	evaluate func(context.Context, PromptFeatures, string) DifficultySemanticShadowResult
+	close    func() error
 	closed   atomic.Int32
 }
 
@@ -25,6 +27,9 @@ func (stub *stubDifficultySemanticShadowEvaluation) Evaluate(
 
 func (stub *stubDifficultySemanticShadowEvaluation) Close() error {
 	stub.closed.Add(1)
+	if stub.close != nil {
+		return stub.close()
+	}
 	return nil
 }
 
@@ -250,6 +255,80 @@ func TestDifficultySemanticShadowRunnerBoundsActiveAndQueuedWork(t *testing.T) {
 	}
 	close(release)
 	closeDifficultySemanticShadowRunnerForTest(t, runner)
+}
+
+func TestDifficultySemanticShadowRunnerIsolatesObserverPanicAndContinues(t *testing.T) {
+	var evaluations atomic.Int32
+	evaluation := &stubDifficultySemanticShadowEvaluation{
+		evaluate: func(context.Context, PromptFeatures, string) DifficultySemanticShadowResult {
+			evaluations.Add(1)
+			return DifficultySemanticShadowResult{
+				Status:     DifficultySemanticShadowReady,
+				Difficulty: DifficultyResult{Difficulty: DifficultySimple},
+			}
+		},
+	}
+	runner := NewDifficultySemanticShadowRunner(
+		evaluation,
+		time.Second,
+		DifficultySemanticShadowObserverFunc(func(DifficultySemanticShadowObservation) {
+			panic("sensitive observer detail must not escape")
+		}),
+	)
+	features := ExtractPromptFeatures("safe observer isolation sample")
+	if !runner.Submit(features, CategoryGeneral, DifficultySimple) {
+		t.Fatal("first observer-isolation job was not accepted")
+	}
+	waitForDifficultyShadowEvaluationCount(t, &evaluations, 1)
+	if !runner.Submit(features, CategoryGeneral, DifficultySimple) {
+		t.Fatal("worker stopped after observer panic")
+	}
+	waitForDifficultyShadowEvaluationCount(t, &evaluations, 2)
+	closeDifficultySemanticShadowRunnerForTest(t, runner)
+}
+
+func TestDifficultySemanticShadowRunnerCloseTimesOutWithoutBlockingRoutingOwner(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	evaluation := &stubDifficultySemanticShadowEvaluation{
+		evaluate: func(context.Context, PromptFeatures, string) DifficultySemanticShadowResult {
+			close(entered)
+			<-release
+			return DifficultySemanticShadowResult{Status: DifficultySemanticShadowInferenceFailed}
+		},
+	}
+	runner := NewDifficultySemanticShadowRunner(evaluation, time.Second, nil)
+	if !runner.Submit(ExtractPromptFeatures("safe close-timeout sample"), CategoryGeneral, DifficultySimple) {
+		t.Fatal("close-timeout job was not accepted")
+	}
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("close-timeout evaluation did not start")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	err := runner.Close(ctx)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close() error = %v, want deadline exceeded", err)
+	}
+	close(release)
+	closeDifficultySemanticShadowRunnerForTest(t, runner)
+	if evaluation.closed.Load() != 1 {
+		t.Fatalf("evaluator Close() calls = %d, want 1", evaluation.closed.Load())
+	}
+}
+
+func waitForDifficultyShadowEvaluationCount(t *testing.T, count *atomic.Int32, expected int32) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if count.Load() >= expected {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("shadow evaluation count = %d, want at least %d", count.Load(), expected)
 }
 
 func waitForDifficultySemanticShadowObservation(

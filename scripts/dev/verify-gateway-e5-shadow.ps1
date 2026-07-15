@@ -3,6 +3,7 @@ param(
     [string]$ArtifactRoot = ".tmp/difficulty-semantic-encoder-artifacts",
     [string]$BundleDirectory = ".tmp/gateway-e5-shadow-bundle",
     [string]$ImageTag = "gatelm/gateway-core:e5-shadow-verify",
+    [string]$EvidenceOutput = "",
     [switch]$SkipImageBuild
 )
 
@@ -30,8 +31,9 @@ $parityDirectory = Join-Path $temporaryRoot ("gateway-e5-parity-" + [guid]::NewG
 New-Item -ItemType Directory -Path $parityDirectory | Out-Null
 $expectedPath = Join-Path $parityDirectory "expected-pooled.f32"
 $expectedTokensPath = Join-Path $parityDirectory "expected-tokens.bin"
+$holdoutReferencePath = Join-Path $parityDirectory "holdout-reference.json"
+$holdoutAggregatePath = Join-Path $parityDirectory "holdout-aggregate.json"
 $pythonReferencePath = Join-Path $parityDirectory "python_reference.py"
-$relativeExpectedPath = $expectedPath.Substring($repoRoot.Length).TrimStart("\").Replace("\", "/")
 $pythonProgram = @'
 from pathlib import Path
 import sys
@@ -76,17 +78,102 @@ try {
         throw "canonical Python E5 parity reference failed"
     }
 
+    & $Python -m gatelm_difficulty_model.gateway_holdout_reference reference `
+        --dataset (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl") `
+        --manifest (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json") `
+        --artifact (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v2.json") `
+        --artifact-root $artifactPath `
+        --encoder-manifest (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json") `
+        --output $holdoutReferencePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "canonical Python Gateway holdout reference failed"
+    }
+
+    $previousGoCache = $env:GOCACHE
+    try {
+        $env:GOCACHE = Join-Path $repoRoot ".cache/go-build"
+        Push-Location $repoRoot
+        try {
+            & go test ./apps/gateway-core/internal/adapters/routing/e5onnx `
+                -run "TestVerifyBundle|TestNativeEncoderIsUnavailableOutsideLinuxShadowProfile" `
+                -count=1
+            if ($LASTEXITCODE -ne 0) { throw "Gateway E5 bundle failure-isolation tests failed" }
+            & go test ./apps/gateway-core/cmd/gateway `
+                -run "TestInitializeDifficultyE5Shadow" `
+                -count=1
+            if ($LASTEXITCODE -ne 0) { throw "Gateway E5 initialization isolation tests failed" }
+            & go test ./apps/gateway-core/internal/domain/routing `
+                -run "TestSimpleRouter.*Shadow|TestDifficultySemanticShadow|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely" `
+                -count=1
+            if ($LASTEXITCODE -ne 0) { throw "Gateway E5 request isolation tests failed" }
+        } finally {
+            Pop-Location
+        }
+    } finally {
+        $env:GOCACHE = $previousGoCache
+    }
+
     & docker run --rm --platform linux/amd64 `
-        -v "${repoRoot}:/src" `
+        -v "$(Join-Path $repoRoot 'apps/gateway-core'):/src/apps/gateway-core:ro" `
         -v "${bundlePath}:/bundle:ro" `
+        -v "${expectedPath}:/evidence/expected-pooled.f32:ro" `
+        -v "${expectedTokensPath}:/evidence/expected-tokens.bin:ro" `
         -w /src/apps/gateway-core `
         -e GATELM_E5_INTEGRATION_BUNDLE_ROOT=/bundle `
-        -e "GATELM_E5_INTEGRATION_EXPECTED_POOLED=/src/$relativeExpectedPath" `
-        -e "GATELM_E5_INTEGRATION_EXPECTED_TOKENS=/src/$($expectedTokensPath.Substring($repoRoot.Length).TrimStart('\').Replace('\', '/'))" `
+        -e GATELM_E5_INTEGRATION_EXPECTED_POOLED=/evidence/expected-pooled.f32 `
+        -e GATELM_E5_INTEGRATION_EXPECTED_TOKENS=/evidence/expected-tokens.bin `
         golang:1.24-bookworm `
         bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./internal/adapters/routing/e5onnx -run TestNativeEncoderMatchesCanonicalPythonPooledOutput -count=1"
     if ($LASTEXITCODE -ne 0) {
         throw "Gateway native/Python E5 parity failed"
+    }
+
+    $holdoutRunReports = @()
+    $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
+    for ($run = 1; $run -le 3; $run++) {
+        $runReport = Join-Path $parityDirectory "holdout-run-$run.json"
+        $holdoutRunReports += $runReport
+        & docker run --rm --platform linux/amd64 `
+            -v "$(Join-Path $repoRoot 'apps/gateway-core'):/src/apps/gateway-core:ro" `
+            -v "${bundlePath}:/bundle:ro" `
+            -v "${parityDirectory}:/evidence" `
+            -v "$(Join-Path $repoRoot 'docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl'):/data/dataset.jsonl:ro" `
+            -v "$(Join-Path $repoRoot 'docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json'):/data/manifest.json:ro" `
+            -w /src/apps/gateway-core `
+            -e GATELM_E5_INTEGRATION_BUNDLE_ROOT=/bundle `
+            -e GATELM_E5_HOLDOUT_REFERENCE=/evidence/holdout-reference.json `
+            -e GATELM_E5_HOLDOUT_DATASET=/data/dataset.jsonl `
+            -e GATELM_E5_HOLDOUT_MANIFEST=/data/manifest.json `
+            -e "GATELM_E5_HOLDOUT_REPORT=/evidence/holdout-run-$run.json" `
+            -e "GATELM_EVIDENCE_COMMIT=$commit" `
+            -e "GATELM_EVIDENCE_RUN=$run" `
+            golang:1.24-bookworm `
+            bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./internal/adapters/routing/e5onnx -run '^TestNativeGatewayHoldoutReplay$' -count=1"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Gateway native holdout replay run $run failed"
+        }
+    }
+
+    $aggregateArguments = @(
+        "-m", "gatelm_difficulty_model.gateway_holdout_reference", "aggregate"
+    )
+    foreach ($runReport in $holdoutRunReports) {
+        $aggregateArguments += @("--report", $runReport)
+    }
+    $aggregateArguments += @("--output", $holdoutAggregatePath)
+    & $Python @aggregateArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gateway holdout replay aggregation failed"
+    }
+
+    if ($EvidenceOutput) {
+        $evidencePath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $EvidenceOutput))
+        if (-not $evidencePath.StartsWith($repoRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "EvidenceOutput must stay inside the repository"
+        }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $evidencePath) -Force | Out-Null
+        Copy-Item -LiteralPath $holdoutAggregatePath -Destination $evidencePath -Force
+        Write-Host "Gateway holdout aggregate evidence: $evidencePath"
     }
 
     if (-not $SkipImageBuild) {
@@ -126,7 +213,7 @@ try {
         }
     }
 
-    Write-Host "Gateway E5 shadow verification passed"
+    Write-Host "Gateway E5 shadow and Holdout replay verification passed"
 } finally {
     $env:PYTHONPATH = $previousPythonPath
     if (Test-Path -LiteralPath $parityDirectory) {

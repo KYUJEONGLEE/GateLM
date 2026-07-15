@@ -81,6 +81,24 @@ const prepareScript = readFileSync(
   path.join(rootDir, "scripts/dev/prepare-gateway-e5-shadow-bundle.ps1"),
   "utf8",
 );
+const verifyNativeScript = readFileSync(
+  path.join(rootDir, "scripts/dev/verify-gateway-e5-shadow.ps1"),
+  "utf8",
+);
+const holdoutReference = readFileSync(
+  path.join(
+    rootDir,
+    "scripts/routing_difficulty_model/gatelm_difficulty_model/gateway_holdout_reference.py",
+  ),
+  "utf8",
+);
+const holdoutIntegration = readFileSync(
+  path.join(
+    rootDir,
+    "apps/gateway-core/internal/adapters/routing/e5onnx/runtime_native_holdout_integration_test.go",
+  ),
+  "utf8",
+);
 if (!defaultDockerfile.includes("CGO_ENABLED=0") || defaultDockerfile.includes("difficulty_e5_onnx")) {
   throw new Error("default Gateway image must remain CGO-free and E5-inactive");
 }
@@ -92,6 +110,37 @@ for (const requiredText of [
 ]) {
   if (!e5Dockerfile.includes(requiredText)) {
     throw new Error(`optional Gateway E5 image omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "gatelm_difficulty_model.gateway_holdout_reference reference",
+  "TestNativeGatewayHoldoutReplay",
+  "holdout-run-$run.json",
+  "EvidenceOutput",
+  ":/src/apps/gateway-core:ro",
+]) {
+  if (!verifyNativeScript.includes(requiredText)) {
+    throw new Error(`Gateway E5 native verifier omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "difficulty_training_2026_07_15_owner_approved_500_v2",
+  "offlineBatch16Classification",
+  "gatewaySingleClassification",
+  "maxAbsoluteScoreDeltaAcrossRuns",
+]) {
+  if (!holdoutReference.includes(requiredText)) {
+    throw new Error(`Gateway Holdout Python reference omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "gatelm.difficulty-gateway-holdout-replay-run.v1",
+  "OfflineAggregateReproduced",
+  "routeShadowDisabled",
+  "nativeTimeoutRecovery",
+]) {
+  if (!holdoutIntegration.includes(requiredText)) {
+    throw new Error(`Gateway Holdout native integration omitted ${requiredText}`);
   }
 }
 for (const requiredText of [
