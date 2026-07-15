@@ -26,7 +26,7 @@ export type IssuedSession = {
 };
 
 export type InvitationSummary = {
-  accountState: 'new' | 'existing';
+  accountState: 'existing' | 'new' | 'reclaimable';
   email: string;
   employeeName: string | null;
   expiresAt: string;

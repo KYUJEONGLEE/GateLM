@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { hashPassword, hashSecret, normalizeEmail, verifyPassword } from '@/modules/auth/auth.crypto';
@@ -15,6 +15,7 @@ import {
 } from './dto/tenant-chat-identity.dto';
 
 type Transaction = Prisma.TransactionClient;
+type InvitationAccountState = 'existing' | 'new' | 'reclaimable';
 
 @Injectable()
 export class TenantChatIdentityService {
@@ -29,9 +30,10 @@ export class TenantChatIdentityService {
     const invitation = await this.findInvitation(this.prisma, token);
     this.assertInvitationUsable(invitation);
     const users = await this.findUsersByEmail(this.prisma, invitation.email);
+    const accountState = await this.invitationAccountState(this.prisma, users);
 
     return {
-      accountState: users.length === 0 ? 'new' : 'existing',
+      accountState,
       email: normalizeEmail(invitation.email),
       employeeName: invitation.name,
       expiresAt: invitation.invitationExpiresAt!.toISOString(),
@@ -71,7 +73,8 @@ export class TenantChatIdentityService {
         const invitation = await this.lockInvitation(tx, body.token);
         this.assertInvitationUsable(invitation);
         const users = await this.findUsersByEmail(tx, invitation.email);
-        if (users.length > 0) {
+        const accountState = await this.invitationAccountState(tx, users);
+        if (accountState === 'existing') {
           this.fail(
             HttpStatus.CONFLICT,
             'CHAT_EXISTING_ACCOUNT_LOGIN_REQUIRED',
@@ -79,16 +82,43 @@ export class TenantChatIdentityService {
           );
         }
 
-        const user = await tx.user.create({
-          data: {
-            authProvider: 'local',
-            email: normalizeEmail(invitation.email),
-            emailVerifiedAt: new Date(),
-            name: body.name.trim(),
-            passwordHash,
-            status: 'active',
-          },
-        });
+        let user: User;
+        if (accountState === 'reclaimable') {
+          const existingUser = users[0]!;
+          const now = new Date();
+          await this.revokeAccountSessions(tx, existingUser.id, now);
+          await tx.tenantMembership.updateMany({
+            where: {
+              deletedAt: null,
+              role: 'employee',
+              status: 'active',
+              userId: existingUser.id,
+            },
+            data: { deletedAt: now, status: 'removed' },
+          });
+          user = await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              actorAuthzVersion: { increment: 1 },
+              emailVerifiedAt: now,
+              lastLoginAt: now,
+              name: body.name.trim(),
+              passwordHash,
+              status: 'active',
+            },
+          });
+        } else {
+          user = await tx.user.create({
+            data: {
+              authProvider: 'local',
+              email: normalizeEmail(invitation.email),
+              emailVerifiedAt: new Date(),
+              name: body.name.trim(),
+              passwordHash,
+              status: 'active',
+            },
+          });
+        }
         await this.bindInvitation(tx, invitation, user.id);
         return this.identityResult(user.id, tx);
       },
@@ -389,6 +419,69 @@ export class TenantChatIdentityService {
       },
       orderBy: { createdAt: 'asc' },
       take: 2,
+    });
+  }
+
+  private async invitationAccountState(
+    db: PrismaService | Transaction,
+    users: User[],
+  ): Promise<InvitationAccountState> {
+    if (users.length === 0) return 'new';
+    if (users.length !== 1) return 'existing';
+    return (await this.isReclaimableLocalAccount(db, users[0]!))
+      ? 'reclaimable'
+      : 'existing';
+  }
+
+  private async isReclaimableLocalAccount(
+    db: PrismaService | Transaction,
+    user: User,
+  ): Promise<boolean> {
+    if (user.authProvider !== 'local' || user.deletedAt || user.status !== 'active') {
+      return false;
+    }
+
+    const [activeMemberships, linkedEmployeeCount, projectAdminCount, tenantAdminCount] =
+      await Promise.all([
+        db.tenantMembership.findMany({
+          where: { deletedAt: null, status: 'active', userId: user.id },
+          select: { role: true },
+        }),
+        db.employee.count({
+          where: {
+            deletedAt: null,
+            status: { not: 'archived' },
+            userId: user.id,
+          },
+        }),
+        db.projectAdmin.count({ where: { userId: user.id } }),
+        db.tenantAdmin.count({ where: { userId: user.id } }),
+      ]);
+
+    return (
+      linkedEmployeeCount === 0 &&
+      projectAdminCount === 0 &&
+      tenantAdminCount === 0 &&
+      activeMemberships.every((membership) => membership.role === 'employee')
+    );
+  }
+
+  private async revokeAccountSessions(
+    tx: Transaction,
+    userId: string,
+    revokedAt: Date,
+  ): Promise<void> {
+    await tx.authSession.updateMany({
+      where: { revokedAt: null, userId },
+      data: { revokedAt },
+    });
+    await tx.tenantChatRefreshToken.updateMany({
+      where: { revokedAt: null, session: { userId } },
+      data: { revokedAt },
+    });
+    await tx.tenantChatSession.updateMany({
+      where: { revokedAt: null, userId },
+      data: { revokeReason: 'account_reclaimed', revokedAt },
     });
   }
 
