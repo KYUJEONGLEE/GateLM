@@ -40,7 +40,6 @@ const costOverTimeText = {
     error: "Failed to load cost data",
     loading: "Loading cost data",
     spend: "Spend (USD)",
-    subtitle: "Hourly cost trend",
     title: "Cost Over Time"
   },
   ko: {
@@ -51,7 +50,6 @@ const costOverTimeText = {
     error: "비용 데이터를 불러오지 못했습니다",
     loading: "비용 데이터 불러오는 중",
     spend: "사용 비용(USD)",
-    subtitle: "시간별 비용 추이",
     title: "시간별 비용"
   }
 } as const;
@@ -246,7 +244,6 @@ export function CostOverTimeCard({
       <div className="dashboard-cost-over-time-header">
         <div>
           <h2>{text.title}</h2>
-          <p>{text.subtitle}</p>
         </div>
         
       </div>

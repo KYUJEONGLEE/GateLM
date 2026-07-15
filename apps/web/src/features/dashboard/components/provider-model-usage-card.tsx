@@ -25,14 +25,14 @@ const MAX_DIRECT_USAGE_ROWS = 3;
 const providerModelUsageText = {
   en: {
     allProviders: "All Providers",
-    aria: "Provider / Model Usage",
+    aria: "Model Usage",
     chartAria: "Provider model usage donut chart",
     empty: "No provider/model usage for selected project",
     filterAria: "Filter provider model usage by provider",
     mock: "Mock",
     others: "Others",
     requests: "Requests",
-    title: "Provider / Model Usage"
+    title: "Model Usage"
   },
   ko: {
     allProviders: "전체 Provider",
