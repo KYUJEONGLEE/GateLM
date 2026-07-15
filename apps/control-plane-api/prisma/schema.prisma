@@ -1240,6 +1240,7 @@ model TenantChatMessage {
   tag               Bytes
   contentKeyVersion Int       @map("content_key_version")
   schemaVersion     Int       @default(1) @map("schema_version")
+  effectiveModelKey String?   @map("effective_model_key")
   expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 

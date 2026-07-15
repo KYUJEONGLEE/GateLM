@@ -152,6 +152,7 @@ CREATE TABLE tenant_chat_messages (
   tag bytea NOT NULL,
   content_key_version integer NOT NULL,
   schema_version integer NOT NULL DEFAULT 1,
+  effective_model_key text,
   expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_message_conversation_sequence_key UNIQUE (conversation_id, sequence),
@@ -163,6 +164,12 @@ CREATE TABLE tenant_chat_messages (
   CONSTRAINT tenant_chat_message_content_key_fkey FOREIGN KEY (tenant_id, content_key_version)
     REFERENCES tenant_chat_content_keys(tenant_id, content_key_version) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_message_role_check CHECK (role IN ('user', 'assistant')),
+  CONSTRAINT tenant_chat_message_effective_model_key_check CHECK (
+    effective_model_key IS NULL OR (
+      role = 'assistant' AND
+      effective_model_key ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$'
+    )
+  ),
   CONSTRAINT tenant_chat_message_shape_check CHECK (
     sequence >= 1 AND schema_version = 1 AND octet_length(ciphertext) BETWEEN 1 AND 1048576 AND
     octet_length(nonce) = 12 AND octet_length(tag) = 16

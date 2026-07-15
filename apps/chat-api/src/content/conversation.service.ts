@@ -264,7 +264,11 @@ export class ConversationService {
         throw error;
       }
       if (prepared.signal.aborted) throw new TurnStateConflict();
-      const persisted = await this.persistAssistantWithRetry(prepared, result.assistantContent);
+      const persisted = await this.persistAssistantWithRetry(
+        prepared,
+        result.assistantContent,
+        result.final.effectiveModelKey,
+      );
       return Object.freeze({
         message: persisted.message,
         replayed: persisted.replayed,
@@ -330,6 +334,7 @@ export class ConversationService {
   private async persistAssistantWithRetry(
     prepared: Extract<PreparedTurn, { kind: 'execute' }>,
     content: string,
+    effectiveModelKey: string | null,
   ) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
@@ -337,6 +342,7 @@ export class ConversationService {
           prepared.actor,
           prepared.reserved,
           content,
+          effectiveModelKey,
         );
       } catch (error) {
         if (attempt === 3 || !isRetryableStorageError(error)) throw error;

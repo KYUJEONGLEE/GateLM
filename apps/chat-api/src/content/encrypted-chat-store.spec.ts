@@ -151,6 +151,7 @@ function encryptedMessage(
     tag: Uint8Array.from(encrypted.tag),
     contentKeyVersion: 1,
     schemaVersion: 1,
+    effectiveModelKey: role === 'assistant' ? 'mock-model' : null,
     expiresAt: null,
     createdAt: new Date(),
   };
