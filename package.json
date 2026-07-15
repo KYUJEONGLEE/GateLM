@@ -25,6 +25,8 @@
     "verify:v2.1-gpt-adjudication": "node --test scripts/dev/import-v2.1-difficulty-gpt-adjudication.test.mjs && node scripts/dev/import-v2.1-difficulty-gpt-adjudication.mjs --check",
     "v2.1:routing:import-difficulty-expansion-gpt-review": "node scripts/dev/import-v2.1-difficulty-expansion-gpt-review.mjs",
     "verify:v2.1-difficulty-expansion-gpt-review": "node --test scripts/dev/import-v2.1-difficulty-expansion-gpt-review.test.mjs && node scripts/dev/import-v2.1-difficulty-expansion-gpt-review.mjs --check",
+    "v2.1:routing:import-difficulty-expansion-direct-review": "node scripts/dev/import-v2.1-difficulty-expansion-direct-review.mjs",
+    "verify:v2.1-difficulty-expansion-direct-review": "node --test scripts/dev/import-v2.1-difficulty-expansion-direct-review.test.mjs && node scripts/dev/import-v2.1-difficulty-expansion-direct-review.mjs --check",
     "v2.1:routing:promote-difficulty-training-candidate": "node scripts/dev/promote-v2.1-difficulty-training-candidate.mjs",
     "verify:v2.1-difficulty-training-candidate": "node --test scripts/dev/promote-v2.1-difficulty-training-candidate.test.mjs && node scripts/dev/promote-v2.1-difficulty-training-candidate.mjs --check",
     "v2.1:routing:test-difficulty-training-tooling": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-difficulty-training-tooling-test.ps1",

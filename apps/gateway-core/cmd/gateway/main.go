@@ -89,7 +89,7 @@ func main() {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
 	metricsRegistry := metrics.NewRegistry()
-	difficultyE5InitCtx, difficultyE5InitCancel := context.WithTimeout(context.Background(), cfg.DifficultyE5Shadow.Timeout)
+	difficultyE5InitCtx, difficultyE5InitCancel := context.WithTimeout(context.Background(), difficultyE5StartupSmokeTimeout)
 	difficultyE5ShadowRunner, difficultyE5ShadowStatus := initializeDifficultyE5ShadowRunner(
 		difficultyE5InitCtx,
 		cfg.DifficultyE5Shadow,
@@ -370,7 +370,10 @@ func main() {
 	}
 }
 
-const difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
+const (
+	difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
+	difficultyE5StartupSmokeTimeout     = 10 * time.Second
+)
 
 const (
 	DifficultyE5ShadowRuntimeDisabled    = "disabled"
@@ -401,7 +404,7 @@ func initializeDifficultyE5Shadow(
 	cfg config.DifficultyE5ShadowConfig,
 	factory difficultyE5EncoderFactory,
 ) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
-	if !cfg.Enabled {
+	if !cfg.HasAllowedScopes() {
 		return nil, nil
 	}
 	if factory == nil {

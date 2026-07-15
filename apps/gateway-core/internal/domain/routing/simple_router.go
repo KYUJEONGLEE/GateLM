@@ -149,7 +149,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	decision.CandidateModelRefs = candidates
 	decision.RoutingDecisionMaterial = material
 	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(material)
-	if r != nil && r.difficultyShadow != nil {
+	if r != nil && r.difficultyShadow != nil && req.DifficultyShadowEligible {
 		r.difficultyShadow.Submit(features, category, difficulty)
 	}
 	return decision, nil

@@ -195,7 +195,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash).SimpleRouterConfig(),
 		routingdomain.WithDifficultySemanticShadow(routerOptions.DifficultyShadow),
 	)
-	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
+	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(
+		simpleRouter,
+		routingstage.WithDifficultyShadowEligibility(cfg.DifficultyE5Shadow.AllowsScope),
+	))
 	if routerOptions.PreProviderPipeline != nil {
 		preProviderPipeline = routerOptions.PreProviderPipeline
 	}

@@ -60,8 +60,9 @@ func TestSimpleRouterKeepsRuleDifficultyAndModelRefWhenShadowDisagrees(t *testin
 	config.Routes.General.Complex.ModelRefs = []string{"rule-complex"}
 	router := NewSimpleRouter(config, WithDifficultySemanticShadow(runner))
 	decision, err := router.DecideRoute(context.Background(), Request{
-		RequestedModel: "auto",
-		PromptText:     "Explain OAuth briefly.",
+		RequestedModel:           "auto",
+		PromptText:               "Explain OAuth briefly.",
+		DifficultyShadowEligible: true,
 	})
 	if err != nil {
 		t.Fatalf("DecideRoute() error = %v", err)
@@ -90,8 +91,9 @@ func TestSimpleRouterDoesNotSubmitManualModelRefToShadow(t *testing.T) {
 	router := NewSimpleRouter(defaultSimpleRouterConfig(), WithDifficultySemanticShadow(runner))
 
 	decision, err := router.DecideRoute(context.Background(), Request{
-		RequestedModel: "opaque-manual-model",
-		PromptText:     "Design a distributed migration with failure paths.",
+		RequestedModel:           "opaque-manual-model",
+		PromptText:               "Design a distributed migration with failure paths.",
+		DifficultyShadowEligible: true,
 	})
 	if err != nil || decision.ModelRef != "opaque-manual-model" {
 		t.Fatalf("manual route failed: decision=%+v err=%v", decision, err)
@@ -120,8 +122,9 @@ func TestSimpleRouterNeverWaitsForShadowEvaluation(t *testing.T) {
 
 	startedAt := time.Now()
 	decision, err := router.DecideRoute(context.Background(), Request{
-		RequestedModel: "auto",
-		PromptText:     "Explain OAuth briefly.",
+		RequestedModel:           "auto",
+		PromptText:               "Explain OAuth briefly.",
+		DifficultyShadowEligible: true,
 	})
 	if err != nil || decision.ModelRef == "" {
 		t.Fatalf("rule route failed: decision=%+v err=%v", decision, err)
@@ -136,6 +139,31 @@ func TestSimpleRouterNeverWaitsForShadowEvaluation(t *testing.T) {
 	}
 	close(release)
 	closeDifficultySemanticShadowRunnerForTest(t, runner)
+}
+
+func TestSimpleRouterDoesNotSubmitIneligibleRequestToShadow(t *testing.T) {
+	var calls atomic.Int32
+	evaluation := &stubDifficultySemanticShadowEvaluation{
+		evaluate: func(context.Context, PromptFeatures, string) DifficultySemanticShadowResult {
+			calls.Add(1)
+			return DifficultySemanticShadowResult{Status: DifficultySemanticShadowReady}
+		},
+	}
+	runner := NewDifficultySemanticShadowRunner(evaluation, 100*time.Millisecond, nil)
+	t.Cleanup(func() { closeDifficultySemanticShadowRunnerForTest(t, runner) })
+	router := NewSimpleRouter(defaultSimpleRouterConfig(), WithDifficultySemanticShadow(runner))
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Explain OAuth briefly.",
+	})
+	if err != nil || decision.ModelRef == "" {
+		t.Fatalf("rule route failed: decision=%+v err=%v", decision, err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if calls.Load() != 0 {
+		t.Fatalf("ineligible request submitted %d shadow jobs", calls.Load())
+	}
 }
 
 func TestDifficultySemanticShadowRunnerSanitizesTimeoutAndPanic(t *testing.T) {

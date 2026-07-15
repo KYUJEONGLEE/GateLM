@@ -54,10 +54,29 @@ func TestInitializeDifficultyE5ShadowIsDisabledWithoutConstructingEncoder(t *tes
 	}
 }
 
+func TestInitializeDifficultyE5ShadowIsDisabledWithoutAllowedScope(t *testing.T) {
+	called := false
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{Enabled: true},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return nil, errors.New("must not be called")
+		},
+	)
+	if err != nil || evaluator != nil || called {
+		t.Fatalf("scope-less shadow initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+}
+
 func TestInitializeDifficultyE5ShadowRunnerDegradesInitializationFailureToRuleOnly(t *testing.T) {
 	runner, status := initializeDifficultyE5ShadowRunner(
 		context.Background(),
-		config.DifficultyE5ShadowConfig{Enabled: true, Timeout: 10 * time.Millisecond},
+		config.DifficultyE5ShadowConfig{
+			Enabled:       true,
+			AllowedScopes: difficultyE5ShadowTestScopes(),
+			Timeout:       10 * time.Millisecond,
+		},
 		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
 			return nil, errors.New("sensitive initialization detail")
 		},
@@ -74,6 +93,7 @@ func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) 
 		context.Background(),
 		config.DifficultyE5ShadowConfig{
 			Enabled:             true,
+			AllowedScopes:       difficultyE5ShadowTestScopes(),
 			ArtifactRoot:        "/bundle",
 			EncoderManifestPath: "/bundle/manifest.json",
 			RuntimeLockPath:     "/bundle/lock.json",
@@ -96,6 +116,12 @@ func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) 
 	if err := evaluator.Close(); err != nil || !encoder.closed {
 		t.Fatalf("close failed: closed=%v err=%v", encoder.closed, err)
 	}
+}
+
+func difficultyE5ShadowTestScopes() []config.DifficultyE5ShadowScope {
+	return []config.DifficultyE5ShadowScope{{
+		TenantID: "tenant_dev", ApplicationID: "application_dev",
+	}}
 }
 
 func TestParsePostgresPoolConfigAppliesBoundsAndIdentity(t *testing.T) {

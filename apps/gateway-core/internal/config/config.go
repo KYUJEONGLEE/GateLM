@@ -138,10 +138,32 @@ type Config struct {
 
 type DifficultyE5ShadowConfig struct {
 	Enabled             bool
+	AllowedScopes       []DifficultyE5ShadowScope
 	ArtifactRoot        string
 	EncoderManifestPath string
 	RuntimeLockPath     string
 	Timeout             time.Duration
+}
+
+type DifficultyE5ShadowScope struct {
+	TenantID      string
+	ApplicationID string
+}
+
+func (c DifficultyE5ShadowConfig) HasAllowedScopes() bool {
+	return c.Enabled && len(c.AllowedScopes) > 0
+}
+
+func (c DifficultyE5ShadowConfig) AllowsScope(tenantID string, applicationID string) bool {
+	if !c.HasAllowedScopes() || tenantID == "" || applicationID == "" {
+		return false
+	}
+	for _, scope := range c.AllowedScopes {
+		if scope.TenantID == tenantID && scope.ApplicationID == applicationID {
+			return true
+		}
+	}
+	return false
 }
 
 type TenantChatPrivateConfig struct {
@@ -245,6 +267,13 @@ func Load() Config {
 
 func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
+	difficultyE5ShadowEnabled := envBool("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", false)
+	difficultyE5ShadowScopes := []DifficultyE5ShadowScope(nil)
+	if difficultyE5ShadowEnabled {
+		difficultyE5ShadowScopes = parseDifficultyE5ShadowScopes(
+			envString("GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES", ""),
+		)
+	}
 	difficultyE5ShadowTimeout, difficultyE5ShadowTimeoutErr := envDurationMillisInRange(
 		"GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS",
 		100,
@@ -388,7 +417,8 @@ func LoadWithError() (Config, error) {
 		ResponseCaptureMaxChars:    envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:              semanticCache,
 		DifficultyE5Shadow: DifficultyE5ShadowConfig{
-			Enabled:             envBool("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", false),
+			Enabled:             difficultyE5ShadowEnabled,
+			AllowedScopes:       difficultyE5ShadowScopes,
 			ArtifactRoot:        strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT", "/opt/gatelm/difficulty-e5")),
 			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v1.json")),
 			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json")),
@@ -432,6 +462,43 @@ func LoadWithError() (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func parseDifficultyE5ShadowScopes(raw string) []DifficultyE5ShadowScope {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	entries := strings.Split(raw, ",")
+	result := make([]DifficultyE5ShadowScope, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
+	for _, rawEntry := range entries {
+		entry := strings.TrimSpace(rawEntry)
+		if entry == "" || strings.Count(entry, "/") != 1 {
+			return nil
+		}
+		tenantID, applicationID, ok := strings.Cut(entry, "/")
+		tenantID = strings.TrimSpace(tenantID)
+		applicationID = strings.TrimSpace(applicationID)
+		if !ok || tenantID == "" || applicationID == "" ||
+			strings.ContainsAny(tenantID, "*?") || strings.ContainsAny(applicationID, "*?") {
+			return nil
+		}
+
+		key := tenantID + "\x00" + applicationID
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, DifficultyE5ShadowScope{
+			TenantID:      tenantID,
+			ApplicationID: applicationID,
+		})
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func validatePostgresPoolConfig(name string, cfg PostgresPoolConfig) error {

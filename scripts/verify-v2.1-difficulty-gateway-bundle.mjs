@@ -118,6 +118,7 @@ for (const requiredText of [
   "holdout-run-$run.json",
   "EvidenceOutput",
   ":/src/apps/gateway-core:ro",
+  "GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES=tenant_smoke/application_smoke",
 ]) {
   if (!verifyNativeScript.includes(requiredText)) {
     throw new Error(`Gateway E5 native verifier omitted ${requiredText}`);

@@ -200,6 +200,7 @@ try {
             $smokeOutput = & docker run --rm --platform linux/amd64 `
                 -e DATABASE_URL=invalid `
                 -e GATEWAY_LOG_DATABASE_URL=invalid `
+                -e GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES=tenant_smoke/application_smoke `
                 $ImageTag 2>&1
             $smokeExitCode = $LASTEXITCODE
         } finally {

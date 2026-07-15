@@ -186,6 +186,12 @@ func TestNewRouterDoesNotWaitForDifficultyShadowBeforeProviderCall(t *testing.T)
 		DemoTenantID:        "tenant_demo",
 		DemoProjectID:       "project_demo",
 		DemoApplicationID:   "app_demo",
+		DifficultyE5Shadow: config.DifficultyE5ShadowConfig{
+			Enabled: true,
+			AllowedScopes: []config.DifficultyE5ShadowScope{{
+				TenantID: "tenant_demo", ApplicationID: "app_demo",
+			}},
+		},
 	}, registry, nil,
 		WithGatewayAuth(
 			&routerTestAPIKeyAuthenticator{identity: routerTestValidAPIKeyIdentity()},

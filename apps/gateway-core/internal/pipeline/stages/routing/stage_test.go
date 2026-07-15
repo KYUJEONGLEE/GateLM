@@ -89,3 +89,36 @@ func TestStagePropagatesAutoRoutingDisabled(t *testing.T) {
 		t.Fatalf("Execute() error = %v, want ErrAutoRoutingDisabled", err)
 	}
 }
+
+func TestStageDerivesDifficultyShadowEligibilityFromTrustedIdentity(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenantID      string
+		applicationID string
+		wantEligible  bool
+	}{
+		{name: "exact pair", tenantID: "tenant_dev", applicationID: "app_dev", wantEligible: true},
+		{name: "different application", tenantID: "tenant_dev", applicationID: "app_other"},
+		{name: "different tenant", tenantID: "tenant_other", applicationID: "app_dev"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			router := &fakeRouter{decision: routing.Decision{RequestedModel: "auto", ModelRef: "model-ref"}}
+			stage := NewStage(router, WithDifficultyShadowEligibility(func(tenantID string, applicationID string) bool {
+				return tenantID == "tenant_dev" && applicationID == "app_dev"
+			}))
+			gatewayCtx := &request.GatewayContext{
+				Request:  request.RequestContext{RequestedModel: "auto", PromptText: "Explain OAuth briefly."},
+				Identity: request.IdentityContext{TenantID: test.tenantID, ApplicationID: test.applicationID},
+			}
+
+			if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if router.request.DifficultyShadowEligible != test.wantEligible {
+				t.Fatalf("DifficultyShadowEligible = %v, want %v", router.request.DifficultyShadowEligible, test.wantEligible)
+			}
+		})
+	}
+}

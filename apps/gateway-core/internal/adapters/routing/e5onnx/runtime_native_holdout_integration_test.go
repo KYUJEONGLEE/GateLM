@@ -293,8 +293,9 @@ func TestNativeGatewayHoldoutReplay(t *testing.T) {
 			t.Fatalf("shadow-disabled route failed for sampleId=%s", record.SampleID)
 		}
 		enabled, err := enabledRouter.DecideRoute(context.Background(), routing.Request{
-			RequestedModel: "auto",
-			PromptText:     record.RedactedPrompt,
+			RequestedModel:           "auto",
+			PromptText:               record.RedactedPrompt,
+			DifficultyShadowEligible: true,
 		})
 		if err != nil {
 			t.Fatalf("shadow-enabled route failed for sampleId=%s", record.SampleID)
@@ -338,7 +339,11 @@ func TestNativeGatewayHoldoutReplay(t *testing.T) {
 			disabledRouteLatencies = append(disabledRouteLatencies, microsSince(started))
 
 			started = time.Now()
-			if _, err := enabledRouter.DecideRoute(context.Background(), routing.Request{RequestedModel: "auto", PromptText: record.RedactedPrompt}); err != nil {
+			if _, err := enabledRouter.DecideRoute(context.Background(), routing.Request{
+				RequestedModel:           "auto",
+				PromptText:               record.RedactedPrompt,
+				DifficultyShadowEligible: true,
+			}); err != nil {
 				t.Fatalf("measured shadow-enabled route failed for sampleId=%s", record.SampleID)
 			}
 			enabledRouteLatencies = append(enabledRouteLatencies, microsSince(started))
