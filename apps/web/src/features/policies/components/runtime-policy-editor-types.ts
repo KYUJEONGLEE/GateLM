@@ -21,7 +21,6 @@ export type RuntimePolicyEditorProps = {
   locale: Locale;
   model: RuntimePolicyModel;
   moveBudgetToGeneral?: boolean;
-  providerManagementHref?: string;
 };
 
 export type RuntimePolicyApiKeyReadiness = {
