@@ -1831,6 +1831,7 @@ function routingModelRefs(
 
 function demoProviderConfig(): Prisma.InputJsonObject {
   return {
+    providerFamily: 'mock',
     models: [...DEMO_MODELS],
     failureMode: 'fail_open_to_fallback',
     adapterType: 'mock',
@@ -1844,6 +1845,7 @@ function demoOpenAIProviderConfig(
   extraModels: string[],
 ): Prisma.InputJsonObject {
   return {
+    providerFamily: 'openai',
     adapterType: 'openai_compatible',
     requestFormat: 'openai_chat_completions',
     credentialRequired: true,
