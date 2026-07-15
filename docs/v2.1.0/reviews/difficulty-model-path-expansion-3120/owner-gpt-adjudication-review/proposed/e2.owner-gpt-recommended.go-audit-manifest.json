@@ -1,0 +1,384 @@
+{
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v2",
+  "datasetVersion": "difficulty_model_path_expansion_3120_2026_07_15_e2_candidate_v1_owner_gpt_recommended_v1",
+  "recordSchemaVersion": "gatelm.difficulty-label-record.v2",
+  "datasetSha256": "3334ddf1cd2824b0326552b85c432cf20fda80e7cca633e78232a4d42f5d0236",
+  "trainingEligible": false,
+  "families": [
+    {
+      "promptFamily": "modelpath3120.code_debugging.scenario.f0457",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_design.scenario.f0460",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_design.scenario.f0461",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_design.scenario.f0462",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_explanation.scenario.f0465",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_explanation.scenario.f0467",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_explanation.scenario.f0469",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0471",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0472",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0473",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_refactoring.scenario.f0478",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0481",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0482",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0483",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0484",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0425",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0426",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0429",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0431",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0432",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0434",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0436",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_other.scenario.f0438",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_other.scenario.f0440",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_qa.scenario.f0442",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_support.scenario.f0446",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_support.scenario.f0448",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0451",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0452",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0453",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0485",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0487",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0488",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0493",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0496",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0497",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0499",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0500",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0501",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0503",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0504",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0505",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0506",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0507",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_planning.scenario.f0513",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0517",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0518",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0520",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0522",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0523",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0525",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0526",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0527",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0528",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0530",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0532",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_structured.scenario.f0537",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_structured.scenario.f0538",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_structured.scenario.f0542",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_structured.scenario.f0544",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0545",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0546",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0547",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0548",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0549",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0551",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0552",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0558",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0560",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0561",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0564",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0565",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0566",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0568",
+      "partition": "holdout",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0571",
+      "partition": "holdout",
+      "records": 5
+    }
+  ]
+}

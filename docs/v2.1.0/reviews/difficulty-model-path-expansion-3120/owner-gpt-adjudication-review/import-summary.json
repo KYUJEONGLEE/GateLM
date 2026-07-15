@@ -1,0 +1,256 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-gpt-adjudication-import-summary.v1",
+  "status": "validated_pending_local_gates_and_human_owner_confirmation",
+  "importedAt": "2026-07-16T00:00:00Z",
+  "sourceArchiveSha256": "8e1c2424112e59cdc11a416710c262b5a530209c275c925163b25ba7bdc7b142",
+  "records": 3120,
+  "families": 624,
+  "batches": [
+    {
+      "batchId": "t1",
+      "records": 400,
+      "families": 80,
+      "recommendations": {
+        "accept_independent_labels": 62,
+        "accept_independent_prompt": 65,
+        "accept_independent_prompt_and_labels": 113,
+        "custom_override": 88,
+        "keep_candidate": 72
+      },
+      "confidence": {
+        "high": 333,
+        "medium": 67
+      },
+      "promptSources": {
+        "candidate": 179,
+        "custom": 2,
+        "independent": 219
+      },
+      "localGoRechecks": 2,
+      "candidateChangedRecords": 328,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "94ba420bc432ddc7c2cefac2c33205988b2c271cee23dbf6e43992c2aeecf1c5"
+    },
+    {
+      "batchId": "t2",
+      "records": 400,
+      "families": 80,
+      "recommendations": {
+        "accept_independent_labels": 63,
+        "accept_independent_prompt": 49,
+        "accept_independent_prompt_and_labels": 122,
+        "custom_override": 101,
+        "keep_candidate": 65
+      },
+      "confidence": {
+        "high": 334,
+        "medium": 66
+      },
+      "promptSources": {
+        "candidate": 181,
+        "custom": 1,
+        "independent": 218
+      },
+      "localGoRechecks": 1,
+      "candidateChangedRecords": 335,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "d5abc3616c91f41b23b389c9a217d0a52d74442eb63049995afcbf9af7c32310"
+    },
+    {
+      "batchId": "t3",
+      "records": 400,
+      "families": 80,
+      "recommendations": {
+        "accept_independent_labels": 55,
+        "accept_independent_prompt": 72,
+        "accept_independent_prompt_and_labels": 112,
+        "custom_override": 92,
+        "keep_candidate": 69
+      },
+      "confidence": {
+        "high": 348,
+        "medium": 52
+      },
+      "promptSources": {
+        "candidate": 180,
+        "independent": 220
+      },
+      "localGoRechecks": 0,
+      "candidateChangedRecords": 331,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "93328043dbc912a9ab8d3883eda3bcbd14abb7ce6baf1d9800494ae501d95e56"
+    },
+    {
+      "batchId": "t4",
+      "records": 395,
+      "families": 79,
+      "recommendations": {
+        "accept_independent_labels": 58,
+        "accept_independent_prompt": 68,
+        "accept_independent_prompt_and_labels": 112,
+        "custom_override": 86,
+        "keep_candidate": 71
+      },
+      "confidence": {
+        "high": 336,
+        "medium": 59
+      },
+      "promptSources": {
+        "candidate": 171,
+        "independent": 224
+      },
+      "localGoRechecks": 0,
+      "candidateChangedRecords": 324,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "25d84dd5104b7fecbba38c76467af21f3734fd537403506db9bc4e2bd641503f"
+    },
+    {
+      "batchId": "c1",
+      "records": 275,
+      "families": 55,
+      "recommendations": {
+        "accept_independent_labels": 38,
+        "accept_independent_prompt": 47,
+        "accept_independent_prompt_and_labels": 88,
+        "custom_override": 60,
+        "keep_candidate": 42
+      },
+      "confidence": {
+        "high": 206,
+        "medium": 69
+      },
+      "promptSources": {
+        "candidate": 110,
+        "independent": 165
+      },
+      "localGoRechecks": 0,
+      "candidateChangedRecords": 233,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "d050552ff99995d28aa63392d9a6c90f19031a7bb8e585202b7a19cdf0699169"
+    },
+    {
+      "batchId": "c2",
+      "records": 250,
+      "families": 50,
+      "recommendations": {
+        "accept_independent_labels": 34,
+        "accept_independent_prompt": 27,
+        "accept_independent_prompt_and_labels": 72,
+        "custom_override": 69,
+        "keep_candidate": 48
+      },
+      "confidence": {
+        "high": 218,
+        "medium": 32
+      },
+      "promptSources": {
+        "candidate": 115,
+        "independent": 135
+      },
+      "localGoRechecks": 0,
+      "candidateChangedRecords": 202,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "9fb46e62d9c782db6aa3e4ff4b1f18eac3f65752954fc9eee7fbd5ef9328ab40"
+    },
+    {
+      "batchId": "e1",
+      "records": 375,
+      "families": 75,
+      "recommendations": {
+        "accept_independent_labels": 47,
+        "accept_independent_prompt": 52,
+        "accept_independent_prompt_and_labels": 127,
+        "custom_override": 88,
+        "keep_candidate": 61
+      },
+      "confidence": {
+        "high": 293,
+        "medium": 82
+      },
+      "promptSources": {
+        "candidate": 149,
+        "independent": 226
+      },
+      "localGoRechecks": 0,
+      "candidateChangedRecords": 314,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "05c8f6fb6619d71229a8df7019ac04330d2c6c674b3c456cd00075fe6c8c3a26"
+    },
+    {
+      "batchId": "e2",
+      "records": 375,
+      "families": 75,
+      "recommendations": {
+        "accept_independent_labels": 53,
+        "accept_independent_prompt": 64,
+        "accept_independent_prompt_and_labels": 112,
+        "custom_override": 80,
+        "keep_candidate": 66
+      },
+      "confidence": {
+        "high": 303,
+        "medium": 72
+      },
+      "promptSources": {
+        "candidate": 155,
+        "custom": 3,
+        "independent": 217
+      },
+      "localGoRechecks": 3,
+      "candidateChangedRecords": 309,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "3334ddf1cd2824b0326552b85c432cf20fda80e7cca633e78232a4d42f5d0236"
+    },
+    {
+      "batchId": "p1",
+      "records": 250,
+      "families": 50,
+      "recommendations": {
+        "accept_independent_labels": 38,
+        "accept_independent_prompt": 46,
+        "accept_independent_prompt_and_labels": 71,
+        "custom_override": 56,
+        "keep_candidate": 39
+      },
+      "confidence": {
+        "high": 216,
+        "medium": 34
+      },
+      "promptSources": {
+        "candidate": 112,
+        "independent": 138
+      },
+      "localGoRechecks": 0,
+      "candidateChangedRecords": 211,
+      "schemaFailures": 0,
+      "proposedDatasetSha256": "770ffd2b451311e25cca66a0eaa73e05679ea61f6dae2726e125d3f8d33b39d7"
+    }
+  ],
+  "totals": {
+    "recommendations": {
+      "accept_independent_labels": 448,
+      "accept_independent_prompt": 490,
+      "accept_independent_prompt_and_labels": 929,
+      "custom_override": 720,
+      "keep_candidate": 533
+    },
+    "confidence": {
+      "high": 2587,
+      "medium": 533
+    },
+    "promptSources": {
+      "candidate": 1352,
+      "custom": 6,
+      "independent": 1762
+    },
+    "localGoRechecks": 6,
+    "candidateChangedRecords": 2587,
+    "difficultyChangedRecords": 74,
+    "mediumConfidenceRecords": 533,
+    "schemaFailures": 0,
+    "forbiddenPromptPatternHits": 0
+  },
+  "importFailures": [],
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

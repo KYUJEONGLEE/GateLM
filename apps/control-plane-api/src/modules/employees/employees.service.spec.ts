@@ -254,3 +254,99 @@ describe('EmployeesService employee invitation deletion', () => {
     });
   });
 });
+
+describe('EmployeesService linked employee lifecycle', () => {
+  const tenantId = '00000000-0000-4000-8000-000000000011';
+  const employeeId = '00000000-0000-4000-8000-000000000012';
+  const userId = '00000000-0000-4000-8000-000000000013';
+  const timestamp = new Date('2026-07-15T00:00:00.000Z');
+  const activeEmployee = {
+    acceptedAt: timestamp,
+    createdAt: timestamp,
+    deletedAt: null,
+    department: 'Platform',
+    email: 'linked@example.com',
+    id: employeeId,
+    invitationExpiresAt: null,
+    invitationRevokedAt: null,
+    invitationStatus: 'accepted',
+    invitationTokenHash: null,
+    invitedAt: timestamp,
+    name: 'Linked Employee',
+    status: 'active',
+    tenantId,
+    updatedAt: timestamp,
+    userId,
+  };
+
+  it('removes the employee membership when archived', async () => {
+    const tx = {
+      employee: {
+        update: jest.fn().mockResolvedValue({
+          ...activeEmployee,
+          _count: { projectAssignments: 0 },
+          deletedAt: timestamp,
+          status: 'archived',
+        }),
+      },
+      tenantMembership: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: Function) => callback(tx)),
+      employee: { findFirst: jest.fn().mockResolvedValue(activeEmployee) },
+    };
+    const service = new EmployeesService(
+      prisma as unknown as PrismaService,
+      {} as ConfigService,
+      new InMemoryEmailSender(),
+    );
+
+    await expect(
+      service.updateEmployee(tenantId, employeeId, { status: 'archived' }),
+    ).resolves.toMatchObject({ id: employeeId, status: 'archived', userId });
+
+    expect(tx.tenantMembership.updateMany).toHaveBeenCalledWith({
+      where: {
+        deletedAt: null,
+        role: 'employee',
+        status: 'active',
+        tenantId,
+        userId,
+      },
+      data: { deletedAt: expect.any(Date), status: 'removed' },
+    });
+  });
+
+  it('restores a removed employee membership when the employee is reactivated', async () => {
+    const archivedEmployee = {
+      ...activeEmployee,
+      deletedAt: timestamp,
+      status: 'archived',
+    };
+    const tx = {
+      employee: {
+        update: jest.fn().mockResolvedValue({
+          ...activeEmployee,
+          _count: { projectAssignments: 0 },
+        }),
+      },
+      tenantMembership: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: Function) => callback(tx)),
+      employee: { findFirst: jest.fn().mockResolvedValue(archivedEmployee) },
+    };
+    const service = new EmployeesService(
+      prisma as unknown as PrismaService,
+      {} as ConfigService,
+      new InMemoryEmailSender(),
+    );
+
+    await service.updateEmployee(tenantId, employeeId, { status: 'active' });
+
+    expect(tx.tenantMembership.updateMany).toHaveBeenCalledWith({
+      where: { role: 'employee', tenantId, userId },
+      data: { deletedAt: null, status: 'active' },
+    });
+  });
+});

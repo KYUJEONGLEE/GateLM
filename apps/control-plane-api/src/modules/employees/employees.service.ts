@@ -699,9 +699,12 @@ export class EmployeesService {
     employeeId: string,
     dto: UpdateEmployeeDto,
   ): Promise<EmployeeResponseDto> {
-    await this.getEmployeeOrThrow(tenantId, employeeId, {
+    const currentEmployee = await this.getEmployeeOrThrow(tenantId, employeeId, {
       includeDeleted: true,
     });
+    const statusChanged =
+      dto.status !== undefined && dto.status !== currentEmployee.status;
+    const statusChangedAt = statusChanged ? new Date() : undefined;
 
     const data: Prisma.EmployeeUpdateInput = {};
     if (dto.name !== undefined) {
@@ -712,7 +715,10 @@ export class EmployeesService {
     }
     if (dto.status !== undefined) {
       data.status = dto.status;
-      data.deletedAt = dto.status === 'archived' ? new Date() : null;
+      data.deletedAt =
+        dto.status === 'archived'
+          ? currentEmployee.deletedAt ?? statusChangedAt ?? new Date()
+          : null;
     }
     if (dto.invitationStatus !== undefined) {
       data.invitationStatus = dto.invitationStatus;
@@ -724,16 +730,48 @@ export class EmployeesService {
       });
     }
 
-    const employee = await this.prisma.employee.update({
-      where: { id: employeeId },
-      data,
-      include: {
-        _count: {
-          select: {
-            projectAssignments: true,
+    const employee = await this.prisma.$transaction(async (tx) => {
+      const updatedEmployee = await tx.employee.update({
+        where: { id: employeeId },
+        data,
+        include: {
+          _count: {
+            select: {
+              projectAssignments: true,
+            },
           },
         },
-      },
+      });
+
+      if (statusChanged && currentEmployee.userId) {
+        // Database triggers advance actorAuthzVersion for both linked Employee and Membership changes.
+        if (dto.status === 'archived') {
+          await tx.tenantMembership.updateMany({
+            where: {
+              deletedAt: null,
+              role: 'employee',
+              status: 'active',
+              tenantId,
+              userId: currentEmployee.userId,
+            },
+            data: {
+              deletedAt: statusChangedAt!,
+              status: 'removed',
+            },
+          });
+        } else if (dto.status === 'active') {
+          await tx.tenantMembership.updateMany({
+            where: {
+              role: 'employee',
+              tenantId,
+              userId: currentEmployee.userId,
+            },
+            data: { deletedAt: null, status: 'active' },
+          });
+        }
+      }
+
+      return updatedEmployee;
     });
 
     return this.toEmployeeResponse(employee);

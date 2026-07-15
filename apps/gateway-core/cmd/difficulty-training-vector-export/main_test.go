@@ -53,6 +53,9 @@ func TestBuildVectorExportUsesActualCategoryForTrainingVector(t *testing.T) {
 	if actual.CategorySource != categorySourceActual || len(actual.Samples) != 1 {
 		t.Fatalf("unexpected export metadata: %+v", actual)
 	}
+	if actual.DecisionBoundaryVersion != "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2" {
+		t.Fatalf("decision boundary version = %q", actual.DecisionBoundaryVersion)
+	}
 	sample := actual.Samples[0]
 	if sample.ExpectedCategory != "general" || sample.ActualCategory != "translation" || sample.VectorCategory != "translation" {
 		t.Fatalf("training vector used the wrong category source: %+v", sample)
@@ -85,7 +88,7 @@ func TestBuildVectorExportMarksHardComplexBypassOutsideModelPath(t *testing.T) {
 	record := map[string]any{
 		"datasetVersion":     "difficulty_test_v1",
 		"sampleId":           "difficulty_code_complex_core_clear_f01_v01",
-		"redactedPrompt":     "Debug a race condition across multiple files.",
+		"redactedPrompt":     "Across multiple services, diagnose a race condition and deadlock; preserve behavior, security, and compatibility.",
 		"expectedCategory":   "code",
 		"expectedDifficulty": "complex",
 	}

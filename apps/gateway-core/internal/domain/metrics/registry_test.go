@@ -47,6 +47,12 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		ErrorCode:       "none",
 		DurationSeconds: 1.25,
 	})
+	registry.RoutingDifficultyShadow(RoutingDifficultyShadow{
+		Status:          "ready",
+		Category:        "general",
+		Comparison:      "rule_simple_shadow_complex",
+		DurationSeconds: 0.012,
+	})
 
 	first := registry.RenderPrometheus()
 	second := registry.RenderPrometheus()
@@ -67,6 +73,8 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_stream_relay_total{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
 	assertMetricsContains(t, first, `gatelm_stream_duration_seconds_count{error_code="none",model="mock-balanced",provider="mock",stream_outcome="completed"} 1`)
 	assertMetricsContains(t, first, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
+	assertMetricsContains(t, first, `gatelm_routing_difficulty_shadow_total{category="general",comparison="rule_simple_shadow_complex",status="ready"} 1`)
+	assertMetricsContains(t, first, `gatelm_routing_difficulty_shadow_duration_seconds_count{status="ready"} 1`)
 	assertMetricsDoesNotContainForbiddenLabels(t, first)
 }
 
@@ -95,6 +103,8 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		StreamRelayTotal,
 		StreamDurationSeconds,
 		StreamTimeToFirstTokenSeconds,
+		RoutingDifficultyShadowTotal,
+		RoutingDifficultyShadowDurationSeconds,
 		TenantChatCompletionTotal,
 		TenantChatUsageReconciliationTotal,
 		TenantChatAccountingTransactionSeconds,
@@ -130,6 +140,14 @@ func assertMetricsDoesNotContainForbiddenLabels(t *testing.T, output string) {
 		"provider_key",
 		"authorization",
 		"raw_error_detail",
+		"instruction_text",
+		"embedding",
+		"vector",
+		"weight",
+		"score",
+		"complexity_score",
+		"artifact_hash",
+		"model_ref",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			t.Fatalf("metrics output must not contain forbidden label %q\noutput:\n%s", labelName, output)

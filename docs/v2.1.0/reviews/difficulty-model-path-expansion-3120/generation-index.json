@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "gatelm.difficulty-generation-index.v1",
+  "datasetGoal": "model_path_5000",
+  "decisionBoundaryVersion": "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2",
+  "trainingPolicyVersion": "difficulty-training-policy.single-request-model-path.2026-07-15.v2",
+  "reviewStatus": "pending_owner_review",
+  "trainingEligible": false,
+  "candidateRecords": 3120,
+  "candidateFamilies": 624,
+  "ownerApprovedSourceRecordsUnchanged": 2500,
+  "batches": [
+    {
+      "batchId": "t1",
+      "partitionRole": "train",
+      "manifestPartition": "train",
+      "records": 400,
+      "families": 80,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t1/t1.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t1/t1.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t1/t1.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t1/t1.go-audit.json",
+      "datasetSha256": "6754fb5ec1f5d21c366fbd1b86ef4e8bffd16132433a7f109505c7e0a2ad0441"
+    },
+    {
+      "batchId": "t2",
+      "partitionRole": "train",
+      "manifestPartition": "train",
+      "records": 400,
+      "families": 80,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t2/t2.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t2/t2.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t2/t2.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t2/t2.go-audit.json",
+      "datasetSha256": "736019b1c3aaaa4d38b7e7e1d6725359cd7c65e7d4d780e96118ddbee87fa3b9"
+    },
+    {
+      "batchId": "t3",
+      "partitionRole": "train",
+      "manifestPartition": "train",
+      "records": 400,
+      "families": 80,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t3/t3.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t3/t3.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t3/t3.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t3/t3.go-audit.json",
+      "datasetSha256": "5a105c84a63e9ddce6e59e914f405ed692a45365edd267ebe16988c0af73b4c4"
+    },
+    {
+      "batchId": "t4",
+      "partitionRole": "train",
+      "manifestPartition": "train",
+      "records": 395,
+      "families": 79,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t4/t4.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t4/t4.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t4/t4.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t4/t4.go-audit.json",
+      "datasetSha256": "a3b2f0a058c06fa36375d14cdb499818149c73c10b5321571550480a4c0dfa07"
+    },
+    {
+      "batchId": "c1",
+      "partitionRole": "calibration",
+      "manifestPartition": "calibration",
+      "records": 275,
+      "families": 55,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c1/c1.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c1/c1.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c1/c1.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c1/c1.go-audit.json",
+      "datasetSha256": "a3281e7e8b3ab67d5b10a4d03c29fa06452677b98fc476cd36d55c712176f4a9"
+    },
+    {
+      "batchId": "c2",
+      "partitionRole": "calibration",
+      "manifestPartition": "calibration",
+      "records": 250,
+      "families": 50,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c2/c2.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c2/c2.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c2/c2.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/c2/c2.go-audit.json",
+      "datasetSha256": "f379f1ab646a14c3d4247d4cfabd7293dc9bc3955e30ed2910a33cf8a15bd23a"
+    },
+    {
+      "batchId": "e1",
+      "partitionRole": "evaluation",
+      "manifestPartition": "holdout",
+      "records": 375,
+      "families": 75,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e1/e1.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e1/e1.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e1/e1.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e1/e1.go-audit.json",
+      "datasetSha256": "108a428daea77515b08a7476acefdb12e7119b03d61f0617724c103ebbd62583"
+    },
+    {
+      "batchId": "e2",
+      "partitionRole": "evaluation",
+      "manifestPartition": "holdout",
+      "records": 375,
+      "families": 75,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e2/e2.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e2/e2.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e2/e2.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/e2/e2.go-audit.json",
+      "datasetSha256": "9b1e4b4e3c0826a97eb44442ca9d6e46bc8b31bebe0b4b8bacd075dd274a1c53"
+    },
+    {
+      "batchId": "p1",
+      "partitionRole": "promotion",
+      "manifestPartition": "holdout",
+      "records": 250,
+      "families": 50,
+      "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/p1/p1.candidate.jsonl",
+      "manifestPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/p1/p1.candidate.manifest.json",
+      "generationReportPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/p1/p1.generation-report.json",
+      "goAuditPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/p1/p1.go-audit.json",
+      "datasetSha256": "9d9c0c2ca5bb86e4407dee514934a970ad049a6efa4e4d29106937f9dbb3c686"
+    }
+  ],
+  "createdAt": "2026-07-15T00:00:00Z"
+}

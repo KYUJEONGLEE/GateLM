@@ -1,0 +1,187 @@
+{
+  "schemaVersion": "gatelm.difficulty-threshold-candidate-evidence.v1",
+  "status": "threshold_only_v4_candidate_frozen",
+  "evaluatedOn": "2026-07-15",
+  "sourceArtifact": {
+    "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",
+    "bundleHash": "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220",
+    "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
+    "thresholdPolicyVersion": "difficulty-threshold-v1",
+    "threshold": 0.45,
+    "artifactFileSha256": "a495bc6cf030038f2afdb724383c396a66b8cef1fc585c615ee51c9b001f0670"
+  },
+  "calibration": {
+    "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
+    "records": 100,
+    "families": 20,
+    "scoreSource": "family_grouped_out_of_fold_calibrated_probability",
+    "thresholdGrid": {
+      "start": 0.0,
+      "end": 1.0,
+      "step": 0.01,
+      "operatingPointCount": 101,
+      "sampleScoreDerived": false
+    },
+    "selectedOperatingPoint": {
+      "threshold": 0.06,
+      "classification": {
+        "samples": 100,
+        "correct": 95,
+        "accuracy": 0.95,
+        "simpleExpectedSamples": 53,
+        "simpleToComplexCount": 5,
+        "simpleToComplexRate": 0.09433962264150944,
+        "complexExpectedSamples": 47,
+        "complexToSimpleCount": 0,
+        "complexToSimpleRate": 0.0,
+        "byExpectedCategory": {
+          "code": {
+            "samples": 21,
+            "correct": 17,
+            "accuracy": 0.8095238095238095,
+            "simpleExpectedSamples": 19,
+            "simpleToComplexCount": 4,
+            "simpleToComplexRate": 0.21052631578947367,
+            "complexExpectedSamples": 2,
+            "complexToSimpleCount": 0,
+            "complexToSimpleRate": 0.0
+          },
+          "general": {
+            "samples": 64,
+            "correct": 64,
+            "accuracy": 1.0,
+            "simpleExpectedSamples": 22,
+            "simpleToComplexCount": 0,
+            "simpleToComplexRate": 0.0,
+            "complexExpectedSamples": 42,
+            "complexToSimpleCount": 0,
+            "complexToSimpleRate": 0.0
+          },
+          "reasoning": {
+            "samples": 11,
+            "correct": 10,
+            "accuracy": 0.9090909090909091,
+            "simpleExpectedSamples": 10,
+            "simpleToComplexCount": 1,
+            "simpleToComplexRate": 0.1,
+            "complexExpectedSamples": 1,
+            "complexToSimpleCount": 0,
+            "complexToSimpleRate": 0.0
+          },
+          "summarization": {
+            "samples": 2,
+            "correct": 2,
+            "accuracy": 1.0,
+            "simpleExpectedSamples": 1,
+            "simpleToComplexCount": 0,
+            "simpleToComplexRate": 0.0,
+            "complexExpectedSamples": 1,
+            "complexToSimpleCount": 0,
+            "complexToSimpleRate": 0.0
+          },
+          "translation": {
+            "samples": 2,
+            "correct": 2,
+            "accuracy": 1.0,
+            "simpleExpectedSamples": 1,
+            "simpleToComplexCount": 0,
+            "simpleToComplexRate": 0.0,
+            "complexExpectedSamples": 1,
+            "complexToSimpleCount": 0,
+            "complexToSimpleRate": 0.0
+          }
+        }
+      },
+      "gate": {
+        "minimumAccuracy": {
+          "minimum": 0.91,
+          "observed": 0.95,
+          "passed": true
+        },
+        "maximumComplexToSimpleCount": {
+          "maximum": 1,
+          "observed": 0,
+          "passed": true
+        },
+        "categoryNonRegressionVsRule": {
+          "policy": "candidate_complex_to_simple_count_and_rate_must_not_exceed_rule_baseline_in_any_expected_category",
+          "byExpectedCategory": {
+            "code": {
+              "candidateCount": 0,
+              "ruleBaselineCount": 2,
+              "candidateRate": 0.0,
+              "ruleBaselineRate": 1.0,
+              "passed": true
+            },
+            "general": {
+              "candidateCount": 0,
+              "ruleBaselineCount": 9,
+              "candidateRate": 0.0,
+              "ruleBaselineRate": 0.21428571428571427,
+              "passed": true
+            },
+            "reasoning": {
+              "candidateCount": 0,
+              "ruleBaselineCount": 0,
+              "candidateRate": 0.0,
+              "ruleBaselineRate": 0.0,
+              "passed": true
+            },
+            "summarization": {
+              "candidateCount": 0,
+              "ruleBaselineCount": 1,
+              "candidateRate": 0.0,
+              "ruleBaselineRate": 1.0,
+              "passed": true
+            },
+            "translation": {
+              "candidateCount": 0,
+              "ruleBaselineCount": 0,
+              "candidateRate": 0.0,
+              "ruleBaselineRate": 0.0,
+              "passed": true
+            }
+          },
+          "passed": true
+        },
+        "passed": true
+      }
+    },
+    "holdoutOutcomeAccessed": false,
+    "feasibilityReportFileSha256": "a06b6008b3184936f0c41281ea3316e80fe2909375d957aef4fa2e897a9eb2e5"
+  },
+  "candidateArtifact": {
+    "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v4",
+    "bundleVersion": "difficulty-feature-bundle.owner-approved-500.single-request.2026-07-15.v4",
+    "bundleHash": "sha256:f812d5f4b58394ea6f0c5a2810e7b8c45dfc4bde0b168fe8c0860290a394b88b",
+    "contentHash": "sha256:bbda7fa6657e67d30592adcad0b8c7c7270ac7cd8e2f0ca36146dd39783d5067",
+    "thresholdPolicyVersion": "difficulty-threshold-v2",
+    "threshold": 0.06,
+    "totalDimension": 118,
+    "artifactFileSha256": "e1053dcb54eae4dcfb4ee669b6340e290f26d394cd964ddfb62592bd1ff0f234"
+  },
+  "componentIdentity": {
+    "weightsUnchanged": true,
+    "biasUnchanged": true,
+    "calibratorUnchanged": true,
+    "projectionUnchanged": true,
+    "semanticHeadsUnchanged": true,
+    "componentHashes": {
+      "ruleVector": "sha256:b0a53d5a494860a04b7c0e5cb75db37f198eb7373dcfb26598104b6e6f2eeb25",
+      "tokenizer": "sha256:ba3285edea2fb569e4d17498fbe6076d3dde711f462fe6ca4d5dcb8e5ed67b86",
+      "encoder": "sha256:a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94",
+      "projection": "sha256:a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa",
+      "semanticHeads": "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386"
+    }
+  },
+  "productRuntimeChanged": false,
+  "newUntouchedHoldoutRequired": true,
+  "runtimePromotionEligible": false,
+  "reportMaterial": {
+    "aggregateOnly": true,
+    "containsPromptOrResponse": false,
+    "containsEmbeddingOrVector": false,
+    "containsModelParameters": false,
+    "containsIndividualScores": false
+  }
+}

@@ -20,6 +20,8 @@ __pycache__
 **/.pytest_cache
 .gocache
 **/.gocache
+.tmp
+**/.tmp
 
 *.pem
 *.key

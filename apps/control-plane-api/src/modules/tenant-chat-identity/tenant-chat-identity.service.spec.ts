@@ -8,6 +8,21 @@ const invitation = {
   invitationExpiresAt: future, invitationRevokedAt: null, invitationStatus: 'pending', name: '초대 사용자',
   tenant: { authzVersion: 1, id: 'tenant-id', name: '테스트 조직', status: 'ACTIVE' }, tenantId: 'tenant-id',
 };
+const existingLocalUser = {
+  actorAuthzVersion: 4,
+  authProvider: 'local',
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  deletedAt: null,
+  email: invitation.email,
+  emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+  id: 'existing-user',
+  lastLoginAt: null,
+  metadata: {},
+  name: '기존 사용자',
+  passwordHash: 'existing-password-hash',
+  status: 'active',
+  updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+};
 
 function makeService(prisma: Record<string, any>, google: Record<string, jest.Mock> = {}) {
   return new TenantChatIdentityService(
@@ -22,12 +37,133 @@ describe('TenantChatIdentityService', () => {
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(0),
       $queryRaw: jest.fn().mockResolvedValue([]),
-      employee: { findUnique: jest.fn().mockResolvedValue(invitation) },
-      user: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([{ id: 'existing-user' }]) },
+      employee: {
+        count: jest.fn().mockResolvedValue(1),
+        findUnique: jest.fn().mockResolvedValue(invitation),
+      },
+      projectAdmin: { count: jest.fn().mockResolvedValue(0) },
+      tenantAdmin: { count: jest.fn().mockResolvedValue(0) },
+      tenantMembership: { findMany: jest.fn().mockResolvedValue([{ role: 'employee' }]) },
+      user: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([existingLocalUser]) },
     };
     const prisma = { $transaction: jest.fn((callback: Function) => callback(tx)) };
     await expect(makeService(prisma).acceptInvitationWithPassword({ name: '사용자', password: 'long-password', token: 'invitation-token-value' })).rejects.toBeInstanceOf(HttpException);
     expect(tx.user.create).not.toHaveBeenCalled();
+  });
+
+  it('marks a local account with only stale employee memberships as reclaimable', async () => {
+    const prisma = {
+      employee: {
+        count: jest.fn().mockResolvedValue(0),
+        findUnique: jest.fn().mockResolvedValue(invitation),
+      },
+      projectAdmin: { count: jest.fn().mockResolvedValue(0) },
+      tenantAdmin: { count: jest.fn().mockResolvedValue(0) },
+      tenantMembership: { findMany: jest.fn().mockResolvedValue([{ role: 'employee' }]) },
+      user: { findMany: jest.fn().mockResolvedValue([existingLocalUser]) },
+    };
+
+    await expect(makeService(prisma).resolveInvitation('invitation-token-value')).resolves.toMatchObject({
+      accountState: 'reclaimable',
+      email: invitation.email,
+      tenantId: invitation.tenantId,
+    });
+  });
+
+  it('keeps an OAuth-only orphan on the existing-account authentication path', async () => {
+    const prisma = {
+      employee: { findUnique: jest.fn().mockResolvedValue(invitation) },
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          { ...existingLocalUser, authProvider: 'google', passwordHash: null },
+        ]),
+      },
+    };
+
+    await expect(makeService(prisma).resolveInvitation('invitation-token-value')).resolves.toMatchObject({
+      accountState: 'existing',
+    });
+  });
+
+  it('recredentials a reclaimable local account and revokes every old session', async () => {
+    const reclaimedUser = {
+      ...existingLocalUser,
+      actorAuthzVersion: existingLocalUser.actorAuthzVersion + 1,
+      lastLoginAt: expect.any(Date),
+      name: '새 조직 사용자',
+    };
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      authSession: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      employee: {
+        count: jest.fn().mockResolvedValue(0),
+        findUnique: jest.fn().mockResolvedValue(invitation),
+        update: jest.fn().mockResolvedValue({ ...invitation, userId: existingLocalUser.id }),
+      },
+      projectAdmin: { count: jest.fn().mockResolvedValue(0) },
+      tenantAdmin: { count: jest.fn().mockResolvedValue(0) },
+      tenantChatRefreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      tenantChatSession: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      tenantMembership: {
+        findMany: jest.fn().mockResolvedValue([{ role: 'employee' }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        upsert: jest.fn().mockResolvedValue({ id: 'new-membership' }),
+      },
+      user: {
+        create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([existingLocalUser]),
+        update: jest.fn().mockResolvedValue(reclaimedUser),
+      },
+    };
+    const prisma = { $transaction: jest.fn((callback: Function) => callback(tx)) };
+    const service = makeService(prisma);
+    const identityResult = jest.fn().mockResolvedValue({ tenants: [], user: reclaimedUser });
+    (service as unknown as { identityResult: typeof identityResult }).identityResult = identityResult;
+
+    await service.acceptInvitationWithPassword({
+      name: '새 조직 사용자',
+      password: 'long-password',
+      token: 'invitation-token-value',
+    });
+
+    expect(tx.user.create).not.toHaveBeenCalled();
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: existingLocalUser.id },
+      data: expect.objectContaining({
+        actorAuthzVersion: { increment: 1 },
+        name: '새 조직 사용자',
+        passwordHash: expect.any(String),
+        status: 'active',
+      }),
+    });
+    expect(tx.authSession.updateMany).toHaveBeenCalledWith({
+      where: { revokedAt: null, userId: existingLocalUser.id },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(tx.tenantChatRefreshToken.updateMany).toHaveBeenCalledWith({
+      where: { revokedAt: null, session: { userId: existingLocalUser.id } },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(tx.tenantChatSession.updateMany).toHaveBeenCalledWith({
+      where: { revokedAt: null, userId: existingLocalUser.id },
+      data: { revokeReason: 'account_reclaimed', revokedAt: expect.any(Date) },
+    });
+    expect(tx.tenantMembership.updateMany).toHaveBeenCalledWith({
+      where: {
+        deletedAt: null,
+        role: 'employee',
+        status: 'active',
+        userId: existingLocalUser.id,
+      },
+      data: { deletedAt: expect.any(Date), status: 'removed' },
+    });
+    expect(tx.tenantMembership.upsert).toHaveBeenCalled();
+    expect(tx.employee.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'active', userId: existingLocalUser.id }),
+      where: { id: invitation.id },
+    }));
+    expect(identityResult).toHaveBeenCalledWith(existingLocalUser.id, tx);
   });
 
   it('rejects a Google subject already bound to an account with another email', async () => {

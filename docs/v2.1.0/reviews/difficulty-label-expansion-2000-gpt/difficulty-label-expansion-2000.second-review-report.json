@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "gatelm.difficulty-expansion-second-review-report.v1",
+  "status": "second_gpt_review_merged_owner_approval_pending",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "candidateDatasetVersion": "difficulty_label_2026_07_15_expansion_2000_gpt_second_review_candidate_v1",
+  "trainingEligible": false,
+  "humanReviewClaimed": false,
+  "integrity": {
+    "batches": 16,
+    "records": 1067,
+    "uniqueSampleIds": 1067,
+    "missingSampleIds": 0,
+    "duplicateSampleIds": 0,
+    "unexpectedSampleIds": 0,
+    "orderMismatches": 0,
+    "parseErrors": 0
+  },
+  "recommendations": {
+    "approve_candidate": 817,
+    "correct_candidate": 250
+  },
+  "confidence": {
+    "minimum": 0.96,
+    "maximum": 0.99,
+    "below090": 0
+  },
+  "corrections": {
+    "records": 250,
+    "prompt": 250,
+    "labels": 0,
+    "byCategory": {
+      "code": 49,
+      "general": 44,
+      "reasoning": 50,
+      "summarization": 50,
+      "translation": 57
+    },
+    "byVariant": {
+      "10": 100,
+      "07": 50,
+      "08": 100
+    },
+    "finalPromptChangesFromOriginalSource": 800
+  },
+  "validation": {
+    "canonicalRecordFailures": 0,
+    "lengthSliceMismatches": 0,
+    "familyConflicts": 0,
+    "families": 200
+  },
+  "ownerApprovalQueue": {
+    "records": 250,
+    "approvedRecords": 0,
+    "status": "pending"
+  },
+  "thirdReviewHandoff": {
+    "records": 250,
+    "batches": [
+      {
+        "batch": 1,
+        "category": "general",
+        "records": 44,
+        "families": 20,
+        "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-01.input.jsonl",
+        "sha256": "852aff509aef156a08ddca13577caf4912bb905ba783ae6272e57882b1f5e395"
+      },
+      {
+        "batch": 2,
+        "category": "code",
+        "records": 49,
+        "families": 20,
+        "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-02.input.jsonl",
+        "sha256": "2185225d2033ac88c9d2da7225a27247d8d95e685daf276e9f46b9ce75453d77"
+      },
+      {
+        "batch": 3,
+        "category": "translation",
+        "records": 57,
+        "families": 20,
+        "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-03.input.jsonl",
+        "sha256": "302874eb4db7e9058745bc0fb7a9351392a5063409f874a1dc27c59b86703cdc"
+      },
+      {
+        "batch": 4,
+        "category": "summarization",
+        "records": 50,
+        "families": 20,
+        "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-04.input.jsonl",
+        "sha256": "243fdd63338cc54d92a77c19935ba1eadb50b0982623dc69bcac0b47d960720f"
+      },
+      {
+        "batch": 5,
+        "category": "reasoning",
+        "records": 50,
+        "families": 20,
+        "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-05.input.jsonl",
+        "sha256": "447a56fed5b234135188b167920c63cfb259e210c8f749da3230d6c28e64e7c1"
+      }
+    ],
+    "status": "third_gpt_review_pending"
+  },
+  "artifacts": {
+    "rawReview": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/direct-review-gpt/review-merged.raw.jsonl",
+      "records": 1067,
+      "sha256": "27dcd5c8b4f7a07b94612e54f45648271a1d45e843d0a6ac2e6562664d39335f"
+    },
+    "secondCandidate": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.second-review-merged-candidate.jsonl",
+      "records": 2000,
+      "sha256": "8c2d7561549b747340cd2e9d434a90ea4a9eeb01028806b616a88a44fd0ffbef"
+    },
+    "corrections": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.second-review-corrections.jsonl",
+      "records": 250,
+      "sha256": "46c26c449c3eb0aa8451e54ae1ce08df381d5c1bf18c1a1d6161f89e7346a50b"
+    },
+    "ownerApprovalQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.owner-approval-queue.jsonl",
+      "records": 250,
+      "sha256": "c865aafea7b61f2ba5cfde20105e70b2b1c107fa8aff30f430356d02685691f7"
+    }
+  }
+}
