@@ -60,14 +60,30 @@ describe('ConversationService turn fan-out', () => {
     });
     const secondResult = service.executeTurn(second, async () => undefined);
 
-    await expect(secondResult).resolves.toEqual({ message, replayed: false });
+    await expect(secondResult).resolves.toEqual({
+      message,
+      replayed: false,
+      quotaState: 'normal',
+      budgetState: 'normal',
+    });
     expect(providerFinished).toBe(true);
     expect(firstSettled).toBe(false);
     expect(bridge.complete).toHaveBeenCalledTimes(1);
     expect(store.persistAssistant).toHaveBeenCalledTimes(1);
+    expect(store.persistAssistant).toHaveBeenCalledWith(
+      first.actor,
+      first.reserved,
+      'delta',
+      'mock',
+    );
 
     releaseSlow();
-    await expect(firstResult).resolves.toEqual({ message, replayed: false });
+    await expect(firstResult).resolves.toEqual({
+      message,
+      replayed: false,
+      quotaState: 'normal',
+      budgetState: 'normal',
+    });
   });
 
   it('retries a transient final persistence conflict while assistant content is available', async () => {
@@ -89,8 +105,19 @@ describe('ConversationService turn fan-out', () => {
     const service = serviceWith({ store, bridge, registry });
 
     await expect(service.executeTurn(prepared, async () => undefined))
-      .resolves.toEqual({ message, replayed: false });
+      .resolves.toEqual({
+        message,
+        replayed: false,
+        quotaState: 'normal',
+        budgetState: 'normal',
+      });
     expect(store.persistAssistant).toHaveBeenCalledTimes(2);
+    expect(store.persistAssistant).toHaveBeenLastCalledWith(
+      prepared.actor,
+      prepared.reserved,
+      'delta',
+      'mock',
+    );
     expect(store.markTerminalFailure).not.toHaveBeenCalled();
   });
 
@@ -256,6 +283,7 @@ function assistantMessage(): MessageView {
     turnId: '00000000-0000-4000-8000-000000000301',
     role: 'assistant' as const,
     content: 'delta',
+    effectiveModelKey: 'mock',
     sequence: 2,
     createdAt: '2026-07-14T00:00:00.000Z',
   });

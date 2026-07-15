@@ -25,6 +25,17 @@ function New-LocalSecret {
   }
 }
 
+function New-ProviderCredentialEncryptionKey {
+  $bytes = New-Object byte[] 32
+  $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $generator.GetBytes($bytes)
+    return -join ($bytes | ForEach-Object { $_.ToString('x2') })
+  } finally {
+    $generator.Dispose()
+  }
+}
+
 function New-SmokeMarker {
   $bytes = New-Object byte[] 32
   $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
@@ -78,6 +89,9 @@ try {
   if (-not $env:TENANT_CHAT_ACCESS_JWT_SECRET) { $env:TENANT_CHAT_ACCESS_JWT_SECRET = New-LocalSecret }
   if (-not $env:TENANT_CHAT_INTENT_SECRET) { $env:TENANT_CHAT_INTENT_SECRET = New-LocalSecret }
   if (-not $env:TENANT_CHAT_WEB_SERVICE_TOKEN) { $env:TENANT_CHAT_WEB_SERVICE_TOKEN = New-LocalSecret }
+  if (-not $env:GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY) {
+    $env:GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = New-ProviderCredentialEncryptionKey
+  }
   $env:MOCK_PROVIDER_DEFAULT_LATENCY_MS = '1500'
   $config = (& docker compose @composeFiles config) -join "`n"
   if ($LASTEXITCODE -ne 0) { throw 'Compose contract validation failed.' }
@@ -102,6 +116,10 @@ try {
 
   Write-Phase 'migration: existing database upgrade and idempotent seed'
   Invoke-Compose run --rm control-plane-api node node_modules/prisma/build/index.js migrate deploy
+  Invoke-Compose run --rm control-plane-api node node_modules/ts-node/dist/bin.js --transpile-only prisma/seed.ts
+
+  Write-Phase 'runtime: seed isolated conversation database'
+  $env:TENANT_CHAT_SMOKE_DATABASE_URL = "postgresql://gatelm:gatelm@postgres:5432/${cleanDatabase}?schema=public"
   Invoke-Compose run --rm control-plane-api node node_modules/ts-node/dist/bin.js --transpile-only prisma/seed.ts
 
   Write-Phase 'runtime: publish snapshot and start private execution services'

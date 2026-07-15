@@ -33,14 +33,26 @@ export type ProviderPresetRecord = {
   providerKey: string;
 };
 
+export type ProviderModelMetadata = {
+  contextWindowTokens?: number;
+  displayName?: string;
+  maxOutputTokens?: number;
+  supportsJsonMode?: boolean;
+  supportsStreaming?: boolean;
+};
+
 export type ProviderDiscoveredModel = {
+  chatCompletionSupported: boolean | null;
+  contextWindowTokens: number | null;
   createdAt: string | null;
   displayName: string;
   modelName: string;
-  object: string;
+  object: string | null;
   ownedBy: string | null;
   provider: string;
   providerId: string;
+  supportsJsonMode: boolean | null;
+  supportsStreaming: boolean | null;
 };
 
 export type ProviderModelDiscovery = {
@@ -65,6 +77,7 @@ export type ProviderConnectionFormValues = {
   displayName: string;
   failureMode: "fail_closed" | "fail_open_to_fallback";
   isEdit?: boolean;
+  modelMetadata: Record<string, ProviderModelMetadata>;
   models: string;
   modelsEndpointPath: string;
   presetProviderKey: string;

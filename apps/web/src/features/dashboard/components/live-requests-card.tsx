@@ -37,6 +37,8 @@ type LiveRequestsCardProps = {
   filters: LiveRequestsCardFilters;
   initialPayload?: LiveRequestsPayload;
   locale: Locale;
+  onFiltersChange?: (filters: { model: string; status: LiveRequestStatusFilter }) => void;
+  pollingEnabled?: boolean;
 };
 
 type LiveRequestsApiResponse = {
@@ -62,7 +64,9 @@ const liveRequestsErrorText: Record<Locale, Record<LiveRequestsError, string>> =
 export function LiveRequestsCard({
   filters,
   initialPayload,
-  locale
+  locale,
+  onFiltersChange,
+  pollingEnabled = true
 }: LiveRequestsCardProps) {
   const {
     budgetScopeId,
@@ -125,6 +129,7 @@ export function LiveRequestsCard({
     ]
   );
   const historyQueryRef = useRef(requestQueryString);
+  const appliedPayloadRef = useRef(initialPayload);
 
   const bindDetailReturnButton = useCallback((element: HTMLButtonElement | null) => {
     detailReturnButtonRef.current = element;
@@ -133,6 +138,34 @@ export function LiveRequestsCard({
   useEffect(() => {
     rowCountRef.current = rows.length;
   }, [rows.length]);
+
+  useEffect(() => {
+    if (!initialPayload || appliedPayloadRef.current === initialPayload) {
+      return;
+    }
+
+    appliedPayloadRef.current = initialPayload;
+    const nextRows = normalizeLiveRequestRows(initialPayload.rows);
+    const queryChanged = historyQueryRef.current !== requestQueryString;
+    historyQueryRef.current = requestQueryString;
+    rowCountRef.current = nextRows.length;
+    setRows(nextRows);
+    if (queryChanged) {
+      setHistoryRows(nextRows);
+      if (isFocusOpenRef.current) {
+        setFocusRows(nextRows);
+      }
+    } else {
+      setHistoryRows((currentRows) =>
+        mergeLiveRequestHistory(currentRows, nextRows, {
+          minimumTimestampMs: liveRequestHistoryCutoff(range)
+        })
+      );
+    }
+    setModelOptions(mergeModelOptions(initialPayload.requestedModelOptions, modelFilter));
+    setError(null);
+    setIsLoading(false);
+  }, [initialPayload, modelFilter, range, requestQueryString]);
 
   const loadRequests = useCallback(
     async ({ silent }: { silent: boolean }) => {
@@ -201,6 +234,10 @@ export function LiveRequestsCard({
   );
 
   useEffect(() => {
+    if (!pollingEnabled) {
+      return;
+    }
+
     let stopped = false;
     let timeoutId: number | null = null;
     let currentPollId = 0;
@@ -271,7 +308,7 @@ export function LiveRequestsCard({
       abortRef.current?.abort();
       inFlightQueryRef.current = null;
     };
-  }, [initialPayload, loadRequests]);
+  }, [initialPayload, loadRequests, pollingEnabled]);
 
   useEffect(() => {
     if (!isFocusOpen) {
@@ -302,12 +339,24 @@ export function LiveRequestsCard({
     ? countPendingLiveRequests(focusRows, historyRows)
     : 0;
   const errorMessage = error ? liveRequestsErrorText[locale][error] : null;
+  const displayedRows = pollingEnabled
+    ? rows
+    : normalizeLiveRequestRows(initialPayload?.rows);
+  const displayedModelOptions = pollingEnabled
+    ? modelOptions
+    : mergeModelOptions(initialPayload?.requestedModelOptions, modelFilter);
+  const displayedError = pollingEnabled ? errorMessage : null;
+  const displayedLoading = pollingEnabled ? isLoading : !initialPayload;
 
   function openFocusView() {
     focusTriggerRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setFocusOrigin(readFocusOrigin(cardRef.current));
-    setFocusRows(historyRows);
+    setFocusRows(
+      !pollingEnabled && appliedPayloadRef.current !== initialPayload
+        ? displayedRows
+        : historyRows
+    );
     isFocusOpenRef.current = true;
     setIsFocusOpen(true);
   }
@@ -357,21 +406,31 @@ export function LiveRequestsCard({
     setSelectedRequest(null);
   }
 
+  function changeStatusFilter(status: LiveRequestStatusFilter) {
+    setStatusFilter(status);
+    onFiltersChange?.({ model: modelFilter, status });
+  }
+
+  function changeModelFilter(model: string) {
+    setModelFilter(model);
+    onFiltersChange?.({ model, status: statusFilter });
+  }
+
   return (
     <>
       <div className="dashboard-live-requests-slot" ref={cardRef}>
         <LiveRequestsView
-          error={errorMessage}
-          isLoading={isLoading}
+          error={displayedError}
+          isLoading={displayedLoading}
           locale={locale}
           mode="compact"
           modelFilter={modelFilter}
-          modelOptions={modelOptions}
-          onModelFilterChange={setModelFilter}
+          modelOptions={displayedModelOptions}
+          onModelFilterChange={changeModelFilter}
           onOpenFocus={openFocusView}
           onOpenRequest={openRequestDetail}
-          onStatusFilterChange={setStatusFilter}
-          rows={rows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)}
+          onStatusFilterChange={changeStatusFilter}
+          rows={displayedRows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)}
           statusFilter={statusFilter}
           tenantId={tenantId}
           viewAllLogsHref={viewAllLogsHref}
@@ -395,9 +454,9 @@ export function LiveRequestsCard({
           modelOptions={modelOptions}
           onApplyPending={() => setFocusRows(historyRows)}
           onCloseFocus={closeFocusView}
-          onModelFilterChange={setModelFilter}
+          onModelFilterChange={changeModelFilter}
           onOpenRequest={openRequestDetail}
-          onStatusFilterChange={setStatusFilter}
+          onStatusFilterChange={changeStatusFilter}
           pendingCount={pendingCount}
           rows={focusRows.slice(0, FOCUS_LIVE_REQUEST_LIMIT)}
           selectedRequestId={selectedRequest?.requestId}

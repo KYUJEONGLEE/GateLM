@@ -14,7 +14,7 @@ export const COMPLETION_EVENT_SCHEMA = {
     },
     effectiveModelKey: {
       anyOf: [
-        { type: 'string', minLength: 1, maxLength: 128 },
+        { type: 'string', minLength: 1, maxLength: 200, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$' },
         { type: 'null' },
       ],
     },

@@ -221,6 +221,9 @@ func TestCompletionAuthenticatesBoundPayloadAndStreamsContractEvents(t *testing.
 	if contentType := recorder.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
 		t.Fatalf("unexpected completion content type: %q", contentType)
 	}
+	if contentEncoding := recorder.Header().Get("Content-Encoding"); contentEncoding != "identity" {
+		t.Fatalf("completion stream must disable compression, got %q", contentEncoding)
+	}
 	body := recorder.Body.String()
 	if !strings.Contains(body, "event: tenant_chat.delta") ||
 		!strings.Contains(body, "event: tenant_chat.final") ||

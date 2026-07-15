@@ -3469,7 +3469,22 @@ func providerPricingAliases(value string) []string {
 	if strings.ContainsAny(value, ":/_") || looksLikeUUID(value) {
 		return nil
 	}
+	if separator := strings.LastIndex(value, "-"); separator > 0 && isDecimalSuffix(value[separator+1:]) {
+		return []string{value[:separator]}
+	}
 	return []string{value + "-main"}
+}
+
+func isDecimalSuffix(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func modelPricingAliases(value string) []string {

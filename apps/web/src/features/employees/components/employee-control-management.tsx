@@ -143,6 +143,10 @@ const employeeText: Record<
     fixtureFallback: string;
     import: string;
     imported: string;
+    invitationDeleteConfirm: (count: number) => string;
+    invitationDeleteFailed: string;
+    invitationDeleteSelected: string;
+    invitationDeleted: (successCount: number, failedCount: number) => string;
     inviteSelected: string;
     inviteSend: string;
     inviteSent: string;
@@ -197,6 +201,14 @@ const employeeText: Record<
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     import: "Import",
     imported: "Imported",
+    invitationDeleteConfirm: (count) =>
+      `Delete ${count} pending invitations? Employee records and project assignments will remain, but existing invitation links will stop working.`,
+    invitationDeleteFailed: "Selected invitations could not be deleted.",
+    invitationDeleteSelected: "Delete invite",
+    invitationDeleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount} invitations deleted, ${failedCount} failed`
+        : `${successCount} invitations deleted.`,
     inviteSelected: "Send invite",
     inviteSend: "Send Chat invite",
     inviteSent: "Chat invitation email sent.",
@@ -251,6 +263,14 @@ const employeeText: Record<
     fixtureFallback: "Control Plane을 사용할 수 없어 예시 직원을 표시 중입니다.",
     import: "등록",
     imported: "등록됨",
+    invitationDeleteConfirm: (count) =>
+      `선택한 대기 초대 ${count}개를 삭제할까요? 직원과 프로젝트 배정은 유지되고 기존 초대 링크만 무효화됩니다.`,
+    invitationDeleteFailed: "선택한 초대를 삭제하지 못했습니다.",
+    invitationDeleteSelected: "초대 삭제",
+    invitationDeleted: (successCount, failedCount) =>
+      failedCount > 0
+        ? `${successCount}개 초대 삭제, ${failedCount}개 실패`
+        : `${successCount}개의 초대를 삭제했습니다.`,
     inviteSelected: "초대 발송",
     inviteSend: "채팅 초대 보내기",
     inviteSent: "채팅 초대 메일을 발송했습니다.",
@@ -1569,6 +1589,11 @@ export function EmployeeControlManagement({
       employee.invitationStatus !== "accepted" &&
       selectedEmployeeIdSet.has(employee.id)
   ).length;
+  const selectedPendingInvitationEmployeeCount = employees.filter(
+    (employee) =>
+      employee.invitationStatus === "pending" &&
+      selectedEmployeeIdSet.has(employee.id)
+  ).length;
 
   useEffect(() => {
     if (pageIndex >= pageCount) {
@@ -1801,6 +1826,85 @@ export function EmployeeControlManagement({
     });
     setPendingAction(null);
     router.refresh();
+  }
+
+  async function deleteInvitationsForSelectedEmployees() {
+    const selectedIds = new Set(selectedEmployeeIds);
+    const targets = employees.filter(
+      (employee) =>
+        selectedIds.has(employee.id) && employee.invitationStatus === "pending"
+    );
+
+    if (
+      targets.length === 0 ||
+      !window.confirm(text.invitationDeleteConfirm(targets.length))
+    ) {
+      return;
+    }
+
+    setPendingAction("deleteInvitations");
+    setSubmitState({ message: "", status: "idle" });
+
+    try {
+      const revokedEmployees: EmployeeRecord[] = [];
+      let failedCount = 0;
+
+      for (let index = 0; index < targets.length; index += 5) {
+        const batch = targets.slice(index, index + 5);
+        const results = await Promise.all(
+          batch.map(async (employee) => {
+            try {
+              const response = await fetch("/api/control-plane/employees", {
+                body: JSON.stringify({
+                  action: "deleteInvitation",
+                  values: {
+                    employeeId: employee.id,
+                    tenantId: model.controlPlaneTenantId
+                  }
+                }),
+                headers: { "Content-Type": "application/json" },
+                method: "POST"
+              });
+              const payload = (await response.json().catch(() => ({}))) as EmployeeResponsePayload;
+
+              return response.ok && payload.employee?.invitationStatus === "revoked"
+                ? payload.employee
+                : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        for (const employee of results) {
+          if (employee) {
+            revokedEmployees.push(employee);
+          } else {
+            failedCount += 1;
+          }
+        }
+      }
+
+      mergeEmployees(revokedEmployees);
+      const revokedEmployeeIds = new Set(
+        revokedEmployees.map((employee) => employee.id)
+      );
+      setSelectedEmployeeIds((current) =>
+        current.filter((employeeId) => !revokedEmployeeIds.has(employeeId))
+      );
+      setSubmitState({
+        message:
+          revokedEmployees.length > 0
+            ? text.invitationDeleted(revokedEmployees.length, failedCount)
+            : text.invitationDeleteFailed,
+        status: failedCount > 0 || revokedEmployees.length === 0 ? "error" : "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({ message: text.invitationDeleteFailed, status: "error" });
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function deleteSelectedEmployees() {
@@ -2180,6 +2284,16 @@ export function EmployeeControlManagement({
             >
               <UserPlus aria-hidden="true" />
               {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || selectedPendingInvitationEmployeeCount === 0}
+              onClick={() => void deleteInvitationsForSelectedEmployees()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 aria-hidden="true" />
+              {pendingAction === "deleteInvitations" ? "..." : text.invitationDeleteSelected}
             </Button>
             <Button
               disabled={pendingAction !== null || selectedEmployeeCount === 0}

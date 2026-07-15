@@ -62,7 +62,8 @@ async function requestTenantChatRuntime(
         status: response.status
       };
     }
-    if (!isTenantChatAdminRuntimeSetup(payload)) {
+    const setup = readTenantChatAdminRuntimeSetup(payload);
+    if (!setup) {
       return {
         error: "Control Plane response did not include a valid Tenant Chat runtime setup.",
         ok: false,
@@ -70,10 +71,25 @@ async function requestTenantChatRuntime(
       };
     }
 
-    return { data: payload, ok: true, status: response.status };
+    return { data: setup, ok: true, status: response.status };
   } catch {
     return { error: "Control Plane unavailable.", ok: false, status: 0 };
   }
+}
+
+function readTenantChatAdminRuntimeSetup(
+  payload: unknown
+): TenantChatAdminRuntimeSetup | null {
+  if (isTenantChatAdminRuntimeSetup(payload)) {
+    return payload;
+  }
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const data = (payload as Record<string, unknown>).data;
+    if (isTenantChatAdminRuntimeSetup(data)) {
+      return data;
+    }
+  }
+  return null;
 }
 
 function isTenantChatAdminRuntimeSetup(value: unknown): value is TenantChatAdminRuntimeSetup {

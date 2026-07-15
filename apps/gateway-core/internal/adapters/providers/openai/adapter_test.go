@@ -213,6 +213,64 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 	}
 }
 
+func TestAdapterCreateChatCompletionStreamUsesCerebrasCompatibleFields(t *testing.T) {
+	var request map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_cerebras\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-oss-120b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}],\"usage\":null}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	maxTokens := 64
+	config := executionConfig(server.URL)
+	config.ProviderName = "cerebras-main"
+	stream, err := NewAdapter(server.Client()).CreateChatCompletionStream(context.Background(), config, provider.ChatCompletionRequest{
+		RequestID: "request_cerebras",
+		Model:     "gpt-oss-120b",
+		MaxTokens: &maxTokens,
+		Messages: []provider.ChatMessage{{
+			Role:    "user",
+			Content: json.RawMessage(`"hello"`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateChatCompletionStream returned error: %v", err)
+	}
+	defer stream.Close()
+
+	if _, err := stream.Next(); err != nil {
+		t.Fatalf("read stream event: %v", err)
+	}
+	if _, ok := request["max_tokens"]; ok {
+		t.Fatalf("cerebras request must not include max_tokens: %#v", request)
+	}
+	if got := request["max_completion_tokens"]; got != float64(maxTokens) {
+		t.Fatalf("expected max_completion_tokens=%d, got %#v", maxTokens, got)
+	}
+	if _, ok := request["stream_options"]; ok {
+		t.Fatalf("cerebras request must omit undocumented stream_options: %#v", request)
+	}
+}
+
+func TestCerebrasCompatibilityDetectionRejectsLookalikes(t *testing.T) {
+	if !isCerebrasCompatible(provider.ExecutionConfig{ProviderName: "cerebras-main"}) {
+		t.Fatal("expected the canonical Cerebras provider key to be recognized")
+	}
+	if !isCerebrasCompatible(provider.ExecutionConfig{BaseURL: "https://api.cerebras.ai/v1"}) {
+		t.Fatal("expected the official Cerebras API hostname to be recognized")
+	}
+	if isCerebrasCompatible(provider.ExecutionConfig{
+		ProviderName: "not-cerebras",
+		BaseURL:      "https://api.cerebras.ai.example.com/v1",
+	}) {
+		t.Fatal("Cerebras lookalikes must not activate provider-specific request fields")
+	}
+}
+
 func TestAdapterCreateChatCompletionStreamUsesMaxCompletionTokensForGPT5Models(t *testing.T) {
 	var request map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -308,6 +366,24 @@ func TestProviderEndpointNormalizesOpenAICompatibleBaseURLs(t *testing.T) {
 			baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
 			path:    "/models",
 			want:    "https://generativelanguage.googleapis.com/v1beta/openai/models",
+		},
+		{
+			name:    "groq openai compatible chat endpoint",
+			baseURL: "https://api.groq.com/openai/v1",
+			path:    "/chat/completions",
+			want:    "https://api.groq.com/openai/v1/chat/completions",
+		},
+		{
+			name:    "cerebras openai compatible chat endpoint",
+			baseURL: "https://api.cerebras.ai/v1",
+			path:    "/chat/completions",
+			want:    "https://api.cerebras.ai/v1/chat/completions",
+		},
+		{
+			name:    "mistral openai compatible chat endpoint",
+			baseURL: "https://api.mistral.ai/v1",
+			path:    "/chat/completions",
+			want:    "https://api.mistral.ai/v1/chat/completions",
 		},
 		{
 			name:    "query and fragment are stripped",

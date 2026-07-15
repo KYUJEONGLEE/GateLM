@@ -19,6 +19,7 @@ import type { Request, Response } from 'express';
 import { ChatWebServiceGuard } from '@/auth/chat-web-service.guard';
 
 import { ConversationService, type PreparedTurn } from './conversation.service';
+import type { MessageView } from './encrypted-chat-store';
 import {
   ConversationIdParams,
   CreateConversationDto,
@@ -104,6 +105,7 @@ export class ConversationController {
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Connection', 'keep-alive');
+    response.setHeader('Content-Encoding', 'identity');
     response.setHeader('X-Accel-Buffering', 'no');
     response.flushHeaders();
     let sequence = 1;
@@ -128,13 +130,19 @@ export class ConversationController {
       if (prepared.kind === 'replay') {
         sequence = await writeDeltas(response, prepared, prepared.message.content, sequence);
         sequence += 1;
-        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, prepared.message.id, true));
+        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, prepared.message, true));
       } else {
         const result = await this.conversations.executeTurn(prepared, async (delta) => {
           sequence = await writeDeltas(response, prepared, delta, sequence);
         });
         sequence += 1;
-        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, result.message.id, result.replayed));
+        await writeEvent(response, prepared.reserved.turnId, finalEvent(
+          prepared,
+          sequence,
+          result.message,
+          result.replayed,
+          result,
+        ));
       }
       finished = true;
     } catch (error) {
@@ -207,16 +215,33 @@ async function writeDeltas(
   return sequence;
 }
 
-function finalEvent(prepared: PreparedTurn, sequence: number, messageId: string, replayed: boolean) {
+function finalEvent(
+  prepared: PreparedTurn,
+  sequence: number,
+  message: MessageView,
+  replayed: boolean,
+  policy?: Readonly<{
+    quotaState?: 'normal' | 'warning' | 'economy' | 'blocked';
+    budgetState?: 'normal' | 'warning' | 'economy' | 'blocked';
+  }>,
+) {
+  const policyState = policy?.quotaState && policy.budgetState
+    ? { quotaState: policy.quotaState, budgetState: policy.budgetState }
+    : {};
+  const modelState = message.effectiveModelKey
+    ? { effectiveModelKey: message.effectiveModelKey }
+    : {};
   return {
     type: 'chat.turn.final',
     schemaVersion: 1,
     conversationId: prepared.reserved.conversationId,
     turnId: prepared.reserved.turnId,
     sequence,
-    messageId,
+    messageId: message.id,
     terminalOutcome: 'succeeded',
     replayed,
+    ...modelState,
+    ...policyState,
   } as const;
 }
 

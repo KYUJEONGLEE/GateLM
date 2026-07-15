@@ -64,7 +64,76 @@ describe('ConversationController SSE cleanup', () => {
     expect(conversations.disconnect).toHaveBeenCalledTimes(1);
     expect(conversations.disconnect).toHaveBeenCalledWith(prepared);
   });
+
+  it('includes bounded policy state on a fresh successful final event', async () => {
+    const prepared = execution();
+    const conversations = {
+      prepareTurn: jest.fn().mockResolvedValue(prepared),
+      executeTurn: jest.fn().mockResolvedValue({
+        message: replay().message,
+        replayed: false,
+        quotaState: 'economy',
+        budgetState: 'warning',
+      }),
+      disconnect: jest.fn().mockResolvedValue(undefined),
+      streamError: jest.fn(),
+    };
+    const response = testResponse();
+
+    await new ConversationController(conversations as never).turn(
+      'access',
+      { conversationId: prepared.reserved.conversationId },
+      {} as never,
+      request(),
+      response as unknown as Response,
+    );
+
+    expect(response.setHeader).toHaveBeenCalledWith('Content-Encoding', 'identity');
+    expect(finalPayload(response)).toMatchObject({
+      type: 'chat.turn.final',
+      effectiveModelKey: 'mock-model',
+      quotaState: 'economy',
+      budgetState: 'warning',
+      replayed: false,
+    });
+  });
+
+  it('omits policy state when replaying encrypted assistant content', async () => {
+    const prepared = replay();
+    const conversations = {
+      prepareTurn: jest.fn().mockResolvedValue(prepared),
+      disconnect: jest.fn().mockResolvedValue(undefined),
+      streamError: jest.fn(),
+    };
+    const response = testResponse();
+
+    await new ConversationController(conversations as never).turn(
+      'access',
+      { conversationId: prepared.reserved.conversationId },
+      {} as never,
+      request(),
+      response as unknown as Response,
+    );
+
+    expect(finalPayload(response)).toMatchObject({
+      type: 'chat.turn.final',
+      effectiveModelKey: 'mock-model',
+      replayed: true,
+    });
+    expect(finalPayload(response)).not.toHaveProperty('quotaState');
+    expect(finalPayload(response)).not.toHaveProperty('budgetState');
+  });
 });
+
+function finalPayload(response: ReturnType<typeof testResponse>): Record<string, unknown> {
+  const frame = response.write.mock.calls
+    .map(([value]) => String(value))
+    .find((value) => value.includes('event: chat.turn.final'));
+  if (!frame) throw new Error('Expected a final SSE frame.');
+  const data = frame.split('\n').find((line) => line.startsWith('data: '));
+  if (!data) throw new Error('Expected final SSE data.');
+  return JSON.parse(data.slice('data: '.length)) as Record<string, unknown>;
+}
 
 function testResponse(): EventEmitter & {
   destroyed: boolean;
@@ -111,6 +180,7 @@ function replay(): Extract<PreparedTurn, { kind: 'replay' }> {
       turnId: '00000000-0000-4000-8000-000000000301',
       role: 'assistant' as const,
       content: '',
+      effectiveModelKey: 'mock-model',
       sequence: 2,
       createdAt: '2026-07-14T00:00:00.000Z',
     }),

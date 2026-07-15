@@ -7,3 +7,15 @@ scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.jso
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256 text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256 text eol=lf
+docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudicated-labels.jsonl text eol=lf
+docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl text eol=lf
+docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json text eol=lf
+docs/v2.1.0/reviews/difficulty-training-candidate-500.owner-approval.json text eol=lf
+docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-confirmed-candidate.jsonl text eol=lf
+docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-report.json text eol=lf
+docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.third-review-confirmations.jsonl text eol=lf
+docs/v2.1.0/reviews/difficulty-training-candidate-expansion-2000.owner-approval.json text eol=lf
+docs/v2.1.0/training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl text eol=lf
+docs/v2.1.0/training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json text eol=lf
+docs/v2.1.0/evaluation/difficulty-promotion-holdout-100.v1.json text eol=lf
+docs/testing/difficulty-promotion-holdout-100-result.json text eol=lf

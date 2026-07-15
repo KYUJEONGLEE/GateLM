@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 3002",
     "lint": "eslint . --max-warnings=0",
-    "test": "node --test content-security-policy.test.mjs",
+    "qa:mock-api": "node test/mock-chat-api.mjs",
+    "test": "node --test content-security-policy.test.mjs conversation-contract.test.mjs conversation-upstream.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

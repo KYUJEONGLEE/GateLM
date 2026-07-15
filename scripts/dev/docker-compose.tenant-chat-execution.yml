@@ -6,12 +6,14 @@ services:
     environment:
       NODE_ENV: development
       CONTROL_PLANE_PORT: "3001"
-      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      DATABASE_URL: ${TENANT_CHAT_SMOKE_DATABASE_URL:-postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public}
       REDIS_URL: redis://redis:6379
       CONTROL_PLANE_AUTH_STATE_SECRET: ${CONTROL_PLANE_AUTH_STATE_SECRET:?CONTROL_PLANE_AUTH_STATE_SECRET is required}
       CONTROL_PLANE_ADMIN_AUTH_MODE: demo_admin_placeholder
       CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: "true"
       TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY:?GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY is required}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION:-v1}
       TENANT_CHAT_PROJECTOR_ENABLED: "true"
       TS_NODE_COMPILER_OPTIONS: '{"module":"NodeNext","moduleResolution":"NodeNext"}'
     depends_on:
@@ -26,10 +28,12 @@ services:
       dockerfile: infra/docker/gateway-core.Dockerfile
     environment:
       GATEWAY_PORT: "8080"
-      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      DATABASE_URL: ${TENANT_CHAT_SMOKE_DATABASE_URL:-postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public}
       REDIS_URL: redis://redis:6379
       GATEWAY_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
       GATEWAY_RUNTIME_SNAPSHOT_MODE: demo
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY:?GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY is required}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION:-v1}
       MOCK_PROVIDER_BASE_URL: http://mock-provider:8090
       TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"
       TENANT_CHAT_PRIVATE_LISTEN_ADDRESS: ":8081"
@@ -65,7 +69,7 @@ services:
     environment:
       NODE_ENV: development
       CHAT_API_PORT: "3003"
-      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      DATABASE_URL: ${TENANT_CHAT_SMOKE_DATABASE_URL:-postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public}
       TENANT_CHAT_ACCESS_JWT_SECRET: ${TENANT_CHAT_ACCESS_JWT_SECRET:?TENANT_CHAT_ACCESS_JWT_SECRET is required}
       TENANT_CHAT_INTENT_SECRET: ${TENANT_CHAT_INTENT_SECRET:?TENANT_CHAT_INTENT_SECRET is required}
       TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}

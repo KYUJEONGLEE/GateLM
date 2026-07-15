@@ -167,6 +167,8 @@ export interface ProviderPresetResponseDto {
 }
 
 export interface ProviderModelDiscoveryItemDto {
+  chatCompletionSupported: boolean | null;
+  contextWindowTokens: number | null;
   createdAt: string | null;
   displayName: string;
   modelName: string;
@@ -175,6 +177,8 @@ export interface ProviderModelDiscoveryItemDto {
   provider: string;
   providerId: string;
   source: 'provider_models_endpoint';
+  supportsJsonMode: boolean | null;
+  supportsStreaming: boolean | null;
 }
 
 export interface ProviderModelDiscoveryResponseDto {

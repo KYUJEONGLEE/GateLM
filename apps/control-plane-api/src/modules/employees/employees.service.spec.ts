@@ -150,3 +150,107 @@ describe('EmployeesService employee rate limit policy', () => {
     },
   );
 });
+
+describe('EmployeesService employee invitation deletion', () => {
+  const tenantId = '00000000-0000-4000-8000-000000000001';
+  const employeeId = '00000000-0000-4000-8000-000000000002';
+  const timestamp = new Date('2026-07-15T00:00:00.000Z');
+  const pendingEmployee = {
+    _count: { projectAssignments: 2 },
+    acceptedAt: null,
+    createdAt: timestamp,
+    deletedAt: null,
+    department: 'Platform',
+    email: 'employee@example.com',
+    id: employeeId,
+    invitationExpiresAt: new Date('2026-07-22T00:00:00.000Z'),
+    invitationRevokedAt: null,
+    invitationStatus: 'pending',
+    invitationTokenHash: 'stored-token-hash',
+    invitedAt: timestamp,
+    name: 'Employee',
+    status: 'staged',
+    tenantId,
+    updatedAt: timestamp,
+    userId: null,
+  };
+  const employeeStore = {
+    findFirst: jest.fn(),
+    updateMany: jest.fn(),
+  };
+  const service = new EmployeesService(
+    { employee: employeeStore } as unknown as PrismaService,
+    {} as ConfigService,
+    new InMemoryEmailSender(),
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('revokes only the tenant pending invitation and clears its token material', async () => {
+    employeeStore.findFirst
+      .mockResolvedValueOnce(pendingEmployee)
+      .mockResolvedValueOnce({
+        ...pendingEmployee,
+        invitationExpiresAt: null,
+        invitationRevokedAt: timestamp,
+        invitationStatus: 'revoked',
+        invitationTokenHash: null,
+      });
+    employeeStore.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.deleteEmployeeInvitation(tenantId, employeeId),
+    ).resolves.toMatchObject({
+      id: employeeId,
+      invitationStatus: 'revoked',
+      projectCount: 2,
+      tenantId,
+    });
+    expect(employeeStore.updateMany).toHaveBeenCalledWith({
+      data: {
+        invitationExpiresAt: null,
+        invitationRevokedAt: expect.any(Date),
+        invitationStatus: 'revoked',
+        invitationTokenHash: null,
+      },
+      where: {
+        acceptedAt: null,
+        deletedAt: null,
+        id: employeeId,
+        invitationStatus: 'pending',
+        tenantId,
+      },
+    });
+  });
+
+  it('does not change an accepted invitation', async () => {
+    employeeStore.findFirst.mockResolvedValue({
+      ...pendingEmployee,
+      acceptedAt: timestamp,
+      invitationStatus: 'accepted',
+    });
+
+    await expect(
+      service.deleteEmployeeInvitation(tenantId, employeeId),
+    ).rejects.toThrow('Employee invitation is not pending.');
+    expect(employeeStore.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion when the invitation stopped being pending concurrently', async () => {
+    employeeStore.findFirst.mockResolvedValue(pendingEmployee);
+    employeeStore.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.deleteEmployeeInvitation(tenantId, employeeId),
+    ).rejects.toThrow('Employee invitation is no longer pending.');
+    expect(employeeStore.findFirst).toHaveBeenCalledWith({
+      where: {
+        deletedAt: null,
+        id: employeeId,
+        tenantId,
+      },
+    });
+  });
+});

@@ -1,8 +1,13 @@
 {
-  "type": "chat.turn.accepted",
+  "type": "chat.turn.final",
   "schemaVersion": 1,
   "conversationId": "20000000-0000-4000-8000-000000000001",
   "turnId": "30000000-0000-4000-8000-000000000001",
-  "sequence": 1,
+  "sequence": 2,
+  "messageId": "40000000-0000-4000-8000-000000000001",
+  "terminalOutcome": "succeeded",
+  "effectiveModelKey": "gpt-5.4-mini",
+  "quotaState": "warning",
+  "budgetState": "normal",
   "replayed": false
 }
