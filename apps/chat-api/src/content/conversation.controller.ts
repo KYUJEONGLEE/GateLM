@@ -223,6 +223,7 @@ function finalEvent(
   policy?: Readonly<{
     quotaState?: 'normal' | 'warning' | 'economy' | 'blocked';
     budgetState?: 'normal' | 'warning' | 'economy' | 'blocked';
+    cacheOutcome?: 'off' | 'hit' | 'miss';
   }>,
 ) {
   const policyState = policy?.quotaState && policy.budgetState
@@ -230,6 +231,9 @@ function finalEvent(
     : {};
   const modelState = message.effectiveModelKey
     ? { effectiveModelKey: message.effectiveModelKey }
+    : {};
+  const cacheState = policy?.cacheOutcome
+    ? { cacheOutcome: policy.cacheOutcome }
     : {};
   return {
     type: 'chat.turn.final',
@@ -241,6 +245,7 @@ function finalEvent(
     terminalOutcome: 'succeeded',
     replayed,
     ...modelState,
+    ...cacheState,
     ...policyState,
   } as const;
 }

@@ -18,7 +18,7 @@ test("snapshot route authorizes tenant and project access before observability r
 });
 
 test("snapshot route returns the whole dashboard payload without caching", async () => {
-  const routeSource = await readFile(routeSourceUrl, "utf8");
+  const routeSource = (await readFile(routeSourceUrl, "utf8")).replaceAll("\r\n", "\n");
 
   expect(routeSource).toContain('const noStoreHeaders = { "Cache-Control": "no-store" }');
   expect(routeSource).toContain("costOverTime,");

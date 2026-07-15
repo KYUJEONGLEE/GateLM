@@ -26,7 +26,7 @@ test("rejects incomplete or malformed compact unit values", () => {
 });
 
 test("bulk employee deletion always unlocks the UI and uses the latest selected employee", async () => {
-  const source = await readFile(employeeManagementSourceUrl, "utf8");
+  const source = (await readFile(employeeManagementSourceUrl, "utf8")).replaceAll("\r\n", "\n");
 
   expect(source).toContain('setPendingAction("deleteSelected")');
   expect(source).toContain("} finally {\n      setPendingAction(null);");

@@ -43,4 +43,7 @@ test("dashboard charts merge changed data without replaying unchanged series", a
   expect(source).toContain('id: "dashboard-pie-usage"');
   expect(source).toContain('id: "dashboard-cost-spend"');
   expect(source).toContain('id: "dashboard-cost-average"');
+  expect(source).toContain("const visibleCostBucketCount = 60");
+  expect(source).toContain('barWidth: "70%"');
+  expect(source).toContain("components.DataZoomComponent");
 });

@@ -214,9 +214,9 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   const common = ['conversationId', 'schemaVersion', 'sequence', 'turnId', 'type'];
   const extras = event.type === 'chat.turn.accepted' ? ['replayed']
     : event.type === 'chat.turn.delta' ? ['delta']
-      : event.type === 'chat.turn.final' ? ['budgetState', 'effectiveModelKey', 'messageId', 'quotaState', 'replayed', 'terminalOutcome']
+      : event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'messageId', 'quotaState', 'replayed', 'terminalOutcome']
         : ['error'];
-  exactKeys(event, [...common, ...extras], event.type === 'chat.turn.final' ? ['budgetState', 'effectiveModelKey', 'quotaState'] : []);
+  exactKeys(event, [...common, ...extras], event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'quotaState'] : []);
   if (fields.event !== event.type || event.schemaVersion !== 1 || event.conversationId !== expectedConversationId || !UUID_V4.test(event.turnId)) throw new Error('Mismatched SSE event.');
   if (expectedTurnId && event.turnId !== expectedTurnId) throw new Error('Mismatched SSE turn.');
   if (event.sequence !== expectedSequence || fields.id !== `${event.turnId}:${event.sequence}`) throw new Error('Invalid SSE sequence.');
@@ -226,6 +226,7 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   if (event.type === 'chat.turn.final') {
     if (!UUID_V4.test(event.messageId) || event.terminalOutcome !== 'succeeded' || typeof event.replayed !== 'boolean') throw new Error('Invalid final SSE event.');
     if (event.effectiveModelKey !== undefined && (typeof event.effectiveModelKey !== 'string' || !MODEL_KEY.test(event.effectiveModelKey))) throw new Error('Invalid effective model key.');
+    if (event.cacheOutcome !== undefined && !['off', 'hit', 'miss'].includes(event.cacheOutcome)) throw new Error('Invalid cache outcome.');
     if (event.quotaState !== undefined && !isPolicyState(event.quotaState)) throw new Error('Invalid policy state.');
     if (event.budgetState !== undefined && !isPolicyState(event.budgetState)) throw new Error('Invalid policy state.');
     if ((event.quotaState === undefined) !== (event.budgetState === undefined)) throw new Error('Incomplete policy state.');

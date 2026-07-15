@@ -460,6 +460,7 @@ function numberFrom(value: bigint | Date | null | undefined): number {
 
 function costSeriesInterval(bucket: TenantChatCostSeriesQueryDto['bucket']): string {
   return {
+    '1s': '1 second',
     '7s': '7 seconds',
     '1m': '1 minute',
     '5m': '5 minutes',

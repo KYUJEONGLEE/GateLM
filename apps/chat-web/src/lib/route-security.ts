@@ -1,8 +1,12 @@
-import { readJsonBody, UpstreamResponseError } from '@gatelm/web-bff';
+import {
+  assertCsrf,
+  assertSameOrigin,
+  readJsonBody,
+  UpstreamResponseError,
+} from '@gatelm/web-bff';
 import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 
 import { COOKIE } from './auth-server';
-import { assertDoubleSubmitCsrf, assertExactOrigin } from './conversation-contract.mjs';
 import { serverEnv } from './server-env';
 
 export async function secureJson(request: Request, cookies: ReadonlyRequestCookies, maxBytes?: number) {
@@ -11,8 +15,8 @@ export async function secureJson(request: Request, cookies: ReadonlyRequestCooki
 }
 
 export function secureMutation(request: Request, cookies: ReadonlyRequestCookies): void {
-  assertExactOrigin(request, serverEnv().chatWebOrigin);
-  assertDoubleSubmitCsrf(request, cookies.get(COOKIE.csrf)?.value);
+  assertSameOrigin(request, serverEnv().chatWebOrigin);
+  assertCsrf(request, cookies.get(COOKIE.csrf)?.value);
 }
 
 export async function secureEmptyMutation(request: Request, cookies: ReadonlyRequestCookies): Promise<void> {
