@@ -19,8 +19,10 @@ const (
 	DefaultModelID     = "openai/privacy-filter"
 	DefaultRuntime     = "cpu_only"
 	DefaultDetectorSet = "privacy-filter-default"
-	DefaultMode        = "shadow"
-	DefaultTimeout     = 300 * time.Millisecond
+	ModeShadow         = "shadow"
+	ModeEnforce        = "enforce"
+	DefaultMode        = ModeEnforce
+	DefaultTimeout     = 750 * time.Millisecond
 )
 
 var errSidecarUnavailable = errors.New("ai safety sidecar unavailable")
@@ -37,6 +39,7 @@ type MaskingEngineConfig struct {
 	ModelID     string
 	DetectorSet string
 	Locale      string
+	Mode        string
 }
 
 type MaskingEngine struct {
@@ -47,6 +50,7 @@ type MaskingEngine struct {
 	modelID     string
 	detectorSet string
 	locale      string
+	mode        string
 }
 
 func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
@@ -78,6 +82,7 @@ func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
 		modelID:     modelID,
 		detectorSet: detectorSet,
 		locale:      strings.TrimSpace(config.Locale),
+		mode:        maskingMode(config.Mode),
 	}
 }
 
@@ -90,14 +95,22 @@ func (e MaskingEngine) Apply(ctx context.Context, req maskdomain.ApplyRequest) (
 		return localResult, nil
 	}
 
-	sidecarResult, err := e.detect(ctx, req.Prompt)
+	sidecarRequest := req
+	if strings.TrimSpace(localResult.RedactedPrompt) != "" {
+		sidecarRequest.Prompt = localResult.RedactedPrompt
+	}
+	sidecarResult, err := e.detect(ctx, sidecarRequest)
 	if err != nil {
 		return localResult, nil
+	}
+	if e.mode == ModeShadow {
+		return mergeSidecarShadowResult(localResult, sidecarResult), nil
 	}
 	return mergeSidecarResult(localResult, sidecarResult), nil
 }
 
-func (e MaskingEngine) detect(ctx context.Context, prompt string) (detectResponse, error) {
+func (e MaskingEngine) detect(ctx context.Context, req maskdomain.ApplyRequest) (detectResponse, error) {
+	prompt := req.Prompt
 	if strings.TrimSpace(prompt) == "" {
 		return detectResponse{}, errSidecarUnavailable
 	}
@@ -106,7 +119,7 @@ func (e MaskingEngine) detect(ctx context.Context, prompt string) (detectRespons
 
 	payload, err := json.Marshal(detectRequest{
 		ContractVersion: ContractVersion,
-		Mode:            DefaultMode,
+		Mode:            e.mode,
 		Model: detectModel{
 			ModelID: e.modelID,
 			Runtime: DefaultRuntime,
@@ -118,6 +131,7 @@ func (e MaskingEngine) detect(ctx context.Context, prompt string) (detectRespons
 		DetectorConfig: detectConfig{
 			DetectorSet:      e.detectorSet,
 			ReturnConfidence: false,
+			DetectorPolicies: detectorPolicies(req.DetectorPolicies),
 		},
 	})
 	if err != nil {
@@ -148,12 +162,29 @@ func (e MaskingEngine) detect(ctx context.Context, prompt string) (detectRespons
 	if decoded.ContractVersion != ContractVersion {
 		return detectResponse{}, errSidecarUnavailable
 	}
+	if decoded.Mode != e.mode {
+		return detectResponse{}, errSidecarUnavailable
+	}
+	if strings.TrimSpace(decoded.LogSafePrompt) == "" {
+		return detectResponse{}, errSidecarUnavailable
+	}
 	switch decoded.Outcome {
 	case "passed", "redacted", "blocked":
 		return decoded, nil
 	default:
 		return detectResponse{}, errSidecarUnavailable
 	}
+}
+
+func maskingMode(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), ModeShadow) {
+		return ModeShadow
+	}
+	return ModeEnforce
+}
+
+func mergeSidecarShadowResult(local maskdomain.Result, sidecar detectResponse) maskdomain.Result {
+	return mergeSidecarObservation(local, sidecar)
 }
 
 func mergeSidecarResult(local maskdomain.Result, sidecar detectResponse) maskdomain.Result {
@@ -178,10 +209,6 @@ func mergeSidecarResult(local maskdomain.Result, sidecar detectResponse) maskdom
 	if redactedPrompt == "" {
 		redactedPrompt = local.LogSafePrompt
 	}
-	preview := strings.TrimSpace(sidecar.RedactedPromptPreview)
-	if preview == "" {
-		preview = maskdomain.PreviewRedactedPrompt(redactedPrompt)
-	}
 	detectedTypes := mergeDetectorTypes(local.DetectedTypes, sidecar.detectorCategories())
 	detectedCount := sidecar.DetectorSummary.DetectedCount
 	if detectedCount < local.DetectedCount {
@@ -191,7 +218,7 @@ func mergeSidecarResult(local maskdomain.Result, sidecar detectResponse) maskdom
 		detectedCount = len(detectedTypes)
 	}
 
-	return maskdomain.Result{
+	result := maskdomain.Result{
 		Action:                  action,
 		DetectedTypes:           detectedTypes,
 		DetectedCount:           detectedCount,
@@ -199,28 +226,35 @@ func mergeSidecarResult(local maskdomain.Result, sidecar detectResponse) maskdom
 		PolicyAllowedCount:      local.PolicyAllowedCount,
 		MandatoryProtectedTypes: append([]string(nil), local.MandatoryProtectedTypes...),
 		RedactedPrompt:          redactedPrompt,
-		LogSafePrompt:           redactedPrompt,
-		RedactedPromptPreview:   preview,
 		SecurityPolicyVersionID: local.SecurityPolicyVersionID,
 	}
+	return withSidecarLogSafe(result, sidecar)
 }
 
 func mergeSidecarObservation(local maskdomain.Result, sidecar detectResponse) maskdomain.Result {
 	detectedTypes := mergeDetectorTypes(local.DetectedTypes, sidecar.detectorCategories())
-	if len(detectedTypes) == 0 {
-		return local
+	if len(detectedTypes) > 0 {
+		detectedCount := sidecar.DetectorSummary.DetectedCount
+		if detectedCount < local.DetectedCount {
+			detectedCount = local.DetectedCount
+		}
+		if detectedCount < len(detectedTypes) {
+			detectedCount = len(detectedTypes)
+		}
+		local.DetectedTypes = detectedTypes
+		local.DetectedCount = detectedCount
 	}
-	detectedCount := sidecar.DetectorSummary.DetectedCount
-	if detectedCount < local.DetectedCount {
-		detectedCount = local.DetectedCount
-	}
-	if detectedCount < len(detectedTypes) {
-		detectedCount = len(detectedTypes)
-	}
+	return withSidecarLogSafe(local, sidecar)
+}
 
-	local.DetectedTypes = detectedTypes
-	local.DetectedCount = detectedCount
-	return local
+func withSidecarLogSafe(result maskdomain.Result, sidecar detectResponse) maskdomain.Result {
+	result.LogSafePrompt = strings.TrimSpace(sidecar.LogSafePrompt)
+	preview := strings.TrimSpace(sidecar.RedactedPromptPreview)
+	if preview == "" {
+		preview = maskdomain.PreviewRedactedPrompt(result.LogSafePrompt)
+	}
+	result.RedactedPromptPreview = preview
+	return result
 }
 
 func mergeDetectorTypes(groups ...[]string) []string {
@@ -264,8 +298,33 @@ type detectInput struct {
 }
 
 type detectConfig struct {
-	DetectorSet      string `json:"detectorSet"`
-	ReturnConfidence bool   `json:"returnConfidence"`
+	DetectorSet      string         `json:"detectorSet"`
+	ReturnConfidence bool           `json:"returnConfidence"`
+	DetectorPolicies []detectPolicy `json:"detectorPolicies,omitempty"`
+}
+
+type detectPolicy struct {
+	DetectorType string `json:"detectorType"`
+	Action       string `json:"action"`
+}
+
+func detectorPolicies(policies []maskdomain.DetectorPolicy) []detectPolicy {
+	if len(policies) == 0 {
+		return nil
+	}
+	result := make([]detectPolicy, 0, len(policies))
+	for _, policy := range policies {
+		detectorType := strings.TrimSpace(policy.DetectorType)
+		action := strings.TrimSpace(string(policy.Action))
+		if detectorType == "" {
+			continue
+		}
+		switch maskdomain.PolicyAction(action) {
+		case maskdomain.PolicyActionAllow, maskdomain.PolicyActionRedact, maskdomain.PolicyActionBlock:
+			result = append(result, detectPolicy{DetectorType: detectorType, Action: action})
+		}
+	}
+	return result
 }
 
 type detectResponse struct {
@@ -274,6 +333,7 @@ type detectResponse struct {
 	Outcome               string                `json:"outcome"`
 	Mode                  string                `json:"mode"`
 	RedactedPrompt        string                `json:"redactedPrompt"`
+	LogSafePrompt         string                `json:"logSafePrompt"`
 	RedactedPromptPreview string                `json:"redactedPromptPreview"`
 	DetectorSummary       detectDetectorSummary `json:"detectorSummary"`
 	Detections            []detectDetection     `json:"detections"`

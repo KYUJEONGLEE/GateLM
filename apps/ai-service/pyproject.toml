@@ -34,8 +34,11 @@ ml = [
   "transformers>=4.41,<5",
 ]
 onnx = [
-  "optimum-onnx[onnxruntime]",
-  "transformers>=4.41,<5",
+  "numpy>=2.5,<2.6",
+  "onnxruntime>=1.27,<1.28",
+  "optimum-onnx[onnxruntime]>=0.1,<0.2",
+  "tokenizers>=0.22,<0.23",
+  "transformers>=4.57,<4.58",
 ]
 
 [tool.unittest]

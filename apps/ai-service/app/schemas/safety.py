@@ -97,14 +97,31 @@ class AiSafetyDetectorInput(CamelModel):
     locale: str | None = Field(default=None)
 
 
+class AiSafetyDetectorPolicy(CamelModel):
+    detector_type: str = Field(alias="detectorType", min_length=1)
+    action: Literal["allow", "redact", "block"]
+
+    @field_validator("detector_type")
+    @classmethod
+    def validate_detector_type(cls, value: str) -> str:
+        if value not in ALLOWED_DETECTOR_TYPES:
+            raise PydanticCustomError("unsupported_detector_type", "Unsupported detector type.")
+        return value
+
+
 class AiSafetyDetectorConfig(CamelModel):
     detector_set: str = Field(alias="detectorSet", default="privacy-filter-default", min_length=1)
     return_confidence: bool = Field(alias="returnConfidence", default=True)
+    detector_policies: list[AiSafetyDetectorPolicy] = Field(
+        alias="detectorPolicies",
+        default_factory=list,
+        max_length=64,
+    )
 
 
 class AiSafetyDetectRequest(CamelModel):
     contract_version: str = Field(alias="contractVersion")
-    mode: Literal["shadow"] = "shadow"
+    mode: Literal["shadow", "enforce"] = "shadow"
     model: AiSafetyDetectorModel = Field(default_factory=AiSafetyDetectorModel)
     input: AiSafetyDetectorInput
     detector_config: AiSafetyDetectorConfig = Field(
@@ -130,7 +147,7 @@ class AiSafetyDetection(CamelModel):
     source: str = Field(min_length=1)
     confidence: float | None = Field(default=None, ge=0, le=1)
     action: Literal["allow", "redact", "block"]
-    mode: Literal["shadow"] = "shadow"
+    mode: Literal["shadow", "enforce"] = "shadow"
 
 
 class AiSafetyDetectResponse(CamelModel):
@@ -140,8 +157,9 @@ class AiSafetyDetectResponse(CamelModel):
     )
     model: AiSafetyDetectorModel
     outcome: Literal["passed", "redacted", "blocked"]
-    mode: Literal["shadow"] = "shadow"
+    mode: Literal["shadow", "enforce"] = "shadow"
     redacted_prompt: str = Field(alias="redactedPrompt")
+    log_safe_prompt: str = Field(alias="logSafePrompt")
     redacted_prompt_preview: str | None = Field(alias="redactedPromptPreview")
     detector_summary: AiSafetyDetectorSummary = Field(alias="detectorSummary")
     detections: list[AiSafetyDetection]

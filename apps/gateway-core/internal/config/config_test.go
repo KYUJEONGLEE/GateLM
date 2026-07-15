@@ -41,6 +41,7 @@ var aiSafetySidecarEnvKeys = []string{
 	"GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID",
 	"GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET",
 	"GATEWAY_AI_SAFETY_SIDECAR_LOCALE",
+	"GATEWAY_AI_SAFETY_SIDECAR_MODE",
 }
 
 var runtimeSnapshotCacheEnvKeys = []string{
@@ -182,7 +183,7 @@ func TestAISafetySidecarConfigDefaults(t *testing.T) {
 	if cfg.AISafetySidecar.EndpointURL != "http://127.0.0.1:8001/internal/ai-safety/v1/detect" {
 		t.Fatalf("unexpected sidecar URL: %q", cfg.AISafetySidecar.EndpointURL)
 	}
-	if cfg.AISafetySidecar.Timeout != 300*time.Millisecond {
+	if cfg.AISafetySidecar.Timeout != 750*time.Millisecond {
 		t.Fatalf("unexpected sidecar timeout: %s", cfg.AISafetySidecar.Timeout)
 	}
 	if cfg.AISafetySidecar.ModelID != "openai/privacy-filter" {
@@ -193,6 +194,9 @@ func TestAISafetySidecarConfigDefaults(t *testing.T) {
 	}
 	if cfg.AISafetySidecar.Locale != "" {
 		t.Fatalf("unexpected sidecar locale: %q", cfg.AISafetySidecar.Locale)
+	}
+	if cfg.AISafetySidecar.Mode != "enforce" {
+		t.Fatalf("unexpected sidecar mode: %q", cfg.AISafetySidecar.Mode)
 	}
 	if !cfg.RuntimeSnapshotCache.Enabled {
 		t.Fatal("runtime snapshot cache should be enabled by default")
@@ -225,6 +229,7 @@ func TestAISafetySidecarConfigLoadsEnvOverrides(t *testing.T) {
 	t.Setenv("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter")
 	t.Setenv("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default")
 	t.Setenv("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", "ko-KR")
+	t.Setenv("GATEWAY_AI_SAFETY_SIDECAR_MODE", "shadow")
 
 	cfg, err := LoadWithError()
 	if err != nil {
@@ -248,6 +253,9 @@ func TestAISafetySidecarConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if cfg.AISafetySidecar.Locale != "ko-KR" {
 		t.Fatalf("unexpected sidecar locale: %q", cfg.AISafetySidecar.Locale)
+	}
+	if cfg.AISafetySidecar.Mode != "shadow" {
+		t.Fatalf("unexpected sidecar mode: %q", cfg.AISafetySidecar.Mode)
 	}
 }
 

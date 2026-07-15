@@ -22,10 +22,11 @@ AI Safety Lab은 아래 질문에 답하기 위한 문서와 근거를 모은다
 |---|---|
 | Document status | `docs/ai-safety-lab`은 Lab draft이며 기존 v2 계약을 override하지 않는다. |
 | Initial ML mode | ML detector는 처음에 `shadow`로 시작한다. |
+| Tenant Chat integration mode | 배포 설정에서 `enforce`를 명시하며 `shadow`는 Provider prompt/action을 변경하지 않는다. |
 | ML model | `openai/privacy-filter`를 첫 ML detector model로 사용한다. |
 | Runtime | CPU-only local sidecar로 실행한다. |
 | Sidecar output | Sidecar가 `redactedPrompt`까지 만들어 반환한다. |
-| First ML adapter | 첫 구현은 `transformers.pipeline()` adapter로 한다. |
+| ONNX adapters | OpenAI는 direct ONNX Runtime, KoELECTRA는 Optimum ONNX pipeline을 사용한다. |
 | Confidence thresholds | 계약에는 고정하지 않고 `evaluation-plan.md`의 기준값으로만 둔다. |
 | Schema scope | `safety-detection`, `safety-summary`, `detector-sidecar-response`, `eval-case`, `master-eval-case` schema를 둔다. |
 | Sidecar version | `contractVersion="ai-safety-detector.v1"` |
@@ -42,18 +43,21 @@ Initial `openai/privacy-filter` label mapping:
 |---|---|---|
 | `private_email` | `email` | `redact` |
 | `private_phone` | `phone_number` | `redact` |
-| `private_person` | `person_name` | `redact` |
 | `private_address` | `postal_address` | `redact` |
 | `account_number` | `account_number` | `block` |
 | `private_date` | `private_date` | `redact` |
 | `private_url` | `private_url` | `redact` |
 | `secret` | `secret` | `block` |
 
-Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 
 | Model Label | GateLM Detector Type | Default Action Candidate |
 |---|---|---|
-| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+| `EMA-*` / `email` | `email` | `redact` |
+| `PHN-*` / `phone` / `telephone` | `phone_number` | `redact` |
+| `RRN-*` | `resident_registration_number` | `block` |
+
+현재 `person_name`과 `organization_name`은 두 모델의 accepted label map에 없으며 `local_rule` backstop 결과다.
 
 ## 3. Directory Map
 
@@ -65,6 +69,9 @@ Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 | `implementation-plan.md` | 첨부 PII detector 메모 기반 구현 계획 |
 | `evaluation-plan.md` | 기존 safety eval 방식과 새 PII detector 평가 계획 |
 | `resource-latency-benchmark.md` | local sidecar 리소스/지연시간 벤치마크 측정 프로토콜과 리포트 템플릿 |
+| `tenant-chat-pii-model-integration-20260715.md` | 전달 번들 해시, Tenant Chat 연결, 품질 한계, 실제 CPU 측정 근거 |
+| `pii-model-manifest-20260715.json` | 전달 모델 revision/file size/SHA-256 manifest |
+| `pii-model-evaluation-summary-20260715.json` | 원문 없는 전달 평가 요약과 promotion 부적합 결정 |
 | `fixtures/` | synthetic safety eval fixture 위치. `master-safety-eval-corpus.jsonl`은 Gateway/detector 기대값을 한 케이스에 함께 둔다. |
 | `schemas/` | AI Safety Lab 전용 JSON Schema 위치 |
 

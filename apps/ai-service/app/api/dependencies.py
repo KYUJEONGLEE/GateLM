@@ -30,10 +30,14 @@ def get_ai_safety_detector_service(request: Request) -> AiSafetyDetectorService:
     if isinstance(service, AiSafetyDetectorService):
         return service
     settings = get_settings(request)
-    service = AiSafetyDetectorService(
+    service = create_ai_safety_detector_service(settings)
+    request.app.state.ai_safety_detector_service = service
+    return service
+
+
+def create_ai_safety_detector_service(settings: Settings) -> AiSafetyDetectorService:
+    return AiSafetyDetectorService(
         model_id=settings.ai_safety_detector_model_id,
         additional_model_ids=settings.ai_safety_additional_detector_model_ids,
         detector_runtime=settings.ai_safety_detector_runtime,
     )
-    request.app.state.ai_safety_detector_service = service
-    return service

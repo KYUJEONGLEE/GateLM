@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -29,6 +30,10 @@ PRIVACY_FILTER_RUNTIMES = {
     PRIVACY_FILTER_RUNTIME_TRANSFORMERS,
     PRIVACY_FILTER_RUNTIME_ONNX,
 }
+MODEL_WARMUP_TEXT = "GateLM synthetic PII detector warmup."
+ONNX_INTRA_OP_THREADS_ENV = "AI_SERVICE_ONNX_INTRA_OP_THREADS"
+ONNX_INTER_OP_THREADS_ENV = "AI_SERVICE_ONNX_INTER_OP_THREADS"
+ONNX_ALLOW_SPINNING_ENV = "AI_SERVICE_ONNX_ALLOW_SPINNING"
 
 OPENAI_PRIVACY_FILTER_LABEL_MAP: Mapping[str, str] = {
     "account_number": "account_number",
@@ -158,6 +163,9 @@ class PrivacyFilterAdapter:
     def load_state(self) -> str:
         return "loaded" if self._classifier is not None else "configured"
 
+    def warmup(self) -> None:
+        self._run_classifier(MODEL_WARMUP_TEXT)
+
     def _run_classifier(self, text: str) -> list[Mapping[str, Any]]:
         classifier = self._classifier
         if classifier is None:
@@ -206,7 +214,11 @@ class PrivacyFilterAdapter:
             ) from exc
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        model = ORTModelForTokenClassification.from_pretrained(self.model_name)
+        model_kwargs: dict[str, object] = {}
+        session_options = _onnx_session_options()
+        if session_options is not None:
+            model_kwargs["session_options"] = session_options
+        model = ORTModelForTokenClassification.from_pretrained(self.model_name, **model_kwargs)
         return pipeline(
             task="token-classification",
             model=model,
@@ -294,9 +306,15 @@ class _OpenAIPrivacyFilterOnnxClassifier:
                 import onnxruntime as ort
             except ImportError as exc:
                 raise RuntimeError("OpenAI privacy-filter ONNX runtime requires onnxruntime.") from exc
+            session_kwargs: dict[str, object] = {
+                "providers": ["CPUExecutionProvider"],
+            }
+            session_options = _onnx_session_options()
+            if session_options is not None:
+                session_kwargs["sess_options"] = session_options
             session = ort.InferenceSession(
                 str(self.model_dir / "onnx" / "model_quantized.onnx"),
-                providers=["CPUExecutionProvider"],
+                **session_kwargs,
             )
             self._session = session
         return session
@@ -476,6 +494,54 @@ def _strip_bio_suffix(label: str) -> str:
     if len(label) > 2 and label[-2] == "-" and label[-1].upper() in {"B", "I", "E", "S", "U"}:
         return label[:-2]
     return label
+
+
+def _onnx_session_options() -> Any | None:
+    intra_op_threads = _positive_env_int(ONNX_INTRA_OP_THREADS_ENV)
+    inter_op_threads = _positive_env_int(ONNX_INTER_OP_THREADS_ENV)
+    allow_spinning = _optional_env_bool(ONNX_ALLOW_SPINNING_ENV)
+    if intra_op_threads is None and inter_op_threads is None and allow_spinning is None:
+        return None
+
+    try:
+        import onnxruntime as ort
+    except ImportError as exc:
+        raise RuntimeError("ONNX session tuning requires onnxruntime.") from exc
+
+    options = ort.SessionOptions()
+    if intra_op_threads is not None:
+        options.intra_op_num_threads = intra_op_threads
+    if inter_op_threads is not None:
+        options.inter_op_num_threads = inter_op_threads
+    if allow_spinning is not None:
+        spinning = "1" if allow_spinning else "0"
+        options.add_session_config_entry("session.intra_op.allow_spinning", spinning)
+        options.add_session_config_entry("session.inter_op.allow_spinning", spinning)
+    return options
+
+
+def _positive_env_int(key: str) -> int | None:
+    value = os.environ.get(key, "").strip()
+    if value == "":
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    if parsed < 1 or parsed > 256:
+        return None
+    return parsed
+
+
+def _optional_env_bool(key: str) -> bool | None:
+    value = os.environ.get(key, "").strip().lower()
+    if value == "":
+        return None
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return None
 
 
 def _coerce_int(value: object) -> int | None:

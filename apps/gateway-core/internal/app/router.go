@@ -254,6 +254,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 			ModelID:     cfg.AISafetySidecar.ModelID,
 			DetectorSet: cfg.AISafetySidecar.DetectorSet,
 			Locale:      cfg.AISafetySidecar.Locale,
+			Mode:        cfg.AISafetySidecar.Mode,
 		})
 	}
 	observabilityToken := cfg.ObservabilityInternalToken

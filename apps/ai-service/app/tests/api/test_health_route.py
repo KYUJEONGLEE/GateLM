@@ -71,6 +71,27 @@ class HealthRouteTests(unittest.TestCase):
         self.assertNotIn(".cache", body_text)
         self.assertNotIn("quantized", body_text)
 
+    def test_readyz_marks_preloaded_detector_as_required(self) -> None:
+        settings = Settings(ai_safety_preload_enabled=True)
+        app = create_app(Settings())
+        app.state.settings = settings
+        app.state.ai_safety_detector_service = _loaded_detector_service()
+        client = TestClient(app)
+
+        response = client.get("/readyz")
+
+        self.assertEqual(response.status_code, 200)
+        detector = response.json()["dependencies"]["aiSafetyDetector"]
+        self.assertTrue(detector["required"])
+        self.assertEqual(detector["status"], "loaded")
+
+
+def _loaded_detector_service():
+    from app.adapters.safety.privacy_filter_adapter import PrivacyFilterAdapter
+    from app.services.ai_safety_detector import AiSafetyDetectorService
+
+    return AiSafetyDetectorService(adapter=PrivacyFilterAdapter(classifier=lambda _text: []))
+
 
 if __name__ == "__main__":
     unittest.main()

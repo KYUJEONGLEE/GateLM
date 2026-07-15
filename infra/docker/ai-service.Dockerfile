@@ -19,7 +19,7 @@ COPY apps/ai-service/pyproject.toml ./pyproject.toml
 COPY apps/ai-service/app ./app
 
 RUN if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
-    pip install --no-cache-dir ".[ml]"; \
+    pip install --no-cache-dir ".[onnx]"; \
   else \
     pip install --no-cache-dir .; \
   fi

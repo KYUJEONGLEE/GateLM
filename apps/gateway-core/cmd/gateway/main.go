@@ -36,6 +36,7 @@ import (
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
+	aiservice "gatelm/apps/gateway-core/internal/adapters/safety/aiservice"
 	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
 	redistenantcache "gatelm/apps/gateway-core/internal/adapters/tenantchat/cache/redis"
 	postgrestenantprovider "gatelm/apps/gateway-core/internal/adapters/tenantchat/provider/postgres"
@@ -50,6 +51,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
@@ -274,11 +276,23 @@ func main() {
 			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
 		)
+		var tenantChatMaskingEngine tenantsafety.MaskingEngine = maskdomain.NewP0Engine()
+		if cfg.AISafetySidecar.Enabled {
+			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
+				Local:       tenantChatMaskingEngine,
+				EndpointURL: cfg.AISafetySidecar.EndpointURL,
+				Timeout:     cfg.AISafetySidecar.Timeout,
+				ModelID:     cfg.AISafetySidecar.ModelID,
+				DetectorSet: cfg.AISafetySidecar.DetectorSet,
+				Locale:      cfg.AISafetySidecar.Locale,
+				Mode:        cfg.AISafetySidecar.Mode,
+			})
+		}
 		tenantChatCompletions := completionservice.New(
 			tenantChatRuntime,
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
-			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluator()),
+			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),

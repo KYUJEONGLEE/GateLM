@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from time import perf_counter
 
@@ -24,6 +26,7 @@ from app.schemas.safety import (
     AiSafetyDetectResponse,
     AiSafetyDetection,
     AiSafetyDetectorModel,
+    AiSafetyDetectorPolicy,
     AiSafetyDetectorSummary,
     SafetyDetector,
 )
@@ -183,6 +186,7 @@ ACTION_REDACT_CONTEXT_PATTERN = re.compile(
     r"\uc0c1\ub2f4|\uc9c0\uc6d0)",
     re.IGNORECASE,
 )
+PARALLEL_ADAPTERS_ENV = "AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED"
 
 
 @dataclass(frozen=True)
@@ -333,10 +337,17 @@ class AiSafetyDetectorService:
             for adapter in self.adapters
         ]
 
+    def warmup(self) -> None:
+        for adapter in self.adapters:
+            adapter.warmup()
+
     def detect(self, request: AiSafetyDetectRequest) -> AiSafetyDetectResponse:
         started = perf_counter()
         prompt_text = request.input.prompt_text
-        detector_config = {detector.type: detector for detector in self.detectors}
+        detector_config = _detector_config_with_policy_overrides(
+            self.detectors,
+            request.detector_config.detector_policies,
+        )
         rule_signals = _fast_rule_signals(prompt_text, detector_config, self.fast_rule_detectors)
         ml_signals: list[SafetySignal] = []
         if _should_run_ml_adapters(prompt_text, detector_config, rule_signals):
@@ -352,8 +363,13 @@ class AiSafetyDetectorService:
         )
         signals = _apply_non_real_data_allow_guard(prompt_text, signals)
         signals = _apply_contextual_action_policy(prompt_text, signals)
+        signals = _apply_request_policy_actions(
+            signals,
+            request.detector_config.detector_policies,
+        )
         enforcement_signals = _enforcement_signals(signals)
         redacted_prompt = redact_prompt(prompt_text, enforcement_signals)
+        log_safe_prompt = redact_prompt(prompt_text, _log_safe_signals(signals))
         type_counts = Counter(
             signal.detector_type for signal in signals
         )
@@ -367,9 +383,10 @@ class AiSafetyDetectorService:
                 runtime=AI_SAFETY_DETECTOR_RUNTIME,
             ),
             outcome=outcome,
-            mode="shadow",
+            mode=request.mode,
             redactedPrompt=redacted_prompt,
-            redactedPromptPreview=preview_redacted_prompt(redacted_prompt),
+            logSafePrompt=log_safe_prompt,
+            redactedPromptPreview=preview_redacted_prompt(log_safe_prompt),
             detectorSummary=AiSafetyDetectorSummary(
                 detectedCount=len(signals),
                 detectorCategories=sorted(type_counts),
@@ -380,12 +397,40 @@ class AiSafetyDetectorService:
                     source=signal.source,
                     confidence=signal.confidence if request.detector_config.return_confidence else None,
                     action=signal.action,
-                    mode="shadow",
+                    mode=request.mode,
                 )
                 for signal in signals
             ],
             latencyMs=latency_ms,
         )
+
+
+def _detector_config_with_policy_overrides(
+    detectors: tuple[SafetyDetector, ...],
+    overrides: list[AiSafetyDetectorPolicy],
+) -> dict[str, SafetyDetector]:
+    detector_config = {detector.type: detector for detector in detectors}
+    for override in overrides:
+        detector = detector_config.get(override.detector_type)
+        if detector is None:
+            continue
+        detector_config[override.detector_type] = detector.model_copy(
+            update={"action": override.action}
+        )
+    return detector_config
+
+
+def _apply_request_policy_actions(
+    signals: list[SafetySignal],
+    policies: list[AiSafetyDetectorPolicy],
+) -> list[SafetySignal]:
+    actions = {policy.detector_type: policy.action for policy in policies}
+    return [
+        replace(signal, action=action)
+        if (action := actions.get(signal.detector_type)) is not None
+        else signal
+        for signal in signals
+    ]
 
 
 def _outcome_from_signals(signals: list[SafetySignal]) -> str:
@@ -398,6 +443,10 @@ def _outcome_from_signals(signals: list[SafetySignal]) -> str:
 
 def _enforcement_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
     return [signal for signal in signals if signal.action != "allow"]
+
+
+def _log_safe_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
+    return [replace(signal, action="redact") for signal in signals]
 
 
 def _apply_contextual_action_policy(
@@ -529,13 +578,40 @@ def _ml_detections(
     adapters: tuple[PrivacyFilterAdapter, ...],
 ) -> list[Detection]:
     detections: list[Detection] = []
-    for window in _ml_windows_for_prompt(prompt_text, rule_signals):
-        for adapter in adapters:
-            for detection in adapter.detect(window.text):
-                offset_detection = _offset_detection(detection, window.start, len(prompt_text))
-                if offset_detection is not None:
-                    detections.append(offset_detection)
+    windows = _ml_windows_for_prompt(prompt_text, rule_signals)
+    if len(adapters) == 1 or not _parallel_adapters_enabled():
+        for window in windows:
+            for adapter in adapters:
+                for detection in adapter.detect(window.text):
+                    offset_detection = _offset_detection(detection, window.start, len(prompt_text))
+                    if offset_detection is not None:
+                        detections.append(offset_detection)
+        return detections
+
+    with ThreadPoolExecutor(max_workers=len(adapters), thread_name_prefix="pii-detector") as executor:
+        for window in windows:
+            adapter_results = executor.map(
+                _detect_with_adapter,
+                ((adapter, window.text) for adapter in adapters),
+            )
+            for result in adapter_results:
+                for detection in result:
+                    offset_detection = _offset_detection(detection, window.start, len(prompt_text))
+                    if offset_detection is not None:
+                        detections.append(offset_detection)
     return detections
+
+
+def _detect_with_adapter(
+    adapter_and_text: tuple[PrivacyFilterAdapter, str],
+) -> list[Detection]:
+    adapter, text = adapter_and_text
+    return adapter.detect(text)
+
+
+def _parallel_adapters_enabled() -> bool:
+    value = os.environ.get(PARALLEL_ADAPTERS_ENV, "false").strip().lower()
+    return value not in {"0", "false", "no", "off"}
 
 
 def _ml_windows_for_prompt(

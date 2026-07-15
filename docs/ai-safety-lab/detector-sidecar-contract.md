@@ -24,7 +24,7 @@ Top-level request 후보:
 ```json
 {
   "contractVersion": "ai-safety-detector.v1",
-  "mode": "shadow",
+  "mode": "enforce",
   "model": {
     "modelId": "openai/privacy-filter",
     "runtime": "cpu_only"
@@ -35,12 +35,18 @@ Top-level request 후보:
   },
   "detectorConfig": {
     "detectorSet": "lab-default",
-    "returnConfidence": true
+    "returnConfidence": true,
+    "detectorPolicies": [
+      {"detectorType": "email", "action": "redact"},
+      {"detectorType": "api_key", "action": "block"}
+    ]
   }
 }
 ```
 
 `promptText` example은 synthetic placeholder만 사용한다. 실제 고객 문장, 실제 이메일, 실제 전화번호, 실제 token, 실제 credential을 문서나 fixture에 넣지 않는다.
+
+`mode=shadow`는 sanitized observation과 log-safe redaction만 제공하며 Provider에 전달할 prompt와 최종 action을 변경하지 않는다. `mode=enforce`에서만 Gateway가 sidecar의 redaction/block을 실행 결과에 반영한다. `detectorPolicies`가 있으면 같은 detector type의 sidecar 기본 action보다 우선하며 Tenant Chat RuntimeSnapshot의 `allow|redact|block`을 보존한다.
 
 ## 4. Response Semantics
 
@@ -52,8 +58,9 @@ Success response 후보:
 {
   "contractVersion": "ai-safety-detector.v1",
   "outcome": "redacted",
-  "mode": "shadow",
+  "mode": "enforce",
   "redactedPrompt": "Contact [EMAIL_REDACTED].",
+  "logSafePrompt": "Contact [EMAIL_REDACTED].",
   "redactedPromptPreview": "Contact [EMAIL_REDACTED].",
   "detectorSummary": {
     "detectedCount": 1,
@@ -65,7 +72,7 @@ Success response 후보:
       "source": "privacy_filter_adapter",
       "confidence": 0.91,
       "action": "redact",
-      "mode": "shadow",
+      "mode": "enforce",
       "modelLabel": "private_email",
       "modelId": "openai/privacy-filter",
       "runtime": "cpu_only"
@@ -75,7 +82,9 @@ Success response 후보:
 }
 ```
 
-The response MUST NOT include:
+`redactedPrompt` is the Provider-safe policy result and can retain a value explicitly marked `allow`. `logSafePrompt` and `redactedPromptPreview` always redact detected values, including `allow`, and are the only prompt-shaped fields permitted in logs or reports.
+
+Outside the policy-governed `redactedPrompt`, the response MUST NOT include:
 
 - raw prompt
 - raw detected value
@@ -127,20 +136,21 @@ Initial `openai/privacy-filter` label mapping:
 |---|---|---|
 | `private_email` | `email` | `redact` |
 | `private_phone` | `phone_number` | `redact` |
-| `private_person` | `person_name` | `redact` |
 | `private_address` | `postal_address` | `redact` |
 | `account_number` | `account_number` | `block` |
 | `private_date` | `private_date` | `redact` |
 | `private_url` | `private_url` | `redact` |
 | `secret` | `secret` | `block` |
 
-Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 
 | Model Label | GateLM Detector Type | Action Candidate |
 |---|---|---|
-| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+| `EMA-*` / `email` | `email` | `redact` |
+| `PHN-*` / `phone` / `telephone` | `phone_number` | `redact` |
+| `RRN-*` | `resident_registration_number` | `block` |
 
-When KoELECTRA is configured as an additional detector, the sidecar keeps the primary `model.modelId` as `openai/privacy-filter` and exposes KoELECTRA contribution through sanitized `detections[].source` and `detectorSummary.detectorCategories`.
+The pinned OpenAI label map also excludes person and organization labels. Current `person_name` and `organization_name` results come from `local_rule` backstops, not either ONNX model. When KoELECTRA is configured as an additional detector, the sidecar keeps the primary `model.modelId` as `openai/privacy-filter` and exposes accepted KoELECTRA contributions through sanitized `detections[].source` and `detectorSummary.detectorCategories`.
 
 ## 9. Schema
 

@@ -82,6 +82,11 @@ if (-not $DryRun) {
 $env:AI_SERVICE_HOST = $BindHost
 $env:AI_SERVICE_PORT = [string]$Port
 $env:AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME = "onnx"
+$env:AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED = "true"
+$env:AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED = "false"
+$env:AI_SERVICE_ONNX_INTRA_OP_THREADS = "4"
+$env:AI_SERVICE_ONNX_INTER_OP_THREADS = "1"
+$env:AI_SERVICE_ONNX_ALLOW_SPINNING = "false"
 $env:AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID = (Resolve-Path -LiteralPath $PrimaryModelPath).Path
 $env:AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS = (Resolve-Path -LiteralPath $KoelectraModelPath).Path
 $env:PYTHONIOENCODING = "utf-8"
@@ -108,7 +113,8 @@ Write-Host ""
 Write-Host "Gateway sidecar env:"
 Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true"
 Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_URL=http://127.0.0.1:$Port/internal/ai-safety/v1/detect"
-Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS=300"
+Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS=750"
+Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_MODE=enforce"
 Write-Host ""
 
 if ($DryRun) {

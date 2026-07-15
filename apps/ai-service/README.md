@@ -44,27 +44,41 @@ prompt
 -> redaction preview
 ```
 
-Install ML dependencies only in a local sidecar image or experiment environment:
+Install ONNX dependencies only in a local sidecar image or experiment environment:
 
 ```bash
 cd apps/ai-service
-python -m pip install -e ".[ml,test]"
+python -m pip install -e ".[onnx,test]"
 ```
 
-`PrivacyFilterAdapter` lazy-loads `transformers.pipeline(task="token-classification")` and is not wired into the default evaluator unless it is explicitly injected. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
+`PrivacyFilterAdapter` lazy-loads either the direct OpenAI ONNX Runtime classifier or an Optimum ONNX token-classification pipeline. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
 
 The primary sidecar detector model defaults to `openai/privacy-filter`. For lightweight local Korean privacy NER experiments, keep the primary model and add the quantized KoELECTRA ONNX artifact as an additional detector:
 
 ```bash
 AI_SERVICE_TRANSFORMERS_OFFLINE=1
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
+AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED=false
+AI_SERVICE_ONNX_INTRA_OP_THREADS=4
+AI_SERVICE_ONNX_INTER_OP_THREADS=1
+AI_SERVICE_ONNX_ALLOW_SPINNING=false
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter
 AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized
 ```
 
 Both models are loaded through local ONNX Runtime pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/onnx` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
-KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`. The `amoeba04--koelectra-small-v3-privacy-ner-quantized` local artifact keeps the same public model identity and sanitized source as the non-quantized KoELECTRA detector.
+For the pinned 2026-07-15 bundle, the accepted KoELECTRA model labels are email, phone number, and resident registration number only. Person-name and organization-name detections are intentionally excluded from both model label maps and currently come from the local rule backstop. The supplied evaluation does not justify claiming model-based Korean name or organization detection.
+
+Import only manifest-listed model artifacts from the delivery archive and verify every file hash:
+
+```bash
+python scripts/tenant_chat_pii_models/import_bundle.py \
+  apps/ai-service/.cache/bundles/tenant-chat-pii-model-bundle-20260715.zip
+```
+
+The imported `.cache/onnx` files are runtime assets and are ignored by Git. The manifest, evaluation summary, third-party notices, and Apache-2.0 text remain versioned in the repository. See `docs/ai-safety-lab/tenant-chat-pii-model-integration-20260715.md` for measured evidence and promotion limits.
 
 ## AI Safety Detector Sidecar
 
@@ -74,21 +88,25 @@ The local detector sidecar endpoint is available at:
 POST /internal/ai-safety/v1/detect
 ```
 
-It uses the `ai-safety-detector.v1` draft contract and returns `redactedPrompt`, `detectorSummary`, and sanitized `detections`. The endpoint is `shadow` mode by default and uses CPU-only local token-classification adapters. `openai/privacy-filter` remains the primary default adapter, and additional adapters such as KoELECTRA can be enabled through configuration. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+It uses the `ai-safety-detector.v1` draft contract and returns Provider-safe `redactedPrompt`, storage-safe `logSafePrompt`, `detectorSummary`, and sanitized `detections`. The endpoint accepts `shadow` and `enforce`: shadow observations do not change the Provider prompt or final action, while enforce results can redact or block before Provider execution. `logSafePrompt` and the preview redact detections even when the Provider policy action is `allow`. `openai/privacy-filter` remains the primary default adapter, and additional adapters such as KoELECTRA can be enabled through configuration. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
 
 Example request shape:
 
 ```json
 {
   "contractVersion": "ai-safety-detector.v1",
-  "mode": "shadow",
+  "mode": "enforce",
   "input": {
     "promptText": "Use synthetic text only.",
     "locale": "en-US"
   },
   "detectorConfig": {
     "detectorSet": "privacy-filter-default",
-    "returnConfidence": true
+    "returnConfidence": true,
+    "detectorPolicies": [
+      {"detectorType": "email", "action": "redact"},
+      {"detectorType": "api_key", "action": "block"}
+    ]
   }
 }
 ```
@@ -100,6 +118,11 @@ cd apps/ai-service
 python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true \
+AI_SERVICE_AI_SAFETY_PARALLEL_ADAPTERS_ENABLED=false \
+AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
+AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
+AI_SERVICE_ONNX_ALLOW_SPINNING=false \
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
 AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
 python -m app.main

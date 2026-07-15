@@ -26,7 +26,11 @@
       ]
     },
     "redactedPrompt": {
-      "description": "Prompt text after sidecar redaction. This must not include detected raw sensitive values.",
+      "description": "Provider-safe policy result. A value explicitly marked allow can remain here; this field must never be logged.",
+      "type": "string"
+    },
+    "logSafePrompt": {
+      "description": "Storage/preview-safe prompt with allow detections redacted as well. This value must be used for logs instead of redactedPrompt.",
       "type": "string"
     },
     "model": {
@@ -62,6 +66,7 @@
         "outcome",
         "mode",
         "redactedPrompt",
+        "logSafePrompt",
         "detectorSummary",
         "detections",
         "latencyMs"
@@ -86,6 +91,11 @@
           {
             "required": [
               "redactedPrompt"
+            ]
+          },
+          {
+            "required": [
+              "logSafePrompt"
             ]
           },
           {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
+from app.api.dependencies import create_ai_safety_detector_service
 from app.api.routes import ai_safety, health, safety
 from app.core.config import Settings, load_settings
 from app.core.errors import (
@@ -25,6 +26,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = resolved_settings
+    if resolved_settings.ai_safety_preload_enabled:
+        detector_service = create_ai_safety_detector_service(resolved_settings)
+        detector_service.warmup()
+        app.state.ai_safety_detector_service = detector_service
     app.include_router(health.router)
     app.include_router(safety.router)
     app.include_router(ai_safety.router)
@@ -42,7 +47,7 @@ def run() -> None:
 
     settings = load_settings()
     uvicorn.run(
-        "app.main:app",
+        app,
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level.lower(),

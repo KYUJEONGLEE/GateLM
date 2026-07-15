@@ -11,17 +11,24 @@ import (
 
 var ErrUnavailable = errors.New("tenant chat safety unavailable")
 
-type engine interface {
+type MaskingEngine interface {
 	Apply(ctx context.Context, req masking.ApplyRequest) (masking.Result, error)
 }
 
 type Evaluator struct {
-	engine engine
+	engine MaskingEngine
 }
 
 func NewEvaluator() *Evaluator {
 	local := masking.NewP0Engine()
 	return &Evaluator{engine: local}
+}
+
+func NewEvaluatorWithEngine(engine MaskingEngine) *Evaluator {
+	if engine == nil {
+		return NewEvaluator()
+	}
+	return &Evaluator{engine: engine}
 }
 
 func (e *Evaluator) Evaluate(

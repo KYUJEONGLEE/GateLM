@@ -27,6 +27,7 @@ class Settings:
     ai_safety_detector_model_id: str = DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID
     ai_safety_additional_detector_model_ids: tuple[str, ...] = ()
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
+    ai_safety_preload_enabled: bool = False
 
 
 def load_settings() -> Settings:
@@ -44,6 +45,10 @@ def load_settings() -> Settings:
             "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS",
         ),
         ai_safety_detector_runtime=_env_ai_safety_detector_runtime(),
+        ai_safety_preload_enabled=_env_bool(
+            "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED",
+            False,
+        ),
     )
 
 

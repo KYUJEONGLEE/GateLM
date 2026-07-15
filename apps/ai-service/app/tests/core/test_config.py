@@ -80,8 +80,19 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "ai_safety_detector_model_id",
                 "ai_safety_additional_detector_model_ids",
                 "ai_safety_detector_runtime",
+                "ai_safety_preload_enabled",
             },
         )
+
+    def test_settings_loads_ai_safety_preload_flag(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED": "true"},
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertTrue(settings.ai_safety_preload_enabled)
 
     def test_launcher_passes_access_log_setting_to_uvicorn(self) -> None:
         env = {
@@ -94,6 +105,7 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             run()
 
         uvicorn_run.assert_called_once()
+        self.assertNotIsInstance(uvicorn_run.call_args.args[0], str)
         self.assertEqual(uvicorn_run.call_args.kwargs["host"], "127.0.0.9")
         self.assertEqual(uvicorn_run.call_args.kwargs["port"], 8011)
         self.assertEqual(uvicorn_run.call_args.kwargs["log_level"], "debug")

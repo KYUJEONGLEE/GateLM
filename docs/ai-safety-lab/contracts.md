@@ -28,7 +28,7 @@ MUST NOT:
 | First ML detector model | `openai/privacy-filter` |
 | Sidecar runtime | CPU-only local sidecar |
 | Sidecar output | `redactedPrompt`까지 반환 |
-| First ML adapter | `transformers.pipeline()` |
+| ONNX adapters | OpenAI direct ONNX Runtime + KoELECTRA Optimum ONNX pipeline |
 | Confidence threshold | 계약에 고정하지 않고 evaluation 기준값으로만 관리 |
 | Sidecar contract version | `ai-safety-detector.v1` |
 | Sidecar endpoint candidate | `POST /internal/ai-safety/v1/detect` |
@@ -52,7 +52,7 @@ prompt
 
 Request-side safety는 downstream routing, cache, provider call, streaming start보다 먼저 완료되어야 한다.
 
-초기 ML detector는 `shadow`로 시작한다. regex/rule detector가 초기 enforcement baseline이며, ML detector의 enforce 승격은 evaluation evidence와 별도 계약 판단 이후에만 한다.
+초기 ML detector는 `shadow`로 시작한다. regex/rule detector가 초기 enforcement baseline이다. Tenant Chat 연결은 별도 배포 설정으로 `enforce`를 명시하며, 이 경우에도 아래 evaluation evidence 한계는 그대로 유지한다.
 
 `openai/privacy-filter`는 첫 ML detector model이다. 이 모델도 초기에는 shadow로만 실행한다.
 
@@ -153,7 +153,6 @@ Initial `openai/privacy-filter` label mapping:
 |---|---|---|
 | `private_email` | `email` | `redact` |
 | `private_phone` | `phone_number` | `redact` |
-| `private_person` | `person_name` | `redact` |
 | `private_address` | `postal_address` | `redact` |
 | `account_number` | `account_number` | `block` |
 | `private_date` | `private_date` | `redact` |
@@ -164,11 +163,15 @@ Initial `openai/privacy-filter` label mapping:
 
 `secret` from `openai/privacy-filter` maps to `secret`. Existing regex/rule secret detectors remain the enforce baseline for critical block behavior.
 
-Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 
 | Model Label | GateLM Detector Type | Default Action Candidate |
 |---|---|---|
-| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+| `EMA-*` / `email` | `email` | `redact` |
+| `PHN-*` / `phone` / `telephone` | `phone_number` | `redact` |
+| `RRN-*` | `resident_registration_number` | `block` |
+
+2026-07-15 pinned bundle에서는 `person_name`과 `organization_name`이 두 모델의 accepted label map에 없으며 해당 결과는 local rule backstop이다.
 
 ## 9. Request-Level Action
 

@@ -8,6 +8,7 @@ from app.schemas.safety import (
     AiSafetyDetectRequest,
     AiSafetyDetectorConfig,
     AiSafetyDetectorInput,
+    AiSafetyDetectorPolicy,
     SafetyDetector,
 )
 from app.services.ai_safety_detector import AiSafetyDetectorService
@@ -57,6 +58,24 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
 
         self.assertEqual(service.detector_model_states()[0]["loadState"], "loaded")
 
+    def test_warmup_runs_every_configured_adapter(self) -> None:
+        calls: list[str] = []
+        service = AiSafetyDetectorService(
+            adapters=(
+                PrivacyFilterAdapter(classifier=lambda text: calls.append(f"primary:{text}") or []),
+                PrivacyFilterAdapter(
+                    classifier=lambda text: calls.append(f"additional:{text}") or [],
+                    model_name=KOELECTRA_PRIVACY_NER_MODEL,
+                ),
+            )
+        )
+
+        service.warmup()
+
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(calls[0].startswith("primary:"))
+        self.assertTrue(calls[1].startswith("additional:"))
+
     def test_detect_skips_ml_when_fast_rules_cover_deterministic_pii(self) -> None:
         classifier_calls = 0
 
@@ -102,6 +121,49 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
         self.assertEqual(classifier_calls, 0)
         self.assertEqual(response.outcome, "redacted")
         self.assertEqual(response.detector_summary.detector_categories, ["organization_name"])
+
+    def test_detect_applies_request_detector_policy_override(self) -> None:
+        prompt = "Share policy-owner@example.invalid externally."
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=lambda _text: []),
+        )
+
+        allowed = service.detect(
+            AiSafetyDetectRequest(
+                contractVersion=AI_SAFETY_DETECTOR_CONTRACT_VERSION,
+                input=AiSafetyDetectorInput(promptText=prompt),
+                detectorConfig=AiSafetyDetectorConfig(
+                    returnConfidence=False,
+                    detectorPolicies=(
+                        AiSafetyDetectorPolicy(detectorType="email", action="allow"),
+                    ),
+                ),
+            )
+        )
+        blocked = service.detect(
+            AiSafetyDetectRequest(
+                contractVersion=AI_SAFETY_DETECTOR_CONTRACT_VERSION,
+                mode="enforce",
+                input=AiSafetyDetectorInput(promptText=prompt),
+                detectorConfig=AiSafetyDetectorConfig(
+                    returnConfidence=False,
+                    detectorPolicies=(
+                        AiSafetyDetectorPolicy(detectorType="email", action="block"),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(allowed.outcome, "passed")
+        self.assertEqual(allowed.redacted_prompt, prompt)
+        self.assertNotIn("policy-owner@example.invalid", allowed.log_safe_prompt)
+        self.assertNotIn("policy-owner@example.invalid", allowed.redacted_prompt_preview or "")
+        self.assertEqual(allowed.detections[0].action, "allow")
+        self.assertEqual(blocked.outcome, "blocked")
+        self.assertEqual(blocked.mode, "enforce")
+        self.assertNotIn("policy-owner@example.invalid", blocked.redacted_prompt)
+        self.assertEqual(blocked.detections[0].action, "block")
+        self.assertEqual(blocked.detections[0].mode, "enforce")
 
     def test_detect_distinguishes_account_number_from_bank_account(self) -> None:
         service = AiSafetyDetectorService(
