@@ -2,16 +2,17 @@
 
 | Field | Value |
 |---|---|
-| Status | Canonical offline component; Gateway runtime에는 미활성 |
+| Status | Canonical offline component + opt-in Gateway startup shadow; 제품 request/routing에는 미활성 |
 | Model | `intfloat/multilingual-e5-small` |
 | Source revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
-| Runtime | NumPy + ONNX Runtime CPU, dynamic QInt8 |
+| Runtime | Canonical Python ORT CPU + optional Go/Linux amd64 native ORT CPU, dynamic QInt8 |
 | Canonical output | L2-normalized `float32[batch,64]` |
 | Manifest | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json) |
+| Gateway runtime lock | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json) |
 | PCA artifact | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.npz`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.npz) |
 | Last reviewed | 2026-07-15 |
 
-이 계약은 difficulty semantic 후보가 사용하는 유일한 offline encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. 이 component의 존재는 Gateway hot path 또는 active routing contract의 변경을 뜻하지 않는다.
+이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Optional Gateway image는 같은 경로를 process-local startup shadow로 검증하지만 요청별 결과를 제품 routing에 연결하지 않는다. 이 component의 존재는 active routing contract의 변경을 뜻하지 않는다.
 
 ## 1. Canonical Pipeline
 
@@ -62,13 +63,16 @@ Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[
 
 PCA NPZ와 작은 manifest는 source control에 포함한다. Tokenizer와 ONNX model처럼 큰 runtime artifact는 Git에 포함하지 않는다. 개발 환경에서는 `.tmp/difficulty-semantic-encoder-artifacts`의 로컬 artifact cache에 exact pinned revision과 hash로 준비한다.
 
-배포 환경은 다음 규칙을 지켜야 한다.
+Optional Gateway shadow 배포 환경은 다음 규칙을 지켜야 한다.
 
-- 향후 Docker image build 단계에서 manifest에 나열된 tokenizer 파일과 dynamic-QInt8 ONNX model을 image에 반드시 포함한다.
-- 같은 image에는 committed PCA NPZ와 manifest도 함께 포함한다.
+- [`../../infra/docker/gateway-core-e5-shadow.Dockerfile`](../../infra/docker/gateway-core-e5-shadow.Dockerfile)은 검증된 local bundle을 `difficulty_e5` named build context로만 받는다. 기본 [`../../infra/docker/gateway-core.Dockerfile`](../../infra/docker/gateway-core.Dockerfile)은 계속 CGO-free이며 E5를 포함하지 않는다.
+- Optional image build 단계에서 manifest에 나열된 tokenizer 파일, dynamic-QInt8 ONNX model, encoder manifest, Linux amd64 runtime lock과 ONNX Runtime shared library를 포함한다.
+- Rust tokenizer static library는 image build에만 사용하고 최종 runtime image에는 넣지 않는다. 최종 image에는 request inference에 필요한 model/tokenizer와 ONNX Runtime shared library만 둔다.
 - Container/runtime 시작 이후 Hugging Face 또는 다른 network source에서 artifact를 다운로드하면 안 된다.
-- 시작 시 모든 runtime artifact의 path, byte size와 SHA-256, PCA file/parameter hash와 manifest bundle hash를 검증한다.
+- Image build는 [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256)의 exact file allowlist와 전체 checksum을 검증하며 추가 파일과 symlink를 거부한다. Gateway 시작은 runtime lock, 모든 encoder artifact와 ONNX Runtime library의 path, byte size와 SHA-256을 다시 검증한다.
 - 누락, hash mismatch, shape mismatch 또는 지원하지 않는 revision이면 encoder를 실행하지 않고 fail closed한다.
+
+Gateway Linux amd64 profile은 `github.com/daulet/tokenizers v1.23.0`과 그 release의 Rust tokenizer core `0.22.0`, `github.com/yalue/onnxruntime_go v1.22.0`, ONNX Runtime `1.22.1`을 고정한다. Canonical Python environment의 tokenizer는 `0.21.2`이므로 버전 문자열을 동일하다고 가정하지 않는다. 대신 Gateway와 동일한 단건 shape에서 고정된 비민감 English/Korean/right-truncation instruction 3건의 pooled 384개 값을 모두 `1e-5` tolerance로 비교한다. QInt8 결과는 batch shape에 따라 미세하게 달라질 수 있으므로 batch와 단건 결과를 직접 parity 기준으로 섞지 않는다. Padding mask 제외는 별도의 순수 pooling test로 검증한다.
 
 `prepare`는 개발 또는 image build처럼 명시적으로 허용된 artifact 준비 단계에서만 network를 사용할 수 있다. `fit-pca`, `verify`, semantic-head training과 실제 inference는 local-only이며 network-disabled 상태로 실행한다.
 
@@ -84,20 +88,28 @@ corepack pnpm run v2.1:routing:prepare-e5-encoder
 corepack pnpm run v2.1:routing:fit-e5-pca
 corepack pnpm run v2.1:routing:test-e5-encoder
 corepack pnpm run verify:v2.1-e5-encoder
+corepack pnpm run v2.1:routing:setup-gateway-e5-shadow-native
+corepack pnpm run v2.1:routing:prepare-gateway-e5-shadow
+corepack pnpm run verify:v2.1-difficulty-gateway-bundle
+corepack pnpm run verify:v2.1-gateway-e5-shadow
 ```
 
-`prepare`는 large artifact를 로컬 cache에 만들기 때문에 별도 단계다. 일반 verifier는 network download를 대신 수행하지 않는다.
+`prepare`는 large artifact를 로컬 cache에 만들기 때문에 별도 단계다. Gateway bundle 준비 명령은 이미 존재하는 pinned encoder cache, tokenizer native archive와 ONNX Runtime NuGet package를 검증해 `.tmp` 아래 Docker build context로 조립한다. Native package가 없는 개발 환경은 명시적인 `setup-gateway-e5-shadow-native` 명령에서만 pinned GitHub release/NuGet URL을 사용하며 다운로드 완료 전 임시 파일의 size와 SHA-256을 검증한다. Encoder/model artifact는 기존 `prepare-e5-encoder` 단계가 소유한다. 일반 verifier와 container runtime은 network download를 대신 수행하지 않는다.
 
 ## 6. Runtime Boundary
 
-이 encoder는 offline evaluation과 semantic-head/difficulty-head artifact 생성에만 사용하며 Gateway request path에서는 아직 실행하지 않는다. Selected 118D checked-in Go bundle은 이 encoder의 attention-mask mean-pooled `float32[384]` 출력 이후 PCA·L2·semantic-head·final score만 재현한다. Tokenizer/ONNX 호출, image packaging과 request-level shadow adapter는 포함하지 않는다. Gateway의 current `difficulty-feature-vector.v1`, rule-based classifier, `DifficultyResult`, RuntimeSnapshot, routing policy, API, DB, Event와 Metrics는 변경하지 않는다.
+Gateway에는 build tag `difficulty_e5_onnx && linux && cgo`로 제한된 local tokenizer/ONNX adapter와 request-independent startup shadow가 존재한다. `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true`일 때만 artifact를 검증하고 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → 4 semantic head/12D → final 118D score를 한 번 실행한다. 실패하면 Gateway 시작을 중단한다. 지원하지 않는 기본 CGO-free build에서 enable하면 `unavailable`로 fail closed한다.
+
+Package-level evaluator는 실제 `PromptFeatures.instructionText`만 받으며 동시 ONNX 실행을 1개로 제한한다. 빈 instruction은 tokenizer 전 `not_applicable`, 경합은 `busy`, runtime 실패는 안전한 상태 코드로 반환하고 raw text, token, embedding, head output 또는 native error detail을 노출하지 않는다. 현재 Gateway router는 이 evaluator를 제품 요청에 등록하지 않는다. 따라서 startup shadow 결과는 routing, RuntimeSnapshot, API, DB, Event, Metrics, log schema와 `difficulty-feature-vector.v1` 42차원 외부 계약을 변경하지 않는다.
+
+Selected 118D checked-in Go bundle은 pooled 384D 이후 `42D rule + PCA 64D + fixed 4-head probability 12D`를 고정 배열로 정확히 조립하고 final difficulty head, Platt calibration과 threshold를 적용한다.
 
 Gateway hot path 승격 전에는 다음 경계를 모두 충족해야 한다.
 
 - 실패한 per-category safety regression을 새 evidence run에서 해결
-- pinned tokenizer·encoder·PCA·semantic-head·difficulty-head·calibrator를 포함하는 image/runtime packaging과 시작 시 hash 검증
+- request-level shadow 실행 위치와 bounded overhead 정책 승인
 - supported runtime의 latency, memory와 failure isolation evidence
-- supported runtime별 Python inference와 generated Go inference의 numeric tolerance 및 label parity
+- 새 promotion artifact에 대한 supported runtime별 end-to-end label parity
 - [`contracts.md`](contracts.md), [`classification-pipeline.md`](classification-pipeline.md)와 필요한 verifier를 포함한 active runtime contract 승인
 
 위 조건을 충족한 artifact도 먼저 opt-in shadow로 실행한다. Shadow 결과와 rollback 준비를 검토한 뒤 owner가 exact artifact version, bundle hash와 threshold policy를 명시적으로 promotion해야 하며 자동 승격은 허용하지 않는다.

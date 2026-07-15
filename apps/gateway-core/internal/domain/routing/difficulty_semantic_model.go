@@ -69,26 +69,9 @@ func (material *difficultySemanticModelMaterial) inferModelPath(
 	if material == nil || !UsesDifficultyModelPath(features) {
 		return DifficultyResult{}, errDifficultySemanticModelPathRequired
 	}
-	projection, err := material.projectPooled(pooled)
+	vector, err := material.assembleModelVector(features, pooled)
 	if err != nil {
 		return DifficultyResult{}, err
-	}
-	heads, err := material.predictSemanticHeads(projection)
-	if err != nil {
-		return DifficultyResult{}, err
-	}
-	rule := vectorizeDifficultyFeaturesV1Fixed(features)
-	var vector [difficultySemanticTotalDimension]float64
-	for index, value := range rule {
-		vector[index] = value
-	}
-	projectionOffset := DifficultyFeatureVectorDimensionV1
-	for index, value := range projection {
-		vector[projectionOffset+index] = float64(value)
-	}
-	headOffset := projectionOffset + difficultySemanticProjectionDimension
-	for index, value := range heads {
-		vector[headOffset+index] = value
 	}
 
 	logit := material.finalBias
@@ -107,6 +90,37 @@ func (material *difficultySemanticModelMaterial) inferModelPath(
 		ComplexityScore: calibratedScore,
 		Difficulty:      difficultyFromScore(calibratedScore, material.threshold),
 	}, nil
+}
+
+func (material *difficultySemanticModelMaterial) assembleModelVector(
+	features DifficultyFeatures,
+	pooled [difficultySemanticPooledDimension]float32,
+) ([difficultySemanticTotalDimension]float64, error) {
+	var vector [difficultySemanticTotalDimension]float64
+	if material == nil || !UsesDifficultyModelPath(features) {
+		return vector, errDifficultySemanticModelPathRequired
+	}
+	projection, err := material.projectPooled(pooled)
+	if err != nil {
+		return vector, err
+	}
+	heads, err := material.predictSemanticHeads(projection)
+	if err != nil {
+		return vector, err
+	}
+	rule := vectorizeDifficultyFeaturesV1Fixed(features)
+	for index, value := range rule {
+		vector[index] = value
+	}
+	projectionOffset := DifficultyFeatureVectorDimensionV1
+	for index, value := range projection {
+		vector[projectionOffset+index] = float64(value)
+	}
+	headOffset := projectionOffset + difficultySemanticProjectionDimension
+	for index, value := range heads {
+		vector[headOffset+index] = value
+	}
+	return vector, nil
 }
 
 func (material *difficultySemanticModelMaterial) projectPooled(

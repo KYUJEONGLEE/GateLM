@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -11,6 +12,128 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestDifficultySemanticModelAssemblesExact118DBlocks(t *testing.T) {
+	features := syntheticDifficultySemanticModelFeatures()
+	vector, err := generatedDifficultySemanticModel118D.assembleModelVector(
+		features,
+		syntheticDifficultySemanticPooled(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vector) != 118 {
+		t.Fatalf("semantic vector dimension=%d, want 118", len(vector))
+	}
+	if vector[0] != 0 || vector[1] != 1 || vector[8] != 1 || vector[41] != 0 {
+		t.Fatalf("rule block offsets drifted")
+	}
+	if delta := math.Abs(vector[42] - -0.3578607439994812); delta > 2e-6 {
+		t.Fatalf("projection block start delta=%g exceeds tolerance", delta)
+	}
+	if delta := math.Abs(vector[105] - 0.08702966570854187); delta > 2e-6 {
+		t.Fatalf("projection block end delta=%g exceeds tolerance", delta)
+	}
+	if delta := math.Abs(vector[106] - 0.6659214847694449); delta > 1e-6 {
+		t.Fatalf("semantic head block start delta=%g exceeds tolerance", delta)
+	}
+	if delta := math.Abs(vector[117] - 0.18833381597465082); delta > 1e-6 {
+		t.Fatalf("semantic head block end delta=%g exceeds tolerance", delta)
+	}
+}
+
+func TestDifficultySemanticShadowEvaluatorUsesInstructionOnlyEncoder(t *testing.T) {
+	encoder := &testDifficultyPooledEncoder{pooled: syntheticDifficultySemanticPooled()}
+	evaluator := NewDifficultySemanticShadowEvaluator(encoder)
+	features := ExtractPromptFeatures("Explain one workflow step.")
+
+	result := evaluator.Evaluate(context.Background(), features, CategoryGeneral)
+
+	if result.Status != DifficultySemanticShadowReady || result.Difficulty.Difficulty != DifficultyComplex {
+		t.Fatalf("shadow result=%+v, want ready complex result", result)
+	}
+	if encoder.input != "explain one workflow step." {
+		t.Fatalf("encoder input boundary drifted")
+	}
+}
+
+func TestDifficultySemanticShadowEvaluatorFailsClosedWithoutExposingEncoderError(t *testing.T) {
+	encoder := &testDifficultyPooledEncoder{err: errors.New("secret token 123")}
+	evaluator := NewDifficultySemanticShadowEvaluator(encoder)
+	features := ExtractPromptFeatures("Explain one workflow step.")
+
+	result := evaluator.Evaluate(context.Background(), features, CategoryGeneral)
+
+	if result.Status != DifficultySemanticShadowInferenceFailed || result.Difficulty.Difficulty != "" {
+		t.Fatalf("shadow failure=%+v, want sanitized unavailable result", result)
+	}
+	if strings.Contains(result.Status, "secret") || strings.Contains(result.Status, "123") {
+		t.Fatalf("shadow status exposed encoder error: %q", result.Status)
+	}
+}
+
+func TestDifficultySemanticShadowEvaluatorReturnsUnavailableWithoutEncoder(t *testing.T) {
+	result := NewDifficultySemanticShadowEvaluator(nil).Evaluate(
+		context.Background(),
+		ExtractPromptFeatures("Explain one workflow step."),
+		CategoryGeneral,
+	)
+	if result.Status != DifficultySemanticShadowUnavailable || result.Difficulty.Difficulty != "" {
+		t.Fatalf("shadow result=%+v, want unavailable without a product result", result)
+	}
+}
+
+func TestDifficultySemanticShadowEvaluatorRejectsConcurrentInferenceAsBusy(t *testing.T) {
+	encoder := &blockingDifficultyPooledEncoder{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	evaluator := NewDifficultySemanticShadowEvaluator(encoder)
+	features := ExtractPromptFeatures("Explain one workflow step.")
+	firstDone := make(chan DifficultySemanticShadowResult, 1)
+	go func() {
+		firstDone <- evaluator.Evaluate(context.Background(), features, CategoryGeneral)
+	}()
+	<-encoder.entered
+
+	second := evaluator.Evaluate(context.Background(), features, CategoryGeneral)
+	if second.Status != DifficultySemanticShadowBusy || second.Difficulty.Difficulty != "" {
+		t.Fatalf("concurrent shadow result=%+v, want busy without a product result", second)
+	}
+	close(encoder.release)
+	if first := <-firstDone; first.Status != DifficultySemanticShadowReady {
+		t.Fatalf("first shadow result=%+v, want ready", first)
+	}
+}
+
+type testDifficultyPooledEncoder struct {
+	input  string
+	pooled DifficultySemanticPooled
+	err    error
+}
+
+func (encoder *testDifficultyPooledEncoder) EncodePooled(_ context.Context, instructionText string) (DifficultySemanticPooled, error) {
+	encoder.input = instructionText
+	return encoder.pooled, encoder.err
+}
+
+func (*testDifficultyPooledEncoder) Close() error { return nil }
+
+type blockingDifficultyPooledEncoder struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (encoder *blockingDifficultyPooledEncoder) EncodePooled(
+	_ context.Context,
+	_ string,
+) (DifficultySemanticPooled, error) {
+	close(encoder.entered)
+	<-encoder.release
+	return syntheticDifficultySemanticPooled(), nil
+}
+
+func (*blockingDifficultyPooledEncoder) Close() error { return nil }
 
 func TestGeneratedDifficultySemanticModelIdentityAndProjectionBitsArePinned(t *testing.T) {
 	identity := generatedDifficultySemanticModel118D.identity

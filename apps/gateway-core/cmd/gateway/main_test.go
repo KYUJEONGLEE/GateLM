@@ -2,18 +2,87 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 
 	goredis "github.com/redis/go-redis/v9"
 )
+
+type fakeDifficultyE5Encoder struct {
+	instruction string
+	closed      bool
+}
+
+func (encoder *fakeDifficultyE5Encoder) EncodePooled(
+	_ context.Context,
+	instruction string,
+) (routing.DifficultySemanticPooled, error) {
+	encoder.instruction = instruction
+	var pooled routing.DifficultySemanticPooled
+	for index := range pooled {
+		pooled[index] = float32(index%17) / 17
+	}
+	return pooled, nil
+}
+
+func (encoder *fakeDifficultyE5Encoder) Close() error {
+	encoder.closed = true
+	return nil
+}
+
+func TestInitializeDifficultyE5ShadowIsDisabledWithoutConstructingEncoder(t *testing.T) {
+	called := false
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return nil, errors.New("must not be called")
+		},
+	)
+	if err != nil || evaluator != nil || called {
+		t.Fatalf("disabled shadow initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) {
+	encoder := &fakeDifficultyE5Encoder{}
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:             true,
+			ArtifactRoot:        "/bundle",
+			EncoderManifestPath: "/bundle/manifest.json",
+			RuntimeLockPath:     "/bundle/lock.json",
+		},
+		func(bundle e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			if bundle.ArtifactRoot != "/bundle" ||
+				bundle.EncoderManifestPath != "/bundle/manifest.json" ||
+				bundle.RuntimeLockPath != "/bundle/lock.json" {
+				t.Fatalf("unexpected bundle config: %#v", bundle)
+			}
+			return encoder, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evaluator == nil || encoder.instruction != difficultyE5StartupSmokeInstruction {
+		t.Fatalf("startup smoke did not use pinned instruction-only input: %q", encoder.instruction)
+	}
+	if err := evaluator.Close(); err != nil || !encoder.closed {
+		t.Fatalf("close failed: closed=%v err=%v", encoder.closed, err)
+	}
+}
 
 func TestParsePostgresPoolConfigAppliesBoundsAndIdentity(t *testing.T) {
 	tuning := config.PostgresPoolConfig{

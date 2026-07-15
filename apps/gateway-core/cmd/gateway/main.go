@@ -33,6 +33,7 @@ import (
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
@@ -86,6 +87,18 @@ func main() {
 	}
 	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneInternalToken) == "" {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
+	}
+	difficultyE5Shadow, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		cfg.DifficultyE5Shadow,
+		e5onnx.NewEncoder,
+	)
+	if err != nil {
+		log.Fatalf("gateway-core difficulty E5 shadow initialization failed: %v", err)
+	}
+	if difficultyE5Shadow != nil {
+		defer difficultyE5Shadow.Close()
+		log.Printf("gateway-core difficulty E5 shadow initialized; product routing unchanged")
 	}
 
 	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
@@ -336,6 +349,40 @@ func main() {
 			log.Printf("gateway-core async terminal log flush failed: %v", err)
 		}
 	}
+}
+
+const difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
+
+type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
+
+func initializeDifficultyE5Shadow(
+	ctx context.Context,
+	cfg config.DifficultyE5ShadowConfig,
+	factory difficultyE5EncoderFactory,
+) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	if factory == nil {
+		return nil, errors.New("unavailable")
+	}
+	encoder, err := factory(e5onnx.BundleConfig{
+		ArtifactRoot:        cfg.ArtifactRoot,
+		EncoderManifestPath: cfg.EncoderManifestPath,
+		RuntimeLockPath:     cfg.RuntimeLockPath,
+	})
+	if err != nil {
+		return nil, errors.New("unavailable")
+	}
+	evaluator := routingdomain.NewDifficultySemanticShadowEvaluator(encoder)
+	features := routingdomain.ExtractPromptFeatures(difficultyE5StartupSmokeInstruction)
+	category := routingdomain.NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category
+	result := evaluator.Evaluate(ctx, features, category)
+	if result.Status != routingdomain.DifficultySemanticShadowReady {
+		_ = evaluator.Close()
+		return nil, fmt.Errorf("startup_smoke_%s", result.Status)
+	}
+	return evaluator, nil
 }
 
 func newPostgresPool(ctx context.Context, rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Pool, error) {

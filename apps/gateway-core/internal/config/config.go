@@ -132,7 +132,15 @@ type Config struct {
 	ResponseCaptureEnabled                 bool
 	ResponseCaptureMaxChars                int
 	SemanticCache                          SemanticCacheConfig
+	DifficultyE5Shadow                     DifficultyE5ShadowConfig
 	TenantChatPrivate                      TenantChatPrivateConfig
+}
+
+type DifficultyE5ShadowConfig struct {
+	Enabled             bool
+	ArtifactRoot        string
+	EncoderManifestPath string
+	RuntimeLockPath     string
 }
 
 type TenantChatPrivateConfig struct {
@@ -369,6 +377,12 @@ func LoadWithError() (Config, error) {
 		ResponseCaptureEnabled:     envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
 		ResponseCaptureMaxChars:    envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:              semanticCache,
+		DifficultyE5Shadow: DifficultyE5ShadowConfig{
+			Enabled:             envBool("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", false),
+			ArtifactRoot:        strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT", "/opt/gatelm/difficulty-e5")),
+			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v1.json")),
+			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v1.json")),
+		},
 		TenantChatPrivate: TenantChatPrivateConfig{
 			Enabled:               envBool("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED", false),
 			ListenAddress:         strings.TrimSpace(envString("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS", ":8081")),

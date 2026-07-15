@@ -98,6 +98,14 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 `minimumFamilyPolicyStatus=decision_required`인 모든 manifest는 `trainingEligible=false`여야 한다. 2026-07-14 owner-approved candidate는 `difficulty-training-minimum-family-policy.2026-07-14.v1`을 사용하며, 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 approved family 이상을 요구한다. [`training/difficulty-training-candidate-500.owner-approved.manifest.json`](training/difficulty-training-candidate-500.owner-approved.manifest.json)이 이 기준과 `difficulty-family-constrained-split.2026-07-15.v1`, seed `20260715`, family-disjoint train 300/calibration 100/holdout 100 partition을 고정한다.
 
+### 6.2 Synthetic 2,000-record expansion
+
+[`fixtures/difficulty-label-expansion-2000.fixture.jsonl`](fixtures/difficulty-label-expansion-2000.fixture.jsonl)과 [`fixtures/difficulty-label-expansion-2000.manifest.json`](fixtures/difficulty-label-expansion-2000.manifest.json)은 기존 owner-approved 500건을 변경하지 않고 취약 slice와 semantic pipeline wiring을 확장하는 synthetic review candidate다. [`../../scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs`](../../scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs)가 2,000 record와 200 prompt family를 결정론적으로 생성하며, 다섯 category 각각 400건, simple/complex 각각 1,000건, family-disjoint train/calibration/holdout 1,200/400/400을 고정한다.
+
+이 expansion은 `difficulty-label-record.v2`의 기존 필드만 사용한다. 42D rule vector는 `redactedPrompt`에서 재추출하고, tokenizer/encoder에는 분리된 instruction만 전달하며, 네 semantic head의 12D target은 기존 task/constraint/scope/dependency bucket에서 얻는다. Token, pooled 384D, projected 64D, 12D probability, raw/calibrated score와 threshold 근접도를 record나 manifest에 저장하지 않는다. Explicit/ambiguous/payload-only boundary, empty instruction, long-simple, short-complex, negation, synonym, indirect expression, payload contamination, category confusion과 OOD terminology를 의도적으로 과대표집한다.
+
+모든 record는 `synthetic_fixture + pending + reviewerCount=0`이고 manifest는 `trainingEligible=false`다. 따라서 generator·schema·split·feature wiring과 ephemeral tooling에는 사용할 수 있지만 model coefficient, PCA, semantic head, calibrator, threshold 선택, holdout 성능 또는 runtime promotion evidence에는 사용할 수 없다. 실제 training candidate로 파생하려면 family 전체를 human review하고 owner-approved minimum-family policy와 새 immutable split/evidence version을 별도로 승인해야 한다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.
@@ -172,6 +180,7 @@ Approved offline report는 sampleId, 허용된 redactedPrompt, expected/actual c
 Difficulty 계약, schema 또는 fixture를 변경하면 다음을 실행한다.
 
 ```powershell
+node scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs --check
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2-docs

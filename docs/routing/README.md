@@ -28,7 +28,7 @@
 | Path | Status | Scope |
 |---|---|---|
 | [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | Exact v1 42D를 보존하고 `instructionText` projection과 4-head/12D probability를 분리해 비교하는 offline/shadow difficulty candidate |
-| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Canonical offline component; not active in Gateway | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64, local artifact cache와 Docker build 포함 계약 |
+| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Canonical offline + opt-in Gateway startup shadow; not active in product requests | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64, verified local bundle과 optional Linux amd64 image 계약 |
 | [`difficulty-decision-loss-threshold-experiment.md`](difficulty-decision-loss-threshold-experiment.md) | Offline experiment; not active | 고정 threshold grid의 FP/FN, Expected Decision Loss, break-even `C_FN`과 safety-constrained optimum을 aggregate로 비교 |
 
 이 표의 문서는 active contract가 아니다. 별도 승인과 source-of-truth 승격 전에는 Gateway hot path, routing policy 또는 제품 surface의 근거로 사용할 수 없다.
@@ -51,5 +51,8 @@
 corepack pnpm run verify:routing-contract
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2.1-difficulty-eval
+corepack pnpm run verify:v2.1-difficulty-gateway-bundle
 corepack pnpm run verify:v2-docs
 ```
+
+Local pinned E5 artifact cache와 Docker가 준비된 환경에서는 `corepack pnpm run verify:v2.1-gateway-e5-shadow`로 Linux amd64 native/Python parity, optional image build와 startup smoke를 추가 검증한다. 이 명령은 runtime download를 수행하지 않는다.
