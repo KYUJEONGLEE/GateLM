@@ -74,8 +74,8 @@ function Ensure-PinnedDownload(
 $manifestPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json"
 $lockPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json"
 $checksumsPath = Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256"
-Assert-File $manifestPath 5073 "893aa885bdbe2a66d71f6c1da9e6d32ee9ba50a8b062db10177040ce587ec549"
-Assert-File $lockPath 1364 "6a94f74fcd003a6cd048f88cdce98cd661972124fc8f205da14a25cda7092099"
+Assert-File $manifestPath 4915 "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380"
+Assert-File $lockPath 1364 "90395b13aa6c5a5ba33241e7cf627c0353a17141434c7ced3a42421cb8a2fd73"
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.schemaVersion -ne "gatelm.difficulty-e5-encoder-manifest.v2" -or

@@ -4,7 +4,7 @@
   "evaluatedOn": "2026-07-15",
   "priorApproval": {
     "status": "owner_approved_limited_development_shadow_guardrails",
-    "fileSha256": "c7ab4966510bc7a87184a1b9a6ebe81c1a4c6b240aebb06276f9683b186426c4"
+    "fileSha256": "ff99eaee7599516130947c6f239e3f782015b164d75da6d54de9ae0b489f0ef0"
   },
   "artifact": {
     "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",

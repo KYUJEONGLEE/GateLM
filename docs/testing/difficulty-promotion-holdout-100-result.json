@@ -28,7 +28,7 @@
     "thresholdPolicyVersion": "difficulty-threshold-v1",
     "threshold": 0.45,
     "totalDimension": 118,
-    "artifactFileSha256": "008a149ef935e763d2905c0b98e5e9ea5718a163f2f260270eae5ff194e05cb6",
+    "artifactFileSha256": "a495bc6cf030038f2afdb724383c396a66b8cef1fc585c615ee51c9b001f0670",
     "changedAfterFreeze": false
   },
   "executionShape": {

@@ -20,7 +20,7 @@
     "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",
     "bundleHash": "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220",
     "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
-    "artifactFileSha256": "008a149ef935e763d2905c0b98e5e9ea5718a163f2f260270eae5ff194e05cb6",
+    "artifactFileSha256": "a495bc6cf030038f2afdb724383c396a66b8cef1fc585c615ee51c9b001f0670",
     "thresholdPolicyVersion": "difficulty-threshold-v1",
     "threshold": 0.45,
     "totalDimension": 118,

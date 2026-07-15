@@ -7,7 +7,7 @@
     "datasetVersion": "difficulty_training_2026_07_15_expansion_2000_owner_approved_v1",
     "datasetSha256": "9bd448240d3479072c5daf9517abd6ea7fc0797d204354d6d636a33111a0b9de",
     "manifestSha256": "2306f0d74aec619c166018e6fb43d9b8a95c184731141eda3237309140dc356f",
-    "freezeSha256": "f3ca638405d58543edb079bb329ff9fb37d56c035d6f5a8446d8bd1efd88ca11",
+    "freezeSha256": "6e54a07923183872084e4a945f735fe66dc894e5dc1cd9585953f8ea436b73d9",
     "selectionPolicyVersion": "difficulty-promotion-holdout-family-sample.2026-07-15.v2",
     "membershipHash": "sha256:332253d2e85197259d1b2bac0690115f988eacfaa3dfe93f7fcffb7fe722ce22"
   },
@@ -26,7 +26,7 @@
     "bundleVersion": "difficulty-feature-bundle.owner-approved-500.single-request.2026-07-15.v4",
     "bundleHash": "sha256:f812d5f4b58394ea6f0c5a2810e7b8c45dfc4bde0b168fe8c0860290a394b88b",
     "contentHash": "sha256:bbda7fa6657e67d30592adcad0b8c7c7270ac7cd8e2f0ca36146dd39783d5067",
-    "artifactFileSha256": "533686ac9e9e326d4fee66c99834646583c27f0cf9193a51936ae5bae593cae6",
+    "artifactFileSha256": "e1053dcb54eae4dcfb4ee669b6340e290f26d394cd964ddfb62592bd1ff0f234",
     "thresholdPolicyVersion": "difficulty-threshold-v2",
     "threshold": 0.06,
     "totalDimension": 118,

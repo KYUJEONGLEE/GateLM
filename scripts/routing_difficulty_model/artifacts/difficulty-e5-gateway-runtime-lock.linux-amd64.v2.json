@@ -2,7 +2,7 @@
   "schemaVersion": "gatelm.difficulty-e5-gateway-runtime-lock.v2",
   "runtimeVersion": "difficulty-e5-gateway-runtime.linux-amd64.single-request.2026-07-15.v2",
   "platform": "linux-amd64",
-  "encoderManifestSha256": "893aa885bdbe2a66d71f6c1da9e6d32ee9ba50a8b062db10177040ce587ec549",
+  "encoderManifestSha256": "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380",
   "encoderBundleVersion": "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2",
   "encoderBundleSha256": "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e",
   "tokenizerBindingModule": "github.com/daulet/tokenizers",

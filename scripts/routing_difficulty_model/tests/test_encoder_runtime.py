@@ -23,6 +23,7 @@ from gatelm_difficulty_model.encoder_runtime import (
     read_json,
     sha256_file,
     validate_manifest,
+    write_json,
 )
 
 
@@ -56,6 +57,14 @@ class FakeSession:
 
 
 class EncoderRuntimeTests(unittest.TestCase):
+    def test_write_json_uses_lf_bytes_on_every_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            write_json(path, {"first": 1, "second": 2})
+            payload = path.read_bytes()
+        self.assertNotIn(b"\r\n", payload)
+        self.assertTrue(payload.endswith(b"\n"))
+
     def test_single_request_embedding_helper_never_microbatches(self) -> None:
         class Runtime:
             def __init__(self) -> None:

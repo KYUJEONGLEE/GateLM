@@ -8,7 +8,7 @@
     "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
     "thresholdPolicyVersion": "difficulty-threshold-v1",
     "threshold": 0.45,
-    "artifactFileSha256": "008a149ef935e763d2905c0b98e5e9ea5718a163f2f260270eae5ff194e05cb6"
+    "artifactFileSha256": "a495bc6cf030038f2afdb724383c396a66b8cef1fc585c615ee51c9b001f0670"
   },
   "calibration": {
     "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
@@ -148,7 +148,7 @@
       }
     },
     "holdoutOutcomeAccessed": false,
-    "feasibilityReportFileSha256": "618b10bd99872e47c7bcce2f35a69f20b47c03ccdeb30deb4981a8fb73299763"
+    "feasibilityReportFileSha256": "a06b6008b3184936f0c41281ea3316e80fe2909375d957aef4fa2e897a9eb2e5"
   },
   "candidateArtifact": {
     "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v4",
@@ -158,7 +158,7 @@
     "thresholdPolicyVersion": "difficulty-threshold-v2",
     "threshold": 0.06,
     "totalDimension": 118,
-    "artifactFileSha256": "533686ac9e9e326d4fee66c99834646583c27f0cf9193a51936ae5bae593cae6"
+    "artifactFileSha256": "e1053dcb54eae4dcfb4ee669b6340e290f26d394cd964ddfb62592bd1ff0f234"
   },
   "componentIdentity": {
     "weightsUnchanged": true,
