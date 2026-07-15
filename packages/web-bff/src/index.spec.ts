@@ -1,4 +1,12 @@
-import { assertCsrf, assertSameOrigin, callJson, proxyHttp, readJsonBody, UpstreamResponseError } from './index';
+import {
+  assertCsrf,
+  assertSameOrigin,
+  callJson,
+  jsonError,
+  proxyHttp,
+  readJsonBody,
+  UpstreamResponseError,
+} from './index';
 
 describe('web BFF security helpers', () => {
   it('requires exact origin and matching double-submit CSRF', () => {
@@ -9,6 +17,20 @@ describe('web BFF security helpers', () => {
     expect(() => assertCsrf(request, 'csrf-value')).not.toThrow();
     expect(() => assertSameOrigin(request, 'https://admin.example.test')).toThrow(UpstreamResponseError);
     expect(() => assertCsrf(request, 'different')).toThrow(UpstreamResponseError);
+  });
+
+  it('preserves safe security status and code in JSON errors', async () => {
+    const request = new Request('https://chat.example.test/api/auth/login', {
+      headers: { origin: 'https://invalid.example', 'x-gatelm-csrf': 'csrf-value' },
+    });
+    let response: Response | undefined;
+    try {
+      assertSameOrigin(request, 'https://chat.example.test');
+    } catch (error) {
+      response = jsonError(error);
+    }
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toMatchObject({ code: 'CHAT_ORIGIN_REJECTED' });
   });
 
   it('rejects oversized JSON before parsing', async () => {
