@@ -8,7 +8,10 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import { computeTenantChatSnapshotDigest } from './tenant-chat-runtime.contract';
 import { TenantChatRuntimeService } from './tenant-chat-runtime.service';
-import type { TenantChatRuntimeSnapshotDocument } from './tenant-chat-runtime.types';
+import type {
+  TenantChatRoutingMatrix,
+  TenantChatRuntimeSnapshotDocument,
+} from './tenant-chat-runtime.types';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const PROVIDER_ID = '22222222-2222-4222-8222-222222222222';
@@ -170,6 +173,7 @@ function createPersistenceHarness(options?: {
 
   return {
     prisma,
+    provider,
     tx,
     snapshots,
     get activeSnapshot() {
@@ -181,7 +185,7 @@ function createPersistenceHarness(options?: {
 }
 
 describe('TenantChatRuntimeService administrator activation', () => {
-  it('returns only active tenant Provider candidates and disables unsupported pricing', async () => {
+  it('returns active tenant Provider candidates without disabling price-unavailable models', async () => {
     const harness = createPersistenceHarness();
     const service = new TenantChatRuntimeService(harness.prisma);
 
@@ -209,11 +213,12 @@ describe('TenantChatRuntimeService administrator activation', () => {
         modelKey: 'gpt-5.4-nano',
         activationStatus: 'available',
       }),
-      {
+      expect.objectContaining({
         modelKey: 'gpt-5.4',
-        activationStatus: 'pricing_unavailable',
+        activationStatus: 'available',
+        pricingStatus: 'unavailable',
         pricing: null,
-      },
+      }),
     ]);
     expect(harness.tx.providerConnection.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -261,16 +266,19 @@ describe('TenantChatRuntimeService administrator activation', () => {
     });
     expect(snapshot?.policies.routing.routes).toEqual([
       expect.objectContaining({
-        tier: 'standard',
-        providerId: PROVIDER_ID,
-        modelKey: 'gpt-5.4-mini',
-      }),
-      expect.objectContaining({
-        tier: 'economy',
+        modelRef: expect.stringMatching(/^tc_[a-f0-9]{32}$/),
         providerId: PROVIDER_ID,
         modelKey: 'gpt-5.4-mini',
       }),
     ]);
+    expect(snapshot?.policies.routing.policy).toEqual(
+      expect.objectContaining({
+        schemaVersion: 'gatelm.routing-policy.v2',
+        mode: 'manual',
+        bootstrapState: 'configured',
+        routingPolicyHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      }),
+    );
     expect(snapshot?.policies.fallback).toEqual({
       enabled: false,
       routeIds: [],
@@ -284,6 +292,71 @@ describe('TenantChatRuntimeService administrator activation', () => {
         pricingStatus: 'current',
       }),
     );
+  });
+
+  it('publishes the explicit 5 x 2 auto-routing matrix with resolved modelRefs', async () => {
+    const harness = createPersistenceHarness();
+    const service = new TenantChatRuntimeService(harness.prisma);
+    const setup = await service.getAdminRuntimeSetup(TENANT_ID);
+    const miniRef = setup.providers[0]?.models.find(
+      (model) => model.modelKey === 'gpt-5.4-mini',
+    )?.modelRef;
+    const nanoRef = setup.providers[0]?.models.find(
+      (model) => model.modelKey === 'gpt-5.4-nano',
+    )?.modelRef;
+    const unknownPriceRef = setup.providers[0]?.models.find(
+      (model) => model.modelKey === 'gpt-5.4',
+    )?.modelRef;
+    if (!miniRef || !nanoRef || !unknownPriceRef) {
+      throw new Error('Expected stable modelRefs for configured models.');
+    }
+    const routes: TenantChatRoutingMatrix = {
+      general: {
+        simple: { modelRefs: [nanoRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      code: {
+        simple: { modelRefs: [nanoRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      translation: {
+        simple: { modelRefs: [unknownPriceRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      summarization: {
+        simple: { modelRefs: [nanoRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      reasoning: {
+        simple: { modelRefs: [miniRef] },
+        complex: { modelRefs: [miniRef, nanoRef] },
+      },
+    };
+
+    const activated = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      routingMode: 'auto',
+      manualModelRef: miniRef,
+      routes,
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(activated.activeSnapshot).toEqual(
+      expect.objectContaining({
+        routingMode: 'auto',
+        manualModelRef: miniRef,
+        pricingStatus: 'unavailable',
+        routes,
+      }),
+    );
+    expect(harness.snapshots[0]?.policies.routing.routes).toHaveLength(3);
+    expect(harness.snapshots[0]?.policies.fallback).toEqual({
+      enabled: true,
+      routeIds: [],
+      maxAttempts: 2,
+      allowedReasons: ['provider_timeout', 'provider_error_pre_delta'],
+    });
+    expect(harness.snapshots[0]?.pricing.routes).toHaveLength(3);
   });
 
   it('preserves non-routing policies while publishing monotonic versions for a new model', async () => {
@@ -335,26 +408,86 @@ describe('TenantChatRuntimeService administrator activation', () => {
     });
     expect(current?.policies.routing.routes).toEqual([
       expect.objectContaining({ modelKey: 'gpt-5.4-nano' }),
-      expect.objectContaining({ modelKey: 'gpt-5.4-nano' }),
     ]);
     expect(setup.activeSnapshot?.modelKey).toBe('gpt-5.4-nano');
   });
 
-  it('rejects a Provider model whose exact price cannot be represented', async () => {
+  it('publishes a Provider model with explicit unavailable pricing when no exact price exists', async () => {
     const harness = createPersistenceHarness();
     const service = new TenantChatRuntimeService(harness.prisma);
 
-    await expect(
-      service.activateAdminRuntime({
-        tenantId: TENANT_ID,
-        providerConnectionId: PROVIDER_ID,
+    const setup = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4',
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(setup.activeSnapshot?.pricingStatus).toBe('unavailable');
+    expect(harness.snapshots).toHaveLength(1);
+    expect(harness.snapshots[0]?.pricing.routes).toEqual([
+      expect.objectContaining({
         modelKey: 'gpt-5.4',
-        publishedBy: ADMIN_ID,
+        pricingStatus: 'unavailable',
+        pricingSource: 'unavailable',
+        inputMicroUsdPerMillionTokens: 0,
+        outputMicroUsdPerMillionTokens: 0,
       }),
-    ).rejects.toThrow(
-      'Tenant Chat pricing is unavailable for the selected Provider model.',
-    );
-    expect(harness.snapshots).toHaveLength(0);
+    ]);
+  });
+
+  it('reports degraded when any active routing cell loses its configured model', async () => {
+    const harness = createPersistenceHarness();
+    const service = new TenantChatRuntimeService(harness.prisma);
+    const setup = await service.getAdminRuntimeSetup(TENANT_ID);
+    const miniRef = setup.providers[0]?.models.find(
+      (model) => model.modelKey === 'gpt-5.4-mini',
+    )?.modelRef;
+    const nanoRef = setup.providers[0]?.models.find(
+      (model) => model.modelKey === 'gpt-5.4-nano',
+    )?.modelRef;
+    if (!miniRef || !nanoRef) {
+      throw new Error('Expected configured modelRefs.');
+    }
+    const routes: TenantChatRoutingMatrix = {
+      general: {
+        simple: { modelRefs: [nanoRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      code: {
+        simple: { modelRefs: [miniRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      translation: {
+        simple: { modelRefs: [miniRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      summarization: {
+        simple: { modelRefs: [miniRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+      reasoning: {
+        simple: { modelRefs: [miniRef] },
+        complex: { modelRefs: [miniRef] },
+      },
+    };
+
+    await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      routingMode: 'auto',
+      manualModelRef: miniRef,
+      routes,
+      publishedBy: ADMIN_ID,
+    });
+    harness.provider.providerConfig = {
+      providerFamily: 'openai',
+      models: ['gpt-5.4-mini'],
+    };
+
+    const degraded = await service.getAdminRuntimeSetup(TENANT_ID);
+
+    expect(degraded.readiness).toBe('degraded');
+    expect(degraded.activeSnapshot).toBeNull();
   });
 
   it('rejects inactive, project-scoped, or cross-tenant Provider identifiers', async () => {
@@ -369,10 +502,9 @@ describe('TenantChatRuntimeService administrator activation', () => {
         publishedBy: ADMIN_ID,
       }),
     ).rejects.toThrow('Active tenant Provider connection not found.');
-    expect(harness.tx.providerConnection.findFirst).toHaveBeenCalledWith(
+    expect(harness.tx.providerConnection.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          id: PROVIDER_ID,
           tenantId: TENANT_ID,
           projectId: null,
           status: ProviderConnectionStatus.ACTIVE,

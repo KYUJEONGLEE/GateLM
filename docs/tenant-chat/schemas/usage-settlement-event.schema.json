@@ -96,7 +96,7 @@
           },
           "budget": {
             "properties": {
-              "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 1 },
+              "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 0 },
               "confirmedCostMicroUsdDelta": { "const": 0 },
               "unconfirmedExposureMicroUsdDelta": { "const": 0 }
             }

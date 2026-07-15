@@ -5,6 +5,8 @@ import addFormats from 'ajv-formats';
 
 import type {
   TenantChatPricing,
+  TenantChatRoutingCategory,
+  TenantChatRoutingPolicyV2Bridge,
   TenantChatRuntimePolicies,
   TenantChatRuntimeSnapshotDocument,
 } from './tenant-chat-runtime.types';
@@ -83,6 +85,12 @@ export function computeTenantChatPolicyDigest(
   return sha256Digest(policies);
 }
 
+export function computeTenantChatRoutingPolicyHash(
+  policy: Omit<TenantChatRoutingPolicyV2Bridge, 'routingPolicyHash'>,
+): string {
+  return sha256HexDigest(policy);
+}
+
 export function computeTenantChatSafetyPolicyDigest(
   safety: Omit<TenantChatRuntimePolicies['safety'], 'policyDigest'>,
 ): string {
@@ -137,6 +145,11 @@ function sha256Digest(value: unknown): string {
   return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('base64url')}`;
 }
 
+function sha256HexDigest(value: unknown): string {
+  const canonical = canonicalizeTenantChatJson(value);
+  return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
+}
+
 function validatePricing(pricing: TenantChatPricing): void {
   assertPositiveInteger(pricing.version, 'pricing.version');
   assertDigest(pricing.digest, 'pricing.digest');
@@ -169,6 +182,26 @@ function validatePricing(pricing: TenantChatPricing): void {
       route.outputMicroUsdPerMillionTokens,
       `${prefix}.outputMicroUsdPerMillionTokens`,
     );
+    if (route.pricingStatus === 'unavailable') {
+      if (
+        route.pricingSource !== 'unavailable' ||
+        route.inputMicroUsdPerMillionTokens !== 0 ||
+        route.outputMicroUsdPerMillionTokens !== 0 ||
+        (route.cacheReadInputMicroUsdPerMillionTokens ?? 0) !== 0
+      ) {
+        throw new TenantChatRuntimeContractError(
+          `${prefix} with unavailable pricing must use the unavailable source and zero monetary rates`,
+        );
+      }
+    }
+    if (
+      route.pricingStatus === 'available' &&
+      route.pricingSource === 'unavailable'
+    ) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.pricingSource cannot be unavailable when pricing is available`,
+      );
+    }
     if (route.cacheReadInputMicroUsdPerMillionTokens !== undefined) {
       assertNonnegativeInteger(
         route.cacheReadInputMicroUsdPerMillionTokens,
@@ -237,6 +270,11 @@ function validatePolicies(
     pricing.routes.map((route) => [route.routeId, route] as const),
   );
   const runtimeByRoute = new Map<string, (typeof policies.routing.routes)[number]>();
+  const runtimeByModelRef = new Map<
+    string,
+    (typeof policies.routing.routes)[number]
+  >();
+  const routingPolicy = policies.routing.policy;
   if (
     policies.routing.routes.length < 1 ||
     policies.routing.routes.length > 32
@@ -251,6 +289,24 @@ function validatePolicies(
     assertOpaqueId(route.routeId, `${prefix}.routeId`);
     assertOpaqueId(route.providerId, `${prefix}.providerId`);
     assertModelKey(route.modelKey, `${prefix}.modelKey`);
+    if (routingPolicy) {
+      if (!route.modelRef) {
+        throw new TenantChatRuntimeContractError(
+          `${prefix}.modelRef is required by the Routing v2 compatibility bridge`,
+        );
+      }
+      assertModelKey(route.modelRef, `${prefix}.modelRef`);
+      if (runtimeByModelRef.has(route.modelRef)) {
+        throw new TenantChatRuntimeContractError(
+          `runtime modelRef ${route.modelRef} is duplicated`,
+        );
+      }
+      runtimeByModelRef.set(route.modelRef, route);
+    } else if (!route.tier) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.tier is required by a legacy routing snapshot`,
+      );
+    }
     if (runtimeByRoute.has(route.routeId)) {
       throw new TenantChatRuntimeContractError(
         `runtime routeId ${route.routeId} is duplicated`,
@@ -266,16 +322,33 @@ function validatePolicies(
         `${prefix} must have matching immutable pricing provenance`,
       );
     }
+    if (
+      routingPolicy &&
+      (priceRoute.pricingStatus === undefined ||
+        priceRoute.pricingSource === undefined)
+    ) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix} must declare pricingStatus and pricingSource for Routing v2`,
+      );
+    }
     runtimeByRoute.set(route.routeId, route);
   }
 
-  const hasEconomyRoute = policies.routing.routes.some(
-    (route) => route.enabled && route.tier === 'economy',
-  );
-  if (!hasEconomyRoute) {
-    throw new TenantChatRuntimeContractError(
-      'at least one enabled economy route is required',
+  if (routingPolicy) {
+    validateRoutingPolicyV2Bridge(
+      routingPolicy,
+      policies.routing.manualModelRef,
+      runtimeByModelRef,
     );
+  } else {
+    const hasEconomyRoute = policies.routing.routes.some(
+      (route) => route.enabled && route.tier === 'economy',
+    );
+    if (!hasEconomyRoute) {
+      throw new TenantChatRuntimeContractError(
+        'at least one enabled economy route is required',
+      );
+    }
   }
 
   if (policies.fallback.routeIds.length > 3) {
@@ -304,7 +377,11 @@ function validatePolicies(
     }
     fallbackIds.add(routeId);
   }
-  if (policies.fallback.enabled && fallbackIds.size === 0) {
+  if (
+    policies.fallback.enabled &&
+    fallbackIds.size === 0 &&
+    !routingPolicy
+  ) {
     throw new TenantChatRuntimeContractError(
       'enabled fallback requires at least one routeId',
     );
@@ -374,6 +451,56 @@ function validatePolicies(
     throw new TenantChatRuntimeContractError(
       'policies.streaming.finalEventRequired must be true',
     );
+  }
+}
+
+const ROUTING_CATEGORIES: TenantChatRoutingCategory[] = [
+  'general',
+  'code',
+  'translation',
+  'summarization',
+  'reasoning',
+];
+
+function validateRoutingPolicyV2Bridge(
+  policy: TenantChatRoutingPolicyV2Bridge,
+  manualModelRef: string | undefined,
+  runtimeByModelRef: ReadonlyMap<
+    string,
+    TenantChatRuntimePolicies['routing']['routes'][number]
+  >,
+): void {
+  const { routingPolicyHash: _routingPolicyHash, ...hashPayload } = policy;
+  const expectedHash = computeTenantChatRoutingPolicyHash(hashPayload);
+  if (policy.routingPolicyHash !== expectedHash) {
+    throw new TenantChatRuntimeContractError(
+      `policies.routing.policy.routingPolicyHash does not match the canonical policy payload: expected ${expectedHash}`,
+    );
+  }
+  if (!manualModelRef) {
+    throw new TenantChatRuntimeContractError(
+      'policies.routing.manualModelRef is required by the Routing v2 compatibility bridge',
+    );
+  }
+  const manualRoute = runtimeByModelRef.get(manualModelRef);
+  if (!manualRoute?.enabled) {
+    throw new TenantChatRuntimeContractError(
+      'policies.routing.manualModelRef must reference an enabled runtime modelRef',
+    );
+  }
+
+  for (const category of ROUTING_CATEGORIES) {
+    for (const difficulty of ['simple', 'complex'] as const) {
+      const modelRefs = policy.routes[category][difficulty].modelRefs;
+      for (const modelRef of modelRefs) {
+        const route = runtimeByModelRef.get(modelRef);
+        if (!route?.enabled) {
+          throw new TenantChatRuntimeContractError(
+            `policies.routing.policy.routes.${category}.${difficulty} references unavailable modelRef ${modelRef}`,
+          );
+        }
+      }
+    }
   }
 }
 

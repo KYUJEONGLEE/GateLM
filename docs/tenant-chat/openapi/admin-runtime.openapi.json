@@ -36,7 +36,7 @@
       },
       "put": {
         "operationId": "activateTenantChatAdminRuntime",
-        "summary": "Activate a priced tenant Provider and model",
+        "summary": "Publish the Tenant Chat 5 x 2 routing policy",
         "requestBody": {
           "required": true,
           "content": {
@@ -58,8 +58,7 @@
           "401": { "$ref": "#/components/responses/AuthenticationRequired" },
           "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
           "404": { "$ref": "#/components/responses/ProviderUnavailable" },
-          "409": { "$ref": "#/components/responses/PublishConflict" },
-          "422": { "$ref": "#/components/responses/PricingUnavailable" }
+          "409": { "$ref": "#/components/responses/PublishConflict" }
         }
       }
     }
@@ -77,10 +76,11 @@
       "ActivateRuntimeRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["providerConnectionId", "modelKey"],
+        "required": ["routingMode", "manualModelRef", "routes"],
         "properties": {
-          "providerConnectionId": { "type": "string", "format": "uuid" },
-          "modelKey": { "$ref": "#/components/schemas/ModelKey" }
+          "routingMode": { "type": "string", "enum": ["auto", "manual"] },
+          "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
+          "routes": { "$ref": "#/components/schemas/RoutingMatrix" }
         }
       },
       "ModelKey": {
@@ -88,6 +88,41 @@
         "minLength": 1,
         "maxLength": 200,
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$"
+      },
+      "RoutingCell": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["modelRefs"],
+        "properties": {
+          "modelRefs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/ModelKey" }
+          }
+        }
+      },
+      "RoutingDifficulty": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["simple", "complex"],
+        "properties": {
+          "simple": { "$ref": "#/components/schemas/RoutingCell" },
+          "complex": { "$ref": "#/components/schemas/RoutingCell" }
+        }
+      },
+      "RoutingMatrix": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["general", "code", "translation", "summarization", "reasoning"],
+        "properties": {
+          "general": { "$ref": "#/components/schemas/RoutingDifficulty" },
+          "code": { "$ref": "#/components/schemas/RoutingDifficulty" },
+          "translation": { "$ref": "#/components/schemas/RoutingDifficulty" },
+          "summarization": { "$ref": "#/components/schemas/RoutingDifficulty" },
+          "reasoning": { "$ref": "#/components/schemas/RoutingDifficulty" }
+        }
       },
       "SetupEnvelope": {
         "type": "object",
@@ -136,10 +171,12 @@
       "ModelCandidate": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["modelKey", "activationStatus", "pricing"],
+        "required": ["modelRef", "modelKey", "activationStatus", "pricingStatus", "pricing"],
         "properties": {
+          "modelRef": { "$ref": "#/components/schemas/ModelKey" },
           "modelKey": { "$ref": "#/components/schemas/ModelKey" },
-          "activationStatus": { "type": "string", "enum": ["available", "pricing_unavailable"] },
+          "activationStatus": { "const": "available" },
+          "pricingStatus": { "type": "string", "enum": ["available", "unavailable"] },
           "pricing": {
             "oneOf": [
               { "$ref": "#/components/schemas/ModelPricing" },
@@ -161,7 +198,7 @@
       "ActiveSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus"],
+        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes"],
         "properties": {
           "snapshotId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "version": { "type": "integer", "minimum": 1 },
@@ -170,6 +207,9 @@
           "pricingVersion": { "type": "integer", "minimum": 1 },
           "providerConnectionId": { "type": "string", "format": "uuid" },
           "modelKey": { "$ref": "#/components/schemas/ModelKey" },
+          "routingMode": { "type": "string", "enum": ["auto", "manual"] },
+          "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
+          "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
           "publishedAt": { "type": "string", "format": "date-time" },
           "pricingStatus": { "type": "string", "enum": ["current", "update_available", "unavailable"] }
         }
@@ -189,8 +229,7 @@
       "AuthenticationRequired": { "description": "Full admin session is required.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
       "TenantScopeForbidden": { "description": "The admin is outside this tenant scope.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
       "ProviderUnavailable": { "description": "The tenant-level ACTIVE Provider connection is unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-      "PublishConflict": { "description": "Concurrent monotonic publication did not converge.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-      "PricingUnavailable": { "description": "No exact standard text price exists for the persisted Provider family and model.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
+      "PublishConflict": { "description": "Concurrent monotonic publication did not converge.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
     }
   }
 }
