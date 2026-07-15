@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "gatelm.difficulty-batch-verification.v1",
+  "batchId": "c2",
+  "datasetSha256": "f379f1ab646a14c3d4247d4cfabd7293dc9bc3955e30ed2910a33cf8a15bd23a",
+  "gates": {
+    "schemaFailures": 0,
+    "exactDuplicates": 0,
+    "familyCollisions": 0,
+    "splitLeakage": 0,
+    "actualGoModelPathRecords": 250,
+    "actualGoHardSentinelRecords": 0,
+    "actualGoSimpleSentinelRecords": 0,
+    "semanticStatusRouteMismatches": 0,
+    "categoryClassifierMismatches": 102,
+    "nearDuplicateCandidates": 39,
+    "strictNearDuplicateCandidates": 0,
+    "humanReviewStatus": "pending",
+    "ownerApprovalStatus": "pending"
+  },
+  "categoryMismatchByExpectedActual": {
+    "code->general": 8,
+    "code->reasoning": 4,
+    "code->summarization": 5,
+    "code->translation": 1,
+    "general->code": 13,
+    "general->reasoning": 21,
+    "general->summarization": 1,
+    "general->translation": 2,
+    "reasoning->code": 2,
+    "reasoning->general": 9,
+    "reasoning->translation": 2,
+    "summarization->code": 2,
+    "summarization->general": 9,
+    "summarization->reasoning": 2,
+    "translation->code": 4,
+    "translation->general": 16,
+    "translation->summarization": 1
+  },
+  "categoryMismatchBySlice": {
+    "negation": 12,
+    "indirect_expression": 11,
+    "synonym": 31,
+    "short_complex": 20,
+    "long_simple": 12,
+    "payload_contamination": 8,
+    "category_confusion": 20,
+    "ood_terminology": 19
+  },
+  "distributions": {
+    "category": {
+      "code": 55,
+      "general": 55,
+      "reasoning": 50,
+      "summarization": 45,
+      "translation": 45
+    },
+    "difficulty": {
+      "complex": 120,
+      "simple": 130
+    },
+    "language": {
+      "en": 84,
+      "ko": 93,
+      "mixed": 73
+    },
+    "semanticLabel": {
+      "code_debugging": 5,
+      "code_design": 10,
+      "code_explanation": 5,
+      "code_generation": 10,
+      "code_refactoring": 10,
+      "code_review": 15,
+      "general_explanation": 5,
+      "general_extraction": 15,
+      "general_qa": 10,
+      "general_support": 15,
+      "general_transformation": 10,
+      "reasoning_causal": 25,
+      "reasoning_comparison": 15,
+      "reasoning_constraint_solving": 5,
+      "reasoning_planning": 5,
+      "summarization_direct": 10,
+      "summarization_key_points": 20,
+      "summarization_multi_source": 15,
+      "translation_direct": 15,
+      "translation_localization": 10,
+      "translation_style_preserving": 20
+    },
+    "taskBucket": {
+      "count_1": 121,
+      "count_2": 78,
+      "count_3_plus": 51
+    },
+    "constraintBucket": {
+      "count_0_to_1": 140,
+      "count_2": 76,
+      "count_3_plus": 34
+    },
+    "scopeBucket": {
+      "count_1": 123,
+      "count_2_to_3": 76,
+      "count_4_plus": 51
+    },
+    "dependencyBucket": {
+      "depth_0_to_1": 127,
+      "depth_2": 74,
+      "depth_3_plus": 49
+    },
+    "slices": {
+      "negation": 39,
+      "indirect_expression": 47,
+      "synonym": 48,
+      "short_complex": 44,
+      "long_simple": 33,
+      "payload_contamination": 25,
+      "korean": 93,
+      "english": 84,
+      "mixed_language": 73,
+      "category_confusion": 44,
+      "ood_terminology": 44
+    },
+    "boundary": {
+      "explicit_separation": 25,
+      "instruction_only": 225
+    }
+  }
+}

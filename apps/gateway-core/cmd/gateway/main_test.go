@@ -87,9 +87,27 @@ func TestInitializeDifficultyE5ShadowRunnerDegradesInitializationFailureToRuleOn
 	}
 }
 
+func TestInitializeDifficultyE5ShadowRejectsHistoricalDecisionBoundaryBeforeEncoder(t *testing.T) {
+	called := false
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:       true,
+			AllowedScopes: difficultyE5ShadowTestScopes(),
+		},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return &fakeDifficultyE5Encoder{}, nil
+		},
+	)
+	if err == nil || evaluator != nil || called {
+		t.Fatalf("historical boundary initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+}
+
 func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) {
 	encoder := &fakeDifficultyE5Encoder{}
-	evaluator, err := initializeDifficultyE5Shadow(
+	evaluator, err := initializeDifficultyE5ShadowWithCompatibility(
 		context.Background(),
 		config.DifficultyE5ShadowConfig{
 			Enabled:             true,
@@ -106,6 +124,7 @@ func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) 
 			}
 			return encoder, nil
 		},
+		func() bool { return true },
 	)
 	if err != nil {
 		t.Fatal(err)

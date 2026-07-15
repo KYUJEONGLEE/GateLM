@@ -382,6 +382,7 @@ const (
 )
 
 type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
+type difficultyE5ModelCompatibility func() bool
 
 func initializeDifficultyE5ShadowRunner(
 	ctx context.Context,
@@ -404,8 +405,25 @@ func initializeDifficultyE5Shadow(
 	cfg config.DifficultyE5ShadowConfig,
 	factory difficultyE5EncoderFactory,
 ) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
+	return initializeDifficultyE5ShadowWithCompatibility(
+		ctx,
+		cfg,
+		factory,
+		routingdomain.DifficultySemanticShadowModelCompatible,
+	)
+}
+
+func initializeDifficultyE5ShadowWithCompatibility(
+	ctx context.Context,
+	cfg config.DifficultyE5ShadowConfig,
+	factory difficultyE5EncoderFactory,
+	compatible difficultyE5ModelCompatibility,
+) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
 	if !cfg.HasAllowedScopes() {
 		return nil, nil
+	}
+	if compatible == nil || !compatible() {
+		return nil, errors.New("unavailable")
 	}
 	if factory == nil {
 		return nil, errors.New("unavailable")

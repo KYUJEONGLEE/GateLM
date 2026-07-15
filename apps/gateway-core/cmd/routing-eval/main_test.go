@@ -211,7 +211,7 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 		},
 		{
 			SampleID:           "short_hard_complex",
-			RedactedPrompt:     stringPtr("Debug a race condition."),
+			RedactedPrompt:     stringPtr("Across multiple services, diagnose a race condition and deadlock; preserve behavior, security, and compatibility."),
 			ExpectedCategory:   routing.CategoryCode,
 			ExpectedDifficulty: routing.DifficultyComplex,
 		},

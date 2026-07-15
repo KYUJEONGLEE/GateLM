@@ -23,8 +23,19 @@ func TestDifficultyClassifierUsesDeterministicSentinelsBeforeModel(t *testing.T)
 		t.Fatalf("meaningless result = %#v, want 0.0/simple sentinel", actual)
 	}
 
+	payloadOnly := ExtractDifficultyFeatures(
+		ExtractPromptFeatures("```text\npayload only\n```"),
+		CategoryGeneral,
+	)
+	if UsesDifficultyModelPath(payloadOnly) {
+		t.Fatal("payload-only semantic-empty input unexpectedly used the model path")
+	}
+	if actual := simpleModel.ClassifyFeatures(payloadOnly); actual.ComplexityScore != 0 || actual.Difficulty != DifficultySimple {
+		t.Fatalf("payload-only result = %#v, want 0.0/simple sentinel", actual)
+	}
+
 	hardComplex := ExtractDifficultyFeatures(
-		ExtractPromptFeatures("Debug a race condition across multiple files."),
+		ExtractPromptFeatures("Across multiple services, diagnose a race condition and deadlock; preserve behavior, security, and compatibility."),
 		CategoryCode,
 	)
 	if actual := simpleModel.ClassifyFeatures(hardComplex); actual.ComplexityScore != 1 || actual.Difficulty != DifficultyComplex {
@@ -92,6 +103,62 @@ func TestSingleProxyDifficultySignalsDoNotBypassTheModel(t *testing.T) {
 				t.Fatalf("single proxy rule result = %#v, want simple", actual)
 			}
 		})
+	}
+}
+
+func TestDifficultyDecisionEvidenceForOfflineMatchesCanonicalRoute(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		prompt    string
+		category  string
+		wantRoute string
+	}{
+		{name: "semantic empty", prompt: "```text\npayload only\n```", category: CategoryGeneral, wantRoute: DifficultyDecisionRouteSimpleSentinel},
+		{name: "hard", prompt: "Across multiple services, diagnose a race condition and deadlock; preserve behavior, security, and compatibility.", category: CategoryCode, wantRoute: DifficultyDecisionRouteHardSentinel},
+		{name: "model", prompt: "Explain OAuth briefly.", category: CategoryGeneral, wantRoute: DifficultyDecisionRouteModel},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			features := ExtractDifficultyFeatures(ExtractPromptFeatures(test.prompt), test.category)
+			evidence := DifficultyDecisionEvidenceForOffline(features)
+			if evidence.Route != test.wantRoute {
+				t.Fatalf("route = %q, want %q", evidence.Route, test.wantRoute)
+			}
+			if (evidence.Route == DifficultyDecisionRouteModel) != UsesDifficultyModelPath(features) {
+				t.Fatalf("route/modelPath mismatch: evidence=%#v", evidence)
+			}
+		})
+	}
+}
+
+func TestHardComplexSentinelRequiresOverwhelmingCombinedEvidence(t *testing.T) {
+	t.Parallel()
+
+	borderline := DifficultyFeatures{
+		category: CategoryCode,
+		common: CommonDifficultyFeatures{
+			payloadSizeBucket: "medium",
+			taskCount:         3,
+			constraintCount:   2,
+		},
+		code: &CodeDifficultyFeatures{
+			codeOperationKind: "concurrency",
+			causalComplexity:  1,
+		},
+	}
+	if evidence := DifficultyDecisionEvidenceForOffline(borderline); evidence.CommonEvidenceScore != 4 || evidence.CategoryEvidenceScore != 3 || evidence.Route != DifficultyDecisionRouteModel {
+		t.Fatalf("borderline evidence = %#v, want 4+3 on model path", evidence)
+	}
+
+	overwhelming := borderline
+	code := *borderline.code
+	code.engineeringConstraintCount = 2
+	overwhelming.code = &code
+	if evidence := DifficultyDecisionEvidenceForOffline(overwhelming); evidence.CommonEvidenceScore != 4 || evidence.CategoryEvidenceScore != 5 || evidence.Route != DifficultyDecisionRouteHardSentinel {
+		t.Fatalf("overwhelming evidence = %#v, want 4+5 hard sentinel", evidence)
 	}
 }
 

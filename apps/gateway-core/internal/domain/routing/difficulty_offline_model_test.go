@@ -82,7 +82,7 @@ func TestOfflineDifficultyClassifierAppliesSentinelsBeforeVectorization(t *testi
 			taskCount:         3,
 			constraintCount:   3,
 		},
-		general: &GeneralDifficultyFeatures{workflowDepth: 5},
+		general: &GeneralDifficultyFeatures{workflowDepth: 5, branchOrExceptionCount: 2},
 	})
 	if err != nil {
 		t.Fatal(err)

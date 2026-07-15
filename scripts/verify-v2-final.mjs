@@ -78,6 +78,11 @@ const commands = [
     args: ["run", "verify:v2.1-difficulty-training-candidate"],
   },
   {
+    name: "v2.1 difficulty model-path expansion candidates",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-model-path-expansion"],
+  },
+  {
     name: "v2.1 difficulty semantic candidates",
     packageManager: true,
     args: ["run", "verify:v2.1-difficulty-semantic-candidates"],
@@ -91,6 +96,11 @@ const commands = [
     name: "v2.1 difficulty promotion holdout evidence",
     packageManager: true,
     args: ["run", "verify:v2.1-difficulty-promotion-holdout"],
+  },
+  {
+    name: "v2.1 difficulty threshold-v4 evidence",
+    packageManager: true,
+    args: ["run", "verify:v2.1-difficulty-threshold-v4"],
   },
   {
     name: "v2.1 difficulty live-shadow owner approval",

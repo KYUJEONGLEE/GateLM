@@ -23,26 +23,36 @@ var (
 )
 
 type difficultySemanticModelIdentity struct {
-	artifactVersion        string
-	candidateName          string
-	ruleVectorVersion      string
-	preprocessingVersion   string
-	tokenizerVersion       string
-	encoderVersion         string
-	poolingVersion         string
-	projectionVersion      string
-	semanticHeadsVersion   string
-	calibrationVersion     string
-	thresholdPolicyVersion string
-	thresholdEquality      string
-	ruleVectorHash         string
-	tokenizerHash          string
-	encoderHash            string
-	projectionHash         string
-	semanticHeadsHash      string
-	bundleVersion          string
-	bundleHash             string
-	contentHash            string
+	artifactVersion         string
+	decisionBoundaryVersion string
+	candidateName           string
+	ruleVectorVersion       string
+	preprocessingVersion    string
+	tokenizerVersion        string
+	encoderVersion          string
+	poolingVersion          string
+	projectionVersion       string
+	semanticHeadsVersion    string
+	calibrationVersion      string
+	thresholdPolicyVersion  string
+	thresholdEquality       string
+	ruleVectorHash          string
+	tokenizerHash           string
+	encoderHash             string
+	projectionHash          string
+	semanticHeadsHash       string
+	bundleVersion           string
+	bundleHash              string
+	contentHash             string
+}
+
+// DifficultySemanticShadowModelCompatible reports whether the checked-in
+// shadow material was trained for the exact deterministic sentinel boundary
+// used by the current Gateway. A mismatch disables shadow only; rule routing
+// remains authoritative.
+func DifficultySemanticShadowModelCompatible() bool {
+	return generatedDifficultySemanticModel118D.identity.decisionBoundaryVersion != "" &&
+		generatedDifficultySemanticModel118D.identity.decisionBoundaryVersion == DifficultyDecisionBoundaryVersion
 }
 
 type difficultySemanticModelMaterial struct {

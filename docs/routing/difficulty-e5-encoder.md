@@ -68,6 +68,14 @@ Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[
 
 2026-07-15 첫 single-request evaluation은 [`../testing/difficulty-promotion-holdout-100-result.json`](../testing/difficulty-promotion-holdout-100-result.json)에 aggregate로만 보존한다. 결과는 candidate accuracy `0.70`/rule baseline `0.78`, candidate `complex -> simple=0`이며 category별 complex-to-simple 비악화는 모두 통과했다. 그러나 accuracy gate가 실패했으므로 현재 artifact는 promotion eligible이 아니다. 이 결과를 확인한 Holdout으로 model, PCA, semantic head, calibrator, threshold 또는 subset을 바꾸지 않는다.
 
+### 2.3 Threshold-only v4 복구 시도
+
+소비한 promotion Holdout을 보지 않고 기존 calibration 100건의 family-grouped out-of-fold calibrated probability만 고정 `0.01` grid로 검사했다. `0.45`는 accuracy `0.93`, `complex -> simple=4`였고, calibration safety gate를 만족한 `difficulty-threshold-v2 = 0.06`은 accuracy `0.95`, `complex -> simple=0`, `simple -> complex=5`였다. 이에 weight 118개, bias, Platt calibrator, PCA, semantic head와 component hash는 바꾸지 않고 threshold와 artifact/bundle identity만 바꾼 v4 offline candidate를 만들었다.
+
+그 뒤 v1에서 소비한 10 family를 제외한 새 whole-family Holdout 10 family/100건을 score access 전에 고정했다. 첫 평가 결과는 accuracy `0.56`, `complex -> simple=0`, `simple -> complex=44`로 accuracy gate를 실패했다. 따라서 calibration의 threshold-only operating point는 새 family로 일반화되지 않았고 v4는 Go bundle, parity replay, live shadow 또는 product routing으로 승격하지 않는다. 새 Holdout도 이제 소비됐으며 재튜닝에 사용할 수 없다. 상세 aggregate evidence와 다음 경계는 [`../testing/difficulty-threshold-v4-evaluation.md`](../testing/difficulty-threshold-v4-evaluation.md)에 기록한다.
+
+이후 canonical sentinel 경계가 `semantic-empty / combined score-8` v2로 변경되어 v3가 학습된 historical model-path membership과 달라졌다. Generated v3 material은 historical boundary identity를 별도로 pin하고 Gateway는 encoder 생성 전에 current boundary와 비교한다. 현재는 불일치하므로 optional image가 존재해도 request shadow는 `unavailable`로 내려가며 rule routing만 유지한다. 기존 owner guardrail 승인은 historical evidence로 보존하지만 current boundary 활성화 권한은 없고, 새 exact-boundary artifact와 별도 승인이 필요하다.
+
 ## 3. Artifact And Distribution Contract
 
 PCA NPZ와 작은 manifest는 source control에 포함한다. Tokenizer와 ONNX model처럼 큰 runtime artifact는 Git에 포함하지 않는다. 개발 환경에서는 `.tmp/difficulty-semantic-encoder-artifacts`의 로컬 artifact cache에 exact pinned revision과 hash로 준비한다.

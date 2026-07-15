@@ -31,13 +31,15 @@ const (
 	OfflineCandidateProjection         = "42d-rule-vector-v1-plus-projection"
 	OfflineCandidateProjectionAndHeads = "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities"
 
-	GatewayShadow118DProfileName       = "gateway-shadow-118d"
-	GatewayShadow118DArtifactVersion   = "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3"
-	GatewayShadow118DBundleHash        = "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220"
-	GatewayShadow118DContentHash       = "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd"
-	GatewayShadow118DProjectionHash    = "sha256:a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa"
-	GatewayShadow118DSemanticHeadsHash = "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386"
-	GatewayShadow118DGeneratedName     = "generatedDifficultySemanticModel118D"
+	GatewayShadow118DProfileName             = "gateway-shadow-118d"
+	GatewayShadow118DArtifactVersion         = "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3"
+	GatewayShadow118DBundleHash              = "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220"
+	GatewayShadow118DContentHash             = "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd"
+	GatewayShadow118DProjectionHash          = "sha256:a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa"
+	GatewayShadow118DSemanticHeadsHash       = "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386"
+	GatewayShadow118DTrainingPolicyVersion   = "difficulty-logistic-training.semantic-candidates.single-request.2026-07-15.v3"
+	GatewayShadow118DDecisionBoundaryVersion = "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1"
+	GatewayShadow118DGeneratedName           = "generatedDifficultySemanticModel118D"
 )
 
 type OfflineSemanticHeadSpec struct {
@@ -300,6 +302,7 @@ func ValidateGatewayShadow118DArtifact(artifact OfflineArtifact) error {
 		return err
 	}
 	if artifact.ArtifactVersion != GatewayShadow118DArtifactVersion ||
+		artifact.TrainingPolicyVersion != GatewayShadow118DTrainingPolicyVersion ||
 		artifact.CandidateName != OfflineCandidateProjectionAndHeads ||
 		artifact.TotalDimension != 118 || len(artifact.FeatureNames) != 118 || len(artifact.Weights) != 118 {
 		return errors.New("Gateway shadow 118D artifact identity mismatch")
@@ -628,6 +631,7 @@ func RenderGatewayShadow118DGo(artifact OfflineArtifact, packageName string) ([]
 	builder.WriteString("var " + GatewayShadow118DGeneratedName + " = difficultySemanticModelMaterial{\n")
 	builder.WriteString("\tidentity: difficultySemanticModelIdentity{\n")
 	writeGeneratedStringField(&builder, "artifactVersion", artifact.ArtifactVersion)
+	writeGeneratedStringField(&builder, "decisionBoundaryVersion", GatewayShadow118DDecisionBoundaryVersion)
 	writeGeneratedStringField(&builder, "candidateName", artifact.CandidateName)
 	writeGeneratedStringField(&builder, "ruleVectorVersion", artifact.RuleVectorVersion)
 	writeGeneratedStringField(&builder, "preprocessingVersion", artifact.PreprocessingVersion)

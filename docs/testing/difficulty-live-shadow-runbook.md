@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Operational runbook; owner guardrails approved, live evidence pending |
+| Status | Historical guardrails only; current decision boundary is incompatible and live shadow is disabled |
 | Applies to | Limited development tenant/application request shadow |
 | Product routing | Rule-based and authoritative |
 | Active contract | [`../routing/contracts.md`](../routing/contracts.md) |
@@ -11,6 +11,8 @@
 ## 1. Scope And Safety Boundary
 
 Live shadow is observation-only. It does not change category, authoritative difficulty, routing matrix lookup, ordered `modelRefs`, decision key, cache, provider resolution, retry, fallback, quota or cost.
+
+Do not activate the current v3 pair. The owner guardrails approved, live evidence pending state applied to the historical `payload-empty / separate score-3` decision boundary. The Gateway now uses `semantic-empty / combined score-8`, so [`difficulty-live-shadow-boundary-supersession.json`](difficulty-live-shadow-boundary-supersession.json) makes that approval inapplicable to the current runtime. Gateway checks this compatibility before creating the encoder and remains rule-only. A new exact-boundary artifact, passing evidence, and explicit owner approval are required before the activation steps below can be used again.
 
 Activation requires both settings:
 
@@ -25,7 +27,7 @@ Rollback clears the allowlist or sets `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=fals
 
 ## 2. Owner-Approved Guardrails
 
-The routing owner approved the exact artifact, threshold and runtime guardrails in [`difficulty-live-shadow-owner-approval.json`](difficulty-live-shadow-owner-approval.json) on 2026-07-15. This approval applies only to limited development exact-pair live shadow. The untouched promotion Holdout accuracy gate remains failed, so it does not approve ML-authoritative routing, product model selection changes, production/global enablement or release.
+The routing owner approved the historical exact artifact, threshold and runtime guardrails in [`difficulty-live-shadow-owner-approval.json`](difficulty-live-shadow-owner-approval.json) on 2026-07-15. It applied only to limited development exact-pair live shadow under that artifact's historical decision boundary. It is not an approval for the current boundary. The untouched promotion Holdout accuracy gate also remains failed, so it never approved ML-authoritative routing, product model selection changes, production/global enablement or release.
 
 Before enabling any pair, the deployment platform must enforce a container memory hard limit of `2 GiB` (`2147483648` bytes). The diagnostic three-run replay observed peak process RSS `1008566272` bytes and peak cgroup current `1540128768` bytes; these measurements are runtime context, not promotion evidence.
 
@@ -44,6 +46,8 @@ Rollback when either memory condition persists for 5 minutes:
 To roll back, clear `GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES` or set `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false`, restart Gateway, and confirm rule-only routing and provider health before re-enabling. Memory and restart observations come from deployment-platform operational telemetry; this runbook does not add a product metric contract.
 
 ## 3. Rollout
+
+The following sequence is blocked until a compatible artifact and new owner approval replace the historical pair.
 
 1. Deploy the candidate image with shadow disabled.
 2. Enable one exact development tenant/application pair.

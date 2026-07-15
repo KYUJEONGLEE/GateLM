@@ -21,14 +21,16 @@ type promotionFreeze struct {
 	SchemaVersion string `json:"schemaVersion"`
 	Status        string `json:"status"`
 	Source        struct {
-		DatasetVersion  string `json:"datasetVersion"`
-		DatasetSHA256   string `json:"datasetSha256"`
-		ManifestSHA256  string `json:"manifestSha256"`
-		SplitPolicy     string `json:"splitPolicyVersion"`
-		SplitSeed       int    `json:"splitSeed"`
-		SourceFamilies  int    `json:"sourceHoldoutFamilies"`
-		SourceRecords   int    `json:"sourceHoldoutRecords"`
-		PreviousOverlap int    `json:"overlapWithPreviouslyObservedDatasetFamilies"`
+		DatasetVersion   string `json:"datasetVersion"`
+		DatasetSHA256    string `json:"datasetSha256"`
+		ManifestSHA256   string `json:"manifestSha256"`
+		SplitPolicy      string `json:"splitPolicyVersion"`
+		SplitSeed        int    `json:"splitSeed"`
+		SourceFamilies   int    `json:"sourceHoldoutFamilies"`
+		SourceRecords    int    `json:"sourceHoldoutRecords"`
+		PreviousOverlap  int    `json:"overlapWithPreviouslyObservedDatasetFamilies"`
+		ConsumedOverlap  int    `json:"overlapWithConsumedHoldoutFamilies"`
+		ExcludedConsumed int    `json:"excludedConsumedFamilies"`
 	} `json:"source"`
 	Selection struct {
 		PolicyVersion    string `json:"policyVersion"`
@@ -39,8 +41,10 @@ type promotionFreeze struct {
 	} `json:"selection"`
 	Artifact struct {
 		ArtifactVersion        string  `json:"artifactVersion"`
+		BundleVersion          string  `json:"bundleVersion,omitempty"`
 		BundleHash             string  `json:"bundleHash"`
 		ContentHash            string  `json:"contentHash"`
+		ArtifactFileSHA256     string  `json:"artifactFileSha256,omitempty"`
 		ThresholdPolicyVersion string  `json:"thresholdPolicyVersion"`
 		Threshold              float64 `json:"threshold"`
 		TotalDimension         int     `json:"totalDimension"`
@@ -183,7 +187,11 @@ func buildPromotionHoldoutInput(datasetPath, manifestPath, freezePath string) (p
 	datasetSHA256 := hex.EncodeToString(datasetHash[:])
 	manifestSHA256 := hex.EncodeToString(manifestHash[:])
 
-	if freeze.SchemaVersion != "gatelm.difficulty-promotion-holdout-freeze.v1" || freeze.Status != "frozen_before_first_score_access" ||
+	validFreezeSchema := freeze.SchemaVersion == "gatelm.difficulty-promotion-holdout-freeze.v1" ||
+		freeze.SchemaVersion == "gatelm.difficulty-promotion-holdout-freeze.v2"
+	validConsumedBoundary := freeze.SchemaVersion != "gatelm.difficulty-promotion-holdout-freeze.v2" ||
+		(freeze.Source.ConsumedOverlap == 0 && freeze.Source.ExcludedConsumed == 10)
+	if !validFreezeSchema || !validConsumedBoundary || freeze.Status != "frozen_before_first_score_access" ||
 		!freeze.Selection.ScoreIndependent || freeze.Selection.SelectedFamilies != 10 || freeze.Selection.SelectedRecords != 100 ||
 		freeze.Source.PreviousOverlap != 0 {
 		return promotionHoldoutInput{}, errors.New("promotion freeze identity or score-independent membership gate is invalid")

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "gatelm.difficulty-live-shadow-boundary-supersession.v1",
+  "status": "historical_owner_approval_inapplicable_to_current_boundary",
+  "evaluatedOn": "2026-07-15",
+  "priorApproval": {
+    "status": "owner_approved_limited_development_shadow_guardrails",
+    "fileSha256": "c7ab4966510bc7a87184a1b9a6ebe81c1a4c6b240aebb06276f9683b186426c4"
+  },
+  "artifact": {
+    "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",
+    "bundleHash": "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220",
+    "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
+    "thresholdPolicyVersion": "difficulty-threshold-v1",
+    "threshold": 0.45
+  },
+  "decisionBoundary": {
+    "artifactTrainingBoundaryVersion": "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1",
+    "currentGatewayBoundaryVersion": "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2",
+    "compatible": false
+  },
+  "enforcement": {
+    "checkedBeforeEncoderCreation": true,
+    "currentLiveShadowEnabled": false,
+    "currentProductRouting": "rule_based",
+    "productRuntimeChanged": false,
+    "newExactBoundaryArtifactAndOwnerApprovalRequired": true
+  },
+  "reportMaterial": {
+    "aggregateOnly": true,
+    "containsRawPromptOrResponse": false,
+    "containsEmbeddingOrFeatureMaterial": false,
+    "containsModelParameters": false,
+    "containsIndividualScores": false,
+    "containsTenantOrApplicationIdentifiers": false
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "gatelm.routing-difficulty-smoke-metrics.v1",
+  "evidenceClass": "offline_contract_smoke",
+  "measuredAt": "2026-07-15T13:05:14.8974215Z",
+  "eligibility": {
+    "performanceClaimEligible": false,
+    "promotionGateApplicable": false,
+    "trainingEligible": false
+  },
+  "source": {
+    "branch": "feat/routing-difficulty-update",
+    "baseCommit": "940be8f36e0b2c7ec9c7e298449e3a7ceb4c7c64",
+    "localOriginDev": "b650d2cafd4e37cd6469e959bbd5ad4fc18e8e8d",
+    "worktreeDirty": true,
+    "datasetPath": "docs/v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl",
+    "datasetSha256": "d5cc57d833a574af1c2d34575842eee74ce5c216c9fb386419c2f4c1409acc25",
+    "command": "corepack pnpm run v2.1:routing:test:difficulty",
+    "rawReportPath": "reports/routing-difficulty-eval/difficulty-eval-20260715-220459.json",
+    "rawReportSha256": "32ab8155f726867574f54c22e088f1adaaf65571207517f83860d5ec77737760",
+    "latestReportSha256": "32ab8155f726867574f54c22e088f1adaaf65571207517f83860d5ec77737760"
+  },
+  "classifier": {
+    "name": "rule_based_category_aware_difficulty_classifier",
+    "version": "rule_based_difficulty_classifier_v1"
+  },
+  "difficulty": {
+    "totalSamples": 10,
+    "correctSamples": 10,
+    "incorrectSamples": 0,
+    "accuracy": 1,
+    "errorRate": 0,
+    "directionalErrors": {
+      "simpleExpectedSamples": 5,
+      "simpleToComplexCount": 0,
+      "simpleToComplexRate": 0,
+      "complexExpectedSamples": 5,
+      "complexToSimpleCount": 0,
+      "complexToSimpleRate": 0
+    },
+    "byCategoryDifficulty": {
+      "code": {
+        "simple": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 },
+        "complex": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 }
+      },
+      "general": {
+        "simple": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 },
+        "complex": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 }
+      },
+      "reasoning": {
+        "simple": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 },
+        "complex": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 }
+      },
+      "summarization": {
+        "simple": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 },
+        "complex": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 }
+      },
+      "translation": {
+        "simple": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 },
+        "complex": { "correct": 1, "incorrect": 0, "total": 1, "accuracy": 1, "incorrectRate": 0 }
+      }
+    }
+  },
+  "categoryContext": {
+    "matchedSamples": 7,
+    "mismatchedSamples": 3,
+    "mismatches": [
+      {
+        "sampleId": "difficulty_general_complex_001",
+        "expectedCategory": "general",
+        "actualCategory": "reasoning",
+        "expectedDifficulty": "complex",
+        "actualDifficulty": "complex",
+        "categoryMatched": false,
+        "difficultyMatched": true
+      },
+      {
+        "sampleId": "difficulty_reasoning_simple_001",
+        "expectedCategory": "reasoning",
+        "actualCategory": "general",
+        "expectedDifficulty": "simple",
+        "actualDifficulty": "simple",
+        "categoryMatched": false,
+        "difficultyMatched": true
+      },
+      {
+        "sampleId": "difficulty_reasoning_complex_001",
+        "expectedCategory": "reasoning",
+        "actualCategory": "general",
+        "expectedDifficulty": "complex",
+        "actualDifficulty": "complex",
+        "categoryMatched": false,
+        "difficultyMatched": true
+      }
+    ]
+  },
+  "classificationLatency": {
+    "unit": "microseconds",
+    "category": {
+      "warmupIterations": 5,
+      "batchSize": 32,
+      "iterations": 100,
+      "samples": 1000,
+      "avgMicros": 193.0857,
+      "p50Micros": 187.3938,
+      "p95Micros": 302.9281,
+      "maxMicros": 391.3531
+    },
+    "difficulty": {
+      "warmupIterations": 5,
+      "batchSize": 4096,
+      "iterations": 100,
+      "samples": 1000,
+      "avgMicros": 0.0454,
+      "p50Micros": 0.001,
+      "p95Micros": 0.2447,
+      "maxMicros": 0.3947
+    },
+    "total": {
+      "warmupIterations": 5,
+      "batchSize": 32,
+      "iterations": 100,
+      "samples": 1000,
+      "avgMicros": 215.3309,
+      "p50Micros": 203.6219,
+      "p95Micros": 359.2906,
+      "maxMicros": 484.8781
+    }
+  },
+  "calibration": {
+    "applicable": false,
+    "valid": false,
+    "reason": "rule-based difficulty classifier does not provide a calibrated probability"
+  },
+  "failures": []
+}

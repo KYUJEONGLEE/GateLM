@@ -37,6 +37,7 @@ func TestGatewayShadow118DCodegenPinsAndRendersSelectedBundle(t *testing.T) {
 		GatewayShadow118DContentHash,
 		GatewayShadow118DProjectionHash,
 		GatewayShadow118DSemanticHeadsHash,
+		GatewayShadow118DDecisionBoundaryVersion,
 	} {
 		if !strings.Contains(text, marker) {
 			t.Fatalf("generated Gateway shadow Go is missing %q", marker)
@@ -457,6 +458,7 @@ const difficultySemanticHeadClassCount = 3
 const difficultySemanticTotalDimension = 118
 type difficultySemanticModelIdentity struct {
     artifactVersion string
+    decisionBoundaryVersion string
     candidateName string
     ruleVectorVersion string
     preprocessingVersion string

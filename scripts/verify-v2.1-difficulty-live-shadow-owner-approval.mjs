@@ -15,6 +15,10 @@ export const approvalPaths = Object.freeze({
     "docs/testing/difficulty-promotion-holdout-100-result.json",
   ),
   approval: path.join(root, "docs/testing/difficulty-live-shadow-owner-approval.json"),
+  supersession: path.join(
+    root,
+    "docs/testing/difficulty-live-shadow-boundary-supersession.json",
+  ),
   runbook: path.join(root, "docs/testing/difficulty-live-shadow-runbook.md"),
 });
 
@@ -95,7 +99,14 @@ function assertNoForbiddenApprovalKeys(value, pathParts = []) {
   }
 }
 
-export function validateApproval({ artifactBytes, promotionReport, approval, runbook }) {
+export function validateApproval({
+  artifactBytes,
+  promotionReport,
+  approvalBytes,
+  approval,
+  supersession,
+  runbook,
+}) {
   const artifact = JSON.parse(artifactBytes.toString("utf8"));
 
   requireValue(
@@ -206,6 +217,51 @@ export function validateApproval({ artifactBytes, promotionReport, approval, run
   );
   assertNoForbiddenApprovalKeys(approval);
 
+  requireValue(
+    supersession?.schemaVersion ===
+      "gatelm.difficulty-live-shadow-boundary-supersession.v1" &&
+      supersession.status === "historical_owner_approval_inapplicable_to_current_boundary" &&
+      supersession.evaluatedOn === "2026-07-15" &&
+      supersession.priorApproval?.status === approval.status &&
+      supersession.priorApproval?.fileSha256 === sha256(approvalBytes),
+    "live-shadow boundary supersession provenance drifted",
+  );
+  for (const field of [
+    "artifactVersion",
+    "bundleHash",
+    "contentHash",
+    "thresholdPolicyVersion",
+    "threshold",
+  ]) {
+    requireValue(
+      supersession.artifact?.[field] === approval.artifact?.[field],
+      `live-shadow boundary supersession artifact ${field} drifted`,
+    );
+  }
+  requireValue(
+    supersession.decisionBoundary?.artifactTrainingBoundaryVersion ===
+      "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1" &&
+      supersession.decisionBoundary?.currentGatewayBoundaryVersion ===
+        "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2" &&
+      supersession.decisionBoundary?.compatible === false &&
+      supersession.enforcement?.checkedBeforeEncoderCreation === true &&
+      supersession.enforcement?.currentLiveShadowEnabled === false &&
+      supersession.enforcement?.currentProductRouting === "rule_based" &&
+      supersession.enforcement?.productRuntimeChanged === false &&
+      supersession.enforcement?.newExactBoundaryArtifactAndOwnerApprovalRequired === true,
+    "live-shadow boundary supersession drifted",
+  );
+  requireValue(
+    supersession.reportMaterial?.aggregateOnly === true &&
+      supersession.reportMaterial?.containsRawPromptOrResponse === false &&
+      supersession.reportMaterial?.containsEmbeddingOrFeatureMaterial === false &&
+      supersession.reportMaterial?.containsModelParameters === false &&
+      supersession.reportMaterial?.containsIndividualScores === false &&
+      supersession.reportMaterial?.containsTenantOrApplicationIdentifiers === false,
+    "live-shadow boundary supersession data-safety declaration is unsafe",
+  );
+  assertNoForbiddenApprovalKeys(supersession);
+
   for (const requiredText of [
     "owner guardrails approved, live evidence pending",
     "2 GiB",
@@ -226,15 +282,24 @@ export function validateApproval({ artifactBytes, promotionReport, approval, run
 export function verifyCanonicalApproval(paths = approvalPaths) {
   const artifactBytes = readFileSync(paths.artifact);
   const promotionReport = JSON.parse(readFileSync(paths.promotionReport, "utf8"));
-  const approval = JSON.parse(readFileSync(paths.approval, "utf8"));
+  const approvalBytes = readFileSync(paths.approval);
+  const approval = JSON.parse(approvalBytes.toString("utf8"));
+  const supersession = JSON.parse(readFileSync(paths.supersession, "utf8"));
   const runbook = readFileSync(paths.runbook, "utf8");
-  validateApproval({ artifactBytes, promotionReport, approval, runbook });
-  return approval;
+  validateApproval({
+    artifactBytes,
+    promotionReport,
+    approvalBytes,
+    approval,
+    supersession,
+    runbook,
+  });
+  return { approval, supersession };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const approval = verifyCanonicalApproval();
+  const { approval, supersession } = verifyCanonicalApproval();
   console.log(
-    `difficulty live-shadow owner approval verified (${approval.status}, hard limit ${approval.ownerApprovedMemoryGuardrails.containerHardLimitBytes} bytes)`,
+    `difficulty live-shadow historical owner approval verified (${approval.status}, hard limit ${approval.ownerApprovedMemoryGuardrails.containerHardLimitBytes} bytes; current status ${supersession.status})`,
   );
 }

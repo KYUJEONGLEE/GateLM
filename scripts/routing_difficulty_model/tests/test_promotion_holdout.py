@@ -2,11 +2,47 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 
-from gatelm_difficulty_model.promotion_holdout import build_gate, classification_summary
+from gatelm_difficulty_model.promotion_holdout import (
+    build_gate,
+    classification_summary,
+    validate_frozen_runtime_material,
+)
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class PromotionHoldoutTests(unittest.TestCase):
+    def test_accepts_the_exact_frozen_threshold_v2_artifact(self) -> None:
+        artifact = json.loads(
+            (
+                REPO_ROOT
+                / "scripts/routing_difficulty_model/artifacts/candidates/"
+                "difficulty-candidate-c-118d.owner-approved-500.v4.json"
+            ).read_text(encoding="utf-8")
+        )
+        freeze = json.loads(
+            (
+                REPO_ROOT
+                / "docs/v2.1.0/evaluation/difficulty-promotion-holdout-100.v2.json"
+            ).read_text(encoding="utf-8")
+        )
+        runtime_manifest = json.loads(
+            (
+                REPO_ROOT
+                / "scripts/routing_difficulty_model/artifacts/"
+                "difficulty-e5-encoder-manifest.v2.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        validate_frozen_runtime_material(
+            {"artifact": freeze["artifact"]},
+            artifact,
+            runtime_manifest,
+        )
+
     def test_gate_requires_accuracy_count_and_every_category_non_regression(self) -> None:
         samples = []
         candidate_predictions = []

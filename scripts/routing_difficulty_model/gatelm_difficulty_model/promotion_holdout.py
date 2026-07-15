@@ -199,7 +199,7 @@ def build_gate(
     }
 
 
-def _validate_runtime_and_artifact(
+def validate_frozen_runtime_material(
     exported: Mapping[str, Any], artifact: Mapping[str, Any], runtime_manifest: Mapping[str, Any]
 ) -> None:
     frozen_artifact = exported.get("artifact")
@@ -215,8 +215,21 @@ def _validate_runtime_and_artifact(
     ):
         if artifact.get(field) != frozen_artifact.get(field):
             raise ValueError(f"promotion artifact {field} changed after holdout freeze")
-    if artifact.get("totalDimension") != 118 or artifact.get("threshold") != 0.45:
-        raise ValueError("promotion artifact no longer has the frozen 118D/0.45 shape")
+    if "bundleVersion" in frozen_artifact and artifact.get("bundleVersion") != frozen_artifact.get(
+        "bundleVersion"
+    ):
+        raise ValueError("promotion artifact bundleVersion changed after holdout freeze")
+    threshold = artifact.get("threshold")
+    if (
+        artifact.get("totalDimension") != 118
+        or isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or not math.isfinite(float(threshold))
+        or not 0.0 <= float(threshold) <= 1.0
+        or artifact.get("thresholdPolicyVersion")
+        not in {"difficulty-threshold-v1", "difficulty-threshold-v2"}
+    ):
+        raise ValueError("promotion artifact no longer has an approved frozen 118D threshold policy")
     calibrator = artifact.get("calibrator")
     if not isinstance(calibrator, Mapping) or calibrator.get("type") != "platt":
         raise ValueError("promotion artifact no longer uses the frozen Platt calibrator")
@@ -263,7 +276,10 @@ def evaluate(
     )
     if runtime.projection is None:
         raise ValueError("promotion runtime is missing the frozen PCA projection")
-    _validate_runtime_and_artifact(exported, artifact, runtime_manifest)
+    frozen_file_hash = exported.get("artifact", {}).get("artifactFileSha256")
+    if frozen_file_hash and frozen_file_hash != _sha256(artifact_path):
+        raise ValueError("promotion artifact file identity changed after holdout freeze")
+    validate_frozen_runtime_material(exported, artifact, runtime_manifest)
 
     samples = exported["samples"]
     model_samples = [sample for sample in samples if sample["modelPath"]]

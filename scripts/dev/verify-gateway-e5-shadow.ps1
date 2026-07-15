@@ -20,6 +20,13 @@ if (-not $Python) {
     $Python = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { "python" }
 }
 
+# The checked-in v3 model is pinned to the historical payload-empty / separate
+# score-3 sentinel boundary. The current Gateway uses the semantic-empty /
+# combined-score-8 boundary, so model replay and live shadow must fail closed.
+# Go compatibility tests below pin both identities; change this flag only with
+# a newly trained and explicitly approved exact-boundary artifact.
+$shadowModelCompatible = $false
+
 & (Join-Path $PSScriptRoot "prepare-gateway-e5-shadow-bundle.ps1") `
     -EncoderArtifactRoot $ArtifactRoot `
     -OutputDirectory $BundleDirectory
@@ -78,15 +85,19 @@ try {
         throw "canonical Python E5 parity reference failed"
     }
 
-    & $Python -m gatelm_difficulty_model.gateway_holdout_reference reference `
-        --dataset (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl") `
-        --manifest (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json") `
-        --artifact (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json") `
-        --artifact-root $artifactPath `
-        --encoder-manifest (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json") `
-        --output $holdoutReferencePath
-    if ($LASTEXITCODE -ne 0) {
-        throw "canonical Python Gateway holdout reference failed"
+    if ($shadowModelCompatible) {
+        & $Python -m gatelm_difficulty_model.gateway_holdout_reference reference `
+            --dataset (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl") `
+            --manifest (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json") `
+            --artifact (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json") `
+            --artifact-root $artifactPath `
+            --encoder-manifest (Join-Path $repoRoot "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json") `
+            --output $holdoutReferencePath
+        if ($LASTEXITCODE -ne 0) {
+            throw "canonical Python Gateway holdout reference failed"
+        }
+    } else {
+        Write-Host "Gateway model replay skipped: checked-in artifact decision boundary is historical"
     }
 
     $previousGoCache = $env:GOCACHE
@@ -103,7 +114,7 @@ try {
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 initialization isolation tests failed" }
             & go test ./apps/gateway-core/internal/domain/routing `
-                -run "TestSimpleRouter.*Shadow|TestDifficultySemanticShadow|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely" `
+                -run "TestSimpleRouter.*Shadow|TestDifficultySemanticShadow|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely|TestGeneratedDifficultySemanticModelIsIncompatibleAfterDecisionBoundaryChange" `
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 request isolation tests failed" }
         } finally {
@@ -128,52 +139,56 @@ try {
         throw "Gateway native/Python E5 parity failed"
     }
 
-    $holdoutRunReports = @()
-    $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
-    for ($run = 1; $run -le 3; $run++) {
-        $runReport = Join-Path $parityDirectory "holdout-run-$run.json"
-        $holdoutRunReports += $runReport
-        & docker run --rm --platform linux/amd64 `
-            -v "$(Join-Path $repoRoot 'apps/gateway-core'):/src/apps/gateway-core:ro" `
-            -v "${bundlePath}:/bundle:ro" `
-            -v "${parityDirectory}:/evidence" `
-            -v "$(Join-Path $repoRoot 'docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl'):/data/dataset.jsonl:ro" `
-            -v "$(Join-Path $repoRoot 'docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json'):/data/manifest.json:ro" `
-            -w /src/apps/gateway-core `
-            -e GATELM_E5_INTEGRATION_BUNDLE_ROOT=/bundle `
-            -e GATELM_E5_HOLDOUT_REFERENCE=/evidence/holdout-reference.json `
-            -e GATELM_E5_HOLDOUT_DATASET=/data/dataset.jsonl `
-            -e GATELM_E5_HOLDOUT_MANIFEST=/data/manifest.json `
-            -e "GATELM_E5_HOLDOUT_REPORT=/evidence/holdout-run-$run.json" `
-            -e "GATELM_EVIDENCE_COMMIT=$commit" `
-            -e "GATELM_EVIDENCE_RUN=$run" `
-            golang:1.24-bookworm `
-            bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./internal/adapters/routing/e5onnx -run '^TestNativeGatewayHoldoutReplay$' -count=1"
+    if ($shadowModelCompatible) {
+        $holdoutRunReports = @()
+        $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
+        for ($run = 1; $run -le 3; $run++) {
+            $runReport = Join-Path $parityDirectory "holdout-run-$run.json"
+            $holdoutRunReports += $runReport
+            & docker run --rm --platform linux/amd64 `
+                -v "$(Join-Path $repoRoot 'apps/gateway-core'):/src/apps/gateway-core:ro" `
+                -v "${bundlePath}:/bundle:ro" `
+                -v "${parityDirectory}:/evidence" `
+                -v "$(Join-Path $repoRoot 'docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl'):/data/dataset.jsonl:ro" `
+                -v "$(Join-Path $repoRoot 'docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json'):/data/manifest.json:ro" `
+                -w /src/apps/gateway-core `
+                -e GATELM_E5_INTEGRATION_BUNDLE_ROOT=/bundle `
+                -e GATELM_E5_HOLDOUT_REFERENCE=/evidence/holdout-reference.json `
+                -e GATELM_E5_HOLDOUT_DATASET=/data/dataset.jsonl `
+                -e GATELM_E5_HOLDOUT_MANIFEST=/data/manifest.json `
+                -e "GATELM_E5_HOLDOUT_REPORT=/evidence/holdout-run-$run.json" `
+                -e "GATELM_EVIDENCE_COMMIT=$commit" `
+                -e "GATELM_EVIDENCE_RUN=$run" `
+                golang:1.24-bookworm `
+                bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./internal/adapters/routing/e5onnx -run '^TestNativeGatewayHoldoutReplay$' -count=1"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Gateway native holdout replay run $run failed"
+            }
+        }
+
+        $aggregateArguments = @(
+            "-m", "gatelm_difficulty_model.gateway_holdout_reference", "aggregate"
+        )
+        foreach ($runReport in $holdoutRunReports) {
+            $aggregateArguments += @("--report", $runReport)
+        }
+        $aggregateArguments += @("--output", $holdoutAggregatePath)
+        & $Python @aggregateArguments
         if ($LASTEXITCODE -ne 0) {
-            throw "Gateway native holdout replay run $run failed"
+            throw "Gateway holdout replay aggregation failed"
         }
-    }
 
-    $aggregateArguments = @(
-        "-m", "gatelm_difficulty_model.gateway_holdout_reference", "aggregate"
-    )
-    foreach ($runReport in $holdoutRunReports) {
-        $aggregateArguments += @("--report", $runReport)
-    }
-    $aggregateArguments += @("--output", $holdoutAggregatePath)
-    & $Python @aggregateArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Gateway holdout replay aggregation failed"
-    }
-
-    if ($EvidenceOutput) {
-        $evidencePath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $EvidenceOutput))
-        if (-not $evidencePath.StartsWith($repoRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "EvidenceOutput must stay inside the repository"
+        if ($EvidenceOutput) {
+            $evidencePath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $EvidenceOutput))
+            if (-not $evidencePath.StartsWith($repoRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "EvidenceOutput must stay inside the repository"
+            }
+            New-Item -ItemType Directory -Path (Split-Path -Parent $evidencePath) -Force | Out-Null
+            Copy-Item -LiteralPath $holdoutAggregatePath -Destination $evidencePath -Force
+            Write-Host "Gateway holdout aggregate evidence: $evidencePath"
         }
-        New-Item -ItemType Directory -Path (Split-Path -Parent $evidencePath) -Force | Out-Null
-        Copy-Item -LiteralPath $holdoutAggregatePath -Destination $evidencePath -Force
-        Write-Host "Gateway holdout aggregate evidence: $evidencePath"
+    } elseif ($EvidenceOutput) {
+        throw "Gateway holdout evidence cannot be produced for an incompatible decision boundary"
     }
 
     if (-not $SkipImageBuild) {
@@ -207,14 +222,23 @@ try {
             $ErrorActionPreference = $previousErrorActionPreference
         }
         $safeSmoke = $smokeOutput -join "`n"
+        $expectedShadowStatus = if ($shadowModelCompatible) {
+            "difficulty E5 shadow initialized; product routing unchanged"
+        } else {
+            "difficulty E5 shadow unavailable; product routing unchanged"
+        }
         if ($smokeExitCode -ne 1 -or
-            -not $safeSmoke.Contains("difficulty E5 shadow initialized; product routing unchanged") -or
+            -not $safeSmoke.Contains($expectedShadowStatus) -or
             -not $safeSmoke.Contains("postgres pool configuration failed")) {
             throw "Gateway E5 shadow container startup smoke failed"
         }
     }
 
-    Write-Host "Gateway E5 shadow and Holdout replay verification passed"
+    if ($shadowModelCompatible) {
+        Write-Host "Gateway E5 shadow and Holdout replay verification passed"
+    } else {
+        Write-Host "Gateway E5 optional image verification passed with historical model shadow disabled"
+    }
 } finally {
     $env:PYTHONPATH = $previousPythonPath
     if (Test-Path -LiteralPath $parityDirectory) {

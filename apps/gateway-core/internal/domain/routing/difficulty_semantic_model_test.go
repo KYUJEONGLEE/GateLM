@@ -164,6 +164,19 @@ func TestGeneratedDifficultySemanticModelIdentityAndProjectionBitsArePinned(t *t
 	}
 }
 
+func TestGeneratedDifficultySemanticModelIsIncompatibleAfterDecisionBoundaryChange(t *testing.T) {
+	identity := generatedDifficultySemanticModel118D.identity
+	if identity.decisionBoundaryVersion != "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1" {
+		t.Fatalf("historical decision boundary identity drifted: %q", identity.decisionBoundaryVersion)
+	}
+	if identity.decisionBoundaryVersion == DifficultyDecisionBoundaryVersion {
+		t.Fatal("historical model unexpectedly matches the current decision boundary")
+	}
+	if DifficultySemanticShadowModelCompatible() {
+		t.Fatal("historical semantic model was accepted by the current decision boundary")
+	}
+}
+
 func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing.T) {
 	features := syntheticDifficultySemanticModelFeatures()
 	pooled := syntheticDifficultySemanticPooled()
