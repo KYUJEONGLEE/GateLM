@@ -107,6 +107,42 @@ func TestServiceAppliesRoutingV2BeforeUsageReservation(t *testing.T) {
 	}
 }
 
+func TestServiceRoutesAnExistingConversationByTheLatestUserMessage(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_cheap", ProviderID: "provider-openai", ModelKey: "gpt-mini",
+		},
+	}}
+	providers := &fakeProviderExecutor{stream: &fakeStream{}}
+	service := New(&fakeSnapshotResolver{snapshot: snapshot}, usage, providers)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{
+		{Role: "user", Content: "Debug a race condition across multiple files, refactor the architecture, and preserve performance."},
+		{Role: "assistant", Content: "Here is the detailed architecture analysis."},
+		{Role: "user", Content: "Hello"},
+	}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare routed conversation: %v", err)
+	}
+	defer execution.Close()
+	if usage.lastContext.Routing == nil {
+		t.Fatal("routing decision must be attached before usage reservation")
+	}
+	decision := usage.lastContext.Routing
+	if decision.ModelRef != "tc_cheap" || decision.Category != "general" || decision.Difficulty != "simple" {
+		t.Fatalf("latest user message must determine the route: %+v", decision)
+	}
+	if len(providers.lastInput.Messages) != len(request.Input.Messages) {
+		t.Fatalf("provider input lost conversation history: got %d messages, want %d", len(providers.lastInput.Messages), len(request.Input.Messages))
+	}
+}
+
 func TestServiceFailsClosedBeforeReservationWhenExactCacheAdapterIsMissing(t *testing.T) {
 	snapshot := completionSnapshot()
 	snapshot.Policies.Cache.Enabled = true
@@ -825,18 +861,20 @@ func (f *fakeUsageAccounting) ReadTerminal(context.Context, tenantchat.RequestCo
 }
 
 type fakeProviderExecutor struct {
-	stream   provider.ChatCompletionStreamReader
-	streams  []provider.ChatCompletionStreamReader
-	errors   []error
-	err      error
-	status   tenantchat.ProviderCallStartStatus
-	statuses []tenantchat.ProviderCallStartStatus
-	calls    int
+	stream    provider.ChatCompletionStreamReader
+	streams   []provider.ChatCompletionStreamReader
+	errors    []error
+	err       error
+	status    tenantchat.ProviderCallStartStatus
+	statuses  []tenantchat.ProviderCallStartStatus
+	calls     int
+	lastInput tenantchat.CompletionInput
 }
 
-func (f *fakeProviderExecutor) OpenStream(context.Context, tenantchat.RequestContext, tenantchat.SelectedRoute, tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
+func (f *fakeProviderExecutor) OpenStream(_ context.Context, _ tenantchat.RequestContext, _ tenantchat.SelectedRoute, input tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
 	index := f.calls
 	f.calls++
+	f.lastInput = input
 	if index < len(f.streams) {
 		var err error
 		if index < len(f.errors) {

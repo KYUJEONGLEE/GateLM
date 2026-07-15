@@ -429,12 +429,9 @@ func decideTenantChatRoute(
 	if policy.Mode == routing.RoutingPolicyModeManual {
 		requestedModel = snapshot.Policies.Routing.ManualModelRef
 	}
-	messages := make([]routing.PromptMessage, 0, len(input.Messages))
-	for _, message := range input.Messages {
-		messages = append(messages, routing.PromptMessage{
-			Role: message.Role,
-			Text: message.Content,
-		})
+	messages := currentTurnRoutingMessages(input.Messages)
+	if len(messages) == 0 {
+		return tenantchat.RoutingDecision{}, tenantchat.ErrNoEligibleRoute
 	}
 	config := routing.SimpleRouterConfig{
 		Mode:           policy.Mode,
@@ -463,6 +460,28 @@ func decideTenantChatRoute(
 		RoutingDecisionKeyHash: decision.RoutingDecisionKeyHash,
 		RoutingPolicyHash:      decision.PolicyHash,
 	}, nil
+}
+
+// currentTurnRoutingMessages keeps stable system context, but excludes earlier
+// conversation turns so a previous complex request cannot force the next
+// simple request onto the complex route. The caller passes safety-processed
+// input, while the full input remains unchanged for cache and provider use.
+func currentTurnRoutingMessages(messages []tenantchat.EphemeralMessage) []routing.PromptMessage {
+	current := make([]routing.PromptMessage, 0, 2)
+	latestUserIndex := -1
+	for index, message := range messages {
+		if message.Role == "system" {
+			current = append(current, routing.PromptMessage{Role: message.Role, Text: message.Content})
+		}
+		if message.Role == "user" {
+			latestUserIndex = index
+		}
+	}
+	if latestUserIndex >= 0 {
+		message := messages[latestUserIndex]
+		current = append(current, routing.PromptMessage{Role: message.Role, Text: message.Content})
+	}
+	return current
 }
 
 func toRoutingDifficulty(value tenantruntime.RoutingDifficulty) routing.DifficultyRoutes {
