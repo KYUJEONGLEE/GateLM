@@ -33,6 +33,9 @@ import {
   type SafeChatError,
 } from '@/lib/conversation-contract.mjs';
 
+const CONTEXT_MODE_STORAGE_KEY = 'gatelm.tenant-chat.context-mode';
+type ContextMode = 'conversation' | 'single_turn';
+
 export function ChatShell() {
   const router = useRouter();
   const [session, setSession] = useState<ChatSession | null>(null);
@@ -42,6 +45,7 @@ export function ChatShell() {
   const [messages, setMessages] = useState<readonly DisplayMessage[]>([]);
   const [messageCursor, setMessageCursor] = useState<string | null>(null);
   const [composer, setComposer] = useState('');
+  const [contextMode, setContextMode] = useState<ContextMode>('conversation');
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -73,6 +77,16 @@ export function ChatShell() {
   const closeDrawer = useCallback((returnFocus: boolean) => {
     setMenuOpen(false);
     if (returnFocus) requestAnimationFrame(() => drawerTriggerRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CONTEXT_MODE_STORAGE_KEY) === 'single_turn') {
+        setContextMode('single_turn');
+      }
+    } catch {
+      // Storage can be unavailable in hardened browser modes; the safe default keeps context.
+    }
   }, []);
 
   useEffect(() => {
@@ -291,6 +305,7 @@ export function ChatShell() {
       const response = await streamApi(`/api/tenant-chat/conversations/${conversationId}/turns`, {
         body: JSON.stringify({
           content,
+          contextMode,
           idempotencyKey: idempotencyKey(),
           usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
         }),
@@ -390,6 +405,19 @@ export function ChatShell() {
     }
   }
 
+  function changeContextMode(enabled: boolean) {
+    const next: ContextMode = enabled ? 'conversation' : 'single_turn';
+    setContextMode(next);
+    try {
+      window.localStorage.setItem(CONTEXT_MODE_STORAGE_KEY, next);
+    } catch {
+      // The in-memory preference still applies for the current page.
+    }
+    setStatus(enabled
+      ? '다음 요청부터 이전 대화 컨텍스트를 함께 사용합니다.'
+      : '다음 요청부터 현재 메시지만 사용합니다. 대화 기록은 그대로 유지됩니다.');
+  }
+
   if (loading || !session?.selectedTenant) return <main className="chat-loading"><LoaderCircle className="spin" aria-hidden /><div role="status">GateLM Chat을 준비하는 중…</div></main>;
   const displayName = session.user.name || session.user.email.split('@')[0];
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
@@ -438,7 +466,20 @@ export function ChatShell() {
       <header className="chat-topbar">
         <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
         <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}</span></div>
-        <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
+        <div className="topbar-actions">
+          <label className="context-setting" title="끄면 다음 요청은 이전 대화 없이 현재 메시지만 모델과 캐시에 전달됩니다.">
+            <input
+              aria-label="이전 대화 컨텍스트 유지"
+              checked={contextMode === 'conversation'}
+              disabled={streaming}
+              onChange={(event) => changeContextMode(event.target.checked)}
+              type="checkbox"
+            />
+            <span className="context-switch" aria-hidden="true" />
+            <span className="context-setting-copy"><strong>컨텍스트 유지</strong><span>{contextMode === 'conversation' ? '켜짐' : '꺼짐'}</span></span>
+          </label>
+          <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
+        </div>
       </header>
       <div className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
         <div className={`policy-banner policy-${policyState}`} role={policyState === 'blocked' ? 'alert' : 'status'}>
