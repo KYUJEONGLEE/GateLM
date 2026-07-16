@@ -11,7 +11,10 @@ import {
   mergeLiveRequestPayloads
 } from "@/lib/dashboard/tenant-chat-live-requests";
 import type { DashboardSurface } from "@/lib/dashboard/unified-dashboard";
-import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
+import {
+  getLiveOverviewRequests,
+  getLiveRequestProviderDirectory
+} from "@/lib/gateway/live-overview-requests";
 import type { LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import type { LiveRequestStatusFilter } from "@/lib/gateway/live-requests-types";
 
@@ -61,29 +64,39 @@ export async function GET(request: NextRequest) {
     isProjectScopedForTenant(auth, tenantId) || hasProjectFilters
       ? "project_application"
       : normalizeSurface(query.get("surface"));
+  const providerDirectoryPromise = getLiveRequestProviderDirectory(tenantId);
   const [projectApplicationPayload, tenantChatPayload] = await Promise.all([
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveOverviewRequests(
-          tenantId,
-          {
-            budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
-            budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
-            model,
-            projectId: effectiveProjectId ?? requestedProjectId,
-            range,
-            resolvedBy: optionalQueryValue(query, "resolvedBy"),
-            status
-          },
-          {
-            projectIds: projects.map((project) => project.id).filter(Boolean),
-            projectNameSource: projectsModel.source,
-            projects
-          }
+      : providerDirectoryPromise.then((providerDirectory) =>
+          getLiveOverviewRequests(
+            tenantId,
+            {
+              budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
+              budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
+              model,
+              projectId: effectiveProjectId ?? requestedProjectId,
+              range,
+              resolvedBy: optionalQueryValue(query, "resolvedBy"),
+              status
+            },
+            {
+              projectIds: projects.map((project) => project.id).filter(Boolean),
+              projectNameSource: projectsModel.source,
+              projects,
+              providerDirectory
+            }
+          )
         ),
     surface === "project_application"
       ? Promise.resolve(undefined)
-      : getTenantChatLiveRequests(tenantId, { model, range, status })
+      : providerDirectoryPromise.then((providerDirectory) =>
+          getTenantChatLiveRequests(
+            tenantId,
+            { model, range, status },
+            { providerDirectory }
+          )
+        )
   ]);
   const payload =
     surface === "project_application"
