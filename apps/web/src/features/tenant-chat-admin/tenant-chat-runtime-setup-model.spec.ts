@@ -139,7 +139,9 @@ test("degraded routing selections render unavailable options instead of an avail
 
 test("Chat App routing selects Provider first and limits models to that Provider", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
+  const styles = await readFile(stylesUrl, "utf8");
 
   expect(source).toContain('className="tenant-routing-provider-control"');
   expect(source).toContain('className="tenant-routing-model-control"');
@@ -149,6 +151,11 @@ test("Chat App routing selects Provider first and limits models to that Provider
   expect(source).toContain("{model.modelKey}");
   expect(source).toContain("const showProviderIcon = Boolean(selectedProvider || value);");
   expect(source).toContain("{showProviderIcon ? (");
+  expect(styles).toMatch(/\.tenant-routing-provider-control,\r?\n\.tenant-routing-model-control \{[\s\S]*?min-height: 70px;/);
+  expect(styles).toMatch(/\.tenant-routing-provider-control select,\r?\n\.tenant-routing-model-control select \{[\s\S]*?min-height: 68px;[\s\S]*?font-size: 21px;/);
+  expect(styles).toMatch(/\.tenant-routing-table-head \{[\s\S]*?font-size: 21px;/);
+  expect(styles).toMatch(/\.tenant-routing-category \{[\s\S]*?font-size: 21px;/);
+  expect(styles).toMatch(/\.tenant-routing-route::before \{[\s\S]*?font-size: 21px;/);
 });
 
 test("Chat App routing projects one shared fallback into every routing cell", () => {
@@ -212,9 +219,12 @@ test("Chat App routing keeps existing fallback candidates when a primary changes
 
 test("Chat App routing reuses the original routing policy presentation", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
+  const styles = await readFile(stylesUrl, "utf8");
 
-  expect(source).toContain('className="console-content management-line-content tenant-management-content"');
+  expect(source).toContain('className="console-content management-line-content tenant-management-content tenant-chat-app-content"');
+  expect(styles).toMatch(/\.tenant-chat-app-content \{[\s\S]*?width: 100%;[\s\S]*?max-width: none;[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   expect(source).toContain('className="tenant-routing-switch"');
   expect(source).toContain('className="tenant-routing-model-card"');
   expect(source).toContain('className="tenant-routing-table"');
@@ -271,11 +281,35 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(source).toContain('className="tenant-routing-fixed-panel"');
   expect(source).toContain('<p>{text.manualDescription}</p>');
   expect(source).toMatch(/\)\}\r?\n {16}<section className="tenant-routing-fallback-card"/);
+  expect(source).toContain('className="tenant-routing-fallback-title-row"');
+  expect(source).toMatch(/<h3 id="tenant-routing-fallback-title">\{text\.fallbackTitle\}<\/h3>\r?\n\s+<span className="tenant-routing-fallback-kicker">/);
   expect(source).toContain('routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription');
   expect(styles).toContain('@keyframes tenant-routing-mode-enter');
-  expect(styles).toContain('left: 22px;');
+  expect(styles).toMatch(/\.tenant-routing-switch-control \{[^}]*gap: 15px;[^}]*min-width: 222px;[^}]*font-size: 21px;/);
+  expect(styles).toMatch(/\.tenant-routing-mode-label \{[^}]*min-width: 48px;/);
+  expect(styles).toMatch(/\.tenant-routing-switch\[data-slot="switch"\] \{[^}]*width: 72px;[^}]*height: 42px;/);
+  expect(styles).toMatch(/\.tenant-routing-switch \[data-slot="switch-thumb"\] \{[^}]*top: 3px;[^}]*left: 3px;[^}]*width: 33px;[^}]*height: 33px;/);
+  expect(styles).toMatch(/\.tenant-routing-switch:is\(\[data-checked\], \[aria-checked="true"\]\)[\s\S]*?left: 33px;/);
   expect(styles).toContain('.tenant-routing-fixed-panel {');
   expect(styles).toContain('width: min(620px, 100%);');
+  expect(styles).toContain('.tenant-routing-fallback-title-row {');
+  expect(styles).toContain('.tenant-routing-fallback-title-row .tenant-routing-fallback-kicker {');
+  expect(styles).toMatch(/\.tenant-routing-fallback-card \{[^}]*align-items: center;/);
+  expect(styles).toMatch(/\.tenant-routing-fallback-heading \{[^}]*align-content: center;[^}]*align-self: center;/);
+  expect(styles).toMatch(/\.tenant-routing-fallback-heading h3 \{[^}]*font-size: 28px;/);
+  expect(styles).toMatch(/\.tenant-routing-fallback-heading p \{[^}]*font-size: 18px;/);
+  expect(styles).toMatch(/\.tenant-routing-fallback-title-row \.tenant-routing-fallback-kicker \{[^}]*font-size: 16px;/);
+  expect(styles).toMatch(/\.tenant-management-content #tenant-routing-model-title \{[^}]*font-size: 35px;/);
+  expect(styles).toMatch(/\.tenant-routing-model-heading-copy > p \{[^}]*margin-top: 20px;/);
+  expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-title-with-help \{[^}]*grid-template-columns: auto 20px;[^}]*gap: 8px;/);
+  expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-info-button \{[^}]*width: 20px;[^}]*height: 20px;/);
+  expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-info-button svg \{[^}]*width: 20px;[^}]*height: 20px;/);
+  expect(styles).toMatch(/\.tenant-routing-category \.tenant-routing-info-button \{[^}]*width: 18px;[^}]*height: 18px;/);
+  expect(styles).toMatch(/\.tenant-routing-category \.tenant-routing-info-button svg \{[^}]*width: 15px;[^}]*height: 15px;/);
+  expect(styles).toMatch(/\.tenant-routing-actions \{[^}]*gap: 21px;/);
+  expect(styles).toMatch(/\.tenant-routing-actions button \{[^}]*min-width: 207px;[^}]*min-height: 69px;[^}]*padding-inline: 33px;[^}]*font-size: 24px;/);
+  expect(styles).toMatch(/\.tenant-routing-save-button \{[^}]*gap: 12px;/);
+  expect(styles).toMatch(/\.tenant-routing-save-button svg \{[^}]*width: 27px;[^}]*height: 27px;/);
   expect(source).not.toContain('tenant-routing-enable-card');
   expect(styles).not.toContain('.tenant-routing-enable-card');
 });

@@ -345,7 +345,7 @@ export function ChatAppRoutingSetup({
   const canPublish = refs.has(manualModelRef) && matrixUsesOnly(routes, refs);
 
   return (
-    <main className="console-content management-line-content tenant-management-content">
+    <main className="console-content management-line-content tenant-management-content tenant-chat-app-content">
       <header className="project-page-header">
         <h2>{text.title}</h2>
       </header>
@@ -455,11 +455,13 @@ export function ChatAppRoutingSetup({
                 )}
                 <section className="tenant-routing-fallback-card" aria-labelledby="tenant-routing-fallback-title">
                   <header className="tenant-routing-fallback-heading">
-                    <span className="tenant-routing-fallback-kicker">
-                      <RefreshCcw aria-hidden="true" />
-                      {text.fallbackKicker}
-                    </span>
-                    <h3 id="tenant-routing-fallback-title">{text.fallbackTitle}</h3>
+                    <div className="tenant-routing-fallback-title-row">
+                      <h3 id="tenant-routing-fallback-title">{text.fallbackTitle}</h3>
+                      <span className="tenant-routing-fallback-kicker">
+                        <RefreshCcw aria-hidden="true" />
+                        {text.fallbackKicker}
+                      </span>
+                    </div>
                     <p>{routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription}</p>
                   </header>
                   <TenantRoutingProviderModelSelect

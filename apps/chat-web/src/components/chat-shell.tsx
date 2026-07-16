@@ -22,6 +22,7 @@ import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, use
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
+import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import {
   consumeTurnSse,
   isBlockedCode,
@@ -497,7 +498,7 @@ export function ChatShell() {
                     <article>
                       <span className="message-author">GateLM</span>
                       {message.content
-                        ? <p>{message.content}</p>
+                        ? <MarkdownMessage content={message.content} />
                         : streaming && message === messages.at(-1) && !message.notice
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
