@@ -348,7 +348,14 @@ jobs:
 
       - name: Run encrypted Tenant Chat and usage smoke with mock provider
         shell: pwsh
-        run: ./scripts/dev/tenant-chat-encrypted-conversation-smoke.ps1
+        run: |
+          try {
+            ./scripts/dev/tenant-chat-encrypted-conversation-smoke.ps1
+          } catch {
+            docker compose -f docker-compose.yml -f scripts/dev/docker-compose.tenant-chat-execution.yml ps --all
+            docker compose -f docker-compose.yml -f scripts/dev/docker-compose.tenant-chat-execution.yml logs --no-color control-plane-api gateway-core chat-api mock-provider
+            throw
+          }
 
       - name: Build remaining production images
         shell: bash
@@ -358,11 +365,6 @@ jobs:
             --env-file deploy/aws-triage/.env.example \
             -f deploy/aws-triage/docker-compose.yml \
             build ai-service chat-web web
-
-      - name: Print container logs on failure
-        if: failure()
-        shell: bash
-        run: docker compose -f docker-compose.yml -f scripts/dev/docker-compose.tenant-chat-execution.yml logs --no-color
 
   release-packaging:
     name: release packaging
