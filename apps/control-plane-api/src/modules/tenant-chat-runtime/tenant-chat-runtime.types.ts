@@ -9,6 +9,23 @@ export type TenantChatRoutingCategory =
   | 'reasoning';
 export type TenantChatRoutingDifficulty = 'simple' | 'complex';
 export type TenantChatPricingStatus = 'available' | 'unavailable';
+export type TenantChatSafetyDetectorType =
+  | 'email'
+  | 'phone_number'
+  | 'postal_address'
+  | 'person_name'
+  | 'organization_name'
+  | 'resident_registration_number'
+  | 'api_key'
+  | 'authorization_header'
+  | 'jwt'
+  | 'private_key';
+export type TenantChatSafetyAction = 'allow' | 'redact' | 'block';
+
+export interface TenantChatSafetyDetector {
+  detectorType: TenantChatSafetyDetectorType;
+  action: TenantChatSafetyAction;
+}
 
 export interface TenantChatRoutingCell {
   modelRefs: string[];
@@ -110,20 +127,7 @@ export interface TenantChatRuntimePolicies {
   safety: {
     enabled: boolean;
     policyDigest: string;
-    detectorSet: Array<{
-      detectorType:
-        | 'email'
-        | 'phone_number'
-        | 'postal_address'
-        | 'person_name'
-        | 'organization_name'
-        | 'resident_registration_number'
-        | 'api_key'
-        | 'authorization_header'
-        | 'jwt'
-        | 'private_key';
-      action: 'allow' | 'redact' | 'block';
-    }>;
+    detectorSet: TenantChatSafetyDetector[];
   };
   streaming: {
     enabled: boolean;
@@ -191,6 +195,18 @@ export interface TenantChatAdminActiveSnapshot {
   routingMode: TenantChatRoutingMode;
   manualModelRef: string;
   routes: TenantChatRoutingMatrix;
+  cachePolicy: TenantChatAdminCachePolicy;
+  safetyPolicy: TenantChatAdminSafetyPolicy;
+}
+
+export interface TenantChatAdminCachePolicy {
+  enabled: boolean;
+  ttlSeconds: number;
+  maxEntriesPerUser: number;
+}
+
+export interface TenantChatAdminSafetyPolicy {
+  detectorSet: TenantChatSafetyDetector[];
 }
 
 export interface TenantChatAdminRuntimeSetup {
@@ -206,5 +222,7 @@ export interface ActivateTenantChatRuntimeInput {
   routingMode?: TenantChatRoutingMode;
   manualModelRef?: string;
   routes?: TenantChatRoutingMatrix;
+  cachePolicy?: TenantChatAdminCachePolicy;
+  safetyPolicy?: TenantChatAdminSafetyPolicy;
   publishedBy: string;
 }

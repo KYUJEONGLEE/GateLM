@@ -2,13 +2,18 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
+  IsBoolean,
+  IsInt,
   IsArray,
   IsIn,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -56,6 +61,60 @@ class TenantChatRoutingMatrixDto {
   reasoning!: TenantChatRoutingDifficultyDto;
 }
 
+class TenantChatAdminCachePolicyDto {
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  ttlSeconds!: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  maxEntriesPerUser!: number;
+}
+
+class TenantChatAdminSafetyDetectorDto {
+  @IsIn([
+    'email',
+    'phone_number',
+    'postal_address',
+    'person_name',
+    'organization_name',
+    'resident_registration_number',
+    'api_key',
+    'authorization_header',
+    'jwt',
+    'private_key',
+  ])
+  detectorType!:
+    | 'email'
+    | 'phone_number'
+    | 'postal_address'
+    | 'person_name'
+    | 'organization_name'
+    | 'resident_registration_number'
+    | 'api_key'
+    | 'authorization_header'
+    | 'jwt'
+    | 'private_key';
+
+  @IsIn(['allow', 'redact', 'block'])
+  action!: 'allow' | 'redact' | 'block';
+}
+
+class TenantChatAdminSafetyPolicyDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @ArrayUnique((detector: TenantChatAdminSafetyDetectorDto) => detector.detectorType)
+  @ValidateNested({ each: true })
+  @Type(() => TenantChatAdminSafetyDetectorDto)
+  detectorSet!: TenantChatAdminSafetyDetectorDto[];
+}
+
 export class ActivateTenantChatRuntimeDto {
   // Legacy single-model activation remains accepted while old admin clients
   // are redirected to the Chat App authoring surface.
@@ -85,4 +144,14 @@ export class ActivateTenantChatRuntimeDto {
   @ValidateNested()
   @Type(() => TenantChatRoutingMatrixDto)
   routes?: TenantChatRoutingMatrixDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TenantChatAdminCachePolicyDto)
+  cachePolicy?: TenantChatAdminCachePolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TenantChatAdminSafetyPolicyDto)
+  safetyPolicy?: TenantChatAdminSafetyPolicyDto;
 }

@@ -54,6 +54,13 @@ const ROUTING_CATEGORIES: TenantChatRoutingCategory[] = [
   'reasoning',
 ];
 const ROUTING_DIFFICULTIES = ['simple', 'complex'] as const;
+const MANDATORY_SAFETY_DETECTORS = new Set([
+  'resident_registration_number',
+  'api_key',
+  'authorization_header',
+  'jwt',
+  'private_key',
+]);
 
 interface AdminProviderRecord {
   id: string;
@@ -347,10 +354,7 @@ export class TenantChatRuntimeService {
     const activeSnapshot = activePointer
       ? this.readValidSnapshotOrNull(activePointer.snapshot.snapshotBody)
       : null;
-    const policies = this.composeAdminPolicies(
-      activeSnapshot,
-      routing,
-    );
+    const policies = this.composeAdminPolicies(activeSnapshot, routing, input);
     const pricingRoutes = this.composePricingRoutes(
       policies.routing.routes,
       routing.targets,
@@ -605,18 +609,46 @@ export class TenantChatRuntimeService {
       routingMode: routingPolicy?.mode ?? 'manual',
       manualModelRef: activeManualModelRef,
       routes,
+      cachePolicy: {
+        enabled: snapshot.policies.cache.enabled,
+        ttlSeconds: snapshot.policies.cache.ttlSeconds,
+        maxEntriesPerUser: snapshot.policies.cache.maxEntriesPerUser,
+      },
+      safetyPolicy: {
+        detectorSet: snapshot.policies.safety.detectorSet.map((detector) => ({
+          ...detector,
+        })),
+      },
     };
   }
 
   private composeAdminPolicies(
     activeSnapshot: TenantChatRuntimeSnapshotDocument | null,
     routing: NormalizedAdminRouting,
+    input: ActivateTenantChatRuntimeInput,
   ): TenantChatRuntimePolicies {
     const safetyWithoutDigest = {
       enabled: true,
       detectorSet: [
         { detectorType: 'email' as const, action: 'redact' as const },
+        { detectorType: 'phone_number' as const, action: 'redact' as const },
+        { detectorType: 'postal_address' as const, action: 'redact' as const },
+        { detectorType: 'person_name' as const, action: 'redact' as const },
+        {
+          detectorType: 'organization_name' as const,
+          action: 'redact' as const,
+        },
+        {
+          detectorType: 'resident_registration_number' as const,
+          action: 'block' as const,
+        },
         { detectorType: 'api_key' as const, action: 'block' as const },
+        {
+          detectorType: 'authorization_header' as const,
+          action: 'block' as const,
+        },
+        { detectorType: 'jwt' as const, action: 'block' as const },
+        { detectorType: 'private_key' as const, action: 'block' as const },
       ],
     };
     const routingPolicyWithoutHash = {
@@ -649,6 +681,75 @@ export class TenantChatRuntimeService {
         ),
       1,
     );
+    const previousCache = activeSnapshot?.policies.cache ?? {
+      strategy: 'off' as const,
+      enabled: false,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant_chat_cache_keys_v1',
+    };
+    if (
+      input.cachePolicy &&
+      (!Number.isSafeInteger(input.cachePolicy.ttlSeconds) ||
+        input.cachePolicy.ttlSeconds < 1 ||
+        !Number.isSafeInteger(input.cachePolicy.maxEntriesPerUser) ||
+        input.cachePolicy.maxEntriesPerUser < 1)
+    ) {
+      throw new BadRequestException(
+        'Tenant Chat cache policy values must be positive safe integers.',
+      );
+    }
+    const cache = input.cachePolicy
+      ? {
+          ...previousCache,
+          strategy: input.cachePolicy.enabled ? ('exact' as const) : ('off' as const),
+          enabled: input.cachePolicy.enabled,
+          ttlSeconds: input.cachePolicy.ttlSeconds,
+          maxEntriesPerUser: input.cachePolicy.maxEntriesPerUser,
+        }
+      : previousCache;
+    const previousSafety = activeSnapshot?.policies.safety ?? {
+      ...safetyWithoutDigest,
+      policyDigest: computeTenantChatSafetyPolicyDigest(safetyWithoutDigest),
+    };
+    const safety = input.safetyPolicy
+      ? (() => {
+          if (
+            input.safetyPolicy.detectorSet.length < 1 ||
+            input.safetyPolicy.detectorSet.length > 10 ||
+            new Set(
+              input.safetyPolicy.detectorSet.map(
+                (detector) => detector.detectorType,
+              ),
+            ).size !== input.safetyPolicy.detectorSet.length
+          ) {
+            throw new BadRequestException(
+              'Tenant Chat safety policy requires 1 to 10 unique detectors.',
+            );
+          }
+          if (
+            input.safetyPolicy.detectorSet.some(
+              (detector) =>
+                detector.action === 'allow' &&
+                MANDATORY_SAFETY_DETECTORS.has(detector.detectorType),
+            )
+          ) {
+            throw new BadRequestException(
+              'Mandatory Tenant Chat safety detectors cannot be disabled.',
+            );
+          }
+          const safetyWithoutDigest = {
+            enabled: true,
+            detectorSet: input.safetyPolicy.detectorSet.map((detector) => ({
+              ...detector,
+            })),
+          };
+          return {
+            ...safetyWithoutDigest,
+            policyDigest: computeTenantChatSafetyPolicyDigest(safetyWithoutDigest),
+          };
+        })()
+      : previousSafety;
 
     return {
       rateLimit: activeSnapshot?.policies.rateLimit ?? {
@@ -702,17 +803,8 @@ export class TenantChatRuntimeService {
           windowSeconds: 60,
         })),
       },
-      cache: activeSnapshot?.policies.cache ?? {
-        strategy: 'off',
-        enabled: false,
-        ttlSeconds: 300,
-        maxEntriesPerUser: 100,
-        keySetId: 'tenant_chat_cache_keys_v1',
-      },
-      safety: activeSnapshot?.policies.safety ?? {
-        ...safetyWithoutDigest,
-        policyDigest: computeTenantChatSafetyPolicyDigest(safetyWithoutDigest),
-      },
+      cache,
+      safety,
       streaming: activeSnapshot?.policies.streaming ?? {
         enabled: true,
         maxDurationSeconds: 120,

@@ -45,4 +45,44 @@ describe('TenantChatAdminRuntimeController', () => {
       publishedBy,
     });
   });
+
+  it('forwards cache and safety policy fields without adding sensitive data', async () => {
+    const service = {
+      activateAdminRuntime: jest.fn().mockResolvedValue(setup),
+    };
+    const controller = new TenantChatAdminRuntimeController(
+      service as unknown as TenantChatRuntimeService,
+    );
+    const cachePolicy = {
+      enabled: true,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+    };
+    const safetyPolicy = {
+      detectorSet: [
+        { detectorType: 'email' as const, action: 'redact' as const },
+        { detectorType: 'api_key' as const, action: 'block' as const },
+      ],
+    };
+
+    await controller.activate(
+      tenantId,
+      {
+        providerConnectionId,
+        modelKey: 'gpt-5.4-mini',
+        cachePolicy,
+        safetyPolicy,
+      },
+      publishedBy,
+    );
+
+    expect(service.activateAdminRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        cachePolicy,
+        safetyPolicy,
+        publishedBy,
+      }),
+    );
+  });
 });

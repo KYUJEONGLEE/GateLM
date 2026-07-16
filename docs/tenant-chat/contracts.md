@@ -225,8 +225,9 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 
 - 관리자 wire는 [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json)을 따른다.
 - Web Console의 단일 authoring surface 이름은 `채팅 앱`이며 built-in Tenant Chat에만 적용한다. 과거 `회사 정책`과 `Tenant Chat` 메뉴는 이 화면으로 redirect하고 Project/Application routing 의미를 변경하지 않는다.
-- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태와 active 5×2 snapshot metadata만 반환한다. credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
-- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`를 받는다. 각 cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태, active 5×2 routing metadata와 편집 가능한 exact cache/safety detector 설정만 반환한다. cache key set, safety digest, credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
+- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`의 현재 authoring wire는 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`, `cachePolicy`, `safetyPolicy`를 받는다. 각 routing cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+- `cachePolicy`는 exact cache의 enabled, positive integer TTL, positive integer per-user entry limit만 편집한다. `safetyPolicy.detectorSet`은 1~10개의 unique detector와 `allow|redact|block` action을 받으며 주민등록번호/API key/Authorization header/JWT/private key detector는 `allow`를 거부한다. 이 관리자 wire는 raw prompt, raw response, raw detected value 또는 secret 원문을 받거나 반환하지 않는다.
 - `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 기존 deterministic rule-based classifier가 안전 처리된 메시지에서 category/difficulty를 계산한 뒤 해당 cell의 첫 eligible ref를 사용한다. offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
 - compatibility 기간 동안 Control Plane은 과거 `providerConnectionId`+`modelKey` PUT을 동일 ref로 채운 manual 5×2 policy로 변환해 받을 수 있다. 이 legacy shape는 새 authoring wire가 아니며 RuntimeSnapshot의 명시적 Routing v2 bridge를 우회하지 않는다.
 - Provider family는 persisted `providerConfig.providerFamily`에서만 판정한다. client 입력이나 base URL 추론으로 가격을 선택하지 않는다.
@@ -234,8 +235,8 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - 가격 미확인 모델은 Provider 호출과 token quota 적용이 가능하다. 이 상태의 monetary reservation/confirmed cost는 0으로 계산하되 UI/snapshot에 `unavailable`을 유지하며 known price처럼 표시하지 않는다. 이미 hard-block 상태인 tenant budget을 우회하지 않는다.
 - `modelKey`는 1~200자의 `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$`를 사용한다. Provider/model catalog의 점, 슬래시와 콜론을 지원하지만 whitespace와 control 문자는 허용하지 않는다.
 - RuntimeSnapshot은 기존 concrete `policies.routing.routes[]`와 pricing provenance를 유지하면서 `policies.routing.policy`에 `gatelm.routing-policy.v2`, mode, bootstrap state, canonical hex policy hash와 5×2 matrix를 명시한다. concrete route에는 opaque `modelRef`를 포함하며 난이도와 `standard|economy` tier를 암묵 변환하지 않는다.
-- 최초 활성화는 계약에 고정된 safe default 비라우팅 policy를 조합한다. 재구성은 active snapshot의 rate/concurrency/quota/budget/cache/safety/streaming 및 employee notice version을 보존하고 routing/fallback/provider token rate/pricing만 새 선택으로 교체한다.
-- 동일 routing policy와 가격의 PUT은 active snapshot을 그대로 반환한다. 변경이 있으면 snapshot, policy, pricing version을 serializable transaction 안에서 각각 monotonic하게 증가시킨다.
+- 최초 활성화는 계약에 고정된 safe default 비라우팅 policy를 조합한다. 재구성은 active snapshot의 rate/concurrency/quota/budget/streaming 및 employee notice version을 보존하고 routing/fallback/provider token rate/pricing과 요청에 명시된 cache/safety 설정만 새 값으로 교체한다. 호환 요청에서 cache/safety를 생략하면 기존 값을 보존한다.
+- 동일 runtime policy와 가격의 PUT은 active snapshot을 그대로 반환한다. 변경이 있으면 snapshot, policy, pricing version을 serializable transaction 안에서 각각 monotonic하게 증가시킨다.
 
 ### 7.2 Cache extensibility
 
