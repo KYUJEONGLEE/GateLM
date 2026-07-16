@@ -4,6 +4,8 @@ import { Badge, Button } from '@gatelm/ui';
 import {
   AlertTriangle,
   Building2,
+  Check,
+  Copy,
   Gauge,
   LoaderCircle,
   LogOut,
@@ -22,6 +24,7 @@ import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, use
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
+import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import {
   consumeTurnSse,
@@ -280,6 +283,7 @@ export function ChatShell() {
     event.preventDefault();
     if (streaming || creatingConversation || policyState === 'blocked' || !composer.trim()) return;
     const content = composer;
+    const responseStartedAt = performance.now();
     let conversationId = selectedId;
     if (!conversationId) {
       const created = await createConversation();
@@ -335,6 +339,7 @@ export function ChatShell() {
               turnId: terminal.turnId,
               ...(terminal.cacheOutcome ? { cacheOutcome: terminal.cacheOutcome } : {}),
               ...(terminal.effectiveModelKey ? { effectiveModelKey: terminal.effectiveModelKey } : {}),
+              responseDurationMs: performance.now() - responseStartedAt,
             }
           : message));
         if (terminal.quotaState && terminal.budgetState) {
@@ -493,7 +498,7 @@ export function ChatShell() {
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
               : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
                 {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
-                  {message.role === 'user' ? <article><span className="sr-only">내 메시지</span><p>{message.content}</p></article> : <>
+                  {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} /> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
                     <article>
                       <span className="message-author">GateLM</span>
@@ -503,11 +508,14 @@ export function ChatShell() {
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
                       {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
-                      {message.cacheOutcome === 'hit'
-                        ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
-                        : message.effectiveModelKey
-                          ? <div className="message-meta" aria-label={`응답 모델: ${message.effectiveModelKey}`}>모델 · {message.effectiveModelKey}로 생성됨</div>
-                          : null}
+                      {message.content && (message.cacheOutcome === 'hit' || message.effectiveModelKey) && <div className="message-assistant-actions">
+                        <MessageCopyButton content={message.content} label="모델 답변" />
+                        {message.cacheOutcome === 'hit'
+                          ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
+                          : message.effectiveModelKey
+                            ? <div className="message-meta" aria-label={`응답 ${modelResponseMetaText(message, messages)}`}>{modelResponseMetaText(message, messages)}</div>
+                            : null}
+                      </div>}
                     </article>
                   </>}
                 </li>)}
@@ -544,10 +552,101 @@ type DisplayMessage = Message & Readonly<{
   cacheOutcome?: 'off' | 'hit' | 'miss';
   localId?: string;
   notice?: SafeChatError;
+  responseDurationMs?: number;
 }>;
+
+function UserMessage({ content, createdAt }: Readonly<{ content: string; createdAt: string }>) {
+  return <article>
+    <span className="sr-only">내 메시지</span>
+    <p>{content}</p>
+    <div className="message-user-actions">
+      <MessageTime createdAt={createdAt} />
+      <MessageCopyButton content={content} label="내 메시지" />
+    </div>
+  </article>;
+}
+
+function MessageTime({ createdAt }: Readonly<{ createdAt: string }>) {
+  const [displayTime, setDisplayTime] = useState('');
+
+  useEffect(() => {
+    setDisplayTime(new Intl.DateTimeFormat('ko-KR', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(createdAt)));
+  }, [createdAt]);
+
+  return <time dateTime={createdAt}>{displayTime}</time>;
+}
+
+function MessageCopyButton({ content, label }: Readonly<{ content: string; label: string }>) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function copyMessage() {
+    try {
+      await copyTextToClipboard(content);
+      showTemporaryCopyState('copied');
+    } catch {
+      showTemporaryCopyState('failed');
+    }
+  }
+
+  function showTemporaryCopyState(nextState: 'copied' | 'failed') {
+    setCopyState(nextState);
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => setCopyState('idle'), 1800);
+  }
+
+  const copyLabel = copyState === 'copied'
+    ? `${label} 복사됨`
+    : copyState === 'failed'
+      ? `${label} 복사 실패, 다시 시도`
+      : `${label} 복사`;
+
+  return <>
+    <button
+      aria-label={copyLabel}
+      className="message-copy-button"
+      data-copy-state={copyState}
+      onClick={() => void copyMessage()}
+      title={copyLabel}
+      type="button"
+    >
+      {copyState === 'copied' ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}
+    </button>
+    <span className="sr-only" role="status">
+      {copyState === 'copied' ? `${label}을 클립보드에 복사했습니다.` : copyState === 'failed' ? `${label}을 복사하지 못했습니다.` : ''}
+    </span>
+  </>;
+}
 
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
+}
+
+function modelResponseMetaText(message: DisplayMessage, messages: readonly DisplayMessage[]): string {
+  const durationMs = message.responseDurationMs ?? persistedResponseDurationMs(message, messages);
+  const duration = durationMs === undefined
+    ? ''
+    : ` · ${Math.max(1, Math.round(durationMs / 1000))}s 소요`;
+  return `${message.effectiveModelKey ?? ''}로 생성됨${duration}`;
+}
+
+function persistedResponseDurationMs(
+  message: DisplayMessage,
+  messages: readonly DisplayMessage[],
+): number | undefined {
+  const userMessage = messages.find((candidate) =>
+    candidate.role === 'user' && candidate.turnId === message.turnId);
+  if (!userMessage) return undefined;
+  const durationMs = Date.parse(message.createdAt) - Date.parse(userMessage.createdAt);
+  return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined;
 }
 
 function policyText(state: PolicyState): Readonly<{ label: string; description: string }> {
