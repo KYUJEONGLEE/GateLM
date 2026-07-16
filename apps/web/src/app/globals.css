@@ -9042,43 +9042,33 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-col-time {
-  width: 8.12%;
+  width: 5.278%;
 }
 
-.request-log-col-name {
-  width: 16.896%;
-}
-
-.request-log-col-project {
-  width: 13.72%;
-}
-
-.request-log-col-model {
-  width: 17.632%;
-}
-
-.request-log-col-status {
-  width: 13%;
-}
-
-.request-log-col-latency {
-  width: 13%;
-}
-
+.request-log-col-name,
+.request-log-col-project,
+.request-log-col-model,
 .request-log-col-cost {
-  width: 17.632%;
+  width: 15.787%;
+}
+
+.request-log-col-latency,
+.request-log-col-status {
+  width: 15.787%;
 }
 
 .request-log-screen .request-table th:first-child,
 .request-log-screen .request-table td:first-child {
-  width: 73px;
-  min-width: 73px;
-  max-width: 73px;
+  width: 5.278%;
+  min-width: 0;
+  max-width: none;
+  padding-right: 6px;
+  padding-left: 6px;
 }
 
 .request-log-screen .request-table th,
 .request-log-screen .request-table td {
-  padding: 17px 16px;
+  padding: 25.5px 16px;
   border-bottom: 1px solid var(--request-log-border);
   color: var(--request-log-text);
   vertical-align: middle;
@@ -9670,6 +9660,25 @@ html[data-theme="dark"] .request-log-screen {
 .status-badge[data-status="failed"] {
   background: var(--danger-soft);
   color: var(--danger-text);
+}
+
+.request-log-screen .request-table {
+  font-size: 120%;
+}
+
+.request-log-screen .request-table :is(th, td),
+.request-log-screen .request-table :is(th, td) * {
+  font-size: inherit;
+  font-weight: var(--font-weight-regular);
+}
+
+.request-log-screen .request-table :is(th, td):first-child {
+  text-align: center;
+}
+
+.request-log-screen .request-table td:first-child .request-log-row-link {
+  width: 100%;
+  justify-content: center;
 }
 
 .detail-grid {
