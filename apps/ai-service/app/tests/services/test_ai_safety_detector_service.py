@@ -162,6 +162,29 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
             ["email", "phone_number"],
         )
 
+    def test_detect_rules_cover_resident_number_followed_by_korean_particle(self) -> None:
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return []
+
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+
+        response = service.detect(
+            detect_request("주민등록번호 900101-1234567은 외부로 보내면 안 됩니다.")
+        )
+
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(response.outcome, "blocked")
+        self.assertEqual(
+            response.detector_summary.detector_categories,
+            ["resident_registration_number"],
+        )
+
     def test_detect_skips_ml_when_fast_rules_cover_organization_context(self) -> None:
         classifier_calls = 0
         organization_name = "Acme Synthetic"

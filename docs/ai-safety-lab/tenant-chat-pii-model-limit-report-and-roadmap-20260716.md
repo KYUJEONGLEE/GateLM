@@ -6,12 +6,12 @@
 |---|---|
 | 문서 성격 | 특정 브랜치와 실행 환경에서 확인한 개발 근거 및 후속 작업 계획 |
 | 검증 대상 브랜치 | `feat/tenant-chat-pii-mask-once` |
-| 검증 대상 코드 | `468d3fe1`까지의 1~3단계 구현 및 해당 revision에 결합된 실측 |
+| 검증 대상 코드 | `f77b11bb`까지의 1~3단계 구현, Presidio 격리 screening, 주민등록번호 규칙 경계 보완 |
 | 검증일 | 2026-07-16 KST |
 | 대상 경로 | Tenant Chat 저장 전 sanitization과 AI Service ONNX PII 탐지 |
 | 데이터 범위 | 합성 문장과 aggregate 결과만 사용 |
 | 원문 저장 | 없음 |
-| 현재 결정 | 품질 후보는 `rules + OpenAI(전화번호·secret만 허용)`로 유지하되 3단계 warm latency·memory gate 실패로 production enforce 전환은 보류. KoELECTRA는 hot path에서 제외 |
+| 현재 결정 | 배포 기본값은 rules-only로 유지하고 주민등록번호 한글 조사 경계 누락은 규칙으로 보완. Presidio는 안전한 추가 품질 이득이 없어 미도입. OpenAI 품질 후보의 production enforce 전환과 KoELECTRA hot path 사용은 보류 |
 
 이 문서는 active Tenant Chat 계약을 변경하지 않는다. 현재 구현과 모델의 한계를 기록하는 evidence 문서이며, 아래 통과 기준 중 운영 기준값은 제품·보안 책임자의 별도 승인 정책으로 확정해야 한다.
 
@@ -27,6 +27,7 @@
 8. 같은 측정의 timeout은 2건, process peak RSS는 1,295.46MiB로 오늘 engineering gate를 통과하지 못했다.
 9. OpenAI 모델은 전화번호와 secret만 허용하면 rules-only 대비 exact pass가 5건 증가하고 false positive는 증가하지 않았다.
 10. 따라서 1~3단계 결과는 품질상 OpenAI-only 후보를 남기되 현재 배포 서비스의 production enforce 기본값으로 승격하지 않는 것이다.
+11. Presidio 패턴 인식기는 체크섬을 엄격히 적용하면 rules-only 대비 추가 이득이 0건이었다. 느슨한 설정의 +2건은 기존 주민등록번호 정규식의 한글 조사 경계 누락이므로 규칙 자체를 보완했다.
 
 ## 3. 현재 완성된 흐름
 
@@ -189,6 +190,36 @@ OpenAI label을 `phone_number`, `secret`으로만 제한하고 같은 103건을 
 | 모델 호출 / accepted 기여 | 0 / 0 | 20 / 17 | accounting 일치 |
 
 따라서 3단계 성능 검증 대상은 `rules + OpenAI ONNX`, ML 허용 유형은 전화번호와 secret으로 확정한다. 이 결론은 오늘 모델 선택용 screening 결과이며 untouched holdout이나 production 승격 증거가 아니다.
+
+### 5.7 Presidio 패턴 인식기 screening과 규칙 보완
+
+Presidio Analyzer `2.2.362`를 제품 가상환경과 분리해 설치하고 같은 103건 합성 subset에서 `rules-only`와 `rules + Presidio 패턴·체크섬 인식기`를 비교했다. spaCy나 별도 NER 모델은 사용하지 않았으며 이메일, 전화번호, 비공개 URL, 주민등록번호만 GateLM 유형으로 매핑했다.
+
+| 구성 | exact pass | false positive 사례 | false negative 사례 | p95 |
+|---|---:|---:|---:|---:|
+| 기존 rules-only | 80/103 | 4 | 21 | 0ms |
+| rules + Presidio, 주민번호 임계값 0.5 | 82/103 | 4 | 19 | 1ms |
+| rules + Presidio, 주민번호 체크섬 통과만 허용 | 80/103 | 4 | 21 | 1ms |
+
+느슨한 구성의 exact recovery 2건은 모두 숫자 뒤에 한글 조사가 바로 붙은 주민등록번호 사례였다. Presidio가 채택한 주민등록번호 결과는 8개 사례 9건이었지만, 평가 fixture가 체크섬 통과 결과가 아니어서 임계값을 1.0으로 높이면 accepted 기여가 0건이 됐다. 따라서 +2를 Presidio의 production 품질 증거로 사용할 수 없다.
+
+단독 supported-type 검사에서도 보수적 구성은 74/103만 정확히 일치했고 false positive 사례 13건, false negative 사례 29건이었다. 예약 테스트 도메인과 corpus의 detector-type 기대값이 Presidio의 URL·이메일 의미와 완전히 같지 않아 이 단독 수치는 모델 일반 정확도가 아니라 통합 위험을 찾는 자료로만 사용한다.
+
+원인은 기존 주민등록번호 규칙이 단어 경계 `\b`를 사용해 숫자와 한글 조사가 모두 단어 문자로 취급되는 경우를 놓친 것이었다. 이를 숫자 앞뒤에 다른 숫자가 없는지를 검사하는 경계로 바꾼 결과, 별도 dependency와 모델 호출 없이 rules-only가 `82/103`, false positive 4건, false negative 19건으로 개선됐다. AI Safety 탐지 서비스 unittest 21건도 모두 통과했다.
+
+결정은 다음과 같다.
+
+1. Presidio dependency와 runtime은 현재 제품에 추가하지 않는다.
+2. 한글 조사 인접 주민등록번호 누락은 기존 빠른 규칙에서 수정한다.
+3. Presidio는 실제 한국어 holdout과 GateLM detector taxonomy에 맞춘 평가셋이 생길 때 다시 비교한다.
+
+원문·탐지값·span을 저장하지 않은 로컬 evidence는 Git-ignored 경로에 있다.
+
+```text
+.tmp/presidio-screening-20260716/
+.tmp/presidio-screening-strict-20260716/
+.tmp/rrn-boundary-screening-20260716/
+```
 
 ## 6. 지연시간과 메모리 결과
 
