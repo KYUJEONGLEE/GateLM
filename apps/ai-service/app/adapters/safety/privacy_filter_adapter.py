@@ -483,26 +483,17 @@ class _KoElectraPrivacyNerOnnxClassifier:
             probabilities = np.exp(shifted_logits)
             probabilities = probabilities / probabilities.sum(axis=-1, keepdims=True)
             token_confidences = probabilities[np.arange(len(predicted_ids)), predicted_ids]
-            items: list[Mapping[str, Any]] = []
-            for predicted_id, confidence, offset in zip(
-                predicted_ids,
-                token_confidences,
-                offsets[item_index, :length],
-                strict=True,
-            ):
-                start, end = int(offset[0]), int(offset[1])
-                label = self._id_to_label.get(int(predicted_id), "O")
-                if label == "O" or end <= start:
-                    continue
-                items.append(
-                    {
-                        "entity": label,
-                        "score": float(confidence),
-                        "start": start,
-                        "end": end,
-                    }
+            results.append(
+                _decode_koelectra_privacy_ner_spans(
+                    id_to_label=self._id_to_label,
+                    predicted_ids=[int(predicted_id) for predicted_id in predicted_ids],
+                    confidences=[float(confidence) for confidence in token_confidences],
+                    offsets=[
+                        (int(offset[0]), int(offset[1]))
+                        for offset in offsets[item_index, :length]
+                    ],
                 )
-            results.append(items)
+            )
         return results
 
     def _load_session(self) -> Any:
@@ -594,11 +585,95 @@ def _decode_openai_privacy_filter_spans(
     return items
 
 
+def _decode_koelectra_privacy_ner_spans(
+    *,
+    id_to_label: Mapping[int, str],
+    predicted_ids: list[int],
+    confidences: list[float],
+    offsets: list[tuple[int, int]],
+) -> list[Mapping[str, Any]]:
+    items: list[Mapping[str, Any]] = []
+    current_type: str | None = None
+    current_start: int | None = None
+    current_end: int | None = None
+    current_scores: list[float] = []
+
+    def flush() -> None:
+        nonlocal current_type, current_start, current_end, current_scores
+        if current_type is not None and current_start is not None and current_end is not None:
+            score = sum(current_scores) / len(current_scores) if current_scores else 0.0
+            items.append(
+                {
+                    "entity_group": current_type,
+                    "score": score,
+                    "start": current_start,
+                    "end": current_end,
+                }
+            )
+        current_type = None
+        current_start = None
+        current_end = None
+        current_scores = []
+
+    for predicted_id, confidence, offset in zip(predicted_ids, confidences, offsets):
+        start, end = offset
+        label = id_to_label.get(predicted_id, "O").strip()
+        if label.upper() == "O" or start < 0 or end <= start:
+            flush()
+            continue
+
+        marker, entity_type = _split_koelectra_bioes_label(label)
+        if entity_type == "":
+            flush()
+            continue
+        if marker == "S":
+            flush()
+            current_type = entity_type
+            current_start = start
+            current_end = end
+            current_scores = [confidence]
+            flush()
+            continue
+
+        can_continue = (
+            marker in {"I", "E"}
+            and current_type == entity_type
+            and current_start is not None
+            and current_end is not None
+            and start >= current_start
+        )
+        if marker == "B" or not can_continue:
+            flush()
+            current_type = entity_type
+            current_start = start
+            current_end = end
+            current_scores = [confidence]
+        else:
+            current_end = max(current_end, end)
+            current_scores.append(confidence)
+
+        if marker == "E":
+            flush()
+
+    flush()
+    return items
+
+
 def _split_bioes_label(label: str) -> tuple[str, str]:
     if len(label) > 2 and label[1] == "-" and label[0].upper() in {"B", "I", "E", "S", "U"}:
         marker = label[0].upper()
         return ("S" if marker == "U" else marker), label[2:]
     return "S", label
+
+
+def _split_koelectra_bioes_label(label: str) -> tuple[str, str]:
+    marker, entity_type = _split_bioes_label(label)
+    if marker != "S" or entity_type != label:
+        return marker, entity_type
+    if len(label) > 2 and label[-2] == "-" and label[-1].upper() in {"B", "I", "E", "S", "U"}:
+        marker = label[-1].upper()
+        return ("S" if marker == "U" else marker), label[:-2]
+    return marker, entity_type
 
 
 def normalize_label(raw_label: str, label_map: Mapping[str, str] | None = None) -> str | None:

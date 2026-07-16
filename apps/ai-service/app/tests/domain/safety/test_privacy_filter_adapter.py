@@ -19,6 +19,7 @@ from app.adapters.safety.privacy_filter_adapter import (
     KOELECTRA_PRIVACY_NER_SOURCE,
     PrivacyFilterAdapter,
     _OpenAIPrivacyFilterOnnxClassifier,
+    _decode_koelectra_privacy_ner_spans,
     _decode_openai_privacy_filter_spans,
     aggregation_strategy_for_model,
     normalize_label,
@@ -476,6 +477,95 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertAlmostEqual(float(decoded[1]["score"]), 0.85)
         self.assertEqual(decoded[1]["start"], 7)
         self.assertEqual(decoded[1]["end"], 17)
+
+    def test_koelectra_onnx_decoder_merges_wordpiece_offsets_into_one_span(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-B", 2: "EMA-I"},
+            predicted_ids=[1, 2, 2, 2],
+            confidences=[0.96, 0.92, 0.88, 0.84],
+            offsets=[(8, 12), (12, 13), (13, 20), (20, 25)],
+        )
+
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]["entity_group"], "EMA")
+        self.assertEqual(decoded[0]["start"], 8)
+        self.assertEqual(decoded[0]["end"], 25)
+        self.assertAlmostEqual(float(decoded[0]["score"]), 0.9)
+
+    def test_koelectra_onnx_decoder_merges_resident_number_suffix_bio_span(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "RRN-B", 2: "RRN-I"},
+            predicted_ids=[1, 2, 2],
+            confidences=[0.94, 0.9, 0.86],
+            offsets=[(4, 10), (10, 11), (11, 18)],
+        )
+
+        self.assertEqual(
+            decoded,
+            [{"entity_group": "RRN", "score": 0.9, "start": 4, "end": 18}],
+        )
+
+    def test_koelectra_onnx_decoder_recovers_from_leading_inside_and_end_tokens(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-I", 2: "EMA-E", 3: "PHN-E"},
+            predicted_ids=[1, 1, 2, 3],
+            confidences=[0.9, 0.8, 0.7, 0.95],
+            offsets=[(0, 4), (4, 8), (8, 12), (14, 18)],
+        )
+
+        self.assertEqual(len(decoded), 2)
+        self.assertEqual(decoded[0]["entity_group"], "EMA")
+        self.assertEqual(decoded[0]["start"], 0)
+        self.assertEqual(decoded[0]["end"], 12)
+        self.assertEqual(decoded[1], {"entity_group": "PHN", "score": 0.95, "start": 14, "end": 18})
+
+    def test_koelectra_onnx_decoder_treats_single_and_unit_tokens_as_spans(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "S-EMA", 2: "PHN-U"},
+            predicted_ids=[1, 2],
+            confidences=[0.91, 0.87],
+            offsets=[(0, 5), (6, 10)],
+        )
+
+        self.assertEqual(
+            decoded,
+            [
+                {"entity_group": "EMA", "score": 0.91, "start": 0, "end": 5},
+                {"entity_group": "PHN", "score": 0.87, "start": 6, "end": 10},
+            ],
+        )
+
+    def test_koelectra_onnx_decoder_splits_when_entity_type_changes(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-B", 2: "EMA-I", 3: "PHN-I", 4: "PHN-E"},
+            predicted_ids=[1, 2, 3, 4],
+            confidences=[0.9, 0.8, 0.95, 0.85],
+            offsets=[(0, 4), (4, 8), (9, 12), (12, 16)],
+        )
+
+        self.assertEqual(len(decoded), 2)
+        self.assertEqual(decoded[0]["entity_group"], "EMA")
+        self.assertEqual(decoded[0]["start"], 0)
+        self.assertEqual(decoded[0]["end"], 8)
+        self.assertEqual(decoded[1]["entity_group"], "PHN")
+        self.assertEqual(decoded[1]["start"], 9)
+        self.assertEqual(decoded[1]["end"], 16)
+
+    def test_koelectra_onnx_decoder_ignores_special_offsets_without_bridging_spans(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-B", 2: "EMA-I"},
+            predicted_ids=[1, 2, 2, 2],
+            confidences=[0.99, 0.9, 0.99, 0.8],
+            offsets=[(0, 0), (0, 4), (0, 0), (4, 8)],
+        )
+
+        self.assertEqual(
+            decoded,
+            [
+                {"entity_group": "EMA", "score": 0.9, "start": 0, "end": 4},
+                {"entity_group": "EMA", "score": 0.8, "start": 4, "end": 8},
+            ],
+        )
 
     def test_openai_privacy_filter_onnx_session_uses_cpu_execution_provider(self) -> None:
         captured: dict[str, object] = {}
