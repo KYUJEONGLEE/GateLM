@@ -124,7 +124,6 @@ func main() {
 	}
 
 	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
-		RequestTimeout:        cfg.ProviderTimeout,
 		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
 		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
 		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,

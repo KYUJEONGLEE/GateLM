@@ -7,7 +7,6 @@ import (
 )
 
 type Config struct {
-	RequestTimeout        time.Duration
 	MaxIdleConns          int
 	MaxIdleConnsPerHost   int
 	MaxConnsPerHost       int
@@ -34,8 +33,9 @@ func New(cfg Config) *http.Client {
 		KeepAlive: cfg.DialKeepAlive,
 	}).DialContext
 
+	// Provider adapters apply each runtime target's deadline to the request
+	// context. A client-wide timeout here would override that deadline.
 	return &http.Client{
 		Transport: transport,
-		Timeout:   cfg.RequestTimeout,
 	}
 }
