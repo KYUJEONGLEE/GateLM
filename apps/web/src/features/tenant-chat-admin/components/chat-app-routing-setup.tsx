@@ -26,6 +26,10 @@ import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { getTenantChatReturnPath } from "@/features/provider-connections/tenant-chat-setup-return";
 import {
+  ChatAppPolicySummary,
+  type ChatAppReadOnlyPolicySection
+} from "@/features/tenant-chat-admin/components/chat-app-policy-summary";
+import {
   applyTenantChatSharedFallbackModelRef,
   getTenantChatFallbackExcludedModelRefs,
   selectTenantChatSharedFallbackModelRef,
@@ -135,6 +139,13 @@ const routingDifficultyCriteria: DifficultyCriteria = {
 };
 
 type RoutingProviderOption = TenantChatAdminRuntimeSetup["providers"][number];
+type ChatAppPolicySection = "routing" | ChatAppReadOnlyPolicySection;
+
+const chatAppPolicySections: ChatAppPolicySection[] = [
+  "routing",
+  "cache",
+  "security"
+];
 
 const copy = {
   en: {
@@ -142,6 +153,7 @@ const copy = {
     autoLabel: "Auto",
     modeTitle: "Routing mode",
     breadcrumb: "Chat App",
+    cacheTab: "Cache",
     configureProvider: "Register or edit provider",
     degraded: "The active runtime references a provider or model that is no longer available. Review and publish again.",
     description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing policy.",
@@ -173,7 +185,9 @@ const copy = {
     reset: "Reset",
     resetMessage: "Unsaved changes were reset to the active routing policy.",
     routing: "Routing policy",
+    routingTab: "Routing",
     routingDescription: "Configure models for the selected routing mode. Automatic assignments are preserved while fixed mode is active.",
+    securityTab: "Security",
     title: "Chat App"
   },
   ko: {
@@ -181,6 +195,7 @@ const copy = {
     autoLabel: "자동",
     modeTitle: "라우팅 방식",
     breadcrumb: "채팅 앱",
+    cacheTab: "캐시",
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
     description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 정책을 관리합니다.",
@@ -212,7 +227,9 @@ const copy = {
     reset: "초기화",
     resetMessage: "저장하지 않은 변경사항을 현재 라우팅 정책으로 되돌렸습니다.",
     routing: "라우팅 정책",
+    routingTab: "라우팅",
     routingDescription: "선택한 라우팅 방식에 맞춰 모델을 설정합니다. 고정 모드에서도 자동 배정은 그대로 보존됩니다.",
+    securityTab: "보안",
     title: "채팅 앱"
   }
 } satisfies Record<Locale, Record<string, string>>;
@@ -231,6 +248,8 @@ export function ChatAppRoutingSetup({
   const [loadError, setLoadError] = useState(initialLoadError);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
+  const [activePolicySection, setActivePolicySection] =
+    useState<ChatAppPolicySection>("routing");
   const [feedback, setFeedback] = useState<{ message: string; error: boolean; published?: boolean } | null>(null);
   const initialRef = firstModelRef(initialSetup);
   const [routingMode, setRoutingMode] = useState<TenantChatRoutingMode>(initialSetup?.activeSnapshot?.routingMode ?? "auto");
@@ -370,10 +389,33 @@ export function ChatAppRoutingSetup({
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div aria-label={text.breadcrumb} className="policy-section-tabs tenant-management-tabs" role="tablist">
-          <button aria-controls="chat-app-routing-panel" aria-selected="true" data-active="true" id="chat-app-routing-tab" role="tab" type="button">{text.routing}</button>
+          {chatAppPolicySections.map((section) => {
+            const isActive = activePolicySection === section;
+            const label = section === "routing"
+              ? text.routingTab
+              : section === "cache"
+                ? text.cacheTab
+                : text.securityTab;
+
+            return (
+              <button
+                aria-controls={`chat-app-${section}-panel`}
+                aria-selected={isActive}
+                data-active={isActive}
+                id={`chat-app-${section}-tab`}
+                key={section}
+                onClick={() => setActivePolicySection(section)}
+                role="tab"
+                type="button"
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
+      {activePolicySection === "routing" ? (
       <div aria-labelledby="chat-app-routing-tab" className="policy-tab-panel space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
         {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
         {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
@@ -510,6 +552,17 @@ export function ChatAppRoutingSetup({
           </form>
         )}
       </div>
+      ) : (
+        <div
+          aria-labelledby={`chat-app-${activePolicySection}-tab`}
+          className="policy-tab-panel"
+          id={`chat-app-${activePolicySection}-panel`}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <ChatAppPolicySummary locale={locale} section={activePolicySection} />
+        </div>
+      )}
     </main>
   );
 }

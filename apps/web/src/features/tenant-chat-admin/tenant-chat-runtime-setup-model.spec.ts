@@ -223,6 +223,27 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
+test("Chat App policy navigation exposes routing, cache, and security boundaries", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const summarySourceUrl = new URL("./components/chat-app-policy-summary.tsx", import.meta.url);
+  const runtimeEditorSourceUrl = new URL("../policies/components/runtime-policy-editor.tsx", import.meta.url);
+  const [source, summarySource, runtimeEditorSource] = await Promise.all([
+    readFile(componentSourceUrl, "utf8"),
+    readFile(summarySourceUrl, "utf8"),
+    readFile(runtimeEditorSourceUrl, "utf8")
+  ]);
+
+  expect(source).toContain('const chatAppPolicySections: ChatAppPolicySection[] = [');
+  expect(source).toContain('"routing",\n  "cache",\n  "security"');
+  expect(source).toContain('securityTab: "보안"');
+  expect(source).toContain("<ChatAppPolicySummary locale={locale} section={activePolicySection} />");
+  expect(summarySource).toContain("현재 채팅 앱 관리 API는 라우팅 설정만 편집합니다.");
+  expect(summarySource).toContain("raw prompt, raw response와 탐지된 원문은 이 콘솔에 노출하지 않습니다.");
+  expect(runtimeEditorSource).toContain('safetyTab: "Security"');
+  expect(runtimeEditorSource).toContain('safetyTab: "보안"');
+  expect(runtimeEditorSource).not.toContain('safetyTab: "안전"');
+});
+
 test("Chat App routing explains the simple and complex difficulty criteria", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const stylesUrl = new URL("../../app/globals.css", import.meta.url);
