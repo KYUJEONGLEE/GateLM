@@ -126,6 +126,40 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
 }
 
+func TestRoutingV2WithoutTierAllowsRolloutOffIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC()
+	admissionStore := admissionpostgres.NewStore(pool)
+	admission, err := admissionStore.Create(context.Background(), fixture.admissionContext(), tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create admission fixture: %v", err)
+	}
+
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.Routing = &tenantchat.RoutingDecision{ModelRef: "tc_standard"}
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.Policies.Routing = tenantruntime.RoutingPolicy{
+		Policy: &tenantruntime.RoutingPolicyV2Bridge{Mode: "auto"},
+		Routes: []tenantruntime.RuntimeRoute{{
+			RouteID: "standard_route", ModelRef: "tc_standard",
+			ProviderID: "provider", ModelKey: "standard_model", Enabled: true,
+		}},
+	}
+
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve Routing v2 route without tier while employee ledger rollout is off: %v", err)
+	}
+	if reservation.Route.ModelKey != "standard_model" || reservation.Route.Tier != "" {
+		t.Fatalf("unexpected Routing v2 reservation route: %+v", reservation.Route)
+	}
+	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
+}
+
 func TestShadowDisabledEmployeePolicyDualWritesReserveAndSettlementIntegration(t *testing.T) {
 	pool, fixture := setupUsageIntegration(t)
 	fixture.configureShadowDisabledEmployeePolicy(t, pool)
