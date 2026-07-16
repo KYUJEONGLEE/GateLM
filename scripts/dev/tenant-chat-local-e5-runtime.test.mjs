@@ -12,18 +12,42 @@ test('Tenant Chat local Compose defaults to the authoritative E5 difficulty runt
     'utf8',
   );
 
-  assert.match(compose, /dockerfile:\s+infra\/docker\/gateway-core-e5-runtime\.Dockerfile/);
+  assert.match(
+    compose,
+    /dockerfile:\s+\$\{GATELM_GATEWAY_DOCKERFILE:-infra\/docker\/gateway-core-e5-runtime\.Dockerfile\}/,
+  );
   assert.match(compose, /gateway-core:\s+platform:\s+linux\/amd64/s);
   assert.match(
     compose,
     /difficulty_e5:\s+\$\{GATELM_DIFFICULTY_E5_BUNDLE_DIR:-\.tmp\/gateway-e5-runtime-bundle\}/,
   );
-  assert.match(compose, /GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED:\s+"true"/);
+  assert.match(
+    compose,
+    /GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED:\s+"\$\{GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED:-true\}"/,
+  );
   assert.match(
     compose,
     /GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:\s+\$\{GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100\}/,
   );
   assert.match(compose, /GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED:\s+"false"/);
+});
+
+test('Tenant Chat container smoke overrides the local E5 default with the rule-only Gateway', async () => {
+  const workflow = await readFile(join(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
+  const smokeStepStart = workflow.indexOf(
+    '- name: Run encrypted Tenant Chat and usage smoke with mock provider',
+  );
+  const smokeStepEnd = workflow.indexOf('- name: Build remaining production images', smokeStepStart);
+  const smokeStep = workflow.slice(smokeStepStart, smokeStepEnd);
+
+  assert.ok(smokeStepStart >= 0);
+  assert.ok(smokeStepEnd > smokeStepStart);
+  assert.match(
+    smokeStep,
+    /GATELM_GATEWAY_DOCKERFILE:\s+infra\/docker\/gateway-core\.Dockerfile/,
+  );
+  assert.match(smokeStep, /GATELM_DIFFICULTY_E5_BUNDLE_DIR:\s+\./);
+  assert.match(smokeStep, /GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED:\s+"false"/);
 });
 
 test('Tenant Chat local wrapper prepares the pinned E5 runtime bundle before build or up', async () => {

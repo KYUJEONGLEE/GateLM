@@ -485,6 +485,10 @@ jobs:
           find .secrets/tenant-chat -type f -exec chmod 0444 {} +
 
       - name: Run encrypted Tenant Chat and usage smoke with mock provider
+        env:
+          GATELM_GATEWAY_DOCKERFILE: infra/docker/gateway-core.Dockerfile
+          GATELM_DIFFICULTY_E5_BUNDLE_DIR: .
+          GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "false"
         shell: pwsh
         run: |
           try {
