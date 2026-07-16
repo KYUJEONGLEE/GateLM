@@ -132,8 +132,17 @@ type Config struct {
 	ResponseCaptureEnabled                 bool
 	ResponseCaptureMaxChars                int
 	SemanticCache                          SemanticCacheConfig
+	DifficultyE5Runtime                    DifficultyE5RuntimeConfig
 	DifficultyE5Shadow                     DifficultyE5ShadowConfig
 	TenantChatPrivate                      TenantChatPrivateConfig
+}
+
+type DifficultyE5RuntimeConfig struct {
+	Enabled             bool
+	ArtifactRoot        string
+	EncoderManifestPath string
+	RuntimeLockPath     string
+	Timeout             time.Duration
 }
 
 type DifficultyE5ShadowConfig struct {
@@ -268,7 +277,20 @@ func Load() Config {
 
 func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
+	difficultyE5RuntimeEnabled := envBool("GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED", false)
+	difficultyE5RuntimeTimeout, difficultyE5RuntimeTimeoutErr := envDurationMillisInRange(
+		"GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS",
+		100,
+		1,
+		1000,
+	)
+	if difficultyE5RuntimeTimeoutErr != nil {
+		return Config{}, difficultyE5RuntimeTimeoutErr
+	}
 	difficultyE5ShadowEnabled := envBool("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", false)
+	if difficultyE5RuntimeEnabled && difficultyE5ShadowEnabled {
+		return Config{}, errors.New("difficulty E5 runtime and shadow cannot be enabled together")
+	}
 	difficultyE5ShadowScopes := []DifficultyE5ShadowScope(nil)
 	if difficultyE5ShadowEnabled {
 		difficultyE5ShadowScopes = parseDifficultyE5ShadowScopes(
@@ -417,6 +439,13 @@ func LoadWithError() (Config, error) {
 		ResponseCaptureEnabled:     envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
 		ResponseCaptureMaxChars:    envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:              semanticCache,
+		DifficultyE5Runtime: DifficultyE5RuntimeConfig{
+			Enabled:             difficultyE5RuntimeEnabled,
+			ArtifactRoot:        strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT", "/opt/gatelm/difficulty-e5")),
+			EncoderManifestPath: strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST", "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json")),
+			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")),
+			Timeout:             difficultyE5RuntimeTimeout,
+		},
 		DifficultyE5Shadow: DifficultyE5ShadowConfig{
 			Enabled:             difficultyE5ShadowEnabled,
 			AllowedScopes:       difficultyE5ShadowScopes,

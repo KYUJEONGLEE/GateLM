@@ -166,6 +166,8 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 
 Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다. 고정 Compose project의 PostgreSQL volume을 여러 Git worktree가 공유하므로 local helper와 Compose wrapper는 Git common directory의 상위 checkout에 있는 단일 gitignored `.secrets/tenant-chat`을 사용한다. 명시적 `--target`을 쓰는 production/self-host 경로는 이 local 기본 경로 해석을 사용하지 않는다.
 
+RAG crypto compatibility package를 추가해도 이 mount 경계는 자동으로 넓어지지 않는다. 현재 Control Plane HTTP process에는 content key file을 mount하지 않으며, 향후 별도 Control Plane worker가 chunk를 암호화할 때 필요한 least-privilege key delivery와 readiness는 worker contract/deployment milestone에서 명시적으로 추가한다.
+
 ```json
 {
   "schemaVersion": 1,
@@ -195,7 +197,7 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - 각 price route는 Routing v2 snapshot에서 `pricingStatus=available|unavailable`과 `pricingSource=model_pricing_rules|bundled|unavailable`을 명시한다. unavailable은 모든 monetary rate 0이며 “무료”를 뜻하지 않고 정확한 금액을 계산할 수 없다는 뜻이다.
 - attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
 - `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. safety는 routing/cache/Provider보다 먼저 실행하고 redacted input만 다음 단계에 전달한다.
-- `policies.routing.policy`가 있으면 Gateway는 기존 deterministic rule-based classifier로 category `general|code|translation|summarization|reasoning`과 difficulty `simple|complex`를 계산하고 cell의 ordered `modelRefs`를 concrete enabled route로 resolve한다. offline shadow Routing AI service는 이 경로를 변경하지 않는다.
+- `policies.routing.policy`가 있으면 Gateway는 기존 deterministic rule classifier로 category `general|code|translation|summarization|reasoning`을 계산한다. `routingMode=auto`의 model-path difficulty는 활성화된 경우 일반 Gateway와 공유하는 process-global 106D runtime의 `ready` 결과를 사용하고, 그 외 모든 non-ready 상태와 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. 선택된 `simple|complex` cell의 ordered `modelRefs`는 concrete enabled route로 resolve한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 경로를 변경하지 않는다.
 - routing decision은 cache lookup과 usage reservation 전에 고정한다. exact-cache fingerprint는 snapshot digest와 선택 `modelRef`를 포함하므로 같은 prompt라도 다른 routing target의 response를 재사용하지 않는다.
 - `routingMode=manual`은 `manualModelRef`를 선택하고, `routingMode=auto`는 5×2 matrix를 선택한다. budget/quota의 `economy` 상태를 difficulty 또는 modelRef로 암묵 변환하지 않는다.
 - `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.

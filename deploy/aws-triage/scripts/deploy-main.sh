@@ -37,6 +37,7 @@ public_url="${public_url%/}"
 chat_url="${chat_url%/}"
 minimum_free_kb="${GATELM_DEPLOY_MINIMUM_FREE_KB:-5242880}"
 tenant_chat_secret_dir="${deploy_dir}/.secrets/tenant-chat"
+gateway_e5_bundle_script="${deploy_dir}/scripts/prepare-gateway-e5-runtime-bundle.sh"
 
 build_services=(
   ai-service
@@ -81,7 +82,7 @@ tenant_chat_secret_files=(
 [[ "${minimum_free_kb}" =~ ^[0-9]+$ ]] || \
   deploy_fail "GATELM_DEPLOY_MINIMUM_FREE_KB must be an integer."
 
-for command_name in awk curl date df docker flock git install sha256sum stat tee; do
+for command_name in awk chmod cp curl date df diff dirname docker find flock git install mkdir mv rm sha256sum sort stat tar tee unzip; do
   need_command "${command_name}"
 done
 
@@ -395,6 +396,9 @@ compose exec -T postgres pg_restore --list < "${backup_dir}/postgres.dump" >/dev
 sha256sum "${backup_dir}/postgres.dump" > "${backup_dir}/postgres.dump.sha256"
 
 git -C "${repo_dir}" checkout --detach "${target_sha}"
+[[ -f "${gateway_e5_bundle_script}" ]] || \
+  deploy_fail "Gateway E5 bundle preparation script not found: ${gateway_e5_bundle_script}"
+bash "${gateway_e5_bundle_script}" "${repo_dir}"
 compose config --quiet
 
 export COMPOSE_PARALLEL_LIMIT=1

@@ -11,9 +11,16 @@ const base = {
 
 describe('Chat API environment', () => {
   it('adds bounded PostgreSQL pool defaults', () => {
-    const url = new URL(validateEnv(base).DATABASE_URL);
+    const validated = validateEnv(base);
+    const url = new URL(validated.DATABASE_URL);
     expect(url.searchParams.get('connection_limit')).toBe('12');
     expect(url.searchParams.get('pool_timeout')).toBe('5');
+    expect(validated.TENANT_CHAT_RAG_ENABLED).toBe('false');
+    expect(validated.RAG_EMBEDDING_PROVIDER).toBe('openai');
+    expect(validated.RAG_EMBEDDING_MODEL).toBe('text-embedding-3-large');
+    expect(validated.RAG_EMBEDDING_DIMENSIONS).toBe(1536);
+    expect(validated.RAG_EMBEDDING_PROFILE_VERSION).toBe(1);
+    expect(validated.RAG_DISTANCE_METRIC).toBe('cosine');
   });
 
   it('preserves an explicitly smaller pool limit', () => {
@@ -50,5 +57,16 @@ describe('Chat API environment', () => {
       .toThrow('CHAT_API_PORT');
     expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '' }))
       .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
+  });
+
+  it.each([
+    ['TENANT_CHAT_RAG_ENABLED', 'enabled'],
+    ['RAG_EMBEDDING_PROVIDER', 'unsupported'],
+    ['RAG_EMBEDDING_MODEL', 'text-embedding-3-small'],
+    ['RAG_EMBEDDING_DIMENSIONS', '3072'],
+    ['RAG_EMBEDDING_PROFILE_VERSION', '2'],
+    ['RAG_DISTANCE_METRIC', 'euclidean'],
+  ])('rejects invalid fixed RAG setting %s', (key, value) => {
+    expect(() => validateEnv({ ...base, [key]: value })).toThrow(key);
   });
 });

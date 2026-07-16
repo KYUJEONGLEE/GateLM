@@ -40,6 +40,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		generated, err = difficultymodel.RenderArtifactPayload(payload, "routing")
 	case difficultymodel.GatewayShadow118DProfileName:
 		generated, err = difficultymodel.RenderGatewayShadow118DPayload(payload, "routing")
+	case difficultymodel.GatewayShadow106DProfileName:
+		generated, err = difficultymodel.RenderGatewayShadow106DPayload(payload, "routing")
 	default:
 		fmt.Fprintln(stderr, "unsupported generation profile:", *profile)
 		return 2

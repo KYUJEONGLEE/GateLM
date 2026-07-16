@@ -8,6 +8,7 @@ AWS_TRIAGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${AWS_TRIAGE_DIR}/../.." && pwd)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
+E5_BUNDLE_SCRIPT="${SCRIPT_DIR}/prepare-gateway-e5-runtime-bundle.sh"
 WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/deploy-production.yml"
 TEMPLATE_FILE="${AWS_TRIAGE_DIR}/aws/github-actions-cd.template.json"
 COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.yml"
@@ -32,7 +33,7 @@ assert_fails_with() {
     fail "Expected failure text was not found: ${expected}"
 }
 
-for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}"; do
+for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
   bash -n "${file}"
 done
 
@@ -116,6 +117,27 @@ grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
   fail "Temporary rollback image tags must be cleaned up"
+grep -Fq 'bash "${gateway_e5_bundle_script}" "${repo_dir}"' "${DEPLOY_SCRIPT}" || \
+  fail "Deployment must prepare the pinned Gateway E5 bundle before image builds"
+for required_setting in \
+  'dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile' \
+  'difficulty_e5: ../../.tmp/gateway-e5-runtime-bundle' \
+  'GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "true"' \
+  'GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100}' \
+  'GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"'
+do
+  grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
+    fail "Gateway E5 production Compose setting is missing: ${required_setting}"
+done
+for pinned_material in \
+  '614241f622f53c4eeff9890bdc4f31cfecc418b3' \
+  'c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0' \
+  '2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58' \
+  'sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256'
+do
+  grep -Fq "${pinned_material}" "${E5_BUNDLE_SCRIPT}" || \
+    fail "Gateway E5 bundle preparation pin is missing: ${pinned_material}"
+done
 for required_setting in \
   'TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"' \
   'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \

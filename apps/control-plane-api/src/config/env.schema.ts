@@ -1,6 +1,8 @@
+import { validateRagRuntimeConfig, type RagRuntimeConfig } from '@gatelm/rag-config';
+
 type RawEnv = Record<string, string | undefined>;
 
-interface ControlPlaneEnv {
+interface ControlPlaneEnv extends RagRuntimeConfig {
   AUTH_EMAIL_TRANSPORT?: string;
   CONTROL_PLANE_INTERNAL_SERVICE_TOKEN?: string;
   TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN?: string;
@@ -224,6 +226,7 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
 
   return {
     ...config,
+    ...validateRagRuntimeConfig(config),
     AUTH_EMAIL_TRANSPORT: emailTransport,
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: internalServiceToken,
     TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: tenantChatServiceToken,
