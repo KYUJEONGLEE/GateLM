@@ -381,6 +381,20 @@ function validateData(schema, data, context, rootSchema, localFailures) {
     }
   }
 
+  if (schema.oneOf) {
+    const matchCount = schema.oneOf.reduce((count, subSchema) => {
+      const trialFailures = [];
+      validateData(subSchema, data, context, rootSchema, trialFailures);
+      return count + (trialFailures.length === 0 ? 1 : 0);
+    }, 0);
+
+    if (matchCount !== 1) {
+      localFailures.push(
+        `${context.path}: expected to match exactly one oneOf branch, matched ${matchCount}`,
+      );
+    }
+  }
+
   if ("const" in schema && !deepEqual(data, schema.const)) {
     localFailures.push(`${context.path}: expected const ${JSON.stringify(schema.const)}`);
   }
@@ -750,10 +764,17 @@ function assertTenantChatExecutableContract() {
       }
     }
 
-    const activationSchema = adminOpenApi.components?.schemas?.ActivateRuntimeRequest;
-    if (!activationSchema) {
+    const activationComponent = adminOpenApi.components?.schemas?.ActivateRuntimeRequest;
+    const activationSchema = runtimePath?.put?.requestBody?.content?.["application/json"]?.schema;
+    if (!runtimePath?.put?.requestBody?.required) {
+      fail(`${adminOpenApiPath}: PUT admin runtime requestBody must be required`);
+    }
+    if (activationSchema?.$ref !== "#/components/schemas/ActivateRuntimeRequest") {
+      fail(`${adminOpenApiPath}: PUT admin runtime request must reference ActivateRuntimeRequest`);
+    }
+    if (!activationComponent) {
       fail(`${adminOpenApiPath}: missing ActivateRuntimeRequest schema`);
-    } else {
+    } else if (activationSchema) {
       const modelRef = "openai:gpt-4o-mini";
       const routingCell = { modelRefs: [modelRef] };
       const routingDifficulty = { simple: routingCell, complex: routingCell };
@@ -857,6 +878,49 @@ function assertTenantChatExecutableContract() {
           fail(`${adminOpenApiPath}: unexpectedly accepted ${label}`);
         }
       }
+    }
+
+    const setupEnvelopePayload = {
+      data: {
+        readiness: "needs_provider",
+        providers: [],
+        activeSnapshot: null,
+      },
+    };
+    for (const method of ["get", "put"]) {
+      const responseSchema =
+        runtimePath?.[method]?.responses?.["200"]?.content?.["application/json"]?.schema;
+      if (responseSchema?.$ref !== "#/components/schemas/SetupEnvelope") {
+        fail(
+          `${adminOpenApiPath}: ${method.toUpperCase()} 200 response must reference SetupEnvelope`,
+        );
+        continue;
+      }
+      const responseFailures = [];
+      validateData(
+        responseSchema,
+        setupEnvelopePayload,
+        { filePath: adminOpenApiPath, path: `$.${method}.response.200` },
+        adminOpenApi,
+        responseFailures,
+      );
+      for (const validationFailure of responseFailures) {
+        fail(`${adminOpenApiPath}: ${validationFailure}`);
+      }
+    }
+
+    const invalidSetupEnvelopePayload = structuredClone(setupEnvelopePayload);
+    invalidSetupEnvelopePayload.data.activeSnapshot = {};
+    const invalidResponseFailures = [];
+    validateData(
+      adminOpenApi.components?.schemas?.SetupEnvelope,
+      invalidSetupEnvelopePayload,
+      { filePath: adminOpenApiPath, path: "$.negative.invalidActiveSnapshot" },
+      adminOpenApi,
+      invalidResponseFailures,
+    );
+    if (invalidResponseFailures.length === 0) {
+      fail(`${adminOpenApiPath}: unexpectedly accepted an invalid activeSnapshot response`);
     }
   }
 
