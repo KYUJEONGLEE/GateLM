@@ -128,7 +128,7 @@ test("live request columns place cost before status and size columns by content 
   expect(styles).not.toContain("width: calc(100% / 9);");
 });
 
-test("live request headers and cell contents are all left aligned", async () => {
+test("live request status header and cell contents are center aligned", async () => {
   const styles = await readFile(dashboardStylesSourceUrl, "utf8");
   const focusStyles = styles.slice(
     styles.indexOf("/* Live Requests focus workspace and request detail presentation */")
@@ -140,8 +140,8 @@ test("live request headers and cell contents are all left aligned", async () => 
   expect(focusStyles).toMatch(
     /\.dashboard-live-provider-model \{[^}]*justify-content: flex-start;/
   );
-  expect(focusStyles).not.toMatch(
-    /\.dashboard-live-requests-table[^{}]+\{[^{}]*text-align: (?:right|center);/
+  expect(styles).toMatch(
+    /\.dashboard-live-requests-table th:nth-child\(8\),\s*\.dashboard-live-requests-table td:nth-child\(8\) \{[^}]*text-align: center;/
   );
 });
 
