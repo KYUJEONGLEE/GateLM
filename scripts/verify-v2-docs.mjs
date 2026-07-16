@@ -255,7 +255,7 @@ function assertCiGate() {
 
   const workflow = readText(workflowPath);
   for (const expectedText of [
-    "branches: [main, dev]",
+    "branches: [main, dev, dev2]",
     "node-version-file: .node-version",
     "corepack prepare pnpm@9.15.0 --activate",
     "pnpm verify:v2-docs",
