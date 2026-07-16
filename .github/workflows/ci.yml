@@ -564,6 +564,12 @@ jobs:
             -f deploy/selfhost/docker-compose.yml \
             config --quiet
 
+      - name: Prepare Gateway E5 runtime bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh "${GITHUB_WORKSPACE}"
+
       - name: Build release images
         shell: bash
         run: |

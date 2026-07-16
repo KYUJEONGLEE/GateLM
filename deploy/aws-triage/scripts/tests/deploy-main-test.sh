@@ -118,6 +118,14 @@ grep -Fq 'Tenant Chat secret files must share one owner UID and GID.' "${DEPLOY_
   fail "Tenant Chat secret files must have consistent ownership"
 grep -Fq 'content-keys.json' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat content keys must be validated before the image build"
+grep -Fq 'tenant-chat-secrets' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secrets must be backed up with the database"
+grep -Fq 'install -m 600' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret backups must use restrictive file permissions"
+grep -Fq 'wait_for_chat_api_readiness' "${DEPLOY_SCRIPT}" || \
+  fail "Deployment must verify Chat API database and key continuity"
+grep -Fq 'Chat API readiness did not verify database and key continuity.' "${DEPLOY_SCRIPT}" || \
+  fail "A key continuity failure must fail the deployment"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
