@@ -2,10 +2,10 @@
 
 import {
   Activity,
-  CheckCircle2,
   DollarSign,
   RotateCcw,
-  Timer
+  Timer,
+  WalletCards
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -92,13 +92,14 @@ const dashboardText: Record<
     backToOverview: string;
     costByModel: string;
     dashboardFilters: string;
-    dataAsOf: string;
     keyMetrics: string;
     kpi: {
+      averageLatency: string;
+      averageLatencyDetail: string;
       monthCost: string;
       monthCostDetail: string;
-      successRate: string;
-      successful: string;
+      totalCost: string;
+      totalCostDetail: string;
       totalRequests: string;
     };
     overviewWorkspace: string;
@@ -157,7 +158,6 @@ const dashboardText: Record<
     backToOverview: "Back to overview",
     costByModel: "Cost by model",
     dashboardFilters: "Dashboard filters",
-    dataAsOf: "Data as of",
     filter: {
       apply: "Apply",
       budgetScopeId: "Policy ID",
@@ -197,10 +197,12 @@ const dashboardText: Record<
     },
     keyMetrics: "Dashboard key metrics",
     kpi: {
+      averageLatency: "Average latency",
+      averageLatencyDetail: "Average response time for the selected range",
       monthCost: "Month-to-date cost",
       monthCostDetail: "Live accumulated cost for this month",
-      successRate: "Success rate",
-      successful: "successful",
+      totalCost: "Total cost",
+      totalCostDetail: "Provider cost for the selected range",
       totalRequests: "Total requests"
     },
     overviewWorkspace: "Dashboard overview workspace",
@@ -221,14 +223,13 @@ const dashboardText: Record<
       safety: "Safety",
       limits: "Limits"
     },
-    title: "Overview"
+    title: "Operations Dashboard"
   },
   ko: {
     actionRequestLogs: "요청 로그 열기",
     backToOverview: "개요로 돌아가기",
     costByModel: "모델별 비용",
     dashboardFilters: "대시보드 필터",
-    dataAsOf: "데이터 기준 시각",
     filter: {
       apply: "적용",
       budgetScopeId: "Policy ID",
@@ -268,10 +269,12 @@ const dashboardText: Record<
     },
     keyMetrics: "대시보드 핵심 지표",
     kpi: {
+      averageLatency: "평균 지연 시간",
+      averageLatencyDetail: "선택 기간의 평균 응답 시간",
       monthCost: "이번 달 누적 비용",
       monthCostDetail: "이번 달 실시간 누적 비용",
-      successRate: "성공률",
-      successful: "성공",
+      totalCost: "총비용",
+      totalCostDetail: "선택 기간의 실제 Provider 비용",
       totalRequests: "총 요청"
     },
     overviewWorkspace: "대시보드 개요 영역",
@@ -292,7 +295,7 @@ const dashboardText: Record<
       safety: "Safety",
       limits: "Limits"
     },
-    title: "Overview"
+    title: "운영 대시보드"
   }
 };
 
@@ -331,32 +334,32 @@ export function DashboardOverviewView({
   const liveRequests = snapshot?.liveRequests ?? initialLiveRequests;
   const text = dashboardText[locale];
   const monthToDate = monthToDateOverview ?? overview;
-  const successRate = ratio(overview.successfulRequests, overview.totalRequests);
-  const dataAsOf = formatDashboardDataAsOf(
-    overview.dataFreshness.lastLogCreatedAt ||
-      overview.dataFreshness.generatedAt ||
-      overview.range.to,
-    locale
-  );
   const queryBudgetWarning = dashboardQueryBudgetWarning(overview.queryBudget, locale);
   const kpiCards = [
     {
-      detail: `${formatInteger(overview.totalRequests)} ${locale === "ko" ? "건" : "requests"} · ${rangeLabel(filters.range, locale)}`,
+      detail: `${rangeLabel(filters.range, locale)} · ${text.kpi.totalCostDetail}`,
+      icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: text.kpi.totalCost,
+      tone: "blue",
+      value: formatMicroUsd(overview.totalCostMicroUsd)
+    },
+    {
+      detail: rangeLabel(filters.range, locale),
       icon: <Activity aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.totalRequests,
-      tone: "blue",
+      tone: "green",
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: `${formatInteger(overview.successfulRequests)} ${text.kpi.successful}`,
-      icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: text.kpi.successRate,
-      tone: "green",
-      value: formatPercent(successRate)
+      detail: text.kpi.averageLatencyDetail,
+      icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: text.kpi.averageLatency,
+      tone: "violet",
+      value: formatLatency(overview.averageLatencyMs)
     },
     {
       detail: text.kpi.monthCostDetail,
-      icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
+      icon: <WalletCards aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.monthCost,
       tone: "orange",
       value: snapshot
@@ -364,17 +367,6 @@ export function DashboardOverviewView({
         : monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
-
-  if (overview.gatewayTtft?.scope === "project_application") {
-    const ttft = overview.gatewayTtft;
-    kpiCards.push({
-      detail: text.ttftDetail,
-      icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
-      label: text.ttftTitle,
-      tone: "violet",
-      value: formatTtftLatency(ttft.averageMs)
-    });
-  }
 
   useEffect(() => {
     let stopped = false;
@@ -502,10 +494,6 @@ export function DashboardOverviewView({
             {queryBudgetWarning}
           </div>
         ) : null}
-        <div className="dashboard-data-freshness">
-          <span>{text.dataAsOf}</span>
-          <strong>{dataAsOf}</strong>
-        </div>
       </section>
 
       <section className="dashboard-overview-workspace" aria-label={text.overviewWorkspace}>
@@ -513,12 +501,12 @@ export function DashboardOverviewView({
           <div className="dashboard-kpi-grid" aria-label={text.keyMetrics}>
             {kpiCards.map((card) => (
               <article className="dashboard-kpi-card" data-tone={card.tone} key={card.label}>
-                <div className="dashboard-kpi-card-header">
-                  <span className="dashboard-kpi-icon">{card.icon}</span>
+                <span className="dashboard-kpi-icon">{card.icon}</span>
+                <div className="dashboard-kpi-copy">
                   <span className="dashboard-kpi-label">{card.label}</span>
+                  <strong>{card.value}</strong>
+                  <p>{card.detail}</p>
                 </div>
-                <strong>{card.value}</strong>
-                <p>{card.detail}</p>
               </article>
             ))}
           </div>
@@ -531,9 +519,23 @@ export function DashboardOverviewView({
               initialSummary={costOverTime}
               locale={locale}
               pollingEnabled={false}
+              rangeOptions={dashboardRanges.map((range) => ({
+                active: filters.range === range,
+                href: dashboardHref(
+                  overview.filters.tenantId,
+                  { ...filters, range },
+                  undefined,
+                  { motion: "none" }
+                ),
+                label: rangeToggleLabel(range, locale)
+              }))}
               rangeLabel={rangeLabel(filters.range, locale)}
             />
-            <ProviderModelUsageCard locale={locale} rows={buildProviderModelUsageRows(overview)} />
+            <ProviderModelUsageCard
+              detailsHref={analyticsHref(overview.filters.tenantId, filters)}
+              locale={locale}
+              rows={buildProviderModelUsageRows(overview)}
+            />
           </div>
           <LiveRequestsCard
             filters={{
@@ -554,14 +556,6 @@ export function DashboardOverviewView({
       {detailPanel}
     </main>
   );
-}
-
-function ratio(numerator: number, denominator: number) {
-  if (denominator <= 0) {
-    return 0;
-  }
-
-  return numerator / denominator;
 }
 
 function formatTtftLatency(value: number | null) {
@@ -599,19 +593,6 @@ function dashboardQueryBudgetWarning(
   return fallback[locale][queryBudget.status];
 }
 
-function formatDashboardDataAsOf(value: string, locale: Locale) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Seoul"
-  }).format(date);
-}
-
 function rangeLabel(range: DashboardRange, locale: Locale) {
   if (range === "5m") {
     return locale === "ko" ? "최근 5분" : "Last 5 minutes";
@@ -632,6 +613,18 @@ function rangeLabel(range: DashboardRange, locale: Locale) {
   return locale === "ko" ? "최근 7일" : "Last 7 days";
 }
 
+function rangeToggleLabel(range: DashboardRange, locale: Locale) {
+  const labels: Record<DashboardRange, { en: string; ko: string }> = {
+    "5m": { en: "5m", ko: "5분" },
+    "15m": { en: "15m", ko: "15분" },
+    "1h": { en: "1h", ko: "1시간" },
+    "1d": { en: "24h", ko: "24시간" },
+    "1w": { en: "7d", ko: "7일" }
+  };
+
+  return labels[range][locale];
+}
+
 function formatMicroUsd(value: number) {
   const dollars = value / 1_000_000;
 
@@ -644,19 +637,11 @@ function formatMicroUsd(value: number) {
 }
 
 function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModelUsageRow[] {
-  const rows = overview.breakdowns?.byProviderModel?.length
-    ? overview.breakdowns.byProviderModel.map((row) => ({
-        model: row.model,
-        provider: row.provider,
-        requestCount: row.requestCount
-      }))
-    : overview.costByModel.length
-      ? overview.costByModel.map((row) => ({
-          model: row.model,
-          provider: row.provider,
-          requestCount: row.requestCount
-        }))
-      : [];
+  const rows = overview.costByModel.map((row) => ({
+    costMicroUsd: row.costMicroUsd,
+    model: row.model,
+    provider: row.provider
+  }));
   const rowMap = new Map<string, ProviderModelUsageRow>();
 
   for (const row of rows) {
@@ -667,14 +652,26 @@ function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModel
     const existing = rowMap.get(key);
 
     rowMap.set(key, {
+      costMicroUsd: Math.max(row.costMicroUsd, 0) + (existing?.costMicroUsd ?? 0),
       model,
       provider,
-      providerLabel: providerDisplay.label,
-      requestCount: Math.max(row.requestCount, 0) + (existing?.requestCount ?? 0)
+      providerLabel: providerDisplay.label
     });
   }
 
-  return Array.from(rowMap.values()).sort((first, second) => second.requestCount - first.requestCount);
+  return Array.from(rowMap.values()).sort(
+    (first, second) => second.costMicroUsd - first.costMicroUsd
+  );
+}
+
+function analyticsHref(tenantId: string, filters: DashboardFilterState) {
+  const query = new URLSearchParams({
+    range: filters.range === "5m" ? "15m" : filters.range,
+    tab: "cost"
+  });
+  appendDashboardQuery(query, "projectId", filters.projectId);
+
+  return `/tenants/${tenantId}/analytics?${query.toString()}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

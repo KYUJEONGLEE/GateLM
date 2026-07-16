@@ -32,6 +32,7 @@ export type LiveOverviewRequestsFilters = {
 };
 
 export type LiveOverviewRequestsOptions = {
+  providerDirectory?: ProviderDisplayDirectory;
   projectIds?: string[];
   projectNameSource?: LiveRequestsPayload["projectNameSource"];
   projects?: ProjectRecord[];
@@ -45,10 +46,12 @@ export async function getLiveOverviewRequests(
   options: LiveOverviewRequestsOptions = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const liveRange = getDashboardLiveRange(filters.range);
-  const [projectsModel, employees, providerConnections] = await Promise.all([
+  const [projectsModel, employees, providerDirectory] = await Promise.all([
     options.projects ? Promise.resolve(undefined) : getProjectsModel(tenantId),
     getTenantEmployees(tenantId),
-    listTenantProviderConnections(resolveControlPlaneTenantId(tenantId))
+    options.providerDirectory
+      ? Promise.resolve(options.providerDirectory)
+      : getLiveRequestProviderDirectory(tenantId)
   ]);
   const projects = options.projects ?? projectsModel?.projects ?? [];
   const projectIds = options.projectIds ?? projects.map((project) => project.id).filter(Boolean);
@@ -71,9 +74,6 @@ export async function getLiveOverviewRequests(
 
   const projectNames = buildProjectNameMap(projects);
   const employeeNames = buildEmployeeNameMap(employees);
-  const providerDirectory = buildProviderDisplayDirectory(
-    providerConnections.ok ? providerConnections.data : []
-  );
   const allRows = records.map((record) =>
     toLiveRequestRow(record, projectNames, employeeNames, providerDirectory)
   );
@@ -89,6 +89,18 @@ export async function getLiveOverviewRequests(
     projectNameSource: options.projectNameSource ?? projectsModel?.source ?? "control-plane",
     rows
   };
+}
+
+export async function getLiveRequestProviderDirectory(
+  tenantId: string
+): Promise<ProviderDisplayDirectory> {
+  const providerConnections = await listTenantProviderConnections(
+    resolveControlPlaneTenantId(tenantId)
+  );
+
+  return buildProviderDisplayDirectory(
+    providerConnections.ok ? providerConnections.data : []
+  );
 }
 
 function buildProjectNameMap(projects: ProjectRecord[]) {
