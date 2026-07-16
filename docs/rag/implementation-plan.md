@@ -1,10 +1,10 @@
 # Tenant Chat RAG MVP implementation plan
 
-Status: **Approved MVP implementation plan / M1 crypto-config and M2 DB foundation implemented / RAG route contracts pending**
+Status: **Approved MVP plan / implementation candidate through the RAG chat, citation, deletion, UI, and validation milestones / release blockers remain**
 
-Repository baseline: `6a43b757b2379494792d9224276cc4a4f79e5f75` (`dev`, verified 2026-07-16)
+Current review baseline: `f3a67232ea` (`origin/dev`, verified 2026-07-17). The RAG candidate changes were reapplied on `feat/RAG-rc-sync` and revalidated against this baseline.
 
-Current implementation progress: **M1 shared crypto/fixed-profile configuration plus M2 database and pgvector infrastructure; no RAG API, worker, object storage, extraction, embedding call, retrieval, citation, or UI implementation**
+Current implementation progress: **The candidate contains the database, admin document API/UI, private object storage, extraction, embedding, durable worker, retrieval, RAG chat, encrypted citation, deletion, and validation slices described below. It is not release-ready: no tenant-admin Knowledge Base enable/disable API/UI exists, so a normally created Knowledge Base remains `DISABLED`, and the real staging S3/KMS/internal-service end-to-end smoke has not been executed.**
 
 This document turns the agreed Tenant Chat RAG MVP boundary into repository-specific milestones. It is not an active API, database, event, or security contract. Contract-sensitive changes described here must first be promoted into the active Tenant Chat contract and reviewed in their own milestone.
 
@@ -16,6 +16,7 @@ Related decisions:
 - [ADR-004: cache policy](adr-004-cache-policy.md)
 - [ADR-005: job processing](adr-005-job-processing.md)
 - [ADR-006: citation protocol](adr-006-citation-protocol.md)
+- [2026-07-17 release-candidate review](release-candidate-review.md)
 
 ## 1. Scope and invariants
 
@@ -63,7 +64,7 @@ RAG is not automatically applied to every employee message. `TenantChatConversat
 - `off` (default): current non-RAG flow.
 - `tenant`: retrieve from the authenticated tenant's single active Knowledge Base.
 
-The conversation create/update contract may expose only this mode, subject to the Tenant Chat contract milestone. It never exposes a Knowledge Base selector. Tenant Chat Web offers the choice only when the Tenant Admin has enabled the tenant Knowledge Base. On each turn the Chat API loads the stored conversation, authenticated tenant, and Knowledge Base status, then chooses the path.
+The conversation create contract exposes only this mode and persists it server-side; turn requests cannot override it. It never exposes a Knowledge Base selector. The current Tenant Chat Web renders the choice, but it has no tenant Knowledge Base enablement read model yet; the missing tenant-admin enable/disable contract/API/UI must be completed before release so the choice is offered only for enabled tenants. On each turn the Chat API loads the stored conversation, authenticated tenant, and Knowledge Base status, then chooses the path.
 
 - If mode is `off`, no retrieval or embedding call is made.
 - If mode is `tenant` but the tenant feature is disabled, the turn fails with stable `CHAT_RAG_DISABLED`; it never silently switches to ordinary chat.
@@ -74,8 +75,9 @@ The conversation create/update contract may expose only this mode, subject to th
 
 `chunkingProfileVersion = 1`:
 
-- target chunk size: 800 tokens;
-- overlap: 120 tokens;
+- target chunk size: 600 tokens;
+- overlap: 100 tokens;
+- maximum chunk size: 900 tokens;
 - tokenizer name/version is frozen as part of chunking profile version 1 so token boundaries are reproducible;
 - preserve PDF page identity;
 - prefer paragraph and sentence boundaries and do not split them when the size limit can still be respected;
@@ -145,15 +147,15 @@ The Control Plane worker is a separate process built from the Control Plane code
 ### Prisma and PostgreSQL
 
 - The authoritative Prisma schema is `apps/control-plane-api/prisma/schema.prisma`.
-- The user-provided baseline said 34 migrations. The repository at the verified commit contains **37** migration directories. The three later migrations are:
+- The user-provided baseline said 34 migrations. The historical design baseline contained **37** migration directories. The three later migrations were:
   - `20260715180000_tenant_employee_cost_policies`
   - `20260715180100_tenant_employee_cost_policy_limit_constraints`
   - `20260715180200_tenant_employee_cost_ledger`
   The baseline count and list therefore must not be hard-coded into implementation prompts.
-- Baseline local migration status reported 37 migrations. M2 adds migrations 38 and 39: the immutable foundation migration plus an additive invariant-hardening migration. The local 37→39 upgrade and a separate fresh-database application both pass.
+- Migration counts are historical evidence, not an invariant. The synchronized 2026-07-17 candidate contains 43 migrations and passes fresh-database validation, including the newer pre-RAG `20260716113000_tenant_chat_cache_outcome` migration before the additive RAG chain. CI derives the pre-RAG set by migration timestamp/name instead of a fixed count.
 - Local, self-host, AWS-triage, distributed-performance, and CI manifests now use the same digest-pinned pgvector 0.8.5 PostgreSQL 16 image.
 - The local database now has pgvector 0.8.5 installed by `CREATE EXTENSION IF NOT EXISTS vector`; the previous `postgres:16` image did not expose that extension.
-- CI now has a dedicated PostgreSQL service/job that runs the static migration guard, 37→39 upgrade, fresh migration, and catalog/constraint integration tests.
+- CI now has a dedicated PostgreSQL service/job that derives the pre-RAG baseline by migration name, runs the additive upgrade and fresh migration, and executes catalog/constraint integration tests. It deliberately does not hard-code a baseline count because unrelated earlier migrations continue to land on `dev`.
 - The AWS deployment script runs `prisma migrate deploy` after starting the pinned compose PostgreSQL instance. Externally managed production extension privileges and copied-volume compatibility remain deployment prerequisites rather than repository-proven facts.
 
 ### Authentication and RBAC
@@ -170,7 +172,7 @@ The Control Plane worker is a separate process built from the Control Plane code
 - Messages and titles use AES-256-GCM in `apps/chat-api/src/content/content-crypto.ts` with a random 12-byte nonce, 16-byte authentication tag, a 32-byte data key, and canonical associated data.
 - `TenantContentKeyService` manages per-tenant active key versions, grace/retired states, rollback floors, and wrapping-key rewraps using `tenant_chat_content_key_states` and `tenant_chat_content_keys`.
 - The current AAD schema is chat-record-specific and cannot be reused unchanged for RAG chunks.
-- `packages/tenant-content-crypto` now owns deterministic crypto/JCS/keyset/AAD primitives while Chat API retains Nest/file/Prisma key-resolution adapters. Fixed legacy message fixtures prove existing ciphertext/AAD compatibility. The future Control Plane worker will import the same package but does not yet exist and receives no key-file mount in M1.
+- `packages/tenant-content-crypto` owns deterministic crypto/JCS/keyset/AAD primitives while Chat API retains Nest/file/Prisma key-resolution adapters. Fixed legacy message fixtures prove existing ciphertext/AAD compatibility. The Control Plane document adapter and dedicated worker both use the same least-privilege wrapping-only key projection.
 - `packages/rag-config` now validates the fixed OpenAI/1536/cosine/profile-v1 environment contract in Chat API and Control Plane. `TENANT_CHAT_RAG_ENABLED` defaults to `false`; both processes reject a mismatched Knowledge Base profile before listen regardless of the flag, while tenant enablement remains `RagKnowledgeBase.status=ENABLED`.
 
 ### Gateway, cache, budget, and usage
@@ -196,7 +198,7 @@ The Control Plane worker is a separate process built from the Control Plane code
 
 - AI Service currently exposes internal-looking safety endpoints but has no route-level service-token authentication dependency. The RAG extraction route adds a distinct service token per environment before accepting document bytes; staging/production fail startup when the token is absent or local/fake.
 - AI Service has no PDF parser dependency. The selected text-layer PDF library must support Python 3.12, deterministic page-level text extraction, encrypted/image-only detection, bounded in-memory parsing, maintained security fixes, a repository-compatible license, and tests without network/native subprocess requirements. It must not introduce OCR or execute embedded PDF content.
-- No S3/KMS/object-storage adapter or AWS SDK dependency exists in production code. `apps/worker/src/infrastructure/object-storage` is only a scaffold.
+- M5 adds the Control Plane production S3 adapter under `apps/control-plane-api/src/modules/rag-documents/storage`, with managed streaming upload, explicit SSE-KMS, IAM-role-only production credential selection and safe compensation. `apps/worker/src/infrastructure/object-storage` remains only a scaffold and is not reused.
 - No robust Redis queue/BullMQ implementation exists. There are PostgreSQL polling patterns using `FOR UPDATE SKIP LOCKED`, but they run for other concerns and are not a reusable RAG queue.
 - The approved MVP job mechanism is a durable PostgreSQL `RagJob` table leased by a dedicated Control Plane worker process.
 
@@ -229,10 +231,19 @@ sequenceDiagram
     Admin->>Web: Upload .txt or text-layer .pdf
     Web->>CP: Admin session + tenant route + multipart upload
     CP->>CP: AdminAuthGuard, type/size/name validation
-    CP->>DB: TX create KB if absent + document UPLOADING
+    CP->>DB: Create/load the tenant Knowledge Base
     CP->>S3: Stream original to opaque tenant/document key
-    CP->>DB: TX document UPLOADED + enqueue INGEST job
-    CP-->>Web: 202 + safe documentId + status
+    alt S3 upload fails or stream validation aborts
+        CP-->>Web: Safe error; no Document or Job row
+    else S3 object is durable
+        CP->>DB: TX lock KB + limit/duplicate + Document UPLOADED + INGEST PENDING
+        alt DB transaction fails or rejects
+            CP->>S3: Best-effort compensation delete
+            CP-->>Web: Safe error or duplicate conflict
+        else DB transaction commits
+            CP-->>Web: 202 + safe documentId + UPLOADED
+        end
+    end
 
     loop Lease bounded jobs
         Worker->>DB: SELECT ... FOR UPDATE SKIP LOCKED
@@ -249,7 +260,7 @@ sequenceDiagram
 
 Rules:
 
-- Before upload, the tenant-scoped transaction counts all existing document rows, including DELETING rows until hard deletion completes; the 501st document is rejected.
+- The server may perform a non-authoritative tenant count preflight to avoid a wasteful upload. The authoritative tenant-scoped count and duplicate check occur in the post-S3 database transaction; they include DELETING rows until hard deletion completes and reject the 501st document.
 - Upload streams with a 20 MB product limit implemented as `20 * 1024 * 1024` bytes; it is never buffered into logs or error payloads.
 - AI extraction rejects PDFs above 300 pages and documents with empty extractable text as terminal failures.
 - The S3 object key is opaque and generated by the server. The original filename is metadata, not part of the key.
@@ -257,7 +268,7 @@ Rules:
 - S3 uses Block Public Access and SSE-KMS. Staging and production have separate buckets and KMS keys and authenticate only through workload IAM roles; static AWS credentials are rejected.
 - AI Service is stateless, uses its environment-specific service token, never reads S3, and never persists document text.
 - Gateway owns the OpenAI key. The worker never calls OpenAI directly.
-- Worker batches are bounded by byte count, chunk count, embedding input count, and request timeout and use `chunkingProfileVersion = 1` (800 tokens, 120-token overlap).
+- Worker batches are bounded by byte count, chunk count, embedding input count, and request timeout and use `chunkingProfileVersion = 1` (600 target tokens, 100-token overlap, 900-token maximum).
 - A document becomes READY only in the same transaction that makes all expected chunks durable.
 
 ## 5. Retrieval and SSE sequence
@@ -342,7 +353,7 @@ The database names below are fixed by migrations `20260716150000_rag_db_foundati
 ### `RagChunk`
 
 - `id`, `tenantId`, `documentIndexId`, `documentId`.
-- `ordinal`, `tokenCount` with a database hard bound of `1..800`, nullable paired page/line ranges, and bounded `sourceMetadata` JSON object. The separate 6,000-token value is the total retrieval-context cap, not a per-chunk allowance.
+- `ordinal`, `tokenCount` with the approved additive database hard bound of `1..900`, nullable paired page/line ranges, and bounded `sourceMetadata` JSON object. The separate 6,000-token value is the total retrieval-context cap, not a per-chunk allowance.
 - AES-256-GCM fields: content ciphertext, nonce, auth tag, and `contentKeyVersion`.
 - `embedding vector(1536)` represented by Prisma `Unsupported("vector(1536)")` and queried with parameterized SQL.
 - bounded byte/token counts; no plaintext column.
@@ -356,16 +367,15 @@ The database names below are fixed by migrations `20260716150000_rag_db_foundati
 - `status`: `PENDING | RUNNING | RETRY_WAIT | SUCCEEDED | FAILED | CANCELLED`.
 - `idempotencyKey`, attempts/max attempts, `availableAt`, lease owner/expiry, safe failure fields, deletion object-key snapshot, and timestamps. DELETE requires a snapshot from creation; INGEST/REINDEX forbid it. RUNNING requires a complete valid lease triple, while every non-RUNNING state requires all lease fields to be null.
 - unique `(tenantId, type, idempotencyKey)`.
-- The Document FK is `NO ACTION`. The admin delete transaction stores the server-owned opaque object-key snapshot on the DELETE job when that job is created. Before hard deletion, the worker transaction verifies/preserves that snapshot, cancels non-terminal INGEST/REINDEX jobs, and clears `documentId` on every job that references the Document. The Document can then be deleted while detached job history and tenant identity remain available without making `tenantId` nullable.
+- The Document FK is `NO ACTION`. The admin delete transaction stores the server-owned opaque object-key snapshot on the DELETE job when that job is created. Before hard deletion, the worker transaction verifies/preserves that snapshot, cancels every non-terminal document job, and clears `documentId` on every job that references the Document. The Document can then be deleted while detached job history and tenant identity remain available without making `tenantId` nullable.
 
-### `RagTurnCitation`
+### Encrypted message citation snapshot
 
-- `id`, `tenantId`, turn/message identity, `sourceId` (server-issued opaque UUID).
-- `availability`: `AVAILABLE | DELETED`.
-- nullable internal document/index/chunk references and locator, present only while AVAILABLE.
-- no plaintext display-name snapshot; while AVAILABLE the API decrypts the linked document filename for the authorized response.
-- no excerpt, vector, score, object key, bucket, or raw source text.
-- hard deletion first converts linked citations to DELETED tombstones by nulling document/index/chunk references, public document ID, locator, and any derived label, then deletes the document. The tombstone retains only tenant/turn/message/source identity and availability so history can render `삭제된 자료` without retaining document metadata.
+- Assistant message rows have nullable citation ciphertext, nonce, authentication tag, content-key version, and schema version fields.
+- The bounded snapshot contains request-local `S1...Sn`, safe public document UUID, display name, page/line ranges, and chunk ordinal for sources actually cited in the answer.
+- It has a distinct message-citation AAD and stores no internal index/chunk/job ID, excerpt, vector, score, object key, bucket, or raw source text.
+- History decrypts only after tenant authorization and derives `available | unavailable` using a tenant-scoped READY-document lookup.
+- Document hard deletion does not rewrite encrypted conversation history; it removes the active link target, so replay marks the historical citation unavailable.
 
 ### `RagEmbeddingUsage`
 
@@ -413,21 +423,23 @@ For retrieval profile version 1, `$3 = 0.30` cosine similarity and `$4 = 6`; bot
 
 ## 7. API and internal contract drafts
 
-These are proposed shapes, not active routes.
+The document upload/list/status/delete shapes below are promoted into the active Tenant Chat contract by `docs/tenant-chat/openapi/admin-rag.openapi.json`. The private extraction/embedding, knowledge mode, RAG context, usage, retrieval errors, citation/SSE, and deletion contracts are also active in the linked Tenant Chat contract files. The Knowledge Base enable/disable routes remain proposals and are the product-flow release blocker.
 
 ### Control Plane admin API
 
 - `GET /admin/v1/tenants/:tenantId/rag/knowledge-base`
-  - Returns enabled state and aggregate document counts only.
+  - Future proposal: returns enabled state and aggregate document counts only.
 - `PATCH /admin/v1/tenants/:tenantId/rag/knowledge-base`
-  - Tenant Admin enables/disables RAG for employee conversation selection; the body contains only the bounded enabled state.
+  - Future proposal: Tenant Admin enables/disables RAG for employee conversation selection; the body contains only the bounded enabled state.
 - `GET /admin/v1/tenants/:tenantId/rag/documents`
-  - Paginated list with safe `documentId`, authorized server-decrypted display name, type, status, size, and timestamps.
+  - Active M5 route. Cursor-paginated list with safe `documentId`, authorized server-decrypted display name, type, status, size, uploader, safe failure fields, and timestamps.
 - `POST /admin/v1/tenants/:tenantId/rag/documents`
-  - Admin-authenticated bounded upload for `.txt`, `text/plain`, and text-layer `application/pdf`, maximum 20 MB, subject to the tenant 500-document limit.
-  - Returns `202` with safe document metadata.
+  - Active M5 route. Admin-authenticated streaming upload for `.txt`/`text/plain` and minimally signature-validated `.pdf`/`application/pdf`; `RAG_MAX_UPLOAD_BYTES` defaults to and cannot exceed 20 MiB, subject to the tenant 500-document limit.
+  - Returns `202` only after the object is durable and the atomic `UPLOADED` Document plus `INGEST/PENDING` Job transaction commits.
+- `GET /admin/v1/tenants/:tenantId/rag/documents/:documentId`
+  - Active M5 route. Returns the same safe tenant-scoped document status resource and never resolves an internal DB ID.
 - `DELETE /admin/v1/tenants/:tenantId/rag/documents/:documentId`
-  - Idempotently marks DELETING and returns `202`; the worker performs hard deletion.
+  - Active M6 route. Atomically marks the tenant-scoped Document `DELETING`, creates one `DELETE/PENDING` job with its opaque object-key snapshot, and returns `202`. Repeat while `DELETING` returns the same safe resource without a second job; after hard deletion the existing `404` absent-resource policy applies.
 
 Every route uses `AdminAuthGuard`, the route tenant, and authenticated admin ID. DTOs reject unknown fields. No response exposes internal storage, key, vector, index, chunk, or job identifiers.
 
@@ -437,7 +449,10 @@ Every route uses `AdminAuthGuard`, the route tenant, and authenticated admin ID.
 
 - Authenticated by a dedicated per-environment internal service token using constant-time comparison; staging/production fail startup if it is missing or configured as local/fake.
 - Request body is bounded raw `application/pdf` or `text/plain; charset=utf-8`; multipart is unnecessary between services.
-- Response contains ordered normalized chunks: `ordinal`, `text`, `byteCount`, and a safe locator such as `pageNumber` for PDF or logical text ordinal.
+- Response contains ordered normalized chunks: `ordinal`, `text`, exact tokenizer-derived `tokenCount`, `pageStart`/`pageEnd`, `lineStart`/`lineEnd`, bounded `sourceMetadata`, `parserVersion`, and `chunkerVersion`.
+- TXT normalization is UTF-8 strict with BOM support, NUL removal, LF line endings, Unicode NFC, paragraph-preserving horizontal whitespace normalization, and 1-based line ranges.
+- PDF parsing uses pinned `pypdf==6.14.2` in a killable child process. It reads only page text, preserves 1-based pages, and never follows images, attachments, scripts, or external references.
+- Chunking uses pinned `tiktoken==0.13.0` and the official `text-embedding-3-large` mapping to `cl100k_base`; defaults are target 600, overlap 100, and hard maximum 900 tokens.
 - Rejects encrypted PDFs, image-only/scanned PDFs, malformed UTF-8, unsupported types, files over 20 MB, PDFs over 300 pages, excessive chunks, and empty extractable text with stable codes.
 - The PDF library must meet the approved Python 3.12, page-level deterministic extraction, bounded parsing, security maintenance, license, no-network/no-subprocess, and no-embedded-content-execution selection criteria.
 - Has no S3, database, OpenAI, or persistent filesystem responsibility.
@@ -447,11 +462,17 @@ Every route uses `AdminAuthGuard`, the route tenant, and authenticated admin ID.
 `POST /internal/v1/rag/embeddings`
 
 - Private workload-authenticated route, unavailable from the public router.
-- Request contains a bounded array of text inputs and `profileVersion: 1`; provider/model/dimensions are not client-selectable.
+- Request contains only a bounded array of text inputs, `purpose: RAG_INGESTION | RAG_QUERY`, and `profileVersion: 1`; tenant/provider/model/dimensions/credential/cache controls are not client-selectable.
+- A dedicated RAG workload JWT reuses the private listener's Ed25519, JCS/HMAC request binding, and Redis JTI conventions without reusing the Chat admission/completion/cancel claims. The signing `kid` is atomically bound to issuer, subject, and allowed purposes: Chat API keys allow query and Control Plane Worker keys allow ingestion.
+- Tenant identity is taken only from the verified RAG workload claim. The exact ordered request body is included in the signed binding, so input mutation or reordering fails before provider dispatch.
 - Response preserves input order and contains only 1536-dimensional vectors, profile version, and bounded provider usage metadata needed for idempotent `RagEmbeddingUsage` recording.
-- Gateway validates count, individual bytes, total bytes, response count, and vector dimensions.
+- Gateway validates 1~128 inputs, a conservative 8,192-token upper bound per input, 300,000 per batch, bounded request/response bytes, response count/index order, finite numeric values, and vector dimensions.
+- Provider attempts have a timeout and retry only bounded transient timeout/408/429/5xx/transport failures. Permanent 4xx, credential failures, invalid responses, and caller cancellation are not retried.
 - Provider errors are mapped to stable internal codes without raw response bodies.
-- Tests use fakes or `httptest`; default test suites never contact OpenAI. Staging/production register only the actual OpenAI adapter and fail startup on fake/mock configuration.
+- Tests use fakes or `httptest`; default test suites never contact OpenAI. Custom endpoints require explicit `DEPLOYMENT_MODE=local|test`; an unclassified environment, staging, production, and self-host release register only the actual OpenAI adapter and fail startup on fake/mock configuration.
+- Compose forwards the fixed Gateway RAG profile, credential reference, endpoint, and enablement flag so a production-like fake endpoint fails even while disabled. Dedicated caller signing/JWKS/HMAC/identity secret generation and mounts remain M6/M7; enabling RAG before those files are mounted intentionally fails Gateway startup instead of silently serving a disabled route.
+
+M4 contract review keeps `UsageIntent.cacheStrategy=off` as the only RAG completion cache-bypass mechanism. The private embedding route has no cache, and the private completion route is structurally disconnected from public Semantic Cache. Therefore the proposed duplicate client fields `cacheMode: BYPASS` and `semanticCache: disabled` are not added; M7 forces the existing signed server-owned field for every RAG turn.
 
 ### Tenant Chat private completion contract
 
@@ -468,22 +489,33 @@ Every route uses `AdminAuthGuard`, the route tenant, and authenticated admin ID.
 
 ```json
 {
-  "sourceId": "opaque-server-uuid",
+  "sourceId": "S1",
   "availability": "available",
   "documentId": "safe-public-uuid",
   "displayName": "Employee handbook.pdf",
-  "locator": { "type": "pdf_page", "page": 12 }
+  "pageStart": 12,
+  "pageEnd": 12,
+  "lineStart": null,
+  "lineEnd": null,
+  "ordinal": 4
 }
 ```
 
-`displayName` is decrypted only for this authorized response and is never stored plaintext. For text sources, locator is `{ "type": "text_chunk", "chunk": 4 }`.
+`displayName` and source locators are stored only inside the tenant-encrypted assistant citation snapshot and are decrypted only after tenant authorization.
 
-After hard deletion, history returns only the tombstone shape and Tenant Chat Web renders `삭제된 자료` without a link:
+After hard deletion, history returns the same encrypted historical metadata with `availability: "unavailable"`; Tenant Chat Web removes the link and renders the source as unavailable:
 
 ```json
 {
-  "sourceId": "opaque-server-uuid",
-  "availability": "deleted"
+  "sourceId": "S1",
+  "documentId": "safe-public-uuid",
+  "displayName": "Employee handbook.pdf",
+  "pageStart": 12,
+  "pageEnd": 12,
+  "lineStart": null,
+  "lineEnd": null,
+  "ordinal": 4,
+  "availability": "unavailable"
 }
 ```
 
@@ -494,14 +526,15 @@ The exact JSON Schema, OpenAPI, fixture, strict parser, and replay/history behav
 ### Document
 
 ```text
-UPLOADING -> UPLOADED -> EXTRACTING -> CHUNKING -> EMBEDDING -> INDEXING -> READY
-     |           |            |            |           |           |
-     +-----------+------------+------------+-----------+-----------+-> FAILED
+UPLOADED -> EXTRACTING -> CHUNKING -> EMBEDDING -> INDEXING -> READY
+     |            |            |           |           |
+     +------------+------------+-----------+-----------+-> FAILED
 
 Any non-deleted state -> DELETING -> physically absent
 ```
 
 - Only the worker advances extraction/embedding states.
+- `UPLOADING` remains an additive M2 schema compatibility value, but the active M5 upload contract never writes it: S3 failure leaves no Document/Job and S3 success is finalized directly as `UPLOADED`.
 - `FAILED` is not searchable and stores only a stable failure code.
 - A delete request wins over an ingest attempt. Workers re-read state before each external side effect and stop ingestion if DELETING.
 - Retrying a FAILED document is a new idempotent job / new index build decision, not an in-place accidental duplicate.
@@ -540,10 +573,10 @@ PENDING -> RUNNING -> SUCCEEDED
 
 ### Upload
 
-1. Transaction A locks/counts tenant document rows, rejects a count of 500 or more, creates/loads the tenant Knowledge Base, encrypts initial private metadata containing the normalized filename, and creates `RagDocument(UPLOADING)` with an opaque key.
-2. S3 upload occurs outside a database transaction.
-3. Transaction B locks the document, re-encrypts private metadata with the calculated content digest, moves it to UPLOADED, and inserts one INGEST job with an opaque unique idempotency key. Extraction later re-encrypts the payload with page count when present.
-4. If S3 succeeds but Transaction B fails, the API attempts best-effort object deletion. A scheduled orphan reconciliation is required before production because best-effort cleanup is not a guarantee.
+1. After admin/tenant validation, the API creates or loads the tenant Knowledge Base, then generates internal and safe public Document UUIDs and an opaque object key. An S3 failure may leave this empty Knowledge Base, but never a Document or Job.
+2. The API streams the validated bytes to S3 while calculating SHA-256. No `RagDocument` or `RagJob` exists yet; an S3 or stream-validation failure aborts the upload and returns a safe error without creating either row.
+3. After S3 success, one tenant-scoped database transaction locks the resolved Knowledge Base, counts existing tenant documents, checks same-tenant encrypted digest duplicates, and inserts `RagDocument(UPLOADED)` plus one `RagJob(INGEST,PENDING)` with an opaque unique idempotency key. The count/duplicate result and both inserts commit atomically.
+4. If this post-S3 transaction fails or rejects the request, the API attempts best-effort object deletion before returning the safe persistence error, document-limit error, or duplicate conflict. A compensation-delete failure emits a structured operation error without filename, display name, digest, bucket, object key, KMS key, or raw SDK error. Scheduled orphan reconciliation remains required before production because best-effort cleanup is not a guarantee.
 
 ### Ingestion
 
@@ -557,12 +590,12 @@ PENDING -> RUNNING -> SUCCEEDED
 
 1. The admin transaction locks the tenant-scoped document, changes it to DELETING, and inserts/deduplicates the DELETE job with the server-owned opaque `s3ObjectKey` snapshot already populated. SQL retrieval excludes the Document immediately.
 2. The worker deletes the S3 object first; a missing object is success.
-3. A database transaction converts linked citations to metadata-free DELETED tombstones, verifies/preserves the DELETE job's existing opaque object-key snapshot, cancels non-terminal INGEST/REINDEX jobs, clears any associated leases, detaches every job that references the Document, finalizes the DELETE job, and then hard-deletes the Document. Indexes and chunks cascade; detached terminal/history jobs remain available under the retention policy.
+3. A database transaction verifies/preserves the DELETE job's existing opaque object-key snapshot, cancels non-terminal jobs, clears any associated leases, detaches every job that references the Document, finalizes the DELETE job, and then hard-deletes the Document. Indexes and chunks cascade; detached terminal/history jobs remain available under the retention policy. Existing encrypted conversation citation snapshots remain immutable; history resolves their tenant-scoped document availability and marks a deleted/non-READY source unavailable.
 4. If the database step fails after S3 deletion, retry sees an absent object and completes the database deletion.
 
 ### Citation persistence
 
-Citation rows are inserted only after Chat API validates source IDs against the exact retrieved set supplied to the provider. They are committed with the assistant message/final turn state where the current storage transaction allows. If that cannot be atomic in the existing turn lifecycle, the contract milestone must define a deterministic reconciliation path before implementation.
+Citation snapshots are created only after Chat API validates source IDs against the exact retrieved set supplied to the provider. The bounded snapshot is encrypted with its own assistant-message AAD and committed atomically with the encrypted assistant response and final turn state. Raw context and chunk text are never stored in the conversation record.
 
 ## 10. Tenant isolation strategy
 
@@ -585,7 +618,7 @@ Tenant isolation is enforced at every boundary, not added after retrieval:
 - Vectors: plaintext `vector(1536)` because PostgreSQL must calculate cosine distance. Treat embeddings as sensitive derived data and tenant-scope all access/backups.
 - Query text: sent to the private Gateway embedding endpoint and then OpenAI under the configured provider policy; never persisted or logged by RAG code.
 - Decrypted chunks: exist only in Tenant Chat API memory long enough to construct a bounded context; zero or release buffers/references as soon as practical.
-- Citation responses decrypt the linked filename only after tenant authorization. No plaintext display-name snapshot is stored in citation rows, logs, metrics, or caches.
+- Citation responses decrypt the assistant message's separately encrypted snapshot only after tenant authorization. No plaintext citation snapshot is stored in relational metadata, logs, metrics, or caches.
 
 The new `RagChunkAadV1` is detailed in ADR-003. Existing chat ciphertext and AAD must not be rewritten as a side effect of extracting shared primitives.
 
@@ -721,7 +754,7 @@ Expected files:
 
 - `apps/ai-service/app/*` route/auth/extraction modules
 - `apps/ai-service/app/tests/*`
-- `apps/ai-service/pyproject.toml` and lock/dependency metadata for the approved PDF library
+- `apps/ai-service/pyproject.toml` and `requirements-rag-extraction.lock`
 - AI Service configuration documentation
 
 Must not change: S3, database, OpenAI, OCR, public endpoints.
@@ -729,11 +762,13 @@ Must not change: S3, database, OpenAI, OCR, public endpoints.
 Validation:
 
 ```powershell
-python -m unittest discover -s apps/ai-service/app/tests -p "test_*.py"
-python -m compileall apps/ai-service/app
+Push-Location apps/ai-service
+python -m unittest discover -s app/tests -p "test_*.py"
+python -m compileall app
+Pop-Location
 ```
 
-The PDF dependency must satisfy the approved Python 3.12, deterministic page extraction, encrypted/image-only detection, bounded parsing, active security maintenance, compatible license, no-network/no-subprocess, and no-embedded-content-execution criteria. Fixtures must cover UTF-8 text, text PDF pages, scanned/image-only rejection, encrypted PDF rejection, malformed input, 20 MB/300-page/chunk limits, per-environment service-token auth failure, and log redaction.
+The PDF dependency must satisfy the approved Python 3.12, deterministic page extraction, encrypted/image-only detection, bounded parsing, active security maintenance, compatible license, no-network/no-subprocess, and no-embedded-content-execution criteria. `pypdf==6.14.2` satisfies the selected pure-Python/page-text boundary; GateLM contains it in a killable process and does not access embedded content. Fixtures must cover UTF-8 text, text PDF pages, scanned/image-only rejection, encrypted PDF rejection, malformed input, 20 MB/300-page/chunk limits, per-environment service-token auth failure, and log redaction.
 
 ### M4 — Gateway private embedding endpoint
 
@@ -760,19 +795,21 @@ Pop-Location
 
 Tests use fakes/`httptest` only and assert auth, limits, order preservation, dimension 1536, provider error redaction, and public-route absence. Staging/production startup tests prove that fake adapters are rejected and the actual provider adapter is selected.
 
-### M5 — Control Plane S3 admin lifecycle
+### M5 — Control Plane S3 admin upload/read lifecycle
 
-Goal: add admin-only enable/disable/upload/list/delete lifecycle, a real IAM-role S3/KMS runtime adapter, and a fake-tested storage port; no ingestion execution yet.
+Goal: add admin-only upload/list/single-status lifecycle, a real IAM-role S3/KMS runtime adapter, and a fake-tested storage port; no ingestion execution yet.
 
 Expected files:
 
-- `apps/control-plane-api/src/rag/*`
+- `apps/control-plane-api/src/modules/rag-documents/*`
+- `packages/tenant-content-crypto/src/keyset.ts` and types/tests for the additive wrapping-only projection
 - Control Plane configuration/env validation
 - admin controller/service/repository/object-store tests
-- `apps/web/src/app/api/control-plane/rag-*` BFF routes only if needed for API integration fixtures
+- deployment Compose/secret wiring and the local wrapping-key projection helper
+- `docs/tenant-chat/openapi/admin-rag.openapi.json` and the paired active contract text
 - approved AWS SDK dependency and lockfile
 
-Must not change: Chat API, Gateway completion, AI extraction, citation UI.
+Must not change: Knowledge Base enable/disable API, document delete API, parser/chunk/embedding execution, Chat API, Gateway completion, AI extraction, Web UI, citation UI.
 
 Validation:
 
@@ -783,11 +820,15 @@ corepack pnpm --filter @gatelm/control-plane-api typecheck
 corepack pnpm --filter @gatelm/control-plane-api build
 ```
 
-Unit/integration tests use a fake object store/local test double, not real AWS. Runtime configuration tests prove staging/production require distinct private bucket/KMS configuration, reject static AWS credentials and fake/local endpoints, and select the actual IAM-role S3/KMS adapter.
+Unit/integration tests use a fake object store/local test double, not real AWS. They cover admin/non-admin and tenant scope, TXT/PDF upload, MIME/signature/name traversal, empty/size errors, same-tenant duplicate conflict, S3 failure, atomic Document/Job creation, post-S3 database failure compensation, list/status isolation, and response-field allowlisting. Runtime configuration tests prove staging/production require private bucket/KMS configuration, reject static AWS credentials and fake/local endpoints, and select the actual IAM-role S3/KMS adapter.
+
+The production adapter never uses the AWS SDK default credential chain: ECS task credentials, IRSA/web identity, or EC2 instance metadata are the only allowed sources. Control Plane receives only `RAG_CONTENT_WRAPPING_KEYS_FILE`, an exact wrapping-only projection that excludes Tenant Chat `integrityKey`; startup in S3 mode validates file readability, rollback floor, and all non-retired DEK wrapping versions before listen. Multipart total bytes and idle time are bounded in addition to the configured file limit. Database finalization uses predetermined IDs and an idempotent retry under the tenant Knowledge Base lock when COMMIT acknowledgement is ambiguous.
 
 ### M6 — Dedicated ingestion/deletion worker
 
-Goal: run the approved PostgreSQL `RagJob` worker, call extraction/embedding, encrypt filenames/chunks, record platform embedding usage, and complete hard deletion with citation tombstones.
+Goal: run the approved PostgreSQL `RagJob` worker, call extraction/embedding, encrypt filenames/chunks, record platform embedding usage, and complete hard deletion. Encrypted citation snapshot persistence is implemented in M8 and remains independent from the delete transaction.
+
+Implementation status: **INGEST and DELETE orchestration are implemented in the current worktree.** The dedicated process leases both job types; DELETE first performs idempotent S3 deletion from the durable snapshot, then atomically cancels/detaches conflicting jobs and hard-deletes the Document with cascading indexes/chunks. Existing encrypted conversation citations are not part of this transaction and become unavailable on replay.
 
 Expected files:
 
@@ -812,7 +853,7 @@ docker compose --env-file deploy/selfhost/.env.example -f deploy/selfhost/docker
 docker compose --env-file deploy/aws-triage/.env.example -f deploy/aws-triage/docker-compose.yml config
 ```
 
-Integration fixtures prove lease recovery, retry backoff, duplicate delivery idempotency, delete-during-ingest, S3-success/DB-failure recovery, 20 MB/300-page/500-document limits, 800/120 chunking, idempotent embedding usage, citation tombstones, and no plaintext filename/chunk persistence or logging.
+Integration fixtures prove lease recovery, retry backoff, duplicate delivery idempotency, delete-during-ingest, S3-success/DB-failure recovery, 20 MB/300-page/500-document limits, 600/100/900 chunking, idempotent embedding usage, hard deletion cascade, and no plaintext filename/chunk persistence or logging. Encrypted citation replay fixtures belong to M8.
 
 ### M7 — Tenant Chat retrieval, context, and cache/budget behavior
 
@@ -843,7 +884,7 @@ Integration tests use two tenants and prove SQL isolation, READY/ACTIVE/ENABLED 
 
 ### M8 — Citation protocol and Tenant Chat UI
 
-Goal: persist server-verified citations, decrypt authorized display names, extend SSE/history contracts, render citation cards, and render metadata-free DELETED tombstones as `삭제된 자료`.
+Goal: persist server-verified citations in the encrypted assistant record, extend SSE/history contracts, render citation cards, and render deleted/non-READY sources as unavailable without a link.
 
 Expected files:
 
@@ -908,20 +949,21 @@ Acceptance includes admin/non-admin authorization, two-tenant isolation, upload 
 The product directions in this plan are approved. The remaining items are concrete implementation/deployment prerequisites, not product-choice blockers:
 
 1. **pgvector deployment evidence:** the PostgreSQL 16 + pgvector 0.8.5 artifact and digest are fixed and local fresh/upgrade tests pass. A production-like restored-volume rehearsal and extension privilege check remain required for every externally managed staging/production database.
-2. **S3/KMS/IAM provisioning:** create or identify separate staging/production private buckets and KMS keys, lifecycle/VPC policies, and workload IAM roles. No verified implementation currently exists in the repository.
+2. **S3/KMS/IAM provisioning:** the Control Plane adapter and fail-closed runtime selection exist after M5; still create or identify separate staging/production private buckets and KMS keys, lifecycle/VPC policies, and workload IAM roles, and verify them in each deployed environment. MVP buckets must keep versioning disabled/suspended until version-aware hard deletion is implemented and tested.
 3. **AI token operations:** define environment-specific secret storage, delivery, rotation, grace, and revocation for the extraction service token.
-4. **Dependencies:** select the PDF text extraction library against the approved criteria and explicitly approve the required PDF/AWS SDK packages in their milestones.
-5. **Evaluation evidence:** validate the approved initial 800/120 chunking and top-six/0.30/6,000-token retrieval profile with fixtures before production enablement; tune version 1 only before launch.
-6. **Active contract promotion:** the M1 crypto/profile/default-off gate is promoted in `docs/tenant-chat/contracts.md`; knowledge mode/admin routes, marked context, SSE citation availability union, stable RAG errors, usage record, and admin APIs still require promotion before their source milestones.
-7. **Operational policy:** set worker concurrency, lease duration, retry limits, SLOs, backup/restore, orphan reconciliation cadence, and alarm thresholds. PostgreSQL `RagJob` itself is already the approved MVP mechanism.
+4. **Dependencies:** the M5 AWS SDK packages and M3 `pypdf==6.14.2`/`tiktoken==0.13.0` packages are approved and locked. Local tests and the AI Service image install the lock successfully; the synchronized candidate still requires its own official Linux CI run before image promotion.
+5. **Chunk constraint reconciliation:** resolved by additive migration `20260716200000_rag_worker_foundation`, which replaces only `rag_chunks_counts_check` with the approved 900-token maximum before worker persistence. The applied M2 migration remains immutable.
+6. **Evaluation evidence:** validate the approved initial 600/100/900 chunking and top-six/0.30/6,000-token retrieval profile with fixtures before production enablement; tune version 1 only before launch.
+7. **Tenant enablement contract and implementation:** knowledge mode, marked context, stable retrieval errors, usage, delete, and citation/SSE history shapes are promoted in `docs/tenant-chat/contracts.md`. The remaining blocker is a reviewed tenant-admin Knowledge Base enable/disable contract plus its Control Plane API and Web Console flow; tests must stop relying on direct `status=ENABLED` seed writes as the only activation path.
+8. **Operational policy:** set worker concurrency, lease duration, retry limits, SLOs, backup/restore, orphan reconciliation cadence, and alarm thresholds. PostgreSQL `RagJob` itself is already the approved MVP mechanism.
 
 ## 16. Decisions changed from the initial assumptions
 
-- The requested 34-migration assumption was stale: the verified baseline had **37**, and M2 adds migrations **38–39** without editing the prior history. Migration 39 hardens constraints after migration 38 had already been applied locally.
+- The requested 34-migration assumption was stale: the historical verified baseline had **37**. M2 added two immutable, additive RAG migrations without editing prior history; their ordinal numbers can shift when `dev` receives an earlier-timestamp migration, so migration names and ordering—not a hard-coded total—are authoritative.
 - Not every employee chat uses RAG. A persisted conversation-level `knowledgeMode`, default `off`, distinguishes ordinary and RAG conversations without accepting a Knowledge Base ID.
 - Tenant Admin enablement gates employee access; disabled or unavailable RAG fails explicitly and never silently falls back to ordinary chat.
-- Original filenames/citation display names are tenant-key encrypted; hard deletion leaves only metadata-free citation tombstones so history can show `삭제된 자료`.
-- MVP limits are approved at 20 MB, 300 PDF pages, 500 tenant documents, 800-token chunks with 120 overlap, top six results at cosine similarity 0.30 or above, and 6,000 RAG-context tokens.
+- Original filenames and citation snapshots are tenant-key encrypted. Hard deletion removes the knowledge document/index/chunks/vectors but leaves past encrypted conversation records; history marks their citations unavailable so the UI can show `삭제된 자료 또는 현재 사용할 수 없는 출처` without a link.
+- MVP limits are approved at 20 MB, 300 PDF pages, 500 tenant documents, 600-token target chunks with 100 overlap and 900 maximum, top six results at cosine similarity 0.30 or above, and 6,000 RAG-context tokens.
 - Embedding cost is platform operating cost for MVP and is recorded separately without decrementing employee/tenant chat budget.
 - The worker is a separate Control Plane process from the existing Control Plane codebase. The empty `apps/worker` scaffold is not used because it has no package/runtime and would duplicate ownership.
 - The existing Semantic Cache embedding file is not reused as the RAG service boundary. Only its provider HTTP logic is refactored behind a neutral adapter; RAG has a private fixed-profile endpoint and separate configuration.
