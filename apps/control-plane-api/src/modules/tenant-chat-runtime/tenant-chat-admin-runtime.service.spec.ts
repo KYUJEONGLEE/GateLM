@@ -3,6 +3,7 @@ import {
   ResourceStatus,
   RuntimeConfigPublishState,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -264,6 +265,13 @@ describe('TenantChatRuntimeService administrator activation', () => {
       maxActiveAdmissionsPerUser: 2,
       admissionTtlSeconds: 30,
     });
+    expect(snapshot?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant_chat_cache_keys_v1',
+    });
     expect(snapshot?.policies.routing.routes).toEqual([
       expect.objectContaining({
         modelRef: expect.stringMatching(/^tc_[a-f0-9]{32}$/),
@@ -290,8 +298,71 @@ describe('TenantChatRuntimeService administrator activation', () => {
         providerConnectionId: PROVIDER_ID,
         modelKey: 'gpt-5.4-mini',
         pricingStatus: 'current',
+        cacheEnabled: true,
       }),
     );
+  });
+
+  it('uses the configured key set and preserves cache settings across explicit and omitted updates', async () => {
+    const harness = createPersistenceHarness();
+    const config = {
+      get: jest.fn((key: string) =>
+        key === 'TENANT_CHAT_CACHE_KEY_SET_ID'
+          ? 'tenant-chat-local-cache-1'
+          : undefined,
+      ),
+    } as unknown as ConfigService;
+    const service = new TenantChatRuntimeService(harness.prisma, config);
+
+    const disabled = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-mini',
+      cacheEnabled: false,
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(disabled.activeSnapshot?.cacheEnabled).toBe(false);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'off',
+      enabled: false,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant-chat-local-cache-1',
+    });
+
+    const preserved = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-nano',
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(preserved.activeSnapshot?.cacheEnabled).toBe(false);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'off',
+      enabled: false,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant-chat-local-cache-1',
+    });
+
+    const enabled = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-nano',
+      cacheEnabled: true,
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(enabled.activeSnapshot?.cacheEnabled).toBe(true);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant-chat-local-cache-1',
+    });
   });
 
   it('publishes the explicit 5 x 2 auto-routing matrix with resolved modelRefs', async () => {
@@ -378,6 +449,13 @@ describe('TenantChatRuntimeService administrator activation', () => {
       maxActiveAdmissionsPerUser: 1,
       admissionTtlSeconds: 30,
     };
+    previous.policies.cache = {
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 777,
+      maxEntriesPerUser: 23,
+      keySetId: 'existing-cache-key-set',
+    };
     previous.employeeNoticeVersion = 9;
     previous.digest = computeTenantChatSnapshotDigest(previous);
 
@@ -406,10 +484,127 @@ describe('TenantChatRuntimeService administrator activation', () => {
       maxActiveAdmissionsPerUser: 1,
       admissionTtlSeconds: 30,
     });
+    expect(current?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 777,
+      maxEntriesPerUser: 23,
+      keySetId: 'existing-cache-key-set',
+    });
     expect(current?.policies.routing.routes).toEqual([
       expect.objectContaining({ modelKey: 'gpt-5.4-nano' }),
     ]);
     expect(setup.activeSnapshot?.modelKey).toBe('gpt-5.4-nano');
+  });
+
+  it('publishes Tenant Chat cache and safety policy changes in the active snapshot', async () => {
+    const harness = createPersistenceHarness();
+    const service = new TenantChatRuntimeService(harness.prisma);
+    const input = {
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-mini',
+      cachePolicy: {
+        enabled: true,
+        ttlSeconds: 900,
+        maxEntriesPerUser: 250,
+      },
+      safetyPolicy: {
+        detectorSet: [
+          { detectorType: 'email' as const, action: 'allow' as const },
+          { detectorType: 'phone_number' as const, action: 'redact' as const },
+          {
+            detectorType: 'resident_registration_number' as const,
+            action: 'block' as const,
+          },
+          { detectorType: 'api_key' as const, action: 'block' as const },
+          {
+            detectorType: 'authorization_header' as const,
+            action: 'block' as const,
+          },
+          { detectorType: 'jwt' as const, action: 'block' as const },
+          { detectorType: 'private_key' as const, action: 'block' as const },
+        ],
+      },
+      publishedBy: ADMIN_ID,
+    };
+
+    const first = await service.activateAdminRuntime(input);
+    const second = await service.activateAdminRuntime(input);
+
+    expect(harness.snapshots).toHaveLength(1);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 900,
+      maxEntriesPerUser: 250,
+      keySetId: 'tenant_chat_cache_keys_v1',
+    });
+    expect(harness.activeSnapshot?.policies.safety).toEqual({
+      enabled: true,
+      detectorSet: input.safetyPolicy.detectorSet,
+      policyDigest: expect.stringMatching(/^sha256:[A-Za-z0-9_-]{43}$/),
+    });
+    expect(first.activeSnapshot?.cachePolicy).toEqual(input.cachePolicy);
+    expect(first.activeSnapshot?.safetyPolicy).toEqual(input.safetyPolicy);
+    expect(second).toEqual(first);
+  });
+
+  it('rejects disabling a mandatory Tenant Chat safety detector', async () => {
+    const harness = createPersistenceHarness();
+    const service = new TenantChatRuntimeService(harness.prisma);
+
+    await expect(
+      service.activateAdminRuntime({
+        tenantId: TENANT_ID,
+        providerConnectionId: PROVIDER_ID,
+        modelKey: 'gpt-5.4-mini',
+        safetyPolicy: {
+          detectorSet: [
+            {
+              detectorType: 'resident_registration_number',
+              action: 'block',
+            },
+            { detectorType: 'api_key', action: 'allow' },
+            { detectorType: 'authorization_header', action: 'block' },
+            { detectorType: 'jwt', action: 'block' },
+            { detectorType: 'private_key', action: 'block' },
+          ],
+        },
+        publishedBy: ADMIN_ID,
+      }),
+    ).rejects.toThrow(
+      'Mandatory Tenant Chat safety detectors cannot be disabled or omitted.',
+    );
+    expect(harness.snapshots).toHaveLength(0);
+  });
+
+  it('rejects omitting a mandatory Tenant Chat safety detector', async () => {
+    const harness = createPersistenceHarness();
+    const service = new TenantChatRuntimeService(harness.prisma);
+
+    await expect(
+      service.activateAdminRuntime({
+        tenantId: TENANT_ID,
+        providerConnectionId: PROVIDER_ID,
+        modelKey: 'gpt-5.4-mini',
+        safetyPolicy: {
+          detectorSet: [
+            {
+              detectorType: 'resident_registration_number',
+              action: 'block',
+            },
+            { detectorType: 'authorization_header', action: 'block' },
+            { detectorType: 'jwt', action: 'block' },
+            { detectorType: 'private_key', action: 'block' },
+          ],
+        },
+        publishedBy: ADMIN_ID,
+      }),
+    ).rejects.toThrow(
+      'Mandatory Tenant Chat safety detectors cannot be disabled or omitted.',
+    );
+    expect(harness.snapshots).toHaveLength(0);
   });
 
   it('publishes a Provider model with explicit unavailable pricing when no exact price exists', async () => {

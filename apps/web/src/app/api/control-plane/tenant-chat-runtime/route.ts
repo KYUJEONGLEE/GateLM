@@ -84,12 +84,95 @@ function isActivationPayload(
     return false;
   }
   const record = value as Record<string, unknown>;
-  return (
-    Object.keys(record).length === 3 &&
+  const hasValidRouting =
     (record.routingMode === "auto" || record.routingMode === "manual") &&
     typeof record.manualModelRef === "string" &&
     MODEL_KEY_PATTERN.test(record.manualModelRef) &&
-    isRoutingMatrix(record.routes)
+    isRoutingMatrix(record.routes);
+  if (!hasValidRouting) {
+    return false;
+  }
+  const keys = Object.keys(record);
+  const hasCurrentPolicyPayload =
+    keys.length === 5 &&
+    isCachePolicy(record.cachePolicy) &&
+    isSafetyPolicy(record.safetyPolicy);
+  const hasCompatibilityCacheToggle =
+    keys.length === 4 && typeof record.cacheEnabled === "boolean";
+  return hasCurrentPolicyPayload || hasCompatibilityCacheToggle;
+}
+
+function isCachePolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    Object.keys(record).length === 3 &&
+    typeof record.enabled === "boolean" &&
+    Number.isSafeInteger(record.ttlSeconds) &&
+    Number(record.ttlSeconds) > 0 &&
+    Number.isSafeInteger(record.maxEntriesPerUser) &&
+    Number(record.maxEntriesPerUser) > 0
+  );
+}
+
+const SAFETY_DETECTOR_TYPES = new Set([
+  "email",
+  "phone_number",
+  "postal_address",
+  "person_name",
+  "organization_name",
+  "resident_registration_number",
+  "api_key",
+  "authorization_header",
+  "jwt",
+  "private_key"
+]);
+const MANDATORY_SAFETY_DETECTOR_TYPES = new Set([
+  "resident_registration_number",
+  "api_key",
+  "authorization_header",
+  "jwt",
+  "private_key"
+]);
+
+function isSafetyPolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  const detectorSet = record.detectorSet;
+  if (Object.keys(record).length !== 1 || !Array.isArray(detectorSet)) {
+    return false;
+  }
+  if (detectorSet.length < 1 || detectorSet.length > 10) {
+    return false;
+  }
+  const detectorTypes = new Set<string>();
+  const allDetectorsValid = detectorSet.every((detector) => {
+    if (!detector || typeof detector !== "object" || Array.isArray(detector)) {
+      return false;
+    }
+    const item = detector as Record<string, unknown>;
+    if (
+      Object.keys(item).length !== 2 ||
+      typeof item.detectorType !== "string" ||
+      !SAFETY_DETECTOR_TYPES.has(item.detectorType) ||
+      detectorTypes.has(item.detectorType) ||
+      (item.action !== "allow" && item.action !== "redact" && item.action !== "block") ||
+      (item.action === "allow" && MANDATORY_SAFETY_DETECTOR_TYPES.has(item.detectorType))
+    ) {
+      return false;
+    }
+    detectorTypes.add(item.detectorType);
+    return true;
+  });
+  return (
+    allDetectorsValid &&
+    Array.from(MANDATORY_SAFETY_DETECTOR_TYPES).every((detectorType) =>
+      detectorTypes.has(detectorType)
+    )
   );
 }
 

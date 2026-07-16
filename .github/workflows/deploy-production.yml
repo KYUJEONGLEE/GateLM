@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -44,6 +45,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.DEPLOY_SHA }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
       - name: Verify exact current main SHA and deployment variables
         shell: bash
         run: |
@@ -60,6 +66,71 @@ jobs:
             echo "Refusing stale deployment: requested=$DEPLOY_SHA current_main=$current_main_sha" >&2
             exit 1
           fi
+
+      - name: Require successful CI and Security runs for deployment SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          wait_for_workflow() {
+            local workflow="$1"
+            local label="$2"
+            local response=""
+            local run=""
+            local status=""
+            local conclusion=""
+
+            for attempt in $(seq 1 90); do
+              response="$(gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs" \
+                -f branch=main \
+                -f event=push \
+                -f head_sha="$DEPLOY_SHA" \
+                -F per_page=10)"
+              run="$(jq -c --arg sha "$DEPLOY_SHA" \
+                '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.run_number) | last // empty' \
+                <<<"$response")"
+
+              if [[ -z "$run" ]]; then
+                echo "Waiting for $label run for $DEPLOY_SHA ($attempt/90)."
+                sleep 10
+                continue
+              fi
+
+              status="$(jq -r '.status' <<<"$run")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"$run")"
+              if [[ "$status" != "completed" ]]; then
+                echo "Waiting for $label run to complete ($status, $attempt/90)."
+                sleep 10
+                continue
+              fi
+              if [[ "$conclusion" != "success" ]]; then
+                echo "$label run for $DEPLOY_SHA concluded with $conclusion." >&2
+                exit 1
+              fi
+
+              echo "$label run succeeded for $DEPLOY_SHA."
+              return 0
+            done
+
+            echo "Timed out waiting for $label run for $DEPLOY_SHA." >&2
+            exit 1
+          }
+
+          wait_for_workflow ci.yml CI
+          wait_for_workflow security.yml Security
+
+      - name: Verify authenticated smoke secrets are configured
+        env:
+          TENANT_CHAT_SMOKE_EMAIL: ${{ secrets.TENANT_CHAT_SMOKE_EMAIL }}
+          TENANT_CHAT_SMOKE_PASSWORD: ${{ secrets.TENANT_CHAT_SMOKE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${TENANT_CHAT_SMOKE_EMAIL:?TENANT_CHAT_SMOKE_EMAIL production secret is required}"
+          : "${TENANT_CHAT_SMOKE_PASSWORD:?TENANT_CHAT_SMOKE_PASSWORD production secret is required}"
 
       - name: Configure temporary AWS credentials
         uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # v6.2.2
@@ -94,3 +165,10 @@ jobs:
           chat_status="$(curl --connect-timeout 5 --max-time 30 -sS -o /dev/null -w '%{http_code}' \
             "$GATELM_CHAT_URL/api/tenant-chat/auth/session")"
           [[ "$chat_status" == "401" ]]
+
+      - name: Verify authenticated Tenant Chat execution
+        env:
+          TENANT_CHAT_SMOKE_EMAIL: ${{ secrets.TENANT_CHAT_SMOKE_EMAIL }}
+          TENANT_CHAT_SMOKE_ORIGIN: ${{ env.GATELM_CHAT_URL }}
+          TENANT_CHAT_SMOKE_PASSWORD: ${{ secrets.TENANT_CHAT_SMOKE_PASSWORD }}
+        run: node scripts/smoke/tenant-chat-production.mjs

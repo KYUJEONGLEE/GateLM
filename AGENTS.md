@@ -32,6 +32,7 @@ GateLM의 현재 개발 상태는 하나의 확정된 SemVer로 선언되어 있
 현재 versioned 범위는 다음처럼 사용한다.
 
 - `docs/tenant-chat/`: 신규 Tenant Chat의 active scoped contract다. release SemVer와 독립되며 `docs/current` scope router가 연결한다.
+- `docs/rag/`: Tenant Chat 전용 RAG의 approved implementation planning 범위다. `implementation-plan.md`와 ADR은 설계 근거이며, 그 자체로 active API/DB/Event/Security contract나 production 구현을 의미하지 않는다.
 - `docs/v2.1.0/`: 최신 versioned 문서 범위다. Self-host delivery와 Advanced Routing offline evidence 작업에 한해 사용한다.
 - `docs/v2.0.0/`: 닫힌 historical workstream의 behavior baseline이다. 새 기능의 roadmap이나 착수 계획으로 사용하지 않는다.
 - `docs/v1.0.0/`: 더 오래된 compatibility/history 문서다.
@@ -79,6 +80,26 @@ feature / fix / docs branch
 - Provider와 Model은 catalog/config data로 유지하며 DB enum 또는 code enum으로 고정하지 않는다.
 - Gateway는 client-provided budget scope를 신뢰하지 않는다.
 - Gateway runtime policy 변경은 현재 코드와 published RuntimeSnapshot 경계를 함께 확인한다.
+
+### Tenant Chat RAG planning rules
+
+Tenant Chat RAG 작업은 `docs/rag/implementation-plan.md`와 연결된 ADR을 먼저 읽고, 해당 milestone이 요구하는 active contract proposal을 별도 검토받은 뒤 구현한다.
+
+- RAG는 Tenant Chat 전용이다. 공용 Gateway API와 기존 Application Chat에는 노출하지 않는다.
+- `tenantId`는 인증된 서버 컨텍스트에서만 결정하며 일반 채팅 요청에서 `knowledgeBaseId`를 받지 않는다.
+- tenant당 활성 Knowledge Base는 하나이며, 모든 문서·index·chunk·job에는 `tenantId`를 둔다.
+- vector SQL 자체가 `tenantId`, READY document, ACTIVE index를 제한해야 한다. 검색 후 application filter로 tenant 격리를 보완하지 않는다.
+- RAG 채팅 사용 여부는 서버에 저장된 conversation knowledge mode(`off | tenant`, 기본값 `off`)로 결정한다. Tenant Admin이 RAG를 활성화한 tenant에서만 직원이 대화별로 선택할 수 있으며, 모든 일반 직원 채팅을 자동으로 RAG 처리하지 않는다.
+- RAG 요청은 exact/semantic response cache를 우회하고, RAG context를 포함한 최종 provider input으로 token과 budget을 계산한다.
+- 문서·chunk·query 원문, embedding, secret, S3 내부 위치는 log·metric·외부 응답에 남기지 않는다.
+- 문서 파일명과 citation 표시명은 tenant AES-256-GCM으로 암호화하며 확장자, MIME type, byte size만 허용된 평문 metadata로 둔다.
+- RAG 장애는 일반 채팅으로 자동 fallback하지 않는다. 안정적인 RAG unavailable error로 종료한다.
+- pgvector가 포함된 PostgreSQL 16 이미지를 사용하고 image version과 digest를 고정한다.
+- staging/production은 환경별 private S3 bucket과 KMS key를 분리하고 AWS static key를 금지하며 IAM role만 사용한다.
+- AI Service 내부 RAG API는 환경별 service token으로 인증한다.
+- ingestion/deletion은 PostgreSQL `RagJob`을 lease하는 전용 Control Plane worker process가 수행한다.
+- fake/mock/local test double은 test 또는 명시적인 local 환경에서만 허용한다. staging/production에서 fake 설정을 발견하면 fail-fast하며 실제 S3, KMS, Gateway embedding endpoint, AI Service만 사용한다.
+- OCR, 외부 지식 source, hybrid search, reranker, query rewriting, agent는 RAG MVP 범위가 아니다.
 
 ## 4. Forbidden Data
 

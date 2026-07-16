@@ -21,6 +21,7 @@ import { PrivateGatewayClient } from './execution/private-gateway.client';
 import { WorkloadCredentialsService } from './execution/workload-credentials';
 import { WorkloadSigner } from './execution/workload-signer';
 import { HealthController } from './health.controller';
+import { RagProfileStartupService } from './rag/rag-profile-startup.service';
 
 @Module({
   controllers: [AuthController, ConversationController, HealthController],
@@ -36,6 +37,7 @@ import { HealthController } from './health.controller';
     ExecutionBridgeService,
     PrismaService,
     PrivateGatewayClient,
+    RagProfileStartupService,
     RetentionService,
     SessionService,
     TenantContentKeyService,

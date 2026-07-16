@@ -36,7 +36,7 @@
       },
       "put": {
         "operationId": "activateTenantChatAdminRuntime",
-        "summary": "Publish the Tenant Chat 5 x 2 routing policy",
+        "summary": "Publish Tenant Chat routing, cache and safety policy",
         "requestBody": {
           "required": true,
           "content": {
@@ -76,11 +76,53 @@
       "ActivateRuntimeRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["routingMode", "manualModelRef", "routes"],
+        "required": ["routingMode", "manualModelRef", "routes", "cachePolicy", "safetyPolicy"],
         "properties": {
           "routingMode": { "type": "string", "enum": ["auto", "manual"] },
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
-          "routes": { "$ref": "#/components/schemas/RoutingMatrix" }
+          "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
+          "cachePolicy": { "$ref": "#/components/schemas/CachePolicy" },
+          "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" },
+          "cacheEnabled": {
+            "type": "boolean",
+            "description": "Compatibility toggle. Current authoring clients use cachePolicy."
+          }
+        }
+      },
+      "CachePolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enabled", "ttlSeconds", "maxEntriesPerUser"],
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "ttlSeconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "maxEntriesPerUser": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        }
+      },
+      "SafetyPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["detectorSet"],
+        "properties": {
+          "detectorSet": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/SafetyDetector" }
+          }
+        }
+      },
+      "SafetyDetector": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["detectorType", "action"],
+        "properties": {
+          "detectorType": {
+            "type": "string",
+            "enum": ["email", "phone_number", "postal_address", "person_name", "organization_name", "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key"]
+          },
+          "action": { "type": "string", "enum": ["allow", "redact", "block"] }
         }
       },
       "ModelKey": {
@@ -198,7 +240,7 @@
       "ActiveSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes"],
+        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes", "cachePolicy", "safetyPolicy", "cacheEnabled"],
         "properties": {
           "snapshotId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "version": { "type": "integer", "minimum": 1 },
@@ -210,6 +252,9 @@
           "routingMode": { "type": "string", "enum": ["auto", "manual"] },
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
           "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
+          "cachePolicy": { "$ref": "#/components/schemas/CachePolicy" },
+          "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" },
+          "cacheEnabled": { "type": "boolean" },
           "publishedAt": { "type": "string", "format": "date-time" },
           "pricingStatus": { "type": "string", "enum": ["current", "update_available", "unavailable"] }
         }

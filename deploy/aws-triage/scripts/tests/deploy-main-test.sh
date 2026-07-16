@@ -89,9 +89,22 @@ grep -Fq "id-token: write" "${WORKFLOW_FILE}" || fail "OIDC permission is missin
 grep -Fq "name: production" "${WORKFLOW_FILE}" || fail "production environment is missing"
 grep -Fq "517a711dbcd0e402f90c77e7e2f81e849156e31d" "${WORKFLOW_FILE}" || \
   fail "AWS credentials action is not pinned"
-if grep -Fq 'secrets.' "${WORKFLOW_FILE}"; then
-  fail "The deployment workflow must not use long-lived GitHub secrets"
-fi
+for required_smoke_secret in \
+  'secrets.TENANT_CHAT_SMOKE_EMAIL' \
+  'secrets.TENANT_CHAT_SMOKE_PASSWORD'
+do
+  grep -Fq "${required_smoke_secret}" "${WORKFLOW_FILE}" || \
+    fail "Required Tenant Chat smoke secret is missing: ${required_smoke_secret}"
+done
+unexpected_secret_references="$(
+  grep -oE 'secrets\.[A-Za-z_][A-Za-z0-9_]*' "${WORKFLOW_FILE}" | \
+    sort -u | \
+    grep -Fvx \
+      -e 'secrets.TENANT_CHAT_SMOKE_EMAIL' \
+      -e 'secrets.TENANT_CHAT_SMOKE_PASSWORD' || true
+)"
+[[ -z "${unexpected_secret_references}" ]] || \
+  fail "The deployment workflow contains an unexpected GitHub secret reference: ${unexpected_secret_references}"
 
 grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
@@ -105,6 +118,14 @@ grep -Fq 'Tenant Chat secret files must share one owner UID and GID.' "${DEPLOY_
   fail "Tenant Chat secret files must have consistent ownership"
 grep -Fq 'content-keys.json' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat content keys must be validated before the image build"
+grep -Fq 'tenant-chat-secrets' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secrets must be backed up with the database"
+grep -Fq 'install -m 600' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret backups must use restrictive file permissions"
+grep -Fq 'wait_for_chat_api_readiness' "${DEPLOY_SCRIPT}" || \
+  fail "Deployment must verify Chat API database and key continuity"
+grep -Fq 'Chat API readiness did not verify database and key continuity.' "${DEPLOY_SCRIPT}" || \
+  fail "A key continuity failure must fail the deployment"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \

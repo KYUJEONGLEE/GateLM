@@ -23,6 +23,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
+import {
+  CachePolicyControls,
+  type CachePolicyControlsText
+} from "@/features/policies/components/runtime-policy-panels/cache-panel";
+import {
+  SafetyDetectorPolicyControls,
+  type SafetyDetectorPolicyText
+} from "@/features/policies/components/runtime-policy-panels/safety-panel";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { getTenantChatReturnPath } from "@/features/provider-connections/tenant-chat-setup-return";
 import {
@@ -33,11 +41,14 @@ import {
 } from "@/features/tenant-chat-admin/tenant-chat-runtime-setup-model";
 import type {
   TenantChatAdminRuntimeSetup,
+  TenantChatAdminCachePolicy,
+  TenantChatAdminSafetyPolicy,
   TenantChatRoutingCategory,
   TenantChatRoutingDifficulty,
   TenantChatRoutingMatrix,
   TenantChatRoutingMode
 } from "@/lib/control-plane/tenant-chat-runtime-types";
+import type { RuntimePolicyDetector } from "@/lib/control-plane/runtime-policy-types";
 import type { Locale } from "@/lib/i18n/locale";
 
 type Props = {
@@ -135,6 +146,13 @@ const routingDifficultyCriteria: DifficultyCriteria = {
 };
 
 type RoutingProviderOption = TenantChatAdminRuntimeSetup["providers"][number];
+type ChatAppPolicySection = "routing" | "cache" | "security";
+
+const chatAppPolicySections: ChatAppPolicySection[] = [
+  "routing",
+  "cache",
+  "security"
+];
 
 const copy = {
   en: {
@@ -142,9 +160,10 @@ const copy = {
     autoLabel: "Auto",
     modeTitle: "Routing mode",
     breadcrumb: "Chat App",
+    cacheTab: "Cache",
     configureProvider: "Register or edit provider",
     degraded: "The active runtime references a provider or model that is no longer available. Review and publish again.",
-    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing policy.",
+    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing and cache policy.",
     categoryCriteria: "Simple and complex guidance",
     criteriaNote: "Length alone does not make a request complex. Task count, constraints, scope, dependency steps, and category-specific signals are evaluated together.",
     example: "Example",
@@ -165,14 +184,16 @@ const copy = {
     noProvider: "Register an active tenant-level provider to configure the Chat App.",
     provider: "Provider",
     providerUnavailable: "Selected Provider unavailable",
-    publish: "Publish routing policy",
+    publish: "Publish Chat App policy",
     publishing: "Publishing…",
-    ready: "The Chat App routing policy is active.",
+    ready: "The Chat App policy is active.",
     refresh: "Try again",
     reset: "Reset",
-    resetMessage: "Unsaved changes were reset to the active routing policy.",
+    resetMessage: "Unsaved changes were reset to the active Chat App policy.",
     routing: "Routing policy",
+    routingTab: "Routing",
     routingDescription: "Configure models for the selected routing mode. Automatic assignments are preserved while fixed mode is active.",
+    securityTab: "Security",
     title: "Chat App"
   },
   ko: {
@@ -180,9 +201,10 @@ const copy = {
     autoLabel: "자동",
     modeTitle: "라우팅 방식",
     breadcrumb: "채팅 앱",
+    cacheTab: "캐시",
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
-    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 정책을 관리합니다.",
+    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 및 캐시 정책을 관리합니다.",
     categoryCriteria: "일반·고성능 안내",
     criteriaNote: "요청 길이만으로는 고성능으로 분류되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.",
     example: "예시",
@@ -203,17 +225,86 @@ const copy = {
     noProvider: "채팅 앱을 설정하려면 활성 tenant-level Provider를 등록하세요.",
     provider: "Provider",
     providerUnavailable: "선택된 Provider 사용 불가",
-    publish: "라우팅 정책 발행",
+    publish: "채팅 앱 정책 발행",
     publishing: "발행 중…",
-    ready: "채팅 앱 라우팅 정책이 적용되었습니다.",
+    ready: "채팅 앱 정책이 적용되었습니다.",
     refresh: "다시 시도",
     reset: "초기화",
-    resetMessage: "저장하지 않은 변경사항을 현재 라우팅 정책으로 되돌렸습니다.",
+    resetMessage: "저장하지 않은 변경사항을 현재 채팅 앱 정책으로 되돌렸습니다.",
     routing: "라우팅 정책",
+    routingTab: "라우팅",
     routingDescription: "선택한 라우팅 방식에 맞춰 모델을 설정합니다. 고정 모드에서도 자동 배정은 그대로 보존됩니다.",
+    securityTab: "보안",
     title: "채팅 앱"
   }
 } satisfies Record<Locale, Record<string, string>>;
+
+const tenantChatPolicyText = {
+  en: {
+    blockAction: "Block",
+    cacheEnabled: "Cache enabled",
+    cacheEnabledHint: "Reuse completed responses for identical Tenant Chat requests before a Provider call.",
+    cacheSection: "Cache",
+    cacheSettings: "Cache settings",
+    close: "Close",
+    detectorNames: {
+      api_key: "API key",
+      authorization_header: "Authorization header",
+      email: "Email address",
+      jwt: "JWT",
+      organization_name: "Organization name",
+      person_name: "Person name",
+      phone_number: "Phone number",
+      postal_address: "Postal address",
+      private_key: "Private key",
+      resident_registration_number: "Resident registration number"
+    },
+    detectors: "Safety detectors",
+    edit: "Edit",
+    enabled: "Enabled",
+    mandatoryProtection: "Sensitive data protection",
+    mandatoryProtectionHint: "These detectors cannot be disabled.",
+    mode: "Mode",
+    placeholder: "Placeholder",
+    privacyMasking: "Personal data masking",
+    redactAction: "Redact",
+    semanticCache: "Semantic cache",
+    semanticCacheDisabled: "disabled",
+    semanticCacheEvidenceOnly: "evidence only"
+  },
+  ko: {
+    blockAction: "차단",
+    cacheEnabled: "캐시 사용",
+    cacheEnabledHint: "동일한 채팅 앱 요청은 Provider 호출 전에 완료된 기존 응답을 재사용합니다.",
+    cacheSection: "캐시",
+    cacheSettings: "캐시 설정",
+    close: "닫기",
+    detectorNames: {
+      api_key: "API 키",
+      authorization_header: "인증 헤더",
+      email: "이메일",
+      jwt: "JWT",
+      organization_name: "조직명",
+      person_name: "이름",
+      phone_number: "전화번호",
+      postal_address: "주소",
+      private_key: "개인 키",
+      resident_registration_number: "주민등록번호"
+    },
+    detectors: "안전 탐지 항목",
+    edit: "편집",
+    enabled: "사용",
+    mandatoryProtection: "중요 민감정보 보호",
+    mandatoryProtectionHint: "이 항목은 사용 중지할 수 없습니다.",
+    mode: "모드",
+    placeholder: "치환 문구",
+    privacyMasking: "개인정보 마스킹",
+    redactAction: "마스킹",
+    semanticCache: "Semantic Cache",
+    semanticCacheDisabled: "비활성",
+    semanticCacheEvidenceOnly: "근거 전용"
+  }
+} satisfies Record<Locale, CachePolicyControlsText & SafetyDetectorPolicyText>;
 
 export function ChatAppRoutingSetup({
   initialLoadError,
@@ -229,11 +320,19 @@ export function ChatAppRoutingSetup({
   const [loadError, setLoadError] = useState(initialLoadError);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
+  const [activePolicySection, setActivePolicySection] =
+    useState<ChatAppPolicySection>("routing");
   const [feedback, setFeedback] = useState<{ message: string; error: boolean; published?: boolean } | null>(null);
   const initialRef = firstModelRef(initialSetup);
   const [routingMode, setRoutingMode] = useState<TenantChatRoutingMode>(initialSetup?.activeSnapshot?.routingMode ?? "auto");
   const [manualModelRef, setManualModelRef] = useState(initialSetup?.activeSnapshot?.manualModelRef ?? initialRef);
   const [routes, setRoutes] = useState<TenantChatRoutingMatrix>(initialSetup?.activeSnapshot?.routes ?? uniformRoutingMatrix(initialRef));
+  const [cachePolicy, setCachePolicy] = useState<TenantChatAdminCachePolicy>(
+    initialSetup?.activeSnapshot?.cachePolicy ?? defaultCachePolicy()
+  );
+  const [detectors, setDetectors] = useState<RuntimePolicyDetector[]>(
+    toRuntimePolicyDetectors(initialSetup?.activeSnapshot?.safetyPolicy)
+  );
 
   const providers = useMemo(
     () => (setup?.providers ?? []).filter((provider) => provider.models.length > 0),
@@ -268,7 +367,15 @@ export function ChatAppRoutingSetup({
     void loadSetup(tenantId).then((result) => {
       if (!current) return;
       if (result.ok) {
-        applySetup(result.data, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+        applySetup(
+          result.data,
+          setSetup,
+          setRoutingMode,
+          setManualModelRef,
+          setRoutes,
+          setCachePolicy,
+          setDetectors
+        );
         setLoadError(null);
       } else setLoadError(result.error);
     }).finally(() => {
@@ -285,7 +392,15 @@ export function ChatAppRoutingSetup({
     setFeedback(null);
     const result = await loadSetup(tenantId);
     if (result.ok) {
-      applySetup(result.data, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+      applySetup(
+        result.data,
+        setSetup,
+        setRoutingMode,
+        setManualModelRef,
+        setRoutes,
+        setCachePolicy,
+        setDetectors
+      );
       setLoadError(null);
     } else setLoadError(result.error);
     setLoading(false);
@@ -296,15 +411,29 @@ export function ChatAppRoutingSetup({
     setFeedback(null);
     try {
       const response = await fetch(`/api/control-plane/tenant-chat-runtime?tenantId=${encodeURIComponent(tenantId)}`, {
-        body: JSON.stringify({ manualModelRef, routes, routingMode }),
+        body: JSON.stringify({
+          cachePolicy,
+          manualModelRef,
+          routes,
+          routingMode,
+          safetyPolicy: toTenantChatSafetyPolicy(detectors)
+        }),
         headers: { "Content-Type": "application/json" },
         method: "PUT"
       });
       const payload = (await response.json().catch(() => ({}))) as unknown;
       if (!response.ok || !isRuntimeSetup(payload)) {
-        setFeedback({ error: true, message: readPayloadError(payload, "Chat App routing policy publish failed.") });
+        setFeedback({ error: true, message: readPayloadError(payload, "Chat App policy publish failed.") });
       } else {
-        applySetup(payload, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+        applySetup(
+          payload,
+          setSetup,
+          setRoutingMode,
+          setManualModelRef,
+          setRoutes,
+          setCachePolicy,
+          setDetectors
+        );
         setFeedback({ error: false, message: text.ready, published: true });
       }
     } catch {
@@ -335,7 +464,15 @@ export function ChatAppRoutingSetup({
 
   function resetDraft() {
     if (setup) {
-      applySetup(setup, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+      applySetup(
+        setup,
+        setSetup,
+        setRoutingMode,
+        setManualModelRef,
+        setRoutes,
+        setCachePolicy,
+        setDetectors
+      );
     }
     setFeedback({ error: false, message: text.resetMessage });
   }
@@ -352,15 +489,38 @@ export function ChatAppRoutingSetup({
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div aria-label={text.breadcrumb} className="policy-section-tabs tenant-management-tabs" role="tablist">
-          <button aria-controls="chat-app-routing-panel" aria-selected="true" data-active="true" id="chat-app-routing-tab" role="tab" type="button">{text.routing}</button>
+          {chatAppPolicySections.map((section) => {
+            const isActive = activePolicySection === section;
+            const label = section === "routing"
+              ? text.routingTab
+              : section === "cache"
+                ? text.cacheTab
+                : text.securityTab;
+
+            return (
+              <button
+                aria-controls={`chat-app-${section}-panel`}
+                aria-selected={isActive}
+                data-active={isActive}
+                id={`chat-app-${section}-tab`}
+                key={section}
+                onClick={() => setActivePolicySection(section)}
+                role="tab"
+                type="button"
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div aria-labelledby="chat-app-routing-tab" className="policy-tab-panel space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
-        {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
-        {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
-        {feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <Check />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
+      {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
+      {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
+      {feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <Check />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
 
+      {activePolicySection === "routing" ? (
+      <div aria-labelledby="chat-app-routing-tab" className="policy-tab-panel space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
         {!setup?.providers.length ? (
           <EmptyState action={<Link className={buttonVariants()} href={providerManagementHref}><PlugZap />{text.configureProvider}</Link>} description={text.noProvider} icon={PlugZap} title={text.title} />
         ) : models.length === 0 ? (
@@ -426,7 +586,7 @@ export function ChatAppRoutingSetup({
                               locale={locale}
                               onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
                               providers={providers}
-                              value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
+                              value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}
                             />
                           ))}
                         </div>
@@ -489,6 +649,56 @@ export function ChatAppRoutingSetup({
           </form>
         )}
       </div>
+      ) : (
+        <form
+          aria-labelledby={`chat-app-${activePolicySection}-tab`}
+          className="chat-app-policy-form"
+          id={`chat-app-${activePolicySection}-panel`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void publish();
+          }}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <section className="policy-layout policy-settings-list">
+            <div className="policy-tab-panel">
+              {activePolicySection === "cache" ? (
+                <CachePolicyControls
+                  enabled={cachePolicy.enabled}
+                  onEnabledChange={(enabled) => {
+                    setCachePolicy((current) => ({ ...current, enabled }));
+                    setFeedback(null);
+                  }}
+                  showSemanticCache={false}
+                  text={tenantChatPolicyText[locale]}
+                />
+              ) : (
+                <SafetyDetectorPolicyControls
+                  allowPlaceholderEditing={false}
+                  detectors={detectors}
+                  onDetectorChange={(nextDetector) => {
+                    setDetectors((current) =>
+                      current.map((detector) =>
+                        detector.type === nextDetector.type ? nextDetector : detector
+                      )
+                    );
+                    setFeedback(null);
+                  }}
+                  text={tenantChatPolicyText[locale]}
+                />
+              )}
+            </div>
+          </section>
+          <div className="tenant-routing-actions">
+            <button className="secondary-button tenant-routing-reset-button" disabled={pending || loading} onClick={resetDraft} type="button">{text.reset}</button>
+            <button className="primary-button tenant-routing-save-button" data-save-confirmed={feedback?.published ? "true" : undefined} disabled={!canPublish || pending || loading} type="submit">
+              {pending ? <LoaderCircle className="animate-spin" /> : feedback?.published ? <Check aria-hidden="true" /> : null}
+              {pending ? text.publishing : feedback?.published ? text.active : text.publish}
+            </button>
+          </div>
+        </form>
+      )}
     </main>
   );
 }
@@ -656,17 +866,86 @@ function uniformRoutingMatrix(modelRef: string): TenantChatRoutingMatrix {
 
 function matrixUsesOnly(routes: TenantChatRoutingMatrix, available: Set<string>) {
   return categories.every((category) => difficulties.every((difficulty) => {
-    const refs = routes[category.id][difficulty.id].modelRefs;
+    const refs = routes[category.id]?.[difficulty.id]?.modelRefs ?? [];
     return refs.length >= 1 && refs.length <= 4 && refs.every((ref) => available.has(ref));
   }));
 }
 
-function applySetup(next: TenantChatAdminRuntimeSetup, setSetup: (value: TenantChatAdminRuntimeSetup) => void, setMode: (value: TenantChatRoutingMode) => void, setManual: (value: string) => void, setRoutes: (value: TenantChatRoutingMatrix) => void) {
+const defaultRuntimePolicyDetectors: RuntimePolicyDetector[] = [
+  { type: "email", enabled: true, action: "redact", placeholder: "[EMAIL_REDACTED]" },
+  { type: "phone_number", enabled: true, action: "redact", placeholder: "[PHONE_NUMBER_REDACTED]" },
+  { type: "person_name", enabled: true, action: "redact", placeholder: "[PERSON_NAME_REDACTED]" },
+  { type: "postal_address", enabled: true, action: "redact", placeholder: "[POSTAL_ADDRESS_REDACTED]" },
+  { type: "organization_name", enabled: true, action: "redact", placeholder: "[ORGANIZATION_NAME_REDACTED]" },
+  { type: "resident_registration_number", enabled: true, action: "block", placeholder: "[RESIDENT_REGISTRATION_NUMBER_REDACTED]" },
+  { type: "api_key", enabled: true, action: "block", placeholder: "[API_KEY_REDACTED]" },
+  { type: "authorization_header", enabled: true, action: "block", placeholder: "[AUTHORIZATION_HEADER_REDACTED]" },
+  { type: "jwt", enabled: true, action: "block", placeholder: "[JWT_REDACTED]" },
+  { type: "private_key", enabled: true, action: "block", placeholder: "[SECRET_REDACTED]" }
+];
+const mandatoryRuntimePolicyDetectorTypes = new Set<RuntimePolicyDetector["type"]>([
+  "resident_registration_number",
+  "api_key",
+  "authorization_header",
+  "jwt",
+  "private_key"
+]);
+
+function defaultCachePolicy(): TenantChatAdminCachePolicy {
+  return { enabled: false, maxEntriesPerUser: 100, ttlSeconds: 300 };
+}
+
+function toRuntimePolicyDetectors(
+  safetyPolicy?: TenantChatAdminSafetyPolicy
+): RuntimePolicyDetector[] {
+  const configured = new Map(
+    safetyPolicy?.detectorSet.map((detector) => [detector.detectorType, detector]) ?? []
+  );
+  return defaultRuntimePolicyDetectors.map((detector) => {
+    const active = configured.get(detector.type);
+    if (!active) {
+      return {
+        ...detector,
+        enabled:
+          safetyPolicy === undefined ||
+          mandatoryRuntimePolicyDetectorTypes.has(detector.type)
+      };
+    }
+    return {
+      ...detector,
+      action: active.action === "block" ? "block" : "redact",
+      enabled: active.action !== "allow"
+    };
+  });
+}
+
+function toTenantChatSafetyPolicy(
+  detectors: RuntimePolicyDetector[]
+): TenantChatAdminSafetyPolicy {
+  return {
+    detectorSet: detectors.map((detector) => ({
+      action: detector.enabled ? detector.action : "allow",
+      detectorType: detector.type
+    }))
+  };
+}
+
+function applySetup(
+  next: TenantChatAdminRuntimeSetup,
+  setSetup: (value: TenantChatAdminRuntimeSetup) => void,
+  setMode: (value: TenantChatRoutingMode) => void,
+  setManual: (value: string) => void,
+  setRoutes: (value: TenantChatRoutingMatrix) => void,
+  setCachePolicy: (value: TenantChatAdminCachePolicy) => void,
+  setDetectors: (value: RuntimePolicyDetector[]) => void
+) {
   const modelRef = next.activeSnapshot?.manualModelRef ?? firstModelRef(next);
   setSetup(next);
   setMode(next.activeSnapshot?.routingMode ?? "auto");
   setManual(modelRef);
   setRoutes(next.activeSnapshot?.routes ?? uniformRoutingMatrix(modelRef));
+  setCachePolicy(next.activeSnapshot?.cachePolicy ?? defaultCachePolicy());
+  setDetectors(toRuntimePolicyDetectors(next.activeSnapshot?.safetyPolicy));
 }
 
 async function loadSetup(tenantId: string): Promise<{ data: TenantChatAdminRuntimeSetup; ok: true } | { error: string; ok: false }> {

@@ -323,9 +323,11 @@ func (s *Service) Prepare(
 		}
 		entry, hit, cacheErr := s.cache.Get(ctx, request.Context, snapshot, input)
 		if cacheErr != nil {
+			s.recordCacheOperation("lookup", "error", "error")
 			return nil, tenantchat.ErrRuntimeUnavailable
 		}
 		if hit {
+			s.recordCacheOperation("lookup", "hit", "success")
 			settleCtx, settleCancel := detachedAccountingContext(ctx)
 			replayed, settleErr := s.ledgerless.FinalizeLedgerless(
 				settleCtx, request.Context, snapshot, "cache_hit", "", "hit",
@@ -338,6 +340,7 @@ func (s *Service) Prepare(
 				requestContext: request.Context, entry: entry, replayed: replayed, metrics: s.metrics,
 			}, nil
 		}
+		s.recordCacheOperation("lookup", "miss", "success")
 	}
 
 	reservation, err := s.usage.BeginExecution(ctx, request.Context, snapshot)
@@ -993,13 +996,19 @@ func (e *PreparedExecution) storeConfirmedPrimaryCache(ctx context.Context) {
 	response := strings.Join(e.cacheResponse, "")
 	e.cacheResponse = nil
 	if response == "" {
+		e.recordCacheOperation("write", "store_skipped", "error")
 		return
 	}
 	cacheCtx, cancel := detachedAccountingContext(ctx)
 	defer cancel()
-	_ = e.cache.Put(cacheCtx, e.requestContext, e.snapshot, e.input, tenantchat.ExactCacheEntry{
+	err := e.cache.Put(cacheCtx, e.requestContext, e.snapshot, e.input, tenantchat.ExactCacheEntry{
 		ResponseText: response, EffectiveModelKey: e.route.ModelKey,
 	})
+	if err != nil {
+		e.recordCacheOperation("write", "error", "error")
+		return
+	}
+	e.recordCacheOperation("write", "miss", "success")
 }
 
 func (e *PreparedExecution) IsReplay() bool { return false }
@@ -1069,10 +1078,6 @@ func (e *PreparedExecution) finalEvent(
 	} else if settlement.State == "released" {
 		usageQuality = "not_available"
 	}
-	cacheOutcome := "off"
-	if e.cacheEligible {
-		cacheOutcome = "miss"
-	}
 	return tenantchat.CompletionEvent{
 		Type: tenantchat.CompletionEventFinal, SchemaVersion: 1,
 		RequestID: e.requestContext.RequestID, TurnID: e.requestContext.TurnID,
@@ -1082,7 +1087,7 @@ func (e *PreparedExecution) finalEvent(
 			TotalTokens: inputTokens + outputTokens, UsageQuality: usageQuality,
 		},
 		QuotaState: settlement.QuotaState, BudgetState: settlement.BudgetState,
-		CacheOutcome: cacheOutcome, Replayed: &replayed, Error: completionErr,
+		CacheOutcome: e.reservation.CacheOutcome, Replayed: &replayed, Error: completionErr,
 	}
 }
 
@@ -1091,17 +1096,13 @@ func (e *PreparedExecution) emitAccountingFailure(emit EventEmitter, accountingE
 	replayed := false
 	modelKey := e.route.ModelKey
 	e.sequence++
-	cacheOutcome := "off"
-	if e.cacheEligible {
-		cacheOutcome = "miss"
-	}
 	event := tenantchat.CompletionEvent{
 		Type: tenantchat.CompletionEventFinal, SchemaVersion: 1,
 		RequestID: e.requestContext.RequestID, TurnID: e.requestContext.TurnID,
 		Sequence: e.sequence, TerminalOutcome: "failed", EffectiveModelKey: &modelKey,
 		Usage:      &tenantchat.CompletionUsage{UsageQuality: "not_available"},
 		QuotaState: e.reservation.QuotaState, BudgetState: e.reservation.BudgetState,
-		CacheOutcome: cacheOutcome, Replayed: &replayed,
+		CacheOutcome: e.reservation.CacheOutcome, Replayed: &replayed,
 		Error: &tenantchat.CompletionError{Code: "CHAT_USAGE_GUARD_UNAVAILABLE", Message: "Tenant chat usage guard is unavailable.", RetryAfterSeconds: 1},
 	}
 	if err := e.emitEvent(emit, event); err != nil {
@@ -1118,6 +1119,24 @@ func (s *Service) recordCompletionOutcome(outcome string) {
 		metrics.TenantChatCompletionTotal,
 		[]metrics.Label{{Name: "outcome", Value: outcome}}, 1,
 	)
+}
+
+func (s *Service) recordCacheOperation(operation string, cacheStatus string, status string) {
+	if s == nil || s.metrics == nil {
+		return
+	}
+	s.metrics.CacheOperation(metrics.CacheOperation{
+		Operation: operation, CacheStatus: cacheStatus, CacheType: "exact", Status: status,
+	})
+}
+
+func (e *PreparedExecution) recordCacheOperation(operation string, cacheStatus string, status string) {
+	if e == nil || e.metrics == nil {
+		return
+	}
+	e.metrics.CacheOperation(metrics.CacheOperation{
+		Operation: operation, CacheStatus: cacheStatus, CacheType: "exact", Status: status,
+	})
 }
 
 func (e *PreparedExecution) recordCompletionOutcome(outcome string) {
@@ -1163,7 +1182,7 @@ func (e *ReplayExecution) Relay(_ context.Context, emit EventEmitter) error {
 			TotalTokens: inputTokens + outputTokens, UsageQuality: usageQuality,
 		},
 		QuotaState: e.settlement.QuotaState, BudgetState: e.settlement.BudgetState,
-		CacheOutcome: "off", Replayed: &replayed,
+		CacheOutcome: e.settlement.CacheOutcome, Replayed: &replayed,
 	}
 	if len(e.settlement.Attempts) > 0 && terminalOutcome != "succeeded" {
 		event.Error = completionErrorForAttempt(e.settlement.Attempts[len(e.settlement.Attempts)-1].Outcome)

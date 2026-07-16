@@ -9118,20 +9118,10 @@ html[data-theme="dark"] .request-log-screen {
   text-decoration: none;
 }
 
-.request-log-row-link::after {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-}
-
 .request-log-row-link:focus-visible {
-  outline: none;
-}
-
-.request-log-row-link:focus-visible::after {
   outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 .request-log-screen .request-link {
@@ -19221,6 +19211,13 @@ html:has(.tenant-management-content) {
   padding-bottom: var(--space-4);
 }
 
+.chat-app-policy-form {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+  padding-bottom: var(--space-4);
+}
+
 .routing-migration-alert [data-slot="alert-description"] {
   gap: 14px;
   width: 100%;
@@ -19824,6 +19821,14 @@ html:has(.tenant-management-content) {
 }
 
 .policy-routing-model-choice[data-has-icon="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.policy-routing-model-selectors > label {
+  min-width: 0;
+}
+
+.routing-migration-manual-grid .policy-routing-model-selectors {
   grid-template-columns: minmax(0, 1fr);
 }
 

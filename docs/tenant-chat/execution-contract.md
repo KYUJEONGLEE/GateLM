@@ -26,10 +26,12 @@ revision: `tenant-chat/v1`
 | Usage outbox payload | [`schemas/usage-settlement-event.schema.json`](./schemas/usage-settlement-event.schema.json) |
 | Pre-ledger terminal payload | [`schemas/invocation-terminal-event.schema.json`](./schemas/invocation-terminal-event.schema.json) |
 | Mixed/late usage outbox payload | [`schemas/usage-settlement-event-v2.schema.json`](./schemas/usage-settlement-event-v2.schema.json) |
+| Cache-aware usage outbox payload | [`schemas/usage-settlement-event-v3.schema.json`](./schemas/usage-settlement-event-v3.schema.json) |
 | Pre-ledger terminal payload v2 | [`schemas/invocation-terminal-event-v2.schema.json`](./schemas/invocation-terminal-event-v2.schema.json) |
 | Binding vectors | [`vectors/binding-digest-vectors.json`](./vectors/binding-digest-vectors.json) |
 | Event transition vectors | [`vectors/usage-event-vectors.json`](./vectors/usage-event-vectors.json) |
 | Mixed/late event vectors | [`vectors/usage-event-v2-vectors.json`](./vectors/usage-event-v2-vectors.json) |
+| Cache-aware event vectors | [`vectors/usage-event-v3-vectors.json`](./vectors/usage-event-v3-vectors.json) |
 
 ## 2. API idempotency와 retry
 
@@ -164,7 +166,9 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 
 ### 5.1 Content wrapping/integrity key 운영
 
-Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다.
+Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다. 고정 Compose project의 PostgreSQL volume을 여러 Git worktree가 공유하므로 local helper와 Compose wrapper는 Git common directory의 상위 checkout에 있는 단일 gitignored `.secrets/tenant-chat`을 사용한다. 명시적 `--target`을 쓰는 production/self-host 경로는 이 local 기본 경로 해석을 사용하지 않는다.
+
+RAG crypto compatibility package를 추가해도 이 mount 경계는 자동으로 넓어지지 않는다. 현재 Control Plane HTTP process에는 content key file을 mount하지 않으며, 향후 별도 Control Plane worker가 chunk를 암호화할 때 필요한 least-privilege key delivery와 readiness는 worker contract/deployment milestone에서 명시적으로 추가한다.
 
 ```json
 {
@@ -183,6 +187,7 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - create/turn row는 binding MAC과 함께 `bindingKeyVersion`을 저장한다. replay는 저장된 grace integrity key로 검증하며 active key로 다시 계산해 conflict를 만들지 않는다.
 - 새 version을 모든 reader에 먼저 배포하고 active version을 올린다. Chat API는 DEK rewrap과 DB rollback floor 증가를 같은 짧은 transaction으로 적용하며 crypto 연산 중 transaction을 열어두지 않는다.
 - active version이 DB floor보다 낮거나 필요한 grace key가 file에 없으면 readiness, encrypt/decrypt, cursor/idempotency를 fail closed한다.
+- readiness는 non-retired wrapping key version별 대표 persisted DEK 하나를 실제 unwrap하고 즉시 zeroize한다. 같은 version 번호에 다른 key material이 배포된 경우 `readyz`는 `503`이며 배포 health gate를 통과하지 못한다. key set 최대 크기 8에 맞춰 readiness crypto 검증도 최대 8개로 제한하고, 개별 row integrity는 실제 read path에서 fail closed한다.
 
 ## 6. RuntimeSnapshot digest와 pricing
 
@@ -199,7 +204,7 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - `routingMode=manual`은 `manualModelRef`를 선택하고, `routingMode=auto`는 5×2 matrix를 선택한다. budget/quota의 `economy` 상태를 difficulty 또는 modelRef로 암묵 변환하지 않는다.
 - `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
 - `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
-- 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, exact cache off, email redact/API-key block safety, streaming `120s`와 required final이다.
+- 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, Exact Cache `exact/enabled`(TTL 300초, 사용자당 최대 100개), email redact/API-key block safety, streaming `120s`와 required final이다.
 - 관리자 재발행은 active snapshot의 비라우팅 정책과 `employeeNoticeVersion`을 보존한다. 5×2 policy가 참조하는 unique modelRefs의 concrete routes, ordered fallback attempts, provider token rate와 pinned pricing만 교체한다.
 - Admin Runtime publisher는 full-session tenant admin의 server-side user ID를 `publishedBy`로 사용하며 client가 publisher를 공급하지 못하게 한다.
 
@@ -242,8 +247,8 @@ admitted -> reserved -> settled
 - outbox idempotency key는 `(aggregateId=requestId,eventType,eventVersion=ledgerVersion)`다.
 - consumer는 version이 현재 이하이면 duplicate로 no-op한다. 정확히 `current+1`만 적용한다.
 - version gap이면 뒤 event를 적용하지 않고 aggregate replay를 요청한다. 재시도 후에도 gap이면 DLQ/incident로 보내며 quota correctness source에는 영향이 없다.
-- v1 event 의미는 변경하지 않는다. mixed confirmed/unconfirmed deadline transition과 late negative unconfirmed delta만 schemaVersion 2를 사용하며 signed delta 조건은 v2 schema/vector를 따른다.
-- projector는 일반 terminal event를 snapshot 값으로 투영하고, `schemaVersion=2`, `eventType=usage_settled`, `lateUsage=true`에 한해 기존 confirmed 합계에 delta를 누적한다.
+- v1/v2 event 의미는 변경하지 않는다. 최신 Gateway writer는 reservation에서 고정한 `cacheOutcome=off|miss`를 필수로 갖는 schemaVersion 3을 사용한다. cache hit은 reservation 없이 `invocation_terminal`로만 기록한다.
+- projector는 v3 값을 그대로 투영하고 레거시 v1/v2에 필드가 없으면 reservation의 backfill provenance를 사용한다. `schemaVersion>=2`, `eventType=usage_settled`, `lateUsage=true`이면 기존 confirmed 합계에 delta를 누적한다.
 - ledger 이전 rate/concurrency/policy/runtime block은 `invocation_terminal`을 admission transaction의 outbox에 기록한다. content와 usage delta는 없으며 Dashboard projector만 소비한다.
 
 Transaction 경계는 `BeginExecution`(admission consume, period reservation, reservation, primary attempt, `usage_reserved` ledger/outbox), `BeginFallback`(이전 attempt 결과, fallback top-up, fallback attempt), terminal/reconciliation transaction으로 나눈다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.

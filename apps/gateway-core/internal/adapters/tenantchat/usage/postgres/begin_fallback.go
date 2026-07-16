@@ -103,7 +103,8 @@ func (s *ReservationStore) BeginFallback(
 		return false, tenantchat.ErrUsageGuardUnavailable
 	}
 	if err = s.topUpFallback(
-		ctx, tx, requestContext, snapshot, reservationID, reservation.LedgerVersion, exposureCost, now,
+		ctx, tx, requestContext, snapshot, reservationID, reservation.LedgerVersion,
+		exposureCost, reservation.CacheOutcome, now,
 	); err != nil {
 		return false, err
 	}

@@ -25,12 +25,33 @@ describe('TenantChatProjectionService', () => {
           executionScopeKind: 'tenant_chat',
           confirmedTotalTokens: 30n,
           confirmedCostMicroUsd: 50n,
+          cacheOutcome: 'off',
         }),
       }),
     );
     expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ publishedAt: expect.any(Date) }),
+      }),
+    );
+  });
+
+  it('projects an explicit v3 cache outcome instead of the reservation fallback', async () => {
+    const row = settledRow();
+    row.payload.schemaVersion = 3;
+    Object.assign(row.payload, { cacheOutcome: 'miss' });
+    const harness = createHarness(row);
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ publishedAt: expect.any(Date) }),
+      }),
+    );
+    expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ cacheOutcome: 'miss' }),
       }),
     );
   });
@@ -208,36 +229,43 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
-  it('accumulates only a v2 late usage settlement onto confirmed totals', async () => {
-    const row = lateSettledRow();
-    const harness = createHarness(row);
-    harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([
-      { eventVersion: 1n, publishedAt: new Date(), lastErrorCode: null },
-      { eventVersion: 2n, publishedAt: new Date(), lastErrorCode: null },
-    ]);
-    harness.tx.tenantChatInvocationLog.findUnique.mockResolvedValue({
-      projectedEventVersion: 2n,
-      tenantId,
-      confirmedInputTokens: 20n,
-      confirmedOutputTokens: 10n,
-      confirmedTotalTokens: 30n,
-      confirmedCostMicroUsd: 50n,
-    });
+  it.each([2, 3])(
+    'accumulates a v%d late usage settlement onto confirmed totals',
+    async (schemaVersion) => {
+      const row = lateSettledRow();
+      row.payload.schemaVersion = schemaVersion;
+      if (schemaVersion === 3) {
+        Object.assign(row.payload, { cacheOutcome: 'off' });
+      }
+      const harness = createHarness(row);
+      harness.tx.tenantChatInvocationOutbox.findMany.mockResolvedValue([
+        { eventVersion: 1n, publishedAt: new Date(), lastErrorCode: null },
+        { eventVersion: 2n, publishedAt: new Date(), lastErrorCode: null },
+      ]);
+      harness.tx.tenantChatInvocationLog.findUnique.mockResolvedValue({
+        projectedEventVersion: 2n,
+        tenantId,
+        confirmedInputTokens: 20n,
+        confirmedOutputTokens: 10n,
+        confirmedTotalTokens: 30n,
+        confirmedCostMicroUsd: 50n,
+      });
 
-    await harness.service.runOnce();
+      await harness.service.runOnce();
 
-    expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({
-          confirmedInputTokens: 24n,
-          confirmedOutputTokens: 12n,
-          confirmedTotalTokens: 36n,
-          confirmedCostMicroUsd: 60n,
-          projectedEventVersion: 3n,
+      expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            confirmedInputTokens: 24n,
+            confirmedOutputTokens: 12n,
+            confirmedTotalTokens: 36n,
+            confirmedCostMicroUsd: 60n,
+            projectedEventVersion: 3n,
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it('marks both old and new UTC hours dirty when a late correction moves buckets', async () => {
     const row = lateSettledRow();
@@ -346,6 +374,7 @@ function createHarness(
 
 function reservationSource() {
   return {
+    cacheOutcome: 'off',
     idempotencyKey: 'idempotency_projection_001',
     pricingVersion: 5n,
     requestId: 'request_projection_001',

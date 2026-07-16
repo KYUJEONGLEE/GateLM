@@ -10,11 +10,18 @@ services:
       REDIS_URL: redis://redis:6379
       CONTROL_PLANE_AUTH_STATE_SECRET: ${CONTROL_PLANE_AUTH_STATE_SECRET:?CONTROL_PLANE_AUTH_STATE_SECRET is required}
       CONTROL_PLANE_ADMIN_AUTH_MODE: demo_admin_placeholder
+      TENANT_CHAT_CACHE_KEY_SET_ID: tenant-chat-local-cache-1
       CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: "true"
       TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
       GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY:?GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY is required}
       GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION:-v1}
       TENANT_CHAT_PROJECTOR_ENABLED: "true"
+      TENANT_CHAT_RAG_ENABLED: ${TENANT_CHAT_RAG_ENABLED:-false}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
       TS_NODE_COMPILER_OPTIONS: '{"module":"NodeNext","moduleResolution":"NodeNext"}'
     depends_on:
       postgres:
@@ -76,6 +83,12 @@ services:
       TENANT_CHAT_CONTROL_PLANE_BASE_URL: http://control-plane-api:3001
       TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
       TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081
+      TENANT_CHAT_RAG_ENABLED: ${TENANT_CHAT_RAG_ENABLED:-false}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
       TENANT_CHAT_WORKLOAD_ACTIVE_KID: ${TENANT_CHAT_WORKLOAD_ACTIVE_KID:-tenant-chat-local-1}
       TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json
       TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
@@ -117,14 +130,14 @@ services:
 
 secrets:
   tenant_chat_workload_signing_jwk:
-    file: .secrets/tenant-chat/signing.jwk.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/signing.jwk.json
   tenant_chat_workload_jwks:
-    file: .secrets/tenant-chat/jwks.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/jwks.json
   tenant_chat_binding_hmac_keys:
-    file: .secrets/tenant-chat/binding-hmac-keys.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/binding-hmac-keys.json
   tenant_chat_cache_keysets:
-    file: .secrets/tenant-chat/cache-keysets.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/cache-keysets.json
   tenant_chat_content_keys:
-    file: .secrets/tenant-chat/content-keys.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/content-keys.json
   tenant_chat_usage_receipt_token:
-    file: .secrets/tenant-chat/usage-receipt-token
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/usage-receipt-token

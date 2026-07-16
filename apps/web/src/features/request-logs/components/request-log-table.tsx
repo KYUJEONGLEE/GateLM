@@ -440,7 +440,11 @@ export function RequestLogTable({
                       : undefined;
 
                     return (
-                      <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
+                      <tr
+                        data-request-log-row
+                        data-selected={isSelected ? "true" : undefined}
+                        key={record.requestId}
+                      >
                         <td className="request-log-time-cell">
                           <Link
                             className="request-log-row-link"

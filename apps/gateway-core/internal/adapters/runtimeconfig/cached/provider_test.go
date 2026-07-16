@@ -158,7 +158,6 @@ func TestProviderReturnsStaleSnapshotWhileRefreshing(t *testing.T) {
 	block := make(chan struct{})
 	delegate.block = block
 	delegate.started = make(chan int, 1)
-	delegate.completed = make(chan int, 1)
 
 	stale, err := provider.GetExecutionSnapshot(context.Background(), "tenant", "project", "app")
 	if err != nil {
@@ -167,10 +166,21 @@ func TestProviderReturnsStaleSnapshotWhileRefreshing(t *testing.T) {
 	if stale.Snapshot.RuntimeSnapshotVersion != 1 || stale.Snapshot.RuntimeState != runtimeconfig.RuntimeStateStaleSnapshotUsed {
 		t.Fatalf("expected stale version 1, got version=%d state=%s", stale.Snapshot.RuntimeSnapshotVersion, stale.Snapshot.RuntimeState)
 	}
+	key := lookupKey{tenantID: "tenant", projectID: "project", applicationID: "app"}
+	provider.mu.Lock()
+	refreshFlight := provider.flights[key]
+	provider.mu.Unlock()
+	if refreshFlight == nil {
+		t.Fatal("expected stale lookup to start a background refresh")
+	}
 
 	<-delegate.started
 	close(block)
-	<-delegate.completed
+	select {
+	case <-refreshFlight.done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for background refresh")
+	}
 
 	refreshed, err := provider.GetExecutionSnapshot(context.Background(), "tenant", "project", "app")
 	if err != nil {
@@ -214,7 +224,6 @@ type fakeSnapshotProvider struct {
 	err       error
 	block     <-chan struct{}
 	started   chan int
-	completed chan int
 }
 
 func newFakeSnapshotProvider(snapshots ...runtimeconfig.ExecutionSnapshot) *fakeSnapshotProvider {
@@ -228,7 +237,6 @@ func (p *fakeSnapshotProvider) GetExecutionSnapshot(ctx context.Context, tenantI
 	err := p.err
 	block := p.block
 	started := p.started
-	completed := p.completed
 	snapshot := p.snapshots[len(p.snapshots)-1]
 	if call <= len(p.snapshots) {
 		snapshot = p.snapshots[call-1]
@@ -244,9 +252,6 @@ func (p *fakeSnapshotProvider) GetExecutionSnapshot(ctx context.Context, tenantI
 		case <-ctx.Done():
 			return runtimeconfig.ExecutionSnapshot{}, ctx.Err()
 		}
-	}
-	if completed != nil {
-		defer func() { completed <- call }()
 	}
 	if err != nil {
 		return runtimeconfig.ExecutionSnapshot{}, err
