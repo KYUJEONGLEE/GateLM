@@ -82,7 +82,7 @@ tenant_chat_secret_files=(
 [[ "${minimum_free_kb}" =~ ^[0-9]+$ ]] || \
   deploy_fail "GATELM_DEPLOY_MINIMUM_FREE_KB must be an integer."
 
-for command_name in awk chmod cp curl date df diff dirname docker find flock git install mkdir mv rm sha256sum sort stat tar tee unzip; do
+for command_name in awk chmod cp curl date df diff dirname docker find flock git install mkdir mv node rm sha256sum sort stat tar tee unzip; do
   need_command "${command_name}"
 done
 
@@ -245,6 +245,10 @@ validate_tenant_chat_secrets() {
 
   [[ "${secret_owner_uid}" != "0" && "${secret_owner_gid}" != "0" ]] || \
     deploy_fail "Tenant Chat secret files must be owned by a non-root runtime UID and GID."
+  node "${repo_dir}/scripts/dev/validate-tenant-chat-cache-keyset.mjs" \
+    --env-file="${env_file}" \
+    --keysets-file="${tenant_chat_secret_dir}/cache-keysets.json" || \
+    deploy_fail "Tenant Chat cache key-set configuration is inconsistent."
   export TENANT_CHAT_RUNTIME_UID="${secret_owner_uid}"
   export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"
 }
@@ -354,6 +358,7 @@ available_kb="$(df -Pk "${repo_dir}" | awk 'NR == 2 {print $4}')"
 (( available_kb >= minimum_free_kb )) || \
   deploy_fail "Insufficient disk space: ${available_kb} KiB available, ${minimum_free_kb} KiB required."
 
+git -C "${repo_dir}" checkout --detach "${target_sha}"
 validate_tenant_chat_secrets
 compose config --quiet
 
@@ -395,7 +400,6 @@ compose exec -T postgres sh -c \
 compose exec -T postgres pg_restore --list < "${backup_dir}/postgres.dump" >/dev/null
 sha256sum "${backup_dir}/postgres.dump" > "${backup_dir}/postgres.dump.sha256"
 
-git -C "${repo_dir}" checkout --detach "${target_sha}"
 [[ -f "${gateway_e5_bundle_script}" ]] || \
   deploy_fail "Gateway E5 bundle preparation script not found: ${gateway_e5_bundle_script}"
 bash "${gateway_e5_bundle_script}" "${repo_dir}"

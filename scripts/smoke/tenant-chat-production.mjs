@@ -13,6 +13,7 @@ export async function runProductionTenantChatSmoke({
   fetchImpl = fetch,
   origin,
   password,
+  verifyCache = false,
 } = {}) {
   const baseUrl = productionOrigin(origin);
   const accountEmail = requiredValue('TENANT_CHAT_SMOKE_EMAIL', email);
@@ -63,29 +64,18 @@ export async function runProductionTenantChatSmoke({
     const created = await responseJson(create, 'conversation create');
     conversationId = conversationIdentifier(created);
 
-    const turn = await request(fetchImpl, `${baseUrl}/api/tenant-chat/conversations/${conversationId}/turns`, {
-      body: JSON.stringify({
-        content: 'Reply with OK.',
-        contextMode: 'single_turn',
-        idempotencyKey: smokeKey('turn'),
-        usageIntent: {
-          cacheStrategy: 'off',
-          maxOutputTokens: 8,
-          requestedTier: 'auto',
-        },
-      }),
-      headers: mutationHeaders(baseUrl, jar),
-      method: 'POST',
-      redirect: 'manual',
-    }, TURN_TIMEOUT_MS, 'conversation turn');
-    absorbCookies(jar, turn);
-    await expectOk(turn, 'conversation turn');
-    if (!turn.headers.get('content-type')?.startsWith('text/event-stream')) {
-      throw new Error('conversation turn returned an invalid content type');
-    }
-    const terminal = await consumeTurnSse(turn.body, { conversationId });
-    if (terminal.type !== 'chat.turn.final' || terminal.terminalOutcome !== 'succeeded') {
-      throw new Error(`conversation turn failed (${safeCode(terminal.error?.code)})`);
+    if (verifyCache) {
+      const content = `Reply with OK for cache probe ${smokeKey('probe')}.`;
+      const first = await executeTurn(fetchImpl, baseUrl, jar, conversationId, content, 'exact');
+      if (first.cacheOutcome !== 'miss') {
+        throw new Error(`first cache probe did not miss (${safeCacheOutcome(first.cacheOutcome)})`);
+      }
+      const second = await executeTurn(fetchImpl, baseUrl, jar, conversationId, content, 'exact');
+      if (second.cacheOutcome !== 'hit') {
+        throw new Error(`second cache probe did not hit (${safeCacheOutcome(second.cacheOutcome)})`);
+      }
+    } else {
+      await executeTurn(fetchImpl, baseUrl, jar, conversationId, 'Reply with OK.', 'off');
     }
   } catch (error) {
     failure = safeError(error);
@@ -106,7 +96,35 @@ export async function runProductionTenantChatSmoke({
   }
 
   if (failure) throw failure;
-  return Object.freeze({ ok: true });
+  return Object.freeze({ cacheVerified: verifyCache, ok: true });
+}
+
+async function executeTurn(fetchImpl, baseUrl, jar, conversationId, content, cacheStrategy) {
+  const turn = await request(fetchImpl, `${baseUrl}/api/tenant-chat/conversations/${conversationId}/turns`, {
+    body: JSON.stringify({
+      content,
+      contextMode: 'single_turn',
+      idempotencyKey: smokeKey('turn'),
+      usageIntent: {
+        cacheStrategy,
+        maxOutputTokens: 8,
+        requestedTier: 'auto',
+      },
+    }),
+    headers: mutationHeaders(baseUrl, jar),
+    method: 'POST',
+    redirect: 'manual',
+  }, TURN_TIMEOUT_MS, 'conversation turn');
+  absorbCookies(jar, turn);
+  await expectOk(turn, 'conversation turn');
+  if (!turn.headers.get('content-type')?.startsWith('text/event-stream')) {
+    throw new Error('conversation turn returned an invalid content type');
+  }
+  const terminal = await consumeTurnSse(turn.body, { conversationId });
+  if (terminal.type !== 'chat.turn.final' || terminal.terminalOutcome !== 'succeeded') {
+    throw new Error(`conversation turn failed (${safeCode(terminal.error?.code)})`);
+  }
+  return terminal;
 }
 
 async function deleteConversation(fetchImpl, baseUrl, jar, conversationId) {
@@ -265,6 +283,10 @@ function safeCode(value) {
   return typeof value === 'string' && SAFE_ERROR_CODE.test(value) ? value : 'CHAT_UNKNOWN_ERROR';
 }
 
+function safeCacheOutcome(value) {
+  return ['off', 'hit', 'miss'].includes(value) ? value : 'unknown';
+}
+
 function safeError(error) {
   return error instanceof Error ? error : new Error('Tenant Chat production smoke failed');
 }
@@ -281,6 +303,7 @@ if (isMain) {
       email: process.env.TENANT_CHAT_SMOKE_EMAIL,
       origin: process.env.TENANT_CHAT_SMOKE_ORIGIN,
       password: process.env.TENANT_CHAT_SMOKE_PASSWORD,
+      verifyCache: process.env.TENANT_CHAT_SMOKE_VERIFY_CACHE === 'true',
     });
     console.log('Tenant Chat production smoke passed.');
   } catch (error) {

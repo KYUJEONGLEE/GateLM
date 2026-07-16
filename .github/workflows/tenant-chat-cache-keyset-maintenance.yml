@@ -1,0 +1,125 @@
+name: tenant-chat-cache-keyset-maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Read-only check, reconciled apply, or explicit backup rollback
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - apply
+          - rollback
+      backup_id:
+        description: Required only for rollback (value emitted by apply)
+        required: false
+        type: string
+      confirmation:
+        description: Enter APPLY or ROLLBACK for mutating actions; leave blank for check
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: gatelm-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    name: ${{ inputs.action }} Tenant Chat cache key set
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: production
+      url: https://gatelm.co.kr
+    env:
+      AWS_INSTANCE_ID: ${{ vars.AWS_INSTANCE_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      GATELM_CHAT_URL: ${{ vars.GATELM_CHAT_URL }}
+      MAINTENANCE_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout exact main maintenance SHA
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ env.MAINTENANCE_SHA }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Validate action, confirmation, and current main
+        env:
+          ACTION: ${{ inputs.action }}
+          BACKUP_ID: ${{ inputs.backup_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${AWS_INSTANCE_ID:?AWS_INSTANCE_ID production variable is required}"
+          : "${AWS_REGION:?AWS_REGION production variable is required}"
+          : "${AWS_ROLE_ARN:?AWS_ROLE_ARN production variable is required}"
+          : "${GATELM_CHAT_URL:?GATELM_CHAT_URL production variable is required}"
+          git fetch --no-tags origin main
+          [[ "$MAINTENANCE_SHA" == "$(git rev-parse origin/main)" ]]
+          case "$ACTION" in
+            check)
+              [[ -z "$BACKUP_ID" && -z "$CONFIRMATION" ]]
+              ;;
+            apply)
+              [[ -z "$BACKUP_ID" && "$CONFIRMATION" == "APPLY" ]]
+              ;;
+            rollback)
+              [[ "$BACKUP_ID" =~ ^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}$ ]]
+              [[ "$CONFIRMATION" == "ROLLBACK" ]]
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # v6.2.2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: gatelm-cache-keyset-${{ github.run_id }}
+
+      - name: Run approved maintenance through Systems Manager
+        env:
+          ACTION: ${{ inputs.action }}
+          BACKUP_ID: ${{ inputs.backup_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deploy/aws-triage/scripts/send-ssm-cache-keyset-maintenance.sh \
+            "$AWS_INSTANCE_ID" \
+            "$MAINTENANCE_SHA" \
+            "$ACTION" \
+            "$BACKUP_ID"
+
+      - name: Verify authenticated exact-cache miss then hit
+        if: inputs.action == 'apply'
+        env:
+          TENANT_CHAT_SMOKE_EMAIL: ${{ secrets.TENANT_CHAT_SMOKE_EMAIL }}
+          TENANT_CHAT_SMOKE_ORIGIN: ${{ env.GATELM_CHAT_URL }}
+          TENANT_CHAT_SMOKE_PASSWORD: ${{ secrets.TENANT_CHAT_SMOKE_PASSWORD }}
+          TENANT_CHAT_SMOKE_VERIFY_CACHE: "true"
+        run: node scripts/smoke/tenant-chat-production.mjs
+
+      - name: Verify authenticated execution after rollback
+        if: inputs.action == 'rollback'
+        env:
+          TENANT_CHAT_SMOKE_EMAIL: ${{ secrets.TENANT_CHAT_SMOKE_EMAIL }}
+          TENANT_CHAT_SMOKE_ORIGIN: ${{ env.GATELM_CHAT_URL }}
+          TENANT_CHAT_SMOKE_PASSWORD: ${{ secrets.TENANT_CHAT_SMOKE_PASSWORD }}
+        run: node scripts/smoke/tenant-chat-production.mjs

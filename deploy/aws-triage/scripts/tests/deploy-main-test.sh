@@ -10,6 +10,8 @@ DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
 E5_BUNDLE_SCRIPT="${SCRIPT_DIR}/prepare-gateway-e5-runtime-bundle.sh"
 WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/deploy-production.yml"
+MAINTENANCE_WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/tenant-chat-cache-keyset-maintenance.yml"
+MAINTENANCE_SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-cache-keyset-maintenance.sh"
 TEMPLATE_FILE="${AWS_TRIAGE_DIR}/aws/github-actions-cd.template.json"
 COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.yml"
 
@@ -33,7 +35,7 @@ assert_fails_with() {
     fail "Expected failure text was not found: ${expected}"
 }
 
-for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
+for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${MAINTENANCE_SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
   bash -n "${file}"
 done
 
@@ -51,6 +53,9 @@ assert_fails_with \
 assert_fails_with \
   "Invalid deployment SHA" \
   bash "${SSM_SCRIPT}" i-0123456789abcdef0 invalid https://gatelm.co.kr https://chat.gatelm.co.kr
+assert_fails_with \
+  "Invalid maintenance SHA" \
+  bash "${MAINTENANCE_SSM_SCRIPT}" i-0123456789abcdef0 invalid check
 assert_fails_with \
   "Public URL must be an HTTPS origin" \
   bash "${SSM_SCRIPT}" i-0123456789abcdef0 0000000000000000000000000000000000000000 http://gatelm.co.kr https://chat.gatelm.co.kr
@@ -96,6 +101,16 @@ do
   grep -Fq "${required_smoke_secret}" "${WORKFLOW_FILE}" || \
     fail "Required Tenant Chat smoke secret is missing: ${required_smoke_secret}"
 done
+grep -Fq "workflow_dispatch:" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance must be manually dispatched"
+grep -Fq "name: production" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance must use the protected production environment"
+grep -Fq "id-token: write" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance requires OIDC permission"
+grep -Fq "TENANT_CHAT_SMOKE_VERIFY_CACHE: \"true\"" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set apply must verify an exact-cache miss followed by a hit"
+grep -Fq "send-ssm-cache-keyset-maintenance.sh" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance must use the reviewed SSM sender"
 unexpected_secret_references="$(
   grep -oE 'secrets\.[A-Za-z_][A-Za-z0-9_]*' "${WORKFLOW_FILE}" | \
     sort -u | \
@@ -110,6 +125,10 @@ grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
 grep -Fq 'validate_tenant_chat_secrets' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret files must be validated before the image build"
+grep -Fq 'validate-tenant-chat-cache-keyset.mjs' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat cache key-set identity must be validated before the image build"
+grep -Fq 'TENANT_CHAT_CACHE_KEY_SET_ID: ${TENANT_CHAT_CACHE_KEY_SET_ID:?TENANT_CHAT_CACHE_KEY_SET_ID is required}' "${COMPOSE_FILE}" || \
+  fail "Production Compose must require an explicit Tenant Chat cache key-set ID"
 grep -Fq 'export TENANT_CHAT_RUNTIME_UID="${secret_owner_uid}"' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret owner UID must be passed to Compose"
 grep -Fq 'export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"' "${DEPLOY_SCRIPT}" || \
@@ -277,6 +296,40 @@ if (!remoteScript.includes("deploy-main.sh")) {
 }
 if (!remoteScript.includes("0000000000000000000000000000000000000000")) {
   throw new Error("Deployment SHA was not sent");
+}
+NODE
+
+: > "${fake_log}"
+PATH="${fake_bin}:${PATH}" \
+FAKE_AWS_LOG="${fake_log}" \
+AWS_REGION=ap-northeast-2 \
+GATELM_SSM_POLL_INTERVAL_SECONDS=0 \
+bash "${MAINTENANCE_SSM_SCRIPT}" \
+  i-0123456789abcdef0 \
+  0000000000000000000000000000000000000000 \
+  check >/dev/null
+
+node - "${fake_log}" <<'NODE'
+const fs = require("node:fs");
+const logPath = process.argv[2];
+const line = fs.readFileSync(logPath, "utf8").split(/\r?\n/)
+  .find((value) => value.startsWith('{"commands":'));
+if (!line) throw new Error("Cache key-set maintenance SSM parameters were not sent");
+const command = JSON.parse(line).commands?.[0];
+const match = command?.match(/^printf '%s' '([A-Za-z0-9+/=]+)' \| base64 --decode \| bash$/);
+if (!match) throw new Error("Cache key-set maintenance payload is not POSIX-safe");
+const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
+for (const fragment of [
+  "action=check",
+  "flock -n 9",
+  "git -C \"${repo}\" archive",
+  "tenant_chat_active_runtime_snapshots",
+  "--mode=\"${action}\"",
+  "--active-key-set-ids-file=\"${active_ids_file}\"",
+]) {
+  if (!remoteScript.includes(fragment)) {
+    throw new Error(`Cache key-set maintenance payload is missing: ${fragment}`);
+  }
 }
 NODE
 
