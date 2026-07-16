@@ -317,12 +317,12 @@ func lockReservationReplay(ctx context.Context, tx pgx.Tx, input ReserveInput) (
 		SELECT reservation_id::text, tenant_id::text, employee_id::text,
 		       state, enforcement_outcome, pricing_rule_id, pricing_version,
 		       estimate_version,
-		       (
+		       COALESCE((
 		         SELECT ledger.reserved_cost_micro_usd_delta
 		         FROM tenant_employee_cost_ledger_entries AS ledger
 		         WHERE ledger.reservation_id = reservation.reservation_id
 		           AND ledger.event_version = 1 AND ledger.event_type = 'reserve'
-		       ) AS initial_reserved_cost_micro_usd,
+		       ), 0) AS initial_reserved_cost_micro_usd,
 		       ledger_version
 		FROM tenant_employee_cost_reservations AS reservation
 		WHERE surface = $1 AND request_id = $2

@@ -261,7 +261,7 @@ func employeeCostEstimatedInput(messages []provider.ChatMessage) (int64, error) 
 		if err != nil {
 			return 0, err
 		}
-		total += int64(len([]byte(text)))
+		total += int64(len(text))
 	}
 	if total < 1 {
 		total = 1

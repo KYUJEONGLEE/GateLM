@@ -121,6 +121,9 @@ func (s *ReservationStore) promoteDispatchedAttemptToPending(
 	if pendingCount > 0 {
 		return nil
 	}
+	if notAvailableCount == 0 {
+		return nil
+	}
 	if notAvailableCount != 1 {
 		return tenantchat.ErrUsageGuardUnavailable
 	}

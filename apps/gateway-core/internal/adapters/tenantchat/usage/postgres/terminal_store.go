@@ -364,7 +364,7 @@ func validateReleasedReplay(
 ) error {
 	var storedOutcome string
 	err := tx.QueryRow(ctx, `
-		SELECT payload ->> 'terminalOutcome'
+		SELECT COALESCE(payload ->> 'terminalOutcome', '')
 		FROM tenant_chat_invocation_outbox
 		WHERE tenant_id = $1::uuid AND aggregate_id = $2
 		  AND event_type = 'usage_released' AND event_version = $3

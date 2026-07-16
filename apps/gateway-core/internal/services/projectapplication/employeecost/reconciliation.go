@@ -80,17 +80,16 @@ func (s *Service) reconcileNextPending(ctx context.Context, cutoff time.Time) (p
 	if err != nil {
 		return false, err
 	}
+	defer rows.Close()
 	attempts := make([]int, 0, 1)
 	for rows.Next() {
 		var attemptNo int
 		if err := rows.Scan(&attemptNo); err != nil {
-			rows.Close()
 			return false, err
 		}
 		attempts = append(attempts, attemptNo)
 	}
 	err = rows.Err()
-	rows.Close()
 	if err != nil {
 		return false, err
 	}
