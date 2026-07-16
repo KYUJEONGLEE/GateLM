@@ -70,6 +70,21 @@ AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 
 The primary model is loaded through the local ONNX Runtime pipeline and its detections are merged through the same sanitized GateLM policy path. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
+For the recommended self-hosted Microsoft PII container path, keep raw prompts inside the deployment network and point the AI service at the local container endpoint. This backend scans the current prompt text directly instead of only the rule-derived candidate windows, then returns only category, offset, length, and confidence into the same GateLM masking pipeline.
+
+```bash
+AI_SERVICE_AI_SAFETY_LOCAL_MODEL_ENABLED=false
+AI_SERVICE_AZURE_PII_ENABLED=true
+AI_SERVICE_AZURE_PII_ENDPOINT=http://azure-pii:5000
+AI_SERVICE_AZURE_PII_API_KEY=
+AI_SERVICE_AZURE_PII_API_VERSION=2024-11-01
+AI_SERVICE_AZURE_PII_LANGUAGE=ko
+AI_SERVICE_AZURE_PII_TIMEOUT_MS=750
+AI_SERVICE_AZURE_PII_ALLOWED_DETECTOR_TYPES=email,organization_name,person_name,phone_number,postal_address,resident_registration_number
+```
+
+When Azure PII is enabled, `AI_SERVICE_AZURE_PII_ENDPOINT` is required and startup fails if every model backend is disabled. Keep `AI_SERVICE_AZURE_PII_API_KEY` in runtime secrets when the container or managed endpoint requires it; it is intentionally hidden from the settings repr.
+
 The pinned 2026-07-15 delivery bundle still contains the KoELECTRA artifact and the importer verifies all manifest-listed files, but a blank additional-model setting prevents that adapter from loading or warming up. If the allowlisted KoELECTRA path is explicitly enabled for an isolated evaluation, its accepted labels remain email, phone number, and resident registration number only. Person-name and organization-name detections remain rule backstops, and the supplied evaluation does not justify production-grade accuracy claims.
 
 Import only manifest-listed model artifacts from the delivery archive and verify every file hash:

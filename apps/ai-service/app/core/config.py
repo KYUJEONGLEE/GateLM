@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
 
@@ -12,6 +12,17 @@ REMOTE_SAFETY_MODES = {REMOTE_SAFETY_MODE_DISABLED, REMOTE_SAFETY_MODE_SHADOW}
 DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID = "openai/privacy-filter"
 DEFAULT_AI_SAFETY_DETECTOR_RUNTIME = "onnx"
 DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES = ("phone_number", "secret")
+DEFAULT_AZURE_PII_ALLOWED_DETECTOR_TYPES = (
+    "email",
+    "organization_name",
+    "person_name",
+    "phone_number",
+    "postal_address",
+    "resident_registration_number",
+)
+DEFAULT_AZURE_PII_API_VERSION = "2024-11-01"
+DEFAULT_AZURE_PII_LANGUAGE = "ko"
+DEFAULT_AZURE_PII_TIMEOUT_MS = 750
 AI_SAFETY_DETECTOR_RUNTIME_TRANSFORMERS = "transformers"
 AI_SAFETY_DETECTOR_RUNTIME_ONNX = "onnx"
 AI_SAFETY_DETECTOR_RUNTIMES = {
@@ -34,10 +45,18 @@ class Settings:
     )
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
     ai_safety_preload_enabled: bool = False
+    ai_safety_local_model_enabled: bool = True
+    azure_pii_enabled: bool = False
+    azure_pii_endpoint: str = ""
+    azure_pii_api_key: str = field(default="", repr=False)
+    azure_pii_api_version: str = DEFAULT_AZURE_PII_API_VERSION
+    azure_pii_language: str = DEFAULT_AZURE_PII_LANGUAGE
+    azure_pii_timeout_ms: int = DEFAULT_AZURE_PII_TIMEOUT_MS
+    azure_pii_allowed_detector_types: tuple[str, ...] = DEFAULT_AZURE_PII_ALLOWED_DETECTOR_TYPES
 
 
 def load_settings() -> Settings:
-    return Settings(
+    settings = Settings(
         host=_env_string("AI_SERVICE_HOST", "127.0.0.1"),
         port=_env_int("AI_SERVICE_PORT", 8001),
         log_level=_env_string("AI_SERVICE_LOG_LEVEL", "INFO"),
@@ -56,7 +75,35 @@ def load_settings() -> Settings:
             "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED",
             False,
         ),
+        ai_safety_local_model_enabled=_env_bool(
+            "AI_SERVICE_AI_SAFETY_LOCAL_MODEL_ENABLED",
+            True,
+        ),
+        azure_pii_enabled=_env_bool("AI_SERVICE_AZURE_PII_ENABLED", False),
+        azure_pii_endpoint=_env_string("AI_SERVICE_AZURE_PII_ENDPOINT", "").strip(),
+        azure_pii_api_key=_env_string("AI_SERVICE_AZURE_PII_API_KEY", "").strip(),
+        azure_pii_api_version=_env_string(
+            "AI_SERVICE_AZURE_PII_API_VERSION",
+            DEFAULT_AZURE_PII_API_VERSION,
+        ).strip(),
+        azure_pii_language=_env_string(
+            "AI_SERVICE_AZURE_PII_LANGUAGE",
+            DEFAULT_AZURE_PII_LANGUAGE,
+        ).strip(),
+        azure_pii_timeout_ms=_env_int(
+            "AI_SERVICE_AZURE_PII_TIMEOUT_MS",
+            DEFAULT_AZURE_PII_TIMEOUT_MS,
+        ),
+        azure_pii_allowed_detector_types=_env_detector_types(
+            "AI_SERVICE_AZURE_PII_ALLOWED_DETECTOR_TYPES",
+            DEFAULT_AZURE_PII_ALLOWED_DETECTOR_TYPES,
+        ),
     )
+    if settings.azure_pii_enabled and settings.azure_pii_endpoint == "":
+        raise ValueError("AI_SERVICE_AZURE_PII_ENDPOINT must be set when Azure PII is enabled")
+    if not settings.ai_safety_local_model_enabled and not settings.azure_pii_enabled:
+        raise ValueError("At least one AI safety model backend must be enabled")
+    return settings
 
 
 def _env_remote_safety_mode() -> str:
@@ -137,6 +184,28 @@ def _env_ml_allowed_detector_types() -> tuple[str, ...]:
     value = os.environ.get(key)
     if value is None:
         return DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES
+    if value.strip() == "":
+        raise ValueError(f"{key} must not be empty")
+
+    detector_types: list[str] = []
+    seen: set[str] = set()
+    for raw_item in value.split(","):
+        detector_type = raw_item.strip()
+        if detector_type == "" or detector_type not in ALLOWED_DETECTOR_TYPES:
+            raise ValueError(f"{key} contains an unsupported detector type")
+        if detector_type in seen:
+            continue
+        detector_types.append(detector_type)
+        seen.add(detector_type)
+    if not detector_types:
+        raise ValueError(f"{key} must select at least one detector type")
+    return tuple(detector_types)
+
+
+def _env_detector_types(key: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
+    value = os.environ.get(key)
+    if value is None:
+        return fallback
     if value.strip() == "":
         raise ValueError(f"{key} must not be empty")
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from app.adapters.safety.azure_pii_adapter import AzurePiiAdapter
 from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL, PrivacyFilterAdapter
 from app.schemas.safety import (
     AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
@@ -161,6 +162,79 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
             response.detector_summary.detector_categories,
             ["email", "phone_number"],
         )
+
+    def test_full_text_adapter_runs_even_without_candidate_hint(self) -> None:
+        calls: list[str] = []
+
+        def requester(_url, payload, _headers, _timeout_seconds):
+            text = payload["analysisInput"]["documents"][0]["text"]
+            calls.append(text)
+            return {
+                "results": {
+                    "documents": [
+                        {
+                            "id": "0",
+                            "entities": [
+                                {
+                                    "category": "Person",
+                                    "offset": 0,
+                                    "length": 3,
+                                    "confidenceScore": 0.99,
+                                }
+                            ],
+                        }
+                    ],
+                    "errors": [],
+                }
+            }
+
+        service = AiSafetyDetectorService(
+            adapters=(
+                AzurePiiAdapter(
+                    endpoint="http://localhost:5000",
+                    allowed_detector_types=frozenset({"person_name"}),
+                    requester=requester,
+                ),
+            ),
+            ml_allowed_detector_types=("person_name",),
+        )
+
+        response = service.detect(detect_request("홍길동"))
+
+        self.assertEqual(calls, ["홍길동"])
+        self.assertEqual(response.execution_summary.execution_mode, "hybrid")
+        self.assertEqual(response.detector_summary.detector_categories, ["person_name"])
+        self.assertNotIn("홍길동", response.redacted_prompt)
+
+    def test_full_text_adapter_runs_even_when_rules_cover_input(self) -> None:
+        calls: list[str] = []
+
+        def requester(_url, payload, _headers, _timeout_seconds):
+            calls.append(payload["analysisInput"]["documents"][0]["text"])
+            return {
+                "results": {
+                    "documents": [{"id": "0", "entities": []}],
+                    "errors": [],
+                }
+            }
+
+        service = AiSafetyDetectorService(
+            adapters=(
+                AzurePiiAdapter(
+                    endpoint="http://localhost:5000",
+                    allowed_detector_types=frozenset({"email"}),
+                    requester=requester,
+                ),
+            ),
+            ml_allowed_detector_types=("email",),
+        )
+
+        response = service.detect(detect_request("Contact rule-covered@example.test."))
+
+        self.assertEqual(calls, ["Contact rule-covered@example.test."])
+        self.assertEqual(response.execution_summary.execution_mode, "hybrid")
+        self.assertEqual(response.execution_summary.model_invocation_count, 1)
+        self.assertEqual(response.detector_summary.detector_categories, ["email"])
 
     def test_detect_rules_cover_resident_number_followed_by_korean_particle(self) -> None:
         classifier_calls = 0
