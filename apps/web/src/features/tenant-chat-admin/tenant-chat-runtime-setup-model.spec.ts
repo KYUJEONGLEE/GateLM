@@ -87,6 +87,7 @@ test("active snapshot wins on reload", () => {
     ...setup,
     activeSnapshot: {
       digest: "sha256:fixture",
+      cacheEnabled: true,
       modelKey: "models/gemini-2.5-flash",
       policyVersion: 4,
       pricingStatus: "current",
@@ -148,9 +149,36 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
-test("Chat App routing publish recovers from a Control Plane network failure", async () => {
+test("Chat App cache policy reuses the shared existing policy card", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const cachePanelSourceUrl = new URL("../policies/components/runtime-policy-panels/cache-panel.tsx", import.meta.url);
+  const sharedCardSourceUrl = new URL("../policies/components/exact-cache-toggle-card.tsx", import.meta.url);
+  const [componentSource, cachePanelSource, sharedCardSource] = await Promise.all([
+    readFile(componentSourceUrl, "utf8"),
+    readFile(cachePanelSourceUrl, "utf8"),
+    readFile(sharedCardSourceUrl, "utf8")
+  ]);
+
+  expect(componentSource).toContain("<ExactCacheToggleCard");
+  expect(cachePanelSource).toContain("<ExactCacheToggleCard");
+  expect(sharedCardSource).toContain("DatabaseZap");
+  expect(sharedCardSource).toContain('className="policy-cache-card"');
+  expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
+  expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
+});
+
+test("Chat App publishes routing and cache policy in one request", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source).toContain("JSON.stringify({ cacheEnabled, manualModelRef, routes, routingMode })");
+  expect(source).toContain('publish: "Publish Chat App policy"');
+  expect(source).toContain('publish: "채팅 앱 정책 발행"');
+});
+
+test("Chat App routing publish recovers from a Control Plane network failure", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = (await readFile(componentSourceUrl, "utf8")).replaceAll("\r\n", "\n");
 
   expect(source).toContain('setFeedback({ error: true, message: "Control Plane unavailable." });');
   expect(source).toContain("} finally {\n      setPending(false);");
