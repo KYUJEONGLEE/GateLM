@@ -168,6 +168,8 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 
 Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다.
 
+RAG crypto compatibility package를 추가해도 이 mount 경계는 자동으로 넓어지지 않는다. 현재 Control Plane HTTP process에는 content key file을 mount하지 않으며, 향후 별도 Control Plane worker가 chunk를 암호화할 때 필요한 least-privilege key delivery와 readiness는 worker contract/deployment milestone에서 명시적으로 추가한다.
+
 ```json
 {
   "schemaVersion": 1,

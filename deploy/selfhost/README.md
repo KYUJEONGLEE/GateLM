@@ -10,7 +10,7 @@ It runs these services:
 | Control Plane API | `gatelm/control-plane-api:2.1.0` |
 | Gateway Core | `gatelm/gateway-core:2.1.0` |
 | AI Service | `gatelm/ai-service:2.1.0` |
-| PostgreSQL | `postgres:16` |
+| PostgreSQL | `pgvector/pgvector:0.8.5-pg16-trixie` (digest pinned in Compose) |
 | Redis | `redis:7-alpine` |
 | Mock Provider | `python:3.12-alpine` |
 

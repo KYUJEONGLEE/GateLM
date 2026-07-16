@@ -92,6 +92,11 @@ model Tenant {
   employeeCostPolicyAudits        TenantEmployeeCostPolicyAudit[]
   employeeCostLedgerRollout       TenantEmployeeCostLedgerRollout?
   employeeCostPeriods             TenantEmployeeCostPeriod[]
+  ragKnowledgeBases               RagKnowledgeBase[]
+  ragDocuments                    RagDocument[]
+  ragDocumentIndexes              RagDocumentIndex[]
+  ragChunks                       RagChunk[]
+  ragJobs                         RagJob[]
 
   @@map("tenants")
 }
@@ -124,6 +129,7 @@ model User {
   tenantChatUserTokenPeriods  TenantChatUserTokenPeriod[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
   tenantChatConversations     TenantChatConversation[]
+  uploadedRagDocuments        RagDocument[]
 
   @@index([email])
   @@index([status])
@@ -1391,9 +1397,11 @@ model TenantChatContentKey {
   rewrappedAt        DateTime? @map("rewrapped_at") @db.Timestamptz(6)
   retiredAt          DateTime? @map("retired_at") @db.Timestamptz(6)
 
-  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  conversationTitles TenantChatConversation[] @relation("TenantChatConversationTitleKey")
-  messages           TenantChatMessage[]
+  tenant              Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  conversationTitles  TenantChatConversation[] @relation("TenantChatConversationTitleKey")
+  messages            TenantChatMessage[]
+  ragDocumentMetadata RagDocument[]            @relation("RagDocumentMetadataKey")
+  ragChunks           RagChunk[]               @relation("RagChunkContentKey")
 
   @@id([tenantId, contentKeyVersion])
   @@map("tenant_chat_content_keys")
@@ -1496,6 +1504,157 @@ model TenantChatMessage {
   @@unique([turnId, role], map: "tenant_chat_message_turn_role_key")
   @@index([tenantId, userId, conversationId, sequence], map: "tenant_chat_message_history_idx")
   @@map("tenant_chat_messages")
+}
+
+model RagKnowledgeBase {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @unique(map: "rag_knowledge_bases_tenant_key") @map("tenant_id") @db.Uuid
+  status                  String   @default("DISABLED")
+  embeddingProvider       String   @default("openai") @map("embedding_provider")
+  embeddingModel          String   @default("text-embedding-3-large") @map("embedding_model")
+  embeddingDimensions     Int      @default(1536) @map("embedding_dimensions")
+  embeddingDistance       String   @default("cosine") @map("embedding_distance")
+  embeddingProfileVersion Int      @default(1) @map("embedding_profile_version")
+  revision                Int      @default(1)
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_knowledge_bases_tenant_fkey")
+  documents RagDocument[]
+  jobs      RagJob[]
+
+  @@unique([id, tenantId], map: "rag_knowledge_bases_id_tenant_key")
+  @@index([tenantId, status], map: "rag_knowledge_bases_tenant_status_idx")
+  @@map("rag_knowledge_bases")
+}
+
+model RagDocument {
+  id                               String   @id @default(uuid()) @db.Uuid
+  publicId                         String   @unique(map: "rag_documents_public_id_key") @default(uuid()) @map("public_id") @db.Uuid
+  tenantId                         String   @map("tenant_id") @db.Uuid
+  knowledgeBaseId                  String   @map("knowledge_base_id") @db.Uuid
+  privateMetadataCiphertext        Bytes    @map("private_metadata_ciphertext")
+  privateMetadataNonce             Bytes    @map("private_metadata_nonce")
+  privateMetadataAuthTag           Bytes    @map("private_metadata_auth_tag")
+  privateMetadataContentKeyVersion Int      @map("private_metadata_content_key_version")
+  privateMetadataSchemaVersion     Int      @default(1) @map("private_metadata_schema_version")
+  fileExtension                    String   @map("file_extension")
+  mimeType                         String   @map("mime_type")
+  sizeBytes                        BigInt   @map("size_bytes")
+  s3ObjectKey                      String   @map("s3_object_key")
+  uploadedByUserId                 String   @map("uploaded_by_user_id") @db.Uuid
+  status                           String   @default("UPLOADED")
+  failureCode                      String?  @map("failure_code")
+  sanitizedFailureMessage          String?  @map("sanitized_failure_message")
+  createdAt                        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_tenant_fkey")
+  knowledgeBase  RagKnowledgeBase     @relation(fields: [knowledgeBaseId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_knowledge_base_tenant_fkey")
+  uploadedByUser User                 @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_uploaded_by_user_fkey")
+  metadataKey    TenantChatContentKey @relation("RagDocumentMetadataKey", fields: [tenantId, privateMetadataContentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_metadata_key_fkey")
+  indexes        RagDocumentIndex[]
+  chunks         RagChunk[]
+  jobs           RagJob[]
+
+  @@unique([id, tenantId], map: "rag_documents_id_tenant_key")
+  @@index([tenantId, status], map: "rag_documents_tenant_status_idx")
+  @@index([tenantId, knowledgeBaseId], map: "rag_documents_tenant_knowledge_base_idx")
+  @@index([tenantId, uploadedByUserId], map: "rag_documents_tenant_uploader_idx")
+  @@map("rag_documents")
+}
+
+model RagDocumentIndex {
+  id                      String    @id @default(uuid()) @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  documentId              String    @map("document_id") @db.Uuid
+  version                 Int
+  status                  String    @default("BUILDING")
+  parserVersion           Int       @default(1) @map("parser_version")
+  chunkerVersion          Int       @default(1) @map("chunker_version")
+  embeddingProvider       String    @default("openai") @map("embedding_provider")
+  embeddingModel          String    @default("text-embedding-3-large") @map("embedding_model")
+  embeddingDimensions     Int       @default(1536) @map("embedding_dimensions")
+  embeddingProfileVersion Int       @default(1) @map("embedding_profile_version")
+  startedAt               DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt             DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_document_indexes_tenant_fkey")
+  document RagDocument @relation(fields: [documentId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: NoAction, map: "rag_document_indexes_document_tenant_fkey")
+  chunks   RagChunk[]
+
+  @@unique([id, documentId, tenantId], map: "rag_document_indexes_identity_key")
+  @@unique([tenantId, documentId, version], map: "rag_document_indexes_version_key")
+  // Prisma cannot express the one-ACTIVE-index partial unique index. The custom
+  // migration and rag-foundation catalog integration test are authoritative.
+  @@index([tenantId, status], map: "rag_document_indexes_tenant_status_idx")
+  @@index([tenantId, documentId, status], map: "rag_document_indexes_tenant_document_status_idx")
+  @@map("rag_document_indexes")
+}
+
+model RagChunk {
+  id                String                      @id @default(uuid()) @db.Uuid
+  tenantId          String                      @map("tenant_id") @db.Uuid
+  documentId        String                      @map("document_id") @db.Uuid
+  documentIndexId   String                      @map("document_index_id") @db.Uuid
+  ordinal           Int
+  tokenCount        Int                         @map("token_count")
+  pageStart         Int?                        @map("page_start")
+  pageEnd           Int?                        @map("page_end")
+  lineStart         Int?                        @map("line_start")
+  lineEnd           Int?                        @map("line_end")
+  sourceMetadata    Json                        @default("{}") @map("source_metadata") @db.JsonB
+  contentCiphertext Bytes                       @map("content_ciphertext")
+  contentNonce      Bytes                       @map("content_nonce")
+  contentAuthTag    Bytes                       @map("content_auth_tag")
+  contentKeyVersion Int                         @map("content_key_version")
+  embedding         Unsupported("vector(1536)")
+  createdAt         DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_chunks_tenant_fkey")
+  document      RagDocument          @relation(fields: [documentId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: NoAction, map: "rag_chunks_document_tenant_fkey")
+  documentIndex RagDocumentIndex     @relation(fields: [documentIndexId, documentId, tenantId], references: [id, documentId, tenantId], onDelete: Cascade, onUpdate: NoAction, map: "rag_chunks_document_index_tenant_fkey")
+  contentKey    TenantChatContentKey @relation("RagChunkContentKey", fields: [tenantId, contentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction, map: "rag_chunks_content_key_fkey")
+
+  @@unique([tenantId, documentIndexId, documentId, ordinal], map: "rag_chunks_index_document_ordinal_key")
+  @@index([tenantId, documentId], map: "rag_chunks_tenant_document_idx")
+  @@index([tenantId, documentIndexId], map: "rag_chunks_tenant_document_index_idx")
+  @@map("rag_chunks")
+}
+
+model RagJob {
+  id                        String    @id @default(uuid()) @db.Uuid
+  tenantId                  String    @map("tenant_id") @db.Uuid
+  knowledgeBaseId           String    @map("knowledge_base_id") @db.Uuid
+  documentId                String?   @map("document_id") @db.Uuid
+  type                      String
+  status                    String    @default("PENDING")
+  idempotencyKey            String    @map("idempotency_key")
+  attemptCount              Int       @default(0) @map("attempt_count")
+  maxAttempts               Int       @default(5) @map("max_attempts")
+  availableAt               DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  lockedAt                  DateTime? @map("locked_at") @db.Timestamptz(6)
+  lockedBy                  String?   @map("locked_by")
+  leaseExpiresAt            DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  lastErrorCode             String?   @map("last_error_code")
+  sanitizedLastError        String?   @map("sanitized_last_error")
+  deletionObjectKeySnapshot String?   @map("deletion_object_key_snapshot")
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_jobs_tenant_fkey")
+  knowledgeBase RagKnowledgeBase @relation(fields: [knowledgeBaseId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "rag_jobs_knowledge_base_tenant_fkey")
+  // The DELETE job snapshots the opaque object key when it is created. Hard
+  // deletion later terminalizes linked work and clears every job documentId.
+  document      RagDocument?     @relation(fields: [documentId, tenantId], references: [id, tenantId], onDelete: NoAction, onUpdate: NoAction, map: "rag_jobs_document_tenant_fkey")
+
+  @@unique([id, tenantId], map: "rag_jobs_id_tenant_key")
+  @@unique([tenantId, type, idempotencyKey], map: "rag_jobs_idempotency_key")
+  @@index([status, availableAt, leaseExpiresAt], map: "rag_jobs_claim_idx")
+  @@index([tenantId, status, availableAt], map: "rag_jobs_tenant_status_available_idx")
+  @@index([tenantId, documentId], map: "rag_jobs_tenant_document_idx")
+  @@map("rag_jobs")
 }
 
 model DashboardRollupSourceCursor {

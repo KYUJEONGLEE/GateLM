@@ -188,6 +188,10 @@ jobs:
               pnpm --filter @gatelm/web build
               ;;
             tenant-chat-api)
+              pnpm --filter @gatelm/tenant-content-crypto test
+              pnpm --filter @gatelm/tenant-content-crypto typecheck
+              pnpm --filter @gatelm/rag-config test
+              pnpm --filter @gatelm/rag-config typecheck
               pnpm --filter @gatelm/chat-api typecheck
               pnpm --filter @gatelm/chat-api test -- --runInBand
               pnpm --filter @gatelm/chat-api build
@@ -208,6 +212,122 @@ jobs:
               exit 1
               ;;
           esac
+
+  rag-db-foundation:
+    name: RAG database foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.5-pg16-trixie@sha256:073acab878025cadf03fe6fed01babaaa285b8d09ddc9c43882cf02d409546d7
+        env:
+          POSTGRES_USER: gatelm
+          POSTGRES_PASSWORD: gatelm
+          POSTGRES_DB: gatelm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gatelm -d gatelm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public
+      GATELM_TEST_DATABASE_URL: postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Setup pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Prisma schema
+        run: >-
+          pnpm --filter @gatelm/control-plane-api exec prisma validate
+          --schema prisma/schema.prisma
+
+      - name: Verify additive migration SQL
+        run: >-
+          pnpm --filter @gatelm/control-plane-api exec jest --runInBand
+          prisma/rag-foundation.migration.spec.ts
+
+      - name: Verify upgrade from the 37-migration baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_name="20260716150000_rag_db_foundation"
+          baseline_root="${RUNNER_TEMP}/gatelm-rag-baseline"
+          mkdir -p "${baseline_root}/migrations"
+          cp apps/control-plane-api/prisma/schema.prisma "${baseline_root}/schema.prisma"
+          cp apps/control-plane-api/prisma/migrations/migration_lock.toml \
+            "${baseline_root}/migrations/migration_lock.toml"
+
+          for migration in apps/control-plane-api/prisma/migrations/*; do
+            name="$(basename "${migration}")"
+            if [[ -d "${migration}" && "${name}" < "${migration_name}" ]]; then
+              cp -R "${migration}" "${baseline_root}/migrations/"
+            fi
+          done
+
+          baseline_count="$(find "${baseline_root}/migrations" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+          [[ "${baseline_count}" -eq 37 ]]
+
+          pnpm --filter @gatelm/control-plane-api exec prisma migrate deploy \
+            --schema "${baseline_root}/schema.prisma"
+          pnpm --filter @gatelm/control-plane-api exec prisma migrate deploy \
+            --schema prisma/schema.prisma
+          pnpm --filter @gatelm/control-plane-api exec prisma migrate status \
+            --schema prisma/schema.prisma
+          schema_diff="$(pnpm --filter @gatelm/control-plane-api exec prisma migrate diff \
+            --from-url "${DATABASE_URL}" \
+            --to-schema-datamodel prisma/schema.prisma --script)"
+          if grep -Eiq 'rag_(knowledge_bases|documents|document_indexes|chunks|jobs)' \
+            <<<"${schema_diff}"; then
+            echo "Prisma detected drift in an M2-owned RAG table."
+            exit 1
+          fi
+          pnpm --filter @gatelm/control-plane-api exec prisma generate \
+            --schema prisma/schema.prisma
+          pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
+            prisma/rag-foundation.integration.spec.ts
+
+      - name: Verify migration from an empty database
+        shell: bash
+        run: |
+          set -euo pipefail
+          postgres_container="${{ job.services.postgres.id }}"
+          [[ -n "${postgres_container}" ]]
+          docker exec "${postgres_container}" psql -U gatelm -d postgres \
+            -v ON_ERROR_STOP=1 -c 'CREATE DATABASE gatelm_rag_fresh'
+          fresh_url='postgresql://gatelm:gatelm@localhost:5432/gatelm_rag_fresh?schema=public'
+
+          DATABASE_URL="${fresh_url}" \
+            pnpm --filter @gatelm/control-plane-api exec prisma migrate deploy \
+              --schema prisma/schema.prisma
+          DATABASE_URL="${fresh_url}" \
+            pnpm --filter @gatelm/control-plane-api exec prisma migrate status \
+              --schema prisma/schema.prisma
+          DATABASE_URL="${fresh_url}" GATELM_TEST_DATABASE_URL="${fresh_url}" \
+            pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
+              prisma/rag-foundation.integration.spec.ts
+
+      - name: Verify Control Plane types and build
+        run: |
+          pnpm --filter @gatelm/control-plane-api typecheck
+          pnpm --filter @gatelm/control-plane-api build
 
   gateway-race:
     name: gateway race and vet
@@ -240,7 +360,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:0.8.5-pg16-trixie@sha256:073acab878025cadf03fe6fed01babaaa285b8d09ddc9c43882cf02d409546d7
         env:
           POSTGRES_USER: gatelm
           POSTGRES_PASSWORD: gatelm
@@ -380,6 +500,7 @@ jobs:
       - repository-contracts
       - application-verification
       - gateway-race
+      - rag-db-foundation
       - service-integration
       - tenant-chat-smoke
     runs-on: ubuntu-latest
@@ -391,6 +512,7 @@ jobs:
           REPOSITORY_CONTRACTS_RESULT: ${{ needs.repository-contracts.result }}
           APPLICATION_VERIFICATION_RESULT: ${{ needs.application-verification.result }}
           GATEWAY_RACE_RESULT: ${{ needs.gateway-race.result }}
+          RAG_DB_FOUNDATION_RESULT: ${{ needs.rag-db-foundation.result }}
           SERVICE_INTEGRATION_RESULT: ${{ needs.service-integration.result }}
           TENANT_CHAT_SMOKE_RESULT: ${{ needs.tenant-chat-smoke.result }}
         shell: bash
@@ -401,6 +523,7 @@ jobs:
             "$REPOSITORY_CONTRACTS_RESULT" \
             "$APPLICATION_VERIFICATION_RESULT" \
             "$GATEWAY_RACE_RESULT" \
+            "$RAG_DB_FOUNDATION_RESULT" \
             "$SERVICE_INTEGRATION_RESULT" \
             "$TENANT_CHAT_SMOKE_RESULT"; do
             if [[ "$result" != "success" ]]; then

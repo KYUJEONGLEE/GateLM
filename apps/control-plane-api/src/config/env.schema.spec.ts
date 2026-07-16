@@ -21,6 +21,12 @@ describe('validateEnv', () => {
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(60000);
     expect(env.DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS).toBe(60000);
     expect(env.DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS).toBe(900000);
+    expect(env.TENANT_CHAT_RAG_ENABLED).toBe('false');
+    expect(env.RAG_EMBEDDING_PROVIDER).toBe('openai');
+    expect(env.RAG_EMBEDDING_MODEL).toBe('text-embedding-3-large');
+    expect(env.RAG_EMBEDDING_DIMENSIONS).toBe(1536);
+    expect(env.RAG_EMBEDDING_PROFILE_VERSION).toBe(1);
+    expect(env.RAG_DISTANCE_METRIC).toBe('cosine');
   });
 
   it('accepts a bounded Tenant Chat cache key-set identifier', () => {
@@ -170,6 +176,17 @@ describe('validateEnv', () => {
     expect(env.TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN).toBe(
       'prod-chat-service-token-1234567890abcdef',
     );
+  });
+
+  it.each([
+    ['TENANT_CHAT_RAG_ENABLED', 'enabled'],
+    ['RAG_EMBEDDING_PROVIDER', 'unsupported'],
+    ['RAG_EMBEDDING_MODEL', 'text-embedding-3-small'],
+    ['RAG_EMBEDDING_DIMENSIONS', '3072'],
+    ['RAG_EMBEDDING_PROFILE_VERSION', '2'],
+    ['RAG_DISTANCE_METRIC', 'euclidean'],
+  ])('rejects invalid fixed RAG setting %s', (key, value) => {
+    expect(() => validateEnv({ ...baseEnv(), [key]: value })).toThrow(key);
   });
 
   function baseEnv() {
