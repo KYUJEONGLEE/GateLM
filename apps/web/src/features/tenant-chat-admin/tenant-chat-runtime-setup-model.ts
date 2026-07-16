@@ -76,7 +76,7 @@ export function selectTenantChatSharedFallbackModelRef(
 ): string | null {
   const fallbackProfiles = routingCategories.flatMap((category) =>
     routingDifficulties.map((difficulty) =>
-      routes[category][difficulty].modelRefs.slice(1)
+      (routes[category]?.[difficulty]?.modelRefs ?? []).slice(1)
     )
   );
   const firstProfile = fallbackProfiles[0] ?? [];
@@ -118,16 +118,15 @@ export function updateTenantChatPrimaryModelRef(
 
 export function applyTenantChatSharedFallbackModelRef(
   routes: TenantChatRoutingMatrix,
-  fallbackModelRef: string
+  fallbackModelRef: string,
+  manualModelRef = ""
 ): TenantChatRoutingMatrix {
-  const primaryModelRefs = new Set(
-    routingCategories.flatMap((category) =>
-      routingDifficulties.map(
-        (difficulty) => routes[category][difficulty].modelRefs[0]
-      )
+  if (
+    fallbackModelRef &&
+    getTenantChatFallbackExcludedModelRefs(routes, manualModelRef).has(
+      fallbackModelRef
     )
-  );
-  if (fallbackModelRef && primaryModelRefs.has(fallbackModelRef)) {
+  ) {
     return routes;
   }
 
@@ -144,4 +143,23 @@ export function applyTenantChatSharedFallbackModelRef(
     }
   }
   return next;
+}
+
+export function getTenantChatFallbackExcludedModelRefs(
+  routes: TenantChatRoutingMatrix,
+  manualModelRef = ""
+): Set<string> {
+  const modelRefs = new Set<string>();
+  for (const category of routingCategories) {
+    for (const difficulty of routingDifficulties) {
+      const primaryModelRef = routes[category]?.[difficulty]?.modelRefs?.[0];
+      if (primaryModelRef) {
+        modelRefs.add(primaryModelRef);
+      }
+    }
+  }
+  if (manualModelRef) {
+    modelRefs.add(manualModelRef);
+  }
+  return modelRefs;
 }

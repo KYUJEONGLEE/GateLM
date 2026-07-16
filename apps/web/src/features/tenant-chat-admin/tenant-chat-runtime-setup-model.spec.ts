@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import type { TenantChatAdminRuntimeSetup } from "@/lib/control-plane/tenant-chat-runtime-types";
 import {
   applyTenantChatSharedFallbackModelRef,
+  getTenantChatFallbackExcludedModelRefs,
   getTenantChatSetupStep,
   selectTenantChatSharedFallbackModelRef,
   selectTenantChatModelKey,
@@ -161,6 +162,32 @@ test("Chat App routing projects one shared fallback into every routing cell", ()
   expect(
     applyTenantChatSharedFallbackModelRef(withFallback, "").general.simple.modelRefs
   ).toEqual(["tc_gemini_flash"]);
+});
+
+test("Chat App routing rejects malformed shared fallback profiles without throwing", () => {
+  const withFallback = applyTenantChatSharedFallbackModelRef(
+    setupWithRoutes().activeSnapshot!.routes,
+    "tc_tiered"
+  );
+  const malformed = {
+    ...withFallback,
+    reasoning: {
+      ...withFallback.reasoning,
+      complex: undefined
+    }
+  } as unknown as typeof withFallback;
+
+  expect(selectTenantChatSharedFallbackModelRef(malformed)).toBeNull();
+});
+
+test("Chat App routing excludes automatic and fixed primary models from fallback", () => {
+  const routes = setupWithRoutes().activeSnapshot!.routes;
+  const excluded = getTenantChatFallbackExcludedModelRefs(routes, "tc_tiered");
+
+  expect([...excluded]).toEqual(["tc_gemini_flash", "tc_tiered"]);
+  expect(
+    applyTenantChatSharedFallbackModelRef(routes, "tc_tiered", "tc_tiered")
+  ).toBe(routes);
 });
 
 test("Chat App routing keeps existing fallback candidates when a primary changes", () => {

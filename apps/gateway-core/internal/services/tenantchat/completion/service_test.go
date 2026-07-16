@@ -159,6 +159,39 @@ func TestServiceManualRoutingIncludesSharedFallbackCandidate(t *testing.T) {
 	}
 }
 
+func TestSharedTenantChatFallbackModelRefsRejectsCellsWithoutFallback(t *testing.T) {
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary", "tc_fallback"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{Simple: sharedCell, Complex: sharedCell}
+
+	tests := []struct {
+		name   string
+		routes tenantruntime.RoutingMatrix
+	}{
+		{name: "empty matrix", routes: tenantruntime.RoutingMatrix{}},
+		{
+			name: "later cell has no fallback",
+			routes: tenantruntime.RoutingMatrix{
+				General: sharedDifficulty,
+				Code: tenantruntime.RoutingDifficulty{
+					Simple:  tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary"}},
+					Complex: sharedCell,
+				},
+				Translation:   sharedDifficulty,
+				Summarization: sharedDifficulty,
+				Reasoning:     sharedDifficulty,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sharedTenantChatFallbackModelRefs(test.routes, "tc_manual"); got != nil {
+				t.Fatalf("expected no shared fallback, got %v", got)
+			}
+		})
+	}
+}
+
 func TestServiceRoutesAnExistingConversationByTheLatestUserMessage(t *testing.T) {
 	snapshot := completionRoutingSnapshot()
 	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{

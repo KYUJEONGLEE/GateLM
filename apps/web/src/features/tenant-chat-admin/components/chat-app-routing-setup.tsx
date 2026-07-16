@@ -27,6 +27,7 @@ import { ProviderFamilyIcon } from "@/features/provider-connections/components/p
 import { getTenantChatReturnPath } from "@/features/provider-connections/tenant-chat-setup-return";
 import {
   applyTenantChatSharedFallbackModelRef,
+  getTenantChatFallbackExcludedModelRefs,
   selectTenantChatSharedFallbackModelRef,
   updateTenantChatPrimaryModelRef
 } from "@/features/tenant-chat-admin/tenant-chat-runtime-setup-model";
@@ -245,18 +246,15 @@ export function ChatAppRoutingSetup({
     [providers]
   );
   const fallbackModelRef = selectTenantChatSharedFallbackModelRef(routes);
-  const primaryModelRefs = new Set(
-    categories.flatMap((category) =>
-      difficulties.map(
-        (difficulty) => routes[category.id][difficulty.id].modelRefs[0]
-      )
-    )
+  const fallbackExcludedModelRefs = getTenantChatFallbackExcludedModelRefs(
+    routes,
+    manualModelRef
   );
   const fallbackProviders = providers
     .map((provider) => ({
       ...provider,
       models: provider.models.filter(
-        (model) => !primaryModelRefs.has(model.modelRef)
+        (model) => !fallbackExcludedModelRefs.has(model.modelRef)
       )
     }))
     .filter((provider) => provider.models.length > 0);
@@ -343,7 +341,7 @@ export function ChatAppRoutingSetup({
 
   function updateFallback(modelRef: string) {
     setRoutes((current) =>
-      applyTenantChatSharedFallbackModelRef(current, modelRef)
+      applyTenantChatSharedFallbackModelRef(current, modelRef, manualModelRef)
     );
     setFeedback(null);
   }

@@ -498,11 +498,14 @@ func sharedTenantChatFallbackModelRefs(
 	manualModelRef string,
 ) []string {
 	cells := routes.Cells()
-	if len(cells) == 0 {
+	if len(cells) == 0 || len(cells[0].ModelRefs) < 2 {
 		return nil
 	}
 	shared := cells[0].ModelRefs[1:]
 	for _, cell := range cells[1:] {
+		if len(cell.ModelRefs) < 2 {
+			return nil
+		}
 		candidate := cell.ModelRefs[1:]
 		if len(candidate) != len(shared) {
 			return nil
