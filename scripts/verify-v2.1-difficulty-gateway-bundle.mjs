@@ -208,7 +208,7 @@ for (const requiredText of [
 for (const requiredText of [
   "DownloadMissingNativePackages",
   "https://github.com/daulet/tokenizers/releases/download/v1.23.0/libtokenizers.linux-amd64.tar.gz",
-  "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1",
+  "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg",
   expectedLock.tokenizerNativeArchiveSha256,
   expectedLock.onnxRuntimePackageSha256,
 ]) {
