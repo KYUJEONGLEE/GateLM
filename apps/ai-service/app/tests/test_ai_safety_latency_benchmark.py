@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
 from app.core.config import Settings
@@ -241,7 +241,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             ai_safety_ml_allowed_detector_types=("phone_number", "secret"),
             ai_safety_detector_runtime="onnx",
         )
-        fake_service = object()
+        fake_service = Mock()
         with patch("app.core.config.load_settings", return_value=settings), patch(
             "app.services.ai_safety_detector.AiSafetyDetectorService",
             return_value=fake_service,
@@ -249,6 +249,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             target = InProcessBenchmarkTarget.create(model_id="openai/privacy-filter")
 
         self.assertIs(target.service, fake_service)
+        fake_service.warmup.assert_called_once_with()
         service_class.assert_called_once_with(
             model_id="openai/privacy-filter",
             additional_model_ids=(),

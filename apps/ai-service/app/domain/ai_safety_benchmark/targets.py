@@ -136,13 +136,15 @@ class InProcessBenchmarkTarget:
         from app.services.ai_safety_detector import AiSafetyDetectorService
 
         settings = load_settings()
+        service = AiSafetyDetectorService(
+            model_id=model_id,
+            additional_model_ids=settings.ai_safety_additional_detector_model_ids,
+            detector_runtime=settings.ai_safety_detector_runtime,
+            ml_allowed_detector_types=settings.ai_safety_ml_allowed_detector_types,
+        )
+        service.warmup()
         return cls(
-            service=AiSafetyDetectorService(
-                model_id=model_id,
-                additional_model_ids=settings.ai_safety_additional_detector_model_ids,
-                detector_runtime=settings.ai_safety_detector_runtime,
-                ml_allowed_detector_types=settings.ai_safety_ml_allowed_detector_types,
-            ),
+            service=service,
             model_id=model_id,
         )
 
