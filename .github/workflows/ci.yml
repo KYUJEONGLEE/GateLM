@@ -508,8 +508,8 @@ jobs:
             -f deploy/aws-triage/docker-compose.yml \
             build ai-service chat-web web
 
-  ci-gate:
-    name: CI gate
+  verification-gate:
+    name: verification gate
     if: always()
     needs:
       - repo-check
@@ -550,13 +550,15 @@ jobs:
 
   release-packaging:
     name: release packaging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [ci-gate]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    needs: [verification-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
-      - name: Checkout repository
+      - name: Checkout synthetic merge or pushed commit
         uses: actions/checkout@v7
 
       - name: Validate deployment manifests
@@ -592,3 +594,40 @@ jobs:
             chat-api \
             chat-web \
             web
+
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - verification-gate
+      - release-packaging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require verification and context-appropriate release packaging
+        env:
+          VERIFICATION_GATE_RESULT: ${{ needs.verification-gate.result }}
+          RELEASE_PACKAGING_RESULT: ${{ needs.release-packaging.result }}
+          RELEASE_PACKAGING_REQUIRED: >-
+            ${{
+              (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+              (github.event_name == 'pull_request' && github.base_ref == 'main')
+            }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$VERIFICATION_GATE_RESULT" != "success" ]]; then
+            echo "Verification gate did not succeed: $VERIFICATION_GATE_RESULT" >&2
+            exit 1
+          fi
+
+          if [[ "$RELEASE_PACKAGING_REQUIRED" == "true" ]]; then
+            if [[ "$RELEASE_PACKAGING_RESULT" != "success" ]]; then
+              echo "Release packaging is required but did not succeed: $RELEASE_PACKAGING_RESULT" >&2
+              exit 1
+            fi
+          elif [[ "$RELEASE_PACKAGING_RESULT" != "skipped" ]]; then
+            echo "Release packaging must be skipped outside main delivery: $RELEASE_PACKAGING_RESULT" >&2
+            exit 1
+          fi
