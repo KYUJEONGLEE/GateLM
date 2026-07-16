@@ -3,6 +3,7 @@ export type ConsoleSection = "monitoring" | "management";
 export type ManagementNavItem =
   | "api-keys"
   | "app-tokens"
+  | "chat-app"
   | "employees"
   | "policies"
   | "project"
@@ -61,9 +62,11 @@ export function getConsoleNavigationState(pathname: string | null): ConsoleNavig
         activeManagementItem: "policies",
         activeSection: "management"
       };
+    case "chat-app":
     case "tenants":
+    case "tenant-chat":
       return {
-        activeManagementItem: "tenant",
+        activeManagementItem: "chat-app",
         activeSection: "management"
       };
     case "employees":
@@ -75,11 +78,6 @@ export function getConsoleNavigationState(pathname: string | null): ConsoleNavig
     case "model-catalog":
       return {
         activeManagementItem: "provider",
-        activeSection: "management"
-      };
-    case "tenant-chat":
-      return {
-        activeManagementItem: "tenant-chat",
         activeSection: "management"
       };
     case "teams":

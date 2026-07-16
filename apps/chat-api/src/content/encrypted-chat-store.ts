@@ -8,6 +8,7 @@ import {
   type AdmissionHandle,
   type ClientUsageIntent,
   type EphemeralMessage,
+  type TenantChatContextMode,
 } from '@/execution/execution.types';
 import type { JsonValue } from '@/execution/jcs';
 
@@ -331,7 +332,12 @@ export class EncryptedChatStore {
   async reserveTurn(
     actor: ChatActor,
     conversationId: string,
-    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
+    input: Readonly<{
+      idempotencyKey: string;
+      content: string;
+      contextMode: TenantChatContextMode;
+      usageIntent: ClientUsageIntent;
+    }>,
   ): Promise<ReservedTurn> {
     const binding = turnBinding(actor, conversationId, input);
     const signed = await this.integrity.sign(binding);
@@ -813,9 +819,14 @@ function createBinding(actor: ChatActor, idempotencyKey: string, title: string):
 function turnBinding(
   actor: ChatActor,
   conversationId: string,
-  input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
+  input: Readonly<{
+    idempotencyKey: string;
+    content: string;
+    contextMode: TenantChatContextMode;
+    usageIntent: ClientUsageIntent;
+  }>,
 ): JsonValue {
-  return {
+  const legacyBinding = {
     actor: actorValue(actor),
     content: input.content,
     conversationId,
@@ -823,7 +834,10 @@ function turnBinding(
     scope: TURN_SCOPE,
     usageIntent: input.usageIntent,
     version: 1,
-  } as unknown as JsonValue;
+  };
+  return (input.contextMode === 'single_turn'
+    ? { ...legacyBinding, contextMode: input.contextMode }
+    : legacyBinding) as unknown as JsonValue;
 }
 
 function actorValue(actor: ChatActor): JsonValue {

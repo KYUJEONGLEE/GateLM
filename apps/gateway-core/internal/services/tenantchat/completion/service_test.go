@@ -75,6 +75,74 @@ func TestServiceRelaysPrimaryStreamAndSettlesConfirmedUsage(t *testing.T) {
 	}
 }
 
+func TestServiceAppliesRoutingV2BeforeUsageReservation(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_cheap", ProviderID: "provider-openai", ModelKey: "gpt-mini",
+		},
+	}}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot},
+		usage,
+		&fakeProviderExecutor{stream: &fakeStream{}},
+	)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{{Role: "user", Content: "Hello"}}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare routed completion: %v", err)
+	}
+	defer execution.Close()
+	if usage.lastContext.Routing == nil {
+		t.Fatal("routing decision must be attached before usage reservation")
+	}
+	decision := usage.lastContext.Routing
+	if decision.ModelRef != "tc_cheap" || decision.Category != "general" || decision.Difficulty != "simple" {
+		t.Fatalf("unexpected routing decision: %+v", decision)
+	}
+}
+
+func TestServiceRoutesAnExistingConversationByTheLatestUserMessage(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_cheap", ProviderID: "provider-openai", ModelKey: "gpt-mini",
+		},
+	}}
+	providers := &fakeProviderExecutor{stream: &fakeStream{}}
+	service := New(&fakeSnapshotResolver{snapshot: snapshot}, usage, providers)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{
+		{Role: "user", Content: "Debug a race condition across multiple files, refactor the architecture, and preserve performance."},
+		{Role: "assistant", Content: "Here is the detailed architecture analysis."},
+		{Role: "user", Content: "Hello"},
+	}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare routed conversation: %v", err)
+	}
+	defer execution.Close()
+	if usage.lastContext.Routing == nil {
+		t.Fatal("routing decision must be attached before usage reservation")
+	}
+	decision := usage.lastContext.Routing
+	if decision.ModelRef != "tc_cheap" || decision.Category != "general" || decision.Difficulty != "simple" {
+		t.Fatalf("latest user message must determine the route: %+v", decision)
+	}
+	if len(providers.lastInput.Messages) != len(request.Input.Messages) {
+		t.Fatalf("provider input lost conversation history: got %d messages, want %d", len(providers.lastInput.Messages), len(request.Input.Messages))
+	}
+}
+
 func TestServiceFailsClosedBeforeReservationWhenExactCacheAdapterIsMissing(t *testing.T) {
 	snapshot := completionSnapshot()
 	snapshot.Policies.Cache.Enabled = true
@@ -628,6 +696,31 @@ func fallbackCompletionSnapshot() tenantruntime.Snapshot {
 	return snapshot
 }
 
+func completionRoutingSnapshot() tenantruntime.Snapshot {
+	snapshot := completionSnapshot()
+	cheap := tenantruntime.RoutingCell{ModelRefs: []string{"tc_cheap"}}
+	premium := tenantruntime.RoutingCell{ModelRefs: []string{"tc_premium"}}
+	difficulty := tenantruntime.RoutingDifficulty{Simple: cheap, Complex: premium}
+	snapshot.Policies.Routing = tenantruntime.RoutingPolicy{
+		Routes: []tenantruntime.RuntimeRoute{
+			{RouteID: "route_cheap", ModelRef: "tc_cheap", ProviderID: "provider-openai", ModelKey: "gpt-mini", Enabled: true},
+			{RouteID: "route_premium", ModelRef: "tc_premium", ProviderID: "provider-anthropic", ModelKey: "claude", Enabled: true},
+		},
+		Policy: &tenantruntime.RoutingPolicyV2Bridge{
+			SchemaVersion:     "gatelm.routing-policy.v2",
+			Mode:              "auto",
+			BootstrapState:    "configured",
+			RoutingPolicyHash: "sha256:919261eed2c088bafd316ea0e7f6f8746c332f3ef7766cc5fa97dfe269aec91c",
+			Routes: tenantruntime.RoutingMatrix{
+				General: difficulty, Code: difficulty, Translation: difficulty,
+				Summarization: difficulty, Reasoning: difficulty,
+			},
+		},
+		ManualModelRef: "tc_premium",
+	}
+	return snapshot
+}
+
 type fakeSnapshotResolver struct {
 	snapshot tenantruntime.Snapshot
 	err      error
@@ -675,6 +768,7 @@ type fakeUsageAccounting struct {
 	settlement   tenantchat.UsageSettlement
 	err          error
 	fallbackErr  error
+	lastContext  tenantchat.RequestContext
 
 	reserveCalls      int
 	startAttemptCalls int
@@ -702,10 +796,11 @@ func (f *fakeUsageAccounting) FinalizePreCall(context.Context, tenantchat.Reques
 	return f.settlement, f.err
 }
 
-func (f *fakeUsageAccounting) BeginExecution(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot) (tenantchat.UsageReservation, error) {
+func (f *fakeUsageAccounting) BeginExecution(_ context.Context, requestContext tenantchat.RequestContext, _ tenantruntime.Snapshot) (tenantchat.UsageReservation, error) {
 	index := f.reserveCalls
 	f.reserveCalls++
 	f.startAttemptCalls++
+	f.lastContext = requestContext
 	if index < len(f.reservations) {
 		return f.reservations[index], f.err
 	}
@@ -766,18 +861,20 @@ func (f *fakeUsageAccounting) ReadTerminal(context.Context, tenantchat.RequestCo
 }
 
 type fakeProviderExecutor struct {
-	stream   provider.ChatCompletionStreamReader
-	streams  []provider.ChatCompletionStreamReader
-	errors   []error
-	err      error
-	status   tenantchat.ProviderCallStartStatus
-	statuses []tenantchat.ProviderCallStartStatus
-	calls    int
+	stream    provider.ChatCompletionStreamReader
+	streams   []provider.ChatCompletionStreamReader
+	errors    []error
+	err       error
+	status    tenantchat.ProviderCallStartStatus
+	statuses  []tenantchat.ProviderCallStartStatus
+	calls     int
+	lastInput tenantchat.CompletionInput
 }
 
-func (f *fakeProviderExecutor) OpenStream(context.Context, tenantchat.RequestContext, tenantchat.SelectedRoute, tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
+func (f *fakeProviderExecutor) OpenStream(_ context.Context, _ tenantchat.RequestContext, _ tenantchat.SelectedRoute, input tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
 	index := f.calls
 	f.calls++
+	f.lastInput = input
 	if index < len(f.streams) {
 		var err error
 		if index < len(f.errors) {

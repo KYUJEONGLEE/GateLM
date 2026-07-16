@@ -72,15 +72,18 @@ export function renameConversationBody(value) {
 }
 
 export function createTurnBody(value) {
-  const body = record(value, ['content', 'idempotencyKey', 'usageIntent']);
+  const body = record(value, ['content', 'idempotencyKey', 'usageIntent'], ['contextMode']);
   if (typeof body.idempotencyKey !== 'string' || !IDEMPOTENCY_KEY.test(body.idempotencyKey)) invalid();
   if (typeof body.content !== 'string' || body.content.length < 1 || body.content.length > 20_000) invalid();
+  const contextMode = body.contextMode ?? 'conversation';
+  if (!['conversation', 'single_turn'].includes(contextMode)) invalid();
   const intent = record(body.usageIntent, ['cacheStrategy', 'maxOutputTokens', 'requestedTier']);
   if (!Number.isSafeInteger(intent.maxOutputTokens) || intent.maxOutputTokens < 1 || intent.maxOutputTokens > 8192) invalid();
   if (!['auto', 'high_quality', 'standard', 'economy'].includes(intent.requestedTier)) invalid();
   if (!['off', 'exact'].includes(intent.cacheStrategy)) invalid();
   return Object.freeze({
     content: body.content,
+    contextMode,
     idempotencyKey: body.idempotencyKey,
     usageIntent: Object.freeze({
       cacheStrategy: intent.cacheStrategy,

@@ -32,6 +32,22 @@ test('conversation inputs reject browser-provided scope and unknown keys', () =>
     idempotencyKey: '1234567890abcdef',
     usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
   }));
+  assert.throws(() => createTurnBody({
+    content: '질문',
+    contextMode: 'all_history',
+    idempotencyKey: '1234567890abcdef',
+    usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
+  }));
+});
+
+test('turn context mode defaults to conversation and accepts single-turn isolation', () => {
+  const base = {
+    content: '질문',
+    idempotencyKey: '1234567890abcdef',
+    usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
+  };
+  assert.equal(createTurnBody(base).contextMode, 'conversation');
+  assert.equal(createTurnBody({ ...base, contextMode: 'single_turn' }).contextMode, 'single_turn');
 });
 
 test('success response shaping rejects tenant or user scope fields', () => {

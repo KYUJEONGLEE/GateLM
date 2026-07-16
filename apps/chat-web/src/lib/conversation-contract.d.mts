@@ -26,6 +26,7 @@ export function createConversationBody(value: unknown): Readonly<{ idempotencyKe
 export function renameConversationBody(value: unknown): Readonly<{ expectedVersion: number; title: string }>;
 export function createTurnBody(value: unknown): Readonly<{
   content: string;
+  contextMode: 'conversation' | 'single_turn';
   idempotencyKey: string;
   usageIntent: Readonly<{ cacheStrategy: 'off' | 'exact'; maxOutputTokens: number; requestedTier: 'auto' | 'high_quality' | 'standard' | 'economy' }>;
 }>;

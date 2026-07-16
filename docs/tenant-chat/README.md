@@ -3,7 +3,7 @@
 상태: **Active implementation contract**
 적용 범위: 신규 Tenant Chat Product
 계약 revision: `tenant-chat/v1`
-기준일: 2026-07-12
+기준일: 2026-07-15
 소유 범위: Tenant Chat workstream
 
 이 디렉터리는 신규 Tenant Chat의 구현 기준이다. `proposal`이 아니라 구현 중 active로 간주하며, 명시적인 후속 ADR 또는 contract revision이 merge되기 전까지 구현 에이전트는 이 기준을 따른다.

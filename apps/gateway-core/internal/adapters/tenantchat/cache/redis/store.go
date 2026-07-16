@@ -40,6 +40,7 @@ type envelope struct {
 
 type fingerprintMaterial struct {
 	SnapshotDigest string                     `json:"snapshotDigest"`
+	ModelRef       string                     `json:"modelRef,omitempty"`
 	UsageIntent    *tenantchat.UsageIntent    `json:"usageIntent"`
 	Input          tenantchat.CompletionInput `json:"input"`
 }
@@ -174,6 +175,7 @@ func (s *Store) resolve(
 	fingerprintUsageIntent.EstimatedInputTokens = estimatedInputBytes(fingerprintInput.Messages)
 	material, err := json.Marshal(fingerprintMaterial{
 		SnapshotDigest: snapshot.Digest,
+		ModelRef:       routingModelRef(requestContext),
 		UsageIntent:    &fingerprintUsageIntent,
 		Input:          fingerprintInput,
 	})
@@ -185,6 +187,13 @@ func (s *Store) resolve(
 	fingerprint := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	namespace := strings.Join([]string{s.keyPrefix, tenantID, userID}, ":")
 	return keySet, namespace, fingerprint, nil
+}
+
+func routingModelRef(requestContext tenantchat.RequestContext) string {
+	if requestContext.Routing == nil {
+		return ""
+	}
+	return strings.TrimSpace(requestContext.Routing.ModelRef)
 }
 
 // A repeated latest user turn should address the cache entry created before its

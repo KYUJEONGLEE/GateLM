@@ -200,6 +200,43 @@ describe('ConversationService turn fan-out', () => {
     registry.release(reserved.turnId, handle);
   });
 
+  it('uses only the current user message when conversation context is disabled', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ replayed: false }),
+      completionHistory: jest.fn(),
+    };
+    const bridge = { admitAuthorized: jest.fn().mockResolvedValue(handle) };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'current only',
+      contextMode: 'single_turn',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(prepared.kind).toBe('execute');
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(store.reserveTurn).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved.conversationId,
+      expect.objectContaining({ contextMode: 'single_turn' }),
+    );
+    expect(store.completionHistory).not.toHaveBeenCalled();
+    expect(prepared.messages).toEqual([{ role: 'user', content: 'current only' }]);
+    expect(prepared.usageIntent.estimatedInputTokens).toBe(Buffer.byteLength('current only', 'utf8'));
+    registry.release(reserved.turnId, handle);
+  });
+
   it('cleans up the last admitted attachment when history preparation fails', async () => {
     const registry = new ActiveTurnRegistry();
     const reserved = reservedTurn('pending_admission');

@@ -42,6 +42,9 @@ export class TenantChatAdminRuntimeController {
         tenantId,
         providerConnectionId: body.providerConnectionId,
         modelKey: body.modelKey,
+        routingMode: body.routingMode,
+        manualModelRef: body.manualModelRef,
+        routes: body.routes,
         publishedBy,
       }),
     };

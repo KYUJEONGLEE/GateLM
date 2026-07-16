@@ -128,7 +128,7 @@ Browser
 -> workload JWT(admission) 발급
 -> private Gateway admission: request rate + active concurrency
 -> Chat API가 current user message를 encrypted store에 durable 기록
--> Chat API가 completed prior context만 bounded decrypt
+-> Chat API가 turn contextMode에 따라 completed prior context를 bounded decrypt하거나 current user message만 선택
 -> workload JWT(completion) 발급
 -> private Gateway completion이 admission/body/snapshot binding consume
 -> safety
@@ -224,14 +224,18 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 ### 7.1 관리자 Runtime 활성화
 
 - 관리자 wire는 [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json)을 따른다.
-- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 가격 지원 상태와 active snapshot metadata만 반환한다. credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
-- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 `providerConnectionId`와 `modelKey`만 받는다. Control Plane은 tenant scope, `projectId=null`, ACTIVE 상태, persisted `providerConfig.models` 포함 여부와 versioned 가격 catalog의 exact model entry를 다시 검증한다.
+- Web Console의 단일 authoring surface 이름은 `채팅 앱`이며 built-in Tenant Chat에만 적용한다. 과거 `회사 정책`과 `Tenant Chat` 메뉴는 이 화면으로 redirect하고 Project/Application routing 의미를 변경하지 않는다.
+- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태와 active 5×2 snapshot metadata만 반환한다. credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
+- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`를 받는다. 각 cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+- `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 기존 deterministic rule-based classifier가 안전 처리된 메시지에서 category/difficulty를 계산한 뒤 해당 cell의 첫 eligible ref를 사용한다. offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
+- compatibility 기간 동안 Control Plane은 과거 `providerConnectionId`+`modelKey` PUT을 동일 ref로 채운 manual 5×2 policy로 변환해 받을 수 있다. 이 legacy shape는 새 authoring wire가 아니며 RuntimeSnapshot의 명시적 Routing v2 bridge를 우회하지 않는다.
 - Provider family는 persisted `providerConfig.providerFamily`에서만 판정한다. client 입력이나 base URL 추론으로 가격을 선택하지 않는다.
-- 가격 catalog는 Provider/Model config data이며 DB/code enum이 아니다. 표준 on-demand text input/output 가격을 현재 pricing schema로 정확히 표현할 수 있는 exact model ID만 활성화한다. 알 수 없거나 tiered/modality-specific인 가격은 `pricing_unavailable`이다.
+- 가격은 현재 유효한 shared `model_pricing_rules`를 먼저 사용하고, Tenant Chat bundled catalog를 fallback으로 사용한다. 둘 다 없거나 안전한 정수 micro-USD 단가로 표현할 수 없으면 모델을 비활성화하지 않고 `pricingStatus=unavailable`, `pricingSource=unavailable`, monetary rate 0으로 pin한다.
+- 가격 미확인 모델은 Provider 호출과 token quota 적용이 가능하다. 이 상태의 monetary reservation/confirmed cost는 0으로 계산하되 UI/snapshot에 `unavailable`을 유지하며 known price처럼 표시하지 않는다. 이미 hard-block 상태인 tenant budget을 우회하지 않는다.
 - `modelKey`는 1~200자의 `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$`를 사용한다. Provider/model catalog의 점, 슬래시와 콜론을 지원하지만 whitespace와 control 문자는 허용하지 않는다.
-- 최초 활성화는 계약에 고정된 safe default policy를 조합한다. 재구성은 active snapshot의 rate/concurrency/quota/budget/cache/safety/streaming 및 employee notice version을 보존하고 routing/fallback/provider token rate/pricing만 새 선택으로 교체한다.
-- 동일 Provider/model, policy와 가격의 PUT은 active snapshot을 그대로 반환한다. 변경이 있으면 snapshot, policy, pricing version을 serializable transaction 안에서 각각 monotonic하게 증가시킨다.
-- 선택 모델 하나에 deterministic `standard`와 `economy` route를 만들고 fallback은 끈다. client-provided quota, budget, route 또는 publisher scope는 허용하지 않는다.
+- RuntimeSnapshot은 기존 concrete `policies.routing.routes[]`와 pricing provenance를 유지하면서 `policies.routing.policy`에 `gatelm.routing-policy.v2`, mode, bootstrap state, canonical hex policy hash와 5×2 matrix를 명시한다. concrete route에는 opaque `modelRef`를 포함하며 난이도와 `standard|economy` tier를 암묵 변환하지 않는다.
+- 최초 활성화는 계약에 고정된 safe default 비라우팅 policy를 조합한다. 재구성은 active snapshot의 rate/concurrency/quota/budget/cache/safety/streaming 및 employee notice version을 보존하고 routing/fallback/provider token rate/pricing만 새 선택으로 교체한다.
+- 동일 routing policy와 가격의 PUT은 active snapshot을 그대로 반환한다. 변경이 있으면 snapshot, policy, pricing version을 serializable transaction 안에서 각각 monotonic하게 증가시킨다.
 
 ### 7.2 Cache extensibility
 
@@ -252,7 +256,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - 현재 runtime/API/schema/UI 지원 전략은 `off|exact`다.
 - Semantic Cache는 닫힌 non-goal이 아니라 follow-up capability지만, backend API와 Gateway adapter가 없으므로 현재 DTO, published RuntimeSnapshot, Admin UI에 선택지를 노출하지 않는다.
 - cache adapter/interface, versioned policy discriminator, capabilities response는 후속 contract revision에서 `semantic` 전략을 추가할 수 있어야 한다.
-- exact cache는 tenant+user scoped, encrypted, history disabled면 off다.
+- exact cache는 tenant+user scoped, encrypted이며 실제 private completion에 전달된 message 배열을 fingerprint한다. `contextMode=single_turn`은 current user message만 fingerprint하므로 context 유지 여부와 cache hit을 독립적으로 검증할 수 있다.
 - exact cache outer key는 tenant+user namespace만 포함하고 keyed fingerprint는 Redis hash field로만 사용한다. value는 AES-256-GCM으로 암호화하며 confirmed primary 성공만 저장한다.
 - Semantic Cache를 구현할 때 tenant isolation, embedding/version, safety/policy/snapshot binding, content retention, invalidation, false-hit evaluation과 Admin API/UI를 별도 contract revision으로 고정한다.
 
@@ -273,7 +277,7 @@ Tenant Chat은 이를 단순한 세 상태로 구현한다.
 |---|---|---|
 | `normal` | 별도 경고 없음 | snapshot의 전체 eligible route 사용 |
 | `warning` | profile에 사용량 경고 | routing 변경 없음 |
-| `economy` | “절약 모드가 적용됨” | `high_quality` 제외, `standard|economy` route만 사용 |
+| `economy` | “예산/할당량 경고” | Routing v2의 category/difficulty 선택은 변경하지 않음 |
 | `blocked` | “관리자에게 한도 문의” | cache hit 외 새 provider call 차단 |
 
 MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced section에 둔다. 직원용 in-product 증액 승인 workflow는 후속 PR이며 MVP는 관리자 문의 안내와 admin quota 편집으로 끝낸다.
@@ -286,14 +290,14 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 | tenant monthly confirmed cost | budget의 80% | budget의 90% | budget의 100% |
 
 - tenant admin은 absolute limits와 threshold를 설정할 수 있다.
-- publish validator는 `0 < warning < economy < hardStop`과 최소 하나의 economy-eligible route를 요구한다.
+- publish validator는 `0 < warning < economy < hardStop`을 요구한다. Routing v2에는 tier 기반 economy route를 요구하지 않는다.
 - user period는 tenant-configured IANA timezone 기준 월이며 변경은 다음 period부터 적용한다.
 - tenant cost는 MVP에서 USD micro-unit과 pinned pricing version을 사용한다.
 
 ### 8.3 Reservation과 settlement
 
 1. exact cache miss에서 user token과 tenant cost의 current confirmed+reserved 상태를 확인한다.
-2. selected route의 bounded input estimate + max output 및 가격으로 conservative reservation을 한 transaction에서 만든다.
+2. selected route의 bounded input estimate + max output 및 pinned 가격으로 conservative reservation을 한 transaction에서 만든다. `pricingStatus=unavailable`이면 token reservation은 유지하고 monetary reservation만 0이다.
 3. hard stop을 넘으면 reservation 없이 차단한다.
 4. Provider call 직전 weighted token-rate를 소비한다.
 5. fallback이 필요하면 실제 호출 전에 추가 exposure를 atomic top-up한다. top-up이 실패하면 fallback을 호출하지 않는다.
@@ -459,7 +463,7 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 2. conversation ownership, request binding, cursor/idempotency bound를 확인한다.
 3. content-free turn identity를 reserve하고 기존 `authorizeAndAdmit`을 호출한다.
 4. admission 성공 뒤 user message ciphertext를 commit한다.
-5. user commit 뒤 completed prior history만 bounded decrypt하고 `complete`를 호출한다.
+5. user commit 뒤 `conversation`이면 completed prior history를 bounded decrypt하고, `single_turn`이면 history를 decrypt하지 않고 current user message만으로 `complete`를 호출한다.
 6. private Gateway SSE를 strict consume하며 Chat API-facing `accepted -> delta* -> final|error|cancelled` 순서를 유지한다.
 7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
 
@@ -467,7 +471,9 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - fresh successful `chat.turn.final`은 Gateway가 확정한 bounded `quotaState`와 `budgetState`를 전달한다. encrypted assistant만으로 재생하는 completed turn은 두 상태를 복원할 Chat API-owned 근거가 없으므로 생략할 수 있으며, browser는 이를 새 정책 상태로 추정하지 않는다.
 - successful assistant history와 `chat.turn.final`은 Gateway가 확정한 bounded `effectiveModelKey`를 선택적으로 포함한다. Chat API는 이를 assistant message와 함께 저장하며 legacy row 또는 Gateway가 모델을 확정하지 못한 경우 생략한다. Provider connection, fallback attempt, credential과 비용 상세는 직원 응답에 포함하지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 `cacheOutcome`을 선택적으로 포함한다. exact cache hit에서는 assistant history의 모델 표시를 생략하고 browser는 모델 호출이 없었다고 표시한다.
-- public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다.
+- public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. 별도 optional `contextMode`는 `conversation|single_turn`이며 미지정 시 기존 호환을 위해 `conversation`이다. `conversation`은 completed prior context와 current user message를 전달하고, `single_turn`은 encrypted history를 삭제하거나 변경하지 않은 채 current user message만 전달한다.
+- Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다. context mode는 actor, employee, tenant usage 귀속을 바꾸지 않으므로 confirmed ledger와 향후 DB-backed employee usage/cost aggregate는 동일 identity 경계를 유지한다.
+- context mode는 keyed turn request binding에 포함한다. legacy/default `conversation` binding shape는 그대로 유지하고 `single_turn`만 explicit discriminator를 추가해 같은 idempotency key로 mode를 바꾸는 replay를 `409 CHAT_IDEMPOTENCY_CONFLICT`로 거절한다.
 - attachment capacity는 admission 전에 reserve한다. admission 뒤 user persistence, history preparation 또는 local attachment activation이 실패하면 마지막 local attachment만 admission과 turn을 best effort cancel하고 reservation을 반드시 해제한다.
 - 느린 attachment의 response backpressure는 해당 응답에만 적용하며 공유 Provider stream과 final persistence를 막지 않는다. disconnect된 attachment handle은 취소 시도 결과와 무관하게 local registry에서 해제한다.
 - partial, interrupted, cancelled assistant와 Provider raw error는 저장하지 않는다. 이미 저장된 user message와 confirmed Gateway usage는 assistant persistence 실패 때문에 삭제·변조하지 않는다.

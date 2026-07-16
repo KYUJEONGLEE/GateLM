@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { getConsoleNavigationState } from "./console-navigation";
 
-test("tenant management route activates the tenant management nav item", () => {
+test("legacy company policy route activates the Chat App nav item", () => {
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/tenants")).toEqual({
-    activeManagementItem: "tenant",
+    activeManagementItem: "chat-app",
     activeSection: "management"
   });
 });
@@ -15,9 +15,13 @@ test("API management route activates the API Key management nav item", () => {
   });
 });
 
-test("Tenant Chat route activates the Tenant Chat management nav item", () => {
+test("Chat App and legacy Tenant Chat routes activate one management item", () => {
+  expect(getConsoleNavigationState("/tenants/tenant_demo_acme/chat-app")).toEqual({
+    activeManagementItem: "chat-app",
+    activeSection: "management"
+  });
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/tenant-chat")).toEqual({
-    activeManagementItem: "tenant-chat",
+    activeManagementItem: "chat-app",
     activeSection: "management"
   });
 });
