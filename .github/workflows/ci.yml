@@ -6,6 +6,10 @@ on:
   push:
     branches: [main, dev]
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -32,6 +36,12 @@ jobs:
           corepack enable
           corepack prepare pnpm@9.15.0 --activate
 
+      - name: Setup workflow linter Go runtime
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.25.12
+          cache: false
+
       - name: Check changed files for whitespace errors
         shell: bash
         run: |
@@ -53,6 +63,9 @@ jobs:
 
       - name: Verify current documentation
         run: pnpm verify:v2-docs
+
+      - name: Validate GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: Block committed secret files
         shell: bash
@@ -79,8 +92,8 @@ jobs:
         shell: bash
         run: bash deploy/aws-triage/scripts/tests/deploy-main-test.sh
 
-  application-verification:
-    name: application verification
+  repository-contracts:
+    name: repository and routing contracts
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -129,37 +142,68 @@ jobs:
           pnpm verify:v2.1-category-eval
           pnpm verify:v2.1-difficulty-eval
 
-      - name: Verify operator web
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm --filter @gatelm/web lint
-          pnpm --filter @gatelm/web build
+  application-verification:
+    name: application verification (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - operator-web
+          - tenant-chat-api
+          - tenant-chat-web
+          - legacy-application
 
-      - name: Verify Tenant Chat API
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm --filter @gatelm/chat-api typecheck
-          pnpm --filter @gatelm/chat-api test -- --runInBand
-          pnpm --filter @gatelm/chat-api build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: Verify Tenant Chat web
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm --filter @gatelm/chat-web lint
-          pnpm --filter @gatelm/chat-web test
-          pnpm --filter @gatelm/chat-web typecheck
-          pnpm --filter @gatelm/chat-web build
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
 
-      - name: Verify legacy application
+      - name: Setup pnpm
         shell: bash
         run: |
           set -euo pipefail
-          pnpm --filter @gatelm/application lint
-          pnpm --filter @gatelm/application typecheck
-          pnpm --filter @gatelm/application build
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify application
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.target }}" in
+            operator-web)
+              pnpm --filter @gatelm/web lint
+              pnpm --filter @gatelm/web build
+              ;;
+            tenant-chat-api)
+              pnpm --filter @gatelm/chat-api typecheck
+              pnpm --filter @gatelm/chat-api test -- --runInBand
+              pnpm --filter @gatelm/chat-api build
+              ;;
+            tenant-chat-web)
+              pnpm --filter @gatelm/chat-web lint
+              pnpm --filter @gatelm/chat-web test
+              pnpm --filter @gatelm/chat-web typecheck
+              pnpm --filter @gatelm/chat-web build
+              ;;
+            legacy-application)
+              pnpm --filter @gatelm/application lint
+              pnpm --filter @gatelm/application typecheck
+              pnpm --filter @gatelm/application build
+              ;;
+            *)
+              echo "Unknown application verification target: ${{ matrix.target }}" >&2
+              exit 1
+              ;;
+          esac
 
   gateway-race:
     name: gateway race and vet
@@ -186,10 +230,140 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -race ./...
 
+  service-integration:
+    name: PostgreSQL and Redis integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gatelm
+          POSTGRES_PASSWORD: gatelm
+          POSTGRES_DB: gatelm_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gatelm -d gatelm_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://gatelm:gatelm@localhost:5432/gatelm_ci?schema=public
+      TEST_DATABASE_URL: postgresql://gatelm:gatelm@localhost:5432/gatelm_ci
+      GATELM_TEST_DATABASE_URL: postgresql://gatelm:gatelm@localhost:5432/gatelm_ci
+      GATELM_TEST_REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Setup pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/gateway-core/go.mod
+          cache-dependency-path: apps/gateway-core/go.sum
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate and deploy all Prisma migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @gatelm/control-plane-api exec prisma validate
+          pnpm --filter @gatelm/control-plane-api exec prisma migrate deploy
+
+      - name: Run Control Plane database integration tests
+        run: pnpm --filter @gatelm/control-plane-api test -- --runInBand
+
+      - name: Run Gateway PostgreSQL and Redis integration tests
+        working-directory: apps/gateway-core
+        run: >-
+          go test -count=1
+          ./internal/adapters/employeepolicy/postgres
+          ./internal/adapters/employeepolicy/redis
+          ./internal/adapters/tenantchat/admission/postgres
+          ./internal/adapters/tenantchat/usage/postgres
+          ./internal/services/projectapplication/employeecost
+
+  tenant-chat-smoke:
+    name: Tenant Chat container smoke
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/gateway-core/go.mod
+          cache-dependency-path: apps/gateway-core/go.sum
+
+      - name: Validate production deployment manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file deploy/aws-triage/.env.example \
+            -f deploy/aws-triage/docker-compose.yml \
+            config --quiet
+          docker compose \
+            --env-file deploy/selfhost/.env.example \
+            -f deploy/selfhost/docker-compose.yml \
+            config --quiet
+
+      - name: Run encrypted Tenant Chat and usage smoke with mock provider
+        shell: pwsh
+        run: ./scripts/dev/tenant-chat-encrypted-conversation-smoke.ps1
+
+      - name: Build remaining production images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file deploy/aws-triage/.env.example \
+            -f deploy/aws-triage/docker-compose.yml \
+            build ai-service chat-web web
+
+      - name: Print container logs on failure
+        if: failure()
+        shell: bash
+        run: docker compose -f docker-compose.yml -f scripts/dev/docker-compose.tenant-chat-execution.yml logs --no-color
+
   release-packaging:
     name: release packaging
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-    needs: [repo-check, application-verification, gateway-race]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [repo-check, repository-contracts, application-verification, gateway-race, service-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
