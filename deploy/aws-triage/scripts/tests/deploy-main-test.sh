@@ -89,9 +89,22 @@ grep -Fq "id-token: write" "${WORKFLOW_FILE}" || fail "OIDC permission is missin
 grep -Fq "name: production" "${WORKFLOW_FILE}" || fail "production environment is missing"
 grep -Fq "517a711dbcd0e402f90c77e7e2f81e849156e31d" "${WORKFLOW_FILE}" || \
   fail "AWS credentials action is not pinned"
-if grep -Fq 'secrets.' "${WORKFLOW_FILE}"; then
-  fail "The deployment workflow must not use long-lived GitHub secrets"
-fi
+for required_smoke_secret in \
+  'secrets.TENANT_CHAT_SMOKE_EMAIL' \
+  'secrets.TENANT_CHAT_SMOKE_PASSWORD'
+do
+  grep -Fq "${required_smoke_secret}" "${WORKFLOW_FILE}" || \
+    fail "Required Tenant Chat smoke secret is missing: ${required_smoke_secret}"
+done
+unexpected_secret_references="$(
+  grep -oE 'secrets\.[A-Za-z_][A-Za-z0-9_]*' "${WORKFLOW_FILE}" | \
+    sort -u | \
+    grep -Fvx \
+      -e 'secrets.TENANT_CHAT_SMOKE_EMAIL' \
+      -e 'secrets.TENANT_CHAT_SMOKE_PASSWORD' || true
+)"
+[[ -z "${unexpected_secret_references}" ]] || \
+  fail "The deployment workflow contains an unexpected GitHub secret reference: ${unexpected_secret_references}"
 
 grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
