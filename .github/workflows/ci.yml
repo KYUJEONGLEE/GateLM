@@ -434,7 +434,6 @@ jobs:
 
   tenant-chat-smoke:
     name: Tenant Chat container smoke
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -493,10 +492,50 @@ jobs:
             -f deploy/aws-triage/docker-compose.yml \
             build ai-service chat-web web
 
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - repo-check
+      - repository-contracts
+      - application-verification
+      - gateway-race
+      - rag-db-foundation
+      - service-integration
+      - tenant-chat-smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require every CI verification job
+        env:
+          REPO_CHECK_RESULT: ${{ needs.repo-check.result }}
+          REPOSITORY_CONTRACTS_RESULT: ${{ needs.repository-contracts.result }}
+          APPLICATION_VERIFICATION_RESULT: ${{ needs.application-verification.result }}
+          GATEWAY_RACE_RESULT: ${{ needs.gateway-race.result }}
+          RAG_DB_FOUNDATION_RESULT: ${{ needs.rag-db-foundation.result }}
+          SERVICE_INTEGRATION_RESULT: ${{ needs.service-integration.result }}
+          TENANT_CHAT_SMOKE_RESULT: ${{ needs.tenant-chat-smoke.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for result in \
+            "$REPO_CHECK_RESULT" \
+            "$REPOSITORY_CONTRACTS_RESULT" \
+            "$APPLICATION_VERIFICATION_RESULT" \
+            "$GATEWAY_RACE_RESULT" \
+            "$RAG_DB_FOUNDATION_RESULT" \
+            "$SERVICE_INTEGRATION_RESULT" \
+            "$TENANT_CHAT_SMOKE_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              echo "Required CI job did not succeed: $result" >&2
+              exit 1
+            fi
+          done
+
   release-packaging:
     name: release packaging
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [repo-check, repository-contracts, application-verification, gateway-race, service-integration, rag-db-foundation]
+    needs: [ci-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
