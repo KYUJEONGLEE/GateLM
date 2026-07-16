@@ -19,6 +19,18 @@ const aad: ContentAad = {
   role: 'user',
   contentKeyVersion: 1,
 };
+const policyDigest = `sha256:${'A'.repeat(43)}`;
+const sanitizedAad: ContentAad = {
+  schemaVersion: 2,
+  tenantId: aad.tenantId,
+  conversationId: aad.conversationId,
+  recordId: aad.recordId,
+  contentKind: 'message',
+  role: 'user',
+  contentKeyVersion: 1,
+  safetyStatus: 'sanitized',
+  safetyPolicyDigest: policyDigest,
+};
 
 describe('Tenant Chat content crypto', () => {
   it('round-trips AES-256-GCM content with canonical record AAD', () => {
@@ -28,6 +40,37 @@ describe('Tenant Chat content crypto', () => {
       expect(decryptContent(key, encrypted, aad)).toBe('synthetic-content');
       expect(encrypted.nonce).toHaveLength(12);
       expect(encrypted.tag).toHaveLength(16);
+    } finally {
+      key.fill(0);
+    }
+  });
+
+  it('binds sanitized provenance into the v2 message AAD', () => {
+    const key = newTenantKey();
+    try {
+      const encrypted = encryptContent(key, '[EMAIL_1]', sanitizedAad);
+      expect(encrypted.schemaVersion).toBe(2);
+      expect(decryptContent(key, encrypted, sanitizedAad)).toBe('[EMAIL_1]');
+      expect(() => decryptContent(key, encrypted, {
+        ...sanitizedAad,
+        safetyPolicyDigest: `sha256:${'B'.repeat(43)}`,
+      })).toThrow(ContentIntegrityError);
+    } finally {
+      key.fill(0);
+    }
+  });
+
+  it('rejects invalid role and safety combinations before encryption', () => {
+    const key = newTenantKey();
+    try {
+      expect(() => encryptContent(key, 'synthetic-content', {
+        ...sanitizedAad,
+        role: 'assistant',
+      } as ContentAad)).toThrow(ContentIntegrityError);
+      expect(() => encryptContent(key, 'synthetic-content', {
+        ...sanitizedAad,
+        safetyPolicyDigest: null,
+      } as ContentAad)).toThrow(ContentIntegrityError);
     } finally {
       key.fill(0);
     }

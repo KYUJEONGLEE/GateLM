@@ -2,10 +2,14 @@ import type { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
 import type { AdmissionHandle, CompleteOptions, CompletionResult } from '@/execution/execution.types';
+import { PrivateGatewayError } from '@/execution/private-gateway.client';
 
 import { ActiveTurnRegistry } from './active-turn-registry';
 import { ConversationService, type PreparedTurn } from './conversation.service';
 import type { MessageView } from './encrypted-chat-store';
+
+const OLD_POLICY_DIGEST = `sha256:${'A'.repeat(43)}`;
+const CURRENT_POLICY_DIGEST = `sha256:${'B'.repeat(43)}`;
 
 describe('ConversationService turn fan-out', () => {
   it('releases an early-disconnected attachment after cancellation attempts', async () => {
@@ -113,16 +117,29 @@ describe('ConversationService turn fan-out', () => {
     const registry = new ActiveTurnRegistry();
     const reserved = reservedTurn('pending_admission');
     const messages = Object.freeze([
-      Object.freeze({ role: 'assistant' as const, content: '한' }),
-      Object.freeze({ role: 'user' as const, content: 'abc' }),
+      Object.freeze({
+        id: '00000000-0000-4000-8000-000000000410',
+        turnId: '00000000-0000-4000-8000-000000000411',
+        role: 'assistant' as const,
+        content: '한',
+        safetyStatus: 'provider_generated' as const,
+        safetyPolicyDigest: null,
+      }),
     ]);
     const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const persistedUser = userMessage('abc');
     const store = {
       reserveTurn: jest.fn().mockResolvedValue(reserved),
-      persistAdmittedUser: jest.fn().mockResolvedValue({ replayed: false }),
-      completionHistory: jest.fn().mockResolvedValue(messages),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ message: persistedUser, replayed: false }),
+      completionHistory: jest.fn().mockResolvedValue({ messages, placeholderCounters: {} }),
     };
-    const bridge = { admitAuthorized: jest.fn().mockResolvedValue(handle) };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockResolvedValue({
+        messages: [{ itemIndex: 0, content: 'abc' }],
+        policyDigest: CURRENT_POLICY_DIGEST,
+      }),
+    };
     const service = serviceWith({
       store,
       bridge,
@@ -144,7 +161,295 @@ describe('ConversationService turn fan-out', () => {
       requestedTier: 'standard',
       cacheStrategy: 'exact',
     });
+    expect(bridge.sanitize).toHaveBeenCalledWith(handle, {
+      messages: [{ role: 'user', content: 'abc' }],
+    });
+    expect(prepared.userMessage).toEqual(persistedUser);
     registry.release(reserved.turnId, handle);
+  });
+
+  it('persists only sanitized current content and migrates selected legacy user history', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const history = Object.freeze([
+      Object.freeze({
+        id: '00000000-0000-4000-8000-000000000420',
+        turnId: '00000000-0000-4000-8000-000000000421',
+        role: 'user' as const,
+        content: '[EMAIL_3]',
+        safetyStatus: 'sanitized' as const,
+        safetyPolicyDigest: OLD_POLICY_DIGEST,
+      }),
+      Object.freeze({
+        id: '00000000-0000-4000-8000-000000000422',
+        turnId: '00000000-0000-4000-8000-000000000423',
+        role: 'user' as const,
+        content: '010-1234-5678',
+        safetyStatus: 'legacy_unverified' as const,
+        safetyPolicyDigest: null,
+      }),
+      Object.freeze({
+        id: '00000000-0000-4000-8000-000000000424',
+        turnId: '00000000-0000-4000-8000-000000000425',
+        role: 'assistant' as const,
+        content: '확인',
+        safetyStatus: 'provider_generated' as const,
+        safetyPolicyDigest: null,
+      }),
+    ]);
+    const persistedUser = userMessage('[EMAIL_4]');
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      completionHistory: jest.fn().mockResolvedValue({
+        messages: history,
+        placeholderCounters: { EMAIL: 3 },
+      }),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ message: persistedUser, replayed: false }),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockResolvedValue({
+        messages: [
+          { itemIndex: 0, content: '[PHONE_NUMBER_1]' },
+          { itemIndex: 1, content: '[EMAIL_4]' },
+        ],
+        policyDigest: CURRENT_POLICY_DIGEST,
+      }),
+    };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'new@example.com',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(bridge.sanitize).toHaveBeenCalledWith(handle, {
+      messages: [
+        { role: 'user', content: '010-1234-5678' },
+        { role: 'user', content: 'new@example.com' },
+      ],
+      placeholderCounters: { EMAIL: 3 },
+    });
+    expect(store.persistAdmittedUser).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved,
+      '[EMAIL_4]',
+      CURRENT_POLICY_DIGEST,
+      handle,
+      [{ messageId: history[1]!.id, content: '[PHONE_NUMBER_1]' }],
+      CURRENT_POLICY_DIGEST,
+    );
+    expect(prepared).toMatchObject({
+      kind: 'execute',
+      userMessage: persistedUser,
+      messages: [
+        { role: 'user', content: '[EMAIL_3]', safety: { status: 'sanitized', policyDigest: OLD_POLICY_DIGEST } },
+        { role: 'user', content: '[PHONE_NUMBER_1]', safety: { status: 'sanitized', policyDigest: CURRENT_POLICY_DIGEST } },
+        { role: 'assistant', content: '확인', safety: { status: 'provider_generated' } },
+        { role: 'user', content: '[EMAIL_4]', safety: { status: 'sanitized', policyDigest: CURRENT_POLICY_DIGEST } },
+      ],
+    });
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(JSON.stringify({ messages: prepared.messages, userMessage: prepared.userMessage }))
+      .not.toContain('new@example.com');
+    expect(JSON.stringify({ messages: prepared.messages, userMessage: prepared.userMessage }))
+      .not.toContain('010-1234-5678');
+    registry.release(reserved.turnId, handle);
+  });
+
+  it('reuses an already-sanitized current message on an idempotent retry', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('user_persisted', true);
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const persistedUser = userMessage('[EMAIL_1]');
+    const existingCurrent = Object.freeze({
+      id: persistedUser.id,
+      turnId: persistedUser.turnId,
+      role: 'user' as const,
+      content: persistedUser.content,
+      safetyStatus: 'sanitized' as const,
+      safetyPolicyDigest: OLD_POLICY_DIGEST,
+    });
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      readCurrentUserSafety: jest.fn().mockResolvedValue(existingCurrent),
+      completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ message: persistedUser, replayed: true }),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn(),
+    };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'retry@example.com',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(bridge.sanitize).not.toHaveBeenCalled();
+    expect(store.completionHistory).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved.conversationId,
+      Buffer.byteLength('[EMAIL_1]'),
+    );
+    expect(store.persistAdmittedUser).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved,
+      '[EMAIL_1]',
+      OLD_POLICY_DIGEST,
+      handle,
+      [],
+      OLD_POLICY_DIGEST,
+    );
+    expect(prepared).toMatchObject({
+      kind: 'execute',
+      userMessage: persistedUser,
+      messages: [{
+        role: 'user',
+        content: '[EMAIL_1]',
+        safety: { status: 'sanitized', policyDigest: OLD_POLICY_DIGEST },
+      }],
+    });
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(JSON.stringify({ messages: prepared.messages, userMessage: prepared.userMessage }))
+      .not.toContain('retry@example.com');
+    registry.release(reserved.turnId, handle);
+  });
+
+  it('marks a safety-blocked turn failed without cancelling the consumed admission', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
+      persistAdmittedUser: jest.fn(),
+      markTerminalFailure: jest.fn().mockResolvedValue(undefined),
+      cancelTurn: jest.fn(),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockRejectedValue(new PrivateGatewayError('CHAT_SAFETY_BLOCKED', 403)),
+      cancel: jest.fn(),
+    };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'blocked@example.com',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).rejects.toMatchObject({ status: 403 });
+
+    expect(store.markTerminalFailure).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved.turnId,
+      'CHAT_SAFETY_BLOCKED',
+    );
+    expect(store.persistAdmittedUser).not.toHaveBeenCalled();
+    expect(store.cancelTurn).not.toHaveBeenCalled();
+    expect(bridge.cancel).not.toHaveBeenCalled();
+  });
+
+  it('records a terminal safety block even when the reservation is an idempotent replay', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission', true);
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
+      markTerminalFailure: jest.fn().mockResolvedValue(undefined),
+      cancelTurn: jest.fn(),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockRejectedValue(
+        new PrivateGatewayError('CHAT_SAFETY_BLOCKED', 403),
+      ),
+      cancel: jest.fn(),
+    };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'blocked@example.com',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).rejects.toMatchObject({ status: 403 });
+
+    expect(store.markTerminalFailure).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved.turnId,
+      'CHAT_SAFETY_BLOCKED',
+    );
+    expect(store.cancelTurn).not.toHaveBeenCalled();
+    expect(bridge.cancel).not.toHaveBeenCalled();
+  });
+
+  it('does not terminally mutate a shared turn when an idempotent contender loses', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('user_persisted', true);
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      readCurrentUserSafety: jest.fn().mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000401',
+        turnId: reserved.turnId,
+        role: 'user',
+        content: 'legacy@example.com',
+        safetyStatus: 'legacy_unverified',
+        safetyPolicyDigest: null,
+      }),
+      completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
+      persistAdmittedUser: jest.fn(),
+      markTerminalFailure: jest.fn(),
+      cancelTurn: jest.fn(),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockRejectedValue(
+        new PrivateGatewayError('CHAT_ADMISSION_EXPIRED', 409),
+      ),
+      cancel: jest.fn(),
+    };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'legacy@example.com',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).rejects.toMatchObject({ status: 409 });
+
+    expect(bridge.cancel).not.toHaveBeenCalled();
+    expect(store.cancelTurn).not.toHaveBeenCalled();
+    expect(store.markTerminalFailure).not.toHaveBeenCalled();
   });
 
   it('cleans up the last admitted attachment when history preparation fails', async () => {
@@ -255,6 +560,7 @@ function execution(
     }),
     handle,
     messages: Object.freeze([]),
+    userMessage: userMessage(),
     usageIntent: Object.freeze({
       estimatedInputTokens: 1,
       maxOutputTokens: 1,
@@ -262,6 +568,17 @@ function execution(
       cacheStrategy: 'exact' as const,
     }),
     signal: registry.register(turnId, handle, 4),
+  });
+}
+
+function userMessage(content = '[EMAIL_1]'): MessageView {
+  return Object.freeze({
+    id: '00000000-0000-4000-8000-000000000401',
+    turnId: '00000000-0000-4000-8000-000000000301',
+    role: 'user' as const,
+    content,
+    sequence: 1,
+    createdAt: '2026-07-14T00:00:00.000Z',
   });
 }
 
@@ -301,7 +618,7 @@ function completion(assistantContent: string): CompletionResult {
   });
 }
 
-function reservedTurn(state: string) {
+function reservedTurn(state: string, replayed = false) {
   return Object.freeze({
     conversationId: '00000000-0000-4000-8000-000000000300',
     turnId: '00000000-0000-4000-8000-000000000301',
@@ -309,7 +626,7 @@ function reservedTurn(state: string) {
     idempotencyKey: 'idempotency-key',
     cacheEpoch: 1n,
     state,
-    replayed: false,
+    replayed,
   });
 }
 

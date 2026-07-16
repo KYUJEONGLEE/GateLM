@@ -16,6 +16,14 @@ type snapshotResolver interface {
 type admissionStore interface {
 	Create(ctx context.Context, requestContext tenantchat.RequestContext, limits tenantchat.AdmissionLimits) (tenantchat.Admission, error)
 	Cancel(ctx context.Context, requestContext tenantchat.RequestContext) (tenantchat.AdmissionCancellation, error)
+	ValidateActive(ctx context.Context, requestContext tenantchat.RequestContext) error
+}
+
+func (s *Service) ValidateActive(ctx context.Context, requestContext tenantchat.RequestContext) error {
+	if s == nil || s.admissions == nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	return s.admissions.ValidateActive(ctx, requestContext)
 }
 
 type Service struct {

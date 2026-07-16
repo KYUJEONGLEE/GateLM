@@ -125,6 +125,8 @@ export class ConversationController {
         turnId: prepared.reserved.turnId,
         sequence,
         replayed: prepared.kind === 'replay' || prepared.reserved.replayed,
+        userMessageId: prepared.userMessage.id,
+        userContent: prepared.userMessage.content,
       });
       if (prepared.kind === 'replay') {
         sequence = await writeDeltas(response, prepared, prepared.message.content, sequence);

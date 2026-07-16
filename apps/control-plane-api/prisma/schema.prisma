@@ -1227,21 +1227,23 @@ model TenantChatTurn {
 }
 
 model TenantChatMessage {
-  id                String    @id @db.Uuid
-  conversationId    String    @map("conversation_id") @db.Uuid
-  tenantId          String    @map("tenant_id") @db.Uuid
-  userId            String    @map("user_id") @db.Uuid
-  turnId            String    @map("turn_id") @db.Uuid
-  requestId         String    @map("request_id")
-  role              String
-  sequence          BigInt
-  ciphertext        Bytes
-  nonce             Bytes
-  tag               Bytes
-  contentKeyVersion Int       @map("content_key_version")
-  schemaVersion     Int       @default(1) @map("schema_version")
-  expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                   String    @id @db.Uuid
+  conversationId       String    @map("conversation_id") @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  turnId               String    @map("turn_id") @db.Uuid
+  requestId            String    @map("request_id")
+  role                 String
+  sequence             BigInt
+  ciphertext           Bytes
+  nonce                Bytes
+  tag                  Bytes
+  contentKeyVersion    Int       @map("content_key_version")
+  schemaVersion        Int       @default(1) @map("schema_version")
+  safetyStatus         String    @default("legacy_unverified") @map("safety_status")
+  safetyPolicyDigest   String?   @map("safety_policy_digest")
+  expiresAt            DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   conversation TenantChatConversation @relation(fields: [conversationId, tenantId, userId], references: [id, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
   turn         TenantChatTurn         @relation(fields: [turnId, conversationId, tenantId, userId], references: [id, conversationId, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)

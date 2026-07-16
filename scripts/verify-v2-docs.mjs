@@ -634,8 +634,10 @@ function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
   const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
   const conversationOpenApiPath = "docs/tenant-chat/openapi/chat-conversation.openapi.json";
+  const chatTurnEventSchemaPath = "docs/tenant-chat/schemas/chat-turn-sse-event.schema.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
+  const contentDdlPath = "docs/tenant-chat/db/tenant-chat-content.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
   const usageVectorPath = "docs/tenant-chat/vectors/usage-event-vectors.json";
   const jwtVectorPath = "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json";
@@ -717,6 +719,16 @@ function assertTenantChatExecutableContract() {
     }
   }
 
+  const chatTurnEventSchema = readJson(chatTurnEventSchemaPath);
+  if (chatTurnEventSchema) {
+    const acceptedRequired = new Set(chatTurnEventSchema.$defs?.accepted?.allOf?.[1]?.required ?? []);
+    for (const field of ["userMessageId", "userContent"]) {
+      if (!acceptedRequired.has(field)) {
+        fail(`${chatTurnEventSchemaPath}: chat.turn.accepted must require ${field}`);
+      }
+    }
+  }
+
   const openApi = readJson(openApiPath);
   if (openApi) {
     if (openApi.openapi !== "3.1.0") {
@@ -726,6 +738,7 @@ function assertTenantChatExecutableContract() {
     const expectedPaths = {
       "/internal/v1/tenant-chat/admissions": ["200", "201", "400", "401", "409", "429", "503"],
       "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
+      "/internal/v1/tenant-chat/admissions/{admissionId}/sanitizations": ["200", "400", "401", "403", "409", "503"],
       "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
       "/internal/v1/tenant-chat/usage-receipts": ["200", "400", "401", "409", "503"],
     };
@@ -798,6 +811,19 @@ function assertTenantChatExecutableContract() {
         fail(`${openApiPath}: completion example bindingDigest does not match completion binding vector`);
       }
     }
+    const sanitizationExample = openApi.components?.examples?.SanitizationRequestExample?.value;
+    const sanitizationVector = openApiBindingVectors.find(
+      (vector) => vector.vectorId === "sanitization_employee_v1",
+    );
+    if (sanitizationExample && sanitizationVector) {
+      const payloadDigest = sha256Base64Url(canonicalizeJson(sanitizationExample.input));
+      if (payloadDigest !== sanitizationVector.bindingObject?.payloadDigest) {
+        fail(`${openApiPath}: sanitization example payload digest does not match sanitization binding vector`);
+      }
+      if (sanitizationExample.context?.bindingDigest !== sanitizationVector.expectedBindingDigest) {
+        fail(`${openApiPath}: sanitization example bindingDigest does not match sanitization binding vector`);
+      }
+    }
     for (const [exampleName, vectorId] of [
       ["AdmissionRequestExample", "admission_employee_v1"],
       ["CancelRequestExample", "cancel_employee_v1"],
@@ -857,6 +883,19 @@ function assertTenantChatExecutableContract() {
   }
   if (/cached_input|confirmed_cached_input/i.test(ddl)) {
     fail(`${ddlPath}: ambiguous cached_input naming is forbidden; use provider cache_read fields`);
+  }
+
+  const contentDdl = readText(contentDdlPath);
+  const normalizedContentDdl = contentDdl.replace(/\s+/g, " ").trim().toLowerCase();
+  for (const fragment of [
+    "safety_status text not null default 'legacy_unverified'",
+    "role = 'user' and safety_status = 'legacy_unverified' and safety_policy_digest is null",
+    "role = 'assistant' and safety_status = 'provider_generated' and safety_policy_digest is null",
+    "role = 'user' and safety_status = 'sanitized' and safety_policy_digest",
+  ]) {
+    if (!normalizedContentDdl.includes(fragment)) {
+      fail(`${contentDdlPath}: missing safety provenance fragment "${fragment}"`);
+    }
   }
   if (/\bDROP\s+(TABLE|COLUMN|TYPE)\b/i.test(ddl) || /\bALTER\s+TABLE\b[\s\S]*?\bDROP\b/i.test(ddl)) {
     fail(`${ddlPath}: destructive DROP statement is forbidden`);
@@ -1005,7 +1044,7 @@ function assertTenantChatExecutableContract() {
         fail(`${jwtVectorPath}: ${validationFailure}`);
       }
     }
-    for (const phase of ["admission", "completion", "cancel"]) {
+    for (const phase of ["admission", "sanitization", "completion", "cancel"]) {
       if (!phases.has(phase)) {
         fail(`${jwtVectorPath}: missing ${phase} payload`);
       }

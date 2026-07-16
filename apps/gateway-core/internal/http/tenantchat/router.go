@@ -36,6 +36,10 @@ type completionService interface {
 	Prepare(ctx context.Context, request domain.CompletionRequest) (completionservice.Execution, error)
 }
 
+type sanitizationService interface {
+	Sanitize(ctx context.Context, request domain.SanitizationRequest) (domain.SanitizationResponse, error)
+}
+
 type usageReceiptAuthenticator interface {
 	Authenticate(authorization string) bool
 }
@@ -45,12 +49,13 @@ type usageReceiptService interface {
 }
 
 type Handler struct {
-	auth         authenticator
-	admissions   admissionService
-	completions  completionService
-	receiptAuth  usageReceiptAuthenticator
-	receipts     usageReceiptService
-	maxBodyBytes int64
+	auth          authenticator
+	admissions    admissionService
+	completions   completionService
+	sanitizations sanitizationService
+	receiptAuth   usageReceiptAuthenticator
+	receipts      usageReceiptService
+	maxBodyBytes  int64
 }
 
 type Option func(*Handler)
@@ -58,6 +63,12 @@ type Option func(*Handler)
 func WithCompletionService(completions completionService) Option {
 	return func(handler *Handler) {
 		handler.completions = completions
+	}
+}
+
+func WithSanitizationService(sanitizations sanitizationService) Option {
+	return func(handler *Handler) {
+		handler.sanitizations = sanitizations
 	}
 }
 
@@ -78,11 +89,42 @@ func NewRouter(auth authenticator, admissions admissionService, maxBodyBytes int
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions", handler.admit)
 	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions/{admissionId}/cancel", handler.cancel)
+	mux.HandleFunc("POST /internal/v1/tenant-chat/admissions/{admissionId}/sanitizations", handler.sanitize)
 	mux.HandleFunc("POST /internal/v1/tenant-chat/completions", handler.complete)
 	if handler.receiptAuth != nil && handler.receipts != nil {
 		mux.HandleFunc("POST /internal/v1/tenant-chat/usage-receipts", handler.recordUsageReceipt)
 	}
 	return mux
+}
+
+func (h *Handler) sanitize(w http.ResponseWriter, r *http.Request) {
+	request := domain.SanitizationRequest{}
+	if err := h.decodeJSON(w, r, &request); err != nil ||
+		request.Context.AdmissionID != r.PathValue("admissionId") ||
+		domain.ValidateSanitizationInput(request.Input) != nil {
+		writeError(w, http.StatusBadRequest, "CHAT_INVALID_REQUEST", "Invalid tenant chat request.", 0)
+		return
+	}
+	if _, err := h.auth.Authenticate(
+		r.Context(),
+		r.Header.Get("Authorization"),
+		domain.PhaseSanitization,
+		request.Context,
+		request.Input,
+	); err != nil {
+		writeAuthenticationError(w, err)
+		return
+	}
+	if h.sanitizations == nil {
+		writeError(w, http.StatusServiceUnavailable, "CHAT_RUNTIME_UNAVAILABLE", "Tenant chat runtime is unavailable.", 1)
+		return
+	}
+	response, err := h.sanitizations.Sanitize(r.Context(), request)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) recordUsageReceipt(w http.ResponseWriter, r *http.Request) {

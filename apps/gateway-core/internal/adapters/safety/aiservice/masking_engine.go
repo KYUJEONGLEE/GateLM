@@ -194,7 +194,12 @@ func (e MaskingEngine) ApplyBatch(
 	}
 
 	startedAt := time.Now()
-	sidecarResult, err := e.detectBatch(ctx, inputs, policies)
+	sidecarResult, err := e.detectBatch(
+		ctx,
+		inputs,
+		policies,
+		placeholderCountersForRequests(requests),
+	)
 	if err != nil {
 		reason := sidecarFailureReason(err)
 		e.recordSidecarCall(startedAt, reason, "unknown")
@@ -303,6 +308,7 @@ func (e MaskingEngine) detectBatch(
 	ctx context.Context,
 	inputs []detectBatchInput,
 	policies []detectPolicy,
+	placeholderCounters map[string]int,
 ) (detectBatchResponse, error) {
 	callCtx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
@@ -313,7 +319,8 @@ func (e MaskingEngine) detectBatch(
 			ModelID: e.modelID,
 			Runtime: DefaultRuntime,
 		},
-		Inputs: inputs,
+		Inputs:              inputs,
+		PlaceholderCounters: placeholderCounters,
 		DetectorConfig: detectConfig{
 			DetectorSet:      e.detectorSet,
 			ReturnConfidence: false,
@@ -610,11 +617,28 @@ type detectRequest struct {
 }
 
 type detectBatchRequest struct {
-	ContractVersion string             `json:"contractVersion"`
-	Mode            string             `json:"mode"`
-	Model           detectModel        `json:"model"`
-	Inputs          []detectBatchInput `json:"inputs"`
-	DetectorConfig  detectConfig       `json:"detectorConfig"`
+	ContractVersion     string             `json:"contractVersion"`
+	Mode                string             `json:"mode"`
+	Model               detectModel        `json:"model"`
+	Inputs              []detectBatchInput `json:"inputs"`
+	PlaceholderCounters map[string]int     `json:"placeholderCounters,omitempty"`
+	DetectorConfig      detectConfig       `json:"detectorConfig"`
+}
+
+func placeholderCountersForRequests(requests []maskdomain.ApplyRequest) map[string]int {
+	var merged map[string]int
+	for _, request := range requests {
+		for prefix, count := range request.EntityScope.PlaceholderCounters() {
+			if count <= 0 || count <= merged[prefix] {
+				continue
+			}
+			if merged == nil {
+				merged = make(map[string]int)
+			}
+			merged[prefix] = count
+		}
+	}
+	return merged
 }
 
 type detectBatchInput struct {

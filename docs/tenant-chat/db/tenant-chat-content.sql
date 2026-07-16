@@ -152,6 +152,8 @@ CREATE TABLE tenant_chat_messages (
   tag bytea NOT NULL,
   content_key_version integer NOT NULL,
   schema_version integer NOT NULL DEFAULT 1,
+  safety_status text NOT NULL DEFAULT 'legacy_unverified',
+  safety_policy_digest text,
   expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_message_conversation_sequence_key UNIQUE (conversation_id, sequence),
@@ -164,8 +166,40 @@ CREATE TABLE tenant_chat_messages (
     REFERENCES tenant_chat_content_keys(tenant_id, content_key_version) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_message_role_check CHECK (role IN ('user', 'assistant')),
   CONSTRAINT tenant_chat_message_shape_check CHECK (
-    sequence >= 1 AND schema_version = 1 AND octet_length(ciphertext) BETWEEN 1 AND 1048576 AND
+    sequence >= 1 AND schema_version IN (1, 2) AND octet_length(ciphertext) BETWEEN 1 AND 1048576 AND
     octet_length(nonce) = 12 AND octet_length(tag) = 16
+  ),
+  CONSTRAINT tenant_chat_message_safety_provenance_check CHECK (
+    (
+      schema_version = 1
+      AND (
+        (
+          role = 'user'
+          AND safety_status = 'legacy_unverified'
+          AND safety_policy_digest IS NULL
+        )
+        OR (
+          role = 'assistant'
+          AND safety_status = 'provider_generated'
+          AND safety_policy_digest IS NULL
+        )
+      )
+    )
+    OR (
+      schema_version = 2
+      AND (
+        (
+          role = 'user'
+          AND safety_status = 'sanitized'
+          AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
+        )
+        OR (
+          role = 'assistant'
+          AND safety_status = 'provider_generated'
+          AND safety_policy_digest IS NULL
+        )
+      )
+    )
   )
 );
 
@@ -175,5 +209,12 @@ CREATE INDEX tenant_chat_message_expiry_idx
   ON tenant_chat_messages(expires_at, id)
   WHERE expires_at IS NOT NULL;
 
+-- Existing schema_version=1 user messages are legacy_unverified reader-only
+-- records; existing schema_version=1 assistant messages are marked
+-- provider_generated. A user row must never be metadata-only backfilled to
+-- schema_version=2 or included in Provider context until its plaintext is
+-- sanitized once and re-encrypted. New message writes use schema_version=2;
+-- AES-GCM message AAD binds safety_status and safety_policy_digest in addition
+-- to the v1 message AAD fields.
 -- Runtime Chat API roles receive only SELECT/INSERT/UPDATE/DELETE on these five tables.
 -- No table contains title/message plaintext, provider raw errors, credentials, or Authorization values.

@@ -41,6 +41,8 @@ revision: `tenant-chat/v1`
 - caller abort는 transport failure로 재시도하거나 reattach하지 않는다. Chat API private client는 내부 `499 CHAT_REQUEST_CANCELLED`로 즉시 중단하고 execution bridge가 admission/Provider cancel을 best effort로 시도한다.
 - 같은 `(tenantId,userId,idempotencyKey)`와 같은 binding은 provider를 다시 호출하지 않는다.
 - admission 최초 생성은 `201`, 같은 binding replay는 `200`과 `replayed=true`다.
+- sanitization transport retry는 같은 admission/request/turn/idempotency와 exact ordered input을 유지하고 새 JWT/JTI만 발급한다. 성공 응답을 받지 못한 retry는 safety를 다시 실행할 수 있지만 raw/processed content를 Gateway DB에 저장해 replay하지 않는다.
+- sanitization 성공은 admission을 active로 유지한다. `CHAT_SAFETY_BLOCKED`만 content-free ledgerless terminal transaction으로 admission을 consume하고 slot을 release하며 같은 request의 completion을 금지한다.
 - cancel 최초·동일 replay는 모두 `200`이다. 이미 consume/expire된 admission의 첫 cancel은 `409 CHAT_ADMISSION_EXPIRED`다.
 - completion의 in-flight replay는 같은 실행 stream에 attach한다. terminal replay는 provider 호출 없이 final event만 다시 보낸다. 둘 다 `200`이며 `Idempotency-Replayed: true`다.
 - Chat API는 같은 logical turn의 concurrent HTTP attachment를 하나의 completion promise와 AbortSignal로 fan-out한다. attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다. 늦게 attach한 응답은 이미 관측된 bounded delta부터 순서대로 replay하며 별도 Provider call을 만들지 않는다. 느린 attachment의 response backpressure는 해당 응답에만 적용하고 공유 Provider stream과 final persistence를 막지 않는다.
@@ -79,7 +81,7 @@ revision: `tenant-chat/v1`
 ### 4.1 Payload digest
 
 1. admission과 cancel의 `payloadDigest`는 zero-length byte string의 SHA-256이다.
-2. completion의 `payloadDigest`는 request의 `input` object를 RFC 8785 JSON Canonicalization Scheme(JCS)로 직렬화한 UTF-8 bytes의 SHA-256이다.
+2. sanitization과 completion의 `payloadDigest`는 각 request의 `input` object를 RFC 8785 JSON Canonicalization Scheme(JCS)로 직렬화한 UTF-8 bytes의 SHA-256이다.
 3. 표현은 `sha256:` + unpadded base64url digest다.
 4. Gateway는 수신 body로 payload digest를 다시 계산한다. Chat API가 보낸 digest 값을 신뢰하지 않는다.
 
@@ -93,7 +95,7 @@ revision: `tenant-chat/v1`
   "executionScope": {},
   "idempotencyKey": "<opaque>",
   "payloadDigest": "sha256:<base64url>",
-  "phase": "admission|completion|cancel",
+  "phase": "admission|sanitization|completion|cancel",
   "requestId": "<opaque>",
   "snapshotDigest": "sha256:<base64url>",
   "snapshotVersion": 1,
@@ -191,7 +193,14 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - Gateway는 DB body를 다시 digest하고 요청의 version/digest와 exact match할 때만 실행한다.
 - pricing은 snapshot에 `version`, `digest`, `effectiveAt`, USD micro-unit 단가를 immutable하게 pin한다. pricing digest는 pricing object에서 `digest`를 제거한 뒤 같은 RFC 8785/SHA-256/base64url 규칙으로 계산한다.
 - attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
-- `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. safety는 cache/routing/Provider보다 먼저 실행하고 redacted input만 다음 단계에 전달한다.
+- `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. 새 user input은 cache/routing/Provider와 encrypted persistence보다 먼저 sanitization하고 redacted content만 Chat API에 반환한다.
+- 저장 전 sanitization은 `policies.safety.enabled=true`이고 detector set과 masking engine이 모두 준비된 경우에만 성공한다. 비활성화·미구성 상태에서 raw input을 그대로 `sanitized`로 인증하지 않으며 `CHAT_RUNTIME_UNAVAILABLE`로 fail closed한다.
+- sanitization request `messages`는 1~64개의 ordered `{role:user,content}`이며 index는 배열 위치로 암묵적으로 정한다. optional `placeholderCounters`는 `EMAIL`, `PERSON`처럼 실제 masked text에 쓰는 허용된 uppercase placeholder prefix에서 이미 할당한 최대 suffix 정수로의 bounded map이고 detector type이나 raw entity mapping을 포함하지 않는다.
+- sanitization response는 exact-cardinality ordered `{itemIndex,content}`와 pinned `policyDigest`만 반환한다. `itemIndex`는 0부터 연속하며 request 위치와 같아야 한다. partial, duplicate, reorder, blank result, digest mismatch는 전체 응답을 폐기하고 user ciphertext를 쓰지 않는다.
+- normal turn은 current user 한 건만 sanitization한다. 여러 item은 schema v1/null-provenance history를 한 번 재암호화하는 bounded migration에만 허용하며, 같은 v2 history를 매 요청 다시 검사하는 용도로 사용하지 않는다.
+- completion input은 stored message마다 optional `safety` provenance를 전달한다. user `sanitized`는 policy digest가 필수이고 assistant `provider_generated`는 digest를 금지한다. 현재 user digest는 admission에 pinned된 safety policy와 같아야 한다. 과거 user digest는 처음 처리한 immutable provenance이며 policy publish만으로 매 turn 재검사하지 않는다.
+- Chat API는 message ciphertext와 provenance를 schema v2 AES-GCM AAD로 함께 인증하고, workload JWT `bindingDigest`가 provenance를 포함한 exact completion input을 서명한다. Gateway admission row에 별도 sanitized 상태를 기록하는 것은 이 revision의 신뢰 경계가 아니다.
+- schema v1 user, missing/invalid provenance와 role/status mismatch는 `legacy_unverified`다. 이를 trusted로 backfill하지 않고 one-time sanitize+v2 re-encryption 전에는 Chat API가 provider input에서 제외하거나 fail closed하며, Gateway는 수신 시 trusted로 skip하지 않고 방어적으로 safety 처리한다.
 - `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
 - `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
 - 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, exact cache off, email redact/API-key block safety, streaming `120s`와 required final이다.
@@ -239,7 +248,7 @@ admitted -> reserved -> settled
 - projector는 일반 terminal event를 snapshot 값으로 투영하고, `schemaVersion=2`, `eventType=usage_settled`, `lateUsage=true`에 한해 기존 confirmed 합계에 delta를 누적한다.
 - ledger 이전 rate/concurrency/policy/runtime block은 `invocation_terminal`을 admission transaction의 outbox에 기록한다. content와 usage delta는 없으며 Dashboard projector만 소비한다.
 
-Transaction 경계는 `BeginExecution`(admission consume, period reservation, reservation, primary attempt, `usage_reserved` ledger/outbox), `BeginFallback`(이전 attempt 결과, fallback top-up, fallback attempt), terminal/reconciliation transaction으로 나눈다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
+Transaction 경계는 blocked sanitization의 ledgerless terminal(admission consume, slot release, `safety_blocked` outbox), `BeginExecution`(active admission consume, period reservation, reservation, primary attempt, `usage_reserved` ledger/outbox), `BeginFallback`(이전 attempt 결과, fallback top-up, fallback attempt), terminal/reconciliation transaction으로 나눈다. Sanitization 성공은 Gateway admission에 별도 상태를 쓰지 않는다. completion 전에 Gateway가 workload JWT/body binding을 검증하고, signed message provenance가 있으면 재검사를 생략하며 없거나 invalid하면 방어적으로 safety 처리한다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
 
 ## 8. 구현 소유권
 
@@ -264,7 +273,10 @@ Chat API는 Control Plane-owned identity table을 직접 읽지 않는다. sessi
 ### 8.1 Content transaction ordering
 
 - new turn reserve는 actor-scoped active conversation을 `FOR UPDATE`로 잠근 같은 transaction에서 content-free `tenant_chat_turns` row만 만든다. unique `(tenant_id,user_id,idempotency_key)`와 keyed request MAC이 logical IDs를 고정하며 delete가 lock을 먼저 획득하면 insert하지 않는다.
-- admission 성공 뒤 user ciphertext insert와 turn admission metadata update를 한 transaction에서 수행한다. transaction 실패 시 Gateway cancel을 best effort로 호출하고 completion을 호출하지 않는다.
+- admission 성공 뒤 Gateway sanitization을 transaction 밖에서 완료한다. passed/redacted content의 schema v2 user ciphertext insert, authenticated safety metadata와 turn admission metadata update를 한 transaction에서 수행한다. transaction 실패 시 Gateway cancel을 best effort로 호출하고 completion을 호출하지 않는다.
+- blocked sanitization은 Gateway가 admission을 terminal consume한 뒤 Chat API turn만 `failed/CHAT_SAFETY_BLOCKED`로 기록한다. Chat API는 placeholder counter와 bounded legacy 대상 선정을 위해 prior history를 이미 복호화했을 수 있지만 raw current user ciphertext와 Provider completion은 만들지 않으며, 이미 consumed admission에 cancel을 재시도하지 않는다.
+- completion history query는 schema v2와 authenticated safety metadata를 가진 completed rows 및 현재 sanitized user만 선택한다. v1/null-provenance row를 발견했는데 안전한 one-time migration을 완료할 수 없으면 context를 구성하지 않는다.
+- user ciphertext commit 뒤 첫 `chat.turn.accepted`는 persisted user message UUID와 sanitized content를 전달한다. Browser는 이를 받는 즉시 optimistic raw input을 교체하며, replay도 동일한 committed 값만 반환한다.
 - assistant final은 conversation row를 `FOR UPDATE`로 잠그고 `deleted_at IS NULL`, captured `cache_epoch`, turn state를 확인한 뒤 message insert, next sequence increment, turn completed transition을 한 transaction에서 수행한다.
 - assistant insert unique key는 `(turn_id,role)`다. duplicate는 기존 ciphertext를 decrypt/compare한 뒤 same content만 replay하고, mismatch는 integrity failure다.
 - delete는 conversation lock, tombstone/version/cache epoch update, message ciphertext delete, unfinished turn cancel transition을 한 transaction에서 수행한다. 외부 Gateway cancel은 commit 뒤 best effort다.

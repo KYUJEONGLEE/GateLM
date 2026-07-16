@@ -38,6 +38,39 @@
       "expectedBindingDigest": "hmac-sha256:BMVPZ2qQx-4Ewex5FGnDXGpjERAhSn7WF_3BfkNuG6M"
     },
     {
+      "vectorId": "sanitization_employee_v1",
+      "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "bindingObject": {
+        "admissionId": "admission_fixture_001",
+        "executionScope": {
+          "kind": "tenant_chat",
+          "tenantId": "tenant_fixture_001",
+          "actor": {
+            "userId": "user_fixture_001",
+            "actorKind": "employee",
+            "employeeId": "employee_fixture_001"
+          },
+          "quotaScope": {
+            "type": "user",
+            "id": "user_fixture_001"
+          },
+          "budgetScope": {
+            "type": "tenant",
+            "id": "tenant_fixture_001"
+          }
+        },
+        "idempotencyKey": "turn_fixture_001_attempt_1",
+        "payloadDigest": "sha256:AymR5BBkhjTxkYJP3j_uATy2uWnuqKJCKzKFQupgUAI",
+        "phase": "sanitization",
+        "requestId": "request_fixture_001",
+        "snapshotDigest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+        "snapshotVersion": 12,
+        "turnId": "turn_fixture_001"
+      },
+      "canonicalBinding": "{\"admissionId\":\"admission_fixture_001\",\"executionScope\":{\"actor\":{\"actorKind\":\"employee\",\"employeeId\":\"employee_fixture_001\",\"userId\":\"user_fixture_001\"},\"budgetScope\":{\"id\":\"tenant_fixture_001\",\"type\":\"tenant\"},\"kind\":\"tenant_chat\",\"quotaScope\":{\"id\":\"user_fixture_001\",\"type\":\"user\"},\"tenantId\":\"tenant_fixture_001\"},\"idempotencyKey\":\"turn_fixture_001_attempt_1\",\"payloadDigest\":\"sha256:AymR5BBkhjTxkYJP3j_uATy2uWnuqKJCKzKFQupgUAI\",\"phase\":\"sanitization\",\"requestId\":\"request_fixture_001\",\"snapshotDigest\":\"sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M\",\"snapshotVersion\":12,\"turnId\":\"turn_fixture_001\"}",
+      "expectedBindingDigest": "hmac-sha256:NT0qVTJv5oEoqUXQVfd4pQWQhw0K5WI9Ka7qShjB9EA"
+    },
+    {
       "vectorId": "completion_employee_v1",
       "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
       "bindingObject": {
@@ -60,7 +93,7 @@
           }
         },
         "idempotencyKey": "turn_fixture_001_attempt_1",
-        "payloadDigest": "sha256:qxvu5nu3j1XwQhFqg059fhmOHoqs-wMgvFsCW2DN3Uk",
+        "payloadDigest": "sha256:fA5IKAalr_hcu0wjy3wUQRgdLrrNXFY_7d7e1C98tO4",
         "phase": "completion",
         "requestId": "request_fixture_001",
         "snapshotDigest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
@@ -73,8 +106,8 @@
           "cacheStrategy": "exact"
         }
       },
-      "canonicalBinding": "{\"admissionId\":\"admission_fixture_001\",\"executionScope\":{\"actor\":{\"actorKind\":\"employee\",\"employeeId\":\"employee_fixture_001\",\"userId\":\"user_fixture_001\"},\"budgetScope\":{\"id\":\"tenant_fixture_001\",\"type\":\"tenant\"},\"kind\":\"tenant_chat\",\"quotaScope\":{\"id\":\"user_fixture_001\",\"type\":\"user\"},\"tenantId\":\"tenant_fixture_001\"},\"idempotencyKey\":\"turn_fixture_001_attempt_1\",\"payloadDigest\":\"sha256:qxvu5nu3j1XwQhFqg059fhmOHoqs-wMgvFsCW2DN3Uk\",\"phase\":\"completion\",\"requestId\":\"request_fixture_001\",\"snapshotDigest\":\"sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M\",\"snapshotVersion\":12,\"turnId\":\"turn_fixture_001\",\"usageIntent\":{\"cacheStrategy\":\"exact\",\"estimatedInputTokens\":640,\"maxOutputTokens\":1024,\"requestedTier\":\"standard\"}}",
-      "expectedBindingDigest": "hmac-sha256:9q5GSRXGlGvD0AG0P367oxDQVoYsLusfPsRQpxOYZh0"
+      "canonicalBinding": "{\"admissionId\":\"admission_fixture_001\",\"executionScope\":{\"actor\":{\"actorKind\":\"employee\",\"employeeId\":\"employee_fixture_001\",\"userId\":\"user_fixture_001\"},\"budgetScope\":{\"id\":\"tenant_fixture_001\",\"type\":\"tenant\"},\"kind\":\"tenant_chat\",\"quotaScope\":{\"id\":\"user_fixture_001\",\"type\":\"user\"},\"tenantId\":\"tenant_fixture_001\"},\"idempotencyKey\":\"turn_fixture_001_attempt_1\",\"payloadDigest\":\"sha256:fA5IKAalr_hcu0wjy3wUQRgdLrrNXFY_7d7e1C98tO4\",\"phase\":\"completion\",\"requestId\":\"request_fixture_001\",\"snapshotDigest\":\"sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M\",\"snapshotVersion\":12,\"turnId\":\"turn_fixture_001\",\"usageIntent\":{\"cacheStrategy\":\"exact\",\"estimatedInputTokens\":640,\"maxOutputTokens\":1024,\"requestedTier\":\"standard\"}}",
+      "expectedBindingDigest": "hmac-sha256:DVP_Yiv2GzDYYmGKZtK4lm6no2iNnHHMD1mNsekhZfI"
     },
     {
       "vectorId": "cancel_employee_v1",

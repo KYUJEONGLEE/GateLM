@@ -391,6 +391,11 @@ func TestMaskingEngineApplyBatchUsesOneHTTPCallAndPreservesEntityScope(t *testin
 		if len(received.Inputs) != 2 || received.ContractVersion != BatchContractVersion {
 			t.Fatalf("unexpected batch request: %+v", received)
 		}
+		if len(received.PlaceholderCounters) != 2 ||
+			received.PlaceholderCounters["EMAIL"] != 1 ||
+			received.PlaceholderCounters["PERSON"] != 4 {
+			t.Fatalf("batch request must contain raw-free placeholder counters: %+v", received.PlaceholderCounters)
+		}
 		for _, input := range received.Inputs {
 			if strings.Contains(input.PromptText, rawEmail) || !strings.Contains(input.PromptText, "[EMAIL_1]") {
 				t.Fatalf("batch input must contain stable local placeholder only: %q", input.PromptText)
@@ -424,6 +429,7 @@ func TestMaskingEngineApplyBatchUsesOneHTTPCallAndPreservesEntityScope(t *testin
 		HTTPClient:  server.Client(), Timeout: time.Second, Mode: ModeEnforce,
 	})
 	scope := maskdomain.NewEntityScope()
+	scope.SeedPlaceholderCounters(map[string]int{"PERSON": 4, "UNKNOWN": 99})
 	results, err := engine.ApplyBatch(context.Background(), []maskdomain.ApplyRequest{
 		{Prompt: "Contact " + rawEmail + ".", EntityScope: scope},
 		{Prompt: "Email " + rawEmail + " again.", EntityScope: scope},

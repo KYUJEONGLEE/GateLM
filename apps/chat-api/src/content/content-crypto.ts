@@ -16,8 +16,9 @@ const MAX_CONTENT_BYTES = 1024 * 1024;
 
 export type ContentRole = 'none' | 'user' | 'assistant';
 export type ContentKind = 'title' | 'message';
+export type BoundMessageSafetyStatus = 'sanitized' | 'provider_generated';
 
-export type ContentAad = Readonly<{
+type ContentAadV1 = Readonly<{
   schemaVersion: 1;
   tenantId: string;
   conversationId: string;
@@ -27,12 +28,26 @@ export type ContentAad = Readonly<{
   contentKeyVersion: number;
 }>;
 
+type ContentAadV2 = Readonly<{
+  schemaVersion: 2;
+  tenantId: string;
+  conversationId: string;
+  recordId: string;
+  contentKind: 'message';
+  role: 'user' | 'assistant';
+  contentKeyVersion: number;
+  safetyStatus: BoundMessageSafetyStatus;
+  safetyPolicyDigest: string | null;
+}>;
+
+export type ContentAad = ContentAadV1 | ContentAadV2;
+
 export type EncryptedContent = Readonly<{
   ciphertext: Buffer;
   nonce: Buffer;
   tag: Buffer;
   contentKeyVersion: number;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
 }>;
 
 export type WrappedTenantKey = Readonly<{
@@ -56,7 +71,7 @@ export function encryptContent(key: Buffer, plaintext: string, aad: ContentAad):
       nonce,
       tag: cipher.getAuthTag(),
       contentKeyVersion: aad.contentKeyVersion,
-      schemaVersion: 1 as const,
+      schemaVersion: aad.schemaVersion,
     });
   } finally {
     input.fill(0);
@@ -158,14 +173,39 @@ export function newTenantKey(): Buffer {
 }
 
 function contentAadBytes(aad: ContentAad): Buffer {
-  if (
-    aad.schemaVersion !== 1 ||
-    !positiveVersion(aad.contentKeyVersion) ||
-    !['title', 'message'].includes(aad.contentKind) ||
-    !['none', 'user', 'assistant'].includes(aad.role) ||
-    (aad.contentKind === 'title' && aad.role !== 'none') ||
-    (aad.contentKind === 'message' && aad.role === 'none')
-  ) {
+  if (!positiveVersion(aad.contentKeyVersion)) {
+    throw new ContentIntegrityError();
+  }
+  if (aad.schemaVersion === 1) {
+    if (
+      !exactKeys(aad, [
+        'schemaVersion', 'tenantId', 'conversationId', 'recordId', 'contentKind', 'role',
+        'contentKeyVersion',
+      ]) ||
+      !['title', 'message'].includes(aad.contentKind) ||
+      !['none', 'user', 'assistant'].includes(aad.role) ||
+      (aad.contentKind === 'title' && aad.role !== 'none') ||
+      (aad.contentKind === 'message' && aad.role === 'none')
+    ) {
+      throw new ContentIntegrityError();
+    }
+  } else if (aad.schemaVersion === 2) {
+    if (
+      !exactKeys(aad, [
+        'schemaVersion', 'tenantId', 'conversationId', 'recordId', 'contentKind', 'role',
+        'contentKeyVersion', 'safetyStatus', 'safetyPolicyDigest',
+      ]) ||
+      aad.contentKind !== 'message' ||
+      (aad.role === 'user' && (
+        aad.safetyStatus !== 'sanitized' || !policyDigest(aad.safetyPolicyDigest)
+      )) ||
+      (aad.role === 'assistant' && (
+        aad.safetyStatus !== 'provider_generated' || aad.safetyPolicyDigest !== null
+      ))
+    ) {
+      throw new ContentIntegrityError();
+    }
+  } else {
     throw new ContentIntegrityError();
   }
   return Buffer.from(canonicalizeJson(aad as unknown as JsonValue), 'utf8');
@@ -197,4 +237,14 @@ function assertKey(key: Buffer): void {
 
 function positiveVersion(value: number): boolean {
   return Number.isInteger(value) && value >= 1 && value <= 2_147_483_647;
+}
+
+function exactKeys(value: object, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]);
+}
+
+function policyDigest(value: unknown): value is string {
+  return typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value);
 }

@@ -10,6 +10,8 @@ export type TurnEvent = Readonly<Record<string, unknown> & {
   quotaState?: PolicyState;
   budgetState?: PolicyState;
   messageId?: string;
+  userMessageId?: string;
+  userContent?: string;
 }>;
 
 export class ConversationContractError extends Error { code: string; status: number }

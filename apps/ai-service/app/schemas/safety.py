@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
+from app.domain.safety.detectors import (
+    ALLOWED_DETECTOR_TYPES,
+    ALLOWED_PLACEHOLDER_PREFIXES,
+    MAXIMUM_PLACEHOLDER_COUNTER,
+)
 
 
 CONTRACT_VERSION = "remote-safety.v1"
@@ -14,6 +18,10 @@ AI_SAFETY_DETECTOR_CONTRACT_VERSION = "ai-safety-detector.v1"
 AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION = "ai-safety-detector-batch.v1"
 AI_SAFETY_DETECTOR_MODEL_ID = "openai/privacy-filter"
 AI_SAFETY_DETECTOR_RUNTIME = "cpu_only"
+PlaceholderCounter = Annotated[
+    int,
+    Field(strict=True, ge=0, le=MAXIMUM_PLACEHOLDER_COUNTER),
+]
 
 
 class CamelModel(BaseModel):
@@ -183,6 +191,11 @@ class AiSafetyBatchDetectRequest(CamelModel):
     mode: Literal["shadow", "enforce"] = "shadow"
     model: AiSafetyDetectorModel = Field(default_factory=AiSafetyDetectorModel)
     inputs: list[AiSafetyBatchInput] = Field(min_length=1, max_length=64)
+    placeholder_counters: dict[str, PlaceholderCounter] = Field(
+        alias="placeholderCounters",
+        default_factory=dict,
+        max_length=len(ALLOWED_PLACEHOLDER_PREFIXES),
+    )
     detector_config: AiSafetyDetectorConfig = Field(
         alias="detectorConfig",
         default_factory=AiSafetyDetectorConfig,
@@ -193,6 +206,19 @@ class AiSafetyBatchDetectRequest(CamelModel):
     def validate_batch_contract_version(cls, value: str) -> str:
         if value != AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION:
             raise PydanticCustomError("invalid_contract_version", "Invalid contract version.")
+        return value
+
+    @field_validator("placeholder_counters")
+    @classmethod
+    def validate_placeholder_counter_prefixes(
+        cls,
+        value: dict[str, int],
+    ) -> dict[str, int]:
+        if any(prefix not in ALLOWED_PLACEHOLDER_PREFIXES for prefix in value):
+            raise PydanticCustomError(
+                "unsupported_placeholder_prefix",
+                "Unsupported placeholder prefix.",
+            )
         return value
 
     @model_validator(mode="after")

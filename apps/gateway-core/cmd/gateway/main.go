@@ -70,6 +70,7 @@ import (
 	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 	tenantsafety "gatelm/apps/gateway-core/internal/services/tenantchat/safety"
+	sanitizationservice "gatelm/apps/gateway-core/internal/services/tenantchat/sanitization"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -300,20 +301,28 @@ func main() {
 				Metrics:     metricsRegistry,
 			})
 		}
+		tenantChatSafety := tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)
 		tenantChatCompletions := completionservice.New(
 			tenantChatRuntime,
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
-			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)),
+			completionservice.WithSafetyEvaluator(tenantChatSafety),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),
+		)
+		tenantChatSanitizations := sanitizationservice.New(
+			tenantChatRuntime,
+			tenantChatAdmissions,
+			tenantChatSafety,
+			tenantChatUsage,
 		)
 		tenantChatPrivateRouter := tenantchathttp.NewRouter(
 			tenantChatAuthenticator,
 			tenantChatAdmissions,
 			cfg.MaxRequestBodyBytes,
 			tenantchathttp.WithCompletionService(tenantChatCompletions),
+			tenantchathttp.WithSanitizationService(tenantChatSanitizations),
 			tenantchathttp.WithUsageReceipts(tenantChatReceiptToken, tenantChatUsage),
 		)
 		tenantChatPrivateServer = app.NewServerAtAddress(

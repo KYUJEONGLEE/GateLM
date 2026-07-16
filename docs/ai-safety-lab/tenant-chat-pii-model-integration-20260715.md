@@ -7,7 +7,7 @@
 | Branch | `feat/tenant-chat-pii-model-integration` |
 | Baseline | local `dev` at `0c637455` |
 | Runtime | local CPU-only ONNX sidecar |
-| Product path | Tenant Chat private completion safety stage |
+| Product path | Tenant Chat private sanitization stage, plus completion compatibility fallback |
 | Integration status | implemented and locally verified |
 | Promotion status | **not production-grade evidence** |
 
@@ -31,8 +31,9 @@ The delivery archive is kept at the Git-ignored runtime path `apps/ai-service/.c
 ## 3. Runtime flow
 
 ```text
-Tenant Chat completion messages
--> Tenant safety evaluator, preserving message order and one shared entity scope
+New Tenant Chat user message
+-> admission-bound sanitization before encrypted persistence
+-> Tenant safety evaluator, preserving item order and one shared entity scope
 -> local P0 rules for every message
 -> immediate all-local result when a mandatory/local rule blocks
 -> one ordered batch HTTP request to the local ai-service sidecar for remaining text
@@ -41,12 +42,14 @@ Tenant Chat completion messages
 -> Tenant RuntimeSnapshot detector action override
 -> enforce: model result can redact/block
 -> shadow: observation only; Provider prompt/action remain local-rule result
+-> returned passed/redacted content is encrypted with authenticated safety provenance
+-> later completion reuses stored sanitized history without normal repeat model inspection
 -> redacted input only continues to cache/routing/Provider
 ```
 
 The Gateway first applies local rules and sends that Provider-safe result transiently to a process inside the trusted local runtime boundary. This preserves cross-message local entity placeholders and reduces raw sensitive text reaching the sidecar. The sidecar returns separate Provider-safe and log-safe prompts, does not return raw spans or detected values, and the smoke runner emits aggregate/sanitized evidence only. Sidecar timeout, invalid response, or server failure falls back to the local P0 rule result.
 
-The current Tenant evaluator sends at most one ordered sidecar HTTP request for up to 64 messages. It keeps one shared entity scope so repeated values receive stable placeholders, and restores results by `itemIndex`. Older/non-batch masking engines retain the per-message compatibility path. A timeout, invalid/partial response, local block, policy mismatch, or over-limit request returns the complete local-rule result for every message; the Gateway never mixes a partial remote result into the request.
+The current Tenant evaluator sends at most one ordered sidecar HTTP request for up to 64 supplied items. A normal mask-once turn supplies only the new user message; a multi-item call is reserved for bounded legacy migration or defensive processing of untrusted provenance. It keeps one shared entity scope so repeated values receive stable placeholders, and restores results by `itemIndex`. Older/non-batch masking engines retain the per-message compatibility path. A timeout, invalid/partial response, local block, policy mismatch, or over-limit request returns the complete local-rule result for every supplied item; the Gateway never mixes a partial remote result into the request.
 
 ## 4. Model contribution boundary
 
@@ -157,8 +160,16 @@ The supplied KoELECTRA dynamic-QInt8 graph accepts a dynamic batch axis, but a p
 2. Report span-level precision/recall/F1 and case-level false-redaction impact per detector and locale.
 3. Decide whether Korean name/organization model labels can be safely admitted; current results are rule-only.
 4. Run repeated cold starts and report cold p50/p95, peak RSS, steady RSS, and startup failure rate.
-5. Measure warm p50/p95/p99 under expected concurrency and realistic Tenant Chat history lengths.
+5. Measure warm p50/p95/p99 under expected concurrency for realistic current-user payloads and bounded legacy migration batches.
 6. Measure sidecar timeout/fallback rate and verify Provider never receives a value that an enforce result marked protected.
 7. Complete security and license review before distributing the model bundle with a release.
 
 Until these gates pass, this integration is a configurable hybrid guardrail with local-rule fallback, not a DLP-grade PII system.
+
+## 11. Mask-once contract revision — 2026-07-16
+
+Tenant Chat now defines a pre-persistence `sanitization` phase. The new user message is processed before ciphertext insertion, and only the returned passed/redacted content is eligible for storage. User messages use schema v2 AES-GCM AAD that binds `safetyStatus=sanitized` and the exact `safetyPolicyDigest`; assistant messages bind `provider_generated`. The workload JWT payload digest also binds the completion messages and their provenance.
+
+This removes normal repeat PII inspection of already sanitized history. It does not trust a mutable database flag by itself: schema v1 users remain `legacy_unverified`, metadata-only backfill is forbidden, and missing/invalid provenance is excluded, failed closed, or defensively reprocessed. Existing schema v1 assistants may be marked `provider_generated` because they are Provider output, but that status is not an output-DLP claim.
+
+The browser receives the sanitized committed user content in `chat.turn.accepted` and replaces its optimistic raw text immediately. This revision changes request handling and latency shape; it does not improve the supplied models' accuracy evidence or satisfy any production promotion gate listed above.

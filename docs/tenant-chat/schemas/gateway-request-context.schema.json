@@ -19,7 +19,7 @@
     "surface": { "const": "tenant_chat" },
     "phase": {
       "type": "string",
-      "enum": ["admission", "completion", "cancel"]
+      "enum": ["admission", "sanitization", "completion", "cancel"]
     },
     "requestId": { "$ref": "#/$defs/opaqueId" },
     "turnId": { "$ref": "#/$defs/opaqueId" },
@@ -46,6 +46,16 @@
             { "required": ["usageIntent"] }
           ]
         }
+      }
+    },
+    {
+      "if": {
+        "properties": { "phase": { "const": "sanitization" } },
+        "required": ["phase"]
+      },
+      "then": {
+        "required": ["admissionId"],
+        "not": { "required": ["usageIntent"] }
       }
     },
     {

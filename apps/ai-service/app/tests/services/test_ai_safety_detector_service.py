@@ -282,6 +282,44 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
         self.assertEqual([item.item_index for item in response.results], [0, 1])
         self.assertNotIn(value, response.results[0].log_safe_prompt)
 
+    def test_batch_model_detections_continue_seeded_placeholder_counters(self) -> None:
+        values = ("alpha-mail-token", "beta-mail-token")
+
+        def classifier(text: str) -> list[object]:
+            detections: list[object] = []
+            for value in values:
+                start = text.find(value)
+                if start < 0:
+                    continue
+                detections.append(
+                    {
+                        "entity_group": "private_email",
+                        "score": 0.99,
+                        "start": start,
+                        "end": start + len(value),
+                    }
+                )
+            return detections
+
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(classifier=classifier),
+        )
+
+        response = service.detect_batch(
+            batch_request(
+                f"Inspect production email {values[0]} before release.",
+                f"Inspect production email {values[1]} before release.",
+                placeholder_counters={"EMAIL": 3},
+            )
+        )
+
+        self.assertEqual(response.execution_summary.execution_mode, "hybrid")
+        self.assertEqual(response.execution_summary.accepted_model_detection_count, 2)
+        self.assertIn("[EMAIL_4]", response.results[0].redacted_prompt)
+        self.assertIn("[EMAIL_5]", response.results[1].redacted_prompt)
+        self.assertNotIn(values[0], response.results[0].log_safe_prompt)
+        self.assertNotIn(values[1], response.results[1].log_safe_prompt)
+
     def test_batch_results_match_single_detection_semantics(self) -> None:
         service = AiSafetyDetectorService(
             adapter=PrivacyFilterAdapter(classifier=lambda _text: []),
@@ -373,7 +411,10 @@ def detect_request(prompt: str) -> AiSafetyDetectRequest:
     )
 
 
-def batch_request(*prompts: str) -> AiSafetyBatchDetectRequest:
+def batch_request(
+    *prompts: str,
+    placeholder_counters: dict[str, int] | None = None,
+) -> AiSafetyBatchDetectRequest:
     return AiSafetyBatchDetectRequest(
         contractVersion=AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
         mode="enforce",
@@ -381,6 +422,7 @@ def batch_request(*prompts: str) -> AiSafetyBatchDetectRequest:
             AiSafetyBatchInput(itemIndex=index, promptText=prompt)
             for index, prompt in enumerate(prompts)
         ],
+        placeholderCounters=placeholder_counters or {},
         detectorConfig=AiSafetyDetectorConfig(returnConfidence=False),
     )
 

@@ -89,6 +89,10 @@ describe('ConversationController SSE cleanup', () => {
     );
 
     expect(response.setHeader).toHaveBeenCalledWith('Content-Encoding', 'identity');
+    expect(eventPayload(response, 'chat.turn.accepted')).toMatchObject({
+      userMessageId: prepared.userMessage.id,
+      userContent: prepared.userMessage.content,
+    });
     expect(finalPayload(response)).toMatchObject({
       type: 'chat.turn.final',
       quotaState: 'economy',
@@ -124,12 +128,19 @@ describe('ConversationController SSE cleanup', () => {
 });
 
 function finalPayload(response: ReturnType<typeof testResponse>): Record<string, unknown> {
+  return eventPayload(response, 'chat.turn.final');
+}
+
+function eventPayload(
+  response: ReturnType<typeof testResponse>,
+  eventName: string,
+): Record<string, unknown> {
   const frame = response.write.mock.calls
     .map(([value]) => String(value))
-    .find((value) => value.includes('event: chat.turn.final'));
-  if (!frame) throw new Error('Expected a final SSE frame.');
-  const data = frame.split('\n').find((line) => line.startsWith('data: '));
-  if (!data) throw new Error('Expected final SSE data.');
+    .find((value) => value.includes(`event: ${eventName}`));
+  if (!frame) throw new Error(`Expected a ${eventName} SSE frame.`);
+  const data = frame.split('\n').find((line: string) => line.startsWith('data: '));
+  if (!data) throw new Error(`Expected ${eventName} SSE data.`);
   return JSON.parse(data.slice('data: '.length)) as Record<string, unknown>;
 }
 
@@ -181,6 +192,7 @@ function replay(): Extract<PreparedTurn, { kind: 'replay' }> {
       sequence: 2,
       createdAt: '2026-07-14T00:00:00.000Z',
     }),
+    userMessage: userMessage(),
   });
 }
 
@@ -191,6 +203,7 @@ function execution(): Extract<PreparedTurn, { kind: 'execute' }> {
     reserved: reserved('user_persisted'),
     handle: Object.freeze({ admissionId: '00000000-0000-4000-8000-000000000500' }) as never,
     messages: Object.freeze([]),
+    userMessage: userMessage(),
     usageIntent: Object.freeze({
       estimatedInputTokens: 1,
       maxOutputTokens: 1,
@@ -198,6 +211,17 @@ function execution(): Extract<PreparedTurn, { kind: 'execute' }> {
       cacheStrategy: 'exact' as const,
     }),
     signal: new AbortController().signal,
+  });
+}
+
+function userMessage() {
+  return Object.freeze({
+    id: '00000000-0000-4000-8000-000000000401',
+    turnId: '00000000-0000-4000-8000-000000000301',
+    role: 'user' as const,
+    content: '[EMAIL_1]',
+    sequence: 1,
+    createdAt: '2026-07-14T00:00:00.000Z',
   });
 }
 

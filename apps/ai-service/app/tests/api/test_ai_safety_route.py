@@ -940,6 +940,44 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_batch_detect_continues_seeded_placeholder_counters(self) -> None:
+        prompt = "Contact next-person@example.test."
+        body = batch_payload(prompt)
+        body["placeholderCounters"] = {"EMAIL": 7}
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect/batch", json=body)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        response_body = response.json()
+        self.assertEqual(
+            response_body["results"][0]["redactedPrompt"],
+            "Contact [EMAIL_8].",
+        )
+        self.assertNotIn("placeholderCounters", response_body)
+
+    def test_batch_validation_rejects_untrusted_placeholder_counters(self) -> None:
+        private_marker = "counter-validation-marker@example.test"
+        invalid_counters = (
+            {"UNKNOWN": 1},
+            {"EMAIL": 1_000_001},
+            {"EMAIL": True},
+            {"EMAIL": "1"},
+        )
+        client = TestClient(create_app())
+
+        for counters in invalid_counters:
+            with self.subTest(counters=counters):
+                body = batch_payload(f"Contact {private_marker}.")
+                body["placeholderCounters"] = counters
+
+                response = client.post("/internal/ai-safety/v1/detect/batch", json=body)
+
+                self.assertEqual(response.status_code, 400, response.text)
+                self.assertNotIn(private_marker, json.dumps(response.json(), sort_keys=True))
+
     def test_batch_validation_rejects_more_than_64_without_echoing_prompt(self) -> None:
         private_marker = "private-batch-marker@example.test"
         body = batch_payload(*([f"Contact {private_marker}."] * 65))

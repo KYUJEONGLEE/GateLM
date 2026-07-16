@@ -32,6 +32,12 @@ type SafetyEvaluation struct {
 	Blocked bool
 }
 
+type SanitizationEvaluation struct {
+	Messages     []SanitizedMessage
+	PolicyDigest string
+	Blocked      bool
+}
+
 type ExactCacheEntry struct {
 	ResponseText      string `json:"responseText"`
 	EffectiveModelKey string `json:"effectiveModelKey"`
@@ -91,4 +97,32 @@ func ValidateCompletionInput(input CompletionInput) error {
 		}
 	}
 	return nil
+}
+
+func ValidateSanitizationInput(input SanitizationInput) error {
+	if len(input.Messages) < 1 || len(input.Messages) > 64 {
+		return fmt.Errorf("tenant chat sanitization messages must contain between 1 and 64 items")
+	}
+	for index, message := range input.Messages {
+		if message.Role != "user" || message.Safety != nil {
+			return fmt.Errorf("tenant chat sanitization message %d must be an untrusted user message", index)
+		}
+		if strings.TrimSpace(message.Content) == "" || len([]rune(message.Content)) > 20_000 {
+			return fmt.Errorf("tenant chat sanitization message %d has invalid content", index)
+		}
+	}
+	if len(input.PlaceholderCounters) > len(allowedPlaceholderCounterPrefixes) {
+		return fmt.Errorf("tenant chat sanitization has too many placeholder counters")
+	}
+	for prefix, count := range input.PlaceholderCounters {
+		if _, ok := allowedPlaceholderCounterPrefixes[prefix]; !ok || count < 0 || count > 1_000_000 {
+			return fmt.Errorf("tenant chat sanitization placeholder counter is invalid")
+		}
+	}
+	return nil
+}
+
+var allowedPlaceholderCounterPrefixes = map[string]struct{}{
+	"PERSON": {}, "ORGANIZATION": {}, "ADDRESS": {}, "EMAIL": {}, "PHONE_NUMBER": {},
+	"CUSTOMER": {}, "AGENT": {}, "DOCTOR": {}, "PATIENT": {}, "APPLICANT": {}, "INTERVIEWER": {},
 }

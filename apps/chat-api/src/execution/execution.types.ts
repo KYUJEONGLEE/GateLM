@@ -1,4 +1,4 @@
-export type ExecutionPhase = 'admission' | 'completion' | 'cancel';
+export type ExecutionPhase = 'admission' | 'sanitization' | 'completion' | 'cancel';
 
 export type ExecutionScope = Readonly<{
   kind: 'tenant_chat';
@@ -70,6 +70,21 @@ export type AdmissionHandle = Readonly<AdmissionSeed & {
 export type EphemeralMessage = Readonly<{
   role: 'system' | 'user' | 'assistant';
   content: string;
+  safety?: SafetyProvenance;
+}>;
+
+export type SafetyProvenance =
+  | Readonly<{ status: 'sanitized'; policyDigest: string }>
+  | Readonly<{ status: 'provider_generated' }>;
+
+export type SanitizationInput = Readonly<{
+  messages: readonly Readonly<{ role: 'user'; content: string }>[];
+  placeholderCounters?: Readonly<Record<string, number>>;
+}>;
+
+export type SanitizationResult = Readonly<{
+  messages: readonly Readonly<{ itemIndex: number; content: string }>[];
+  policyDigest: string;
 }>;
 
 export type CompletionInput = Readonly<{

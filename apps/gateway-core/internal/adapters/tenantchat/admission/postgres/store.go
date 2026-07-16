@@ -234,6 +234,35 @@ func (s *Store) Cancel(
 	}, nil
 }
 
+func (s *Store) ValidateActive(ctx context.Context, requestContext tenantchat.RequestContext) error {
+	if s == nil || s.pool == nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	row, err := scanAdmission(s.pool.QueryRow(ctx, `
+		SELECT admission_id::text, employee_id::text, actor_kind, request_id, turn_id,
+		       idempotency_key, binding_digest, snapshot_version, state, expires_at
+		FROM tenant_chat_request_admissions
+		WHERE admission_id = $1::uuid AND tenant_id = $2::uuid AND user_id = $3::uuid
+		LIMIT 1
+	`, requestContext.AdmissionID, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID))
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tenantchat.ErrAdmissionExpired
+		}
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	if !sameAdmissionIdentity(row, requestContext) {
+		return tenantchat.ErrIdempotencyConflict
+	}
+	if row.State != "active" || !row.ExpiresAt.After(s.now().UTC()) {
+		return tenantchat.ErrAdmissionExpired
+	}
+	return nil
+}
+
 func findByIdempotency(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) (admissionRow, bool, error) {
 	actor := requestContext.ExecutionScope.Actor
 	row, err := scanAdmission(tx.QueryRow(ctx, `

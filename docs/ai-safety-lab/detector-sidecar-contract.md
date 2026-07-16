@@ -13,7 +13,7 @@ contractVersion = ai-safety-detector.v1
 POST /internal/ai-safety/v1/detect
 ```
 
-Tenant Chat multi-message input uses the additive ordered batch contract:
+Tenant Chat sanitization and bounded legacy migration can use the additive ordered batch contract:
 
 ```text
 contractVersion = ai-safety-detector-batch.v1
@@ -55,8 +55,9 @@ Top-level request 후보:
 
 `promptText` example은 synthetic placeholder만 사용한다. 실제 고객 문장, 실제 이메일, 실제 전화번호, 실제 token, 실제 credential을 문서나 fixture에 넣지 않는다.
 
-The batch request replaces `input` with `inputs`. It accepts 1 through 64 items. `itemIndex` starts at zero, is contiguous, and matches array order. Gateway runs local P0 masking for every message in original order with one shared request-scoped entity scope, then sends only those local-redacted transient values. It does not concatenate messages and does not send role, tenant, user, request, or conversation identifiers.
-Whitespace-only messages retain their local result and are omitted from the sidecar request. Remaining nonblank messages are assigned dense `itemIndex` values and sidecar results are mapped back to their original Tenant Chat positions, so a blank history item cannot disable model checks for later messages.
+The batch request replaces `input` with `inputs`. It accepts 1 through 64 items. `itemIndex` starts at zero, is contiguous, and matches array order. A normal mask-once turn contains only the newly submitted user message; multiple items are reserved for bounded one-time legacy migration or defensive processing of untrusted provenance. Gateway runs local P0 masking for every supplied item in original order with one shared request-scoped entity scope, then sends only those local-redacted transient values. It does not concatenate messages and does not send role, tenant, user, request, or conversation identifiers.
+Whitespace-only items retain their local result and are omitted from the sidecar request. Remaining nonblank items are assigned dense `itemIndex` values and sidecar results are mapped back to their original Tenant Chat positions, so one blank migration item cannot disable model checks for later items.
+The optional `placeholderCounters` object carries only the greatest already allocated numeric suffix for each allowed uppercase placeholder prefix. It is bounded to `0..1,000,000`, contains no raw entity or raw-to-placeholder map, and seeds one shared sidecar entity scope for the full batch. This keeps model-only detections from reusing identifiers already allocated by trusted history, local P0 masking, or an earlier item in the same batch.
 
 ```json
 {
@@ -67,6 +68,7 @@ Whitespace-only messages retain their local result and are omitted from the side
     {"itemIndex": 0, "promptText": "Contact [EMAIL_1].", "locale": "ko-KR"},
     {"itemIndex": 1, "promptText": "Write a synthetic safe note.", "locale": "ko-KR"}
   ],
+  "placeholderCounters": {"EMAIL": 1},
   "detectorConfig": {
     "detectorSet": "privacy-filter-default",
     "returnConfidence": false,
@@ -210,4 +212,4 @@ docs/ai-safety-lab/schemas/detector-sidecar-batch-response.schema.json
 
 The sidecar keeps message boundaries during rules, contextual policy, redaction, and response mapping. It flattens only eligible model windows, executes bounded dynamic ONNX micro-batches, then restores each detection to its original item/window before policy evaluation. Current micro-batch size defaults to 4 and is bounded to 1 through 64 by `AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE`.
 
-Model candidate routing is detector-type aware. A configured adapter is invoked only when its accepted label map intersects an uncovered typed candidate. The pinned models do not advertise `person_name` or `organization_name`, so name/organization-only prompts remain rules-only. Message concatenation, last-message-only inspection, history safety caching, and raw text/value/offset response fields are forbidden.
+Model candidate routing is detector-type aware. A configured adapter is invoked only when its accepted label map intersects an uncovered typed candidate. The pinned models do not advertise `person_name` or `organization_name`, so name/organization-only prompts remain rules-only. Message concatenation, skipping the new untrusted user message, full-history rescans on every normal turn, unauthenticated metadata-only safety caching, and raw text/value/offset response fields are forbidden. Stored schema v2 messages may skip repeat inspection only when Chat API has authenticated their safety provenance in AES-GCM AAD and signed the exact completion input.

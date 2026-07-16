@@ -12,6 +12,7 @@ from app.adapters.safety.privacy_filter_adapter import public_model_id_for_model
 from app.domain.safety.detections import Detection, safety_signals_from_detections
 from app.domain.safety.policy import (
     BUSINESS_ROLE_LABELS,
+    EntityMaskingScope,
     effective_signals,
     preview_redacted_prompt,
     redact_prompt,
@@ -423,6 +424,8 @@ class AiSafetyDetectorService:
             [(item.item_index, item.prompt_text) for item in request.inputs],
             detector_config,
         )
+        entity_scope = EntityMaskingScope()
+        entity_scope.seed_placeholder_counters(request.placeholder_counters)
         results: list[AiSafetyBatchResult] = []
         accepted_model_detection_count = 0
         for work_item in work_items:
@@ -431,6 +434,7 @@ class AiSafetyDetectorService:
                 mode=request.mode,
                 policies=request.detector_config.detector_policies,
                 return_confidence=request.detector_config.return_confidence,
+                entity_scope=entity_scope,
             )
             results.append(result)
             accepted_model_detection_count += accepted_count
@@ -525,6 +529,7 @@ class AiSafetyDetectorService:
         mode: str,
         policies: list[AiSafetyDetectorPolicy],
         return_confidence: bool,
+        entity_scope: EntityMaskingScope | None = None,
     ) -> tuple[AiSafetyBatchResult, int]:
         detector_config = _detector_config_with_policy_overrides(self.detectors, policies)
         ml_signals = safety_signals_from_detections(
@@ -540,8 +545,17 @@ class AiSafetyDetectorService:
         signals = _apply_contextual_action_policy(work_item.prompt_text, signals)
         signals = _apply_request_policy_actions(signals, policies)
         enforcement_signals = _enforcement_signals(signals)
-        redacted_prompt = redact_prompt(work_item.prompt_text, enforcement_signals)
-        log_safe_prompt = redact_prompt(work_item.prompt_text, _log_safe_signals(signals))
+        masking_scope = entity_scope or EntityMaskingScope()
+        redacted_prompt = redact_prompt(
+            work_item.prompt_text,
+            enforcement_signals,
+            entity_scope=masking_scope,
+        )
+        log_safe_prompt = redact_prompt(
+            work_item.prompt_text,
+            _log_safe_signals(signals),
+            entity_scope=masking_scope,
+        )
         type_counts = Counter(signal.detector_type for signal in signals)
         model_sources = {adapter.source for adapter in self.adapters}
         accepted_count = sum(1 for signal in signals if signal.source in model_sources)
