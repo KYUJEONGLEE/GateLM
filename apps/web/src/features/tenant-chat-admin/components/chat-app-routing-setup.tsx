@@ -74,7 +74,7 @@ const categories = [
     ko: "코드",
     criteria: {
       en: { simple: "Syntax, examples, small edits, or a single debug/refactor request without another complexity signal.", simpleExample: "Fix the syntax error in this one function.", complex: "Design, migration, performance, concurrency, three or more scopes, causal debugging, or at least two engineering constraints.", complexExample: "Find the reproduction conditions and possible cause, then design a fix and regression test." },
-      ko: { simple: "문법·예시·작은 수정이거나, 다른 복합 신호가 없는 단일 디버그·리팩터링 요청입니다.", simpleExample: "함수 하나의 문법 오류를 수정해줘", complex: "설계·마이그레이션·성능·동시성, 범위 3개 이상, 원인 추적 또는 기술 제약 2개 이상이 포함됩니다.", complexExample: "재현 조건과 가능한 원인을 좁히고 수정안과 회귀 테스트를 설계해줘" }
+      ko: { simple: "문법·예시·작은 수정이거나, 다른 고성능 분류 신호가 없는 단일 디버그·리팩터링 요청입니다.", simpleExample: "함수 하나의 문법 오류를 수정해줘", complex: "설계·마이그레이션·성능·동시성, 범위 3개 이상, 원인 추적 또는 기술 제약 2개 이상이 포함됩니다.", complexExample: "재현 조건과 가능한 원인을 좁히고 수정안과 회귀 테스트를 설계해줘" }
     }
   },
   {
@@ -94,7 +94,7 @@ const categories = [
     ko: "요약",
     criteria: {
       en: { simple: "One direct summary with at most two requested facets and no citation or traceability requirement. Length alone does not make it complex.", simpleExample: "Summarize this note into key points.", complex: "Multiple sources, comparison/synthesis, three or more facets, or citations and traceability.", complexExample: "Compare three documents and summarize their disagreements, evidence, and structure in a table." },
-      ko: { simple: "단일 자료를 직접 요약하고 요청 항목이 2개 이하이며 인용·근거 추적 조건이 없습니다. 길이만으로는 복합이 되지 않습니다.", simpleExample: "이 메모를 핵심 내용으로 요약해줘", complex: "복수 자료, 비교·종합, 요청 항목 3개 이상 또는 인용·근거 추적이 포함됩니다.", complexExample: "세 문서의 충돌점과 근거를 표로 요약해줘" }
+      ko: { simple: "단일 자료를 직접 요약하고 요청 항목이 2개 이하이며 인용·근거 추적 조건이 없습니다. 길이만으로는 고성능으로 분류되지 않습니다.", simpleExample: "이 메모를 핵심 내용으로 요약해줘", complex: "복수 자료, 비교·종합, 요청 항목 3개 이상 또는 인용·근거 추적이 포함됩니다.", complexExample: "세 문서의 충돌점과 근거를 표로 요약해줘" }
     }
   },
   {
@@ -115,8 +115,8 @@ const categories = [
   ko: string;
 }>;
 const difficulties: Array<{ id: TenantChatRoutingDifficulty; en: string; ko: string }> = [
-  { id: "simple", en: "Simple", ko: "단순" },
-  { id: "complex", en: "Complex", ko: "복합" }
+  { id: "simple", en: "Simple", ko: "일반" },
+  { id: "complex", en: "Complex", ko: "고성능" }
 ];
 
 const routingDifficultyCriteria: DifficultyCriteria = {
@@ -127,9 +127,9 @@ const routingDifficultyCriteria: DifficultyCriteria = {
     complexExample: "Investigate the situation and decide the best approach."
   },
   ko: {
-    simple: "작업·제약·범위·의존 단계가 각각 1개 이하이고 카테고리별 복합 신호가 제한적입니다. 길이 또는 단일 디버그·리팩터링 신호만으로는 복합이 되지 않습니다.",
+    simple: "작업·제약·범위·의존 단계가 각각 1개 이하이고 카테고리별 고성능 분류 신호가 제한적입니다. 길이 또는 단일 디버그·리팩터링 신호만으로는 고성능으로 분류되지 않습니다.",
     simpleExample: "긴 배경 설명 뒤 서비스 운영 시간 하나만 요청",
-    complex: "위의 제한된 길이·디버그·리팩터링 예외를 제외하고, 공통 복합 신호가 여러 개이거나 카테고리별 복합 신호가 있습니다. 의미는 있지만 판정 근거가 모호하면 복합으로 처리합니다.",
+    complex: "위의 제한된 길이·디버그·리팩터링 예외를 제외하고, 공통 고성능 분류 신호가 여러 개이거나 카테고리별 고성능 분류 신호가 있습니다. 의미는 있지만 판정 근거가 모호하면 고성능으로 처리합니다.",
     complexExample: "상황을 조사하고 최선의 접근 방식을 결정해줘"
   }
 };
@@ -163,7 +163,6 @@ const copy = {
     modelUnavailable: "Selected model unavailable",
     noModel: "No chat model is configured on an active tenant-level provider.",
     noProvider: "Register an active tenant-level provider to configure the Chat App.",
-    priceUnknown: "Pricing is unavailable for a selected model. Usage is allowed, but its cost is temporarily calculated as 0. This does not mean the model is free.",
     provider: "Provider",
     providerUnavailable: "Selected Provider unavailable",
     publish: "Publish routing policy",
@@ -184,10 +183,10 @@ const copy = {
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
     description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 정책을 관리합니다.",
-    categoryCriteria: "단순·복합 안내",
-    criteriaNote: "요청 길이만으로는 복합이 되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.",
+    categoryCriteria: "일반·고성능 안내",
+    criteriaNote: "요청 길이만으로는 고성능으로 분류되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.",
     example: "예시",
-    routingCriteria: "라우팅 단순·복합 안내",
+    routingCriteria: "라우팅 일반·고성능 안내",
     fallbackDescription: "기본 모델이 응답 시작 전에 실패하거나 시간 초과되면 모든 라우팅 셀에서 이 모델로 다시 시도합니다.",
     fallbackDisabled: "Fallback 사용 안 함",
     fallbackKicker: "장애 시 자동 전환",
@@ -202,7 +201,6 @@ const copy = {
     modelUnavailable: "선택된 모델 사용 불가",
     noModel: "활성 tenant-level Provider에 채팅 모델이 설정되어 있지 않습니다.",
     noProvider: "채팅 앱을 설정하려면 활성 tenant-level Provider를 등록하세요.",
-    priceUnknown: "선택한 모델의 가격 정보가 없습니다. 모델은 사용할 수 있지만 비용은 임시로 0원 처리되며, 무료 모델이라는 의미는 아닙니다.",
     provider: "Provider",
     providerUnavailable: "선택된 Provider 사용 불가",
     publish: "라우팅 정책 발행",
@@ -258,22 +256,6 @@ export function ChatAppRoutingSetup({
       )
     }))
     .filter((provider) => provider.models.length > 0);
-  const selectedModelRefs = new Set(
-    routingMode === "manual"
-      ? [manualModelRef, fallbackModelRef].filter(
-          (modelRef): modelRef is string => Boolean(modelRef)
-        )
-      : categories.flatMap((category) =>
-          difficulties.flatMap(
-            (difficulty) => routes[category.id][difficulty.id].modelRefs
-          )
-        )
-  );
-  const hasSelectedModelWithoutPricing = models.some(
-    (model) =>
-      selectedModelRefs.has(model.modelRef) &&
-      model.pricingStatus === "unavailable"
-  );
   const providerManagementHref = `/tenants/${encodeURIComponent(tenantId)}/provider-connections?${new URLSearchParams({
     intent: "tenant-chat-setup",
     returnTo: returnPath
@@ -404,7 +386,6 @@ export function ChatAppRoutingSetup({
                   <p>{text.routingDescription}</p>
                 </div>
                 <div className="tenant-routing-heading-mode">
-                  <span>{text.modeTitle}</span>
                   <div className="tenant-routing-switch-control">
                     <span className="tenant-routing-mode-label" data-active={routingMode === "manual" ? "true" : undefined}>{text.fixedLabel}</span>
                     <Switch
@@ -496,10 +477,6 @@ export function ChatAppRoutingSetup({
               </div>
             </section>
 
-            {hasSelectedModelWithoutPricing ? (
-              <div className="tenant-routing-mock-warning"><AlertTriangle aria-hidden="true" /><div><strong>{text.model}</strong><span>{text.priceUnknown}</span></div></div>
-            ) : null}
-
             <div className="tenant-routing-actions">
               <button className="secondary-button tenant-routing-reset-button" disabled={pending || loading} onClick={resetDraft} type="button">{text.reset}</button>
               <button className="primary-button tenant-routing-save-button" data-save-confirmed={feedback?.published ? "true" : undefined} disabled={!canPublish || pending || loading} type="submit">
@@ -583,6 +560,7 @@ function TenantRoutingProviderModelSelect({ allowEmpty = false, ariaLabel, appea
   );
   const selectedModels = selectedProvider?.models ?? [];
   const standalone = appearance === "standalone";
+  const showProviderIcon = Boolean(selectedProvider || value);
   const providerValue = selectedProvider?.providerConnectionId ?? (
     value === null ? "__mixed" : value ? "__unavailable" : ""
   );
@@ -599,11 +577,13 @@ function TenantRoutingProviderModelSelect({ allowEmpty = false, ariaLabel, appea
       <label className={standalone ? "tenant-routing-standalone-field" : undefined}>
         <span className={standalone ? undefined : "sr-only"}>{copy[locale].provider}</span>
         <span className="tenant-routing-provider-control">
-          <ProviderFamilyIcon
-            className="tenant-routing-provider-icon"
-            family={selectedProvider?.providerFamily ?? "unknown"}
-            size={22}
-          />
+          {showProviderIcon ? (
+            <ProviderFamilyIcon
+              className="tenant-routing-provider-icon"
+              family={selectedProvider?.providerFamily ?? "unknown"}
+              size={22}
+            />
+          ) : null}
           <select
             aria-label={`${ariaLabel} ${copy[locale].provider}`}
             onChange={(event) => {

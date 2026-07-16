@@ -19499,15 +19499,7 @@ html:has(.tenant-management-content) {
 .tenant-routing-heading-mode {
   display: grid;
   flex: 0 0 auto;
-  gap: 7px;
   justify-items: end;
-}
-
-.tenant-routing-heading-mode > span {
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
 }
 
 .tenant-routing-mode-content {
@@ -19841,35 +19833,6 @@ html:has(.tenant-management-content) {
   grid-template-columns: minmax(168px, 0.72fr) minmax(220px, 1fr);
   gap: 10px;
   width: 100%;
-}
-
-.tenant-routing-mock-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 18px;
-  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--border));
-  border-radius: var(--radius-md);
-  color: var(--foreground);
-}
-
-.tenant-routing-mock-warning > svg {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  color: var(--warning-text);
-}
-
-.tenant-routing-mock-warning > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.tenant-routing-mock-warning span {
-  color: var(--text-muted);
-  line-height: var(--line-height-snug);
 }
 
 .tenant-routing-model-ref-cell {

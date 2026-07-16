@@ -147,6 +147,8 @@ test("Chat App routing selects Provider first and limits models to that Provider
   expect(source).toContain('onChange(nextProvider?.models[0]?.modelRef ?? "")');
   expect(source).toContain("selectedModels.map((model)");
   expect(source).toContain("{model.modelKey}");
+  expect(source).toContain("const showProviderIcon = Boolean(selectedProvider || value);");
+  expect(source).toContain("{showProviderIcon ? (");
 });
 
 test("Chat App routing projects one shared fallback into every routing cell", () => {
@@ -223,7 +225,7 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
-test("Chat App routing explains the simple and complex difficulty criteria", async () => {
+test("Chat App routing presents general and high-performance difficulty labels in Korean", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const stylesUrl = new URL("../../app/globals.css", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
@@ -232,7 +234,11 @@ test("Chat App routing explains the simple and complex difficulty criteria", asy
   expect(source).toContain("function RoutingCriteriaPopover");
   expect(source).toContain("criteria={routingDifficultyCriteria[locale]}");
   expect(source).toContain("criteria={category.criteria[locale]}");
-  expect(source).toContain("작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.");
+  expect(source).toContain('{ id: "simple", en: "Simple", ko: "일반" }');
+  expect(source).toContain('{ id: "complex", en: "Complex", ko: "고성능" }');
+  expect(source).toContain("요청 길이만으로는 고성능으로 분류되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.");
+  expect(source).toContain('categoryCriteria: "일반·고성능 안내"');
+  expect(source).toContain('routingCriteria: "라우팅 일반·고성능 안내"');
   expect(source).toContain('simpleExample: "함수 하나의 문법 오류를 수정해줘"');
   expect(source).toContain('complexExample: "법률 용어와 표 형식을 유지해 존댓말로 번역해줘"');
   expect(source).toContain('className="tenant-routing-info-button"');
@@ -257,33 +263,36 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(source).toContain('fixedLabel: "고정"');
   expect(source).toContain('data-routing-mode={routingMode}');
   expect(source).toContain('className="tenant-routing-heading-mode"');
-  expect(source).toContain('<span>{text.modeTitle}</span>');
+  expect(source).not.toContain('<span>{text.modeTitle}</span>');
+  expect(source).toContain('aria-label={text.modeTitle}');
   expect(source).toContain('data-active={routingMode === "manual" ? "true" : undefined}');
   expect(source).toContain('data-active={routingMode === "auto" ? "true" : undefined}');
   expect(source).toContain('className="tenant-routing-mode-content" key={routingMode}');
   expect(source).toContain('className="tenant-routing-fixed-panel"');
   expect(source).toContain('<p>{text.manualDescription}</p>');
-  expect(source).toContain(')}\n                <section className="tenant-routing-fallback-card"');
+  expect(source).toMatch(/\)\}\r?\n {16}<section className="tenant-routing-fallback-card"/);
   expect(source).toContain('routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription');
   expect(styles).toContain('@keyframes tenant-routing-mode-enter');
-  expect(styles).toContain('--tw-translate-x: 23px;');
+  expect(styles).toContain('left: 22px;');
   expect(styles).toContain('.tenant-routing-fixed-panel {');
   expect(styles).toContain('width: min(620px, 100%);');
   expect(source).not.toContain('tenant-routing-enable-card');
   expect(styles).not.toContain('.tenant-routing-enable-card');
 });
 
-test("Chat App hides runtime badges and limits pricing warnings to selected models", async () => {
+test("Chat App hides runtime badges and the unavailable-pricing warning", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
+  const styles = await readFile(stylesUrl, "utf8");
 
   expect(source).not.toContain("<ReadinessBadge");
   expect(source).not.toContain("Snapshot v");
-  expect(source).toContain("const selectedModelRefs = new Set(");
-  expect(source).toContain("[manualModelRef, fallbackModelRef].filter(");
-  expect(source).toContain("selectedModelRefs.has(model.modelRef)");
-  expect(source).toContain("hasSelectedModelWithoutPricing ? (");
-  expect(source).toContain("비용은 임시로 0원 처리되며");
+  expect(source).not.toContain("const selectedModelRefs = new Set(");
+  expect(source).not.toContain("hasSelectedModelWithoutPricing");
+  expect(source).not.toContain("tenant-routing-mock-warning");
+  expect(source).not.toContain("비용은 임시로 0원 처리되며");
+  expect(styles).not.toContain(".tenant-routing-mock-warning");
 });
 
 test("Chat App routing publish recovers from a Control Plane network failure", async () => {
@@ -291,7 +300,7 @@ test("Chat App routing publish recovers from a Control Plane network failure", a
   const source = await readFile(componentSourceUrl, "utf8");
 
   expect(source).toContain('setFeedback({ error: true, message: "Control Plane unavailable." });');
-  expect(source).toContain("} finally {\n      setPending(false);");
+  expect(source).toMatch(/\} finally \{\r?\n {6}setPending\(false\);/);
 });
 
 function setupWithRoutes(): TenantChatAdminRuntimeSetup {
