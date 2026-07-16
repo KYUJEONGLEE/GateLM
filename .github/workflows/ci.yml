@@ -97,7 +97,10 @@ jobs:
 
       - name: Verify production deployment automation
         shell: bash
-        run: bash deploy/aws-triage/scripts/tests/deploy-main-test.sh
+        run: |
+          set -euo pipefail
+          bash deploy/aws-triage/scripts/tests/deploy-main-test.sh
+          bash deploy/selfhost/scripts/selfhost-rag-wiring-test.sh
 
   repository-contracts:
     name: repository and routing contracts
@@ -131,13 +134,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: scripts/routing_difficulty_model/test-requirements.lock.txt
+          cache-dependency-path: |
+            scripts/routing_difficulty_model/test-requirements.lock.txt
+            apps/ai-service/requirements-rag-extraction.lock
 
       - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --requirement scripts/routing_difficulty_model/test-requirements.lock.txt
+          python -m pip install --requirement apps/ai-service/requirements-rag-extraction.lock
+          mkdir -p .cache/tiktoken
+          TIKTOKEN_CACHE_DIR=.cache/tiktoken python -c "import tiktoken; assert tiktoken.encoding_for_model('text-embedding-3-large').name == 'cl100k_base'"
           pnpm install --frozen-lockfile
 
       - name: Verify repository and routing contracts
@@ -148,6 +156,12 @@ jobs:
           pnpm verify:routing-contract
           pnpm verify:v2.1-category-eval
           pnpm verify:v2.1-difficulty-eval
+          pnpm rag:evaluate
+          (
+            cd apps/ai-service
+            TIKTOKEN_CACHE_DIR="$GITHUB_WORKSPACE/.cache/tiktoken" python -m unittest discover -s app/tests -p "test_*.py"
+            TIKTOKEN_CACHE_DIR="$GITHUB_WORKSPACE/.cache/tiktoken" python -m compileall -q app
+          )
 
   application-verification:
     name: application verification (${{ matrix.target }})
@@ -296,6 +310,7 @@ jobs:
             echo "Pre-RAG migration baseline copy mismatch: expected ${expected_baseline_count}, copied ${baseline_count}." >&2
             exit 1
           fi
+          echo "Applying ${baseline_count} pre-RAG migrations before the additive RAG chain."
 
           pnpm --filter @gatelm/control-plane-api exec prisma migrate deploy \
             --schema "${baseline_root}/schema.prisma"
@@ -315,6 +330,8 @@ jobs:
             --schema prisma/schema.prisma
           pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
             prisma/rag-foundation.integration.spec.ts
+          pnpm --filter @gatelm/chat-api test -- --runInBand \
+            src/rag/rag-tenant-isolation.integration.spec.ts
 
       - name: Verify migration from an empty database
         shell: bash
@@ -335,6 +352,9 @@ jobs:
           DATABASE_URL="${fresh_url}" GATELM_TEST_DATABASE_URL="${fresh_url}" \
             pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
               prisma/rag-foundation.integration.spec.ts
+          DATABASE_URL="${fresh_url}" GATELM_TEST_DATABASE_URL="${fresh_url}" \
+            pnpm --filter @gatelm/chat-api test -- --runInBand \
+              src/rag/rag-tenant-isolation.integration.spec.ts
 
       - name: Verify Control Plane types and build
         run: |
@@ -472,9 +492,19 @@ jobs:
             --env-file deploy/aws-triage/.env.example \
             -f deploy/aws-triage/docker-compose.yml \
             config --quiet
+          TENANT_CHAT_RAG_ENABLED=true docker compose \
+            --env-file deploy/aws-triage/.env.example \
+            -f deploy/aws-triage/docker-compose.yml \
+            -f deploy/aws-triage/docker-compose.rag.yml \
+            config --quiet
           docker compose \
             --env-file deploy/selfhost/.env.example \
             -f deploy/selfhost/docker-compose.yml \
+            config --quiet
+          TENANT_CHAT_RAG_ENABLED=true docker compose \
+            --env-file deploy/selfhost/.env.example \
+            -f deploy/selfhost/docker-compose.yml \
+            -f deploy/selfhost/docker-compose.rag.yml \
             config --quiet
 
       - name: Prepare local-only Tenant Chat test secrets
@@ -567,9 +597,19 @@ jobs:
             --env-file deploy/aws-triage/.env.example \
             -f deploy/aws-triage/docker-compose.yml \
             config --quiet
+          TENANT_CHAT_RAG_ENABLED=true docker compose \
+            --env-file deploy/aws-triage/.env.example \
+            -f deploy/aws-triage/docker-compose.yml \
+            -f deploy/aws-triage/docker-compose.rag.yml \
+            config --quiet
           docker compose \
             --env-file deploy/selfhost/.env.example \
             -f deploy/selfhost/docker-compose.yml \
+            config --quiet
+          TENANT_CHAT_RAG_ENABLED=true docker compose \
+            --env-file deploy/selfhost/.env.example \
+            -f deploy/selfhost/docker-compose.yml \
+            -f deploy/selfhost/docker-compose.rag.yml \
             config --quiet
 
       - name: Prepare Gateway E5 runtime bundle

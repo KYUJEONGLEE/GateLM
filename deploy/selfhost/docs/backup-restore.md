@@ -18,8 +18,14 @@ Back up PostgreSQL for:
 - Gateway credential metadata and hashes
 - Request Log and dashboard source data
 - Gateway rate limit counters
+- RAG document metadata, jobs, encrypted chunks, and vectors
 
 Redis is runtime cache/state. For v2.1.0 MVP, PostgreSQL is the critical durable backup target.
+RAG source objects remain in the configured private S3 bucket and are not part
+of `pg_dump`. Back up that bucket, its KMS recovery material, and the approved
+`.secrets/tenant-chat` and `.secrets/rag` values through your secret-management
+process. Losing wrapping/signing material can make restored tenant content or
+private workload authentication unusable.
 
 ## Before You Start
 
@@ -69,6 +75,12 @@ Restore is safest into a fresh PostgreSQL volume or a new server.
 docker compose --env-file .env stop web gateway-core control-plane-api ai-service
 ```
 
+When RAG is enabled, stop the overlay services with the same composed model:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml stop web chat-web chat-api rag-worker gateway-core control-plane-api ai-service
+```
+
 2. Start PostgreSQL:
 
 ```bash
@@ -84,7 +96,7 @@ docker compose --env-file .env exec -T postgres sh -lc 'pg_restore -U "$POSTGRES
 4. Start the stack:
 
 ```bash
-docker compose --env-file .env up -d
+bash scripts/install.sh
 ```
 
 5. Run migrations for the current image version:

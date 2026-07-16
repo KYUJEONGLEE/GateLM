@@ -27,6 +27,7 @@ target_sha="${1:-${GATELM_DEPLOY_SHA:-}}"
 repo_dir="${GATELM_REPO_DIR:-/home/ubuntu/GateLM}"
 deploy_dir="${repo_dir}/deploy/aws-triage"
 compose_file="${deploy_dir}/docker-compose.yml"
+rag_compose_file="${deploy_dir}/docker-compose.rag.yml"
 env_file="${deploy_dir}/.env"
 backup_root="${GATELM_DEPLOY_BACKUP_ROOT:-/home/ubuntu/gatelm-deploy-backups}"
 log_root="${GATELM_DEPLOY_LOG_ROOT:-/home/ubuntu/gatelm-deploy-logs}"
@@ -37,6 +38,7 @@ public_url="${public_url%/}"
 chat_url="${chat_url%/}"
 minimum_free_kb="${GATELM_DEPLOY_MINIMUM_FREE_KB:-5242880}"
 tenant_chat_secret_dir="${deploy_dir}/.secrets/tenant-chat"
+rag_secret_dir="${deploy_dir}/.secrets/rag"
 gateway_e5_bundle_script="${deploy_dir}/scripts/prepare-gateway-e5-runtime-bundle.sh"
 
 build_services=(
@@ -74,6 +76,16 @@ tenant_chat_secret_files=(
   cache-keysets.json
   usage-receipt-token
 )
+rag_secret_files=(
+  content-wrapping-keys.json
+  query-signing.jwk.json
+  query-binding-hmac-keys.json
+  worker-signing.jwk.json
+  worker-binding-hmac-keys.json
+  workload-jwks.json
+  workload-binding-hmac-keys.json
+  workload-identities.json
+)
 
 [[ "${public_url}" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || \
   deploy_fail "GATELM_DEPLOY_PUBLIC_URL must be an HTTPS origin."
@@ -97,6 +109,50 @@ if [[ "${env_mode}" =~ ^[0-7]{3,4}$ ]] && (( (8#${env_mode} & 077) != 0 )); then
   deploy_fail "${env_file} permissions are too open (${env_mode}); expected 600."
 fi
 
+read_deploy_env_value() {
+  local key="$1"
+  awk -F= -v key="${key}" \
+    '$1 == key {sub(/^[^=]*=/, ""); value=$0} END {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      if ((substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
+          (substr(value, 1, 1) == "\047" && substr(value, length(value), 1) == "\047")) {
+        value=substr(value, 2, length(value) - 2)
+      }
+      print value
+    }' \
+    "${env_file}"
+}
+
+rag_enabled="$(read_deploy_env_value TENANT_CHAT_RAG_ENABLED)"
+rag_enabled="${rag_enabled:-false}"
+[[ "${rag_enabled}" == "true" || "${rag_enabled}" == "false" ]] || \
+  deploy_fail "TENANT_CHAT_RAG_ENABLED must be true or false."
+
+rag_driver="$(read_deploy_env_value RAG_OBJECT_STORE_DRIVER)"
+[[ "${rag_driver}" != "fake" ]] || \
+  deploy_fail "RAG_OBJECT_STORE_DRIVER=fake is not allowed in AWS deployment configuration."
+for static_key in \
+  AWS_ACCESS_KEY_ID \
+  AWS_SECRET_ACCESS_KEY \
+  AWS_SESSION_TOKEN \
+  AWS_PROFILE \
+  AWS_SHARED_CREDENTIALS_FILE
+do
+  [[ -z "$(read_deploy_env_value "${static_key}")" ]] || \
+    deploy_fail "${static_key} is not allowed in AWS deployment configuration; use the instance IAM role."
+done
+
+compose_args=(-f "${compose_file}")
+if [[ "${rag_enabled}" == "true" ]]; then
+  [[ -f "${rag_compose_file}" ]] || \
+    deploy_fail "RAG Compose overlay not found: ${rag_compose_file}"
+  [[ "${rag_driver}" == "s3" ]] || \
+    deploy_fail "RAG_OBJECT_STORE_DRIVER must be s3 when Tenant Chat RAG is enabled."
+  compose_args+=(-f "${rag_compose_file}")
+  runtime_services+=(rag-worker)
+  all_services+=(rag-worker)
+fi
+
 exec 9>"${lock_file}"
 flock -n 9 || deploy_fail "Another production deployment is already running."
 
@@ -109,7 +165,7 @@ log_file="${log_root}/${run_id}.log"
 exec > >(tee -a "${log_file}") 2>&1
 
 compose() {
-  docker compose --env-file "${env_file}" -f "${compose_file}" "$@"
+  docker compose --env-file "${env_file}" "${compose_args[@]}" "$@"
 }
 
 wait_for_service() {
@@ -253,11 +309,46 @@ validate_tenant_chat_secrets() {
   export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"
 }
 
+validate_rag_secrets() {
+  local path mode name owner query_active_kid worker_active_kid
+
+  [[ -d "${rag_secret_dir}" && ! -L "${rag_secret_dir}" ]] || \
+    deploy_fail "RAG secret directory not found: ${rag_secret_dir}"
+  mode="$(stat -c '%a' "${rag_secret_dir}" 2>/dev/null || true)"
+  if [[ ! "${mode}" =~ ^[0-7]{3,4}$ ]] || (( (8#${mode} & 077) != 0 )); then
+    deploy_fail "${rag_secret_dir} permissions are too open (${mode:-unknown}); expected 700."
+  fi
+
+  query_active_kid="$(awk -F= '$1 == "RAG_QUERY_EMBEDDING_ACTIVE_KID" {sub(/^[^=]*=/, ""); print}' "${env_file}" | tail -n 1)"
+  if [[ ! "${query_active_kid}" =~ ^[A-Za-z0-9_-]{1,128}$ || "${query_active_kid}" == replace-me* ]]; then
+    deploy_fail "RAG_QUERY_EMBEDDING_ACTIVE_KID must be a non-placeholder opaque ID."
+  fi
+  worker_active_kid="$(awk -F= '$1 == "RAG_WORKER_EMBEDDING_ACTIVE_KID" {sub(/^[^=]*=/, ""); print}' "${env_file}" | tail -n 1)"
+  if [[ ! "${worker_active_kid}" =~ ^[A-Za-z0-9_-]{1,128}$ || "${worker_active_kid}" == replace-me* ]]; then
+    deploy_fail "RAG_WORKER_EMBEDDING_ACTIVE_KID must be a non-placeholder opaque ID."
+  fi
+
+  for name in "${rag_secret_files[@]}"; do
+    path="${rag_secret_dir}/${name}"
+    [[ -f "${path}" && ! -L "${path}" && -s "${path}" ]] || \
+      deploy_fail "RAG secret file is missing, empty, or not a regular file: ${path}"
+    mode="$(stat -c '%a' "${path}" 2>/dev/null || true)"
+    if [[ ! "${mode}" =~ ^[0-7]{3,4}$ ]] || (( (8#${mode} & 077) != 0 )); then
+      deploy_fail "${path} permissions are too open (${mode:-unknown}); expected 600."
+    fi
+    owner="$(stat -c '%u:%g' "${path}" 2>/dev/null || true)"
+    [[ "${owner}" == "${TENANT_CHAT_RUNTIME_UID}:${TENANT_CHAT_RUNTIME_GID}" ]] || \
+      deploy_fail "RAG secret files must share the Tenant Chat runtime UID and GID."
+  done
+}
+
 previous_sha=""
 backup_dir=""
 rollback_manifest=""
 deployment_succeeded=false
 cutover_started=false
+previous_runtime_services=()
+additive_runtime_services=()
 
 cleanup_rollback_tags() {
   local service image_ref image_id rollback_ref
@@ -296,10 +387,17 @@ restore_previous_application() {
 
   if [[ "${cutover_started}" == "true" ]]; then
     deploy_warn "Recreating the previous application images after failed health checks."
-    if ! compose up -d --force-recreate --remove-orphans "${runtime_services[@]}"; then
+    for service in "${additive_runtime_services[@]}"; do
+      if ! compose rm -sf "${service}" >/dev/null 2>&1; then
+        deploy_warn "Could not remove additive runtime service ${service} during rollback."
+        restore_failed=true
+      fi
+    done
+    if (( ${#previous_runtime_services[@]} == 0 )) || \
+      ! compose up -d --force-recreate --remove-orphans "${previous_runtime_services[@]}"; then
       restore_failed=true
     else
-      for service in "${all_services[@]}"; do
+      for service in postgres redis mock-provider "${previous_runtime_services[@]}"; do
         if ! wait_for_service "${service}" 36 5; then
           restore_failed=true
         fi
@@ -360,6 +458,9 @@ available_kb="$(df -Pk "${repo_dir}" | awk 'NR == 2 {print $4}')"
 
 git -C "${repo_dir}" checkout --detach "${target_sha}"
 validate_tenant_chat_secrets
+if [[ "${rag_enabled}" == "true" ]]; then
+  validate_rag_secrets
+fi
 compose config --quiet
 
 backup_dir="${backup_root}/${run_id}"
@@ -378,8 +479,16 @@ for name in "${tenant_chat_secret_files[@]}"; do
 done
 
 for service in "${runtime_services[@]}"; do
-  container_id="$(compose ps -q "${service}")"
-  [[ -n "${container_id}" ]] || deploy_fail "Running container not found for ${service}."
+  container_id="$(compose ps -q "${service}" 2>/dev/null || true)"
+  if [[ -z "${container_id}" ]]; then
+    if [[ "${service}" == "rag-worker" ]]; then
+      deploy_warn "No previous container exists for additive runtime service ${service}; rollback will remove it explicitly."
+      additive_runtime_services+=("${service}")
+      continue
+    fi
+    deploy_fail "Running container not found for ${service}."
+  fi
+  previous_runtime_services+=("${service}")
   image_ref="$(docker inspect --format '{{.Config.Image}}' "${container_id}")"
   image_id="$(docker inspect --format '{{.Image}}' "${container_id}")"
   rollback_ref="gatelm/rollback:${run_id}-${service}"
