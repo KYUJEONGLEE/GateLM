@@ -42,6 +42,7 @@ export type TenantChatAdminProviderCandidate = {
 };
 
 export type TenantChatAdminActiveSnapshot = {
+  cacheEnabled: boolean;
   digest: string;
   modelKey: string;
   policyVersion: number;
@@ -63,6 +64,7 @@ export type TenantChatAdminRuntimeSetup = {
 };
 
 export type TenantChatRuntimeActivationValues = {
+  cacheEnabled: boolean;
   manualModelRef: string;
   routes: TenantChatRoutingMatrix;
   routingMode: TenantChatRoutingMode;

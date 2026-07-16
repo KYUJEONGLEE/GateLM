@@ -165,6 +165,7 @@ func (s *ReservationStore) consumeAndReserve(
 	}
 	quotaState := usageState(projectedTokens, userPeriod.Warning, userPeriod.Economy, userPeriod.HardStop)
 	budgetState := usageState(projectedCost, tenantPeriod.Warning, tenantPeriod.Economy, tenantPeriod.HardStop)
+	cacheOutcome := reservationCacheOutcome(requestContext, snapshot)
 
 	reservationID, err := newUUID()
 	if err != nil {
@@ -227,7 +228,7 @@ func (s *ReservationStore) consumeAndReserve(
 	}
 	if err = persistReservation(
 		ctx, tx, requestContext, snapshot, route, userPeriod, tenantPeriod,
-		reservationID, eventID, reservedTokens, reservedCost, quotaState, budgetState, now,
+		reservationID, eventID, reservedTokens, reservedCost, quotaState, budgetState, cacheOutcome, now,
 	); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -249,7 +250,8 @@ func (s *ReservationStore) consumeAndReserve(
 	return tenantchat.UsageReservation{
 		ReservationID: reservationID, RequestID: requestContext.RequestID, State: "reserved",
 		ReservedTokens: reservedTokens, ReservedCostMicroUSD: reservedCost,
-		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: 1, Route: route,
+		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: 1,
+		CacheOutcome: cacheOutcome, Route: route,
 	}, nil
 }
 
@@ -336,13 +338,13 @@ func findReservationReplay(ctx context.Context, tx pgx.Tx, requestContext tenant
 	var result tenantchat.UsageReservation
 	err := tx.QueryRow(ctx, `
 		SELECT reservation_id::text, request_id, state, reserved_tokens,
-		       reserved_cost_micro_usd, ledger_version
+		       reserved_cost_micro_usd, ledger_version, cache_outcome
 		FROM tenant_chat_usage_reservations
 		WHERE tenant_id = $1::uuid AND user_id = $2::uuid AND idempotency_key = $3
 		FOR UPDATE
 	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID, requestContext.IdempotencyKey).Scan(
 		&result.ReservationID, &result.RequestID, &result.State, &result.ReservedTokens,
-		&result.ReservedCostMicroUSD, &result.LedgerVersion,
+		&result.ReservedCostMicroUSD, &result.LedgerVersion, &result.CacheOutcome,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tenantchat.UsageReservation{}, false, nil

@@ -19,7 +19,13 @@ import {
   TurnStateConflict,
 } from './chat-store.errors';
 import { ContentIntegrityError } from './content.errors';
-import { decryptContent, encryptContent, type ContentRole } from './content-crypto';
+import {
+  createMessageAad,
+  createTitleAad,
+  decryptContent,
+  encryptContent,
+  type ContentRole,
+} from './content-crypto';
 import { ContentIntegrityService } from './content-integrity.service';
 import { CursorCodec, InvalidCursor } from './cursor-codec';
 import { TenantContentKeyService } from './tenant-content-key.service';
@@ -83,7 +89,7 @@ export class EncryptedChatStore {
     const signed = await this.integrity.sign(binding);
     const id = randomUUID();
     const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(key, input.title, titleAad(actor.tenantId, id, version)),
+      encryptContent(key, input.title, createTitleAad(actor.tenantId, id, version)),
     );
     const expiresAt = expiry(input.historyRetentionDays);
     try {
@@ -175,7 +181,7 @@ export class EncryptedChatStore {
   ): Promise<ConversationView> {
     const current = await this.activeConversation(actor, conversationId);
     const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(key, title, titleAad(actor.tenantId, conversationId, version)),
+      encryptContent(key, title, createTitleAad(actor.tenantId, conversationId, version)),
     );
     const changed = await this.prisma.tenantChatConversation.updateMany({
       where: {
@@ -395,7 +401,17 @@ export class EncryptedChatStore {
     }
     const messageId = randomUUID();
     const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(key, content, messageAad(actor.tenantId, reserved.conversationId, messageId, 'user', version)),
+      encryptContent(
+        key,
+        content,
+        createMessageAad(
+          actor.tenantId,
+          reserved.conversationId,
+          messageId,
+          'user',
+          version,
+        ),
+      ),
     );
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -522,7 +538,17 @@ export class EncryptedChatStore {
     }
     const messageId = randomUUID();
     const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(key, content, messageAad(actor.tenantId, reserved.conversationId, messageId, 'assistant', version)),
+      encryptContent(
+        key,
+        content,
+        createMessageAad(
+          actor.tenantId,
+          reserved.conversationId,
+          messageId,
+          'assistant',
+          version,
+        ),
+      ),
     );
     try {
       const message = await this.prisma.$transaction(async (tx) => {
@@ -696,7 +722,7 @@ export class EncryptedChatStore {
           nonce: Buffer.from(row.titleNonce!),
           tag: Buffer.from(row.titleTag!),
         },
-        titleAad(row.tenantId, row.id, row.titleContentKeyVersion!),
+        createTitleAad(row.tenantId, row.id, row.titleContentKeyVersion!),
       ),
     );
     return Object.freeze({
@@ -735,7 +761,7 @@ export class EncryptedChatStore {
           nonce: Buffer.from(row.nonce),
           tag: Buffer.from(row.tag),
         },
-        messageAad(
+        createMessageAad(
           row.tenantId,
           row.conversationId,
           row.id,
@@ -842,36 +868,6 @@ function turnBinding(
 
 function actorValue(actor: ChatActor): JsonValue {
   return { tenantId: actor.tenantId, userId: actor.userId };
-}
-
-function titleAad(tenantId: string, conversationId: string, contentKeyVersion: number) {
-  return {
-    schemaVersion: 1 as const,
-    tenantId,
-    conversationId,
-    recordId: conversationId,
-    contentKind: 'title' as const,
-    role: 'none' as const,
-    contentKeyVersion,
-  };
-}
-
-function messageAad(
-  tenantId: string,
-  conversationId: string,
-  recordId: string,
-  role: 'user' | 'assistant',
-  contentKeyVersion: number,
-) {
-  return {
-    schemaVersion: 1 as const,
-    tenantId,
-    conversationId,
-    recordId,
-    contentKind: 'message' as const,
-    role,
-    contentKeyVersion,
-  };
 }
 
 async function lockActiveConversation(

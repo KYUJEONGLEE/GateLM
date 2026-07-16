@@ -6,6 +6,7 @@ import invocationTerminalEventSchema = require('./invocation-terminal-event.sche
 import invocationTerminalEventV2Schema = require('./invocation-terminal-event-v2.schema.json');
 import usageSettlementEventSchema = require('./usage-settlement-event.schema.json');
 import usageSettlementEventV2Schema = require('./usage-settlement-event-v2.schema.json');
+import usageSettlementEventV3Schema = require('./usage-settlement-event-v3.schema.json');
 
 const projectionEventAjv = new Ajv2020({
   allErrors: true,
@@ -30,6 +31,10 @@ const validateUsageSettlementEventV2 =
 const validateInvocationTerminalEventV2 =
   projectionEventAjv.compile<TenantChatProjectionEvent>(
     invocationTerminalEventV2Schema,
+  );
+const validateUsageSettlementEventV3 =
+  projectionEventAjv.compile<TenantChatProjectionEvent>(
+    usageSettlementEventV3Schema,
   );
 
 export class TenantChatProjectionContractError extends Error {
@@ -87,6 +92,9 @@ function selectValidator(
     eventType === 'usage_released' ||
     eventType === 'usage_unconfirmed'
   ) {
+    if (schemaVersion === 3) {
+      return validateUsageSettlementEventV3;
+    }
     return v2 ? validateUsageSettlementEventV2 : validateUsageSettlementEvent;
   }
   return undefined;

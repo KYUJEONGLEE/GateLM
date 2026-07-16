@@ -16,6 +16,7 @@ import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProjectAdminsModule } from './modules/project-admins/project-admins.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
+import { RagConfigModule } from './modules/rag-config/rag-config.module';
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { TenantChatIdentityModule } from './modules/tenant-chat-identity/tenant-chat-identity.module';
@@ -36,6 +37,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ProjectAdminsModule,
     ApplicationsModule,
     ProviderConnectionsModule,
+    RagConfigModule,
     ApiKeysModule,
     AppTokensModule,
     AuthModule,

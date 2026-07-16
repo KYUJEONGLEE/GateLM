@@ -57,9 +57,10 @@ type RouteCandidateStatus struct {
 }
 
 type SimpleRouter struct {
-	config           SimpleRouterConfig
-	promptClassifier RuleBasedPromptClassifier
-	difficultyShadow *DifficultySemanticShadowRunner
+	config            SimpleRouterConfig
+	promptClassifier  RuleBasedPromptClassifier
+	difficultyRuntime *DifficultySemanticRuntime
+	difficultyShadow  *DifficultySemanticShadowRunner
 }
 
 type SimpleRouterOption func(*SimpleRouter)
@@ -67,6 +68,12 @@ type SimpleRouterOption func(*SimpleRouter)
 func WithDifficultySemanticShadow(runner *DifficultySemanticShadowRunner) SimpleRouterOption {
 	return func(router *SimpleRouter) {
 		router.difficultyShadow = runner
+	}
+}
+
+func WithDifficultySemanticRuntime(runtime *DifficultySemanticRuntime) SimpleRouterOption {
+	return func(router *SimpleRouter) {
+		router.difficultyRuntime = runtime
 	}
 }
 
@@ -83,7 +90,7 @@ func NewSimpleRouter(config SimpleRouterConfig, options ...SimpleRouterOption) *
 	return router
 }
 
-func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
+func (r *SimpleRouter) DecideRoute(ctx context.Context, req Request) (Decision, error) {
 	config := defaultSimpleRouterConfig()
 	promptClassifier := NewRuleBasedPromptClassifier()
 	if r != nil {
@@ -132,6 +139,14 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 
 	if config.Mode != RoutingPolicyModeAuto {
 		return Decision{}, ErrAutoRoutingDisabled
+	}
+	if r != nil && r.difficultyRuntime != nil &&
+		UsesDifficultyModelPath(ExtractDifficultyFeatures(features, category)) {
+		semantic := r.difficultyRuntime.Classify(ctx, features, category)
+		if semantic.Status == DifficultySemanticShadowReady {
+			difficulty = canonicalDifficulty(semantic.Difficulty.Difficulty)
+			material.Difficulty = difficulty
+		}
 	}
 	cell := config.Routes.Cell(category, difficulty)
 	candidates, usedHealthFallback := availableModelRefs(cell.ModelRefs, config.CandidateStatuses)

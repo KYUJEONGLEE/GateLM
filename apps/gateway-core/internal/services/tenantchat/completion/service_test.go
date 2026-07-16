@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
 )
@@ -107,6 +111,222 @@ func TestServiceAppliesRoutingV2BeforeUsageReservation(t *testing.T) {
 	}
 }
 
+func TestServiceUsesSemanticDifficultyAcrossTenantChatRoutingMatrix(t *testing.T) {
+	snapshot := completionDistinctRoutingSnapshot()
+	evaluation := &fakeDifficultySemanticEvaluation{result: routing.DifficultySemanticShadowResult{
+		Status: routing.DifficultySemanticShadowReady,
+		Difficulty: routing.DifficultyResult{
+			Difficulty: routing.DifficultyComplex,
+		},
+	}}
+	runtime := routing.NewDifficultySemanticRuntime(evaluation, 50*time.Millisecond)
+	t.Cleanup(func() { _ = runtime.Close(context.Background()) })
+
+	tests := []struct {
+		name         string
+		prompt       string
+		wantCategory string
+		wantModelRef string
+	}{
+		{name: "general", prompt: "Explain OAuth briefly.", wantCategory: routing.CategoryGeneral, wantModelRef: "general_complex"},
+		{name: "code", prompt: "Fix this TypeScript function error.", wantCategory: routing.CategoryCode, wantModelRef: "code_complex"},
+		{name: "translation", prompt: "Translate this sentence to Korean.", wantCategory: routing.CategoryTranslation, wantModelRef: "translation_complex"},
+		{name: "summarization", prompt: "Summarize this report into key points.", wantCategory: routing.CategorySummarization, wantModelRef: "summarization_complex"},
+		{name: "reasoning", prompt: "Compare these options and recommend one with tradeoffs.", wantCategory: routing.CategoryReasoning, wantModelRef: "reasoning_complex"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+				ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+				RequestID:     "request_completion_001",
+				State:         "reserved",
+				Route: tenantchat.SelectedRoute{
+					RouteID: "route_selected", ProviderID: "provider-selected", ModelKey: "model-selected",
+				},
+			}}
+			service := New(
+				&fakeSnapshotResolver{snapshot: snapshot},
+				usage,
+				&fakeProviderExecutor{stream: &fakeStream{}},
+				WithDifficultySemanticRuntime(runtime),
+			)
+			request := completionRequest()
+			request.Input.Messages = []tenantchat.EphemeralMessage{{Role: "user", Content: test.prompt}}
+
+			execution, err := service.Prepare(context.Background(), request)
+			if err != nil {
+				t.Fatalf("prepare semantic routed completion: %v", err)
+			}
+			defer execution.Close()
+			decision := usage.lastContext.Routing
+			if decision == nil || decision.Category != test.wantCategory ||
+				decision.Difficulty != routing.DifficultyComplex || decision.ModelRef != test.wantModelRef {
+				t.Fatalf("semantic matrix route mismatch: got %+v, want category=%s modelRef=%s", decision, test.wantCategory, test.wantModelRef)
+			}
+		})
+	}
+	if got := evaluation.calls.Load(); got != int32(len(tests)) {
+		t.Fatalf("semantic evaluations = %d, want %d", got, len(tests))
+	}
+}
+
+func TestServiceFallsBackToRuleDifficultyWhenSemanticRuntimeIsNotReady(t *testing.T) {
+	evaluation := &fakeDifficultySemanticEvaluation{result: routing.DifficultySemanticShadowResult{
+		Status: routing.DifficultySemanticShadowInferenceFailed,
+	}}
+	runtime := routing.NewDifficultySemanticRuntime(evaluation, 50*time.Millisecond)
+	t.Cleanup(func() { _ = runtime.Close(context.Background()) })
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_cheap", ProviderID: "provider-openai", ModelKey: "gpt-mini",
+		},
+	}}
+	service := New(
+		&fakeSnapshotResolver{snapshot: completionRoutingSnapshot()},
+		usage,
+		&fakeProviderExecutor{stream: &fakeStream{}},
+		WithDifficultySemanticRuntime(runtime),
+	)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{{Role: "user", Content: "Explain OAuth briefly."}}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare fallback routed completion: %v", err)
+	}
+	defer execution.Close()
+	decision := usage.lastContext.Routing
+	if decision == nil || decision.ModelRef != "tc_cheap" || decision.Difficulty != routing.DifficultySimple {
+		t.Fatalf("rule fallback route mismatch: %+v", decision)
+	}
+}
+
+func TestServiceSkipsSemanticRuntimeForTenantChatManualRoute(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	snapshot.Policies.Routing.Policy.Mode = routing.RoutingPolicyModeManual
+	evaluation := &fakeDifficultySemanticEvaluation{result: routing.DifficultySemanticShadowResult{
+		Status: routing.DifficultySemanticShadowReady,
+		Difficulty: routing.DifficultyResult{
+			Difficulty: routing.DifficultyComplex,
+		},
+	}}
+	runtime := routing.NewDifficultySemanticRuntime(evaluation, 50*time.Millisecond)
+	t.Cleanup(func() { _ = runtime.Close(context.Background()) })
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_premium", ProviderID: "provider-anthropic", ModelKey: "claude",
+		},
+	}}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot},
+		usage,
+		&fakeProviderExecutor{stream: &fakeStream{}},
+		WithDifficultySemanticRuntime(runtime),
+	)
+
+	execution, err := service.Prepare(context.Background(), completionRequest())
+	if err != nil {
+		t.Fatalf("prepare manual routed completion: %v", err)
+	}
+	defer execution.Close()
+	decision := usage.lastContext.Routing
+	if decision == nil || decision.ModelRef != "tc_premium" || evaluation.calls.Load() != 0 {
+		t.Fatalf("manual route used semantic runtime: decision=%+v evaluations=%d", decision, evaluation.calls.Load())
+	}
+}
+
+func TestServiceManualRoutingIncludesSharedFallbackCandidate(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_premium", "tc_cheap"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{
+		Simple:  sharedCell,
+		Complex: sharedCell,
+	}
+	snapshot.Policies.Routing.Policy.Mode = "manual"
+	snapshot.Policies.Routing.Policy.Routes = tenantruntime.RoutingMatrix{
+		General:       sharedDifficulty,
+		Code:          sharedDifficulty,
+		Translation:   sharedDifficulty,
+		Summarization: sharedDifficulty,
+		Reasoning:     sharedDifficulty,
+	}
+	snapshot.Policies.Routing.ManualModelRef = "tc_premium"
+	snapshot.Policies.Fallback = tenantruntime.FallbackPolicy{
+		Enabled:        true,
+		MaxAttempts:    2,
+		AllowedReasons: []string{"provider_timeout", "provider_error_pre_delta"},
+	}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_premium", ProviderID: "provider-anthropic", ModelKey: "claude",
+		},
+	}}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot},
+		usage,
+		&fakeProviderExecutor{stream: &fakeStream{}},
+	)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{{Role: "user", Content: "Hello"}}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare manual routed completion: %v", err)
+	}
+	defer execution.Close()
+	if usage.lastContext.Routing == nil {
+		t.Fatal("manual routing decision must be attached before usage reservation")
+	}
+	decision := usage.lastContext.Routing
+	if decision.ModelRef != "tc_premium" || len(decision.CandidateModelRefs) != 2 ||
+		decision.CandidateModelRefs[0] != "tc_premium" || decision.CandidateModelRefs[1] != "tc_cheap" {
+		t.Fatalf("unexpected manual fallback candidates: %+v", decision)
+	}
+}
+
+func TestSharedTenantChatFallbackModelRefsRejectsCellsWithoutFallback(t *testing.T) {
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary", "tc_fallback"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{Simple: sharedCell, Complex: sharedCell}
+
+	tests := []struct {
+		name   string
+		routes tenantruntime.RoutingMatrix
+	}{
+		{name: "empty matrix", routes: tenantruntime.RoutingMatrix{}},
+		{
+			name: "later cell has no fallback",
+			routes: tenantruntime.RoutingMatrix{
+				General: sharedDifficulty,
+				Code: tenantruntime.RoutingDifficulty{
+					Simple:  tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary"}},
+					Complex: sharedCell,
+				},
+				Translation:   sharedDifficulty,
+				Summarization: sharedDifficulty,
+				Reasoning:     sharedDifficulty,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sharedTenantChatFallbackModelRefs(test.routes, "tc_manual"); got != nil {
+				t.Fatalf("expected no shared fallback, got %v", got)
+			}
+		})
+	}
+}
+
 func TestServiceRoutesAnExistingConversationByTheLatestUserMessage(t *testing.T) {
 	snapshot := completionRoutingSnapshot()
 	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
@@ -194,6 +414,156 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	}
 	if got := usage.transactionCalls(); got != 1 {
 		t.Fatalf("cache-hit transaction budget exceeded: got %d want 1", got)
+	}
+}
+
+func TestServiceBypassesStaleExactCacheEntryWhenPolicyIsOff(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "off", Enabled: false, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", State: "reserved", CacheOutcome: "off",
+		Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+	}}
+	cache := &fakeExactCache{
+		entry: tenantchat.ExactCacheEntry{ResponseText: "stale response", EffectiveModelKey: "stale-model"},
+		hit:   true,
+	}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, &fakeProviderExecutor{},
+		WithExactCache(cache),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache-off request: %v", err)
+	}
+	execution.Close()
+	if cache.getCalls != 0 || usage.reserveCalls != 1 {
+		t.Fatalf("cache-off request must bypass stale entries and reserve usage: get=%d reserve=%d", cache.getCalls, usage.reserveCalls)
+	}
+}
+
+func TestServiceStoresExactCacheMissThenHitsWithoutSecondProviderCall(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			RequestID: "request_completion_001", ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+			State: "settled", ConfirmedInputTokens: 4, ConfirmedOutputTokens: 2,
+			QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss", LedgerVersion: 2,
+		},
+	}
+	cache := &fakeExactCache{}
+	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{
+		{Delta: "synthetic response"},
+		{Usage: &provider.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}},
+	}}}
+	registry := metrics.NewRegistry()
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache), WithMetrics(registry),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+
+	first, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache miss: %v", err)
+	}
+	var firstEvents []tenantchat.CompletionEvent
+	if err := first.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		firstEvents = append(firstEvents, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay cache miss: %v", err)
+	}
+	first.Close()
+
+	repeated := request
+	repeated.Context.RequestID = "request_completion_002"
+	repeated.Context.TurnID = "turn_completion_002"
+	repeated.Context.IdempotencyKey = "idempotency_completion_002"
+	second, err := service.Prepare(context.Background(), repeated)
+	if err != nil {
+		t.Fatalf("prepare cache hit: %v", err)
+	}
+	var secondEvents []tenantchat.CompletionEvent
+	if err := second.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		secondEvents = append(secondEvents, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay cache hit: %v", err)
+	}
+	second.Close()
+
+	if providers.calls != 1 || usage.reserveCalls != 1 || cache.getCalls != 2 || cache.putCalls != 1 {
+		t.Fatalf("unexpected miss/store/hit calls: provider=%d reserve=%d get=%d put=%d", providers.calls, usage.reserveCalls, cache.getCalls, cache.putCalls)
+	}
+	if len(firstEvents) == 0 || firstEvents[len(firstEvents)-1].CacheOutcome != "miss" {
+		t.Fatalf("first request must be a cache miss: %+v", firstEvents)
+	}
+	if len(secondEvents) != 2 || secondEvents[1].CacheOutcome != "hit" {
+		t.Fatalf("second request must be a cache hit: %+v", secondEvents)
+	}
+	rendered := registry.RenderPrometheus()
+	for _, metric := range []string{
+		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success"} 1`,
+		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 1`,
+		`gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`,
+	} {
+		if !strings.Contains(rendered, metric) {
+			t.Fatalf("missing cache metric %q in %s", metric, rendered)
+		}
+	}
+}
+
+func TestServiceDoesNotFailProviderResponseWhenExactCacheStoreFails(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			State: "settled", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss",
+		},
+	}
+	cache := &fakeExactCache{putErr: errors.New("synthetic cache failure")}
+	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{
+		{Delta: "synthetic response"},
+		{Usage: &provider.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}},
+	}}}
+	registry := metrics.NewRegistry()
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache), WithMetrics(registry),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache miss: %v", err)
+	}
+	if err := execution.Relay(context.Background(), func(tenantchat.CompletionEvent) error { return nil }); err != nil {
+		t.Fatalf("provider response must survive cache store failure: %v", err)
+	}
+	if !strings.Contains(registry.RenderPrometheus(), `gatelm_cache_operations_total{cache_status="error",cache_type="exact",operation="write",status="error"} 1`) {
+		t.Fatal("cache store failure metric was not recorded")
 	}
 }
 
@@ -841,6 +1211,27 @@ func completionRoutingSnapshot() tenantruntime.Snapshot {
 	return snapshot
 }
 
+func completionDistinctRoutingSnapshot() tenantruntime.Snapshot {
+	snapshot := completionRoutingSnapshot()
+	cell := func(modelRef string) tenantruntime.RoutingCell {
+		return tenantruntime.RoutingCell{ModelRefs: []string{modelRef}}
+	}
+	difficulty := func(category string) tenantruntime.RoutingDifficulty {
+		return tenantruntime.RoutingDifficulty{
+			Simple:  cell(category + "_simple"),
+			Complex: cell(category + "_complex"),
+		}
+	}
+	snapshot.Policies.Routing.Policy.Routes = tenantruntime.RoutingMatrix{
+		General:       difficulty(routing.CategoryGeneral),
+		Code:          difficulty(routing.CategoryCode),
+		Translation:   difficulty(routing.CategoryTranslation),
+		Summarization: difficulty(routing.CategorySummarization),
+		Reasoning:     difficulty(routing.CategoryReasoning),
+	}
+	return snapshot
+}
+
 type fakeSnapshotResolver struct {
 	snapshot tenantruntime.Snapshot
 	err      error
@@ -851,22 +1242,48 @@ type fakeSafetyEvaluator struct {
 	err    error
 }
 
+type fakeDifficultySemanticEvaluation struct {
+	result routing.DifficultySemanticShadowResult
+	calls  atomic.Int32
+}
+
+func (f *fakeDifficultySemanticEvaluation) Evaluate(
+	context.Context,
+	routing.PromptFeatures,
+	string,
+) routing.DifficultySemanticShadowResult {
+	f.calls.Add(1)
+	return f.result
+}
+
+func (f *fakeDifficultySemanticEvaluation) Close() error { return nil }
+
 func (f *fakeSafetyEvaluator) Evaluate(context.Context, tenantruntime.Snapshot, tenantchat.CompletionInput) (tenantchat.SafetyEvaluation, error) {
 	return f.result, f.err
 }
 
 type fakeExactCache struct {
-	entry tenantchat.ExactCacheEntry
-	hit   bool
-	err   error
+	entry    tenantchat.ExactCacheEntry
+	hit      bool
+	getErr   error
+	putErr   error
+	getCalls int
+	putCalls int
 }
 
 func (f *fakeExactCache) Get(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.CompletionInput) (tenantchat.ExactCacheEntry, bool, error) {
-	return f.entry, f.hit, f.err
+	f.getCalls++
+	return f.entry, f.hit, f.getErr
 }
 
-func (f *fakeExactCache) Put(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.CompletionInput, tenantchat.ExactCacheEntry) error {
-	return f.err
+func (f *fakeExactCache) Put(_ context.Context, _ tenantchat.RequestContext, _ tenantruntime.Snapshot, _ tenantchat.CompletionInput, entry tenantchat.ExactCacheEntry) error {
+	f.putCalls++
+	if f.putErr != nil {
+		return f.putErr
+	}
+	f.entry = entry
+	f.hit = true
+	return nil
 }
 
 type fakeTokenLimiter struct {

@@ -3,6 +3,7 @@ import {
   ResourceStatus,
   RuntimeConfigPublishState,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -264,6 +265,13 @@ describe('TenantChatRuntimeService administrator activation', () => {
       maxActiveAdmissionsPerUser: 2,
       admissionTtlSeconds: 30,
     });
+    expect(snapshot?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant_chat_cache_keys_v1',
+    });
     expect(snapshot?.policies.routing.routes).toEqual([
       expect.objectContaining({
         modelRef: expect.stringMatching(/^tc_[a-f0-9]{32}$/),
@@ -290,8 +298,71 @@ describe('TenantChatRuntimeService administrator activation', () => {
         providerConnectionId: PROVIDER_ID,
         modelKey: 'gpt-5.4-mini',
         pricingStatus: 'current',
+        cacheEnabled: true,
       }),
     );
+  });
+
+  it('uses the configured key set and preserves cache settings across explicit and omitted updates', async () => {
+    const harness = createPersistenceHarness();
+    const config = {
+      get: jest.fn((key: string) =>
+        key === 'TENANT_CHAT_CACHE_KEY_SET_ID'
+          ? 'tenant-chat-local-cache-1'
+          : undefined,
+      ),
+    } as unknown as ConfigService;
+    const service = new TenantChatRuntimeService(harness.prisma, config);
+
+    const disabled = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-mini',
+      cacheEnabled: false,
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(disabled.activeSnapshot?.cacheEnabled).toBe(false);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'off',
+      enabled: false,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant-chat-local-cache-1',
+    });
+
+    const preserved = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-nano',
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(preserved.activeSnapshot?.cacheEnabled).toBe(false);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'off',
+      enabled: false,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant-chat-local-cache-1',
+    });
+
+    const enabled = await service.activateAdminRuntime({
+      tenantId: TENANT_ID,
+      providerConnectionId: PROVIDER_ID,
+      modelKey: 'gpt-5.4-nano',
+      cacheEnabled: true,
+      publishedBy: ADMIN_ID,
+    });
+
+    expect(enabled.activeSnapshot?.cacheEnabled).toBe(true);
+    expect(harness.activeSnapshot?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 300,
+      maxEntriesPerUser: 100,
+      keySetId: 'tenant-chat-local-cache-1',
+    });
   });
 
   it('publishes the explicit 5 x 2 auto-routing matrix with resolved modelRefs', async () => {
@@ -378,6 +449,13 @@ describe('TenantChatRuntimeService administrator activation', () => {
       maxActiveAdmissionsPerUser: 1,
       admissionTtlSeconds: 30,
     };
+    previous.policies.cache = {
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 777,
+      maxEntriesPerUser: 23,
+      keySetId: 'existing-cache-key-set',
+    };
     previous.employeeNoticeVersion = 9;
     previous.digest = computeTenantChatSnapshotDigest(previous);
 
@@ -405,6 +483,13 @@ describe('TenantChatRuntimeService administrator activation', () => {
     expect(current?.policies.concurrency).toEqual({
       maxActiveAdmissionsPerUser: 1,
       admissionTtlSeconds: 30,
+    });
+    expect(current?.policies.cache).toEqual({
+      strategy: 'exact',
+      enabled: true,
+      ttlSeconds: 777,
+      maxEntriesPerUser: 23,
+      keySetId: 'existing-cache-key-set',
     });
     expect(current?.policies.routing.routes).toEqual([
       expect.objectContaining({ modelKey: 'gpt-5.4-nano' }),

@@ -147,7 +147,7 @@ func (s *Store) Reserve(ctx context.Context, tx pgx.Tx, input ReserveInput) (Res
 
 func validReserveInput(input ReserveInput) bool {
 	if input.TenantID == "" || input.RequestID == "" || input.ReservationID == "" ||
-		!input.Surface.Valid() || input.Now.IsZero() || input.CandidateTier == "" ||
+		!input.Surface.Valid() || input.Now.IsZero() ||
 		input.Pricing.Validate() != nil {
 		return false
 	}

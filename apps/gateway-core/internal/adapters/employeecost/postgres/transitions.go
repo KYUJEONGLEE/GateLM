@@ -109,11 +109,7 @@ func (s *Store) StartPrimaryAttempt(
 }
 
 func (s *Store) TopUpAttempt(ctx context.Context, tx pgx.Tx, input TopUpAttemptInput) (TopUpResult, error) {
-	if tx == nil || input.TenantID == "" || input.EmployeeID == "" || input.RequestID == "" ||
-		input.ReservationID == "" || !input.Surface.Valid() || input.Now.IsZero() ||
-		input.DispatchIntentExpiresAt.Before(input.Now) ||
-		input.CandidateTier == "" || !validAttemptInput(input.Attempt) ||
-		input.Attempt.Kind != employeecost.AttemptKindFallback {
+	if tx == nil || !validTopUpAttemptInput(input) {
 		return TopUpResult{}, ErrInvalidInput
 	}
 	reservation, found, err := lockCommonReservation(ctx, tx, input.Surface, input.RequestID)
@@ -204,6 +200,13 @@ func (s *Store) TopUpAttempt(ctx context.Context, tx pgx.Tx, input TopUpAttemptI
 		return TopUpResult{}, err
 	}
 	return TopUpResult{Applied: true, LedgerVersion: nextVersion}, nil
+}
+
+func validTopUpAttemptInput(input TopUpAttemptInput) bool {
+	return input.TenantID != "" && input.EmployeeID != "" && input.RequestID != "" &&
+		input.ReservationID != "" && input.Surface.Valid() && !input.Now.IsZero() &&
+		!input.DispatchIntentExpiresAt.Before(input.Now) && validAttemptInput(input.Attempt) &&
+		input.Attempt.Kind == employeecost.AttemptKindFallback
 }
 
 func (s *Store) MarkDispatched(ctx context.Context, tx pgx.Tx, ref AttemptRef) (TransitionResult, error) {

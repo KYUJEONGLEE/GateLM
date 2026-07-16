@@ -76,11 +76,12 @@
       "ActivateRuntimeRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["routingMode", "manualModelRef", "routes"],
+          "required": ["routingMode", "manualModelRef", "routes"],
         "properties": {
           "routingMode": { "type": "string", "enum": ["auto", "manual"] },
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
-          "routes": { "$ref": "#/components/schemas/RoutingMatrix" }
+          "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
+          "cacheEnabled": { "type": "boolean" }
         }
       },
       "ModelKey": {
@@ -198,7 +199,7 @@
       "ActiveSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes"],
+        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes", "cacheEnabled"],
         "properties": {
           "snapshotId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "version": { "type": "integer", "minimum": 1 },
@@ -210,6 +211,7 @@
           "routingMode": { "type": "string", "enum": ["auto", "manual"] },
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
           "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
+          "cacheEnabled": { "type": "boolean" },
           "publishedAt": { "type": "string", "format": "date-time" },
           "pricingStatus": { "type": "string", "enum": ["current", "update_available", "unavailable"] }
         }
