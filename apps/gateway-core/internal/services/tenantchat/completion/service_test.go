@@ -107,6 +107,91 @@ func TestServiceAppliesRoutingV2BeforeUsageReservation(t *testing.T) {
 	}
 }
 
+func TestServiceManualRoutingIncludesSharedFallbackCandidate(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_premium", "tc_cheap"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{
+		Simple:  sharedCell,
+		Complex: sharedCell,
+	}
+	snapshot.Policies.Routing.Policy.Mode = "manual"
+	snapshot.Policies.Routing.Policy.Routes = tenantruntime.RoutingMatrix{
+		General:       sharedDifficulty,
+		Code:          sharedDifficulty,
+		Translation:   sharedDifficulty,
+		Summarization: sharedDifficulty,
+		Reasoning:     sharedDifficulty,
+	}
+	snapshot.Policies.Routing.ManualModelRef = "tc_premium"
+	snapshot.Policies.Fallback = tenantruntime.FallbackPolicy{
+		Enabled:        true,
+		MaxAttempts:    2,
+		AllowedReasons: []string{"provider_timeout", "provider_error_pre_delta"},
+	}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_premium", ProviderID: "provider-anthropic", ModelKey: "claude",
+		},
+	}}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot},
+		usage,
+		&fakeProviderExecutor{stream: &fakeStream{}},
+	)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{{Role: "user", Content: "Hello"}}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare manual routed completion: %v", err)
+	}
+	defer execution.Close()
+	if usage.lastContext.Routing == nil {
+		t.Fatal("manual routing decision must be attached before usage reservation")
+	}
+	decision := usage.lastContext.Routing
+	if decision.ModelRef != "tc_premium" || len(decision.CandidateModelRefs) != 2 ||
+		decision.CandidateModelRefs[0] != "tc_premium" || decision.CandidateModelRefs[1] != "tc_cheap" {
+		t.Fatalf("unexpected manual fallback candidates: %+v", decision)
+	}
+}
+
+func TestSharedTenantChatFallbackModelRefsRejectsCellsWithoutFallback(t *testing.T) {
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary", "tc_fallback"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{Simple: sharedCell, Complex: sharedCell}
+
+	tests := []struct {
+		name   string
+		routes tenantruntime.RoutingMatrix
+	}{
+		{name: "empty matrix", routes: tenantruntime.RoutingMatrix{}},
+		{
+			name: "later cell has no fallback",
+			routes: tenantruntime.RoutingMatrix{
+				General: sharedDifficulty,
+				Code: tenantruntime.RoutingDifficulty{
+					Simple:  tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary"}},
+					Complex: sharedCell,
+				},
+				Translation:   sharedDifficulty,
+				Summarization: sharedDifficulty,
+				Reasoning:     sharedDifficulty,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sharedTenantChatFallbackModelRefs(test.routes, "tc_manual"); got != nil {
+				t.Fatalf("expected no shared fallback, got %v", got)
+			}
+		})
+	}
+}
+
 func TestServiceRoutesAnExistingConversationByTheLatestUserMessage(t *testing.T) {
 	snapshot := completionRoutingSnapshot()
 	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
