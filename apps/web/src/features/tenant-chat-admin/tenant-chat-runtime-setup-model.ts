@@ -101,7 +101,7 @@ export function updateTenantChatPrimaryModelRef(
   difficulty: TenantChatRoutingDifficulty,
   modelRef: string
 ): TenantChatRoutingMatrix {
-  const currentRefs = routes[category][difficulty].modelRefs;
+  const currentRefs = routes[category]?.[difficulty]?.modelRefs ?? [];
   return {
     ...routes,
     [category]: {
@@ -134,12 +134,14 @@ export function applyTenantChatSharedFallbackModelRef(
   for (const category of routingCategories) {
     next[category] = { ...routes[category] };
     for (const difficulty of routingDifficulties) {
-      const primaryModelRef = routes[category][difficulty].modelRefs[0];
-      next[category][difficulty] = {
-        modelRefs: fallbackModelRef
-          ? [primaryModelRef, fallbackModelRef]
-          : [primaryModelRef]
-      };
+      const primaryModelRef = routes[category]?.[difficulty]?.modelRefs?.[0];
+      if (primaryModelRef) {
+        next[category][difficulty] = {
+          modelRefs: fallbackModelRef
+            ? [primaryModelRef, fallbackModelRef]
+            : [primaryModelRef]
+        };
+      }
     }
   }
   return next;

@@ -131,7 +131,8 @@ test("degraded routing selections render unavailable options instead of an avail
 
   expect(source.match(/<UnavailableModelOption/g)).toHaveLength(1);
   expect(source).toContain("function TenantRoutingProviderModelSelect");
-  expect(source).toContain('value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}');
+  expect(source).toContain('value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}');
+  expect(source).toContain("routes[category.id]?.[difficulty.id]?.modelRefs ?? []");
   expect(source).toContain('<UnavailableModelOption locale={locale} models={selectedModels} value={value ?? ""} />');
   expect(source).toContain('return <option disabled value={value}>{copy[locale].modelUnavailable}</option>');
   expect(source).toContain('modelUnavailable: "Selected model unavailable"');
@@ -179,6 +180,35 @@ test("Chat App routing rejects malformed shared fallback profiles without throwi
   } as unknown as typeof withFallback;
 
   expect(selectTenantChatSharedFallbackModelRef(malformed)).toBeNull();
+});
+
+test("Chat App routing helpers tolerate partially populated route cells", () => {
+  const routes = setupWithRoutes().activeSnapshot!.routes;
+  const partial = {
+    ...routes,
+    reasoning: {
+      ...routes.reasoning,
+      complex: undefined
+    }
+  } as unknown as typeof routes;
+
+  const updated = updateTenantChatPrimaryModelRef(
+    partial,
+    "reasoning",
+    "complex",
+    "tc_other_primary"
+  );
+  expect(updated.reasoning.complex.modelRefs).toEqual(["tc_other_primary"]);
+
+  const withFallback = applyTenantChatSharedFallbackModelRef(
+    partial,
+    "tc_tiered"
+  );
+  expect(withFallback.reasoning.complex).toBeUndefined();
+  expect(withFallback.reasoning.simple.modelRefs).toEqual([
+    "tc_gemini_flash",
+    "tc_tiered"
+  ]);
 });
 
 test("Chat App routing excludes automatic and fixed primary models from fallback", () => {
