@@ -9,7 +9,10 @@ import type {
   CompletionResult,
   UsageIntent,
 } from './execution.types';
-import { MAX_EPHEMERAL_MESSAGE_CHARACTERS } from './execution.types';
+import {
+  MAX_EPHEMERAL_MESSAGE_CHARACTERS,
+  MAX_RAG_CONTEXT_MESSAGE_CHARACTERS,
+} from './execution.types';
 import {
   CompletionStreamDisconnected,
   StrictCompletionStreamParser,
@@ -290,13 +293,18 @@ function validateCompletionInput(input: unknown): void {
     throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
   }
   for (const message of input.messages) {
+    const isRagContext = message?.role === 'system' && message?.purpose === 'rag_context';
+    const maximumCharacters = isRagContext
+      ? MAX_RAG_CONTEXT_MESSAGE_CHARACTERS
+      : MAX_EPHEMERAL_MESSAGE_CHARACTERS;
     if (
-      !hasExactKeys(message, ['content', 'role']) ||
+      !hasAllowedKeys(message, ['content', 'purpose', 'role']) ||
       typeof message.role !== 'string' ||
       !['system', 'user', 'assistant'].includes(message.role) ||
       typeof message.content !== 'string' ||
       message.content.length < 1 ||
-      message.content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS
+      message.content.length > maximumCharacters ||
+      (message.purpose !== undefined && (message.role !== 'system' || message.purpose !== 'rag_context'))
     ) {
       throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
     }
@@ -391,6 +399,11 @@ function hasExactKeys(value: unknown, expected: string[]): value is Record<strin
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.keys(value).sort();
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function hasAllowedKeys(value: unknown, allowed: string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.keys(value).every((key) => allowed.includes(key));
 }
 
 function isContentType(response: Response, expected: string): boolean {

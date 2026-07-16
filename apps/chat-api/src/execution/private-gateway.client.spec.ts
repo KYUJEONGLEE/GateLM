@@ -103,6 +103,46 @@ describe('PrivateGatewayClient', () => {
       .rejects.toBeInstanceOf(TerminalReplayContentUnavailable);
   });
 
+  it('accepts only the private system RAG context marker before signing', async () => {
+    const signer = signerMock();
+    global.fetch = jest.fn().mockResolvedValue(sseResponse(textStream([frame(final(1))]))) as typeof fetch;
+    await expect(client(signer).complete(handle, {
+      messages: [
+        { role: 'system', purpose: 'rag_context', content: 'untrusted source text' },
+        { role: 'user', content: 'question' },
+      ],
+      stream: true,
+    }, usageIntent)).resolves.toMatchObject({ final: { sequence: 1 } });
+    expect(signer.authorize).toHaveBeenCalled();
+
+    global.fetch = jest.fn() as typeof fetch;
+    await expect(client(signerMock()).complete(handle, {
+      messages: [{ role: 'user', purpose: 'rag_context', content: 'question' }],
+      stream: true,
+    }, usageIntent)).rejects.toMatchObject({ code: 'CHAT_INVALID_REQUEST' });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('uses a separate request-local size ceiling for RAG context only', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      sseResponse(textStream([frame(final(1))])),
+    ) as typeof fetch;
+    await expect(client(signerMock()).complete(handle, {
+      messages: [
+        { role: 'system', purpose: 'rag_context', content: 'r'.repeat(30_000) },
+        { role: 'user', content: 'question' },
+      ],
+      stream: true,
+    }, usageIntent)).resolves.toMatchObject({ final: { sequence: 1 } });
+
+    global.fetch = jest.fn() as typeof fetch;
+    await expect(client(signerMock()).complete(handle, {
+      messages: [{ role: 'system', content: 'x'.repeat(20_001) }],
+      stream: true,
+    }, usageIntent)).rejects.toMatchObject({ code: 'CHAT_INVALID_REQUEST' });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('rejects oversized JSON and cancel conflicts without retry', async () => {
     const signer = signerMock();
     global.fetch = jest.fn().mockResolvedValue(new Response('x'.repeat(70_000), {

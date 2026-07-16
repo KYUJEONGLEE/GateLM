@@ -15,6 +15,13 @@ import type {
 } from '@/execution/execution.types';
 import { PrivateGatewayError } from '@/execution/private-gateway.client';
 import { TerminalReplayContentUnavailable } from '@/execution/sse-parser';
+import {
+  RagRetrievalDisabledError,
+  RagRetrievalError,
+} from '@/rag/rag-retrieval.errors';
+import { RagContextBuilder } from '@/rag/rag-context.builder';
+import { validateRagCitations, type RagCitation } from '@/rag/rag-citations';
+import { RagRetrievalService } from '@/rag/rag-retrieval.service';
 
 import { ActiveTurnRegistry, TurnAttachmentLimitReached } from './active-turn-registry';
 import {
@@ -40,13 +47,20 @@ export type PreparedTurn =
       message: MessageView;
     }>
   | Readonly<{
+      kind: 'local';
+      actor: ChatActor;
+      reserved: ReservedTurn;
+      message: MessageView;
+    }>
+  | Readonly<{
       kind: 'execute';
       actor: ChatActor;
       reserved: ReservedTurn;
       handle: AdmissionHandle;
-      messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[];
+      messages: readonly EphemeralMessage[];
       usageIntent: UsageIntent;
       signal: AbortSignal;
+      citationSources: readonly RagCitation[];
     }>;
 
 export type SafeStreamError = Readonly<{
@@ -76,19 +90,30 @@ export class ConversationService {
     private readonly store: EncryptedChatStore,
     private readonly bridge: ExecutionBridgeService,
     private readonly activeTurns: ActiveTurnRegistry,
+    private readonly retrieval: RagRetrievalService,
+    private readonly ragContext: RagContextBuilder,
   ) {
     this.historyRetentionDays = config.getOrThrow<0 | 7 | 30 | 90>('TENANT_CHAT_HISTORY_RETENTION_DAYS');
     this.assistantMaxBytes = config.getOrThrow<number>('TENANT_CHAT_ASSISTANT_MAX_BYTES');
     this.maximumAttachmentsPerTurn = config.getOrThrow<number>('TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN');
   }
 
-  create(accessToken: string, idempotencyKey: string, title: string) {
+  create(
+    accessToken: string,
+    idempotencyKey: string,
+    title: string,
+    requestedKnowledgeMode?: 'off' | 'tenant',
+  ) {
     return this.guard(async () => {
-      const actor = await this.actor(accessToken);
+      const authorized = await this.sessions.authorizeExecution(accessToken);
+      const actor = actorOf(authorized);
+      const knowledgeMode = requestedKnowledgeMode ?? 'off';
+      if (knowledgeMode === 'tenant') await this.retrieval.assertTenantEnabled(authorized.tenantId);
       return this.store.createConversation(actor, {
         idempotencyKey,
         title,
         historyRetentionDays: this.historyRetentionDays,
+        knowledgeMode,
       });
     });
   }
@@ -150,6 +175,23 @@ export class ConversationService {
       if (['failed', 'cancelled', 'deleted'].includes(reserved.state)) {
         throw new TurnStateConflict();
       }
+      let ragMessage: EphemeralMessage | undefined;
+      let citationSources: readonly RagCitation[] = Object.freeze([]);
+      if (reserved.knowledgeMode === 'tenant') {
+        const retrieved = await this.retrieval.retrieve(authorized, latestRagQuery(input.content));
+        const context = this.ragContext.build(retrieved);
+        if (context.sources.length === 0) {
+          const message = await this.store.persistRagNoEvidence(
+            actor,
+            reserved,
+            input.content,
+            RAG_NO_EVIDENCE_RESPONSE,
+          );
+          return Object.freeze({ kind: 'local' as const, actor, reserved, message });
+        }
+        ragMessage = context.message;
+        citationSources = context.citationSources;
+      }
       const attachment = this.activeTurns.reserve(
         reserved.turnId,
         this.maximumAttachmentsPerTurn,
@@ -162,9 +204,12 @@ export class ConversationService {
           idempotencyKey: reserved.idempotencyKey,
         });
         await this.store.persistAdmittedUser(actor, reserved, input.content, handle);
-        const messages = contextMode === 'single_turn'
+        const baseMessages = contextMode === 'single_turn'
           ? Object.freeze([Object.freeze({ role: 'user' as const, content: input.content })])
           : await this.store.completionHistory(actor, conversationId, reserved.turnId);
+        const messages = ragMessage
+          ? Object.freeze([ragMessage, ...baseMessages])
+          : baseMessages;
         const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
         if (signal.aborted) throw new TurnStateConflict();
         return Object.freeze({
@@ -173,8 +218,13 @@ export class ConversationService {
           reserved,
           handle,
           messages,
-          usageIntent: internalUsageIntent(input.usageIntent, messages),
+          usageIntent: internalUsageIntent(
+            input.usageIntent,
+            messages,
+            reserved.knowledgeMode === 'tenant',
+          ),
           signal,
+          citationSources,
         });
       } catch (error) {
         const lastAttachment = this.activeTurns.releaseReservation(reserved.turnId, attachment);
@@ -279,6 +329,7 @@ export class ConversationService {
         prepared,
         result.assistantContent,
         result.final.cacheOutcome === 'hit' ? null : result.final.effectiveModelKey,
+        prepared.citationSources.length ? validateRagCitations(result.assistantContent, prepared.citationSources) : undefined,
       );
       return Object.freeze({
         message: persisted.message,
@@ -347,15 +398,13 @@ export class ConversationService {
     prepared: Extract<PreparedTurn, { kind: 'execute' }>,
     content: string,
     effectiveModelKey: string | null,
+    citations?: readonly RagCitation[],
   ) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        return await this.store.persistAssistant(
-          prepared.actor,
-          prepared.reserved,
-          content,
-          effectiveModelKey,
-        );
+        return citations === undefined
+          ? await this.store.persistAssistant(prepared.actor, prepared.reserved, content, effectiveModelKey)
+          : await this.store.persistAssistant(prepared.actor, prepared.reserved, content, effectiveModelKey, citations);
       } catch (error) {
         if (attempt === 3 || !isRetryableStorageError(error)) throw error;
         await delay(attempt * 25);
@@ -388,6 +437,8 @@ function httpError(error: unknown): HttpException {
   if (error instanceof TurnAttachmentLimitReached) return failure(429, 'CHAT_CONCURRENCY_LIMITED', 'Too many clients are attached to this turn.');
   if (error instanceof ContentKeyUnavailable) return failure(503, 'CHAT_CONTENT_KEY_UNAVAILABLE', 'Encrypted content is temporarily unavailable.');
   if (error instanceof ContentIntegrityError) return failure(500, 'CHAT_CONTENT_INTEGRITY_FAILED', 'Encrypted content integrity validation failed.');
+  if (error instanceof RagRetrievalDisabledError) return failure(503, 'CHAT_RAG_DISABLED', 'Tenant knowledge chat is not enabled.');
+  if (error instanceof RagRetrievalError) return failure(503, 'CHAT_RAG_UNAVAILABLE', 'Tenant knowledge retrieval is unavailable.');
   if (error instanceof PrivateGatewayError) {
     const status = error.status >= 400 && error.status <= 599 ? error.status : 502;
     return failure(status, safeCode(error.code), 'Tenant Chat execution could not be completed.');
@@ -403,6 +454,8 @@ function safeStreamError(error: unknown, aborted: boolean): SafeStreamError {
   if (aborted) return Object.freeze({ code: 'CHAT_REQUEST_CANCELLED', message: 'The request was cancelled.', cancelled: true });
   if (error instanceof TerminalReplayContentUnavailable) return Object.freeze({ code: 'CHAT_TERMINAL_REPLAY_UNAVAILABLE', message: 'The completed response cannot be replayed safely.', cancelled: false });
   if (error instanceof ContentIntegrityError) return Object.freeze({ code: 'CHAT_CONTENT_INTEGRITY_FAILED', message: 'Encrypted content integrity validation failed.', cancelled: false });
+  if (error instanceof RagRetrievalDisabledError) return Object.freeze({ code: 'CHAT_RAG_DISABLED', message: 'Tenant knowledge chat is not enabled.', cancelled: false });
+  if (error instanceof RagRetrievalError) return Object.freeze({ code: 'CHAT_RAG_UNAVAILABLE', message: 'Tenant knowledge retrieval is unavailable.', cancelled: false });
   if (error instanceof ContentKeyUnavailable) return Object.freeze({ code: 'CHAT_CONTENT_KEY_UNAVAILABLE', message: 'Encrypted content is temporarily unavailable.', cancelled: false });
   if (isStorageError(error)) return Object.freeze({ code: 'CHAT_STORAGE_UNAVAILABLE', message: 'Encrypted content storage is temporarily unavailable.', cancelled: false });
   if (error instanceof TurnStateConflict) return Object.freeze({ code: 'CHAT_TURN_STATE_CONFLICT', message: 'The turn cannot continue from its current state.', cancelled: false });
@@ -421,18 +474,27 @@ function safeCode(value: string): string {
 class AssistantTooLarge extends Error {}
 
 const RETRYABLE_STORAGE_CODES = new Set(['P1008', 'P1017', 'P2024', 'P2034', 'P2037']);
+const RAG_NO_EVIDENCE_RESPONSE = '등록된 문서에서 관련 근거를 찾지 못했습니다.';
 
 function internalUsageIntent(
   input: ClientUsageIntent,
   messages: readonly EphemeralMessage[],
+  ragEnabled = false,
 ): UsageIntent {
   return Object.freeze({
     ...input,
+    ...(ragEnabled ? { cacheStrategy: 'off' as const } : {}),
     estimatedInputTokens: Math.max(
       1,
       messages.reduce((total, message) => total + Buffer.byteLength(message.content, 'utf8'), 0),
     ),
   });
+}
+
+function latestRagQuery(content: string): string {
+  const query = content.trim();
+  if (query.length === 0) throw new RagRetrievalError('RAG_QUERY_INVALID', 400);
+  return query;
 }
 
 function isStorageError(error: unknown): boolean {

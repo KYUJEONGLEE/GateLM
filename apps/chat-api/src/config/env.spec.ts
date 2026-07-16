@@ -21,6 +21,10 @@ describe('Chat API environment', () => {
     expect(validated.RAG_EMBEDDING_DIMENSIONS).toBe(1536);
     expect(validated.RAG_EMBEDDING_PROFILE_VERSION).toBe(1);
     expect(validated.RAG_DISTANCE_METRIC).toBe('cosine');
+    expect(validated.RAG_TOP_K).toBe(6);
+    expect(validated.RAG_MIN_SCORE).toBe(0.3);
+    expect(validated.RAG_CONTEXT_MAX_TOKENS).toBe(6000);
+    expect(validated.RAG_PROMPT_VERSION).toBe(1);
   });
 
   it('preserves an explicitly smaller pool limit', () => {
@@ -57,6 +61,27 @@ describe('Chat API environment', () => {
       .toThrow('CHAT_API_PORT');
     expect(() => validateEnv({ ...base, TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS: '' }))
       .toThrow('TENANT_CHAT_GATEWAY_COMPLETION_TIMEOUT_MS');
+  });
+
+  it('bounds server-only retrieval settings', () => {
+    expect(() => validateEnv({ ...base, RAG_TOP_K: '13' }))
+      .toThrow('RAG_TOP_K');
+    expect(() => validateEnv({ ...base, RAG_MIN_SCORE: '1.01' }))
+      .toThrow('RAG_MIN_SCORE');
+    expect(() => validateEnv({ ...base, RAG_CONTEXT_MAX_TOKENS: '6001' }))
+      .toThrow('RAG_CONTEXT_MAX_TOKENS');
+    expect(() => validateEnv({ ...base, RAG_RETRIEVAL_QUERY_MAX_UTF8_BYTES: '8193' }))
+      .toThrow('RAG_RETRIEVAL_QUERY_MAX_UTF8_BYTES');
+  });
+
+  it('fails startup rather than reusing Tenant Chat execution credentials when RAG is enabled', () => {
+    expect(() => validateEnv({ ...base, TENANT_CHAT_RAG_ENABLED: 'true' }))
+      .toThrow('TENANT_CHAT_GATEWAY_BASE_URL');
+    expect(() => validateEnv({
+      ...base,
+      TENANT_CHAT_RAG_ENABLED: 'true',
+      TENANT_CHAT_GATEWAY_BASE_URL: 'https://gateway.example.test',
+    })).toThrow('RAG_QUERY_EMBEDDING_ACTIVE_KID');
   });
 
   it.each([
