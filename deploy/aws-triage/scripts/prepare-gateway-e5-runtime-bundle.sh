@@ -16,7 +16,7 @@ need_command() {
   command -v "$1" >/dev/null 2>&1 || bundle_fail "$1 is required."
 }
 
-for command_name in awk chmod cp curl diff dirname find mkdir mv rm sha256sum sort stat tar unzip; do
+for command_name in awk chmod cp curl diff dirname docker find id mkdir mv rm sha256sum sort stat tar unzip; do
   need_command "${command_name}"
 done
 
@@ -31,9 +31,17 @@ staging_dir="${temporary_root}/gateway-e5-runtime-bundle.partial.$$"
 manifest_source="${repo_dir}/scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json"
 runtime_lock_source="${repo_dir}/scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json"
 checksums_source="${repo_dir}/scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256"
+quantizer_dockerfile="${repo_dir}/infra/docker/e5-artifact-quantizer.Dockerfile"
+quantizer_image="gatelm/e5-artifact-quantizer:onnxruntime-1.22.1"
 model_revision="614241f622f53c4eeff9890bdc4f31cfecc418b3"
 model_directory="multilingual-e5-small/${model_revision}"
 model_url="https://huggingface.co/intfloat/multilingual-e5-small/resolve/${model_revision}"
+source_onnx_relative_path="onnx/model.onnx"
+source_onnx_size="470268510"
+source_onnx_sha="ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665"
+quantized_onnx_relative_path="generated/model.dynamic-qint8-matmul.onnx"
+quantized_onnx_size="406734568"
+quantized_onnx_sha="a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94"
 
 assert_file() {
   local path="$1"
@@ -106,6 +114,60 @@ copy_verified() {
   chmod 600 "${destination}"
 }
 
+ensure_quantized_model() {
+  local model_root="$1"
+  local source_path="${model_root}/${source_onnx_relative_path}"
+  local output_path="${model_root}/${quantized_onnx_relative_path}"
+  local output_filename="${quantized_onnx_relative_path##*/}"
+  local scratch_path="${model_root}/.quantizer-tmp.$$"
+
+  if [[ -f "${output_path}" ]]; then
+    assert_file "${output_path}" "${quantized_onnx_size}" "${quantized_onnx_sha}"
+    return
+  fi
+
+  [[ -f "${quantizer_dockerfile}" && ! -L "${quantizer_dockerfile}" ]] || \
+    bundle_fail "Pinned E5 quantizer Dockerfile is missing: ${quantizer_dockerfile}"
+  assert_file "${source_path}" "${source_onnx_size}" "${source_onnx_sha}"
+  docker info >/dev/null 2>&1 || bundle_fail "Docker daemon is not reachable."
+  ensure_directory "$(dirname "${output_path}")"
+
+  bundle_log "Building pinned E5 ONNX quantizer"
+  docker build \
+    --platform linux/amd64 \
+    --file "${quantizer_dockerfile}" \
+    --tag "${quantizer_image}" \
+    "${repo_dir}"
+
+  [[ ! -e "${scratch_path}" ]] || bundle_fail "E5 quantizer scratch path already exists: ${scratch_path}"
+  ensure_directory "${scratch_path}"
+  bundle_log "Generating pinned E5 QInt8 ONNX artifact"
+  if ! docker run \
+    --rm \
+    --platform linux/amd64 \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --user "$(id -u):$(id -g)" \
+    --volume "${source_path}:/input/model.onnx:ro" \
+    --volume "$(dirname "${output_path}"):/output:rw" \
+    --volume "${scratch_path}:/tmp:rw" \
+    "${quantizer_image}" \
+    --source "/input/model.onnx" \
+    --source-size "${source_onnx_size}" \
+    --source-sha256 "${source_onnx_sha}" \
+    --output "/output/${output_filename}" \
+    --output-size "${quantized_onnx_size}" \
+    --output-sha256 "${quantized_onnx_sha}"; then
+    rm -rf -- "${scratch_path}"
+    bundle_fail "Pinned E5 ONNX quantization failed."
+  fi
+  rm -rf -- "${scratch_path}"
+
+  assert_file "${output_path}" "${quantized_onnx_size}" "${quantized_onnx_sha}"
+}
+
 cleanup_staging() {
   [[ -d "${staging_dir}" ]] && rm -rf -- "${staging_dir}"
 }
@@ -127,7 +189,6 @@ declare -a model_artifacts=(
   "tokenizer.json|17082730|0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
   "tokenizer_config.json|443|a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b"
   "sentencepiece.bpe.model|5069051|cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865"
-  "generated/model.dynamic-qint8-matmul.onnx|406734568|a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94"
 )
 
 rm -rf -- "${staging_dir}"
@@ -148,6 +209,20 @@ for artifact in "${model_artifacts[@]}"; do
     "${expected_size}" \
     "${expected_sha}"
 done
+
+model_cache_root="${download_root}/${model_directory}"
+source_onnx_path="${model_cache_root}/${source_onnx_relative_path}"
+ensure_download \
+  "${source_onnx_path}" \
+  "${model_url}/${source_onnx_relative_path}?download=true" \
+  "${source_onnx_size}" \
+  "${source_onnx_sha}"
+ensure_quantized_model "${model_cache_root}"
+copy_verified \
+  "${model_cache_root}/${quantized_onnx_relative_path}" \
+  "${staging_dir}/${model_directory}/${quantized_onnx_relative_path}" \
+  "${quantized_onnx_size}" \
+  "${quantized_onnx_sha}"
 
 tokenizer_archive="${download_root}/libtokenizers.linux-amd64.tar.gz"
 ensure_download \
