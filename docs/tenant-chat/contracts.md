@@ -457,6 +457,33 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - content DEK rotation은 새 version을 writer로 선택하고 이전 DEK를 grace reader로 유지한다. row의 `contentKeyVersion`이 없는 key를 가리키면 fail closed한다.
 - readiness는 key file shape, active key, 모든 DB rollback floor 이상 여부를 검사한다. actual key, unwrapped DEK와 canonical plaintext를 log/fixture/metric/artifact에 남기지 않는다.
 
+#### 12.2.1 RAG crypto와 고정 profile 경계
+
+Tenant Chat RAG의 공용 crypto/config 기반은 route, upload, extraction, embedding 호출, retrieval을 활성화하지 않는 호환성 계층이다.
+
+- `packages/tenant-content-crypto`는 framework-neutral AES-256-GCM, JCS, key wrapping, versioned keyset parser, Chat/RAG AAD builder와 `TenantKeyResolver` 계약만 소유한다. Nest, Prisma, 환경 로딩, tenant authorization과 secret file I/O는 포함하지 않는다.
+- 기존 title/message는 32-byte tenant DEK, 매 record마다 새 random 96-bit nonce, 128-bit tag와 기존 Chat AAD byte 형식을 그대로 사용한다. package 추출은 기존 row를 재암호화하거나 AAD field, title `recordId=conversationId`, error code를 바꾸지 않는다.
+- RAG chunk plaintext는 저장 전에 같은 primitive로 암호화한다. `RagChunkAadV1`의 exact key set은 `schemaVersion=1`, `tenantId`, `knowledgeBaseId`, `documentId`, `documentIndexId`, `chunkId`, `contentKind=rag_chunk`, `contentKeyVersion`이다. 값은 server-owned DB/job state에서만 온다.
+- RAG private document metadata용 별도 AAD의 exact key set은 `schemaVersion=1`, `tenantId`, `knowledgeBaseId`, `documentId`, `contentKind=rag_document_private_metadata`, `contentKeyVersion`이다. 이 compatibility milestone은 metadata나 chunk 저장 경로를 만들지 않는다.
+- crypto/key 조회 실패는 fail closed한다. plaintext 저장 fallback, raw chunk가 포함된 error, key material log는 허용하지 않는다.
+
+RAG의 process-wide kill switch는 `TENANT_CHAT_RAG_ENABLED`이며 기본값은 `false`다. tenant-level enablement는 기존 `RagKnowledgeBase.status=ENABLED`만 사용한다. 두 조건이 모두 참일 때만 향후 Tenant Chat RAG route가 유효하며, global flag만으로 public Gateway/Application Chat이나 아직 구현되지 않은 RAG route가 열리지 않는다.
+
+고정 runtime profile은 다음 환경 계약을 사용한다.
+
+```text
+RAG_EMBEDDING_PROVIDER=openai
+RAG_EMBEDDING_MODEL=text-embedding-3-large
+RAG_EMBEDDING_DIMENSIONS=1536
+RAG_EMBEDDING_PROFILE_VERSION=1
+RAG_DISTANCE_METRIC=cosine
+```
+
+- 각 값은 미지정 시 위 고정값을 사용한다. 명시적으로 빈 값, 다른 provider/model/dimension/profile version/distance는 service listen 전에 거부한다.
+- Chat API와 Control Plane은 global flag 값과 무관하게 listen 전에 mismatch existence query로 `RagKnowledgeBase` profile을 고정 runtime profile과 비교한다. 하나라도 다르면 identifier나 row detail 없이 startup을 실패시킨다.
+- 이 startup guard는 M2 migration이 먼저 배포됐다는 expand-first 순서를 전제로 한다. global flag가 `false`이면 profile 정합성만 확인하고 RAG 실행은 계속 허용하지 않는다.
+- worker process와 worker secret mount는 이 milestone에서 만들지 않는다. 향후 Control Plane worker는 동일 공용 package를 사용하되 least-privilege key delivery를 별도 worker contract에서 확정한다.
+
 ### 12.3 Turn lifecycle, SSE와 DOC-013
 
 1. session/device와 authoritative entitlement를 확인한다.

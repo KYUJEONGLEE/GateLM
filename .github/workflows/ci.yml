@@ -140,6 +140,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          pnpm --filter @gatelm/tenant-content-crypto test
+          pnpm --filter @gatelm/tenant-content-crypto typecheck
+          pnpm --filter @gatelm/rag-config test
+          pnpm --filter @gatelm/rag-config typecheck
           pnpm --filter @gatelm/chat-api typecheck
           pnpm --filter @gatelm/chat-api test -- --runInBand
           pnpm --filter @gatelm/chat-api build

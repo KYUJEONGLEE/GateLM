@@ -1,10 +1,10 @@
 # Tenant Chat RAG MVP implementation plan
 
-Status: **Approved MVP implementation plan / M2 DB foundation implemented / non-DB active contract promotion pending**
+Status: **Approved MVP implementation plan / M1 crypto-config and M2 DB foundation implemented / RAG route contracts pending**
 
 Repository baseline: `6a43b757b2379494792d9224276cc4a4f79e5f75` (`dev`, verified 2026-07-16)
 
-Current implementation progress: **M2 database and pgvector infrastructure only; no RAG API, worker, storage, extraction, embedding, retrieval, or UI implementation**
+Current implementation progress: **M1 shared crypto/fixed-profile configuration plus M2 database and pgvector infrastructure; no RAG API, worker, object storage, extraction, embedding call, retrieval, citation, or UI implementation**
 
 This document turns the agreed Tenant Chat RAG MVP boundary into repository-specific milestones. It is not an active API, database, event, or security contract. Contract-sensitive changes described here must first be promoted into the active Tenant Chat contract and reviewed in their own milestone.
 
@@ -117,6 +117,8 @@ The workspace file is `pnpm-workspace.yaml` with `apps/*` and `packages/*` globs
 - Generic worker scaffold: `apps/worker`; currently empty except scaffolding and not a runnable workspace package.
 - Shared UI: `packages/ui` (`@gatelm/ui`).
 - Web BFF helpers: `packages/web-bff` (`@gatelm/web-bff`).
+- Tenant content crypto: `packages/tenant-content-crypto` (`@gatelm/tenant-content-crypto`), a built CommonJS package with framework-neutral AES-256-GCM/JCS/keyset/AAD contracts.
+- RAG fixed configuration: `packages/rag-config` (`@gatelm/rag-config`), a built CommonJS package with the immutable embedding profile, global/tenant gate policy, and DB profile validator.
 - `packages/shared` and `packages/contracts` are currently scaffolds, not importable packages.
 
 ### Component ownership after the MVP milestones
@@ -168,7 +170,8 @@ The Control Plane worker is a separate process built from the Control Plane code
 - Messages and titles use AES-256-GCM in `apps/chat-api/src/content/content-crypto.ts` with a random 12-byte nonce, 16-byte authentication tag, a 32-byte data key, and canonical associated data.
 - `TenantContentKeyService` manages per-tenant active key versions, grace/retired states, rollback floors, and wrapping-key rewraps using `tenant_chat_content_key_states` and `tenant_chat_content_keys`.
 - The current AAD schema is chat-record-specific and cannot be reused unchanged for RAG chunks.
-- There is no importable shared crypto workspace package today. A later compatibility-only milestone should create `packages/tenant-content-crypto`, move only deterministic crypto/keyset primitives there, and keep Nest/Prisma adapters in each application. Existing ciphertext/AAD bytes and tests must remain compatible.
+- `packages/tenant-content-crypto` now owns deterministic crypto/JCS/keyset/AAD primitives while Chat API retains Nest/file/Prisma key-resolution adapters. Fixed legacy message fixtures prove existing ciphertext/AAD compatibility. The future Control Plane worker will import the same package but does not yet exist and receives no key-file mount in M1.
+- `packages/rag-config` now validates the fixed OpenAI/1536/cosine/profile-v1 environment contract in Chat API and Control Plane. `TENANT_CHAT_RAG_ENABLED` defaults to `false`; both processes reject a mismatched Knowledge Base profile before listen regardless of the flag, while tenant enablement remains `RagKnowledgeBase.status=ENABLED`.
 
 ### Gateway, cache, budget, and usage
 
@@ -200,6 +203,7 @@ The Control Plane worker is a separate process built from the Control Plane code
 ### Current verification entry points
 
 - Documentation: `git diff --check`, `corepack pnpm run verify:v2-docs`.
+- Shared RAG foundations: `corepack pnpm --filter @gatelm/tenant-content-crypto test|typecheck|build` and `corepack pnpm --filter @gatelm/rag-config test|typecheck|build`.
 - Control Plane: `corepack pnpm --filter @gatelm/control-plane-api test|test:e2e|typecheck|build`.
 - Tenant Chat API: `corepack pnpm --filter @gatelm/chat-api test|typecheck|build`.
 - Tenant Chat Web: `corepack pnpm --filter @gatelm/chat-web test|lint|typecheck|build`.
@@ -622,15 +626,20 @@ corepack pnpm run verify:v2-docs
 corepack pnpm --filter @gatelm/chat-web test
 ```
 
-### M1 — Crypto compatibility package
+### M1 — Crypto compatibility and fixed-profile configuration
 
-Goal: extract crypto primitives without changing existing Tenant Chat ciphertext behavior and add distinct RAG chunk/document-private-metadata AAD builders.
+Goal: extract crypto primitives without changing existing Tenant Chat ciphertext behavior, add distinct RAG chunk/document-private-metadata AAD builders, and make the fixed embedding profile/default-off feature gate reusable by the current TypeScript services and future Control Plane worker.
+
+Implementation status: **implemented in the current `feat/RAG` worktree; no worker or RAG data path was added**.
 
 Expected files:
 
 - new `packages/tenant-content-crypto/package.json`, `src/*`, and tests
+- new `packages/rag-config/package.json`, `src/*`, and tests
 - `pnpm-lock.yaml`, `pnpm-workspace.yaml` only if required by the established workspace pattern
 - narrow imports/tests in `apps/chat-api/src/content/*`
+- fixed-profile env validation and startup guards in Chat API and Control Plane
+- backend package build/runtime wiring in the two API Dockerfiles and CI
 
 Must not change: database schema, key-state tables, message AAD bytes, APIs.
 
@@ -639,9 +648,16 @@ Validation:
 ```powershell
 corepack pnpm --filter @gatelm/tenant-content-crypto test
 corepack pnpm --filter @gatelm/tenant-content-crypto typecheck
+corepack pnpm --filter @gatelm/tenant-content-crypto build
+corepack pnpm --filter @gatelm/rag-config test
+corepack pnpm --filter @gatelm/rag-config typecheck
+corepack pnpm --filter @gatelm/rag-config build
 corepack pnpm --filter @gatelm/chat-api test
 corepack pnpm --filter @gatelm/chat-api typecheck
 corepack pnpm --filter @gatelm/chat-api build
+corepack pnpm --filter @gatelm/control-plane-api test
+corepack pnpm --filter @gatelm/control-plane-api typecheck
+corepack pnpm --filter @gatelm/control-plane-api build
 ```
 
 Compatibility fixtures must prove existing chat AAD/ciphertext bytes remain unchanged and new private-metadata AAD fails on tenant/Knowledge Base/document/key substitution.
@@ -896,7 +912,7 @@ The product directions in this plan are approved. The remaining items are concre
 3. **AI token operations:** define environment-specific secret storage, delivery, rotation, grace, and revocation for the extraction service token.
 4. **Dependencies:** select the PDF text extraction library against the approved criteria and explicitly approve the required PDF/AWS SDK packages in their milestones.
 5. **Evaluation evidence:** validate the approved initial 800/120 chunking and top-six/0.30/6,000-token retrieval profile with fixtures before production enablement; tune version 1 only before launch.
-6. **Active contract promotion:** promote knowledge mode/admin enablement, marked context, SSE citation availability union, stable errors, usage record, and admin APIs before source changes.
+6. **Active contract promotion:** the M1 crypto/profile/default-off gate is promoted in `docs/tenant-chat/contracts.md`; knowledge mode/admin routes, marked context, SSE citation availability union, stable RAG errors, usage record, and admin APIs still require promotion before their source milestones.
 7. **Operational policy:** set worker concurrency, lease duration, retry limits, SLOs, backup/restore, orphan reconciliation cadence, and alarm thresholds. PostgreSQL `RagJob` itself is already the approved MVP mechanism.
 
 ## 16. Decisions changed from the initial assumptions

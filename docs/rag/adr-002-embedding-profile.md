@@ -1,6 +1,6 @@
 # ADR-002: Fixed embedding profile and vector search
 
-Status: **Accepted / M2 database storage applied / Gateway and retrieval contracts pending**
+Status: **Accepted / M1 runtime profile validation and M2 database storage applied / Gateway and retrieval contracts pending**
 
 Date: 2026-07-16
 

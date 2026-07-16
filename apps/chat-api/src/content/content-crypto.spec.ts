@@ -21,6 +21,31 @@ const aad: ContentAad = {
 };
 
 describe('Tenant Chat content crypto', () => {
+  it('decrypts the fixed pre-extraction message fixture byte-for-byte', () => {
+    const key = Buffer.from(
+      '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+      'hex',
+    );
+    try {
+      expect(
+        decryptContent(
+          key,
+          {
+            ciphertext: Buffer.from(
+              '8a7d1b4c26b22fcc1b0bf3bb620ea9bd5dc13c63e1d62509',
+              'hex',
+            ),
+            nonce: Buffer.from('a0a1a2a3a4a5a6a7a8a9aaab', 'hex'),
+            tag: Buffer.from('624b6d508b5361e09357609394cef62b', 'hex'),
+          },
+          { ...aad, contentKeyVersion: 7 },
+        ),
+      ).toBe('legacy-synthetic-message');
+    } finally {
+      key.fill(0);
+    }
+  });
+
   it('round-trips AES-256-GCM content with canonical record AAD', () => {
     const key = newTenantKey();
     try {

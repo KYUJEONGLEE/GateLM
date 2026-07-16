@@ -1,6 +1,6 @@
 # ADR-003: Tenant-key encryption for RAG chunks and document metadata
 
-Status: **Accepted / M2 encrypted-column shape applied / crypto package contract pending**
+Status: **Accepted / M1 crypto package and M2 encrypted-column shape applied / worker storage path pending**
 
 Date: 2026-07-16
 
