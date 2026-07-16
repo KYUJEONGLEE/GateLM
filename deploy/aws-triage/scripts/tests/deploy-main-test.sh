@@ -167,6 +167,7 @@ for pinned_material in \
   '--cap-drop ALL' \
   ':/input/model.onnx:ro' \
   ':/output:rw' \
+  'https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg' \
   'c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0' \
   '2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58' \
   'sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256'
@@ -176,6 +177,9 @@ do
 done
 if grep -Fq '"generated/model.dynamic-qint8-matmul.onnx|' "${E5_BUNDLE_SCRIPT}"; then
   fail "Generated E5 ONNX artifact must not be downloaded from Hugging Face"
+fi
+if grep -Fq 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1' "${E5_BUNDLE_SCRIPT}"; then
+  fail "Production E5 bundle must use the digest-pinned GitHub release asset"
 fi
 grep -Fq 'python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7' \
   "${E5_QUANTIZER_DOCKERFILE}" || fail "E5 quantizer base image must be digest-pinned"

@@ -264,6 +264,7 @@ for (const requiredText of [
   "--cap-drop ALL",
   ":/input/model.onnx:ro",
   ":/output:rw",
+  "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg",
   expectedLock.tokenizerNativeArchiveSha256,
   expectedLock.onnxRuntimePackageSha256,
   "model.dynamic-qint8-matmul.onnx",
@@ -275,6 +276,9 @@ for (const requiredText of [
 }
 if (productionPrepareScript.includes('"generated/model.dynamic-qint8-matmul.onnx|')) {
   throw new Error("production Gateway E5 bundle must generate the QInt8 model instead of downloading a missing URL");
+}
+if (productionPrepareScript.includes("https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1")) {
+  throw new Error("production Gateway E5 bundle must use the immutable GitHub release asset");
 }
 for (const requiredText of [
   "python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7",

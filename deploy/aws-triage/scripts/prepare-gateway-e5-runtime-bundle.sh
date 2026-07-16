@@ -239,7 +239,7 @@ assert_file \
 onnx_package="${download_root}/Microsoft.ML.OnnxRuntime.1.22.1.nupkg"
 ensure_download \
   "${onnx_package}" \
-  "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1" \
+  "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg" \
   121484102 \
   "2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58"
 unzip -p \
