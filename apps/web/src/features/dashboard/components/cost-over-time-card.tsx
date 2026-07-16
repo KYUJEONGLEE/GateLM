@@ -1,15 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DashboardCostOverTimeEChart } from "@/features/dashboard/components/dashboard-echarts";
+import {
+  DashboardCostDensityEChart,
+  DashboardCostOverTimeEChart
+} from "@/features/dashboard/components/dashboard-echarts";
+import {
+  resampleCostOverTimeForDisplay,
+  type CostOverTimeRange
+} from "@/features/dashboard/cost-over-time-display";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { Locale } from "@/lib/i18n/locale";
 
 const COST_OVER_TIME_POLLING_INTERVAL_MS = 30000;
 const COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS = 60000;
 const COST_OVER_TIME_REPEATED_FAILURE_BACKOFF_MS = 120000;
-
-type CostOverTimeRange = "5m" | "15m" | "1h" | "1d" | "1w";
 
 type CostOverTimeCardFilters = {
   budgetScopeId: string;
@@ -26,6 +32,11 @@ type CostOverTimeCardProps = {
   initialSummary?: CostOverTimeSummary;
   locale: Locale;
   pollingEnabled?: boolean;
+  rangeOptions?: Array<{
+    active: boolean;
+    href: string;
+    label: string;
+  }>;
   rangeLabel: string;
 };
 
@@ -36,21 +47,29 @@ const costOverTimeText = {
     aria: "Cost over time",
     average: "Average",
     chartAria: "Cost over time chart",
+    denseAria: "Dense cost range overview chart",
+    denseRange: "Dense range",
     empty: "No cost data for selected range",
     error: "Failed to load cost data",
     loading: "Loading cost data",
+    rangeAria: "Cost trend time range",
     spend: "Spend (USD)",
-    title: "Cost Over Time"
+    title: "Cost Trend",
+    total: "Total cost"
   },
   ko: {
-    aria: "시간별 비용",
+    aria: "비용 추이",
     average: "평균",
-    chartAria: "시간별 비용 차트",
+    chartAria: "비용 추이 차트",
+    denseAria: "밀집 비용 구간 미리보기 차트",
+    denseRange: "밀집 구간",
     empty: "선택한 기간에 비용 데이터가 없습니다",
     error: "비용 데이터를 불러오지 못했습니다",
     loading: "비용 데이터 불러오는 중",
+    rangeAria: "비용 추이 시간 범위",
     spend: "사용 비용(USD)",
-    title: "시간별 비용"
+    title: "비용 추이",
+    total: "총비용"
   }
 } as const;
 
@@ -59,6 +78,7 @@ export function CostOverTimeCard({
   initialSummary,
   locale,
   pollingEnabled = true,
+  rangeOptions = [],
   rangeLabel
 }: CostOverTimeCardProps) {
   const text = costOverTimeText[locale];
@@ -103,7 +123,24 @@ export function CostOverTimeCard({
     : displayedSummary
       ? "success"
       : "loading";
-  const hasCostData = displayedSummary?.points.some((point) => point.spendUsd > 0) ?? false;
+  const renderedSummary = useMemo(
+    () => displayedSummary
+      ? resampleCostOverTimeForDisplay(displayedSummary, range)
+      : undefined,
+    [displayedSummary, range]
+  );
+  const hasCostData = renderedSummary?.points.some((point) => point.spendUsd > 0) ?? false;
+  const totalSpendUsd =
+    renderedSummary?.points.reduce((sum, point) => sum + point.spendUsd, 0) ?? 0;
+  const bucketContext = formatCostBucketContext(
+    rangeLabel,
+    renderedSummary?.bucketInterval,
+    locale
+  );
+  const denseIntervalLabel = formatCostBucketInterval(
+    renderedSummary?.bucketInterval,
+    locale
+  );
 
   useEffect(() => {
     latestSummaryRef.current = summary;
@@ -244,24 +281,61 @@ export function CostOverTimeCard({
       <div className="dashboard-cost-over-time-header">
         <div>
           <h2>{text.title}</h2>
+          <p>{bucketContext}</p>
         </div>
-        
+        {rangeOptions.length > 0 ? (
+          <nav aria-label={text.rangeAria} className="dashboard-cost-range-tabs">
+            {rangeOptions.map((option) => (
+              <Link
+                aria-current={option.active ? "page" : undefined}
+                data-active={option.active}
+                href={option.href}
+                key={option.label}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
       </div>
-      <div className="dashboard-cost-over-time-legend">
-        <span data-kind="spend">{text.spend}</span>
-        <span data-kind="average">{text.average}: {formatUsd(displayedSummary?.averageSpendUsd ?? 0)}</span>
-        <strong>{rangeLabel}</strong>
+      <div className="dashboard-cost-over-time-metrics">
+        <div>
+          <span>{text.total}</span>
+          <strong>{formatUsd(totalSpendUsd)}</strong>
+        </div>
+        <div>
+          <span>{text.average}</span>
+          <strong>{formatUsd(renderedSummary?.averageSpendUsd ?? 0)}</strong>
+        </div>
       </div>
       {displayedStatus === "loading" && !displayedSummary ? (
         <div className="dashboard-cost-over-time-skeleton" aria-label={text.loading} />
       ) : displayedStatus === "error" && !displayedSummary ? (
         <div className="dashboard-cost-over-time-state">{text.error}</div>
-      ) : hasCostData && displayedSummary ? (
-        <DashboardCostOverTimeEChart
-          ariaLabel={text.chartAria}
-          averageSpendUsd={displayedSummary.averageSpendUsd}
-          points={displayedSummary.points}
-        />
+      ) : hasCostData && renderedSummary ? (
+        <div className="dashboard-cost-chart-stack">
+          <DashboardCostOverTimeEChart
+            ariaLabel={text.chartAria}
+            averageSpendUsd={renderedSummary.averageSpendUsd}
+            points={renderedSummary.points}
+          />
+          <div className="dashboard-cost-over-time-legend">
+            <span data-kind="spend">{text.spend}</span>
+            <span data-kind="average">
+              {text.average}: {formatUsd(renderedSummary.averageSpendUsd)}
+            </span>
+          </div>
+          <div className="dashboard-cost-density-panel">
+            <div className="dashboard-cost-density-header">
+              <strong>{text.denseRange}</strong>
+              <span>{denseIntervalLabel ?? rangeLabel}</span>
+            </div>
+            <DashboardCostDensityEChart
+              ariaLabel={text.denseAria}
+              points={renderedSummary.points}
+            />
+          </div>
+        </div>
       ) : (
         <div className="dashboard-cost-over-time-state">{text.empty}</div>
       )}
@@ -292,12 +366,43 @@ function setOptionalQuery(query: URLSearchParams, key: string, value: string) {
 }
 
 function formatUsd(value: number) {
+  const normalized = Number.isFinite(value) ? value : 0;
+
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: 2,
+    maximumFractionDigits: normalized > 0 && normalized < 1 ? 6 : 2,
     minimumFractionDigits: 2,
     style: "currency"
-  }).format(Number.isFinite(value) ? value : 0);
+  }).format(normalized);
+}
+
+function formatCostBucketContext(
+  rangeLabel: string,
+  bucketInterval: string | undefined,
+  locale: Locale
+) {
+  const intervalLabel = formatCostBucketInterval(bucketInterval, locale, true);
+
+  return intervalLabel ? `${rangeLabel} · ${intervalLabel}` : rangeLabel;
+}
+
+function formatCostBucketInterval(
+  bucketInterval: string | undefined,
+  locale: Locale,
+  includeUnit = false
+) {
+  const intervalLabels: Record<string, { en: string; ko: string }> = {
+    "1s": { en: includeUnit ? "1-second buckets" : "1 sec", ko: includeUnit ? "1초 단위" : "1초" },
+    "5s": { en: includeUnit ? "5-second buckets" : "5 sec", ko: includeUnit ? "5초 단위" : "5초" },
+    "7s": { en: includeUnit ? "7-second buckets" : "7 sec", ko: includeUnit ? "7초 단위" : "7초" },
+    "15s": { en: includeUnit ? "15-second buckets" : "15 sec", ko: includeUnit ? "15초 단위" : "15초" },
+    "1m": { en: includeUnit ? "1-minute buckets" : "1 min", ko: includeUnit ? "1분 단위" : "1분" },
+    "5m": { en: includeUnit ? "5-minute buckets" : "5 min", ko: includeUnit ? "5분 단위" : "5분" },
+    "1h": { en: includeUnit ? "hourly buckets" : "1 hour", ko: includeUnit ? "1시간 단위" : "1시간" },
+    "1d": { en: includeUnit ? "daily buckets" : "1 day", ko: includeUnit ? "1일 단위" : "1일" }
+  };
+
+  return bucketInterval ? intervalLabels[bucketInterval]?.[locale] : undefined;
 }
 
 function normalizeCostOverTimeSummary(summary: CostOverTimeSummary | undefined): CostOverTimeSummary | undefined {

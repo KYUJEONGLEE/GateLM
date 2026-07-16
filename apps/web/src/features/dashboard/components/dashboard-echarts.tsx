@@ -22,6 +22,7 @@ const chartAxisColor = "#64748b";
 const chartBorderColor = "#d8dee6";
 const chartForegroundColor = "#111827";
 const visibleCostBucketCount = 60;
+const costWindowThreshold = 64;
 let dashboardEchartsRuntimePromise: Promise<EChartsRuntime> | null = null;
 
 export type DashboardLineSeries = {
@@ -171,7 +172,8 @@ export function DashboardPieEChart({
   centerTextColor = chartForegroundColor,
   rows,
   showCenterTitle = true,
-  totalLabel = "requests"
+  totalLabel = "requests",
+  valueFormatter = formatInteger
 }: {
   ariaLabel: string;
   centerSubtextColor?: string;
@@ -179,6 +181,7 @@ export function DashboardPieEChart({
   rows: DashboardPieRow[];
   showCenterTitle?: boolean;
   totalLabel?: string;
+  valueFormatter?: (value: number) => string;
 }) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
   const updateKey = JSON.stringify({
@@ -204,7 +207,7 @@ export function DashboardPieEChart({
           fontSize: 13,
           fontWeight: 800
         },
-        text: formatInteger(total),
+        text: valueFormatter(total),
         textStyle: {
           color: centerTextColor,
           fontSize: 26,
@@ -224,7 +227,7 @@ export function DashboardPieEChart({
             return "";
           }
 
-          return `${String(item.name)}<br/>${formatInteger(Number(item.value ?? 0))} (${formatPercent(Number(item.percent ?? 0) / 100)})`;
+          return `${String(item.name)}<br/>${valueFormatter(Number(item.value ?? 0))} (${formatPercent(Number(item.percent ?? 0) / 100)})`;
         },
         textStyle: {
           color: "#f8fafc",
@@ -256,7 +259,7 @@ export function DashboardPieEChart({
         }
       ]
     }),
-    [centerSubtextColor, centerTextColor, rows, showCenterTitle, total, totalLabel]
+    [centerSubtextColor, centerTextColor, rows, showCenterTitle, total, totalLabel, valueFormatter]
   );
 
   return (
@@ -281,7 +284,7 @@ export function DashboardCostOverTimeEChart({
   const labels = points.map((point) => point.label);
   const values = points.map((point) => point.spendUsd);
   const averageValues = points.map(() => averageSpendUsd);
-  const usesCostWindow = labels.length > visibleCostBucketCount;
+  const usesCostWindow = labels.length > costWindowThreshold;
   const xAxisLabelInterval = readableCategoryInterval(
     usesCostWindow ? visibleCostBucketCount : labels.length
   );
@@ -299,11 +302,12 @@ export function DashboardCostOverTimeEChart({
               type: "inside"
             },
             {
-              bottom: 2,
+              bottom: 0,
               brushSelect: false,
               endValue: labels.length - 1,
               filterMode: "none",
-              height: 18,
+              height: 14,
+              showDataShadow: false,
               showDetail: false,
               startValue: labels.length - visibleCostBucketCount,
               type: "slider"
@@ -311,7 +315,7 @@ export function DashboardCostOverTimeEChart({
           ]
         : undefined,
       grid: {
-        bottom: usesCostWindow ? 48 : 26,
+        bottom: usesCostWindow ? 36 : 28,
         left: 50,
         right: 14,
         top: 24
@@ -376,16 +380,27 @@ export function DashboardCostOverTimeEChart({
       },
       series: [
         {
-          barMaxWidth: 34,
-          barWidth: "70%",
+          barMaxWidth: 26,
+          barMinWidth: 5,
+          barWidth: "62%",
           data: values,
           emphasis: {
             focus: "none"
           },
           id: "dashboard-cost-spend",
           itemStyle: {
-            borderRadius: [6, 6, 0, 0],
-            color: "#3b82f6"
+            borderRadius: [5, 5, 1, 1],
+            color: {
+              colorStops: [
+                { color: "#1d7dfa", offset: 0 },
+                { color: "#3b82f6", offset: 1 }
+              ],
+              type: "linear",
+              x: 0,
+              x2: 0,
+              y: 0,
+              y2: 1
+            }
           },
           label: {
             color: "#cbd5e1",
@@ -429,6 +444,132 @@ export function DashboardCostOverTimeEChart({
     <DashboardEChart
       ariaLabel={ariaLabel}
       className="dashboard-cost-over-time-chart"
+      option={option}
+      updateKey={updateKey}
+    />
+  );
+}
+
+export function DashboardCostDensityEChart({
+  ariaLabel,
+  points
+}: {
+  ariaLabel: string;
+  points: DashboardCostPoint[];
+}) {
+  const labels = points.map((point) => point.label);
+  const values = points.map((point) => point.spendUsd);
+  const updateKey = JSON.stringify({ points });
+  const option = useMemo<EChartOption>(
+    () => ({
+      animation: false,
+      grid: {
+        bottom: 18,
+        left: 8,
+        right: 10,
+        top: 8
+      },
+      tooltip: {
+        axisPointer: {
+          lineStyle: {
+            color: "#64748b",
+            type: "dashed",
+            width: 1
+          },
+          type: "line"
+        },
+        backgroundColor: "rgba(17, 24, 39, 0.96)",
+        borderColor: "rgba(255, 255, 255, 0.08)",
+        borderWidth: 1,
+        confine: true,
+        extraCssText: "box-shadow: 0 12px 26px rgba(15, 23, 42, 0.2); border-radius: 8px;",
+        textStyle: {
+          color: "#f8fafc",
+          fontSize: 12,
+          fontWeight: 700
+        },
+        trigger: "axis",
+        valueFormatter: (value: unknown) => formatCostUsd(Number(value ?? 0))
+      },
+      xAxis: {
+        axisLabel: {
+          color: "#94a3b8",
+          fontSize: 10,
+          hideOverlap: true,
+          interval: readableCategoryInterval(labels.length)
+        },
+        axisLine: {
+          lineStyle: {
+            color: "rgba(148, 163, 184, 0.24)"
+          }
+        },
+        axisTick: {
+          show: false
+        },
+        boundaryGap: false,
+        data: labels,
+        type: "category"
+      },
+      yAxis: {
+        axisLabel: {
+          show: false
+        },
+        axisLine: {
+          show: false
+        },
+        axisTick: {
+          show: false
+        },
+        splitLine: {
+          lineStyle: {
+            color: "rgba(148, 163, 184, 0.11)"
+          }
+        },
+        type: "value"
+      },
+      series: [
+        {
+          areaStyle: {
+            color: {
+              colorStops: [
+                { color: "rgba(37, 99, 235, 0.2)", offset: 0 },
+                { color: "rgba(37, 99, 235, 0.02)", offset: 1 }
+              ],
+              type: "linear",
+              x: 0,
+              x2: 0,
+              y: 0,
+              y2: 1
+            }
+          },
+          data: values,
+          emphasis: {
+            focus: "none"
+          },
+          id: "dashboard-cost-density",
+          itemStyle: {
+            color: "#2563eb"
+          },
+          lineStyle: {
+            color: "#2563eb",
+            width: 2.5
+          },
+          name: "Spend",
+          showSymbol: false,
+          smooth: 0.24,
+          symbol: "circle",
+          symbolSize: 5,
+          type: "line"
+        }
+      ]
+    }),
+    [labels, values]
+  );
+
+  return (
+    <DashboardEChart
+      ariaLabel={ariaLabel}
+      className="dashboard-cost-density-chart"
       option={option}
       updateKey={updateKey}
     />

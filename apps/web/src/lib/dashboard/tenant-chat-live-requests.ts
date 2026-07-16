@@ -1,6 +1,10 @@
 import "server-only";
 
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
+import {
+  resolveProviderDisplay,
+  type ProviderDisplayDirectory
+} from "@/lib/control-plane/provider-display";
 import { getTenantChatInvocations } from "@/lib/control-plane/tenant-chat-observability-client";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import type {
@@ -14,7 +18,8 @@ export async function getTenantChatLiveRequests(
     model?: string;
     range: LiveDashboardRange;
     status?: LiveRequestStatusFilter;
-  }
+  },
+  options: { providerDirectory?: ProviderDisplayDirectory } = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const { from, to } = getDashboardLiveRange(filters.range);
   const [invocations, employees] = await Promise.all([
@@ -31,9 +36,15 @@ export async function getTenantChatLiveRequests(
         .map((value) => [value, employee.name?.trim() || employee.email] as const)
     )
   );
+  const providerDirectory = options.providerDirectory ?? {};
   const rows = invocations
     .map((invocation) => {
       const status = normalizeStatus(invocation.terminalOutcome);
+      const providerId = invocation.providerId?.trim() || null;
+      const providerDisplay = resolveProviderDisplay(
+        providerDirectory,
+        providerId
+      );
       return {
         cacheStatus:
           invocation.cacheOutcome === "hit"
@@ -51,9 +62,9 @@ export async function getTenantChatLiveRequests(
         modelRef: null,
         projectId: "",
         projectName: "Tenant Chat",
-        providerFamily: null,
-        providerId: null,
-        providerName: null,
+        providerFamily: providerDisplay?.family ?? null,
+        providerId,
+        providerName: providerDisplay?.name ?? null,
         requestedModel: invocation.modelKey ?? "auto",
         requestId: invocation.requestId,
         routingReason: "tenant_chat",
