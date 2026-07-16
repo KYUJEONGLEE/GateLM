@@ -477,6 +477,12 @@ func decideTenantChatRoute(
 	if err != nil {
 		return tenantchat.RoutingDecision{}, err
 	}
+	if policy.Mode == routing.RoutingPolicyModeManual {
+		decision.CandidateModelRefs = append(
+			[]string{decision.ModelRef},
+			sharedTenantChatFallbackModelRefs(policy.Routes, decision.ModelRef)...,
+		)
+	}
 	return tenantchat.RoutingDecision{
 		ModelRef:               decision.ModelRef,
 		CandidateModelRefs:     append([]string(nil), decision.CandidateModelRefs...),
@@ -485,6 +491,39 @@ func decideTenantChatRoute(
 		RoutingDecisionKeyHash: decision.RoutingDecisionKeyHash,
 		RoutingPolicyHash:      decision.PolicyHash,
 	}, nil
+}
+
+func sharedTenantChatFallbackModelRefs(
+	routes tenantruntime.RoutingMatrix,
+	manualModelRef string,
+) []string {
+	cells := routes.Cells()
+	if len(cells) == 0 {
+		return nil
+	}
+	shared := cells[0].ModelRefs[1:]
+	for _, cell := range cells[1:] {
+		candidate := cell.ModelRefs[1:]
+		if len(candidate) != len(shared) {
+			return nil
+		}
+		for index := range shared {
+			if candidate[index] != shared[index] {
+				return nil
+			}
+		}
+	}
+
+	result := make([]string, 0, len(shared))
+	seen := map[string]struct{}{manualModelRef: {}}
+	for _, modelRef := range shared {
+		if _, exists := seen[modelRef]; exists {
+			continue
+		}
+		seen[modelRef] = struct{}{}
+		result = append(result, modelRef)
+	}
+	return result
 }
 
 // currentTurnRoutingMessages keeps stable system context, but excludes earlier
