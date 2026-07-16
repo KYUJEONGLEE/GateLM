@@ -1,0 +1,243 @@
+{
+  "schemaVersion": "gatelm.difficulty-expansion-gpt-review-report.v1",
+  "status": "gpt_merged_human_review_pending",
+  "createdAt": "2026-07-15T00:00:00Z",
+  "sourceDatasetVersion": "difficulty_label_2026_07_15_expansion_2000_v1",
+  "candidateDatasetVersion": "difficulty_label_2026_07_15_expansion_2000_gpt_candidate_v1",
+  "trainingEligible": false,
+  "humanReviewClaimed": false,
+  "lowConfidenceThreshold": 0.9,
+  "sourceArchives": [
+    {
+      "name": "difficulty-label-expansion-2000.gpt-review.outputs-available.zip",
+      "sha256": "751eb0a1aee6c7dd5d3dd44d79de59df1aa2bb0c88edb4052cfe567857c90b26",
+      "batches": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10,
+        12
+      ]
+    },
+    {
+      "name": "gpt-review-output-attached-batches.zip",
+      "sha256": "7b991f0ecd3741e3886d51c73b6588eb9220c28e64f205af5574eb73fdf87c08",
+      "batches": [
+        8,
+        11,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ]
+    }
+  ],
+  "integrity": {
+    "parsedRecords": 2000,
+    "uniqueSampleIds": 2000,
+    "missingSampleIds": 0,
+    "duplicateSampleIds": 0,
+    "unexpectedSampleIds": 0
+  },
+  "normalization": {
+    "enumViolations": 0,
+    "boundaryTupleViolations": 0,
+    "applied": 0,
+    "byField": {}
+  },
+  "gpt": {
+    "decisions": {
+      "accept": 1200,
+      "correct": 800
+    },
+    "promptActions": {
+      "keep_source": 1200,
+      "replace": 800
+    },
+    "confidence": {
+      "minimum": 0.94,
+      "maximum": 0.99,
+      "belowThreshold": 0
+    }
+  },
+  "changes": {
+    "changedRecords": 800,
+    "redactedPrompt": 800,
+    "nonPromptLabelChanges": 0,
+    "datasetVersionMetadataTransitions": 2000
+  },
+  "validation": {
+    "canonicalRecordFailures": 0,
+    "postRewriteLengthSliceMismatches": 0,
+    "simpleComplexPairInversions": 0,
+    "simpleComplexPairInversionDetails": []
+  },
+  "family": {
+    "families": 200,
+    "recordsPerFamily": 10,
+    "issues": 0,
+    "issueDetails": [],
+    "partitionOrMembershipChanges": 0
+  },
+  "humanReviewQueue": {
+    "policy": "union(decision_correct,confidence<0.90,category_change,difficulty_change,bucket_change,family_change,prompt_action_replace,ambiguous_boundary,payload_only,family_conflict,simple_complex_pair_inversion,contract_normalization)",
+    "records": 1067,
+    "excludedRecords": 933,
+    "percentOfDataset": 53.3,
+    "withPromptChanges": 800,
+    "withoutPromptChanges": 267,
+    "byReason": {
+      "ambiguous_instruction_payload_boundary": 180,
+      "gpt_decision_correct": 800,
+      "payload_only_empty_instruction": 100,
+      "prompt_action_replace": 800
+    },
+    "byCategory": {
+      "code": 183,
+      "general": 259,
+      "reasoning": 210,
+      "summarization": 203,
+      "translation": 212
+    },
+    "byPartition": {
+      "calibration": 202,
+      "holdout": 212,
+      "train": 653
+    },
+    "families": 200,
+    "batches": [
+      {
+        "batch": 1,
+        "records": 80,
+        "families": 13,
+        "category": "general"
+      },
+      {
+        "batch": 2,
+        "records": 77,
+        "families": 9,
+        "category": "general"
+      },
+      {
+        "batch": 3,
+        "records": 74,
+        "families": 14,
+        "category": "general"
+      },
+      {
+        "batch": 4,
+        "records": 28,
+        "families": 4,
+        "category": "general"
+      },
+      {
+        "batch": 5,
+        "records": 78,
+        "families": 18,
+        "category": "code"
+      },
+      {
+        "batch": 6,
+        "records": 78,
+        "families": 17,
+        "category": "code"
+      },
+      {
+        "batch": 7,
+        "records": 27,
+        "families": 5,
+        "category": "code"
+      },
+      {
+        "batch": 8,
+        "records": 78,
+        "families": 18,
+        "category": "translation"
+      },
+      {
+        "batch": 9,
+        "records": 77,
+        "families": 13,
+        "category": "translation"
+      },
+      {
+        "batch": 10,
+        "records": 57,
+        "families": 9,
+        "category": "translation"
+      },
+      {
+        "batch": 11,
+        "records": 80,
+        "families": 17,
+        "category": "summarization"
+      },
+      {
+        "batch": 12,
+        "records": 76,
+        "families": 14,
+        "category": "summarization"
+      },
+      {
+        "batch": 13,
+        "records": 47,
+        "families": 9,
+        "category": "summarization"
+      },
+      {
+        "batch": 14,
+        "records": 76,
+        "families": 18,
+        "category": "reasoning"
+      },
+      {
+        "batch": 15,
+        "records": 74,
+        "families": 10,
+        "category": "reasoning"
+      },
+      {
+        "batch": 16,
+        "records": 60,
+        "families": 12,
+        "category": "reasoning"
+      }
+    ]
+  },
+  "artifacts": {
+    "rawAdjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.gpt-adjudication.raw.jsonl",
+      "records": 2000,
+      "sha256": "7bb6eb71b0b9cd3edef8293d88de491c6d1da5f4f5e200ef2529c47d7faaf151"
+    },
+    "normalizedAdjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.gpt-adjudication.normalized.jsonl",
+      "records": 2000,
+      "sha256": "940dd5090cc912a1978530a6b74bcc0bbd52f207e00a486ae96e31140e117e28"
+    },
+    "mergedCandidate": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.gpt-merged-candidate.jsonl",
+      "records": 2000,
+      "sha256": "ab0fe51e4e5589ffa9974e56b545591f82cc3e07b3188c86df2a645332b388a7"
+    },
+    "humanApprovalDiff": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.human-approval-diff.jsonl",
+      "records": 800,
+      "sha256": "39dbf5443fb2dceb0c1700d4ad20a41698405dbec8c9d394b2080d2eb4af0c81"
+    },
+    "humanReviewQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/difficulty-label-expansion-2000.human-review-queue.jsonl",
+      "records": 1067,
+      "sha256": "6deb32338bcd89b32ac5bae426976671bdcab39ec630a52ac9ec5a1e79cc142a"
+    }
+  }
+}

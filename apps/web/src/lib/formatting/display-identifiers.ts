@@ -28,6 +28,48 @@ export function formatModelDisplayName(value: string | null | undefined, fallbac
   return formattedValue;
 }
 
+export type ProviderDisplayFamily = "openai" | "anthropic" | "google" | "mock" | "unknown";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function resolveProviderDisplay(
+  value: string | null | undefined,
+  model: string | null | undefined
+): { family: ProviderDisplayFamily; label: string } {
+  const provider = value?.trim() ?? "";
+  const normalizedModel = formatModelDisplayName(model, "").toLowerCase();
+  const candidates = [provider.toLowerCase(), normalizedModel];
+
+  if (candidates.some((candidate) =>
+    candidate.includes("openai") || /^(gpt|chatgpt|o[134](?:-|$))/.test(candidate)
+  )) {
+    return { family: "openai", label: "OpenAI" };
+  }
+
+  if (candidates.some((candidate) =>
+    candidate.includes("anthropic") || candidate.includes("claude")
+  )) {
+    return { family: "anthropic", label: "Anthropic" };
+  }
+
+  if (candidates.some((candidate) =>
+    candidate.includes("google") || candidate.includes("gemini")
+  )) {
+    return { family: "google", label: "Google" };
+  }
+
+  if (candidates.some((candidate) => candidate.includes("mock"))) {
+    return { family: "mock", label: "Mock" };
+  }
+
+  return {
+    family: "unknown",
+    label: provider && !uuidPattern.test(provider)
+      ? formatDisplayIdentifier(provider)
+      : "Provider"
+  };
+}
+
 export type BudgetScopeDisplayInput = {
   budgetScopeId?: string | null;
   budgetScopeType?: string | null;

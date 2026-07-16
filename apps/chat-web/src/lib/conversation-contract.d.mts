@@ -10,6 +10,8 @@ export type TurnEvent = Readonly<Record<string, unknown> & {
   quotaState?: PolicyState;
   budgetState?: PolicyState;
   messageId?: string;
+  effectiveModelKey?: string;
+  cacheOutcome?: 'off' | 'hit' | 'miss';
 }>;
 
 export class ConversationContractError extends Error { code: string; status: number }
@@ -24,11 +26,12 @@ export function createConversationBody(value: unknown): Readonly<{ idempotencyKe
 export function renameConversationBody(value: unknown): Readonly<{ expectedVersion: number; title: string }>;
 export function createTurnBody(value: unknown): Readonly<{
   content: string;
+  contextMode: 'conversation' | 'single_turn';
   idempotencyKey: string;
   usageIntent: Readonly<{ cacheStrategy: 'off' | 'exact'; maxOutputTokens: number; requestedTier: 'auto' | 'high_quality' | 'standard' | 'economy' }>;
 }>;
 export type Conversation = Readonly<{ id: string; title: string; version: number; historyRetentionDays: number; createdAt: string; updatedAt: string }>;
-export type Message = Readonly<{ id: string; turnId: string; role: 'user' | 'assistant'; content: string; sequence: number; createdAt: string }>;
+export type Message = Readonly<{ id: string; turnId: string; role: 'user' | 'assistant'; content: string; effectiveModelKey?: string; sequence: number; createdAt: string }>;
 export function conversationView(value: unknown): Conversation;
 export function conversationPage(value: unknown): Readonly<{ items: readonly Conversation[]; nextCursor: string | null }>;
 export function messagePage(value: unknown): Readonly<{ items: readonly Message[]; nextCursor: string | null }>;

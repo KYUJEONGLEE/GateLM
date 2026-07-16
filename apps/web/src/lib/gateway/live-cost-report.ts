@@ -230,7 +230,7 @@ function formatCostBucketLabel(value: string, bucketInterval: string) {
     return value;
   }
 
-  if (bucketInterval === "7s") {
+  if (bucketInterval === "1s" || bucketInterval === "7s") {
     return new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
       hourCycle: "h23",
@@ -259,7 +259,7 @@ function formatCostBucketLabel(value: string, bucketInterval: string) {
 }
 
 function normalizeCostBucketInterval(value: string | undefined, period: "hour" | "day") {
-  if (value === "7s" || value === "1m" || value === "5m" || value === "1h" || value === "1d") {
+  if (value === "1s" || value === "7s" || value === "1m" || value === "5m" || value === "1h" || value === "1d") {
     return value;
   }
 

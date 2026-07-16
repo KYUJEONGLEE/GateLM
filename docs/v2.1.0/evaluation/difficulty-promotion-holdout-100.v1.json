@@ -1,0 +1,712 @@
+{
+  "schemaVersion": "gatelm.difficulty-promotion-holdout-freeze.v1",
+  "status": "frozen_before_first_score_access",
+  "frozenOn": "2026-07-15",
+  "source": {
+    "datasetVersion": "difficulty_training_2026_07_15_expansion_2000_owner_approved_v1",
+    "datasetSha256": "9bd448240d3479072c5daf9517abd6ea7fc0797d204354d6d636a33111a0b9de",
+    "manifestSha256": "2306f0d74aec619c166018e6fb43d9b8a95c184731141eda3237309140dc356f",
+    "ownerApprovalSha256": "283eb91bf31ede0357aa50825ce2ca56f0f5b20f3e65ac0493e009420de2f946",
+    "splitPolicyVersion": "difficulty-expansion-family-split.2026-07-15.v1",
+    "splitSeed": 20260715,
+    "sourceHoldoutFamilies": 40,
+    "sourceHoldoutRecords": 400,
+    "overlapWithPreviouslyObservedDatasetFamilies": 0
+  },
+  "selection": {
+    "policyVersion": "difficulty-promotion-holdout-family-sample.2026-07-15.v1",
+    "policy": "sha256_rank_two_whole_families_per_expected_category",
+    "scoreIndependent": true,
+    "selectedFamilies": 10,
+    "selectedRecords": 100,
+    "familiesPerExpectedCategory": 2,
+    "recordsPerExpectedCategory": 20,
+    "simplePerExpectedCategory": 10,
+    "complexPerExpectedCategory": 10,
+    "membershipHash": "sha256:692923f02aa303555cae85b0e19db6e5c02c0f5b37d49b326972ce332ff0a134"
+  },
+  "artifact": {
+    "artifactVersion": "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3",
+    "bundleHash": "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220",
+    "contentHash": "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd",
+    "thresholdPolicyVersion": "difficulty-threshold-v1",
+    "threshold": 0.45,
+    "totalDimension": 118
+  },
+  "gatesFrozenBeforeEvaluation": {
+    "minimumAccuracy": 0.91,
+    "maximumComplexToSimpleCount": 1,
+    "categoryDirectionalErrorPolicy": "candidate_complex_to_simple_count_and_rate_must_not_exceed_rule_baseline_in_any_expected_category"
+  },
+  "selectedFamilies": [
+    {
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "selectionRank": "26cb3d31af94cd132b384e83acdea34b669c512869e63a2b01fe37bb3cf6f96c",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "selectionRank": "597e5662fae93212e025ff38ba0f5499719324dfdea0e0849835995c82bf887e",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "selectionRank": "1601b83885d5ee900bf8f64407dd7f8c6ee68105f7845a651f59c2563a392fc8",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "selectionRank": "2d7ebdf3c85bbd5abc7d3b6b43c56176c1165203b46b02593150dc15561b63a0",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "selectionRank": "4fc9b2794c7d84ee8e2a17ddfe36e8fe64c75fe200d56d81419a3bbff9f2e0a2",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "selectionRank": "796932773d937fdba50aa878b72be821c1b0718bf645252bdcce81e04627ce7f",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "selectionRank": "0cbdbb3c8c134021ab5043c49044a66c4b979b417df104da5ade63b80393c3dc",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "selectionRank": "1ccf76800f40e9b5c6df121808032d6885baf23dbcfc1c1e1bda5fa1d8d707e7",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "selectionRank": "100416a8033550006b5cb262ca6bb54f7ccd41951ae12a228f3cacf4e7a5ae36",
+      "records": 10
+    },
+    {
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "selectionRank": "2ae1e55a87f7ad52ea86146929b7e410e6972fb92d9c427e7e2ea38b6d993af9",
+      "records": 10
+    }
+  ],
+  "samples": [
+    {
+      "sampleId": "difficulty_expansion_general_f33_v01",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v02",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v03",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v04",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v05",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v06",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v07",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v08",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v09",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f33_v10",
+      "promptFamily": "expansion.general.general_other.scenario.f33",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v01",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v02",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v03",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v04",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v05",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v06",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v07",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v08",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v09",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_general_f40_v10",
+      "promptFamily": "expansion.general.general_qa.scenario.f40",
+      "expectedCategory": "general",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v01",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v02",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v03",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v04",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v05",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v06",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v07",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v08",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v09",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f24_v10",
+      "promptFamily": "expansion.code.code_generation.scenario.f24",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v01",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v02",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v03",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v04",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v05",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v06",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v07",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v08",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v09",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_code_f33_v10",
+      "promptFamily": "expansion.code.code_debugging.scenario.f33",
+      "expectedCategory": "code",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v01",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v02",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v03",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v04",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v05",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v06",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v07",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v08",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v09",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f37_v10",
+      "promptFamily": "expansion.translation.translation_localization.scenario.f37",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v01",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v02",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v03",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v04",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v05",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v06",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v07",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v08",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v09",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_translation_f40_v10",
+      "promptFamily": "expansion.translation.translation_direct.scenario.f40",
+      "expectedCategory": "translation",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v01",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v02",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v03",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v04",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v05",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v06",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v07",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v08",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v09",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f35_v10",
+      "promptFamily": "expansion.summarization.summarization_direct.scenario.f35",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v01",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v02",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v03",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v04",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v05",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v06",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v07",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v08",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v09",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_summarization_f37_v10",
+      "promptFamily": "expansion.summarization.summarization_structured.scenario.f37",
+      "expectedCategory": "summarization",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v01",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v02",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v03",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v04",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v05",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v06",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v07",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v08",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v09",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f32_v10",
+      "promptFamily": "expansion.reasoning.reasoning_causal.scenario.f32",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v01",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v02",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v03",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v04",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v05",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "simple"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v06",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v07",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v08",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v09",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    },
+    {
+      "sampleId": "difficulty_expansion_reasoning_f38_v10",
+      "promptFamily": "expansion.reasoning.reasoning_comparison.scenario.f38",
+      "expectedCategory": "reasoning",
+      "expectedDifficulty": "complex"
+    }
+  ],
+  "forbiddenEvaluationUses": [
+    "training",
+    "calibration",
+    "candidate_selection",
+    "threshold_selection",
+    "artifact_mutation_after_score_access"
+  ]
+}

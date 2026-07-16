@@ -42,6 +42,17 @@ type UsageIntent struct {
 	CacheStrategy        string `json:"cacheStrategy"`
 }
 
+// RoutingDecision is server-only execution state. It is derived after safety
+// processing and never participates in the client-signed request contract.
+type RoutingDecision struct {
+	ModelRef               string
+	CandidateModelRefs     []string
+	Category               string
+	Difficulty             string
+	RoutingDecisionKeyHash string
+	RoutingPolicyHash      string
+}
+
 type RequestContext struct {
 	Surface        string            `json:"surface"`
 	Phase          Phase             `json:"phase"`
@@ -53,6 +64,7 @@ type RequestContext struct {
 	Snapshot       SnapshotReference `json:"snapshot"`
 	BindingDigest  string            `json:"bindingDigest"`
 	UsageIntent    *UsageIntent      `json:"usageIntent,omitempty"`
+	Routing        *RoutingDecision  `json:"-"`
 }
 
 type EphemeralMessage struct {

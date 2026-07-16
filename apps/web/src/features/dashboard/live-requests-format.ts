@@ -46,6 +46,22 @@ export function projectPillTone(value: string | null | undefined) {
   return stableHash(seed) % projectPillToneCount;
 }
 
+export function formatLiveRequestCostUsd(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "—";
+  }
+
+  if (value === 0) {
+    return "$0.00";
+  }
+
+  if (value < 0.001) {
+    return "$0.001";
+  }
+
+  return `$${value.toFixed(value < 0.01 ? 3 : 2)}`;
+}
+
 function stableHash(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {

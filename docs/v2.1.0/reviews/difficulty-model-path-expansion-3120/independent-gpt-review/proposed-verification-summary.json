@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-proposed-verification-summary.v1",
+  "status": "failed_pending_owner_adjudication",
+  "counts": {
+    "records": 3120,
+    "families": 624,
+    "batches": 9,
+    "modelPath": 3117,
+    "hardSentinel": 3,
+    "simpleSentinel": 0,
+    "categoryClassifierMismatches": 1157,
+    "exactDuplicates": 0,
+    "familyCollisions": 0,
+    "strictCrossPartitionOrExistingNearDuplicates": 0,
+    "broadNearDuplicateCandidates": 450,
+    "simpleStrongBucketConflicts": 3,
+    "simpleOverloadedBucketConflicts": 17,
+    "complexUnderloadedBucketConflicts": 74,
+    "securityPatternHits": 0
+  },
+  "failures": [
+    "t1: proposed actual Go model-path gate failed",
+    "e2: proposed actual Go model-path gate failed"
+  ],
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

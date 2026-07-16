@@ -56,6 +56,36 @@ describe('Tenant Chat projection event contract', () => {
 
     expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
   });
+
+  it.each([1, 2])(
+    'accepts a v%d reservation with zero monetary cost',
+    (schemaVersion) => {
+      const payload = {
+        ...usageSettledEvent(),
+        schemaVersion,
+        eventType: 'usage_reserved',
+        eventVersion: 1,
+        quota: {
+          state: 'normal',
+          reservedTokensDelta: 10,
+          confirmedInputTokensDelta: 0,
+          confirmedOutputTokensDelta: 0,
+          confirmedTotalTokensDelta: 0,
+          unconfirmedTokensDelta: 0,
+        },
+        budget: {
+          state: 'normal',
+          reservedCostMicroUsdDelta: 0,
+          confirmedCostMicroUsdDelta: 0,
+          unconfirmedExposureMicroUsdDelta: 0,
+        },
+        attempts: [],
+      };
+      delete (payload as { terminalOutcome?: string }).terminalOutcome;
+
+      expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+    },
+  );
 });
 
 function terminalEvent() {

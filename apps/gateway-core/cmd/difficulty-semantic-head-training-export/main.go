@@ -88,9 +88,11 @@ type semanticHeadTrainingInput struct {
 	FamilyPolicy                  string                            `json:"familyPolicy"`
 	SplitPolicyVersion            string                            `json:"splitPolicyVersion"`
 	SplitSeed                     int                               `json:"splitSeed"`
+	SourceSplitCounts             map[string]semanticSplitCount     `json:"sourceSplitCounts"`
 	SplitCounts                   map[string]semanticSplitCount     `json:"splitCounts"`
 	FeatureVersion                string                            `json:"featureVersion"`
 	FeatureNames                  []string                          `json:"featureNames"`
+	DecisionBoundaryVersion       string                            `json:"decisionBoundaryVersion"`
 	CategorySource                string                            `json:"categorySource"`
 	SemanticHeads                 []semanticHeadSpec                `json:"semanticHeads"`
 	ExcludedEmptyInstructionCount int                               `json:"excludedEmptyInstructionCount"`
@@ -184,23 +186,31 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 	}
 
 	result := semanticHeadTrainingInput{
-		SchemaVersion:       "gatelm.difficulty-semantic-head-training-input.v1",
-		DatasetVersion:      manifest.DatasetVersion,
-		DatasetSHA256:       datasetSHA256,
-		ManifestSHA256:      manifestSHA256,
-		FamilyPolicyVersion: manifest.FamilyPolicyVersion,
-		FamilyPolicy:        manifest.TrainingGate.PolicyVersion,
-		SplitPolicyVersion:  manifest.SplitPolicyVersion,
-		SplitSeed:           manifest.SplitSeed,
-		SplitCounts:         manifest.SplitCounts,
-		FeatureVersion:      routing.DifficultyFeatureVectorVersionV1,
-		FeatureNames:        routing.DifficultyFeatureNamesV1(),
-		CategorySource:      "actual",
-		SemanticHeads:       fixedSemanticHeadSpecs,
-		Samples:             make([]semanticHeadTrainingInputSample, 0),
+		SchemaVersion:           "gatelm.difficulty-semantic-head-training-input.v1",
+		DatasetVersion:          manifest.DatasetVersion,
+		DatasetSHA256:           datasetSHA256,
+		ManifestSHA256:          manifestSHA256,
+		FamilyPolicyVersion:     manifest.FamilyPolicyVersion,
+		FamilyPolicy:            manifest.TrainingGate.PolicyVersion,
+		SplitPolicyVersion:      manifest.SplitPolicyVersion,
+		SplitSeed:               manifest.SplitSeed,
+		SourceSplitCounts:       cloneSemanticSplitCounts(manifest.SplitCounts),
+		SplitCounts:             make(map[string]semanticSplitCount, len(manifest.SplitCounts)),
+		FeatureVersion:          routing.DifficultyFeatureVectorVersionV1,
+		FeatureNames:            routing.DifficultyFeatureNamesV1(),
+		DecisionBoundaryVersion: routing.DifficultyDecisionBoundaryVersion,
+		CategorySource:          "actual",
+		SemanticHeads:           fixedSemanticHeadSpecs,
+		Samples:                 make([]semanticHeadTrainingInputSample, 0),
 	}
 	actualRecords := make(map[string]int, len(manifest.Families))
+	rawByPartition := map[string]int{"train": 0, "calibration": 0, "holdout": 0}
 	eligibleByPartition := map[string]int{"train": 0, "calibration": 0, "holdout": 0}
+	eligibleFamiliesByPartition := map[string]map[string]struct{}{
+		"train":       {},
+		"calibration": {},
+		"holdout":     {},
+	}
 	categoryClassifier := routing.NewRuleBasedCategoryClassifier()
 	difficultyClassifier := routing.NewRuleBasedDifficultyClassifier()
 	scanner := bufio.NewScanner(bytes.NewReader(datasetBytes))
@@ -221,17 +231,28 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has no manifest family", lineNumber)
 		}
 		actualRecords[record.PromptFamily]++
+		rawByPartition[partition]++
 		if record.LabelSource != "human_review" || record.ReviewStatus != "approved" || record.ReviewerCount < 1 {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d is not human-approved", lineNumber)
 		}
 		if !validLanguage(record.Language) || len(record.EvaluationSlices) == 0 {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has invalid evaluation metadata", lineNumber)
 		}
+		features := routing.ExtractPromptFeatures(record.RedactedPrompt)
+		instructionText, semanticInputAvailable := routing.DifficultySemanticInputForOffline(features)
 		switch record.SemanticInputStatus {
 		case "empty_instruction":
 			if record.TaskBucket != "not_applicable" || record.ConstraintBucket != "not_applicable" ||
 				record.ScopeBucket != "not_applicable" || record.DependencyBucket != "not_applicable" {
 				return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has invalid empty-instruction labels", lineNumber)
+			}
+			if semanticInputAvailable {
+				return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d declares empty instruction but extraction found semantic input", lineNumber)
+			}
+			actualCategory := categoryClassifier.ClassifyFeatures(features).Category
+			difficultyFeatures := routing.ExtractDifficultyFeatures(features, actualCategory)
+			if evidence := routing.DifficultyDecisionEvidenceForOffline(difficultyFeatures); evidence.Route != routing.DifficultyDecisionRouteSimpleSentinel {
+				return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d does not use the simple sentinel", lineNumber)
 			}
 			result.ExcludedEmptyInstructionCount++
 			continue
@@ -246,9 +267,7 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has an unsupported semantic input status", lineNumber)
 		}
 
-		features := routing.ExtractPromptFeatures(record.RedactedPrompt)
-		instructionText, available := routing.DifficultySemanticInputForOffline(features)
-		if !available {
+		if !semanticInputAvailable {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has no semantic instruction input", lineNumber)
 		}
 		actualCategory := categoryClassifier.ClassifyFeatures(features).Category
@@ -280,6 +299,7 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 			DependencyBucket:   record.DependencyBucket,
 		})
 		eligibleByPartition[partition]++
+		eligibleFamiliesByPartition[partition][record.PromptFamily] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
 		return semanticHeadTrainingInput{}, fmt.Errorf("read semantic head dataset: %w", err)
@@ -290,11 +310,8 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		}
 	}
 	for _, partition := range []string{"train", "calibration", "holdout"} {
-		if eligibleByPartition[partition] == 0 {
-			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head dataset has no eligible %s samples", partition)
-		}
 		declared := manifest.SplitCounts[partition]
-		if eligibleByPartition[partition] != declared.Records {
+		if rawByPartition[partition] != declared.Records {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head %s record count does not match manifest", partition)
 		}
 		familyCount := 0
@@ -306,8 +323,23 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		if familyCount != declared.Families {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head %s family count does not match manifest", partition)
 		}
+		if eligibleByPartition[partition] == 0 {
+			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head dataset has no eligible %s samples", partition)
+		}
+		result.SplitCounts[partition] = semanticSplitCount{
+			Families: len(eligibleFamiliesByPartition[partition]),
+			Records:  eligibleByPartition[partition],
+		}
 	}
 	return result, nil
+}
+
+func cloneSemanticSplitCounts(source map[string]semanticSplitCount) map[string]semanticSplitCount {
+	clone := make(map[string]semanticSplitCount, len(source))
+	for partition, count := range source {
+		clone[partition] = count
+	}
+	return clone
 }
 
 func validateSemanticHeadManifest(manifest semanticHeadDatasetManifest) error {

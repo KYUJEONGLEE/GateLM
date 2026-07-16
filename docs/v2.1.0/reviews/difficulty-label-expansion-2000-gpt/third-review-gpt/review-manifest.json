@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "gatelm.difficulty-expansion-third-review-manifest.v1",
+  "status": "third_gpt_review_pending",
+  "records": 250,
+  "uniqueSampleIds": 250,
+  "batches": [
+    {
+      "batch": 1,
+      "category": "general",
+      "records": 44,
+      "families": 20,
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-01.input.jsonl",
+      "sha256": "852aff509aef156a08ddca13577caf4912bb905ba783ae6272e57882b1f5e395"
+    },
+    {
+      "batch": 2,
+      "category": "code",
+      "records": 49,
+      "families": 20,
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-02.input.jsonl",
+      "sha256": "2185225d2033ac88c9d2da7225a27247d8d95e685daf276e9f46b9ce75453d77"
+    },
+    {
+      "batch": 3,
+      "category": "translation",
+      "records": 57,
+      "families": 20,
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-03.input.jsonl",
+      "sha256": "302874eb4db7e9058745bc0fb7a9351392a5063409f874a1dc27c59b86703cdc"
+    },
+    {
+      "batch": 4,
+      "category": "summarization",
+      "records": 50,
+      "families": 20,
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-04.input.jsonl",
+      "sha256": "243fdd63338cc54d92a77c19935ba1eadb50b0982623dc69bcac0b47d960720f"
+    },
+    {
+      "batch": 5,
+      "category": "reasoning",
+      "records": 50,
+      "families": 20,
+      "path": "docs/v2.1.0/reviews/difficulty-label-expansion-2000-gpt/third-review-gpt/review-05.input.jsonl",
+      "sha256": "447a56fed5b234135188b167920c63cfb259e210c8f749da3230d6c28e64e7c1"
+    }
+  ],
+  "createdAt": "2026-07-15T00:00:00Z"
+}

@@ -26,7 +26,7 @@ test("rejects incomplete or malformed compact unit values", () => {
 });
 
 test("bulk employee deletion always unlocks the UI and uses the latest selected employee", async () => {
-  const source = await readFile(employeeManagementSourceUrl, "utf8");
+  const source = (await readFile(employeeManagementSourceUrl, "utf8")).replaceAll("\r\n", "\n");
 
   expect(source).toContain('setPendingAction("deleteSelected")');
   expect(source).toContain("} finally {\n      setPendingAction(null);");
@@ -55,4 +55,31 @@ test("pending employee invitations can be deleted without deleting the employee"
   expect(routeSource).toContain("deleteEmployeeInvitation(values, requestOptions)");
   expect(clientSource).toContain("export async function deleteEmployeeInvitation(");
   expect(clientSource).toContain('method: "DELETE"');
+});
+
+test("employee ranking and detail controls use unified cost policies", async () => {
+  const source = await readFile(employeeManagementSourceUrl, "utf8");
+
+  expect(source).toContain("AnalyticsRankedBarChart");
+  expect(source).toContain('kind="micro-usd"');
+  expect(source).toContain("row.dailyCostMicroUsd ?? 0");
+  expect(source).toContain('action: "updateCostPolicy"');
+  expect(source).toContain("expectedVersion: policy.version");
+  expect(source).toContain("daily: toEmployeeCostLimit(draft.daily)");
+  expect(source).toContain("weekly: toEmployeeCostLimit(draft.weekly)");
+  expect(source).toContain("parseEmployeeCostPolicy(");
+  expect(source).toContain("text.limitConflict");
+  expect(source).toContain("if (response.status === 409)");
+  expect(source).toContain("disabled={pending}");
+  expect(source).toContain("decimals={6}");
+  expect(source).toContain("enabled && current[card.periodKey].limitUsd <= 0");
+  expect(source).toContain("!draft.enabled && draft.limitUsd <= 0 ? 0");
+  expect(source).toContain("Routing remains monitor-only after the ledger is connected.");
+  expect(source).not.toContain("function costLimitUsd(");
+  expect(source).toContain("costPolicyItem.enforcementReady");
+  expect(source).toContain("text.exposureState");
+  expect(source).toContain("usage.periodTimezone");
+  expect(source).toContain('draft.enforcementMode === "restrict_high_cost"');
+  expect(source).not.toContain('policy?.version === 0 ? "restrict_high_cost"');
+  expect(source).not.toContain("AnalyticsEmployeeTokenBarChart");
 });

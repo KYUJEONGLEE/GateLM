@@ -11,6 +11,7 @@ from .encoder_runtime import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_MANIFEST_PATH,
     REPO_ROOT,
+    encode_pooled_single_requests,
     install_network_guard,
     load_runtime,
     write_json,
@@ -26,7 +27,7 @@ DEFAULT_DATASET_MANIFEST = (
     REPO_ROOT
     / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json"
 )
-DEFAULT_POLICY = TOOL_DIR / "training-policy.semantic-candidates.v2.json"
+DEFAULT_POLICY = TOOL_DIR / "training-policy.semantic-candidates.v3.json"
 DEFAULT_OUTPUT_DIRECTORY = TOOL_DIR / "artifacts/candidates"
 
 
@@ -40,35 +41,27 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
     parser.add_argument("--encoder-manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
     parser.add_argument("--output-directory", type=Path, default=DEFAULT_OUTPUT_DIRECTORY)
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, choices=[1], default=1)
     parser.add_argument(
         "--semantic-heads-artifact-version",
-        default="difficulty-semantic-heads.owner-approved-500.2026-07-15.v1",
+        default="difficulty-semantic-heads.owner-approved-500.single-request.2026-07-15.v2",
     )
     parser.add_argument(
         "--artifact-version-prefix",
-        default="difficulty-offline.owner-approved-500.2026-07-15",
+        default="difficulty-offline.owner-approved-500.single-request.2026-07-15",
     )
     parser.add_argument(
         "--bundle-version",
-        default="difficulty-feature-bundle.owner-approved-500.2026-07-15.v2",
+        default="difficulty-feature-bundle.owner-approved-500.single-request.2026-07-15.v3",
     )
     parser.add_argument("--go", default=os.environ.get("GATELM_GO_EXECUTABLE", "go"))
     return parser.parse_args(argv)
 
 
 def _encode_pooled_batches(runtime: Any, instruction_texts: list[str], batch_size: int) -> Any:
-    import numpy as np
-
-    if batch_size <= 0:
-        raise ValueError("candidate encoder batch size must be positive")
-    batches = [
-        runtime.encode_pooled(instruction_texts[index : index + batch_size])
-        for index in range(0, len(instruction_texts), batch_size)
-    ]
-    if not batches:
-        raise ValueError("candidate encoder input must not be empty")
-    return np.concatenate(batches, axis=0)
+    if batch_size != 1:
+        raise ValueError("candidate training requires runtime-equivalent batch size 1")
+    return encode_pooled_single_requests(runtime, instruction_texts)
 
 
 def projection_parameters(runtime: Any, encoder_manifest: dict[str, Any]) -> dict[str, Any]:
@@ -91,8 +84,8 @@ def projection_parameters(runtime: Any, encoder_manifest: dict[str, Any]) -> dic
 
 
 def run(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    if args.batch_size <= 0:
-        raise ValueError("candidate encoder batch size must be positive")
+    if args.batch_size != 1:
+        raise ValueError("candidate training requires runtime-equivalent batch size 1")
     exported_input = load_training_input(args.dataset, args.manifest, args.go)
     policy = json.loads(args.policy.read_text(encoding="utf-8"))
 
@@ -121,17 +114,17 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any], dict[
 
     output_directory = args.output_directory
     output_directory.mkdir(parents=True, exist_ok=True)
-    write_json(output_directory / "difficulty-semantic-heads.owner-approved-500.v1.json", semantic_heads)
+    write_json(output_directory / "difficulty-semantic-heads.owner-approved-500.v2.json", semantic_heads)
     candidate_paths = {
-        "42d-rule-vector-v1": "difficulty-candidate-a-42d.owner-approved-500.v2.json",
-        "42d-rule-vector-v1-plus-projection": "difficulty-candidate-b-106d.owner-approved-500.v2.json",
+        "42d-rule-vector-v1": "difficulty-candidate-a-42d.owner-approved-500.v3.json",
+        "42d-rule-vector-v1-plus-projection": "difficulty-candidate-b-106d.owner-approved-500.v3.json",
         "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities": (
-            "difficulty-candidate-c-118d.owner-approved-500.v2.json"
+            "difficulty-candidate-c-118d.owner-approved-500.v3.json"
         ),
     }
     for candidate_name, artifact in artifacts.items():
         write_json(output_directory / candidate_paths[candidate_name], artifact)
-    write_json(output_directory / "difficulty-candidate-comparison.owner-approved-500.v2.json", report)
+    write_json(output_directory / "difficulty-candidate-comparison.owner-approved-500.v3.json", report)
     return semantic_heads, artifacts, report
 
 

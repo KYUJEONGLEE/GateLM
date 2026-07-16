@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-gpt-final-verification-summary.v1",
+  "status": "validated_pending_human_owner_confirmation",
+  "counts": {
+    "records": 3120,
+    "families": 624,
+    "batches": 9,
+    "modelPath": 3120,
+    "hardSentinel": 0,
+    "simpleSentinel": 0,
+    "categoryClassifierMismatches": 1157,
+    "exactDuplicates": 0,
+    "familyCollisions": 0,
+    "broadNearDuplicateCandidates": 444,
+    "strictNearDuplicateCandidates": 0,
+    "strictCrossPartitionOrExistingNearDuplicates": 0,
+    "simpleStrongBucketHeuristicSignals": 0,
+    "simpleOverloadedBucketHeuristicSignals": 10,
+    "complexUnderloadedBucketHeuristicSignals": 74,
+    "securityPatternHits": 0,
+    "customPromptsActuallyRechecked": 6
+  },
+  "failures": [],
+  "humanOwnerConfirmationStatus": "pending",
+  "trainingEligible": false,
+  "promotionHoldoutUse": "label_review_only_no_model_or_threshold_selection"
+}

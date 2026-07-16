@@ -52,6 +52,11 @@ func (s *ReservationStore) FinalizeConfirmed(
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if reservation.State == "settled" {
+		if err = s.recordConfirmedAttemptTx(
+			ctx, tx, s.now().UTC(), requestContext, reservationID, attemptNo, usage, outcome,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
+		}
 		result, err = readSettlement(ctx, tx, requestContext, reservationID)
 		if err != nil {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -86,6 +91,11 @@ func (s *ReservationStore) FinalizeConfirmed(
 		outcome, now, requestContext.ExecutionScope.TenantID); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = s.recordEmployeeConfirmedAttempt(
+		ctx, tx, requestContext, reservationID, attemptNo, usage, outcome,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
+	}
 
 	attempts, totals, hasPending, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
 	if err != nil || len(attempts) == 0 {
@@ -116,6 +126,11 @@ func (s *ReservationStore) FinalizeConfirmed(
 		attempts, totals, quotaState, budgetState, eventID, nextVersion, now,
 	); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if err = s.settleEmployeeCost(
+		ctx, tx, requestContext, reservationID, attemptNo, reservation.LedgerVersion,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -203,6 +218,12 @@ func (s *ReservationStore) FinalizeRecordedAttempts(
 		attempts, totals, quotaState, budgetState, eventID, nextVersion, now,
 	); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	lastAttemptNo := attempts[len(attempts)-1].AttemptNo
+	if err = s.settleEmployeeCost(
+		ctx, tx, requestContext, reservationID, lastAttemptNo, reservation.LedgerVersion,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable

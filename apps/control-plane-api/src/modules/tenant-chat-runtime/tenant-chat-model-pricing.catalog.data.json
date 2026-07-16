@@ -1,5 +1,5 @@
 {
-  "catalogVersion": "2026-07-14",
+  "catalogVersion": "2026-07-15",
   "entries": [
     {
       "providerFamily": "mock",
@@ -21,8 +21,70 @@
     },
     {
       "providerFamily": "openai",
+      "modelKey": "gpt-4o-mini",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 600000,
+      "cacheReadInputMicroUsdPerMillionTokens": 75000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4o-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4o-mini-2024-07-18",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 600000,
+      "cacheReadInputMicroUsdPerMillionTokens": 75000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4o-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4o",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2500000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 1250000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4o"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4o-2024-08-06",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2500000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 1250000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4o"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4o-2024-11-20",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2500000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 1250000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4o"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4o-2024-05-13",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 5000000,
+      "outputMicroUsdPerMillionTokens": 15000000,
+      "sourceUrl": "https://openai.com/index/introducing-structured-outputs-in-the-api/"
+    },
+    {
+      "providerFamily": "openai",
       "modelKey": "gpt-5.4-mini",
-      "effectiveAt": "2026-07-14T00:00:00Z",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 750000,
+      "outputMicroUsdPerMillionTokens": 4500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 75000,
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.4-mini-2026-03-17",
+      "effectiveAt": "2026-07-15T00:00:00Z",
       "inputMicroUsdPerMillionTokens": 750000,
       "outputMicroUsdPerMillionTokens": 4500000,
       "cacheReadInputMicroUsdPerMillionTokens": 75000,
@@ -31,16 +93,355 @@
     {
       "providerFamily": "openai",
       "modelKey": "gpt-5.4-nano",
-      "effectiveAt": "2026-07-14T00:00:00Z",
+      "effectiveAt": "2026-07-15T00:00:00Z",
       "inputMicroUsdPerMillionTokens": 200000,
       "outputMicroUsdPerMillionTokens": 1250000,
       "cacheReadInputMicroUsdPerMillionTokens": 20000,
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.4-nano-2026-03-17",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 200000,
+      "outputMicroUsdPerMillionTokens": 1250000,
+      "cacheReadInputMicroUsdPerMillionTokens": 20000,
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.2",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1750000,
+      "outputMicroUsdPerMillionTokens": 14000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 175000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.2"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.2-2025-12-11",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1750000,
+      "outputMicroUsdPerMillionTokens": 14000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 175000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.2"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.1",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1250000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 125000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.1"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.1-2025-11-13",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1250000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 125000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.1"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1250000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 125000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5-2025-08-07",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1250000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 125000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5-mini",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 250000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 25000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5-mini-2025-08-07",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 250000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 25000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5-nano",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 50000,
+      "outputMicroUsdPerMillionTokens": 400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 5000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5-nano"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5-nano-2025-08-07",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 50000,
+      "outputMicroUsdPerMillionTokens": 400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 5000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5-nano"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.5-preview",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 75000000,
+      "outputMicroUsdPerMillionTokens": 150000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 37500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.5-preview"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.1",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 8000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.1"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.1-2025-04-14",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 8000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.1"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.1-mini",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 1600000,
+      "cacheReadInputMicroUsdPerMillionTokens": 100000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.1-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.1-mini-2025-04-14",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 1600000,
+      "cacheReadInputMicroUsdPerMillionTokens": 100000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.1-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.1-nano",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 25000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.1-nano"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-4.1-nano-2025-04-14",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 25000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-4.1-nano"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-3.5-turbo",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-3.5-turbo"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-3.5-turbo-0125",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-3.5-turbo"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-3.5-turbo-1106",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1000000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "sourceUrl": "https://openai.com/index/new-models-and-developer-products-announced-at-devday/"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "chat-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 5000000,
+      "outputMicroUsdPerMillionTokens": 30000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/chat-latest"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5-chat-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1250000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 125000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5-chat-latest"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.1-chat-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1250000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 125000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.1-chat-latest"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.2-chat-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1750000,
+      "outputMicroUsdPerMillionTokens": 14000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 175000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.2-chat-latest"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "gpt-5.3-chat-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1750000,
+      "outputMicroUsdPerMillionTokens": 14000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 175000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.3-chat-latest"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o1",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 15000000,
+      "outputMicroUsdPerMillionTokens": 60000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 7500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o1"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o1-2024-12-17",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 15000000,
+      "outputMicroUsdPerMillionTokens": 60000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 7500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o1"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o3",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 8000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o3"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o3-2025-04-16",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 8000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o3"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o3-mini",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1100000,
+      "outputMicroUsdPerMillionTokens": 4400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 550000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o3-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o3-mini-2025-01-31",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1100000,
+      "outputMicroUsdPerMillionTokens": 4400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 550000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o3-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o4-mini",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1100000,
+      "outputMicroUsdPerMillionTokens": 4400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 275000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o4-mini"
+    },
+    {
+      "providerFamily": "openai",
+      "modelKey": "o4-mini-2025-04-16",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1100000,
+      "outputMicroUsdPerMillionTokens": 4400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 275000,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/o4-mini"
+    },
+    {
+      "providerFamily": "gemini",
+      "modelKey": "gemini-3.5-flash",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1500000,
+      "outputMicroUsdPerMillionTokens": 9000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 150000,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    {
+      "providerFamily": "gemini",
+      "modelKey": "gemini-flash-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1500000,
+      "outputMicroUsdPerMillionTokens": 9000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 150000,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/changelog"
+    },
+    {
+      "providerFamily": "gemini",
+      "modelKey": "gemini-3.1-flash-lite",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 250000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 25000,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    {
+      "providerFamily": "gemini",
+      "modelKey": "gemini-3-flash-preview",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 3000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 50000,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    {
       "providerFamily": "gemini",
       "modelKey": "gemini-2.5-flash",
-      "effectiveAt": "2026-07-14T00:00:00Z",
+      "effectiveAt": "2026-07-15T00:00:00Z",
       "inputMicroUsdPerMillionTokens": 300000,
       "outputMicroUsdPerMillionTokens": 2500000,
       "cacheReadInputMicroUsdPerMillionTokens": 30000,
@@ -49,7 +450,7 @@
     {
       "providerFamily": "gemini",
       "modelKey": "gemini-2.5-flash-lite",
-      "effectiveAt": "2026-07-14T00:00:00Z",
+      "effectiveAt": "2026-07-15T00:00:00Z",
       "inputMicroUsdPerMillionTokens": 100000,
       "outputMicroUsdPerMillionTokens": 400000,
       "cacheReadInputMicroUsdPerMillionTokens": 10000,
@@ -57,8 +458,71 @@
     },
     {
       "providerFamily": "claude",
+      "modelKey": "claude-sonnet-5",
+      "effectiveAt": "2026-06-30T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 10000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 200000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-fable-5",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 10000000,
+      "outputMicroUsdPerMillionTokens": 50000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 1000000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-opus-4-8",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 5000000,
+      "outputMicroUsdPerMillionTokens": 25000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-opus-4-7",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 5000000,
+      "outputMicroUsdPerMillionTokens": 25000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-opus-4-6",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 5000000,
+      "outputMicroUsdPerMillionTokens": 25000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-opus-4-5-20251101",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 5000000,
+      "outputMicroUsdPerMillionTokens": 25000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 500000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
       "modelKey": "claude-sonnet-4-6",
-      "effectiveAt": "2026-07-14T00:00:00Z",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 3000000,
+      "outputMicroUsdPerMillionTokens": 15000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 300000,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "claude",
+      "modelKey": "claude-sonnet-4-5-20250929",
+      "effectiveAt": "2026-07-15T00:00:00Z",
       "inputMicroUsdPerMillionTokens": 3000000,
       "outputMicroUsdPerMillionTokens": 15000000,
       "cacheReadInputMicroUsdPerMillionTokens": 300000,
@@ -67,11 +531,314 @@
     {
       "providerFamily": "claude",
       "modelKey": "claude-haiku-4-5-20251001",
-      "effectiveAt": "2026-07-14T00:00:00Z",
+      "effectiveAt": "2026-07-15T00:00:00Z",
       "inputMicroUsdPerMillionTokens": 1000000,
       "outputMicroUsdPerMillionTokens": 5000000,
       "cacheReadInputMicroUsdPerMillionTokens": 100000,
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    {
+      "providerFamily": "cerebras",
+      "modelKey": "gpt-oss-120b",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 350000,
+      "outputMicroUsdPerMillionTokens": 750000,
+      "sourceUrl": "https://inference-docs.cerebras.ai/api-reference/models/public-models"
+    },
+    {
+      "providerFamily": "cerebras",
+      "modelKey": "zai-glm-4.7",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2250000,
+      "outputMicroUsdPerMillionTokens": 2750000,
+      "sourceUrl": "https://inference-docs.cerebras.ai/api-reference/models/public-models"
+    },
+    {
+      "providerFamily": "cerebras",
+      "modelKey": "gemma-4-31b",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 990000,
+      "outputMicroUsdPerMillionTokens": 1490000,
+      "sourceUrl": "https://inference-docs.cerebras.ai/api-reference/models/public-models"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "codestral-2508",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 300000,
+      "outputMicroUsdPerMillionTokens": 900000,
+      "cacheReadInputMicroUsdPerMillionTokens": 30000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/codestral-25-08"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "codestral-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 300000,
+      "outputMicroUsdPerMillionTokens": 900000,
+      "cacheReadInputMicroUsdPerMillionTokens": 30000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/codestral-25-08"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "devstral-2512",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 40000,
+      "sourceUrl": "https://mistral.ai/news/mistral-vibe-2-0/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "devstral-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 40000,
+      "sourceUrl": "https://mistral.ai/news/mistral-vibe-2-0/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "devstral-medium-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 40000,
+      "sourceUrl": "https://mistral.ai/news/mistral-vibe-2-0/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "labs-leanstral-1-5",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 0,
+      "outputMicroUsdPerMillionTokens": 0,
+      "cacheReadInputMicroUsdPerMillionTokens": 0,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/leanstral-1-5"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "labs-leanstral-1-5-1",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 0,
+      "outputMicroUsdPerMillionTokens": 0,
+      "cacheReadInputMicroUsdPerMillionTokens": 0,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/leanstral-1-5"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "magistral-medium-2509",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 5000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 200000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "magistral-medium-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 2000000,
+      "outputMicroUsdPerMillionTokens": 5000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 200000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "magistral-small-2509",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 50000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "magistral-small-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 50000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "ministral-14b-2512",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 200000,
+      "outputMicroUsdPerMillionTokens": 200000,
+      "cacheReadInputMicroUsdPerMillionTokens": 20000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/ministral-3-14b-25-12"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "ministral-14b-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 200000,
+      "outputMicroUsdPerMillionTokens": 200000,
+      "cacheReadInputMicroUsdPerMillionTokens": 20000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/ministral-3-14b-25-12"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "ministral-3b-2512",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 100000,
+      "cacheReadInputMicroUsdPerMillionTokens": 10000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "ministral-3b-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 100000,
+      "cacheReadInputMicroUsdPerMillionTokens": 10000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "ministral-8b-2512",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 150000,
+      "cacheReadInputMicroUsdPerMillionTokens": 15000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "ministral-8b-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 150000,
+      "cacheReadInputMicroUsdPerMillionTokens": 15000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-large-2512",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 50000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-large-3-25-12"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-large-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 500000,
+      "outputMicroUsdPerMillionTokens": 1500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 50000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-large-3-25-12"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-medium-2505",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 40000,
+      "sourceUrl": "https://mistral.ai/news/mistral-medium-3/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-medium-2508",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 400000,
+      "outputMicroUsdPerMillionTokens": 2000000,
+      "cacheReadInputMicroUsdPerMillionTokens": 40000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-medium-3-1-25-08"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-medium-2604",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1500000,
+      "outputMicroUsdPerMillionTokens": 7500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 150000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-medium-3-5-26-04"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-medium-3-5",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1500000,
+      "outputMicroUsdPerMillionTokens": 7500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 150000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-medium-3-5-26-04"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-medium-3.5",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1500000,
+      "outputMicroUsdPerMillionTokens": 7500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 150000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-medium-3-5-26-04"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-medium-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 1500000,
+      "outputMicroUsdPerMillionTokens": 7500000,
+      "cacheReadInputMicroUsdPerMillionTokens": 150000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-medium-3-5-26-04"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-small-2603",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 600000,
+      "cacheReadInputMicroUsdPerMillionTokens": 15000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-small-4-0-26-03"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "mistral-small-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 600000,
+      "cacheReadInputMicroUsdPerMillionTokens": 15000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/mistral-small-4-0-26-03"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "open-mistral-nemo",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 150000,
+      "cacheReadInputMicroUsdPerMillionTokens": 15000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "open-mistral-nemo-2407",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 150000,
+      "outputMicroUsdPerMillionTokens": 150000,
+      "cacheReadInputMicroUsdPerMillionTokens": 15000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "voxtral-small-2507",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 300000,
+      "cacheReadInputMicroUsdPerMillionTokens": 10000,
+      "sourceUrl": "https://docs.mistral.ai/models/model-cards/voxtral-small-25-07"
+    },
+    {
+      "providerFamily": "mistral",
+      "modelKey": "voxtral-small-latest",
+      "effectiveAt": "2026-07-15T00:00:00Z",
+      "inputMicroUsdPerMillionTokens": 100000,
+      "outputMicroUsdPerMillionTokens": 400000,
+      "cacheReadInputMicroUsdPerMillionTokens": 10000,
+      "sourceUrl": "https://mistral.ai/pricing/api/"
     }
   ]
 }

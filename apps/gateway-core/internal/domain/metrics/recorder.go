@@ -62,6 +62,52 @@ type StreamTimeToFirstToken struct {
 	DurationSeconds float64
 }
 
+type RoutingDifficultyShadow struct {
+	Status          string
+	Category        string
+	Comparison      string
+	DurationSeconds float64
+}
+
+func (r *Registry) RoutingDifficultyShadow(observation RoutingDifficultyShadow) {
+	status := normalizeDifficultyShadowStatus(observation.Status)
+	r.AddCounter(RoutingDifficultyShadowTotal, []Label{
+		{Name: "status", Value: status},
+		{Name: "category", Value: normalizeDifficultyShadowCategory(observation.Category)},
+		{Name: "comparison", Value: normalizeDifficultyShadowComparison(observation.Comparison)},
+	}, 1)
+	r.ObserveHistogram(RoutingDifficultyShadowDurationSeconds, []Label{
+		{Name: "status", Value: status},
+	}, observation.DurationSeconds)
+}
+
+func normalizeDifficultyShadowStatus(value string) string {
+	switch strings.TrimSpace(value) {
+	case "ready", "not_applicable", "unavailable", "busy", "timeout", "invalid_embedding", "inference_failed", "panic_recovered":
+		return strings.TrimSpace(value)
+	default:
+		return "unavailable"
+	}
+}
+
+func normalizeDifficultyShadowCategory(value string) string {
+	switch strings.TrimSpace(value) {
+	case "general", "code", "translation", "summarization", "reasoning":
+		return strings.TrimSpace(value)
+	default:
+		return "general"
+	}
+}
+
+func normalizeDifficultyShadowComparison(value string) string {
+	switch strings.TrimSpace(value) {
+	case "match", "rule_simple_shadow_complex", "rule_complex_shadow_simple", "not_compared":
+		return strings.TrimSpace(value)
+	default:
+		return "not_compared"
+	}
+}
+
 func (r *Registry) GatewayRequestStarted(endpoint string, method string) {
 	r.AddGauge(GatewayInflightRequests, []Label{
 		{Name: "endpoint", Value: endpoint},

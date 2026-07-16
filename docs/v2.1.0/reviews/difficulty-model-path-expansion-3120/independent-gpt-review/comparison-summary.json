@@ -1,0 +1,330 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-review-comparison.v1",
+  "status": "validated_pending_owner_adjudication",
+  "importedAt": "2026-07-15T00:00:00Z",
+  "records": 3120,
+  "families": 624,
+  "batches": [
+    {
+      "batchId": "t1",
+      "records": 400,
+      "families": 80,
+      "decisions": {
+        "accept": 179,
+        "revise_prompt": 221
+      },
+      "confidence": {
+        "high": 335,
+        "medium": 65
+      },
+      "promptChanges": 221,
+      "labelConflictRecords": 319,
+      "ownerAdjudicationRecords": 325,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "586170fe4848656a9f3339c8ee434b36004c31e38d0e89daa3f2199ed753784a"
+    },
+    {
+      "batchId": "t2",
+      "records": 400,
+      "families": 80,
+      "decisions": {
+        "accept": 182,
+        "revise_prompt": 218
+      },
+      "confidence": {
+        "high": 335,
+        "medium": 65
+      },
+      "promptChanges": 218,
+      "labelConflictRecords": 338,
+      "ownerAdjudicationRecords": 345,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "092e1b4edc4367c09cd29d1ec2991a80a936734fcf6e25ab738de5bfc590a7cb"
+    },
+    {
+      "batchId": "t3",
+      "records": 400,
+      "families": 80,
+      "decisions": {
+        "accept": 180,
+        "revise_prompt": 220
+      },
+      "confidence": {
+        "high": 348,
+        "medium": 52
+      },
+      "promptChanges": 220,
+      "labelConflictRecords": 305,
+      "ownerAdjudicationRecords": 306,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "0e547aeb405ae5d4f6e21fdef2c2775d39fd2a960616809ed1e2ced89f685cc6"
+    },
+    {
+      "batchId": "t4",
+      "records": 395,
+      "families": 79,
+      "decisions": {
+        "accept": 171,
+        "revise_prompt": 224
+      },
+      "confidence": {
+        "high": 338,
+        "medium": 57
+      },
+      "promptChanges": 224,
+      "labelConflictRecords": 313,
+      "ownerAdjudicationRecords": 319,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "65911c08a7e5a8c2461597034d65565a07c25c51236d03d92d30a0077bcadc75"
+    },
+    {
+      "batchId": "c1",
+      "records": 275,
+      "families": 55,
+      "decisions": {
+        "accept": 110,
+        "revise_prompt": 165
+      },
+      "confidence": {
+        "high": 207,
+        "medium": 68
+      },
+      "promptChanges": 165,
+      "labelConflictRecords": 211,
+      "ownerAdjudicationRecords": 222,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "6f8d4ec8ddf4b04b08227a96258bb493940da4db67039efa6c00345805b38e4d"
+    },
+    {
+      "batchId": "c2",
+      "records": 250,
+      "families": 50,
+      "decisions": {
+        "accept": 115,
+        "revise_prompt": 135
+      },
+      "confidence": {
+        "high": 218,
+        "medium": 32
+      },
+      "promptChanges": 135,
+      "labelConflictRecords": 203,
+      "ownerAdjudicationRecords": 205,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "70341118c5b7b0be4e9be91eec25f86053eb15e4828fd7fc1209b8c54cce14df"
+    },
+    {
+      "batchId": "e1",
+      "records": 375,
+      "families": 75,
+      "decisions": {
+        "accept": 149,
+        "revise_prompt": 226
+      },
+      "confidence": {
+        "high": 294,
+        "medium": 81
+      },
+      "promptChanges": 226,
+      "labelConflictRecords": 303,
+      "ownerAdjudicationRecords": 307,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "65a91b9e3dc3033e2ec94136d14799ee8d2529cb6d5a164fd497eeb84599fda4"
+    },
+    {
+      "batchId": "e2",
+      "records": 375,
+      "families": 75,
+      "decisions": {
+        "accept": 156,
+        "revise_prompt": 219
+      },
+      "confidence": {
+        "high": 307,
+        "medium": 68
+      },
+      "promptChanges": 219,
+      "labelConflictRecords": 290,
+      "ownerAdjudicationRecords": 300,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "9e95eb0f0f83f4094544c8c73118c519c5dfb3a18b8a119461648b5fe1058684"
+    },
+    {
+      "batchId": "p1",
+      "records": 250,
+      "families": 50,
+      "decisions": {
+        "accept": 112,
+        "revise_prompt": 138
+      },
+      "confidence": {
+        "high": 218,
+        "medium": 32
+      },
+      "promptChanges": 138,
+      "labelConflictRecords": 190,
+      "ownerAdjudicationRecords": 196,
+      "decisionPromptInconsistencies": 0,
+      "proposedSchemaFailures": 0,
+      "proposedSchemaFailureDetails": [],
+      "proposedDatasetSha256": "4eaea124a80df156dc5973498f773ec9eaa1d37213a21871eab4dcde87688259"
+    }
+  ],
+  "totals": {
+    "decisions": {
+      "accept": 1354,
+      "revise_prompt": 1766
+    },
+    "confidence": {
+      "high": 2600,
+      "medium": 520
+    },
+    "promptChanges": 1766,
+    "representationalBoundaryNormalizations": 322,
+    "labelConflictRecords": 2472,
+    "labelFieldChanges": {
+      "constraintBucket": 424,
+      "dependencyBucket": 20,
+      "evaluationSlices": 2348,
+      "expectedDifficulty": 81,
+      "taskBucket": 510
+    },
+    "ownerAdjudicationRecords": 2525,
+    "promptRevisionBatchApprovalRecords": 308,
+    "decisionPromptInconsistencies": 0,
+    "proposedSchemaFailures": 0,
+    "securityPatternHits": 0,
+    "issueCodes": {
+      "awkward_audience_expression": 315,
+      "broken_korean_expression": 72,
+      "compressed_shorthand": 343,
+      "duplicated_word": 19,
+      "punctuation_artifact": 202,
+      "template_dependency_artifact": 981
+    }
+  },
+  "providedValidationSummary": {
+    "schemaVersion": "gatelm.difficulty-independent-gpt-review-validation.v1",
+    "records": 3120,
+    "families": 624,
+    "batches": [
+      {
+        "batchId": "t1",
+        "input": 400,
+        "output": 400,
+        "families": 80,
+        "accepted": 179,
+        "revised": 221,
+        "simple": 193,
+        "complex": 207
+      },
+      {
+        "batchId": "t2",
+        "input": 400,
+        "output": 400,
+        "families": 80,
+        "accepted": 182,
+        "revised": 218,
+        "simple": 183,
+        "complex": 217
+      },
+      {
+        "batchId": "t3",
+        "input": 400,
+        "output": 400,
+        "families": 80,
+        "accepted": 180,
+        "revised": 220,
+        "simple": 197,
+        "complex": 203
+      },
+      {
+        "batchId": "t4",
+        "input": 395,
+        "output": 395,
+        "families": 79,
+        "accepted": 171,
+        "revised": 224,
+        "simple": 196,
+        "complex": 199
+      },
+      {
+        "batchId": "c1",
+        "input": 275,
+        "output": 275,
+        "families": 55,
+        "accepted": 110,
+        "revised": 165,
+        "simple": 140,
+        "complex": 135
+      },
+      {
+        "batchId": "c2",
+        "input": 250,
+        "output": 250,
+        "families": 50,
+        "accepted": 115,
+        "revised": 135,
+        "simple": 123,
+        "complex": 127
+      },
+      {
+        "batchId": "e1",
+        "input": 375,
+        "output": 375,
+        "families": 75,
+        "accepted": 149,
+        "revised": 226,
+        "simple": 177,
+        "complex": 198
+      },
+      {
+        "batchId": "e2",
+        "input": 375,
+        "output": 375,
+        "families": 75,
+        "accepted": 156,
+        "revised": 219,
+        "simple": 184,
+        "complex": 191
+      },
+      {
+        "batchId": "p1",
+        "input": 250,
+        "output": 250,
+        "families": 50,
+        "accepted": 112,
+        "revised": 138,
+        "simple": 122,
+        "complex": 128
+      }
+    ],
+    "checks": {
+      "jsonParseable": true,
+      "rowCountsMatch": true,
+      "sampleIdsUniqueAndComplete": true,
+      "orderUnchanged": true,
+      "familyBatchPreserved": true,
+      "familyLabelsConsistent": true
+    }
+  },
+  "importFailures": [],
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

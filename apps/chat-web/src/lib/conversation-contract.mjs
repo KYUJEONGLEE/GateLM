@@ -2,6 +2,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 const CURSOR = /^[A-Za-z0-9_.-]{32,2048}$/;
 const ERROR_CODE = /^CHAT_[A-Z0-9_]{1,59}$/;
+const MODEL_KEY = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 const POLICY_STATES = Object.freeze(['normal', 'warning', 'economy', 'blocked']);
 const POLICY_RANK = Object.freeze({ normal: 0, warning: 1, economy: 2, blocked: 3 });
 
@@ -71,15 +72,18 @@ export function renameConversationBody(value) {
 }
 
 export function createTurnBody(value) {
-  const body = record(value, ['content', 'idempotencyKey', 'usageIntent']);
+  const body = record(value, ['content', 'idempotencyKey', 'usageIntent'], ['contextMode']);
   if (typeof body.idempotencyKey !== 'string' || !IDEMPOTENCY_KEY.test(body.idempotencyKey)) invalid();
   if (typeof body.content !== 'string' || body.content.length < 1 || body.content.length > 20_000) invalid();
+  const contextMode = body.contextMode ?? 'conversation';
+  if (!['conversation', 'single_turn'].includes(contextMode)) invalid();
   const intent = record(body.usageIntent, ['cacheStrategy', 'maxOutputTokens', 'requestedTier']);
   if (!Number.isSafeInteger(intent.maxOutputTokens) || intent.maxOutputTokens < 1 || intent.maxOutputTokens > 8192) invalid();
   if (!['auto', 'high_quality', 'standard', 'economy'].includes(intent.requestedTier)) invalid();
   if (!['off', 'exact'].includes(intent.cacheStrategy)) invalid();
   return Object.freeze({
     content: body.content,
+    contextMode,
     idempotencyKey: body.idempotencyKey,
     usageIntent: Object.freeze({
       cacheStrategy: intent.cacheStrategy,
@@ -213,9 +217,9 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   const common = ['conversationId', 'schemaVersion', 'sequence', 'turnId', 'type'];
   const extras = event.type === 'chat.turn.accepted' ? ['replayed']
     : event.type === 'chat.turn.delta' ? ['delta']
-      : event.type === 'chat.turn.final' ? ['budgetState', 'messageId', 'quotaState', 'replayed', 'terminalOutcome']
+      : event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'messageId', 'quotaState', 'replayed', 'terminalOutcome']
         : ['error'];
-  exactKeys(event, [...common, ...extras], event.type === 'chat.turn.final' ? ['budgetState', 'quotaState'] : []);
+  exactKeys(event, [...common, ...extras], event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'quotaState'] : []);
   if (fields.event !== event.type || event.schemaVersion !== 1 || event.conversationId !== expectedConversationId || !UUID_V4.test(event.turnId)) throw new Error('Mismatched SSE event.');
   if (expectedTurnId && event.turnId !== expectedTurnId) throw new Error('Mismatched SSE turn.');
   if (event.sequence !== expectedSequence || fields.id !== `${event.turnId}:${event.sequence}`) throw new Error('Invalid SSE sequence.');
@@ -224,6 +228,8 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   if (event.type === 'chat.turn.delta' && (typeof event.delta !== 'string' || !event.delta || event.delta.length > 16_384)) throw new Error('Invalid SSE delta.');
   if (event.type === 'chat.turn.final') {
     if (!UUID_V4.test(event.messageId) || event.terminalOutcome !== 'succeeded' || typeof event.replayed !== 'boolean') throw new Error('Invalid final SSE event.');
+    if (event.effectiveModelKey !== undefined && (typeof event.effectiveModelKey !== 'string' || !MODEL_KEY.test(event.effectiveModelKey))) throw new Error('Invalid effective model key.');
+    if (event.cacheOutcome !== undefined && !['off', 'hit', 'miss'].includes(event.cacheOutcome)) throw new Error('Invalid cache outcome.');
     if (event.quotaState !== undefined && !isPolicyState(event.quotaState)) throw new Error('Invalid policy state.');
     if (event.budgetState !== undefined && !isPolicyState(event.budgetState)) throw new Error('Invalid policy state.');
     if ((event.quotaState === undefined) !== (event.budgetState === undefined)) throw new Error('Incomplete policy state.');
@@ -252,14 +258,16 @@ function titleValue(value) {
 }
 
 function messageView(value) {
-  const source = record(value, ['content', 'createdAt', 'id', 'role', 'sequence', 'turnId']);
+  const source = record(value, ['content', 'createdAt', 'id', 'role', 'sequence', 'turnId'], ['effectiveModelKey']);
   if (!UUID_V4.test(source.id) || !UUID_V4.test(source.turnId) || !['user', 'assistant'].includes(source.role)) upstreamInvalid();
   if (typeof source.content !== 'string' || source.content.length > 1_048_576 || !Number.isSafeInteger(source.sequence) || source.sequence < 1 || !validDate(source.createdAt)) upstreamInvalid();
+  if (source.effectiveModelKey !== undefined && (source.role !== 'assistant' || typeof source.effectiveModelKey !== 'string' || !MODEL_KEY.test(source.effectiveModelKey))) upstreamInvalid();
   return Object.freeze({
     id: source.id,
     turnId: source.turnId,
     role: source.role,
     content: source.content,
+    ...(source.effectiveModelKey ? { effectiveModelKey: source.effectiveModelKey } : {}),
     sequence: source.sequence,
     createdAt: source.createdAt,
   });

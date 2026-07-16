@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
-import { api, startGoogle } from '@/lib/browser-api';
+import { api, ChatApiError, startGoogle } from '@/lib/browser-api';
 
 export function LoginForm() {
   const router = useRouter();
@@ -22,7 +22,15 @@ export function LoginForm() {
       });
       router.replace(session.state === 'authenticated' ? '/' : '/tenants');
       router.refresh();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '로그인하지 못했습니다.'); }
+    } catch (reason) {
+      setError(
+        reason instanceof ChatApiError && reason.status === 401
+          ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+          : reason instanceof Error
+            ? reason.message
+            : '로그인하지 못했습니다.',
+      );
+    }
     finally { setBusy(false); }
   }
 

@@ -13,7 +13,8 @@ const nextConfig: NextConfig = {
       source: '/:path*',
       headers: [
         { key: 'Cache-Control', value: 'no-store' },
-        { key: 'Referrer-Policy', value: 'no-referrer' },
+        // Keep same-origin mutation requests compatible with the BFF Origin check.
+        { key: 'Referrer-Policy', value: 'same-origin' },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'X-Frame-Options', value: 'DENY' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }

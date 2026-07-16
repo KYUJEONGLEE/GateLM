@@ -1,0 +1,404 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-gpt-validation-summary.v1",
+  "generatedAt": "2026-07-15T15:12:32.978076Z",
+  "reviewMode": "owner_stage_gpt_recommendation_pending_human_owner_confirmation",
+  "processingOrder": [
+    "t1",
+    "t2",
+    "t3",
+    "t4",
+    "c1",
+    "c2",
+    "e1",
+    "e2",
+    "p1"
+  ],
+  "totals": {
+    "inputRows": 3120,
+    "outputRows": 3120,
+    "uniqueInputSampleIds": 3120,
+    "uniqueOutputSampleIds": 3120,
+    "uniqueInputFamilies": 624,
+    "uniqueOutputFamilies": 624,
+    "recommendationCounts": {
+      "accept_independent_prompt": 490,
+      "custom_override": 720,
+      "accept_independent_labels": 448,
+      "accept_independent_prompt_and_labels": 929,
+      "keep_candidate": 533
+    },
+    "confidenceCounts": {
+      "high": 2587,
+      "medium": 533
+    },
+    "proposedGoRouteCounts": {
+      "model": 3117,
+      "hard_sentinel": 3
+    },
+    "excludeCount": 0,
+    "needsHumanOwnerCount": 0,
+    "customOverrideCount": 720,
+    "customOverridesRequiringLocalGoRecheckCount": 6,
+    "requiresHumanOwnerConfirmationTrueCount": 3120
+  },
+  "batches": [
+    {
+      "batchId": "t1",
+      "partitionRole": "train",
+      "inputFile": "t1.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "t1.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 400,
+      "outputRows": 400,
+      "uniqueInputSampleIds": 400,
+      "uniqueOutputSampleIds": 400,
+      "uniqueFamilies": 80,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "740a10efe1ede348f975b7be1a93530958e2059988c73167b8964286892401f2",
+      "outputSha256": "577ac8e695f4022cda2a7e028142881078cdf17d7f481fb912c9c885f6d8241b",
+      "recommendationCounts": {
+        "accept_independent_prompt": 65,
+        "custom_override": 88,
+        "accept_independent_labels": 62,
+        "accept_independent_prompt_and_labels": 113,
+        "keep_candidate": 72
+      },
+      "confidenceCounts": {
+        "high": 333,
+        "medium": 67
+      },
+      "requiresLocalGoRecheckCount": 2,
+      "requiresHumanOwnerConfirmationTrueCount": 400
+    },
+    {
+      "batchId": "t2",
+      "partitionRole": "train",
+      "inputFile": "t2.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "t2.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 400,
+      "outputRows": 400,
+      "uniqueInputSampleIds": 400,
+      "uniqueOutputSampleIds": 400,
+      "uniqueFamilies": 80,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "2ccc2300ecd4dae7b61efe46d32707b4967e2559794da3a989f85bd5afb5f8fc",
+      "outputSha256": "9d4cb826a953f8fbaef0058bee59895001514b339f50f777d45e6c00f39278b1",
+      "recommendationCounts": {
+        "custom_override": 101,
+        "accept_independent_labels": 63,
+        "accept_independent_prompt_and_labels": 122,
+        "accept_independent_prompt": 49,
+        "keep_candidate": 65
+      },
+      "confidenceCounts": {
+        "high": 334,
+        "medium": 66
+      },
+      "requiresLocalGoRecheckCount": 1,
+      "requiresHumanOwnerConfirmationTrueCount": 400
+    },
+    {
+      "batchId": "t3",
+      "partitionRole": "train",
+      "inputFile": "t3.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "t3.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 400,
+      "outputRows": 400,
+      "uniqueInputSampleIds": 400,
+      "uniqueOutputSampleIds": 400,
+      "uniqueFamilies": 80,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "22cd4f660ac2d4535a33319165bd29df28f45d7d25fd0afe9ec7276efaf69363",
+      "outputSha256": "a6420c510b99a5b9ee3b6fb10c4f35ad7abd38cf20c0780bb34b404f52946a1a",
+      "recommendationCounts": {
+        "accept_independent_prompt_and_labels": 112,
+        "accept_independent_labels": 55,
+        "keep_candidate": 69,
+        "accept_independent_prompt": 72,
+        "custom_override": 92
+      },
+      "confidenceCounts": {
+        "high": 348,
+        "medium": 52
+      },
+      "requiresLocalGoRecheckCount": 0,
+      "requiresHumanOwnerConfirmationTrueCount": 400
+    },
+    {
+      "batchId": "t4",
+      "partitionRole": "train",
+      "inputFile": "t4.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "t4.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 395,
+      "outputRows": 395,
+      "uniqueInputSampleIds": 395,
+      "uniqueOutputSampleIds": 395,
+      "uniqueFamilies": 79,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "957bd7852939279741ffbb28d1108be479e476205b29d5c364eb2c0746f02950",
+      "outputSha256": "b74bb407a74e8b683846263793f2058a460ec27c37e889b04db9f640fc772370",
+      "recommendationCounts": {
+        "custom_override": 86,
+        "accept_independent_prompt_and_labels": 112,
+        "accept_independent_labels": 58,
+        "keep_candidate": 71,
+        "accept_independent_prompt": 68
+      },
+      "confidenceCounts": {
+        "high": 336,
+        "medium": 59
+      },
+      "requiresLocalGoRecheckCount": 0,
+      "requiresHumanOwnerConfirmationTrueCount": 395
+    },
+    {
+      "batchId": "c1",
+      "partitionRole": "calibration",
+      "inputFile": "c1.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "c1.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 275,
+      "outputRows": 275,
+      "uniqueInputSampleIds": 275,
+      "uniqueOutputSampleIds": 275,
+      "uniqueFamilies": 55,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "bb64617214cb1d4996162d87057e30e2c6da90473f5cb7d1f46f497f862ad100",
+      "outputSha256": "7576e799ba42f2d7e1f31d0a5a58942986b2c8e616f4d9ad603452c1bf611217",
+      "recommendationCounts": {
+        "accept_independent_prompt_and_labels": 88,
+        "accept_independent_labels": 38,
+        "custom_override": 60,
+        "keep_candidate": 42,
+        "accept_independent_prompt": 47
+      },
+      "confidenceCounts": {
+        "high": 206,
+        "medium": 69
+      },
+      "requiresLocalGoRecheckCount": 0,
+      "requiresHumanOwnerConfirmationTrueCount": 275
+    },
+    {
+      "batchId": "c2",
+      "partitionRole": "calibration",
+      "inputFile": "c2.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "c2.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 250,
+      "outputRows": 250,
+      "uniqueInputSampleIds": 250,
+      "uniqueOutputSampleIds": 250,
+      "uniqueFamilies": 50,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "acac62a2b405b932dcb2ec3961dcbff1b0e5e323e70c87d7506e4f9a2426b0cf",
+      "outputSha256": "11dca8ad076c7d9c6cc59856128a6974d5f118b2b939e1087b02824075ac943b",
+      "recommendationCounts": {
+        "accept_independent_prompt_and_labels": 72,
+        "custom_override": 69,
+        "keep_candidate": 48,
+        "accept_independent_labels": 34,
+        "accept_independent_prompt": 27
+      },
+      "confidenceCounts": {
+        "high": 218,
+        "medium": 32
+      },
+      "requiresLocalGoRecheckCount": 0,
+      "requiresHumanOwnerConfirmationTrueCount": 250
+    },
+    {
+      "batchId": "e1",
+      "partitionRole": "evaluation",
+      "inputFile": "e1.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "e1.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 375,
+      "outputRows": 375,
+      "uniqueInputSampleIds": 375,
+      "uniqueOutputSampleIds": 375,
+      "uniqueFamilies": 75,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "93b9e19869fbfb9fdd8c1152635b012b305fe05e0b7a40fadcc229d28c11bbc7",
+      "outputSha256": "f25feb05f47a0dd1778c815ac72f1beaa52c71991c673270f0567e06a44753ea",
+      "recommendationCounts": {
+        "accept_independent_prompt": 52,
+        "accept_independent_prompt_and_labels": 127,
+        "keep_candidate": 61,
+        "custom_override": 88,
+        "accept_independent_labels": 47
+      },
+      "confidenceCounts": {
+        "high": 293,
+        "medium": 82
+      },
+      "requiresLocalGoRecheckCount": 0,
+      "requiresHumanOwnerConfirmationTrueCount": 375
+    },
+    {
+      "batchId": "e2",
+      "partitionRole": "evaluation",
+      "inputFile": "e2.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "e2.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 375,
+      "outputRows": 375,
+      "uniqueInputSampleIds": 375,
+      "uniqueOutputSampleIds": 375,
+      "uniqueFamilies": 75,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "8de5c2cf8b3e4b3457450184ce3eb5f51a1def034fce2256da32f98680edf96c",
+      "outputSha256": "a4b8e563766c03e695a0365c5f7be42770816f39f63cf50edcec4f40a0dbee30",
+      "recommendationCounts": {
+        "accept_independent_prompt_and_labels": 112,
+        "custom_override": 80,
+        "keep_candidate": 66,
+        "accept_independent_labels": 53,
+        "accept_independent_prompt": 64
+      },
+      "confidenceCounts": {
+        "medium": 72,
+        "high": 303
+      },
+      "requiresLocalGoRecheckCount": 3,
+      "requiresHumanOwnerConfirmationTrueCount": 375
+    },
+    {
+      "batchId": "p1",
+      "partitionRole": "promotion",
+      "inputFile": "p1.owner-gpt-adjudication.input.jsonl",
+      "outputFile": "p1.owner-gpt-adjudication.output.jsonl",
+      "inputRows": 250,
+      "outputRows": 250,
+      "uniqueInputSampleIds": 250,
+      "uniqueOutputSampleIds": 250,
+      "uniqueFamilies": 50,
+      "familySizeFive": true,
+      "sampleIdOrderPreserved": true,
+      "inputSha256": "a3ad4968164c62be7decdf9a4c90a29a9a6f02debd1e37804be76bd2d60cfad9",
+      "outputSha256": "37e08f27d26b5ed1df1b92723ebb852be54a0ce94d16ff0ffb0a8ffd00c1c4f8",
+      "recommendationCounts": {
+        "accept_independent_prompt_and_labels": 71,
+        "custom_override": 56,
+        "keep_candidate": 39,
+        "accept_independent_labels": 38,
+        "accept_independent_prompt": 46
+      },
+      "confidenceCounts": {
+        "high": 216,
+        "medium": 34
+      },
+      "requiresLocalGoRecheckCount": 0,
+      "requiresHumanOwnerConfirmationTrueCount": 250
+    }
+  ],
+  "proposedHardSentinelRows": [
+    {
+      "batchId": "t1",
+      "sampleId": "difficulty_modelpath3120_t1_reasoning_0143_v03",
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0143",
+      "proposedGoRoute": "hard_sentinel",
+      "recommendation": "custom_override",
+      "independentPromptAcceptedAsWritten": false,
+      "requiresLocalGoRecheck": true
+    },
+    {
+      "batchId": "e2",
+      "sampleId": "difficulty_modelpath3120_e2_translation_0558_v03",
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0558",
+      "proposedGoRoute": "hard_sentinel",
+      "recommendation": "custom_override",
+      "independentPromptAcceptedAsWritten": false,
+      "requiresLocalGoRecheck": true
+    },
+    {
+      "batchId": "e2",
+      "sampleId": "difficulty_modelpath3120_e2_reasoning_0505_v01",
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0505",
+      "proposedGoRoute": "hard_sentinel",
+      "recommendation": "custom_override",
+      "independentPromptAcceptedAsWritten": false,
+      "requiresLocalGoRecheck": true
+    }
+  ],
+  "customOverridesRequiringLocalGoRecheck": [
+    {
+      "batchId": "t1",
+      "sampleId": "difficulty_modelpath3120_t1_reasoning_0143_v03",
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0143",
+      "reason": "proposed_non_model_route"
+    },
+    {
+      "batchId": "t1",
+      "sampleId": "difficulty_modelpath3120_t1_translation_0276_v01",
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0276",
+      "reason": "strict_within_partition_near_duplicate_rewrite"
+    },
+    {
+      "batchId": "t2",
+      "sampleId": "difficulty_modelpath3120_t2_summarization_0241_v01",
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0241",
+      "reason": "strict_within_partition_near_duplicate_rewrite"
+    },
+    {
+      "batchId": "e2",
+      "sampleId": "difficulty_modelpath3120_e2_translation_0558_v03",
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0558",
+      "reason": "proposed_non_model_route"
+    },
+    {
+      "batchId": "e2",
+      "sampleId": "difficulty_modelpath3120_e2_general_0436_v01",
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0436",
+      "reason": "strict_within_partition_near_duplicate_rewrite"
+    },
+    {
+      "batchId": "e2",
+      "sampleId": "difficulty_modelpath3120_e2_reasoning_0505_v01",
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0505",
+      "reason": "proposed_non_model_route"
+    }
+  ],
+  "manualSemanticCorrections": [
+    "difficulty_modelpath3120_c1_translation_0414_v03",
+    "difficulty_modelpath3120_e1_code_0475_v05",
+    "difficulty_modelpath3120_e2_summarization_0532_v05",
+    "difficulty_modelpath3120_e2_translation_0552_v01",
+    "difficulty_modelpath3120_p1_general_0576_v04",
+    "difficulty_modelpath3120_p1_summarization_0614_v04",
+    "difficulty_modelpath3120_t1_general_0038_v01",
+    "difficulty_modelpath3120_t4_code_0079_v04",
+    "difficulty_modelpath3120_t4_general_0020_v02"
+  ],
+  "strictWithinPartitionDuplicateRewrites": [
+    "difficulty_modelpath3120_e2_general_0436_v01",
+    "difficulty_modelpath3120_t1_translation_0276_v01",
+    "difficulty_modelpath3120_t2_summarization_0241_v01"
+  ],
+  "duplicateEvidence": {
+    "broadNearDuplicateSignalRows": 647,
+    "strictCrossPartitionOrExistingLeakageRows": 0,
+    "strictWithinPartitionPairsRewritten": 3
+  },
+  "p1Policy": {
+    "batchId": "p1",
+    "usage": "label_review_only",
+    "modelComparisonPerformed": false,
+    "thresholdSelectionPerformed": false,
+    "promotionRecommendationMade": false
+  },
+  "familyConsistencyFailures": [],
+  "orderFailures": [],
+  "schemaFailures": [],
+  "forbiddenStateFailures": [],
+  "invariants": {
+    "allRowsRequireHumanOwnerConfirmation": true,
+    "noOwnerApprovedStateCreated": true,
+    "noTrainingEligibleTrueStateCreated": true,
+    "statement": "These artifacts are owner-stage GPT recommendations only. No record was marked owner-approved, and no trainingEligible=true state was created."
+  },
+  "validationPassed": true
+}

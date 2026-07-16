@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  formatLiveRequestCostUsd,
   primaryPolicyResult,
   projectPillTone
 } from "./live-requests-format";
@@ -98,4 +99,13 @@ test("returns a stable project pill tone when project identifiers are missing", 
   expect(missingTone).toBeLessThan(6);
   expect(projectPillTone(null)).toBe(missingTone);
   expect(projectPillTone("")).toBe(missingTone);
+});
+
+test("formats request cost for fast table scanning without hiding sub-cent spend", () => {
+  expect(formatLiveRequestCostUsd(0)).toBe("$0.00");
+  expect(formatLiveRequestCostUsd(0.0004)).toBe("$0.001");
+  expect(formatLiveRequestCostUsd(0.0046)).toBe("$0.005");
+  expect(formatLiveRequestCostUsd(0.01)).toBe("$0.01");
+  expect(formatLiveRequestCostUsd(0.016)).toBe("$0.02");
+  expect(formatLiveRequestCostUsd(Number.NaN)).toBe("—");
 });

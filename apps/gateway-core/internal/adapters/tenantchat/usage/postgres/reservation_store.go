@@ -3,8 +3,11 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
+	employeepostgres "gatelm/apps/gateway-core/internal/adapters/employeecost/postgres"
+	"gatelm/apps/gateway-core/internal/domain/employeecost"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
@@ -14,9 +17,10 @@ import (
 )
 
 type ReservationStore struct {
-	pool    *pgxpool.Pool
-	now     func() time.Time
-	metrics *metrics.Registry
+	pool          *pgxpool.Pool
+	now           func() time.Time
+	metrics       *metrics.Registry
+	employeeCosts *employeepostgres.Store
 }
 
 func (s *ReservationStore) WithMetrics(registry *metrics.Registry) *ReservationStore {
@@ -38,7 +42,7 @@ func (s *ReservationStore) observeTransaction(transition string, started time.Ti
 }
 
 func NewReservationStore(pool *pgxpool.Pool) *ReservationStore {
-	return &ReservationStore{pool: pool, now: time.Now}
+	return &ReservationStore{pool: pool, now: time.Now, employeeCosts: employeepostgres.NewStore()}
 }
 
 func (s *ReservationStore) ConsumeAndReserve(
@@ -79,6 +83,11 @@ func (s *ReservationStore) consumeAndReserve(
 	}()
 
 	now := s.now().UTC()
+	streamDuration, durationErr := snapshot.Policies.Streaming.Duration()
+	if durationErr != nil {
+		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	dispatchIntentExpiresAt := now.Add(streamDuration)
 	actor := requestContext.ExecutionScope.Actor
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+actor.UserID); err != nil {
@@ -129,7 +138,7 @@ func (s *ReservationStore) consumeAndReserve(
 		return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
 	}
 
-	route, err := selectRoute(snapshot, requestContext.UsageIntent.RequestedTier, userPeriod.State, tenantPeriod.State)
+	route, err := selectExecutionRoute(snapshot, requestContext, userPeriod.State, tenantPeriod.State)
 	if err != nil {
 		return tenantchat.UsageReservation{}, err
 	}
@@ -161,6 +170,57 @@ func (s *ReservationStore) consumeAndReserve(
 	if err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	employeeReservation, employeeErr := s.reserveEmployeeCost(
+		ctx, tx, requestContext, route, reservationID, now,
+		dispatchIntentExpiresAt, startPrimary, false,
+	)
+	if employeeErr != nil {
+		return tenantchat.UsageReservation{}, employeeErr
+	}
+	if employeeReservation.GuardUnavailable {
+		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if employeeReservation.Replayed {
+		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if employeeReservation.RestrictHighCost {
+		if route.Tier != employeecost.TenantChatRouteTierHighQuality {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		route, err = selectRoute(
+			snapshot, employeecost.TenantChatRouteTierStandard, userPeriod.State, tenantPeriod.State,
+		)
+		if err != nil {
+			return tenantchat.UsageReservation{}, err
+		}
+		reservedCost, err = reservationCost(
+			requestContext.UsageIntent.EstimatedInputTokens,
+			requestContext.UsageIntent.MaxOutputTokens,
+			route.InputMicroUSDPerMillionTokens,
+			route.OutputMicroUSDPerMillionTokens,
+		)
+		if err != nil {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
+		projectedCost = tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + tenantPeriod.Reserved + reservedCost
+		if projectedCost < reservedCost || projectedCost > tenantPeriod.HardStop {
+			return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
+		}
+		budgetState = usageState(projectedCost, tenantPeriod.Warning, tenantPeriod.Economy, tenantPeriod.HardStop)
+		employeeReservation, employeeErr = s.reserveEmployeeCost(
+			ctx, tx, requestContext, route, reservationID, now,
+			dispatchIntentExpiresAt, startPrimary, true,
+		)
+		if employeeErr != nil {
+			return tenantchat.UsageReservation{}, employeeErr
+		}
+		if employeeReservation.GuardUnavailable || employeeReservation.RestrictHighCost || employeeReservation.Replayed {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
+	}
+	if employeeReservation.Applied && employeeReservation.LedgerVersion != 1 {
+		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
 	eventID, err := newUUID()
 	if err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
@@ -177,6 +237,11 @@ func (s *ReservationStore) consumeAndReserve(
 		); err != nil {
 			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 		}
+		if err = markNativeDispatchIntent(
+			ctx, tx, requestContext, reservationID, dispatchIntentExpiresAt, now,
+		); err != nil {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
@@ -186,6 +251,85 @@ func (s *ReservationStore) consumeAndReserve(
 		ReservedTokens: reservedTokens, ReservedCostMicroUSD: reservedCost,
 		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: 1, Route: route,
 	}, nil
+}
+
+func (s *ReservationStore) reserveEmployeeCost(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	route tenantchat.SelectedRoute,
+	reservationID string,
+	now time.Time,
+	dispatchIntentExpiresAt time.Time,
+	startPrimary bool,
+	restrictedFromHigh bool,
+) (employeepostgres.ReserveResult, error) {
+	if s == nil || s.employeeCosts == nil {
+		return employeepostgres.ReserveResult{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	pricing := employeeCostPricing(requestContext, route)
+	var primaryAttempt *employeepostgres.AttemptInput
+	if startPrimary {
+		primaryAttempt = &employeepostgres.AttemptInput{
+			AttemptNo:  1,
+			Kind:       employeecost.AttemptKindPrimary,
+			ProviderID: route.ProviderID,
+			ModelKey:   route.ModelKey,
+			Pricing:    pricing,
+		}
+	}
+	var employeeDispatchIntentExpiresAt time.Time
+	if startPrimary {
+		employeeDispatchIntentExpiresAt = dispatchIntentExpiresAt
+	}
+	result, err := s.employeeCosts.Reserve(ctx, tx, employeepostgres.ReserveInput{
+		TenantID:                requestContext.ExecutionScope.TenantID,
+		EmployeeID:              employeeCostEmployeeID(requestContext),
+		Surface:                 employeecost.SurfaceTenantChat,
+		RequestID:               requestContext.RequestID,
+		ReservationID:           reservationID,
+		CandidateTier:           route.Tier,
+		RestrictedFromHigh:      restrictedFromHigh,
+		Pricing:                 pricing,
+		PrimaryAttempt:          primaryAttempt,
+		DispatchIntentExpiresAt: employeeDispatchIntentExpiresAt,
+		Now:                     now,
+	})
+	if err != nil {
+		return employeepostgres.ReserveResult{}, employeeCostAdapterError(err)
+	}
+	return result, nil
+}
+
+func employeeCostEmployeeID(requestContext tenantchat.RequestContext) string {
+	if requestContext.ExecutionScope.Actor.ActorKind != "employee" {
+		return ""
+	}
+	return requestContext.ExecutionScope.Actor.EmployeeID
+}
+
+func employeeCostAdapterError(err error) error {
+	if errors.Is(err, employeepostgres.ErrIdempotencyConflict) {
+		return tenantchat.ErrIdempotencyConflict
+	}
+	return tenantchat.ErrUsageGuardUnavailable
+}
+
+func employeeCostPricing(
+	requestContext tenantchat.RequestContext,
+	route tenantchat.SelectedRoute,
+) employeecost.PricingPin {
+	return employeecost.PricingPin{
+		RuleID:                           route.RouteID,
+		Version:                          strconv.FormatInt(route.PricingVersion, 10),
+		Currency:                         employeecost.CurrencyUSD,
+		InputMicroUSDPerMillion:          route.InputMicroUSDPerMillionTokens,
+		OutputMicroUSDPerMillion:         route.OutputMicroUSDPerMillionTokens,
+		CacheReadInputMicroUSDPerMillion: route.CacheReadInputMicroUSDPerMillionTokens,
+		EstimateVersion:                  "utf8_message_bytes_v1",
+		EstimatedInputTokens:             requestContext.UsageIntent.EstimatedInputTokens,
+		MaxOutputTokens:                  requestContext.UsageIntent.MaxOutputTokens,
+	}
 }
 
 func findReservationReplay(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) (tenantchat.UsageReservation, bool, error) {

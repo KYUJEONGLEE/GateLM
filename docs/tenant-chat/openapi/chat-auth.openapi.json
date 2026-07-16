@@ -64,7 +64,7 @@
     },
     "/api/tenant-chat/invitations/accept-password": {
       "post": {
-        "summary": "Accept a valid invitation for a new account with a password",
+        "summary": "Accept a valid invitation for a new or reclaimable local account with a password",
         "requestBody": { "$ref": "#/components/requestBodies/InvitationPasswordAcceptance" },
         "responses": {
           "200": { "$ref": "#/components/responses/AuthSession" },
@@ -89,7 +89,7 @@
       "get": {
         "summary": "Resolve the server-protected invitation intent without returning the invitation token",
         "responses": {
-          "200": { "description": "Safe invitation and tenant summary" },
+          "200": { "$ref": "#/components/responses/InvitationSummary" },
           "409": { "$ref": "#/components/responses/SafeError" },
           "503": { "$ref": "#/components/responses/SafeError" }
         }
@@ -262,6 +262,23 @@
         "required": ["name", "password"],
         "additionalProperties": false
       },
+      "InvitationSummary": {
+        "type": "object",
+        "properties": {
+          "accountState": {
+            "type": "string",
+            "enum": ["existing", "new", "reclaimable"],
+            "description": "reclaimable is limited to an active local User without a live Employee or Admin affiliation"
+          },
+          "email": { "type": "string", "format": "email", "maxLength": 254 },
+          "employeeName": { "type": ["string", "null"], "maxLength": 120 },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "tenantId": { "type": "string", "format": "uuid" },
+          "tenantName": { "type": "string", "minLength": 1, "maxLength": 120 }
+        },
+        "required": ["accountState", "email", "employeeName", "expiresAt", "tenantId", "tenantName"],
+        "additionalProperties": false
+      },
       "InternalIssuedSession": {
         "type": "object",
         "description": "Private service-to-service response. Token values are immediately converted to host-only HttpOnly cookies and are never returned by the browser BFF.",
@@ -295,6 +312,7 @@
     "responses": {
       "Ok": { "description": "Successful operation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ok" } } } },
       "AuthSession": { "description": "Token-free public session metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatAuthSession" } } } },
+      "InvitationSummary": { "description": "Safe invitation and tenant summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InvitationSummary" } } } },
       "Entitlement": { "description": "Authoritative active entitlement", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatEntitlement" } } } },
       "InternalIssuedSession": { "description": "Private issued session material", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InternalIssuedSession" } } } },
       "SafeError": { "description": "Safe bounded error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SafeError" } } } }

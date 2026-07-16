@@ -1023,12 +1023,22 @@ func costReportBucketConfig(filter invocationlog.CostReportFilter) invocationlog
 			Unit:                "month",
 		}
 	default:
+		if filter.To.Sub(filter.From) <= 5*time.Minute+time.Second {
+			return invocationlog.TimeSeriesBucketConfig{
+				Interval:            time.Second,
+				IntervalLabel:       "1s",
+				ExpectedBucketCount: 300,
+				Unit:                "second",
+			}
+		}
 		return invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To)
 	}
 }
 
 func timeSeriesBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
 	switch config.Unit {
+	case "second":
+		return "date_trunc('second', created_at)"
 	case "7second":
 		return "to_timestamp(floor(extract(epoch from created_at) / 7) * 7)"
 	case "minute":

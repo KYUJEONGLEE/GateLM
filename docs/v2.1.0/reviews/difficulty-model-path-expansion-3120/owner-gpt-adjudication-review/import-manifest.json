@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-gpt-adjudication-import-manifest.v1",
+  "sourceDirectory": "raw_snapshot",
+  "sourceArchiveSha256": "8e1c2424112e59cdc11a416710c262b5a530209c275c925163b25ba7bdc7b142",
+  "rawFiles": [
+    {
+      "file": "OWNER-GPT-ADJUDICATION-RESULTS.zip",
+      "sha256": "8e1c2424112e59cdc11a416710c262b5a530209c275c925163b25ba7bdc7b142"
+    },
+    {
+      "file": "OWNER-GPT-VALIDATION-SUMMARY.json",
+      "sha256": "817b401229df7936563153f882f35c59bed19893dab4c9984d7eac9d6dd60d4d"
+    },
+    {
+      "file": "OWNER-GPT-ADJUDICATION-INSTRUCTIONS.md",
+      "sha256": "53aef4958cc873be1be8e8804fa3c4a13e9039d6d6f5aaef0ae25854bada0973"
+    },
+    {
+      "file": "LABEL-GUIDE.md",
+      "sha256": "0c08df68f833e002817fcc9766a5b71b685f348f1e61bbf42a578ebb20d4a401"
+    },
+    {
+      "file": "OWNER-GPT-INPUT-MANIFEST.json",
+      "sha256": "2f716bd55fdb1a757cbcfc32afd5d8edc42a1d5a33b02f3a7327b1009adb6ab1"
+    },
+    {
+      "file": "CHATGPT-COMMAND.md",
+      "sha256": "7601aaca07b9bd2a61296ee34ae3a93354598a5d6282c47865ac7e4682b57b3d"
+    },
+    {
+      "file": "t1.owner-gpt-adjudication.output.jsonl",
+      "sha256": "577ac8e695f4022cda2a7e028142881078cdf17d7f481fb912c9c885f6d8241b"
+    },
+    {
+      "file": "t2.owner-gpt-adjudication.output.jsonl",
+      "sha256": "9d4cb826a953f8fbaef0058bee59895001514b339f50f777d45e6c00f39278b1"
+    },
+    {
+      "file": "t3.owner-gpt-adjudication.output.jsonl",
+      "sha256": "a6420c510b99a5b9ee3b6fb10c4f35ad7abd38cf20c0780bb34b404f52946a1a"
+    },
+    {
+      "file": "t4.owner-gpt-adjudication.output.jsonl",
+      "sha256": "b74bb407a74e8b683846263793f2058a460ec27c37e889b04db9f640fc772370"
+    },
+    {
+      "file": "c1.owner-gpt-adjudication.output.jsonl",
+      "sha256": "7576e799ba42f2d7e1f31d0a5a58942986b2c8e616f4d9ad603452c1bf611217"
+    },
+    {
+      "file": "c2.owner-gpt-adjudication.output.jsonl",
+      "sha256": "11dca8ad076c7d9c6cc59856128a6974d5f118b2b939e1087b02824075ac943b"
+    },
+    {
+      "file": "e1.owner-gpt-adjudication.output.jsonl",
+      "sha256": "f25feb05f47a0dd1778c815ac72f1beaa52c71991c673270f0567e06a44753ea"
+    },
+    {
+      "file": "e2.owner-gpt-adjudication.output.jsonl",
+      "sha256": "a4b8e563766c03e695a0365c5f7be42770816f39f63cf50edcec4f40a0dbee30"
+    },
+    {
+      "file": "p1.owner-gpt-adjudication.output.jsonl",
+      "sha256": "37e08f27d26b5ed1df1b92723ebb852be54a0ce94d16ff0ffb0a8ffd00c1c4f8"
+    }
+  ],
+  "records": 3120,
+  "families": 624,
+  "status": "validated_pending_local_gates_and_human_owner_confirmation",
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

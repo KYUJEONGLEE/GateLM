@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-review-import-manifest.v1",
+  "sourceDirectory": "raw_snapshot",
+  "rawFiles": [
+    {
+      "file": "VALIDATION-SUMMARY.json",
+      "sha256": "3b2197853b580c7b325ebd924a8ec5a7acf7185c3fa5224a5ac5b30921a5daf6"
+    },
+    {
+      "file": "GPT-REVIEW-INSTRUCTIONS.md",
+      "sha256": "bf7034bf5bc04e6f4aea319e3d69a568b51c1728773d71050e98e7e6093c1f2d"
+    },
+    {
+      "file": "LABEL-GUIDE.md",
+      "sha256": "0c08df68f833e002817fcc9766a5b71b685f348f1e61bbf42a578ebb20d4a401"
+    },
+    {
+      "file": "PACKET-MANIFEST.json",
+      "sha256": "cd783cacd42f9c55a8c91aa8ac113536a0a69d0dd096f21baae5f84255b10ea6"
+    },
+    {
+      "file": "t1.gpt-review.output.jsonl",
+      "sha256": "3ea8bd9c8713a3aee8951b5adb32df73a12427dc71757b3e51ac8618cbb83744"
+    },
+    {
+      "file": "t2.gpt-review.output.jsonl",
+      "sha256": "263affca93ab4d0b80d5ed132824701842339627918c72aa6712254fd8d6b9f2"
+    },
+    {
+      "file": "t3.gpt-review.output.jsonl",
+      "sha256": "69c9e9f57d264652a1e715472d7e16bdc0237b5b4c61b29b2dbc032d5cafdc7e"
+    },
+    {
+      "file": "t4.gpt-review.output.jsonl",
+      "sha256": "4723c5bed5b3948e7860a367d4349ec8c61e21ab839350a04f4151f623b984db"
+    },
+    {
+      "file": "c1.gpt-review.output.jsonl",
+      "sha256": "808353ffa01c0964f2f4c1ab6128ef6e26d0d81ab16704aa30ca839eeaf36bbd"
+    },
+    {
+      "file": "c2.gpt-review.output.jsonl",
+      "sha256": "0ace50d0a3e72ca656bd32dd3552cdc7085b49b02d172fa49e95314b0e883563"
+    },
+    {
+      "file": "e1.gpt-review.output.jsonl",
+      "sha256": "584f8b6ad6e7053e74b4b47a1f1be1def0def94359e253ec8fc656bc5b0a1c3c"
+    },
+    {
+      "file": "e2.gpt-review.output.jsonl",
+      "sha256": "a87818f6649d5bcb142f03aaf5443dfadffcf5d053ccd2abdff68cb42add740d"
+    },
+    {
+      "file": "p1.gpt-review.output.jsonl",
+      "sha256": "9b0dd11d5e3625f2c7f0d7b763434ce10fd0b8cb36fcf146957b553dc99c8d1e"
+    }
+  ],
+  "records": 3120,
+  "families": 624,
+  "status": "validated_pending_owner_adjudication",
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

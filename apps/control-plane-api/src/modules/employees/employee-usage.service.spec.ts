@@ -139,6 +139,38 @@ describe('EmployeeUsageService', () => {
     expect(unattributed.sql).toContain('project_rollup_attributed');
     expect(unattributed.sql).toContain('tenant_chat_rollup_total');
   });
+
+  it('reads selected employee cost totals in one snapshot per period', async () => {
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([usageRow(employeeA, 1n, 120n, 30n)])
+      .mockResolvedValueOnce([usageRow(employeeA, 1n, 80n, 20n)]);
+    const service = createService(queryRaw);
+
+    const result = await service.readEmployeeCostTotals(
+      tenantId,
+      [employeeA],
+      [
+        {
+          from: new Date('2026-07-14T15:00:00.000Z'),
+          to: new Date('2026-07-15T15:00:00.000Z'),
+        },
+        {
+          from: new Date('2026-07-12T15:00:00.000Z'),
+          to: new Date('2026-07-19T15:00:00.000Z'),
+        },
+      ],
+    );
+
+    expect(result[0]?.get(employeeA)).toBe(30);
+    expect(result[1]?.get(employeeA)).toBe(30);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    for (const [query] of queryRaw.mock.calls) {
+      const selected = rawQuery(query);
+      expect(selected.sql).toContain('employee.id IN');
+      expect(selected.values).toContain(employeeA);
+    }
+  });
 });
 
 function createService(queryRaw: jest.Mock) {

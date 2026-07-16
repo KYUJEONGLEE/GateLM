@@ -107,6 +107,40 @@ func TestCreateChatCompletionTransformsAnthropicMessages(t *testing.T) {
 	}
 }
 
+func TestDispatchHookFailureIsBoundedBeforeHTTPCall(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls++
+	}))
+	defer server.Close()
+
+	for _, stream := range []bool{false, true} {
+		tracker := &provider.DispatchTracker{}
+		req := provider.ChatCompletionRequest{
+			Model:           "claude-synthetic-sonnet",
+			Messages:        []provider.ChatMessage{{Role: "user", Content: rawString(t, "hello")}},
+			DispatchTracker: tracker,
+			BeforeDispatch:  func(context.Context) error { return errors.New("pre-call failed") },
+		}
+
+		var err error
+		if stream {
+			_, err = NewAdapter(server.Client()).CreateChatCompletionStream(t.Context(), executionConfig(server.URL), req)
+		} else {
+			_, err = NewAdapter(server.Client()).CreateChatCompletion(t.Context(), executionConfig(server.URL), req)
+		}
+		if !provider.IsDispatchNotStarted(err) {
+			t.Fatalf("stream=%v expected not-started error, got %v", stream, err)
+		}
+		if !tracker.Observed() || tracker.Started() {
+			t.Fatalf("stream=%v unexpected tracker state observed=%v started=%v", stream, tracker.Observed(), tracker.Started())
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("dispatch hook failure called provider %d times", calls)
+	}
+}
+
 func TestCreateChatCompletionMapsUnauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

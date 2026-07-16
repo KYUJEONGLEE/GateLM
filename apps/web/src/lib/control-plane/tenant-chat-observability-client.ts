@@ -98,7 +98,7 @@ export type TenantChatCostSeries = {
   surface: "tenant_chat";
   from: string;
   to: string;
-  bucket: "7s" | "1m" | "5m" | "1h" | "1d";
+  bucket: "1s" | "7s" | "1m" | "5m" | "1h" | "1d";
   generatedAt: string;
   points: Array<{
     periodStart: string;
@@ -149,6 +149,17 @@ export async function getTenantChatInvocations(
   return Array.isArray(payload?.data) ? payload.data : undefined;
 }
 
+export async function getTenantChatInvocation(
+  tenantId: string,
+  requestId: string
+): Promise<TenantChatInvocation | undefined> {
+  const result = await getJson<{ data?: TenantChatInvocation }>(
+    `/admin/v1/tenants/${encodeURIComponent(tenantId)}/tenant-chat/invocations/${encodeURIComponent(requestId)}`,
+    { suppressNotFoundWarning: true }
+  );
+  return result.payload?.data?.requestId === requestId ? result.payload.data : undefined;
+}
+
 export async function getTenantChatCostSeries(
   tenantId: string,
   from: string,
@@ -168,7 +179,10 @@ type ControlPlaneJsonResult<T> = {
   status?: number;
 };
 
-async function getJson<T>(path: string): Promise<ControlPlaneJsonResult<T>> {
+async function getJson<T>(
+  path: string,
+  options: { suppressNotFoundWarning?: boolean } = {}
+): Promise<ControlPlaneJsonResult<T>> {
   try {
     const response = await fetch(`${getControlPlaneBaseUrl()}${path}`, {
       cache: "no-store",
@@ -179,8 +193,9 @@ async function getJson<T>(path: string): Promise<ControlPlaneJsonResult<T>> {
       const errorMessage = readErrorMessage(errorPayload);
       const expectedRuntimeUnavailable =
         response.status === 503 && errorMessage === tenantChatRuntimeUnavailableMessage;
+      const expectedNotFound = options.suppressNotFoundWarning && response.status === 404;
 
-      if (!expectedRuntimeUnavailable) {
+      if (!expectedRuntimeUnavailable && !expectedNotFound) {
         console.warn("Tenant Chat Control Plane request unavailable", {
           status: response.status
         });

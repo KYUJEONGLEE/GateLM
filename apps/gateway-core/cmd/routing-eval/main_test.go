@@ -6,11 +6,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/tools/difficultymodel"
 )
+
+func TestLatencyChecksumSinkIsRaceSafe(t *testing.T) {
+	classifier := routing.NewRuleBasedCategoryClassifier()
+	const workers = 16
+
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(workers)
+	for range workers {
+		go func() {
+			defer waitGroup.Done()
+			_, latencies := classifyCategoryWithWarmupLatency(
+				classifier,
+				"Compare two bounded options.",
+				2,
+				1,
+				4,
+			)
+			if len(latencies) != 2 {
+				t.Errorf("latency samples = %d, want 2", len(latencies))
+			}
+		}()
+	}
+	waitGroup.Wait()
+}
 
 func TestEvaluateReportIncludesSyntheticPromptText(t *testing.T) {
 	records := []datasetRecord{
@@ -186,7 +211,7 @@ func TestEvaluateDifficultyShadowComparesRuntimeWithoutChangingIt(t *testing.T) 
 		},
 		{
 			SampleID:           "short_hard_complex",
-			RedactedPrompt:     stringPtr("Debug a race condition."),
+			RedactedPrompt:     stringPtr("Across multiple services, diagnose a race condition and deadlock; preserve behavior, security, and compatibility."),
 			ExpectedCategory:   routing.CategoryCode,
 			ExpectedDifficulty: routing.DifficultyComplex,
 		},
@@ -369,6 +394,10 @@ func TestRoutingEvalCLIProducesOptInDifficultyShadowReport(t *testing.T) {
 		"-evaluation-scope", "difficulty",
 		"-dataset", datasetPath,
 		"-difficulty-shadow-model-artifact", artifactPath,
+		"-difficulty-decision-loss-experiment",
+		"-difficulty-decision-loss-fp-cost", "1",
+		"-difficulty-decision-loss-fn-costs", "1,3,5,10",
+		"-difficulty-decision-loss-threshold-step", "0.1",
 		"-latency-iterations", "1",
 		"-pretty=false",
 	)
@@ -383,6 +412,9 @@ func TestRoutingEvalCLIProducesOptInDifficultyShadowReport(t *testing.T) {
 	}
 	if report.Shadow == nil || report.Shadow.ProductRuntimeChanged || report.Shadow.ArtifactVersion != "difficulty-logistic-v1-test" {
 		t.Fatalf("unexpected difficulty shadow CLI report: %#v", report.Shadow)
+	}
+	if experiment := report.Shadow.DecisionLossExperiment; experiment == nil || !experiment.Applicable || experiment.ProductRuntimeChanged || experiment.ThresholdSelectionForPromotionAllowed || len(experiment.Scenarios) != 4 {
+		t.Fatalf("unexpected decision-loss experiment report: %#v", experiment)
 	}
 }
 

@@ -23,6 +23,9 @@ debug.log
 test-results/
 .gocache/
 reports/*
+!reports/routing-difficulty-model/
+reports/routing-difficulty-model/*
+!reports/routing-difficulty-model/README.md
 !reports/rate-limit/
 reports/rate-limit/*
 !reports/rate-limit/README.md

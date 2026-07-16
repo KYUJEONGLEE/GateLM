@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createContentSecurityPolicy } from './content-security-policy.mjs';
@@ -34,4 +35,11 @@ test('CSP requires a base64 nonce', () => {
   assert.throws(() => createContentSecurityPolicy('production'), /nonce/u);
   assert.throws(() => createContentSecurityPolicy('production', ''), /nonce/u);
   assert.throws(() => createContentSecurityPolicy('production', "bad'nonce"), /nonce/u);
+});
+
+test('security headers preserve same-origin mutations without leaking cross-origin referrers', () => {
+  const nextConfig = readFileSync(new URL('./next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(nextConfig, /Referrer-Policy', value: 'same-origin'/u);
+  assert.doesNotMatch(nextConfig, /Referrer-Policy', value: 'no-referrer'/u);
 });

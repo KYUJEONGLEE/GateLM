@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "gatelm.difficulty-model-path-5000-promotion-verification.v1",
+  "status": "passed_owner_approved_training_eligible",
+  "approvedOn": "2026-07-16",
+  "counts": {
+    "approvedExpansionRecords": 3120,
+    "approvedExpansionFamilies": 624,
+    "existingSelectedModelPathRecords": 1880,
+    "finalModelPathRecords": 5000,
+    "finalFamilies": 855,
+    "train": 3000,
+    "calibration": 1000,
+    "evaluationHoldout": 750,
+    "promotionHoldout": 250,
+    "finalGoModelPath": 5000,
+    "finalGoHardSentinel": 0,
+    "finalGoSimpleSentinel": 0
+  },
+  "immutableExistingDatasetHashes": {
+    "owner_approved_500": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "owner_approved_2000": "9bd448240d3479072c5daf9517abd6ea7fc0797d204354d6d636a33111a0b9de"
+  },
+  "failures": [],
+  "trainingEligible": true,
+  "doesNotApprove": [
+    "model_performance",
+    "model_or_calibrator_selection",
+    "threshold_selection",
+    "runtime_promotion",
+    "ga_or_release"
+  ]
+}

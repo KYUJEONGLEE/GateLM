@@ -30,3 +30,26 @@ func TestAllowsFallbackOnlyForProviderTimeoutOrError(t *testing.T) {
 		t.Fatal("credential resolution failure must not allow fallback")
 	}
 }
+
+func TestDispatchTrackerAndNotStartedError(t *testing.T) {
+	tracker := &DispatchTracker{}
+	if tracker.Observed() || tracker.Started() {
+		t.Fatal("new dispatch tracker must be empty")
+	}
+	tracker.Observe()
+	if !tracker.Observed() || tracker.Started() {
+		t.Fatal("observe must not mark provider dispatch as started")
+	}
+	tracker.MarkStarted()
+	if !tracker.Started() {
+		t.Fatal("expected provider dispatch to be marked started")
+	}
+
+	err := NewNotStartedError(errors.New("pre-call failed"))
+	if !IsDispatchNotStarted(err) {
+		t.Fatal("expected bounded not-started evidence")
+	}
+	if SafeErrorCode(err) != ErrorCodeProviderError {
+		t.Fatalf("unexpected safe error code: %s", SafeErrorCode(err))
+	}
+}

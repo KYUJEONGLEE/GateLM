@@ -1,11 +1,10 @@
 "use client";
 
-import { ArrowRight, Plus, TriangleAlert } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
@@ -17,7 +16,6 @@ import {
   runtimeRoutingCategories,
   runtimeRoutingDifficulties,
   type RuntimePolicyDraftValues,
-  type RuntimePolicyModel,
   type RuntimePolicyModelRoles
 } from "@/lib/control-plane/runtime-policy-types";
 
@@ -33,18 +31,14 @@ import {
 export type RoutingPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: RuntimePolicyDraftValuesSetter;
-  providerCatalog: RuntimePolicyModel["providerCatalog"];
   providerConnections: ProviderConnectionRecord[];
-  providerManagementHref?: string;
   text: RuntimePolicyEditorText;
 };
 
 export function RoutingPolicyPanel({
   draftValues,
   onDraftValuesChange,
-  providerCatalog,
   providerConnections,
-  providerManagementHref,
   text
 }: RoutingPolicyPanelProps) {
   const modelOptions = useMemo(
@@ -297,45 +291,6 @@ export function RoutingPolicyPanel({
         </section>
       )}
 
-      <article className="console-panel policy-editor-panel">
-        <div className="panel-heading">
-          <h3>{text.providerCatalog}</h3>
-          {providerManagementHref ? (
-            <Link
-              className={buttonVariants({ size: "sm", variant: "outline" })}
-              href={providerManagementHref}
-            >
-              <Plus aria-hidden="true" />
-              {text.providerAdd}
-            </Link>
-          ) : null}
-        </div>
-        {providerCatalog.loadError ? (
-          <Alert variant="warning">
-            <AlertDescription>{providerCatalog.loadError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {providerCatalog.canonicalLoadError ? (
-          <Alert variant="warning">
-            <AlertDescription>{providerCatalog.canonicalLoadError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {providerCatalog.summary ? (
-          <dl className="policy-summary-list">
-            <div>
-              <dt>{text.catalogVersion}</dt>
-              <dd>{providerCatalog.summary.catalogVersion}</dd>
-            </div>
-            <div>
-              <dt>{text.providerCount}</dt>
-              <dd>
-                {providerCatalog.summary.providerCount} / {text.models}:{" "}
-                {providerCatalog.summary.modelCount}
-              </dd>
-            </div>
-          </dl>
-        ) : null}
-      </article>
     </>
   );
 }

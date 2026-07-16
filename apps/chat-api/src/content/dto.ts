@@ -106,6 +106,10 @@ export class CreateTurnDto {
   @MaxLength(MAX_EPHEMERAL_MESSAGE_CHARACTERS)
   content!: string;
 
+  @IsOptional()
+  @IsIn(['conversation', 'single_turn'])
+  contextMode?: 'conversation' | 'single_turn';
+
   @Type(() => UsageIntentDto)
   @ValidateNested()
   usageIntent!: UsageIntentDto;

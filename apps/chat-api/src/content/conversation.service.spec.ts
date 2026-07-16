@@ -65,11 +65,18 @@ describe('ConversationService turn fan-out', () => {
       replayed: false,
       quotaState: 'normal',
       budgetState: 'normal',
+      cacheOutcome: 'miss',
     });
     expect(providerFinished).toBe(true);
     expect(firstSettled).toBe(false);
     expect(bridge.complete).toHaveBeenCalledTimes(1);
     expect(store.persistAssistant).toHaveBeenCalledTimes(1);
+    expect(store.persistAssistant).toHaveBeenCalledWith(
+      first.actor,
+      first.reserved,
+      'delta',
+      'mock',
+    );
 
     releaseSlow();
     await expect(firstResult).resolves.toEqual({
@@ -77,6 +84,7 @@ describe('ConversationService turn fan-out', () => {
       replayed: false,
       quotaState: 'normal',
       budgetState: 'normal',
+      cacheOutcome: 'miss',
     });
   });
 
@@ -104,9 +112,54 @@ describe('ConversationService turn fan-out', () => {
         replayed: false,
         quotaState: 'normal',
         budgetState: 'normal',
+        cacheOutcome: 'miss',
       });
     expect(store.persistAssistant).toHaveBeenCalledTimes(2);
+    expect(store.persistAssistant).toHaveBeenLastCalledWith(
+      prepared.actor,
+      prepared.reserved,
+      'delta',
+      'mock',
+    );
     expect(store.markTerminalFailure).not.toHaveBeenCalled();
+  });
+
+  it('omits model history metadata when an exact cache hit supplies the assistant', async () => {
+    const registry = new ActiveTurnRegistry();
+    const prepared = execution(registry, 'first');
+    const message = Object.freeze({
+      id: '00000000-0000-4000-8000-000000000400',
+      turnId: '00000000-0000-4000-8000-000000000301',
+      role: 'assistant' as const,
+      content: 'cached delta',
+      sequence: 2,
+      createdAt: '2026-07-14T00:00:00.000Z',
+    });
+    const store = {
+      markStreaming: jest.fn().mockResolvedValue(undefined),
+      persistAssistant: jest.fn().mockResolvedValue({ message, replayed: false }),
+      markTerminalFailure: jest.fn().mockResolvedValue(undefined),
+      cancelTurn: jest.fn().mockResolvedValue({ cancelled: true }),
+    };
+    const bridge = {
+      complete: jest.fn().mockResolvedValue(completion('cached delta', 'hit')),
+    };
+    const service = serviceWith({ store, bridge, registry });
+
+    await expect(service.executeTurn(prepared, async () => undefined)).resolves.toEqual({
+      message,
+      replayed: false,
+      quotaState: 'normal',
+      budgetState: 'normal',
+      cacheOutcome: 'hit',
+    });
+    expect(store.persistAssistant).toHaveBeenCalledWith(
+      prepared.actor,
+      prepared.reserved,
+      'cached delta',
+      null,
+    );
+    expect(message).not.toHaveProperty('effectiveModelKey');
   });
 
   it('derives the internal input estimate from the exact bounded completion messages', async () => {
@@ -144,6 +197,43 @@ describe('ConversationService turn fan-out', () => {
       requestedTier: 'standard',
       cacheStrategy: 'exact',
     });
+    registry.release(reserved.turnId, handle);
+  });
+
+  it('uses only the current user message when conversation context is disabled', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = reservedTurn('pending_admission');
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ replayed: false }),
+      completionHistory: jest.fn(),
+    };
+    const bridge = { admitAuthorized: jest.fn().mockResolvedValue(handle) };
+    const service = serviceWith({
+      store,
+      bridge,
+      registry,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'current only',
+      contextMode: 'single_turn',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(prepared.kind).toBe('execute');
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(store.reserveTurn).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      reserved.conversationId,
+      expect.objectContaining({ contextMode: 'single_turn' }),
+    );
+    expect(store.completionHistory).not.toHaveBeenCalled();
+    expect(prepared.messages).toEqual([{ role: 'user', content: 'current only' }]);
+    expect(prepared.usageIntent.estimatedInputTokens).toBe(Buffer.byteLength('current only', 'utf8'));
     registry.release(reserved.turnId, handle);
   });
 
@@ -271,12 +361,16 @@ function assistantMessage(): MessageView {
     turnId: '00000000-0000-4000-8000-000000000301',
     role: 'assistant' as const,
     content: 'delta',
+    effectiveModelKey: 'mock',
     sequence: 2,
     createdAt: '2026-07-14T00:00:00.000Z',
   });
 }
 
-function completion(assistantContent: string): CompletionResult {
+function completion(
+  assistantContent: string,
+  cacheOutcome: 'hit' | 'miss' = 'miss',
+): CompletionResult {
   return Object.freeze({
     assistantContent,
     final: Object.freeze({
@@ -295,7 +389,7 @@ function completion(assistantContent: string): CompletionResult {
       }),
       quotaState: 'normal' as const,
       budgetState: 'normal' as const,
-      cacheOutcome: 'miss' as const,
+      cacheOutcome,
       replayed: false,
     }),
   });

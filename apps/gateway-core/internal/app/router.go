@@ -24,23 +24,25 @@ import (
 )
 
 type RouterOptions struct {
-	APIKeyAuthenticator   handlers.APIKeyAuthenticator
-	AppTokenValidator     handlers.AppTokenValidator
-	AuthFailureLogWriter  invocationlog.AuthFailureLogWriter
-	TerminalLogWriter     invocationlog.TerminalLogWriter
-	CostCalculator        handlers.CostCalculator
-	InvocationLogReader   invocationlog.Reader
-	ExactCacheStore       ports.CacheStore
-	ExactCacheKeyBuilder  handlers.ExactCacheKeyBuilder
-	SemanticCacheService  handlers.SemanticCacheService
-	MetricsRegistry       *metrics.Registry
-	RateLimitPipeline     handlers.GatewayPipeline
-	RuntimePolicyPipeline handlers.GatewayPipeline
-	ModelsRuntimePipeline handlers.GatewayPipeline
-	PreProviderPipeline   handlers.GatewayPipeline
-	MaskingEngine         handlers.MaskingEngine
-	ProviderCatalogs      providercatalog.Resolver
-	Credentials           credentials.Resolver
+	APIKeyAuthenticator           handlers.APIKeyAuthenticator
+	AppTokenValidator             handlers.AppTokenValidator
+	AuthFailureLogWriter          invocationlog.AuthFailureLogWriter
+	TerminalLogWriter             invocationlog.TerminalLogWriter
+	CostCalculator                handlers.CostCalculator
+	ProjectEmployeeCostAccounting ports.ProjectEmployeeCostAccounting
+	InvocationLogReader           invocationlog.Reader
+	ExactCacheStore               ports.CacheStore
+	ExactCacheKeyBuilder          handlers.ExactCacheKeyBuilder
+	SemanticCacheService          handlers.SemanticCacheService
+	MetricsRegistry               *metrics.Registry
+	RateLimitPipeline             handlers.GatewayPipeline
+	RuntimePolicyPipeline         handlers.GatewayPipeline
+	ModelsRuntimePipeline         handlers.GatewayPipeline
+	PreProviderPipeline           handlers.GatewayPipeline
+	MaskingEngine                 handlers.MaskingEngine
+	ProviderCatalogs              providercatalog.Resolver
+	Credentials                   credentials.Resolver
+	DifficultyShadow              *routingdomain.DifficultySemanticShadowRunner
 }
 
 type RouterOption func(*RouterOptions)
@@ -70,6 +72,12 @@ func WithCostCalculator(calculator handlers.CostCalculator) RouterOption {
 	}
 }
 
+func WithProjectEmployeeCostAccounting(accounting ports.ProjectEmployeeCostAccounting) RouterOption {
+	return func(options *RouterOptions) {
+		options.ProjectEmployeeCostAccounting = accounting
+	}
+}
+
 func WithInvocationLogReader(reader invocationlog.Reader) RouterOption {
 	return func(options *RouterOptions) {
 		options.InvocationLogReader = reader
@@ -92,6 +100,12 @@ func WithSemanticCache(service handlers.SemanticCacheService) RouterOption {
 func WithMetrics(registry *metrics.Registry) RouterOption {
 	return func(options *RouterOptions) {
 		options.MetricsRegistry = registry
+	}
+}
+
+func WithDifficultySemanticShadow(runner *routingdomain.DifficultySemanticShadowRunner) RouterOption {
+	return func(options *RouterOptions) {
+		options.DifficultyShadow = runner
 	}
 }
 
@@ -184,8 +198,14 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		terminalLogWriter = invocationlog.NoopTerminalLogWriter{}
 	}
 
-	simpleRouter := routingdomain.NewSimpleRouter(runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash).SimpleRouterConfig())
-	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
+	simpleRouter := routingdomain.NewSimpleRouter(
+		runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash).SimpleRouterConfig(),
+		routingdomain.WithDifficultySemanticShadow(routerOptions.DifficultyShadow),
+	)
+	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(
+		simpleRouter,
+		routingstage.WithDifficultyShadowEligibility(cfg.DifficultyE5Shadow.AllowsScope),
+	))
 	if routerOptions.PreProviderPipeline != nil {
 		preProviderPipeline = routerOptions.PreProviderPipeline
 	}
@@ -314,6 +334,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		AuthFailureLogWriter:                 authFailureLogWriter,
 		TerminalLogWriter:                    terminalLogWriter,
 		CostCalculator:                       routerOptions.CostCalculator,
+		ProjectEmployeeCostAccounting:        routerOptions.ProjectEmployeeCostAccounting,
 		MaskingEngine:                        maskingEngine,
 		RawResponseCaptureEnabled:            cfg.RawResponseCaptureEnabled,
 		MetricsRegistry:                      metricsRegistry,

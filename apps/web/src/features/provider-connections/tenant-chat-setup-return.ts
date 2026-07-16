@@ -22,7 +22,7 @@ export function getTenantChatProviderSetupContext(input: {
 }
 
 export function getTenantChatReturnPath(tenantId: string) {
-  return `/tenants/${encodeURIComponent(tenantId)}/tenant-chat`;
+  return `/tenants/${encodeURIComponent(tenantId)}/chat-app`;
 }
 
 export function getTenantChatProviderCreatedHref(

@@ -3,7 +3,6 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -19,6 +18,7 @@ import {
   canonicalizeTenantChatJson,
   computeTenantChatPricingDigest,
   computeTenantChatPolicyDigest,
+  computeTenantChatRoutingPolicyHash,
   computeTenantChatSafetyPolicyDigest,
   computeTenantChatSnapshotDigest,
   TENANT_CHAT_MODEL_KEY_PATTERN,
@@ -33,13 +33,27 @@ import type {
   TenantChatAdminProviderCandidate,
   TenantChatAdminRuntimeSetup,
   TenantChatPricing,
+  TenantChatRoutingCategory,
+  TenantChatRoutingMatrix,
+  TenantChatRoutingMode,
   TenantChatRuntimePolicies,
+  TenantChatRuntimeRoute,
   TenantChatRuntimeSnapshotDocument,
 } from './tenant-chat-runtime.types';
+import type { TenantChatModelPricingEntry } from './tenant-chat-model-pricing.catalog';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PLACEHOLDER_DIGEST = `sha256:${'A'.repeat(43)}`;
+const UNKNOWN_PRICING_EFFECTIVE_AT = '1970-01-01T00:00:00.000Z';
+const ROUTING_CATEGORIES: TenantChatRoutingCategory[] = [
+  'general',
+  'code',
+  'translation',
+  'summarization',
+  'reasoning',
+];
+const ROUTING_DIFFICULTIES = ['simple', 'complex'] as const;
 
 interface AdminProviderRecord {
   id: string;
@@ -52,6 +66,39 @@ interface AdminSnapshotPointerRecord {
   snapshot: {
     snapshotBody: Prisma.JsonValue;
   };
+}
+
+interface CurrentPricingRuleRecord {
+  provider: string;
+  model: string;
+  input_micro_usd_per_1m_tokens: bigint;
+  output_micro_usd_per_1m_tokens: bigint;
+  effective_from: Date;
+}
+
+interface ResolvedAdminPrice {
+  status: 'available' | 'unavailable';
+  source: 'model_pricing_rules' | 'bundled' | 'unavailable';
+  effectiveAt: string;
+  inputMicroUsdPerMillionTokens: number;
+  outputMicroUsdPerMillionTokens: number;
+  cacheReadInputMicroUsdPerMillionTokens?: number;
+}
+
+interface AdminModelTarget {
+  modelRef: string;
+  providerId: string;
+  providerKey: string;
+  providerFamily: string;
+  modelKey: string;
+  price: ResolvedAdminPrice;
+}
+
+interface NormalizedAdminRouting {
+  mode: TenantChatRoutingMode;
+  manualModelRef: string;
+  routes: TenantChatRoutingMatrix;
+  targets: AdminModelTarget[];
 }
 
 @Injectable()
@@ -112,7 +159,11 @@ export class TenantChatRuntimeService {
       }),
     ]);
 
-    return this.buildAdminRuntimeSetup(providers, pointer);
+    const currentPricingRules = await this.readCurrentPricingRules(
+      this.prisma,
+      providers,
+    );
+    return this.buildAdminRuntimeSetup(providers, pointer, currentPricingRules);
   }
 
   async activateAdminRuntime(
@@ -259,13 +310,13 @@ export class TenantChatRuntimeService {
       throw new NotFoundException('Active tenant not found.');
     }
 
-    const provider = await tx.providerConnection.findFirst({
+    const providers = await tx.providerConnection.findMany({
       where: {
-        id: input.providerConnectionId,
         tenantId: input.tenantId,
         projectId: null,
         status: ProviderConnectionStatus.ACTIVE,
       },
+      orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
         provider: true,
@@ -273,28 +324,17 @@ export class TenantChatRuntimeService {
         providerConfig: true,
       },
     });
-    if (!provider) {
+    if (providers.length === 0) {
       throw new NotFoundException(
         'Active tenant Provider connection not found.',
       );
     }
-
-    const providerFamily = this.readProviderFamily(provider.providerConfig);
-    const configuredModels = this.readConfiguredModels(provider.providerConfig);
-    if (!configuredModels.includes(input.modelKey)) {
-      throw new BadRequestException(
-        'The selected model is not configured for this Provider connection.',
-      );
-    }
-    const catalogPrice = findTenantChatModelPricing(
-      providerFamily,
-      input.modelKey,
+    const currentPricingRules = await this.readCurrentPricingRules(tx, providers);
+    const modelTargets = this.buildAdminModelTargets(
+      providers,
+      currentPricingRules,
     );
-    if (!catalogPrice) {
-      throw new UnprocessableEntityException(
-        'Tenant Chat pricing is unavailable for the selected Provider model.',
-      );
-    }
+    const routing = this.normalizeAdminRoutingInput(input, modelTargets);
 
     const activePointer = await tx.tenantChatActiveRuntimeSnapshot.findUnique({
       where: { tenantId: input.tenantId },
@@ -309,21 +349,20 @@ export class TenantChatRuntimeService {
       : null;
     const policies = this.composeAdminPolicies(
       activeSnapshot,
-      provider.id,
-      input.modelKey,
+      routing,
     );
     const pricingRoutes = this.composePricingRoutes(
-      provider.id,
-      input.modelKey,
-      catalogPrice,
+      policies.routing.routes,
+      routing.targets,
     );
+    const pricingEffectiveAt = this.pricingEffectiveAt(routing.targets);
 
     if (
       activeSnapshot &&
       this.isEquivalentAdminPublication(
         activeSnapshot,
         policies,
-        catalogPrice.effectiveAt,
+        pricingEffectiveAt,
         pricingRoutes,
       )
     ) {
@@ -352,7 +391,7 @@ export class TenantChatRuntimeService {
       digest: PLACEHOLDER_DIGEST,
       currency: 'USD',
       unit: 'micro_usd_per_1m_tokens',
-      effectiveAt: catalogPrice.effectiveAt,
+      effectiveAt: pricingEffectiveAt,
       routes: pricingRoutes,
     };
     pricing.digest = computeTenantChatPricingDigest(pricing);
@@ -378,18 +417,23 @@ export class TenantChatRuntimeService {
   private buildAdminRuntimeSetup(
     providerRecords: AdminProviderRecord[],
     pointer: AdminSnapshotPointerRecord | null,
+    currentPricingRules: CurrentPricingRuleRecord[],
   ): TenantChatAdminRuntimeSetup {
+    const modelTargets = this.buildAdminModelTargets(
+      providerRecords,
+      currentPricingRules,
+    );
     const providers = providerRecords.map((provider) =>
-      this.toAdminProviderCandidate(provider),
+      this.toAdminProviderCandidate(provider, modelTargets),
     );
     const snapshot = pointer
       ? this.readValidSnapshotOrNull(pointer.snapshot.snapshotBody)
       : null;
     const activeSnapshot = snapshot
-      ? this.toAdminActiveSnapshot(snapshot, providerRecords)
+      ? this.toAdminActiveSnapshot(snapshot, providerRecords, modelTargets)
       : null;
-    const hasActivatableModel = providers.some((provider) =>
-      provider.models.some((model) => model.activationStatus === 'available'),
+    const hasConfiguredModel = providers.some(
+      (provider) => provider.models.length > 0,
     );
 
     let readiness: TenantChatAdminRuntimeSetup['readiness'];
@@ -399,7 +443,7 @@ export class TenantChatRuntimeService {
       readiness = 'ready';
     } else if (providers.length === 0) {
       readiness = 'needs_provider';
-    } else if (!hasActivatableModel) {
+    } else if (!hasConfiguredModel) {
       readiness = 'needs_model';
     } else {
       readiness = 'needs_activation';
@@ -410,6 +454,7 @@ export class TenantChatRuntimeService {
 
   private toAdminProviderCandidate(
     provider: AdminProviderRecord,
+    targets: AdminModelTarget[],
   ): TenantChatAdminProviderCandidate {
     const providerFamily = this.readProviderFamily(provider.providerConfig);
     return {
@@ -419,22 +464,27 @@ export class TenantChatRuntimeService {
       displayName: provider.displayName,
       models: this.readConfiguredModels(provider.providerConfig).map(
         (modelKey) => {
-          const pricing = findTenantChatModelPricing(providerFamily, modelKey);
+          const target = targets.find(
+            (candidate) =>
+              candidate.providerId === provider.id &&
+              candidate.modelKey === modelKey,
+          );
+          const price = target?.price;
           return {
+            modelRef: target?.modelRef ?? this.modelRef(provider.id, modelKey),
             modelKey,
-            activationStatus: pricing
-              ? ('available' as const)
-              : ('pricing_unavailable' as const),
-            pricing: pricing
+            activationStatus: 'available' as const,
+            pricingStatus: price?.status ?? ('unavailable' as const),
+            pricing: price?.status === 'available'
               ? {
                   inputMicroUsdPerMillionTokens:
-                    pricing.inputMicroUsdPerMillionTokens,
+                    price.inputMicroUsdPerMillionTokens,
                   outputMicroUsdPerMillionTokens:
-                    pricing.outputMicroUsdPerMillionTokens,
-                  ...(pricing.cacheReadInputMicroUsdPerMillionTokens !== undefined
+                    price.outputMicroUsdPerMillionTokens,
+                  ...(price.cacheReadInputMicroUsdPerMillionTokens !== undefined
                     ? {
                         cacheReadInputMicroUsdPerMillionTokens:
-                          pricing.cacheReadInputMicroUsdPerMillionTokens,
+                          price.cacheReadInputMicroUsdPerMillionTokens,
                       }
                     : {}),
                 }
@@ -448,11 +498,22 @@ export class TenantChatRuntimeService {
   private toAdminActiveSnapshot(
     snapshot: TenantChatRuntimeSnapshotDocument,
     providers: AdminProviderRecord[],
+    modelTargets: AdminModelTarget[],
   ): TenantChatAdminActiveSnapshot | null {
-    const route =
-      snapshot.policies.routing.routes.find(
-        (candidate) => candidate.enabled && candidate.tier === 'standard',
-      ) ?? snapshot.policies.routing.routes.find((candidate) => candidate.enabled);
+    const routingPolicy = snapshot.policies.routing.policy;
+    const manualModelRef =
+      snapshot.policies.routing.manualModelRef ??
+      snapshot.policies.routing.routes.find((candidate) => candidate.enabled)
+        ?.modelRef;
+    const route = routingPolicy
+      ? snapshot.policies.routing.routes.find(
+          (candidate) =>
+            candidate.enabled &&
+            candidate.modelRef === manualModelRef,
+        )
+      : (snapshot.policies.routing.routes.find(
+          (candidate) => candidate.enabled && candidate.tier === 'standard',
+        ) ?? snapshot.policies.routing.routes.find((candidate) => candidate.enabled));
     if (!route) {
       return null;
     }
@@ -460,25 +521,76 @@ export class TenantChatRuntimeService {
     if (!provider) {
       return null;
     }
-    const priceRoute = snapshot.pricing.routes.find(
-      (candidate) => candidate.routeId === route.routeId,
-    );
-    if (!priceRoute) {
+
+    const referencedModelRefs = new Set<string>();
+    if (routingPolicy) {
+      if (!manualModelRef) {
+        return null;
+      }
+      referencedModelRefs.add(manualModelRef);
+      for (const category of ROUTING_CATEGORIES) {
+        for (const difficulty of ROUTING_DIFFICULTIES) {
+          for (const modelRef of routingPolicy.routes[category][difficulty]
+            .modelRefs) {
+            referencedModelRefs.add(modelRef);
+          }
+        }
+      }
+    }
+    const referencedRoutes = routingPolicy
+      ? snapshot.policies.routing.routes.filter(
+          (candidate) =>
+            candidate.enabled &&
+            candidate.modelRef !== undefined &&
+            referencedModelRefs.has(candidate.modelRef),
+        )
+      : [route];
+    if (
+      (routingPolicy && referencedRoutes.length !== referencedModelRefs.size) ||
+      referencedRoutes.length === 0
+    ) {
       return null;
     }
-    const catalogPrice = findTenantChatModelPricing(
-      this.readProviderFamily(provider.providerConfig),
-      route.modelKey,
-    );
-    const pricingStatus = !catalogPrice
+
+    const pricingPairs = referencedRoutes.map((runtimeRoute) => {
+      const priceRoute = snapshot.pricing.routes.find(
+        (candidate) => candidate.routeId === runtimeRoute.routeId,
+      );
+      const currentTarget = modelTargets.find(
+        (candidate) =>
+          candidate.providerId === runtimeRoute.providerId &&
+          candidate.modelKey === runtimeRoute.modelKey &&
+          (!runtimeRoute.modelRef ||
+            candidate.modelRef === runtimeRoute.modelRef),
+      );
+      return { currentTarget, priceRoute };
+    });
+    if (
+      pricingPairs.some(
+        ({ currentTarget, priceRoute }) => !currentTarget || !priceRoute,
+      )
+    ) {
+      return null;
+    }
+    const pricingStatus = pricingPairs.some(
+      ({ currentTarget, priceRoute }) =>
+        priceRoute?.pricingStatus === 'unavailable' ||
+        currentTarget?.price.status === 'unavailable',
+    )
       ? ('unavailable' as const)
-      : this.priceMatchesCatalog(
-            priceRoute,
-            snapshot.pricing.effectiveAt,
-            catalogPrice,
+      : pricingPairs.every(
+            ({ currentTarget, priceRoute }) =>
+              currentTarget !== undefined &&
+              priceRoute !== undefined &&
+              this.priceMatchesResolved(priceRoute, currentTarget.price),
           )
         ? ('current' as const)
         : ('update_available' as const);
+
+    const activeManualModelRef =
+      manualModelRef ?? this.modelRef(route.providerId, route.modelKey);
+    const routes =
+      routingPolicy?.routes ?? this.uniformRoutingMatrix(activeManualModelRef);
 
     return {
       snapshotId: snapshot.snapshotId,
@@ -490,13 +602,15 @@ export class TenantChatRuntimeService {
       modelKey: route.modelKey,
       publishedAt: snapshot.publishedAt,
       pricingStatus,
+      routingMode: routingPolicy?.mode ?? 'manual',
+      manualModelRef: activeManualModelRef,
+      routes,
     };
   }
 
   private composeAdminPolicies(
     activeSnapshot: TenantChatRuntimeSnapshotDocument | null,
-    providerId: string,
-    modelKey: string,
+    routing: NormalizedAdminRouting,
   ): TenantChatRuntimePolicies {
     const safetyWithoutDigest = {
       enabled: true,
@@ -505,9 +619,35 @@ export class TenantChatRuntimeService {
         { detectorType: 'api_key' as const, action: 'block' as const },
       ],
     };
-    const [standardRouteId, economyRouteId] = this.routeIds(
-      providerId,
-      modelKey,
+    const routingPolicyWithoutHash = {
+      schemaVersion: 'gatelm.routing-policy.v2' as const,
+      mode: routing.mode,
+      bootstrapState: 'configured' as const,
+      routes: routing.routes,
+    };
+    const runtimeRoutes: TenantChatRuntimeRoute[] = routing.targets.map(
+      (target) => ({
+        routeId: this.routeId(target.modelRef),
+        modelRef: target.modelRef,
+        providerId: target.providerId,
+        modelKey: target.modelKey,
+        enabled: true,
+      }),
+    );
+    const providerIds = Array.from(
+      new Set(runtimeRoutes.map((route) => route.providerId)),
+    );
+    const maxRoutingAttempts = ROUTING_CATEGORIES.reduce(
+      (maximum, category) =>
+        ROUTING_DIFFICULTIES.reduce(
+          (cellMaximum, difficulty) =>
+            Math.max(
+              cellMaximum,
+              routing.routes[category][difficulty].modelRefs.length,
+            ),
+          maximum,
+        ),
+      1,
     );
 
     return {
@@ -537,31 +677,30 @@ export class TenantChatRuntimeService {
         hardStopPercent: 100,
       },
       routing: {
-        routes: [
-          {
-            routeId: standardRouteId,
-            tier: 'standard',
-            providerId,
-            modelKey,
-            enabled: true,
-          },
-          {
-            routeId: economyRouteId,
-            tier: 'economy',
-            providerId,
-            modelKey,
-            enabled: true,
-          },
-        ],
+        routes: runtimeRoutes,
+        policy: {
+          ...routingPolicyWithoutHash,
+          routingPolicyHash: computeTenantChatRoutingPolicyHash(
+            routingPolicyWithoutHash,
+          ),
+        },
+        manualModelRef: routing.manualModelRef,
       },
       fallback: {
-        enabled: false,
+        enabled: maxRoutingAttempts > 1,
         routeIds: [],
-        maxAttempts: 1,
-        allowedReasons: [],
+        maxAttempts: maxRoutingAttempts,
+        allowedReasons:
+          maxRoutingAttempts > 1
+            ? ['provider_timeout', 'provider_error_pre_delta']
+            : [],
       },
       providerTokenRate: {
-        providers: [{ providerId, limitTokens: 120_000, windowSeconds: 60 }],
+        providers: providerIds.map((providerId) => ({
+          providerId,
+          limitTokens: 120_000,
+          windowSeconds: 60,
+        })),
       },
       cache: activeSnapshot?.policies.cache ?? {
         strategy: 'off',
@@ -583,27 +722,35 @@ export class TenantChatRuntimeService {
   }
 
   private composePricingRoutes(
-    providerId: string,
-    modelKey: string,
-    price: {
-      inputMicroUsdPerMillionTokens: number;
-      outputMicroUsdPerMillionTokens: number;
-      cacheReadInputMicroUsdPerMillionTokens?: number;
-    },
+    runtimeRoutes: TenantChatRuntimeRoute[],
+    targets: AdminModelTarget[],
   ): TenantChatPricing['routes'] {
-    return this.routeIds(providerId, modelKey).map((routeId) => ({
-      routeId,
-      providerId,
-      modelKey,
-      inputMicroUsdPerMillionTokens: price.inputMicroUsdPerMillionTokens,
-      outputMicroUsdPerMillionTokens: price.outputMicroUsdPerMillionTokens,
-      ...(price.cacheReadInputMicroUsdPerMillionTokens !== undefined
+    return runtimeRoutes.map((route) => {
+      const target = targets.find(
+        (candidate) => candidate.modelRef === route.modelRef,
+      );
+      if (!target) {
+        throw new BadRequestException(
+          `Routing target ${route.modelRef ?? route.routeId} is not configured.`,
+        );
+      }
+      const price = target.price;
+      return {
+        routeId: route.routeId,
+        providerId: route.providerId,
+        modelKey: route.modelKey,
+        pricingStatus: price.status,
+        pricingSource: price.source,
+        inputMicroUsdPerMillionTokens: price.inputMicroUsdPerMillionTokens,
+        outputMicroUsdPerMillionTokens: price.outputMicroUsdPerMillionTokens,
+        ...(price.cacheReadInputMicroUsdPerMillionTokens !== undefined
         ? {
             cacheReadInputMicroUsdPerMillionTokens:
               price.cacheReadInputMicroUsdPerMillionTokens,
           }
         : {}),
-    }));
+      };
+    });
   }
 
   private isEquivalentAdminPublication(
@@ -621,33 +768,314 @@ export class TenantChatRuntimeService {
     );
   }
 
-  private priceMatchesCatalog(
+  private priceMatchesResolved(
     route: TenantChatPricing['routes'][number],
-    effectiveAt: string,
-    catalogPrice: {
-      effectiveAt: string;
-      inputMicroUsdPerMillionTokens: number;
-      outputMicroUsdPerMillionTokens: number;
-      cacheReadInputMicroUsdPerMillionTokens?: number;
-    },
+    price: ResolvedAdminPrice,
   ): boolean {
     return (
-      effectiveAt === catalogPrice.effectiveAt &&
+      route.pricingStatus === price.status &&
+      route.pricingSource === price.source &&
       route.inputMicroUsdPerMillionTokens ===
-        catalogPrice.inputMicroUsdPerMillionTokens &&
+        price.inputMicroUsdPerMillionTokens &&
       route.outputMicroUsdPerMillionTokens ===
-        catalogPrice.outputMicroUsdPerMillionTokens &&
+        price.outputMicroUsdPerMillionTokens &&
       route.cacheReadInputMicroUsdPerMillionTokens ===
-        catalogPrice.cacheReadInputMicroUsdPerMillionTokens
+        price.cacheReadInputMicroUsdPerMillionTokens
     );
   }
 
-  private routeIds(providerId: string, modelKey: string): [string, string] {
+  private modelRef(providerId: string, modelKey: string): string {
     const suffix = createHash('sha256')
       .update(`${providerId}\u0000${modelKey}`, 'utf8')
-      .digest('base64url')
-      .slice(0, 24);
-    return [`route_standard_${suffix}`, `route_economy_${suffix}`];
+      .digest('hex')
+      .slice(0, 32);
+    return `tc_${suffix}`;
+  }
+
+  private routeId(modelRef: string): string {
+    return `route_${modelRef}`;
+  }
+
+  private normalizeAdminRoutingInput(
+    input: ActivateTenantChatRuntimeInput,
+    modelTargets: AdminModelTarget[],
+  ): NormalizedAdminRouting {
+    const targetsByRef = new Map(
+      modelTargets.map((target) => [target.modelRef, target] as const),
+    );
+    const hasLegacySelection = Boolean(
+      input.providerConnectionId || input.modelKey,
+    );
+    if (
+      hasLegacySelection &&
+      (!input.providerConnectionId || !input.modelKey)
+    ) {
+      throw new BadRequestException(
+        'providerConnectionId and modelKey must be provided together.',
+      );
+    }
+
+    let routes = input.routes;
+    let legacyModelRef: string | undefined;
+    if (!routes && input.providerConnectionId && input.modelKey) {
+      legacyModelRef = this.modelRef(
+        input.providerConnectionId,
+        input.modelKey,
+      );
+      if (!targetsByRef.has(legacyModelRef)) {
+        throw new BadRequestException(
+          'The selected model is not configured for this Provider connection.',
+        );
+      }
+      routes = this.uniformRoutingMatrix(legacyModelRef);
+    }
+    if (!routes) {
+      throw new BadRequestException(
+        'A complete 5 x 2 Tenant Chat routing matrix is required.',
+      );
+    }
+
+    const normalizedRoutes = this.validateAndCloneRoutingMatrix(
+      routes,
+      targetsByRef,
+    );
+    const manualModelRef =
+      input.manualModelRef ??
+      legacyModelRef ??
+      normalizedRoutes.general.simple.modelRefs[0];
+    if (!manualModelRef || !targetsByRef.has(manualModelRef)) {
+      throw new BadRequestException(
+        'manualModelRef must reference a configured Tenant Chat model.',
+      );
+    }
+
+    const usedRefs = new Set<string>([manualModelRef]);
+    for (const category of ROUTING_CATEGORIES) {
+      for (const difficulty of ROUTING_DIFFICULTIES) {
+        for (const modelRef of normalizedRoutes[category][difficulty].modelRefs) {
+          usedRefs.add(modelRef);
+        }
+      }
+    }
+
+    return {
+      mode: input.routingMode ?? (legacyModelRef ? 'manual' : 'auto'),
+      manualModelRef,
+      routes: normalizedRoutes,
+      targets: modelTargets.filter((target) => usedRefs.has(target.modelRef)),
+    };
+  }
+
+  private validateAndCloneRoutingMatrix(
+    routes: TenantChatRoutingMatrix,
+    targetsByRef: ReadonlyMap<string, AdminModelTarget>,
+  ): TenantChatRoutingMatrix {
+    const clone = {} as TenantChatRoutingMatrix;
+    for (const category of ROUTING_CATEGORIES) {
+      const categoryRoutes = routes[category];
+      if (!categoryRoutes) {
+        throw new BadRequestException(
+          `Routing category ${category} is required.`,
+        );
+      }
+      clone[category] = {} as TenantChatRoutingMatrix[typeof category];
+      for (const difficulty of ROUTING_DIFFICULTIES) {
+        const modelRefs = categoryRoutes[difficulty]?.modelRefs;
+        if (
+          !Array.isArray(modelRefs) ||
+          modelRefs.length < 1 ||
+          modelRefs.length > 4 ||
+          new Set(modelRefs).size !== modelRefs.length
+        ) {
+          throw new BadRequestException(
+            `Routing cell ${category}.${difficulty} must contain 1 to 4 unique modelRefs.`,
+          );
+        }
+        for (const modelRef of modelRefs) {
+          if (!targetsByRef.has(modelRef)) {
+            throw new BadRequestException(
+              `Routing cell ${category}.${difficulty} references an unavailable modelRef.`,
+            );
+          }
+        }
+        clone[category][difficulty] = { modelRefs: [...modelRefs] };
+      }
+    }
+    return clone;
+  }
+
+  private uniformRoutingMatrix(modelRef: string): TenantChatRoutingMatrix {
+    const cell = () => ({ modelRefs: [modelRef] });
+    return {
+      general: { simple: cell(), complex: cell() },
+      code: { simple: cell(), complex: cell() },
+      translation: { simple: cell(), complex: cell() },
+      summarization: { simple: cell(), complex: cell() },
+      reasoning: { simple: cell(), complex: cell() },
+    };
+  }
+
+  private buildAdminModelTargets(
+    providers: AdminProviderRecord[],
+    currentPricingRules: CurrentPricingRuleRecord[],
+  ): AdminModelTarget[] {
+    const pricingByProviderAndModel = new Map<string, CurrentPricingRuleRecord>();
+    for (const rule of currentPricingRules) {
+      const key = `${rule.provider}\u0000${rule.model}`;
+      if (!pricingByProviderAndModel.has(key)) {
+        pricingByProviderAndModel.set(key, rule);
+      }
+    }
+
+    return providers.flatMap((provider) => {
+      const providerFamily = this.readProviderFamily(provider.providerConfig);
+      return this.readConfiguredModels(provider.providerConfig).map((modelKey) => ({
+        modelRef: this.modelRef(provider.id, modelKey),
+        providerId: provider.id,
+        providerKey: provider.provider,
+        providerFamily: providerFamily || 'unconfigured',
+        modelKey,
+        price: this.resolveAdminPrice(
+          provider.provider,
+          providerFamily,
+          modelKey,
+          pricingByProviderAndModel,
+        ),
+      }));
+    });
+  }
+
+  private resolveAdminPrice(
+    providerKey: string,
+    providerFamily: string,
+    modelKey: string,
+    pricingByProviderAndModel: ReadonlyMap<string, CurrentPricingRuleRecord>,
+  ): ResolvedAdminPrice {
+    for (const lookupProvider of [providerKey, providerFamily]) {
+      if (!lookupProvider) {
+        continue;
+      }
+      const rule = pricingByProviderAndModel.get(
+        `${lookupProvider}\u0000${modelKey}`,
+      );
+      const resolved = rule ? this.priceFromCurrentRule(rule) : null;
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    const bundled = findTenantChatModelPricing(providerFamily, modelKey);
+    return bundled
+      ? this.priceFromBundledCatalog(bundled)
+      : {
+          status: 'unavailable',
+          source: 'unavailable',
+          effectiveAt: UNKNOWN_PRICING_EFFECTIVE_AT,
+          inputMicroUsdPerMillionTokens: 0,
+          outputMicroUsdPerMillionTokens: 0,
+        };
+  }
+
+  private priceFromCurrentRule(
+    rule: CurrentPricingRuleRecord,
+  ): ResolvedAdminPrice | null {
+    const inputPrice = Number(rule.input_micro_usd_per_1m_tokens);
+    const outputPrice = Number(rule.output_micro_usd_per_1m_tokens);
+    const effectiveAt = new Date(rule.effective_from);
+    if (
+      !Number.isSafeInteger(inputPrice) ||
+      inputPrice < 0 ||
+      !Number.isSafeInteger(outputPrice) ||
+      outputPrice < 0 ||
+      Number.isNaN(effectiveAt.getTime())
+    ) {
+      return null;
+    }
+    return {
+      status: 'available',
+      source: 'model_pricing_rules',
+      effectiveAt: effectiveAt.toISOString(),
+      inputMicroUsdPerMillionTokens: inputPrice,
+      outputMicroUsdPerMillionTokens: outputPrice,
+    };
+  }
+
+  private priceFromBundledCatalog(
+    price: TenantChatModelPricingEntry,
+  ): ResolvedAdminPrice {
+    return {
+      status: 'available',
+      source: 'bundled',
+      effectiveAt: price.effectiveAt,
+      inputMicroUsdPerMillionTokens: price.inputMicroUsdPerMillionTokens,
+      outputMicroUsdPerMillionTokens: price.outputMicroUsdPerMillionTokens,
+      ...(price.cacheReadInputMicroUsdPerMillionTokens !== undefined
+        ? {
+            cacheReadInputMicroUsdPerMillionTokens:
+              price.cacheReadInputMicroUsdPerMillionTokens,
+          }
+        : {}),
+    };
+  }
+
+  private pricingEffectiveAt(targets: AdminModelTarget[]): string {
+    return targets.reduce(
+      (latest, target) =>
+        target.price.effectiveAt > latest ? target.price.effectiveAt : latest,
+      UNKNOWN_PRICING_EFFECTIVE_AT,
+    );
+  }
+
+  private async readCurrentPricingRules(
+    client: Pick<Prisma.TransactionClient, '$queryRaw'>,
+    providers: AdminProviderRecord[],
+  ): Promise<CurrentPricingRuleRecord[]> {
+    if (typeof client.$queryRaw !== 'function') {
+      return [];
+    }
+    const providerKeys = Array.from(
+      new Set(
+        providers.flatMap((provider) => [
+          provider.provider,
+          this.readProviderFamily(provider.providerConfig),
+        ]),
+      ),
+    ).filter(Boolean);
+    const modelKeys = Array.from(
+      new Set(
+        providers.flatMap((provider) =>
+          this.readConfiguredModels(provider.providerConfig),
+        ),
+      ),
+    );
+    if (providerKeys.length === 0 || modelKeys.length === 0) {
+      return [];
+    }
+
+    try {
+      const rows = await client.$queryRaw<CurrentPricingRuleRecord[]>(
+        Prisma.sql`
+          select distinct on (provider, model)
+            provider,
+            model,
+            input_micro_usd_per_1m_tokens,
+            output_micro_usd_per_1m_tokens,
+            effective_from
+          from model_pricing_rules
+          where provider in (${Prisma.join(providerKeys)})
+            and model in (${Prisma.join(modelKeys)})
+            and currency = 'USD'
+            and effective_from <= now()
+            and (effective_to is null or effective_to > now())
+          order by provider, model, effective_from desc, created_at desc
+        `,
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      // The shared pricing table predates Tenant Chat in some installations.
+      // Bundled pricing and the explicit unavailable state remain valid fallbacks.
+      return [];
+    }
   }
 
   private readProviderFamily(value: Prisma.JsonValue): string {

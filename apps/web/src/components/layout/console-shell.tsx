@@ -77,6 +77,7 @@ const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
 const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
   "api-keys": KeyRound,
   "app-tokens": SettingsIcon,
+  "chat-app": MessageSquareText,
   employees: Users,
   alerts: Bell,
   analytics: Activity,
@@ -124,7 +125,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Overview",
-          ko: "개요"
+          ko: "대시보드"
         },
         item: "overview",
         path: (tenantId) => `/tenants/${tenantId}/dashboard`
@@ -132,7 +133,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Live Logs",
-          ko: "실시간 로그"
+          ko: "로그"
         },
         item: "live-logs",
         path: (tenantId) => `/tenants/${tenantId}/request-logs`
@@ -164,11 +165,11 @@ const navigationItems: Array<{
     children: [
       {
         labels: {
-          en: "Tenant",
-          ko: "회사 정책"
+          en: "Chat App",
+          ko: "채팅 앱"
         },
-        item: "tenant",
-        path: (tenantId) => `/tenants/${tenantId}/tenants`
+        item: "chat-app",
+        path: (tenantId) => `/tenants/${tenantId}/chat-app`
       },
       {
         labels: {
@@ -189,18 +190,10 @@ const navigationItems: Array<{
       {
         labels: {
           en: "Providers",
-          ko: "프로바이더"
+          ko: "Provider"
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
-      },
-      {
-        labels: {
-          en: "Tenant Chat",
-          ko: "Tenant Chat"
-        },
-        item: "tenant-chat",
-        path: (tenantId) => `/tenants/${tenantId}/tenant-chat`
       },
       {
         labels: {

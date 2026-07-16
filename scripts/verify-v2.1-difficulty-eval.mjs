@@ -1058,6 +1058,7 @@ export function verifyDifficultyTrainingPilot(options = {}) {
         algorithm: "pava",
         tieGrouping: "exact_float64",
         weighting: "sample_count",
+        blockCanonicalization: "maximal_constant",
         lookup: "inclusive_lower_floor",
         outOfBounds: "clip",
         smallBlockMerge: "disabled",
@@ -1072,7 +1073,7 @@ export function verifyDifficultyTrainingPilot(options = {}) {
     !isotonicPolicyIsCanonical
   ) {
     failures.push(
-      `${modelArtifactSchemaPath} and ${trainingPolicyPath}: closed v1 artifact schema with threshold 0.45, nested Platt/Isotonic calibrators, and exact single-block PAVA floor-lookup policy is required`,
+      `${modelArtifactSchemaPath} and ${trainingPolicyPath}: closed v1 artifact schema with threshold 0.45, nested Platt/Isotonic calibrators, and exact maximal-constant single-block PAVA floor-lookup policy is required`,
     );
   }
   const offlineCandidates = [

@@ -29,20 +29,48 @@ describe('EncryptedChatStore concurrency boundaries', () => {
     const prisma = {
       $transaction: jest.fn(async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx)),
     };
+    const integrity = { sign: jest.fn().mockResolvedValue(bindingMac()) };
     const store = new EncryptedChatStore(
       prisma as never,
       {} as never,
-      { sign: jest.fn().mockResolvedValue(bindingMac()) } as never,
+      integrity as never,
       {} as never,
     );
 
     await expect(store.reserveTurn(actor, conversationId, {
       idempotencyKey: 'idempotency-key-0001',
       content: '<synthetic>',
+      contextMode: 'conversation',
       usageIntent,
     })).rejects.toBeInstanceOf(ConversationNotFound);
+    expect(integrity.sign).toHaveBeenCalledWith(expect.not.objectContaining({ contextMode: expect.anything() }));
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(tx.tenantChatTurn.create).not.toHaveBeenCalled();
+  });
+
+  it('binds single-turn context mode without changing the legacy conversation binding', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      tenantChatTurn: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx)),
+    };
+    const integrity = { sign: jest.fn().mockResolvedValue(bindingMac()) };
+    const store = new EncryptedChatStore(
+      prisma as never,
+      {} as never,
+      integrity as never,
+      {} as never,
+    );
+
+    await expect(store.reserveTurn(actor, conversationId, {
+      idempotencyKey: 'idempotency-key-0001',
+      content: '<synthetic>',
+      contextMode: 'single_turn',
+      usageIntent,
+    })).rejects.toBeInstanceOf(ConversationNotFound);
+    expect(integrity.sign).toHaveBeenCalledWith(expect.objectContaining({ contextMode: 'single_turn' }));
   });
 
   it('rechecks expiry under the delete lock before hard deletion', async () => {
@@ -151,6 +179,7 @@ function encryptedMessage(
     tag: Uint8Array.from(encrypted.tag),
     contentKeyVersion: 1,
     schemaVersion: 1,
+    effectiveModelKey: role === 'assistant' ? 'mock-model' : null,
     expiresAt: null,
     createdAt: new Date(),
   };
