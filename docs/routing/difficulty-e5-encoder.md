@@ -121,9 +121,11 @@ corepack pnpm run verify:v2.1-gateway-e5-runtime
 
 `prepare`는 large artifact를 로컬 cache에 만들기 때문에 별도 단계다. Gateway bundle 준비 명령은 이미 존재하는 pinned encoder cache, tokenizer native archive와 ONNX Runtime NuGet package를 검증해 `.tmp` 아래 Docker build context로 조립한다. Native package가 없는 개발 환경은 명시적인 `setup-gateway-e5-runtime-native` 명령에서만 pinned GitHub release/NuGet URL을 사용하며 다운로드 완료 전 임시 파일의 size와 SHA-256을 검증한다. Encoder/model artifact는 기존 `prepare-e5-encoder` 단계가 소유한다. 일반 verifier와 container runtime은 network download를 대신 수행하지 않는다. Promotion Holdout evaluator는 이미 첫 결과를 기록했으므로 같은 canonical output에 다시 실행하면 fail closed한다. 정기 검증은 score를 다시 계산하지 않고 freeze·source·artifact·aggregate report hash와 gate 산술만 검사한다.
 
+`v2.1:routing:prepare-gateway-e5-runtime`과 `v2.1:routing:setup-gateway-e5-runtime-native`는 runtime용 named build context를 `.tmp/gateway-e5-runtime-bundle`에 만든다. Tenant Chat local wrapper는 `build` 또는 `up` 전에 같은 pinned preparation을 실행하며 network download를 대신하지 않는다.
+
 ## 6. Runtime Boundary
 
-Gateway에는 build tag `difficulty_e5_onnx && linux && cgo`로 제한된 local tokenizer/ONNX adapter가 존재한다. `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true`일 때 artifact를 검증하고 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → final 106D score를 한 번 smoke 실행한 뒤 authoritative difficulty runtime을 만든다. 초기화·smoke 실패와 지원하지 않는 기본 CGO-free build는 semantic runtime을 `unavailable`로 내리고 Gateway는 rule difficulty fallback mode로 시작한다. E5 runtime은 readiness 필수 dependency가 아니다.
+Gateway에는 build tag `difficulty_e5_onnx && linux && cgo`로 제한된 local tokenizer/ONNX adapter가 존재한다. `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true`일 때 artifact를 검증하고 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → final 106D score를 한 번 smoke 실행한 뒤 authoritative difficulty runtime을 만든다. Cold native initialization을 포함한 process-start smoke timeout은 `60s`다. 초기화·smoke 실패와 지원하지 않는 기본 CGO-free build는 semantic runtime을 `unavailable`로 내리고 Gateway는 rule difficulty fallback mode로 시작한다. E5 runtime은 readiness 필수 dependency가 아니다.
 
 Package-level evaluator는 masking 이후 실제 `PromptFeatures.instructionText`만 받으며 동시 ONNX 실행을 1개로 제한한다. 빈 instruction은 tokenizer 전 `not_applicable`, queue 포화는 `busy`, timeout·runtime 실패·panic은 안전한 상태 코드로 반환하고 raw text, token, embedding, head output, 개별 score 또는 native error detail을 노출하지 않는다. 일반 Gateway와 Tenant Chat private completion은 process-global runtime 하나를 공유한다. 두 router 모두 manual과 auto-disabled 경로를 먼저 종료하고, 정상 auto 요청만 공유 worker 1개와 bounded 대기 job 4개의 synchronous dispatcher에 전달한다. Default timeout은 `100ms`, 허용 범위는 `1..1000ms`다.
 
@@ -131,7 +133,9 @@ Semantic result가 `ready`이면 106D `simple | complex`가 일반 Gateway polic
 
 Selected 106D checked-in Go bundle은 pooled 384D 이후 `42D rule + PCA 64D`를 고정 배열로 정확히 조립하고 final difficulty head, Platt calibration과 threshold `0.096`을 적용한다. Runtime promotion은 artifact version, content hash와 model selection을 변경하지 않았고 frozen test 1,000건을 다시 열지 않았다. Rollback은 `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=false`로 재시작하여 process 전체를 rule difficulty mode로 되돌린다.
 
-## 7. Production Build Path
+## 7. Default Local And Production Build Paths
+
+Tenant Chat local Compose는 Linux amd64 E5 runtime Dockerfile을 기본 `gateway-core` build로 사용하고 `.tmp/gateway-e5-runtime-bundle`을 `difficulty_e5` named build context로 전달한다. Local profile은 `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true`, timeout `100ms`, historical shadow `false`를 고정한다. 이는 일반 [`../../infra/docker/gateway-core.Dockerfile`](../../infra/docker/gateway-core.Dockerfile)의 CGO-free·rule-only 기본값을 바꾸지 않는다.
 
 AWS production Compose는 기본 CGO-free Gateway image 대신 optional E5 runtime Dockerfile을 사용한다. [`../../deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh`](../../deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh)는 target commit checkout 이후 image build 전에 pinned Hugging Face revision, tokenizer release와 ONNX Runtime package를 내려받고 byte size·SHA-256·exact file allowlist를 검증해 `.tmp/gateway-e5-runtime-bundle`을 만든다. 검증 실패는 image build와 cutover 전에 deployment를 중단한다.
 

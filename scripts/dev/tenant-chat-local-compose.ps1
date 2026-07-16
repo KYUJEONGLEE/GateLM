@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $composeFiles = @('-f', 'docker-compose.yml', '-f', 'scripts/dev/docker-compose.tenant-chat-execution.yml')
+$e5BundleDirectory = '.tmp/gateway-e5-runtime-bundle'
 $cacheKeySetId = 'tenant-chat-local-cache-1'
 
 if ($ComposeArguments.Count -eq 0) {
@@ -17,6 +18,13 @@ Push-Location $root
 try {
   foreach ($command in @('node', 'docker', 'git')) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "$command is required." }
+  }
+
+  $composeCommand = $ComposeArguments | Where-Object { $_ -in @('build', 'up') } | Select-Object -First 1
+  if ($composeCommand) {
+    & (Join-Path $PSScriptRoot 'prepare-gateway-e5-shadow-bundle.ps1') `
+      -OutputDirectory $e5BundleDirectory
+    if ($LASTEXITCODE -ne 0) { throw 'Gateway E5 runtime bundle preparation failed.' }
   }
 
   $secretResolution = (& node scripts/dev/generate-tenant-chat-local-secrets.mjs --resolve-target | Select-Object -Last 1) | ConvertFrom-Json

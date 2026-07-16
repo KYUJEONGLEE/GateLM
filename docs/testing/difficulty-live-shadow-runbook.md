@@ -28,6 +28,8 @@ For a normal public Gateway or Tenant Chat `model: "auto"` model-path request, a
 
 Each Gateway process owns one encoder worker and four bounded waiting jobs shared by the public Gateway and Tenant Chat completion paths; Tenant Chat does not initialize or close a second runtime. Each request waits at most `GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS` (`100ms` default, `1..1000ms` allowed). Queue saturation, request cancellation, timeout, invalid embedding, inference failure or panic retains that request's rule difficulty. Startup bundle verification or smoke failure starts both paths in rule-difficulty fallback mode.
 
+Process startup allows up to `60s` for the one-time cold tokenizer/ONNX smoke. This does not change the per-request `100ms` default. Exceeding the startup bound marks the E5 runtime unavailable and starts the Gateway in rule-difficulty fallback mode.
+
 Runtime activation:
 
 ```dotenv
@@ -37,6 +39,8 @@ GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false
 ```
 
 Use [`../../infra/docker/gateway-core-e5-runtime.Dockerfile`](../../infra/docker/gateway-core-e5-runtime.Dockerfile). The default CGO-free image contains no E5 native runtime and remains rule-only. Enabling both runtime and historical request shadow is a configuration error.
+
+Tenant Chat local Compose selects the E5 runtime image by default, prepares the pinned `.tmp/gateway-e5-runtime-bundle` before `build` or `up`, enables authoritative runtime mode, and disables historical shadow. The standalone CGO-free image remains available for explicit rule-only execution and rollback.
 
 ## 3. Rollout Guardrails
 

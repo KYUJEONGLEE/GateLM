@@ -250,10 +250,10 @@ export function LiveRequestsView({
             <col className="dashboard-live-col-user" />
             <col className="dashboard-live-col-project" />
             <col className="dashboard-live-col-model" />
-            <col className="dashboard-live-col-status" />
+            <col className="dashboard-live-col-cost" />
             <col className="dashboard-live-col-policy" />
             <col className="dashboard-live-col-latency" />
-            <col className="dashboard-live-col-cost" />
+            <col className="dashboard-live-col-status" />
             <col className="dashboard-live-col-action" />
           </colgroup>
           <thead>
@@ -262,10 +262,10 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "사용자" : "User"}</th>
               <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
               <th scope="col">{locale === "ko" ? "처리 모델" : "Model"}</th>
-              <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
+              <th scope="col">{locale === "ko" ? "비용" : "Cost"}</th>
               <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Result"}</th>
               <th scope="col">{locale === "ko" ? "응답 시간" : "Response time"}</th>
-              <th scope="col">{locale === "ko" ? "비용" : "Cost"}</th>
+              <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
               <th scope="col">{text.detail}</th>
             </tr>
           </thead>
@@ -333,11 +333,8 @@ export function LiveRequestsView({
                   <LiveRequestRouting row={row} />
                 </td>
                 <td>
-                  <span
-                    className="dashboard-live-status-badge"
-                    data-status-tone={statusTone(row)}
-                  >
-                    {localizedStatusLabel(row, locale)}
+                  <span className="dashboard-live-cost">
+                    {formatLiveRequestCostUsd(row.costUsd)}
                   </span>
                 </td>
                 <td>
@@ -349,8 +346,11 @@ export function LiveRequestsView({
                   </span>
                 </td>
                 <td>
-                  <span className="dashboard-live-cost">
-                    {formatLiveRequestCostUsd(row.costUsd)}
+                  <span
+                    className="dashboard-live-status-badge"
+                    data-status-tone={statusTone(row)}
+                  >
+                    {localizedStatusLabel(row, locale)}
                   </span>
                 </td>
                 <td>

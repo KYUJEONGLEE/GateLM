@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -482,10 +483,10 @@ export function ChatAppRoutingSetup({
   const canPublish = refs.has(manualModelRef) && matrixUsesOnly(routes, refs);
 
   return (
-    <main className="console-content management-line-content tenant-management-content tenant-chat-app-content">
-      <header className="project-page-header">
-        <h2>{text.title}</h2>
-      </header>
+    <ManagementPage
+      className="tenant-management-content tenant-chat-app-content"
+      title={text.title}
+    >
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div aria-label={text.breadcrumb} className="policy-section-tabs tenant-management-tabs" role="tablist">
@@ -699,7 +700,7 @@ export function ChatAppRoutingSetup({
           </div>
         </form>
       )}
-    </main>
+    </ManagementPage>
   );
 }
 

@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 const overviewSourceUrl = new URL("./dashboard-overview.tsx", import.meta.url);
 const chartSourceUrl = new URL("./dashboard-echarts.tsx", import.meta.url);
 const costSourceUrl = new URL("./cost-over-time-card.tsx", import.meta.url);
+const dashboardStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
 const liveRequestViewSourceUrl = new URL("./live-requests-view.tsx", import.meta.url);
 const liveRequestsSourceUrl = new URL("./live-requests-card.tsx", import.meta.url);
 const providerUsageSourceUrl = new URL("./provider-model-usage-card.tsx", import.meta.url);
@@ -36,6 +37,30 @@ test("snapshot-managed cards render their incoming payload without an effect-del
   expect(costSource.match(/points=\{renderedSummary\.points\}/g)).toHaveLength(2);
   expect(liveRequestsSource).toContain("normalizeLiveRequestRows(initialPayload?.rows)");
   expect(liveRequestsSource).toContain("displayedRows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)");
+});
+
+test("compact request detail opens the focus view before nested request detail", async () => {
+  const source = await readFile(liveRequestsSourceUrl, "utf8");
+  const compactViewStart = source.indexOf(
+    "<LiveRequestsView",
+    source.indexOf('className="dashboard-live-requests-slot"')
+  );
+  const focusDialogStart = source.indexOf("<LiveRequestsFocusDialog");
+  const requestDetailHandlerStart = source.indexOf("function openRequestDetail");
+  const requestDetailHandlerEnd = source.indexOf(
+    "function closeRequestDetail",
+    requestDetailHandlerStart
+  );
+  const compactView = source.slice(compactViewStart, focusDialogStart);
+  const focusView = source.slice(focusDialogStart);
+  const requestDetailHandler = source.slice(
+    requestDetailHandlerStart,
+    requestDetailHandlerEnd
+  );
+
+  expect(compactView).toContain("onOpenRequest={openFocusView}");
+  expect(focusView).toContain("onOpenRequest={openRequestDetail}");
+  expect(requestDetailHandler).not.toContain("openFocusView()");
 });
 
 test("overview keeps four live KPI cards with month-to-date cost in the final position", async () => {
@@ -73,6 +98,51 @@ test("live requests show the executed model, end-to-end latency, and readable co
   expect(source).not.toContain("row.category");
   expect(source).not.toContain("row.difficulty");
   expect(source).not.toContain("row.routingReason");
+});
+
+test("live request columns place cost before status and size columns by content length", async () => {
+  const [source, styles] = await Promise.all([
+    readFile(liveRequestViewSourceUrl, "utf8"),
+    readFile(dashboardStylesSourceUrl, "utf8")
+  ]);
+  const tableSource = source.slice(source.indexOf("<colgroup>"), source.indexOf("</table>"));
+
+  expect(tableSource).toMatch(
+    /dashboard-live-col-model[\s\S]*dashboard-live-col-cost[\s\S]*dashboard-live-col-policy[\s\S]*dashboard-live-col-latency[\s\S]*dashboard-live-col-status[\s\S]*dashboard-live-col-action/
+  );
+  expect(tableSource).toMatch(
+    /"Model"[\s\S]*"Cost"[\s\S]*"Policy Result"[\s\S]*"Response time"[\s\S]*"Status"[\s\S]*text\.detail/
+  );
+  expect(tableSource).toMatch(
+    /LiveRequestRouting[\s\S]*formatLiveRequestCostUsd[\s\S]*PolicyBadges[\s\S]*formatResponseTimeSeconds[\s\S]*statusTone/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-time,\s*\.dashboard-live-col-cost,\s*\.dashboard-live-col-latency,\s*\.dashboard-live-col-action \{\s*width: 8%;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-user,\s*\.dashboard-live-col-policy,\s*\.dashboard-live-col-status \{\s*width: 12%;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-project,\s*\.dashboard-live-col-model \{\s*width: 16%;\s*\}/
+  );
+  expect(styles).not.toContain("width: calc(100% / 9);");
+});
+
+test("live request status header and cell contents are center aligned", async () => {
+  const styles = await readFile(dashboardStylesSourceUrl, "utf8");
+  const focusStyles = styles.slice(
+    styles.indexOf("/* Live Requests focus workspace and request detail presentation */")
+  );
+
+  expect(focusStyles).toMatch(
+    /\.dashboard-live-requests-table th,\s*\.dashboard-live-requests-table td \{[^}]*text-align: left;/
+  );
+  expect(focusStyles).toMatch(
+    /\.dashboard-live-provider-model \{[^}]*justify-content: flex-start;/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-requests-table th:nth-child\(8\),\s*\.dashboard-live-requests-table td:nth-child\(8\) \{[^}]*text-align: center;/
+  );
 });
 
 test("tenant chat live requests preserve provider identity for provider icons", async () => {

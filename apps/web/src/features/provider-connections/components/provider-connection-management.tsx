@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronDown, KeyRound, PlugZap, Plus, Trash2 } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -1132,7 +1133,7 @@ export function ProviderConnectionManagement({
   }
 
   return (
-    <main className="console-content management-line-content">
+    <ManagementPage title={text.title}>
       {tenantChatSetupContext ? (
         <Alert className="mb-4" variant="neutral">
           <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -1151,12 +1152,6 @@ export function ProviderConnectionManagement({
           </AlertDescription>
         </Alert>
       ) : null}
-      <section className="dashboard-hero provider-page-header">
-        <div>
-          <h2>{text.title}</h2>
-        </div>
-      </section>
-
       {model.source === "fixture" ? (
         <Alert variant="warning">
           <AlertDescription>
@@ -1430,7 +1425,7 @@ export function ProviderConnectionManagement({
           </DialogContent>
         </Dialog>
       ) : null}
-    </main>
+    </ManagementPage>
   );
 }
 

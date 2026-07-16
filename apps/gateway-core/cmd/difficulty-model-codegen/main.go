@@ -56,7 +56,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "read generated output:", readErr)
 			return 1
 		}
-		if !bytes.Equal(existing, generated) {
+		if !bytes.Equal(normalizeGeneratedLineEndings(existing), normalizeGeneratedLineEndings(generated)) {
 			fmt.Fprintln(stderr, "generated output does not match canonical artifact")
 			return 1
 		}
@@ -72,4 +72,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func normalizeGeneratedLineEndings(payload []byte) []byte {
+	return bytes.ReplaceAll(payload, []byte("\r\n"), []byte("\n"))
 }
