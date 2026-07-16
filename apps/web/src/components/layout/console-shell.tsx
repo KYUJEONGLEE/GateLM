@@ -11,9 +11,7 @@ import {
   Globe2,
   LayoutDashboard,
   LogOut,
-  Maximize2,
   MessageSquareText,
-  Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
@@ -230,9 +228,6 @@ const shellText: Record<
     settings: string;
     light: string;
     dark: string;
-    presentationMode: string;
-    presentationModeOff: string;
-    presentationModeOn: string;
     theme: string;
     planned: string;
     tenant: string;
@@ -260,9 +255,6 @@ const shellText: Record<
     openUserProfile: "Open user profile menu",
     organization: "Organization",
     planned: "planned",
-    presentationMode: "Expanded layout",
-    presentationModeOff: "Expand",
-    presentationModeOn: "Standard",
     role: "Role",
     sessionRequired: "Session required",
     settings: "Settings",
@@ -291,9 +283,6 @@ const shellText: Record<
     openUserProfile: "사용자 프로필 메뉴 열기",
     organization: "조직",
     planned: "예정",
-    presentationMode: "확장 보기",
-    presentationModeOff: "확장",
-    presentationModeOn: "기본",
     role: "역할",
     sessionRequired: "로그인 필요",
     settings: "설정",
@@ -308,7 +297,6 @@ const shellText: Record<
 
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
-const presentationModeStorageKey = "gatelm_console_presentation_mode";
 const notificationReadStorageKey = "gatelm_console_header_notification_read_ids";
 
 // No notification API exists yet; these are preview notifications for the console header demo.
@@ -428,7 +416,6 @@ export function ConsoleShell({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
-  const [isPresentationMode, setIsPresentationMode] = useState(false);
 
   const notifications = useMemo(
     () =>
@@ -461,12 +448,6 @@ export function ConsoleShell({
   }, []);
 
   useEffect(() => {
-    const initialPresentationMode = readStoredPresentationMode();
-    setIsPresentationMode(initialPresentationMode);
-    applyPresentationMode(initialPresentationMode);
-  }, []);
-
-  useEffect(() => {
     setReadNotificationIds(readStoredNotificationIds());
   }, []);
 
@@ -491,15 +472,6 @@ export function ConsoleShell({
     setTheme(nextTheme);
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
-  }
-
-  function togglePresentationMode() {
-    setIsPresentationMode((current) => {
-      const next = !current;
-      applyPresentationMode(next);
-      writeStoredPresentationMode(next);
-      return next;
-    });
   }
 
   async function logout() {
@@ -720,14 +692,12 @@ export function ConsoleShell({
       <div className="console-main">
         <ConsoleTopbarActions
           currentUser={currentUser}
-          isPresentationMode={isPresentationMode}
           isLoggingOut={isLoggingOut}
           locale={locale}
           notifications={notifications}
           onLogout={logout}
           onMarkAllNotificationsRead={markAllNotificationsRead}
           onSelectTheme={selectTheme}
-          onTogglePresentationMode={togglePresentationMode}
           tenantLabel={tenantLabel}
           text={text}
           theme={theme}
@@ -741,28 +711,24 @@ export function ConsoleShell({
 
 function ConsoleTopbarActions({
   currentUser,
-  isPresentationMode,
   isLoggingOut,
   locale,
   notifications,
   onLogout,
   onMarkAllNotificationsRead,
   onSelectTheme,
-  onTogglePresentationMode,
   tenantLabel,
   text,
   theme,
   unreadNotificationCount
 }: {
   currentUser: CurrentUser | null;
-  isPresentationMode: boolean;
   isLoggingOut: boolean;
   locale: Locale;
   notifications: AdminNotification[];
   onLogout: () => Promise<void>;
   onMarkAllNotificationsRead: () => void;
   onSelectTheme: (theme: ConsoleTheme) => void;
-  onTogglePresentationMode: () => void;
   tenantLabel: string;
   text: (typeof shellText)[Locale];
   theme: ConsoleTheme;
@@ -930,25 +896,6 @@ function ConsoleTopbarActions({
                 </button>
               </div>
             </div>
-            <div className="console-user-settings-row">
-              <span>{text.presentationMode}</span>
-              <button
-                aria-pressed={isPresentationMode}
-                className="console-presentation-mode-button"
-                data-active={isPresentationMode}
-                onClick={onTogglePresentationMode}
-                type="button"
-              >
-                {isPresentationMode ? (
-                  <Minimize2 aria-hidden="true" size={15} strokeWidth={2.2} />
-                ) : (
-                  <Maximize2 aria-hidden="true" size={15} strokeWidth={2.2} />
-                )}
-                <span>
-                  {isPresentationMode ? text.presentationModeOn : text.presentationModeOff}
-                </span>
-              </button>
-            </div>
           </section>
 
           <div className="console-user-menu-actions">
@@ -1088,28 +1035,4 @@ function writeStoredTheme(theme: ConsoleTheme) {
   }
 
   window.localStorage.setItem(themeStorageKey, theme);
-}
-
-function applyPresentationMode(isEnabled: boolean) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.documentElement.dataset.presentationMode = String(isEnabled);
-}
-
-function readStoredPresentationMode() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage.getItem(presentationModeStorageKey) === "true";
-}
-
-function writeStoredPresentationMode(isEnabled: boolean) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(presentationModeStorageKey, String(isEnabled));
 }

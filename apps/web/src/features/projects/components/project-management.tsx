@@ -4,6 +4,7 @@ import { Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import type {
@@ -192,10 +193,7 @@ export function ProjectManagement({
   ) : null;
 
   return (
-    <main className="console-content management-line-content">
-      <header className="project-page-header">
-        <h2>{text.title}</h2>
-      </header>
+    <ManagementPage title={text.title}>
 
       {model.source === "fixture" ? (
         <Alert variant="warning">
@@ -313,7 +311,7 @@ export function ProjectManagement({
           </div>
         )}
       </section>
-    </main>
+    </ManagementPage>
   );
 }
 

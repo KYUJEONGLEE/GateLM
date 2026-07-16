@@ -261,7 +261,8 @@ test("Chat App routing reuses the original routing policy presentation", async (
   const source = await readFile(componentSourceUrl, "utf8");
   const styles = await readFile(stylesUrl, "utf8");
 
-  expect(source).toContain('className="console-content management-line-content tenant-management-content tenant-chat-app-content"');
+  expect(source).toContain('import { ManagementPage } from "@/components/layout/management-page"');
+  expect(source).toContain('className="tenant-management-content tenant-chat-app-content"');
   expect(styles).toMatch(/\.tenant-chat-app-content \{[\s\S]*?width: 100%;[\s\S]*?max-width: none;[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   expect(source).toContain('className="tenant-routing-switch"');
   expect(source).toContain('className="tenant-routing-model-card"');
@@ -374,6 +375,9 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(styles).toMatch(/\.tenant-routing-fallback-title-row \.tenant-routing-fallback-kicker \{[^}]*font-size: 16px;/);
   expect(styles).toMatch(/\.tenant-management-content #tenant-routing-model-title \{[^}]*font-size: 30px;/);
   expect(styles).toMatch(/\.tenant-routing-model-heading-copy > p \{[^}]*margin-top: 20px;/);
+  expect(styles).toMatch(/\.tenant-routing-title-with-help \{[^}]*grid-template-columns: auto 16px;[^}]*gap: 5px;/);
+  expect(styles).toMatch(/\.tenant-routing-info-button \{[^}]*width: 16px;[^}]*height: 16px;/);
+  expect(styles).toMatch(/\.tenant-routing-info-button svg \{[^}]*width: 13px;[^}]*height: 13px;/);
   expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-title-with-help \{[^}]*grid-template-columns: auto 20px;[^}]*gap: 8px;/);
   expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-info-button \{[^}]*width: 20px;[^}]*height: 20px;/);
   expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-info-button svg \{[^}]*width: 20px;[^}]*height: 20px;/);

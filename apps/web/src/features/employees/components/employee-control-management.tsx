@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -2244,10 +2245,7 @@ export function EmployeeControlManagement({
   }
 
   return (
-    <main className="console-content management-line-content employee-console">
-      <header className="project-page-header employee-hero">
-        <h2>{text.title}</h2>
-      </header>
+    <ManagementPage className="employee-console" title={text.title}>
 
       {model.source === "fixture" ? (
         <Alert variant="warning">
@@ -2971,7 +2969,7 @@ export function EmployeeControlManagement({
           </div>
         </DialogContent>
       </Dialog>
-    </main>
+    </ManagementPage>
   );
 }
 

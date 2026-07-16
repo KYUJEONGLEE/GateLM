@@ -102,7 +102,7 @@ export function RoutingPolicyPanel({
     <>
       <section
         aria-labelledby="policy-auto-routing-title"
-        className="tenant-routing-model-card"
+        className="tenant-routing-model-card policy-auto-routing-card"
         data-routing-mode={draftValues.routingPolicy.mode}
       >
         <header className="tenant-routing-model-heading">

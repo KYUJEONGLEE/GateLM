@@ -1323,39 +1323,6 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
-.console-presentation-mode-button {
-  display: inline-flex;
-  min-width: 82px;
-  min-height: 30px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-subtle);
-  color: var(--text-muted);
-  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
-  cursor: pointer;
-}
-
-.console-presentation-mode-button:hover {
-  border-color: var(--border-strong);
-  color: var(--foreground);
-}
-
-.console-presentation-mode-button:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-.console-presentation-mode-button[data-active="true"] {
-  border-color: color-mix(in srgb, var(--primary) 46%, var(--border));
-  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
-  color: var(--primary);
-}
-
 .console-user-menu-action {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
@@ -9125,38 +9092,17 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-latency-cell {
-  display: grid;
-  min-width: 0;
-  max-width: 100%;
-  gap: 6px;
-  margin: 0;
   font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  vertical-align: middle;
 }
 
-.request-log-latency-cell > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1px;
-}
-
-.request-log-latency-cell dt,
-.request-log-latency-cell dd {
+.request-log-latency-cell > span {
+  display: block;
   overflow: hidden;
-  margin: 0;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.request-log-latency-cell dt {
-  color: var(--request-log-muted);
-  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
-  font-weight: var(--font-weight-medium);
-}
-
-.request-log-latency-cell dd {
-  color: var(--request-log-text);
-  font-weight: var(--font-weight-semibold);
 }
 
 .request-log-project-pill {
@@ -9240,6 +9186,8 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-name-primary {
+  width: 50%;
+  min-width: 0;
   font-weight: var(--font-weight-regular);
 }
 
@@ -20583,6 +20531,85 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   max-width: 1020px;
 }
 
+.project-policy-console-content {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  align-content: start;
+}
+
+.project-policy-console-content .management-page-heading {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.project-policy-console-content .policy-section-toolbar,
+.project-policy-console-content .policy-settings-list,
+.project-policy-console-content .policy-general-layout,
+.project-policy-console-content
+  .project-policy-general-tab.management-line-content
+  .project-detail-panel,
+.project-policy-console-content
+  .project-policy-general-tab.management-line-content
+  > .project-admin-section,
+.project-policy-console-content
+  .project-policy-general-tab.management-line-content
+  > .team-section,
+.project-policy-console-content
+  .policy-general-layout
+  .project-policy-budget-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  justify-self: stretch;
+}
+
+.project-policy-console-content
+  .policy-auto-routing-card
+  .tenant-routing-model-heading-copy
+  > p {
+  margin-top: 6px;
+}
+
+.project-policy-console-content
+  .policy-auto-routing-card
+  .tenant-routing-switch-control {
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+
+.project-policy-console-content
+  .policy-auto-routing-card
+  .tenant-routing-mode-label {
+  min-width: 30px;
+  font-size: var(--font-size-sm);
+}
+
+.project-policy-console-content
+  .policy-auto-routing-card
+  .tenant-routing-switch[data-slot="switch"] {
+  width: 56px;
+  height: 32px;
+}
+
+.project-policy-console-content
+  .policy-auto-routing-card
+  .tenant-routing-switch
+  [data-slot="switch-thumb"] {
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+}
+
+.project-policy-console-content
+  .policy-auto-routing-card
+  .tenant-routing-switch:is([data-checked], [aria-checked="true"])
+  [data-slot="switch-thumb"] {
+  left: 27px;
+}
+
 .project-policy-general-tab.management-line-content
   .project-detail-panel
   .project-detail-form {
@@ -20598,6 +20625,17 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   gap: 24px;
   width: 100%;
   max-width: 1020px;
+}
+
+.project-policy-console-content
+  .project-policy-general-tab.management-line-content
+  .project-detail-general-content,
+.project-policy-console-content
+  .project-policy-general-tab.management-line-content
+  .project-detail-form {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 
 .project-policy-general-tab.management-line-content
@@ -20617,8 +20655,8 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 .project-policy-general-tab.management-line-content
   > .gateway-api-key-section
   .gateway-api-key-heading h3 {
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
+  font-size: calc(var(--font-size-xl) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
 }
 
 .project-policy-general-tab.management-line-content .project-general-name-field,
@@ -20655,7 +20693,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   > span {
   color: var(--text-muted);
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
 }
 
 .project-policy-general-tab.management-line-content
@@ -20667,8 +20705,8 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   border: 0;
   background: transparent;
   color: var(--foreground);
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
   outline: 0;
 }
 
@@ -20702,8 +20740,8 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 .project-general-budget-input > span {
   color: var(--foreground);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
 }
 
 .project-policy-general-tab.management-line-content
@@ -20719,7 +20757,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   border: 0;
   background: transparent;
   color: var(--foreground);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   outline: 0;
 }
 
@@ -20727,7 +20765,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   .project-general-budget-input
   input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
 }
 
 .project-general-status-input > span {
@@ -20767,7 +20805,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 .budget-policy-card-header strong {
   color: var(--foreground);
   font-size: calc(var(--font-size-lg) + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
 }
 
 .budget-policy-card-header p {
@@ -20850,8 +20888,8 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   gap: 3px;
   color: var(--foreground);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(24px + var(--global-font-lift));
-  font-weight: var(--font-weight-bold);
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
 }
 
 .budget-warning-value input {
@@ -21065,15 +21103,17 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   table-layout: fixed;
 }
 
-.dashboard-live-col-time { width: 9%; }
-.dashboard-live-col-user { width: 12%; }
-.dashboard-live-col-project { width: 14%; }
-.dashboard-live-col-model { width: 18%; }
-.dashboard-live-col-status { width: 11%; }
-.dashboard-live-col-policy { width: 13%; }
-.dashboard-live-col-latency { width: 8%; }
-.dashboard-live-col-cost { width: 8%; }
-.dashboard-live-col-action { width: 7%; }
+.dashboard-live-col-time,
+.dashboard-live-col-user,
+.dashboard-live-col-project,
+.dashboard-live-col-model,
+.dashboard-live-col-cost,
+.dashboard-live-col-policy,
+.dashboard-live-col-latency,
+.dashboard-live-col-status,
+.dashboard-live-col-action {
+  width: calc(100% / 9);
+}
 
 .dashboard-live-requests-table thead {
   position: sticky;
@@ -21086,9 +21126,11 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 .dashboard-live-requests-table th,
 .dashboard-live-requests-table td {
   height: 52px;
+  min-width: 0;
   padding: 8px 11px;
   overflow: hidden;
   font-size: calc(0.8125rem + var(--global-font-lift));
+  text-align: left;
   text-overflow: ellipsis;
 }
 
@@ -21234,6 +21276,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
 .dashboard-live-provider-model {
   width: 100%;
   min-width: 0;
+  justify-content: flex-start;
   line-height: 1.35;
 }
 
@@ -21257,13 +21300,6 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   font-weight: var(--font-weight-semibold);
   line-height: 1.25;
   white-space: nowrap;
-}
-
-.dashboard-live-requests-table th:nth-child(7),
-.dashboard-live-requests-table td:nth-child(7),
-.dashboard-live-requests-table th:nth-child(8),
-.dashboard-live-requests-table td:nth-child(8) {
-  text-align: right;
 }
 
 .dashboard-live-policy-badges {
@@ -23294,5 +23330,122 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
     min-width: 0;
     max-width: none;
     box-sizing: border-box;
+  }
+}
+
+/* Shared responsive frame for every primary Management screen. */
+.management-page.console-content {
+  --management-font-title: calc(var(--font-size-3xl) + var(--global-font-lift));
+  --management-font-section: calc(var(--font-size-xl) + var(--global-font-lift));
+  --management-font-body: calc(var(--font-size-base) + var(--global-font-lift));
+  --management-font-label: calc(var(--font-size-sm) + var(--global-font-lift));
+
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  justify-self: stretch;
+  gap: clamp(14px, 1.25vw, 20px);
+  box-sizing: border-box;
+  padding:
+    clamp(20px, 2.2vw, 32px)
+    clamp(16px, 2.6vw, 40px)
+    clamp(32px, 4vw, 56px);
+}
+
+.management-page.console-content > *,
+.management-page.management-line-content > :is(
+  .console-panel,
+  .provider-line-panel,
+  .credential-line-panel,
+  .team-section
+) {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.management-page-header {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.management-page-heading {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.management-page-header h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--management-font-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.project-policy-console-content .policy-section-tabs button,
+.project-policy-console-content .policy-actions button {
+  font-size: var(--management-font-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.project-policy-console-content :is(
+  .panel-heading p,
+  .team-section-header p,
+  .policy-alert
+) {
+  font-size: var(--management-font-label);
+  line-height: var(--line-height-normal);
+}
+
+.project-policy-console-content :is(input, select, textarea, button) {
+  font-family: inherit;
+}
+
+.management-page-header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.management-page .tenant-page-header-rule {
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 760px) {
+  .management-page.console-content {
+    gap: 14px;
+    padding: 20px 16px 36px;
+  }
+
+  .management-page-header {
+    min-height: 56px;
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .management-page-header h2 {
+    font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
+  }
+
+  .management-page-header-actions,
+  .management-page-header-actions > * {
+    width: 100%;
   }
 }

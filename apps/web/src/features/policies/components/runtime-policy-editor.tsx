@@ -12,6 +12,7 @@ import {
   type ReactNode
 } from "react";
 import { useRouter } from "next/navigation";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,44 @@ const policySections: PolicySection[] = [
 ];
 
 const RuntimePolicyMovedBudgetContext = createContext<ReactNode>(null);
+
+function RuntimePolicyPageFrame({
+  breadcrumbItems,
+  children,
+  fullWidth,
+  title
+}: {
+  breadcrumbItems: RuntimePolicyEditorProps["breadcrumbItems"];
+  children: ReactNode;
+  fullWidth: boolean;
+  title: string;
+}) {
+  const breadcrumb = breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null;
+
+  if (fullWidth) {
+    return (
+      <ManagementPage
+        className="policy-console-content project-policy-console-content"
+        headerEyebrow={breadcrumb}
+        title={title}
+      >
+        {children}
+      </ManagementPage>
+    );
+  }
+
+  return (
+    <main className="console-content">
+      <section className="dashboard-hero">
+        <div>
+          {breadcrumb}
+          <h2>{title}</h2>
+        </div>
+      </section>
+      {children}
+    </main>
+  );
+}
 
 export function RuntimePolicyMovedBudgetSlot() {
   return useContext(RuntimePolicyMovedBudgetContext);
@@ -476,6 +515,7 @@ export function RuntimePolicyEditor({
   breadcrumbItems,
   children,
   employeeSection,
+  fullWidth = false,
   generalBudgetPanelPlacement = "afterChildren",
   generalFooter,
   hideStreamingTab = false,
@@ -827,14 +867,11 @@ export function RuntimePolicyEditor({
   }
 
   return (
-    <main className="console-content">
-      <section className="dashboard-hero">
-        <div>
-          {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
-          <h2>{text.title}</h2>
-        </div>
-      </section>
-
+    <RuntimePolicyPageFrame
+      breadcrumbItems={breadcrumbItems}
+      fullWidth={fullWidth}
+      title={text.title}
+    >
       {model.source === "fixture" ? (
         <Alert variant="warning">
           <AlertDescription>
@@ -972,6 +1009,6 @@ export function RuntimePolicyEditor({
       ) : null}
 
       {renderActivePolicyPanel()}
-    </main>
+    </RuntimePolicyPageFrame>
   );
 }
