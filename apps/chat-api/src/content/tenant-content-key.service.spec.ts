@@ -10,8 +10,12 @@ describe('TenantContentKeyService readiness', () => {
   });
 
   it('fails closed when a durable row references an unavailable reader version', async () => {
+    const persistedKeys = keySet([1, 2]);
     const service = new TenantContentKeyService(
-      prismaReferences(),
+      prismaReferences([
+        wrappedContentKey(persistedKeys, 'tenant', 1, 1),
+        wrappedContentKey(persistedKeys, 'tenant', 2, 2),
+      ]),
       provider(keySet([2])) as WrappingKeyProvider,
     );
 
@@ -19,12 +23,30 @@ describe('TenantContentKeyService readiness', () => {
   });
 
   it('accepts active and grace versions required by durable rows', async () => {
+    const availableKeys = keySet([1, 2]);
     const service = new TenantContentKeyService(
-      prismaReferences(),
-      provider(keySet([1, 2])) as WrappingKeyProvider,
+      prismaReferences([
+        wrappedContentKey(availableKeys, 'tenant', 1, 1),
+        wrappedContentKey(availableKeys, 'tenant', 2, 2),
+      ]),
+      provider(availableKeys) as WrappingKeyProvider,
     );
 
     await expect(service.isReady()).resolves.toBe(true);
+  });
+
+  it('fails closed when the configured key material changed under the same version', async () => {
+    const persistedKeys = keySet([1, 2]);
+    const replacedKeys = keySet([1, 2], 20);
+    const service = new TenantContentKeyService(
+      prismaReferences([
+        wrappedContentKey(persistedKeys, 'tenant', 1, 1),
+        wrappedContentKey(persistedKeys, 'tenant', 2, 2),
+      ]),
+      provider(replacedKeys) as WrappingKeyProvider,
+    );
+
+    await expect(service.isReady()).resolves.toBe(false);
   });
 
   it('zeroes an unwrapped tenant key when rewrap persistence fails', async () => {
@@ -60,13 +82,13 @@ describe('TenantContentKeyService readiness', () => {
   });
 });
 
-function prismaReferences(): PrismaService {
+function prismaReferences(contentKeys: ReturnType<typeof wrappedContentKey>[]): PrismaService {
   return {
     tenantChatContentKeyState: {
       findFirst: jest.fn().mockResolvedValue({ wrappingKeyRollbackFloor: 2 }),
     },
     tenantChatContentKey: {
-      groupBy: jest.fn().mockResolvedValue([{ wrappingKeyVersion: 1 }, { wrappingKeyVersion: 2 }]),
+      findMany: jest.fn().mockResolvedValue(contentKeys),
     },
     tenantChatConversation: {
       groupBy: jest.fn().mockResolvedValue([{ creationBindingKeyVersion: 1 }]),
@@ -81,13 +103,38 @@ function provider(value: WrappingKeySet): Pick<WrappingKeyProvider, 'load'> {
   return { load: jest.fn().mockResolvedValue(value) };
 }
 
-function keySet(versions: number[]): WrappingKeySet {
+function keySet(versions: number[], offset = 0): WrappingKeySet {
   return Object.freeze({
-    activeVersion: 2,
+    activeVersion: Math.max(...versions),
     keys: new Map(versions.map((version) => [version, Object.freeze({
       version,
-      wrappingKey: Buffer.alloc(32),
-      integrityKey: Buffer.alloc(32),
+      wrappingKey: Buffer.alloc(32, version + offset),
+      integrityKey: Buffer.alloc(32, version + offset + 8),
     })])),
   });
+}
+
+function wrappedContentKey(
+  keySetValue: WrappingKeySet,
+  tenantId: string,
+  contentKeyVersion: number,
+  wrappingKeyVersion: number,
+) {
+  const wrapping = keySetValue.keys.get(wrappingKeyVersion);
+  if (!wrapping) throw new Error('test wrapping key is missing');
+  const encrypted = contentCrypto.wrapTenantKey(
+    Buffer.alloc(32, contentKeyVersion + 32),
+    wrapping.wrappingKey,
+    tenantId,
+    contentKeyVersion,
+    wrappingKeyVersion,
+  );
+  return {
+    tenantId,
+    contentKeyVersion,
+    wrappingKeyVersion,
+    wrappedKey: Uint8Array.from(encrypted.wrappedKey),
+    wrapNonce: Uint8Array.from(encrypted.wrapNonce),
+    wrapTag: Uint8Array.from(encrypted.wrapTag),
+  };
 }

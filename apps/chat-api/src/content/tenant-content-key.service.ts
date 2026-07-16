@@ -31,9 +31,16 @@ export class TenantContentKeyService {
           select: { wrappingKeyRollbackFloor: true },
           orderBy: { wrappingKeyRollbackFloor: 'desc' },
         }),
-        this.prisma.tenantChatContentKey.groupBy({
-          by: ['wrappingKeyVersion'],
+        this.prisma.tenantChatContentKey.findMany({
           where: { status: { not: 'retired' } },
+          select: {
+            tenantId: true,
+            contentKeyVersion: true,
+            wrappingKeyVersion: true,
+            wrappedKey: true,
+            wrapNonce: true,
+            wrapTag: true,
+          },
         }),
         this.prisma.tenantChatConversation.groupBy({ by: ['creationBindingKeyVersion'] }),
         this.prisma.tenantChatTurn.groupBy({ by: ['requestBindingKeyVersion'] }),
@@ -44,7 +51,13 @@ export class TenantContentKeyService {
         ...conversations.map((row) => row.creationBindingKeyVersion),
         ...turns.map((row) => row.requestBindingKeyVersion),
       ]);
-      return [...requiredVersions].every((version) => keySet.keys.has(version));
+      if (![...requiredVersions].every((version) => keySet.keys.has(version))) return false;
+
+      for (const row of contentKeys) {
+        const key = unwrap(row, keySet);
+        key.fill(0);
+      }
+      return true;
     } catch {
       return false;
     }
