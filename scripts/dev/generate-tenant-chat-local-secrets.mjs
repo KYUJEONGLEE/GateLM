@@ -74,7 +74,7 @@ export async function resolveTenantChatLocalSecretsTarget(options = {}) {
   try {
     ({ stdout } = await execFileAsync(
       'git',
-      ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+      ['-C', cwd, 'rev-parse', '--git-common-dir'],
       { encoding: 'utf8', windowsHide: true },
     ));
   } catch {

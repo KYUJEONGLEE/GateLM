@@ -72,7 +72,7 @@ async function gitCommonDirectory(repositoryRoot) {
   const { promisify } = await import('node:util');
   const { stdout } = await promisify(execFile)(
     'git',
-    ['-C', repositoryRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    ['-C', repositoryRoot, 'rev-parse', '--git-common-dir'],
     { encoding: 'utf8', windowsHide: true },
   );
   return stdout.trim();
