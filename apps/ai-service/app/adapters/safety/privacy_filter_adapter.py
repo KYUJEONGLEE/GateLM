@@ -25,6 +25,12 @@ KOELECTRA_PRIVACY_NER_MODEL = "amoeba04/koelectra-small-v3-privacy-ner"
 KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME = "amoeba04--koelectra-small-v3-privacy-ner"
 KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME = f"{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}-quantized"
 KOELECTRA_PRIVACY_NER_SOURCE = "koelectra_privacy_ner"
+GATELM_KOELECTRA_PII_NER_MODEL = "gatelm/koelectra-small-v3-pii-ner"
+GATELM_KOELECTRA_PII_NER_LOCAL_DIR_NAME = "gatelm--koelectra-small-v3-pii-ner"
+GATELM_KOELECTRA_PII_NER_QUANTIZED_LOCAL_DIR_NAME = (
+    f"{GATELM_KOELECTRA_PII_NER_LOCAL_DIR_NAME}-quantized"
+)
+GATELM_KOELECTRA_PII_NER_SOURCE = "gatelm_koelectra_pii_ner"
 PRIVACY_FILTER_RUNTIME_TRANSFORMERS = "transformers"
 PRIVACY_FILTER_RUNTIME_ONNX = "onnx"
 PRIVACY_FILTER_RUNTIMES = {
@@ -59,6 +65,20 @@ KOELECTRA_PRIVACY_NER_LABEL_MAP: Mapping[str, str] = {
     "rrn": "resident_registration_number",
     "tel": "phone_number",
     "telephone": "phone_number",
+}
+
+GATELM_KOELECTRA_PII_NER_LABEL_MAP: Mapping[str, str] = {
+    "addr": "postal_address",
+    "address": "postal_address",
+    "ema": "email",
+    "email": "email",
+    "org": "organization_name",
+    "organization": "organization_name",
+    "per": "person_name",
+    "person": "person_name",
+    "phn": "phone_number",
+    "phone": "phone_number",
+    "rrn": "resident_registration_number",
 }
 
 DEFAULT_LABEL_MAP: Mapping[str, str] = {
@@ -702,6 +722,8 @@ def normalize_label(raw_label: str, label_map: Mapping[str, str] | None = None) 
 def label_map_for_model(model_name: str) -> Mapping[str, str]:
     if _is_default_privacy_filter_model(model_name):
         return OPENAI_PRIVACY_FILTER_LABEL_MAP
+    if _is_gatelm_koelectra_pii_ner_model(model_name):
+        return GATELM_KOELECTRA_PII_NER_LABEL_MAP
     if _is_koelectra_privacy_ner_model(model_name):
         return KOELECTRA_PRIVACY_NER_LABEL_MAP
     return {}
@@ -717,13 +739,17 @@ def runtime_for_value(value: str) -> str:
 def source_for_model(model_name: str) -> str:
     if _is_default_privacy_filter_model(model_name):
         return DEFAULT_PRIVACY_FILTER_SOURCE
+    if _is_gatelm_koelectra_pii_ner_model(model_name):
+        return GATELM_KOELECTRA_PII_NER_SOURCE
     if _is_koelectra_privacy_ner_model(model_name):
         return KOELECTRA_PRIVACY_NER_SOURCE
     return "huggingface_token_classifier"
 
 
 def aggregation_strategy_for_model(model_name: str) -> str:
-    if _is_koelectra_privacy_ner_model(model_name):
+    if _is_koelectra_privacy_ner_model(model_name) or _is_gatelm_koelectra_pii_ner_model(
+        model_name
+    ):
         return "none"
     return "simple"
 
@@ -731,6 +757,8 @@ def aggregation_strategy_for_model(model_name: str) -> str:
 def public_model_id_for_model(model_name: str) -> str:
     if _is_default_privacy_filter_model(model_name):
         return DEFAULT_PRIVACY_FILTER_MODEL
+    if _is_gatelm_koelectra_pii_ner_model(model_name):
+        return GATELM_KOELECTRA_PII_NER_MODEL
     if _is_koelectra_privacy_ner_model(model_name):
         return KOELECTRA_PRIVACY_NER_MODEL
     return model_name
@@ -777,6 +805,19 @@ def _local_koelectra_privacy_ner_onnx_dir(model_name: str) -> Path | None:
                 / KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME,
             ]
         )
+    elif normalized_model_name == GATELM_KOELECTRA_PII_NER_MODEL:
+        candidates.extend(
+            [
+                Path(".cache")
+                / "onnx"
+                / GATELM_KOELECTRA_PII_NER_QUANTIZED_LOCAL_DIR_NAME,
+                Path("apps")
+                / "ai-service"
+                / ".cache"
+                / "onnx"
+                / GATELM_KOELECTRA_PII_NER_QUANTIZED_LOCAL_DIR_NAME,
+            ]
+        )
     for candidate in candidates:
         if (
             (candidate / "config.json").is_file()
@@ -793,6 +834,17 @@ def _is_koelectra_privacy_ner_model(model_name: str) -> bool:
         normalized == KOELECTRA_PRIVACY_NER_MODEL
         or normalized.endswith(f"/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}")
         or normalized.endswith(f"/{KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME}")
+    )
+
+
+def _is_gatelm_koelectra_pii_ner_model(model_name: str) -> bool:
+    normalized = model_name.replace("\\", "/").rstrip("/")
+    return (
+        normalized == GATELM_KOELECTRA_PII_NER_MODEL
+        or normalized.endswith(f"/{GATELM_KOELECTRA_PII_NER_LOCAL_DIR_NAME}")
+        or normalized.endswith(
+            f"/{GATELM_KOELECTRA_PII_NER_QUANTIZED_LOCAL_DIR_NAME}"
+        )
     )
 
 

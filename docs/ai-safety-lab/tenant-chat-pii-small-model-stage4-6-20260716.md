@@ -59,6 +59,24 @@
 
 한 조건이라도 실패하면 모델 파일은 실험 산출물로만 보존하고 6단계로 승격하지 않는다.
 
+#### 5단계 실제 결과
+
+`monologg/koelectra-small-v3-discriminator` revision `7488f8db0f208beff4a1f3f9bb3ed04650a89ed7`을 합성 train 459건으로 3 epoch fine-tuning했다. holdout은 학습 중 열지 않았고, 학습 완료 후 QInt8 artifact 평가에서 처음 열었다.
+
+| 항목 | 결과 | 판정 |
+|---|---:|---|
+| validation span micro F1 | 0.153846 | 실패 |
+| QInt8 model 크기 | 14,595,587 bytes | 통과 |
+| holdout span TP / FP / FN | 0 / 0 / 11 | 실패 |
+| holdout micro recall / F1 | 0 / 산출 불가 | 실패 |
+| rules-only 대비 103건 exact pass 변화 | 0 | 실패 |
+| semantic 유형 추가 기여 | 0건 | 실패 |
+| 신규 screening FP | 0건 | 통과 |
+| direct warm p50 / p95 | 6.205ms / 13.591ms | 통과 |
+| 평가 프로세스 peak RSS | 347.914MiB | 통과 |
+
+결론은 `속도와 크기는 적합하지만 품질은 배포 불가`다. 이 모델은 Git-ignored 실험 artifact로만 남기고 Tenant Chat enforce에는 연결하지 않는다. 합성 후보 평가는 production promotion evidence가 아니며, 현재 데이터 규모로 품질 gate까지 실패했으므로 production gate를 실행할 근거도 없다.
+
 ### 2.3 6단계 — Tenant Chat 제한 배포
 
 5단계 gate를 통과한 QInt8 모델만 AI Service sidecar의 단일 primary 모델로 설정한다. 1.6GB OpenAI 모델과 기존 품질 No-Go KoELECTRA를 동시에 로드하지 않는다.
@@ -79,7 +97,7 @@
 | 단계 | 상태 | 비고 |
 |---|---|---|
 | 4단계 | 구현·검증 완료 | 합성 span dataset builder와 manifest 계약 완료 |
-| 5단계 | 진행 전 | 실제 fine-tuning·ONNX/QInt8·promotion gate 필요 |
-| 6단계 | 진행 전 | 5단계 통과 모델이 없으므로 아직 배포 금지 |
+| 5단계 | 구현·실측 완료, No-Go | 13.9MiB·p95 13.591ms지만 holdout TP 0으로 품질 gate 실패 |
+| 6단계 | 배포 차단 | 5단계 통과 모델이 없으므로 enforce 활성화 금지, rules-only 유지 |
 
-현재 서비스 안전 기본값은 계속 rules-only다. 4단계 완료는 학습 준비가 끝났다는 뜻이며, 정확한 모델이 완성됐다는 뜻은 아니다.
+현재 서비스 안전 기본값은 계속 rules-only다. 이번 결과는 작은 모델이 곧 정확한 모델을 뜻하지 않으며, backbone 교체보다 먼저 학습 데이터와 학습 전략을 개선해야 함을 보여준다.

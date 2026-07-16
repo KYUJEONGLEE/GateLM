@@ -13,6 +13,8 @@ from pathlib import Path
 
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator
 from app.adapters.safety.privacy_filter_adapter import (
+    GATELM_KOELECTRA_PII_NER_MODEL,
+    GATELM_KOELECTRA_PII_NER_SOURCE,
     DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_MODEL,
     KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
@@ -93,6 +95,29 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertNotIn("person_name", openai_adapter.supported_detector_types)
         self.assertIn("resident_registration_number", koelectra_adapter.supported_detector_types)
         self.assertNotIn("organization_name", koelectra_adapter.supported_detector_types)
+
+    def test_gatelm_koelectra_model_has_separate_identity_and_six_type_contract(self) -> None:
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        self.assertEqual(adapter.source, GATELM_KOELECTRA_PII_NER_SOURCE)
+        self.assertEqual(
+            public_model_id_for_model(adapter.model_name),
+            GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+        self.assertEqual(
+            adapter.supported_detector_types,
+            {
+                "email",
+                "organization_name",
+                "person_name",
+                "phone_number",
+                "postal_address",
+                "resident_registration_number",
+            },
+        )
 
     def test_adapter_dynamic_batch_preserves_input_order_and_counts_one_invocation(self) -> None:
         classifier = FakeBatchClassifier()
