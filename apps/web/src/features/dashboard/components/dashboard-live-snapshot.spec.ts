@@ -100,7 +100,7 @@ test("live requests show the executed model, end-to-end latency, and readable co
   expect(source).not.toContain("row.routingReason");
 });
 
-test("live request columns place cost before status and share the table width equally", async () => {
+test("live request columns place cost before status and size columns by content length", async () => {
   const [source, styles] = await Promise.all([
     readFile(liveRequestViewSourceUrl, "utf8"),
     readFile(dashboardStylesSourceUrl, "utf8")
@@ -117,8 +117,15 @@ test("live request columns place cost before status and share the table width eq
     /LiveRequestRouting[\s\S]*formatLiveRequestCostUsd[\s\S]*PolicyBadges[\s\S]*formatResponseTimeSeconds[\s\S]*statusTone/
   );
   expect(styles).toMatch(
-    /\.dashboard-live-col-time,[\s\S]*\.dashboard-live-col-action \{\s*width: calc\(100% \/ 9\);\s*\}/
+    /\.dashboard-live-col-time,\s*\.dashboard-live-col-cost,\s*\.dashboard-live-col-latency,\s*\.dashboard-live-col-action \{\s*width: 8%;\s*\}/
   );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-user,\s*\.dashboard-live-col-policy,\s*\.dashboard-live-col-status \{\s*width: 12%;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-project,\s*\.dashboard-live-col-model \{\s*width: 16%;\s*\}/
+  );
+  expect(styles).not.toContain("width: calc(100% / 9);");
 });
 
 test("live request headers and cell contents are all left aligned", async () => {

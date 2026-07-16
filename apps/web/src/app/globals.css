@@ -21104,15 +21104,21 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 .dashboard-live-col-time,
-.dashboard-live-col-user,
-.dashboard-live-col-project,
-.dashboard-live-col-model,
 .dashboard-live-col-cost,
-.dashboard-live-col-policy,
 .dashboard-live-col-latency,
-.dashboard-live-col-status,
 .dashboard-live-col-action {
-  width: calc(100% / 9);
+  width: 8%;
+}
+
+.dashboard-live-col-user,
+.dashboard-live-col-policy,
+.dashboard-live-col-status {
+  width: 12%;
+}
+
+.dashboard-live-col-project,
+.dashboard-live-col-model {
+  width: 16%;
 }
 
 .dashboard-live-requests-table thead {
