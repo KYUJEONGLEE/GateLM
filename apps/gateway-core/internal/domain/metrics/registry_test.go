@@ -108,6 +108,8 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		TenantChatCompletionTotal,
 		TenantChatUsageReconciliationTotal,
 		TenantChatAccountingTransactionSeconds,
+		RagEmbeddingRequestsTotal,
+		RagEmbeddingInputTokensTotal,
 	} {
 		assertMetricsContains(t, output, "# TYPE "+metricName)
 	}
@@ -148,6 +150,12 @@ func assertMetricsDoesNotContainForbiddenLabels(t *testing.T, output string) {
 		"complexity_score",
 		"artifact_hash",
 		"model_ref",
+		"filename",
+		"document_title",
+		"document_id",
+		"chunk",
+		"query",
+		"api_key",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			t.Fatalf("metrics output must not contain forbidden label %q\noutput:\n%s", labelName, output)
