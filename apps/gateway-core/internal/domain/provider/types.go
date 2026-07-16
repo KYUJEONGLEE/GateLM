@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,6 +14,8 @@ type ChatMessage struct {
 
 type ChatCompletionRequest struct {
 	RequestID           string                       `json:"-"`
+	DispatchTracker     *DispatchTracker             `json:"-"`
+	BeforeDispatch      func(context.Context) error  `json:"-"`
 	Model               string                       `json:"model"`
 	Messages            []ChatMessage                `json:"messages"`
 	Temperature         *float64                     `json:"temperature,omitempty"`
@@ -22,6 +25,34 @@ type ChatCompletionRequest struct {
 	StreamOptions       *ChatCompletionStreamOptions `json:"stream_options,omitempty"`
 	Metadata            json.RawMessage              `json:"metadata,omitempty"`
 	GateLM              json.RawMessage              `json:"gate_lm,omitempty"`
+}
+
+// DispatchTracker records the bounded provider-dispatch evidence exposed by an
+// adapter. Observed means the adapter method was entered; Started means control
+// was about to be handed to the configured HTTP client.
+type DispatchTracker struct {
+	observed atomic.Bool
+	started  atomic.Bool
+}
+
+func (t *DispatchTracker) Observe() {
+	if t != nil {
+		t.observed.Store(true)
+	}
+}
+
+func (t *DispatchTracker) MarkStarted() {
+	if t != nil {
+		t.started.Store(true)
+	}
+}
+
+func (t *DispatchTracker) Observed() bool {
+	return t != nil && t.observed.Load()
+}
+
+func (t *DispatchTracker) Started() bool {
+	return t != nil && t.started.Load()
 }
 
 type ChatCompletionStreamOptions struct {

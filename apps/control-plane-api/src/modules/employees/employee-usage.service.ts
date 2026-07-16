@@ -66,6 +66,11 @@ type EmployeeUsageCoverageRow = {
   hasRawUsage: boolean;
 };
 
+export type EmployeeCostTotalPeriod = {
+  from: Date;
+  to: Date;
+};
+
 @Injectable()
 export class EmployeeUsageService {
   constructor(private readonly prisma: PrismaService) {}
@@ -139,6 +144,44 @@ export class EmployeeUsageService {
               : 'rollup',
       },
     };
+  }
+
+  async readEmployeeCostTotals(
+    tenantId: string,
+    employeeIds: string[],
+    periods: EmployeeCostTotalPeriod[],
+  ): Promise<Array<Map<string, number>>> {
+    await this.assertTenantExists(tenantId);
+    const validatedPeriods = periods.map((period) =>
+      this.validatePeriod(period.from.toISOString(), period.to.toISOString()),
+    );
+    if (employeeIds.length === 0) {
+      return validatedPeriods.map(() => new Map<string, number>());
+    }
+
+    const rowsByPeriod = await Promise.all(
+      validatedPeriods.map((period) =>
+        this.queryRows(
+          tenantId,
+          period.from,
+          period.to,
+          'cost',
+          'desc',
+          employeeIds.length,
+          null,
+          employeeIds,
+        ),
+      ),
+    );
+    return rowsByPeriod.map(
+      (rows) =>
+        new Map(
+          rows.map((row) => [
+            row.employeeId,
+            Number(row.projectCostMicroUsd + row.tenantChatCostMicroUsd),
+          ]),
+        ),
+    );
   }
 
   private validatePeriod(fromValue: string, toValue: string) {
@@ -221,6 +264,7 @@ export class EmployeeUsageService {
     order: EmployeeUsageOrder,
     limit: number,
     cursor: EmployeeUsageCursor | null,
+    employeeIds?: string[],
   ): Promise<EmployeeUsageDatabaseRow[]> {
     const sortColumn = {
       cost: 'cost_micro_usd',
@@ -234,6 +278,13 @@ export class EmployeeUsageService {
           WHERE sort_value ${Prisma.raw(cursorOperator)} ${BigInt(cursor.value)}
              OR (sort_value = ${BigInt(cursor.value)}
                  AND employee_id::text > ${cursor.employeeId})
+        `
+      : Prisma.sql``;
+    const employeeFilter = employeeIds
+      ? Prisma.sql`
+          AND employee.id IN (
+            ${Prisma.join(employeeIds.map((id) => Prisma.sql`${id}::uuid`))}
+          )
         `
       : Prisma.sql``;
 
@@ -385,6 +436,7 @@ export class EmployeeUsageService {
         LEFT JOIN tenant_chat_usage chat ON chat.employee_id = employee.id
         WHERE employee."tenantId" = ${tenantId}::uuid
           AND employee."deletedAt" IS NULL
+          ${employeeFilter}
       ), ranked AS (
         SELECT employee_metrics.*,
           ${Prisma.raw(sortColumn)} AS sort_value,

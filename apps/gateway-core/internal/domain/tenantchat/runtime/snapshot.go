@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/masking"
 
@@ -190,6 +191,15 @@ type StreamingPolicy struct {
 	FinalEventRequired bool `json:"finalEventRequired"`
 }
 
+func (policy StreamingPolicy) Duration() (time.Duration, error) {
+	const maxSeconds = int64(^uint64(0)>>1) / int64(time.Second)
+	seconds := int64(policy.MaxDurationSeconds)
+	if seconds <= 0 || seconds > maxSeconds {
+		return 0, fmt.Errorf("tenant chat streaming duration is out of range")
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
 func ParseSnapshot(document []byte) (Snapshot, error) {
 	schema, err := snapshotSchema()
 	if err != nil {
@@ -207,6 +217,9 @@ func ParseSnapshot(document []byte) (Snapshot, error) {
 	var snapshot Snapshot
 	if err := json.Unmarshal(document, &snapshot); err != nil {
 		return Snapshot{}, fmt.Errorf("decode typed tenant chat runtime snapshot: %w", err)
+	}
+	if _, err := snapshot.Policies.Streaming.Duration(); err != nil {
+		return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: %w", err)
 	}
 	pricingByRoute := make(map[string]PriceRoute, len(snapshot.Pricing.Routes))
 	for index, route := range snapshot.Pricing.Routes {

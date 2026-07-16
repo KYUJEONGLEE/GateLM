@@ -101,6 +101,11 @@ func (s *ReservationStore) RecordUsageReceipt(
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if reservation.State == "reserved" {
+		if err = s.confirmEmployeePendingAttempt(
+			ctx, tx, reservation.Pending.Request, reservation.Pending.ID, receipt.AttemptNo, usage,
+		); err != nil {
+			return tenantchat.UsageReceiptResult{}, err
+		}
 		return s.finishPendingReceipt(ctx, tx, reservation, receipt, now)
 	}
 	return s.finishLateReceipt(ctx, tx, reservation, attempt, receipt, cost, now)
@@ -261,6 +266,13 @@ func (s *ReservationStore) finishPendingReceipt(
 	); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	lastAttemptNo := attempts[len(attempts)-1].AttemptNo
+	if err = s.settleEmployeeCost(
+		ctx, tx, reservation.Pending.Request, reservation.Pending.ID,
+		lastAttemptNo, reservation.Pending.Reservation.LedgerVersion,
+	); err != nil {
+		return tenantchat.UsageReceiptResult{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -385,6 +397,16 @@ func (s *ReservationStore) finishLateReceipt(
 		ctx, tx, reservation.Pending.Request, eventID, eventVersion, "usage_settled", payload, now,
 	); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	usage := tenantchat.ConfirmedUsage{
+		InputTokens: receipt.InputTokens, OutputTokens: receipt.OutputTokens,
+		CacheReadInputTokens: receipt.CacheReadInputTokens,
+	}
+	if err = s.applyEmployeeLateReceipt(
+		ctx, tx, reservation.Pending.Request, reservation.Pending.ID, receipt.AttemptNo,
+		usage, reservation.Pending.Reservation.LedgerVersion, now,
+	); err != nil {
+		return tenantchat.UsageReceiptResult{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable

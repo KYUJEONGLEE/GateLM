@@ -2592,7 +2592,7 @@ export class RuntimeConfigsService {
       },
       routing: {
         autoRoutingEligible: this.isModelSelectedForRouting(modelRef, document),
-        costTier: 'balanced',
+        costTier: this.toModelCostTier(modelRef, document),
         fallbackPriority: this.toModelFallbackPriority(modelRef, document),
       },
     };
@@ -2793,6 +2793,29 @@ export class RuntimeConfigsService {
       ),
     ).filter((index) => index >= 0);
     return indexes.length > 0 ? Math.min(...indexes) : 100;
+  }
+
+  private toModelCostTier(
+    modelRef: string,
+    document: ActiveRuntimeConfigResponseDto,
+  ): 'low' | 'balanced' | 'premium' {
+    if (modelRef === BUILTIN_MOCK_MODEL_REF) return 'balanced';
+
+    let simplePrimary = false;
+    let complexPrimary = false;
+    let configuredFallback = false;
+    for (const category of RUNTIME_CONFIG_ROUTING_CATEGORIES) {
+      for (const difficulty of ROUTING_DIFFICULTIES) {
+        const index = document.routingPolicy.routes[category][difficulty].modelRefs.indexOf(modelRef);
+        if (index < 0) continue;
+        if (index > 0) configuredFallback = true;
+        if (index === 0 && difficulty === 'simple') simplePrimary = true;
+        if (index === 0 && difficulty === 'complex') complexPrimary = true;
+      }
+    }
+    if (configuredFallback || (simplePrimary && complexPrimary)) return 'balanced';
+    if (simplePrimary) return 'low';
+    return 'premium';
   }
 
   private isSafeCatalogToken(value: unknown): value is string {

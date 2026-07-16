@@ -28,6 +28,36 @@ type Error struct {
 	Err  error
 }
 
+// NotStartedError marks an error that occurred before control was handed to
+// the provider HTTP client. Callers may safely release a pre-call reservation
+// only when this bounded evidence is present.
+type NotStartedError struct {
+	Err error
+}
+
+func NewNotStartedError(err error) *NotStartedError {
+	return &NotStartedError{Err: NewError(ErrorKindError, ErrorCodeProviderError, err)}
+}
+
+func (e *NotStartedError) Error() string {
+	if e == nil || e.Err == nil {
+		return ErrorCodeProviderError
+	}
+	return e.Err.Error()
+}
+
+func (e *NotStartedError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func IsDispatchNotStarted(err error) bool {
+	var notStarted *NotStartedError
+	return errors.As(err, &notStarted)
+}
+
 func NewError(kind ErrorKind, code string, err error) *Error {
 	if code == "" {
 		code = safeCodeForKind(kind)
