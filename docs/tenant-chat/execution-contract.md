@@ -164,7 +164,7 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 
 ### 5.1 Content wrapping/integrity key 운영
 
-Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다.
+Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다. 고정 Compose project의 PostgreSQL volume을 여러 Git worktree가 공유하므로 local helper와 Compose wrapper는 Git common directory의 상위 checkout에 있는 단일 gitignored `.secrets/tenant-chat`을 사용한다. 명시적 `--target`을 쓰는 production/self-host 경로는 이 local 기본 경로 해석을 사용하지 않는다.
 
 ```json
 {
@@ -183,6 +183,7 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - create/turn row는 binding MAC과 함께 `bindingKeyVersion`을 저장한다. replay는 저장된 grace integrity key로 검증하며 active key로 다시 계산해 conflict를 만들지 않는다.
 - 새 version을 모든 reader에 먼저 배포하고 active version을 올린다. Chat API는 DEK rewrap과 DB rollback floor 증가를 같은 짧은 transaction으로 적용하며 crypto 연산 중 transaction을 열어두지 않는다.
 - active version이 DB floor보다 낮거나 필요한 grace key가 file에 없으면 readiness, encrypt/decrypt, cursor/idempotency를 fail closed한다.
+- readiness는 각 non-retired persisted DEK를 해당 wrapping key로 실제 unwrap하고 즉시 zeroize한다. 같은 version 번호에 다른 key material이 배포된 경우 `readyz`는 `503`이며 배포 health gate를 통과하지 못한다.
 
 ## 6. RuntimeSnapshot digest와 pricing
 
