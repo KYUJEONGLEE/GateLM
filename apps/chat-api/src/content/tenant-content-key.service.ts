@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { TenantKeyResolver } from '@gatelm/tenant-content-crypto';
 
 import { PrismaService } from '@/database/prisma.service';
 
@@ -17,7 +18,7 @@ type ContentKeyRow = Readonly<{
 }>;
 
 @Injectable()
-export class TenantContentKeyService {
+export class TenantContentKeyService implements TenantKeyResolver {
   constructor(
     private readonly prisma: PrismaService,
     private readonly provider: WrappingKeyProvider,
