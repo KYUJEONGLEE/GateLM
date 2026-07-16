@@ -123,37 +123,6 @@ directory to AI Service. `AI_SERVICE_INSTALL_ML_DEPS=true` is mandatory for
 this opt-in because an image without the pinned ONNX dependencies cannot load
 the verified files.
 
-### Microsoft Azure AI Language PII container
-
-For the Microsoft container backend, keep the normal install values unchanged
-and fill these values only in the untracked `.env`:
-
-```text
-AZURE_PII_EULA=accept
-AZURE_PII_BILLING_ENDPOINT=https://<resource>.cognitiveservices.azure.com
-AZURE_PII_API_KEY=<resource-key>
-AZURE_PII_BUILD_AI_SERVICE=true
-AZURE_PII_TARGET_P95_MS=500
-```
-
-`accept` is an operator decision after reviewing the Microsoft container
-terms. The billing endpoint and key are required by the Microsoft image even
-though analyzed text stays inside the self-host network. Never commit the
-resource key or paste it into support logs.
-
-After the base stack is installed, start and verify the backend:
-
-```bash
-bash scripts/azure-pii-up.sh
-bash scripts/azure-pii-smoke.sh
-```
-
-The start script uses the digest-pinned Microsoft image, builds the checked-out
-AI Service source without local ONNX dependencies, waits for `/ready`, then
-recreates AI Service and Gateway with the Azure backend in enforce mode.
-The smoke script checks model-sourced Korean person, organization, and email
-detections and reports only aggregate warm p50/p95 latency.
-
 Demo seed is disabled for self-host/prod-like deployments. Keep demo UUID values only for non-prod local seed experiments:
 
 ```text

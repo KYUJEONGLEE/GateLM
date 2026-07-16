@@ -10,7 +10,6 @@ It runs these services:
 | Control Plane API | `gatelm/control-plane-api:2.1.0` |
 | Gateway Core | `gatelm/gateway-core:2.1.0` |
 | AI Service | `gatelm/ai-service:2.1.0` |
-| Microsoft PII container (optional) | digest-pinned `mcr.microsoft.com/azure-cognitive-services/textanalytics/pii` |
 | PostgreSQL | `postgres:16` |
 | Redis | `redis:7-alpine` |
 | Mock Provider | `python:3.12-alpine` |
@@ -106,8 +105,6 @@ bash scripts/smoke-test.sh
 | 2 | `scripts/migrate.sh` | runs Control Plane Prisma migrations and Gateway runtime table SQL |
 | 3 | `scripts/smoke-test.sh` | checks health endpoints, sends one Gateway request, and verifies the Request Log after real runtime resources exist |
 | Optional | `scripts/pii-model-smoke.sh` | checks the pinned OpenAI model is the only loaded model, verifies the ML allowlist, and runs one sanitized hybrid masking probe |
-| Optional | `scripts/azure-pii-up.sh` | starts the Microsoft PII container and reconnects AI Service and Gateway to it |
-| Optional | `scripts/azure-pii-smoke.sh` | verifies Korean person/organization/email model coverage and enforces the warm p95 target |
 
 PII models are disabled by default. When enabled, the one-shot
 `pii-model-init` container downloads the bundle from a URL read through a
@@ -118,27 +115,6 @@ The default runtime leaves the additional-model list blank, loads only the
 pinned OpenAI model, and limits ML candidates to `phone_number` and `secret`.
 The release archive still contains every manifest-pinned artifact, so bundle
 download and integrity verification are unchanged by this runtime selection.
-
-The recommended production comparison path uses the separate
-`docker-compose.azure-pii.yml` override. It leaves the normal self-host install
-unchanged until the operator explicitly accepts the Microsoft container terms
-and supplies an Azure Language billing endpoint and key in the untracked
-`.env`. The Microsoft container is bound to host loopback only; AI Service uses
-the internal `http://azure-pii:5000` address, and Gateway continues to call only
-AI Service. By default the start script builds AI Service from the checked-out
-source without local ONNX dependencies. Set `AZURE_PII_BUILD_AI_SERVICE=false`
-only when the selected prebuilt image already contains this Azure adapter.
-
-```bash
-bash scripts/azure-pii-up.sh
-bash scripts/azure-pii-smoke.sh
-```
-
-The smoke test never prints request text, response text, detected values, or
-credentials. It requires model-sourced Korean person name, organization name,
-and email detections, then measures 20 warm requests and fails when p95 exceeds
-`AZURE_PII_TARGET_P95_MS` (default `500`). Do not route production traffic to
-this path until both coverage and latency pass.
 
 The Gateway runtime SQL lives in:
 
