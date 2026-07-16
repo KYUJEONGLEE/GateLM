@@ -82,7 +82,11 @@
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
           "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
           "cachePolicy": { "$ref": "#/components/schemas/CachePolicy" },
-          "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" }
+          "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" },
+          "cacheEnabled": {
+            "type": "boolean",
+            "description": "Compatibility toggle. Current authoring clients use cachePolicy."
+          }
         }
       },
       "CachePolicy": {
@@ -236,7 +240,7 @@
       "ActiveSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes", "cachePolicy", "safetyPolicy"],
+        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes", "cachePolicy", "safetyPolicy", "cacheEnabled"],
         "properties": {
           "snapshotId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "version": { "type": "integer", "minimum": 1 },
@@ -250,6 +254,7 @@
           "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
           "cachePolicy": { "$ref": "#/components/schemas/CachePolicy" },
           "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" },
+          "cacheEnabled": { "type": "boolean" },
           "publishedAt": { "type": "string", "format": "date-time" },
           "pricingStatus": { "type": "string", "enum": ["current", "update_available", "unavailable"] }
         }

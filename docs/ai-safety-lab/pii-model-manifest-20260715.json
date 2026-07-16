@@ -1,0 +1,41 @@
+{
+  "manifestVersion": "tenant-chat-pii-models.v1",
+  "generatedAt": "2026-07-15T00:00:00+09:00",
+  "hashAlgorithm": "SHA-256",
+  "models": [
+    {
+      "modelId": "openai/privacy-filter",
+      "revision": "7ffa9a043d54d1be65afb281eddf0ffbe629385b",
+      "runtimeDirectory": "models/openai--privacy-filter",
+      "license": "Apache-2.0",
+      "files": [
+        {"path": "config.json", "bytes": 3039, "sha256": "b2b26a4a4a000639ad30b0c264adbefe365bdb567fbd7bb27303b8c438375bd1"},
+        {"path": "tokenizer.json", "bytes": 27868174, "sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3"},
+        {"path": "tokenizer_config.json", "bytes": 234, "sha256": "6c14af9ce1a284d3c3c5146b26efe4cd589c68e1dd4e9d94455606ec911ba774"},
+        {"path": "viterbi_calibration.json", "bytes": 372, "sha256": "bbc8611ef08a55ed72d64856cbbbb9a91db8dfa881f0a92e2afbad6e4bbc775a"},
+        {"path": "onnx/model_quantized.onnx", "bytes": 162239, "sha256": "a325fb5341567a73c94e91ec5e49060d38d9b16111f518ad34773039a0c9c098"},
+        {"path": "onnx/model_quantized.onnx_data", "bytes": 1618042064, "sha256": "50f4c8c7f3c27fbc1fe16d4f74f6f7c3b74ba8f18a262e8b6911854c64c33a6d"}
+      ]
+    },
+    {
+      "modelId": "amoeba04/koelectra-small-v3-privacy-ner",
+      "revision": "9f4e2fd9e35b12bcdb5fc334ac31be4399cb4281",
+      "runtimeDirectory": "models/amoeba04--koelectra-small-v3-privacy-ner-quantized",
+      "license": "Apache-2.0",
+      "conversion": "Optimum ONNX token-classification export followed by ONNX Runtime dynamic QInt8 quantization",
+      "files": [
+        {"path": "config.json", "bytes": 1733, "sha256": "8595ec9b495ea716adda11730223257d3835377b9d12b5bbd7f1fe79fb850f36"},
+        {"path": "model.onnx", "bytes": 14560872, "sha256": "77662411a461dd996f79bb42a6fbdf9a1eaa9d2480d82e4a128c3486ff4317e2"},
+        {"path": "special_tokens_map.json", "bytes": 132, "sha256": "3c3507f36dff57bce437223db3b3081d1e2b52ec3e56ee55438193ecb2c94dd6"},
+        {"path": "tokenizer.json", "bytes": 814850, "sha256": "d5c7a9a8996aca4fee55a3664381b012bd7dbb3e190061b2591c02502b7171b6"},
+        {"path": "tokenizer_config.json", "bytes": 1414, "sha256": "35f88592880dee61248e34227481e5fa8fb143c67808f87f98965304056907b1"},
+        {"path": "vocab.txt", "bytes": 263327, "sha256": "6e886927dfcecd22029b1ba80c10a1374740259c1067fc3a28d964b7ae2d55a7"}
+      ],
+      "unquantizedModel": {
+        "path": "model.onnx",
+        "bytes": 56449283,
+        "sha256": "eb99bedfe2c9cb98a780eea514ab9642e59d55a17930e69b9d8a4ec3c450ceff"
+      }
+    }
+  ]
+}

@@ -84,15 +84,22 @@ function isActivationPayload(
     return false;
   }
   const record = value as Record<string, unknown>;
-  return (
-    Object.keys(record).length === 5 &&
+  const hasValidRouting =
     (record.routingMode === "auto" || record.routingMode === "manual") &&
     typeof record.manualModelRef === "string" &&
     MODEL_KEY_PATTERN.test(record.manualModelRef) &&
-    isRoutingMatrix(record.routes) &&
+    isRoutingMatrix(record.routes);
+  if (!hasValidRouting) {
+    return false;
+  }
+  const keys = Object.keys(record);
+  const hasCurrentPolicyPayload =
+    keys.length === 5 &&
     isCachePolicy(record.cachePolicy) &&
-    isSafetyPolicy(record.safetyPolicy)
-  );
+    isSafetyPolicy(record.safetyPolicy);
+  const hasCompatibilityCacheToggle =
+    keys.length === 4 && typeof record.cacheEnabled === "boolean";
+  return hasCurrentPolicyPayload || hasCompatibilityCacheToggle;
 }
 
 function isCachePolicy(value: unknown) {

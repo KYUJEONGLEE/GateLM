@@ -164,6 +164,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   snapshot_version bigint NOT NULL,
   snapshot_digest text NOT NULL,
   pricing_version bigint NOT NULL,
+  cache_outcome text NOT NULL,
   state text NOT NULL DEFAULT 'reserved',
   reserved_tokens bigint NOT NULL DEFAULT 0,
   reserved_cost_micro_usd bigint NOT NULL DEFAULT 0,
@@ -190,6 +191,7 @@ CREATE TABLE tenant_chat_usage_reservations (
     FOREIGN KEY (tenant_id, tenant_period_start, currency)
     REFERENCES tenant_chat_tenant_cost_periods (tenant_id, period_start, currency) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_reservation_state_check CHECK (state IN ('reserved', 'settled', 'released', 'unconfirmed')),
+  CONSTRAINT tenant_chat_reservation_cache_outcome_check CHECK (cache_outcome IN ('off', 'miss')),
   CONSTRAINT tenant_chat_reservation_currency_check CHECK (currency = 'USD'),
   CONSTRAINT tenant_chat_reservation_balances_check CHECK (
     reserved_tokens >= 0

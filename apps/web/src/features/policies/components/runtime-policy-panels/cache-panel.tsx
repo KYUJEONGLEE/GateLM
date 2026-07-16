@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronDown, DatabaseZap, FlaskConical } from "lucide-react";
+import { ChevronDown, FlaskConical } from "lucide-react";
 import { useState } from "react";
 
-import { Switch } from "@/components/ui/switch";
+import { ExactCacheToggleCard } from "@/features/policies/components/exact-cache-toggle-card";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
 import type {
@@ -69,26 +69,13 @@ export function CachePolicyControls({
       <div className="policy-cache-content">
         <section className="policy-cache-group">
           <h4>{text.cacheSettings}</h4>
-          <div
-            className="policy-cache-card"
-            data-enabled={enabled}
-          >
-            <div className="policy-cache-card-summary">
-              <span className="policy-cache-card-icon" aria-hidden="true">
-                <DatabaseZap size={19} />
-              </span>
-              <span className="policy-cache-card-copy">
-                <strong>{text.cacheEnabled}</strong>
-                <small>{text.cacheEnabledHint}</small>
-              </span>
-              <Switch
-                aria-label={text.cacheEnabled}
-                checked={enabled}
-                id="runtime-policy-cache-enabled"
-                onCheckedChange={onEnabledChange}
-              />
-            </div>
-          </div>
+          <ExactCacheToggleCard
+            enabled={enabled}
+            hint={text.cacheEnabledHint}
+            id="runtime-policy-cache-enabled"
+            onEnabledChange={onEnabledChange}
+            title={text.cacheEnabled}
+          />
           {showSemanticCache ? (
             <>
               <button

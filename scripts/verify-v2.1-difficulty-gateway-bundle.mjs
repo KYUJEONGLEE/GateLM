@@ -85,7 +85,7 @@ const defaultDockerfile = readFileSync(
   "utf8",
 );
 const e5Dockerfile = readFileSync(
-  path.join(rootDir, "infra/docker/gateway-core-e5-shadow.Dockerfile"),
+  path.join(rootDir, "infra/docker/gateway-core-e5-runtime.Dockerfile"),
   "utf8",
 );
 const prepareScript = readFileSync(
@@ -94,6 +94,22 @@ const prepareScript = readFileSync(
 );
 const verifyNativeScript = readFileSync(
   path.join(rootDir, "scripts/dev/verify-gateway-e5-shadow.ps1"),
+  "utf8",
+);
+const productionCompose = readFileSync(
+  path.join(rootDir, "deploy/aws-triage/docker-compose.yml"),
+  "utf8",
+);
+const productionDeployScript = readFileSync(
+  path.join(rootDir, "deploy/aws-triage/scripts/deploy-main.sh"),
+  "utf8",
+);
+const productionPrepareScript = readFileSync(
+  path.join(rootDir, "deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh"),
+  "utf8",
+);
+const ciWorkflow = readFileSync(
+  path.join(rootDir, ".github/workflows/ci.yml"),
   "utf8",
 );
 const holdoutReference = readFileSync(
@@ -117,6 +133,18 @@ const baselineWaiverIntegration = readFileSync(
   ),
   "utf8",
 );
+const gatewayMain = readFileSync(
+  path.join(rootDir, "apps/gateway-core/cmd/gateway/main.go"),
+  "utf8",
+);
+const tenantChatCompletionService = readFileSync(
+  path.join(rootDir, "apps/gateway-core/internal/services/tenantchat/completion/service.go"),
+  "utf8",
+);
+const tenantChatCompletionTest = readFileSync(
+  path.join(rootDir, "apps/gateway-core/internal/services/tenantchat/completion/service_test.go"),
+  "utf8",
+);
 if (!defaultDockerfile.includes("CGO_ENABLED=0") || defaultDockerfile.includes("difficulty_e5_onnx")) {
   throw new Error("default Gateway image must remain CGO-free and E5-inactive");
 }
@@ -124,21 +152,22 @@ for (const requiredText of [
   "COPY --from=difficulty_e5",
   "sha256sum --check",
   "-tags=difficulty_e5_onnx",
-  "GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true",
-  "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER=difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
+  "GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true",
+  "GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false",
+  "find . -type d -exec chmod 0555",
+  "find . -type f -exec chmod 0444",
 ]) {
   if (!e5Dockerfile.includes(requiredText)) {
     throw new Error(`optional Gateway E5 image omitted ${requiredText}`);
   }
 }
 for (const requiredText of [
-  "TestBaselineWaiverNativeRequestShadowE2E",
-  "DifficultySemanticShadowBaselineE2EWaiverV3",
-  "DifficultySemanticShadowReady",
-  "authoritative route changed",
+  "TestNativeRequestRuntimeE2E",
+  "WithDifficultySemanticRuntime",
+  "authoritative matrix cell",
 ]) {
   if (!baselineWaiverIntegration.includes(requiredText)) {
-    throw new Error(`Gateway baseline waiver native integration omitted ${requiredText}`);
+    throw new Error(`Gateway native shadow integration omitted ${requiredText}`);
   }
 }
 for (const requiredText of [
@@ -147,10 +176,9 @@ for (const requiredText of [
   "holdout-run-$run.json",
   "EvidenceOutput",
   ":/src/apps/gateway-core:ro",
-  "GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES=tenant_smoke/application_smoke",
-  "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
-  "difficulty E5 shadow initialized; product routing unchanged",
-  "TestBaselineWaiverNativeRequestShadowE2E",
+  "GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true",
+  "difficulty E5 hot-path runtime initialized",
+  "TestNativeRequestRuntimeE2E",
 ]) {
   if (!verifyNativeScript.includes(requiredText)) {
     throw new Error(`Gateway E5 native verifier omitted ${requiredText}`);
@@ -188,30 +216,103 @@ for (const requiredText of [
     throw new Error(`Gateway E5 bundle preparation omitted ${requiredText}`);
   }
 }
+if (!gatewayMain.includes("completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime)")) {
+  throw new Error("Tenant Chat completion must share the process-global Gateway difficulty runtime");
+}
+if (!tenantChatCompletionService.includes("routing.WithDifficultySemanticRuntime(difficultyRuntime)")) {
+  throw new Error("Tenant Chat routing must inject the shared difficulty runtime into SimpleRouter");
+}
+for (const requiredText of [
+  "TestServiceUsesSemanticDifficultyAcrossTenantChatRoutingMatrix",
+  "TestServiceFallsBackToRuleDifficultyWhenSemanticRuntimeIsNotReady",
+  "TestServiceSkipsSemanticRuntimeForTenantChatManualRoute",
+]) {
+  if (!tenantChatCompletionTest.includes(requiredText)) {
+    throw new Error(`Tenant Chat difficulty runtime coverage omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile",
+  "difficulty_e5: ../../.tmp/gateway-e5-runtime-bundle",
+  'GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "true"',
+  'GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100}',
+  'GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"',
+]) {
+  if (!productionCompose.includes(requiredText)) {
+    throw new Error(`production Gateway E5 Compose path omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  encoderManifest.sourceRevision,
+  expectedLock.tokenizerNativeArchiveSha256,
+  expectedLock.onnxRuntimePackageSha256,
+  "model.dynamic-qint8-matmul.onnx",
+  "sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256",
+]) {
+  if (!productionPrepareScript.includes(requiredText)) {
+    throw new Error(`production Gateway E5 bundle preparation omitted ${requiredText}`);
+  }
+}
+const prepareInvocation = 'bash "${gateway_e5_bundle_script}" "${repo_dir}"';
+const prepareInvocationIndex = productionDeployScript.indexOf(prepareInvocation);
+const gatewayBuildIndex = productionDeployScript.indexOf('compose build "${service}"');
+if (
+  prepareInvocationIndex < 0 ||
+  gatewayBuildIndex < 0 ||
+  prepareInvocationIndex > gatewayBuildIndex
+) {
+  throw new Error("production Gateway E5 bundle must be prepared before application image builds");
+}
+const releasePackagingMatch = /(?:^|\r?\n)[ \t]+release-packaging[ \t]*:/.exec(ciWorkflow);
+const releasePackagingIndex = releasePackagingMatch?.index ?? -1;
+const releasePackagingWorkflow =
+  releasePackagingIndex >= 0 ? ciWorkflow.slice(releasePackagingIndex) : "";
+const ciPrepareMatch =
+  /bash[ \t]+deploy\/aws-triage\/scripts\/prepare-gateway-e5-runtime-bundle\.sh[ \t]+(["']?)\$\{GITHUB_WORKSPACE\}\1/.exec(
+    releasePackagingWorkflow,
+  );
+const ciPrepareInvocationIndex = ciPrepareMatch?.index ?? -1;
+const ciReleaseBuildMatch =
+  /^[ \t]*-[ \t]*name[ \t]*:[ \t]*(["']?)Build release images\1[ \t]*\r?$/m.exec(
+    releasePackagingWorkflow,
+  );
+const ciReleaseBuildIndex = ciReleaseBuildMatch?.index ?? -1;
+if (
+  releasePackagingIndex < 0 ||
+  ciPrepareInvocationIndex < 0 ||
+  ciReleaseBuildIndex < 0 ||
+  ciPrepareInvocationIndex > ciReleaseBuildIndex
+) {
+  throw new Error("CI release packaging must prepare the Gateway E5 bundle before image builds");
+}
+if (!verifyNativeScript.includes("--user 1000:1000")) {
+  throw new Error("Gateway E5 image smoke must cover the production arbitrary UID boundary");
+}
 
 const commands = [
   {
-    name: "selected 118D generated bundle drift",
+    name: "selected 106D generated bundle drift",
     args: [
       "run",
       "./apps/gateway-core/cmd/difficulty-model-codegen",
       "-profile",
-      "gateway-shadow-118d",
+      "gateway-shadow-106d-model-path-5000",
       "-artifact",
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-b-106d.model-path-5000.shadow.v1.json",
       "-output",
-      "apps/gateway-core/internal/domain/routing/difficulty_model_118d_generated.go",
+      "apps/gateway-core/internal/domain/routing/difficulty_model_106d_generated.go",
       "-check",
     ],
   },
   {
-    name: "selected 118D codegen and inference tests",
+    name: "selected 106D codegen and inference tests",
     args: [
       "test",
       "./apps/gateway-core/internal/tools/difficultymodel",
       "./apps/gateway-core/cmd/difficulty-model-codegen",
       "./apps/gateway-core/internal/domain/routing",
       "./apps/gateway-core/internal/adapters/routing/e5onnx",
+      "./apps/gateway-core/internal/services/tenantchat/completion",
       "./apps/gateway-core/internal/config",
       "./apps/gateway-core/cmd/gateway",
     ],
@@ -234,4 +335,4 @@ for (const command of commands) {
   }
 }
 
-console.log("\nGateway shadow 118D bundle and optional E5 runtime verification passed.");
+console.log("\nGateway 106D bundle and authoritative optional E5 runtime verification passed.");

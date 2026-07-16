@@ -127,6 +127,7 @@ func (s *ReservationStore) FinalizeReleased(
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "released",
 		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+		CacheOutcome: reservation.CacheOutcome,
 	}, nil
 }
 
@@ -220,7 +221,7 @@ func (s *ReservationStore) FinalizePreCall(
 			RequestID: requestContext.RequestID, ReservationID: reservationID, State: "settled",
 			ConfirmedInputTokens: totals.InputTokens, ConfirmedOutputTokens: totals.OutputTokens,
 			ConfirmedCostMicroUSD: totals.CostMicroUSD, QuotaState: quotaState, BudgetState: budgetState,
-			LedgerVersion: nextVersion, Attempts: attempts,
+			LedgerVersion: nextVersion, CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 		}, nil
 	}
 	if err = persistReleased(
@@ -239,7 +240,8 @@ func (s *ReservationStore) FinalizePreCall(
 	}
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "released",
-		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion, Attempts: attempts,
+		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+		CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
 }
 
@@ -351,7 +353,8 @@ func (s *ReservationStore) FinalizeUnconfirmed(
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "unconfirmed",
 		UnconfirmedTokens:           reservation.ReservedTokens,
 		UnconfirmedExposureMicroUSD: reservation.ReservedCostMicroUSD,
-		QuotaState:                  quotaState, BudgetState: budgetState, LedgerVersion: nextVersion, Attempts: attempts,
+		QuotaState:                  quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+		CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
 }
 
@@ -609,7 +612,7 @@ func terminalUsageEventPayload(
 		unconfirmedCost = reservation.ReservedCostMicroUSD
 	}
 	payload := map[string]any{
-		"eventId": eventID, "schemaVersion": 1, "eventType": eventType, "eventVersion": eventVersion,
+		"eventId": eventID, "schemaVersion": 3, "eventType": eventType, "eventVersion": eventVersion,
 		"occurredAt": now.Format(time.RFC3339Nano), "aggregateId": requestContext.RequestID,
 		"requestId": requestContext.RequestID, "turnId": requestContext.TurnID,
 		"idempotencyKey": requestContext.IdempotencyKey, "reservationId": reservationID,
@@ -619,6 +622,7 @@ func terminalUsageEventPayload(
 			"timezone": userPeriod.Timezone, "currency": "USD",
 		},
 		"snapshotVersion": requestContext.Snapshot.Version, "pricingVersion": reservation.PricingVersion,
+		"cacheOutcome": reservation.CacheOutcome,
 		"quota": map[string]any{
 			"state": quotaState, "reservedTokensDelta": -reservation.ReservedTokens,
 			"confirmedInputTokensDelta": 0, "confirmedOutputTokensDelta": 0,

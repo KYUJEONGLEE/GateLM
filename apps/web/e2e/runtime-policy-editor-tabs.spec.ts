@@ -1,4 +1,10 @@
-import { expect, type APIRequestContext, type Page, test } from "@playwright/test";
+import {
+  expect,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+  test
+} from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
 const policyPath = "/tenants/tenant_demo_acme/policies";
@@ -97,12 +103,15 @@ test("routing roles persist and manual mode keeps the projected ten cells", asyn
     exact: true,
     name: "Auto routing"
   });
+  await expect(autoRoutingSwitch).toBeChecked();
+  await expectSwitchThumbAtActiveEdge(autoRoutingSwitch);
   await expect(async () => {
     if (await autoRoutingSwitch.isChecked()) {
       await autoRoutingSwitch.click();
     }
     await expect(autoRoutingSwitch).not.toBeChecked();
   }).toPass();
+  await expectSwitchThumbAtActiveEdge(autoRoutingSwitch);
   await expect(roleModels).toBeVisible();
 
   await page.getByRole("button", { name: /^Save draft/ }).click();
@@ -119,6 +128,7 @@ test("routing roles persist and manual mode keeps the projected ten cells", asyn
     }
     await expect(autoRoutingSwitch).toBeChecked();
   }).toPass();
+  await expectSwitchThumbAtActiveEdge(autoRoutingSwitch);
   await expect(roleModels).toBeVisible();
   await expect(routingPanel.getByLabel("Simple model", { exact: true })).toHaveValue(
     "mock-balanced"
@@ -144,6 +154,29 @@ test("policy editor exposes category tabs and category panels", async ({ page })
   await expect(page.locator("#policy-panel-routing")).toHaveCount(0);
   await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
 });
+
+async function expectSwitchThumbAtActiveEdge(switchControl: Locator) {
+  const geometry = await switchControl.evaluate((element) => {
+    const thumb = element.querySelector('[data-slot="switch-thumb"]');
+
+    if (!(thumb instanceof HTMLElement)) {
+      throw new Error("Switch thumb not found");
+    }
+
+    const trackBounds = element.getBoundingClientRect();
+    const thumbBounds = thumb.getBoundingClientRect();
+
+    return {
+      checked: element.getAttribute("aria-checked") === "true",
+      left: thumbBounds.left - trackBounds.left,
+      right: trackBounds.right - thumbBounds.right
+    };
+  });
+
+  expect(geometry.left).toBeGreaterThanOrEqual(2);
+  expect(geometry.right).toBeGreaterThanOrEqual(2);
+  expect(geometry.checked ? geometry.right : geometry.left).toBeLessThanOrEqual(4);
+}
 
 test("lazy policy tab panel mounts only for active tab and shows loading fallback", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);

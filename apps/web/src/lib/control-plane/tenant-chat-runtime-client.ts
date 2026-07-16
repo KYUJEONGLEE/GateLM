@@ -166,6 +166,7 @@ function isActiveSnapshot(value: unknown) {
     Number.isSafeInteger(record.version) &&
     Number.isSafeInteger(record.policyVersion) &&
     Number.isSafeInteger(record.pricingVersion) &&
+    typeof record.cacheEnabled === "boolean" &&
     (record.routingMode === "auto" || record.routingMode === "manual") &&
     typeof record.manualModelRef === "string" &&
     isRoutingMatrix(record.routes) &&

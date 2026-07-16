@@ -17,7 +17,7 @@ ARTIFACT_PATH = (
     / "routing_difficulty_model"
     / "artifacts"
     / "candidates"
-    / "difficulty-candidate-c-118d.owner-approved-500.v3.json"
+    / "difficulty-candidate-b-106d.model-path-5000.shadow.v1.json"
 )
 
 
@@ -37,28 +37,12 @@ class GatewayShadowGoParityTests(unittest.TestCase):
         self.assertTrue(np.all(norm > np.float32(1e-12)))
         projection = np.asarray(projection / norm, dtype=np.float32)
 
-        head_probabilities: list[float] = []
-        for head in artifact["semanticHeadParameters"]:
-            coefficient = np.asarray(head["coefficient"], dtype=np.float64)
-            intercept = np.asarray(head["intercept"], dtype=np.float64)
-            logits = np.asarray(projection, dtype=np.float64) @ coefficient.T + intercept
-            logits -= np.max(logits)
-            exponentials = np.exp(logits)
-            probabilities = exponentials / exponentials.sum()
-            head_probabilities.extend(float(value) for value in probabilities)
-
         rule = np.zeros(42, dtype=np.float64)
         rule[1] = 1.0
         rule[4] = 0.2
         rule[8] = 1.0
         rule[13] = 0.2
-        vector = np.concatenate(
-            [
-                rule,
-                projection.astype(np.float64),
-                np.asarray(head_probabilities, dtype=np.float64),
-            ]
-        )
+        vector = np.concatenate([rule, projection.astype(np.float64)])
         logit = float(
             np.dot(vector, np.asarray(artifact["weights"], dtype=np.float64))
             + artifact["bias"]
@@ -90,7 +74,11 @@ class GatewayShadowGoParityTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(
+            completed.returncode,
+            0,
+            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
+        )
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $composeFiles = @('-f', 'docker-compose.yml', '-f', 'scripts/dev/docker-compose.tenant-chat-execution.yml')
-$secretDirectory = Join-Path $root '.secrets\tenant-chat'
+$secretDirectory = $null
 $cleanDatabase = ('gatelm_tc_{0}_{1}' -f $PID, [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).ToLowerInvariant()
 $cleanDatabaseCreated = $false
 
@@ -80,6 +80,10 @@ try {
   foreach ($command in @('node', 'docker')) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "$command is required." }
   }
+  $secretResolution = (& node scripts/dev/generate-tenant-chat-local-secrets.mjs --resolve-target | Select-Object -Last 1) | ConvertFrom-Json
+  $secretDirectory = [string]$secretResolution.directory
+  if ([string]::IsNullOrWhiteSpace($secretDirectory)) { throw 'Tenant Chat shared secret directory resolution failed.' }
+  $env:GATELM_TENANT_CHAT_LOCAL_SECRET_DIR = $secretDirectory.Replace('\', '/')
   if (-not (Test-Path -LiteralPath $secretDirectory)) {
     & node scripts/dev/generate-tenant-chat-local-secrets.mjs
     if ($LASTEXITCODE -ne 0) { throw 'Tenant Chat secret generation failed.' }

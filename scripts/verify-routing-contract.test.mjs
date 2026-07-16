@@ -136,18 +136,18 @@ test("active routing documentation rejects an incomplete difficulty feature vect
   }
 });
 
-test("active routing documentation rejects a stale 0.5 difficulty threshold", () => {
+test("active routing documentation rejects a stale 0.5 authoritative difficulty threshold", () => {
   const rootDir = mkdtempSync(path.join(tmpdir(), "gatelm-routing-threshold-stale-"));
   try {
     writeContractFiles(rootDir, validSchema(), validPolicy());
     writeRoutingDocumentation(rootDir);
     const pipelinePath = path.join(rootDir, "docs", "routing", "classification-pipeline.md");
-    const stalePipeline = readFileSync(pipelinePath, "utf8").replaceAll("0.45", "0.5");
+    const stalePipeline = readFileSync(pipelinePath, "utf8").replaceAll("0.096", "0.5");
     writeFileSync(pipelinePath, stalePipeline, "utf8");
 
     const failures = verifyRoutingContract({ rootDir });
     assert.ok(
-      failures.some((failure) => failure.includes("decision boundary must be 0.45")),
+      failures.some((failure) => failure.includes("decision boundary must be 0.096")),
       `stale 0.5 difficulty threshold was accepted: ${JSON.stringify(failures)}`,
     );
   } finally {
@@ -346,7 +346,8 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
       "classification-pipeline.md",
       "difficulty-feature-vector-v1.md",
       "difficulty-threshold-v1 = 0.45",
-      "ComplexityScore >= 0.45",
+      "difficulty-threshold.model-path-5000.2026-07-16.v1 = 0.096",
+      "ComplexityScore >= 0.096",
       "Simple model",
       "Complex model",
       "Fallback model",
@@ -370,7 +371,8 @@ function writeRoutingDocumentation(rootDir, overrides = {}) {
       "-difficulty-shadow-model-artifact",
       "model path",
       "difficulty-threshold-v1 = 0.45",
-      "ComplexityScore >= 0.45",
+      "difficulty-threshold.model-path-5000.2026-07-16.v1 = 0.096",
+      "ComplexityScore >= 0.096",
     ].join("\n"),
     "docs/routing/difficulty-feature-vector-v1.md": [
       "difficulty-feature-vector.v1",

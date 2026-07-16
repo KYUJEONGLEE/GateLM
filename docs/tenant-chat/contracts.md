@@ -228,7 +228,8 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태, active 5×2 routing metadata와 편집 가능한 exact cache/safety detector 설정만 반환한다. cache key set, safety digest, credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
 - `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`의 현재 authoring wire는 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`, `cachePolicy`, `safetyPolicy`를 받는다. 각 routing cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
 - `cachePolicy`는 exact cache의 enabled, positive integer TTL, positive integer per-user entry limit만 편집한다. `safetyPolicy.detectorSet`은 1~10개의 unique detector와 `allow|redact|block` action을 받으며 주민등록번호/API key/Authorization header/JWT/private key detector는 `allow`를 거부한다. 이 관리자 wire는 raw prompt, raw response, raw detected value 또는 secret 원문을 받거나 반환하지 않는다.
-- `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 기존 deterministic rule-based classifier가 안전 처리된 메시지에서 category/difficulty를 계산한 뒤 해당 cell의 첫 eligible ref를 사용한다. offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
+- compatibility client는 `cachePolicy` 대신 boolean `cacheEnabled`만 보낼 수 있다. 이 경우 기존 TTL, 사용자별 엔트리 상한과 key-set ID를 보존하고 `exact/enabled` 또는 `off/disabled`만 전환한다. cache 입력을 모두 생략하면 기존 snapshot 정책을 보존하며 최초 활성화에서만 TTL 300초, 사용자당 100개와 operator-configured key-set ID의 Exact Cache를 기본 활성화한다. key-set ID는 관리자 응답에 노출하지 않는다.
+- `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 안전 처리된 메시지에서 기존 deterministic rule classifier로 category를 계산한다. Model-path difficulty는 활성화된 경우 일반 Gateway와 동일한 process-global 106D runtime을 사용하며 `ready` 결과가 `simple|complex` cell 선택에 권위를 가진다. Runtime 비활성화·초기화 실패·queue 포화·timeout·invalid result·inference 실패·panic과 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
 - compatibility 기간 동안 Control Plane은 과거 `providerConnectionId`+`modelKey` PUT을 동일 ref로 채운 manual 5×2 policy로 변환해 받을 수 있다. 이 legacy shape는 새 authoring wire가 아니며 RuntimeSnapshot의 명시적 Routing v2 bridge를 우회하지 않는다.
 - Provider family는 persisted `providerConfig.providerFamily`에서만 판정한다. client 입력이나 base URL 추론으로 가격을 선택하지 않는다.
 - 가격은 현재 유효한 shared `model_pricing_rules`를 먼저 사용하고, Tenant Chat bundled catalog를 fallback으로 사용한다. 둘 다 없거나 안전한 정수 micro-USD 단가로 표현할 수 없으면 모델을 비활성화하지 않고 `pricingStatus=unavailable`, `pricingSource=unavailable`, monetary rate 0으로 pin한다.
@@ -325,7 +326,7 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 | `TenantChatRequestAdmission` | `(tenantId,userId,idempotencyKey)` | content-free rate/concurrency admission |
 | `TenantChatUserTokenPeriod` | `(tenantId,userId,periodStart)` | confirmed/reserved token balance |
 | `TenantChatTenantCostPeriod` | `(tenantId,periodStart,currency)` | confirmed/reserved tenant cost balance |
-| `TenantChatUsageReservation` | `requestId` and `(tenantId,userId,idempotencyKey)` | request reserve/top-up/settle state machine |
+| `TenantChatUsageReservation` | `requestId` and `(tenantId,userId,idempotencyKey)` | request reserve/top-up/settle state machine and immutable `off|miss` cache provenance |
 | `TenantChatProviderAttempt` | `(requestId,attemptNo)` | primary/fallback billable attempt |
 | `TenantChatUsageLedgerEntry` | `(requestId,ledgerVersion)` | append-only reservation/settlement delta |
 | `TenantChatInvocationOutbox` | `(aggregateId,eventType,eventVersion)` | atomic projection handoff |
@@ -337,7 +338,7 @@ Correctness source는 period/reservation/ledger transaction이다. `TenantChatIn
 
 ### 9.2 Event
 
-Ledger transition outbox는 paired [usage settlement schema](./schemas/usage-settlement-event.schema.json)를 따른다. admission/rate/concurrency처럼 usage ledger 이전에 끝난 요청은 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)로 같은 outbox/projector를 사용한다.
+Ledger transition outbox의 최신 writer는 paired [usage settlement schema v3](./schemas/usage-settlement-event-v3.schema.json)를 따르고 reservation에 고정된 필수 `cacheOutcome=off|miss`를 모든 transition에 전달한다. Exact Cache hit는 usage reservation을 만들지 않으므로 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)의 `cacheOutcome=hit`을 사용한다. projector는 v1/v2를 계속 읽으며 해당 필드가 없으면 backfill된 reservation provenance를 사용한다.
 
 Idempotency rules:
 
@@ -456,7 +457,34 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - wrong tenant/AAD/key version, tag/ciphertext tamper와 record swap은 `CHAT_CONTENT_INTEGRITY_FAILED`로 fail closed한다. 원인 detail이나 key metadata를 caller/log/metric에 포함하지 않는다.
 - rotation은 reader-first다. 새 wrapping key를 reader set에 배포한 뒤 active version을 올리고 DEK를 rewrap한다. DB의 monotonic `wrappingKeyRollbackFloor` 아래 active version은 readiness와 write 모두 거부한다.
 - content DEK rotation은 새 version을 writer로 선택하고 이전 DEK를 grace reader로 유지한다. row의 `contentKeyVersion`이 없는 key를 가리키면 fail closed한다.
-- readiness는 key file shape, active key, 모든 DB rollback floor 이상 여부를 검사한다. actual key, unwrapped DEK와 canonical plaintext를 log/fixture/metric/artifact에 남기지 않는다.
+- readiness는 key file shape, active key, 모든 DB rollback floor 이상 여부와 non-retired wrapping key version별 대표 persisted DEK 하나가 실제 unwrap되는지를 검사한다. version 번호만 일치하고 key material이 바뀐 경우도 fail closed한다. key set은 최대 8개이므로 readiness crypto 검증도 최대 8개로 제한한다. 개별 row integrity는 실제 read path에서 계속 fail closed한다. actual key, unwrapped DEK와 canonical plaintext를 log/fixture/metric/artifact에 남기지 않는다.
+
+#### 12.2.1 RAG crypto와 고정 profile 경계
+
+Tenant Chat RAG의 공용 crypto/config 기반은 route, upload, extraction, embedding 호출, retrieval을 활성화하지 않는 호환성 계층이다.
+
+- `packages/tenant-content-crypto`는 framework-neutral AES-256-GCM, JCS, key wrapping, versioned keyset parser, Chat/RAG AAD builder와 `TenantKeyResolver` 계약만 소유한다. Nest, Prisma, 환경 로딩, tenant authorization과 secret file I/O는 포함하지 않는다.
+- 기존 title/message는 32-byte tenant DEK, 매 record마다 새 random 96-bit nonce, 128-bit tag와 기존 Chat AAD byte 형식을 그대로 사용한다. package 추출은 기존 row를 재암호화하거나 AAD field, title `recordId=conversationId`, error code를 바꾸지 않는다.
+- RAG chunk plaintext는 저장 전에 같은 primitive로 암호화한다. `RagChunkAadV1`의 exact key set은 `schemaVersion=1`, `tenantId`, `knowledgeBaseId`, `documentId`, `documentIndexId`, `chunkId`, `contentKind=rag_chunk`, `contentKeyVersion`이다. 값은 server-owned DB/job state에서만 온다.
+- RAG private document metadata용 별도 AAD의 exact key set은 `schemaVersion=1`, `tenantId`, `knowledgeBaseId`, `documentId`, `contentKind=rag_document_private_metadata`, `contentKeyVersion`이다. 이 compatibility milestone은 metadata나 chunk 저장 경로를 만들지 않는다.
+- crypto/key 조회 실패는 fail closed한다. plaintext 저장 fallback, raw chunk가 포함된 error, key material log는 허용하지 않는다.
+
+RAG의 process-wide kill switch는 `TENANT_CHAT_RAG_ENABLED`이며 기본값은 `false`다. tenant-level enablement는 기존 `RagKnowledgeBase.status=ENABLED`만 사용한다. 두 조건이 모두 참일 때만 향후 Tenant Chat RAG route가 유효하며, global flag만으로 public Gateway/Application Chat이나 아직 구현되지 않은 RAG route가 열리지 않는다.
+
+고정 runtime profile은 다음 환경 계약을 사용한다.
+
+```text
+RAG_EMBEDDING_PROVIDER=openai
+RAG_EMBEDDING_MODEL=text-embedding-3-large
+RAG_EMBEDDING_DIMENSIONS=1536
+RAG_EMBEDDING_PROFILE_VERSION=1
+RAG_DISTANCE_METRIC=cosine
+```
+
+- 각 값은 미지정 시 위 고정값을 사용한다. 명시적으로 빈 값, 다른 provider/model/dimension/profile version/distance는 service listen 전에 거부한다.
+- Chat API와 Control Plane은 global flag 값과 무관하게 listen 전에 mismatch existence query로 `RagKnowledgeBase` profile을 고정 runtime profile과 비교한다. 하나라도 다르면 identifier나 row detail 없이 startup을 실패시킨다.
+- 이 startup guard는 M2 migration이 먼저 배포됐다는 expand-first 순서를 전제로 한다. global flag가 `false`이면 profile 정합성만 확인하고 RAG 실행은 계속 허용하지 않는다.
+- worker process와 worker secret mount는 이 milestone에서 만들지 않는다. 향후 Control Plane worker는 동일 공용 package를 사용하되 least-privilege key delivery를 별도 worker contract에서 확정한다.
 
 ### 12.3 Turn lifecycle, SSE와 DOC-013
 

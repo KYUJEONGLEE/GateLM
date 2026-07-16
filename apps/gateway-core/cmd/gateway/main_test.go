@@ -39,6 +39,65 @@ func (encoder *fakeDifficultyE5Encoder) Close() error {
 	return nil
 }
 
+func TestInitializeDifficultyE5RuntimeIsDisabledWithoutConstructingEncoder(t *testing.T) {
+	called := false
+	runtime, status := initializeDifficultyE5Runtime(
+		context.Background(),
+		config.DifficultyE5RuntimeConfig{},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return nil, errors.New("must not be called")
+		},
+	)
+	if runtime != nil || status != DifficultyE5HotPathRuntimeDisabled || called {
+		t.Fatalf("disabled runtime initialized: runtime=%v status=%q called=%v", runtime, status, called)
+	}
+}
+
+func TestInitializeDifficultyE5RuntimeDegradesInitializationFailureToRuleOnly(t *testing.T) {
+	runtime, status := initializeDifficultyE5Runtime(
+		context.Background(),
+		config.DifficultyE5RuntimeConfig{Enabled: true, Timeout: 10 * time.Millisecond},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			return nil, errors.New("sensitive initialization detail")
+		},
+	)
+	if runtime != nil || status != DifficultyE5HotPathRuntimeUnavailable {
+		t.Fatalf("initialization failure did not degrade safely: runtime=%v status=%q", runtime, status)
+	}
+}
+
+func TestInitializeDifficultyE5RuntimeRunsSmokeAndBecomesReady(t *testing.T) {
+	encoder := &fakeDifficultyE5Encoder{}
+	runtime, status := initializeDifficultyE5Runtime(
+		context.Background(),
+		config.DifficultyE5RuntimeConfig{
+			Enabled:             true,
+			ArtifactRoot:        "/bundle",
+			EncoderManifestPath: "/bundle/manifest.json",
+			RuntimeLockPath:     "/bundle/lock.json",
+			Timeout:             50 * time.Millisecond,
+		},
+		func(bundle e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			if bundle.ArtifactRoot != "/bundle" ||
+				bundle.EncoderManifestPath != "/bundle/manifest.json" ||
+				bundle.RuntimeLockPath != "/bundle/lock.json" {
+				t.Fatalf("unexpected bundle config: %#v", bundle)
+			}
+			return encoder, nil
+		},
+	)
+	if runtime == nil || status != DifficultyE5HotPathRuntimeReady {
+		t.Fatalf("runtime not ready: runtime=%v status=%q", runtime, status)
+	}
+	if encoder.instruction != difficultyE5StartupSmokeInstruction {
+		t.Fatalf("startup smoke input = %q", encoder.instruction)
+	}
+	if err := runtime.Close(context.Background()); err != nil || !encoder.closed {
+		t.Fatalf("close failed: closed=%v err=%v", encoder.closed, err)
+	}
+}
+
 func TestInitializeDifficultyE5ShadowIsDisabledWithoutConstructingEncoder(t *testing.T) {
 	called := false
 	evaluator, err := initializeDifficultyE5Shadow(
@@ -87,8 +146,9 @@ func TestInitializeDifficultyE5ShadowRunnerDegradesInitializationFailureToRuleOn
 	}
 }
 
-func TestInitializeDifficultyE5ShadowRejectsHistoricalDecisionBoundaryBeforeEncoder(t *testing.T) {
+func TestInitializeDifficultyE5ShadowAcceptsCurrentDecisionBoundary(t *testing.T) {
 	called := false
+	encoder := &fakeDifficultyE5Encoder{}
 	evaluator, err := initializeDifficultyE5Shadow(
 		context.Background(),
 		config.DifficultyE5ShadowConfig{
@@ -97,15 +157,18 @@ func TestInitializeDifficultyE5ShadowRejectsHistoricalDecisionBoundaryBeforeEnco
 		},
 		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
 			called = true
-			return &fakeDifficultyE5Encoder{}, nil
+			return encoder, nil
 		},
 	)
-	if err == nil || evaluator != nil || called {
-		t.Fatalf("historical boundary initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	if err != nil || evaluator == nil || !called {
+		t.Fatalf("current boundary not initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+	if err := evaluator.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestInitializeDifficultyE5ShadowAcceptsPinnedBaselineE2EWaiver(t *testing.T) {
+func TestInitializeDifficultyE5ShadowIgnoresHistoricalWaiverForCompatibleModel(t *testing.T) {
 	called := false
 	encoder := &fakeDifficultyE5Encoder{}
 	evaluator, err := initializeDifficultyE5Shadow(
@@ -121,10 +184,10 @@ func TestInitializeDifficultyE5ShadowAcceptsPinnedBaselineE2EWaiver(t *testing.T
 		},
 	)
 	if err != nil || evaluator == nil || !called {
-		t.Fatalf("pinned baseline waiver not admitted: evaluator=%v called=%v err=%v", evaluator, called, err)
+		t.Fatalf("compatible model not admitted: evaluator=%v called=%v err=%v", evaluator, called, err)
 	}
 	if encoder.instruction != difficultyE5StartupSmokeInstruction {
-		t.Fatalf("baseline startup smoke input = %q", encoder.instruction)
+		t.Fatalf("startup smoke input = %q", encoder.instruction)
 	}
 	if err := evaluator.Close(); err != nil {
 		t.Fatal(err)

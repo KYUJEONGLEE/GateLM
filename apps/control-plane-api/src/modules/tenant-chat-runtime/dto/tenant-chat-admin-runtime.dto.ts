@@ -154,4 +154,8 @@ export class ActivateTenantChatRuntimeDto {
   @ValidateNested()
   @Type(() => TenantChatAdminSafetyPolicyDto)
   safetyPolicy?: TenantChatAdminSafetyPolicyDto;
+
+  @IsOptional()
+  @IsBoolean()
+  cacheEnabled?: boolean;
 }

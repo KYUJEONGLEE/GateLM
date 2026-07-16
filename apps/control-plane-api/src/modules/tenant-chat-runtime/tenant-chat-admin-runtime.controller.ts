@@ -47,6 +47,7 @@ export class TenantChatAdminRuntimeController {
         routes: body.routes,
         cachePolicy: body.cachePolicy,
         safetyPolicy: body.safetyPolicy,
+        cacheEnabled: body.cacheEnabled,
         publishedBy,
       }),
     };

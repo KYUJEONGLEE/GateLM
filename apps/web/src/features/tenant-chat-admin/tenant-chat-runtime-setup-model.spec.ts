@@ -91,6 +91,7 @@ test("active snapshot wins on reload", () => {
     ...setup,
     activeSnapshot: {
       digest: "sha256:fixture",
+      cacheEnabled: true,
       modelKey: "models/gemini-2.5-flash",
       policyVersion: 4,
       pricingStatus: "current",
@@ -137,7 +138,8 @@ test("degraded routing selections render unavailable options instead of an avail
 
   expect(source.match(/<UnavailableModelOption/g)).toHaveLength(1);
   expect(source).toContain("function TenantRoutingProviderModelSelect");
-  expect(source).toContain('value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}');
+  expect(source).toContain('value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}');
+  expect(source).toContain("routes[category.id]?.[difficulty.id]?.modelRefs ?? []");
   expect(source).toContain('<UnavailableModelOption locale={locale} models={selectedModels} value={value ?? ""} />');
   expect(source).toContain('return <option disabled value={value}>{copy[locale].modelUnavailable}</option>');
   expect(source).toContain('modelUnavailable: "Selected model unavailable"');
@@ -185,6 +187,35 @@ test("Chat App routing rejects malformed shared fallback profiles without throwi
   } as unknown as typeof withFallback;
 
   expect(selectTenantChatSharedFallbackModelRef(malformed)).toBeNull();
+});
+
+test("Chat App routing helpers tolerate partially populated route cells", () => {
+  const routes = setupWithRoutes().activeSnapshot!.routes;
+  const partial = {
+    ...routes,
+    reasoning: {
+      ...routes.reasoning,
+      complex: undefined
+    }
+  } as unknown as typeof routes;
+
+  const updated = updateTenantChatPrimaryModelRef(
+    partial,
+    "reasoning",
+    "complex",
+    "tc_other_primary"
+  );
+  expect(updated.reasoning.complex.modelRefs).toEqual(["tc_other_primary"]);
+
+  const withFallback = applyTenantChatSharedFallbackModelRef(
+    partial,
+    "tc_tiered"
+  );
+  expect(withFallback.reasoning.complex).toBeUndefined();
+  expect(withFallback.reasoning.simple.modelRefs).toEqual([
+    "tc_gemini_flash",
+    "tc_tiered"
+  ]);
 });
 
 test("Chat App routing excludes automatic and fixed primary models from fallback", () => {
@@ -249,6 +280,21 @@ test("Chat App policy navigation exposes editable routing, cache, and security p
   expect(runtimeEditorSource).not.toContain('safetyTab: "안전"');
 });
 
+test("Chat App cache policy reuses the shared existing policy card", async () => {
+  const cachePanelSourceUrl = new URL("../policies/components/runtime-policy-panels/cache-panel.tsx", import.meta.url);
+  const sharedCardSourceUrl = new URL("../policies/components/exact-cache-toggle-card.tsx", import.meta.url);
+  const [cachePanelSource, sharedCardSource] = await Promise.all([
+    readFile(cachePanelSourceUrl, "utf8"),
+    readFile(sharedCardSourceUrl, "utf8")
+  ]);
+
+  expect(cachePanelSource).toContain("<ExactCacheToggleCard");
+  expect(sharedCardSource).toContain("DatabaseZap");
+  expect(sharedCardSource).toContain('className="policy-cache-card"');
+  expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
+  expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
+});
+
 test("Chat App routing explains the simple and complex difficulty criteria", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const stylesUrl = new URL("../../app/globals.css", import.meta.url);
@@ -276,7 +322,7 @@ test("Chat App routing explains the simple and complex difficulty criteria", asy
 test("Chat App routing switches one policy card between automatic and fixed modes", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const stylesUrl = new URL("../../app/globals.css", import.meta.url);
-  const source = await readFile(componentSourceUrl, "utf8");
+  const source = (await readFile(componentSourceUrl, "utf8")).replaceAll("\r\n", "\n");
   const styles = await readFile(stylesUrl, "utf8");
 
   expect(source).toContain('fixedLabel: "Fixed"');
@@ -314,7 +360,7 @@ test("Chat App hides runtime badges and limits pricing warnings to selected mode
 
 test("Chat App routing publish recovers from a Control Plane network failure", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
-  const source = await readFile(componentSourceUrl, "utf8");
+  const source = (await readFile(componentSourceUrl, "utf8")).replaceAll("\r\n", "\n");
 
   expect(source).toContain('setFeedback({ error: true, message: "Control Plane unavailable." });');
   expect(source).toContain("} finally {\n      setPending(false);");
@@ -337,6 +383,7 @@ function setupWithRoutes(): TenantChatAdminRuntimeSetup {
   return {
     ...setup,
     activeSnapshot: {
+      cacheEnabled: true,
       digest: "sha256:fallback-fixture",
       modelKey: "models/gemini-2.5-flash",
       policyVersion: 1,

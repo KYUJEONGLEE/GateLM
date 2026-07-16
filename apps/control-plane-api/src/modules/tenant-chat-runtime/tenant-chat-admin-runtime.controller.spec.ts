@@ -34,7 +34,11 @@ describe('TenantChatAdminRuntimeController', () => {
     await expect(
       controller.activate(
         tenantId,
-        { providerConnectionId, modelKey: 'gpt-5.4-mini' },
+        {
+          providerConnectionId,
+          modelKey: 'gpt-5.4-mini',
+          cacheEnabled: true,
+        },
         publishedBy,
       ),
     ).resolves.toEqual({ data: setup });
@@ -42,6 +46,7 @@ describe('TenantChatAdminRuntimeController', () => {
       tenantId,
       providerConnectionId,
       modelKey: 'gpt-5.4-mini',
+      cacheEnabled: true,
       publishedBy,
     });
   });

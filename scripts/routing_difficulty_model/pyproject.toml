@@ -16,6 +16,7 @@ gatelm-train-difficulty-semantic-candidates = "gatelm_difficulty_model.candidate
 gatelm-gateway-holdout-reference = "gatelm_difficulty_model.gateway_holdout_reference:main"
 gatelm-difficulty-calibration-feasibility = "gatelm_difficulty_model.calibration_feasibility_cli:main"
 gatelm-difficulty-threshold-candidate = "gatelm_difficulty_model.threshold_candidate_cli:main"
+gatelm-train-difficulty-model-path-5000 = "gatelm_difficulty_model.model_path_5000:main"
 
 [project.optional-dependencies]
 e5-encoder = [

@@ -197,6 +197,7 @@ export interface TenantChatAdminActiveSnapshot {
   routes: TenantChatRoutingMatrix;
   cachePolicy: TenantChatAdminCachePolicy;
   safetyPolicy: TenantChatAdminSafetyPolicy;
+  cacheEnabled: boolean;
 }
 
 export interface TenantChatAdminCachePolicy {
@@ -224,5 +225,6 @@ export interface ActivateTenantChatRuntimeInput {
   routes?: TenantChatRoutingMatrix;
   cachePolicy?: TenantChatAdminCachePolicy;
   safetyPolicy?: TenantChatAdminSafetyPolicy;
+  cacheEnabled?: boolean;
   publishedBy: string;
 }

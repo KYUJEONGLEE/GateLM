@@ -68,7 +68,7 @@ func (evaluator *DifficultySemanticShadowEvaluator) Evaluate(
 	if ctx.Err() == context.DeadlineExceeded {
 		return DifficultySemanticShadowResult{Status: DifficultySemanticShadowTimeout}
 	}
-	result, err := generatedDifficultySemanticModel118D.inferModelPath(difficultyFeatures, pooled)
+	result, err := generatedDifficultySemanticModel106D.inferModelPath(difficultyFeatures, pooled)
 	if err != nil {
 		return DifficultySemanticShadowResult{Status: DifficultySemanticShadowInvalidEmbedding}
 	}

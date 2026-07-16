@@ -94,4 +94,20 @@ describe('ActivateTenantChatRuntimeDto', () => {
       ),
     ).rejects.toThrow();
   });
+
+  it('accepts only a boolean compatibility cache toggle', async () => {
+    await expect(
+      pipe.transform(
+        { providerConnectionId, modelKey: 'gpt-5.4-mini', cacheEnabled: false },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).resolves.toMatchObject({ cacheEnabled: false });
+
+    await expect(
+      pipe.transform(
+        { providerConnectionId, modelKey: 'gpt-5.4-mini', cacheEnabled: 'false' },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).rejects.toThrow();
+  });
 });

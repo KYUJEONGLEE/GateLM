@@ -163,7 +163,7 @@ const copy = {
     cacheTab: "Cache",
     configureProvider: "Register or edit provider",
     degraded: "The active runtime references a provider or model that is no longer available. Review and publish again.",
-    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing policy.",
+    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing and cache policy.",
     categoryCriteria: "Simple and complex guidance",
     criteriaNote: "Length alone does not make a request complex. Task count, constraints, scope, dependency steps, and category-specific signals are evaluated together.",
     example: "Example",
@@ -205,7 +205,7 @@ const copy = {
     cacheTab: "캐시",
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
-    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 정책을 관리합니다.",
+    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 및 캐시 정책을 관리합니다.",
     categoryCriteria: "단순·복합 안내",
     criteriaNote: "요청 길이만으로는 복합이 되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.",
     example: "예시",
@@ -364,7 +364,8 @@ export function ChatAppRoutingSetup({
         )
       : categories.flatMap((category) =>
           difficulties.flatMap(
-            (difficulty) => routes[category.id][difficulty.id].modelRefs
+            (difficulty) =>
+              routes[category.id]?.[difficulty.id]?.modelRefs ?? []
           )
         )
   );
@@ -441,7 +442,7 @@ export function ChatAppRoutingSetup({
       });
       const payload = (await response.json().catch(() => ({}))) as unknown;
       if (!response.ok || !isRuntimeSetup(payload)) {
-        setFeedback({ error: true, message: readPayloadError(payload, "Chat App routing policy publish failed.") });
+        setFeedback({ error: true, message: readPayloadError(payload, "Chat App policy publish failed.") });
       } else {
         applySetup(
           payload,
@@ -605,7 +606,7 @@ export function ChatAppRoutingSetup({
                               locale={locale}
                               onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
                               providers={providers}
-                              value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
+                              value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}
                             />
                           ))}
                         </div>
@@ -884,7 +885,7 @@ function uniformRoutingMatrix(modelRef: string): TenantChatRoutingMatrix {
 
 function matrixUsesOnly(routes: TenantChatRoutingMatrix, available: Set<string>) {
   return categories.every((category) => difficulties.every((difficulty) => {
-    const refs = routes[category.id][difficulty.id].modelRefs;
+    const refs = routes[category.id]?.[difficulty.id]?.modelRefs ?? [];
     return refs.length >= 1 && refs.length <= 4 && refs.every((ref) => available.has(ref));
   }));
 }

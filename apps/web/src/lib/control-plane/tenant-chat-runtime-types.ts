@@ -65,6 +65,7 @@ export type TenantChatAdminProviderCandidate = {
 };
 
 export type TenantChatAdminActiveSnapshot = {
+  cacheEnabled: boolean;
   digest: string;
   modelKey: string;
   policyVersion: number;
@@ -87,10 +88,17 @@ export type TenantChatAdminRuntimeSetup = {
   readiness: TenantChatAdminReadiness;
 };
 
-export type TenantChatRuntimeActivationValues = {
-  cachePolicy: TenantChatAdminCachePolicy;
+type TenantChatRuntimeRoutingActivationValues = {
   manualModelRef: string;
   routes: TenantChatRoutingMatrix;
   routingMode: TenantChatRoutingMode;
-  safetyPolicy: TenantChatAdminSafetyPolicy;
 };
+
+export type TenantChatRuntimeActivationValues =
+  | (TenantChatRuntimeRoutingActivationValues & {
+      cachePolicy: TenantChatAdminCachePolicy;
+      safetyPolicy: TenantChatAdminSafetyPolicy;
+    })
+  | (TenantChatRuntimeRoutingActivationValues & {
+      cacheEnabled: boolean;
+    });

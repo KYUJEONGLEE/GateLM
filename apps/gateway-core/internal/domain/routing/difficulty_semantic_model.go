@@ -8,10 +8,7 @@ import (
 const (
 	difficultySemanticPooledDimension           = 384
 	difficultySemanticProjectionDimension       = 64
-	difficultySemanticHeadCount                 = 4
-	difficultySemanticHeadClassCount            = 3
-	difficultySemanticHeadProbabilityDimension  = difficultySemanticHeadCount * difficultySemanticHeadClassCount
-	difficultySemanticTotalDimension            = DifficultyFeatureVectorDimensionV1 + difficultySemanticProjectionDimension + difficultySemanticHeadProbabilityDimension
+	difficultySemanticTotalDimension            = DifficultyFeatureVectorDimensionV1 + difficultySemanticProjectionDimension
 	DifficultySemanticShadowBaselineE2EWaiverV3 = "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1"
 )
 
@@ -19,7 +16,6 @@ var (
 	errDifficultySemanticModelPathRequired = errors.New("difficulty semantic model path is required")
 	errDifficultySemanticInputInvalid      = errors.New("difficulty semantic pooled input is invalid")
 	errDifficultySemanticProjectionInvalid = errors.New("difficulty semantic projection is invalid")
-	errDifficultySemanticHeadInvalid       = errors.New("difficulty semantic head inference is invalid")
 	errDifficultySemanticScoreInvalid      = errors.New("difficulty semantic calibrated score is invalid")
 )
 
@@ -52,42 +48,29 @@ type difficultySemanticModelIdentity struct {
 // used by the current Gateway. A mismatch disables shadow only; rule routing
 // remains authoritative.
 func DifficultySemanticShadowModelCompatible() bool {
-	return generatedDifficultySemanticModel118D.identity.decisionBoundaryVersion != "" &&
-		generatedDifficultySemanticModel118D.identity.decisionBoundaryVersion == DifficultyDecisionBoundaryVersion
+	return generatedDifficultySemanticModel106D.identity.decisionBoundaryVersion != "" &&
+		generatedDifficultySemanticModel106D.identity.decisionBoundaryVersion == DifficultyDecisionBoundaryVersion
 }
 
-// DifficultySemanticShadowBaselineWaiverAccepted permits one immutable,
-// non-authoritative v3 bundle to exercise the limited-development E2E shadow
-// path despite its historical decision boundary. Any artifact regeneration,
-// threshold change, boundary change, or waiver typo fails closed.
+// DifficultySemanticShadowBaselineWaiverAccepted is retained as a config
+// compatibility bridge. The historical 118D exception is closed now that the
+// checked-in 106D model matches the current decision boundary.
 func DifficultySemanticShadowBaselineWaiverAccepted(waiver string) bool {
-	identity := generatedDifficultySemanticModel118D.identity
-	return waiver == DifficultySemanticShadowBaselineE2EWaiverV3 &&
-		identity.artifactVersion == "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3" &&
-		identity.bundleHash == "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220" &&
-		identity.contentHash == "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd" &&
-		identity.thresholdPolicyVersion == "difficulty-threshold-v1" &&
-		generatedDifficultySemanticModel118D.threshold == difficultyThresholdV1 &&
-		identity.decisionBoundaryVersion == "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1" &&
-		DifficultyDecisionBoundaryVersion == "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2" &&
-		!DifficultySemanticShadowModelCompatible()
+	_ = waiver
+	return false
 }
 
 type difficultySemanticModelMaterial struct {
-	identity                 difficultySemanticModelIdentity
-	featureNames             [difficultySemanticTotalDimension]string
-	semanticHeadNames        [difficultySemanticHeadCount]string
-	semanticHeadClasses      [difficultySemanticHeadCount][difficultySemanticHeadClassCount]string
-	pcaMean                  [difficultySemanticPooledDimension]float32
-	pcaComponents            [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32
-	l2Epsilon                float32
-	semanticHeadCoefficients [difficultySemanticHeadCount][difficultySemanticHeadClassCount][difficultySemanticProjectionDimension]float64
-	semanticHeadIntercepts   [difficultySemanticHeadCount][difficultySemanticHeadClassCount]float64
-	finalWeights             [difficultySemanticTotalDimension]float64
-	finalBias                float64
-	plattCoefficient         float64
-	plattIntercept           float64
-	threshold                float64
+	identity         difficultySemanticModelIdentity
+	featureNames     [difficultySemanticTotalDimension]string
+	pcaMean          [difficultySemanticPooledDimension]float32
+	pcaComponents    [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32
+	l2Epsilon        float32
+	finalWeights     [difficultySemanticTotalDimension]float64
+	finalBias        float64
+	plattCoefficient float64
+	plattIntercept   float64
+	threshold        float64
 }
 
 func (material *difficultySemanticModelMaterial) inferModelPath(
@@ -132,10 +115,6 @@ func (material *difficultySemanticModelMaterial) assembleModelVector(
 	if err != nil {
 		return vector, err
 	}
-	heads, err := material.predictSemanticHeads(projection)
-	if err != nil {
-		return vector, err
-	}
 	rule := vectorizeDifficultyFeaturesV1Fixed(features)
 	for index, value := range rule {
 		vector[index] = value
@@ -143,10 +122,6 @@ func (material *difficultySemanticModelMaterial) assembleModelVector(
 	projectionOffset := DifficultyFeatureVectorDimensionV1
 	for index, value := range projection {
 		vector[projectionOffset+index] = float64(value)
-	}
-	headOffset := projectionOffset + difficultySemanticProjectionDimension
-	for index, value := range heads {
-		vector[headOffset+index] = value
 	}
 	return vector, nil
 }
@@ -188,51 +163,6 @@ func (material *difficultySemanticModelMaterial) projectPooled(
 		}
 	}
 	return projection, nil
-}
-
-func (material *difficultySemanticModelMaterial) predictSemanticHeads(
-	projection [difficultySemanticProjectionDimension]float32,
-) ([difficultySemanticHeadProbabilityDimension]float64, error) {
-	var probabilities [difficultySemanticHeadProbabilityDimension]float64
-	if material == nil {
-		return probabilities, errDifficultySemanticHeadInvalid
-	}
-	for head := 0; head < difficultySemanticHeadCount; head++ {
-		var logits [difficultySemanticHeadClassCount]float64
-		for class := 0; class < difficultySemanticHeadClassCount; class++ {
-			logit := material.semanticHeadIntercepts[head][class]
-			for index, value := range projection {
-				logit += float64(value) * material.semanticHeadCoefficients[head][class][index]
-			}
-			if !finiteDifficultyFloat(logit) {
-				return probabilities, errDifficultySemanticHeadInvalid
-			}
-			logits[class] = logit
-		}
-		maximum := logits[0]
-		for class := 1; class < difficultySemanticHeadClassCount; class++ {
-			if logits[class] > maximum {
-				maximum = logits[class]
-			}
-		}
-		sum := 0.0
-		for class := 0; class < difficultySemanticHeadClassCount; class++ {
-			value := math.Exp(logits[class] - maximum)
-			probabilities[head*difficultySemanticHeadClassCount+class] = value
-			sum += value
-		}
-		if !finiteDifficultyFloat(sum) || sum <= 0 {
-			return [difficultySemanticHeadProbabilityDimension]float64{}, errDifficultySemanticHeadInvalid
-		}
-		for class := 0; class < difficultySemanticHeadClassCount; class++ {
-			index := head*difficultySemanticHeadClassCount + class
-			probabilities[index] /= sum
-			if !finiteDifficultyFloat(probabilities[index]) || probabilities[index] < 0 || probabilities[index] > 1 {
-				return [difficultySemanticHeadProbabilityDimension]float64{}, errDifficultySemanticHeadInvalid
-			}
-		}
-	}
-	return probabilities, nil
 }
 
 func finiteDifficultyFloat32(value float32) bool {
