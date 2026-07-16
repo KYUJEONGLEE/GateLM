@@ -45,3 +45,14 @@ test("primary management screens share one responsive full-width page component"
     /@media \(max-width: 760px\) \{[\s\S]*?\.management-page\.console-content \{[\s\S]*?padding: 20px 16px 36px;/
   );
 });
+
+test("API management uses the enlarged primary action scale", async () => {
+  const styles = await readFile(stylesSourceUrl, "utf8");
+
+  expect(styles).toMatch(
+    /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger \{[\s\S]*?min-width: 132px;[\s\S]*?min-height: 44px;[\s\S]*?padding-inline: 20px;[\s\S]*?font-size: 16px;/
+  );
+  expect(styles).toMatch(
+    /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger svg \{\s*width: 18px;\s*height: 18px;/
+  );
+});

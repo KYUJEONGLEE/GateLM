@@ -111,7 +111,6 @@ export function RoutingPolicyPanel({
             <p>{text.routingRoleHint}</p>
           </div>
           <div className="tenant-routing-heading-mode">
-            <span>Auto routing</span>
             <div className="tenant-routing-switch-control">
               <Switch
                 aria-label="Auto routing"

@@ -4431,6 +4431,11 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   font-weight: var(--font-weight-semibold);
 }
 
+.tenant-chat-app-content .policy-cache-card-copy strong {
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+}
+
 .policy-cache-card-copy small {
   color: var(--text-muted);
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
@@ -7643,6 +7648,20 @@ html[data-theme="dark"] .provider-card-icon[data-family="openai"] img {
 .api-key-issue-trigger {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.api-key-list-toolbar [data-slot="button"].api-key-issue-trigger {
+  min-width: 132px;
+  min-height: 44px;
+  height: auto;
+  gap: 8px;
+  padding-inline: 20px;
+  font-size: 16px;
+}
+
+.api-key-list-toolbar [data-slot="button"].api-key-issue-trigger svg {
+  width: 18px;
+  height: 18px;
 }
 
 .api-key-filters select,
@@ -17214,6 +17233,25 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   gap: 8px;
 }
 
+.employee-list-toolbar [data-slot="button"] {
+  min-width: 132px;
+  min-height: 44px;
+  height: auto;
+  gap: 8px;
+  padding-inline: 20px;
+  font-size: 16px;
+}
+
+.employee-list-toolbar [data-slot="button"] svg {
+  width: 18px;
+  height: 18px;
+}
+
+.employee-list-section > .project-empty {
+  font-size: calc(var(--font-size-lg) + var(--global-font-lift));
+  line-height: var(--line-height-normal);
+}
+
 .employee-add-dialog {
   width: min(720px, calc(100vw - 32px));
   max-width: 720px;
@@ -19299,6 +19337,10 @@ html:has(.tenant-management-content) {
   margin-top: 20px;
 }
 
+.policy-category-model-card .tenant-routing-model-heading-copy > p {
+  margin-top: 6px;
+}
+
 .tenant-routing-model-ref-cell > .tenant-routing-model-choice {
   width: 100%;
 }
@@ -20114,6 +20156,26 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   stroke-width: 2.4;
 }
 
+.tenant-chat-app-content .tenant-routing-actions {
+  gap: 12px;
+}
+
+.tenant-chat-app-content .tenant-routing-actions button {
+  min-width: 132px;
+  min-height: 44px;
+  padding-inline: 20px;
+  font-size: 16px;
+}
+
+.tenant-chat-app-content .tenant-routing-save-button {
+  gap: 8px;
+}
+
+.tenant-chat-app-content .tenant-routing-save-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 .tenant-routing-save-button[data-save-confirmed="true"] {
   background: var(--brand-blue-strong);
   box-shadow:
@@ -20586,26 +20648,29 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   font-size: var(--font-size-sm);
 }
 
-.project-policy-console-content
-  .policy-auto-routing-card
-  .tenant-routing-switch[data-slot="switch"] {
+.project-policy-console-content [data-slot="switch"] {
+  position: relative;
+  flex: 0 0 56px;
   width: 56px;
   height: 32px;
+  overflow: hidden;
+  border: 0;
 }
 
-.project-policy-console-content
-  .policy-auto-routing-card
-  .tenant-routing-switch
-  [data-slot="switch-thumb"] {
+.project-policy-console-content [data-slot="switch"] [data-slot="switch-thumb"] {
+  position: absolute;
   top: 3px;
   left: 3px;
   width: 26px;
   height: 26px;
+  --tw-translate-x: 0px !important;
+  --tw-translate-y: 0px !important;
+  transform: none !important;
+  transition: left 150ms ease;
 }
 
 .project-policy-console-content
-  .policy-auto-routing-card
-  .tenant-routing-switch:is([data-checked], [aria-checked="true"])
+  [data-slot="switch"]:is([data-checked], [aria-checked="true"])
   [data-slot="switch-thumb"] {
   left: 27px;
 }

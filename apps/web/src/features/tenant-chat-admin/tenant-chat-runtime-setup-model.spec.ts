@@ -297,9 +297,11 @@ test("Chat App policy navigation exposes editable routing, cache, and security p
 test("Chat App cache policy reuses the shared existing policy card", async () => {
   const cachePanelSourceUrl = new URL("../policies/components/runtime-policy-panels/cache-panel.tsx", import.meta.url);
   const sharedCardSourceUrl = new URL("../policies/components/exact-cache-toggle-card.tsx", import.meta.url);
-  const [cachePanelSource, sharedCardSource] = await Promise.all([
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
+  const [cachePanelSource, sharedCardSource, styles] = await Promise.all([
     readFile(cachePanelSourceUrl, "utf8"),
-    readFile(sharedCardSourceUrl, "utf8")
+    readFile(sharedCardSourceUrl, "utf8"),
+    readFile(stylesUrl, "utf8")
   ]);
 
   expect(cachePanelSource).toContain("<ExactCacheToggleCard");
@@ -307,6 +309,7 @@ test("Chat App cache policy reuses the shared existing policy card", async () =>
   expect(sharedCardSource).toContain('className="policy-cache-card"');
   expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
   expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
+  expect(styles).toMatch(/\.tenant-chat-app-content \.policy-cache-card-copy strong \{[^}]*font-size: calc\(var\(--font-size-base\) \+ var\(--global-font-lift\)\);[^}]*font-weight: var\(--font-weight-bold\);/);
 });
 
 test("Chat App routing presents general and high-performance difficulty labels in Korean", async () => {
@@ -383,10 +386,11 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(styles).toMatch(/\.tenant-routing-model-heading-copy \.tenant-routing-info-button svg \{[^}]*width: 20px;[^}]*height: 20px;/);
   expect(styles).toMatch(/\.tenant-routing-category \.tenant-routing-info-button \{[^}]*width: 18px;[^}]*height: 18px;/);
   expect(styles).toMatch(/\.tenant-routing-category \.tenant-routing-info-button svg \{[^}]*width: 15px;[^}]*height: 15px;/);
-  expect(styles).toMatch(/\.tenant-routing-actions \{[^}]*gap: 21px;/);
-  expect(styles).toMatch(/\.tenant-routing-actions button \{[^}]*min-width: 207px;[^}]*min-height: 69px;[^}]*padding-inline: 33px;[^}]*font-size: 24px;/);
-  expect(styles).toMatch(/\.tenant-routing-save-button \{[^}]*gap: 12px;/);
-  expect(styles).toMatch(/\.tenant-routing-save-button svg \{[^}]*width: 27px;[^}]*height: 27px;/);
+  expect(source.match(/className="tenant-routing-actions"/g)).toHaveLength(2);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-actions \{[^}]*gap: 12px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-actions button \{[^}]*min-width: 132px;[^}]*min-height: 44px;[^}]*padding-inline: 20px;[^}]*font-size: 16px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-save-button \{[^}]*gap: 8px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-save-button svg \{[^}]*width: 18px;[^}]*height: 18px;/);
   expect(source).not.toContain('tenant-routing-enable-card');
   expect(styles).not.toContain('.tenant-routing-enable-card');
 });

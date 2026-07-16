@@ -49,7 +49,7 @@ test("project policy settings use the shared management typography scale", async
   );
 });
 
-test("project Auto routing uses tighter copy spacing and a compact switch", async () => {
+test("project policy tabs share the compact routing switch geometry", async () => {
   const [routingSource, styles] = await Promise.all([
     readFile(routingSourceUrl, "utf8"),
     readFile(stylesSourceUrl, "utf8")
@@ -61,18 +61,34 @@ test("project Auto routing uses tighter copy spacing and a compact switch", asyn
   expect(routingSource).toContain(
     'className="tenant-routing-model-card policy-auto-routing-card"'
   );
+  expect(routingSource).not.toContain("<span>Auto routing</span>");
+  expect(routingSource).toContain('aria-label="Auto routing"');
   expect(projectPolicyStyles).toContain("gap: var(--space-3);");
   expect(projectPolicyStyles).toContain("margin-top: 6px;");
   expect(projectPolicyStyles).toMatch(
     /\.tenant-routing-switch-control \{[\s\S]*?gap: 8px;[\s\S]*?font-size: var\(--font-size-sm\);/
   );
   expect(projectPolicyStyles).toMatch(
-    /\.tenant-routing-switch\[data-slot="switch"\] \{\s*width: 56px;\s*height: 32px;/
+    /\.project-policy-console-content \[data-slot="switch"\] \{[\s\S]*?flex: 0 0 56px;[\s\S]*?width: 56px;[\s\S]*?height: 32px;[\s\S]*?border: 0;/
   );
   expect(projectPolicyStyles).toMatch(
-    /\[data-slot="switch-thumb"\] \{[\s\S]*?width: 26px;[\s\S]*?height: 26px;/
+    /\.project-policy-console-content \[data-slot="switch"\] \[data-slot="switch-thumb"\] \{[\s\S]*?top: 3px;[\s\S]*?left: 3px;[\s\S]*?width: 26px;[\s\S]*?height: 26px;[\s\S]*?transform: none !important;/
   );
   expect(projectPolicyStyles).toMatch(
-    /\.tenant-routing-switch:is\(\[data-checked\], \[aria-checked="true"\]\)[\s\S]*?left: 27px;/
+    /\[data-slot="switch"\]:is\(\[data-checked\], \[aria-checked="true"\]\)[\s\S]*?left: 27px;/
+  );
+});
+
+test("project routing role copy uses tighter heading spacing", async () => {
+  const [routingSource, styles] = await Promise.all([
+    readFile(routingSourceUrl, "utf8"),
+    readFile(stylesSourceUrl, "utf8")
+  ]);
+
+  expect(routingSource).toContain(
+    'className="tenant-routing-model-card policy-category-model-card"'
+  );
+  expect(styles).toMatch(
+    /\.policy-category-model-card \.tenant-routing-model-heading-copy > p \{\s*margin-top: 6px;/
   );
 });
