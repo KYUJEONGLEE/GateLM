@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
+  isTenantAdminForTenant,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
@@ -31,7 +32,12 @@ export default async function ConsoleTenantLayout({
   }
 
   return (
-    <ConsoleShell currentUser={auth.currentUser} locale={locale} tenantId={effectiveTenantId}>
+    <ConsoleShell
+      canManageKnowledgeDocuments={isTenantAdminForTenant(auth, effectiveTenantId)}
+      currentUser={auth.currentUser}
+      locale={locale}
+      tenantId={effectiveTenantId}
+    >
       {children}
     </ConsoleShell>
   );
