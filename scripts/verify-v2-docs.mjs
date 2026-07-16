@@ -704,24 +704,31 @@ function assertTenantChatExecutableContract() {
 
     const collectionPath = "/admin/v1/tenants/{tenantId}/rag/documents";
     const resourcePath = "/admin/v1/tenants/{tenantId}/rag/documents/{documentId}";
+    const knowledgeBasePath = "/admin/v1/tenants/{tenantId}/rag/knowledge-base";
     const upload = adminRagOpenApi.paths?.[collectionPath]?.post;
     const list = adminRagOpenApi.paths?.[collectionPath]?.get;
     const getOne = adminRagOpenApi.paths?.[resourcePath]?.get;
     const deleteOne = adminRagOpenApi.paths?.[resourcePath]?.delete;
+    const getKnowledgeBase = adminRagOpenApi.paths?.[knowledgeBasePath]?.get;
+    const updateKnowledgeBase = adminRagOpenApi.paths?.[knowledgeBasePath]?.patch;
     for (const [method, operation] of [
       ["POST", upload],
       ["GET collection", list],
       ["GET resource", getOne],
       ["DELETE resource", deleteOne],
+      ["GET Knowledge Base", getKnowledgeBase],
+      ["PATCH Knowledge Base", updateKnowledgeBase],
     ]) {
       if (!operation) {
-        fail(`${adminRagOpenApiPath}: missing ${method} RAG document operation`);
+        fail(`${adminRagOpenApiPath}: missing ${method} RAG admin operation`);
       }
     }
 
     if (adminRagOpenApi.paths?.[collectionPath]?.delete ||
-        adminRagOpenApi.paths?.["/admin/v1/tenants/{tenantId}/rag/knowledge-base"]) {
-      fail(`${adminRagOpenApiPath}: only per-document DELETE is allowed; collection delete and Knowledge Base admin routes remain out of scope`);
+        adminRagOpenApi.paths?.[knowledgeBasePath]?.post ||
+        adminRagOpenApi.paths?.[knowledgeBasePath]?.put ||
+        adminRagOpenApi.paths?.[knowledgeBasePath]?.delete) {
+      fail(`${adminRagOpenApiPath}: collection DELETE and non-GET/PATCH Knowledge Base methods are forbidden`);
     }
 
     for (const [operationName, operation, expectedStatuses] of [
@@ -729,6 +736,8 @@ function assertTenantChatExecutableContract() {
       ["list", list, ["200", "400", "401", "403", "503"]],
       ["status", getOne, ["200", "400", "401", "403", "404", "503"]],
       ["delete", deleteOne, ["202", "400", "401", "403", "404", "503"]],
+      ["knowledge-base read", getKnowledgeBase, ["200", "400", "401", "403", "503"]],
+      ["knowledge-base update", updateKnowledgeBase, ["200", "400", "401", "403", "503"]],
     ]) {
       for (const status of expectedStatuses) {
         if (!operation?.responses?.[status]) {
@@ -752,6 +761,25 @@ function assertTenantChatExecutableContract() {
         JSON.stringify(uploadProperties) !== JSON.stringify(["displayName", "file"]) ||
         !uploadRequest?.required?.includes("file")) {
       fail(`${adminRagOpenApiPath}: upload request must contain only required file and optional displayName`);
+    }
+
+    const knowledgeBaseMedia = updateKnowledgeBase?.requestBody?.content?.["application/json"];
+    const knowledgeBaseUpdate = adminRagOpenApi.components?.schemas?.UpdateKnowledgeBaseSettingsRequest;
+    if (!updateKnowledgeBase?.requestBody?.required ||
+        knowledgeBaseMedia?.schema?.$ref !== "#/components/schemas/UpdateKnowledgeBaseSettingsRequest" ||
+        knowledgeBaseUpdate?.additionalProperties !== false ||
+        JSON.stringify(knowledgeBaseUpdate?.required ?? []) !== JSON.stringify(["enabled"]) ||
+        JSON.stringify(Object.keys(knowledgeBaseUpdate?.properties ?? {})) !== JSON.stringify(["enabled"]) ||
+        knowledgeBaseUpdate?.properties?.enabled?.type !== "boolean") {
+      fail(`${adminRagOpenApiPath}: Knowledge Base PATCH must require only boolean enabled`);
+    }
+    const knowledgeBaseSettings = adminRagOpenApi.components?.schemas?.KnowledgeBaseSettings;
+    const expectedKnowledgeBaseFields = ["tenantEnabled", "globalEnabled", "effectiveEnabled"].sort();
+    if (knowledgeBaseSettings?.additionalProperties !== false ||
+        JSON.stringify([...(knowledgeBaseSettings?.required ?? [])].sort()) !== JSON.stringify(expectedKnowledgeBaseFields) ||
+        JSON.stringify(Object.keys(knowledgeBaseSettings?.properties ?? {}).sort()) !== JSON.stringify(expectedKnowledgeBaseFields) ||
+        expectedKnowledgeBaseFields.some((field) => knowledgeBaseSettings?.properties?.[field]?.type !== "boolean")) {
+      fail(`${adminRagOpenApiPath}: Knowledge Base response must expose only the three boolean enablement fields`);
     }
 
     const documentSchema = adminRagOpenApi.components?.schemas?.RagDocument;
@@ -825,6 +853,8 @@ function assertTenantChatExecutableContract() {
     }
 
     const requiredResponseCodes = new Map([
+      ["InvalidKnowledgeBaseSettings", ["VALIDATION_ERROR"]],
+      ["KnowledgeBaseServiceUnavailable", ["RAG_KNOWLEDGE_BASE_UNAVAILABLE"]],
       ["InvalidUpload", ["RAG_DOCUMENT_INVALID_UPLOAD"]],
       ["InvalidCursor", ["RAG_DOCUMENT_CURSOR_INVALID"]],
       ["InvalidDocumentId", ["VALIDATION_ERROR"]],

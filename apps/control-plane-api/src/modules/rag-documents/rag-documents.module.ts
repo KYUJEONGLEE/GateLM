@@ -9,6 +9,8 @@ import { RagDocumentPrivateMetadataCodec } from './crypto/rag-document-private-m
 import { RagDocumentsCryptoStartupService } from './crypto/rag-documents-crypto-startup.service';
 import { ControlPlaneTenantContentKeyService } from './crypto/tenant-content-key.service';
 import { RagWrappingKeyProvider } from './crypto/wrapping-key-provider';
+import { RagKnowledgeBaseController } from './rag-knowledge-base.controller';
+import { RagKnowledgeBaseService } from './rag-knowledge-base.service';
 import { RagDocumentsController } from './rag-documents.controller';
 import { RagDocumentsService } from './rag-documents.service';
 import {
@@ -22,7 +24,7 @@ import { createIamRoleCredentialProvider } from './storage/iam-role-credentials'
 
 @Module({
   imports: [ConfigModule, DatabaseModule],
-  controllers: [RagDocumentsController],
+  controllers: [RagDocumentsController, RagKnowledgeBaseController],
   providers: [
     AdminAuthGuard,
     RagWrappingKeyProvider,
@@ -31,6 +33,7 @@ import { createIamRoleCredentialProvider } from './storage/iam-role-credentials'
     RagDocumentsCryptoStartupService,
     RagUploadStreamService,
     RagDocumentsService,
+    RagKnowledgeBaseService,
     {
       provide: RAG_OBJECT_STORE,
       inject: [ConfigService],

@@ -39,6 +39,8 @@ import type { TenantRagDocument } from "@/lib/control-plane/rag-documents-types"
 import type { Locale } from "@/lib/i18n/locale";
 
 type KnowledgeDocumentsProps = {
+  active?: boolean;
+  embedded?: boolean;
   initialDocuments: TenantRagDocument[];
   initialLoadError: string | null;
   locale: Locale;
@@ -124,6 +126,8 @@ const copy = {
 } satisfies Record<Locale, Record<string, string>>;
 
 export function KnowledgeDocuments({
+  active = true,
+  embedded = false,
   initialDocuments,
   initialLoadError,
   locale,
@@ -142,14 +146,17 @@ export function KnowledgeDocuments({
     null,
   );
   const inputRef = useRef<HTMLInputElement>(null);
+  const Root = embedded ? "div" : "main";
 
   const hasProcessingDocuments = documents.some((document) =>
     isProcessing(document.status),
   );
-  const pollingEnabled = shouldPollRagDocuments(
-    documents.map((document) => document.status),
-    pollAttempts,
-  );
+  const pollingEnabled =
+    active &&
+    shouldPollRagDocuments(
+      documents.map((document) => document.status),
+      pollAttempts,
+    );
 
   const refreshDocuments = useCallback(
     async (options: { incrementPollAttempts?: boolean } = {}) => {
@@ -274,13 +281,21 @@ export function KnowledgeDocuments({
   }
 
   return (
-    <main className="console-content management-line-content space-y-5">
-      <Breadcrumb
-        items={[
-          { label: text.breadcrumbManagement },
-          { label: text.breadcrumbTitle },
-        ]}
-      />
+    <Root
+      className={
+        embedded
+          ? "space-y-5"
+          : "console-content management-line-content space-y-5"
+      }
+    >
+      {!embedded ? (
+        <Breadcrumb
+          items={[
+            { label: text.breadcrumbManagement },
+            { label: text.breadcrumbTitle },
+          ]}
+        />
+      ) : null}
       <section className="dashboard-hero flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h2>{text.title}</h2>
@@ -498,7 +513,7 @@ export function KnowledgeDocuments({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </Root>
   );
 }
 

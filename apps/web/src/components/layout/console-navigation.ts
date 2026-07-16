@@ -5,7 +5,6 @@ export type ManagementNavItem =
   | "app-tokens"
   | "chat-app"
   | "employees"
-  | "knowledge-documents"
   | "policies"
   | "project"
   | "provider"
@@ -77,7 +76,7 @@ export function getConsoleNavigationState(pathname: string | null): ConsoleNavig
       };
     case "knowledge-documents":
       return {
-        activeManagementItem: "knowledge-documents",
+        activeManagementItem: "chat-app",
         activeSection: "management"
       };
     case "provider-connections":

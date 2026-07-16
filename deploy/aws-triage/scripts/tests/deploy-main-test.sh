@@ -266,6 +266,15 @@ done
 if grep -Fq '  rag-worker:' "${COMPOSE_FILE}" || grep -Fq '/run/secrets/rag/' "${COMPOSE_FILE}"; then
   fail "Default-off AWS Compose must not include the RAG worker or RAG secret mounts"
 fi
+for service in control-plane-api gateway-core ai-service rag-worker chat-api; do
+  awk -v service="${service}" '
+    $0 == "  " service ":" { in_service=1; next }
+    in_service && /^  [[:alnum:]_-]+:$/ { exit }
+    in_service && /TENANT_CHAT_RAG_ENABLED: "true"/ { found=1 }
+    END { if (!found) exit 1 }
+  ' "${RAG_COMPOSE_FILE}" || \
+    fail "RAG overlay must enable the shared global flag for ${service}"
+done
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   docker compose \
     --env-file "${ENV_EXAMPLE}" \

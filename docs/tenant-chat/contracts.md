@@ -503,9 +503,16 @@ Gateway의 `POST /internal/v1/rag/embeddings`는 private `:8081` listener에만 
 - embedding path에는 response cache나 Semantic Cache read/write가 없다. RAG chat cache bypass의 authoritative 실행 계약은 기존 `UsageIntent.cacheStrategy=off`이며 M7에서 Chat API가 강제한다. 별도 client-controlled `cacheMode` 또는 `semanticCache` field를 추가하지 않는다.
 - input, vector, raw query/chunk, API key와 Provider raw error body는 log, metric, DB, cache에 남기지 않는다. 기본 test suite는 fake/`httptest`만 사용하며 OpenAI를 호출하지 않는다.
 
-#### 12.2.3 Tenant Admin RAG 문서 upload/read/delete 계약
+#### 12.2.3 Tenant Admin RAG enablement 및 문서 upload/read/delete 계약
 
-Control Plane의 Tenant Admin 문서 wire는 [Admin RAG document OpenAPI](./openapi/admin-rag.openapi.json)를 따른다. 이 revision의 active surface는 upload, 목록, 단건 상태 조회, 비동기 hard delete다.
+Control Plane의 Tenant Admin wire는 [Admin RAG OpenAPI](./openapi/admin-rag.openapi.json)를 따른다. 이 revision의 active surface는 tenant enablement, upload, 목록, 단건 상태 조회, 비동기 hard delete다.
+
+- `GET /admin/v1/tenants/{tenantId}/rag/knowledge-base`는 row를 만들지 않는 read다. tenant Knowledge Base가 아직 없으면 `tenantEnabled=false`를 반환한다. `PATCH` body는 additional property 없는 exact `{enabled:boolean}`이고, 같은 값의 반복은 idempotent하다. response는 safe boolean인 `tenantEnabled`, process configuration을 반영한 read-only `globalEnabled`, 둘의 AND인 `effectiveEnabled`만 반환하며 Knowledge Base ID, profile row, revision은 노출하지 않는다.
+- `PATCH`는 tenant singleton Knowledge Base가 없으면 고정 embedding profile과 요청 status로 생성하고, 있으면 `status=ENABLED|DISABLED`만 갱신한다. document, index, chunk, job, revision과 encrypted citation snapshot은 변경하거나 삭제하지 않는다. 다시 활성화하면 기존 `READY` document와 `ACTIVE` index를 재수집 없이 사용한다.
+- tenant `DISABLED`여도 관리자 upload와 worker ingestion은 허용되어 문서를 `READY`로 준비할 수 있다. 이 준비 흐름은 RAG infrastructure가 배포되어 process-wide flag가 켜진 환경을 전제로 한다. process-wide flag가 꺼진 운영 kill-switch 상태에서는 Control Plane의 현재 fail-closed storage/worker 구성이 우선한다.
+- employee retrieval과 새 RAG turn은 `TENANT_CHAT_RAG_ENABLED=true`와 tenant `status=ENABLED`를 모두 매 요청 확인한다. disable commit 이후 시작하는 create/retrieval은 embedding 및 provider 호출 전에 `CHAT_RAG_DISABLED`로 실패하고 일반 chat으로 자동 fallback하지 않는다. 이미 provider streaming이 시작된 in-flight turn의 distributed cancellation은 이 계약 범위가 아니다.
+- `TENANT_CHAT_RAG_ENABLED`는 process-local 환경값이므로 Control Plane의 `globalEnabled` 표시와 Chat API의 실제 집행값은 배포 단위에서 반드시 같아야 한다. 지원하는 self-host/AWS Compose RAG overlay는 Control Plane, Gateway, AI Service, worker, Chat API 모두에 동일한 enabled 값을 주입하며 wiring test가 이 parity를 검증한다. 별도 orchestrator는 같은 불변식을 보장해야 하고, 값을 독립적으로 변경하는 배포는 지원하지 않는다. 실제 retrieval은 표시값을 신뢰하지 않고 Chat API 자신의 global flag와 DB의 tenant status를 다시 확인해 fail-closed한다.
+- enablement route도 기존 `AdminAuthGuard`, full admin session과 route tenant만 신뢰한다. 일반 직원, 다른 tenant 관리자, body/query의 `tenantId`·`knowledgeBaseId` override는 controller 실행 또는 validation에서 거부한다. DB 장애는 내부 detail 없이 `503 RAG_KNOWLEDGE_BASE_UNAVAILABLE`이다.
 
 - `POST /admin/v1/tenants/{tenantId}/rag/documents`, `GET /admin/v1/tenants/{tenantId}/rag/documents`, `GET /admin/v1/tenants/{tenantId}/rag/documents/{documentId}`는 기존 `AdminAuthGuard`와 full admin session을 사용한다. route의 tenant scope와 `CurrentAdminUserId`만 신뢰하며 body/query의 `tenantId`, `knowledgeBaseId`, uploader ID는 unknown-field validation으로 거부한다. 일반 직원 session과 다른 tenant의 Tenant Admin은 controller 실행 전에 거부한다.
 - upload body는 `multipart/form-data`의 단일 `file`과 optional `displayName`만 받는다. `RAG_MAX_UPLOAD_BYTES` 기본값과 상한은 모두 `20 * 1024 * 1024` bytes이고 환경은 1 byte 이상 이 상한 이하로만 낮출 수 있다. 빈 파일은 거부한다.

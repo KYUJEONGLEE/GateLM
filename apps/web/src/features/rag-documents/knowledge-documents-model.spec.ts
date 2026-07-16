@@ -71,6 +71,24 @@ test("the RAG documents UI preserves server authorization and never renders inte
     ),
     "utf8",
   );
+  const knowledgeBaseSource = await readFile(
+    new URL("./knowledge-base-management.tsx", import.meta.url),
+    "utf8",
+  );
+  const knowledgeBaseBffSource = await readFile(
+    new URL(
+      "../../app/api/control-plane/rag-knowledge-base/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const chatAppSource = await readFile(
+    new URL(
+      "../tenant-chat-admin/components/chat-app-routing-setup.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   const shellSource = await readFile(
     new URL("../../components/layout/console-shell.tsx", import.meta.url),
     "utf8",
@@ -83,12 +101,19 @@ test("the RAG documents UI preserves server authorization and never renders inte
   expect(componentSource).not.toContain("kms");
   expect(componentSource).not.toContain("embedding");
   expect(pageSource).toContain("isTenantAdminForTenant(auth, tenantId)");
+  expect(pageSource).toContain("chat-app?section=knowledge");
   expect(bffSource).toContain("isTenantAdminForTenant(auth, routeTenantId)");
   expect(bffSource).toContain(
     "resolveConsoleTenantIdForAuth(auth, routeTenantId)",
   );
-  expect(shellSource).toContain("adminOnly: true");
-  expect(shellSource).toContain(
-    "!child.adminOnly || canManageKnowledgeDocuments",
-  );
+  expect(shellSource).not.toContain('item: "knowledge-documents"');
+  expect(knowledgeBaseSource).toContain("<Switch");
+  expect(knowledgeBaseSource).toContain("<KnowledgeDocuments");
+  expect(knowledgeBaseSource).toContain("embedded");
+  expect(knowledgeBaseSource).toContain('method: enabled === undefined ? "GET" : "PATCH"');
+  expect(knowledgeBaseBffSource).toContain("isTenantAdminForTenant(auth, routeTenantId)");
+  expect(knowledgeBaseBffSource).toContain("Object.keys(record).length === 1");
+  expect(chatAppSource).toContain('section !== "knowledge" || canManageKnowledgeBase');
+  expect(knowledgeBaseSource).not.toContain("s3ObjectKey");
+  expect(knowledgeBaseSource).not.toContain("knowledgeBaseId");
 });

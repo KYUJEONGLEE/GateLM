@@ -6,6 +6,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import type { RagDocumentPrivateMetadataCodec } from './crypto/rag-document-private-metadata.codec';
 import { RagDocumentsService } from './rag-documents.service';
+import { RagKnowledgeBaseService } from './rag-knowledge-base.service';
 import type { RagObjectStore } from './storage/object-store.port';
 import type { RagUploadStreamService } from './storage/rag-upload-stream.service';
 
@@ -181,6 +182,67 @@ describeIntegration('RagDocumentsService database integration', () => {
         }),
       ).resolves.toBe(1);
       expect(objectStore.deleteObject).toHaveBeenCalledTimes(1);
+    } finally {
+      await prisma.ragJob.deleteMany({ where: { tenantId: tenant.id } });
+      await prisma.ragDocument.deleteMany({ where: { tenantId: tenant.id } });
+      await prisma.ragKnowledgeBase.deleteMany({ where: { tenantId: tenant.id } });
+      await prisma.tenantChatContentKey.deleteMany({
+        where: { tenantId: tenant.id },
+      });
+      await prisma.tenant.delete({ where: { id: tenant.id } });
+    }
+  });
+
+  it('persists tenant enablement in the shared DB without deleting prepared documents or jobs', async () => {
+    const tenant = await prisma.tenant.create({
+      data: { name: `rag-settings-${randomUUID()}` },
+      select: { id: true },
+    });
+    await createContentKey(tenant.id);
+
+    try {
+      const uploaded = await service.upload(tenant.id, userId, {} as never);
+      const document = await prisma.ragDocument.findFirstOrThrow({
+        where: { tenantId: tenant.id, publicId: uploaded.documentId },
+        select: { id: true, status: true },
+      });
+      const job = await prisma.ragJob.findFirstOrThrow({
+        where: { tenantId: tenant.id, documentId: document.id },
+        select: { id: true, status: true, type: true },
+      });
+      const settings = new RagKnowledgeBaseService(
+        prisma,
+        new ConfigService({ TENANT_CHAT_RAG_ENABLED: 'true' }),
+      );
+
+      await expect(settings.getSettings(tenant.id)).resolves.toEqual({
+        effectiveEnabled: false,
+        globalEnabled: true,
+        tenantEnabled: false,
+      });
+      await expect(settings.updateSettings(tenant.id, true)).resolves.toEqual({
+        effectiveEnabled: true,
+        globalEnabled: true,
+        tenantEnabled: true,
+      });
+      await expect(settings.updateSettings(tenant.id, false)).resolves.toEqual({
+        effectiveEnabled: false,
+        globalEnabled: true,
+        tenantEnabled: false,
+      });
+
+      await expect(
+        prisma.ragDocument.findUniqueOrThrow({
+          where: { id: document.id },
+          select: { id: true, status: true },
+        }),
+      ).resolves.toEqual(document);
+      await expect(
+        prisma.ragJob.findUniqueOrThrow({
+          where: { id: job.id },
+          select: { id: true, status: true, type: true },
+        }),
+      ).resolves.toEqual(job);
     } finally {
       await prisma.ragJob.deleteMany({ where: { tenantId: tenant.id } });
       await prisma.ragDocument.deleteMany({ where: { tenantId: tenant.id } });

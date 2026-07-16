@@ -97,6 +97,42 @@ describeIntegration('RAG tenant isolation through pgvector retrieval and prompt 
     expect(validateRagCitations('Answer [S1] and fabricated [S999] [S1].', context.citationSources)).toEqual(context.citationSources);
   });
 
+  it('blocks retrieval immediately while disabled and reuses the existing READY index after re-enable', async () => {
+    const usageBefore = await prisma.ragEmbeddingUsage.count({
+      where: { tenantId: tenantA, purpose: 'RAG_QUERY' },
+    });
+    await prisma.ragKnowledgeBase.update({
+      where: { id: knowledgeBaseA },
+      data: { status: 'DISABLED' },
+    });
+
+    try {
+      await expect(
+        service.retrieve(actor(tenantA, tenantAUser), 'annual leave'),
+      ).rejects.toMatchObject({ code: 'RAG_RETRIEVAL_DISABLED' });
+      await expect(
+        prisma.ragEmbeddingUsage.count({
+          where: { tenantId: tenantA, purpose: 'RAG_QUERY' },
+        }),
+      ).resolves.toBe(usageBefore);
+    } finally {
+      await prisma.ragKnowledgeBase.update({
+        where: { id: knowledgeBaseA },
+        data: { status: 'ENABLED' },
+      });
+    }
+    await expect(
+      service.retrieve(actor(tenantA, tenantAUser), 'annual leave'),
+    ).resolves.toEqual([
+      expect.objectContaining({ documentId: documentA.publicId }),
+    ]);
+    await expect(
+      prisma.ragDocumentIndex.count({
+        where: { documentId: documentA.id, status: 'ACTIVE' },
+      }),
+    ).resolves.toBe(1);
+  });
+
   it('excludes DELETING immediately and stays excluded after hard delete', async () => {
     await prisma.ragDocument.update({ where: { id: documentA.id }, data: { status: 'DELETING' } });
     await expect(service.retrieve(actor(tenantA, tenantAUser), 'annual leave')).resolves.toEqual([]);

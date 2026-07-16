@@ -423,14 +423,14 @@ For retrieval profile version 1, `$3 = 0.30` cosine similarity and `$4 = 6`; bot
 
 ## 7. API and internal contract drafts
 
-The document upload/list/status/delete shapes below are promoted into the active Tenant Chat contract by `docs/tenant-chat/openapi/admin-rag.openapi.json`. The private extraction/embedding, knowledge mode, RAG context, usage, retrieval errors, citation/SSE, and deletion contracts are also active in the linked Tenant Chat contract files. The Knowledge Base enable/disable routes remain proposals and are the product-flow release blocker.
+The Knowledge Base enablement and document upload/list/status/delete shapes below are promoted into the active Tenant Chat contract by `docs/tenant-chat/openapi/admin-rag.openapi.json`. The private extraction/embedding, knowledge mode, RAG context, usage, retrieval errors, citation/SSE, and deletion contracts are also active in the linked Tenant Chat contract files.
 
 ### Control Plane admin API
 
 - `GET /admin/v1/tenants/:tenantId/rag/knowledge-base`
-  - Future proposal: returns enabled state and aggregate document counts only.
+  - Active: returns only `tenantEnabled`, read-only `globalEnabled`, and their AND `effectiveEnabled`. A missing singleton is reported as disabled without mutating on GET.
 - `PATCH /admin/v1/tenants/:tenantId/rag/knowledge-base`
-  - Future proposal: Tenant Admin enables/disables RAG for employee conversation selection; the body contains only the bounded enabled state.
+  - Active: Tenant Admin idempotently enables/disables employee RAG selection with exact `{enabled:boolean}`. It changes only Knowledge Base status; prepared documents, indexes, jobs, revision, and past citations are preserved.
 - `GET /admin/v1/tenants/:tenantId/rag/documents`
   - Active M5 route. Cursor-paginated list with safe `documentId`, authorized server-decrypted display name, type, status, size, uploader, safe failure fields, and timestamps.
 - `POST /admin/v1/tenants/:tenantId/rag/documents`
@@ -954,7 +954,7 @@ The product directions in this plan are approved. The remaining items are concre
 4. **Dependencies:** the M5 AWS SDK packages and M3 `pypdf==6.14.2`/`tiktoken==0.13.0` packages are approved and locked. Local tests and the AI Service image install the lock successfully; the synchronized candidate still requires its own official Linux CI run before image promotion.
 5. **Chunk constraint reconciliation:** resolved by additive migration `20260716200000_rag_worker_foundation`, which replaces only `rag_chunks_counts_check` with the approved 900-token maximum before worker persistence. The applied M2 migration remains immutable.
 6. **Evaluation evidence:** validate the approved initial 600/100/900 chunking and top-six/0.30/6,000-token retrieval profile with fixtures before production enablement; tune version 1 only before launch.
-7. **Tenant enablement contract and implementation:** knowledge mode, marked context, stable retrieval errors, usage, delete, and citation/SSE history shapes are promoted in `docs/tenant-chat/contracts.md`. The remaining blocker is a reviewed tenant-admin Knowledge Base enable/disable contract plus its Control Plane API and Web Console flow; tests must stop relying on direct `status=ENABLED` seed writes as the only activation path.
+7. **Tenant enablement deployment evidence:** the reviewed Tenant Admin Knowledge Base contract, Control Plane API, and Web Console flow are implemented. The remaining release evidence is the official CI/browser flow plus staging verification that disable blocks the next retrieval and re-enable reuses an existing READY index without re-ingestion.
 8. **Operational policy:** set worker concurrency, lease duration, retry limits, SLOs, backup/restore, orphan reconciliation cadence, and alarm thresholds. PostgreSQL `RagJob` itself is already the approved MVP mechanism.
 
 ## 16. Decisions changed from the initial assumptions

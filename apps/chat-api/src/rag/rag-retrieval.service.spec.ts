@@ -43,8 +43,12 @@ describe('RagRetrievalService', () => {
   });
 
   it('fails closed when the global feature flag is disabled', async () => {
-    const service = createService(repositoryMock(), { embedQuery: jest.fn() }, 'false');
+    const embeddingClient = { embedQuery: jest.fn() };
+    const repository = repositoryMock();
+    const service = createService(repository, embeddingClient, 'false');
     await expect(service.retrieve(actor(), 'leave policy')).rejects.toBeInstanceOf(RagRetrievalDisabledError);
+    expect(repository.findEnabledKnowledgeBase).not.toHaveBeenCalled();
+    expect(embeddingClient.embedQuery).not.toHaveBeenCalled();
   });
 
   it('rejects malformed query embedding dimensions before SQL search', async () => {

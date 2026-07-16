@@ -2,12 +2,67 @@
   "openapi": "3.1.0",
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
-    "title": "GateLM Tenant Chat Admin RAG Document API",
+    "title": "GateLM Tenant Chat Admin RAG API",
     "version": "tenant-chat/v1",
-    "description": "Tenant-admin upload, list, status, and asynchronous hard-delete contract for Tenant Chat RAG documents."
+    "description": "Tenant-admin Knowledge Base enablement plus upload, list, status, and asynchronous hard-delete contracts for Tenant Chat RAG documents."
   },
   "security": [{ "adminSession": [] }],
   "paths": {
+    "/admin/v1/tenants/{tenantId}/rag/knowledge-base": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "description": "Tenant scope authorized from the administrator session; it is never accepted in the request body or query.",
+          "schema": { "type": "string", "format": "uuid" }
+        }
+      ],
+      "get": {
+        "operationId": "getTenantRagKnowledgeBaseSettings",
+        "summary": "Read tenant, global, and effective RAG enablement without creating a Knowledge Base",
+        "responses": {
+          "200": {
+            "description": "The missing-row default is tenant disabled. Effective enablement is true only when both global and tenant gates are enabled.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/KnowledgeBaseSettingsEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidKnowledgeBaseSettings" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "503": { "$ref": "#/components/responses/KnowledgeBaseServiceUnavailable" }
+        }
+      },
+      "patch": {
+        "operationId": "updateTenantRagKnowledgeBaseSettings",
+        "summary": "Enable or disable employee RAG access without changing prepared documents",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateKnowledgeBaseSettingsRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The tenant gate was idempotently updated. Documents, indexes, jobs, revision, and past citations are unchanged.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/KnowledgeBaseSettingsEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidKnowledgeBaseSettings" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "503": { "$ref": "#/components/responses/KnowledgeBaseServiceUnavailable" }
+        }
+      }
+    },
     "/admin/v1/tenants/{tenantId}/rag/documents": {
       "parameters": [
         {
@@ -149,6 +204,43 @@
       }
     },
     "schemas": {
+      "UpdateKnowledgeBaseSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enabled"],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Tenant-owned gate only. The global process gate is never writable from this API."
+          }
+        }
+      },
+      "KnowledgeBaseSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tenantEnabled", "globalEnabled", "effectiveEnabled"],
+        "properties": {
+          "tenantEnabled": { "type": "boolean" },
+          "globalEnabled": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "Control Plane deployment snapshot. Supported deployments inject the same global flag into every RAG process."
+          },
+          "effectiveEnabled": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "Always globalEnabled AND tenantEnabled."
+          }
+        }
+      },
+      "KnowledgeBaseSettingsEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/KnowledgeBaseSettings" }
+        }
+      },
       "UploadDocumentRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -293,6 +385,16 @@
       }
     },
     "responses": {
+      "InvalidKnowledgeBaseSettings": {
+        "description": "The tenantId is malformed, request body is not exactly a boolean enabled field, or a query scope override was supplied.",
+        "x-error-codes": ["VALIDATION_ERROR"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "KnowledgeBaseServiceUnavailable": {
+        "description": "The tenant Knowledge Base setting could not be read or durably updated. Database details are redacted.",
+        "x-error-codes": ["RAG_KNOWLEDGE_BASE_UNAVAILABLE"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
       "InvalidUpload": {
         "description": "Empty input, unsupported extension/MIME, signature mismatch, malformed UTF-8, unsafe original filename or invalid displayName.",
         "x-error-codes": ["RAG_DOCUMENT_INVALID_UPLOAD"],

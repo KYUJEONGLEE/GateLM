@@ -6,7 +6,6 @@ import {
   Building2,
   ChevronDown,
   FolderKanban,
-  Files,
   KeyRound,
   Globe2,
   LayoutDashboard,
@@ -59,7 +58,6 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
   "app-tokens": SettingsIcon,
   "chat-app": MessageSquareText,
   employees: Users,
-  "knowledge-documents": Files,
   alerts: Bell,
   analytics: Activity,
   "live-logs": ScrollText,
@@ -73,7 +71,6 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
 };
 
 type ConsoleShellProps = {
-  canManageKnowledgeDocuments?: boolean;
   children: ReactNode;
   activeManagementItem?: ManagementNavItem;
   activeMonitoringItem?: MonitoringNavItem;
@@ -84,7 +81,6 @@ type ConsoleShellProps = {
 };
 
 type ChildNavigationItem = {
-  adminOnly?: boolean;
   badge?: string;
   disabled?: boolean;
   labels: Record<Locale, string>;
@@ -169,15 +165,6 @@ const navigationItems: Array<{
         },
         item: "employees",
         path: (tenantId) => `/tenants/${tenantId}/employees`
-      },
-      {
-        labels: {
-          en: "Knowledge Documents",
-          ko: "지식 문서"
-        },
-        adminOnly: true,
-        item: "knowledge-documents",
-        path: (tenantId) => `/tenants/${tenantId}/knowledge-documents`
       },
       {
         labels: {
@@ -278,7 +265,6 @@ export function ConsoleShell({
   activeManagementItem,
   activeMonitoringItem,
   activeSection,
-  canManageKnowledgeDocuments = false,
   children,
   currentUser,
   locale,
@@ -361,7 +347,7 @@ export function ConsoleShell({
   }
 
   function renderSubnavItems(children: ChildNavigationItem[]) {
-    return children.filter((child) => !child.adminOnly || canManageKnowledgeDocuments).map((child) => {
+    return children.map((child) => {
       const childLabel = child.labels[locale];
       const ChildIcon = childIcons[child.item];
 
