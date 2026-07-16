@@ -19748,6 +19748,14 @@ html:has(.tenant-management-content) {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.policy-routing-model-selectors > label {
+  min-width: 0;
+}
+
+.routing-migration-manual-grid .policy-routing-model-selectors {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 820px) {
   .policy-routing-role-row {
     grid-template-columns: minmax(0, 1fr);

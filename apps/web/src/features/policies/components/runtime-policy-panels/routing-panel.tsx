@@ -25,6 +25,7 @@ import type {
 } from "../runtime-policy-editor-types";
 import {
   getRoutingModelOptions,
+  groupRoutingModelOptionsByProvider,
   type RoutingModelOption
 } from "../runtime-policy-editor-utils";
 
@@ -99,20 +100,34 @@ export function RoutingPolicyPanel({
 
   return (
     <>
-      <section className="tenant-routing-enable-card" aria-labelledby="policy-auto-routing-title">
-        <div>
-          <h3 id="policy-auto-routing-title">Auto routing</h3>
-          <p>{text.routingRoleHint}</p>
-        </div>
-        <div className="tenant-routing-switch-control">
-          <Switch
-            aria-label="Auto routing"
-            checked={draftValues.routingPolicy.mode === "auto"}
-            className="tenant-routing-switch"
-            onCheckedChange={(checked) => setMode(checked ? "auto" : "manual")}
-          />
-          <span>{draftValues.routingPolicy.mode === "auto" ? "ON" : "OFF"}</span>
-        </div>
+      <section
+        aria-labelledby="policy-auto-routing-title"
+        className="tenant-routing-model-card"
+        data-routing-mode={draftValues.routingPolicy.mode}
+      >
+        <header className="tenant-routing-model-heading">
+          <div className="tenant-routing-model-heading-copy">
+            <h3 id="policy-auto-routing-title">Auto routing</h3>
+            <p>{text.routingRoleHint}</p>
+          </div>
+          <div className="tenant-routing-heading-mode">
+            <span>Auto routing</span>
+            <div className="tenant-routing-switch-control">
+              <Switch
+                aria-label="Auto routing"
+                checked={draftValues.routingPolicy.mode === "auto"}
+                className="tenant-routing-switch"
+                onCheckedChange={(checked) => setMode(checked ? "auto" : "manual")}
+              />
+              <span
+                className="tenant-routing-mode-label"
+                data-active="true"
+              >
+                {draftValues.routingPolicy.mode === "auto" ? "ON" : "OFF"}
+              </span>
+            </div>
+          </div>
+        </header>
       </section>
 
       {hasMockRoute ? (
@@ -176,6 +191,7 @@ export function RoutingPolicyPanel({
                   <RoleModelSelect
                     allowEmpty
                     label={text.routingSimpleModel}
+                    modelLabel={text.model}
                     modelOptions={modelOptions}
                     noneLabel={text.routingSelectModel}
                     onChange={(simpleModelRef) =>
@@ -188,11 +204,13 @@ export function RoutingPolicyPanel({
                         simpleModelRef
                       }))
                     }
+                    providerLabel={text.provider}
                     value={manualSetupRoles.simpleModelRef}
                   />
                   <RoleModelSelect
                     allowEmpty
                     label={text.routingComplexModel}
+                    modelLabel={text.model}
                     modelOptions={modelOptions}
                     noneLabel={text.routingSelectModel}
                     onChange={(complexModelRef) =>
@@ -205,6 +223,7 @@ export function RoutingPolicyPanel({
                             : current.fallbackModelRef
                       }))
                     }
+                    providerLabel={text.provider}
                     value={manualSetupRoles.complexModelRef}
                   />
                   <RoleModelSelect
@@ -214,6 +233,7 @@ export function RoutingPolicyPanel({
                       manualSetupRoles.complexModelRef
                     ]}
                     label={text.routingFallbackModel}
+                    modelLabel={text.model}
                     modelOptions={modelOptions}
                     noneLabel={text.routingFallbackNone}
                     onChange={(fallbackModelRef) =>
@@ -222,6 +242,7 @@ export function RoutingPolicyPanel({
                         fallbackModelRef: fallbackModelRef || null
                       }))
                     }
+                    providerLabel={text.provider}
                     value={manualSetupRoles.fallbackModelRef ?? ""}
                   />
                 </div>
@@ -261,15 +282,21 @@ export function RoutingPolicyPanel({
             <RoleModelSelect
               appearance="card"
               label={text.routingSimpleModel}
+              modelLabel={text.model}
               modelOptions={modelOptions}
+              noneLabel={text.routingSelectModel}
               onChange={(simpleModelRef) => setRoles({ ...roles, simpleModelRef })}
+              providerLabel={text.provider}
               value={roles.simpleModelRef}
             />
             <RoleModelSelect
               appearance="card"
               label={text.routingComplexModel}
+              modelLabel={text.model}
               modelOptions={modelOptions}
+              noneLabel={text.routingSelectModel}
               onChange={(complexModelRef) => setRoles({ ...roles, complexModelRef })}
+              providerLabel={text.provider}
               value={roles.complexModelRef}
             />
             <RoleModelSelect
@@ -277,6 +304,7 @@ export function RoutingPolicyPanel({
               appearance="card"
               excludedModelRefs={[roles.simpleModelRef, roles.complexModelRef]}
               label={text.routingFallbackModel}
+              modelLabel={text.model}
               modelOptions={modelOptions}
               noneLabel={text.routingFallbackNone}
               onChange={(fallbackModelRef) =>
@@ -285,6 +313,7 @@ export function RoutingPolicyPanel({
                   fallbackModelRef: fallbackModelRef || null
                 })
               }
+              providerLabel={text.provider}
               value={roles.fallbackModelRef ?? ""}
             />
           </div>
@@ -300,18 +329,22 @@ function RoleModelSelect({
   appearance = "default",
   excludedModelRefs = [],
   label,
+  modelLabel,
   modelOptions,
   noneLabel = "None",
   onChange,
+  providerLabel,
   value
 }: {
   allowEmpty?: boolean;
   appearance?: "card" | "default";
   excludedModelRefs?: string[];
   label: string;
+  modelLabel: string;
   modelOptions: RoutingModelOption[];
   noneLabel?: string;
   onChange: (modelRef: string) => void;
+  providerLabel: string;
   value: string;
 }) {
   const availableOptions = modelOptions.filter(
@@ -325,73 +358,103 @@ function RoleModelSelect({
           {
             family: "mock",
             label: `${value} (unavailable)`,
+            modelName: `${value} (unavailable)`,
             modelRef: value,
+            providerConnectionId: "__unavailable",
+            providerDisplayName: "unavailable",
             providerName: "unavailable"
           },
           ...availableOptions
         ]
       : availableOptions;
+  const providers = groupRoutingModelOptionsByProvider(options);
+  const selectedProvider = providers.find((provider) =>
+    provider.models.some((model) => model.modelRef === value)
+  );
+  const providerValue = selectedProvider?.providerConnectionId ?? "";
+  const selectedProviderUnavailable = providerValue === "__unavailable";
 
-  if (appearance === "card") {
-    return (
-      <label className="tenant-routing-route policy-routing-role-row">
-        <span className="policy-routing-role-label">{label}</span>
-        <span
-          className="tenant-routing-model-choice policy-routing-model-choice"
-          data-has-icon={value ? "true" : "false"}
-        >
-          {value ? (
+  return (
+    <div
+      className={
+        appearance === "card"
+          ? "tenant-routing-route policy-routing-role-row"
+          : "tenant-routing-route"
+      }
+    >
+      <span className={appearance === "card" ? "policy-routing-role-label" : undefined}>
+        {label}
+      </span>
+      <div
+        aria-label={label}
+        className="tenant-routing-model-selectors policy-routing-model-selectors"
+        role="group"
+      >
+        <label>
+          <span className="sr-only">{providerLabel}</span>
+          <span className="tenant-routing-provider-control">
             <ProviderFamilyIcon
-              className="tenant-routing-provider-icon tenant-routing-provider-icon-large"
-              family={selectedOption?.family ?? "mock"}
-              size={36}
+              className="tenant-routing-provider-icon"
+              family={selectedProvider?.family ?? "unknown"}
+              size={22}
             />
-          ) : null}
-          <span className="tenant-routing-model-choice-copy">
-            {value ? (
-              <span className="tenant-routing-model-provider">
-                {selectedOption?.providerName ?? "unavailable"}
-              </span>
-            ) : null}
             <select
-              aria-label={label}
-              onChange={(event) => onChange(event.target.value)}
-              value={value}
+              aria-label={`${label} ${providerLabel}`}
+              onChange={(event) => {
+                if (event.target.value === "") {
+                  onChange("");
+                  return;
+                }
+
+                const nextProvider = providers.find(
+                  (provider) =>
+                    provider.providerConnectionId === event.target.value
+                );
+                onChange(nextProvider?.models[0]?.modelRef ?? "");
+              }}
+              value={providerValue}
             >
               {allowEmpty ? <option value="">{noneLabel}</option> : null}
-              {options.map((option) => (
-                <option key={option.modelRef} value={option.modelRef}>
-                  {option.label}
+              {!allowEmpty && !selectedProvider ? (
+                <option disabled value="">
+                  {noneLabel}
+                </option>
+              ) : null}
+              {providers.map((provider) => (
+                <option
+                  disabled={provider.providerConnectionId === "__unavailable"}
+                  key={provider.providerConnectionId}
+                  value={provider.providerConnectionId}
+                >
+                  {provider.displayName}
                 </option>
               ))}
             </select>
           </span>
-        </span>
-      </label>
-    );
-  }
-
-  return (
-    <label className="tenant-routing-route">
-      <span>{label}</span>
-      <span className="routing-model-ref-item" data-has-icon={value ? "true" : "false"}>
-        {value ? (
-          <ProviderFamilyIcon
-            className="tenant-routing-provider-icon"
-            family={selectedOption?.family ?? "mock"}
-            size={20}
-          />
-        ) : null}
-        <select aria-label={label} onChange={(event) => onChange(event.target.value)} value={value}>
-          {allowEmpty ? <option value="">{noneLabel}</option> : null}
-          {options.map((option) => (
-            <option key={option.modelRef} value={option.modelRef}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </span>
-    </label>
+        </label>
+        <label>
+          <span className="sr-only">{modelLabel}</span>
+          <span className="tenant-routing-model-control">
+            <select
+              aria-label={`${label} ${modelLabel}`}
+              disabled={!selectedProvider || selectedProviderUnavailable}
+              onChange={(event) => onChange(event.target.value)}
+              value={selectedProvider ? value : ""}
+            >
+              {selectedProvider ? (
+                selectedProvider.models.map((option) => (
+                  <option key={option.modelRef} value={option.modelRef}>
+                    {option.modelName}
+                  </option>
+                ))
+              ) : (
+                <option value="">{noneLabel}</option>
+              )}
+            </select>
+          </span>
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -404,7 +467,10 @@ function createModelRefOptions(
     options.unshift({
       family: "mock",
       label: "Mock Provider / mock-balanced",
+      modelName: "mock-balanced",
       modelRef: "mock-balanced",
+      providerConnectionId: "mock",
+      providerDisplayName: "Mock Provider",
       providerName: "mock"
     });
   }
