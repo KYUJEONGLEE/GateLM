@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
-import { api, ChatApiError, startGoogle } from '@/lib/browser-api';
+import { api, ChatApiError } from '@/lib/browser-api';
 
 export function LoginForm() {
   const router = useRouter();
@@ -42,8 +42,6 @@ export function LoginForm() {
       <div className="field"><label htmlFor="email">이메일</label><Input id="email" name="email" type="email" autoComplete="username" inputMode="email" required placeholder="name@company.com" /></div>
       <div className="field"><label htmlFor="password">비밀번호</label><Input id="password" name="password" type="password" autoComplete="current-password" required /></div>
       <div className="form-actions"><Button disabled={busy} type="submit">{busy ? '확인하는 중…' : '로그인'}</Button></div>
-      <div className="divider" aria-hidden>또는</div>
-      <Button type="button" variant="secondary" disabled={busy} onClick={() => { setBusy(true); startGoogle().catch((reason) => { setBusy(false); setError(reason instanceof Error ? reason.message : 'Google 로그인을 시작하지 못했습니다.'); }); }}><span className="google-mark" aria-hidden>G</span> Google로 계속</Button>
     </form>
     <p className="helper">GateLM Chat은 공개 회원가입을 제공하지 않습니다.<br />접근이 필요하면 조직 관리자에게 초대를 요청하세요.</p>
   </Card>;
