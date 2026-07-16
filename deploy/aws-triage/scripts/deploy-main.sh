@@ -154,6 +154,23 @@ wait_for_http() {
   return 1
 }
 
+wait_for_chat_api_readiness() {
+  local attempts="${1:-30}"
+  local delay_seconds="${2:-5}"
+  local attempt
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if compose exec -T chat-api node -e \
+      "fetch('http://127.0.0.1:3003/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+      return 0
+    fi
+    sleep "${delay_seconds}"
+  done
+
+  deploy_warn "Timed out waiting for Chat API readiness."
+  return 1
+}
+
 capture_http_status() {
   local status
 
@@ -286,6 +303,7 @@ restore_previous_application() {
       wait_for_http "restored Gateway" "http://127.0.0.1:8080/readyz" 24 5 || restore_failed=true
       wait_for_http "restored Web Console" "http://127.0.0.1:3000/" 24 5 || restore_failed=true
       wait_for_http "restored Tenant Chat" "http://127.0.0.1:3002/login" 24 5 || restore_failed=true
+      wait_for_chat_api_readiness 24 5 || restore_failed=true
     fi
   else
     deploy_warn "Cutover had not started; existing containers were left running."
@@ -345,6 +363,13 @@ chmod 700 "${backup_dir}"
 printf '%s\n' "${previous_sha}" > "${backup_dir}/previous-sha.txt"
 printf '%s\n' "${target_sha}" > "${backup_dir}/target-sha.txt"
 install -m 600 "${env_file}" "${backup_dir}/aws-triage.env"
+tenant_chat_secret_backup_dir="${backup_dir}/tenant-chat-secrets"
+install -d -m 700 "${tenant_chat_secret_backup_dir}"
+for name in "${tenant_chat_secret_files[@]}"; do
+  install -m 600 \
+    "${tenant_chat_secret_dir}/${name}" \
+    "${tenant_chat_secret_backup_dir}/${name}"
+done
 
 for service in "${runtime_services[@]}"; do
   container_id="$(compose ps -q "${service}")"
@@ -413,6 +438,7 @@ wait_for_http "Gateway health" "http://127.0.0.1:8080/healthz"
 wait_for_http "Gateway readiness" "http://127.0.0.1:8080/readyz"
 wait_for_http "Web Console" "http://127.0.0.1:3000/"
 wait_for_http "Tenant Chat" "http://127.0.0.1:3002/login"
+wait_for_chat_api_readiness || deploy_fail "Chat API readiness did not verify database and key continuity."
 wait_for_http "public Web Console" "${public_url}" || \
   deploy_warn "Public Web Console is not reachable from this host."
 wait_for_http "public Tenant Chat" "${chat_url}/login" || \
@@ -445,6 +471,7 @@ cat > "${backup_dir}/deployment-evidence.json" <<EOF
   "deployedSha": "${target_sha}",
   "gatewayUnauthenticatedStatus": 401,
   "tenantChatUnauthenticatedStatus": 401,
+  "tenantChatKeyContinuity": "verified",
   "status": "passed"
 }
 EOF
