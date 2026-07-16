@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
@@ -62,6 +62,13 @@ export function ChatShell() {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const userMessagesByTurnId = useMemo(() => {
+    const byTurnId = new Map<string, DisplayMessage>();
+    for (const message of messages) {
+      if (message.role === 'user') byTurnId.set(message.turnId, message);
+    }
+    return byTurnId;
+  }, [messages]);
   const drawerRef = useRef<HTMLElement>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -513,7 +520,7 @@ export function ChatShell() {
                         {message.cacheOutcome === 'hit'
                           ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
                           : message.effectiveModelKey
-                            ? <div className="message-meta" aria-label={`응답 ${modelResponseMetaText(message, messages)}`}>{modelResponseMetaText(message, messages)}</div>
+                            ? <div className="message-meta" aria-label={`응답 ${modelResponseMetaText(message, userMessagesByTurnId)}`}>{modelResponseMetaText(message, userMessagesByTurnId)}</div>
                             : null}
                       </div>}
                     </article>
@@ -570,11 +577,16 @@ function MessageTime({ createdAt }: Readonly<{ createdAt: string }>) {
   const [displayTime, setDisplayTime] = useState('');
 
   useEffect(() => {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) {
+      setDisplayTime('');
+      return;
+    }
     setDisplayTime(new Intl.DateTimeFormat('ko-KR', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    }).format(new Date(createdAt)));
+    }).format(date));
   }, [createdAt]);
 
   return <time dateTime={createdAt}>{displayTime}</time>;
@@ -630,8 +642,11 @@ function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
 }
 
-function modelResponseMetaText(message: DisplayMessage, messages: readonly DisplayMessage[]): string {
-  const durationMs = message.responseDurationMs ?? persistedResponseDurationMs(message, messages);
+function modelResponseMetaText(
+  message: DisplayMessage,
+  userMessagesByTurnId: ReadonlyMap<string, DisplayMessage>,
+): string {
+  const durationMs = message.responseDurationMs ?? persistedResponseDurationMs(message, userMessagesByTurnId);
   const duration = durationMs === undefined
     ? ''
     : ` · ${Math.max(1, Math.round(durationMs / 1000))}s 소요`;
@@ -640,10 +655,9 @@ function modelResponseMetaText(message: DisplayMessage, messages: readonly Displ
 
 function persistedResponseDurationMs(
   message: DisplayMessage,
-  messages: readonly DisplayMessage[],
+  userMessagesByTurnId: ReadonlyMap<string, DisplayMessage>,
 ): number | undefined {
-  const userMessage = messages.find((candidate) =>
-    candidate.role === 'user' && candidate.turnId === message.turnId);
+  const userMessage = userMessagesByTurnId.get(message.turnId);
   if (!userMessage) return undefined;
   const durationMs = Date.parse(message.createdAt) - Date.parse(userMessage.createdAt);
   return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined;
