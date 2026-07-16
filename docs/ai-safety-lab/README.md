@@ -73,6 +73,7 @@ Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 | `resource-latency-benchmark.md` | local sidecar 리소스/지연시간 벤치마크 측정 프로토콜과 리포트 템플릿 |
 | `tenant-chat-pii-model-integration-20260715.md` | 전달 번들 해시, Tenant Chat 연결, 품질 한계, 실제 CPU 측정 근거 |
 | `tenant-chat-pii-model-limit-report-and-roadmap-20260716.md` | 현재 규칙·OpenAI·KoELECTRA 비교 결과, 확인된 결함, 한글 발전 계획과 단계별 통과 기준 |
+| `tenant-chat-pii-small-model-stage4-6-20260716.md` | KoELECTRA-small 합성 데이터·fine-tuning·QInt8 실측과 fail-closed 배포 차단 결과 |
 | `pii-model-manifest-20260715.json` | 전달 모델 revision/file size/SHA-256 manifest |
 | `pii-model-evaluation-summary-20260715.json` | 원문 없는 전달 평가 요약과 promotion 부적합 결정 |
 | `fixtures/` | synthetic safety eval fixture 위치. master corpus와 checksum-bound 103건 PII model screening case-ID manifest를 둔다. |

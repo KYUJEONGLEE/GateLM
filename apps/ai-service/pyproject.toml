@@ -18,6 +18,7 @@ gatelm-pii-ner-training-dataset = "app.services.pii_ner_training_dataset_cli:mai
 gatelm-pii-ner-train = "app.services.pii_ner_train_cli:main"
 gatelm-pii-ner-export = "app.services.pii_ner_export_cli:main"
 gatelm-pii-ner-candidate-eval = "app.services.pii_ner_candidate_eval_cli:main"
+gatelm-pii-ner-deployment-gate = "app.services.pii_ner_deployment_gate_cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]

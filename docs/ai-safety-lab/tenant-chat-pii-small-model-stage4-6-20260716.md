@@ -92,12 +92,30 @@
 
 배포 전에는 synthetic Tenant Chat E2E로 redact, block, Provider 억제, timeout fallback, DB·Redis·로그 원문 비저장을 확인한다. 실패하면 sidecar를 끄고 즉시 rules-only로 원복한다.
 
+#### 6단계 fail-closed 배포 계약
+
+`gatelm-pii-ner-deployment-gate`는 다음 두 증거를 모두 통과한 경우에만 `candidate-activation.env`를 만든다.
+
+1. 5단계 candidate evaluation의 모든 engineering gate 통과
+2. owner 승인, artifact 무결성, 품질, warm/cold runtime, 실제 Tenant Chat E2E가 모두 묶인 production promotion evidence 통과
+
+둘 중 하나라도 실패하거나 누락되면 candidate env를 만들지 않고 다음 rules-only rollback env만 생성한다.
+
+```text
+GATEWAY_AI_SAFETY_SIDECAR_ENABLED=false
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
+```
+
+현재 실제 5단계 보고서로 gate를 실행한 결과는 `candidate_engineering_gate_failed` 1건으로 차단됐다. `candidateActivationEnvWritten=false`, `rulesOnlyRollbackEnvWritten=true`를 확인했다. 따라서 실제 서비스 설정이나 배포 image는 변경하지 않았다.
+
+실제 Tenant Chat E2E를 실행하지 않은 상태에서 boolean 증거를 임의로 만들거나 품질 gate를 우회하는 경로는 제공하지 않는다.
+
 ## 3. 현재 상태
 
 | 단계 | 상태 | 비고 |
 |---|---|---|
 | 4단계 | 구현·검증 완료 | 합성 span dataset builder와 manifest 계약 완료 |
 | 5단계 | 구현·실측 완료, No-Go | 13.9MiB·p95 13.591ms지만 holdout TP 0으로 품질 gate 실패 |
-| 6단계 | 배포 차단 | 5단계 통과 모델이 없으므로 enforce 활성화 금지, rules-only 유지 |
+| 6단계 | fail-closed 계약 구현·검증 완료, 배포 차단 | 실패 후보의 activation env 미생성, rules-only rollback env 생성 확인 |
 
 현재 서비스 안전 기본값은 계속 rules-only다. 이번 결과는 작은 모델이 곧 정확한 모델을 뜻하지 않으며, backbone 교체보다 먼저 학습 데이터와 학습 전략을 개선해야 함을 보여준다.
