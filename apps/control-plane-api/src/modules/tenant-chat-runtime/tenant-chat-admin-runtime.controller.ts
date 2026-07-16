@@ -45,6 +45,7 @@ export class TenantChatAdminRuntimeController {
         routingMode: body.routingMode,
         manualModelRef: body.manualModelRef,
         routes: body.routes,
+        cacheEnabled: body.cacheEnabled,
         publishedBy,
       }),
     };

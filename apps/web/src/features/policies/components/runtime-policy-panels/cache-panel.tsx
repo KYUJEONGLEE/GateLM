@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronDown, DatabaseZap, FlaskConical } from "lucide-react";
+import { ChevronDown, FlaskConical } from "lucide-react";
 import { useState } from "react";
 
-import { Switch } from "@/components/ui/switch";
+import { ExactCacheToggleCard } from "@/features/policies/components/exact-cache-toggle-card";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
 import type {
@@ -32,31 +32,18 @@ export function CachePolicyPanel({
       <div className="policy-cache-content">
         <section className="policy-cache-group">
           <h4>{text.cacheSettings}</h4>
-          <div
-            className="policy-cache-card"
-            data-enabled={draftValues.cacheEnabled}
-          >
-            <div className="policy-cache-card-summary">
-              <span className="policy-cache-card-icon" aria-hidden="true">
-                <DatabaseZap size={19} />
-              </span>
-              <span className="policy-cache-card-copy">
-                <strong>{text.cacheEnabled}</strong>
-                <small>{text.cacheEnabledHint}</small>
-              </span>
-              <Switch
-                aria-label={text.cacheEnabled}
-                checked={draftValues.cacheEnabled}
-                id="runtime-policy-cache-enabled"
-                onCheckedChange={(checked) =>
-                  onDraftValuesChange((current) => ({
-                    ...current,
-                    cacheEnabled: checked
-                  }))
-                }
-              />
-            </div>
-          </div>
+          <ExactCacheToggleCard
+            enabled={draftValues.cacheEnabled}
+            hint={text.cacheEnabledHint}
+            id="runtime-policy-cache-enabled"
+            onEnabledChange={(checked) =>
+              onDraftValuesChange((current) => ({
+                ...current,
+                cacheEnabled: checked
+              }))
+            }
+            title={text.cacheEnabled}
+          />
           <button
             aria-expanded={isSemanticExpanded}
             className="policy-cache-semantic-toggle"

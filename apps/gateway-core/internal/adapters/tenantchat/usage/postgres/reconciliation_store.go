@@ -155,7 +155,8 @@ func lockNextPendingReservation(ctx context.Context, tx pgx.Tx, cutoff time.Time
 		       reservation.snapshot_digest, reservation.pricing_version,
 		       reservation.user_period_start, reservation.tenant_period_start,
 		       reservation.reserved_tokens, reservation.reserved_cost_micro_usd,
-		       reservation.ledger_version, admission.actor_kind, admission.employee_id::text
+		       reservation.ledger_version, reservation.cache_outcome,
+		       admission.actor_kind, admission.employee_id::text
 		FROM tenant_chat_usage_reservations AS reservation
 		JOIN tenant_chat_request_admissions AS admission
 		  ON admission.tenant_id = reservation.tenant_id
@@ -174,7 +175,8 @@ func lockNextPendingReservation(ctx context.Context, tx pgx.Tx, cutoff time.Time
 		&result.Request.Snapshot.Digest, &result.Reservation.PricingVersion,
 		&result.Reservation.UserPeriodStart, &result.Reservation.TenantPeriodStart,
 		&result.Reservation.ReservedTokens, &result.Reservation.ReservedCostMicroUSD,
-		&result.Reservation.LedgerVersion, &result.Request.ExecutionScope.Actor.ActorKind, &employeeID,
+		&result.Reservation.LedgerVersion, &result.Reservation.CacheOutcome,
+		&result.Request.ExecutionScope.Actor.ActorKind, &employeeID,
 	)
 	if err != nil {
 		return pendingReservation{}, err
@@ -351,7 +353,7 @@ func reconciliationEventPayload(
 		executionScope["employeeId"] = actor.EmployeeID
 	}
 	payload := map[string]any{
-		"eventId": eventID, "schemaVersion": 2, "eventType": "usage_unconfirmed", "eventVersion": eventVersion,
+		"eventId": eventID, "schemaVersion": 3, "eventType": "usage_unconfirmed", "eventVersion": eventVersion,
 		"occurredAt": now.Format(time.RFC3339Nano), "aggregateId": pending.Request.RequestID,
 		"requestId": pending.Request.RequestID, "turnId": pending.Request.TurnID,
 		"idempotencyKey": pending.Request.IdempotencyKey, "reservationId": pending.ID,
@@ -361,6 +363,7 @@ func reconciliationEventPayload(
 			"timezone": userPeriod.Timezone, "currency": "USD",
 		},
 		"snapshotVersion": pending.Request.Snapshot.Version, "pricingVersion": pending.Reservation.PricingVersion,
+		"cacheOutcome": pending.Reservation.CacheOutcome,
 		"quota": map[string]any{
 			"state": quotaState, "reservedTokensDelta": -pending.Reservation.ReservedTokens,
 			"confirmedInputTokensDelta":  exposure.Confirmed.InputTokens,

@@ -3,7 +3,9 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   Prisma,
   ProviderConnectionStatus,
@@ -103,7 +105,10 @@ interface NormalizedAdminRouting {
 
 @Injectable()
 export class TenantChatRuntimeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async getActiveSnapshot(
     tenantId: string,
@@ -350,6 +355,7 @@ export class TenantChatRuntimeService {
     const policies = this.composeAdminPolicies(
       activeSnapshot,
       routing,
+      input.cacheEnabled ?? activeSnapshot?.policies.cache.enabled ?? true,
     );
     const pricingRoutes = this.composePricingRoutes(
       policies.routing.routes,
@@ -605,12 +611,16 @@ export class TenantChatRuntimeService {
       routingMode: routingPolicy?.mode ?? 'manual',
       manualModelRef: activeManualModelRef,
       routes,
+      cacheEnabled:
+        snapshot.policies.cache.enabled &&
+        snapshot.policies.cache.strategy === 'exact',
     };
   }
 
   private composeAdminPolicies(
     activeSnapshot: TenantChatRuntimeSnapshotDocument | null,
     routing: NormalizedAdminRouting,
+    cacheEnabled: boolean,
   ): TenantChatRuntimePolicies {
     const safetyWithoutDigest = {
       enabled: true,
@@ -702,12 +712,14 @@ export class TenantChatRuntimeService {
           windowSeconds: 60,
         })),
       },
-      cache: activeSnapshot?.policies.cache ?? {
-        strategy: 'off',
-        enabled: false,
-        ttlSeconds: 300,
-        maxEntriesPerUser: 100,
-        keySetId: 'tenant_chat_cache_keys_v1',
+      cache: {
+        strategy: cacheEnabled ? 'exact' : 'off',
+        enabled: cacheEnabled,
+        ttlSeconds: activeSnapshot?.policies.cache.ttlSeconds ?? 300,
+        maxEntriesPerUser:
+          activeSnapshot?.policies.cache.maxEntriesPerUser ?? 100,
+        keySetId:
+          activeSnapshot?.policies.cache.keySetId ?? this.cacheKeySetId(),
       },
       safety: activeSnapshot?.policies.safety ?? {
         ...safetyWithoutDigest,
@@ -765,6 +777,13 @@ export class TenantChatRuntimeService {
       snapshot.pricing.effectiveAt === effectiveAt &&
       canonicalizeTenantChatJson(snapshot.pricing.routes) ===
         canonicalizeTenantChatJson(pricingRoutes)
+    );
+  }
+
+  private cacheKeySetId(): string {
+    return (
+      this.config?.get<string>('TENANT_CHAT_CACHE_KEY_SET_ID') ??
+      'tenant_chat_cache_keys_v1'
     );
   }
 

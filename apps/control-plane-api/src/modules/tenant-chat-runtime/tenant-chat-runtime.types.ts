@@ -191,6 +191,7 @@ export interface TenantChatAdminActiveSnapshot {
   routingMode: TenantChatRoutingMode;
   manualModelRef: string;
   routes: TenantChatRoutingMatrix;
+  cacheEnabled: boolean;
 }
 
 export interface TenantChatAdminRuntimeSetup {
@@ -206,5 +207,6 @@ export interface ActivateTenantChatRuntimeInput {
   routingMode?: TenantChatRoutingMode;
   manualModelRef?: string;
   routes?: TenantChatRoutingMatrix;
+  cacheEnabled?: boolean;
   publishedBy: string;
 }

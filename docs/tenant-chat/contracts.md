@@ -226,7 +226,8 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - 관리자 wire는 [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json)을 따른다.
 - Web Console의 단일 authoring surface 이름은 `채팅 앱`이며 built-in Tenant Chat에만 적용한다. 과거 `회사 정책`과 `Tenant Chat` 메뉴는 이 화면으로 redirect하고 Project/Application routing 의미를 변경하지 않는다.
 - `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태와 active 5×2 snapshot metadata만 반환한다. credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
-- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`를 받는다. 각 cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`, `cacheEnabled`를 받는다. 각 cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+- 신규 authoring client는 `cacheEnabled`를 항상 보낸다. compatibility client가 생략하면 기존 snapshot의 cache policy를 보존하고, 최초 활성화에서만 Exact Cache를 기본 활성화한다. 활성화는 `exact/enabled`, 비활성화는 `off/disabled`로 발행하며 기존 TTL, 사용자별 엔트리 상한과 key-set ID를 보존한다. 최초 값은 TTL 300초, 사용자당 100개와 operator-configured key-set ID다. key-set ID는 관리자 응답에 노출하지 않는다.
 - `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 안전 처리된 메시지에서 기존 deterministic rule classifier로 category를 계산한다. Model-path difficulty는 활성화된 경우 일반 Gateway와 동일한 process-global 106D runtime을 사용하며 `ready` 결과가 `simple|complex` cell 선택에 권위를 가진다. Runtime 비활성화·초기화 실패·queue 포화·timeout·invalid result·inference 실패·panic과 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
 - compatibility 기간 동안 Control Plane은 과거 `providerConnectionId`+`modelKey` PUT을 동일 ref로 채운 manual 5×2 policy로 변환해 받을 수 있다. 이 legacy shape는 새 authoring wire가 아니며 RuntimeSnapshot의 명시적 Routing v2 bridge를 우회하지 않는다.
 - Provider family는 persisted `providerConfig.providerFamily`에서만 판정한다. client 입력이나 base URL 추론으로 가격을 선택하지 않는다.
@@ -324,7 +325,7 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 | `TenantChatRequestAdmission` | `(tenantId,userId,idempotencyKey)` | content-free rate/concurrency admission |
 | `TenantChatUserTokenPeriod` | `(tenantId,userId,periodStart)` | confirmed/reserved token balance |
 | `TenantChatTenantCostPeriod` | `(tenantId,periodStart,currency)` | confirmed/reserved tenant cost balance |
-| `TenantChatUsageReservation` | `requestId` and `(tenantId,userId,idempotencyKey)` | request reserve/top-up/settle state machine |
+| `TenantChatUsageReservation` | `requestId` and `(tenantId,userId,idempotencyKey)` | request reserve/top-up/settle state machine and immutable `off|miss` cache provenance |
 | `TenantChatProviderAttempt` | `(requestId,attemptNo)` | primary/fallback billable attempt |
 | `TenantChatUsageLedgerEntry` | `(requestId,ledgerVersion)` | append-only reservation/settlement delta |
 | `TenantChatInvocationOutbox` | `(aggregateId,eventType,eventVersion)` | atomic projection handoff |
@@ -336,7 +337,7 @@ Correctness source는 period/reservation/ledger transaction이다. `TenantChatIn
 
 ### 9.2 Event
 
-Ledger transition outbox는 paired [usage settlement schema](./schemas/usage-settlement-event.schema.json)를 따른다. admission/rate/concurrency처럼 usage ledger 이전에 끝난 요청은 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)로 같은 outbox/projector를 사용한다.
+Ledger transition outbox의 최신 writer는 paired [usage settlement schema v3](./schemas/usage-settlement-event-v3.schema.json)를 따르고 reservation에 고정된 필수 `cacheOutcome=off|miss`를 모든 transition에 전달한다. Exact Cache hit는 usage reservation을 만들지 않으므로 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)의 `cacheOutcome=hit`을 사용한다. projector는 v1/v2를 계속 읽으며 해당 필드가 없으면 backfill된 reservation provenance를 사용한다.
 
 Idempotency rules:
 

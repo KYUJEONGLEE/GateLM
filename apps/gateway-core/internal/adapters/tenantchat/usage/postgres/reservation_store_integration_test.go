@@ -1146,7 +1146,8 @@ func TestPendingDeadlineAndLateReceiptExactlyOnceIntegration(t *testing.T) {
 	if err := json.Unmarshal(payload, &event); err != nil {
 		t.Fatalf("decode late event: %v", err)
 	}
-	if unconfirmedTokens != 0 || confirmedTokens != 100 || event["schemaVersion"] != float64(2) || event["lateUsage"] != true {
+	if unconfirmedTokens != 0 || confirmedTokens != 100 || event["schemaVersion"] != float64(3) ||
+		event["cacheOutcome"] != "off" || event["lateUsage"] != true {
 		t.Fatalf("unexpected late transition: unconfirmed=%d confirmed=%d event=%v", unconfirmedTokens, confirmedTokens, event)
 	}
 	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{

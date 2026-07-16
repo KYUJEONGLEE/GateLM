@@ -139,7 +139,7 @@ func (s *ReservationStore) FinalizeConfirmed(
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "settled",
 		ConfirmedInputTokens: totals.InputTokens, ConfirmedOutputTokens: totals.OutputTokens,
 		ConfirmedCostMicroUSD: totals.CostMicroUSD, QuotaState: quotaState, BudgetState: budgetState,
-		LedgerVersion: nextVersion, Attempts: attempts,
+		LedgerVersion: nextVersion, CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
 }
 
@@ -232,7 +232,7 @@ func (s *ReservationStore) FinalizeRecordedAttempts(
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "settled",
 		ConfirmedInputTokens: totals.InputTokens, ConfirmedOutputTokens: totals.OutputTokens,
 		ConfirmedCostMicroUSD: totals.CostMicroUSD, QuotaState: quotaState, BudgetState: budgetState,
-		LedgerVersion: nextVersion, Attempts: attempts,
+		LedgerVersion: nextVersion, CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
 }
 
@@ -244,6 +244,7 @@ type settlementReservation struct {
 	ReservedCostMicroUSD int64
 	LedgerVersion        int64
 	PricingVersion       int64
+	CacheOutcome         string
 }
 
 type settlementAttempt struct {
@@ -267,7 +268,8 @@ func lockReservationForSettlement(
 ) (result settlementReservation, err error) {
 	err = tx.QueryRow(ctx, `
 		SELECT state, user_period_start, tenant_period_start,
-		       reserved_tokens, reserved_cost_micro_usd, ledger_version, pricing_version
+		       reserved_tokens, reserved_cost_micro_usd, ledger_version, pricing_version,
+		       cache_outcome
 		FROM tenant_chat_usage_reservations
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid AND user_id = $3::uuid
 		  AND request_id = $4 AND turn_id = $5 AND idempotency_key = $6
@@ -275,7 +277,8 @@ func lockReservationForSettlement(
 	`, reservationID, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID,
 		requestContext.RequestID, requestContext.TurnID, requestContext.IdempotencyKey).Scan(
 		&result.State, &result.UserPeriodStart, &result.TenantPeriodStart,
-		&result.ReservedTokens, &result.ReservedCostMicroUSD, &result.LedgerVersion, &result.PricingVersion,
+		&result.ReservedTokens, &result.ReservedCostMicroUSD, &result.LedgerVersion,
+		&result.PricingVersion, &result.CacheOutcome,
 	)
 	return result, err
 }
@@ -438,7 +441,7 @@ func readSettlement(
 		       reservation.confirmed_input_tokens, reservation.confirmed_output_tokens,
 		       reservation.confirmed_cost_micro_usd, reservation.unconfirmed_tokens,
 		       reservation.unconfirmed_exposure_micro_usd, token_period.state,
-		       cost_period.state, reservation.ledger_version
+		       cost_period.state, reservation.ledger_version, reservation.cache_outcome
 		FROM tenant_chat_usage_reservations AS reservation
 		JOIN tenant_chat_user_token_periods AS token_period
 		  ON token_period.tenant_id = reservation.tenant_id
@@ -453,7 +456,7 @@ func readSettlement(
 		&result.RequestID, &result.ReservationID, &result.State, &result.ConfirmedInputTokens,
 		&result.ConfirmedOutputTokens, &result.ConfirmedCostMicroUSD, &result.UnconfirmedTokens,
 		&result.UnconfirmedExposureMicroUSD, &result.QuotaState, &result.BudgetState,
-		&result.LedgerVersion,
+		&result.LedgerVersion, &result.CacheOutcome,
 	)
 	return result, err
 }
@@ -495,7 +498,7 @@ func settlementEventPayload(
 		executionScope["employeeId"] = actor.EmployeeID
 	}
 	payload := map[string]any{
-		"eventId": eventID, "schemaVersion": 1, "eventType": "usage_settled", "eventVersion": eventVersion,
+		"eventId": eventID, "schemaVersion": 3, "eventType": "usage_settled", "eventVersion": eventVersion,
 		"occurredAt": now.Format(time.RFC3339Nano), "aggregateId": requestContext.RequestID,
 		"requestId": requestContext.RequestID, "turnId": requestContext.TurnID,
 		"idempotencyKey": requestContext.IdempotencyKey, "reservationId": reservationID,
@@ -505,6 +508,7 @@ func settlementEventPayload(
 			"timezone": userPeriod.Timezone, "currency": "USD",
 		},
 		"snapshotVersion": requestContext.Snapshot.Version, "pricingVersion": reservation.PricingVersion,
+		"cacheOutcome": reservation.CacheOutcome,
 		"quota": map[string]any{
 			"state": quotaState, "reservedTokensDelta": -reservation.ReservedTokens,
 			"confirmedInputTokensDelta": totals.InputTokens, "confirmedOutputTokensDelta": totals.OutputTokens,
