@@ -147,3 +147,11 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("BrainCircuit");
   expect(source).toContain("ProviderFamilyIcon");
 });
+
+test("Chat App routing publish recovers from a Control Plane network failure", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source).toContain('setFeedback({ error: true, message: "Control Plane unavailable." });');
+  expect(source).toContain("} finally {\n      setPending(false);");
+});

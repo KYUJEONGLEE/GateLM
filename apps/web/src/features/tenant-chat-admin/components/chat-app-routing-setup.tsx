@@ -192,19 +192,24 @@ export function ChatAppRoutingSetup({
   async function publish() {
     setPending(true);
     setFeedback(null);
-    const response = await fetch(`/api/control-plane/tenant-chat-runtime?tenantId=${encodeURIComponent(tenantId)}`, {
-      body: JSON.stringify({ manualModelRef, routes, routingMode }),
-      headers: { "Content-Type": "application/json" },
-      method: "PUT"
-    });
-    const payload = (await response.json().catch(() => ({}))) as unknown;
-    if (!response.ok || !isRuntimeSetup(payload)) {
-      setFeedback({ error: true, message: readPayloadError(payload, "Chat App routing policy publish failed.") });
-    } else {
-      applySetup(payload, setSetup, setRoutingMode, setManualModelRef, setRoutes);
-      setFeedback({ error: false, message: text.ready, published: true });
+    try {
+      const response = await fetch(`/api/control-plane/tenant-chat-runtime?tenantId=${encodeURIComponent(tenantId)}`, {
+        body: JSON.stringify({ manualModelRef, routes, routingMode }),
+        headers: { "Content-Type": "application/json" },
+        method: "PUT"
+      });
+      const payload = (await response.json().catch(() => ({}))) as unknown;
+      if (!response.ok || !isRuntimeSetup(payload)) {
+        setFeedback({ error: true, message: readPayloadError(payload, "Chat App routing policy publish failed.") });
+      } else {
+        applySetup(payload, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+        setFeedback({ error: false, message: text.ready, published: true });
+      }
+    } catch {
+      setFeedback({ error: true, message: "Control Plane unavailable." });
+    } finally {
+      setPending(false);
     }
-    setPending(false);
   }
 
   function updateRoute(category: TenantChatRoutingCategory, difficulty: TenantChatRoutingDifficulty, modelRef: string) {
