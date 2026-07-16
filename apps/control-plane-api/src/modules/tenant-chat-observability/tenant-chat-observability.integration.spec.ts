@@ -84,6 +84,7 @@ describeIntegration('Tenant Chat observability integration', () => {
       surface: 'tenant_chat',
       executionScopeKind: 'tenant_chat',
       terminalOutcome: 'succeeded',
+      cacheOutcome: 'miss',
       confirmedInputTokens: 20n,
       confirmedOutputTokens: 10n,
       confirmedTotalTokens: 30n,
@@ -101,6 +102,8 @@ describeIntegration('Tenant Chat observability integration', () => {
     expect(dashboard.data.requests.billableAttempts).toBe(1);
     expect(dashboard.data.usage.confirmedTotalTokens).toBe(30);
     expect(dashboard.data.usage.confirmedCostMicroUsd).toBe(50);
+    expect(dashboard.data.requests.cacheMisses).toBe(1);
+    expect(dashboard.data.requests.cacheOff).toBe(0);
     expect(dashboard.data.requests.cacheEligible).toBe(1);
     expect(dashboard.data.requests.cacheHitRate).toBe(0);
     expect(dashboard.data.breakdowns).toEqual([
@@ -195,7 +198,7 @@ describeIntegration('Tenant Chat observability integration', () => {
         snapshotVersion: BigInt(snapshot.version),
         snapshotDigest: snapshot.digest,
         pricingVersion: BigInt(snapshot.pricing.version),
-        cacheOutcome: 'off',
+        cacheOutcome: 'miss',
         state: 'settled',
         confirmedInputTokens: 20,
         confirmedOutputTokens: 10,
