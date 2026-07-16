@@ -23,6 +23,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
+import { ExactCacheToggleCard } from "@/features/policies/components/exact-cache-toggle-card";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { getTenantChatReturnPath } from "@/features/provider-connections/tenant-chat-setup-return";
 import {
@@ -142,9 +143,14 @@ const copy = {
     autoLabel: "Auto",
     modeTitle: "Routing mode",
     breadcrumb: "Chat App",
+    cache: "Cache policy",
+    cacheDescription: "Reuse identical Tenant Chat responses without another provider call.",
+    cacheEnabled: "Exact cache",
+    cacheEnabledHint: "Store exact responses for 5 minutes, up to 100 entries per user.",
+    cacheSettings: "Cache settings",
     configureProvider: "Register or edit provider",
     degraded: "The active runtime references a provider or model that is no longer available. Review and publish again.",
-    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing policy.",
+    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing and cache policy.",
     categoryCriteria: "Simple and complex guidance",
     criteriaNote: "Length alone does not make a request complex. Task count, constraints, scope, dependency steps, and category-specific signals are evaluated together.",
     example: "Example",
@@ -166,12 +172,12 @@ const copy = {
     priceUnknown: "Pricing is unavailable for a selected model. Usage is allowed, but its cost is temporarily calculated as 0. This does not mean the model is free.",
     provider: "Provider",
     providerUnavailable: "Selected Provider unavailable",
-    publish: "Publish routing policy",
+    publish: "Publish Chat App policy",
     publishing: "Publishing…",
-    ready: "The Chat App routing policy is active.",
+    ready: "The Chat App policy is active.",
     refresh: "Try again",
     reset: "Reset",
-    resetMessage: "Unsaved changes were reset to the active routing policy.",
+    resetMessage: "Unsaved changes were reset to the active Chat App policy.",
     routing: "Routing policy",
     routingDescription: "Configure models for the selected routing mode. Automatic assignments are preserved while fixed mode is active.",
     title: "Chat App"
@@ -181,9 +187,14 @@ const copy = {
     autoLabel: "자동",
     modeTitle: "라우팅 방식",
     breadcrumb: "채팅 앱",
+    cache: "캐시 정책",
+    cacheDescription: "동일한 Tenant Chat 응답을 Provider 재호출 없이 재사용합니다.",
+    cacheEnabled: "Exact Cache",
+    cacheEnabledHint: "동일 응답을 5분 동안 사용자당 최대 100개까지 저장합니다.",
+    cacheSettings: "캐시 설정",
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
-    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 정책을 관리합니다.",
+    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 및 캐시 정책을 관리합니다.",
     categoryCriteria: "단순·복합 안내",
     criteriaNote: "요청 길이만으로는 복합이 되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.",
     example: "예시",
@@ -205,12 +216,12 @@ const copy = {
     priceUnknown: "선택한 모델의 가격 정보가 없습니다. 모델은 사용할 수 있지만 비용은 임시로 0원 처리되며, 무료 모델이라는 의미는 아닙니다.",
     provider: "Provider",
     providerUnavailable: "선택된 Provider 사용 불가",
-    publish: "라우팅 정책 발행",
+    publish: "채팅 앱 정책 발행",
     publishing: "발행 중…",
-    ready: "채팅 앱 라우팅 정책이 적용되었습니다.",
+    ready: "채팅 앱 정책이 적용되었습니다.",
     refresh: "다시 시도",
     reset: "초기화",
-    resetMessage: "저장하지 않은 변경사항을 현재 라우팅 정책으로 되돌렸습니다.",
+    resetMessage: "저장하지 않은 변경사항을 현재 채팅 앱 정책으로 되돌렸습니다.",
     routing: "라우팅 정책",
     routingDescription: "선택한 라우팅 방식에 맞춰 모델을 설정합니다. 고정 모드에서도 자동 배정은 그대로 보존됩니다.",
     title: "채팅 앱"
@@ -232,10 +243,12 @@ export function ChatAppRoutingSetup({
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; error: boolean; published?: boolean } | null>(null);
+  const [activeTab, setActiveTab] = useState<"routing" | "cache">("routing");
   const initialRef = firstModelRef(initialSetup);
   const [routingMode, setRoutingMode] = useState<TenantChatRoutingMode>(initialSetup?.activeSnapshot?.routingMode ?? "auto");
   const [manualModelRef, setManualModelRef] = useState(initialSetup?.activeSnapshot?.manualModelRef ?? initialRef);
   const [routes, setRoutes] = useState<TenantChatRoutingMatrix>(initialSetup?.activeSnapshot?.routes ?? uniformRoutingMatrix(initialRef));
+  const [cacheEnabled, setCacheEnabled] = useState(initialSetup?.activeSnapshot?.cacheEnabled ?? true);
 
   const providers = useMemo(
     () => (setup?.providers ?? []).filter((provider) => provider.models.length > 0),
@@ -286,7 +299,7 @@ export function ChatAppRoutingSetup({
     void loadSetup(tenantId).then((result) => {
       if (!current) return;
       if (result.ok) {
-        applySetup(result.data, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+        applySetup(result.data, setSetup, setRoutingMode, setManualModelRef, setRoutes, setCacheEnabled);
         setLoadError(null);
       } else setLoadError(result.error);
     }).finally(() => {
@@ -303,7 +316,7 @@ export function ChatAppRoutingSetup({
     setFeedback(null);
     const result = await loadSetup(tenantId);
     if (result.ok) {
-      applySetup(result.data, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+      applySetup(result.data, setSetup, setRoutingMode, setManualModelRef, setRoutes, setCacheEnabled);
       setLoadError(null);
     } else setLoadError(result.error);
     setLoading(false);
@@ -314,15 +327,15 @@ export function ChatAppRoutingSetup({
     setFeedback(null);
     try {
       const response = await fetch(`/api/control-plane/tenant-chat-runtime?tenantId=${encodeURIComponent(tenantId)}`, {
-        body: JSON.stringify({ manualModelRef, routes, routingMode }),
+        body: JSON.stringify({ cacheEnabled, manualModelRef, routes, routingMode }),
         headers: { "Content-Type": "application/json" },
         method: "PUT"
       });
       const payload = (await response.json().catch(() => ({}))) as unknown;
       if (!response.ok || !isRuntimeSetup(payload)) {
-        setFeedback({ error: true, message: readPayloadError(payload, "Chat App routing policy publish failed.") });
+        setFeedback({ error: true, message: readPayloadError(payload, "Chat App policy publish failed.") });
       } else {
-        applySetup(payload, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+        applySetup(payload, setSetup, setRoutingMode, setManualModelRef, setRoutes, setCacheEnabled);
         setFeedback({ error: false, message: text.ready, published: true });
       }
     } catch {
@@ -353,7 +366,7 @@ export function ChatAppRoutingSetup({
 
   function resetDraft() {
     if (setup) {
-      applySetup(setup, setSetup, setRoutingMode, setManualModelRef, setRoutes);
+      applySetup(setup, setSetup, setRoutingMode, setManualModelRef, setRoutes, setCacheEnabled);
     }
     setFeedback({ error: false, message: text.resetMessage });
   }
@@ -370,11 +383,12 @@ export function ChatAppRoutingSetup({
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div aria-label={text.breadcrumb} className="policy-section-tabs tenant-management-tabs" role="tablist">
-          <button aria-controls="chat-app-routing-panel" aria-selected="true" data-active="true" id="chat-app-routing-tab" role="tab" type="button">{text.routing}</button>
+          <button aria-controls="chat-app-routing-panel" aria-selected={activeTab === "routing"} data-active={activeTab === "routing"} id="chat-app-routing-tab" onClick={() => setActiveTab("routing")} role="tab" type="button">{text.routing}</button>
+          <button aria-controls="chat-app-cache-panel" aria-selected={activeTab === "cache"} data-active={activeTab === "cache"} id="chat-app-cache-tab" onClick={() => setActiveTab("cache")} role="tab" type="button">{text.cache}</button>
         </div>
       </div>
 
-      <div aria-labelledby="chat-app-routing-tab" className="policy-tab-panel space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
+      <div className="policy-tab-panel space-y-5">
         {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
         {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
         {feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <Check />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
@@ -385,6 +399,8 @@ export function ChatAppRoutingSetup({
           <EmptyState action={<Link className={buttonVariants()} href={providerManagementHref}>{text.configureProvider}</Link>} description={text.noModel} icon={MessageSquareText} title={text.model} />
         ) : (
           <form className="tenant-routing-panel" onSubmit={(event) => { event.preventDefault(); void publish(); }}>
+            {activeTab === "routing" ? (
+            <div aria-labelledby="chat-app-routing-tab" className="space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
             <section
               aria-labelledby="tenant-routing-model-title"
               className="tenant-routing-model-card"
@@ -499,6 +515,32 @@ export function ChatAppRoutingSetup({
             {hasSelectedModelWithoutPricing ? (
               <div className="tenant-routing-mock-warning"><AlertTriangle aria-hidden="true" /><div><strong>{text.model}</strong><span>{text.priceUnknown}</span></div></div>
             ) : null}
+            </div>
+            ) : (
+              <article aria-labelledby="chat-app-cache-tab" className="console-panel policy-editor-panel policy-cache-panel" id="chat-app-cache-panel" role="tabpanel" tabIndex={0}>
+                <div className="panel-heading">
+                  <div>
+                    <h3>{text.cache}</h3>
+                    <p>{text.cacheDescription}</p>
+                  </div>
+                </div>
+                <div className="policy-cache-content">
+                  <section className="policy-cache-group">
+                    <h4>{text.cacheSettings}</h4>
+                    <ExactCacheToggleCard
+                      enabled={cacheEnabled}
+                      hint={text.cacheEnabledHint}
+                      id="tenant-chat-exact-cache-enabled"
+                      onEnabledChange={(checked) => {
+                        setCacheEnabled(checked);
+                        setFeedback(null);
+                      }}
+                      title={text.cacheEnabled}
+                    />
+                  </section>
+                </div>
+              </article>
+            )}
 
             <div className="tenant-routing-actions">
               <button className="secondary-button tenant-routing-reset-button" disabled={pending || loading} onClick={resetDraft} type="button">{text.reset}</button>
@@ -679,12 +721,13 @@ function matrixUsesOnly(routes: TenantChatRoutingMatrix, available: Set<string>)
   }));
 }
 
-function applySetup(next: TenantChatAdminRuntimeSetup, setSetup: (value: TenantChatAdminRuntimeSetup) => void, setMode: (value: TenantChatRoutingMode) => void, setManual: (value: string) => void, setRoutes: (value: TenantChatRoutingMatrix) => void) {
+function applySetup(next: TenantChatAdminRuntimeSetup, setSetup: (value: TenantChatAdminRuntimeSetup) => void, setMode: (value: TenantChatRoutingMode) => void, setManual: (value: string) => void, setRoutes: (value: TenantChatRoutingMatrix) => void, setCacheEnabled: (value: boolean) => void) {
   const modelRef = next.activeSnapshot?.manualModelRef ?? firstModelRef(next);
   setSetup(next);
   setMode(next.activeSnapshot?.routingMode ?? "auto");
   setManual(modelRef);
   setRoutes(next.activeSnapshot?.routes ?? uniformRoutingMatrix(modelRef));
+  setCacheEnabled(next.activeSnapshot?.cacheEnabled ?? true);
 }
 
 async function loadSetup(tenantId: string): Promise<{ data: TenantChatAdminRuntimeSetup; ok: true } | { error: string; ok: false }> {

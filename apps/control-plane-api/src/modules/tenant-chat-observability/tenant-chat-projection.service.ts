@@ -232,6 +232,7 @@ export class TenantChatProjectionService
         where: { requestId: event.requestId },
         select: {
           idempotencyKey: true,
+          cacheOutcome: true,
           pricingVersion: true,
           requestId: true,
           reservationId: true,
@@ -369,7 +370,7 @@ export class TenantChatProjectionService
       confirmedInputTokens + confirmedOutputTokens;
     const confirmedCostMicroUsd = budget?.confirmedCostMicroUsdDelta ?? 0;
     const isLateUsageDelta =
-      event.schemaVersion === 2 &&
+      event.schemaVersion >= 2 &&
       event.eventType === 'usage_settled' &&
       event.lateUsage === true;
     const projectedConfirmedInputTokens =
@@ -411,7 +412,7 @@ export class TenantChatProjectionService
         confirmedCostMicroUsd: projectedConfirmedCostMicroUsd,
         quotaState: quota?.state ?? event.quotaState ?? 'normal',
         budgetState: budget?.state ?? event.budgetState ?? 'normal',
-        cacheOutcome: event.cacheOutcome ?? 'miss',
+        cacheOutcome: event.cacheOutcome ?? reservation?.cacheOutcome ?? 'off',
         latencyMs: BigInt(
           event.latencyMs ?? Math.max(0, occurredAt.getTime() - startedAt.getTime()),
         ),
@@ -430,7 +431,7 @@ export class TenantChatProjectionService
         confirmedCostMicroUsd: projectedConfirmedCostMicroUsd,
         quotaState: quota?.state ?? event.quotaState ?? 'normal',
         budgetState: budget?.state ?? event.budgetState ?? 'normal',
-        cacheOutcome: event.cacheOutcome ?? 'miss',
+        cacheOutcome: event.cacheOutcome ?? reservation?.cacheOutcome ?? 'off',
         latencyMs: BigInt(
           event.latencyMs ?? Math.max(0, occurredAt.getTime() - startedAt.getTime()),
         ),
@@ -556,7 +557,9 @@ function assertEnvelopeMatches(
   event: TenantChatProjectionEvent,
 ): void {
   if (
-    (event.schemaVersion !== 1 && event.schemaVersion !== 2) ||
+    (event.schemaVersion !== 1 &&
+      event.schemaVersion !== 2 &&
+      event.schemaVersion !== 3) ||
     event.eventId !== row.eventId ||
     event.aggregateId !== row.aggregateId ||
     event.requestId !== row.aggregateId ||

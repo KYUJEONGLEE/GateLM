@@ -85,7 +85,8 @@ function isActivationPayload(
   }
   const record = value as Record<string, unknown>;
   return (
-    Object.keys(record).length === 3 &&
+    Object.keys(record).length === 4 &&
+    typeof record.cacheEnabled === "boolean" &&
     (record.routingMode === "auto" || record.routingMode === "manual") &&
     typeof record.manualModelRef === "string" &&
     MODEL_KEY_PATTERN.test(record.manualModelRef) &&

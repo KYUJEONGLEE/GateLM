@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsOptional,
   IsString,
@@ -85,4 +86,8 @@ export class ActivateTenantChatRuntimeDto {
   @ValidateNested()
   @Type(() => TenantChatRoutingMatrixDto)
   routes?: TenantChatRoutingMatrixDto;
+
+  @IsOptional()
+  @IsBoolean()
+  cacheEnabled?: boolean;
 }

@@ -11,6 +11,9 @@ describe('validateEnv', () => {
     expect(env.TENANT_CHAT_PROJECTOR_BATCH_SIZE).toBe(50);
     expect(env.TENANT_CHAT_PROJECTOR_INTERVAL_MS).toBe(1000);
     expect(env.TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS).toBe(5);
+    expect(env.TENANT_CHAT_CACHE_KEY_SET_ID).toBe(
+      'tenant_chat_cache_keys_v1',
+    );
     expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('false');
     expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(1000);
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(500);
@@ -24,6 +27,28 @@ describe('validateEnv', () => {
     expect(env.RAG_EMBEDDING_DIMENSIONS).toBe(1536);
     expect(env.RAG_EMBEDDING_PROFILE_VERSION).toBe(1);
     expect(env.RAG_DISTANCE_METRIC).toBe('cosine');
+  });
+
+  it('accepts a bounded Tenant Chat cache key-set identifier', () => {
+    const env = validateEnv({
+      ...baseEnv(),
+      TENANT_CHAT_CACHE_KEY_SET_ID: 'tenant-chat-local-cache-1',
+    });
+
+    expect(env.TENANT_CHAT_CACHE_KEY_SET_ID).toBe(
+      'tenant-chat-local-cache-1',
+    );
+  });
+
+  it('rejects an unsafe Tenant Chat cache key-set identifier', () => {
+    expect(() =>
+      validateEnv({
+        ...baseEnv(),
+        TENANT_CHAT_CACHE_KEY_SET_ID: 'invalid cache key set',
+      }),
+    ).toThrow(
+      'TENANT_CHAT_CACHE_KEY_SET_ID must be a bounded opaque identifier',
+    );
   });
 
   it('validates dashboard rollup bounds without changing ports', () => {

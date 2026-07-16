@@ -17,6 +17,10 @@ const USAGE_PENDING_MIGRATION_PATH = resolve(
   __dirname,
   '../../../prisma/migrations/20260713160000_tenant_chat_usage_pending/migration.sql',
 );
+const CACHE_OUTCOME_MIGRATION_PATH = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260716113000_tenant_chat_cache_outcome/migration.sql',
+);
 const ACTIVE_USAGE_DDL_PATH = resolve(
   __dirname,
   '../../../../../docs/tenant-chat/db/tenant-chat-usage.sql',
@@ -35,6 +39,7 @@ describe('Tenant Chat migrations', () => {
     'utf8',
   );
   const usagePendingSql = readFileSync(USAGE_PENDING_MIGRATION_PATH, 'utf8');
+  const cacheOutcomeSql = readFileSync(CACHE_OUTCOME_MIGRATION_PATH, 'utf8');
   const activeUsageDdl = readFileSync(ACTIVE_USAGE_DDL_PATH, 'utf8');
 
   it.each([
@@ -174,6 +179,27 @@ describe('Tenant Chat migrations', () => {
       "CREATE INDEX tenant_chat_reservation_usage_pending_idx ON tenant_chat_usage_reservations (usage_pending_at, reservation_id) WHERE state = 'reserved' AND usage_pending_at IS NOT NULL",
     );
     expect(usagePendingSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE|DROP)\b/i);
+  });
+
+  it('backfills bounded cache provenance before enforcing the reservation constraint', () => {
+    const compactSql = compactWhitespace(cacheOutcomeSql);
+
+    expect(compactSql).toContain(
+      'ADD COLUMN cache_outcome text',
+    );
+    expect(compactSql).toContain(
+      "snapshot_body #>> '{policies,cache,enabled}' = 'true'",
+    );
+    expect(compactSql).toContain(
+      "CHECK (cache_outcome IN ('off', 'miss'))",
+    );
+    expect(cacheOutcomeSql.indexOf('SET cache_outcome')).toBeLessThan(
+      cacheOutcomeSql.indexOf('ALTER COLUMN cache_outcome SET NOT NULL'),
+    );
+    expect(compactSql).toContain(
+      "reservation.cache_outcome = 'off' AND invocation.cache_outcome = 'miss'",
+    );
+    expect(cacheOutcomeSql).not.toMatch(/raw|prompt|response/i);
   });
 });
 

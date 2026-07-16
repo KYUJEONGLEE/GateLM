@@ -34,6 +34,22 @@ describe('Tenant Chat RAG database foundation migration', () => {
     }
   });
 
+  it('derives the pre-RAG upgrade baseline instead of hard-coding a migration count', () => {
+    const workflow = readFileSync(
+      resolve(repositoryRoot, '.github/workflows/ci.yml'),
+      'utf8',
+    );
+
+    expect(workflow).toContain('Verify upgrade from every pre-RAG migration');
+    expect(workflow).toContain(
+      'expected_baseline_count=$((expected_baseline_count + 1))',
+    );
+    expect(workflow).toContain(
+      '"${baseline_count}" -ne "${expected_baseline_count}"',
+    );
+    expect(workflow).not.toMatch(/\$\{baseline_count\}" -eq \d+/);
+  });
+
   it('enables pgvector and declares the fixed 1536-dimensional Prisma field', () => {
     expect(migrationSql).toMatch(/CREATE EXTENSION IF NOT EXISTS vector;/);
     expect(migrationSql).toMatch(/"embedding" vector\(1536\) NOT NULL/);
