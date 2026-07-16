@@ -35,13 +35,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          status="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.security_and_analysis.dependency_graph.status // "disabled"')"
-          if [[ "${status}" == "enabled" ]]; then
-            echo "enabled=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "enabled=false" >> "${GITHUB_OUTPUT}"
-            echo "::warning::Dependency Review skipped because GitHub Dependency Graph is not enabled for this repository."
-          fi
+          readonly max_attempts=5
+          status=""
+
+          for ((attempt = 1; attempt <= max_attempts; attempt += 1)); do
+            if status="$(
+              gh api "repos/${GITHUB_REPOSITORY}" \
+                --jq '.security_and_analysis.dependency_graph.status // "disabled"' \
+                2>/dev/null
+            )"; then
+              break
+            fi
+
+            if ((attempt == max_attempts)); then
+              echo "::error::Unable to determine Dependency Graph support after ${max_attempts} attempts."
+              exit 1
+            fi
+
+            retry_delay_seconds=$((attempt * 2))
+            echo "::warning::Dependency Graph support probe failed; retrying in ${retry_delay_seconds}s (${attempt}/${max_attempts})."
+            sleep "${retry_delay_seconds}"
+          done
+
+          case "${status}" in
+            enabled)
+              echo "enabled=true" >> "${GITHUB_OUTPUT}"
+              ;;
+            disabled)
+              echo "enabled=false" >> "${GITHUB_OUTPUT}"
+              echo "::warning::Dependency Review skipped because GitHub Dependency Graph is not enabled for this repository."
+              ;;
+            *)
+              echo "::error::Dependency Graph support probe returned an unexpected status."
+              exit 1
+              ;;
+          esac
 
       - name: Reject newly introduced vulnerable dependencies
         if: steps.dependency-graph.outputs.enabled == 'true'
