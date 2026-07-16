@@ -5,6 +5,13 @@
   --analytics-v5-amber: #f59e0b;
   --analytics-v5-red: #ef4444;
   --analytics-v5-gray: #94a3b8;
+  --analytics-v5-page-title-size: 34px;
+  --analytics-v5-panel-title-size: 24px;
+  --analytics-v5-metric-label-size: 14px;
+  --analytics-v5-metric-value-size: 36px;
+  --analytics-v5-primary-value-size: 46px;
+  --analytics-v5-surface-title-size: 19px;
+  --analytics-v5-surface-copy-size: 13px;
   gap: 0;
 }
 
@@ -14,7 +21,7 @@
 }
 
 .analytics-v5-page .analytics-v3-title-block h1 {
-  font-size: calc(44px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-page-title-size) + var(--global-font-lift));
 }
 
 .analytics-v5-page .analytics-v3-tabs {
@@ -55,7 +62,7 @@
 .analytics-v5-panel-heading h2 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(30px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-panel-title-size) + var(--global-font-lift));
   font-weight: 800;
   line-height: 1;
 }
@@ -121,7 +128,7 @@
 
 .analytics-v5-metric > span {
   color: var(--text-muted);
-  font-size: calc(17px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-metric-label-size) + var(--global-font-lift));
   font-weight: 750;
 }
 
@@ -134,14 +141,14 @@
 .analytics-v5-metric > div > strong {
   overflow-wrap: anywhere;
   color: var(--foreground);
-  font-size: calc(46px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-metric-value-size) + var(--global-font-lift));
   font-weight: 850;
   line-height: 0.96;
 }
 
 .analytics-v5-metric-primary > div > strong {
   color: #047857;
-  font-size: calc(58px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-primary-value-size) + var(--global-font-lift));
 }
 
 .analytics-v5-metric > div {
@@ -281,14 +288,14 @@
 .analytics-v5-surface > header h3 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(24px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-surface-title-size) + var(--global-font-lift));
   font-weight: 800;
 }
 
 .analytics-v5-surface > header p {
   margin: 6px 0 0;
   color: var(--text-muted);
-  font-size: calc(15px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v5-surface-copy-size) + var(--global-font-lift));
   font-weight: 650;
 }
 
@@ -324,6 +331,18 @@ html[data-theme="dark"] .analytics-v5-metric-primary {
 
 html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
   color: #6ee7b7;
+}
+
+@media (min-width: 1101px) {
+  html[data-presentation-mode="true"] .analytics-v5-page {
+    --analytics-v5-page-title-size: 44px;
+    --analytics-v5-panel-title-size: 30px;
+    --analytics-v5-metric-label-size: 17px;
+    --analytics-v5-metric-value-size: 46px;
+    --analytics-v5-primary-value-size: 58px;
+    --analytics-v5-surface-title-size: 24px;
+    --analytics-v5-surface-copy-size: 15px;
+  }
 }
 
 @media (max-width: 1280px) {
@@ -365,7 +384,7 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
   }
 
   .analytics-v5-metric-primary > div > strong {
-    font-size: calc(48px + var(--global-font-lift));
+    font-size: calc(40px + var(--global-font-lift));
   }
 
   .analytics-v5-policy-strip {

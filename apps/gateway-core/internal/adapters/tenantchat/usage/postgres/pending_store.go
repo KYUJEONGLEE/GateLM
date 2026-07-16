@@ -43,9 +43,19 @@ func (s *ReservationStore) MarkPending(
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if attempt.CompletedAt != nil {
+		if err = validatePendingAttemptReplay(
+			ctx, tx, requestContext, reservationID, attemptNo, outcome,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
+		}
 		attempts, _, pending, readErr := readSettlementAttempts(ctx, tx, requestContext, reservationID)
 		if readErr != nil || !pending {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrIdempotencyConflict
+		}
+		if err = s.markEmployeePending(
+			ctx, tx, requestContext, reservationID, attemptNo, outcome,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -68,11 +78,16 @@ func (s *ReservationStore) MarkPending(
 	}
 	tag, err = tx.Exec(ctx, `
 		UPDATE tenant_chat_usage_reservations
-		SET usage_pending_at = COALESCE(usage_pending_at, $3), updated_at = $3
+		SET usage_pending_at = $3, updated_at = $3
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid AND state = 'reserved'
 	`, reservationID, requestContext.ExecutionScope.TenantID, now)
 	if err != nil || tag.RowsAffected() != 1 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if err = s.markEmployeePending(
+		ctx, tx, requestContext, reservationID, attemptNo, outcome,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
 	}
 	attempts, _, pending, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
 	if err != nil || !pending {
@@ -85,6 +100,32 @@ func (s *ReservationStore) MarkPending(
 		RequestID: requestContext.RequestID, ReservationID: reservationID,
 		State: "pending_unconfirmed", CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
+}
+
+func validatePendingAttemptReplay(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	attemptNo int,
+	outcome string,
+) error {
+	var storedQuality string
+	var storedOutcome string
+	err := tx.QueryRow(ctx, `
+		SELECT usage_quality, outcome
+		FROM tenant_chat_provider_attempts
+		WHERE request_id = $1 AND attempt_no = $2
+		  AND reservation_id = $3::uuid AND tenant_id = $4::uuid
+	`, requestContext.RequestID, attemptNo, reservationID,
+		requestContext.ExecutionScope.TenantID).Scan(&storedQuality, &storedOutcome)
+	if err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	if storedQuality != "pending_unconfirmed" || storedOutcome != outcome {
+		return tenantchat.ErrIdempotencyConflict
+	}
+	return nil
 }
 
 func (s *ReservationStore) readPendingTerminal(

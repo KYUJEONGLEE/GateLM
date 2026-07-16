@@ -140,7 +140,15 @@ Control Plane draft 입력은 `{ "mode", "routes" }`만 받는다. `schemaVersio
 
 따라서 신규 authoring/publish에서 각 cell의 `modelRefs` 길이는 `1..2`다. 기존에 저장된 category별 primary 또는 여러 fallback의 v2 matrix는 read/execution compatibility를 위해 그대로 실행할 수 있지만 신규 draft로 간주하지 않는다. 정책 UI는 이를 자동으로 덮어쓰지 않고 사용자가 전역 profile 전환을 명시적으로 확인한 뒤에만 새 draft를 publish한다.
 
-Gateway consumer는 호환성과 향후 고도화를 위해 ordered candidate list를 일반적으로 읽을 수 있다. 이 일반성은 현재 Control Plane이 여러 fallback이나 category별 authoring을 허용한다는 뜻이 아니다. Provider/model 역할은 catalog/config data로 유지하며 모델명 문자열이나 현재 신뢰할 수 없는 `routing.costTier` 값으로 추론하지 않는다.
+Gateway consumer는 호환성과 향후 고도화를 위해 ordered candidate list를 일반적으로 읽을 수 있다. 이 일반성은 현재 Control Plane이 여러 fallback이나 category별 authoring을 허용한다는 뜻이 아니다. Provider/model 역할은 catalog/config data로 유지하며 모델명 문자열로 추론하지 않는다.
+
+Published Provider Catalog의 `routing.costTier`는 일반 routing decision 입력이 아니다. 다만 Tenant employee cost guard는 검증된 exact catalog entry의 값을 비용 제한 분류로 사용할 수 있다. 이때 Control Plane publisher는 authoring role에서 다음 canonical 값을 만들어야 한다.
+
+- Simple-only primary: `low`
+- Complex-only primary와 routing profile에 없는 일반 model: `premium`
+- Simple/Complex shared primary, configured fallback, `mock-balanced`: `balanced`
+
+Gateway는 이 값을 모델명, provider family, category 또는 difficulty에서 다시 추정하지 않는다. missing/unknown cost tier는 employee cost rollout `enforce`에서 guard unavailable이며, 일반 routing 자체의 provider/model 선택 의미는 바꾸지 않는다.
 
 Control Plane이 일반 catalog entry에서 생성하는 canonical reference는 `${providerId}:${modelId}` 형식이지만 Gateway와 다른 consumer는 `:`를 분해해서 provider/model을 추론하지 않는다. 반드시 published catalog mapping으로 resolve한다. `mock-balanced`는 built-in Mock target에 연결되는 예약 bootstrap reference다.
 

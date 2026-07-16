@@ -37,6 +37,12 @@ type usageAccounting interface {
 		previousOutcome string,
 		route tenantchat.SelectedRoute,
 		attemptNo int,
+	) (restricted bool, err error)
+	MarkDispatched(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		reservationID string,
+		attemptNo int,
 	) error
 	FinalizeConfirmed(
 		ctx context.Context,
@@ -373,10 +379,11 @@ func (s *Service) Prepare(
 			return nil, tenantchat.ErrRateLimited
 		}
 	}
-	streamCtx, cancel := context.WithTimeout(
-		ctx,
-		time.Duration(snapshot.Policies.Streaming.MaxDurationSeconds)*time.Second,
-	)
+	streamDuration, durationErr := snapshot.Policies.Streaming.Duration()
+	if durationErr != nil {
+		return nil, tenantchat.ErrRuntimeUnavailable
+	}
+	streamCtx, cancel := context.WithTimeout(ctx, streamDuration)
 	stream, startStatus, err := s.providers.OpenStream(streamCtx, request.Context, reservation.Route, input)
 	if err != nil {
 		cancel()
@@ -396,6 +403,24 @@ func (s *Service) Prepare(
 			return nil, tenantchat.ErrUsageGuardUnavailable
 		}
 		return nil, err
+	}
+	dispatchCtx, dispatchCancel := detachedAccountingContext(ctx)
+	dispatchErr := s.usage.MarkDispatched(
+		dispatchCtx, request.Context, reservation.ReservationID, 1,
+	)
+	dispatchCancel()
+	if dispatchErr != nil {
+		cancel()
+		_ = stream.Close()
+		settleCtx, settleCancel := detachedAccountingContext(ctx)
+		_, settleErr := s.usage.MarkPending(
+			settleCtx, request.Context, reservation.ReservationID, 1, "failed_pre_delta",
+		)
+		settleCancel()
+		if settleErr != nil {
+			return nil, tenantchat.ErrUsageGuardUnavailable
+		}
+		return nil, tenantchat.ErrUsageGuardUnavailable
 	}
 	session := s.registerSession(request.Context)
 	return &PreparedExecution{
@@ -455,6 +480,12 @@ func decideTenantChatRoute(
 	if err != nil {
 		return tenantchat.RoutingDecision{}, err
 	}
+	if policy.Mode == routing.RoutingPolicyModeManual {
+		decision.CandidateModelRefs = append(
+			[]string{decision.ModelRef},
+			sharedTenantChatFallbackModelRefs(policy.Routes, decision.ModelRef)...,
+		)
+	}
 	return tenantchat.RoutingDecision{
 		ModelRef:               decision.ModelRef,
 		CandidateModelRefs:     append([]string(nil), decision.CandidateModelRefs...),
@@ -463,6 +494,42 @@ func decideTenantChatRoute(
 		RoutingDecisionKeyHash: decision.RoutingDecisionKeyHash,
 		RoutingPolicyHash:      decision.PolicyHash,
 	}, nil
+}
+
+func sharedTenantChatFallbackModelRefs(
+	routes tenantruntime.RoutingMatrix,
+	manualModelRef string,
+) []string {
+	cells := routes.Cells()
+	if len(cells) == 0 || len(cells[0].ModelRefs) < 2 {
+		return nil
+	}
+	shared := cells[0].ModelRefs[1:]
+	for _, cell := range cells[1:] {
+		if len(cell.ModelRefs) < 2 {
+			return nil
+		}
+		candidate := cell.ModelRefs[1:]
+		if len(candidate) != len(shared) {
+			return nil
+		}
+		for index := range shared {
+			if candidate[index] != shared[index] {
+				return nil
+			}
+		}
+	}
+
+	result := make([]string, 0, len(shared))
+	seen := map[string]struct{}{manualModelRef: {}}
+	for _, modelRef := range shared {
+		if _, exists := seen[modelRef]; exists {
+			continue
+		}
+		seen[modelRef] = struct{}{}
+		result = append(result, modelRef)
+	}
+	return result
 }
 
 // currentTurnRoutingMessages keeps stable system context, but excludes earlier
@@ -499,6 +566,7 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 		return tenantchat.ErrUsageGuardUnavailable
 	}
 	defer e.Close()
+attemptLoop:
 	for {
 		result := e.relayAttempt(ctx, emit)
 		if result.err == nil && result.usage != nil {
@@ -534,11 +602,30 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 
 		confirmed := confirmedUsage(result.usage)
 		if !result.clientWrite && result.deltaCount == 0 && e.canFallback(result.err) {
-			fallbackRoute, ok := e.nextFallbackRoute()
-			if ok {
-				started, preCallSettlement, openErr := e.openFallback(ctx, fallbackRoute, confirmed, outcome)
-				if openErr == nil {
+			restrictedFallback := false
+			for {
+				fallbackRoute, ok := e.nextFallbackRoute()
+				if !ok {
+					if restrictedFallback {
+						settlement, settleErr := e.finalizeConfirmed(ctx, result.usage, outcome)
+						if settleErr != nil {
+							return e.emitAccountingFailure(emit, settleErr)
+						}
+						return e.emitEvent(emit, e.finalEvent(
+							settlement, "failed", completionErrorFor(tenantchat.ErrNoEligibleRoute), false,
+						))
+					}
+					break
+				}
+				started, restricted, preCallSettlement, openErr := e.openFallback(
+					ctx, fallbackRoute, confirmed, outcome,
+				)
+				if restricted {
+					restrictedFallback = true
 					continue
+				}
+				if openErr == nil {
+					continue attemptLoop
 				}
 				if started {
 					settlement, settleErr := e.finalizePending(ctx, attemptOutcome(openErr, 0))
@@ -546,21 +633,17 @@ func (e *PreparedExecution) Relay(ctx context.Context, emit EventEmitter) error 
 						return e.emitAccountingFailure(emit, settleErr)
 					}
 					return e.emitEvent(emit, e.finalEvent(settlement, terminalOutcomeForError(openErr), completionErrorFor(openErr), false))
-				} else {
-					if errors.Is(openErr, tenantchat.ErrUsageGuardUnavailable) {
-						return e.emitAccountingFailure(emit, openErr)
-					}
-					if preCallSettlement != nil {
-						return e.emitEvent(emit, e.finalEvent(
-							*preCallSettlement, terminalOutcomeForError(openErr), completionErrorFor(openErr), false,
-						))
-					}
-					settlement, settleErr := e.finalizeConfirmed(ctx, result.usage, outcome)
-					if settleErr != nil {
-						return e.emitAccountingFailure(emit, settleErr)
-					}
-					return e.emitEvent(emit, e.finalEvent(settlement, "failed", completionErrorFor(openErr), false))
 				}
+				if preCallSettlement != nil {
+					return e.emitEvent(emit, e.finalEvent(
+						*preCallSettlement, terminalOutcomeForError(openErr), completionErrorFor(openErr), false,
+					))
+				}
+				settlement, settleErr := e.finalizeConfirmed(ctx, result.usage, outcome)
+				if settleErr != nil {
+					return e.emitAccountingFailure(emit, settleErr)
+				}
+				return e.emitEvent(emit, e.finalEvent(settlement, "failed", completionErrorFor(openErr), false))
 			}
 			settlement, err := e.finalizeConfirmed(ctx, result.usage, outcome)
 			if err != nil {
@@ -629,20 +712,28 @@ func (e *PreparedExecution) openFallback(
 	route tenantchat.SelectedRoute,
 	previousUsage tenantchat.ConfirmedUsage,
 	previousOutcome string,
-) (bool, *tenantchat.UsageSettlement, error) {
+) (bool, bool, *tenantchat.UsageSettlement, error) {
 	e.closeCurrentStream()
 	e.cacheResponse = nil
 	e.attemptNo++
-	if err := e.usage.BeginFallback(
-		ctx, e.requestContext, e.snapshot, e.reservation.ReservationID,
+	fallbackCtx, fallbackCancel := detachedAccountingContext(ctx)
+	restricted, err := e.usage.BeginFallback(
+		fallbackCtx, e.requestContext, e.snapshot, e.reservation.ReservationID,
 		e.attemptNo-1, previousUsage, previousOutcome, route, e.attemptNo,
-	); err != nil {
+	)
+	fallbackCancel()
+	if err != nil {
 		e.attemptNo--
-		return false, nil, err
+		return false, false, nil, err
+	}
+	if restricted {
+		e.attemptNo--
+		e.usedRouteIDs[route.RouteID] = struct{}{}
+		return false, true, nil, nil
 	}
 	if len(e.snapshot.Policies.ProviderTokenRate.Providers) > 0 {
 		if e.tokenRate == nil || e.preCall == nil {
-			return false, nil, tenantchat.ErrUsageGuardUnavailable
+			return false, false, nil, tenantchat.ErrUsageGuardUnavailable
 		}
 		decision, rateErr := e.tokenRate.Check(ctx, e.requestContext, e.snapshot, route)
 		if rateErr != nil || !decision.Allowed {
@@ -655,16 +746,20 @@ func (e *PreparedExecution) openFallback(
 				settleCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo, terminalOutcome,
 			)
 			settleCancel()
-			if settleErr != nil || rateErr != nil {
-				return false, nil, tenantchat.ErrUsageGuardUnavailable
+			if settleErr != nil {
+				return false, false, nil, tenantchat.ErrUsageGuardUnavailable
 			}
-			return false, &settlement, tenantchat.ErrRateLimited
+			if rateErr != nil {
+				return false, false, &settlement, rateErr
+			}
+			return false, false, &settlement, tenantchat.ErrRateLimited
 		}
 	}
-	streamCtx, cancel := context.WithTimeout(
-		ctx,
-		time.Duration(e.snapshot.Policies.Streaming.MaxDurationSeconds)*time.Second,
-	)
+	streamDuration, durationErr := e.snapshot.Policies.Streaming.Duration()
+	if durationErr != nil {
+		return false, false, nil, tenantchat.ErrRuntimeUnavailable
+	}
+	streamCtx, cancel := context.WithTimeout(ctx, streamDuration)
 	stream, startStatus, err := e.providers.OpenStream(streamCtx, e.requestContext, route, e.input)
 	if err != nil {
 		cancel()
@@ -677,17 +772,29 @@ func (e *PreparedExecution) openFallback(
 			)
 			settleCancel()
 			if settleErr != nil {
-				return false, nil, tenantchat.ErrUsageGuardUnavailable
+				return false, false, nil, tenantchat.ErrUsageGuardUnavailable
 			}
-			return false, &settlement, err
+			return false, false, &settlement, err
 		}
-		return true, nil, err
+		return true, false, nil, err
+	}
+	dispatchCtx, dispatchCancel := detachedAccountingContext(ctx)
+	dispatchErr := e.usage.MarkDispatched(
+		dispatchCtx, e.requestContext, e.reservation.ReservationID, e.attemptNo,
+	)
+	dispatchCancel()
+	if dispatchErr != nil {
+		cancel()
+		_ = stream.Close()
+		e.route = route
+		e.usedRouteIDs[route.RouteID] = struct{}{}
+		return true, false, nil, dispatchErr
 	}
 	e.stream = stream
 	e.cancel = cancel
 	e.route = route
 	e.usedRouteIDs[route.RouteID] = struct{}{}
-	return true, nil, nil
+	return true, false, nil, nil
 }
 
 func (e *PreparedExecution) canFallback(err error) bool {
@@ -844,6 +951,8 @@ func completionErrorFor(err error) *tenantchat.CompletionError {
 		return &tenantchat.CompletionError{Code: "CHAT_BUDGET_HARD_LIMIT", Message: "Tenant chat tenant budget was reached."}
 	case errors.Is(err, tenantchat.ErrRateLimited):
 		return &tenantchat.CompletionError{Code: "CHAT_RATE_LIMITED", Message: "Tenant chat provider token rate was reached.", RetryAfterSeconds: 1}
+	case errors.Is(err, tenantchat.ErrNoEligibleRoute):
+		return &tenantchat.CompletionError{Code: "CHAT_NO_ELIGIBLE_ROUTE", Message: "Tenant chat has no eligible route.", RetryAfterSeconds: 1}
 	case errors.Is(err, context.Canceled):
 		return &tenantchat.CompletionError{Code: "CHAT_REQUEST_CANCELLED", Message: "Tenant chat request was cancelled."}
 	default:

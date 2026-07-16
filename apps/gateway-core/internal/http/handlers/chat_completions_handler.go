@@ -89,6 +89,7 @@ type ChatCompletionsHandler struct {
 	AuthFailureLogWriter                 invocationlog.AuthFailureLogWriter
 	TerminalLogWriter                    invocationlog.TerminalLogWriter
 	CostCalculator                       CostCalculator
+	ProjectEmployeeCostAccounting        ports.ProjectEmployeeCostAccounting
 	MaskingEngine                        MaskingEngine
 	RawResponseCaptureEnabled            bool
 	MetricsRegistry                      *metrics.Registry
@@ -290,6 +291,12 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.writeProviderResolutionFailure(w, reqCtx, err)
 		return
 	}
+	employeeCostReservation, target, handled := h.reserveProjectEmployeeCost(
+		r.Context(), w, reqCtx, chatReq, promptText, target, startedAt,
+	)
+	if handled {
+		return
+	}
 
 	providerReq := providerRequestForTarget(chatReq, requestID)
 	if reqCtx.RoutingReason == "" {
@@ -300,21 +307,32 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	if reqCtx.Stream {
 		providerReq.Stream = true
-		h.handleStreamingProvider(w, r, reqCtx, providerReq, chatReq, target, startedAt)
+		h.handleStreamingProvider(w, r, reqCtx, providerReq, chatReq, target, startedAt, employeeCostReservation)
 		return
 	}
 
 	providerReq.Stream = false
 	startProviderAttempt(reqCtx, target)
+	employeeCostAttempt := h.newEmployeeCostAttempt(employeeCostReservation, &providerReq)
 	providerStartedAt := time.Now()
 	providerResp, err := target.Adapter.CreateChatCompletion(r.Context(), target.ExecutionConfig, providerReq)
 	providerDuration := time.Since(providerStartedAt)
 	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, providerDuration)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	var providerUsage *provider.Usage
+	if providerResp != nil {
+		providerUsage = providerResp.Usage
+	}
+	_, employeeCostErr := employeeCostAttempt.Complete(r.Context(), providerUsage, err)
+	if employeeCostErr != nil {
+		_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
+		h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+		return
+	}
 	if err != nil {
 		h.markSemanticCacheBypass(reqCtx, cachekey.SemanticCacheReasonProviderErrorStoreBypass, h.semanticPromptCategory(reqCtx))
-		h.handleProviderFailure(w, r, reqCtx, providerReq, target, err, providerDuration, startedAt)
+		h.handleProviderFailure(w, r, reqCtx, providerReq, target, err, providerDuration, startedAt, employeeCostReservation)
 		return
 	}
 	if providerResp == nil {
@@ -348,6 +366,10 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.HTTPStatus = http.StatusOK
 	reqCtx.SavedCostMicroUSD = 0
 	h.applyProviderUsageCost(r.Context(), reqCtx, target)
+	if err := h.settleProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); err != nil {
+		h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+		return
+	}
 	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
@@ -476,6 +498,8 @@ type providerCallTarget struct {
 	ModelRef           string
 	ModelID            string
 	ModelName          string
+	CostTier           string
+	MaxOutputTokens    int
 	CatalogHash        string
 	StreamingSupported bool
 	FromCatalog        bool
@@ -774,6 +798,8 @@ func (h *ChatCompletionsHandler) providerCallTargetFromCatalog(ctx context.Conte
 		ModelRef:           catalogModel.ModelRef,
 		ModelID:            catalogModel.ModelName,
 		ModelName:          catalogModel.ModelName,
+		CostTier:           catalogModel.Routing.CostTier,
+		MaxOutputTokens:    catalogModel.Capabilities.MaxOutputTokens,
 		CatalogHash:        catalog.ContentHash,
 		StreamingSupported: catalogModel.Capabilities.StreamingSupported,
 		FromCatalog:        true,
@@ -804,9 +830,13 @@ func (h *ChatCompletionsHandler) writeProviderResolutionFailure(w http.ResponseW
 	writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider credential could not be resolved.", "resolve_provider_credential")
 }
 
-func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time) {
+func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time, employeeCostReservation *ports.EmployeeCostReservation) {
 	code := provider.SafeErrorCode(err)
 	if errors.Is(err, context.Canceled) {
+		if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 		h.recordProviderRequest(metrics.ProviderRequest{
 			Provider:        reqCtx.Provider,
 			Model:           reqCtx.Model,
@@ -829,6 +859,10 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 	})
 
 	if !provider.AllowsFallback(err) {
+		if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 		reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{Outcome: "not_called"})
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider request failed.", "call_provider_with_timeout_retry_fallback")
 		return
@@ -841,11 +875,19 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 		fallbackTarget, fallbackErr := h.resolveFallbackTarget(r.Context(), reqCtx, target, attemptedTargets...)
 		if fallbackErr != nil {
 			if lastFallbackErr == nil {
+				if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+					h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+					return
+				}
 				reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
 					Outcome: "disabled",
 					Reason:  stringPointerValue("fallback_not_configured"),
 				})
 				writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider request failed and fallback is unavailable.", "call_provider_with_timeout_retry_fallback")
+				return
+			}
+			if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+				h.writeEmployeeCostGuardUnavailable(w, reqCtx)
 				return
 			}
 			reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, lastFallbackTarget, lastFallbackErr, invocationlog.FallbackOutcome{
@@ -859,14 +901,38 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 		attemptedTargets = append(attemptedTargets, fallbackTarget)
 		fallbackReq := providerRequestForTarget(chatReq, reqCtx.RequestID)
 		fallbackReq.Model = fallbackTarget.ModelName
+		topUp, topUpErr := h.topUpProjectEmployeeCost(r.Context(), reqCtx, fallbackReq, fallbackTarget, employeeCostReservation)
+		if topUpErr != nil || topUp.GuardUnavailable {
+			_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
+		if topUp.RestrictHighCost {
+			continue
+		}
 		startProviderAttempt(reqCtx, fallbackTarget)
+		employeeCostAttempt := h.newEmployeeCostAttempt(employeeCostReservation, &fallbackReq)
 		fallbackStartedAt := time.Now()
 		fallbackResp, fallbackCallErr := fallbackTarget.Adapter.CreateChatCompletion(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
 		fallbackDuration := time.Since(fallbackStartedAt)
 		reqCtx.ProviderLatencyMs = fallbackDuration.Milliseconds()
 		recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, fallbackDuration)
+		var fallbackUsage *provider.Usage
+		if fallbackResp != nil {
+			fallbackUsage = fallbackResp.Usage
+		}
+		_, employeeCostErr := employeeCostAttempt.Complete(r.Context(), fallbackUsage, fallbackCallErr)
+		if employeeCostErr != nil {
+			_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 		if fallbackCallErr != nil || fallbackResp == nil {
 			if requestWasCanceled(r.Context(), fallbackCallErr) {
+				if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+					h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+					return
+				}
 				h.recordProviderRequest(metrics.ProviderRequest{
 					Provider:        fallbackTarget.ProviderName,
 					Model:           fallbackTarget.ModelID,
@@ -894,6 +960,10 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 			}
 			if provider.AllowsFallback(lastFallbackErr) {
 				continue
+			}
+			if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+				h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+				return
 			}
 			reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, fallbackTarget, lastFallbackErr, invocationlog.FallbackOutcome{
 				Outcome: "failed",
@@ -924,6 +994,10 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 		reqCtx.SavedCostMicroUSD = 0
 		h.applyProviderUsageCost(r.Context(), reqCtx, fallbackTarget)
+		if err := h.settleProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); err != nil {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 		reqCtx.FallbackOccurred = true
 		skipExactCacheStore(reqCtx, "fallback_response_store_bypassed")
 		h.markSemanticCacheBypass(reqCtx, cachekey.SemanticCacheReasonFallbackStoreBypass, h.semanticPromptCategory(reqCtx))
@@ -938,9 +1012,12 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 	}
 }
 
-func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, providerReq provider.ChatCompletionRequest, semanticCacheReq provider.ChatCompletionRequest, target providerCallTarget, startedAt time.Time) {
+func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, providerReq provider.ChatCompletionRequest, semanticCacheReq provider.ChatCompletionRequest, target providerCallTarget, startedAt time.Time, employeeCostReservation *ports.EmployeeCostReservation) {
 	streamAdapter, ok := target.Adapter.(provider.StreamingAdapter)
+	employeeCostAttempt := h.newEmployeeCostAttempt(employeeCostReservation, &providerReq)
 	if !target.StreamingSupported || !ok {
+		_, _ = employeeCostAttempt.Complete(r.Context(), nil, provider.NewNotStartedError(errors.New("selected provider does not support streaming")))
+		_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
 		h.writeStreamingUnsupported(w, reqCtx)
 		return
 	}
@@ -952,7 +1029,13 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	reqCtx.ProviderLatencyMs = openDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
-		h.handleStreamingOpenFailure(w, r, reqCtx, providerReq, target, err, openDuration, startedAt)
+		_, employeeCostErr := employeeCostAttempt.Complete(r.Context(), nil, err)
+		if employeeCostErr != nil {
+			_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
+		h.handleStreamingOpenFailure(w, r, reqCtx, providerReq, target, err, openDuration, startedAt, employeeCostReservation)
 		return
 	}
 
@@ -966,6 +1049,13 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		reqCtx.PromptTokens = usage.PromptTokens
 		reqCtx.CompletionTokens = usage.CompletionTokens
 		reqCtx.TotalTokens = usage.TotalTokens
+	}
+	_, employeeCostErr := employeeCostAttempt.Complete(r.Context(), usage, streamErr)
+	if employeeCostErr != nil {
+		if !started {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+		}
+		return
 	}
 
 	if streamErr == nil {
@@ -985,10 +1075,19 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		reqCtx.ErrorStage = ""
 		reqCtx.SavedCostMicroUSD = 0
 		h.applyProviderUsageCost(r.Context(), reqCtx, target)
+		if err := h.settleProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); err != nil {
+			return
+		}
 		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
 		cacheCtx := context.WithoutCancel(r.Context())
 		h.writeExactCache(cacheCtx, reqCtx, cacheableResp)
 		h.writeSemanticCache(cacheCtx, reqCtx, semanticCacheReq, "", nil, cacheableResp)
+		return
+	}
+	if err := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); err != nil {
+		if !started {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+		}
 		return
 	}
 
@@ -1031,10 +1130,14 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	}
 }
 
-func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time) {
+func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time, employeeCostReservation *ports.EmployeeCostReservation) {
 	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, providerDuration)
 	code := provider.SafeErrorCode(err)
 	if errors.Is(err, context.Canceled) {
+		if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 		h.recordProviderRequest(metrics.ProviderRequest{
 			Provider:        reqCtx.Provider,
 			Model:           reqCtx.Model,
@@ -1058,6 +1161,10 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	})
 
 	if !provider.AllowsFallback(err) {
+		if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 		reqCtx.DomainOutcomes = withStreamingOutcome(
 			h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{Outcome: "not_called"}),
 			reqCtx,
@@ -1071,16 +1178,22 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	var fallbackTarget providerCallTarget
 	var fallbackStartedAt time.Time
 	var stream provider.ChatCompletionStreamReader
+	var fallbackEmployeeCostAttempt *employeeCostAttemptLifecycle
 	var lastFallbackErr error
 	unsupportedFallbackSeen := false
 	for {
 		resolvedTarget, fallbackErr := h.resolveFallbackTarget(r.Context(), reqCtx, target, attemptedTargets...)
 		if fallbackErr != nil {
 			if requestWasCanceled(r.Context(), fallbackErr) {
+				_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
 				h.writeStreamingOpenCancellation(w, reqCtx, reqCtx.Provider, reqCtx.Model, providerDuration)
 				return
 			}
 			if lastFallbackErr == nil {
+				if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+					h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+					return
+				}
 				if unsupportedFallbackSeen {
 					reqCtx.DomainOutcomes = withStreamingOutcome(
 						h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
@@ -1102,6 +1215,10 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 					"not_streaming",
 				)
 				writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider streaming request failed and fallback is unavailable.", "open_provider_stream")
+				return
+			}
+			if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+				h.writeEmployeeCostGuardUnavailable(w, reqCtx)
 				return
 			}
 			reqCtx.DomainOutcomes = withStreamingOutcome(
@@ -1128,18 +1245,38 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		fallbackReq := providerRequestForTarget(chatReq, reqCtx.RequestID)
 		fallbackReq.Model = fallbackTarget.ModelName
 		fallbackReq.Stream = true
+		topUp, topUpErr := h.topUpProjectEmployeeCost(r.Context(), reqCtx, fallbackReq, fallbackTarget, employeeCostReservation)
+		if topUpErr != nil || topUp.GuardUnavailable {
+			_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
+		if topUp.RestrictHighCost {
+			continue
+		}
 		startProviderAttempt(reqCtx, fallbackTarget)
+		fallbackEmployeeCostAttempt = h.newEmployeeCostAttempt(employeeCostReservation, &fallbackReq)
 		fallbackStartedAt = time.Now()
 		openedStream, fallbackCallErr := fallbackAdapter.CreateChatCompletionStream(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
 		if fallbackCallErr == nil {
 			stream = openedStream
 			break
 		}
+		_, employeeCostErr := fallbackEmployeeCostAttempt.Complete(r.Context(), nil, fallbackCallErr)
+		if employeeCostErr != nil {
+			_ = h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation)
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
+		}
 
 		fallbackDuration := time.Since(fallbackStartedAt)
 		reqCtx.ProviderLatencyMs = fallbackDuration.Milliseconds()
 		recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, fallbackDuration)
 		if requestWasCanceled(r.Context(), fallbackCallErr) {
+			if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+				h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+				return
+			}
 			h.writeStreamingOpenCancellation(w, reqCtx, fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackDuration)
 			return
 		}
@@ -1154,6 +1291,10 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		lastFallbackErr = fallbackCallErr
 		if provider.AllowsFallback(fallbackCallErr) {
 			continue
+		}
+		if releaseErr := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); releaseErr != nil {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+			return
 		}
 		reqCtx.DomainOutcomes = withStreamingOutcome(
 			h.providerFailureDomainOutcomes(reqCtx, fallbackTarget, fallbackCallErr, invocationlog.FallbackOutcome{
@@ -1179,6 +1320,13 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		reqCtx.CompletionTokens = usage.CompletionTokens
 		reqCtx.TotalTokens = usage.TotalTokens
 	}
+	_, employeeCostErr := fallbackEmployeeCostAttempt.Complete(r.Context(), usage, streamErr)
+	if employeeCostErr != nil {
+		if !started {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
+		}
+		return
+	}
 	if streamErr == nil {
 		streamMetrics.finish("completed", "none", time.Now())
 		h.recordProviderRequest(metrics.ProviderRequest{
@@ -1197,10 +1345,19 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 		reqCtx.SavedCostMicroUSD = 0
 		h.applyProviderUsageCost(r.Context(), reqCtx, fallbackTarget)
+		if err := h.settleProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); err != nil {
+			return
+		}
 		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
 		reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{
 			Outcome: "success",
 			Reason:  stringPointerValue(code),
+		}
+		return
+	}
+	if err := h.finalizeFailedProjectEmployeeCost(r.Context(), reqCtx, employeeCostReservation); err != nil {
+		if !started {
+			h.writeEmployeeCostGuardUnavailable(w, reqCtx)
 		}
 		return
 	}
@@ -3591,6 +3748,8 @@ func looksLikeUUID(value string) bool {
 func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID string) provider.ChatCompletionRequest {
 	req := chatReq
 	req.RequestID = strings.TrimSpace(requestID)
+	req.DispatchTracker = nil
+	req.BeforeDispatch = nil
 	req.Metadata = nil
 	req.GateLM = nil
 	return req

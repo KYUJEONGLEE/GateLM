@@ -8,15 +8,18 @@ import { EmailSender, InMemoryEmailSender } from '@/modules/auth/email-sender';
 import { SmtpEmailSender } from '@/modules/auth/smtp-email-sender';
 
 import { EmployeesController } from './employees.controller';
+import { EmployeeCostPolicyController } from './employee-cost-policy.controller';
+import { EmployeeCostPolicyService } from './employee-cost-policy.service';
 import { EmployeeUsageService } from './employee-usage.service';
 import { EmployeesService } from './employees.service';
 
 @Module({
   imports: [ConfigModule, DatabaseModule],
-  controllers: [EmployeesController],
+  controllers: [EmployeesController, EmployeeCostPolicyController],
   providers: [
     EmployeesService,
     EmployeeUsageService,
+    EmployeeCostPolicyService,
     AdminAuthGuard,
     {
       provide: EMAIL_SENDER,

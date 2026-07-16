@@ -11,6 +11,7 @@ import {
 } from "@/features/analytics/components/analytics-echart";
 import type { CostOverTimePoint } from "@/lib/gateway/cost-over-time-types";
 import type { AnalyticsLatencyDistributionPoint } from "@/lib/gateway/live-analytics-performance";
+import { formatMicroUsdCurrency } from "@/lib/formatting/formatters";
 
 export type AnalyticsValueKind = "count" | "micro-usd" | "milliseconds" | "tokens";
 
@@ -450,7 +451,7 @@ function latencySeries(name: string, data: Array<number | null>) {
 
 function formatValue(value: number, kind: AnalyticsValueKind, compact: boolean) {
   if (kind === "micro-usd") {
-    return formatUsd(value / 1_000_000);
+    return formatMicroUsdCurrency(value);
   }
   if (kind === "milliseconds") {
     return `${compact ? compactAxisNumber(value) : Math.round(value)} ms`;

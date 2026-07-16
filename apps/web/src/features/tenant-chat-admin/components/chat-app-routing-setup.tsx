@@ -1,29 +1,37 @@
 "use client";
 
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import {
   AlertTriangle,
   BrainCircuit,
   Check,
   Code2,
   FileText,
+  Info,
   Languages,
   LoaderCircle,
   MessageSquareMore,
   MessageSquareText,
   PlugZap,
+  RefreshCcw,
   RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
 import { ExactCacheToggleCard } from "@/features/policies/components/exact-cache-toggle-card";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { getTenantChatReturnPath } from "@/features/provider-connections/tenant-chat-setup-return";
+import {
+  applyTenantChatSharedFallbackModelRef,
+  getTenantChatFallbackExcludedModelRefs,
+  selectTenantChatSharedFallbackModelRef,
+  updateTenantChatPrimaryModelRef
+} from "@/features/tenant-chat-admin/tenant-chat-runtime-setup-model";
 import type {
   TenantChatAdminRuntimeSetup,
   TenantChatRoutingCategory,
@@ -42,13 +50,66 @@ type Props = {
   tenantId: string;
 };
 
+type DifficultyCriteria = Record<Locale, {
+  complex: string;
+  complexExample: string;
+  simple: string;
+  simpleExample: string;
+}>;
+
 const categories = [
-  { icon: MessageSquareMore, id: "general", en: "General", ko: "일반" },
-  { icon: Code2, id: "code", en: "Code", ko: "코드" },
-  { icon: Languages, id: "translation", en: "Translation", ko: "번역" },
-  { icon: FileText, id: "summarization", en: "Summarization", ko: "요약" },
-  { icon: BrainCircuit, id: "reasoning", en: "Reasoning", ko: "추론" }
+  {
+    icon: MessageSquareMore,
+    id: "general",
+    en: "General",
+    ko: "일반",
+    criteria: {
+      en: { simple: "At most one workflow or branch signal, no more than three extraction fields, and no cross-source synthesis.", simpleExample: "Explain OAuth briefly.", complex: "Two or more workflow stages or branches, four or more extraction fields, or cross-source synthesis.", complexExample: "Split the work into preparation, execution, and verification, with an owner and completion criteria for each stage." },
+      ko: { simple: "흐름·분기 신호가 각각 1개 이하이고 추출 항목이 3개 이하이며 여러 자료를 종합하지 않습니다.", simpleExample: "OAuth를 짧게 설명해줘", complex: "흐름 단계나 분기가 2개 이상, 추출 항목이 4개 이상이거나 여러 자료를 종합합니다.", complexExample: "업무를 준비, 실행, 확인 단계로 나누고 각 단계의 담당자와 완료 조건을 정해줘" }
+    }
+  },
+  {
+    icon: Code2,
+    id: "code",
+    en: "Code",
+    ko: "코드",
+    criteria: {
+      en: { simple: "Syntax, examples, small edits, or a single debug/refactor request without another complexity signal.", simpleExample: "Fix the syntax error in this one function.", complex: "Design, migration, performance, concurrency, three or more scopes, causal debugging, or at least two engineering constraints.", complexExample: "Find the reproduction conditions and possible cause, then design a fix and regression test." },
+      ko: { simple: "문법·예시·작은 수정이거나, 다른 복합 신호가 없는 단일 디버그·리팩터링 요청입니다.", simpleExample: "함수 하나의 문법 오류를 수정해줘", complex: "설계·마이그레이션·성능·동시성, 범위 3개 이상, 원인 추적 또는 기술 제약 2개 이상이 포함됩니다.", complexExample: "재현 조건과 가능한 원인을 좁히고 수정안과 회귀 테스트를 설계해줘" }
+    }
+  },
+  {
+    icon: Languages,
+    id: "translation",
+    en: "Translation",
+    ko: "번역",
+    criteria: {
+      en: { simple: "One translation scope with at most one preservation constraint and no strong domain or localization signal.", simpleExample: "Translate this sentence to Korean.", complex: "Two or more scopes or preservation constraints, legal/medical terminology, or explicit cultural localization.", complexExample: "Translate to Korean while preserving legal terminology, formal tone, tables, and Markdown formatting." },
+      ko: { simple: "번역 범위가 1개이고 보존 조건이 1개 이하이며 강한 전문 분야·현지화 신호가 없습니다.", simpleExample: "이 문장을 한국어로 번역해줘", complex: "범위나 보존 조건이 2개 이상이거나 법률·의료 용어 또는 명시적 현지화가 포함됩니다.", complexExample: "법률 용어와 표 형식을 유지해 존댓말로 번역해줘" }
+    }
+  },
+  {
+    icon: FileText,
+    id: "summarization",
+    en: "Summarization",
+    ko: "요약",
+    criteria: {
+      en: { simple: "One direct summary with at most two requested facets and no citation or traceability requirement. Length alone does not make it complex.", simpleExample: "Summarize this note into key points.", complex: "Multiple sources, comparison/synthesis, three or more facets, or citations and traceability.", complexExample: "Compare three documents and summarize their disagreements, evidence, and structure in a table." },
+      ko: { simple: "단일 자료를 직접 요약하고 요청 항목이 2개 이하이며 인용·근거 추적 조건이 없습니다. 길이만으로는 복합이 되지 않습니다.", simpleExample: "이 메모를 핵심 내용으로 요약해줘", complex: "복수 자료, 비교·종합, 요청 항목 3개 이상 또는 인용·근거 추적이 포함됩니다.", complexExample: "세 문서의 충돌점과 근거를 표로 요약해줘" }
+    }
+  },
+  {
+    icon: BrainCircuit,
+    id: "reasoning",
+    en: "Reasoning",
+    ko: "추론",
+    criteria: {
+      en: { simple: "At most two alternatives, one criterion, one reasoning step, and one uncertainty scenario.", simpleExample: "If the switch is on, should I restart it?", complex: "Three or more alternatives or criteria, multi-step reasoning, or at least two uncertainty scenarios.", complexExample: "Compare three alternatives by cost, risk, and schedule constraints." },
+      ko: { simple: "대안 2개 이하, 판단 기준·추론 단계·불확실성 시나리오가 각각 1개 이하입니다.", simpleExample: "스위치가 켜져 있으면 재시작해야 할까?", complex: "대안이나 판단 기준이 3개 이상이거나 다단계 추론 또는 불확실성 시나리오가 2개 이상입니다.", complexExample: "세 대안을 비용·위험·일정 제약으로 비교해줘" }
+    }
+  }
 ] satisfies Array<{
+  criteria: DifficultyCriteria;
   icon: typeof MessageSquareMore;
   id: TenantChatRoutingCategory;
   en: string;
@@ -59,18 +120,28 @@ const difficulties: Array<{ id: TenantChatRoutingDifficulty; en: string; ko: str
   { id: "complex", en: "Complex", ko: "복합" }
 ];
 
-type RoutingModelOption = TenantChatAdminRuntimeSetup["providers"][number]["models"][number] & {
-  label: string;
-  providerFamily: string;
-  providerName: string;
+const routingDifficultyCriteria: DifficultyCriteria = {
+  en: {
+    simple: "One task, constraint, scope, and dependency step at most, with bounded category-specific signals. Length or a single debug/refactor signal alone does not force complex routing.",
+    simpleExample: "A long background followed by one request to state the service window.",
+    complex: "Multiple common signals or a category-specific complex signal, except the bounded length/debug/refactor case above. A meaningful but ambiguous request defaults to complex.",
+    complexExample: "Investigate the situation and decide the best approach."
+  },
+  ko: {
+    simple: "작업·제약·범위·의존 단계가 각각 1개 이하이고 카테고리별 복합 신호가 제한적입니다. 길이 또는 단일 디버그·리팩터링 신호만으로는 복합이 되지 않습니다.",
+    simpleExample: "긴 배경 설명 뒤 서비스 운영 시간 하나만 요청",
+    complex: "위의 제한된 길이·디버그·리팩터링 예외를 제외하고, 공통 복합 신호가 여러 개이거나 카테고리별 복합 신호가 있습니다. 의미는 있지만 판정 근거가 모호하면 복합으로 처리합니다.",
+    complexExample: "상황을 조사하고 최선의 접근 방식을 결정해줘"
+  }
 };
+
+type RoutingProviderOption = TenantChatAdminRuntimeSetup["providers"][number];
 
 const copy = {
   en: {
     active: "Active runtime",
     autoLabel: "Auto",
-    auto: "Automatic routing",
-    autoDescription: "Classify messages into five workloads and simple or complex, then use the model assigned to that cell.",
+    modeTitle: "Routing mode",
     breadcrumb: "Chat App",
     cache: "Cache policy",
     cacheDescription: "Reuse identical Tenant Chat responses without another provider call.",
@@ -79,16 +150,28 @@ const copy = {
     cacheSettings: "Cache settings",
     configureProvider: "Register or edit provider",
     degraded: "The active runtime references a provider or model that is no longer available. Review and publish again.",
-    description: "Manage the built-in Tenant Chat app and publish its 5 × 2 routing and cache policy.",
+    description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing and cache policy.",
+    categoryCriteria: "Simple and complex guidance",
+    criteriaNote: "Length alone does not make a request complex. Task count, constraints, scope, dependency steps, and category-specific signals are evaluated together.",
+    example: "Example",
+    routingCriteria: "Simple and complex routing guidance",
+    fallbackDescription: "If the primary model times out or fails before a response starts, retry every routing cell with this model.",
+    fallbackDisabled: "Do not use fallback",
+    fallbackKicker: "Automatic failover",
+    fallbackMixed: "Keep existing per-cell fallback settings",
+    fallbackTitle: "Fallback model",
+    fixedLabel: "Fixed",
+    fixedFallbackDescription: "If the fixed model times out or fails before a response starts, retry with the selected fallback model.",
     loadError: "The Chat App policy could not be loaded.",
     manual: "Fixed model",
-    manualLabel: "Manual",
-    manualDescription: "Use one model for every message while preserving the automatic routing matrix for later.",
+    manualDescription: "Use this model for every message without category or difficulty classification.",
     model: "Model",
     modelUnavailable: "Selected model unavailable",
     noModel: "No chat model is configured on an active tenant-level provider.",
     noProvider: "Register an active tenant-level provider to configure the Chat App.",
-    priceUnknown: "Price unavailable · usage allowed · monetary ledger uses 0 (not a free-price claim)",
+    priceUnknown: "Pricing is unavailable for a selected model. Usage is allowed, but its cost is temporarily calculated as 0. This does not mean the model is free.",
+    provider: "Provider",
+    providerUnavailable: "Selected Provider unavailable",
     publish: "Publish Chat App policy",
     publishing: "Publishing…",
     ready: "The Chat App policy is active.",
@@ -96,15 +179,13 @@ const copy = {
     reset: "Reset",
     resetMessage: "Unsaved changes were reset to the active Chat App policy.",
     routing: "Routing policy",
-    routingDescription: "Each cell is an explicit modelRef assignment. Difficulty is independent from budget or quota state.",
-    title: "Chat App",
-    version: "Snapshot v"
+    routingDescription: "Configure models for the selected routing mode. Automatic assignments are preserved while fixed mode is active.",
+    title: "Chat App"
   },
   ko: {
     active: "현재 적용 중",
     autoLabel: "자동",
-    auto: "자동 라우팅",
-    autoDescription: "메시지를 5개 작업 유형과 단순·복잡 난이도로 분류한 뒤 해당 셀에 지정한 모델을 사용합니다.",
+    modeTitle: "라우팅 방식",
     breadcrumb: "채팅 앱",
     cache: "캐시 정책",
     cacheDescription: "동일한 Tenant Chat 응답을 Provider 재호출 없이 재사용합니다.",
@@ -113,16 +194,28 @@ const copy = {
     cacheSettings: "캐시 설정",
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
-    description: "내장 Tenant Chat 앱의 5 × 2 라우팅과 캐시 정책을 관리합니다.",
+    description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 및 캐시 정책을 관리합니다.",
+    categoryCriteria: "단순·복합 안내",
+    criteriaNote: "요청 길이만으로는 복합이 되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.",
+    example: "예시",
+    routingCriteria: "라우팅 단순·복합 안내",
+    fallbackDescription: "기본 모델이 응답 시작 전에 실패하거나 시간 초과되면 모든 라우팅 셀에서 이 모델로 다시 시도합니다.",
+    fallbackDisabled: "Fallback 사용 안 함",
+    fallbackKicker: "장애 시 자동 전환",
+    fallbackMixed: "기존 셀별 Fallback 설정 유지",
+    fallbackTitle: "Fallback 모델",
+    fixedLabel: "고정",
+    fixedFallbackDescription: "고정 모델이 응답 시작 전에 실패하거나 시간 초과되면 선택한 Fallback 모델로 다시 시도합니다.",
     loadError: "채팅 앱 정책을 불러오지 못했습니다.",
     manual: "고정 모델",
-    manualLabel: "수동",
-    manualDescription: "모든 메시지에 하나의 모델을 사용합니다. 자동 라우팅 매트릭스는 그대로 보존됩니다.",
+    manualDescription: "카테고리나 난이도 분류 없이 모든 메시지에 이 모델을 사용합니다.",
     model: "모델",
     modelUnavailable: "선택된 모델 사용 불가",
     noModel: "활성 tenant-level Provider에 채팅 모델이 설정되어 있지 않습니다.",
     noProvider: "채팅 앱을 설정하려면 활성 tenant-level Provider를 등록하세요.",
-    priceUnknown: "가격 미확인 · 모델 사용 가능 · 금액 ledger는 0 사용(무료라는 뜻이 아님)",
+    priceUnknown: "선택한 모델의 가격 정보가 없습니다. 모델은 사용할 수 있지만 비용은 임시로 0원 처리되며, 무료 모델이라는 의미는 아닙니다.",
+    provider: "Provider",
+    providerUnavailable: "선택된 Provider 사용 불가",
     publish: "채팅 앱 정책 발행",
     publishing: "발행 중…",
     ready: "채팅 앱 정책이 적용되었습니다.",
@@ -130,9 +223,8 @@ const copy = {
     reset: "초기화",
     resetMessage: "저장하지 않은 변경사항을 현재 채팅 앱 정책으로 되돌렸습니다.",
     routing: "라우팅 정책",
-    routingDescription: "각 셀은 명시적인 modelRef 배정입니다. 난이도는 예산 또는 quota 상태와 독립적입니다.",
-    title: "채팅 앱",
-    version: "Snapshot v"
+    routingDescription: "선택한 라우팅 방식에 맞춰 모델을 설정합니다. 고정 모드에서도 자동 배정은 그대로 보존됩니다.",
+    title: "채팅 앱"
   }
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -158,14 +250,42 @@ export function ChatAppRoutingSetup({
   const [routes, setRoutes] = useState<TenantChatRoutingMatrix>(initialSetup?.activeSnapshot?.routes ?? uniformRoutingMatrix(initialRef));
   const [cacheEnabled, setCacheEnabled] = useState(initialSetup?.activeSnapshot?.cacheEnabled ?? true);
 
-  const models = useMemo(
-    () => (setup?.providers ?? []).flatMap((provider) => provider.models.map((model) => ({
-      ...model,
-      label: `${provider.displayName} / ${model.modelKey}`,
-      providerFamily: provider.providerFamily,
-      providerName: provider.displayName
-    }))),
+  const providers = useMemo(
+    () => (setup?.providers ?? []).filter((provider) => provider.models.length > 0),
     [setup]
+  );
+  const models = useMemo(
+    () => providers.flatMap((provider) => provider.models),
+    [providers]
+  );
+  const fallbackModelRef = selectTenantChatSharedFallbackModelRef(routes);
+  const fallbackExcludedModelRefs = getTenantChatFallbackExcludedModelRefs(
+    routes,
+    manualModelRef
+  );
+  const fallbackProviders = providers
+    .map((provider) => ({
+      ...provider,
+      models: provider.models.filter(
+        (model) => !fallbackExcludedModelRefs.has(model.modelRef)
+      )
+    }))
+    .filter((provider) => provider.models.length > 0);
+  const selectedModelRefs = new Set(
+    routingMode === "manual"
+      ? [manualModelRef, fallbackModelRef].filter(
+          (modelRef): modelRef is string => Boolean(modelRef)
+        )
+      : categories.flatMap((category) =>
+          difficulties.flatMap(
+            (difficulty) => routes[category.id][difficulty.id].modelRefs
+          )
+        )
+  );
+  const hasSelectedModelWithoutPricing = models.some(
+    (model) =>
+      selectedModelRefs.has(model.modelRef) &&
+      model.pricingStatus === "unavailable"
   );
   const providerManagementHref = `/tenants/${encodeURIComponent(tenantId)}/provider-connections?${new URLSearchParams({
     intent: "tenant-chat-setup",
@@ -226,10 +346,16 @@ export function ChatAppRoutingSetup({
   }
 
   function updateRoute(category: TenantChatRoutingCategory, difficulty: TenantChatRoutingDifficulty, modelRef: string) {
-    setRoutes((current) => ({
-      ...current,
-      [category]: { ...current[category], [difficulty]: { modelRefs: [modelRef] } }
-    }));
+    setRoutes((current) =>
+      updateTenantChatPrimaryModelRef(current, category, difficulty, modelRef)
+    );
+    setFeedback(null);
+  }
+
+  function updateFallback(modelRef: string) {
+    setRoutes((current) =>
+      applyTenantChatSharedFallbackModelRef(current, modelRef, manualModelRef)
+    );
     setFeedback(null);
   }
 
@@ -260,10 +386,6 @@ export function ChatAppRoutingSetup({
           <button aria-controls="chat-app-routing-panel" aria-selected={activeTab === "routing"} data-active={activeTab === "routing"} id="chat-app-routing-tab" onClick={() => setActiveTab("routing")} role="tab" type="button">{text.routing}</button>
           <button aria-controls="chat-app-cache-panel" aria-selected={activeTab === "cache"} data-active={activeTab === "cache"} id="chat-app-cache-tab" onClick={() => setActiveTab("cache")} role="tab" type="button">{text.cache}</button>
         </div>
-        <div className="policy-actions flex flex-wrap items-center gap-2">
-          <ReadinessBadge readiness={readiness} locale={locale} />
-          {setup?.activeSnapshot ? <Badge variant="outline">{text.version}{setup.activeSnapshot.version}</Badge> : null}
-        </div>
       </div>
 
       <div className="policy-tab-panel space-y-5">
@@ -279,77 +401,118 @@ export function ChatAppRoutingSetup({
           <form className="tenant-routing-panel" onSubmit={(event) => { event.preventDefault(); void publish(); }}>
             {activeTab === "routing" ? (
             <div aria-labelledby="chat-app-routing-tab" className="space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
-            <section className="tenant-routing-enable-card" aria-labelledby="tenant-auto-routing-title">
-              <div>
-                <h3 id="tenant-auto-routing-title">{text.auto}</h3>
-                <p>{text.autoDescription}</p>
-              </div>
-              <div className="tenant-routing-switch-control">
-                <Switch
-                  aria-label={text.auto}
-                  checked={routingMode === "auto"}
-                  className="tenant-routing-switch"
-                  onCheckedChange={changeMode}
-                />
-                <span>{routingMode === "auto" ? text.autoLabel : text.manualLabel}</span>
-              </div>
-            </section>
-
-            <section className="tenant-routing-enable-card tenant-routing-default-card">
-              <div>
-                <h3>{text.manual}</h3>
-                <p>{text.manualDescription}</p>
-              </div>
-              <TenantRoutingModelSelect
-                ariaLabel={text.manual}
-                className="tenant-routing-model-choice-prominent"
-                locale={locale}
-                models={models}
-                onChange={(value) => { setManualModelRef(value); setFeedback(null); }}
-                value={manualModelRef}
-              />
-            </section>
-
-            {routingMode === "auto" ? (
-              <section className="tenant-routing-model-card" aria-labelledby="tenant-routing-model-title">
-                <header className="tenant-routing-model-heading">
-                  <div className="tenant-routing-model-heading-copy">
+            <section
+              aria-labelledby="tenant-routing-model-title"
+              className="tenant-routing-model-card"
+              data-routing-mode={routingMode}
+            >
+              <header className="tenant-routing-model-heading">
+                <div className="tenant-routing-model-heading-copy">
+                  <div className="tenant-routing-title-with-help">
                     <h3 id="tenant-routing-model-title">{text.routing}</h3>
-                    <p>{text.routingDescription}</p>
+                    <RoutingCriteriaPopover
+                      ariaLabel={text.routingCriteria}
+                      criteria={routingDifficultyCriteria[locale]}
+                      locale={locale}
+                      note={text.criteriaNote}
+                    />
                   </div>
-                </header>
-                <div aria-label={text.routing} className="tenant-routing-table" role="table">
-                  <div className="tenant-routing-table-head" role="row">
-                    <span role="columnheader">{locale === "ko" ? "카테고리" : "Category"}</span>
-                    {difficulties.map((difficulty) => <span key={difficulty.id} role="columnheader">{difficulty[locale]}</span>)}
-                  </div>
-                  {categories.map((category) => {
-                    const CategoryIcon = category.icon;
-                    return (
-                      <div className="tenant-routing-table-row" key={category.id} role="row">
-                        <div className="tenant-routing-category" role="rowheader">
-                          <CategoryIcon aria-hidden="true" />
-                          <span>{category[locale]}</span>
-                        </div>
-                        {difficulties.map((difficulty) => (
-                          <RoutingCellEditor
-                            ariaLabel={`${category[locale]} ${difficulty[locale]}`}
-                            columnLabel={difficulty[locale]}
-                            key={difficulty.id}
-                            locale={locale}
-                            models={models}
-                            onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
-                            value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
-                          />
-                        ))}
-                      </div>
-                    );
-                  })}
+                  <p>{text.routingDescription}</p>
                 </div>
-              </section>
-            ) : null}
+                <div className="tenant-routing-heading-mode">
+                  <span>{text.modeTitle}</span>
+                  <div className="tenant-routing-switch-control">
+                    <span className="tenant-routing-mode-label" data-active={routingMode === "manual" ? "true" : undefined}>{text.fixedLabel}</span>
+                    <Switch
+                      aria-label={text.modeTitle}
+                      checked={routingMode === "auto"}
+                      className="tenant-routing-switch"
+                      onCheckedChange={changeMode}
+                    />
+                    <span className="tenant-routing-mode-label" data-active={routingMode === "auto" ? "true" : undefined}>{text.autoLabel}</span>
+                  </div>
+                </div>
+              </header>
+              <div className="tenant-routing-mode-content" key={routingMode}>
+                {routingMode === "auto" ? (
+                  <div aria-label={text.routing} className="tenant-routing-table" role="table">
+                    <div className="tenant-routing-table-head" role="row">
+                      <span role="columnheader">{locale === "ko" ? "카테고리" : "Category"}</span>
+                      {difficulties.map((difficulty) => <span key={difficulty.id} role="columnheader">{difficulty[locale]}</span>)}
+                    </div>
+                    {categories.map((category) => {
+                      const CategoryIcon = category.icon;
+                      return (
+                        <div className="tenant-routing-table-row" key={category.id} role="row">
+                          <div className="tenant-routing-category" role="rowheader">
+                            <CategoryIcon aria-hidden="true" />
+                            <span>{category[locale]}</span>
+                            <RoutingCriteriaPopover
+                              ariaLabel={`${category[locale]} ${text.categoryCriteria}`}
+                              criteria={category.criteria[locale]}
+                              locale={locale}
+                            />
+                          </div>
+                          {difficulties.map((difficulty) => (
+                            <RoutingCellEditor
+                              ariaLabel={`${category[locale]} ${difficulty[locale]}`}
+                              columnLabel={difficulty[locale]}
+                              key={difficulty.id}
+                              locale={locale}
+                              onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
+                              providers={providers}
+                              value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div aria-label={text.manual} className="tenant-routing-fixed-panel">
+                    <div className="tenant-routing-fixed-heading">
+                      <span className="tenant-routing-fallback-kicker">
+                        <MessageSquareText aria-hidden="true" />
+                        {text.fixedLabel}
+                      </span>
+                      <h4>{text.manual}</h4>
+                      <p>{text.manualDescription}</p>
+                    </div>
+                    <TenantRoutingProviderModelSelect
+                      ariaLabel={text.manual}
+                      appearance="standalone"
+                      locale={locale}
+                      onChange={(value) => { setManualModelRef(value); setFeedback(null); }}
+                      providers={providers}
+                      value={manualModelRef}
+                    />
+                  </div>
+                )}
+                <section className="tenant-routing-fallback-card" aria-labelledby="tenant-routing-fallback-title">
+                  <header className="tenant-routing-fallback-heading">
+                    <span className="tenant-routing-fallback-kicker">
+                      <RefreshCcw aria-hidden="true" />
+                      {text.fallbackKicker}
+                    </span>
+                    <h3 id="tenant-routing-fallback-title">{text.fallbackTitle}</h3>
+                    <p>{routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription}</p>
+                  </header>
+                  <TenantRoutingProviderModelSelect
+                    allowEmpty
+                    ariaLabel={text.fallbackTitle}
+                    appearance="standalone"
+                    emptyLabel={text.fallbackDisabled}
+                    locale={locale}
+                    mixedLabel={text.fallbackMixed}
+                    onChange={updateFallback}
+                    providers={fallbackProviders}
+                    value={fallbackModelRef}
+                  />
+                </section>
+              </div>
+            </section>
 
-            {models.some((model) => model.pricingStatus === "unavailable") ? (
+            {hasSelectedModelWithoutPricing ? (
               <div className="tenant-routing-mock-warning"><AlertTriangle aria-hidden="true" /><div><strong>{text.model}</strong><span>{text.priceUnknown}</span></div></div>
             ) : null}
             </div>
@@ -393,45 +556,143 @@ export function ChatAppRoutingSetup({
   );
 }
 
-function RoutingCellEditor({ ariaLabel, columnLabel, locale, models, onChange, value }: {
+function RoutingCellEditor({ ariaLabel, columnLabel, locale, onChange, providers, value }: {
   ariaLabel: string;
   columnLabel: string;
   locale: Locale;
-  models: RoutingModelOption[];
   onChange: (value: string) => void;
+  providers: RoutingProviderOption[];
   value: string;
 }) {
   return (
     <div className="tenant-routing-route tenant-routing-model-ref-cell" data-column-label={columnLabel} role="cell">
-      <TenantRoutingModelSelect ariaLabel={ariaLabel} locale={locale} models={models} onChange={onChange} value={value} />
+      <TenantRoutingProviderModelSelect ariaLabel={ariaLabel} locale={locale} onChange={onChange} providers={providers} value={value} />
     </div>
   );
 }
 
-function TenantRoutingModelSelect({ ariaLabel, className, locale, models, onChange, value }: {
+function RoutingCriteriaPopover({ ariaLabel, criteria, locale, note }: {
   ariaLabel: string;
-  className?: string;
+  criteria: DifficultyCriteria[Locale];
   locale: Locale;
-  models: RoutingModelOption[];
-  onChange: (value: string) => void;
-  value: string;
+  note?: string;
 }) {
-  const selected = models.find((model) => model.modelRef === value);
   return (
-    <label className={`tenant-routing-model-choice ${className ?? ""}`.trim()}>
-      <ProviderFamilyIcon
-        className="tenant-routing-provider-icon tenant-routing-provider-icon-large"
-        family={selected?.providerFamily ?? "unknown"}
-        size={36}
-      />
-      <span className="tenant-routing-model-choice-copy">
-        <span className="tenant-routing-model-provider">{selected?.providerName ?? copy[locale].modelUnavailable}</span>
-        <select aria-label={ariaLabel} onChange={(event) => onChange(event.target.value)} value={value}>
-          <UnavailableModelOption locale={locale} models={models} value={value} />
-          {models.map((model) => <option key={model.modelRef} value={model.modelRef}>{model.label}</option>)}
-        </select>
-      </span>
-    </label>
+    <PopoverPrimitive.Root>
+      <PopoverPrimitive.Trigger aria-label={ariaLabel} className="tenant-routing-info-button" type="button">
+        <Info aria-hidden="true" />
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Positioner align="start" className="tenant-routing-popover-positioner" side="bottom" sideOffset={8}>
+          <PopoverPrimitive.Popup className="tenant-routing-criteria-popover">
+            <section className="tenant-routing-criteria-section" data-difficulty="simple">
+              <strong>{difficulties[0][locale]}</strong>
+              <p>{criteria.simple}</p>
+              <div className="tenant-routing-criteria-example">
+                <span>{copy[locale].example}</span>
+                <p>{criteria.simpleExample}</p>
+              </div>
+            </section>
+            <section className="tenant-routing-criteria-section" data-difficulty="complex">
+              <strong>{difficulties[1][locale]}</strong>
+              <p>{criteria.complex}</p>
+              <div className="tenant-routing-criteria-example">
+                <span>{copy[locale].example}</span>
+                <p>{criteria.complexExample}</p>
+              </div>
+            </section>
+            {note ? <p className="tenant-routing-criteria-note">{note}</p> : null}
+          </PopoverPrimitive.Popup>
+        </PopoverPrimitive.Positioner>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
+  );
+}
+
+function TenantRoutingProviderModelSelect({ allowEmpty = false, ariaLabel, appearance = "cell", emptyLabel, locale, mixedLabel, onChange, providers, value }: {
+  allowEmpty?: boolean;
+  ariaLabel: string;
+  appearance?: "cell" | "standalone";
+  emptyLabel?: string;
+  locale: Locale;
+  mixedLabel?: string;
+  onChange: (value: string) => void;
+  providers: RoutingProviderOption[];
+  value: string | null;
+}) {
+  const selectedProvider = providers.find((provider) =>
+    provider.models.some((model) => model.modelRef === value)
+  );
+  const selectedModels = selectedProvider?.models ?? [];
+  const standalone = appearance === "standalone";
+  const providerValue = selectedProvider?.providerConnectionId ?? (
+    value === null ? "__mixed" : value ? "__unavailable" : ""
+  );
+  const emptyStateLabel = value === null
+    ? (mixedLabel ?? copy[locale].modelUnavailable)
+    : (emptyLabel ?? copy[locale].modelUnavailable);
+
+  return (
+    <div
+      aria-label={ariaLabel}
+      className={standalone ? "tenant-routing-standalone-controls" : "tenant-routing-model-selectors"}
+      role="group"
+    >
+      <label className={standalone ? "tenant-routing-standalone-field" : undefined}>
+        <span className={standalone ? undefined : "sr-only"}>{copy[locale].provider}</span>
+        <span className="tenant-routing-provider-control">
+          <ProviderFamilyIcon
+            className="tenant-routing-provider-icon"
+            family={selectedProvider?.providerFamily ?? "unknown"}
+            size={22}
+          />
+          <select
+            aria-label={`${ariaLabel} ${copy[locale].provider}`}
+            onChange={(event) => {
+              if (event.target.value === "") {
+                onChange("");
+                return;
+              }
+              const nextProvider = providers.find(
+                (provider) => provider.providerConnectionId === event.target.value
+              );
+              onChange(nextProvider?.models[0]?.modelRef ?? "");
+            }}
+            value={providerValue}
+          >
+            {value === null ? <option disabled value="__mixed">{emptyStateLabel}</option> : null}
+            {value && !selectedProvider ? <option disabled value="__unavailable">{copy[locale].providerUnavailable}</option> : null}
+            {allowEmpty ? <option value="">{emptyLabel}</option> : null}
+            {!allowEmpty && !selectedProvider && !value ? <option disabled value="">{copy[locale].providerUnavailable}</option> : null}
+            {providers.map((provider) => (
+              <option key={provider.providerConnectionId} value={provider.providerConnectionId}>
+                {provider.displayName}
+              </option>
+            ))}
+          </select>
+        </span>
+      </label>
+      <label className={standalone ? "tenant-routing-standalone-field" : undefined}>
+        <span className={standalone ? undefined : "sr-only"}>{copy[locale].model}</span>
+        <span className="tenant-routing-model-control">
+          <select
+            aria-label={`${ariaLabel} ${copy[locale].model}`}
+            disabled={!selectedProvider}
+            onChange={(event) => onChange(event.target.value)}
+            value={selectedProvider ? (value ?? "") : ""}
+          >
+            {selectedProvider ? (
+              <>
+                <UnavailableModelOption locale={locale} models={selectedModels} value={value ?? ""} />
+                {selectedModels.map((model) => (
+                  <option key={model.modelRef} value={model.modelRef}>{model.modelKey}</option>
+                ))}
+              </>
+            ) : <option value="">{emptyStateLabel}</option>}
+          </select>
+        </span>
+      </label>
+    </div>
   );
 }
 
@@ -475,11 +736,6 @@ async function loadSetup(tenantId: string): Promise<{ data: TenantChatAdminRunti
     const payload = (await response.json().catch(() => ({}))) as unknown;
     return response.ok && isRuntimeSetup(payload) ? { data: payload, ok: true } : { error: readPayloadError(payload, "Chat App policy load failed."), ok: false };
   } catch { return { error: "Control Plane unavailable.", ok: false }; }
-}
-
-function ReadinessBadge({ readiness, locale }: { readiness: TenantChatAdminRuntimeSetup["readiness"]; locale: Locale }) {
-  const labels: Record<TenantChatAdminRuntimeSetup["readiness"], Record<Locale, string>> = { degraded: { en: "Degraded", ko: "확인 필요" }, needs_activation: { en: "Publish needed", ko: "발행 필요" }, needs_model: { en: "Model needed", ko: "모델 필요" }, needs_provider: { en: "Provider needed", ko: "Provider 필요" }, ready: { en: "Ready", ko: "적용됨" } };
-  return <Badge variant={readiness === "ready" ? "success" : readiness === "degraded" ? "destructive" : "warning"}>{labels[readiness][locale]}</Badge>;
 }
 
 function readPayloadError(payload: unknown, fallback: string) {

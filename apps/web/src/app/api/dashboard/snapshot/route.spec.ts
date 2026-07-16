@@ -9,12 +9,24 @@ test("snapshot route authorizes tenant and project access before observability r
   const authenticationIndex = routeSource.indexOf("if (!auth.isAuthenticated)");
   const tenantAccessIndex = routeSource.indexOf("if (!hasConsoleTenantAccess(auth, tenantId))");
   const projectAccessIndex = routeSource.indexOf("if (effectiveProjectId === null)");
+  const providerDirectoryReadIndex = routeSource.indexOf(
+    "const providerDirectoryPromise = getLiveRequestProviderDirectory(tenantId)"
+  );
   const observabilityReadIndex = routeSource.indexOf("] = await Promise.all([");
 
   expect(authenticationIndex).toBeGreaterThan(-1);
   expect(tenantAccessIndex).toBeGreaterThan(authenticationIndex);
   expect(projectAccessIndex).toBeGreaterThan(tenantAccessIndex);
-  expect(observabilityReadIndex).toBeGreaterThan(projectAccessIndex);
+  expect(providerDirectoryReadIndex).toBeGreaterThan(projectAccessIndex);
+  expect(observabilityReadIndex).toBeGreaterThan(providerDirectoryReadIndex);
+});
+
+test("snapshot route shares one provider directory across both live-request surfaces", async () => {
+  const routeSource = await readFile(routeSourceUrl, "utf8");
+
+  expect(routeSource.match(/providerDirectoryPromise\.then/g)).toHaveLength(2);
+  expect(routeSource).toContain("projects,\n              providerDirectory");
+  expect(routeSource).toContain("{ providerDirectory }");
 });
 
 test("snapshot route returns the whole dashboard payload without caching", async () => {

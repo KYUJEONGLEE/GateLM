@@ -58,8 +58,8 @@ func TestServiceRelaysPrimaryStreamAndSettlesConfirmedUsage(t *testing.T) {
 			usage.reserveCalls, usage.startAttemptCalls, usage.settleCalls, providers.calls,
 		)
 	}
-	if got := usage.transactionCalls(); got != 2 {
-		t.Fatalf("primary confirmed transaction budget exceeded: got %d want 2", got)
+	if got := usage.transactionCalls(); got != 3 {
+		t.Fatalf("primary confirmed transaction budget exceeded: got %d want 3", got)
 	}
 	if len(events) != 3 || events[0].Delta != "안녕" || events[1].Delta != "하세요" {
 		t.Fatalf("unexpected delta events: %+v", events)
@@ -106,6 +106,91 @@ func TestServiceAppliesRoutingV2BeforeUsageReservation(t *testing.T) {
 	decision := usage.lastContext.Routing
 	if decision.ModelRef != "tc_cheap" || decision.Category != "general" || decision.Difficulty != "simple" {
 		t.Fatalf("unexpected routing decision: %+v", decision)
+	}
+}
+
+func TestServiceManualRoutingIncludesSharedFallbackCandidate(t *testing.T) {
+	snapshot := completionRoutingSnapshot()
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_premium", "tc_cheap"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{
+		Simple:  sharedCell,
+		Complex: sharedCell,
+	}
+	snapshot.Policies.Routing.Policy.Mode = "manual"
+	snapshot.Policies.Routing.Policy.Routes = tenantruntime.RoutingMatrix{
+		General:       sharedDifficulty,
+		Code:          sharedDifficulty,
+		Translation:   sharedDifficulty,
+		Summarization: sharedDifficulty,
+		Reasoning:     sharedDifficulty,
+	}
+	snapshot.Policies.Routing.ManualModelRef = "tc_premium"
+	snapshot.Policies.Fallback = tenantruntime.FallbackPolicy{
+		Enabled:        true,
+		MaxAttempts:    2,
+		AllowedReasons: []string{"provider_timeout", "provider_error_pre_delta"},
+	}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_premium", ProviderID: "provider-anthropic", ModelKey: "claude",
+		},
+	}}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot},
+		usage,
+		&fakeProviderExecutor{stream: &fakeStream{}},
+	)
+	request := completionRequest()
+	request.Input.Messages = []tenantchat.EphemeralMessage{{Role: "user", Content: "Hello"}}
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare manual routed completion: %v", err)
+	}
+	defer execution.Close()
+	if usage.lastContext.Routing == nil {
+		t.Fatal("manual routing decision must be attached before usage reservation")
+	}
+	decision := usage.lastContext.Routing
+	if decision.ModelRef != "tc_premium" || len(decision.CandidateModelRefs) != 2 ||
+		decision.CandidateModelRefs[0] != "tc_premium" || decision.CandidateModelRefs[1] != "tc_cheap" {
+		t.Fatalf("unexpected manual fallback candidates: %+v", decision)
+	}
+}
+
+func TestSharedTenantChatFallbackModelRefsRejectsCellsWithoutFallback(t *testing.T) {
+	sharedCell := tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary", "tc_fallback"}}
+	sharedDifficulty := tenantruntime.RoutingDifficulty{Simple: sharedCell, Complex: sharedCell}
+
+	tests := []struct {
+		name   string
+		routes tenantruntime.RoutingMatrix
+	}{
+		{name: "empty matrix", routes: tenantruntime.RoutingMatrix{}},
+		{
+			name: "later cell has no fallback",
+			routes: tenantruntime.RoutingMatrix{
+				General: sharedDifficulty,
+				Code: tenantruntime.RoutingDifficulty{
+					Simple:  tenantruntime.RoutingCell{ModelRefs: []string{"tc_primary"}},
+					Complex: sharedCell,
+				},
+				Translation:   sharedDifficulty,
+				Summarization: sharedDifficulty,
+				Reasoning:     sharedDifficulty,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sharedTenantChatFallbackModelRefs(test.routes, "tc_manual"); got != nil {
+				t.Fatalf("expected no shared fallback, got %v", got)
+			}
+		})
 	}
 }
 
@@ -410,6 +495,29 @@ func TestServicePreCallProviderFailureReleasesWithoutPendingExposure(t *testing.
 	}
 }
 
+func TestServiceMarksProviderDispatchBeforeRelaying(t *testing.T) {
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", State: "reserved",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+		},
+		dispatchErr: errors.New("synthetic dispatch persistence failure"),
+	}
+	stream := &fakeStream{}
+	providers := &fakeProviderExecutor{stream: stream}
+	service := New(&fakeSnapshotResolver{snapshot: completionSnapshot()}, usage, providers)
+
+	if _, err := service.Prepare(context.Background(), completionRequest()); !errors.Is(err, tenantchat.ErrUsageGuardUnavailable) {
+		t.Fatalf("expected usage guard unavailable, got %v", err)
+	}
+	if usage.dispatchCalls != 1 || usage.unconfirmedCalls != 1 || usage.lastOutcome != "failed_pre_delta" {
+		t.Fatalf("dispatch failure accounting mismatch: usage=%+v", usage)
+	}
+	if stream.closeCalls != 1 {
+		t.Fatalf("provider stream must close when dispatch persistence fails: got %d", stream.closeCalls)
+	}
+}
+
 func TestServiceEmitsSafeFinalAndKeepsMissingUsagePending(t *testing.T) {
 	usage := &fakeUsageAccounting{
 		reservation: tenantchat.UsageReservation{
@@ -483,12 +591,70 @@ func TestServiceFallsBackBeforeDeltaAndSettlesAllConfirmedAttempts(t *testing.T)
 	if usage.recordCalls != 1 || usage.startAttemptCalls != 2 || usage.settleCalls != 1 || providers.calls != 2 {
 		t.Fatalf("unexpected fallback calls: record=%d start=%d settle=%d provider=%d", usage.recordCalls, usage.startAttemptCalls, usage.settleCalls, providers.calls)
 	}
-	if got := usage.transactionCalls(); got != 3 {
-		t.Fatalf("fallback confirmed transaction budget exceeded: got %d want 3", got)
+	if got := usage.transactionCalls(); got != 5 {
+		t.Fatalf("fallback confirmed transaction budget exceeded: got %d want 5", got)
 	}
 	if len(events) != 2 || events[0].Delta != "fallback answer" || events[1].TerminalOutcome != "succeeded" ||
 		events[1].EffectiveModelKey == nil || *events[1].EffectiveModelKey != "model-economy" {
 		t.Fatalf("unexpected fallback events: %+v", events)
+	}
+}
+
+func TestServiceSkipsRestrictedFallbackAndUsesNextLowerCostRoute(t *testing.T) {
+	snapshot := fallbackCompletionSnapshot()
+	highRoute := tenantruntime.PriceRoute{
+		RouteID: "route_high", ProviderID: "provider-high", ModelKey: "model-high",
+		InputMicroUSDPerMillionTokens: 20, OutputMicroUSDPerMillionTokens: 40,
+	}
+	snapshot.Pricing.Routes = append(snapshot.Pricing.Routes, highRoute)
+	snapshot.Policies.Routing.Routes = append(snapshot.Policies.Routing.Routes, tenantruntime.RuntimeRoute{
+		RouteID: "route_high", Tier: "high_quality", ProviderID: "provider-high", ModelKey: "model-high", Enabled: true,
+	})
+	snapshot.Policies.Fallback.RouteIDs = []string{"route_high", "route_economy"}
+
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider-primary", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			State: "settled", ConfirmedInputTokens: 20, ConfirmedOutputTokens: 4,
+			QuotaState: "normal", BudgetState: "normal",
+		},
+		restrictions: []bool{true, false},
+	}
+	providers := &fakeProviderExecutor{streams: []provider.ChatCompletionStreamReader{
+		&fakeStream{
+			events:      []provider.ChatCompletionStreamEvent{{Usage: &provider.Usage{PromptTokens: 8, TotalTokens: 8}}},
+			terminalErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic primary failure")),
+		},
+		&fakeStream{events: []provider.ChatCompletionStreamEvent{
+			{Delta: "lower-cost fallback"},
+			{Usage: &provider.Usage{PromptTokens: 12, CompletionTokens: 4, TotalTokens: 16}},
+		}},
+	}}
+	service := New(&fakeSnapshotResolver{snapshot: snapshot}, usage, providers)
+	execution, err := service.Prepare(context.Background(), completionRequest())
+	if err != nil {
+		t.Fatalf("prepare restricted fallback: %v", err)
+	}
+	var events []tenantchat.CompletionEvent
+	if err := execution.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay restricted fallback: %v", err)
+	}
+
+	if providers.calls != 2 || len(providers.routes) != 2 || providers.routes[1].RouteID != "route_economy" {
+		t.Fatalf("restricted route must not reach provider: routes=%+v", providers.routes)
+	}
+	if usage.recordCalls != 2 || usage.dispatchCalls != 2 || usage.transactionCalls() != 6 {
+		t.Fatalf("restricted fallback accounting mismatch: usage=%+v", usage)
+	}
+	if len(events) != 2 || events[1].EffectiveModelKey == nil || *events[1].EffectiveModelKey != "model-economy" {
+		t.Fatalf("unexpected restricted fallback events: %+v", events)
 	}
 }
 
@@ -520,11 +686,50 @@ func TestServiceSettlesCurrentAttemptWhenFallbackTopUpFails(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("relay fallback top-up failure: %v", err)
 	}
-	if usage.settleCalls != 1 || providers.calls != 1 || usage.transactionCalls() != 3 {
+	if usage.settleCalls != 1 || providers.calls != 1 || usage.transactionCalls() != 4 {
 		t.Fatalf("fallback top-up failure accounting mismatch: usage=%+v provider=%d", usage, providers.calls)
 	}
 	if len(events) != 1 || events[0].Error == nil || events[0].Error.Code != "CHAT_BUDGET_HARD_LIMIT" {
 		t.Fatalf("unexpected fallback top-up terminal event: %+v", events)
+	}
+}
+
+func TestServiceSettlesConfirmedUsageWhenFallbackAccountingIsUnavailableAfterCancellation(t *testing.T) {
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider-primary", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			State: "settled", ConfirmedInputTokens: 8, QuotaState: "normal", BudgetState: "normal",
+		},
+		fallbackErr: tenantchat.ErrUsageGuardUnavailable,
+	}
+	relayCtx, cancel := context.WithCancel(context.Background())
+	providers := &fakeProviderExecutor{stream: &fakeStream{
+		events:      []provider.ChatCompletionStreamEvent{{Usage: &provider.Usage{PromptTokens: 8, TotalTokens: 8}}},
+		terminalErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic primary failure")),
+		onTerminal:  cancel,
+	}}
+	service := New(&fakeSnapshotResolver{snapshot: fallbackCompletionSnapshot()}, usage, providers)
+	execution, err := service.Prepare(context.Background(), completionRequest())
+	if err != nil {
+		t.Fatalf("prepare fallback accounting failure: %v", err)
+	}
+	var events []tenantchat.CompletionEvent
+	if err := execution.Relay(relayCtx, func(event tenantchat.CompletionEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay fallback accounting failure: %v", err)
+	}
+	if usage.fallbackContextErr != nil || usage.settleCalls != 1 ||
+		usage.confirmedUsage.InputTokens != 8 || usage.transactionCalls() != 4 {
+		t.Fatalf("confirmed fallback failure accounting mismatch: %+v", usage)
+	}
+	if len(events) != 1 || events[0].Usage == nil || events[0].Usage.UsageQuality != "confirmed" {
+		t.Fatalf("unexpected fallback accounting failure event: %+v", events)
 	}
 }
 
@@ -565,7 +770,7 @@ func TestServiceUsesFallbackPreCallSettlementWithoutFourthTransaction(t *testing
 	}); err != nil {
 		t.Fatalf("relay fallback pre-call failure: %v", err)
 	}
-	if usage.preCallCalls != 1 || usage.settleCalls != 0 || providers.calls != 2 || usage.transactionCalls() != 3 {
+	if usage.preCallCalls != 1 || usage.settleCalls != 0 || providers.calls != 2 || usage.transactionCalls() != 4 {
 		t.Fatalf("fallback pre-call transaction budget mismatch: usage=%+v provider=%d", usage, providers.calls)
 	}
 	if len(events) != 1 || events[0].Error == nil || events[0].Error.Code != "CHAT_PROVIDER_FAILED" {
@@ -925,15 +1130,19 @@ func (f *fakeSnapshotResolver) Resolve(context.Context, tenantchat.RequestContex
 }
 
 type fakeUsageAccounting struct {
-	reservation  tenantchat.UsageReservation
-	reservations []tenantchat.UsageReservation
-	settlement   tenantchat.UsageSettlement
-	err          error
-	fallbackErr  error
-	lastContext  tenantchat.RequestContext
+	reservation        tenantchat.UsageReservation
+	reservations       []tenantchat.UsageReservation
+	settlement         tenantchat.UsageSettlement
+	err                error
+	fallbackErr        error
+	fallbackContextErr error
+	dispatchErr        error
+	restrictions       []bool
+	lastContext        tenantchat.RequestContext
 
 	reserveCalls      int
 	startAttemptCalls int
+	dispatchCalls     int
 	settleCalls       int
 	recordCalls       int
 	releasedCalls     int
@@ -945,7 +1154,7 @@ type fakeUsageAccounting struct {
 }
 
 func (f *fakeUsageAccounting) transactionCalls() int {
-	return f.reserveCalls + f.recordCalls + f.settleCalls + f.releasedCalls + f.ledgerlessCalls + f.preCallCalls
+	return f.reserveCalls + f.recordCalls + f.dispatchCalls + f.settleCalls + f.releasedCalls + f.ledgerlessCalls + f.preCallCalls
 }
 
 func (f *fakeUsageAccounting) FinalizeLedgerless(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, string, string, string) (bool, error) {
@@ -970,22 +1179,37 @@ func (f *fakeUsageAccounting) BeginExecution(_ context.Context, requestContext t
 }
 
 func (f *fakeUsageAccounting) BeginFallback(
-	context.Context,
-	tenantchat.RequestContext,
-	tenantruntime.Snapshot,
-	string,
-	int,
-	tenantchat.ConfirmedUsage,
-	string,
-	tenantchat.SelectedRoute,
-	int,
-) error {
+	ctx context.Context,
+	_ tenantchat.RequestContext,
+	_ tenantruntime.Snapshot,
+	_ string,
+	_ int,
+	_ tenantchat.ConfirmedUsage,
+	_ string,
+	_ tenantchat.SelectedRoute,
+	_ int,
+) (bool, error) {
+	f.fallbackContextErr = ctx.Err()
+	index := f.recordCalls
 	f.startAttemptCalls++
 	f.recordCalls++
 	if f.fallbackErr != nil {
-		return f.fallbackErr
+		return false, f.fallbackErr
 	}
-	return f.err
+	if index < len(f.restrictions) && f.restrictions[index] {
+		return true, nil
+	}
+	return false, f.err
+}
+
+func (f *fakeUsageAccounting) MarkDispatched(
+	context.Context,
+	tenantchat.RequestContext,
+	string,
+	int,
+) error {
+	f.dispatchCalls++
+	return f.dispatchErr
 }
 
 func (f *fakeUsageAccounting) FinalizeConfirmed(_ context.Context, _ tenantchat.RequestContext, _ string, _ int, usage tenantchat.ConfirmedUsage, _ string) (tenantchat.UsageSettlement, error) {
@@ -1029,13 +1253,15 @@ type fakeProviderExecutor struct {
 	err       error
 	status    tenantchat.ProviderCallStartStatus
 	statuses  []tenantchat.ProviderCallStartStatus
+	routes    []tenantchat.SelectedRoute
 	calls     int
 	lastInput tenantchat.CompletionInput
 }
 
-func (f *fakeProviderExecutor) OpenStream(_ context.Context, _ tenantchat.RequestContext, _ tenantchat.SelectedRoute, input tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
+func (f *fakeProviderExecutor) OpenStream(_ context.Context, _ tenantchat.RequestContext, route tenantchat.SelectedRoute, input tenantchat.CompletionInput) (provider.ChatCompletionStreamReader, tenantchat.ProviderCallStartStatus, error) {
 	index := f.calls
 	f.calls++
+	f.routes = append(f.routes, route)
 	f.lastInput = input
 	if index < len(f.streams) {
 		var err error
@@ -1059,11 +1285,17 @@ type fakeStream struct {
 	events      []provider.ChatCompletionStreamEvent
 	index       int
 	terminalErr error
+	onTerminal  func()
+	closeCalls  int
 }
 
 func (f *fakeStream) Next() (provider.ChatCompletionStreamEvent, error) {
 	if f.index >= len(f.events) {
 		if f.terminalErr != nil {
+			if f.onTerminal != nil {
+				f.onTerminal()
+				f.onTerminal = nil
+			}
 			err := f.terminalErr
 			f.terminalErr = nil
 			return provider.ChatCompletionStreamEvent{}, err
@@ -1075,7 +1307,10 @@ func (f *fakeStream) Next() (provider.ChatCompletionStreamEvent, error) {
 	return event, nil
 }
 
-func (f *fakeStream) Close() error { return nil }
+func (f *fakeStream) Close() error {
+	f.closeCalls++
+	return nil
+}
 
 type streamResult struct {
 	event provider.ChatCompletionStreamEvent

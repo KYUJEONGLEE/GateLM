@@ -1774,6 +1774,73 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
   });
 
+  it('classifies simple, complex, and fallback routing models by cost tier', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const simpleModel = 'mock-simple';
+    const complexModel = 'mock-complex';
+    const fallbackModel = 'mock-fallback';
+    const simpleModelRef = `${providerId}:${simpleModel}`;
+    const complexModelRef = `${providerId}:${complexModel}`;
+    const fallbackModelRef = `${providerId}:${fallbackModel}`;
+    const baseDocument = activeRuntimeConfigDocument();
+    const baseProvider = baseDocument.providers[0];
+    if (!baseProvider) {
+      throw new Error('runtime config fixture provider is missing');
+    }
+    const models = [simpleModel, complexModel, fallbackModel];
+    const activeDocument: ActiveRuntimeConfigResponseDto = {
+      ...baseDocument,
+      providers: [{ ...baseProvider, models }],
+      models: models.map((model) => ({
+        provider: 'mock',
+        model,
+        displayName: model,
+        status: 'active' as const,
+        contextWindowTokens: 8192,
+        supportsStreaming: false,
+        supportsJsonMode: false,
+      })),
+      routingPolicy: {
+        ...baseDocument.routingPolicy,
+        routes: routingRoleRoutes(
+          simpleModelRef,
+          complexModelRef,
+          fallbackModelRef,
+        ),
+      },
+      pricingRules: models.map((model) => ({
+        pricingRuleId: `price_mock_${model}_v1`,
+        provider: 'mock',
+        model,
+        pricingVersion: '2026-06-27.mock.v1',
+        currency: 'USD' as const,
+        unit: 'token' as const,
+        promptTokenMicroUsd: 1,
+        completionTokenMicroUsd: 2,
+        effectiveAt: now.toISOString(),
+      })),
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const costTierByModelRef = new Map(
+      catalog.providers[0]?.models.map((model) => [
+        model.modelRef,
+        model.routing?.costTier,
+      ]),
+    );
+
+    expect(costTierByModelRef.get(simpleModelRef)).toBe('low');
+    expect(costTierByModelRef.get(complexModelRef)).toBe('premium');
+    expect(costTierByModelRef.get(fallbackModelRef)).toBe('balanced');
+  });
+
   it('exposes selected custom model names in RuntimeSnapshot and Provider Catalog', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);

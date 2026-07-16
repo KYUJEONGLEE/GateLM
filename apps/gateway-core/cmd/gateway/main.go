@@ -64,6 +64,7 @@ import (
 	employeepolicystage "gatelm/apps/gateway-core/internal/pipeline/stages/employeepolicy"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
+	projectemployeecost "gatelm/apps/gateway-core/internal/services/projectapplication/employeecost"
 	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
 	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
@@ -219,11 +220,13 @@ func main() {
 		MaxEntries: cfg.PricingCache.MaxEntries,
 	})
 	costCalculator := costing.NewCalculator(pricingCatalog)
+	projectEmployeeCosts := projectemployeecost.NewService(postgresPool, pricingCatalog)
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
 		app.WithInvocationLogReader(invocationLogReader),
 		app.WithCostCalculator(costCalculator),
+		app.WithProjectEmployeeCostAccounting(projectEmployeeCosts),
 		app.WithMetrics(metricsRegistry),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
@@ -326,6 +329,7 @@ func main() {
 	if tenantChatReconciliationWorker != nil {
 		go tenantChatReconciliationWorker.Run(ctx)
 	}
+	go projectEmployeeCosts.RunReconciliation(ctx)
 
 	go func() {
 		log.Printf("gateway-core listening on :%s", cfg.Port)

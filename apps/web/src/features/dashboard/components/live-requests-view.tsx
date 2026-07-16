@@ -3,6 +3,7 @@
 import { Eye, Info, Maximize2, RotateCw, X } from "lucide-react";
 import Link from "next/link";
 import {
+  formatLiveRequestCostUsd,
   primaryPolicyResult,
   projectPillTone
 } from "@/features/dashboard/live-requests-format";
@@ -252,6 +253,7 @@ export function LiveRequestsView({
             <col className="dashboard-live-col-status" />
             <col className="dashboard-live-col-policy" />
             <col className="dashboard-live-col-latency" />
+            <col className="dashboard-live-col-cost" />
             <col className="dashboard-live-col-action" />
           </colgroup>
           <thead>
@@ -259,17 +261,18 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "시각" : "Time"}</th>
               <th scope="col">{locale === "ko" ? "사용자" : "User"}</th>
               <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
-              <th scope="col">{locale === "ko" ? "라우팅" : "Routing"}</th>
+              <th scope="col">{locale === "ko" ? "처리 모델" : "Model"}</th>
               <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
               <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Result"}</th>
               <th scope="col">{locale === "ko" ? "응답 시간" : "Response time"}</th>
+              <th scope="col">{locale === "ko" ? "비용" : "Cost"}</th>
               <th scope="col">{text.detail}</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && rows.length === 0 ? (
               <tr>
-                <td className="dashboard-live-requests-state" colSpan={8}>
+                <td className="dashboard-live-requests-state" colSpan={9}>
                   <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
                   {text.loading}
                 </td>
@@ -277,7 +280,7 @@ export function LiveRequestsView({
             ) : null}
             {!isLoading && rows.length === 0 ? (
               <tr>
-                <td className="dashboard-live-requests-state" colSpan={8}>
+                <td className="dashboard-live-requests-state" colSpan={9}>
                   {text.noRequests}
                 </td>
               </tr>
@@ -340,7 +343,16 @@ export function LiveRequestsView({
                 <td>
                   <PolicyBadges locale={locale} row={row} />
                 </td>
-                <td>{formatResponseTimeSeconds(row.ttftMs)}</td>
+                <td>
+                  <span className="dashboard-live-latency">
+                    {formatResponseTimeSeconds(row.latencyMs)}
+                  </span>
+                </td>
+                <td>
+                  <span className="dashboard-live-cost">
+                    {formatLiveRequestCostUsd(row.costUsd)}
+                  </span>
+                </td>
                 <td>
                   <button
                     aria-label={text.openDetail + " " + row.requestId}
@@ -396,17 +408,10 @@ function LiveRequestRouting({ row }: { row: LiveRequestRow }) {
     row.executedModel ?? row.requestedModel,
     "auto"
   );
-  const requestMode = row.requestedModel === "auto"
-    ? "Auto routing"
-    : formatModelDisplayName(row.requestedModel, "Manual routing");
-  const executionLabel = row.providerName
-    ? `${row.providerName} · ${requestMode}`
-    : `${row.category} / ${row.difficulty} / ${row.modelRef ?? "-"}`;
-  const routingLabel = `${row.category} / ${row.difficulty} / ${row.modelRef ?? "no-model-ref"} / ${row.routingReason ?? "not-set"}`;
   return (
     <span
       className="dashboard-live-provider-model"
-      title={routingLabel + " · " + model}
+      title={row.providerName ? `${row.providerName} · ${model}` : model}
     >
       {row.providerFamily ? (
         <ProviderFamilyIcon
@@ -417,7 +422,6 @@ function LiveRequestRouting({ row }: { row: LiveRequestRow }) {
       ) : null}
       <span className="dashboard-live-provider-copy">
         <strong>{model}</strong>
-        <small>{executionLabel}</small>
       </span>
     </span>
   );
