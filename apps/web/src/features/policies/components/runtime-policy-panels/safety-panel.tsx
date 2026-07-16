@@ -55,6 +55,7 @@ export function SafetyPolicyPanel({
       <SafetyDetectorPolicyControls
         detectors={draftValues.detectors}
         onDetectorChange={updateDetector}
+        showAllActionOptions
         text={text}
       />
 
@@ -122,11 +123,13 @@ export function SafetyDetectorPolicyControls({
   allowPlaceholderEditing = true,
   detectors,
   onDetectorChange,
+  showAllActionOptions = false,
   text
 }: {
   allowPlaceholderEditing?: boolean;
   detectors: RuntimePolicyDetector[];
   onDetectorChange: (detector: RuntimePolicyDetector) => void;
+  showAllActionOptions?: boolean;
   text: SafetyDetectorPolicyText;
 }) {
   const [isMandatoryExpanded, setIsMandatoryExpanded] = useState(false);
@@ -153,6 +156,7 @@ export function SafetyDetectorPolicyControls({
                 key={detector.type}
                 labels={text}
                 onChange={onDetectorChange}
+                showAllActionOptions={showAllActionOptions}
               />
             ))}
           </div>
@@ -180,6 +184,7 @@ export function SafetyDetectorPolicyControls({
                   key={detector.type}
                   labels={text}
                   onChange={onDetectorChange}
+                  showAllActionOptions={showAllActionOptions}
                 />
               ))}
             </div>
@@ -194,17 +199,18 @@ function DetectorEditor({
   allowPlaceholderEditing,
   detector,
   labels,
-  onChange
+  onChange,
+  showAllActionOptions
 }: {
   allowPlaceholderEditing: boolean;
   detector: RuntimePolicyDetector;
   labels: SafetyDetectorPolicyText;
   onChange: (detector: RuntimePolicyDetector) => void;
+  showAllActionOptions: boolean;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
   const isMandatory = isMandatorySafetyDetector(detector.type);
   const actionValue = detector.action;
-  const canEditPlaceholder = allowPlaceholderEditing && actionValue === "redact";
+  const showPlaceholder = allowPlaceholderEditing;
   const detectorName = labels.detectorNames[detector.type];
   const actionLabel =
     actionValue === "block" ? labels.blockAction : labels.redactAction;
@@ -214,7 +220,6 @@ function DetectorEditor({
       className="policy-detector-card"
       data-detector-type={detector.type}
       data-action={actionValue}
-      data-expanded={isEditing && canEditPlaceholder}
       data-mandatory={isMandatory}
     >
       <div className="policy-detector-card-summary">
@@ -237,49 +242,66 @@ function DetectorEditor({
         </div>
         <div className="policy-detector-card-name">
           <strong>{detectorName}</strong>
-          {canEditPlaceholder && !isEditing ? (
+          {showPlaceholder ? (
             <span>{detector.placeholder}</span>
           ) : null}
         </div>
-        {isEditing && canEditPlaceholder ? (
-          <input
-            aria-label={`${detectorName} ${labels.placeholder}`}
-            className="policy-detector-placeholder-inline"
-            onChange={(event) =>
+        {showAllActionOptions ? (
+          <fieldset
+            className="policy-detector-action-group"
+            data-action={actionValue}
+          >
+            <legend className="sr-only">{`${detectorName} ${labels.mode}`}</legend>
+            <span
+              aria-hidden="true"
+              className="policy-detector-action-indicator"
+            />
+            {(["redact", "block"] as const).map((nextAction) => {
+              const isSelected = actionValue === nextAction;
+
+              return (
+                <label
+                  className="policy-detector-mode-button"
+                  data-action={nextAction}
+                  data-selected={isSelected}
+                  key={nextAction}
+                >
+                  <input
+                    checked={isSelected}
+                    className="sr-only"
+                    name={`runtime-policy-detector-${detector.type}-action`}
+                    onChange={() =>
+                      onChange({
+                        ...detector,
+                        action: nextAction
+                      })
+                    }
+                    type="radio"
+                    value={nextAction}
+                  />
+                  <span>
+                    {nextAction === "block" ? labels.blockAction : labels.redactAction}
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
+        ) : (
+          <button
+            aria-label={`${detectorName} ${labels.mode}`}
+            className="policy-detector-mode-button"
+            data-action={actionValue}
+            onClick={() =>
               onChange({
                 ...detector,
-                placeholder: event.target.value
+                action: actionValue === "block" ? "redact" : "block"
               })
             }
-            value={detector.placeholder}
-          />
-        ) : null}
-        {canEditPlaceholder ? (
-          <button
-            aria-expanded={isEditing}
-            className="policy-detector-edit-button"
-            onClick={() => setIsEditing((current) => !current)}
             type="button"
           >
-            <span>{isEditing ? labels.close : labels.edit}</span>
-            <ChevronDown aria-hidden="true" size={16} />
+            {actionLabel}
           </button>
-        ) : null}
-        <button
-          aria-label={`${detectorName} ${labels.mode}`}
-          className="policy-detector-mode-button"
-          data-action={actionValue}
-          onClick={() => {
-            setIsEditing(false);
-            onChange({
-              ...detector,
-              action: actionValue === "block" ? "redact" : "block"
-            });
-          }}
-          type="button"
-        >
-          {actionLabel}
-        </button>
+        )}
       </div>
     </div>
   );
