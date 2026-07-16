@@ -14,6 +14,7 @@ gatelm-ai-service = "app.main:run"
 gatelm-ai-safety-promotion-gate = "app.services.ai_safety_promotion_gate:main"
 gatelm-ai-safety-repeated-cold = "app.services.ai_safety_repeated_cold_runner:main"
 gatelm-pii-model-sync = "app.model_artifacts.cli:run"
+gatelm-pii-ner-training-dataset = "app.services.pii_ner_training_dataset_cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]
