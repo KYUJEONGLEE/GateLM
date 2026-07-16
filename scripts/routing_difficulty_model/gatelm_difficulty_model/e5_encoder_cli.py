@@ -65,6 +65,13 @@ def prepare(artifact_root: Path) -> Path:
     for relative_path, expected_hash in PINNED_SOURCE_HASHES.items():
         target = directory / relative_path
         if not target.is_file() or sha256_file(target) != expected_hash:
+            # huggingface_hub writes download state below local_dir/.cache.
+            # Create the nested parent here because Windows does not create it
+            # reliably for artifact paths such as onnx/model.onnx.
+            (directory / ".cache" / "huggingface" / "download" / relative_path).parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
             target = Path(
                 hf_hub_download(
                     repo_id=MODEL_ID,
