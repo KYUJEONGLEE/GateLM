@@ -5,16 +5,16 @@ import {
   getTenantChatProviderSetupContext
 } from "./tenant-chat-setup-return";
 
-test("accepts only the exact same-tenant Tenant Chat return path", () => {
+test("accepts only the exact same-tenant Chat App return path", () => {
   const context = getTenantChatProviderSetupContext({
     intent: "tenant-chat-setup",
-    returnTo: "/tenants/tenant_demo_acme/tenant-chat",
+    returnTo: "/tenants/tenant_demo_acme/chat-app",
     tenantId: "tenant_demo_acme"
   });
 
   expect(context).toEqual({
     intent: "tenant-chat-setup",
-    returnTo: "/tenants/tenant_demo_acme/tenant-chat"
+    returnTo: "/tenants/tenant_demo_acme/chat-app"
   });
   expect(
     getTenantChatProviderCreatedHref(
@@ -22,7 +22,7 @@ test("accepts only the exact same-tenant Tenant Chat return path", () => {
       "22222222-2222-4222-8222-222222222222"
     )
   ).toBe(
-    "/tenants/tenant_demo_acme/tenant-chat?onboarding=provider-created&providerConnectionId=22222222-2222-4222-8222-222222222222"
+    "/tenants/tenant_demo_acme/chat-app?onboarding=provider-created&providerConnectionId=22222222-2222-4222-8222-222222222222"
   );
 });
 
@@ -37,7 +37,7 @@ test("ignores external and cross-tenant return paths", () => {
   expect(
     getTenantChatProviderSetupContext({
       intent: "tenant-chat-setup",
-      returnTo: "/tenants/other/tenant-chat",
+      returnTo: "/tenants/other/chat-app",
       tenantId: "tenant_demo_acme"
     })
   ).toBeNull();

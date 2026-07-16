@@ -26,10 +26,12 @@ revision: `tenant-chat/v1`
 | Usage outbox payload | [`schemas/usage-settlement-event.schema.json`](./schemas/usage-settlement-event.schema.json) |
 | Pre-ledger terminal payload | [`schemas/invocation-terminal-event.schema.json`](./schemas/invocation-terminal-event.schema.json) |
 | Mixed/late usage outbox payload | [`schemas/usage-settlement-event-v2.schema.json`](./schemas/usage-settlement-event-v2.schema.json) |
+| Cache-aware usage outbox payload | [`schemas/usage-settlement-event-v3.schema.json`](./schemas/usage-settlement-event-v3.schema.json) |
 | Pre-ledger terminal payload v2 | [`schemas/invocation-terminal-event-v2.schema.json`](./schemas/invocation-terminal-event-v2.schema.json) |
 | Binding vectors | [`vectors/binding-digest-vectors.json`](./vectors/binding-digest-vectors.json) |
 | Event transition vectors | [`vectors/usage-event-vectors.json`](./vectors/usage-event-vectors.json) |
 | Mixed/late event vectors | [`vectors/usage-event-v2-vectors.json`](./vectors/usage-event-v2-vectors.json) |
+| Cache-aware event vectors | [`vectors/usage-event-v3-vectors.json`](./vectors/usage-event-v3-vectors.json) |
 
 ## 2. API idempotency와 retry
 
@@ -58,11 +60,12 @@ revision: `tenant-chat/v1`
 - `id`는 `<requestId>:<sequence>`다. sequence는 request별 1부터 단조 증가한다.
 - `tenant_chat.delta`는 ephemeral display payload이며 DB, structured log, metric에 저장하지 않는다.
 - `tenant_chat.final`은 request마다 exactly once 생성하고 schema validation 후 Chat API가 final assistant ciphertext를 저장한다.
-- Chat API는 public turn request에서 `estimatedInputTokens`를 받지 않는다. private completion에 실제 포함되는 bounded message content의 UTF-8 byte length 합계(최소 1)를 계산해 completion `usageIntent`와 binding에 사용한다.
+- Chat API는 public turn request에서 `estimatedInputTokens`를 받지 않는다. optional `contextMode=conversation|single_turn`을 받고 미지정 시 `conversation`으로 처리한다. `single_turn`에서는 encrypted prior history를 decrypt하지 않으며 current user message만 private completion에 포함한다. 실제 포함되는 bounded message content의 UTF-8 byte length 합계(최소 1)를 계산해 completion `usageIntent`와 binding에 사용한다.
 - successful final 저장의 retryable PostgreSQL timeout/connection/transaction conflict는 동일 assistant content를 유지한 채 최대 3회 재시도한다. unique `(turn_id,role)`와 decrypt/compare가 commit 후 응답 유실도 same-content replay로 수렴시킨다.
 - terminal replay는 새로운 Provider call 없이 동일한 terminal facts로 `tenant_chat.final`을 재생하며 `replayed=true`다.
 - DOC-013은 Chat API의 encrypted final을 authoritative replay source로 사용해 닫는다. local final이 있으면 `accepted`, bounded reconstructed `delta`, `final`을 재생한다. Gateway terminal replay만 있고 local final이 없으면 `CHAT_TERMINAL_REPLAY_UNAVAILABLE`로 fail closed하며 성공 content를 만들지 않는다.
 - Chat API-facing fresh success `chat.turn.final`은 private final의 bounded `quotaState`와 `budgetState`를 그대로 전달한다. local encrypted replay는 해당 usage state를 DB에 중복 저장하지 않으므로 두 필드를 생략할 수 있고, browser는 마지막으로 확인한 상태만 유지한다.
+- Chat API-facing fresh success `chat.turn.final`은 private final의 bounded `cacheOutcome`도 전달한다. exact cache hit에서는 모델 호출을 표시하지 않으며, local encrypted replay에서는 해당 필드를 생략할 수 있다.
 - client disconnect는 local attachment handle을 즉시 해제하고 best-effort Provider cancel을 시도하지만 이미 발생한 billable usage의 정산을 취소하지 않는다.
 - HTTP status는 stream header를 보내기 전 실패에만 적용한다. `200` stream 시작 뒤의 Provider timeout/failure/cancel은 safe `error`를 가진 `tenant_chat.final`로 종료한다.
 - Chat API private client는 redirect를 금지하고 JSON 64 KiB, request 4 MiB, SSE frame 64 KiB, 전체 stream 8 MiB를 기본 상한으로 둔다. 기본 timeout은 Control Plane 1.5초, admission/cancel 2초, completion 130초이며 환경 설정은 bounded range만 허용한다.
@@ -165,7 +168,9 @@ Compromise revoke는 Gateway에서 해당 `kid`를 즉시 제거하고 readiness
 
 ### 5.1 Content wrapping/integrity key 운영
 
-Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다.
+Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys.json`을 읽는다. Gateway, Control Plane, Chat Web에는 mount하지 않는다. repository에는 실제 value를 두지 않으며 local helper가 다른 Tenant Chat secret과 함께 원자적으로 생성하고 기존 directory를 덮어쓰지 않는다. 고정 Compose project의 PostgreSQL volume을 여러 Git worktree가 공유하므로 local helper와 Compose wrapper는 Git common directory의 상위 checkout에 있는 단일 gitignored `.secrets/tenant-chat`을 사용한다. 명시적 `--target`을 쓰는 production/self-host 경로는 이 local 기본 경로 해석을 사용하지 않는다.
+
+RAG crypto compatibility package를 추가해도 이 mount 경계는 자동으로 넓어지지 않는다. 현재 Control Plane HTTP process에는 content key file을 mount하지 않으며, 향후 별도 Control Plane worker가 chunk를 암호화할 때 필요한 least-privilege key delivery와 readiness는 worker contract/deployment milestone에서 명시적으로 추가한다.
 
 ```json
 {
@@ -184,6 +189,7 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - create/turn row는 binding MAC과 함께 `bindingKeyVersion`을 저장한다. replay는 저장된 grace integrity key로 검증하며 active key로 다시 계산해 conflict를 만들지 않는다.
 - 새 version을 모든 reader에 먼저 배포하고 active version을 올린다. Chat API는 DEK rewrap과 DB rollback floor 증가를 같은 짧은 transaction으로 적용하며 crypto 연산 중 transaction을 열어두지 않는다.
 - active version이 DB floor보다 낮거나 필요한 grace key가 file에 없으면 readiness, encrypt/decrypt, cursor/idempotency를 fail closed한다.
+- readiness는 non-retired wrapping key version별 대표 persisted DEK 하나를 실제 unwrap하고 즉시 zeroize한다. 같은 version 번호에 다른 key material이 배포된 경우 `readyz`는 `503`이며 배포 health gate를 통과하지 못한다. key set 최대 크기 8에 맞춰 readiness crypto 검증도 최대 8개로 제한하고, 개별 row integrity는 실제 read path에서 fail closed한다.
 
 ## 6. RuntimeSnapshot digest와 pricing
 
@@ -192,19 +198,25 @@ Chat API만 `TENANT_CHAT_CONTENT_KEYS_FILE=/run/secrets/tenant-chat/content-keys
 - payload를 RFC 8785 JCS UTF-8 bytes로 만들고 SHA-256 후 `sha256:<unpadded-base64url>`로 표현한다.
 - Gateway는 DB body를 다시 digest하고 요청의 version/digest와 exact match할 때만 실행한다.
 - pricing은 snapshot에 `version`, `digest`, `effectiveAt`, USD micro-unit 단가를 immutable하게 pin한다. pricing digest는 pricing object에서 `digest`를 제거한 뒤 같은 RFC 8785/SHA-256/base64url 규칙으로 계산한다.
+- 각 price route는 Routing v2 snapshot에서 `pricingStatus=available|unavailable`과 `pricingSource=model_pricing_rules|bundled|unavailable`을 명시한다. unavailable은 모든 monetary rate 0이며 “무료”를 뜻하지 않고 정확한 금액을 계산할 수 없다는 뜻이다.
 - attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
-- `policies.safety.detectorSet`은 detector별 `allow|redact|block` 실행 규칙이며 mandatory secret detector는 `allow`를 거부한다. 새 user input은 cache/routing/Provider와 encrypted persistence보다 먼저 sanitization하고 redacted content만 Chat API에 반환한다.
-- 저장 전 sanitization은 `policies.safety.enabled=true`이고 detector set과 masking engine이 모두 준비된 경우에만 성공한다. 비활성화·미구성 상태에서 raw input을 그대로 `sanitized`로 인증하지 않으며 `CHAT_RUNTIME_UNAVAILABLE`로 fail closed한다.
-- sanitization request `messages`는 1~64개의 ordered `{role:user,content}`이며 index는 배열 위치로 암묵적으로 정한다. optional `placeholderCounters`는 `EMAIL`, `PERSON`처럼 실제 masked text에 쓰는 허용된 uppercase placeholder prefix에서 이미 할당한 최대 suffix 정수로의 bounded map이고 detector type이나 raw entity mapping을 포함하지 않는다.
-- sanitization response는 exact-cardinality ordered `{itemIndex,content}`와 pinned `policyDigest`만 반환한다. `itemIndex`는 0부터 연속하며 request 위치와 같아야 한다. partial, duplicate, reorder, blank result, digest mismatch는 전체 응답을 폐기하고 user ciphertext를 쓰지 않는다.
-- normal turn은 current user 한 건만 sanitization한다. 여러 item은 schema v1/null-provenance history를 한 번 재암호화하는 bounded migration에만 허용하며, 같은 v2 history를 매 요청 다시 검사하는 용도로 사용하지 않는다.
-- completion input은 stored message마다 optional `safety` provenance를 전달한다. user `sanitized`는 policy digest가 필수이고 assistant `provider_generated`는 digest를 금지한다. 현재 user digest는 admission에 pinned된 safety policy와 같아야 한다. 과거 user digest는 처음 처리한 immutable provenance이며 policy publish만으로 매 turn 재검사하지 않는다.
-- Chat API는 message ciphertext와 provenance를 schema v2 AES-GCM AAD로 함께 인증하고, workload JWT `bindingDigest`가 provenance를 포함한 exact completion input을 서명한다. Gateway admission row에 별도 sanitized 상태를 기록하는 것은 이 revision의 신뢰 경계가 아니다.
-- schema v1 user, missing/invalid provenance와 role/status mismatch는 `legacy_unverified`다. 이를 trusted로 backfill하지 않고 one-time sanitize+v2 re-encryption 전에는 Chat API가 provider input에서 제외하거나 fail closed하며, Gateway는 수신 시 trusted로 skip하지 않고 방어적으로 safety 처리한다.
+- policies.safety.detectorSet은 detector별 allow/redact/block 규칙이며 mandatory secret detector의 allow를 거부한다. 새 user input은 routing/cache/Provider와 encrypted persistence보다 먼저 sanitization하고 redacted content만 Chat API에 반환한다.
+- 저장 전 sanitization은 safety enabled, detector set, masking engine이 모두 준비된 경우에만 성공한다. 비활성·미구성 상태에서 raw input을 sanitized로 인증하지 않고 CHAT_RUNTIME_UNAVAILABLE로 fail closed한다.
+- sanitization request는 ordered user messages 1~64개와 optional bounded uppercase placeholderCounters만 받는다. detector type이나 raw entity mapping은 포함하지 않는다.
+- response는 exact-cardinality ordered itemIndex/content와 pinned policyDigest만 반환한다. partial, duplicate, reorder, blank result, digest mismatch면 전체를 폐기하고 ciphertext를 쓰지 않는다.
+- normal turn은 current user 한 건만 처리한다. 여러 item은 bounded schema v1 legacy migration에만 허용하고 같은 v2 history의 반복 검사에 사용하지 않는다.
+- completion input의 optional safety provenance는 user sanitized에 digest를 요구하고 assistant provider_generated에는 digest를 금지한다.
+- Chat API는 ciphertext와 provenance를 schema v2 AES-GCM AAD로 함께 인증하고 workload JWT bindingDigest로 exact completion input을 서명한다.
+- schema v1 user와 invalid provenance는 legacy_unverified이며 one-time sanitize+v2 re-encrypt 전에는 Provider input에서 제외하거나 fail closed한다.
+- `policies.routing.policy`가 있으면 Gateway는 기존 deterministic rule classifier로 category `general|code|translation|summarization|reasoning`을 계산한다. `routingMode=auto`의 model-path difficulty는 활성화된 경우 일반 Gateway와 공유하는 process-global 106D runtime의 `ready` 결과를 사용하고, 그 외 모든 non-ready 상태와 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. 선택된 `simple|complex` cell의 ordered `modelRefs`는 concrete enabled route로 resolve한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 경로를 변경하지 않는다.
+- routing decision은 cache lookup과 usage reservation 전에 고정한다. exact-cache fingerprint는 snapshot digest와 선택 `modelRef`를 포함하므로 같은 prompt라도 다른 routing target의 response를 재사용하지 않는다.
+- `routingMode=manual`은 `manualModelRef`를 선택하고, `routingMode=auto`는 5×2 matrix를 선택한다. budget/quota의 `economy` 상태를 difficulty 또는 modelRef로 암묵 변환하지 않는다.
 - `policies.cache.keySetId`는 Gateway-local cache keyset의 logical ID다. fingerprint HMAC key와 AES-256-GCM key material은 snapshot이나 DB에 넣지 않는다.
+- 배포 환경의 `TENANT_CHAT_CACHE_KEY_SET_ID`, active snapshot의 `policies.cache.keySetId`, Gateway-local `cache-keysets.json`의 logical ID는 실행 전에 연결 가능해야 한다. 배포 preflight는 environment ID와 keyset file을 대조하고, 운영 유지보수 check는 cache가 enabled인 모든 active snapshot ID를 함께 대조한다. 불일치는 서비스 재기동 전에 fail closed한다.
+- cache keyset ID 정합성 복구는 기존 key material을 재생성하거나 동일 ID 아래에서 덮어쓰지 않는다. 새 logical ID alias를 기존 fingerprint/encryption key material과 함께 reader-first로 추가하고 Gateway를 재기동한 뒤 miss→hit를 확인한다. 이전 ID는 최대 cache TTL과 rollback window가 지난 뒤 별도 승인으로 제거한다. key material rotation은 새 ID와 새 material을 먼저 추가하고 새 snapshot을 발행한 뒤 같은 순서를 따른다.
 - `policies.providerTokenRate.providers`는 routed provider별 `limitTokens/windowSeconds`를 모두 정의한다. 호출 직전의 weight는 `estimatedInputTokens + maxOutputTokens`다.
-- 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, exact cache off, email redact/API-key block safety, streaming `120s`와 required final이다.
-- 관리자 재발행은 active snapshot의 비라우팅 정책과 `employeeNoticeVersion`을 보존한다. 선택 Provider/model에 대한 standard/economy route, disabled fallback, provider token rate와 pinned pricing만 교체한다.
+- 관리자 최초 발행 기본값은 request rate `60/60s`, user concurrency `2`와 admission TTL `30s`, 월 token limit `1,000,000` 및 `80/100/120`, 월 budget `1,000,000,000 microUSD` 및 `80/90/100`, timezone `Asia/Seoul`, provider token rate `120,000/60s`, Exact Cache `exact/enabled`(TTL 300초, 사용자당 최대 100개), email redact/API-key block safety, streaming `120s`와 required final이다.
+- 관리자 재발행은 active snapshot의 비라우팅 정책과 `employeeNoticeVersion`을 보존한다. 5×2 policy가 참조하는 unique modelRefs의 concrete routes, ordered fallback attempts, provider token rate와 pinned pricing만 교체한다.
 - Admin Runtime publisher는 full-session tenant admin의 server-side user ID를 `publishedBy`로 사용하며 client가 publisher를 공급하지 못하게 한다.
 
 예약 계산은 integer arithmetic만 사용한다.
@@ -216,7 +228,9 @@ outputExposureMicroUsd = ceil(maxOutputTokens * outputMicroUsdPerMillionTokens /
 reservedCostMicroUsd = inputExposureMicroUsd + outputExposureMicroUsd
 ```
 
-fallback 전에는 fallback route의 위 exposure 전체를 추가 top-up한다. 예약은 cache discount를 가정하지 않는다. 정산에서 Provider prompt-cache read token이 확인되면 `regularInput=inputTokens-cacheReadInputTokens`로 두고 regular input, cache-read input, output 항목을 각각 pinned 단가로 계산해 올림한 뒤 합한다. cache-read 단가가 없으면 모든 input을 regular input으로 계산한다. `cacheReadInputTokens <= inputTokens`, `cacheReadInputPrice <= regularInputPrice`를 publish/settlement에서 검증한다. Provider cache creation/write token과 가격은 이 read 필드에 넣지 않으며, 지원할 때 5분/1시간 write field를 별도 contract revision으로 추가한다. Provider가 total cost를 authoritative하게 제공하더라도 token과 pinned price로 계산한 값과 차이를 기록해 검토하며, MVP ledger의 confirmed cost는 pinned price 계산값을 사용한다. GateLM Exact Cache hit과 pre-call failure는 Provider를 호출하지 않으므로 0이다.
+`pricingStatus=unavailable` route는 input/output monetary rate가 0이므로 `reservedCostMicroUsd=0`이다. token quota와 provider token-rate는 정상 적용하고, 기존 tenant cost period가 이미 `blocked`면 새 호출을 허용하지 않는다. 이후 가격 catalog가 생겨도 과거 snapshot/attempt를 소급 가격 책정하지 않으며 새 snapshot을 발행한다.
+
+fallback 전에는 현재 routing cell의 다음 ordered modelRef route에 대한 exposure 전체를 추가 top-up한다. legacy snapshot은 기존 `fallback.routeIds` 순서를 유지한다. 예약은 cache discount를 가정하지 않는다. 정산에서 Provider prompt-cache read token이 확인되면 `regularInput=inputTokens-cacheReadInputTokens`로 두고 regular input, cache-read input, output 항목을 각각 pinned 단가로 계산해 올림한 뒤 합한다. cache-read 단가가 없으면 모든 input을 regular input으로 계산한다. `cacheReadInputTokens <= inputTokens`, `cacheReadInputPrice <= regularInputPrice`를 publish/settlement에서 검증한다. Provider cache creation/write token과 가격은 이 read 필드에 넣지 않으며, 지원할 때 5분/1시간 write field를 별도 contract revision으로 추가한다. Provider가 total cost를 authoritative하게 제공하더라도 token과 pinned price로 계산한 값과 차이를 기록해 검토하며, MVP ledger의 confirmed cost는 pinned price 계산값을 사용한다. GateLM Exact Cache hit과 pre-call failure는 Provider를 호출하지 않으므로 0이다.
 
 GateLM Exact Cache와 Provider prompt cache는 별도 기능이다. Exact Cache는 GateLM이 응답을 반환해 Provider 호출 자체가 없고, Provider cache-read는 Provider 호출 안에서 input 일부가 재사용되는 과금 provenance다.
 
@@ -244,11 +258,11 @@ admitted -> reserved -> settled
 - outbox idempotency key는 `(aggregateId=requestId,eventType,eventVersion=ledgerVersion)`다.
 - consumer는 version이 현재 이하이면 duplicate로 no-op한다. 정확히 `current+1`만 적용한다.
 - version gap이면 뒤 event를 적용하지 않고 aggregate replay를 요청한다. 재시도 후에도 gap이면 DLQ/incident로 보내며 quota correctness source에는 영향이 없다.
-- v1 event 의미는 변경하지 않는다. mixed confirmed/unconfirmed deadline transition과 late negative unconfirmed delta만 schemaVersion 2를 사용하며 signed delta 조건은 v2 schema/vector를 따른다.
-- projector는 일반 terminal event를 snapshot 값으로 투영하고, `schemaVersion=2`, `eventType=usage_settled`, `lateUsage=true`에 한해 기존 confirmed 합계에 delta를 누적한다.
+- v1/v2 event 의미는 변경하지 않는다. 최신 Gateway writer는 reservation에서 고정한 `cacheOutcome=off|miss`를 필수로 갖는 schemaVersion 3을 사용한다. cache hit은 reservation 없이 `invocation_terminal`로만 기록한다.
+- projector는 v3 값을 그대로 투영하고 레거시 v1/v2에 필드가 없으면 reservation의 backfill provenance를 사용한다. `schemaVersion>=2`, `eventType=usage_settled`, `lateUsage=true`이면 기존 confirmed 합계에 delta를 누적한다.
 - ledger 이전 rate/concurrency/policy/runtime block은 `invocation_terminal`을 admission transaction의 outbox에 기록한다. content와 usage delta는 없으며 Dashboard projector만 소비한다.
 
-Transaction 경계는 blocked sanitization의 ledgerless terminal(admission consume, slot release, `safety_blocked` outbox), `BeginExecution`(active admission consume, period reservation, reservation, primary attempt, `usage_reserved` ledger/outbox), `BeginFallback`(이전 attempt 결과, fallback top-up, fallback attempt), terminal/reconciliation transaction으로 나눈다. Sanitization 성공은 Gateway admission에 별도 상태를 쓰지 않는다. completion 전에 Gateway가 workload JWT/body binding을 검증하고, signed message provenance가 있으면 재검사를 생략하며 없거나 invalid하면 방어적으로 safety 처리한다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
+Transaction 경계는 blocked sanitization의 ledgerless terminal(admission consume, slot release, safety_blocked outbox), BeginExecution, BeginFallback, terminal/reconciliation transaction으로 나눈다. Sanitization 성공은 admission에 별도 상태를 쓰지 않는다. completion 전 Gateway가 signed provenance를 검증하며 없거나 invalid하면 방어적으로 safety 처리한다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
 
 ## 8. 구현 소유권
 

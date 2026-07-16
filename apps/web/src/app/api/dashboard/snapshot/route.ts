@@ -29,7 +29,10 @@ import {
   type LiveDashboardOverviewFilters,
   type LiveDashboardRange
 } from "@/lib/gateway/live-dashboard-overview";
-import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
+import {
+  getLiveOverviewRequests,
+  getLiveRequestProviderDirectory
+} from "@/lib/gateway/live-overview-requests";
 import type { LiveRequestStatusFilter } from "@/lib/gateway/live-requests-types";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
@@ -88,6 +91,7 @@ export async function GET(request: NextRequest) {
   const liveRange = getDashboardLiveRange(range);
   const monthToDateRange = getMonthToDateRange();
   const projects = projectsModel.projects;
+  const providerDirectoryPromise = getLiveRequestProviderDirectory(tenantId);
 
   const [
     projectApplicationOverview,
@@ -118,22 +122,31 @@ export async function GET(request: NextRequest) {
         ),
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveOverviewRequests(
-          tenantId,
-          { ...projectFilters, model: liveModel, status: liveStatus },
-          {
-            projectIds: projects.map((project) => project.id).filter(Boolean),
-            projectNameSource: projectsModel.source,
-            projects
-          }
+      : providerDirectoryPromise.then((providerDirectory) =>
+          getLiveOverviewRequests(
+            tenantId,
+            { ...projectFilters, model: liveModel, status: liveStatus },
+            {
+              projectIds: projects.map((project) => project.id).filter(Boolean),
+              projectNameSource: projectsModel.source,
+              projects,
+              providerDirectory
+            }
+          )
         ),
     surface === "project_application"
       ? Promise.resolve(undefined)
-      : getTenantChatLiveRequests(tenantId, {
-          model: liveModel,
-          range,
-          status: liveStatus
-        }),
+      : providerDirectoryPromise.then((providerDirectory) =>
+          getTenantChatLiveRequests(
+            tenantId,
+            {
+              model: liveModel,
+              range,
+              status: liveStatus
+            },
+            { providerDirectory }
+          )
+        ),
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
       : getLiveCostOverTime(tenantId, {
@@ -227,7 +240,7 @@ function normalizeSurface(value: string | null): DashboardSurface {
 }
 
 function costBucketForRange(range: LiveDashboardRange) {
-  if (range === "5m") return "7s" as const;
+  if (range === "5m") return "1s" as const;
   if (range === "15m") return "1m" as const;
   if (range === "1h") return "5m" as const;
   if (range === "1d") return "1h" as const;

@@ -4,6 +4,15 @@
   --analytics-coral: #dc4c4c;
   --analytics-emerald: #0f8f66;
   --analytics-amber: #d97706;
+  --analytics-v3-page-title-size: 34px;
+  --analytics-v3-panel-title-size: 22px;
+  --analytics-v3-lead-label-size: 15px;
+  --analytics-v3-lead-value-min-size: 38px;
+  --analytics-v3-lead-value-max-size: 54px;
+  --analytics-v3-metric-value-size: 28px;
+  --analytics-v3-section-title-size: 20px;
+  --analytics-v3-section-value-size: 22px;
+  --global-font-lift: 0px;
   display: grid;
   width: 100%;
   min-width: 0;
@@ -25,7 +34,7 @@
 .analytics-v3-title-block h1 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(48px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v3-page-title-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1;
 }
@@ -171,7 +180,7 @@
 .analytics-v3-panel-topline h2 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(28px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v3-panel-title-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1.1;
 }
@@ -285,14 +294,18 @@
 .analytics-v3-executive-lead span,
 .analytics-v3-executive-metric > span {
   color: var(--text-muted);
-  font-size: calc(17px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v3-lead-label-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
 }
 
 .analytics-v3-executive-lead > strong {
   overflow-wrap: anywhere;
   color: var(--foreground);
-  font-size: clamp(46px, 4.1vw, 68px);
+  font-size: clamp(
+    var(--analytics-v3-lead-value-min-size),
+    4.1vw,
+    var(--analytics-v3-lead-value-max-size)
+  );
   font-weight: 800;
   line-height: 0.98;
 }
@@ -304,7 +317,7 @@
 .analytics-v3-executive-metric strong {
   overflow-wrap: anywhere;
   color: var(--foreground);
-  font-size: calc(34px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v3-metric-value-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1;
 }
@@ -365,7 +378,7 @@
 .analytics-v3-section-heading h3 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(24px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v3-section-title-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1.15;
 }
@@ -380,7 +393,7 @@
 
 .analytics-v3-section-heading > strong {
   color: var(--foreground);
-  font-size: calc(26px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v3-section-value-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   white-space: nowrap;
 }
@@ -725,6 +738,20 @@
   }
 }
 
+@media (min-width: 1101px) {
+  html[data-presentation-mode="true"] .analytics-v3-page {
+    --analytics-v3-page-title-size: 48px;
+    --analytics-v3-panel-title-size: 28px;
+    --analytics-v3-lead-label-size: 17px;
+    --analytics-v3-lead-value-min-size: 46px;
+    --analytics-v3-lead-value-max-size: 68px;
+    --analytics-v3-metric-value-size: 34px;
+    --analytics-v3-section-title-size: 24px;
+    --analytics-v3-section-value-size: 26px;
+    --global-font-lift: 2pt;
+  }
+}
+
 @media (max-width: 1380px) {
   .analytics-v3-command-header {
     grid-template-columns: 1fr;
@@ -779,7 +806,7 @@
   }
 
   .analytics-v3-title-block h1 {
-    font-size: calc(38px + var(--global-font-lift));
+    font-size: calc(32px + var(--global-font-lift));
   }
 
   .analytics-v3-filter-bar label,
@@ -845,7 +872,7 @@
   }
 
   .analytics-v3-executive-lead > strong {
-    font-size: calc(46px + var(--global-font-lift));
+    font-size: calc(38px + var(--global-font-lift));
   }
 
   .analytics-v3-workspace {

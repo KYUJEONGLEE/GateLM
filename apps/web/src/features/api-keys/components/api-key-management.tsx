@@ -2,6 +2,7 @@
 
 import { Ban, Copy, Plus, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -314,10 +315,7 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
     : false;
 
   return (
-    <main className="console-content management-line-content api-key-management">
-      <header className="project-page-header api-key-hero">
-        <h2>{text.title}</h2>
-      </header>
+    <ManagementPage className="api-key-management" title={text.title}>
 
       {model.source === "error" ? (
         <Alert variant="destructive">
@@ -569,7 +567,7 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </ManagementPage>
   );
 }
 

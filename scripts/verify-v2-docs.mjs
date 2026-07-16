@@ -640,6 +640,7 @@ function assertTenantChatExecutableContract() {
   const contentDdlPath = "docs/tenant-chat/db/tenant-chat-content.sql";
   const bindingVectorPath = "docs/tenant-chat/vectors/binding-digest-vectors.json";
   const usageVectorPath = "docs/tenant-chat/vectors/usage-event-vectors.json";
+  const usageV3VectorPath = "docs/tenant-chat/vectors/usage-event-v3-vectors.json";
   const jwtVectorPath = "docs/tenant-chat/vectors/workload-jwt-phase-vectors.json";
   const runtimeFixturePath = "docs/tenant-chat/fixtures/tenant-runtime-snapshot.fixture.json";
 
@@ -1015,6 +1016,40 @@ function assertTenantChatExecutableContract() {
       );
       if (negativeFailures.length === 0) {
         fail(`${usageSchemaPath}: employee actor must require employeeId`);
+      }
+    }
+  }
+
+  const usageV3SchemaPath = "docs/tenant-chat/schemas/usage-settlement-event-v3.schema.json";
+  const usageV3Schema = readJson(usageV3SchemaPath);
+  const usageV3Vectors = readJson(usageV3VectorPath);
+  if (usageV3Schema && usageV3Vectors) {
+    for (const [index, event] of (usageV3Vectors.events ?? []).entries()) {
+      const validationFailures = [];
+      validateData(
+        usageV3Schema,
+        event,
+        { filePath: usageV3SchemaPath, path: `$.events[${index}]` },
+        usageV3Schema,
+        validationFailures,
+      );
+      for (const validationFailure of validationFailures) {
+        fail(`${usageV3VectorPath}: ${validationFailure}`);
+      }
+    }
+    const missingCacheOutcome = structuredClone(usageV3Vectors.events?.[0]);
+    if (missingCacheOutcome) {
+      delete missingCacheOutcome.cacheOutcome;
+      const negativeFailures = [];
+      validateData(
+        usageV3Schema,
+        missingCacheOutcome,
+        { filePath: usageV3SchemaPath, path: "$.negative.missingCacheOutcome" },
+        usageV3Schema,
+        negativeFailures,
+      );
+      if (negativeFailures.length === 0) {
+        fail(`${usageV3SchemaPath}: cacheOutcome must be required`);
       }
     }
   }

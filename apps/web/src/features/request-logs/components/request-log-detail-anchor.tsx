@@ -20,9 +20,22 @@ export function RequestLogDetailAnchor({ children }: RequestLogDetailAnchorProps
     }
 
     const target = event.target instanceof Element ? event.target : null;
-    const anchor = target?.closest("[data-request-log-anchor]");
+    const directAnchor = target?.closest("[data-request-log-anchor]");
+    const row = target?.closest("[data-request-log-row]");
+    const anchor = directAnchor ?? row?.querySelector("[data-request-log-anchor]");
 
     if (!anchor) {
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (
+      row &&
+      selection &&
+      !selection.isCollapsed &&
+      selection.anchorNode &&
+      row.contains(selection.anchorNode)
+    ) {
       return;
     }
 

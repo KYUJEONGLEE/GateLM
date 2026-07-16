@@ -3,7 +3,7 @@ name: gatelm-perf-distributed
 services:
   postgres:
     profiles: [data]
-    image: postgres:16
+    image: pgvector/pgvector:0.8.5-pg16-trixie@sha256:073acab878025cadf03fe6fed01babaaa285b8d09ddc9c43882cf02d409546d7
     restart: "no"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -161,7 +161,6 @@ services:
       GATEWAY_PROVIDER_DIAL_TIMEOUT_MS: "5000"
       GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS: "30000"
       GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS: "10000"
-      GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS: "5000"
       GATEWAY_DATABASE_MAX_CONNS: ${GATELM_PERF_DATABASE_MAX_CONNS:-32}
       GATEWAY_DATABASE_MIN_CONNS: ${GATELM_PERF_DATABASE_MIN_CONNS:-4}
       GATEWAY_LOG_DATABASE_MAX_CONNS: ${GATELM_PERF_LOG_DATABASE_MAX_CONNS:-8}

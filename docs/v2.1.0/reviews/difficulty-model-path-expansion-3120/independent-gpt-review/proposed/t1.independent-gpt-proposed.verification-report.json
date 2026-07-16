@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-proposed-batch-verification.v1",
+  "batchId": "t1",
+  "records": 400,
+  "families": 80,
+  "gates": {
+    "schemaFailures": 0,
+    "actualGoModelPathRecords": 399,
+    "actualGoHardSentinelRecords": 1,
+    "actualGoSimpleSentinelRecords": 0,
+    "semanticStatusRouteMismatches": 0,
+    "categoryClassifierMismatches": 137,
+    "nearDuplicateCandidates": 120,
+    "strictNearDuplicateCandidates": 1,
+    "ownerApprovalStatus": "pending"
+  },
+  "distributions": {
+    "category": {
+      "code": 90,
+      "general": 90,
+      "reasoning": 75,
+      "summarization": 75,
+      "translation": 70
+    },
+    "difficulty": {
+      "complex": 207,
+      "simple": 193
+    },
+    "language": {
+      "en": 134,
+      "ko": 149,
+      "mixed": 117
+    },
+    "semanticLabel": {
+      "code_debugging": 5,
+      "code_design": 30,
+      "code_explanation": 15,
+      "code_generation": 5,
+      "code_refactoring": 30,
+      "code_review": 5,
+      "general_explanation": 20,
+      "general_extraction": 15,
+      "general_other": 15,
+      "general_qa": 15,
+      "general_support": 5,
+      "general_transformation": 20,
+      "reasoning_causal": 25,
+      "reasoning_comparison": 15,
+      "reasoning_constraint_solving": 15,
+      "reasoning_decision": 10,
+      "reasoning_planning": 10,
+      "summarization_direct": 25,
+      "summarization_key_points": 5,
+      "summarization_multi_source": 20,
+      "summarization_structured": 25,
+      "translation_direct": 25,
+      "translation_localization": 25,
+      "translation_style_preserving": 20
+    },
+    "slices": {
+      "category_confusion": 66,
+      "english": 134,
+      "indirect_expression": 54,
+      "korean": 149,
+      "long_simple": 51,
+      "mixed_language": 117,
+      "negation": 170,
+      "ood_terminology": 94,
+      "payload_contamination": 42,
+      "short_complex": 32,
+      "synonym": 162
+    },
+    "taskBucket": {
+      "count_1": 195,
+      "count_2": 60,
+      "count_3_plus": 145
+    },
+    "constraintBucket": {
+      "count_0_to_1": 208,
+      "count_2": 107,
+      "count_3_plus": 85
+    },
+    "scopeBucket": {
+      "count_1": 196,
+      "count_2_to_3": 121,
+      "count_4_plus": 83
+    },
+    "dependencyBucket": {
+      "depth_0_to_1": 204,
+      "depth_2": 116,
+      "depth_3_plus": 80
+    }
+  }
+}

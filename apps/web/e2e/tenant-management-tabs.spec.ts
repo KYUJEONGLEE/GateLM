@@ -225,7 +225,7 @@ async function expectNoHorizontalOverflow(locator: Locator) {
 }
 
 async function expectSwitchThumbInsideTrack(switchControl: Locator) {
-  const insets = await switchControl.evaluate((element) => {
+  const geometry = await switchControl.evaluate((element) => {
     const thumb = element.querySelector('[data-slot="switch-thumb"]');
 
     if (!(thumb instanceof HTMLElement)) {
@@ -236,13 +236,15 @@ async function expectSwitchThumbInsideTrack(switchControl: Locator) {
     const thumbBounds = thumb.getBoundingClientRect();
 
     return {
+      checked: element.getAttribute("aria-checked") === "true",
       left: thumbBounds.left - trackBounds.left,
       right: trackBounds.right - thumbBounds.right
     };
   });
 
-  expect(insets.left).toBeGreaterThanOrEqual(2);
-  expect(insets.right).toBeGreaterThanOrEqual(2);
+  expect(geometry.left).toBeGreaterThanOrEqual(2);
+  expect(geometry.right).toBeGreaterThanOrEqual(2);
+  expect(geometry.checked ? geometry.right : geometry.left).toBeLessThanOrEqual(4);
 }
 
 async function createConsoleSessionCookie(request: APIRequestContext) {

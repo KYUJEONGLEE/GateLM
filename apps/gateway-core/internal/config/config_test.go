@@ -443,8 +443,8 @@ func TestProviderTransportConfigDefaults(t *testing.T) {
 	if transport.MaxIdleConns != 512 || transport.MaxIdleConnsPerHost != 256 || transport.MaxConnsPerHost != 256 {
 		t.Fatalf("unexpected provider connection defaults: totalIdle=%d hostIdle=%d hostMax=%d", transport.MaxIdleConns, transport.MaxIdleConnsPerHost, transport.MaxConnsPerHost)
 	}
-	if transport.ResponseHeaderTimeout != cfg.ProviderTimeout {
-		t.Fatalf("response header timeout should follow provider timeout: header=%s provider=%s", transport.ResponseHeaderTimeout, cfg.ProviderTimeout)
+	if transport.ResponseHeaderTimeout != 0 {
+		t.Fatalf("response header timeout must default to disabled so provider-specific deadlines apply: %s", transport.ResponseHeaderTimeout)
 	}
 }
 

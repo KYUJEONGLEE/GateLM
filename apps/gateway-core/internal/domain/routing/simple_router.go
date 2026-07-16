@@ -57,18 +57,40 @@ type RouteCandidateStatus struct {
 }
 
 type SimpleRouter struct {
-	config           SimpleRouterConfig
-	promptClassifier RuleBasedPromptClassifier
+	config            SimpleRouterConfig
+	promptClassifier  RuleBasedPromptClassifier
+	difficultyRuntime *DifficultySemanticRuntime
+	difficultyShadow  *DifficultySemanticShadowRunner
 }
 
-func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
-	return &SimpleRouter{
-		config:           normalizeSimpleRouterConfig(config),
-		promptClassifier: NewRuleBasedPromptClassifier(),
+type SimpleRouterOption func(*SimpleRouter)
+
+func WithDifficultySemanticShadow(runner *DifficultySemanticShadowRunner) SimpleRouterOption {
+	return func(router *SimpleRouter) {
+		router.difficultyShadow = runner
 	}
 }
 
-func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
+func WithDifficultySemanticRuntime(runtime *DifficultySemanticRuntime) SimpleRouterOption {
+	return func(router *SimpleRouter) {
+		router.difficultyRuntime = runtime
+	}
+}
+
+func NewSimpleRouter(config SimpleRouterConfig, options ...SimpleRouterOption) *SimpleRouter {
+	router := &SimpleRouter{
+		config:           normalizeSimpleRouterConfig(config),
+		promptClassifier: NewRuleBasedPromptClassifier(),
+	}
+	for _, option := range options {
+		if option != nil {
+			option(router)
+		}
+	}
+	return router
+}
+
+func (r *SimpleRouter) DecideRoute(ctx context.Context, req Request) (Decision, error) {
 	config := defaultSimpleRouterConfig()
 	promptClassifier := NewRuleBasedPromptClassifier()
 	if r != nil {
@@ -118,6 +140,14 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if config.Mode != RoutingPolicyModeAuto {
 		return Decision{}, ErrAutoRoutingDisabled
 	}
+	if r != nil && r.difficultyRuntime != nil &&
+		UsesDifficultyModelPath(ExtractDifficultyFeatures(features, category)) {
+		semantic := r.difficultyRuntime.Classify(ctx, features, category)
+		if semantic.Status == DifficultySemanticShadowReady {
+			difficulty = canonicalDifficulty(semantic.Difficulty.Difficulty)
+			material.Difficulty = difficulty
+		}
+	}
 	cell := config.Routes.Cell(category, difficulty)
 	candidates, usedHealthFallback := availableModelRefs(cell.ModelRefs, config.CandidateStatuses)
 	if len(candidates) == 0 {
@@ -134,6 +164,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	decision.CandidateModelRefs = candidates
 	decision.RoutingDecisionMaterial = material
 	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(material)
+	if r != nil && r.difficultyShadow != nil && req.DifficultyShadowEligible {
+		r.difficultyShadow.Submit(features, category, difficulty)
+	}
 	return decision, nil
 }
 

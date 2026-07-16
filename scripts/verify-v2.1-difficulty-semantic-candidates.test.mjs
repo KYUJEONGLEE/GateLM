@@ -10,8 +10,8 @@ import { verifyDifficultySemanticCandidates } from "./verify-v2.1-difficulty-sem
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requiredPaths = [
   "scripts/routing_difficulty_model/artifacts/candidates",
-  "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json",
-  "scripts/routing_difficulty_model/training-policy.semantic-candidates.v2.json",
+  "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json",
+  "scripts/routing_difficulty_model/training-policy.semantic-candidates.v3.json",
   "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json",
 ];
 
@@ -30,7 +30,7 @@ function withFixture(mutator) {
   }
 }
 
-test("checked-in semantic candidates select on calibration and reserve holdout for one frozen candidate", () => {
+test("checked-in semantic candidates preserve the frozen 118D architecture at single-request shape", () => {
   assert.deepEqual(withFixture(), []);
 });
 
@@ -38,7 +38,7 @@ test("semantic candidate verifier rejects holdout count drift", () => {
   const failures = withFixture((rootDir) => {
     const reportPath = path.join(
       rootDir,
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v2.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v3.json",
     );
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     report.splitCounts.holdout.records = 99;
@@ -51,7 +51,7 @@ test("semantic candidate verifier rejects per-candidate holdout outcomes", () =>
   const failures = withFixture((rootDir) => {
     const reportPath = path.join(
       rootDir,
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v2.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v3.json",
     );
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     report.candidates["42d-rule-vector-v1"].holdoutClassification = { samples: 100 };
@@ -60,18 +60,18 @@ test("semantic candidate verifier rejects per-candidate holdout outcomes", () =>
   assert(failures.some((failure) => failure.includes("defer all holdout outcomes")));
 });
 
-test("semantic candidate verifier rejects selection that disagrees with calibration evidence", () => {
+test("semantic candidate verifier rejects drift from the frozen 118D architecture", () => {
   const failures = withFixture((rootDir) => {
     const reportPath = path.join(
       rootDir,
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v2.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v3.json",
     );
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     report.selectedCandidate = "42d-rule-vector-v1";
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   });
   assert(
-    failures.some((failure) => failure.includes("determined only by calibration evidence")),
+    failures.some((failure) => failure.includes("preserve the frozen 118D architecture")),
   );
 });
 
@@ -79,14 +79,14 @@ test("semantic candidate verifier rejects final holdout evaluation count drift",
   const failures = withFixture((rootDir) => {
     const reportPath = path.join(
       rootDir,
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v2.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v3.json",
     );
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     report.finalHoldoutEvaluation.samples = 99;
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   });
   assert(
-    failures.some((failure) => failure.includes("selected frozen candidate over all 100 records")),
+    failures.some((failure) => failure.includes("frozen 118D candidate over all 100 records")),
   );
 });
 
@@ -94,13 +94,13 @@ test("semantic candidate verifier rejects a falsified holdout promotion gate", (
   const failures = withFixture((rootDir) => {
     const reportPath = path.join(
       rootDir,
-      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v2.json",
+      "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-comparison.owner-approved-500.v3.json",
     );
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     report.finalHoldoutEvaluation.promotionSafetyGate.passed = true;
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   });
   assert(
-    failures.some((failure) => failure.includes("selected frozen candidate over all 100 records")),
+    failures.some((failure) => failure.includes("frozen 118D candidate over all 100 records")),
   );
 });

@@ -42,4 +42,72 @@ describe('ActivateTenantChatRuntimeDto', () => {
       ),
     ).rejects.toThrow();
   });
+
+  it('accepts bounded cache and safety policy fields', async () => {
+    await expect(
+      pipe.transform(
+        {
+          providerConnectionId,
+          modelKey: 'gpt-5.4-mini',
+          cachePolicy: {
+            enabled: true,
+            ttlSeconds: 300,
+            maxEntriesPerUser: 100,
+          },
+          safetyPolicy: {
+            detectorSet: [
+              { detectorType: 'email', action: 'allow' },
+              { detectorType: 'api_key', action: 'block' },
+            ],
+          },
+        },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).resolves.toMatchObject({
+      cachePolicy: { enabled: true, ttlSeconds: 300, maxEntriesPerUser: 100 },
+      safetyPolicy: {
+        detectorSet: [
+          { detectorType: 'email', action: 'allow' },
+          { detectorType: 'api_key', action: 'block' },
+        ],
+      },
+    });
+  });
+
+  it('rejects duplicate safety detectors and invalid cache values', async () => {
+    await expect(
+      pipe.transform(
+        {
+          cachePolicy: {
+            enabled: true,
+            ttlSeconds: 0,
+            maxEntriesPerUser: 100,
+          },
+          safetyPolicy: {
+            detectorSet: [
+              { detectorType: 'email', action: 'redact' },
+              { detectorType: 'email', action: 'block' },
+            ],
+          },
+        },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('accepts only a boolean compatibility cache toggle', async () => {
+    await expect(
+      pipe.transform(
+        { providerConnectionId, modelKey: 'gpt-5.4-mini', cacheEnabled: false },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).resolves.toMatchObject({ cacheEnabled: false });
+
+    await expect(
+      pipe.transform(
+        { providerConnectionId, modelKey: 'gpt-5.4-mini', cacheEnabled: 'false' },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).rejects.toThrow();
+  });
 });

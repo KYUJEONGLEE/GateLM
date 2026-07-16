@@ -88,6 +88,15 @@ model Tenant {
   dashboardRollupTotals           DashboardRollupTotal[]
   dashboardRollupDimensions       DashboardRollupDimension[]
   employeeUsageRollups            EmployeeUsageRollup[]
+  employeeCostPolicies            TenantEmployeeCostPolicy[]
+  employeeCostPolicyAudits        TenantEmployeeCostPolicyAudit[]
+  employeeCostLedgerRollout       TenantEmployeeCostLedgerRollout?
+  employeeCostPeriods             TenantEmployeeCostPeriod[]
+  ragKnowledgeBases               RagKnowledgeBase[]
+  ragDocuments                    RagDocument[]
+  ragDocumentIndexes              RagDocumentIndex[]
+  ragChunks                       RagChunk[]
+  ragJobs                         RagJob[]
 
   @@map("tenants")
 }
@@ -120,6 +129,7 @@ model User {
   tenantChatUserTokenPeriods  TenantChatUserTokenPeriod[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
   tenantChatConversations     TenantChatConversation[]
+  uploadedRagDocuments        RagDocument[]
 
   @@index([email])
   @@index([status])
@@ -383,12 +393,16 @@ model Employee {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
 
-  tenant                      Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user                        User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant                      Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                        User?                           @relation(fields: [userId], references: [id], onDelete: SetNull)
   projectAssignments          ProjectEmployeeAssignment[]
   tenantChatRequestAdmissions TenantChatRequestAdmission[]
   tenantChatInvocationLogs    TenantChatInvocationLog[]
   usageRollups                EmployeeUsageRollup[]
+  costPolicy                  TenantEmployeeCostPolicy?
+  costPolicyAudits            TenantEmployeeCostPolicyAudit[]
+  costPeriods                 TenantEmployeeCostPeriod[]
+  costReservations            TenantEmployeeCostReservation[]
 
   @@unique([id, tenantId], map: "employees_identity_tenant_key")
   @@index([tenantId, status])
@@ -419,6 +433,241 @@ model ProjectEmployeeAssignment {
   @@index([projectId, status])
   @@index([employeeId, status])
   @@map("project_employee_assignments")
+}
+
+model TenantEmployeeCostPolicy {
+  tenantId                String   @map("tenant_id") @db.Uuid
+  employeeId              String   @map("employee_id") @db.Uuid
+  dailyEnabled            Boolean  @default(false) @map("daily_enabled")
+  dailyLimitMicroUsd      BigInt   @default(0) @map("daily_limit_micro_usd")
+  weeklyEnabled           Boolean  @default(false) @map("weekly_enabled")
+  weeklyLimitMicroUsd     BigInt   @default(0) @map("weekly_limit_micro_usd")
+  currency                String   @default("USD")
+  periodTimezone          String   @default("Asia/Seoul") @map("period_timezone")
+  warningThresholdPercent Int      @default(80) @map("warning_threshold_percent")
+  enforcementMode         String   @default("monitor") @map("enforcement_mode")
+  version                 Int      @default(1)
+  updatedBy               String   @map("updated_by") @db.Uuid
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "tenant_employee_cost_policies_tenant_fkey")
+  employee Employee                        @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_employee_cost_policies_employee_tenant_fkey")
+  audits   TenantEmployeeCostPolicyAudit[]
+
+  @@id([tenantId, employeeId])
+  @@unique([employeeId, tenantId], map: "tenant_employee_cost_policies_employee_tenant_key")
+  @@index([tenantId, enforcementMode], map: "tenant_employee_cost_policies_mode_idx")
+  @@map("tenant_employee_cost_policies")
+}
+
+model TenantEmployeeCostPolicyAudit {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  employeeId     String   @map("employee_id") @db.Uuid
+  actorId        String   @map("actor_id") @db.Uuid
+  policyVersion  Int      @map("policy_version")
+  action         String   @default("policy_updated")
+  previousPolicy Json     @default("{}") @map("previous_policy")
+  nextPolicy     Json     @map("next_policy")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "tenant_employee_cost_policy_audits_tenant_fkey")
+  employee Employee                 @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_employee_cost_policy_audits_employee_tenant_fkey")
+  policy   TenantEmployeeCostPolicy @relation(fields: [tenantId, employeeId], references: [tenantId, employeeId], onDelete: Restrict, onUpdate: NoAction, map: "tenant_employee_cost_policy_audits_policy_fkey")
+
+  @@unique([tenantId, employeeId, policyVersion], map: "tenant_employee_cost_policy_audits_version_key")
+  @@index([tenantId, createdAt], map: "tenant_employee_cost_policy_audits_tenant_created_idx")
+  @@index([tenantId, employeeId, createdAt], map: "tenant_employee_cost_policy_audits_employee_created_idx")
+  @@map("tenant_employee_cost_policy_audits")
+}
+
+model TenantEmployeeCostLedgerRollout {
+  tenantId                      String    @id @map("tenant_id") @db.Uuid
+  mode                          String    @default("off")
+  activationBoundaryAt          DateTime? @map("activation_boundary_at") @db.Timestamptz(6)
+  projectApplicationCoveredFrom DateTime? @map("project_application_covered_from") @db.Timestamptz(6)
+  tenantChatCoveredFrom         DateTime? @map("tenant_chat_covered_from") @db.Timestamptz(6)
+  coverageInvalidatedAt         DateTime? @map("coverage_invalidated_at") @db.Timestamptz(6)
+  coverageErrorCode             String?   @map("coverage_error_code")
+  version                       BigInt    @default(1)
+  updatedByKind                 String    @map("updated_by_kind")
+  updatedBy                     String    @map("updated_by")
+  createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant                                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_rollouts_tenant_fkey")
+  audits       TenantEmployeeCostLedgerRolloutAudit[]
+  periods      TenantEmployeeCostPeriod[]
+  reservations TenantEmployeeCostReservation[]
+
+  @@index([mode, activationBoundaryAt], map: "employee_cost_rollouts_mode_activation_idx")
+  @@map("tenant_employee_cost_ledger_rollouts")
+}
+
+model TenantEmployeeCostLedgerRolloutAudit {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  actorKind       String   @map("actor_kind")
+  actorId         String   @map("actor_id")
+  rolloutVersion  BigInt   @map("rollout_version")
+  action          String
+  previousRollout Json     @default("{}") @map("previous_rollout")
+  nextRollout     Json     @map("next_rollout")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  rollout TenantEmployeeCostLedgerRollout @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_rollout_audits_rollout_fkey")
+
+  @@unique([tenantId, rolloutVersion], map: "employee_cost_rollout_audits_version_key")
+  @@index([tenantId, createdAt(sort: Desc)], map: "employee_cost_rollout_audits_tenant_created_idx")
+  @@map("tenant_employee_cost_ledger_rollout_audits")
+}
+
+model TenantEmployeeCostPeriod {
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  employeeId                 String   @map("employee_id") @db.Uuid
+  periodKind                 String   @map("period_kind")
+  periodStart                DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd                  DateTime @map("period_end") @db.Timestamptz(6)
+  periodTimezone             String   @map("period_timezone")
+  currency                   String   @default("USD") @db.Char(3)
+  createdPolicyVersion       Int      @default(0) @map("created_policy_version")
+  lastEvaluatedPolicyVersion Int      @default(0) @map("last_evaluated_policy_version")
+  confirmedCostMicroUsd      BigInt   @default(0) @map("confirmed_cost_micro_usd")
+  reservedCostMicroUsd       BigInt   @default(0) @map("reserved_cost_micro_usd")
+  unconfirmedCostMicroUsd    BigInt   @default(0) @map("unconfirmed_cost_micro_usd")
+  state                      String   @default("not_configured")
+  version                    BigInt   @default(1)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant           Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_periods_tenant_fkey")
+  rollout          TenantEmployeeCostLedgerRollout @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_periods_rollout_fkey")
+  employee         Employee                        @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_periods_employee_tenant_fkey")
+  dayReservations  TenantEmployeeCostReservation[] @relation("EmployeeCostReservationDayPeriod")
+  weekReservations TenantEmployeeCostReservation[] @relation("EmployeeCostReservationWeekPeriod")
+
+  @@id([tenantId, employeeId, periodKind, periodStart, currency], map: "employee_cost_periods_pkey")
+  @@index([tenantId, employeeId, periodKind, periodEnd(sort: Desc)], map: "employee_cost_periods_tenant_employee_current_idx")
+  @@index([tenantId, periodKind, state, periodEnd(sort: Desc)], map: "employee_cost_periods_tenant_state_idx")
+  @@map("tenant_employee_cost_periods")
+}
+
+model TenantEmployeeCostReservation {
+  reservationId           String    @id @default(uuid()) @map("reservation_id") @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  employeeId              String    @map("employee_id") @db.Uuid
+  surface                 String
+  requestId               String    @map("request_id")
+  dayPeriodKind           String    @default("day") @map("day_period_kind")
+  dayPeriodStart          DateTime  @map("day_period_start") @db.Timestamptz(6)
+  weekPeriodKind          String    @default("week") @map("week_period_kind")
+  weekPeriodStart         DateTime  @map("week_period_start") @db.Timestamptz(6)
+  currency                String    @default("USD") @db.Char(3)
+  pinnedPolicyVersion     Int       @default(0) @map("pinned_policy_version")
+  enforcementMode         String    @map("enforcement_mode")
+  dailyEnabled            Boolean   @map("daily_enabled")
+  dailyLimitMicroUsd      BigInt    @map("daily_limit_micro_usd")
+  dailyWarningMicroUsd    BigInt    @map("daily_warning_micro_usd")
+  dailyState              String    @map("daily_state")
+  weeklyEnabled           Boolean   @map("weekly_enabled")
+  weeklyLimitMicroUsd     BigInt    @map("weekly_limit_micro_usd")
+  weeklyWarningMicroUsd   BigInt    @map("weekly_warning_micro_usd")
+  weeklyState             String    @map("weekly_state")
+  enforcementOutcome      String    @map("enforcement_outcome")
+  pricingRuleId           String    @map("pricing_rule_id")
+  pricingVersion          String    @map("pricing_version")
+  estimateVersion         String    @map("estimate_version")
+  reservedCostMicroUsd    BigInt    @default(0) @map("reserved_cost_micro_usd")
+  confirmedCostMicroUsd   BigInt    @default(0) @map("confirmed_cost_micro_usd")
+  unconfirmedCostMicroUsd BigInt    @default(0) @map("unconfirmed_cost_micro_usd")
+  state                   String    @default("reserved")
+  ledgerVersion           BigInt    @default(0) @map("ledger_version")
+  reservedAt              DateTime  @map("reserved_at") @db.Timestamptz(6)
+  usagePendingAt          DateTime? @map("usage_pending_at") @db.Timestamptz(6)
+  terminalAt              DateTime? @map("terminal_at") @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rollout          TenantEmployeeCostLedgerRollout     @relation(fields: [tenantId], references: [tenantId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_reservations_rollout_fkey")
+  employee         Employee                            @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_reservations_employee_tenant_fkey")
+  dayPeriod        TenantEmployeeCostPeriod            @relation("EmployeeCostReservationDayPeriod", fields: [tenantId, employeeId, dayPeriodKind, dayPeriodStart, currency], references: [tenantId, employeeId, periodKind, periodStart, currency], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_reservations_day_period_fkey")
+  weekPeriod       TenantEmployeeCostPeriod            @relation("EmployeeCostReservationWeekPeriod", fields: [tenantId, employeeId, weekPeriodKind, weekPeriodStart, currency], references: [tenantId, employeeId, periodKind, periodStart, currency], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_reservations_week_period_fkey")
+  providerAttempts TenantEmployeeCostProviderAttempt[]
+  ledgerEntries    TenantEmployeeCostLedgerEntry[]
+
+  @@unique([surface, requestId], map: "employee_cost_reservations_surface_request_key")
+  @@unique([reservationId, surface, requestId, tenantId, employeeId], map: "employee_cost_reservations_identity_key")
+  @@index([tenantId, employeeId, state, createdAt(sort: Desc)], map: "employee_cost_reservations_tenant_employee_state_idx")
+  @@index([tenantId, employeeId, dayPeriodStart, currency], map: "employee_cost_reservations_day_period_idx")
+  @@index([tenantId, employeeId, weekPeriodStart, currency], map: "employee_cost_reservations_week_period_idx")
+  @@map("tenant_employee_cost_reservations")
+}
+
+model TenantEmployeeCostProviderAttempt {
+  surface                                String
+  requestId                              String    @map("request_id")
+  attemptNo                              Int       @map("attempt_no") @db.SmallInt
+  reservationId                          String    @map("reservation_id") @db.Uuid
+  tenantId                               String    @map("tenant_id") @db.Uuid
+  employeeId                             String    @map("employee_id") @db.Uuid
+  kind                                   String
+  providerId                             String    @map("provider_id")
+  modelKey                               String    @map("model_key")
+  pricingRuleId                          String    @map("pricing_rule_id")
+  pricingVersion                         String    @map("pricing_version")
+  inputMicroUsdPerMillionTokens          BigInt    @map("input_micro_usd_per_million_tokens")
+  outputMicroUsdPerMillionTokens         BigInt    @map("output_micro_usd_per_million_tokens")
+  cacheReadInputMicroUsdPerMillionTokens BigInt?   @map("cache_read_input_micro_usd_per_million_tokens")
+  estimatedInputTokens                   BigInt    @map("estimated_input_tokens")
+  maxOutputTokens                        BigInt    @map("max_output_tokens")
+  reservedCostMicroUsd                   BigInt    @map("reserved_cost_micro_usd")
+  confirmedInputTokens                   BigInt    @default(0) @map("confirmed_input_tokens")
+  confirmedCacheReadInputTokens          BigInt    @default(0) @map("confirmed_cache_read_input_tokens")
+  confirmedOutputTokens                  BigInt    @default(0) @map("confirmed_output_tokens")
+  confirmedCostMicroUsd                  BigInt    @default(0) @map("confirmed_cost_micro_usd")
+  unconfirmedCostMicroUsd                BigInt    @default(0) @map("unconfirmed_cost_micro_usd")
+  dispatchState                          String    @default("not_started") @map("dispatch_state")
+  outcome                                String?
+  usageQuality                           String    @default("not_available") @map("usage_quality")
+  startedAt                              DateTime? @map("started_at") @db.Timestamptz(6)
+  usagePendingAt                         DateTime? @map("usage_pending_at") @db.Timestamptz(6)
+  completedAt                            DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt                              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  reservation   TenantEmployeeCostReservation   @relation(fields: [reservationId, surface, requestId, tenantId, employeeId], references: [reservationId, surface, requestId, tenantId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_attempts_reservation_fkey")
+  ledgerEntries TenantEmployeeCostLedgerEntry[]
+
+  @@id([surface, requestId, attemptNo], map: "employee_cost_attempts_pkey")
+  @@index([reservationId, surface, requestId, tenantId, employeeId, attemptNo], map: "employee_cost_attempts_reservation_idx")
+  @@index([tenantId, employeeId, completedAt(sort: Desc)], map: "employee_cost_attempts_tenant_employee_completed_idx")
+  @@map("tenant_employee_cost_provider_attempts")
+}
+
+model TenantEmployeeCostLedgerEntry {
+  eventId                      String   @id @default(uuid()) @map("event_id") @db.Uuid
+  reservationId                String   @map("reservation_id") @db.Uuid
+  tenantId                     String   @map("tenant_id") @db.Uuid
+  employeeId                   String   @map("employee_id") @db.Uuid
+  surface                      String
+  requestId                    String   @map("request_id")
+  attemptNo                    Int?     @map("attempt_no") @db.SmallInt
+  eventVersion                 BigInt   @map("event_version")
+  eventType                    String   @map("event_type")
+  reservedCostMicroUsdDelta    BigInt   @default(0) @map("reserved_cost_micro_usd_delta")
+  confirmedCostMicroUsdDelta   BigInt   @default(0) @map("confirmed_cost_micro_usd_delta")
+  unconfirmedCostMicroUsdDelta BigInt   @default(0) @map("unconfirmed_cost_micro_usd_delta")
+  occurredAt                   DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  reservation TenantEmployeeCostReservation      @relation(fields: [reservationId, surface, requestId, tenantId, employeeId], references: [reservationId, surface, requestId, tenantId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_ledger_reservation_fkey")
+  attempt     TenantEmployeeCostProviderAttempt? @relation(fields: [surface, requestId, attemptNo], references: [surface, requestId, attemptNo], onDelete: Restrict, onUpdate: Restrict, map: "employee_cost_ledger_attempt_fkey")
+
+  @@unique([reservationId, eventVersion], map: "employee_cost_ledger_reservation_version_key")
+  @@index([reservationId, eventVersion], map: "employee_cost_ledger_reservation_idx")
+  @@index([tenantId, employeeId, occurredAt(sort: Desc)], map: "employee_cost_ledger_tenant_employee_occurred_idx")
+  @@map("tenant_employee_cost_ledger_entries")
 }
 
 model Application {
@@ -969,6 +1218,7 @@ model TenantChatUsageReservation {
   snapshotVersion             BigInt    @map("snapshot_version")
   snapshotDigest              String    @map("snapshot_digest")
   pricingVersion              BigInt    @map("pricing_version")
+  cacheOutcome                String    @map("cache_outcome")
   state                       String    @default("reserved")
   reservedTokens              BigInt    @default(0) @map("reserved_tokens")
   reservedCostMicroUsd        BigInt    @default(0) @map("reserved_cost_micro_usd")
@@ -1147,9 +1397,11 @@ model TenantChatContentKey {
   rewrappedAt        DateTime? @map("rewrapped_at") @db.Timestamptz(6)
   retiredAt          DateTime? @map("retired_at") @db.Timestamptz(6)
 
-  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  conversationTitles TenantChatConversation[] @relation("TenantChatConversationTitleKey")
-  messages           TenantChatMessage[]
+  tenant              Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  conversationTitles  TenantChatConversation[] @relation("TenantChatConversationTitleKey")
+  messages            TenantChatMessage[]
+  ragDocumentMetadata RagDocument[]            @relation("RagDocumentMetadataKey")
+  ragChunks           RagChunk[]               @relation("RagChunkContentKey")
 
   @@id([tenantId, contentKeyVersion])
   @@map("tenant_chat_content_keys")
@@ -1227,23 +1479,24 @@ model TenantChatTurn {
 }
 
 model TenantChatMessage {
-  id                   String    @id @db.Uuid
-  conversationId       String    @map("conversation_id") @db.Uuid
-  tenantId             String    @map("tenant_id") @db.Uuid
-  userId               String    @map("user_id") @db.Uuid
-  turnId               String    @map("turn_id") @db.Uuid
-  requestId            String    @map("request_id")
-  role                 String
-  sequence             BigInt
-  ciphertext           Bytes
-  nonce                Bytes
-  tag                  Bytes
-  contentKeyVersion    Int       @map("content_key_version")
-  schemaVersion        Int       @default(1) @map("schema_version")
-  safetyStatus         String    @default("legacy_unverified") @map("safety_status")
-  safetyPolicyDigest   String?   @map("safety_policy_digest")
-  expiresAt            DateTime? @map("expires_at") @db.Timestamptz(6)
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                String    @id @db.Uuid
+  conversationId    String    @map("conversation_id") @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  turnId            String    @map("turn_id") @db.Uuid
+  requestId         String    @map("request_id")
+  role              String
+  sequence          BigInt
+  ciphertext        Bytes
+  nonce             Bytes
+  tag               Bytes
+  contentKeyVersion Int       @map("content_key_version")
+  schemaVersion     Int       @default(1) @map("schema_version")
+  safetyStatus      String    @default("legacy_unverified") @map("safety_status")
+  safetyPolicyDigest String?  @map("safety_policy_digest")
+  effectiveModelKey String?   @map("effective_model_key")
+  expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   conversation TenantChatConversation @relation(fields: [conversationId, tenantId, userId], references: [id, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
   turn         TenantChatTurn         @relation(fields: [turnId, conversationId, tenantId, userId], references: [id, conversationId, tenantId, userId], onDelete: Cascade, onUpdate: NoAction)
@@ -1253,6 +1506,157 @@ model TenantChatMessage {
   @@unique([turnId, role], map: "tenant_chat_message_turn_role_key")
   @@index([tenantId, userId, conversationId, sequence], map: "tenant_chat_message_history_idx")
   @@map("tenant_chat_messages")
+}
+
+model RagKnowledgeBase {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @unique(map: "rag_knowledge_bases_tenant_key") @map("tenant_id") @db.Uuid
+  status                  String   @default("DISABLED")
+  embeddingProvider       String   @default("openai") @map("embedding_provider")
+  embeddingModel          String   @default("text-embedding-3-large") @map("embedding_model")
+  embeddingDimensions     Int      @default(1536) @map("embedding_dimensions")
+  embeddingDistance       String   @default("cosine") @map("embedding_distance")
+  embeddingProfileVersion Int      @default(1) @map("embedding_profile_version")
+  revision                Int      @default(1)
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_knowledge_bases_tenant_fkey")
+  documents RagDocument[]
+  jobs      RagJob[]
+
+  @@unique([id, tenantId], map: "rag_knowledge_bases_id_tenant_key")
+  @@index([tenantId, status], map: "rag_knowledge_bases_tenant_status_idx")
+  @@map("rag_knowledge_bases")
+}
+
+model RagDocument {
+  id                               String   @id @default(uuid()) @db.Uuid
+  publicId                         String   @unique(map: "rag_documents_public_id_key") @default(uuid()) @map("public_id") @db.Uuid
+  tenantId                         String   @map("tenant_id") @db.Uuid
+  knowledgeBaseId                  String   @map("knowledge_base_id") @db.Uuid
+  privateMetadataCiphertext        Bytes    @map("private_metadata_ciphertext")
+  privateMetadataNonce             Bytes    @map("private_metadata_nonce")
+  privateMetadataAuthTag           Bytes    @map("private_metadata_auth_tag")
+  privateMetadataContentKeyVersion Int      @map("private_metadata_content_key_version")
+  privateMetadataSchemaVersion     Int      @default(1) @map("private_metadata_schema_version")
+  fileExtension                    String   @map("file_extension")
+  mimeType                         String   @map("mime_type")
+  sizeBytes                        BigInt   @map("size_bytes")
+  s3ObjectKey                      String   @map("s3_object_key")
+  uploadedByUserId                 String   @map("uploaded_by_user_id") @db.Uuid
+  status                           String   @default("UPLOADED")
+  failureCode                      String?  @map("failure_code")
+  sanitizedFailureMessage          String?  @map("sanitized_failure_message")
+  createdAt                        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_tenant_fkey")
+  knowledgeBase  RagKnowledgeBase     @relation(fields: [knowledgeBaseId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_knowledge_base_tenant_fkey")
+  uploadedByUser User                 @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_uploaded_by_user_fkey")
+  metadataKey    TenantChatContentKey @relation("RagDocumentMetadataKey", fields: [tenantId, privateMetadataContentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction, map: "rag_documents_metadata_key_fkey")
+  indexes        RagDocumentIndex[]
+  chunks         RagChunk[]
+  jobs           RagJob[]
+
+  @@unique([id, tenantId], map: "rag_documents_id_tenant_key")
+  @@index([tenantId, status], map: "rag_documents_tenant_status_idx")
+  @@index([tenantId, knowledgeBaseId], map: "rag_documents_tenant_knowledge_base_idx")
+  @@index([tenantId, uploadedByUserId], map: "rag_documents_tenant_uploader_idx")
+  @@map("rag_documents")
+}
+
+model RagDocumentIndex {
+  id                      String    @id @default(uuid()) @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  documentId              String    @map("document_id") @db.Uuid
+  version                 Int
+  status                  String    @default("BUILDING")
+  parserVersion           Int       @default(1) @map("parser_version")
+  chunkerVersion          Int       @default(1) @map("chunker_version")
+  embeddingProvider       String    @default("openai") @map("embedding_provider")
+  embeddingModel          String    @default("text-embedding-3-large") @map("embedding_model")
+  embeddingDimensions     Int       @default(1536) @map("embedding_dimensions")
+  embeddingProfileVersion Int       @default(1) @map("embedding_profile_version")
+  startedAt               DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt             DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_document_indexes_tenant_fkey")
+  document RagDocument @relation(fields: [documentId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: NoAction, map: "rag_document_indexes_document_tenant_fkey")
+  chunks   RagChunk[]
+
+  @@unique([id, documentId, tenantId], map: "rag_document_indexes_identity_key")
+  @@unique([tenantId, documentId, version], map: "rag_document_indexes_version_key")
+  // Prisma cannot express the one-ACTIVE-index partial unique index. The custom
+  // migration and rag-foundation catalog integration test are authoritative.
+  @@index([tenantId, status], map: "rag_document_indexes_tenant_status_idx")
+  @@index([tenantId, documentId, status], map: "rag_document_indexes_tenant_document_status_idx")
+  @@map("rag_document_indexes")
+}
+
+model RagChunk {
+  id                String                      @id @default(uuid()) @db.Uuid
+  tenantId          String                      @map("tenant_id") @db.Uuid
+  documentId        String                      @map("document_id") @db.Uuid
+  documentIndexId   String                      @map("document_index_id") @db.Uuid
+  ordinal           Int
+  tokenCount        Int                         @map("token_count")
+  pageStart         Int?                        @map("page_start")
+  pageEnd           Int?                        @map("page_end")
+  lineStart         Int?                        @map("line_start")
+  lineEnd           Int?                        @map("line_end")
+  sourceMetadata    Json                        @default("{}") @map("source_metadata") @db.JsonB
+  contentCiphertext Bytes                       @map("content_ciphertext")
+  contentNonce      Bytes                       @map("content_nonce")
+  contentAuthTag    Bytes                       @map("content_auth_tag")
+  contentKeyVersion Int                         @map("content_key_version")
+  embedding         Unsupported("vector(1536)")
+  createdAt         DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_chunks_tenant_fkey")
+  document      RagDocument          @relation(fields: [documentId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: NoAction, map: "rag_chunks_document_tenant_fkey")
+  documentIndex RagDocumentIndex     @relation(fields: [documentIndexId, documentId, tenantId], references: [id, documentId, tenantId], onDelete: Cascade, onUpdate: NoAction, map: "rag_chunks_document_index_tenant_fkey")
+  contentKey    TenantChatContentKey @relation("RagChunkContentKey", fields: [tenantId, contentKeyVersion], references: [tenantId, contentKeyVersion], onDelete: Restrict, onUpdate: NoAction, map: "rag_chunks_content_key_fkey")
+
+  @@unique([tenantId, documentIndexId, documentId, ordinal], map: "rag_chunks_index_document_ordinal_key")
+  @@index([tenantId, documentId], map: "rag_chunks_tenant_document_idx")
+  @@index([tenantId, documentIndexId], map: "rag_chunks_tenant_document_index_idx")
+  @@map("rag_chunks")
+}
+
+model RagJob {
+  id                        String    @id @default(uuid()) @db.Uuid
+  tenantId                  String    @map("tenant_id") @db.Uuid
+  knowledgeBaseId           String    @map("knowledge_base_id") @db.Uuid
+  documentId                String?   @map("document_id") @db.Uuid
+  type                      String
+  status                    String    @default("PENDING")
+  idempotencyKey            String    @map("idempotency_key")
+  attemptCount              Int       @default(0) @map("attempt_count")
+  maxAttempts               Int       @default(5) @map("max_attempts")
+  availableAt               DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  lockedAt                  DateTime? @map("locked_at") @db.Timestamptz(6)
+  lockedBy                  String?   @map("locked_by")
+  leaseExpiresAt            DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  lastErrorCode             String?   @map("last_error_code")
+  sanitizedLastError        String?   @map("sanitized_last_error")
+  deletionObjectKeySnapshot String?   @map("deletion_object_key_snapshot")
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_jobs_tenant_fkey")
+  knowledgeBase RagKnowledgeBase @relation(fields: [knowledgeBaseId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction, map: "rag_jobs_knowledge_base_tenant_fkey")
+  // The DELETE job snapshots the opaque object key when it is created. Hard
+  // deletion later terminalizes linked work and clears every job documentId.
+  document      RagDocument?     @relation(fields: [documentId, tenantId], references: [id, tenantId], onDelete: NoAction, onUpdate: NoAction, map: "rag_jobs_document_tenant_fkey")
+
+  @@unique([id, tenantId], map: "rag_jobs_id_tenant_key")
+  @@unique([tenantId, type, idempotencyKey], map: "rag_jobs_idempotency_key")
+  @@index([status, availableAt, leaseExpiresAt], map: "rag_jobs_claim_idx")
+  @@index([tenantId, status, availableAt], map: "rag_jobs_tenant_status_available_idx")
+  @@index([tenantId, documentId], map: "rag_jobs_tenant_document_idx")
+  @@map("rag_jobs")
 }
 
 model DashboardRollupSourceCursor {

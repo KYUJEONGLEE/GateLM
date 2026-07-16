@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronDown, KeyRound, PlugZap, Plus, Trash2 } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,6 +23,10 @@ import {
   getTenantChatProviderCreatedHref,
   type TenantChatProviderSetupContext
 } from "@/features/provider-connections/tenant-chat-setup-return";
+import {
+  hasDatedModelVersion,
+  hasExcludedGeminiVariant
+} from "@/features/provider-connections/provider-model-name";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
@@ -196,23 +201,23 @@ const providerText: Record<
     credentialLast4: "인증 정보 마지막 4자리",
     credentialPrefix: "인증 정보 접두어",
     credentialValue: "API 키 등록",
-    credentialValuePlaceholder: "프로바이더 API 키 입력",
-    displayName: "프로바이더 이름",
+    credentialValuePlaceholder: "Provider API 키 입력",
+    displayName: "Provider 이름",
     discoverModels: "모델 조회",
-    discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 및 Anthropic 프로바이더에서 사용할 수 있습니다.",
-    empty: "등록된 프로바이더 연결이 없습니다.",
+    discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 및 Anthropic Provider에서 사용할 수 있습니다.",
+    empty: "등록된 Provider 연결이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 예시 프로바이더 연결을 표시 중입니다.",
     management: "관리",
     models: "모델",
     modelsEndpointPath: "모델 조회 경로",
     failureMode: "실패 처리 방식",
     projectId: "프로젝트 ID",
-    provider: "프로바이더 키",
-    providerConfig: "프로바이더 설정",
-    providerId: "프로바이더 ID",
-    register: "프로바이더 등록",
+    provider: "Provider 키",
+    providerConfig: "Provider 설정",
+    providerId: "Provider ID",
+    register: "Provider 등록",
     registerAction: "모델 등록",
-    registerDescription: "프로바이더 API 키를 테넌트 공통으로 등록합니다.",
+    registerDescription: "Provider API 키를 테넌트 공통으로 등록합니다.",
     requestFormat: "요청 형식",
     resolver: "인증 정보 해석 방식",
     save: "저장",
@@ -221,7 +226,7 @@ const providerText: Record<
     source: "출처",
     status: "상태",
     timeoutMs: "제한 시간(ms)",
-    title: "프로바이더",
+    title: "Provider",
     updated: "수정"
   }
 };
@@ -567,11 +572,11 @@ export function ProviderConnectionManagement({
         message:
           locale === "ko"
             ? applyToForm
-              ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
-              : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+              ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 모델: ${skippedModelCount}개.`
+              : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 모델: ${skippedModelCount}개.`
             : applyToForm
-              ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
-              : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
+              ? `${chatModels.length} chat models discovered. Select models to use. Excluded models: ${skippedModelCount}.`
+              : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded models: ${skippedModelCount}.`,
         status: "success"
       });
     }
@@ -824,8 +829,8 @@ export function ProviderConnectionManagement({
               <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar provider-card-model-discovery-note">
                 <span className="project-muted">
                   {locale === "ko"
-                    ? `제외된 비채팅 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
-                    : `${activeDiscovery.skippedModelCount} non-chat models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
+                    ? `제외된 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
+                    : `${activeDiscovery.skippedModelCount} models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
                 </span>
               </div>
               <div className="provider-discovery-model-list provider-model-selection-table">
@@ -1128,7 +1133,7 @@ export function ProviderConnectionManagement({
   }
 
   return (
-    <main className="console-content management-line-content">
+    <ManagementPage title={text.title}>
       {tenantChatSetupContext ? (
         <Alert className="mb-4" variant="neutral">
           <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -1147,12 +1152,6 @@ export function ProviderConnectionManagement({
           </AlertDescription>
         </Alert>
       ) : null}
-      <section className="dashboard-hero provider-page-header">
-        <div>
-          <h2>{text.title}</h2>
-        </div>
-      </section>
-
       {model.source === "fixture" ? (
         <Alert variant="warning">
           <AlertDescription>
@@ -1426,7 +1425,7 @@ export function ProviderConnectionManagement({
           </DialogContent>
         </Dialog>
       ) : null}
-    </main>
+    </ManagementPage>
   );
 }
 
@@ -1887,7 +1886,11 @@ function normalizeDiscoveredModelName(modelName: string) {
 function isChatCompletionModelName(modelName: string) {
   const normalizedModelName = modelName.toLowerCase();
 
-  if (nonChatModelNameTokens.some((token) => normalizedModelName.includes(token))) {
+  if (
+    hasDatedModelVersion(normalizedModelName) ||
+    hasExcludedGeminiVariant(normalizedModelName) ||
+    nonChatModelNameTokens.some((token) => normalizedModelName.includes(token))
+  ) {
     return false;
   }
 

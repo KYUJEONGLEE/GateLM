@@ -4,6 +4,8 @@ import { Badge, Button } from '@gatelm/ui';
 import {
   AlertTriangle,
   Building2,
+  Check,
+  Copy,
   Gauge,
   LoaderCircle,
   LogOut,
@@ -18,13 +20,16 @@ import {
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
+import { copyTextToClipboard } from '@/lib/clipboard.mjs';
+import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import {
   consumeTurnSse,
   isBlockedCode,
+  MAX_TENANT_CHAT_OUTPUT_TOKENS,
   safeChatError,
   strongestPolicyState,
   type Conversation,
@@ -32,6 +37,9 @@ import {
   type PolicyState,
   type SafeChatError,
 } from '@/lib/conversation-contract.mjs';
+
+const CONTEXT_MODE_STORAGE_KEY = 'gatelm.tenant-chat.context-mode';
+type ContextMode = 'conversation' | 'single_turn';
 
 export function ChatShell() {
   const router = useRouter();
@@ -42,6 +50,7 @@ export function ChatShell() {
   const [messages, setMessages] = useState<readonly DisplayMessage[]>([]);
   const [messageCursor, setMessageCursor] = useState<string | null>(null);
   const [composer, setComposer] = useState('');
+  const [contextMode, setContextMode] = useState<ContextMode>('conversation');
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -54,6 +63,13 @@ export function ChatShell() {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const userMessagesByTurnId = useMemo(() => {
+    const byTurnId = new Map<string, DisplayMessage>();
+    for (const message of messages) {
+      if (message.role === 'user') byTurnId.set(message.turnId, message);
+    }
+    return byTurnId;
+  }, [messages]);
   const drawerRef = useRef<HTMLElement>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -73,6 +89,16 @@ export function ChatShell() {
   const closeDrawer = useCallback((returnFocus: boolean) => {
     setMenuOpen(false);
     if (returnFocus) requestAnimationFrame(() => drawerTriggerRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CONTEXT_MODE_STORAGE_KEY) === 'single_turn') {
+        setContextMode('single_turn');
+      }
+    } catch {
+      // Storage can be unavailable in hardened browser modes; the safe default keeps context.
+    }
   }, []);
 
   useEffect(() => {
@@ -265,6 +291,7 @@ export function ChatShell() {
     event.preventDefault();
     if (streaming || creatingConversation || policyState === 'blocked' || !composer.trim()) return;
     const content = composer;
+    const responseStartedAt = performance.now();
     let conversationId = selectedId;
     if (!conversationId) {
       const created = await createConversation();
@@ -291,8 +318,9 @@ export function ChatShell() {
       const response = await streamApi(`/api/tenant-chat/conversations/${conversationId}/turns`, {
         body: JSON.stringify({
           content,
+          contextMode,
           idempotencyKey: idempotencyKey(),
-          usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
+          usageIntent: { cacheStrategy: 'exact', maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS, requestedTier: 'auto' },
         }),
         method: 'POST',
         signal: controller.signal,
@@ -318,7 +346,14 @@ export function ChatShell() {
       });
       if (terminal.type === 'chat.turn.final') {
         setMessages((current) => current.map((message) => message.id === draftId
-          ? { ...message, id: terminal.messageId ?? message.id, turnId: terminal.turnId }
+          ? {
+              ...message,
+              id: terminal.messageId ?? message.id,
+              turnId: terminal.turnId,
+              ...(terminal.cacheOutcome ? { cacheOutcome: terminal.cacheOutcome } : {}),
+              ...(terminal.effectiveModelKey ? { effectiveModelKey: terminal.effectiveModelKey } : {}),
+              responseDurationMs: performance.now() - responseStartedAt,
+            }
           : message));
         if (terminal.quotaState && terminal.budgetState) {
           setPolicyState(strongestPolicyState(terminal.quotaState, terminal.budgetState));
@@ -389,6 +424,19 @@ export function ChatShell() {
     }
   }
 
+  function changeContextMode(enabled: boolean) {
+    const next: ContextMode = enabled ? 'conversation' : 'single_turn';
+    setContextMode(next);
+    try {
+      window.localStorage.setItem(CONTEXT_MODE_STORAGE_KEY, next);
+    } catch {
+      // The in-memory preference still applies for the current page.
+    }
+    setStatus(enabled
+      ? '다음 요청부터 이전 대화 컨텍스트를 함께 사용합니다.'
+      : '다음 요청부터 현재 메시지만 사용합니다. 대화 기록은 그대로 유지됩니다.');
+  }
+
   if (loading || !session?.selectedTenant) return <main className="chat-loading"><LoaderCircle className="spin" aria-hidden /><div role="status">GateLM Chat을 준비하는 중…</div></main>;
   const displayName = session.user.name || session.user.email.split('@')[0];
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
@@ -437,7 +485,20 @@ export function ChatShell() {
       <header className="chat-topbar">
         <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
         <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}</span></div>
-        <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
+        <div className="topbar-actions">
+          <label className="context-setting" title="끄면 다음 요청은 이전 대화 없이 현재 메시지만 모델과 캐시에 전달됩니다.">
+            <input
+              aria-label="이전 대화 컨텍스트 유지"
+              checked={contextMode === 'conversation'}
+              disabled={streaming}
+              onChange={(event) => changeContextMode(event.target.checked)}
+              type="checkbox"
+            />
+            <span className="context-switch" aria-hidden="true" />
+            <span className="context-setting-copy"><strong>컨텍스트 유지</strong><span>{contextMode === 'conversation' ? '켜짐' : '꺼짐'}</span></span>
+          </label>
+          <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
+        </div>
       </header>
       <div className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
         <div className={`policy-banner policy-${policyState}`} role={policyState === 'blocked' ? 'alert' : 'status'}>
@@ -450,16 +511,24 @@ export function ChatShell() {
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
               : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
                 {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
-                  {message.role === 'user' ? <article><span className="sr-only">내 메시지</span><p>{message.content}</p></article> : <>
+                  {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} /> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
                     <article>
                       <span className="message-author">GateLM</span>
                       {message.content
-                        ? <p>{message.content}</p>
+                        ? <MarkdownMessage content={message.content} />
                         : streaming && message === messages.at(-1) && !message.notice
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
                       {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
+                      {message.content && (message.cacheOutcome === 'hit' || message.effectiveModelKey) && <div className="message-assistant-actions">
+                        <MessageCopyButton content={message.content} label="모델 답변" />
+                        {message.cacheOutcome === 'hit'
+                          ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
+                          : message.effectiveModelKey
+                            ? <div className="message-meta" aria-label={`응답 ${modelResponseMetaText(message, userMessagesByTurnId)}`}>{modelResponseMetaText(message, userMessagesByTurnId)}</div>
+                            : null}
+                      </div>}
                     </article>
                   </>}
                 </li>)}
@@ -492,10 +561,112 @@ export function ChatShell() {
 
 type ConversationPage = Readonly<{ items: readonly Conversation[]; nextCursor: string | null }>;
 type MessagePage = Readonly<{ items: readonly Message[]; nextCursor: string | null }>;
-type DisplayMessage = Message & Readonly<{ localId?: string; notice?: SafeChatError }>;
+type DisplayMessage = Message & Readonly<{
+  cacheOutcome?: 'off' | 'hit' | 'miss';
+  localId?: string;
+  notice?: SafeChatError;
+  responseDurationMs?: number;
+}>;
+
+function UserMessage({ content, createdAt }: Readonly<{ content: string; createdAt: string }>) {
+  return <article>
+    <span className="sr-only">내 메시지</span>
+    <p>{content}</p>
+    <div className="message-user-actions">
+      <MessageTime createdAt={createdAt} />
+      <MessageCopyButton content={content} label="내 메시지" />
+    </div>
+  </article>;
+}
+
+function MessageTime({ createdAt }: Readonly<{ createdAt: string }>) {
+  const [displayTime, setDisplayTime] = useState('');
+
+  useEffect(() => {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) {
+      setDisplayTime('');
+      return;
+    }
+    setDisplayTime(new Intl.DateTimeFormat('ko-KR', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(date));
+  }, [createdAt]);
+
+  return <time dateTime={createdAt}>{displayTime}</time>;
+}
+
+function MessageCopyButton({ content, label }: Readonly<{ content: string; label: string }>) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function copyMessage() {
+    try {
+      await copyTextToClipboard(content);
+      showTemporaryCopyState('copied');
+    } catch {
+      showTemporaryCopyState('failed');
+    }
+  }
+
+  function showTemporaryCopyState(nextState: 'copied' | 'failed') {
+    setCopyState(nextState);
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => setCopyState('idle'), 1800);
+  }
+
+  const copyLabel = copyState === 'copied'
+    ? `${label} 복사됨`
+    : copyState === 'failed'
+      ? `${label} 복사 실패, 다시 시도`
+      : `${label} 복사`;
+
+  return <>
+    <button
+      aria-label={copyLabel}
+      className="message-copy-button"
+      data-copy-state={copyState}
+      onClick={() => void copyMessage()}
+      title={copyLabel}
+      type="button"
+    >
+      {copyState === 'copied' ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}
+    </button>
+    <span className="sr-only" role="status">
+      {copyState === 'copied' ? `${label}을 클립보드에 복사했습니다.` : copyState === 'failed' ? `${label}을 복사하지 못했습니다.` : ''}
+    </span>
+  </>;
+}
 
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
+}
+
+function modelResponseMetaText(
+  message: DisplayMessage,
+  userMessagesByTurnId: ReadonlyMap<string, DisplayMessage>,
+): string {
+  const durationMs = message.responseDurationMs ?? persistedResponseDurationMs(message, userMessagesByTurnId);
+  const duration = durationMs === undefined
+    ? ''
+    : ` · ${Math.max(1, Math.round(durationMs / 1000))}s 소요`;
+  return `${message.effectiveModelKey ?? ''}로 생성됨${duration}`;
+}
+
+function persistedResponseDurationMs(
+  message: DisplayMessage,
+  userMessagesByTurnId: ReadonlyMap<string, DisplayMessage>,
+): number | undefined {
+  const userMessage = userMessagesByTurnId.get(message.turnId);
+  if (!userMessage) return undefined;
+  const durationMs = Date.parse(message.createdAt) - Date.parse(userMessage.createdAt);
+  return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined;
 }
 
 function policyText(state: PolicyState): Readonly<{ label: string; description: string }> {

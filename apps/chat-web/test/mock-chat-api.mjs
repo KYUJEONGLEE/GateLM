@@ -123,6 +123,7 @@ async function streamTurn(response, conversation, input) {
   };
   const assistantMessage = {
     id: randomUUID(), turnId, role: 'assistant', content: '요청을 안전하게 처리한 테스트 답변입니다.',
+    effectiveModelKey: 'mock-model',
     sequence: userMessage.sequence + 1,
     createdAt: new Date().toISOString(),
   };
@@ -168,6 +169,7 @@ async function streamTurn(response, conversation, input) {
     writeSse(response, turnId, {
       type: 'chat.turn.final', schemaVersion: 1, conversationId: conversation.id, turnId, sequence,
       messageId: assistantMessage.id, terminalOutcome: 'succeeded',
+      effectiveModelKey: assistantMessage.effectiveModelKey,
       quotaState: input.content.toLowerCase().includes('economy') ? 'economy' : 'normal',
       budgetState: 'normal', replayed: false,
     });

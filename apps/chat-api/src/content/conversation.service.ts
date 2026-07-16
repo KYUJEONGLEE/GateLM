@@ -10,6 +10,7 @@ import type {
   ClientUsageIntent,
   CompletionFinalEvent,
   EphemeralMessage,
+  TenantChatContextMode,
   UsageIntent,
 } from '@/execution/execution.types';
 import { PrivateGatewayError } from '@/execution/private-gateway.client';
@@ -62,6 +63,7 @@ export type CompletedTurn = Readonly<{
   replayed: boolean;
   quotaState?: CompletionFinalEvent['quotaState'];
   budgetState?: CompletionFinalEvent['budgetState'];
+  cacheOutcome?: CompletionFinalEvent['cacheOutcome'];
 }>;
 
 @Injectable()
@@ -130,12 +132,19 @@ export class ConversationService {
   async prepareTurn(
     accessToken: string,
     conversationId: string,
-    input: Readonly<{ idempotencyKey: string; content: string; usageIntent: ClientUsageIntent }>,
+    input: Readonly<{
+      idempotencyKey: string;
+      content: string;
+      contextMode?: TenantChatContextMode;
+      usageIntent: ClientUsageIntent;
+    }>,
   ): Promise<PreparedTurn> {
     return this.guard(async () => {
       const authorized = await this.sessions.authorizeExecution(accessToken);
       const actor = actorOf(authorized);
-      const reserved = await this.store.reserveTurn(actor, conversationId, input);
+      const contextMode = input.contextMode ?? 'conversation';
+      const turnInput = Object.freeze({ ...input, contextMode });
+      const reserved = await this.store.reserveTurn(actor, conversationId, turnInput);
       if (reserved.state === 'completed') {
         const [message, userMessage] = await Promise.all([
           this.store.readCompletedReplay(actor, reserved),
@@ -164,11 +173,16 @@ export class ConversationService {
         if (reserved.state !== 'pending_admission' && !existingCurrent) {
           throw new ContentIntegrityError();
         }
-        const history = await this.store.completionHistory(
-          actor,
-          conversationId,
-          Buffer.byteLength(existingCurrent?.content ?? input.content, 'utf8'),
-        );
+        const history = contextMode === 'single_turn'
+          ? Object.freeze({
+              messages: Object.freeze([]),
+              placeholderCounters: Object.freeze({}),
+            })
+          : await this.store.completionHistory(
+              actor,
+              conversationId,
+              Buffer.byteLength(existingCurrent?.content ?? input.content, 'utf8'),
+            );
         const legacyUsers = history.messages.filter((message) =>
           message.role === 'user' && message.safetyStatus === 'legacy_unverified');
         const currentNeedsSanitization = existingCurrent?.safetyStatus !== 'sanitized';
@@ -340,12 +354,17 @@ export class ConversationService {
         throw error;
       }
       if (prepared.signal.aborted) throw new TurnStateConflict();
-      const persisted = await this.persistAssistantWithRetry(prepared, result.assistantContent);
+      const persisted = await this.persistAssistantWithRetry(
+        prepared,
+        result.assistantContent,
+        result.final.cacheOutcome === 'hit' ? null : result.final.effectiveModelKey,
+      );
       return Object.freeze({
         message: persisted.message,
         replayed: persisted.replayed,
         quotaState: result.final.quotaState,
         budgetState: result.final.budgetState,
+        cacheOutcome: result.final.cacheOutcome,
       });
     } catch (error) {
       if (error instanceof AssistantTooLarge) {
@@ -406,6 +425,7 @@ export class ConversationService {
   private async persistAssistantWithRetry(
     prepared: Extract<PreparedTurn, { kind: 'execute' }>,
     content: string,
+    effectiveModelKey: string | null,
   ) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
@@ -413,6 +433,7 @@ export class ConversationService {
           prepared.actor,
           prepared.reserved,
           content,
+          effectiveModelKey,
         );
       } catch (error) {
         if (attempt === 3 || !isRetryableStorageError(error)) throw error;

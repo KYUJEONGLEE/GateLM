@@ -98,6 +98,22 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 `minimumFamilyPolicyStatus=decision_required`인 모든 manifest는 `trainingEligible=false`여야 한다. 2026-07-14 owner-approved candidate는 `difficulty-training-minimum-family-policy.2026-07-14.v1`을 사용하며, 전체 89 family, category별 15, category × difficulty별 9, 지원 language별 50, required slice별 1 approved family 이상을 요구한다. [`training/difficulty-training-candidate-500.owner-approved.manifest.json`](training/difficulty-training-candidate-500.owner-approved.manifest.json)이 이 기준과 `difficulty-family-constrained-split.2026-07-15.v1`, seed `20260715`, family-disjoint train 300/calibration 100/holdout 100 partition을 고정한다.
 
+### 6.2 Synthetic 2,000-record expansion
+
+[`fixtures/difficulty-label-expansion-2000.fixture.jsonl`](fixtures/difficulty-label-expansion-2000.fixture.jsonl)과 [`fixtures/difficulty-label-expansion-2000.manifest.json`](fixtures/difficulty-label-expansion-2000.manifest.json)은 기존 owner-approved 500건을 변경하지 않고 취약 slice와 semantic pipeline wiring을 확장하는 synthetic review candidate다. [`../../scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs`](../../scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs)가 2,000 record와 200 prompt family를 결정론적으로 생성하며, 다섯 category 각각 400건, simple/complex 각각 1,000건, family-disjoint train/calibration/holdout 1,200/400/400을 고정한다.
+
+이 expansion은 `difficulty-label-record.v2`의 기존 필드만 사용한다. 42D rule vector는 `redactedPrompt`에서 재추출하고, tokenizer/encoder에는 분리된 instruction만 전달하며, 네 semantic head의 12D target은 기존 task/constraint/scope/dependency bucket에서 얻는다. Token, pooled 384D, projected 64D, 12D probability, raw/calibrated score와 threshold 근접도를 record나 manifest에 저장하지 않는다. Explicit/ambiguous/payload-only boundary, empty instruction, long-simple, short-complex, negation, synonym, indirect expression, payload contamination, category confusion과 OOD terminology를 의도적으로 과대표집한다.
+
+모든 record는 `synthetic_fixture + pending + reviewerCount=0`이고 manifest는 `trainingEligible=false`다. 따라서 generator·schema·split·feature wiring과 ephemeral tooling에는 사용할 수 있지만 model coefficient, PCA, semantic head, calibrator, threshold 선택, holdout 성능 또는 runtime promotion evidence에는 사용할 수 없다. 실제 training candidate로 파생하려면 family 전체를 human review하고 owner-approved minimum-family policy와 새 immutable split/evidence version을 별도로 승인해야 한다.
+
+### 6.3 Owner-approved 2,000-record expansion derivative
+
+2026-07-15 dataset owner의 명시적 전체 승인은 원본 fixture가 아니라 별도 [`training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl`](training/difficulty-training-candidate-expansion-2000.owner-approved.jsonl)에 기록한다. 원본 2,000건과 GPT 검토 candidate는 계속 `pending`으로 보존한다. 파생 record는 모두 `human_review + approved + reviewerCount=1`이며 synthetic source와 consent provenance를 바꾸지 않는다.
+
+[`training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json`](training/difficulty-training-candidate-expansion-2000.owner-approved.manifest.json)은 `difficulty-training-expansion-minimum-family-policy.2026-07-15.v1`, 200 approved family와 원본의 family-disjoint 1,200/400/400 partition을 고정한다. [`reviews/difficulty-training-candidate-expansion-2000.owner-approval.json`](reviews/difficulty-training-candidate-expansion-2000.owner-approval.json)은 250건 3차 GPT 확인과 잔여 queue 0건을 보조 evidence로 연결하되, GPT 검토 자체를 human approval로 주장하지 않는다. 이 승격은 training input eligibility만 충족하며 model coefficient, PCA, semantic head, calibrator, threshold, holdout 성능, runtime promotion 또는 release를 승인하지 않는다.
+
+[`evaluation/difficulty-promotion-holdout-100.v1.json`](evaluation/difficulty-promotion-holdout-100.v1.json)은 위 expansion의 아직 보지 않은 holdout 400건에서 category마다 SHA-256 rank가 앞선 whole family 2개씩을 model score access 전에 선택해 10 family/100건을 고정한다. 이전 500건과 family overlap은 0이며 category별 20건, simple/complex 각 10건이다. 기존 v3 118D artifact identity와 accuracy `>=0.91`, 전체 `complex -> simple <=1`, category별 rule baseline 비악화 gate를 동시에 고정한다. 첫 결과는 [`../testing/difficulty-promotion-holdout-100-result.json`](../testing/difficulty-promotion-holdout-100-result.json)에 aggregate로만 남겼고 accuracy `0.70`, `complex -> simple=0`, category directional 비악화 통과로 accuracy gate를 실패했다. 이 Holdout은 소비됐으며 이후 tuning·selection·threshold 변경에 사용할 수 없다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.
@@ -133,13 +149,17 @@ Dataset의 정답은 계속 `expectedDifficulty`뿐이다. `expectedComplexitySc
 
 같은 prompt family나 단순 변형을 서로 다른 split에 두지 않는다. Split은 versioned deterministic family rule로 재현해야 한다. Owner-approved candidate의 `difficulty-family-constrained-split.2026-07-15.v1`은 difficulty label을 family key에서 제외하고 train 300/calibration 100/holdout 100을 exact count로 배정해 cross-label contrast 누출도 금지한다. 현재 10건 contract-smoke fixture는 어느 split의 학습·선택 근거로도 사용하지 않는다.
 
-Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용하며 log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 Platt를 고른다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보는 calibration split 전체로 다시 fit한다. Holdout을 본 뒤 candidate 목록, feature encoder, model 또는 calibrator를 다시 선택하지 않으며 수정이 필요하면 dataset/split/artifact version을 올리고 처음부터 반복한다.
+Calibrator candidate는 `platt`, `isotonic` 두 종류만 허용하며 log-loss tie tolerance와 단순성 순서는 evidence 실행 전에 versioned policy로 고정한다. Calibration split 내부에서 deterministic family-grouped cross-validation을 수행한다. 평균 log loss가 가장 낮은 후보를 선택하며 허용 오차 안에서 같으면 평균 Brier score가 낮은 후보, 그래도 같으면 Platt를 고른다. 한 후보의 fit 또는 검증이 실패하면 유효한 다른 후보를 사용할 수 있지만 둘 다 실패하면 artifact를 만들지 않고 학습을 실패시킨다. Identity calibrator와 무보정 fallback은 없다. 선택된 후보는 calibration split 전체로 다시 fit한다.
+
+Untouched Holdout 결과를 확인한 시점에 해당 Holdout은 freeze된 artifact의 final evidence로 소비된 것으로 본다. 그 결과를 근거로 feature 정의·구성, model, calibrator 또는 threshold 중 하나라도 변경하면 기존 run의 연장이 아니라 새 evidence run이다. 이 경우 dataset/split과 immutable artifact version을 올리고, 기존에 결과를 확인한 Holdout을 포함하지 않는 새 untouched Holdout을 준비해 선택 절차부터 다시 수행한다. 이미 본 Holdout으로 새 artifact를 반복 튜닝하거나 선택·검증·승격 evidence를 다시 만들면 Holdout leakage로 간주한다.
 
 42D·106D·118D feature candidate의 선택도 Holdout을 사용하지 않는다. 각 candidate에서 선택된 calibrator의 calibration family-grouped CV 평균 log loss가 가장 낮은 candidate를 고르고, 허용 오차 안에서 같으면 평균 Brier score가 낮은 candidate, 그래도 같으면 더 낮은 dimension을 고른다. 이 선택 정책은 `difficulty-semantic-candidate-selection.2026-07-15.v1`로 고정한다. Candidate별 report에는 Holdout outcome을 만들지 않으며, candidate·calibrator·threshold와 component hash를 freeze한 뒤 선택된 단 하나의 candidate만 untouched Holdout 100건에 적용한다.
 
 두 후보의 입력은 모두 Logistic Regression의 미보정 `raw_probability`다. Isotonic은 exact-equal score를 동일 가중 sample count로 먼저 묶고, complex 비율이 감소하는 인접 block을 PAVA로 병합한다. Artifact의 x 경계는 각 block의 포함 하한이며 runtime은 floor lookup과 양끝 clipping만 사용하고 선형 보간하지 않는다. Single constant block도 유효하다. Score 반올림, epsilon grouping, 고정 interval, `labelConfidence` weighting과 사후 small-block 자동 병합은 사용하지 않는다. 과세분화는 group-CV 회귀와 fold별 block count·최소 block 표본 수로 확인하며, 선택된 Isotonic 전체 fit의 block sample count를 aggregate report에 둘 수 있다. Raw probability, logit과 실제 score 경계는 report에 넣지 않는다.
 
 초기 threshold policy는 모든 category가 공유하는 `difficulty-threshold-v1 = 0.45`다. `ComplexityScore >= 0.45`이면 `complex`, 미만이면 `simple`이다. `0.45`는 evidence-selected optimum이 아닌 bootstrap/default 값이다. 이후 evidence가 다른 값을 지지하면 v1을 변경하지 않고 새 global threshold policy version과 immutable artifact를 만든다. Category별 threshold, calibrator 또는 model은 평가 candidate로도 만들지 않는다.
+
+Threshold selection은 calibrator candidate 선택·fit과 분리한다. 변경 후보의 threshold grid, 목적 함수, cost ratio, tie-break와 safety constraint를 evidence run 전에 고정하고, 선택된 model·calibrator의 family-grouped calibration OOF calibrated score만 사용한다. 이 절차에서 승인 후보를 만들면 이름은 `difficulty-threshold-v2`로 제안하며, category별 threshold로 분기하지 않는다. Untouched Holdout은 freeze된 threshold의 final gate에만 사용하고 threshold 선택·재조정에는 사용하지 않는다. Holdout 결과로 `difficulty-threshold-v2` 값을 고르면 해당 Holdout은 final evidence 자격을 잃는다.
 
 Promotion report는 최소한 다음 provenance와 결과를 선언한다.
 
@@ -168,6 +188,8 @@ Approved offline report는 sampleId, 허용된 redactedPrompt, expected/actual c
 Difficulty 계약, schema 또는 fixture를 변경하면 다음을 실행한다.
 
 ```powershell
+node scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs --check
+corepack pnpm run verify:v2.1-difficulty-expansion-training-candidate
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2-docs

@@ -12,10 +12,49 @@ export type TenantChatAdminModelPricing = {
 };
 
 export type TenantChatAdminModelCandidate = {
-  activationStatus: "available" | "pricing_unavailable";
+  activationStatus: "available";
+  modelRef: string;
   modelKey: string;
+  pricingStatus: "available" | "unavailable";
   pricing: TenantChatAdminModelPricing | null;
 };
+
+export type TenantChatRoutingMode = "auto" | "manual";
+export type TenantChatRoutingCategory =
+  | "general"
+  | "code"
+  | "translation"
+  | "summarization"
+  | "reasoning";
+export type TenantChatRoutingDifficulty = "simple" | "complex";
+export type TenantChatSafetyDetectorType =
+  | "email"
+  | "phone_number"
+  | "postal_address"
+  | "person_name"
+  | "organization_name"
+  | "resident_registration_number"
+  | "api_key"
+  | "authorization_header"
+  | "jwt"
+  | "private_key";
+export type TenantChatSafetyDetector = {
+  action: "allow" | "redact" | "block";
+  detectorType: TenantChatSafetyDetectorType;
+};
+export type TenantChatAdminCachePolicy = {
+  enabled: boolean;
+  maxEntriesPerUser: number;
+  ttlSeconds: number;
+};
+export type TenantChatAdminSafetyPolicy = {
+  detectorSet: TenantChatSafetyDetector[];
+};
+export type TenantChatRoutingCell = { modelRefs: string[] };
+export type TenantChatRoutingMatrix = Record<
+  TenantChatRoutingCategory,
+  Record<TenantChatRoutingDifficulty, TenantChatRoutingCell>
+>;
 
 export type TenantChatAdminProviderCandidate = {
   displayName: string;
@@ -26,6 +65,7 @@ export type TenantChatAdminProviderCandidate = {
 };
 
 export type TenantChatAdminActiveSnapshot = {
+  cacheEnabled: boolean;
   digest: string;
   modelKey: string;
   policyVersion: number;
@@ -35,6 +75,11 @@ export type TenantChatAdminActiveSnapshot = {
   publishedAt: string;
   snapshotId: string;
   version: number;
+  manualModelRef: string;
+  routes: TenantChatRoutingMatrix;
+  routingMode: TenantChatRoutingMode;
+  cachePolicy: TenantChatAdminCachePolicy;
+  safetyPolicy: TenantChatAdminSafetyPolicy;
 };
 
 export type TenantChatAdminRuntimeSetup = {
@@ -43,7 +88,17 @@ export type TenantChatAdminRuntimeSetup = {
   readiness: TenantChatAdminReadiness;
 };
 
-export type TenantChatRuntimeActivationValues = {
-  modelKey: string;
-  providerConnectionId: string;
+type TenantChatRuntimeRoutingActivationValues = {
+  manualModelRef: string;
+  routes: TenantChatRoutingMatrix;
+  routingMode: TenantChatRoutingMode;
 };
+
+export type TenantChatRuntimeActivationValues =
+  | (TenantChatRuntimeRoutingActivationValues & {
+      cachePolicy: TenantChatAdminCachePolicy;
+      safetyPolicy: TenantChatAdminSafetyPolicy;
+    })
+  | (TenantChatRuntimeRoutingActivationValues & {
+      cacheEnabled: boolean;
+    });

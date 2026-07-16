@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-owner-decision.v1",
+  "ownerApprovalStatus": "pending",
+  "decisionGroups": {
+    "goRouteBlockers": "pending",
+    "difficultyLabelConflicts": "pending",
+    "otherCoreLabelConflicts": "pending",
+    "sliceOnlyConflicts": "pending",
+    "mediumConfidenceReviews": "pending",
+    "promptOnlyHighConfidenceBatch": "pending"
+  },
+  "recordOverrides": [],
+  "familyOverrides": [],
+  "ownerNote": ""
+}

@@ -47,6 +47,7 @@ type SelectedRoute struct {
 	Tier                                   string
 	ProviderID                             string
 	ModelKey                               string
+	PricingStatus                          string
 	PricingVersion                         int64
 	InputMicroUSDPerMillionTokens          int64
 	OutputMicroUSDPerMillionTokens         int64
@@ -62,6 +63,7 @@ type UsageReservation struct {
 	QuotaState           string
 	BudgetState          string
 	LedgerVersion        int64
+	CacheOutcome         string
 	Route                SelectedRoute
 	Replayed             bool
 }
@@ -97,6 +99,7 @@ type UsageSettlement struct {
 	QuotaState                  string
 	BudgetState                 string
 	LedgerVersion               int64
+	CacheOutcome                string
 	Attempts                    []ProviderAttempt
 	Replayed                    bool
 }

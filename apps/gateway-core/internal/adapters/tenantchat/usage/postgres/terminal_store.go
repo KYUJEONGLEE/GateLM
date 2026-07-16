@@ -68,6 +68,11 @@ func (s *ReservationStore) FinalizeReleased(
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if reservation.State == "released" {
+		if err = validateReleasedReplay(
+			ctx, tx, requestContext, reservation.LedgerVersion, terminalOutcome,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
+		}
 		result, err = readSettlement(ctx, tx, requestContext, reservationID)
 		if err != nil {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -111,12 +116,18 @@ func (s *ReservationStore) FinalizeReleased(
 	); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = s.releaseEmployeeCost(
+		ctx, tx, requestContext, reservationID, nil, reservation.LedgerVersion,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "released",
 		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+		CacheOutcome: reservation.CacheOutcome,
 	}, nil
 }
 
@@ -166,6 +177,11 @@ func (s *ReservationStore) FinalizePreCall(
 	if err != nil || tag.RowsAffected() != 1 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = s.recordEmployeePreCallFailure(
+		ctx, tx, requestContext, reservationID, attemptNo,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
+	}
 	attempts, totals, pending, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
 	if err != nil || pending || len(attempts) != attemptNo {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -193,6 +209,11 @@ func (s *ReservationStore) FinalizePreCall(
 		); err != nil {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 		}
+		if err = s.settleEmployeeCost(
+			ctx, tx, requestContext, reservationID, attemptNo, reservation.LedgerVersion,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
+		}
 		if err = tx.Commit(ctx); err != nil {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 		}
@@ -200,7 +221,7 @@ func (s *ReservationStore) FinalizePreCall(
 			RequestID: requestContext.RequestID, ReservationID: reservationID, State: "settled",
 			ConfirmedInputTokens: totals.InputTokens, ConfirmedOutputTokens: totals.OutputTokens,
 			ConfirmedCostMicroUSD: totals.CostMicroUSD, QuotaState: quotaState, BudgetState: budgetState,
-			LedgerVersion: nextVersion, Attempts: attempts,
+			LedgerVersion: nextVersion, CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 		}, nil
 	}
 	if err = persistReleased(
@@ -209,12 +230,18 @@ func (s *ReservationStore) FinalizePreCall(
 	); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = s.releaseEmployeeCost(
+		ctx, tx, requestContext, reservationID, &attemptNo, reservation.LedgerVersion,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "released",
-		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion, Attempts: attempts,
+		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+		CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
 }
 
@@ -245,6 +272,16 @@ func (s *ReservationStore) FinalizeUnconfirmed(
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if reservation.State == "unconfirmed" {
+		if err = validatePendingAttemptReplay(
+			ctx, tx, requestContext, reservationID, attemptNo, outcome,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
+		}
+		if err = s.markEmployeePending(
+			ctx, tx, requestContext, reservationID, attemptNo, outcome,
+		); err != nil {
+			return tenantchat.UsageSettlement{}, err
+		}
 		result, err = readSettlement(ctx, tx, requestContext, reservationID)
 		if err != nil {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -276,6 +313,11 @@ func (s *ReservationStore) FinalizeUnconfirmed(
 	if err != nil || tag.RowsAffected() != 1 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = s.markEmployeePending(
+		ctx, tx, requestContext, reservationID, attemptNo, outcome,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
+	}
 	attempts, _, _, err := readSettlementAttempts(ctx, tx, requestContext, reservationID)
 	if err != nil || len(attempts) == 0 {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
@@ -299,6 +341,11 @@ func (s *ReservationStore) FinalizeUnconfirmed(
 	); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = s.reconcileEmployeeCost(
+		ctx, tx, requestContext, reservationID, reservation.LedgerVersion, now,
+	); err != nil {
+		return tenantchat.UsageSettlement{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -306,8 +353,32 @@ func (s *ReservationStore) FinalizeUnconfirmed(
 		RequestID: requestContext.RequestID, ReservationID: reservationID, State: "unconfirmed",
 		UnconfirmedTokens:           reservation.ReservedTokens,
 		UnconfirmedExposureMicroUSD: reservation.ReservedCostMicroUSD,
-		QuotaState:                  quotaState, BudgetState: budgetState, LedgerVersion: nextVersion, Attempts: attempts,
+		QuotaState:                  quotaState, BudgetState: budgetState, LedgerVersion: nextVersion,
+		CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
+}
+
+func validateReleasedReplay(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	ledgerVersion int64,
+	terminalOutcome string,
+) error {
+	var storedOutcome string
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(payload ->> 'terminalOutcome', '')
+		FROM tenant_chat_invocation_outbox
+		WHERE tenant_id = $1::uuid AND aggregate_id = $2
+		  AND event_type = 'usage_released' AND event_version = $3
+	`, requestContext.ExecutionScope.TenantID, requestContext.RequestID, ledgerVersion).Scan(&storedOutcome)
+	if err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	if storedOutcome != terminalOutcome {
+		return tenantchat.ErrIdempotencyConflict
+	}
+	return nil
 }
 
 func lockUsageActors(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) error {
@@ -541,7 +612,7 @@ func terminalUsageEventPayload(
 		unconfirmedCost = reservation.ReservedCostMicroUSD
 	}
 	payload := map[string]any{
-		"eventId": eventID, "schemaVersion": 1, "eventType": eventType, "eventVersion": eventVersion,
+		"eventId": eventID, "schemaVersion": 3, "eventType": eventType, "eventVersion": eventVersion,
 		"occurredAt": now.Format(time.RFC3339Nano), "aggregateId": requestContext.RequestID,
 		"requestId": requestContext.RequestID, "turnId": requestContext.TurnID,
 		"idempotencyKey": requestContext.IdempotencyKey, "reservationId": reservationID,
@@ -551,6 +622,7 @@ func terminalUsageEventPayload(
 			"timezone": userPeriod.Timezone, "currency": "USD",
 		},
 		"snapshotVersion": requestContext.Snapshot.Version, "pricingVersion": reservation.PricingVersion,
+		"cacheOutcome": reservation.CacheOutcome,
 		"quota": map[string]any{
 			"state": quotaState, "reservedTokensDelta": -reservation.ReservedTokens,
 			"confirmedInputTokensDelta": 0, "confirmedOutputTokensDelta": 0,

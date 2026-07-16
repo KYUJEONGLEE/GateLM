@@ -33,6 +33,7 @@ import (
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
@@ -65,6 +66,7 @@ import (
 	employeepolicystage "gatelm/apps/gateway-core/internal/pipeline/stages/employeepolicy"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
+	projectemployeecost "gatelm/apps/gateway-core/internal/services/projectapplication/employeecost"
 	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
 	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
@@ -90,9 +92,41 @@ func main() {
 	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneInternalToken) == "" {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
+	metricsRegistry := metrics.NewRegistry()
+	difficultyE5InitCtx, difficultyE5InitCancel := context.WithTimeout(context.Background(), difficultyE5StartupSmokeTimeout)
+	difficultyE5Runtime, difficultyE5RuntimeStatus := initializeDifficultyE5Runtime(
+		difficultyE5InitCtx,
+		cfg.DifficultyE5Runtime,
+		e5onnx.NewEncoder,
+	)
+	difficultyE5ShadowRunner, difficultyE5ShadowStatus := initializeDifficultyE5ShadowRunner(
+		difficultyE5InitCtx,
+		cfg.DifficultyE5Shadow,
+		e5onnx.NewEncoder,
+		routingdomain.DifficultySemanticShadowObserverFunc(func(observation routingdomain.DifficultySemanticShadowObservation) {
+			metricsRegistry.RoutingDifficultyShadow(metrics.RoutingDifficultyShadow{
+				Status:          observation.Status,
+				Category:        observation.Category,
+				Comparison:      observation.Comparison,
+				DurationSeconds: observation.Duration.Seconds(),
+			})
+		}),
+	)
+	difficultyE5InitCancel()
+	if difficultyE5RuntimeStatus == DifficultyE5HotPathRuntimeUnavailable {
+		log.Printf("gateway-core difficulty E5 hot-path runtime unavailable; auto routing falls back to rule difficulty")
+	}
+	if difficultyE5Runtime != nil {
+		log.Printf("gateway-core difficulty E5 hot-path runtime initialized; 106D model difficulty is authoritative for eligible auto routes")
+	}
+	if difficultyE5ShadowStatus == DifficultyE5ShadowRuntimeUnavailable {
+		log.Printf("gateway-core difficulty E5 shadow unavailable; product routing unchanged")
+	}
+	if difficultyE5ShadowRunner != nil {
+		log.Printf("gateway-core difficulty E5 shadow initialized; product routing unchanged")
+	}
 
 	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
-		RequestTimeout:        cfg.ProviderTimeout,
 		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
 		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
 		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
@@ -109,7 +143,6 @@ func main() {
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
 	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter, anthropicAdapter)
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
-	metricsRegistry := metrics.NewRegistry()
 
 	postgresPool, err := newPostgresPool(context.Background(), cfg.DatabaseURL, cfg.DatabasePool, "gatelm-gateway-main")
 	if err != nil {
@@ -210,17 +243,25 @@ func main() {
 		MaxEntries: cfg.PricingCache.MaxEntries,
 	})
 	costCalculator := costing.NewCalculator(pricingCatalog)
+	projectEmployeeCosts := projectemployeecost.NewService(postgresPool, pricingCatalog)
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
 		app.WithInvocationLogReader(invocationLogReader),
 		app.WithCostCalculator(costCalculator),
+		app.WithProjectEmployeeCostAccounting(projectEmployeeCosts),
 		app.WithMetrics(metricsRegistry),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
 		),
 		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
+	}
+	if difficultyE5ShadowRunner != nil {
+		routerOptions = append(routerOptions, app.WithDifficultySemanticShadow(difficultyE5ShadowRunner))
+	}
+	if difficultyE5Runtime != nil {
+		routerOptions = append(routerOptions, app.WithDifficultySemanticRuntime(difficultyE5Runtime))
 	}
 	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
 		gatewayCredentials := cachedauth.NewStore(postgresauth.NewStore(postgresPool), cachedauth.Config{
@@ -307,6 +348,7 @@ func main() {
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
 			completionservice.WithSafetyEvaluator(tenantChatSafety),
+			completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),
@@ -336,6 +378,7 @@ func main() {
 	if tenantChatReconciliationWorker != nil {
 		go tenantChatReconciliationWorker.Run(ctx)
 	}
+	go projectEmployeeCosts.RunReconciliation(ctx)
 
 	go func() {
 		log.Printf("gateway-core listening on :%s", cfg.Port)
@@ -364,6 +407,20 @@ func main() {
 			log.Printf("gateway-core tenant chat private shutdown failed: %v", err)
 		}
 	}
+	if difficultyE5ShadowRunner != nil {
+		shadowCloseCtx, shadowCloseCancel := context.WithTimeout(context.Background(), time.Second)
+		if err := difficultyE5ShadowRunner.Close(shadowCloseCtx); err != nil {
+			log.Printf("gateway-core difficulty E5 shadow shutdown incomplete; product routing unchanged")
+		}
+		shadowCloseCancel()
+	}
+	if difficultyE5Runtime != nil {
+		runtimeCloseCtx, runtimeCloseCancel := context.WithTimeout(context.Background(), time.Second)
+		if err := difficultyE5Runtime.Close(runtimeCloseCtx); err != nil {
+			log.Printf("gateway-core difficulty E5 hot-path runtime shutdown incomplete")
+		}
+		runtimeCloseCancel()
+	}
 	if asyncTerminalLogWriter != nil {
 		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)
 		defer logCloseCancel()
@@ -371,6 +428,130 @@ func main() {
 			log.Printf("gateway-core async terminal log flush failed: %v", err)
 		}
 	}
+}
+
+const (
+	difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
+	difficultyE5StartupSmokeTimeout     = 60 * time.Second
+)
+
+const (
+	DifficultyE5ShadowRuntimeDisabled    = "disabled"
+	DifficultyE5ShadowRuntimeReady       = "ready"
+	DifficultyE5ShadowRuntimeUnavailable = "unavailable"
+)
+
+const (
+	DifficultyE5HotPathRuntimeDisabled    = "disabled"
+	DifficultyE5HotPathRuntimeReady       = "ready"
+	DifficultyE5HotPathRuntimeUnavailable = "unavailable"
+)
+
+type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
+type difficultyE5ModelCompatibility func() bool
+
+func initializeDifficultyE5Runtime(
+	ctx context.Context,
+	cfg config.DifficultyE5RuntimeConfig,
+	factory difficultyE5EncoderFactory,
+) (*routingdomain.DifficultySemanticRuntime, string) {
+	if !cfg.Enabled {
+		return nil, DifficultyE5HotPathRuntimeDisabled
+	}
+	if !routingdomain.DifficultySemanticShadowModelCompatible() || factory == nil {
+		return nil, DifficultyE5HotPathRuntimeUnavailable
+	}
+	evaluator, err := initializeDifficultyE5Evaluator(
+		ctx,
+		cfg.ArtifactRoot,
+		cfg.EncoderManifestPath,
+		cfg.RuntimeLockPath,
+		factory,
+	)
+	if err != nil {
+		return nil, DifficultyE5HotPathRuntimeUnavailable
+	}
+	return routingdomain.NewDifficultySemanticRuntime(evaluator, cfg.Timeout), DifficultyE5HotPathRuntimeReady
+}
+
+func initializeDifficultyE5ShadowRunner(
+	ctx context.Context,
+	cfg config.DifficultyE5ShadowConfig,
+	factory difficultyE5EncoderFactory,
+	observer routingdomain.DifficultySemanticShadowObserver,
+) (*routingdomain.DifficultySemanticShadowRunner, string) {
+	evaluator, err := initializeDifficultyE5Shadow(ctx, cfg, factory)
+	if err != nil {
+		return nil, DifficultyE5ShadowRuntimeUnavailable
+	}
+	if evaluator == nil {
+		return nil, DifficultyE5ShadowRuntimeDisabled
+	}
+	return routingdomain.NewDifficultySemanticShadowRunner(evaluator, cfg.Timeout, observer), DifficultyE5ShadowRuntimeReady
+}
+
+func initializeDifficultyE5Shadow(
+	ctx context.Context,
+	cfg config.DifficultyE5ShadowConfig,
+	factory difficultyE5EncoderFactory,
+) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
+	return initializeDifficultyE5ShadowWithCompatibility(
+		ctx,
+		cfg,
+		factory,
+		routingdomain.DifficultySemanticShadowModelCompatible,
+	)
+}
+
+func initializeDifficultyE5ShadowWithCompatibility(
+	ctx context.Context,
+	cfg config.DifficultyE5ShadowConfig,
+	factory difficultyE5EncoderFactory,
+	compatible difficultyE5ModelCompatibility,
+) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
+	if !cfg.HasAllowedScopes() {
+		return nil, nil
+	}
+	if compatible == nil ||
+		(!compatible() && !routingdomain.DifficultySemanticShadowBaselineWaiverAccepted(cfg.BaselineWaiver)) {
+		return nil, errors.New("unavailable")
+	}
+	if factory == nil {
+		return nil, errors.New("unavailable")
+	}
+	return initializeDifficultyE5Evaluator(
+		ctx,
+		cfg.ArtifactRoot,
+		cfg.EncoderManifestPath,
+		cfg.RuntimeLockPath,
+		factory,
+	)
+}
+
+func initializeDifficultyE5Evaluator(
+	ctx context.Context,
+	artifactRoot string,
+	encoderManifestPath string,
+	runtimeLockPath string,
+	factory difficultyE5EncoderFactory,
+) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
+	encoder, err := factory(e5onnx.BundleConfig{
+		ArtifactRoot:        artifactRoot,
+		EncoderManifestPath: encoderManifestPath,
+		RuntimeLockPath:     runtimeLockPath,
+	})
+	if err != nil {
+		return nil, errors.New("unavailable")
+	}
+	evaluator := routingdomain.NewDifficultySemanticShadowEvaluator(encoder)
+	features := routingdomain.ExtractPromptFeatures(difficultyE5StartupSmokeInstruction)
+	category := routingdomain.NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category
+	result := evaluator.Evaluate(ctx, features, category)
+	if result.Status != routingdomain.DifficultySemanticShadowReady {
+		_ = evaluator.Close()
+		return nil, fmt.Errorf("startup_smoke_%s", result.Status)
+	}
+	return evaluator, nil
 }
 
 func newPostgresPool(ctx context.Context, rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Pool, error) {

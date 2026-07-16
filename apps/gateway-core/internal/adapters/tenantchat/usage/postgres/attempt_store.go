@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	employeepostgres "gatelm/apps/gateway-core/internal/adapters/employeecost/postgres"
+	"gatelm/apps/gateway-core/internal/domain/employeecost"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
 
@@ -36,6 +38,11 @@ func (s *ReservationStore) StartAttempt(
 	}()
 
 	now := s.now().UTC()
+	streamDuration, durationErr := snapshot.Policies.Streaming.Duration()
+	if durationErr != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	dispatchIntentExpiresAt := now.Add(streamDuration)
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+requestContext.ExecutionScope.Actor.UserID); err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
@@ -49,13 +56,14 @@ func (s *ReservationStore) StartAttempt(
 	var storedRequestID string
 	var storedSnapshotVersion int64
 	var ledgerVersion int64
+	var cacheOutcome string
 	err = tx.QueryRow(ctx, `
-		SELECT state, request_id, snapshot_version, ledger_version
+		SELECT state, request_id, snapshot_version, ledger_version, cache_outcome
 		FROM tenant_chat_usage_reservations
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid AND user_id = $3::uuid
 		FOR UPDATE
 	`, reservationID, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID).Scan(
-		&reservationState, &storedRequestID, &storedSnapshotVersion, &ledgerVersion,
+		&reservationState, &storedRequestID, &storedSnapshotVersion, &ledgerVersion, &cacheOutcome,
 	)
 	if err != nil || reservationState != "reserved" || storedRequestID != requestContext.RequestID ||
 		storedSnapshotVersion != requestContext.Snapshot.Version {
@@ -79,6 +87,11 @@ func (s *ReservationStore) StartAttempt(
 		if existingKind != kind || existingProvider != route.ProviderID || existingModel != route.ModelKey {
 			return tenantchat.ErrIdempotencyConflict
 		}
+		if err = markNativeDispatchIntent(
+			ctx, tx, requestContext, reservationID, dispatchIntentExpiresAt, now,
+		); err != nil {
+			return err
+		}
 		if err = tx.Commit(ctx); err != nil {
 			return tenantchat.ErrUsageGuardUnavailable
 		}
@@ -100,18 +113,148 @@ func (s *ReservationStore) StartAttempt(
 	if kind == "fallback" {
 		if err = s.topUpFallback(
 			ctx, tx, requestContext, snapshot, reservationID, ledgerVersion,
-			exposureCost, now,
+			exposureCost, cacheOutcome, now,
 		); err != nil {
 			return err
 		}
 	}
-
+	employeeID := employeeCostEmployeeID(requestContext)
+	if employeeID != "" {
+		if s.employeeCosts == nil {
+			return tenantchat.ErrUsageGuardUnavailable
+		}
+		pricing := employeeCostPricing(requestContext, route)
+		attempt := employeepostgres.AttemptInput{
+			AttemptNo: attemptNo, Kind: employeecost.AttemptKind(kind),
+			ProviderID: route.ProviderID, ModelKey: route.ModelKey, Pricing: pricing,
+		}
+		if kind == "primary" {
+			result, employeeErr := s.employeeCosts.StartPrimaryAttempt(
+				ctx, tx, employeepostgres.StartPrimaryAttemptInput{
+					TenantID: requestContext.ExecutionScope.TenantID, EmployeeID: employeeID,
+					Surface: employeecost.SurfaceTenantChat, RequestID: requestContext.RequestID,
+					ReservationID: reservationID, Attempt: attempt,
+					DispatchIntentExpiresAt: dispatchIntentExpiresAt, Now: now,
+				},
+			)
+			if employeeErr != nil {
+				return employeeCostAdapterError(employeeErr)
+			}
+			if result.Applied && result.LedgerVersion != ledgerVersion {
+				return tenantchat.ErrUsageGuardUnavailable
+			}
+		} else {
+			result, employeeErr := s.employeeCosts.TopUpAttempt(
+				ctx, tx, employeepostgres.TopUpAttemptInput{
+					TenantID: requestContext.ExecutionScope.TenantID, EmployeeID: employeeID,
+					Surface: employeecost.SurfaceTenantChat, RequestID: requestContext.RequestID,
+					ReservationID: reservationID, CandidateTier: route.Tier,
+					Attempt: attempt, DispatchIntentExpiresAt: dispatchIntentExpiresAt, Now: now,
+				},
+			)
+			if employeeErr != nil {
+				return employeeCostAdapterError(employeeErr)
+			}
+			if result.RestrictHighCost {
+				return tenantchat.ErrNoEligibleRoute
+			}
+			if result.GuardUnavailable || result.Replayed {
+				return tenantchat.ErrUsageGuardUnavailable
+			}
+			if result.Applied && result.LedgerVersion != ledgerVersion+1 {
+				return tenantchat.ErrUsageGuardUnavailable
+			}
+		}
+	}
 	if err = insertAttemptRow(
 		ctx, tx, requestContext, reservationID, route, attemptNo, kind, exposureCost, now,
 	); err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
+	if err = markNativeDispatchIntent(
+		ctx, tx, requestContext, reservationID, dispatchIntentExpiresAt, now,
+	); err != nil {
+		return err
+	}
 	if err = tx.Commit(ctx); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	return nil
+}
+
+func (s *ReservationStore) MarkDispatched(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	attemptNo int,
+) (err error) {
+	started := time.Now()
+	defer s.observeTransaction("mark_dispatched", started)
+	if s == nil || s.pool == nil || attemptNo < 1 || attemptNo > 4 {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	if err = lockUsageActors(ctx, tx, requestContext); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	reservation, err := lockReservationForSettlement(ctx, tx, requestContext, reservationID)
+	if err != nil || reservation.State != "reserved" {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	if _, err = lockAttempt(ctx, tx, requestContext, reservationID, attemptNo); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	now := s.now().UTC()
+	if err = markNativeDispatchIntent(ctx, tx, requestContext, reservationID, now, now); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	employeeID := employeeCostEmployeeID(requestContext)
+	if employeeID != "" {
+		if s.employeeCosts == nil {
+			return tenantchat.ErrUsageGuardUnavailable
+		}
+		_, employeeErr := s.employeeCosts.MarkDispatched(ctx, tx, employeepostgres.AttemptRef{
+			TenantID:      requestContext.ExecutionScope.TenantID,
+			EmployeeID:    employeeID,
+			Surface:       employeecost.SurfaceTenantChat,
+			RequestID:     requestContext.RequestID,
+			ReservationID: reservationID,
+			AttemptNo:     attemptNo,
+			Now:           now,
+		})
+		if employeeErr != nil {
+			return employeeCostAdapterError(employeeErr)
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	return nil
+}
+
+func markNativeDispatchIntent(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	expiresAt time.Time,
+	now time.Time,
+) error {
+	tag, err := tx.Exec(ctx, `
+		UPDATE tenant_chat_usage_reservations
+		SET usage_pending_at = COALESCE(usage_pending_at, $4), updated_at = $5
+		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid
+		  AND request_id = $3 AND state = 'reserved'
+	`, reservationID, requestContext.ExecutionScope.TenantID, requestContext.RequestID, expiresAt, now)
+	if err != nil || tag.RowsAffected() != 1 {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
 	return nil
@@ -156,6 +299,7 @@ func (s *ReservationStore) topUpFallback(
 	reservationID string,
 	ledgerVersion int64,
 	exposureCost int64,
+	cacheOutcome string,
 	now time.Time,
 ) error {
 	additionalTokens := requestContext.UsageIntent.EstimatedInputTokens + requestContext.UsageIntent.MaxOutputTokens
@@ -219,7 +363,7 @@ func (s *ReservationStore) topUpFallback(
 	}
 	payload, err := usageDeltaEventPayload(
 		"usage_topped_up", eventID, reservationID, nextVersion, requestContext, snapshot,
-		userPeriod, quotaState, budgetState, additionalTokens, exposureCost, now,
+		userPeriod, quotaState, budgetState, additionalTokens, exposureCost, now, cacheOutcome,
 	)
 	if err != nil {
 		return tenantchat.ErrUsageGuardUnavailable

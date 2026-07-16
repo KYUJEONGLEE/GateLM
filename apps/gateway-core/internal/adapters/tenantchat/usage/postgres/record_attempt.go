@@ -37,7 +37,7 @@ func (s *ReservationStore) RecordConfirmedAttempt(
 	if err != nil || reservation.State != "reserved" {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
-	if err = recordConfirmedAttemptTx(
+	if err = s.recordConfirmedAttemptTx(
 		ctx, tx, s.now().UTC(), requestContext, reservationID, attemptNo, usage, outcome,
 	); err != nil {
 		return err
@@ -48,7 +48,27 @@ func (s *ReservationStore) RecordConfirmedAttempt(
 	return nil
 }
 
-func recordConfirmedAttemptTx(
+func (s *ReservationStore) recordConfirmedAttemptTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	now time.Time,
+	requestContext tenantchat.RequestContext,
+	reservationID string,
+	attemptNo int,
+	usage tenantchat.ConfirmedUsage,
+	outcome string,
+) error {
+	if err := recordConfirmedAttemptNativeTx(
+		ctx, tx, now, requestContext, reservationID, attemptNo, usage, outcome,
+	); err != nil {
+		return err
+	}
+	return s.recordEmployeeConfirmedAttempt(
+		ctx, tx, requestContext, reservationID, attemptNo, usage, outcome,
+	)
+}
+
+func recordConfirmedAttemptNativeTx(
 	ctx context.Context,
 	tx pgx.Tx,
 	now time.Time,

@@ -5,6 +5,14 @@
   --analytics-v4-amber: #d97706;
   --analytics-v4-violet: #7c3aed;
   --analytics-v4-red: #dc4c4c;
+  --analytics-v4-panel-title-size: 24px;
+  --analytics-v4-briefing-label-size: 18px;
+  --analytics-v4-metric-label-size: 15px;
+  --analytics-v4-metric-value-size: 36px;
+  --analytics-v4-section-title-size: 22px;
+  --analytics-v4-section-copy-size: 14px;
+  --analytics-v4-outcome-label-size: 15px;
+  --analytics-v4-outcome-value-size: 30px;
 }
 
 .analytics-v4-page .analytics-v3-command-header {
@@ -26,7 +34,7 @@
 }
 
 .analytics-v4-page .analytics-v3-panel-topline h2 {
-  font-size: calc(30px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-panel-title-size) + var(--global-font-lift));
 }
 
 .analytics-v4-briefing-band {
@@ -52,7 +60,7 @@
 }
 
 .analytics-v4-briefing-label span {
-  font-size: calc(22px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-briefing-label-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1.25;
 }
@@ -78,14 +86,14 @@
 
 .analytics-v4-headline-metrics span {
   color: #a8b3c4;
-  font-size: calc(20px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-metric-label-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
 }
 
 .analytics-v4-headline-metrics strong {
   overflow-wrap: anywhere;
   color: #ffffff;
-  font-size: calc(48px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-metric-value-size) + var(--global-font-lift));
   font-weight: 800;
   line-height: 1;
 }
@@ -109,7 +117,7 @@
 .analytics-v4-section-heading h3 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(28px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-section-title-size) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1.1;
 }
@@ -117,7 +125,7 @@
 .analytics-v4-section-heading p {
   margin: 0;
   color: var(--text-muted);
-  font-size: calc(18px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-section-copy-size) + var(--global-font-lift));
   font-weight: var(--font-weight-semibold);
 }
 
@@ -185,7 +193,7 @@
 .analytics-v4-outcome-grid article > div strong {
   overflow: hidden;
   color: var(--foreground);
-  font-size: calc(20px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-outcome-label-size) + var(--global-font-lift));
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -193,7 +201,7 @@
 
 .analytics-v4-outcome-grid article > span {
   color: var(--foreground);
-  font-size: calc(38px + var(--global-font-lift));
+  font-size: calc(var(--analytics-v4-outcome-value-size) + var(--global-font-lift));
   font-weight: 800;
   line-height: 1;
 }
@@ -372,6 +380,19 @@ html[data-theme="dark"] .analytics-v4-briefing-band {
   background: #111820;
 }
 
+@media (min-width: 1101px) {
+  html[data-presentation-mode="true"] .analytics-v4-page {
+    --analytics-v4-panel-title-size: 30px;
+    --analytics-v4-briefing-label-size: 22px;
+    --analytics-v4-metric-label-size: 20px;
+    --analytics-v4-metric-value-size: 48px;
+    --analytics-v4-section-title-size: 28px;
+    --analytics-v4-section-copy-size: 18px;
+    --analytics-v4-outcome-label-size: 20px;
+    --analytics-v4-outcome-value-size: 38px;
+  }
+}
+
 @media (max-width: 1280px) {
   .analytics-v4-outcome-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -432,7 +453,7 @@ html[data-theme="dark"] .analytics-v4-briefing-band {
   }
 
   .analytics-v4-headline-metrics strong {
-    font-size: calc(40px + var(--global-font-lift));
+    font-size: calc(32px + var(--global-font-lift));
   }
 
   .analytics-v4-section-heading {

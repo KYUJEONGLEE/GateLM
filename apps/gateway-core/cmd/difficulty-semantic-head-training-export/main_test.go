@@ -49,6 +49,9 @@ func TestBuildSemanticHeadTrainingInputUsesApprovedFamiliesAndInstructionOnly(t 
 	if actual.FeatureVersion != "difficulty-feature-vector.v1" || len(actual.FeatureNames) != 42 || len(first.RuleVectorV1) != 42 {
 		t.Fatalf("exact 42D candidate material missing: %+v", first)
 	}
+	if actual.DecisionBoundaryVersion != "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2" {
+		t.Fatalf("decision boundary version = %q", actual.DecisionBoundaryVersion)
+	}
 	if first.Label != 0 || first.ActualCategory == "" || first.VectorCategory != first.ActualCategory || first.RuleDifficulty == "" {
 		t.Fatalf("candidate training metadata missing: %+v", first)
 	}
@@ -76,6 +79,9 @@ func TestBuildSemanticHeadTrainingInputExcludesContractualEmptyInstruction(t *te
 	}
 	if len(actual.Samples) != 3 || actual.ExcludedEmptyInstructionCount != 1 {
 		t.Fatalf("empty instruction handling = samples %d excluded %d", len(actual.Samples), actual.ExcludedEmptyInstructionCount)
+	}
+	if actual.SourceSplitCounts["train"].Records != 2 || actual.SplitCounts["train"].Records != 1 {
+		t.Fatalf("source/eligible split counts = %#v / %#v", actual.SourceSplitCounts, actual.SplitCounts)
 	}
 }
 
@@ -111,6 +117,58 @@ func TestBuildSemanticHeadTrainingInputRejectsInvalidHeadLabelWithoutFallback(t 
 	}
 }
 
+func TestBuildSemanticHeadTrainingInputPhasesKeepHoldoutOutOfSelection(t *testing.T) {
+	t.Parallel()
+	records := []map[string]any{
+		semanticHeadRecord("sample-train", "family.train", "train", "Explain the result."),
+		semanticHeadRecord("sample-calibration", "family.calibration", "calibration", "Compare two options."),
+		semanticHeadRecord("sample-holdout", "family.holdout", "holdout", "Summarize one source."),
+	}
+	datasetPath, manifestPath := writeSemanticHeadDataset(t, records, true, false)
+
+	selectionPartitions, err := semanticHeadPartitionsForPhase("selection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := buildSemanticHeadTrainingInputForPhase(
+		datasetPath,
+		manifestPath,
+		"selection",
+		selectionPartitions,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selection.HoldoutOutcomeAccessed || len(selection.Samples) != 2 {
+		t.Fatalf("selection phase leaked holdout: %+v", selection)
+	}
+	if _, ok := selection.SplitCounts["holdout"]; ok {
+		t.Fatalf("selection phase declared holdout counts: %+v", selection.SplitCounts)
+	}
+	for _, sample := range selection.Samples {
+		if sample.Split == "holdout" {
+			t.Fatalf("selection phase returned a holdout sample: %+v", sample)
+		}
+	}
+
+	finalPartitions, err := semanticHeadPartitionsForPhase("final-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalTest, err := buildSemanticHeadTrainingInputForPhase(
+		datasetPath,
+		manifestPath,
+		"final-test",
+		finalPartitions,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !finalTest.HoldoutOutcomeAccessed || len(finalTest.Samples) != 1 || finalTest.Samples[0].Split != "holdout" {
+		t.Fatalf("final-test phase did not isolate holdout: %+v", finalTest)
+	}
+}
+
 func semanticHeadRecord(sampleID, familyID, _ string, prompt string) map[string]any {
 	return map[string]any{
 		"schemaVersion":       "gatelm.difficulty-label-record.v2",
@@ -140,7 +198,6 @@ func writeSemanticHeadDataset(t *testing.T, records []map[string]any, trainingEl
 	manifestPath := filepath.Join(tempDir, "manifest.json")
 	var dataset []byte
 	counts := map[string]int{}
-	eligibleCounts := map[string]int{}
 	for _, record := range records {
 		encoded, err := json.Marshal(record)
 		if err != nil {
@@ -149,9 +206,6 @@ func writeSemanticHeadDataset(t *testing.T, records []map[string]any, trainingEl
 		dataset = append(dataset, encoded...)
 		dataset = append(dataset, '\n')
 		counts[record["promptFamily"].(string)]++
-		if record["semanticInputStatus"] == "eligible" {
-			eligibleCounts[record["promptFamily"].(string)]++
-		}
 	}
 	if err := os.WriteFile(datasetPath, dataset, 0o600); err != nil {
 		t.Fatal(err)
@@ -177,9 +231,9 @@ func writeSemanticHeadDataset(t *testing.T, records []map[string]any, trainingEl
 		"splitPolicyVersion":  "difficulty-family-constrained-split.test-v1",
 		"splitSeed":           1729,
 		"splitCounts": map[string]any{
-			"train":       map[string]any{"families": 1, "records": eligibleCounts["family.train"]},
-			"calibration": map[string]any{"families": 1, "records": eligibleCounts["family.calibration"]},
-			"holdout":     map[string]any{"families": 1, "records": eligibleCounts["family.holdout"]},
+			"train":       map[string]any{"families": 1, "records": counts["family.train"]},
+			"calibration": map[string]any{"families": 1, "records": counts["family.calibration"]},
+			"holdout":     map[string]any{"families": 1, "records": counts["family.holdout"]},
 		},
 		"trainingGate": map[string]any{"minimumFamilyPolicyStatus": "versioned", "policyVersion": "test-policy-v1"},
 		"families":     families,

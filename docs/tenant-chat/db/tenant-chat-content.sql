@@ -154,6 +154,7 @@ CREATE TABLE tenant_chat_messages (
   schema_version integer NOT NULL DEFAULT 1,
   safety_status text NOT NULL DEFAULT 'legacy_unverified',
   safety_policy_digest text,
+  effective_model_key text,
   expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_chat_message_conversation_sequence_key UNIQUE (conversation_id, sequence),
@@ -165,41 +166,24 @@ CREATE TABLE tenant_chat_messages (
   CONSTRAINT tenant_chat_message_content_key_fkey FOREIGN KEY (tenant_id, content_key_version)
     REFERENCES tenant_chat_content_keys(tenant_id, content_key_version) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_message_role_check CHECK (role IN ('user', 'assistant')),
+  CONSTRAINT tenant_chat_message_effective_model_key_check CHECK (
+    effective_model_key IS NULL OR (
+      role = 'assistant' AND
+      effective_model_key ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$'
+    )
+  ),
   CONSTRAINT tenant_chat_message_shape_check CHECK (
     sequence >= 1 AND schema_version IN (1, 2) AND octet_length(ciphertext) BETWEEN 1 AND 1048576 AND
     octet_length(nonce) = 12 AND octet_length(tag) = 16
   ),
   CONSTRAINT tenant_chat_message_safety_provenance_check CHECK (
-    (
-      schema_version = 1
-      AND (
-        (
-          role = 'user'
-          AND safety_status = 'legacy_unverified'
-          AND safety_policy_digest IS NULL
-        )
-        OR (
-          role = 'assistant'
-          AND safety_status = 'provider_generated'
-          AND safety_policy_digest IS NULL
-        )
-      )
-    )
-    OR (
-      schema_version = 2
-      AND (
-        (
-          role = 'user'
-          AND safety_status = 'sanitized'
-          AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
-        )
-        OR (
-          role = 'assistant'
-          AND safety_status = 'provider_generated'
-          AND safety_policy_digest IS NULL
-        )
-      )
-    )
+    (schema_version = 1 AND (
+      (role = 'user' AND safety_status = 'legacy_unverified' AND safety_policy_digest IS NULL) OR
+      (role = 'assistant' AND safety_status = 'provider_generated' AND safety_policy_digest IS NULL)
+    )) OR (schema_version = 2 AND (
+      (role = 'user' AND safety_status = 'sanitized' AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$') OR
+      (role = 'assistant' AND safety_status = 'provider_generated' AND safety_policy_digest IS NULL)
+    ))
   )
 );
 

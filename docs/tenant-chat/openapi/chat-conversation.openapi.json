@@ -123,7 +123,7 @@
         },
         "responses": {
           "200": {
-            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. accepted always contains userMessageId and the sanitized, committed userContent so the browser can replace its untrusted optimistic text immediately. Success final is sent only after assistant ciphertext commit. Fresh success includes bounded quotaState and budgetState; encrypted-content replay may omit them.",
+            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. accepted always contains userMessageId and the sanitized, committed userContent so the browser can replace untrusted optimistic text immediately. Success final is sent only after assistant ciphertext commit. Success may include the bounded effectiveModelKey stored with the assistant message. Fresh success includes bounded quotaState, budgetState, and cacheOutcome; encrypted-content replay may omit policy/cache state.",
             "headers": {
               "Cache-Control": { "schema": { "type": "string", "const": "no-store" } },
               "X-Accel-Buffering": { "schema": { "type": "string", "const": "no" } }
@@ -210,6 +210,7 @@
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
       },
       "OpaqueKey": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+      "ModelKey": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$" },
       "Conversation": {
         "type": "object",
         "additionalProperties": false,
@@ -256,6 +257,7 @@
           "turnId": { "$ref": "#/components/schemas/Uuid" },
           "role": { "enum": ["user", "assistant"] },
           "content": { "type": "string", "minLength": 1, "maxLength": 1048576 },
+          "effectiveModelKey": { "$ref": "#/components/schemas/ModelKey" },
           "sequence": { "type": "integer", "minimum": 1 },
           "createdAt": { "type": "string", "format": "date-time" }
         }
@@ -282,6 +284,11 @@
         "properties": {
           "idempotencyKey": { "$ref": "#/components/schemas/OpaqueKey" },
           "content": { "type": "string", "minLength": 1, "maxLength": 20000 },
+          "contextMode": {
+            "enum": ["conversation", "single_turn"],
+            "default": "conversation",
+            "description": "Controls only the messages sent to this turn. single_turn keeps encrypted history stored but sends only the current user message."
+          },
           "usageIntent": { "$ref": "#/components/schemas/UsageIntent" }
         }
       },

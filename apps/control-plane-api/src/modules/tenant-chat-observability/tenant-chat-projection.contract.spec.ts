@@ -6,12 +6,14 @@ import invocationTerminalEventSchema = require('./invocation-terminal-event.sche
 import invocationTerminalEventV2Schema = require('./invocation-terminal-event-v2.schema.json');
 import usageSettlementEventSchema = require('./usage-settlement-event.schema.json');
 import usageSettlementEventV2Schema = require('./usage-settlement-event-v2.schema.json');
+import usageSettlementEventV3Schema = require('./usage-settlement-event-v3.schema.json');
 
 describe('Tenant Chat projection event contract', () => {
   it.each([
     ['usage settlement', 'usage-settlement-event.schema.json', usageSettlementEventSchema],
     ['invocation terminal', 'invocation-terminal-event.schema.json', invocationTerminalEventSchema],
     ['usage settlement v2', 'usage-settlement-event-v2.schema.json', usageSettlementEventV2Schema],
+    ['usage settlement v3', 'usage-settlement-event-v3.schema.json', usageSettlementEventV3Schema],
     ['invocation terminal v2', 'invocation-terminal-event-v2.schema.json', invocationTerminalEventV2Schema],
   ])('executes the active %s schema without drift', (_label, fileName, runtimeSchema) => {
     const contractSchema = JSON.parse(
@@ -56,6 +58,53 @@ describe('Tenant Chat projection event contract', () => {
 
     expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
   });
+
+  it('requires bounded cache provenance in a v3 usage event', () => {
+    const payload = usageSettledEvent() as ReturnType<typeof usageSettledEvent> & {
+      cacheOutcome?: string;
+    };
+    payload.schemaVersion = 3;
+    payload.cacheOutcome = 'miss';
+    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+
+    delete payload.cacheOutcome;
+    expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
+      'projection event schema validation failed',
+    );
+  });
+
+  it.each([1, 2, 3])(
+    'accepts a v%d reservation with zero monetary cost',
+    (schemaVersion) => {
+      const payload = {
+        ...usageSettledEvent(),
+        schemaVersion,
+        eventType: 'usage_reserved',
+        eventVersion: 1,
+        quota: {
+          state: 'normal',
+          reservedTokensDelta: 10,
+          confirmedInputTokensDelta: 0,
+          confirmedOutputTokensDelta: 0,
+          confirmedTotalTokensDelta: 0,
+          unconfirmedTokensDelta: 0,
+        },
+        budget: {
+          state: 'normal',
+          reservedCostMicroUsdDelta: 0,
+          confirmedCostMicroUsdDelta: 0,
+          unconfirmedExposureMicroUsdDelta: 0,
+        },
+        attempts: [],
+      };
+      if (schemaVersion === 3) {
+        Object.assign(payload, { cacheOutcome: 'off' });
+      }
+      delete (payload as { terminalOutcome?: string }).terminalOutcome;
+
+      expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+    },
+  );
 });
 
 function terminalEvent() {

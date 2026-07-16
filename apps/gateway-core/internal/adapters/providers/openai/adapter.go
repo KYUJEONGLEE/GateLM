@@ -70,6 +70,7 @@ func (a *Adapter) ListModels(ctx context.Context, config provider.ExecutionConfi
 }
 
 func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	req.DispatchTracker.Observe()
 	config = normalizeConfig(config)
 	if err := validateConfig(config, true); err != nil {
 		return nil, err
@@ -90,6 +91,12 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+config.Credential.Value)
 	httpReq.Header.Set("X-GateLM-Request-Id", req.RequestID)
+	if req.BeforeDispatch != nil {
+		if err := req.BeforeDispatch(reqCtx); err != nil {
+			return nil, provider.NewNotStartedError(err)
+		}
+	}
+	req.DispatchTracker.MarkStarted()
 
 	resp, err := a.httpClient.Do(httpReq)
 	if err != nil {
@@ -110,6 +117,7 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 }
 
 func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	req.DispatchTracker.Observe()
 	config = normalizeConfig(config)
 	if err := validateConfig(config, true); err != nil {
 		return nil, err
@@ -136,6 +144,13 @@ func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provide
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("Authorization", "Bearer "+config.Credential.Value)
 	httpReq.Header.Set("X-GateLM-Request-Id", req.RequestID)
+	if req.BeforeDispatch != nil {
+		if err := req.BeforeDispatch(reqCtx); err != nil {
+			cancel()
+			return nil, provider.NewNotStartedError(err)
+		}
+	}
+	req.DispatchTracker.MarkStarted()
 
 	resp, err := a.httpClient.Do(httpReq)
 	if err != nil {

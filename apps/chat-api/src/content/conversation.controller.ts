@@ -19,6 +19,7 @@ import type { Request, Response } from 'express';
 import { ChatWebServiceGuard } from '@/auth/chat-web-service.guard';
 
 import { ConversationService, type PreparedTurn } from './conversation.service';
+import type { MessageView } from './encrypted-chat-store';
 import {
   ConversationIdParams,
   CreateConversationDto,
@@ -131,7 +132,7 @@ export class ConversationController {
       if (prepared.kind === 'replay') {
         sequence = await writeDeltas(response, prepared, prepared.message.content, sequence);
         sequence += 1;
-        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, prepared.message.id, true));
+        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, prepared.message, true));
       } else {
         const result = await this.conversations.executeTurn(prepared, async (delta) => {
           sequence = await writeDeltas(response, prepared, delta, sequence);
@@ -140,7 +141,7 @@ export class ConversationController {
         await writeEvent(response, prepared.reserved.turnId, finalEvent(
           prepared,
           sequence,
-          result.message.id,
+          result.message,
           result.replayed,
           result,
         ));
@@ -219,15 +220,22 @@ async function writeDeltas(
 function finalEvent(
   prepared: PreparedTurn,
   sequence: number,
-  messageId: string,
+  message: MessageView,
   replayed: boolean,
   policy?: Readonly<{
     quotaState?: 'normal' | 'warning' | 'economy' | 'blocked';
     budgetState?: 'normal' | 'warning' | 'economy' | 'blocked';
+    cacheOutcome?: 'off' | 'hit' | 'miss';
   }>,
 ) {
   const policyState = policy?.quotaState && policy.budgetState
     ? { quotaState: policy.quotaState, budgetState: policy.budgetState }
+    : {};
+  const modelState = message.effectiveModelKey
+    ? { effectiveModelKey: message.effectiveModelKey }
+    : {};
+  const cacheState = policy?.cacheOutcome
+    ? { cacheOutcome: policy.cacheOutcome }
     : {};
   return {
     type: 'chat.turn.final',
@@ -235,9 +243,11 @@ function finalEvent(
     conversationId: prepared.reserved.conversationId,
     turnId: prepared.reserved.turnId,
     sequence,
-    messageId,
+    messageId: message.id,
     terminalOutcome: 'succeeded',
     replayed,
+    ...modelState,
+    ...cacheState,
     ...policyState,
   } as const;
 }

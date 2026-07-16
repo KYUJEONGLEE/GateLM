@@ -15,13 +15,13 @@ export type RuntimePolicyEditorProps = {
   breadcrumbItems?: BreadcrumbItem[];
   children?: ReactNode;
   employeeSection?: ReactNode;
+  fullWidth?: boolean;
   generalFooter?: ReactNode;
   generalBudgetPanelPlacement?: "afterChildren" | "childSlot";
   hideStreamingTab?: boolean;
   locale: Locale;
   model: RuntimePolicyModel;
   moveBudgetToGeneral?: boolean;
-  providerManagementHref?: string;
 };
 
 export type RuntimePolicyApiKeyReadiness = {

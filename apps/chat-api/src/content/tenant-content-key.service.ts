@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { TenantKeyResolver } from '@gatelm/tenant-content-crypto';
 
 import { PrismaService } from '@/database/prisma.service';
 
@@ -17,7 +18,7 @@ type ContentKeyRow = Readonly<{
 }>;
 
 @Injectable()
-export class TenantContentKeyService {
+export class TenantContentKeyService implements TenantKeyResolver {
   constructor(
     private readonly prisma: PrismaService,
     private readonly provider: WrappingKeyProvider,
@@ -26,7 +27,7 @@ export class TenantContentKeyService {
   async isReady(): Promise<boolean> {
     try {
       const keySet = await this.provider.load();
-      const [state, contentKeys, conversations, turns] = await Promise.all([
+      const [state, contentKeyVersions, conversations, turns] = await Promise.all([
         this.prisma.tenantChatContentKeyState.findFirst({
           select: { wrappingKeyRollbackFloor: true },
           orderBy: { wrappingKeyRollbackFloor: 'desc' },
@@ -40,11 +41,34 @@ export class TenantContentKeyService {
       ]);
       if (state && keySet.activeVersion < state.wrappingKeyRollbackFloor) return false;
       const requiredVersions = new Set([
-        ...contentKeys.map((row) => row.wrappingKeyVersion),
+        ...contentKeyVersions.map((row) => row.wrappingKeyVersion),
         ...conversations.map((row) => row.creationBindingKeyVersion),
         ...turns.map((row) => row.requestBindingKeyVersion),
       ]);
-      return [...requiredVersions].every((version) => keySet.keys.has(version));
+      if (![...requiredVersions].every((version) => keySet.keys.has(version))) return false;
+
+      const representativeKeys = await Promise.all(contentKeyVersions.map(({ wrappingKeyVersion }) => (
+        this.prisma.tenantChatContentKey.findFirst({
+          where: { status: { not: 'retired' }, wrappingKeyVersion },
+          select: {
+            tenantId: true,
+            contentKeyVersion: true,
+            wrappingKeyVersion: true,
+            wrappedKey: true,
+            wrapNonce: true,
+            wrapTag: true,
+          },
+          orderBy: [{ tenantId: 'asc' }, { contentKeyVersion: 'asc' }],
+        })
+      )));
+      if (representativeKeys.some((row) => row === null)) return false;
+
+      for (const row of representativeKeys) {
+        if (!row) return false;
+        const key = unwrap(row, keySet);
+        key.fill(0);
+      }
+      return true;
     } catch {
       return false;
     }

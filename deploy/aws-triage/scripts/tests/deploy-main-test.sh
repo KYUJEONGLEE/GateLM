@@ -8,7 +8,10 @@ AWS_TRIAGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${AWS_TRIAGE_DIR}/../.." && pwd)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
+E5_BUNDLE_SCRIPT="${SCRIPT_DIR}/prepare-gateway-e5-runtime-bundle.sh"
 WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/deploy-production.yml"
+MAINTENANCE_WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/tenant-chat-cache-keyset-maintenance.yml"
+MAINTENANCE_SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-cache-keyset-maintenance.sh"
 TEMPLATE_FILE="${AWS_TRIAGE_DIR}/aws/github-actions-cd.template.json"
 COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.yml"
 
@@ -32,7 +35,7 @@ assert_fails_with() {
     fail "Expected failure text was not found: ${expected}"
 }
 
-for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}"; do
+for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${MAINTENANCE_SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
   bash -n "${file}"
 done
 
@@ -50,6 +53,9 @@ assert_fails_with \
 assert_fails_with \
   "Invalid deployment SHA" \
   bash "${SSM_SCRIPT}" i-0123456789abcdef0 invalid https://gatelm.co.kr https://chat.gatelm.co.kr
+assert_fails_with \
+  "Invalid maintenance SHA" \
+  bash "${MAINTENANCE_SSM_SCRIPT}" i-0123456789abcdef0 invalid check
 assert_fails_with \
   "Public URL must be an HTTPS origin" \
   bash "${SSM_SCRIPT}" i-0123456789abcdef0 0000000000000000000000000000000000000000 http://gatelm.co.kr https://chat.gatelm.co.kr
@@ -88,14 +94,41 @@ grep -Fq "id-token: write" "${WORKFLOW_FILE}" || fail "OIDC permission is missin
 grep -Fq "name: production" "${WORKFLOW_FILE}" || fail "production environment is missing"
 grep -Fq "517a711dbcd0e402f90c77e7e2f81e849156e31d" "${WORKFLOW_FILE}" || \
   fail "AWS credentials action is not pinned"
-if grep -Fq 'secrets.' "${WORKFLOW_FILE}"; then
-  fail "The deployment workflow must not use long-lived GitHub secrets"
-fi
+for required_smoke_secret in \
+  'secrets.TENANT_CHAT_SMOKE_EMAIL' \
+  'secrets.TENANT_CHAT_SMOKE_PASSWORD'
+do
+  grep -Fq "${required_smoke_secret}" "${WORKFLOW_FILE}" || \
+    fail "Required Tenant Chat smoke secret is missing: ${required_smoke_secret}"
+done
+grep -Fq "workflow_dispatch:" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance must be manually dispatched"
+grep -Fq "name: production" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance must use the protected production environment"
+grep -Fq "id-token: write" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance requires OIDC permission"
+grep -Fq "TENANT_CHAT_SMOKE_VERIFY_CACHE: \"true\"" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set apply must verify an exact-cache miss followed by a hit"
+grep -Fq "send-ssm-cache-keyset-maintenance.sh" "${MAINTENANCE_WORKFLOW_FILE}" || \
+  fail "Cache key-set maintenance must use the reviewed SSM sender"
+unexpected_secret_references="$(
+  grep -oE 'secrets\.[A-Za-z_][A-Za-z0-9_]*' "${WORKFLOW_FILE}" | \
+    sort -u | \
+    grep -Fvx \
+      -e 'secrets.TENANT_CHAT_SMOKE_EMAIL' \
+      -e 'secrets.TENANT_CHAT_SMOKE_PASSWORD' || true
+)"
+[[ -z "${unexpected_secret_references}" ]] || \
+  fail "The deployment workflow contains an unexpected GitHub secret reference: ${unexpected_secret_references}"
 
 grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
 grep -Fq 'validate_tenant_chat_secrets' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret files must be validated before the image build"
+grep -Fq 'validate-tenant-chat-cache-keyset.mjs' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat cache key-set identity must be validated before the image build"
+grep -Fq 'TENANT_CHAT_CACHE_KEY_SET_ID: ${TENANT_CHAT_CACHE_KEY_SET_ID:?TENANT_CHAT_CACHE_KEY_SET_ID is required}' "${COMPOSE_FILE}" || \
+  fail "Production Compose must require an explicit Tenant Chat cache key-set ID"
 grep -Fq 'export TENANT_CHAT_RUNTIME_UID="${secret_owner_uid}"' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret owner UID must be passed to Compose"
 grep -Fq 'export TENANT_CHAT_RUNTIME_GID="${secret_owner_gid}"' "${DEPLOY_SCRIPT}" || \
@@ -104,10 +137,39 @@ grep -Fq 'Tenant Chat secret files must share one owner UID and GID.' "${DEPLOY_
   fail "Tenant Chat secret files must have consistent ownership"
 grep -Fq 'content-keys.json' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat content keys must be validated before the image build"
+grep -Fq 'tenant-chat-secrets' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secrets must be backed up with the database"
+grep -Fq 'install -m 600' "${DEPLOY_SCRIPT}" || \
+  fail "Tenant Chat secret backups must use restrictive file permissions"
+grep -Fq 'wait_for_chat_api_readiness' "${DEPLOY_SCRIPT}" || \
+  fail "Deployment must verify Chat API database and key continuity"
+grep -Fq 'Chat API readiness did not verify database and key continuity.' "${DEPLOY_SCRIPT}" || \
+  fail "A key continuity failure must fail the deployment"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
   fail "Temporary rollback image tags must be cleaned up"
+grep -Fq 'bash "${gateway_e5_bundle_script}" "${repo_dir}"' "${DEPLOY_SCRIPT}" || \
+  fail "Deployment must prepare the pinned Gateway E5 bundle before image builds"
+for required_setting in \
+  'dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile' \
+  'difficulty_e5: ../../.tmp/gateway-e5-runtime-bundle' \
+  'GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "true"' \
+  'GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100}' \
+  'GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"'
+do
+  grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
+    fail "Gateway E5 production Compose setting is missing: ${required_setting}"
+done
+for pinned_material in \
+  '614241f622f53c4eeff9890bdc4f31cfecc418b3' \
+  'c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0' \
+  '2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58' \
+  'sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256'
+do
+  grep -Fq "${pinned_material}" "${E5_BUNDLE_SCRIPT}" || \
+    fail "Gateway E5 bundle preparation pin is missing: ${pinned_material}"
+done
 for required_setting in \
   'TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"' \
   'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \
@@ -234,6 +296,40 @@ if (!remoteScript.includes("deploy-main.sh")) {
 }
 if (!remoteScript.includes("0000000000000000000000000000000000000000")) {
   throw new Error("Deployment SHA was not sent");
+}
+NODE
+
+: > "${fake_log}"
+PATH="${fake_bin}:${PATH}" \
+FAKE_AWS_LOG="${fake_log}" \
+AWS_REGION=ap-northeast-2 \
+GATELM_SSM_POLL_INTERVAL_SECONDS=0 \
+bash "${MAINTENANCE_SSM_SCRIPT}" \
+  i-0123456789abcdef0 \
+  0000000000000000000000000000000000000000 \
+  check >/dev/null
+
+node - "${fake_log}" <<'NODE'
+const fs = require("node:fs");
+const logPath = process.argv[2];
+const line = fs.readFileSync(logPath, "utf8").split(/\r?\n/)
+  .find((value) => value.startsWith('{"commands":'));
+if (!line) throw new Error("Cache key-set maintenance SSM parameters were not sent");
+const command = JSON.parse(line).commands?.[0];
+const match = command?.match(/^printf '%s' '([A-Za-z0-9+/=]+)' \| base64 --decode \| bash$/);
+if (!match) throw new Error("Cache key-set maintenance payload is not POSIX-safe");
+const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
+for (const fragment of [
+  "action=check",
+  "flock -n 9",
+  "git -C \"${repo}\" archive",
+  "tenant_chat_active_runtime_snapshots",
+  "--mode=\"${action}\"",
+  "--active-key-set-ids-file=\"${active_ids_file}\"",
+]) {
+  if (!remoteScript.includes(fragment)) {
+    throw new Error(`Cache key-set maintenance payload is missing: ${fragment}`);
+  }
 }
 NODE
 

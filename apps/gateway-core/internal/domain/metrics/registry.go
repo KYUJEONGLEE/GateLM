@@ -32,6 +32,8 @@ const (
 	StreamRelayTotal                       = "gatelm_stream_relay_total"
 	StreamDurationSeconds                  = "gatelm_stream_duration_seconds"
 	StreamTimeToFirstTokenSeconds          = "gatelm_stream_time_to_first_token_seconds"
+	RoutingDifficultyShadowTotal           = "gatelm_routing_difficulty_shadow_total"
+	RoutingDifficultyShadowDurationSeconds = "gatelm_routing_difficulty_shadow_duration_seconds"
 	TenantChatCompletionTotal              = "gatelm_tenant_chat_completion_total"
 	TenantChatUsageReconciliationTotal     = "gatelm_tenant_chat_usage_reconciliation_total"
 	TenantChatAccountingTransactionSeconds = "gatelm_tenant_chat_accounting_transaction_seconds"
@@ -96,6 +98,8 @@ var metricSpecs = map[string]metricSpec{
 	StreamRelayTotal:                       {"counter", "Total Gateway streaming relay attempts by outcome."},
 	StreamDurationSeconds:                  {"histogram", "Gateway streaming relay duration in seconds."},
 	StreamTimeToFirstTokenSeconds:          {"histogram", "Gateway streaming time to first visible content token in seconds."},
+	RoutingDifficultyShadowTotal:           {"counter", "Total bounded difficulty shadow comparisons by safe outcome."},
+	RoutingDifficultyShadowDurationSeconds: {"histogram", "Difficulty shadow evaluation duration in seconds by safe status."},
 	TenantChatCompletionTotal:              {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
 	TenantChatUsageReconciliationTotal:     {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
 	TenantChatAccountingTransactionSeconds: {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},
@@ -129,6 +133,8 @@ var allowedLabels = map[string]struct{}{
 	"reason":             {},
 	"dependency":         {},
 	"required":           {},
+	"category":           {},
+	"comparison":         {},
 }
 
 var forbiddenLabels = map[string]struct{}{
@@ -149,6 +155,14 @@ var forbiddenLabels = map[string]struct{}{
 	"provider_key":      {},
 	"authorization":     {},
 	"raw_error_detail":  {},
+	"instruction_text":  {},
+	"embedding":         {},
+	"vector":            {},
+	"weight":            {},
+	"score":             {},
+	"complexity_score":  {},
+	"artifact_hash":     {},
+	"model_ref":         {},
 }
 
 func NewRegistry() *Registry {

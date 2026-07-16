@@ -22,7 +22,7 @@
   "allOf": [
     { "if": { "properties": { "eventType": { "enum": ["usage_reserved", "usage_topped_up"] } }, "required": ["eventType"] }, "then": { "properties": {
       "quota": { "properties": { "reservedTokensDelta": { "type": "integer", "minimum": 1 }, "confirmedInputTokensDelta": { "const": 0 }, "confirmedOutputTokensDelta": { "const": 0 }, "confirmedTotalTokensDelta": { "const": 0 }, "unconfirmedTokensDelta": { "const": 0 } } },
-      "budget": { "properties": { "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 1 }, "confirmedCostMicroUsdDelta": { "const": 0 }, "unconfirmedExposureMicroUsdDelta": { "const": 0 } } }, "attempts": { "maxItems": 0 }
+      "budget": { "properties": { "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 0 }, "confirmedCostMicroUsdDelta": { "const": 0 }, "unconfirmedExposureMicroUsdDelta": { "const": 0 } } }, "attempts": { "maxItems": 0 }
     } } },
     { "if": { "properties": { "eventType": { "const": "usage_settled" } }, "required": ["eventType"] }, "then": { "properties": {
       "quota": { "properties": { "reservedTokensDelta": { "type": "integer", "maximum": 0 }, "unconfirmedTokensDelta": { "type": "integer", "maximum": 0 } } },

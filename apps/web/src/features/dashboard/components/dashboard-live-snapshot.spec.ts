@@ -5,7 +5,14 @@ import { expect, test } from "@playwright/test";
 const overviewSourceUrl = new URL("./dashboard-overview.tsx", import.meta.url);
 const chartSourceUrl = new URL("./dashboard-echarts.tsx", import.meta.url);
 const costSourceUrl = new URL("./cost-over-time-card.tsx", import.meta.url);
+const dashboardStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
+const liveRequestViewSourceUrl = new URL("./live-requests-view.tsx", import.meta.url);
 const liveRequestsSourceUrl = new URL("./live-requests-card.tsx", import.meta.url);
+const providerUsageSourceUrl = new URL("./provider-model-usage-card.tsx", import.meta.url);
+const tenantChatLiveRequestsSourceUrl = new URL(
+  "../../../lib/dashboard/tenant-chat-live-requests.ts",
+  import.meta.url
+);
 
 test("dashboard replaces all cards from one visibility-aware snapshot poll", async () => {
   const source = await readFile(overviewSourceUrl, "utf8");
@@ -26,8 +33,140 @@ test("snapshot-managed cards render their incoming payload without an effect-del
   ]);
 
   expect(costSource).toContain("pollingEnabled ? summary : normalizedInitialSummary");
+  expect(costSource).toContain("resampleCostOverTimeForDisplay(displayedSummary, range)");
+  expect(costSource.match(/points=\{renderedSummary\.points\}/g)).toHaveLength(2);
   expect(liveRequestsSource).toContain("normalizeLiveRequestRows(initialPayload?.rows)");
   expect(liveRequestsSource).toContain("displayedRows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)");
+});
+
+test("compact request detail opens the focus view before nested request detail", async () => {
+  const source = await readFile(liveRequestsSourceUrl, "utf8");
+  const compactViewStart = source.indexOf(
+    "<LiveRequestsView",
+    source.indexOf('className="dashboard-live-requests-slot"')
+  );
+  const focusDialogStart = source.indexOf("<LiveRequestsFocusDialog");
+  const requestDetailHandlerStart = source.indexOf("function openRequestDetail");
+  const requestDetailHandlerEnd = source.indexOf(
+    "function closeRequestDetail",
+    requestDetailHandlerStart
+  );
+  const compactView = source.slice(compactViewStart, focusDialogStart);
+  const focusView = source.slice(focusDialogStart);
+  const requestDetailHandler = source.slice(
+    requestDetailHandlerStart,
+    requestDetailHandlerEnd
+  );
+
+  expect(compactView).toContain("onOpenRequest={openFocusView}");
+  expect(focusView).toContain("onOpenRequest={openRequestDetail}");
+  expect(requestDetailHandler).not.toContain("openFocusView()");
+});
+
+test("overview keeps four live KPI cards with month-to-date cost in the final position", async () => {
+  const source = await readFile(overviewSourceUrl, "utf8");
+  const totalCostIndex = source.indexOf("label: text.kpi.totalCost");
+  const totalRequestsIndex = source.indexOf("label: text.kpi.totalRequests");
+  const averageLatencyIndex = source.indexOf("label: text.kpi.averageLatency");
+  const monthCostIndex = source.indexOf("label: text.kpi.monthCost");
+
+  expect(totalCostIndex).toBeGreaterThan(0);
+  expect(totalRequestsIndex).toBeGreaterThan(totalCostIndex);
+  expect(averageLatencyIndex).toBeGreaterThan(totalRequestsIndex);
+  expect(monthCostIndex).toBeGreaterThan(averageLatencyIndex);
+  expect(source).toContain("value: formatMicroUsd(overview.totalCostMicroUsd)");
+  expect(source).toContain("value: formatLatency(overview.averageLatencyMs)");
+  expect(source).toContain("snapshot.monthToDateCostMicroUsd");
+});
+
+test("overview removes the redundant data freshness timestamp from the main header", async () => {
+  const source = await readFile(overviewSourceUrl, "utf8");
+
+  expect(source).not.toContain("dashboard-data-freshness");
+  expect(source).not.toContain("dataAsOf");
+  expect(source).not.toContain("formatDashboardDataAsOf");
+});
+
+test("live requests show the executed model, end-to-end latency, and readable cost only", async () => {
+  const source = await readFile(liveRequestViewSourceUrl, "utf8");
+
+  expect(source).toContain("formatResponseTimeSeconds(row.latencyMs)");
+  expect(source).toContain("formatLiveRequestCostUsd(row.costUsd)");
+  expect(source).toContain('className="dashboard-live-col-cost"');
+  expect(source.match(/colSpan=\{9\}/g)).toHaveLength(2);
+  expect(source).not.toContain("row.ttftMs");
+  expect(source).not.toContain("row.category");
+  expect(source).not.toContain("row.difficulty");
+  expect(source).not.toContain("row.routingReason");
+});
+
+test("live request columns place cost before status and size columns by content length", async () => {
+  const [source, styles] = await Promise.all([
+    readFile(liveRequestViewSourceUrl, "utf8"),
+    readFile(dashboardStylesSourceUrl, "utf8")
+  ]);
+  const tableSource = source.slice(source.indexOf("<colgroup>"), source.indexOf("</table>"));
+
+  expect(tableSource).toMatch(
+    /dashboard-live-col-model[\s\S]*dashboard-live-col-cost[\s\S]*dashboard-live-col-policy[\s\S]*dashboard-live-col-latency[\s\S]*dashboard-live-col-status[\s\S]*dashboard-live-col-action/
+  );
+  expect(tableSource).toMatch(
+    /"Model"[\s\S]*"Cost"[\s\S]*"Policy Result"[\s\S]*"Response time"[\s\S]*"Status"[\s\S]*text\.detail/
+  );
+  expect(tableSource).toMatch(
+    /LiveRequestRouting[\s\S]*formatLiveRequestCostUsd[\s\S]*PolicyBadges[\s\S]*formatResponseTimeSeconds[\s\S]*statusTone/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-time,\s*\.dashboard-live-col-cost,\s*\.dashboard-live-col-latency,\s*\.dashboard-live-col-action \{\s*width: 8%;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-user,\s*\.dashboard-live-col-policy,\s*\.dashboard-live-col-status \{\s*width: 12%;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-col-project,\s*\.dashboard-live-col-model \{\s*width: 16%;\s*\}/
+  );
+  expect(styles).not.toContain("width: calc(100% / 9);");
+});
+
+test("live request status header and cell contents are center aligned", async () => {
+  const styles = await readFile(dashboardStylesSourceUrl, "utf8");
+  const focusStyles = styles.slice(
+    styles.indexOf("/* Live Requests focus workspace and request detail presentation */")
+  );
+
+  expect(focusStyles).toMatch(
+    /\.dashboard-live-requests-table th,\s*\.dashboard-live-requests-table td \{[^}]*text-align: left;/
+  );
+  expect(focusStyles).toMatch(
+    /\.dashboard-live-provider-model \{[^}]*justify-content: flex-start;/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-live-requests-table th:nth-child\(8\),\s*\.dashboard-live-requests-table td:nth-child\(8\) \{[^}]*text-align: center;/
+  );
+});
+
+test("tenant chat live requests preserve provider identity for provider icons", async () => {
+  const source = await readFile(tenantChatLiveRequestsSourceUrl, "utf8");
+
+  expect(source).toContain("const providerId = invocation.providerId?.trim() || null");
+  expect(source).toContain("resolveProviderDisplay(");
+  expect(source).toContain("providerFamily: providerDisplay?.family ?? null");
+  expect(source).toContain("providerName: providerDisplay?.name ?? null");
+  expect(source).toContain("latencyMs: invocation.latencyMs");
+  expect(source).toContain("costUsd: invocation.confirmedCostMicroUsd / 1_000_000");
+});
+
+test("provider usage keeps the existing cost breakdown wired to the redesigned donut", async () => {
+  const [overviewSource, providerUsageSource] = await Promise.all([
+    readFile(overviewSourceUrl, "utf8"),
+    readFile(providerUsageSourceUrl, "utf8")
+  ]);
+
+  expect(overviewSource).toContain("overview.costByModel.map");
+  expect(overviewSource).toContain("costMicroUsd: row.costMicroUsd");
+  expect(providerUsageSource).toContain("value: row.costMicroUsd");
+  expect(providerUsageSource).toContain("formatMicroUsdSummary(totalCostMicroUsd)");
+  expect(providerUsageSource).not.toContain("row.requestCount");
 });
 
 test("dashboard charts merge changed data without replaying unchanged series", async () => {
@@ -43,4 +182,11 @@ test("dashboard charts merge changed data without replaying unchanged series", a
   expect(source).toContain('id: "dashboard-pie-usage"');
   expect(source).toContain('id: "dashboard-cost-spend"');
   expect(source).toContain('id: "dashboard-cost-average"');
+  expect(source).toContain('id: "dashboard-cost-density"');
+  expect(source).toContain("const visibleCostBucketCount = 60");
+  expect(source).toContain("const costWindowThreshold = 64");
+  expect(source).toContain('barWidth: "62%"');
+  expect(source).toContain('type: "slider"');
+  expect(source).toContain("showDataShadow: false");
+  expect(source).toContain("components.DataZoomComponent");
 });

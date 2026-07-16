@@ -1,6 +1,8 @@
+import { validateRagRuntimeConfig, type RagRuntimeConfig } from '@gatelm/rag-config';
+
 type RawEnv = Record<string, string | undefined>;
 
-export type ChatApiEnv = {
+export type ChatApiEnv = RagRuntimeConfig & {
   CHAT_API_PORT: number;
   DATABASE_URL: string;
   TENANT_CHAT_ACCESS_JWT_SECRET: string;
@@ -34,6 +36,7 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
     throw new Error('CHAT_API_PORT must be a valid port.');
   }
   return {
+    ...validateRagRuntimeConfig(env),
     CHAT_API_PORT: port,
     DATABASE_URL: boundedDatabaseUrl(env),
     TENANT_CHAT_ACCESS_JWT_SECRET: strong(env, 'TENANT_CHAT_ACCESS_JWT_SECRET'),

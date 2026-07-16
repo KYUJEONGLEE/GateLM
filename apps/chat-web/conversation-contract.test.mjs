@@ -6,6 +6,8 @@ import {
   conversationPage,
   createConversationBody,
   createTurnBody,
+  MAX_TENANT_CHAT_OUTPUT_TOKENS,
+  messagePage,
   parseIfMatch,
   parsePageQuery,
   strongestPolicyState,
@@ -41,6 +43,39 @@ test('conversation inputs reject browser-provided scope and unknown keys', () =>
     idempotencyKey: '1234567890abcdef',
     usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
   }));
+  assert.throws(() => createTurnBody({
+    content: '질문',
+    contextMode: 'all_history',
+    idempotencyKey: '1234567890abcdef',
+    usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
+  }));
+});
+
+test('turn context mode defaults to conversation and accepts single-turn isolation', () => {
+  const base = {
+    content: '질문',
+    idempotencyKey: '1234567890abcdef',
+    usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
+  };
+  assert.equal(createTurnBody(base).contextMode, 'conversation');
+  assert.equal(createTurnBody({ ...base, contextMode: 'single_turn' }).contextMode, 'single_turn');
+});
+
+test('turn output token limit matches the public Tenant Chat API limit', () => {
+  const base = {
+    content: '질문',
+    idempotencyKey: '1234567890abcdef',
+    usageIntent: { cacheStrategy: 'exact', maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS, requestedTier: 'auto' },
+  };
+  assert.equal(createTurnBody(base).usageIntent.maxOutputTokens, MAX_TENANT_CHAT_OUTPUT_TOKENS);
+  assert.throws(() => createTurnBody({
+    ...base,
+    usageIntent: { ...base.usageIntent, maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS + 1 },
+  }));
+  assert.throws(() => createTurnBody({
+    ...base,
+    usageIntent: { ...base.usageIntent, maxOutputTokens: 0 },
+  }));
 });
 
 test('success response shaping rejects tenant or user scope fields', () => {
@@ -64,6 +99,26 @@ test('policy reducer uses the most severe bounded state', () => {
   assert.equal(strongestPolicyState('normal', 'blocked'), 'blocked');
 });
 
+test('history accepts bounded assistant model metadata and rejects it on user messages', () => {
+  const assistant = messagePage({
+    items: [{
+      id: messageId,
+      turnId,
+      role: 'assistant',
+      content: 'answer',
+      effectiveModelKey: 'gpt-5.4-mini',
+      sequence: 2,
+      createdAt: '2026-07-15T00:00:00.000Z',
+    }],
+    nextCursor: null,
+  });
+  assert.equal(assistant.items[0].effectiveModelKey, 'gpt-5.4-mini');
+  assert.throws(() => messagePage({
+    items: [{ ...assistant.items[0], role: 'user' }],
+    nextCursor: null,
+  }));
+});
+
 test('SSE parser enforces accepted, contiguous deltas, and one terminal event', async () => {
   const deltas = [];
   const acceptedEvents = [];
@@ -73,6 +128,8 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
     frame('chat.turn.final', 3, {
       messageId,
       terminalOutcome: 'succeeded',
+      effectiveModelKey: 'gpt-5.4-mini',
+      cacheOutcome: 'miss',
       quotaState: 'economy',
       budgetState: 'warning',
       replayed: false,
@@ -87,6 +144,34 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
   assert.equal(acceptedEvents[0].userMessageId, userMessageId);
   assert.equal(terminal.type, 'chat.turn.final');
   assert.equal(terminal.quotaState, 'economy');
+  assert.equal(terminal.effectiveModelKey, 'gpt-5.4-mini');
+  assert.equal(terminal.cacheOutcome, 'miss');
+});
+
+test('SSE parser accepts an exact cache hit', async () => {
+  const terminal = await consumeTurnSse(stream([
+    accepted(),
+    frame('chat.turn.final', 2, {
+      messageId,
+      terminalOutcome: 'succeeded',
+      cacheOutcome: 'hit',
+      replayed: false,
+    }),
+  ]), { conversationId });
+  assert.equal(terminal.cacheOutcome, 'hit');
+  assert.equal(terminal.effectiveModelKey, undefined);
+});
+
+test('SSE parser rejects invalid effective model metadata', async () => {
+  await assert.rejects(() => consumeTurnSse(stream([
+    accepted(),
+    frame('chat.turn.final', 2, {
+      messageId,
+      terminalOutcome: 'succeeded',
+      effectiveModelKey: '<provider raw>',
+      replayed: false,
+    }),
+  ]), { conversationId }));
 });
 
 test('SSE parser rejects gaps, mismatched ids, and oversized frames', async () => {

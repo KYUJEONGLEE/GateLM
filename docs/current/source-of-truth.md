@@ -77,6 +77,7 @@ plan/task/acceptance는 current backlog나 완료 evidence가 아니다. 실제 
 - [`../v2.1.0/difficulty-label-guide.md`](../v2.1.0/difficulty-label-guide.md)
 - [`../v2.1.0/schemas/difficulty-label-record.schema.json`](../v2.1.0/schemas/difficulty-label-record.schema.json)
 - [`../v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json`](../v2.1.0/schemas/difficulty-label-dataset-manifest.schema.json)
+- [`../v2.1.0/schemas/difficulty-model-path-role-manifest.schema.json`](../v2.1.0/schemas/difficulty-model-path-role-manifest.schema.json)
 - [`../v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json`](../v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json)
 - [`../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json`](../v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.smoke-manifest.json)
 - `../v2.1.0/fixtures/*.fixture.jsonl`

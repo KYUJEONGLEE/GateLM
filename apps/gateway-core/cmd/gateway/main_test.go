@@ -2,18 +2,235 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 
 	goredis "github.com/redis/go-redis/v9"
 )
+
+type fakeDifficultyE5Encoder struct {
+	instruction string
+	closed      bool
+}
+
+func (encoder *fakeDifficultyE5Encoder) EncodePooled(
+	_ context.Context,
+	instruction string,
+) (routing.DifficultySemanticPooled, error) {
+	encoder.instruction = instruction
+	var pooled routing.DifficultySemanticPooled
+	for index := range pooled {
+		pooled[index] = float32(index%17) / 17
+	}
+	return pooled, nil
+}
+
+func (encoder *fakeDifficultyE5Encoder) Close() error {
+	encoder.closed = true
+	return nil
+}
+
+func TestInitializeDifficultyE5RuntimeIsDisabledWithoutConstructingEncoder(t *testing.T) {
+	called := false
+	runtime, status := initializeDifficultyE5Runtime(
+		context.Background(),
+		config.DifficultyE5RuntimeConfig{},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return nil, errors.New("must not be called")
+		},
+	)
+	if runtime != nil || status != DifficultyE5HotPathRuntimeDisabled || called {
+		t.Fatalf("disabled runtime initialized: runtime=%v status=%q called=%v", runtime, status, called)
+	}
+}
+
+func TestInitializeDifficultyE5RuntimeDegradesInitializationFailureToRuleOnly(t *testing.T) {
+	runtime, status := initializeDifficultyE5Runtime(
+		context.Background(),
+		config.DifficultyE5RuntimeConfig{Enabled: true, Timeout: 10 * time.Millisecond},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			return nil, errors.New("sensitive initialization detail")
+		},
+	)
+	if runtime != nil || status != DifficultyE5HotPathRuntimeUnavailable {
+		t.Fatalf("initialization failure did not degrade safely: runtime=%v status=%q", runtime, status)
+	}
+}
+
+func TestInitializeDifficultyE5RuntimeRunsSmokeAndBecomesReady(t *testing.T) {
+	encoder := &fakeDifficultyE5Encoder{}
+	runtime, status := initializeDifficultyE5Runtime(
+		context.Background(),
+		config.DifficultyE5RuntimeConfig{
+			Enabled:             true,
+			ArtifactRoot:        "/bundle",
+			EncoderManifestPath: "/bundle/manifest.json",
+			RuntimeLockPath:     "/bundle/lock.json",
+			Timeout:             50 * time.Millisecond,
+		},
+		func(bundle e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			if bundle.ArtifactRoot != "/bundle" ||
+				bundle.EncoderManifestPath != "/bundle/manifest.json" ||
+				bundle.RuntimeLockPath != "/bundle/lock.json" {
+				t.Fatalf("unexpected bundle config: %#v", bundle)
+			}
+			return encoder, nil
+		},
+	)
+	if runtime == nil || status != DifficultyE5HotPathRuntimeReady {
+		t.Fatalf("runtime not ready: runtime=%v status=%q", runtime, status)
+	}
+	if encoder.instruction != difficultyE5StartupSmokeInstruction {
+		t.Fatalf("startup smoke input = %q", encoder.instruction)
+	}
+	if err := runtime.Close(context.Background()); err != nil || !encoder.closed {
+		t.Fatalf("close failed: closed=%v err=%v", encoder.closed, err)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowIsDisabledWithoutConstructingEncoder(t *testing.T) {
+	called := false
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return nil, errors.New("must not be called")
+		},
+	)
+	if err != nil || evaluator != nil || called {
+		t.Fatalf("disabled shadow initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowIsDisabledWithoutAllowedScope(t *testing.T) {
+	called := false
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{Enabled: true},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return nil, errors.New("must not be called")
+		},
+	)
+	if err != nil || evaluator != nil || called {
+		t.Fatalf("scope-less shadow initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowRunnerDegradesInitializationFailureToRuleOnly(t *testing.T) {
+	runner, status := initializeDifficultyE5ShadowRunner(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:       true,
+			AllowedScopes: difficultyE5ShadowTestScopes(),
+			Timeout:       10 * time.Millisecond,
+		},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			return nil, errors.New("sensitive initialization detail")
+		},
+		nil,
+	)
+	if runner != nil || status != DifficultyE5ShadowRuntimeUnavailable {
+		t.Fatalf("initialization failure did not degrade safely: runner=%v status=%q", runner, status)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowAcceptsCurrentDecisionBoundary(t *testing.T) {
+	called := false
+	encoder := &fakeDifficultyE5Encoder{}
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:       true,
+			AllowedScopes: difficultyE5ShadowTestScopes(),
+		},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return encoder, nil
+		},
+	)
+	if err != nil || evaluator == nil || !called {
+		t.Fatalf("current boundary not initialized: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+	if err := evaluator.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowIgnoresHistoricalWaiverForCompatibleModel(t *testing.T) {
+	called := false
+	encoder := &fakeDifficultyE5Encoder{}
+	evaluator, err := initializeDifficultyE5Shadow(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:        true,
+			AllowedScopes:  difficultyE5ShadowTestScopes(),
+			BaselineWaiver: routing.DifficultySemanticShadowBaselineE2EWaiverV3,
+		},
+		func(e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			called = true
+			return encoder, nil
+		},
+	)
+	if err != nil || evaluator == nil || !called {
+		t.Fatalf("compatible model not admitted: evaluator=%v called=%v err=%v", evaluator, called, err)
+	}
+	if encoder.instruction != difficultyE5StartupSmokeInstruction {
+		t.Fatalf("startup smoke input = %q", encoder.instruction)
+	}
+	if err := evaluator.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitializeDifficultyE5ShadowRunsSafeInstructionOnlySmoke(t *testing.T) {
+	encoder := &fakeDifficultyE5Encoder{}
+	evaluator, err := initializeDifficultyE5ShadowWithCompatibility(
+		context.Background(),
+		config.DifficultyE5ShadowConfig{
+			Enabled:             true,
+			AllowedScopes:       difficultyE5ShadowTestScopes(),
+			ArtifactRoot:        "/bundle",
+			EncoderManifestPath: "/bundle/manifest.json",
+			RuntimeLockPath:     "/bundle/lock.json",
+		},
+		func(bundle e5onnx.BundleConfig) (routing.DifficultySemanticPooledEncoder, error) {
+			if bundle.ArtifactRoot != "/bundle" ||
+				bundle.EncoderManifestPath != "/bundle/manifest.json" ||
+				bundle.RuntimeLockPath != "/bundle/lock.json" {
+				t.Fatalf("unexpected bundle config: %#v", bundle)
+			}
+			return encoder, nil
+		},
+		func() bool { return true },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evaluator == nil || encoder.instruction != difficultyE5StartupSmokeInstruction {
+		t.Fatalf("startup smoke did not use pinned instruction-only input: %q", encoder.instruction)
+	}
+	if err := evaluator.Close(); err != nil || !encoder.closed {
+		t.Fatalf("close failed: closed=%v err=%v", encoder.closed, err)
+	}
+}
+
+func difficultyE5ShadowTestScopes() []config.DifficultyE5ShadowScope {
+	return []config.DifficultyE5ShadowScope{{
+		TenantID: "tenant_dev", ApplicationID: "application_dev",
+	}}
+}
 
 func TestParsePostgresPoolConfigAppliesBoundsAndIdentity(t *testing.T) {
 	tuning := config.PostgresPoolConfig{

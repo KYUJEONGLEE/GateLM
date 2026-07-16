@@ -17,6 +17,7 @@ from .encoder_runtime import (
     SOURCE_REVISION,
     E5EncoderRuntime,
     build_manifest,
+    encode_pooled_single_requests,
     fit_pca,
     install_network_guard,
     load_runtime,
@@ -49,7 +50,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     fit.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     fit.add_argument("--dataset-manifest", type=Path, default=DEFAULT_DATASET_MANIFEST)
     fit.add_argument("--pca-output", type=Path, default=DEFAULT_PCA_PATH)
-    fit.add_argument("--batch-size", type=int, default=16)
+    fit.add_argument("--batch-size", type=int, choices=[1], default=1)
     fit.add_argument("--go", default="go")
     subcommands.add_parser("verify")
     return parser.parse_args(argv)
@@ -64,6 +65,13 @@ def prepare(artifact_root: Path) -> Path:
     for relative_path, expected_hash in PINNED_SOURCE_HASHES.items():
         target = directory / relative_path
         if not target.is_file() or sha256_file(target) != expected_hash:
+            # huggingface_hub writes download state below local_dir/.cache.
+            # Create the nested parent here because Windows does not create it
+            # reliably for artifact paths such as onnx/model.onnx.
+            (directory / ".cache" / "huggingface" / "download" / relative_path).parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
             target = Path(
                 hf_hub_download(
                     repo_id=MODEL_ID,
@@ -96,15 +104,9 @@ def _encode_pooled_batches(
     instruction_texts: Sequence[str],
     batch_size: int,
 ) -> Any:
-    import numpy as np
-
-    if batch_size <= 0:
-        raise ValueError("batch size must be positive")
-    batches = [
-        runtime.encode_pooled(instruction_texts[index : index + batch_size])
-        for index in range(0, len(instruction_texts), batch_size)
-    ]
-    return np.concatenate(batches, axis=0)
+    if batch_size != 1:
+        raise ValueError("PCA fit requires runtime-equivalent single-request batch size 1")
+    return encode_pooled_single_requests(runtime, instruction_texts)
 
 
 def fit_and_write(args: argparse.Namespace) -> dict[str, Any]:
@@ -144,15 +146,17 @@ def fit_and_write(args: argparse.Namespace) -> dict[str, Any]:
 
 def verify(args: argparse.Namespace) -> None:
     runtime, manifest = load_runtime(manifest_path=args.manifest, artifact_root=args.artifact_root)
-    values = runtime.encode(
-        [
-            "회의록의 결정 사항과 후속 작업을 요약해줘",
-            "Summarize the decision and list the next steps.",
-            "한국어와 English 요구사항을 비교해서 설명해줘",
-        ]
-    )
+    instructions = [
+        "회의록의 결정 사항과 후속 작업을 요약해줘",
+        "Summarize the decision and list the next steps.",
+        "한국어와 English 요구사항을 비교해서 설명해줘",
+    ]
+    pooled = encode_pooled_single_requests(runtime, instructions)
+    if runtime.projection is None:
+        raise ValueError("canonical E5 verification requires PCA projection")
+    values = runtime.projection.transform(pooled)
     if values.shape != (3, 64) or str(values.dtype) != "float32":
-        raise ValueError("canonical E5 integration output must be float32[batch,64]")
+        raise ValueError("canonical E5 integration output must be stacked single-request float32[n,64]")
     validate_manifest(manifest, artifact_root=args.artifact_root, verify_files=True)
 
 

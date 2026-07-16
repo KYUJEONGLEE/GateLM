@@ -23,7 +23,7 @@ export function InvitationForm() {
     event.preventDefault(); if (!invite) return; setBusy(true); setError('');
     const form = new FormData(event.currentTarget);
     try {
-      if (invite.accountState === 'new') {
+      if (invite.accountState !== 'existing') {
         finish(await api<ChatSession>('/api/tenant-chat/invitations/accept-password', { body: JSON.stringify({ name: form.get('name'), password: form.get('password') }), method: 'POST' }));
       } else {
         await api<ChatSession>('/api/tenant-chat/auth/login', { body: JSON.stringify({ email: invite.email, password: form.get('password') }), method: 'POST' });
@@ -40,13 +40,14 @@ export function InvitationForm() {
     {invite && <>
       <div className="info-box"><strong><Building2 className="inline-heading-icon" size={17} aria-hidden />{invite.tenantName}</strong><br />{invite.email}</div>
       <form className="form-stack invitation-form" onSubmit={submit}>
-        {invite.accountState === 'new' && <div className="field"><label htmlFor="name">이름</label><Input id="name" name="name" defaultValue={invite.employeeName ?? ''} autoComplete="name" required /></div>}
-        <div className="field"><label htmlFor="password">{invite.accountState === 'new' ? '새 비밀번호' : '기존 계정 비밀번호'}</label><Input id="password" name="password" type="password" minLength={8} autoComplete={invite.accountState === 'new' ? 'new-password' : 'current-password'} required /></div>
-        <Button disabled={busy} type="submit">{busy ? '처리하는 중…' : invite.accountState === 'new' ? '계정 만들고 시작' : '로그인하고 초대 수락'}</Button>
+        {invite.accountState !== 'existing' && <div className="field"><label htmlFor="name">이름</label><Input id="name" name="name" defaultValue={invite.employeeName ?? ''} autoComplete="name" required /></div>}
+        <div className="field"><label htmlFor="password">{invite.accountState !== 'existing' ? '새 비밀번호' : '기존 계정 비밀번호'}</label><Input id="password" name="password" type="password" minLength={8} autoComplete={invite.accountState !== 'existing' ? 'new-password' : 'current-password'} required /></div>
+        <Button disabled={busy} type="submit">{busy ? '처리하는 중…' : invite.accountState === 'new' ? '계정 만들고 시작' : invite.accountState === 'reclaimable' ? '새 비밀번호 설정하고 시작' : '로그인하고 초대 수락'}</Button>
         <div className="divider" aria-hidden>또는</div>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => { setBusy(true); startGoogle().catch((reason) => { setBusy(false); setError(reason instanceof Error ? reason.message : 'Google 로그인을 시작하지 못했습니다.'); }); }}><span className="google-mark" aria-hidden>G</span> Google로 초대 수락</Button>
       </form>
       {invite.accountState === 'existing' && <p className="helper">기존 계정의 비밀번호나 로그인 제공자는 변경되지 않습니다.</p>}
+      {invite.accountState === 'reclaimable' && <p className="helper">이전 조직 연결이 종료된 계정입니다. 새 비밀번호를 설정하면 이전 로그인은 모두 종료됩니다.</p>}
     </>}
   </Card>;
 }

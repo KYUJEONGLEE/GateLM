@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-gpt-review-packet-manifest.v1",
+  "reviewMode": "blind_independent_label_and_language_review",
+  "candidateLabelsIncluded": false,
+  "classifierOutputsIncluded": false,
+  "records": 3120,
+  "families": 624,
+  "batches": [
+    {
+      "batchId": "t1",
+      "records": 400,
+      "families": 80,
+      "inputFile": "t1.gpt-review.input.jsonl",
+      "inputSha256": "63d41cd55c291dc3a985ee24015e62cdf13d9cde5c0ba66df4bfd8d3b9ef488e",
+      "candidateDatasetSha256": "6754fb5ec1f5d21c366fbd1b86ef4e8bffd16132433a7f109505c7e0a2ad0441",
+      "expectedOutputFile": "t1.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "t2",
+      "records": 400,
+      "families": 80,
+      "inputFile": "t2.gpt-review.input.jsonl",
+      "inputSha256": "a86ea62ec7b0948b09e86d02fe984c105e78d05bee91ee86fd4335e5c8e15b17",
+      "candidateDatasetSha256": "736019b1c3aaaa4d38b7e7e1d6725359cd7c65e7d4d780e96118ddbee87fa3b9",
+      "expectedOutputFile": "t2.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "t3",
+      "records": 400,
+      "families": 80,
+      "inputFile": "t3.gpt-review.input.jsonl",
+      "inputSha256": "b052aadf0fca5b45681a7b7457a13746a5f6e7106cc03f9e9cf8691cc1e5efdd",
+      "candidateDatasetSha256": "5a105c84a63e9ddce6e59e914f405ed692a45365edd267ebe16988c0af73b4c4",
+      "expectedOutputFile": "t3.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "t4",
+      "records": 395,
+      "families": 79,
+      "inputFile": "t4.gpt-review.input.jsonl",
+      "inputSha256": "7cdc623bb929529e2e8a388fa610d2ab46cf6120eab4f283e68aea9dbe8b752e",
+      "candidateDatasetSha256": "a3b2f0a058c06fa36375d14cdb499818149c73c10b5321571550480a4c0dfa07",
+      "expectedOutputFile": "t4.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "c1",
+      "records": 275,
+      "families": 55,
+      "inputFile": "c1.gpt-review.input.jsonl",
+      "inputSha256": "90f4303baef6c658b19a77169e443a49d5117d9b8bf366823837cb29cae2233c",
+      "candidateDatasetSha256": "a3281e7e8b3ab67d5b10a4d03c29fa06452677b98fc476cd36d55c712176f4a9",
+      "expectedOutputFile": "c1.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "c2",
+      "records": 250,
+      "families": 50,
+      "inputFile": "c2.gpt-review.input.jsonl",
+      "inputSha256": "77bcb6692c4b53e87339de07596ac8566956574ed22247d22c32617b2a3ce178",
+      "candidateDatasetSha256": "f379f1ab646a14c3d4247d4cfabd7293dc9bc3955e30ed2910a33cf8a15bd23a",
+      "expectedOutputFile": "c2.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "e1",
+      "records": 375,
+      "families": 75,
+      "inputFile": "e1.gpt-review.input.jsonl",
+      "inputSha256": "b6f4958a7d20ba1f3da875f5ace3435a80ad4593eac3841422a26961c95aa9cf",
+      "candidateDatasetSha256": "108a428daea77515b08a7476acefdb12e7119b03d61f0617724c103ebbd62583",
+      "expectedOutputFile": "e1.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "e2",
+      "records": 375,
+      "families": 75,
+      "inputFile": "e2.gpt-review.input.jsonl",
+      "inputSha256": "ab067bf87a96259e6297df6effa98607831181f45dea6bcd81a4cada78fbbfbe",
+      "candidateDatasetSha256": "9b1e4b4e3c0826a97eb44442ca9d6e46bc8b31bebe0b4b8bacd075dd274a1c53",
+      "expectedOutputFile": "e2.gpt-review.output.jsonl"
+    },
+    {
+      "batchId": "p1",
+      "records": 250,
+      "families": 50,
+      "inputFile": "p1.gpt-review.input.jsonl",
+      "inputSha256": "a28ddbb06d823de8cdf3f0ce57435a56a5275b27a8bd619917216776d85d2427",
+      "candidateDatasetSha256": "9d9c0c2ca5bb86e4407dee514934a970ad049a6efa4e4d29106937f9dbb3c686",
+      "expectedOutputFile": "p1.gpt-review.output.jsonl"
+    }
+  ],
+  "labelGuideFile": "LABEL-GUIDE.md",
+  "labelGuideSha256": "0c08df68f833e002817fcc9766a5b71b685f348f1e61bbf42a578ebb20d4a401",
+  "instructionsFile": "GPT-REVIEW-INSTRUCTIONS.md",
+  "instructionsSha256": "bf7034bf5bc04e6f4aea319e3d69a568b51c1728773d71050e98e7e6093c1f2d",
+  "ownerApprovalStatus": "pending",
+  "trainingEligible": false
+}

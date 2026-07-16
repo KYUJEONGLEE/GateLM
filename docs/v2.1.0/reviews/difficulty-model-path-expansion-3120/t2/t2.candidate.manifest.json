@@ -1,0 +1,803 @@
+{
+  "schemaVersion": "gatelm.difficulty-label-dataset-manifest.v2",
+  "datasetVersion": "difficulty_model_path_expansion_3120_2026_07_15_t2_candidate_v1",
+  "recordSchemaVersion": "gatelm.difficulty-label-record.v2",
+  "datasetPath": "docs/v2.1.0/reviews/difficulty-model-path-expansion-3120/t2/t2.candidate.jsonl",
+  "datasetSha256": "736019b1c3aaaa4d38b7e7e1d6725359cd7c65e7d4d780e96118ddbee87fa3b9",
+  "datasetPurpose": "training_candidate",
+  "trainingEligible": false,
+  "labelCoverageStatus": "complete",
+  "familyPolicyVersion": "difficulty-prompt-family.v1",
+  "splitPolicyVersion": "difficulty-model-path-expansion-family-split.2026-07-15.v1",
+  "splitSeed": 2026071502,
+  "trainingGate": {
+    "minimumFamilyPolicyStatus": "decision_required"
+  },
+  "counts": {
+    "records": 400,
+    "families": 80,
+    "humanReviewedFamilies": 0,
+    "approvedHumanReviewedFamilies": 0,
+    "semanticHeadEligibleRecords": 400,
+    "semanticHeadEligibleFamilies": 80,
+    "emptyInstructionRecords": 0,
+    "emptyInstructionFamilies": 0
+  },
+  "coverage": {
+    "categoryFamilies": {
+      "general": 18,
+      "code": 17,
+      "reasoning": 15,
+      "summarization": 15,
+      "translation": 15
+    },
+    "difficultyFamilies": {
+      "simple": 80,
+      "complex": 80
+    },
+    "categoryDifficultyFamilies": {
+      "general": {
+        "simple": 18,
+        "complex": 18
+      },
+      "code": {
+        "simple": 17,
+        "complex": 17
+      },
+      "reasoning": {
+        "simple": 15,
+        "complex": 15
+      },
+      "summarization": {
+        "simple": 15,
+        "complex": 15
+      },
+      "translation": {
+        "simple": 15,
+        "complex": 15
+      }
+    },
+    "languageFamilies": {
+      "ko": 80,
+      "en": 80,
+      "mixed": 80,
+      "unknown": 0
+    },
+    "evaluationSliceFamilies": {
+      "negation": 48,
+      "indirect_expression": 51,
+      "synonym": 51,
+      "short_complex": 53,
+      "long_simple": 41,
+      "payload_contamination": 33,
+      "korean": 80,
+      "english": 80,
+      "mixed_language": 80,
+      "category_confusion": 49,
+      "ood_terminology": 50
+    }
+  },
+  "families": [
+    {
+      "promptFamily": "modelpath3120.code_debugging.scenario.f0073",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_debugging.scenario.f0074",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_debugging.scenario.f0075",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_debugging.scenario.f0076",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_debugging",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_design.scenario.f0088",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_design",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_explanation.scenario.f0100",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_explanation.scenario.f0103",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0109",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0112",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_generation.scenario.f0114",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_generation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_refactoring.scenario.f0119",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_refactoring.scenario.f0128",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_refactoring",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0130",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_review",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0133",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_review",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0137",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_review",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0138",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_review",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.code_review.scenario.f0141",
+      "expectedCategory": "code",
+      "expectedSemanticLabel": "code_review",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0004",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0008",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0009",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0013",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_explanation.scenario.f0014",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_explanation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0016",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_extraction",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0021",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_extraction",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0025",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_extraction",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_extraction.scenario.f0027",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_extraction",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_other.scenario.f0033",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_other",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_other.scenario.f0034",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_other",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_qa.scenario.f0039",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_qa.scenario.f0041",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_qa.scenario.f0046",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_qa",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_support.scenario.f0052",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_support",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0059",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_transformation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0064",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_transformation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.general_transformation.scenario.f0067",
+      "expectedCategory": "general",
+      "expectedSemanticLabel": "general_transformation",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0142",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_causal",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0145",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_causal",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0151",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_causal",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_causal.scenario.f0153",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_causal",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0154",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0158",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0166",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_comparison.scenario.f0167",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_comparison",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0169",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_constraint_solving",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0173",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_constraint_solving",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_constraint_solving.scenario.f0174",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_constraint_solving",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0182",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_decision.scenario.f0185",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_decision",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_planning.scenario.f0190",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_planning",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.reasoning_planning.scenario.f0194",
+      "expectedCategory": "reasoning",
+      "expectedSemanticLabel": "reasoning_planning",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0206",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_direct.scenario.f0209",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0220",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0225",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0228",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_key_points.scenario.f0230",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_key_points",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0234",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0236",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0239",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0240",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0241",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0243",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_multi_source.scenario.f0244",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_multi_source",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_structured.scenario.f0246",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_structured",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.summarization_structured.scenario.f0247",
+      "expectedCategory": "summarization",
+      "expectedSemanticLabel": "summarization_structured",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0261",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0262",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0266",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0269",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0270",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0271",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0272",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0274",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_direct.scenario.f0277",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_direct",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0281",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0288",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0291",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_localization.scenario.f0294",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_localization",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0306",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "modelpath3120.translation_style_preserving.scenario.f0308",
+      "expectedCategory": "translation",
+      "expectedSemanticLabel": "translation_style_preserving",
+      "reviewStatus": "pending",
+      "humanReviewed": false,
+      "partition": "train",
+      "records": 5
+    }
+  ],
+  "createdAt": "2026-07-15T00:00:00Z"
+}

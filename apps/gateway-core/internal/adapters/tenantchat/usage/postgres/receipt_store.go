@@ -101,6 +101,11 @@ func (s *ReservationStore) RecordUsageReceipt(
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if reservation.State == "reserved" {
+		if err = s.confirmEmployeePendingAttempt(
+			ctx, tx, reservation.Pending.Request, reservation.Pending.ID, receipt.AttemptNo, usage,
+		); err != nil {
+			return tenantchat.UsageReceiptResult{}, err
+		}
 		return s.finishPendingReceipt(ctx, tx, reservation, receipt, now)
 	}
 	return s.finishLateReceipt(ctx, tx, reservation, attempt, receipt, cost, now)
@@ -114,6 +119,7 @@ func lockReceiptReservation(ctx context.Context, tx pgx.Tx, requestID string) (r
 		       reservation.user_id::text, reservation.request_id, reservation.turn_id,
 		       reservation.idempotency_key, reservation.snapshot_version,
 		       reservation.snapshot_digest, reservation.pricing_version,
+		       reservation.cache_outcome,
 		       reservation.user_period_start, reservation.tenant_period_start,
 		       reservation.reserved_tokens, reservation.reserved_cost_micro_usd,
 		       reservation.ledger_version, reservation.state,
@@ -133,7 +139,8 @@ func lockReceiptReservation(ctx context.Context, tx pgx.Tx, requestID string) (r
 		&result.Pending.Request.ExecutionScope.Actor.UserID, &result.Pending.Request.RequestID,
 		&result.Pending.Request.TurnID, &result.Pending.Request.IdempotencyKey,
 		&result.Pending.Request.Snapshot.Version, &result.Pending.Request.Snapshot.Digest,
-		&result.Pending.Reservation.PricingVersion, &result.Pending.Reservation.UserPeriodStart,
+		&result.Pending.Reservation.PricingVersion, &result.Pending.Reservation.CacheOutcome,
+		&result.Pending.Reservation.UserPeriodStart,
 		&result.Pending.Reservation.TenantPeriodStart, &result.Pending.Reservation.ReservedTokens,
 		&result.Pending.Reservation.ReservedCostMicroUSD, &result.Pending.Reservation.LedgerVersion,
 		&result.State, &result.ConfirmedInput, &result.ConfirmedOutput, &result.ConfirmedCost,
@@ -261,6 +268,13 @@ func (s *ReservationStore) finishPendingReceipt(
 	); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	lastAttemptNo := attempts[len(attempts)-1].AttemptNo
+	if err = s.settleEmployeeCost(
+		ctx, tx, reservation.Pending.Request, reservation.Pending.ID,
+		lastAttemptNo, reservation.Pending.Reservation.LedgerVersion,
+	); err != nil {
+		return tenantchat.UsageReceiptResult{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -386,6 +400,16 @@ func (s *ReservationStore) finishLateReceipt(
 	); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	usage := tenantchat.ConfirmedUsage{
+		InputTokens: receipt.InputTokens, OutputTokens: receipt.OutputTokens,
+		CacheReadInputTokens: receipt.CacheReadInputTokens,
+	}
+	if err = s.applyEmployeeLateReceipt(
+		ctx, tx, reservation.Pending.Request, reservation.Pending.ID, receipt.AttemptNo,
+		usage, reservation.Pending.Reservation.LedgerVersion, now,
+	); err != nil {
+		return tenantchat.UsageReceiptResult{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return tenantchat.UsageReceiptResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -417,7 +441,7 @@ func lateReceiptEventPayload(
 		executionScope["employeeId"] = actor.EmployeeID
 	}
 	payload := map[string]any{
-		"eventId": eventID, "schemaVersion": 2, "eventType": "usage_settled", "eventVersion": eventVersion,
+		"eventId": eventID, "schemaVersion": 3, "eventType": "usage_settled", "eventVersion": eventVersion,
 		"occurredAt": now.Format(time.RFC3339Nano), "aggregateId": receipt.RequestID,
 		"requestId": receipt.RequestID, "turnId": reservation.Pending.Request.TurnID,
 		"idempotencyKey": reservation.Pending.Request.IdempotencyKey, "reservationId": reservation.Pending.ID,
@@ -428,6 +452,7 @@ func lateReceiptEventPayload(
 		},
 		"snapshotVersion": reservation.Pending.Request.Snapshot.Version,
 		"pricingVersion":  reservation.Pending.Reservation.PricingVersion,
+		"cacheOutcome":    reservation.Pending.Reservation.CacheOutcome,
 		"quota": map[string]any{
 			"state": quotaState, "reservedTokensDelta": 0,
 			"confirmedInputTokensDelta":  receipt.InputTokens,

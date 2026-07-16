@@ -1,10 +1,55 @@
 export type TenantChatRouteTier = 'high_quality' | 'standard' | 'economy';
 export type TenantChatCacheStrategy = 'off' | 'exact';
+export type TenantChatRoutingMode = 'auto' | 'manual';
+export type TenantChatRoutingCategory =
+  | 'general'
+  | 'code'
+  | 'translation'
+  | 'summarization'
+  | 'reasoning';
+export type TenantChatRoutingDifficulty = 'simple' | 'complex';
+export type TenantChatPricingStatus = 'available' | 'unavailable';
+export type TenantChatSafetyDetectorType =
+  | 'email'
+  | 'phone_number'
+  | 'postal_address'
+  | 'person_name'
+  | 'organization_name'
+  | 'resident_registration_number'
+  | 'api_key'
+  | 'authorization_header'
+  | 'jwt'
+  | 'private_key';
+export type TenantChatSafetyAction = 'allow' | 'redact' | 'block';
+
+export interface TenantChatSafetyDetector {
+  detectorType: TenantChatSafetyDetectorType;
+  action: TenantChatSafetyAction;
+}
+
+export interface TenantChatRoutingCell {
+  modelRefs: string[];
+}
+
+export type TenantChatRoutingMatrix = Record<
+  TenantChatRoutingCategory,
+  Record<TenantChatRoutingDifficulty, TenantChatRoutingCell>
+>;
+
+export interface TenantChatRoutingPolicyV2Bridge {
+  schemaVersion: 'gatelm.routing-policy.v2';
+  mode: TenantChatRoutingMode;
+  bootstrapState: 'mock_bootstrap' | 'configured';
+  routingPolicyHash: string;
+  routes: TenantChatRoutingMatrix;
+}
 
 export interface TenantChatPricingRoute {
   routeId: string;
   providerId: string;
   modelKey: string;
+  pricingStatus?: TenantChatPricingStatus;
+  pricingSource?: 'model_pricing_rules' | 'bundled' | 'unavailable';
   inputMicroUsdPerMillionTokens: number;
   outputMicroUsdPerMillionTokens: number;
   cacheReadInputMicroUsdPerMillionTokens?: number;
@@ -21,7 +66,8 @@ export interface TenantChatPricing {
 
 export interface TenantChatRuntimeRoute {
   routeId: string;
-  tier: TenantChatRouteTier;
+  tier?: TenantChatRouteTier;
+  modelRef?: string;
   providerId: string;
   modelKey: string;
   enabled: boolean;
@@ -55,6 +101,8 @@ export interface TenantChatRuntimePolicies {
   };
   routing: {
     routes: TenantChatRuntimeRoute[];
+    policy?: TenantChatRoutingPolicyV2Bridge;
+    manualModelRef?: string;
   };
   fallback: {
     enabled: boolean;
@@ -79,20 +127,7 @@ export interface TenantChatRuntimePolicies {
   safety: {
     enabled: boolean;
     policyDigest: string;
-    detectorSet: Array<{
-      detectorType:
-        | 'email'
-        | 'phone_number'
-        | 'postal_address'
-        | 'person_name'
-        | 'organization_name'
-        | 'resident_registration_number'
-        | 'api_key'
-        | 'authorization_header'
-        | 'jwt'
-        | 'private_key';
-      action: 'allow' | 'redact' | 'block';
-    }>;
+    detectorSet: TenantChatSafetyDetector[];
   };
   streaming: {
     enabled: boolean;
@@ -132,8 +167,10 @@ export interface TenantChatAdminModelPricing {
 }
 
 export interface TenantChatAdminModelCandidate {
+  modelRef: string;
   modelKey: string;
-  activationStatus: 'available' | 'pricing_unavailable';
+  activationStatus: 'available';
+  pricingStatus: TenantChatPricingStatus;
   pricing: TenantChatAdminModelPricing | null;
 }
 
@@ -155,6 +192,22 @@ export interface TenantChatAdminActiveSnapshot {
   modelKey: string;
   publishedAt: string;
   pricingStatus: 'current' | 'update_available' | 'unavailable';
+  routingMode: TenantChatRoutingMode;
+  manualModelRef: string;
+  routes: TenantChatRoutingMatrix;
+  cachePolicy: TenantChatAdminCachePolicy;
+  safetyPolicy: TenantChatAdminSafetyPolicy;
+  cacheEnabled: boolean;
+}
+
+export interface TenantChatAdminCachePolicy {
+  enabled: boolean;
+  ttlSeconds: number;
+  maxEntriesPerUser: number;
+}
+
+export interface TenantChatAdminSafetyPolicy {
+  detectorSet: TenantChatSafetyDetector[];
 }
 
 export interface TenantChatAdminRuntimeSetup {
@@ -165,7 +218,13 @@ export interface TenantChatAdminRuntimeSetup {
 
 export interface ActivateTenantChatRuntimeInput {
   tenantId: string;
-  providerConnectionId: string;
-  modelKey: string;
+  providerConnectionId?: string;
+  modelKey?: string;
+  routingMode?: TenantChatRoutingMode;
+  manualModelRef?: string;
+  routes?: TenantChatRoutingMatrix;
+  cachePolicy?: TenantChatAdminCachePolicy;
+  safetyPolicy?: TenantChatAdminSafetyPolicy;
+  cacheEnabled?: boolean;
   publishedBy: string;
 }

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "gatelm.difficulty-owner-approval.v1",
+  "batchId": "t3",
+  "candidateDatasetSha256": "5a105c84a63e9ddce6e59e914f405ed692a45365edd267ebe16988c0af73b4c4",
+  "decisionScope": "entire_batch_with_record_level_adjudication_exceptions",
+  "status": "pending",
+  "owner": null,
+  "decidedAt": null,
+  "decisionNote": null,
+  "adjudications": [],
+  "labelChangeHistory": [],
+  "trainingEligibleAfterApproval": false,
+  "promotionRequiresSeparateMaterialization": true
+}

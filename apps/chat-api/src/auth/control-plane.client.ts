@@ -129,8 +129,7 @@ export class ControlPlaneClient {
       if (Buffer.byteLength(text) > MAX_RESPONSE_BYTES) throw new Error('response_too_large');
       const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
       if (!response.ok) {
-        const code = typeof payload.code === 'string' ? payload.code : 'CHAT_ENTITLEMENT_UNAVAILABLE';
-        const message = typeof payload.message === 'string' ? payload.message : 'Tenant Chat identity request failed.';
+        const { code, message } = controlPlaneError(payload);
         throw new HttpException({ code, message }, response.status);
       }
       return (payload.data ?? payload) as T;
@@ -142,6 +141,28 @@ export class ControlPlaneClient {
       );
     }
   }
+}
+
+function controlPlaneError(payload: Record<string, unknown>): {
+  code: string;
+  message: string;
+} {
+  const nested = isRecord(payload.error) ? payload.error : undefined;
+  const source = nested ?? payload;
+  return {
+    code:
+      typeof source.code === 'string'
+        ? source.code
+        : 'CHAT_ENTITLEMENT_UNAVAILABLE',
+    message:
+      typeof source.message === 'string'
+        ? source.message
+        : 'Tenant Chat identity request failed.',
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function positiveInteger(value: unknown): value is number {

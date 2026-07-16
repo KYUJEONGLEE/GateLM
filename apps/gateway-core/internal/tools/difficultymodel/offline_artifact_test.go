@@ -7,11 +7,161 @@ import (
 	"go/token"
 	"go/types"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestGatewayShadow106DCodegenPinsAndRendersFrozenSelection(t *testing.T) {
+	t.Parallel()
+	artifact := readGatewayShadow106DArtifact(t)
+	if err := ValidateGatewayShadow106DArtifact(artifact); err != nil {
+		t.Fatal(err)
+	}
+	generated, err := RenderGatewayShadow106DGo(artifact, "routing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(generated)
+	for _, marker := range []string{
+		"generatedDifficultySemanticModel106D",
+		"pcaMean: [difficultySemanticPooledDimension]float32",
+		"pcaComponents: [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32",
+		"finalWeights: [difficultySemanticTotalDimension]float64",
+		GatewayShadow106DArtifactVersion,
+		GatewayShadow106DBundleHash,
+		GatewayShadow106DContentHash,
+		GatewayShadow106DProjectionHash,
+		GatewayShadow106DSemanticHeadsHash,
+		GatewayShadow106DDecisionBoundaryVersion,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("generated Gateway shadow Go is missing %q", marker)
+		}
+	}
+	if strings.Contains(text, "semanticHeadCoefficients") {
+		t.Fatal("selected 106D hot path compiled unused semantic-head parameters")
+	}
+	typeCheckGatewayShadow106DGeneratedGo(t, generated)
+}
+
+func TestGatewayShadow106DCodegenRejectsIdentityDrift(t *testing.T) {
+	t.Parallel()
+	base := readGatewayShadow106DArtifact(t)
+	tests := map[string]func(*OfflineArtifact){
+		"candidate":      func(artifact *OfflineArtifact) { artifact.CandidateName = OfflineCandidateProjectionAndHeads },
+		"dimension":      func(artifact *OfflineArtifact) { artifact.TotalDimension = 118 },
+		"calibrator":     func(artifact *OfflineArtifact) { artifact.Calibrator.Type = "isotonic" },
+		"threshold":      func(artifact *OfflineArtifact) { artifact.Threshold = 0.45 },
+		"training split": func(artifact *OfflineArtifact) { artifact.SplitPolicyVersion = "drift.v1" },
+		"bundle hash":    func(artifact *OfflineArtifact) { artifact.BundleHash = "sha256:" + strings.Repeat("0", 64) },
+	}
+	for name, mutate := range tests {
+		name := name
+		mutate := mutate
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			artifact := base
+			mutate(&artifact)
+			if err := ValidateGatewayShadow106DArtifact(artifact); err == nil {
+				t.Fatal("drifted Gateway shadow artifact was accepted")
+			}
+		})
+	}
+}
+
+func readGatewayShadow106DArtifact(t *testing.T) OfflineArtifact {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(
+		"..", "..", "..", "..", "..",
+		"scripts", "routing_difficulty_model", "artifacts", "candidates",
+		"difficulty-candidate-b-106d.model-path-5000.shadow.v1.json",
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := ParseOfflineArtifact(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return artifact
+}
+
+func TestGatewayShadow118DCodegenPinsAndRendersSelectedBundle(t *testing.T) {
+	t.Parallel()
+	artifact := readGatewayShadow118DArtifact(t)
+	if err := ValidateGatewayShadow118DArtifact(artifact); err != nil {
+		t.Fatal(err)
+	}
+	generated, err := RenderGatewayShadow118DGo(artifact, "routing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(generated)
+	for _, marker := range []string{
+		"generatedDifficultySemanticModel118D",
+		"pcaMean: [difficultySemanticPooledDimension]float32",
+		"pcaComponents: [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32",
+		"semanticHeadCoefficients: [difficultySemanticHeadCount][difficultySemanticHeadClassCount][difficultySemanticProjectionDimension]float64",
+		"finalWeights: [difficultySemanticTotalDimension]float64",
+		GatewayShadow118DArtifactVersion,
+		GatewayShadow118DBundleHash,
+		GatewayShadow118DContentHash,
+		GatewayShadow118DProjectionHash,
+		GatewayShadow118DSemanticHeadsHash,
+		GatewayShadow118DDecisionBoundaryVersion,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("generated Gateway shadow Go is missing %q", marker)
+		}
+	}
+	typeCheckGatewayShadow118DGeneratedGo(t, generated)
+}
+
+func TestGatewayShadow118DCodegenRejectsIdentityDrift(t *testing.T) {
+	t.Parallel()
+	base := readGatewayShadow118DArtifact(t)
+
+	tests := map[string]func(*OfflineArtifact){
+		"candidate":   func(artifact *OfflineArtifact) { artifact.CandidateName = OfflineCandidateProjection },
+		"dimension":   func(artifact *OfflineArtifact) { artifact.TotalDimension = 117 },
+		"calibrator":  func(artifact *OfflineArtifact) { artifact.Calibrator.Type = "isotonic" },
+		"threshold":   func(artifact *OfflineArtifact) { artifact.Threshold = 0.5 },
+		"bundle hash": func(artifact *OfflineArtifact) { artifact.BundleHash = "sha256:" + strings.Repeat("0", 64) },
+	}
+	for name, mutate := range tests {
+		name := name
+		mutate := mutate
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			artifact := base
+			mutate(&artifact)
+			if err := ValidateGatewayShadow118DArtifact(artifact); err == nil {
+				t.Fatal("drifted Gateway shadow artifact was accepted")
+			}
+		})
+	}
+}
+
+func readGatewayShadow118DArtifact(t *testing.T) OfflineArtifact {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(
+		"..", "..", "..", "..", "..",
+		"scripts", "routing_difficulty_model", "artifacts", "candidates",
+		"difficulty-candidate-c-118d.owner-approved-500.v3.json",
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := ParseOfflineArtifact(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return artifact
+}
 
 func TestValidateOfflineArtifactSupportsFixedCandidates(t *testing.T) {
 	t.Parallel()
@@ -370,5 +520,121 @@ type difficultyOfflineLogisticModel struct {
 	}
 	if _, err := (&types.Config{}).Check("routing", fileSet, files, nil); err != nil {
 		t.Fatalf("generated Go did not type-check: %v\n%s", err, generated)
+	}
+}
+
+func typeCheckGatewayShadow118DGeneratedGo(t *testing.T, generated []byte) {
+	t.Helper()
+	stub := []byte(`package routing
+const difficultySemanticPooledDimension = 384
+const difficultySemanticProjectionDimension = 64
+const difficultySemanticHeadCount = 4
+const difficultySemanticHeadClassCount = 3
+const difficultySemanticTotalDimension = 118
+type difficultySemanticModelIdentity struct {
+    artifactVersion string
+    decisionBoundaryVersion string
+    candidateName string
+    ruleVectorVersion string
+    preprocessingVersion string
+    tokenizerVersion string
+    encoderVersion string
+    poolingVersion string
+    projectionVersion string
+    semanticHeadsVersion string
+    calibrationVersion string
+    thresholdPolicyVersion string
+    thresholdEquality string
+    ruleVectorHash string
+    tokenizerHash string
+    encoderHash string
+    projectionHash string
+    semanticHeadsHash string
+    bundleVersion string
+    bundleHash string
+    contentHash string
+}
+type difficultySemanticModelMaterial struct {
+    identity difficultySemanticModelIdentity
+    featureNames [difficultySemanticTotalDimension]string
+    semanticHeadNames [difficultySemanticHeadCount]string
+    semanticHeadClasses [difficultySemanticHeadCount][difficultySemanticHeadClassCount]string
+    pcaMean [difficultySemanticPooledDimension]float32
+    pcaComponents [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32
+    l2Epsilon float32
+    semanticHeadCoefficients [difficultySemanticHeadCount][difficultySemanticHeadClassCount][difficultySemanticProjectionDimension]float64
+    semanticHeadIntercepts [difficultySemanticHeadCount][difficultySemanticHeadClassCount]float64
+    finalWeights [difficultySemanticTotalDimension]float64
+    finalBias float64
+    plattCoefficient float64
+    plattIntercept float64
+    threshold float64
+}`)
+	fileSet := token.NewFileSet()
+	files := make([]*ast.File, 0, 2)
+	for name, source := range map[string][]byte{"stub.go": stub, "generated.go": generated} {
+		file, err := parser.ParseFile(fileSet, name, source, parser.AllErrors)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		files = append(files, file)
+	}
+	if _, err := (&types.Config{}).Check("routing", fileSet, files, nil); err != nil {
+		t.Fatalf("generated Gateway shadow Go did not type-check: %v", err)
+	}
+}
+
+func typeCheckGatewayShadow106DGeneratedGo(t *testing.T, generated []byte) {
+	t.Helper()
+	stub := []byte(`package routing
+const difficultySemanticPooledDimension = 384
+const difficultySemanticProjectionDimension = 64
+const difficultySemanticTotalDimension = 106
+type difficultySemanticModelIdentity struct {
+    artifactVersion string
+    decisionBoundaryVersion string
+    candidateName string
+    ruleVectorVersion string
+    preprocessingVersion string
+    tokenizerVersion string
+    encoderVersion string
+    poolingVersion string
+    projectionVersion string
+    semanticHeadsVersion string
+    calibrationVersion string
+    thresholdPolicyVersion string
+    thresholdEquality string
+    ruleVectorHash string
+    tokenizerHash string
+    encoderHash string
+    projectionHash string
+    semanticHeadsHash string
+    bundleVersion string
+    bundleHash string
+    contentHash string
+}
+type difficultySemanticModelMaterial struct {
+    identity difficultySemanticModelIdentity
+    featureNames [difficultySemanticTotalDimension]string
+    pcaMean [difficultySemanticPooledDimension]float32
+    pcaComponents [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32
+    l2Epsilon float32
+    finalWeights [difficultySemanticTotalDimension]float64
+    finalBias float64
+    plattCoefficient float64
+    plattIntercept float64
+    threshold float64
+}`)
+	fileSet := token.NewFileSet()
+	files := make([]*ast.File, 0, 2)
+	for name, source := range map[string][]byte{"stub.go": stub, "generated.go": generated} {
+		file, err := parser.ParseFile(fileSet, name, source, parser.AllErrors)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		files = append(files, file)
+	}
+	if _, err := (&types.Config{}).Check("routing", fileSet, files, nil); err != nil {
+		t.Fatalf("generated Gateway shadow Go did not type-check: %v", err)
 	}
 }
