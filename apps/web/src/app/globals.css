@@ -9663,7 +9663,7 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-screen .request-table {
-  font-size: 120%;
+  font-size: 150%;
 }
 
 .request-log-screen .request-table :is(th, td),
@@ -19335,7 +19335,7 @@ html:has(.tenant-management-content) {
 }
 
 .tenant-management-content #tenant-routing-model-title {
-  font-size: 35px;
+  font-size: 30px;
 }
 
 .tenant-routing-model-heading p,
