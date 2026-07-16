@@ -27,7 +27,7 @@ test('runs an authenticated turn and removes the smoke conversation', async () =
     password: 'test-only-password',
   });
 
-  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(result, { cacheVerified: false, ok: true });
   assert.deepEqual(fake.calls.map((call) => `${call.method} ${call.path}`), [
     'GET /login',
     'POST /api/tenant-chat/auth/login',
@@ -39,6 +39,24 @@ test('runs an authenticated turn and removes the smoke conversation', async () =
     'POST /api/tenant-chat/auth/logout',
   ]);
   assert.equal(fake.calls[6].headers.get('if-match'), '"2"');
+});
+
+test('verifies a unique exact-cache miss followed by a hit', async () => {
+  const fake = fakeTenantChat();
+  const result = await runProductionTenantChatSmoke({
+    email: 'smoke@example.com',
+    fetchImpl: fake.fetch,
+    origin: 'https://chat.example.com',
+    password: 'test-only-password',
+    verifyCache: true,
+  });
+
+  assert.deepEqual(result, { cacheVerified: true, ok: true });
+  const turns = fake.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/turns'));
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0].body.content, turns[1].body.content);
+  assert.equal(turns[0].body.usageIntent.cacheStrategy, 'exact');
+  assert.equal(turns[1].body.usageIntent.cacheStrategy, 'exact');
 });
 
 test('fails on a runtime terminal error but still cleans up', async () => {
@@ -74,19 +92,23 @@ test('rejects a non-HTTPS production origin before making a request', async () =
 
 function fakeTenantChat(terminalErrorCode) {
   const calls = [];
+  let turnCount = 0;
   return {
     calls,
     fetch: async (input, init = {}) => {
       const url = new URL(input);
       const method = init.method ?? 'GET';
       const headers = new Headers(init.headers);
-      calls.push({ headers, method, path: url.pathname });
+      const body = typeof init.body === 'string' && headers.get('content-type') === 'application/json'
+        ? JSON.parse(init.body)
+        : undefined;
+      calls.push({ body, headers, method, path: url.pathname });
 
       if (method === 'GET' && url.pathname === '/login') {
         return json({}, 200, 'gatelm_chat_csrf=csrf-token; Path=/; SameSite=Strict');
       }
       if (method === 'POST' && url.pathname === '/api/tenant-chat/auth/login') {
-        assert.deepEqual(JSON.parse(init.body), { email: 'smoke@example.com', password: 'test-only-password' });
+        assert.deepEqual(body, { email: 'smoke@example.com', password: 'test-only-password' });
         return json(session, 200, [
           'gatelm_chat_access=access-token; Path=/; HttpOnly',
           'gatelm_chat_refresh=refresh-token; Path=/; HttpOnly',
@@ -98,7 +120,11 @@ function fakeTenantChat(terminalErrorCode) {
         return json({ id: conversationId, version: 1 }, 201);
       }
       if (method === 'POST' && url.pathname.endsWith('/turns')) {
-        return sse(terminalErrorCode);
+        turnCount += 1;
+        const cacheOutcome = body?.usageIntent?.cacheStrategy === 'exact'
+          ? turnCount === 1 ? 'miss' : 'hit'
+          : 'off';
+        return sse(terminalErrorCode, cacheOutcome);
       }
       if (method === 'GET' && url.pathname === `/api/tenant-chat/conversations/${conversationId}`) {
         return json({ id: conversationId, version: 2 });
@@ -118,7 +144,7 @@ function json(value, status = 200, setCookie) {
   return new Response(JSON.stringify(value), { headers, status });
 }
 
-function sse(errorCode) {
+function sse(errorCode, cacheOutcome = 'off') {
   const accepted = {
     conversationId,
     replayed: false,
@@ -135,6 +161,7 @@ function sse(errorCode) {
     turnId,
     type: 'chat.turn.error',
   } : {
+    cacheOutcome,
     conversationId,
     messageId,
     replayed: false,
