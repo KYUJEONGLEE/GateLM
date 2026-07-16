@@ -10,20 +10,41 @@ import {
   localSecretsTargetFromGitCommonDirectory,
   resolveTenantChatLocalSecretsTarget,
 } from './generate-tenant-chat-local-secrets.mjs';
+import { validateTenantChatCacheKeySet } from './validate-tenant-chat-cache-keyset.mjs';
 
 test('atomically creates split private/public and Gateway support secrets', async () => {
   const root = await mkdtemp(join(tmpdir(), 'gatelm-secret-helper-'));
   const target = join(root, 'tenant-chat');
   try {
-    const result = await generateTenantChatLocalSecrets({ target, kid: 'test-kid' });
+    const result = await generateTenantChatLocalSecrets({
+      target,
+      kid: 'test-kid',
+      cacheKeySetId: 'test-cache-key-set',
+    });
     assert.deepEqual(result.files.sort(), [
       'binding-hmac-keys.json', 'cache-keysets.json', 'content-keys.json', 'jwks.json',
       'signing.jwk.json', 'usage-receipt-token',
     ].sort());
     const privateJwk = JSON.parse(await readFile(join(target, 'signing.jwk.json'), 'utf8'));
     const publicJwks = JSON.parse(await readFile(join(target, 'jwks.json'), 'utf8'));
+    const cacheKeySets = JSON.parse(await readFile(join(target, 'cache-keysets.json'), 'utf8'));
     assert.equal(privateJwk.d.length > 0, true);
     assert.equal('d' in publicJwks.keys[0], false);
+    assert.equal(cacheKeySets.keySets[0].keySetId, 'test-cache-key-set');
+    assert.deepEqual(
+      await validateTenantChatCacheKeySet({
+        expectedId: 'test-cache-key-set',
+        keySetsFile: join(target, 'cache-keysets.json'),
+      }),
+      { expectedKeySetId: 'test-cache-key-set', keySetCount: 1, status: 'aligned' },
+    );
+    await assert.rejects(
+      validateTenantChatCacheKeySet({
+        expectedId: 'unavailable-cache-key-set',
+        keySetsFile: join(target, 'cache-keysets.json'),
+      }),
+      /Configured Tenant Chat cache key-set is unavailable/,
+    );
     if (process.platform !== 'win32') {
       assert.equal((await stat(target)).mode & 0o777, 0o700);
     }
@@ -65,6 +86,8 @@ test('local Compose and wrapper use the resolved shared secret directory', async
   assert.match(compose, /GATELM_TENANT_CHAT_LOCAL_SECRET_DIR/);
   assert.match(wrapper, /--resolve-target/);
   assert.match(wrapper, /GATELM_TENANT_CHAT_LOCAL_SECRET_DIR/);
+  assert.match(wrapper, /validate-tenant-chat-cache-keyset\.mjs/);
+  assert.match(wrapper, /TENANT_CHAT_CACHE_KEY_SET_ID/);
 });
 
 async function gitCommonDirectory(repositoryRoot) {

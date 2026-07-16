@@ -48,6 +48,7 @@ Replace:
 - `CONTROL_PLANE_INTERNAL_SERVICE_TOKEN`
 - `TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN`
 - `TENANT_CHAT_WEB_SERVICE_TOKEN`
+- `TENANT_CHAT_CACHE_KEY_SET_ID` (keep `tenant_chat_cache_keys_v1` unless performing a documented rotation)
 - `TENANT_CHAT_ACCESS_JWT_SECRET`
 - `TENANT_CHAT_INTENT_SECRET`
 - `TENANT_CHAT_WORKLOAD_ACTIVE_KID`
@@ -92,14 +93,21 @@ content encryption, cache, and usage receipt files once from `deploy/aws-triage`
 ```bash
 node ../../scripts/dev/generate-tenant-chat-local-secrets.mjs \
   --target=.secrets/tenant-chat \
-  --kid=tenant-chat-production-1
+  --kid=tenant-chat-production-1 \
+  --cache-key-set-id=tenant_chat_cache_keys_v1
+node ../../scripts/dev/validate-tenant-chat-cache-keyset.mjs \
+  --env-file=.env \
+  --keysets-file=.secrets/tenant-chat/cache-keysets.json
 chmod 700 .secrets/tenant-chat
 chmod 600 .secrets/tenant-chat/*
 id -u
 id -g
 ```
 
-The generated directory is gitignored. Never copy its private JWK, HMAC keys,
+The generated directory is gitignored. `TENANT_CHAT_CACHE_KEY_SET_ID`, the
+published RuntimeSnapshot `policies.cache.keySetId`, and one logical ID in
+`cache-keysets.json` must agree; deployment preflight enforces the file/env
+part before building images. Never copy its private JWK, HMAC keys,
 cache keys, or usage receipt token into `.env`, Git, logs, or deployment
 evidence. The deployment preflight rejects missing, empty, or group/world-readable
 secret files before building images. Set `TENANT_CHAT_RUNTIME_UID` and
@@ -112,6 +120,15 @@ Generate this directory only once. After encrypted Tenant Chat rows exist, repla
 `content-keys.json` with newly generated material under the same version makes the
 rows unavailable. Rotation must retain the previous reader key and follow the
 reader-first sequence in `docs/tenant-chat/execution-contract.md`.
+
+Do not regenerate `cache-keysets.json` to fix an ID mismatch. Preserve the
+existing key material and use the production-approved cache key-set maintenance
+workflow to add a compatible logical alias. Its `check` action is read-only;
+`apply` creates mode-`600` backups before changing `.env` and the key-set file,
+then recreates only Control Plane and Gateway. `rollback` requires the exact
+backup ID emitted by `apply`; it may restore the previous environment selection
+but deliberately retains the additive alias so a rollback cannot recreate the
+same runtime outage.
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
