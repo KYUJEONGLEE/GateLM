@@ -130,14 +130,14 @@ services:
 
 secrets:
   tenant_chat_workload_signing_jwk:
-    file: .secrets/tenant-chat/signing.jwk.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/signing.jwk.json
   tenant_chat_workload_jwks:
-    file: .secrets/tenant-chat/jwks.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/jwks.json
   tenant_chat_binding_hmac_keys:
-    file: .secrets/tenant-chat/binding-hmac-keys.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/binding-hmac-keys.json
   tenant_chat_cache_keysets:
-    file: .secrets/tenant-chat/cache-keysets.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/cache-keysets.json
   tenant_chat_content_keys:
-    file: .secrets/tenant-chat/content-keys.json
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/content-keys.json
   tenant_chat_usage_receipt_token:
-    file: .secrets/tenant-chat/usage-receipt-token
+    file: ${GATELM_TENANT_CHAT_LOCAL_SECRET_DIR:-.secrets/tenant-chat}/usage-receipt-token

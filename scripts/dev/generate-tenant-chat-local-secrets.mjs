@@ -1,10 +1,14 @@
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 export async function generateTenantChatLocalSecrets(options = {}) {
-  const target = resolve(options.target ?? '.secrets/tenant-chat');
+  const target = await resolveTenantChatLocalSecretsTarget(options);
   const kid = options.kid ?? 'tenant-chat-local-1';
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(kid)) throw new Error('kid must be an opaque ID.');
   const staging = join(dirname(target), `.tenant-chat-${randomUUID()}.tmp`);
@@ -63,6 +67,30 @@ export async function generateTenantChatLocalSecrets(options = {}) {
   }
 }
 
+export async function resolveTenantChatLocalSecretsTarget(options = {}) {
+  if (options.target) return resolve(options.target);
+  const cwd = resolve(options.cwd ?? '.');
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync(
+      'git',
+      ['-C', cwd, 'rev-parse', '--git-common-dir'],
+      { encoding: 'utf8', windowsHide: true },
+    ));
+  } catch {
+    throw new Error('Could not resolve the shared Git directory for Tenant Chat local secrets.');
+  }
+  const commonDirectory = stdout.trim();
+  if (!commonDirectory) {
+    throw new Error('Could not resolve the shared Git directory for Tenant Chat local secrets.');
+  }
+  return localSecretsTargetFromGitCommonDirectory(resolve(cwd, commonDirectory));
+}
+
+export function localSecretsTargetFromGitCommonDirectory(commonDirectory) {
+  return join(dirname(resolve(commonDirectory)), '.secrets', 'tenant-chat');
+}
+
 async function exists(path) {
   try {
     await access(path);
@@ -75,9 +103,17 @@ async function exists(path) {
 async function main() {
   const targetArgument = process.argv.find((value) => value.startsWith('--target='));
   const kidArgument = process.argv.find((value) => value.startsWith('--kid='));
-  const result = await generateTenantChatLocalSecrets({
+  const options = {
     target: targetArgument?.slice('--target='.length),
     kid: kidArgument?.slice('--kid='.length),
+  };
+  if (process.argv.includes('--resolve-target')) {
+    const target = await resolveTenantChatLocalSecretsTarget(options);
+    process.stdout.write(`${JSON.stringify({ status: 'resolved', directory: target })}\n`);
+    return;
+  }
+  const result = await generateTenantChatLocalSecrets({
+    ...options,
   });
   process.stdout.write(`${JSON.stringify({
     status: 'created',

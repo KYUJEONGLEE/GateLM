@@ -108,6 +108,10 @@ and `id -g`. Gateway and Chat API use that non-root identity so file-backed
 Compose secrets remain readable without relaxing the `700` directory and `600`
 file modes. The production deployment script verifies that all six files have
 one non-root owner and passes the detected UID/GID to Compose automatically.
+Generate this directory only once. After encrypted Tenant Chat rows exist, replacing
+`content-keys.json` with newly generated material under the same version makes the
+rows unavailable. Rotation must retain the previous reader key and follow the
+reader-first sequence in `docs/tenant-chat/execution-contract.md`.
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
@@ -646,6 +650,8 @@ curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8080/readyz
 curl -fsS http://127.0.0.1:3000/
 curl -fsS http://127.0.0.1:3002/
+docker compose --env-file .env exec -T chat-api node -e \
+  "fetch('http://127.0.0.1:3003/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 ```
 
 Browser checks from your machine, only if the matching Security Group sources are restricted:
@@ -719,7 +725,7 @@ The workflow is intentionally gated:
 
 ```text
 main push -> ci passes -> production approval -> GitHub OIDC -> AWS SSM
--> database backup -> sequential image build -> migrations -> cutover
+-> paired database + Tenant Chat secret backup -> sequential image build -> migrations -> cutover
 -> local/public health checks
 ```
 
@@ -762,15 +768,17 @@ only the resulting SSM command.
 
 The remote `scripts/deploy-main.sh` command keeps the existing containers alive
 while it builds each image sequentially. Before migrations it stores a custom
-PostgreSQL dump, the protected `.env`, the previous SHA, and protected rollback image tags
-under `/home/ubuntu/gatelm-deploy-backups`. A pre-cutover failure leaves the old
+PostgreSQL dump, the protected `.env`, the six Tenant Chat secret files with mode
+`600`, the previous SHA, and protected rollback image tags under
+`/home/ubuntu/gatelm-deploy-backups`. A pre-cutover failure leaves the old
 containers running. A failed post-cutover health check restores the previous
 application image tags and recreates the previous containers. Temporary rollback
 tags are removed only after a successful deployment or successful rollback.
 
 Database migrations are forward-only. Application rollback does not reverse a
-schema migration; use the recorded PostgreSQL dump for a deliberate database
-restore. Deployment logs remain on the instance under
+schema migration; use the PostgreSQL dump and Tenant Chat secret directory from
+the same deployment backup for a deliberate paired restore. Never restore either
+side independently. Deployment logs remain on the instance under
 `/home/ubuntu/gatelm-deploy-logs`.
 
 If Provider registration shows `Provider credential encryption backend is not configured`, set
@@ -803,5 +811,5 @@ Stopping the EC2 instance stops compute charges, but the EBS volume still exists
 - Gateway success can come from mock fallback; inspect Gateway metadata when testing live providers
 - Chat authentication state is authoritative in PostgreSQL; Redis is not a session store
 - Chat API is private-only and must not be added to Caddy or a public Security Group rule
-- this path has no managed backup, centralized logs, or multi-instance availability
+- this path has no managed off-host backup, centralized logs, or multi-instance availability; deployment backups remain on the same host
 - HTTPS/domain support is host-level triage configuration, not a production ALB/ACM deployment
