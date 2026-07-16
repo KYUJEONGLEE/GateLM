@@ -91,6 +91,11 @@ func main() {
 	}
 	metricsRegistry := metrics.NewRegistry()
 	difficultyE5InitCtx, difficultyE5InitCancel := context.WithTimeout(context.Background(), difficultyE5StartupSmokeTimeout)
+	difficultyE5Runtime, difficultyE5RuntimeStatus := initializeDifficultyE5Runtime(
+		difficultyE5InitCtx,
+		cfg.DifficultyE5Runtime,
+		e5onnx.NewEncoder,
+	)
 	difficultyE5ShadowRunner, difficultyE5ShadowStatus := initializeDifficultyE5ShadowRunner(
 		difficultyE5InitCtx,
 		cfg.DifficultyE5Shadow,
@@ -105,6 +110,12 @@ func main() {
 		}),
 	)
 	difficultyE5InitCancel()
+	if difficultyE5RuntimeStatus == DifficultyE5HotPathRuntimeUnavailable {
+		log.Printf("gateway-core difficulty E5 hot-path runtime unavailable; auto routing falls back to rule difficulty")
+	}
+	if difficultyE5Runtime != nil {
+		log.Printf("gateway-core difficulty E5 hot-path runtime initialized; 106D model difficulty is authoritative for eligible auto routes")
+	}
 	if difficultyE5ShadowStatus == DifficultyE5ShadowRuntimeUnavailable {
 		log.Printf("gateway-core difficulty E5 shadow unavailable; product routing unchanged")
 	}
@@ -237,6 +248,9 @@ func main() {
 	if difficultyE5ShadowRunner != nil {
 		routerOptions = append(routerOptions, app.WithDifficultySemanticShadow(difficultyE5ShadowRunner))
 	}
+	if difficultyE5Runtime != nil {
+		routerOptions = append(routerOptions, app.WithDifficultySemanticRuntime(difficultyE5Runtime))
+	}
 	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
 		gatewayCredentials := cachedauth.NewStore(postgresauth.NewStore(postgresPool), cachedauth.Config{
 			Enabled:    cfg.AuthCache.Enabled,
@@ -365,6 +379,13 @@ func main() {
 		}
 		shadowCloseCancel()
 	}
+	if difficultyE5Runtime != nil {
+		runtimeCloseCtx, runtimeCloseCancel := context.WithTimeout(context.Background(), time.Second)
+		if err := difficultyE5Runtime.Close(runtimeCloseCtx); err != nil {
+			log.Printf("gateway-core difficulty E5 hot-path runtime shutdown incomplete")
+		}
+		runtimeCloseCancel()
+	}
 	if asyncTerminalLogWriter != nil {
 		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)
 		defer logCloseCancel()
@@ -385,8 +406,38 @@ const (
 	DifficultyE5ShadowRuntimeUnavailable = "unavailable"
 )
 
+const (
+	DifficultyE5HotPathRuntimeDisabled    = "disabled"
+	DifficultyE5HotPathRuntimeReady       = "ready"
+	DifficultyE5HotPathRuntimeUnavailable = "unavailable"
+)
+
 type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
 type difficultyE5ModelCompatibility func() bool
+
+func initializeDifficultyE5Runtime(
+	ctx context.Context,
+	cfg config.DifficultyE5RuntimeConfig,
+	factory difficultyE5EncoderFactory,
+) (*routingdomain.DifficultySemanticRuntime, string) {
+	if !cfg.Enabled {
+		return nil, DifficultyE5HotPathRuntimeDisabled
+	}
+	if !routingdomain.DifficultySemanticShadowModelCompatible() || factory == nil {
+		return nil, DifficultyE5HotPathRuntimeUnavailable
+	}
+	evaluator, err := initializeDifficultyE5Evaluator(
+		ctx,
+		cfg.ArtifactRoot,
+		cfg.EncoderManifestPath,
+		cfg.RuntimeLockPath,
+		factory,
+	)
+	if err != nil {
+		return nil, DifficultyE5HotPathRuntimeUnavailable
+	}
+	return routingdomain.NewDifficultySemanticRuntime(evaluator, cfg.Timeout), DifficultyE5HotPathRuntimeReady
+}
 
 func initializeDifficultyE5ShadowRunner(
 	ctx context.Context,
@@ -433,10 +484,26 @@ func initializeDifficultyE5ShadowWithCompatibility(
 	if factory == nil {
 		return nil, errors.New("unavailable")
 	}
+	return initializeDifficultyE5Evaluator(
+		ctx,
+		cfg.ArtifactRoot,
+		cfg.EncoderManifestPath,
+		cfg.RuntimeLockPath,
+		factory,
+	)
+}
+
+func initializeDifficultyE5Evaluator(
+	ctx context.Context,
+	artifactRoot string,
+	encoderManifestPath string,
+	runtimeLockPath string,
+	factory difficultyE5EncoderFactory,
+) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
 	encoder, err := factory(e5onnx.BundleConfig{
-		ArtifactRoot:        cfg.ArtifactRoot,
-		EncoderManifestPath: cfg.EncoderManifestPath,
-		RuntimeLockPath:     cfg.RuntimeLockPath,
+		ArtifactRoot:        artifactRoot,
+		EncoderManifestPath: encoderManifestPath,
+		RuntimeLockPath:     runtimeLockPath,
 	})
 	if err != nil {
 		return nil, errors.New("unavailable")
