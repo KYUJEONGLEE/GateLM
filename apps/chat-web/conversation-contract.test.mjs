@@ -62,6 +62,10 @@ test('turn output token limit matches the public Tenant Chat API limit', () => {
     ...base,
     usageIntent: { ...base.usageIntent, maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS + 1 },
   }));
+  assert.throws(() => createTurnBody({
+    ...base,
+    usageIntent: { ...base.usageIntent, maxOutputTokens: 0 },
+  }));
 });
 
 test('success response shaping rejects tenant or user scope fields', () => {
