@@ -16,8 +16,18 @@ import type { RoutingProviderOption } from "./runtime-policy-editor-types";
 export type RoutingModelOption = {
   family: string;
   label: string;
+  modelName: string;
   modelRef: string;
+  providerConnectionId: string;
+  providerDisplayName: string;
   providerName: string;
+};
+
+export type RoutingProviderModelOption = {
+  displayName: string;
+  family: string;
+  models: RoutingModelOption[];
+  providerConnectionId: string;
 };
 
 export function areRuntimePolicyDraftValuesEqual(
@@ -110,13 +120,40 @@ export function getRoutingModelOptions(
       options.set(modelRef, {
         family: getProviderConnectionFamily(providerConnection),
         label: `${displayName} / ${modelId}`,
+        modelName: modelId,
         modelRef,
+        providerConnectionId: providerConnection.id,
+        providerDisplayName: displayName,
         providerName
       });
     }
   }
 
   return Array.from(options.values());
+}
+
+export function groupRoutingModelOptionsByProvider(
+  modelOptions: RoutingModelOption[]
+): RoutingProviderModelOption[] {
+  const providers = new Map<string, RoutingProviderModelOption>();
+
+  for (const modelOption of modelOptions) {
+    const provider = providers.get(modelOption.providerConnectionId);
+
+    if (provider) {
+      provider.models.push(modelOption);
+      continue;
+    }
+
+    providers.set(modelOption.providerConnectionId, {
+      displayName: modelOption.providerDisplayName,
+      family: modelOption.family,
+      models: [modelOption],
+      providerConnectionId: modelOption.providerConnectionId
+    });
+  }
+
+  return Array.from(providers.values());
 }
 
 export function getSelectedRoutingProviderConnections(

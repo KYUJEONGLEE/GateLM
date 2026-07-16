@@ -121,13 +121,19 @@ test("all active tenant provider models are available as routing candidates", ()
     {
       family: "openai",
       label: "openai-main / gpt-4o-mini",
+      modelName: "gpt-4o-mini",
       modelRef: "provider-openai:gpt-4o-mini",
+      providerConnectionId: "provider-openai",
+      providerDisplayName: "openai-main",
       providerName: "openai-main"
     },
     {
       family: "gemini",
       label: "gemini-main / gemini-2.5-flash",
+      modelName: "gemini-2.5-flash",
       modelRef: "provider-gemini:gemini-2.5-flash",
+      providerConnectionId: "provider-gemini",
+      providerDisplayName: "gemini-main",
       providerName: "gemini-main"
     }
   ]);

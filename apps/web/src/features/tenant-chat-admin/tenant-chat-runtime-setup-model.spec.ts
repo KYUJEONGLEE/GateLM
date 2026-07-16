@@ -100,6 +100,7 @@ test("active snapshot wins on reload", () => {
       publishedAt: "2026-07-14T00:00:00Z",
       snapshotId: "snapshot-fixture",
       version: 5,
+      cachePolicy: { enabled: true, maxEntriesPerUser: 100, ttlSeconds: 300 },
       manualModelRef: "tc_gemini_flash",
       routingMode: "auto",
       routes: {
@@ -108,6 +109,12 @@ test("active snapshot wins on reload", () => {
         translation: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
         summarization: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
         reasoning: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } }
+      },
+      safetyPolicy: {
+        detectorSet: [
+          { action: "redact", detectorType: "email" },
+          { action: "block", detectorType: "api_key" }
+        ]
       }
     },
     readiness: "ready"
@@ -254,31 +261,38 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
-test("Chat App cache policy reuses the shared existing policy card", async () => {
+test("Chat App policy navigation exposes editable routing, cache, and security policies", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const runtimeEditorSourceUrl = new URL("../policies/components/runtime-policy-editor.tsx", import.meta.url);
+  const [source, runtimeEditorSource] = await Promise.all([
+    readFile(componentSourceUrl, "utf8"),
+    readFile(runtimeEditorSourceUrl, "utf8")
+  ]);
+
+  expect(source).toContain('const chatAppPolicySections: ChatAppPolicySection[] = [');
+  expect(source).toContain('"routing",\n  "cache",\n  "security"');
+  expect(source).toContain('securityTab: "보안"');
+  expect(source).toContain("<CachePolicyControls");
+  expect(source).toContain("<SafetyDetectorPolicyControls");
+  expect(source).not.toContain("ChatAppPolicySummary");
+  expect(runtimeEditorSource).toContain('safetyTab: "Security"');
+  expect(runtimeEditorSource).toContain('safetyTab: "보안"');
+  expect(runtimeEditorSource).not.toContain('safetyTab: "안전"');
+});
+
+test("Chat App cache policy reuses the shared existing policy card", async () => {
   const cachePanelSourceUrl = new URL("../policies/components/runtime-policy-panels/cache-panel.tsx", import.meta.url);
   const sharedCardSourceUrl = new URL("../policies/components/exact-cache-toggle-card.tsx", import.meta.url);
-  const [componentSource, cachePanelSource, sharedCardSource] = await Promise.all([
-    readFile(componentSourceUrl, "utf8"),
+  const [cachePanelSource, sharedCardSource] = await Promise.all([
     readFile(cachePanelSourceUrl, "utf8"),
     readFile(sharedCardSourceUrl, "utf8")
   ]);
 
-  expect(componentSource).toContain("<ExactCacheToggleCard");
   expect(cachePanelSource).toContain("<ExactCacheToggleCard");
   expect(sharedCardSource).toContain("DatabaseZap");
   expect(sharedCardSource).toContain('className="policy-cache-card"');
   expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
   expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
-});
-
-test("Chat App publishes routing and cache policy in one request", async () => {
-  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
-  const source = await readFile(componentSourceUrl, "utf8");
-
-  expect(source).toContain("JSON.stringify({ cacheEnabled, manualModelRef, routes, routingMode })");
-  expect(source).toContain('publish: "Publish Chat App policy"');
-  expect(source).toContain('publish: "채팅 앱 정책 발행"');
 });
 
 test("Chat App routing explains the simple and complex difficulty criteria", async () => {
@@ -352,6 +366,19 @@ test("Chat App routing publish recovers from a Control Plane network failure", a
   expect(source).toContain("} finally {\n      setPending(false);");
 });
 
+test("Chat App cache and security tabs publish the Tenant Chat snapshot policy", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source).toContain("<CachePolicyControls");
+  expect(source).toContain("<SafetyDetectorPolicyControls");
+  expect(source).toContain("showSemanticCache={false}");
+  expect(source).toContain("allowPlaceholderEditing={false}");
+  expect(source).toContain("cachePolicy,");
+  expect(source).toContain("safetyPolicy: toTenantChatSafetyPolicy(detectors)");
+  expect(source).not.toContain("ChatAppPolicySummary");
+});
+
 function setupWithRoutes(): TenantChatAdminRuntimeSetup {
   return {
     ...setup,
@@ -366,6 +393,7 @@ function setupWithRoutes(): TenantChatAdminRuntimeSetup {
       publishedAt: "2026-07-16T00:00:00Z",
       snapshotId: "snapshot-fallback-fixture",
       version: 1,
+      cachePolicy: { enabled: false, maxEntriesPerUser: 100, ttlSeconds: 300 },
       manualModelRef: "tc_gemini_flash",
       routingMode: "auto",
       routes: {
@@ -374,6 +402,12 @@ function setupWithRoutes(): TenantChatAdminRuntimeSetup {
         translation: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
         summarization: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
         reasoning: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } }
+      },
+      safetyPolicy: {
+        detectorSet: [
+          { action: "redact", detectorType: "email" },
+          { action: "block", detectorType: "api_key" }
+        ]
       }
     }
   };

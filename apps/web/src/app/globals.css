@@ -19198,6 +19198,13 @@ html:has(.tenant-management-content) {
   padding-bottom: var(--space-4);
 }
 
+.chat-app-policy-form {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+  padding-bottom: var(--space-4);
+}
+
 .routing-migration-alert [data-slot="alert-description"] {
   gap: 14px;
   width: 100%;
@@ -19431,7 +19438,6 @@ html:has(.tenant-management-content) {
 }
 
 .tenant-routing-switch[data-slot="switch"] {
-  position: relative;
   width: 48px;
   height: 28px;
   overflow: hidden;
@@ -19445,21 +19451,18 @@ html:has(.tenant-management-content) {
 }
 
 .tenant-routing-switch [data-slot="switch-thumb"] {
-  position: absolute;
-  top: 2px;
-  left: 2px;
+  --tw-translate-x: 3px;
+  --tw-translate-y: 0px;
   width: 22px;
   height: 22px;
   background: var(--surface);
-  --tw-translate-x: 0px !important;
-  --tw-translate-y: 0px !important;
-  transform: none !important;
-  transition: left 150ms ease;
+  transform: none;
+  transition: translate 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.tenant-routing-switch:is([data-checked], [aria-checked="true"])
-  [data-slot="switch-thumb"] {
-  left: 22px;
+.tenant-routing-switch[data-checked] [data-slot="switch-thumb"] {
+  --tw-translate-x: 23px;
+  transform: none;
 }
 
 .tenant-routing-model-card {
@@ -19784,6 +19787,14 @@ html:has(.tenant-management-content) {
 }
 
 .policy-routing-model-choice[data-has-icon="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.policy-routing-model-selectors > label {
+  min-width: 0;
+}
+
+.routing-migration-manual-grid .policy-routing-model-selectors {
   grid-template-columns: minmax(0, 1fr);
 }
 
