@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Coins,
   Database,
-  Eye,
   RotateCw
 } from "lucide-react";
 import Link from "next/link";
@@ -394,31 +393,19 @@ export function RequestLogTable({
                 </Link>
               </div>
 
-              <div className="request-log-pagination">
-                <Link
-                  aria-disabled={currentPage <= 1}
-                  aria-label={text.previousPage}
-                  className="request-log-page-link"
-                  data-disabled={currentPage <= 1}
-                  href={requestLogPageHref(tenantId, filters, currentPage - 1)}
-                >
-                  <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.4} />
-                </Link>
-                <span>{pageSummary}</span>
-                <Link
-                  aria-disabled={currentPage >= pageCount}
-                  aria-label={text.nextPage}
-                  className="request-log-page-link"
-                  data-disabled={currentPage >= pageCount}
-                  href={requestLogPageHref(tenantId, filters, currentPage + 1)}
-                >
-                  <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
-                </Link>
-              </div>
             </RequestLogFilterForm>
 
             <div className="table-wrap">
               <table className="data-table request-table">
+                <colgroup>
+                  <col className="request-log-col-time" />
+                  <col className="request-log-col-name" />
+                  <col className="request-log-col-project" />
+                  <col className="request-log-col-model" />
+                  <col className="request-log-col-status" />
+                  <col className="request-log-col-latency" />
+                  <col className="request-log-col-cost" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>{text.table.time}</th>
@@ -428,18 +415,17 @@ export function RequestLogTable({
                     <th>{text.table.status}</th>
                     <th>{text.table.latency}</th>
                     <th>{text.table.cost}</th>
-                    <th aria-label={text.table.actions} />
                   </tr>
                 </thead>
                 <tbody>
                   {sourceState === "unavailable" ? (
                     <tr>
-                      <td colSpan={8}>{text.table.unavailable}</td>
+                      <td colSpan={7}>{text.table.unavailable}</td>
                     </tr>
                   ) : null}
                   {sourceState === "ready" && records.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{text.table.empty}</td>
+                      <td colSpan={7}>{text.table.empty}</td>
                     </tr>
                   ) : null}
                   {pageRecords.map((record) => {
@@ -452,9 +438,23 @@ export function RequestLogTable({
                       : undefined;
 
                     return (
-                      <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
+                      <tr
+                        data-request-log-row
+                        data-selected={isSelected ? "true" : undefined}
+                        key={record.requestId}
+                      >
                         <td className="request-log-time-cell">
-                          {formatShortTime(record.createdAt, timezone)}
+                          <Link
+                            className="request-log-row-link"
+                            data-request-log-anchor
+                            data-request-log-project-id={record.projectId}
+                            data-request-log-request-id={record.requestId}
+                            href={detailHref}
+                            scroll={false}
+                          >
+                            <span>{formatShortTime(record.createdAt, timezone)}</span>
+                            <span className="sr-only">{`${text.table.actions}: ${displayRequestId}`}</span>
+                          </Link>
                         </td>
                         <td>
                           {record.endUserId ? (
@@ -497,24 +497,32 @@ export function RequestLogTable({
                           </dl>
                         </td>
                         <td>{formatMicroUsd(record.costMicroUsd)}</td>
-                        <td className="request-log-action-cell">
-                          <Link
-                            aria-label={`${text.table.actions}: ${displayRequestId}`}
-                            className="request-log-action-link"
-                            data-request-log-anchor
-                            data-request-log-project-id={record.projectId}
-                            data-request-log-request-id={record.requestId}
-                            href={detailHref}
-                            scroll={false}
-                          >
-                            <Eye aria-hidden="true" size={16} strokeWidth={2.3} />
-                          </Link>
-                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="request-log-pagination">
+              <Link
+                aria-disabled={currentPage <= 1}
+                aria-label={text.previousPage}
+                className="request-log-page-link"
+                data-disabled={currentPage <= 1}
+                href={requestLogPageHref(tenantId, filters, currentPage - 1)}
+              >
+                <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.4} />
+              </Link>
+              <span>{pageSummary}</span>
+              <Link
+                aria-disabled={currentPage >= pageCount}
+                aria-label={text.nextPage}
+                className="request-log-page-link"
+                data-disabled={currentPage >= pageCount}
+                href={requestLogPageHref(tenantId, filters, currentPage + 1)}
+              >
+                <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
+              </Link>
             </div>
             <div className="request-log-list-end" role="status">
               <span>{text.rangeEndLabel}</span>
