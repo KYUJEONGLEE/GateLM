@@ -17,7 +17,7 @@ const markdownComponents = {
   },
 };
 
-export function MarkdownMessage({ content }) {
+export function MarkdownMessage({ content = '' }) {
   return createElement(
     'div',
     { className: 'message-markdown' },
