@@ -36,6 +36,14 @@ func TestRunGeneratesAndChecksGatewayShadow106DBundle(t *testing.T) {
 	if exitCode := run(append(args, "-check"), &stdout, &stderr); exitCode != 0 {
 		t.Fatalf("check exit=%d stderr=%s", exitCode, stderr.String())
 	}
+	crlfGenerated := bytes.ReplaceAll(generated, []byte("\n"), []byte("\r\n"))
+	if err := os.WriteFile(outputPath, crlfGenerated, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	if exitCode := run(append(args, "-check"), &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("check rejected CRLF-only output exit=%d stderr=%s", exitCode, stderr.String())
+	}
 }
 
 func TestRunGeneratesAndChecksGatewayShadow118DBundle(t *testing.T) {

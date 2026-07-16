@@ -93,10 +93,12 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
     executedModelCell.locator('.dashboard-live-provider-icon[data-family="openai"]')
   ).toHaveCount(1);
 
-  await compact.getByRole("button", { name: "실시간 요청 확대 화면 열기" }).click();
+  const drawer = page.locator(".request-detail-drawer");
+  await compact.getByRole("button", { name: "요청 상세 열기 req-live-1" }).click();
 
   const focus = page.locator(".live-requests-focus-dialog");
   await expect(focus).toBeVisible();
+  await expect(drawer).toBeHidden();
   await expect
     .poll(async () => (await focus.boundingBox())?.width ?? 0)
     .toBeGreaterThanOrEqual(1795);
@@ -127,7 +129,6 @@ test("opens Focus View and nested Request Detail drawer at the intended desktop 
   });
   await targetDetail.click();
 
-  const drawer = page.locator(".request-detail-drawer");
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "요청 상세" })).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "요청 흐름" })).toBeVisible();
