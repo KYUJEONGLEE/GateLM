@@ -9059,13 +9059,6 @@ html[data-theme="dark"] .request-log-screen {
   width: 12.8%;
 }
 
-.request-log-screen .request-table th:first-child,
-.request-log-screen .request-table td:first-child {
-  width: 104px;
-  min-width: 104px;
-  max-width: 104px;
-}
-
 .request-log-screen .request-table th,
 .request-log-screen .request-table td {
   padding: 17px 16px;
@@ -9108,20 +9101,10 @@ html[data-theme="dark"] .request-log-screen {
   text-decoration: none;
 }
 
-.request-log-row-link::after {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  content: "";
-}
-
 .request-log-row-link:focus-visible {
-  outline: none;
-}
-
-.request-log-row-link:focus-visible::after {
   outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 .request-log-screen .request-link {
