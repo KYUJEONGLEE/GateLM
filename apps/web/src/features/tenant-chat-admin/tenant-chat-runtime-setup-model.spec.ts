@@ -426,6 +426,7 @@ test("Chat App cache and security tabs publish the Tenant Chat snapshot policy",
   expect(source).toContain("<SafetyDetectorPolicyControls");
   expect(source).toContain("showSemanticCache={false}");
   expect(source).toContain("allowPlaceholderEditing={false}");
+  expect(source).toContain("return { enabled: true, maxEntriesPerUser: 100, ttlSeconds: 300 };");
   expect(source).toContain("cachePolicy,");
   expect(source).toContain("safetyPolicy: toTenantChatSafetyPolicy(detectors)");
   expect(source).not.toContain("ChatAppPolicySummary");

@@ -893,7 +893,7 @@ const mandatoryRuntimePolicyDetectorTypes = new Set<RuntimePolicyDetector["type"
 ]);
 
 function defaultCachePolicy(): TenantChatAdminCachePolicy {
-  return { enabled: false, maxEntriesPerUser: 100, ttlSeconds: 300 };
+  return { enabled: true, maxEntriesPerUser: 100, ttlSeconds: 300 };
 }
 
 function toRuntimePolicyDetectors(
