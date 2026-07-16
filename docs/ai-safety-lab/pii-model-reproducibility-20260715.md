@@ -144,4 +144,3 @@ Apache-2.0 조건을 지키면 사내 및 상업적 사용이 가능하지만, l
 - `scripts/tenant_chat_pii_models/run_ai_service.ps1`: offline AI Service 실행
 - `ai-service/requirements-pii-model.lock`: 전체 Python pin
 - `reports/`: prompt/value를 제외한 aggregate 평가·latency evidence
-
