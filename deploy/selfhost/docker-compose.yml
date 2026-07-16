@@ -2,7 +2,7 @@ name: gatelm-selfhost
 
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:0.8.5-pg16-trixie@sha256:073acab878025cadf03fe6fed01babaaa285b8d09ddc9c43882cf02d409546d7
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
