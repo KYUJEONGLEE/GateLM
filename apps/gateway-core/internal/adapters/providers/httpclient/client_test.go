@@ -8,7 +8,6 @@ import (
 
 func TestNewBuildsBoundedReusableProviderTransport(t *testing.T) {
 	cfg := Config{
-		RequestTimeout:        60 * time.Second,
 		MaxIdleConns:          512,
 		MaxIdleConnsPerHost:   256,
 		MaxConnsPerHost:       256,
@@ -21,8 +20,8 @@ func TestNewBuildsBoundedReusableProviderTransport(t *testing.T) {
 	}
 	client := New(cfg)
 
-	if client.Timeout != cfg.RequestTimeout {
-		t.Fatalf("unexpected request timeout: %s", client.Timeout)
+	if client.Timeout != 0 {
+		t.Fatalf("provider client must leave request deadlines to adapter contexts: %s", client.Timeout)
 	}
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {

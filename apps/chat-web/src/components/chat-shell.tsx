@@ -29,6 +29,7 @@ import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import {
   consumeTurnSse,
   isBlockedCode,
+  MAX_TENANT_CHAT_OUTPUT_TOKENS,
   safeChatError,
   strongestPolicyState,
   type Conversation,
@@ -319,7 +320,7 @@ export function ChatShell() {
           content,
           contextMode,
           idempotencyKey: idempotencyKey(),
-          usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
+          usageIntent: { cacheStrategy: 'exact', maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS, requestedTier: 'auto' },
         }),
         method: 'POST',
         signal: controller.signal,

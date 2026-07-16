@@ -1,5 +1,6 @@
 export type PolicyState = 'normal' | 'warning' | 'economy' | 'blocked';
 export type SafeChatError = Readonly<{ code: string; message: string; retryAfterSeconds?: number }>;
+export const MAX_TENANT_CHAT_OUTPUT_TOKENS: 8192;
 export type TurnEvent = Readonly<Record<string, unknown> & {
   type: 'chat.turn.accepted' | 'chat.turn.delta' | 'chat.turn.final' | 'chat.turn.error' | 'chat.turn.cancelled';
   conversationId: string;

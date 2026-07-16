@@ -174,13 +174,14 @@ GATEWAY_PROVIDER_IDLE_CONN_TIMEOUT_MS=90000
 GATEWAY_PROVIDER_DIAL_TIMEOUT_MS=5000
 GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS=30000
 GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS=10000
-GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS=<GATEWAY_PROVIDER_TIMEOUT_MS>
+GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS=0 (default; set only for an explicit global header cap)
 ```
 
 The transport keeps proxy behavior and HTTP/2 negotiation from Go's default
-transport while bounding connections per Provider host. Limits must be tuned
-against the Provider's own concurrency and rate limits; raising them does not
-override an upstream quota.
+transport while bounding connections per Provider host. Provider adapters own
+request deadlines from their runtime target; the optional header cap must not
+be set below that deadline. Limits must be tuned against the Provider's own
+concurrency and rate limits; raising them does not override an upstream quota.
 
 The isolated performance Compose profile replaces the thread-per-request
 Python mock with the repository's Node 22 no-op mock. It retains the configured
