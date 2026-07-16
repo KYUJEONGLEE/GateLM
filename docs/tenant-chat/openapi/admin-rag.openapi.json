@@ -1,0 +1,347 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "GateLM Tenant Chat Admin RAG Document API",
+    "version": "tenant-chat/v1",
+    "description": "Tenant-admin upload, list, status, and asynchronous hard-delete contract for Tenant Chat RAG documents."
+  },
+  "security": [{ "adminSession": [] }],
+  "paths": {
+    "/admin/v1/tenants/{tenantId}/rag/documents": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "description": "Tenant scope authorized from the administrator session; it is never accepted in the request body.",
+          "schema": { "type": "string", "format": "uuid" }
+        }
+      ],
+      "post": {
+        "operationId": "uploadTenantRagDocument",
+        "summary": "Stream a TXT or PDF original into private object storage and enqueue ingestion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": { "$ref": "#/components/schemas/UploadDocumentRequest" },
+              "encoding": {
+                "file": { "contentType": "text/plain, application/pdf" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The original is durable, the Document is UPLOADED and one INGEST Job is PENDING.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DocumentEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidUpload" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "409": { "$ref": "#/components/responses/UploadConflict" },
+          "413": { "$ref": "#/components/responses/DocumentTooLarge" },
+          "503": { "$ref": "#/components/responses/DocumentServiceUnavailable" }
+        }
+      },
+      "get": {
+        "operationId": "listTenantRagDocuments",
+        "summary": "List safe document metadata for the authorized tenant",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The previous page's last safe documentId. It is tenant-scoped and never contains an internal database ID.",
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded page ordered by createdAt descending with documentId as the stable tie-breaker.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DocumentListEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidCursor" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "503": { "$ref": "#/components/responses/DocumentServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/v1/tenants/{tenantId}/rag/documents/{documentId}": {
+      "parameters": [
+        {
+          "name": "tenantId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "format": "uuid" }
+        },
+        {
+          "name": "documentId",
+          "in": "path",
+          "required": true,
+          "description": "Safe public UUID, never the RagDocument internal primary key.",
+          "schema": { "type": "string", "format": "uuid" }
+        }
+      ],
+      "get": {
+        "operationId": "getTenantRagDocument",
+        "summary": "Read safe status metadata for one tenant document",
+        "responses": {
+          "200": {
+            "description": "Safe tenant-scoped document status.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DocumentEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidDocumentId" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "404": { "$ref": "#/components/responses/DocumentNotFound" },
+          "503": { "$ref": "#/components/responses/DocumentServiceUnavailable" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTenantRagDocument",
+        "summary": "Logically delete a tenant document and enqueue asynchronous hard deletion",
+        "responses": {
+          "202": {
+            "description": "The document is DELETING and exactly one durable DELETE Job owns the opaque object-key snapshot. Repeating DELETE while DELETING returns the same safe document resource.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DocumentEnvelope" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidDocumentId" },
+          "401": { "$ref": "#/components/responses/AuthenticationRequired" },
+          "403": { "$ref": "#/components/responses/TenantScopeForbidden" },
+          "404": { "$ref": "#/components/responses/DocumentNotFound" },
+          "503": { "$ref": "#/components/responses/DocumentServiceUnavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "adminSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "gatelm_session",
+        "description": "Full Control Plane administrator session. AdminAuthGuard authorizes the route tenant before controller execution."
+      }
+    },
+    "schemas": {
+      "UploadDocumentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file"],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "Non-empty streamed upload. The effective RAG_MAX_UPLOAD_BYTES is 1 through 20971520 bytes and cannot exceed 20 MiB."
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Optional NFC-normalized display name. When absent, the validated and normalized original filename is used."
+          }
+        }
+      },
+      "RagDocumentStatus": {
+        "type": "string",
+        "enum": [
+          "UPLOADING",
+          "UPLOADED",
+          "EXTRACTING",
+          "CHUNKING",
+          "EMBEDDING",
+          "INDEXING",
+          "READY",
+          "FAILED",
+          "DELETING"
+        ]
+      },
+      "RagDocument": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "documentId",
+          "displayName",
+          "mimeType",
+          "sizeBytes",
+          "status",
+          "failureCode",
+          "failureMessage",
+          "uploadedBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Server-generated RagDocument.publicId."
+          },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "mimeType": { "type": "string", "enum": ["text/plain", "application/pdf"] },
+          "sizeBytes": { "type": "integer", "format": "int64", "minimum": 1, "maximum": 20971520 },
+          "status": { "$ref": "#/components/schemas/RagDocumentStatus" },
+          "failureCode": {
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+              { "type": "null" }
+            ]
+          },
+          "failureMessage": {
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 512 },
+              { "type": "null" }
+            ]
+          },
+          "uploadedBy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["displayName"],
+            "properties": {
+              "displayName": {
+                "oneOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 255 },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "description": "Safe administrator display data without the internal User primary key."
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DocumentEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/RagDocument" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["limit", "nextCursor", "hasMore"],
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "nextCursor": {
+            "oneOf": [
+              { "type": "string", "format": "uuid" },
+              { "type": "null" }
+            ]
+          },
+          "hasMore": { "type": "boolean" }
+        }
+      },
+      "DocumentListEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "pagination"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/RagDocument" }
+          },
+          "pagination": { "$ref": "#/components/schemas/Pagination" }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "details", "requestId", "retryable"],
+            "properties": {
+              "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+              "message": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "details": { "type": ["object", "null"] },
+              "requestId": { "type": ["string", "null"], "maxLength": 128 },
+              "retryable": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "InvalidUpload": {
+        "description": "Empty input, unsupported extension/MIME, signature mismatch, malformed UTF-8, unsafe original filename or invalid displayName.",
+        "x-error-codes": ["RAG_DOCUMENT_INVALID_UPLOAD"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "InvalidCursor": {
+        "description": "The cursor is malformed or is not a document in the authorized tenant.",
+        "x-error-codes": ["RAG_DOCUMENT_CURSOR_INVALID"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "InvalidDocumentId": {
+        "description": "The documentId path value is not a UUID.",
+        "x-error-codes": ["VALIDATION_ERROR"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "AuthenticationRequired": {
+        "description": "Full administrator session is required.",
+        "x-error-codes": ["UNAUTHORIZED"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "TenantScopeForbidden": {
+        "description": "The authenticated user is not an active Tenant Admin for the route tenant.",
+        "x-error-codes": ["FORBIDDEN"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "DocumentNotFound": {
+        "description": "No document exists in the authorized tenant. Cross-tenant and absent IDs are indistinguishable.",
+        "x-error-codes": ["RAG_DOCUMENT_NOT_FOUND"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "UploadConflict": {
+        "description": "A same-tenant document with the same digest is READY/processing, or the tenant already has 500 document rows. No document identity or digest is disclosed.",
+        "x-error-codes": ["RAG_DOCUMENT_DUPLICATE", "RAG_DOCUMENT_LIMIT_REACHED"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "DocumentTooLarge": {
+        "description": "The streamed byte count exceeded the configured limit.",
+        "x-error-codes": ["RAG_DOCUMENT_TOO_LARGE"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "DocumentServiceUnavailable": {
+        "description": "Object storage, tenant metadata key resolution or durable database finalization is unavailable. Internal errors and locators are redacted.",
+        "x-error-codes": [
+          "RAG_STORAGE_UNAVAILABLE",
+          "RAG_METADATA_KEY_UNAVAILABLE",
+          "RAG_PERSISTENCE_UNAVAILABLE"
+        ],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    }
+  }
+}

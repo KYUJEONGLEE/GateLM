@@ -107,7 +107,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.message : String(exception);
     const stack = exception instanceof Error ? exception.stack : undefined;
     const method = this.sanitizeLogValue(request.method);
-    const url = this.sanitizeLogValue(request.originalUrl ?? request.url);
+    // Query values can contain user-controlled prompts, filenames or other
+    // sensitive values. Operational logs need only the low-cardinality route
+    // path, never the query string.
+    const url = this.sanitizeLogValue(
+      request.path || stripQuery(request.originalUrl ?? request.url),
+    );
     const requestId = this.resolveRequestId(request);
     const logFields = {
       status,
@@ -127,10 +132,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const requestId =
       request.header('x-gatelm-request-id') ?? request.header('x-request-id');
 
-    return requestId ? this.sanitizeLogValue(requestId) : null;
+    const normalized = requestId?.trim();
+    return normalized && /^[A-Za-z0-9_-]{1,128}$/u.test(normalized)
+      ? normalized
+      : null;
   }
 
   private sanitizeLogValue(value: string): string {
     return value.replace(/[\r\n]+/g, ' ').trim();
   }
+}
+
+function stripQuery(value: string): string {
+  const queryStart = value.indexOf('?');
+  return queryStart === -1 ? value : value.slice(0, queryStart);
 }
