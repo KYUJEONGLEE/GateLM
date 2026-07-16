@@ -1,0 +1,37 @@
+{
+  "reportVersion": "tenant-chat-pii-evaluation.v1",
+  "evaluatedAt": "2026-07-15",
+  "scope": "current combined rule plus two-model ONNX pipeline",
+  "metricUnit": "case-level detector-type presence; not span-level or model-only",
+  "syntheticOnly": true,
+  "rawPromptIncluded": false,
+  "corpus": {
+    "path": "docs/ai-safety-lab/fixtures/master-safety-eval-corpus.jsonl",
+    "cases": 1000,
+    "localeCounts": {"en-US": 662, "ko-KR": 338},
+    "usedForGateLMTraining": false,
+    "untouchedHoldout": false,
+    "note": "The corpus was not used for model fine-tuning, but prior threshold iterations referenced the same corpus. It is not an untouched promotion holdout."
+  },
+  "overall": {
+    "passedCases": 656,
+    "failedCases": 344,
+    "passRate": 0.656,
+    "falsePositiveCases": 211,
+    "falseNegativeCases": 180,
+    "errorCases": 0
+  },
+  "byPiiType": {
+    "account_number": {"tp": 28, "fp": 9, "fn": 0, "precision": 0.756757, "recall": 1.0, "f1": 0.861539},
+    "email": {"tp": 24, "fp": 163, "fn": 0, "precision": 0.128342, "recall": 1.0, "f1": 0.227488},
+    "organization_name": {"tp": 7, "fp": 0, "fn": 17, "precision": 1.0, "recall": 0.291667, "f1": 0.451613, "source": "rule backstop"},
+    "person_name": {"tp": 15, "fp": 16, "fn": 29, "precision": 0.483871, "recall": 0.340909, "f1": 0.4, "source": "rule backstop"},
+    "phone_number": {"tp": 20, "fp": 0, "fn": 6, "precision": 1.0, "recall": 0.769231, "f1": 0.869565},
+    "postal_address": {"tp": 37, "fp": 0, "fn": 0, "precision": 1.0, "recall": 1.0, "f1": 1.0},
+    "private_date": {"tp": 28, "fp": 1, "fn": 0, "precision": 0.965517, "recall": 1.0, "f1": 0.982456},
+    "private_url": {"tp": 21, "fp": 15, "fn": 6, "precision": 0.583333, "recall": 0.777778, "f1": 0.666667},
+    "resident_registration_number": {"tp": 20, "fp": 0, "fn": 8, "precision": 1.0, "recall": 0.714286, "f1": 0.833334},
+    "secret": {"tp": 24, "fp": 4, "fn": 7, "precision": 0.857143, "recall": 0.774194, "f1": 0.81356}
+  },
+  "promotionDecision": "not production-grade evidence"
+}

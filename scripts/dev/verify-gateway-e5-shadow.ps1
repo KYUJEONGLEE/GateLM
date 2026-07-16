@@ -1,8 +1,8 @@
 param(
     [string]$Python = "",
     [string]$ArtifactRoot = ".tmp/difficulty-semantic-encoder-artifacts",
-    [string]$BundleDirectory = ".tmp/gateway-e5-shadow-bundle",
-    [string]$ImageTag = "gatelm/gateway-core:e5-shadow-verify",
+    [string]$BundleDirectory = ".tmp/gateway-e5-runtime-bundle",
+    [string]$ImageTag = "gatelm/gateway-core:e5-runtime-verify",
     [string]$EvidenceOutput = "",
     [switch]$SkipImageBuild
 )
@@ -20,19 +20,19 @@ if (-not $Python) {
     $Python = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { "python" }
 }
 
-# The checked-in v3 model remains incompatible with the current deterministic
-# boundary, so it is not eligible for Holdout replay or quality promotion. The
-# routing owner approved one exact, non-reusable waiver solely for optional-image
-# startup and request-shadow E2E wiring verification.
-$shadowModelCompatible = $false
-$baselineE2EWaiver = "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1"
-$shadowRuntimeAdmitted = $shadowModelCompatible -or ($baselineE2EWaiver -eq "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1")
+# The checked-in 106D model matches the current deterministic boundary. The
+# historical 500-record replay belongs to the retired 118D bundle and must not
+# be reused as quality evidence for this model. Its frozen 1,000-record test is
+# documented separately and is never reopened by this runtime verifier.
+$runtimeModelCompatible = $true
+$legacyHoldoutReplayEligible = $false
+$runtimeAdmitted = $runtimeModelCompatible
 
 & (Join-Path $PSScriptRoot "prepare-gateway-e5-shadow-bundle.ps1") `
     -EncoderArtifactRoot $ArtifactRoot `
     -OutputDirectory $BundleDirectory
 if ($LASTEXITCODE -ne 0) {
-    throw "Gateway E5 shadow bundle preparation failed"
+    throw "Gateway E5 runtime bundle preparation failed"
 }
 
 $parityDirectory = Join-Path $temporaryRoot ("gateway-e5-parity-" + [guid]::NewGuid().ToString("N"))
@@ -86,7 +86,7 @@ try {
         throw "canonical Python E5 parity reference failed"
     }
 
-    if ($shadowModelCompatible) {
+    if ($legacyHoldoutReplayEligible) {
         & $Python -m gatelm_difficulty_model.gateway_holdout_reference reference `
             --dataset (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl") `
             --manifest (Join-Path $repoRoot "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json") `
@@ -111,11 +111,11 @@ try {
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 bundle failure-isolation tests failed" }
             & go test ./apps/gateway-core/cmd/gateway `
-                -run "TestInitializeDifficultyE5Shadow" `
+                -run "TestInitializeDifficultyE5(Runtime|Shadow)" `
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 initialization isolation tests failed" }
             & go test ./apps/gateway-core/internal/domain/routing `
-                -run "TestSimpleRouter.*Shadow|TestDifficultySemanticShadow|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely|TestGeneratedDifficultySemanticModel(IsIncompatibleAfterDecisionBoundaryChange|AcceptsOnlyPinnedBaselineE2EWaiver)" `
+                -run "TestSimpleRouter.*(Runtime|Shadow)|TestDifficultySemantic(Runtime|Shadow)|TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely|TestGeneratedDifficultySemanticModel(MatchesCurrentDecisionBoundary|RejectsHistoricalBaselineE2EWaiver)" `
                 -count=1
             if ($LASTEXITCODE -ne 0) { throw "Gateway E5 request isolation tests failed" }
         } finally {
@@ -146,12 +146,12 @@ try {
         -w /src/apps/gateway-core `
         -e GATELM_E5_INTEGRATION_BUNDLE_ROOT=/bundle `
         golang:1.24-bookworm `
-        bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./cmd/gateway -run '^TestBaselineWaiverNativeRequestShadowE2E$' -count=1"
+        bash -c "CGO_ENABLED=1 CGO_LDFLAGS='-L/bundle/native' go test -tags=difficulty_e5_onnx ./cmd/gateway -run '^TestNativeRequestRuntimeE2E$' -count=1"
     if ($LASTEXITCODE -ne 0) {
-        throw "Gateway baseline waiver native request-shadow E2E failed"
+        throw "Gateway native request-runtime E2E failed"
     }
 
-    if ($shadowModelCompatible) {
+    if ($legacyHoldoutReplayEligible) {
         $holdoutRunReports = @()
         $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
         for ($run = 1; $run -le 3; $run++) {
@@ -200,59 +200,58 @@ try {
             Write-Host "Gateway holdout aggregate evidence: $evidencePath"
         }
     } elseif ($EvidenceOutput) {
-        throw "Gateway holdout evidence cannot be produced for an incompatible decision boundary"
+        throw "Legacy 500-record holdout evidence is not valid for the selected 106D model"
     }
 
     if (-not $SkipImageBuild) {
         & docker build --platform linux/amd64 `
             --build-context "difficulty_e5=$bundlePath" `
-            -f infra/docker/gateway-core-e5-shadow.Dockerfile `
+            -f infra/docker/gateway-core-e5-runtime.Dockerfile `
             -t $ImageTag `
             .
         if ($LASTEXITCODE -ne 0) {
-            throw "Gateway E5 shadow image build failed"
+            throw "Gateway E5 runtime image build failed"
         }
 
         & docker run --rm --platform linux/amd64 `
+            --user 1000:1000 `
             --entrypoint /bin/sh `
             $ImageTag `
             -c "test ! -e /opt/gatelm/difficulty-e5/native/libtokenizers.a"
         if ($LASTEXITCODE -ne 0) {
-            throw "Gateway E5 shadow runtime image retained the build-only tokenizer archive"
+            throw "Gateway E5 runtime image retained the build-only tokenizer archive"
         }
 
         $previousErrorActionPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = "Continue"
             $smokeOutput = & docker run --rm --platform linux/amd64 `
+                --user 1000:1000 `
                 -e DATABASE_URL=invalid `
                 -e GATEWAY_LOG_DATABASE_URL=invalid `
-                -e GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES=tenant_smoke/application_smoke `
-                -e "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER=$baselineE2EWaiver" `
+                -e GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true `
                 $ImageTag 2>&1
             $smokeExitCode = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousErrorActionPreference
         }
         $safeSmoke = $smokeOutput -join "`n"
-        $expectedShadowStatus = if ($shadowRuntimeAdmitted) {
-            "difficulty E5 shadow initialized; product routing unchanged"
+        $expectedRuntimeStatus = if ($runtimeAdmitted) {
+            "difficulty E5 hot-path runtime initialized"
         } else {
-            "difficulty E5 shadow unavailable; product routing unchanged"
+            "difficulty E5 hot-path runtime unavailable"
         }
         if ($smokeExitCode -ne 1 -or
-            -not $safeSmoke.Contains($expectedShadowStatus) -or
+            -not $safeSmoke.Contains($expectedRuntimeStatus) -or
             -not $safeSmoke.Contains("postgres pool configuration failed")) {
-            throw "Gateway E5 shadow container startup smoke failed"
+            throw "Gateway E5 runtime container startup smoke failed"
         }
     }
 
-    if ($shadowModelCompatible) {
-        Write-Host "Gateway E5 shadow and Holdout replay verification passed"
-    } elseif ($shadowRuntimeAdmitted) {
-        Write-Host "Gateway E5 baseline waiver startup and request-shadow E2E verification passed; quality promotion remains failed"
+    if ($runtimeAdmitted) {
+        Write-Host "Gateway E5 106D hot-path verification passed; frozen 1,000-record test was not reopened"
     } else {
-        Write-Host "Gateway E5 optional image verification passed with historical model shadow disabled"
+        Write-Host "Gateway E5 optional image verification passed with runtime disabled"
     }
 } finally {
     $env:PYTHONPATH = $previousPythonPath

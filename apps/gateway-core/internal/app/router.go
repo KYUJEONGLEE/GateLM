@@ -42,6 +42,7 @@ type RouterOptions struct {
 	MaskingEngine                 handlers.MaskingEngine
 	ProviderCatalogs              providercatalog.Resolver
 	Credentials                   credentials.Resolver
+	DifficultyRuntime             *routingdomain.DifficultySemanticRuntime
 	DifficultyShadow              *routingdomain.DifficultySemanticShadowRunner
 }
 
@@ -106,6 +107,12 @@ func WithMetrics(registry *metrics.Registry) RouterOption {
 func WithDifficultySemanticShadow(runner *routingdomain.DifficultySemanticShadowRunner) RouterOption {
 	return func(options *RouterOptions) {
 		options.DifficultyShadow = runner
+	}
+}
+
+func WithDifficultySemanticRuntime(runtime *routingdomain.DifficultySemanticRuntime) RouterOption {
+	return func(options *RouterOptions) {
+		options.DifficultyRuntime = runtime
 	}
 }
 
@@ -200,6 +207,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 
 	simpleRouter := routingdomain.NewSimpleRouter(
 		runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash).SimpleRouterConfig(),
+		routingdomain.WithDifficultySemanticRuntime(routerOptions.DifficultyRuntime),
 		routingdomain.WithDifficultySemanticShadow(routerOptions.DifficultyShadow),
 	)
 	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(

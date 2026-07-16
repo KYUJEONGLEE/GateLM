@@ -117,6 +117,58 @@ func TestBuildSemanticHeadTrainingInputRejectsInvalidHeadLabelWithoutFallback(t 
 	}
 }
 
+func TestBuildSemanticHeadTrainingInputPhasesKeepHoldoutOutOfSelection(t *testing.T) {
+	t.Parallel()
+	records := []map[string]any{
+		semanticHeadRecord("sample-train", "family.train", "train", "Explain the result."),
+		semanticHeadRecord("sample-calibration", "family.calibration", "calibration", "Compare two options."),
+		semanticHeadRecord("sample-holdout", "family.holdout", "holdout", "Summarize one source."),
+	}
+	datasetPath, manifestPath := writeSemanticHeadDataset(t, records, true, false)
+
+	selectionPartitions, err := semanticHeadPartitionsForPhase("selection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := buildSemanticHeadTrainingInputForPhase(
+		datasetPath,
+		manifestPath,
+		"selection",
+		selectionPartitions,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selection.HoldoutOutcomeAccessed || len(selection.Samples) != 2 {
+		t.Fatalf("selection phase leaked holdout: %+v", selection)
+	}
+	if _, ok := selection.SplitCounts["holdout"]; ok {
+		t.Fatalf("selection phase declared holdout counts: %+v", selection.SplitCounts)
+	}
+	for _, sample := range selection.Samples {
+		if sample.Split == "holdout" {
+			t.Fatalf("selection phase returned a holdout sample: %+v", sample)
+		}
+	}
+
+	finalPartitions, err := semanticHeadPartitionsForPhase("final-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalTest, err := buildSemanticHeadTrainingInputForPhase(
+		datasetPath,
+		manifestPath,
+		"final-test",
+		finalPartitions,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !finalTest.HoldoutOutcomeAccessed || len(finalTest.Samples) != 1 || finalTest.Samples[0].Split != "holdout" {
+		t.Fatalf("final-test phase did not isolate holdout: %+v", finalTest)
+	}
+}
+
 func semanticHeadRecord(sampleID, familyID, _ string, prompt string) map[string]any {
 	return map[string]any{
 		"schemaVersion":       "gatelm.difficulty-label-record.v2",

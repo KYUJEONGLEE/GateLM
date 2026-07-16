@@ -476,18 +476,26 @@ function validateDocumentation(rootDir, failures) {
     failures.push("docs/current/source-of-truth.md: classification pipeline authority link is missing");
   }
 
-  const thresholdPolicyMarker = "difficulty-threshold-v1 = 0.45";
-  const thresholdDecisionMarker = "ComplexityScore >= 0.45";
+  const historicalThresholdPolicyMarker = "difficulty-threshold-v1 = 0.45";
   for (const relativePath of ["docs/routing/contracts.md", "docs/routing/classification-pipeline.md"]) {
-    if (!texts.get(relativePath)?.includes(thresholdPolicyMarker)) {
-      failures.push(`${relativePath}: global difficulty threshold policy must be 0.45`);
-    }
-    if (!texts.get(relativePath)?.includes(thresholdDecisionMarker)) {
-      failures.push(`${relativePath}: ComplexityScore decision boundary must be 0.45`);
+    if (!texts.get(relativePath)?.includes(historicalThresholdPolicyMarker)) {
+      failures.push(`${relativePath}: historical bootstrap difficulty threshold policy is missing`);
     }
   }
-  if (!texts.get("docs/routing/difficulty-logistic-training.md")?.includes(thresholdPolicyMarker)) {
-    failures.push("docs/routing/difficulty-logistic-training.md: training threshold policy must be 0.45");
+  if (!texts.get("docs/routing/difficulty-logistic-training.md")?.includes(historicalThresholdPolicyMarker)) {
+    failures.push("docs/routing/difficulty-logistic-training.md: historical training threshold policy is missing");
+  }
+
+  const runtimeThresholdPolicyMarker =
+    "difficulty-threshold.model-path-5000.2026-07-16.v1 = 0.096";
+  const runtimeThresholdDecisionMarker = "ComplexityScore >= 0.096";
+  for (const relativePath of ["docs/routing/contracts.md", "docs/routing/classification-pipeline.md"]) {
+    if (!texts.get(relativePath)?.includes(runtimeThresholdPolicyMarker)) {
+      failures.push(`${relativePath}: authoritative runtime threshold policy must be 0.096`);
+    }
+    if (!texts.get(relativePath)?.includes(runtimeThresholdDecisionMarker)) {
+      failures.push(`${relativePath}: authoritative ComplexityScore decision boundary must be 0.096`);
+    }
   }
 
   const pipelinePath = "docs/routing/classification-pipeline.md";

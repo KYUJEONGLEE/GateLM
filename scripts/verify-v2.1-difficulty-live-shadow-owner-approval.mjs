@@ -423,7 +423,10 @@ export function validateApproval({
   );
 
   for (const requiredText of [
-    "owner guardrails approved, live evidence pending",
+    "Authoritative 106D model-path difficulty runtime",
+    "difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1",
+    "global threshold `0.096`",
+    "Historical baseline waiver: rejected and not required",
     "2 GiB",
     "2147483648",
     "1.25 GiB",
@@ -431,15 +434,15 @@ export function validateApproval({
     "1.75 GiB",
     "1879048192",
     "5 minutes",
-    "GATEWAY_DIFFICULTY_E5_SHADOW_ALLOWED_SCOPES",
+    "GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true",
+    "GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS=100",
     "GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false",
-    "failed promotion gate",
-    "difficulty-shadow-baseline-e2e-v3.2026-07-15.v1",
-    "GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER",
-    "accuracy `0.70`",
-    "future artifact",
+    "Enabling both runtime and historical request shadow is a configuration error.",
+    "GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=false",
+    "Do not enable historical shadow as part of an emergency rollback.",
+    "Do not record tenant/application IDs",
   ]) {
-    requireValue(runbook.includes(requiredText), `live-shadow runbook is missing ${requiredText}`);
+    requireValue(runbook.includes(requiredText), `E5 runtime runbook is missing ${requiredText}`);
   }
 }
 

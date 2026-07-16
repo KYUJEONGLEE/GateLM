@@ -148,17 +148,18 @@ type preCallAccounting interface {
 }
 
 type Service struct {
-	snapshots  snapshotResolver
-	usage      usageAccounting
-	providers  providerExecutor
-	safety     safetyEvaluator
-	cache      exactCache
-	tokenRate  providerTokenLimiter
-	ledgerless ledgerlessAccounting
-	preCall    preCallAccounting
-	metrics    *metrics.Registry
-	sessionsMu sync.Mutex
-	sessions   map[string]*sharedSession
+	snapshots         snapshotResolver
+	usage             usageAccounting
+	providers         providerExecutor
+	safety            safetyEvaluator
+	cache             exactCache
+	tokenRate         providerTokenLimiter
+	difficultyRuntime *routing.DifficultySemanticRuntime
+	ledgerless        ledgerlessAccounting
+	preCall           preCallAccounting
+	metrics           *metrics.Registry
+	sessionsMu        sync.Mutex
+	sessions          map[string]*sharedSession
 }
 
 type PreparedExecution struct {
@@ -241,6 +242,10 @@ func WithProviderTokenLimiter(limiter providerTokenLimiter) Option {
 	return func(service *Service) { service.tokenRate = limiter }
 }
 
+func WithDifficultySemanticRuntime(runtime *routing.DifficultySemanticRuntime) Option {
+	return func(service *Service) { service.difficultyRuntime = runtime }
+}
+
 func WithMetrics(registry *metrics.Registry) Option {
 	return func(service *Service) { service.metrics = registry }
 }
@@ -304,7 +309,7 @@ func (s *Service) Prepare(
 		input = evaluation.Input
 	}
 	if snapshot.Policies.Routing.Policy != nil {
-		routingDecision, routingErr := decideTenantChatRoute(ctx, snapshot, input)
+		routingDecision, routingErr := decideTenantChatRoute(ctx, snapshot, input, s.difficultyRuntime)
 		if routingErr != nil {
 			return nil, tenantchat.ErrNoEligibleRoute
 		}
@@ -445,6 +450,7 @@ func decideTenantChatRoute(
 	ctx context.Context,
 	snapshot tenantruntime.Snapshot,
 	input tenantchat.CompletionInput,
+	difficultyRuntime *routing.DifficultySemanticRuntime,
 ) (tenantchat.RoutingDecision, error) {
 	policy := snapshot.Policies.Routing.Policy
 	if policy == nil {
@@ -470,12 +476,21 @@ func decideTenantChatRoute(
 			Reasoning:     toRoutingDifficulty(policy.Routes.Reasoning),
 		},
 	}
-	decision, err := routing.NewSimpleRouter(config).DecideRoute(ctx, routing.Request{
+	decision, err := routing.NewSimpleRouter(
+		config,
+		routing.WithDifficultySemanticRuntime(difficultyRuntime),
+	).DecideRoute(ctx, routing.Request{
 		RequestedModel: requestedModel,
 		PromptMessages: messages,
 	})
 	if err != nil {
 		return tenantchat.RoutingDecision{}, err
+	}
+	if policy.Mode == routing.RoutingPolicyModeManual {
+		decision.CandidateModelRefs = append(
+			[]string{decision.ModelRef},
+			sharedTenantChatFallbackModelRefs(policy.Routes, decision.ModelRef)...,
+		)
 	}
 	return tenantchat.RoutingDecision{
 		ModelRef:               decision.ModelRef,
@@ -485,6 +500,42 @@ func decideTenantChatRoute(
 		RoutingDecisionKeyHash: decision.RoutingDecisionKeyHash,
 		RoutingPolicyHash:      decision.PolicyHash,
 	}, nil
+}
+
+func sharedTenantChatFallbackModelRefs(
+	routes tenantruntime.RoutingMatrix,
+	manualModelRef string,
+) []string {
+	cells := routes.Cells()
+	if len(cells) == 0 || len(cells[0].ModelRefs) < 2 {
+		return nil
+	}
+	shared := cells[0].ModelRefs[1:]
+	for _, cell := range cells[1:] {
+		if len(cell.ModelRefs) < 2 {
+			return nil
+		}
+		candidate := cell.ModelRefs[1:]
+		if len(candidate) != len(shared) {
+			return nil
+		}
+		for index := range shared {
+			if candidate[index] != shared[index] {
+				return nil
+			}
+		}
+	}
+
+	result := make([]string, 0, len(shared))
+	seen := map[string]struct{}{manualModelRef: {}}
+	for _, modelRef := range shared {
+		if _, exists := seen[modelRef]; exists {
+			continue
+		}
+		seen[modelRef] = struct{}{}
+		result = append(result, modelRef)
+	}
+	return result
 }
 
 // currentTurnRoutingMessages keeps stable system context, but excludes earlier

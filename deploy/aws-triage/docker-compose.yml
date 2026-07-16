@@ -191,7 +191,9 @@ services:
     image: gatelm/gateway-core:aws-triage
     build:
       context: ../..
-      dockerfile: infra/docker/gateway-core.Dockerfile
+      dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile
+      additional_contexts:
+        difficulty_e5: ../../.tmp/gateway-e5-runtime-bundle
     restart: unless-stopped
     user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
     environment:
@@ -204,6 +206,9 @@ services:
       GATEWAY_OBSERVABILITY_AUTH_REQUIRED: "true"
       GATEWAY_CONTROL_PLANE_TIMEOUT_MS: ${GATEWAY_CONTROL_PLANE_TIMEOUT_MS}
       GATEWAY_RUNTIME_SNAPSHOT_MODE: ${GATEWAY_RUNTIME_SNAPSHOT_MODE}
+      GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "true"
+      GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100}
+      GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"
       GATEWAY_PROVIDER_TIMEOUT_MS: ${GATEWAY_PROVIDER_TIMEOUT_MS:-60000}
       MOCK_PROVIDER_BASE_URL: ${MOCK_PROVIDER_BASE_URL:-http://mock-provider:8090}
       GATEWAY_DEFAULT_PROVIDER: ${GATEWAY_DEFAULT_PROVIDER}
