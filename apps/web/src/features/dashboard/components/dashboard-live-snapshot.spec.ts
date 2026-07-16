@@ -26,6 +26,8 @@ test("snapshot-managed cards render their incoming payload without an effect-del
   ]);
 
   expect(costSource).toContain("pollingEnabled ? summary : normalizedInitialSummary");
+  expect(costSource).toContain("resampleCostOverTimeForDisplay(displayedSummary, range)");
+  expect(costSource.match(/points=\{renderedSummary\.points\}/g)).toHaveLength(2);
   expect(liveRequestsSource).toContain("normalizeLiveRequestRows(initialPayload?.rows)");
   expect(liveRequestsSource).toContain("displayedRows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)");
 });
@@ -43,7 +45,11 @@ test("dashboard charts merge changed data without replaying unchanged series", a
   expect(source).toContain('id: "dashboard-pie-usage"');
   expect(source).toContain('id: "dashboard-cost-spend"');
   expect(source).toContain('id: "dashboard-cost-average"');
+  expect(source).toContain('id: "dashboard-cost-density"');
   expect(source).toContain("const visibleCostBucketCount = 60");
-  expect(source).toContain('barWidth: "70%"');
+  expect(source).toContain("const costWindowThreshold = 64");
+  expect(source).toContain('barWidth: "62%"');
+  expect(source).toContain('type: "slider"');
+  expect(source).toContain("showDataShadow: false");
   expect(source).toContain("components.DataZoomComponent");
 });
