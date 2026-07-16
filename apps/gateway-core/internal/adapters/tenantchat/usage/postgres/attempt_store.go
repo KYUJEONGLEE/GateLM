@@ -49,13 +49,14 @@ func (s *ReservationStore) StartAttempt(
 	var storedRequestID string
 	var storedSnapshotVersion int64
 	var ledgerVersion int64
+	var cacheOutcome string
 	err = tx.QueryRow(ctx, `
-		SELECT state, request_id, snapshot_version, ledger_version
+		SELECT state, request_id, snapshot_version, ledger_version, cache_outcome
 		FROM tenant_chat_usage_reservations
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid AND user_id = $3::uuid
 		FOR UPDATE
 	`, reservationID, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID).Scan(
-		&reservationState, &storedRequestID, &storedSnapshotVersion, &ledgerVersion,
+		&reservationState, &storedRequestID, &storedSnapshotVersion, &ledgerVersion, &cacheOutcome,
 	)
 	if err != nil || reservationState != "reserved" || storedRequestID != requestContext.RequestID ||
 		storedSnapshotVersion != requestContext.Snapshot.Version {
@@ -100,7 +101,7 @@ func (s *ReservationStore) StartAttempt(
 	if kind == "fallback" {
 		if err = s.topUpFallback(
 			ctx, tx, requestContext, snapshot, reservationID, ledgerVersion,
-			exposureCost, now,
+			exposureCost, cacheOutcome, now,
 		); err != nil {
 			return err
 		}
@@ -156,6 +157,7 @@ func (s *ReservationStore) topUpFallback(
 	reservationID string,
 	ledgerVersion int64,
 	exposureCost int64,
+	cacheOutcome string,
 	now time.Time,
 ) error {
 	additionalTokens := requestContext.UsageIntent.EstimatedInputTokens + requestContext.UsageIntent.MaxOutputTokens
@@ -219,7 +221,7 @@ func (s *ReservationStore) topUpFallback(
 	}
 	payload, err := usageDeltaEventPayload(
 		"usage_topped_up", eventID, reservationID, nextVersion, requestContext, snapshot,
-		userPeriod, quotaState, budgetState, additionalTokens, exposureCost, now,
+		userPeriod, quotaState, budgetState, additionalTokens, exposureCost, now, cacheOutcome,
 	)
 	if err != nil {
 		return tenantchat.ErrUsageGuardUnavailable

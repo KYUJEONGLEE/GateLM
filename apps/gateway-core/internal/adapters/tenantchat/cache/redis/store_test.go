@@ -73,6 +73,18 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	if err != nil || differentField == originalField {
 		t.Fatalf("usage intent must be bound into exact-cache fingerprint: field=%q err=%v", differentField, err)
 	}
+	differentSnapshot := snapshot
+	differentSnapshot.Digest = "sha256:different-policy-snapshot"
+	_, _, differentSnapshotField, err := store.resolve(requestContext, differentSnapshot, input)
+	if err != nil || differentSnapshotField == originalField {
+		t.Fatalf("snapshot policy must be bound into exact-cache fingerprint: field=%q err=%v", differentSnapshotField, err)
+	}
+	differentModel := requestContext
+	differentModel.Routing = &tenantchat.RoutingDecision{ModelRef: "tc_different"}
+	_, _, differentModelField, err := store.resolve(differentModel, snapshot, input)
+	if err != nil || differentModelField == originalField {
+		t.Fatalf("routed model must be bound into exact-cache fingerprint: field=%q err=%v", differentModelField, err)
+	}
 	if client.key != "tenant-chat:exact-cache:v1:tenant_001:user_001" || strings.Contains(client.key, client.field) {
 		t.Fatalf("unexpected cache namespace: %q", client.key)
 	}

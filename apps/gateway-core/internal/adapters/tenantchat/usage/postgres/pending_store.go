@@ -52,7 +52,8 @@ func (s *ReservationStore) MarkPending(
 		}
 		return tenantchat.UsageSettlement{
 			RequestID: requestContext.RequestID, ReservationID: reservationID,
-			State: "pending_unconfirmed", Attempts: attempts, Replayed: true,
+			State: "pending_unconfirmed", CacheOutcome: reservation.CacheOutcome,
+			Attempts: attempts, Replayed: true,
 		}, nil
 	}
 	now := s.now().UTC()
@@ -82,7 +83,7 @@ func (s *ReservationStore) MarkPending(
 	}
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID,
-		State: "pending_unconfirmed", Attempts: attempts,
+		State: "pending_unconfirmed", CacheOutcome: reservation.CacheOutcome, Attempts: attempts,
 	}, nil
 }
 
@@ -93,11 +94,12 @@ func (s *ReservationStore) readPendingTerminal(
 	reservationID string,
 ) (tenantchat.UsageSettlement, error) {
 	var pending bool
+	var cacheOutcome string
 	if err := tx.QueryRow(ctx, `
-		SELECT usage_pending_at IS NOT NULL
+		SELECT usage_pending_at IS NOT NULL, cache_outcome
 		FROM tenant_chat_usage_reservations
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid AND request_id = $3
-	`, reservationID, requestContext.ExecutionScope.TenantID, requestContext.RequestID).Scan(&pending); err != nil {
+	`, reservationID, requestContext.ExecutionScope.TenantID, requestContext.RequestID).Scan(&pending, &cacheOutcome); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 		}
@@ -112,6 +114,6 @@ func (s *ReservationStore) readPendingTerminal(
 	}
 	return tenantchat.UsageSettlement{
 		RequestID: requestContext.RequestID, ReservationID: reservationID,
-		State: "pending_unconfirmed", Attempts: attempts, Replayed: true,
+		State: "pending_unconfirmed", CacheOutcome: cacheOutcome, Attempts: attempts, Replayed: true,
 	}, nil
 }

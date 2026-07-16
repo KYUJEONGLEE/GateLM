@@ -63,6 +63,7 @@ type UsageReservation struct {
 	QuotaState           string
 	BudgetState          string
 	LedgerVersion        int64
+	CacheOutcome         string
 	Route                SelectedRoute
 	Replayed             bool
 }
@@ -98,6 +99,7 @@ type UsageSettlement struct {
 	QuotaState                  string
 	BudgetState                 string
 	LedgerVersion               int64
+	CacheOutcome                string
 	Attempts                    []ProviderAttempt
 	Replayed                    bool
 }

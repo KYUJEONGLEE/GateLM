@@ -195,6 +195,7 @@ describeIntegration('Tenant Chat observability integration', () => {
         snapshotVersion: BigInt(snapshot.version),
         snapshotDigest: snapshot.digest,
         pricingVersion: BigInt(snapshot.pricing.version),
+        cacheOutcome: 'off',
         state: 'settled',
         confirmedInputTokens: 20,
         confirmedOutputTokens: 10,

@@ -140,6 +140,7 @@ describeIntegration('Tenant Chat tenant isolation integration', () => {
         snapshotVersion: 1,
         snapshotDigest: 'sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         pricingVersion: 1,
+        cacheOutcome: 'off',
         reservedAt: new Date(),
       },
     });

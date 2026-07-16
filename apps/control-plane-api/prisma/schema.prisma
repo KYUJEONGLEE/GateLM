@@ -969,6 +969,7 @@ model TenantChatUsageReservation {
   snapshotVersion             BigInt    @map("snapshot_version")
   snapshotDigest              String    @map("snapshot_digest")
   pricingVersion              BigInt    @map("pricing_version")
+  cacheOutcome                String    @map("cache_outcome")
   state                       String    @default("reserved")
   reservedTokens              BigInt    @default(0) @map("reserved_tokens")
   reservedCostMicroUsd        BigInt    @default(0) @map("reserved_cost_micro_usd")

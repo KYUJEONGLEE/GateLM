@@ -174,3 +174,25 @@ func TestRoutingV2SelectionUsesServerDecisionAndAllowsUnavailablePricing(t *test
 		t.Fatalf("unknown monetary price must reserve zero cost, cost=%d err=%v", cost, err)
 	}
 }
+
+func TestReservationCacheOutcomeRequiresBothSnapshotAndRequestEligibility(t *testing.T) {
+	snapshot := tenantruntime.Snapshot{Policies: tenantruntime.Policies{Cache: tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true,
+	}}}
+	requestContext := tenantchat.RequestContext{UsageIntent: &tenantchat.UsageIntent{CacheStrategy: "exact"}}
+
+	if outcome := reservationCacheOutcome(requestContext, snapshot); outcome != "miss" {
+		t.Fatalf("eligible exact cache request must reserve as miss, got %q", outcome)
+	}
+
+	snapshot.Policies.Cache.Enabled = false
+	if outcome := reservationCacheOutcome(requestContext, snapshot); outcome != "off" {
+		t.Fatalf("disabled cache policy must reserve as off, got %q", outcome)
+	}
+
+	snapshot.Policies.Cache.Enabled = true
+	requestContext.UsageIntent.CacheStrategy = "off"
+	if outcome := reservationCacheOutcome(requestContext, snapshot); outcome != "off" {
+		t.Fatalf("cache-ineligible request must reserve as off, got %q", outcome)
+	}
+}

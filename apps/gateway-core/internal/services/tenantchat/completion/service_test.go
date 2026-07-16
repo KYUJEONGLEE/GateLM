@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
@@ -194,6 +196,156 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	}
 	if got := usage.transactionCalls(); got != 1 {
 		t.Fatalf("cache-hit transaction budget exceeded: got %d want 1", got)
+	}
+}
+
+func TestServiceBypassesStaleExactCacheEntryWhenPolicyIsOff(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "off", Enabled: false, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", State: "reserved", CacheOutcome: "off",
+		Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+	}}
+	cache := &fakeExactCache{
+		entry: tenantchat.ExactCacheEntry{ResponseText: "stale response", EffectiveModelKey: "stale-model"},
+		hit:   true,
+	}
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, &fakeProviderExecutor{},
+		WithExactCache(cache),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache-off request: %v", err)
+	}
+	execution.Close()
+	if cache.getCalls != 0 || usage.reserveCalls != 1 {
+		t.Fatalf("cache-off request must bypass stale entries and reserve usage: get=%d reserve=%d", cache.getCalls, usage.reserveCalls)
+	}
+}
+
+func TestServiceStoresExactCacheMissThenHitsWithoutSecondProviderCall(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			RequestID: "request_completion_001", ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+			State: "settled", ConfirmedInputTokens: 4, ConfirmedOutputTokens: 2,
+			QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss", LedgerVersion: 2,
+		},
+	}
+	cache := &fakeExactCache{}
+	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{
+		{Delta: "synthetic response"},
+		{Usage: &provider.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}},
+	}}}
+	registry := metrics.NewRegistry()
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache), WithMetrics(registry),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+
+	first, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache miss: %v", err)
+	}
+	var firstEvents []tenantchat.CompletionEvent
+	if err := first.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		firstEvents = append(firstEvents, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay cache miss: %v", err)
+	}
+	first.Close()
+
+	repeated := request
+	repeated.Context.RequestID = "request_completion_002"
+	repeated.Context.TurnID = "turn_completion_002"
+	repeated.Context.IdempotencyKey = "idempotency_completion_002"
+	second, err := service.Prepare(context.Background(), repeated)
+	if err != nil {
+		t.Fatalf("prepare cache hit: %v", err)
+	}
+	var secondEvents []tenantchat.CompletionEvent
+	if err := second.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		secondEvents = append(secondEvents, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay cache hit: %v", err)
+	}
+	second.Close()
+
+	if providers.calls != 1 || usage.reserveCalls != 1 || cache.getCalls != 2 || cache.putCalls != 1 {
+		t.Fatalf("unexpected miss/store/hit calls: provider=%d reserve=%d get=%d put=%d", providers.calls, usage.reserveCalls, cache.getCalls, cache.putCalls)
+	}
+	if len(firstEvents) == 0 || firstEvents[len(firstEvents)-1].CacheOutcome != "miss" {
+		t.Fatalf("first request must be a cache miss: %+v", firstEvents)
+	}
+	if len(secondEvents) != 2 || secondEvents[1].CacheOutcome != "hit" {
+		t.Fatalf("second request must be a cache hit: %+v", secondEvents)
+	}
+	rendered := registry.RenderPrometheus()
+	for _, metric := range []string{
+		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success"} 1`,
+		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 1`,
+		`gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`,
+	} {
+		if !strings.Contains(rendered, metric) {
+			t.Fatalf("missing cache metric %q in %s", metric, rendered)
+		}
+	}
+}
+
+func TestServiceDoesNotFailProviderResponseWhenExactCacheStoreFails(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	usage := &fakeUsageAccounting{
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss",
+			Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+		},
+		settlement: tenantchat.UsageSettlement{
+			State: "settled", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "miss",
+		},
+	}
+	cache := &fakeExactCache{putErr: errors.New("synthetic cache failure")}
+	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{
+		{Delta: "synthetic response"},
+		{Usage: &provider.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}},
+	}}}
+	registry := metrics.NewRegistry()
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache), WithMetrics(registry),
+	)
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare cache miss: %v", err)
+	}
+	if err := execution.Relay(context.Background(), func(tenantchat.CompletionEvent) error { return nil }); err != nil {
+		t.Fatalf("provider response must survive cache store failure: %v", err)
+	}
+	if !strings.Contains(registry.RenderPrometheus(), `gatelm_cache_operations_total{cache_status="error",cache_type="exact",operation="write",status="error"} 1`) {
+		t.Fatal("cache store failure metric was not recorded")
 	}
 }
 
@@ -736,17 +888,27 @@ func (f *fakeSafetyEvaluator) Evaluate(context.Context, tenantruntime.Snapshot, 
 }
 
 type fakeExactCache struct {
-	entry tenantchat.ExactCacheEntry
-	hit   bool
-	err   error
+	entry    tenantchat.ExactCacheEntry
+	hit      bool
+	getErr   error
+	putErr   error
+	getCalls int
+	putCalls int
 }
 
 func (f *fakeExactCache) Get(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.CompletionInput) (tenantchat.ExactCacheEntry, bool, error) {
-	return f.entry, f.hit, f.err
+	f.getCalls++
+	return f.entry, f.hit, f.getErr
 }
 
-func (f *fakeExactCache) Put(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, tenantchat.CompletionInput, tenantchat.ExactCacheEntry) error {
-	return f.err
+func (f *fakeExactCache) Put(_ context.Context, _ tenantchat.RequestContext, _ tenantruntime.Snapshot, _ tenantchat.CompletionInput, entry tenantchat.ExactCacheEntry) error {
+	f.putCalls++
+	if f.putErr != nil {
+		return f.putErr
+	}
+	f.entry = entry
+	f.hit = true
+	return nil
 }
 
 type fakeTokenLimiter struct {

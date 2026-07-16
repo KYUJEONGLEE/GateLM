@@ -4,6 +4,7 @@ interface ControlPlaneEnv {
   AUTH_EMAIL_TRANSPORT?: string;
   CONTROL_PLANE_INTERNAL_SERVICE_TOKEN?: string;
   TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN?: string;
+  TENANT_CHAT_CACHE_KEY_SET_ID?: string;
   TENANT_CHAT_GOOGLE_REDIRECT_URI?: string;
   TENANT_CHAT_WEB_ORIGIN?: string;
   CONTROL_PLANE_AUTH_COOKIE_SECURE?: string;
@@ -143,6 +144,18 @@ function readOptionalString(env: RawEnv, key: keyof ControlPlaneEnv): string | u
   return value.trim();
 }
 
+function readCacheKeySetId(env: RawEnv): string {
+  const value =
+    readOptionalString(env, 'TENANT_CHAT_CACHE_KEY_SET_ID') ??
+    'tenant_chat_cache_keys_v1';
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
+    throw new Error(
+      'TENANT_CHAT_CACHE_KEY_SET_ID must be a bounded opaque identifier',
+    );
+  }
+  return value;
+}
+
 function readSmtpTlsMode(env: RawEnv): string | undefined {
   const value = env.SMTP_TLS_MODE;
   if (value === undefined || value.trim().length === 0) {
@@ -227,6 +240,7 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     AUTH_EMAIL_TRANSPORT: emailTransport,
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: internalServiceToken,
     TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: tenantChatServiceToken,
+    TENANT_CHAT_CACHE_KEY_SET_ID: readCacheKeySetId(config),
     TENANT_CHAT_GOOGLE_REDIRECT_URI:
       config.TENANT_CHAT_GOOGLE_REDIRECT_URI ??
       'http://chat.localhost:3002/api/tenant-chat/auth/google/callback',
