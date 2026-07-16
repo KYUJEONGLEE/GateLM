@@ -293,8 +293,10 @@ export function RequestLogTable({
                   <span className="request-log-summary-icon">{item.icon}</span>
                   <div>
                     <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                    {item.detail ? <em>{item.detail}</em> : null}
+                    <span className="request-log-summary-value">
+                      <strong>{item.value}</strong>
+                      {item.detail ? <em>{item.detail}</em> : null}
+                    </span>
                   </div>
                 </article>
               ))}
@@ -402,9 +404,9 @@ export function RequestLogTable({
                   <col className="request-log-col-name" />
                   <col className="request-log-col-project" />
                   <col className="request-log-col-model" />
-                  <col className="request-log-col-status" />
-                  <col className="request-log-col-latency" />
                   <col className="request-log-col-cost" />
+                  <col className="request-log-col-latency" />
+                  <col className="request-log-col-status" />
                 </colgroup>
                 <thead>
                   <tr>
@@ -412,9 +414,9 @@ export function RequestLogTable({
                     <th>{text.table.name}</th>
                     <th>{text.table.project}</th>
                     <th>{text.table.model}</th>
-                    <th>{text.table.status}</th>
-                    <th>{text.table.latency}</th>
                     <th>{text.table.cost}</th>
+                    <th>{text.table.latency}</th>
+                    <th>{text.table.status}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,7 +461,9 @@ export function RequestLogTable({
                         <td>
                           {record.endUserId ? (
                             <span className="request-log-name-cell" title={record.endUserId}>
-                              <strong>{employee?.name || formatDisplayIdentifier(record.endUserId)}</strong>
+                              <span className="request-log-name-primary">
+                                {employee?.name || formatDisplayIdentifier(record.endUserId)}
+                              </span>
                               {employee?.department ? <small>{employee.department}</small> : null}
                             </span>
                           ) : (
@@ -481,9 +485,7 @@ export function RequestLogTable({
                             record={record}
                           />
                         </td>
-                        <td>
-                          <StatusBadge label={formatHttpStatus(record)} status={record.status} />
-                        </td>
+                        <td className="request-log-cost-cell">{formatMicroUsd(record.costMicroUsd)}</td>
                         <td>
                           <dl className="request-log-latency-cell">
                             <div>
@@ -496,7 +498,9 @@ export function RequestLogTable({
                             </div>
                           </dl>
                         </td>
-                        <td>{formatMicroUsd(record.costMicroUsd)}</td>
+                        <td>
+                          <StatusBadge label={formatHttpStatus(record)} status={record.status} />
+                        </td>
                       </tr>
                     );
                   })}
@@ -623,10 +627,7 @@ function RequestRoutingCell({
           size={24}
         />
       ) : null}
-      <span className="request-log-provider-copy">
-        <strong>{modelName}</strong>
-        <small>{executionLabel}</small>
-      </span>
+      <strong>{modelName}</strong>
     </span>
   );
 }
@@ -677,35 +678,35 @@ function buildRequestLogSummaryItems(
   return [
     {
       detail: text.countUnit,
-      icon: <CheckCircle2 aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <CheckCircle2 aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.totalRequests,
       tone: "total",
       value: formatInteger(summary.totalRequests)
     },
     {
       detail: `${text.countUnit} (${formatPercent(successRate)})`,
-      icon: <CheckCircle2 aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <CheckCircle2 aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.successful,
       tone: "success",
       value: formatInteger(summary.successfulRequests)
     },
     {
       detail: `${text.countUnit} (${formatPercent(blockedRate)})`,
-      icon: <AlertTriangle aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <AlertTriangle aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.blocked,
       tone: "blocked",
       value: formatInteger(summary.blockedRequests)
     },
     {
       detail: `${text.countUnit} (${formatPercent(failedRate)})`,
-      icon: <Database aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <Database aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.failed,
       tone: "failed",
       value: formatInteger(summary.failedRequests)
     },
     {
       detail: "",
-      icon: <Coins aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <Coins aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.totalCost,
       tone: "cost",
       value: formatMicroUsd(summary.totalCostMicroUsd)

@@ -131,6 +131,30 @@ a { color: inherit; }
 .message-row article { min-width: 0; padding-top: 4px; }
 .message-author { display: block; margin-bottom: 5px; color: #343946; font-size: 13px; font-weight: 730; }
 .message-row p { max-width: 76ch; margin: 0; color: #252a34; line-height: 1.72; overflow-wrap: anywhere; white-space: pre-wrap; }
+.message-markdown { max-width: 76ch; color: #252a34; line-height: 1.72; overflow-wrap: anywhere; }
+.message-markdown > :first-child { margin-top: 0; }
+.message-markdown > :last-child { margin-bottom: 0; }
+.message-markdown :is(p, ul, ol, blockquote, pre, table, hr) { margin: 0 0 14px; }
+.message-markdown p { max-width: none; white-space: normal; }
+.message-markdown :is(h1, h2, h3, h4, h5, h6) { margin: 22px 0 9px; color: #20242d; font-weight: 750; line-height: 1.35; letter-spacing: -.015em; }
+.message-markdown h1 { font-size: 1.45rem; }
+.message-markdown h2 { font-size: 1.28rem; }
+.message-markdown h3 { font-size: 1.13rem; }
+.message-markdown :is(h4, h5, h6) { font-size: 1rem; }
+.message-markdown :is(ul, ol) { padding-left: 1.4rem; }
+.message-markdown li { margin: 4px 0; padding-left: 2px; }
+.message-markdown li > :is(p, ul, ol) { margin-bottom: 6px; }
+.message-markdown blockquote { border-left: 3px solid #b9b4e9; padding-left: 13px; color: #555b69; }
+.message-markdown pre { max-width: 100%; overflow-x: auto; border: 1px solid #dde0e7; border-radius: 11px; background: #f4f5f8; padding: 13px 15px; }
+.message-markdown code { border: 1px solid #e0e2e8; border-radius: 5px; background: #f1f2f5; padding: .1em .32em; color: #343946; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .92em; }
+.message-markdown pre code { border: 0; border-radius: 0; background: transparent; padding: 0; color: inherit; font-size: 13px; white-space: pre; }
+.message-markdown a { color: #5144d5; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.message-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 14px; }
+.message-markdown :is(th, td) { border: 1px solid #d9dce4; padding: 7px 10px; text-align: left; white-space: nowrap; }
+.message-markdown th { background: #f1f2f6; font-weight: 700; }
+.message-markdown hr { border: 0; border-top: 1px solid #dfe1e7; }
+.message-markdown input[type="checkbox"] { margin-right: 6px; accent-color: var(--g-primary); pointer-events: none; }
+.message-markdown-image-alt { color: var(--g-text-muted); font-size: 13px; }
 .message-row.message-user { display: flex; justify-content: flex-end; }
 .message-user article { width: fit-content; max-width: min(76ch, 82%); padding-top: 0; }
 .message-user p { display: block; border-radius: 15px 15px 4px 15px; background: #edeef2; padding: 10px 13px; }
