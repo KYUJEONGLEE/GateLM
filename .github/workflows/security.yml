@@ -105,3 +105,32 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
+
+  security-gate:
+    name: Security gate
+    if: always()
+    needs:
+      - dependency-review
+      - go-vulnerability
+      - codeql
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require security verification jobs
+        env:
+          DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+          GO_VULNERABILITY_RESULT: ${{ needs.go-vulnerability.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$DEPENDENCY_REVIEW_RESULT" != "success" && "$DEPENDENCY_REVIEW_RESULT" != "skipped" ]]; then
+            echo "Dependency review did not succeed: $DEPENDENCY_REVIEW_RESULT" >&2
+            exit 1
+          fi
+          for result in "$GO_VULNERABILITY_RESULT" "$CODEQL_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              echo "Required security job did not succeed: $result" >&2
+              exit 1
+            fi
+          done

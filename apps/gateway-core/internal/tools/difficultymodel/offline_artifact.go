@@ -40,6 +40,21 @@ const (
 	GatewayShadow118DTrainingPolicyVersion   = "difficulty-logistic-training.semantic-candidates.single-request.2026-07-15.v3"
 	GatewayShadow118DDecisionBoundaryVersion = "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1"
 	GatewayShadow118DGeneratedName           = "generatedDifficultySemanticModel118D"
+
+	GatewayShadow106DProfileName             = "gateway-shadow-106d-model-path-5000"
+	GatewayShadow106DArtifactVersion         = "difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1"
+	GatewayShadow106DBundleHash              = "sha256:1a755c3bca16f76a43f86696e9b2028e805eb7536161245a8683adf78b118ebd"
+	GatewayShadow106DContentHash             = "sha256:4c2c4f516206530d3b3f9c393b0633b7694a2e0aa5e20400d65faf088a184f5d"
+	GatewayShadow106DProjectionHash          = "sha256:4800637a5aa82e3184cdb86052acbe973ba91aeb8119684ecba5baef4e1afc3d"
+	GatewayShadow106DSemanticHeadsHash       = "sha256:8f835ce1799c18c32a7751a159fbd84a20bd970c39a7e13c41cf4ccca4790eef"
+	GatewayShadow106DTrainingPolicyVersion   = "difficulty-logistic-training.semantic-candidates.single-request.2026-07-15.v3"
+	GatewayShadow106DThresholdPolicyVersion  = "difficulty-threshold.model-path-5000.2026-07-16.v1"
+	GatewayShadow106DDecisionBoundaryVersion = "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2"
+	GatewayShadow106DTrainingDatasetVersion  = "difficulty_model_path_5000_2026_07_16_owner_approved_v1"
+	GatewayShadow106DTrainingDatasetHash     = "b29f2de446f540266572acd84b44ace5cf2084a3321a1f542d928abeadce45cf"
+	GatewayShadow106DSplitPolicyVersion      = "difficulty-model-path-four-role-split.2026-07-16.v1"
+	GatewayShadow106DSplitManifestHash       = "2066c1d46e6b2b6644bd100e53436c6b5ce3f12309eadb49cc174889a7b3afcd"
+	GatewayShadow106DGeneratedName           = "generatedDifficultySemanticModel106D"
 )
 
 type OfflineSemanticHeadSpec struct {
@@ -338,6 +353,53 @@ func ValidateGatewayShadow118DArtifact(artifact OfflineArtifact) error {
 	}
 	if projectionFloat32Hash(projection) != GatewayShadow118DProjectionHash {
 		return errors.New("Gateway shadow 118D PCA float32 material hash mismatch")
+	}
+	return nil
+}
+
+// ValidateGatewayShadow106DArtifact pins the frozen 3,000 train / 1,000
+// calibration model-path selection. The final-test outcomes are evidence only
+// and are deliberately absent from this artifact identity.
+func ValidateGatewayShadow106DArtifact(artifact OfflineArtifact) error {
+	if err := ValidateOfflineArtifact(artifact); err != nil {
+		return err
+	}
+	if artifact.ArtifactVersion != GatewayShadow106DArtifactVersion ||
+		artifact.TrainingPolicyVersion != GatewayShadow106DTrainingPolicyVersion ||
+		artifact.CandidateName != OfflineCandidateProjection ||
+		artifact.TotalDimension != 106 || len(artifact.FeatureNames) != 106 || len(artifact.Weights) != 106 {
+		return errors.New("Gateway shadow 106D artifact identity mismatch")
+	}
+	if artifact.TrainingDatasetVersion != GatewayShadow106DTrainingDatasetVersion ||
+		artifact.TrainingDatasetSHA256 != GatewayShadow106DTrainingDatasetHash ||
+		artifact.SplitPolicyVersion != GatewayShadow106DSplitPolicyVersion ||
+		artifact.SplitManifestSHA256 != GatewayShadow106DSplitManifestHash {
+		return errors.New("Gateway shadow 106D training population mismatch")
+	}
+	projection := artifact.ProjectionParameters
+	if artifact.ProjectionDimension != 64 || artifact.SemanticHeadInputDimension != 64 ||
+		projection.Kind != "pca_full_svd" || projection.InputDimension != 384 || projection.OutputDimension != 64 ||
+		projection.DType != "float32_le" || projection.FitSplit != "train" || projection.L2Position != "after_projection" ||
+		projection.L2Epsilon != 1e-12 || len(projection.Mean) != 384 || len(projection.Components) != 64 {
+		return errors.New("Gateway shadow 106D projection contract mismatch")
+	}
+	if len(artifact.SemanticHeadParameters) != 4 || len(artifact.SemanticHeadClassOrder) != 4 ||
+		artifact.SemanticHeadProbabilityRule != OfflineHeadProbabilityRule {
+		return errors.New("Gateway shadow 106D semantic-head provenance mismatch")
+	}
+	if artifact.Calibrator.Type != "platt" || artifact.Calibrator.Input != "raw_probability" ||
+		artifact.Calibrator.Coefficient == nil || artifact.Calibrator.Intercept == nil ||
+		artifact.ThresholdPolicyVersion != GatewayShadow106DThresholdPolicyVersion || artifact.Threshold != 0.096 ||
+		artifact.ThresholdEquality != OfflineThresholdEquality || artifact.Regularization.SelectedC != 10 {
+		return errors.New("Gateway shadow 106D calibration contract mismatch")
+	}
+	if artifact.BundleHash != GatewayShadow106DBundleHash || artifact.ContentHash != GatewayShadow106DContentHash ||
+		artifact.ComponentHashes.Projection != GatewayShadow106DProjectionHash ||
+		artifact.ComponentHashes.SemanticHeads != GatewayShadow106DSemanticHeadsHash {
+		return errors.New("Gateway shadow 106D pinned hash mismatch")
+	}
+	if projectionFloat32Hash(projection) != GatewayShadow106DProjectionHash {
+		return errors.New("Gateway shadow 106D PCA float32 material hash mismatch")
 	}
 	return nil
 }
@@ -731,6 +793,85 @@ func RenderGatewayShadow118DPayload(payload []byte, packageName string) ([]byte,
 		return nil, err
 	}
 	return RenderGatewayShadow118DGo(artifact, packageName)
+}
+
+// RenderGatewayShadow106DGo emits only the selected 42D rule + 64D PCA hot
+// path. Semantic-head parameters remain artifact provenance and are not
+// compiled because the selected Logistic Regression does not consume them.
+func RenderGatewayShadow106DGo(artifact OfflineArtifact, packageName string) ([]byte, error) {
+	if err := ValidateGatewayShadow106DArtifact(artifact); err != nil {
+		return nil, err
+	}
+	if matched, _ := regexp.MatchString(`^[a-z][a-z0-9_]*$`, packageName); !matched {
+		return nil, errors.New("invalid generated Go package name")
+	}
+	var builder strings.Builder
+	builder.WriteString("// Code generated by difficulty-model-codegen; DO NOT EDIT.\n")
+	builder.WriteString("// Gateway shadow only; rule routing remains authoritative.\n")
+	builder.WriteString("package " + packageName + "\n\n")
+	builder.WriteString("var " + GatewayShadow106DGeneratedName + " = difficultySemanticModelMaterial{\n")
+	builder.WriteString("\tidentity: difficultySemanticModelIdentity{\n")
+	writeGeneratedStringField(&builder, "artifactVersion", artifact.ArtifactVersion)
+	writeGeneratedStringField(&builder, "decisionBoundaryVersion", GatewayShadow106DDecisionBoundaryVersion)
+	writeGeneratedStringField(&builder, "candidateName", artifact.CandidateName)
+	writeGeneratedStringField(&builder, "ruleVectorVersion", artifact.RuleVectorVersion)
+	writeGeneratedStringField(&builder, "preprocessingVersion", artifact.PreprocessingVersion)
+	writeGeneratedStringField(&builder, "tokenizerVersion", artifact.TokenizerVersion)
+	writeGeneratedStringField(&builder, "encoderVersion", artifact.EncoderVersion)
+	writeGeneratedStringField(&builder, "poolingVersion", artifact.PoolingVersion)
+	writeGeneratedStringField(&builder, "projectionVersion", artifact.ProjectionVersion)
+	writeGeneratedStringField(&builder, "semanticHeadsVersion", artifact.SemanticHeadsVersion)
+	writeGeneratedStringField(&builder, "calibrationVersion", artifact.CalibrationVersion)
+	writeGeneratedStringField(&builder, "thresholdPolicyVersion", artifact.ThresholdPolicyVersion)
+	writeGeneratedStringField(&builder, "thresholdEquality", artifact.ThresholdEquality)
+	writeGeneratedStringField(&builder, "ruleVectorHash", artifact.ComponentHashes.RuleVector)
+	writeGeneratedStringField(&builder, "tokenizerHash", artifact.ComponentHashes.Tokenizer)
+	writeGeneratedStringField(&builder, "encoderHash", artifact.ComponentHashes.Encoder)
+	writeGeneratedStringField(&builder, "projectionHash", artifact.ComponentHashes.Projection)
+	writeGeneratedStringField(&builder, "semanticHeadsHash", artifact.ComponentHashes.SemanticHeads)
+	writeGeneratedStringField(&builder, "bundleVersion", artifact.BundleVersion)
+	writeGeneratedStringField(&builder, "bundleHash", artifact.BundleHash)
+	writeGeneratedStringField(&builder, "contentHash", artifact.ContentHash)
+	builder.WriteString("\t},\n")
+	builder.WriteString("\tfeatureNames: [difficultySemanticTotalDimension]string{\n")
+	for _, name := range artifact.FeatureNames {
+		builder.WriteString("\t\t" + strconv.Quote(name) + ",\n")
+	}
+	builder.WriteString("\t},\n")
+	builder.WriteString("\tpcaMean: [difficultySemanticPooledDimension]float32{\n")
+	for _, value := range artifact.ProjectionParameters.Mean {
+		builder.WriteString("\t\t" + goFloat32(value) + ",\n")
+	}
+	builder.WriteString("\t},\n")
+	builder.WriteString("\tpcaComponents: [difficultySemanticProjectionDimension][difficultySemanticPooledDimension]float32{\n")
+	for _, row := range artifact.ProjectionParameters.Components {
+		builder.WriteString("\t\t{\n")
+		for _, value := range row {
+			builder.WriteString("\t\t\t" + goFloat32(value) + ",\n")
+		}
+		builder.WriteString("\t\t},\n")
+	}
+	builder.WriteString("\t},\n")
+	builder.WriteString("\tl2Epsilon: " + goFloat32(artifact.ProjectionParameters.L2Epsilon) + ",\n")
+	builder.WriteString("\tfinalWeights: [difficultySemanticTotalDimension]float64{\n")
+	for index, weight := range artifact.Weights {
+		builder.WriteString("\t\t" + goFloat(weight) + ", // " + artifact.FeatureNames[index] + "\n")
+	}
+	builder.WriteString("\t},\n")
+	builder.WriteString("\tfinalBias: " + goFloat(artifact.Bias) + ",\n")
+	builder.WriteString("\tplattCoefficient: " + goFloat(*artifact.Calibrator.Coefficient) + ",\n")
+	builder.WriteString("\tplattIntercept: " + goFloat(*artifact.Calibrator.Intercept) + ",\n")
+	builder.WriteString("\tthreshold: " + goFloat(artifact.Threshold) + ",\n")
+	builder.WriteString("}\n")
+	return format.Source([]byte(builder.String()))
+}
+
+func RenderGatewayShadow106DPayload(payload []byte, packageName string) ([]byte, error) {
+	artifact, err := ParseOfflineArtifact(payload)
+	if err != nil {
+		return nil, err
+	}
+	return RenderGatewayShadow106DGo(artifact, packageName)
 }
 
 func writeGeneratedStringField(builder *strings.Builder, name string, value string) {

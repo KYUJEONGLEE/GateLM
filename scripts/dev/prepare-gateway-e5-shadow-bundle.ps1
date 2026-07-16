@@ -136,4 +136,4 @@ Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $outputPath "diffic
 Copy-Item -LiteralPath $lockPath -Destination (Join-Path $outputPath "difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")
 Copy-Item -LiteralPath $checksumsPath -Destination (Join-Path $outputPath "difficulty-e5-gateway-image.linux-amd64.v2.sha256")
 
-Write-Host "Prepared verified Gateway E5 shadow bundle: $outputPath"
+Write-Host "Prepared verified Gateway E5 runtime bundle: $outputPath"

@@ -13,32 +13,25 @@ import (
 	"testing"
 )
 
-func TestDifficultySemanticModelAssemblesExact118DBlocks(t *testing.T) {
+func TestDifficultySemanticModelAssemblesExact106DBlocks(t *testing.T) {
 	features := syntheticDifficultySemanticModelFeatures()
-	vector, err := generatedDifficultySemanticModel118D.assembleModelVector(
+	vector, err := generatedDifficultySemanticModel106D.assembleModelVector(
 		features,
 		syntheticDifficultySemanticPooled(),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(vector) != 118 {
-		t.Fatalf("semantic vector dimension=%d, want 118", len(vector))
+	if len(vector) != 106 {
+		t.Fatalf("semantic vector dimension=%d, want 106", len(vector))
 	}
 	if vector[0] != 0 || vector[1] != 1 || vector[8] != 1 || vector[41] != 0 {
 		t.Fatalf("rule block offsets drifted")
 	}
-	if delta := math.Abs(vector[42] - -0.37483188509941101); delta > 2e-6 {
-		t.Fatalf("projection block start delta=%g exceeds tolerance", delta)
-	}
-	if delta := math.Abs(vector[105] - -0.038661021739244461); delta > 2e-6 {
-		t.Fatalf("projection block end delta=%g exceeds tolerance", delta)
-	}
-	if delta := math.Abs(vector[106] - 0.55001317602471400); delta > 1e-6 {
-		t.Fatalf("semantic head block start delta=%g exceeds tolerance", delta)
-	}
-	if delta := math.Abs(vector[117] - 0.25060946552348867); delta > 1e-6 {
-		t.Fatalf("semantic head block end delta=%g exceeds tolerance", delta)
+	for index, value := range vector[42:] {
+		if !finiteDifficultyFloat(value) {
+			t.Fatalf("projection block value %d is not finite", index)
+		}
 	}
 }
 
@@ -49,8 +42,8 @@ func TestDifficultySemanticShadowEvaluatorUsesInstructionOnlyEncoder(t *testing.
 
 	result := evaluator.Evaluate(context.Background(), features, CategoryGeneral)
 
-	if result.Status != DifficultySemanticShadowReady || result.Difficulty.Difficulty != DifficultyComplex {
-		t.Fatalf("shadow result=%+v, want ready complex result", result)
+	if result.Status != DifficultySemanticShadowReady || result.Difficulty.Difficulty != DifficultySimple {
+		t.Fatalf("shadow result=%+v, want ready simple result", result)
 	}
 	if encoder.input != "explain one workflow step." {
 		t.Fatalf("encoder input boundary drifted")
@@ -136,12 +129,12 @@ func (encoder *blockingDifficultyPooledEncoder) EncodePooled(
 func (*blockingDifficultyPooledEncoder) Close() error { return nil }
 
 func TestGeneratedDifficultySemanticModelIdentityAndProjectionBitsArePinned(t *testing.T) {
-	identity := generatedDifficultySemanticModel118D.identity
-	if identity.artifactVersion != "difficulty-offline.owner-approved-500.single-request.2026-07-15.42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v3" ||
-		identity.bundleHash != "sha256:4209fbc2ea2a3a222bb8eae2b1003f8c358939c7f4a66ae2b2ef187972351220" ||
-		identity.contentHash != "sha256:72eb5171c30b191716553cb24cdf25cf314c2a53c9085542619de2283f6d1bdd" ||
-		identity.projectionHash != "sha256:a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa" ||
-		identity.semanticHeadsHash != "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386" {
+	identity := generatedDifficultySemanticModel106D.identity
+	if identity.artifactVersion != "difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1" ||
+		identity.bundleHash != "sha256:1a755c3bca16f76a43f86696e9b2028e805eb7536161245a8683adf78b118ebd" ||
+		identity.contentHash != "sha256:4c2c4f516206530d3b3f9c393b0633b7694a2e0aa5e20400d65faf088a184f5d" ||
+		identity.projectionHash != "sha256:4800637a5aa82e3184cdb86052acbe973ba91aeb8119684ecba5baef4e1afc3d" ||
+		identity.semanticHeadsHash != "sha256:8f835ce1799c18c32a7751a159fbd84a20bd970c39a7e13c41cf4ccca4790eef" {
 		t.Fatalf("generated semantic model identity drifted: %+v", identity)
 	}
 	digest := sha256.New()
@@ -150,10 +143,10 @@ func TestGeneratedDifficultySemanticModelIdentityAndProjectionBitsArePinned(t *t
 		binary.LittleEndian.PutUint32(encoded[:], math.Float32bits(value))
 		_, _ = digest.Write(encoded[:])
 	}
-	for _, value := range generatedDifficultySemanticModel118D.pcaMean {
+	for _, value := range generatedDifficultySemanticModel106D.pcaMean {
 		write(value)
 	}
-	for _, row := range generatedDifficultySemanticModel118D.pcaComponents {
+	for _, row := range generatedDifficultySemanticModel106D.pcaComponents {
 		for _, value := range row {
 			write(value)
 		}
@@ -164,25 +157,23 @@ func TestGeneratedDifficultySemanticModelIdentityAndProjectionBitsArePinned(t *t
 	}
 }
 
-func TestGeneratedDifficultySemanticModelIsIncompatibleAfterDecisionBoundaryChange(t *testing.T) {
-	identity := generatedDifficultySemanticModel118D.identity
-	if identity.decisionBoundaryVersion != "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1" {
-		t.Fatalf("historical decision boundary identity drifted: %q", identity.decisionBoundaryVersion)
+func TestGeneratedDifficultySemanticModelMatchesCurrentDecisionBoundary(t *testing.T) {
+	identity := generatedDifficultySemanticModel106D.identity
+	if identity.decisionBoundaryVersion != "difficulty-decision-boundary.semantic-empty-combined-8.2026-07-15.v2" {
+		t.Fatalf("decision boundary identity drifted: %q", identity.decisionBoundaryVersion)
 	}
-	if identity.decisionBoundaryVersion == DifficultyDecisionBoundaryVersion {
-		t.Fatal("historical model unexpectedly matches the current decision boundary")
+	if identity.decisionBoundaryVersion != DifficultyDecisionBoundaryVersion {
+		t.Fatal("semantic model does not match the current decision boundary")
 	}
-	if DifficultySemanticShadowModelCompatible() {
-		t.Fatal("historical semantic model was accepted by the current decision boundary")
+	if !DifficultySemanticShadowModelCompatible() {
+		t.Fatal("current semantic model was rejected by the current decision boundary")
 	}
 }
 
-func TestGeneratedDifficultySemanticModelAcceptsOnlyPinnedBaselineE2EWaiver(t *testing.T) {
-	if !DifficultySemanticShadowBaselineWaiverAccepted(DifficultySemanticShadowBaselineE2EWaiverV3) {
-		t.Fatal("pinned v3 baseline E2E waiver was rejected")
-	}
+func TestGeneratedDifficultySemanticModelRejectsHistoricalBaselineE2EWaiver(t *testing.T) {
 	for _, waiver := range []string{
 		"",
+		DifficultySemanticShadowBaselineE2EWaiverV3,
 		"difficulty-shadow-baseline-e2e-v3-2026-07-15-typo",
 		"difficulty-shadow-baseline-e2e-v4-2026-07-15",
 	} {
@@ -195,15 +186,15 @@ func TestGeneratedDifficultySemanticModelAcceptsOnlyPinnedBaselineE2EWaiver(t *t
 func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing.T) {
 	features := syntheticDifficultySemanticModelFeatures()
 	pooled := syntheticDifficultySemanticPooled()
-	projection, err := generatedDifficultySemanticModel118D.projectPooled(pooled)
+	projection, err := generatedDifficultySemanticModel106D.projectPooled(pooled)
 	if err != nil {
 		t.Fatal(err)
 	}
 	projectionCheckpoints := map[int]float64{
-		0:  -0.37483188509941101,
-		1:  0.072362005710601807,
-		17: -0.0067495238035917282,
-		63: -0.038661021739244461,
+		0:  -0.179607555270195,
+		1:  -0.10602201521396637,
+		17: 0.17137280106544495,
+		63: 0.05988718941807747,
 	}
 	for index, expected := range projectionCheckpoints {
 		if delta := math.Abs(float64(projection[index]) - expected); delta > 2e-6 {
@@ -211,45 +202,20 @@ func TestDifficultySemanticModelMatchesPythonCanonicalSyntheticParity(t *testing
 		}
 	}
 
-	heads, err := generatedDifficultySemanticModel118D.predictSemanticHeads(projection)
+	result, err := generatedDifficultySemanticModel106D.inferModelPath(features, pooled)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedHeads := [difficultySemanticHeadProbabilityDimension]float64{
-		0.55001317602471400, 0.13263457652561014, 0.31735224744967583,
-		0.71046708713372431, 0.080707222910201590, 0.20882568995607415,
-		0.21611276066293320, 0.48002860629757499, 0.30385863303949184,
-		0.28619441938197709, 0.46319611509453423, 0.25060946552348867,
-	}
-	for index, expected := range expectedHeads {
-		if delta := math.Abs(heads[index] - expected); delta > 1e-6 {
-			t.Fatalf("semantic head checkpoint %d delta=%g exceeds tolerance", index, delta)
-		}
-	}
-	for head := 0; head < difficultySemanticHeadCount; head++ {
-		sum := 0.0
-		for class := 0; class < difficultySemanticHeadClassCount; class++ {
-			sum += heads[head*difficultySemanticHeadClassCount+class]
-		}
-		if math.Abs(sum-1) > 1e-12 {
-			t.Fatalf("semantic head %d probability sum=%v", head, sum)
-		}
-	}
-
-	result, err := generatedDifficultySemanticModel118D.inferModelPath(features, pooled)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if delta := math.Abs(result.ComplexityScore - 0.99948949361896144); delta > 2e-8 {
+	if delta := math.Abs(result.ComplexityScore - 0.00972840314063258); delta > 1e-7 {
 		t.Fatalf("calibrated score=%v delta=%g exceeds tolerance", result.ComplexityScore, delta)
 	}
-	if result.Difficulty != DifficultyComplex {
-		t.Fatalf("difficulty=%q, want complex", result.Difficulty)
+	if result.Difficulty != DifficultySimple {
+		t.Fatalf("difficulty=%q, want simple", result.Difficulty)
 	}
-	if generatedDifficultySemanticModel118D.threshold != 0.45 ||
-		difficultyFromScore(0.45, generatedDifficultySemanticModel118D.threshold) != DifficultyComplex ||
-		difficultyFromScore(math.Nextafter(0.45, 0), generatedDifficultySemanticModel118D.threshold) != DifficultySimple {
-		t.Fatal("selected threshold must use greater-than-or-equal semantics at 0.45")
+	if generatedDifficultySemanticModel106D.threshold != 0.096 ||
+		difficultyFromScore(0.096, generatedDifficultySemanticModel106D.threshold) != DifficultyComplex ||
+		difficultyFromScore(math.Nextafter(0.096, 0), generatedDifficultySemanticModel106D.threshold) != DifficultySimple {
+		t.Fatal("selected threshold must use greater-than-or-equal semantics at 0.096")
 	}
 }
 
@@ -260,18 +226,18 @@ func TestDifficultySemanticModelRejectsUnavailableShadowInputsSafely(t *testing.
 		common:   CommonDifficultyFeatures{payloadSizeBucket: "empty"},
 		general:  &GeneralDifficultyFeatures{},
 	}
-	if _, err := generatedDifficultySemanticModel118D.inferModelPath(sentinel, pooled); !errors.Is(err, errDifficultySemanticModelPathRequired) {
+	if _, err := generatedDifficultySemanticModel106D.inferModelPath(sentinel, pooled); !errors.Is(err, errDifficultySemanticModelPathRequired) {
 		t.Fatalf("sentinel input error=%v", err)
 	}
 	features := syntheticDifficultySemanticModelFeatures()
 	pooled[12] = float32(math.NaN())
-	if _, err := generatedDifficultySemanticModel118D.inferModelPath(features, pooled); !errors.Is(err, errDifficultySemanticInputInvalid) {
+	if _, err := generatedDifficultySemanticModel106D.inferModelPath(features, pooled); !errors.Is(err, errDifficultySemanticInputInvalid) {
 		t.Fatalf("non-finite input error=%v", err)
 	} else if strings.Contains(strings.ToLower(err.Error()), "nan") || strings.Contains(err.Error(), "12") {
 		t.Fatalf("safe error exposed input material: %q", err)
 	}
-	degenerate := generatedDifficultySemanticModel118D.pcaMean
-	if _, err := generatedDifficultySemanticModel118D.inferModelPath(features, degenerate); !errors.Is(err, errDifficultySemanticProjectionInvalid) {
+	degenerate := generatedDifficultySemanticModel106D.pcaMean
+	if _, err := generatedDifficultySemanticModel106D.inferModelPath(features, degenerate); !errors.Is(err, errDifficultySemanticProjectionInvalid) {
 		t.Fatalf("degenerate projection error=%v", err)
 	}
 }
@@ -280,7 +246,7 @@ func TestDifficultySemanticModelSuccessPathDoesNotAllocate(t *testing.T) {
 	features := syntheticDifficultySemanticModelFeatures()
 	pooled := syntheticDifficultySemanticPooled()
 	if allocations := testing.AllocsPerRun(100, func() {
-		result, err := generatedDifficultySemanticModel118D.inferModelPath(features, pooled)
+		result, err := generatedDifficultySemanticModel106D.inferModelPath(features, pooled)
 		if err != nil || result.Difficulty == "" {
 			panic("semantic model inference failed")
 		}
@@ -298,7 +264,7 @@ func TestDifficultySemanticModelExternalPythonParity(t *testing.T) {
 	if err != nil || !finiteDifficultyFloat(expected) {
 		t.Fatal("specialist Python parity score is invalid")
 	}
-	result, err := generatedDifficultySemanticModel118D.inferModelPath(
+	result, err := generatedDifficultySemanticModel106D.inferModelPath(
 		syntheticDifficultySemanticModelFeatures(),
 		syntheticDifficultySemanticPooled(),
 	)

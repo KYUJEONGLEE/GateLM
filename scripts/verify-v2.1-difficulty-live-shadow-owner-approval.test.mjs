@@ -24,7 +24,7 @@ function canonicalInputs() {
   };
 }
 
-test("accepts owner guardrails without promoting failed holdout evidence", () => {
+test("keeps historical owner approval narrow after 106D runtime promotion", () => {
   const { approval, supersession, baselineWaiver } = verifyCanonicalApproval();
   assert.equal(approval.scope.authoritativeRouting, "rule_based");
   assert.equal(approval.scope.productRoutingPromotionApproved, false);
