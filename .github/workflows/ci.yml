@@ -264,12 +264,13 @@ jobs:
           pnpm --filter @gatelm/control-plane-api exec jest --runInBand
           prisma/rag-foundation.migration.spec.ts
 
-      - name: Verify upgrade from the 37-migration baseline
+      - name: Verify upgrade from every pre-RAG migration
         shell: bash
         run: |
           set -euo pipefail
           migration_name="20260716150000_rag_db_foundation"
           baseline_root="${RUNNER_TEMP}/gatelm-rag-baseline"
+          expected_baseline_count=0
           mkdir -p "${baseline_root}/migrations"
           cp apps/control-plane-api/prisma/schema.prisma "${baseline_root}/schema.prisma"
           cp apps/control-plane-api/prisma/migrations/migration_lock.toml \
@@ -279,11 +280,15 @@ jobs:
             name="$(basename "${migration}")"
             if [[ -d "${migration}" && "${name}" < "${migration_name}" ]]; then
               cp -R "${migration}" "${baseline_root}/migrations/"
+              expected_baseline_count=$((expected_baseline_count + 1))
             fi
           done
 
           baseline_count="$(find "${baseline_root}/migrations" -mindepth 1 -maxdepth 1 -type d | wc -l)"
-          [[ "${baseline_count}" -eq 37 ]]
+          if [[ "${expected_baseline_count}" -eq 0 || "${baseline_count}" -ne "${expected_baseline_count}" ]]; then
+            echo "Pre-RAG migration baseline copy mismatch: expected ${expected_baseline_count}, copied ${baseline_count}." >&2
+            exit 1
+          fi
 
           pnpm --filter @gatelm/control-plane-api exec prisma migrate deploy \
             --schema "${baseline_root}/schema.prisma"
