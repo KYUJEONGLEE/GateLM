@@ -15,7 +15,9 @@ RUN find . -type f -printf '%P\n' | sort > /tmp/e5-actual-files \
   && sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256
 
 FROM e5-bundle AS e5-runtime
-RUN rm native/libtokenizers.a
+RUN rm native/libtokenizers.a \
+  && find . -type d -exec chmod 0555 {} + \
+  && find . -type f -exec chmod 0444 {} +
 
 FROM golang:${GO_VERSION}-bookworm AS builder
 
@@ -34,8 +36,8 @@ RUN CGO_ENABLED=1 \
 
 FROM debian:bookworm-slim AS runner
 
-LABEL org.opencontainers.image.title="GateLM Gateway Core E5 Shadow"
-LABEL org.opencontainers.image.description="GateLM Gateway Core optional Linux amd64 E5 shadow inference profile"
+LABEL org.opencontainers.image.title="GateLM Gateway Core E5 Runtime"
+LABEL org.opencontainers.image.description="GateLM Gateway Core Linux amd64 authoritative E5 difficulty-routing profile"
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates libstdc++6 \
@@ -49,9 +51,9 @@ COPY --from=e5-runtime --chown=gatelm:gatelm /opt/gatelm/difficulty-e5 /opt/gate
 USER gatelm
 
 ENV GATEWAY_PORT=8080 \
-    GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=true \
-    GATEWAY_DIFFICULTY_E5_SHADOW_BASELINE_WAIVER=difficulty-shadow-baseline-e2e-v3.2026-07-15.v1 \
-    GATEWAY_DIFFICULTY_E5_SHADOW_TIMEOUT_MS=100 \
+    GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true \
+    GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS=100 \
+    GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false \
     GATEWAY_DIFFICULTY_E5_ARTIFACT_ROOT=/opt/gatelm/difficulty-e5 \
     GATEWAY_DIFFICULTY_E5_ENCODER_MANIFEST=/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json \
     GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK=/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json

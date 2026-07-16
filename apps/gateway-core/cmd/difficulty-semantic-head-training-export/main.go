@@ -81,6 +81,9 @@ type semanticHeadSpec struct {
 
 type semanticHeadTrainingInput struct {
 	SchemaVersion                 string                            `json:"schemaVersion"`
+	AccessPhase                   string                            `json:"accessPhase"`
+	IncludedPartitions            []string                          `json:"includedPartitions"`
+	HoldoutOutcomeAccessed        bool                              `json:"holdoutOutcomeAccessed"`
 	DatasetVersion                string                            `json:"datasetVersion"`
 	DatasetSHA256                 string                            `json:"datasetSha256"`
 	ManifestSHA256                string                            `json:"manifestSha256"`
@@ -130,9 +133,20 @@ var fixedSemanticHeadSpecs = []semanticHeadSpec{
 func main() {
 	datasetPath := flag.String("dataset", defaultLabelDatasetPath, "approved difficulty label dataset JSONL")
 	manifestPath := flag.String("manifest", defaultLabelManifestPath, "training-eligible difficulty label manifest")
+	phase := flag.String("phase", "all", "export phase: all, selection, or final-test")
 	flag.Parse()
 
-	export, err := buildSemanticHeadTrainingInput(*datasetPath, *manifestPath)
+	includedPartitions, err := semanticHeadPartitionsForPhase(*phase)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	export, err := buildSemanticHeadTrainingInputForPhase(
+		*datasetPath,
+		*manifestPath,
+		*phase,
+		includedPartitions,
+	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -146,6 +160,41 @@ func main() {
 }
 
 func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (semanticHeadTrainingInput, error) {
+	return buildSemanticHeadTrainingInputForPhase(
+		datasetPath,
+		manifestPath,
+		"all",
+		map[string]bool{"train": true, "calibration": true, "holdout": true},
+	)
+}
+
+func semanticHeadPartitionsForPhase(phase string) (map[string]bool, error) {
+	switch phase {
+	case "all":
+		return map[string]bool{"train": true, "calibration": true, "holdout": true}, nil
+	case "selection":
+		return map[string]bool{"train": true, "calibration": true}, nil
+	case "final-test":
+		return map[string]bool{"holdout": true}, nil
+	default:
+		return nil, errors.New("semantic head export phase must be all, selection, or final-test")
+	}
+}
+
+func buildSemanticHeadTrainingInputForPhase(
+	datasetPath string,
+	manifestPath string,
+	phase string,
+	includedPartitions map[string]bool,
+) (semanticHeadTrainingInput, error) {
+	if len(includedPartitions) == 0 {
+		return semanticHeadTrainingInput{}, errors.New("semantic head export requires at least one partition")
+	}
+	for partition := range includedPartitions {
+		if !validPartition(partition) {
+			return semanticHeadTrainingInput{}, errors.New("semantic head export contains an invalid partition")
+		}
+	}
 	datasetBytes, err := os.ReadFile(datasetPath)
 	if err != nil {
 		return semanticHeadTrainingInput{}, fmt.Errorf("read semantic head dataset: %w", err)
@@ -187,6 +236,9 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 
 	result := semanticHeadTrainingInput{
 		SchemaVersion:           "gatelm.difficulty-semantic-head-training-input.v1",
+		AccessPhase:             phase,
+		IncludedPartitions:      orderedSemanticPartitions(includedPartitions),
+		HoldoutOutcomeAccessed:  includedPartitions["holdout"],
 		DatasetVersion:          manifest.DatasetVersion,
 		DatasetSHA256:           datasetSHA256,
 		ManifestSHA256:          manifestSHA256,
@@ -237,6 +289,9 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		}
 		if !validLanguage(record.Language) || len(record.EvaluationSlices) == 0 {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has invalid evaluation metadata", lineNumber)
+		}
+		if !includedPartitions[partition] {
+			continue
 		}
 		features := routing.ExtractPromptFeatures(record.RedactedPrompt)
 		instructionText, semanticInputAvailable := routing.DifficultySemanticInputForOffline(features)
@@ -323,15 +378,27 @@ func buildSemanticHeadTrainingInput(datasetPath string, manifestPath string) (se
 		if familyCount != declared.Families {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head %s family count does not match manifest", partition)
 		}
-		if eligibleByPartition[partition] == 0 {
+		if includedPartitions[partition] && eligibleByPartition[partition] == 0 {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head dataset has no eligible %s samples", partition)
 		}
-		result.SplitCounts[partition] = semanticSplitCount{
-			Families: len(eligibleFamiliesByPartition[partition]),
-			Records:  eligibleByPartition[partition],
+		if includedPartitions[partition] {
+			result.SplitCounts[partition] = semanticSplitCount{
+				Families: len(eligibleFamiliesByPartition[partition]),
+				Records:  eligibleByPartition[partition],
+			}
 		}
 	}
 	return result, nil
+}
+
+func orderedSemanticPartitions(included map[string]bool) []string {
+	partitions := make([]string, 0, len(included))
+	for _, partition := range []string{"train", "calibration", "holdout"} {
+		if included[partition] {
+			partitions = append(partitions, partition)
+		}
+	}
+	return partitions
 }
 
 func cloneSemanticSplitCounts(source map[string]semanticSplitCount) map[string]semanticSplitCount {

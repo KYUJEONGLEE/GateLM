@@ -28,7 +28,7 @@
 | Path | Status | Scope |
 |---|---|---|
 | [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | Exact v1 42D를 보존하고 `instructionText` projection과 4-head/12D probability를 분리해 비교하는 offline/shadow difficulty candidate |
-| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Canonical offline + opt-in non-authoritative Gateway request shadow | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64, verified local bundle과 bounded optional Linux amd64 request shadow 계약 |
+| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Canonical offline + authoritative Gateway model-path difficulty runtime | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64, verified local bundle과 bounded optional Linux amd64 runtime 계약 |
 | [`difficulty-decision-loss-threshold-experiment.md`](difficulty-decision-loss-threshold-experiment.md) | Offline experiment; not active | 고정 threshold grid의 FP/FN, Expected Decision Loss, break-even `C_FN`과 safety-constrained optimum을 aggregate로 비교 |
 
 이 표의 문서는 active contract가 아니다. 별도 승인과 source-of-truth 승격 전에는 Gateway hot path, routing policy 또는 제품 surface의 근거로 사용할 수 없다.
@@ -57,4 +57,4 @@ corepack pnpm run verify:v2-docs
 
 Local pinned E5 artifact cache와 Docker가 준비된 환경에서는 `corepack pnpm run verify:v2.1-gateway-e5-shadow`로 Linux amd64 native/Python parity, optional image build와 startup smoke를 추가 검증한다. 이 명령은 runtime download를 수행하지 않는다.
 
-제한된 개발 tenant/application에서 request shadow를 운영할 때의 exact-pair opt-in, aggregate disagreement query와 rollback 절차는 [`../testing/difficulty-live-shadow-runbook.md`](../testing/difficulty-live-shadow-runbook.md)를 따른다. 이 runbook은 product routing 승격 근거가 아니다.
+106D difficulty runtime의 활성화, 장애 시 rule fallback, memory guardrail과 rollback 절차는 [`../testing/difficulty-live-shadow-runbook.md`](../testing/difficulty-live-shadow-runbook.md)를 따른다. Historical request shadow는 runtime과 동시에 활성화할 수 없다.

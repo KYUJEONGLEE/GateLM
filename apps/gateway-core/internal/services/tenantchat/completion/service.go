@@ -148,17 +148,18 @@ type preCallAccounting interface {
 }
 
 type Service struct {
-	snapshots  snapshotResolver
-	usage      usageAccounting
-	providers  providerExecutor
-	safety     safetyEvaluator
-	cache      exactCache
-	tokenRate  providerTokenLimiter
-	ledgerless ledgerlessAccounting
-	preCall    preCallAccounting
-	metrics    *metrics.Registry
-	sessionsMu sync.Mutex
-	sessions   map[string]*sharedSession
+	snapshots         snapshotResolver
+	usage             usageAccounting
+	providers         providerExecutor
+	safety            safetyEvaluator
+	cache             exactCache
+	tokenRate         providerTokenLimiter
+	difficultyRuntime *routing.DifficultySemanticRuntime
+	ledgerless        ledgerlessAccounting
+	preCall           preCallAccounting
+	metrics           *metrics.Registry
+	sessionsMu        sync.Mutex
+	sessions          map[string]*sharedSession
 }
 
 type PreparedExecution struct {
@@ -241,6 +242,10 @@ func WithProviderTokenLimiter(limiter providerTokenLimiter) Option {
 	return func(service *Service) { service.tokenRate = limiter }
 }
 
+func WithDifficultySemanticRuntime(runtime *routing.DifficultySemanticRuntime) Option {
+	return func(service *Service) { service.difficultyRuntime = runtime }
+}
+
 func WithMetrics(registry *metrics.Registry) Option {
 	return func(service *Service) { service.metrics = registry }
 }
@@ -304,7 +309,7 @@ func (s *Service) Prepare(
 		input = evaluation.Input
 	}
 	if snapshot.Policies.Routing.Policy != nil {
-		routingDecision, routingErr := decideTenantChatRoute(ctx, snapshot, input)
+		routingDecision, routingErr := decideTenantChatRoute(ctx, snapshot, input, s.difficultyRuntime)
 		if routingErr != nil {
 			return nil, tenantchat.ErrNoEligibleRoute
 		}
@@ -445,6 +450,7 @@ func decideTenantChatRoute(
 	ctx context.Context,
 	snapshot tenantruntime.Snapshot,
 	input tenantchat.CompletionInput,
+	difficultyRuntime *routing.DifficultySemanticRuntime,
 ) (tenantchat.RoutingDecision, error) {
 	policy := snapshot.Policies.Routing.Policy
 	if policy == nil {
@@ -470,7 +476,10 @@ func decideTenantChatRoute(
 			Reasoning:     toRoutingDifficulty(policy.Routes.Reasoning),
 		},
 	}
-	decision, err := routing.NewSimpleRouter(config).DecideRoute(ctx, routing.Request{
+	decision, err := routing.NewSimpleRouter(
+		config,
+		routing.WithDifficultySemanticRuntime(difficultyRuntime),
+	).DecideRoute(ctx, routing.Request{
 		RequestedModel: requestedModel,
 		PromptMessages: messages,
 	})
