@@ -6,6 +6,7 @@ import {
   conversationPage,
   createConversationBody,
   createTurnBody,
+  MAX_TENANT_CHAT_OUTPUT_TOKENS,
   messagePage,
   parseIfMatch,
   parsePageQuery,
@@ -48,6 +49,19 @@ test('turn context mode defaults to conversation and accepts single-turn isolati
   };
   assert.equal(createTurnBody(base).contextMode, 'conversation');
   assert.equal(createTurnBody({ ...base, contextMode: 'single_turn' }).contextMode, 'single_turn');
+});
+
+test('turn output token limit matches the public Tenant Chat API limit', () => {
+  const base = {
+    content: '질문',
+    idempotencyKey: '1234567890abcdef',
+    usageIntent: { cacheStrategy: 'exact', maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS, requestedTier: 'auto' },
+  };
+  assert.equal(createTurnBody(base).usageIntent.maxOutputTokens, MAX_TENANT_CHAT_OUTPUT_TOKENS);
+  assert.throws(() => createTurnBody({
+    ...base,
+    usageIntent: { ...base.usageIntent, maxOutputTokens: MAX_TENANT_CHAT_OUTPUT_TOKENS + 1 },
+  }));
 });
 
 test('success response shaping rejects tenant or user scope fields', () => {
