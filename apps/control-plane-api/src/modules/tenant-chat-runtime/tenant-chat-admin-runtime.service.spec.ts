@@ -513,7 +513,17 @@ describe('TenantChatRuntimeService administrator activation', () => {
         detectorSet: [
           { detectorType: 'email' as const, action: 'allow' as const },
           { detectorType: 'phone_number' as const, action: 'redact' as const },
+          {
+            detectorType: 'resident_registration_number' as const,
+            action: 'block' as const,
+          },
           { detectorType: 'api_key' as const, action: 'block' as const },
+          {
+            detectorType: 'authorization_header' as const,
+            action: 'block' as const,
+          },
+          { detectorType: 'jwt' as const, action: 'block' as const },
+          { detectorType: 'private_key' as const, action: 'block' as const },
         ],
       },
       publishedBy: ADMIN_ID,
@@ -551,12 +561,49 @@ describe('TenantChatRuntimeService administrator activation', () => {
         modelKey: 'gpt-5.4-mini',
         safetyPolicy: {
           detectorSet: [
+            {
+              detectorType: 'resident_registration_number',
+              action: 'block',
+            },
             { detectorType: 'api_key', action: 'allow' },
+            { detectorType: 'authorization_header', action: 'block' },
+            { detectorType: 'jwt', action: 'block' },
+            { detectorType: 'private_key', action: 'block' },
           ],
         },
         publishedBy: ADMIN_ID,
       }),
-    ).rejects.toThrow('Mandatory Tenant Chat safety detectors cannot be disabled.');
+    ).rejects.toThrow(
+      'Mandatory Tenant Chat safety detectors cannot be disabled or omitted.',
+    );
+    expect(harness.snapshots).toHaveLength(0);
+  });
+
+  it('rejects omitting a mandatory Tenant Chat safety detector', async () => {
+    const harness = createPersistenceHarness();
+    const service = new TenantChatRuntimeService(harness.prisma);
+
+    await expect(
+      service.activateAdminRuntime({
+        tenantId: TENANT_ID,
+        providerConnectionId: PROVIDER_ID,
+        modelKey: 'gpt-5.4-mini',
+        safetyPolicy: {
+          detectorSet: [
+            {
+              detectorType: 'resident_registration_number',
+              action: 'block',
+            },
+            { detectorType: 'authorization_header', action: 'block' },
+            { detectorType: 'jwt', action: 'block' },
+            { detectorType: 'private_key', action: 'block' },
+          ],
+        },
+        publishedBy: ADMIN_ID,
+      }),
+    ).rejects.toThrow(
+      'Mandatory Tenant Chat safety detectors cannot be disabled or omitted.',
+    );
     expect(harness.snapshots).toHaveLength(0);
   });
 

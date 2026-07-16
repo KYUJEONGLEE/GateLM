@@ -38,6 +38,7 @@ import type {
   TenantChatRoutingCategory,
   TenantChatRoutingMatrix,
   TenantChatRoutingMode,
+  TenantChatSafetyDetectorType,
   TenantChatRuntimePolicies,
   TenantChatRuntimeRoute,
   TenantChatRuntimeSnapshotDocument,
@@ -56,7 +57,7 @@ const ROUTING_CATEGORIES: TenantChatRoutingCategory[] = [
   'reasoning',
 ];
 const ROUTING_DIFFICULTIES = ['simple', 'complex'] as const;
-const MANDATORY_SAFETY_DETECTORS = new Set([
+const MANDATORY_SAFETY_DETECTORS = new Set<TenantChatSafetyDetectorType>([
   'resident_registration_number',
   'api_key',
   'authorization_header',
@@ -745,15 +746,19 @@ export class TenantChatRuntimeService {
               'Tenant Chat safety policy requires 1 to 10 unique detectors.',
             );
           }
+          const activeMandatoryDetectors = new Set(
+            input.safetyPolicy.detectorSet
+              .filter((detector) => detector.action !== 'allow')
+              .map((detector) => detector.detectorType),
+          );
           if (
-            input.safetyPolicy.detectorSet.some(
-              (detector) =>
-                detector.action === 'allow' &&
-                MANDATORY_SAFETY_DETECTORS.has(detector.detectorType),
+            Array.from(MANDATORY_SAFETY_DETECTORS).some(
+              (detectorType) =>
+                !activeMandatoryDetectors.has(detectorType),
             )
           ) {
             throw new BadRequestException(
-              'Mandatory Tenant Chat safety detectors cannot be disabled.',
+              'Mandatory Tenant Chat safety detectors cannot be disabled or omitted.',
             );
           }
           const safetyWithoutDigest = {

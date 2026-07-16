@@ -150,7 +150,7 @@ function isSafetyPolicy(value: unknown) {
     return false;
   }
   const detectorTypes = new Set<string>();
-  return detectorSet.every((detector) => {
+  const allDetectorsValid = detectorSet.every((detector) => {
     if (!detector || typeof detector !== "object" || Array.isArray(detector)) {
       return false;
     }
@@ -168,6 +168,12 @@ function isSafetyPolicy(value: unknown) {
     detectorTypes.add(item.detectorType);
     return true;
   });
+  return (
+    allDetectorsValid &&
+    Array.from(MANDATORY_SAFETY_DETECTOR_TYPES).every((detectorType) =>
+      detectorTypes.has(detectorType)
+    )
+  );
 }
 
 function isRoutingMatrix(value: unknown) {
