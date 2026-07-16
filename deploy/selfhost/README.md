@@ -104,13 +104,17 @@ bash scripts/smoke-test.sh
 | 1 | `scripts/install.sh` | validates `.env`, pulls images, and starts the Compose stack |
 | 2 | `scripts/migrate.sh` | runs Control Plane Prisma migrations and Gateway runtime table SQL |
 | 3 | `scripts/smoke-test.sh` | checks health endpoints, sends one Gateway request, and verifies the Request Log after real runtime resources exist |
-| Optional | `scripts/pii-model-smoke.sh` | checks both PII models are loaded and one sanitized batch probe uses hybrid inference and masking |
+| Optional | `scripts/pii-model-smoke.sh` | checks the pinned OpenAI model is the only loaded model, verifies the ML allowlist, and runs one sanitized hybrid masking probe |
 
 PII models are disabled by default. When enabled, the one-shot
 `pii-model-init` container downloads the bundle from a URL read through a
 Compose secret, verifies the release's fixed hashes, and writes a versioned
 directory to `pii_model_data`. AI Service mounts that volume read-only. This
 runtime smoke is model-path evidence only, not Tenant Chat end-to-end evidence.
+The default runtime leaves the additional-model list blank, loads only the
+pinned OpenAI model, and limits ML candidates to `phone_number` and `secret`.
+The release archive still contains every manifest-pinned artifact, so bundle
+download and integrity verification are unchanged by this runtime selection.
 
 The Gateway runtime SQL lives in:
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-REPORT_VERSION = "ai-safety-resource-latency-benchmark.v2"
+REPORT_VERSION = "ai-safety-resource-latency-benchmark.v3"
 MODEL_ID = "openai/privacy-filter"
 CONTRACT_VERSION = "ai-safety-detector.v1"
 DEFAULT_ENDPOINT_PATH = "/internal/ai-safety/v1/detect"
@@ -43,6 +43,9 @@ class TargetResult:
     fallback_mode: str
     fallback_observation: str
     sanitized_error_code: str | None = None
+    execution_mode: str | None = None
+    model_invocation_count: int | None = None
+    accepted_model_detection_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,9 @@ class BenchmarkSample:
     fallback_mode: str
     fallback_observation: str
     sanitized_error_code: str | None = None
+    execution_mode: str | None = None
+    model_invocation_count: int | None = None
+    accepted_model_detection_count: int | None = None
 
 
 @dataclass(frozen=True)

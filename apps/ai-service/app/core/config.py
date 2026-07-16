@@ -3,12 +3,15 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
+
 
 REMOTE_SAFETY_MODE_DISABLED = "disabled"
 REMOTE_SAFETY_MODE_SHADOW = "shadow"
 REMOTE_SAFETY_MODES = {REMOTE_SAFETY_MODE_DISABLED, REMOTE_SAFETY_MODE_SHADOW}
 DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID = "openai/privacy-filter"
 DEFAULT_AI_SAFETY_DETECTOR_RUNTIME = "onnx"
+DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES = ("phone_number", "secret")
 AI_SAFETY_DETECTOR_RUNTIME_TRANSFORMERS = "transformers"
 AI_SAFETY_DETECTOR_RUNTIME_ONNX = "onnx"
 AI_SAFETY_DETECTOR_RUNTIMES = {
@@ -26,6 +29,9 @@ class Settings:
     access_log_enabled: bool = False
     ai_safety_detector_model_id: str = DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID
     ai_safety_additional_detector_model_ids: tuple[str, ...] = ()
+    ai_safety_ml_allowed_detector_types: tuple[str, ...] = (
+        DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES
+    )
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
     ai_safety_preload_enabled: bool = False
 
@@ -44,6 +50,7 @@ def load_settings() -> Settings:
         ai_safety_additional_detector_model_ids=_env_model_ids(
             "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS",
         ),
+        ai_safety_ml_allowed_detector_types=_env_ml_allowed_detector_types(),
         ai_safety_detector_runtime=_env_ai_safety_detector_runtime(),
         ai_safety_preload_enabled=_env_bool(
             "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED",
@@ -123,3 +130,26 @@ def _env_model_ids(key: str) -> tuple[str, ...]:
         model_ids.append(model_id)
         seen.add(model_id)
     return tuple(model_ids)
+
+
+def _env_ml_allowed_detector_types() -> tuple[str, ...]:
+    key = "AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES"
+    value = os.environ.get(key)
+    if value is None:
+        return DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES
+    if value.strip() == "":
+        raise ValueError(f"{key} must not be empty")
+
+    detector_types: list[str] = []
+    seen: set[str] = set()
+    for raw_item in value.split(","):
+        detector_type = raw_item.strip()
+        if detector_type == "" or detector_type not in ALLOWED_DETECTOR_TYPES:
+            raise ValueError(f"{key} contains an unsupported detector type")
+        if detector_type in seen:
+            continue
+        detector_types.append(detector_type)
+        seen.add(detector_type)
+    if not detector_types:
+        raise ValueError(f"{key} must select at least one detector type")
+    return tuple(detector_types)

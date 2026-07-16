@@ -111,6 +111,8 @@ GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true
 AI_SERVICE_INSTALL_ML_DEPS=true
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
 AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE=./secrets/pii-model-bundle-url
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 ```
 
 Do not put the presigned URL itself in `.env`, a command argument, a support
@@ -210,10 +212,12 @@ When optional PII models are enabled, run the separate model-runtime smoke:
 bash scripts/pii-model-smoke.sh
 ```
 
-This proves both configured model processes are loaded and that one sanitized
-batch request takes the hybrid inference path and masks its fixed synthetic
-value. It is not a Tenant Chat end-to-end test because the Self-host bundle does
-not include the Tenant Chat API/Web applications.
+This proves the pinned OpenAI primary is loaded with no additional model, the
+runtime ML allowlist is exactly `phone_number,secret`, and one sanitized batch
+request takes the hybrid inference path and masks its fixed synthetic value. It
+does not prove production-grade PII accuracy or Tenant Chat end-to-end behavior
+because the Self-host bundle does not include the Tenant Chat API/Web
+applications.
 
 ## 7. Open The Services
 

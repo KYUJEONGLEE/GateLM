@@ -14,6 +14,11 @@ from app.domain.ai_safety_promotion.binding import (
 
 EVIDENCE_VERSION = "pii-production-promotion-evidence.v1"
 OWNER_POLICY_VERSION = "pii-promotion-owner-policy.v1"
+WARM_RUNTIME_REPORT_VERSION_V2 = "ai-safety-resource-latency-benchmark.v2"
+WARM_RUNTIME_REPORT_VERSION_V3 = "ai-safety-resource-latency-benchmark.v3"
+WARM_RUNTIME_REPORT_VERSIONS = frozenset(
+    {WARM_RUNTIME_REPORT_VERSION_V2, WARM_RUNTIME_REPORT_VERSION_V3}
+)
 MODEL_PROMOTION_PII_TYPES = frozenset(
     {
         "email",
@@ -433,7 +438,8 @@ def _benchmark_reasons(
         return ["warm_runtime_evidence_missing"]
     reasons = _binding_reasons(benchmark, manifest_binding)
     metadata = benchmark.get("metadata")
-    if not isinstance(metadata, Mapping) or metadata.get("reportVersion") != "ai-safety-resource-latency-benchmark.v2":
+    report_version = metadata.get("reportVersion") if isinstance(metadata, Mapping) else None
+    if report_version not in WARM_RUNTIME_REPORT_VERSIONS:
         reasons.append("warm_runtime_evidence_version_invalid")
     binding = benchmark.get("evidenceBinding")
     if isinstance(metadata, Mapping) and isinstance(binding, Mapping):
@@ -450,6 +456,8 @@ def _benchmark_reasons(
     decision = benchmark.get("decisionSummary")
     if runtime is None or runtime.get("status") != "pass":
         reasons.append("warm_runtime_gate_failed")
+    if runtime is not None and report_version == WARM_RUNTIME_REPORT_VERSION_V3:
+        reasons.extend(_v3_model_active_runtime_reasons(runtime))
     if not isinstance(decision, Mapping):
         reasons.append("warm_runtime_decision_missing")
     else:
@@ -466,13 +474,63 @@ def _benchmark_reasons(
     if thresholds is None:
         reasons.append("warm_runtime_thresholds_not_applied")
     elif runtime is not None:
-        p95 = runtime.get("p95SidecarLatencyMs")
+        p95 = (
+            runtime.get("p95ModelActiveSidecarLatencyMs")
+            if report_version == WARM_RUNTIME_REPORT_VERSION_V3
+            else runtime.get("p95SidecarLatencyMs")
+        )
         peak = runtime.get("resource", {}).get("peakRssMb") if isinstance(runtime.get("resource"), Mapping) else None
         if not _non_negative_number(p95) or float(p95) > float(thresholds["maximumWarmSidecarP95Ms"]):
             reasons.append("warm_latency_above_owner_threshold")
         if not _non_negative_number(peak) or float(peak) > float(thresholds["maximumPeakRssMb"]):
             reasons.append("warm_memory_above_owner_threshold")
     return reasons
+
+
+def _v3_model_active_runtime_reasons(runtime: Mapping[str, Any]) -> list[str]:
+    required_fields = {
+        "requests",
+        "modelActiveRequestCount",
+        "modelInvocationCount",
+        "acceptedModelDetectionCount",
+        "p50ModelActiveSidecarLatencyMs",
+        "p95ModelActiveSidecarLatencyMs",
+        "executionModeCounts",
+    }
+    if not required_fields.issubset(runtime):
+        return ["warm_runtime_model_active_evidence_missing"]
+
+    request_count = runtime.get("requests")
+    active_count = runtime.get("modelActiveRequestCount")
+    invocation_count = runtime.get("modelInvocationCount")
+    accepted_count = runtime.get("acceptedModelDetectionCount")
+    p50 = runtime.get("p50ModelActiveSidecarLatencyMs")
+    p95 = runtime.get("p95ModelActiveSidecarLatencyMs")
+    mode_counts = runtime.get("executionModeCounts")
+    if (
+        not _positive_integer(request_count)
+        or not _positive_integer(active_count)
+        or not _non_negative_integer(invocation_count)
+        or not _non_negative_integer(accepted_count)
+        or not _non_negative_number(p50)
+        or not _non_negative_number(p95)
+        or float(p50) > float(p95)
+        or invocation_count < active_count
+        or active_count > request_count
+        or not isinstance(mode_counts, Mapping)
+    ):
+        return ["warm_runtime_model_active_evidence_invalid"]
+
+    allowed_modes = {"rules_only", "hybrid", "unobserved"}
+    if (
+        any(mode not in allowed_modes for mode in mode_counts)
+        or any(not _non_negative_integer(count) for count in mode_counts.values())
+        or sum(mode_counts.values()) != request_count
+        or mode_counts.get("hybrid", 0) != active_count
+        or mode_counts.get("unobserved", 0) != 0
+    ):
+        return ["warm_runtime_model_active_evidence_invalid"]
+    return []
 
 
 def _cold_start_reasons(

@@ -11,6 +11,16 @@ from typing import Mapping
 
 
 RELEASE_ID = "tenant-chat-pii-models-20260715"
+PRIMARY_MODEL_PATH = f"/models/releases/{RELEASE_ID}/openai--privacy-filter"
+ADDITIONAL_MODEL_PATH_ALLOWLIST = frozenset(
+    {
+        (
+            f"/models/releases/{RELEASE_ID}/"
+            "amoeba04--koelectra-small-v3-privacy-ner-quantized"
+        )
+    }
+)
+ML_ALLOWED_DETECTOR_TYPES = ("phone_number", "secret")
 
 
 class VerificationError(RuntimeError):
@@ -68,16 +78,15 @@ def verify_config(payload: object) -> None:
         raise VerificationError("ai-service must wait for successful model initialization")
 
     ai_environment = _mapping(ai_service.get("environment"), "ai-service environment")
-    configured_paths = [
-        ai_environment.get("AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID"),
-        ai_environment.get("AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS"),
-    ]
-    if any(
-        not isinstance(path, str)
-        or not path.startswith(f"/models/releases/{RELEASE_ID}/")
-        for path in configured_paths
+    if ai_environment.get("AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID") != PRIMARY_MODEL_PATH:
+        raise VerificationError("ai-service primary model must use the pinned OpenAI path")
+    _additional_model_paths(
+        ai_environment.get("AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS")
+    )
+    if ai_environment.get("AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES") != (
+        ",".join(ML_ALLOWED_DETECTOR_TYPES)
     ):
-        raise VerificationError("ai-service model paths must use the pinned versioned release")
+        raise VerificationError("ai-service ML detector allowlist is not pinned")
 
     secrets = _mapping(root.get("secrets"), "Compose secrets")
     if "pii_model_bundle_url" not in secrets:
@@ -130,6 +139,24 @@ def _mapping(value: object, name: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise VerificationError(f"{name} is missing or invalid")
     return value
+
+
+def _additional_model_paths(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, str):
+        raise VerificationError("ai-service additional model paths must be a string")
+    if value.strip() == "":
+        return ()
+
+    paths = value.split(",")
+    if any(path == "" or path != path.strip() for path in paths):
+        raise VerificationError("ai-service additional model path syntax is invalid")
+    if len(set(paths)) != len(paths):
+        raise VerificationError("ai-service additional model paths must not contain duplicates")
+    if any(path not in ADDITIONAL_MODEL_PATH_ALLOWLIST for path in paths):
+        raise VerificationError("ai-service additional model path is not pinned or allowlisted")
+    return tuple(paths)
 
 
 def _volume_at(service: Mapping[str, object], target: str) -> Mapping[str, object]:

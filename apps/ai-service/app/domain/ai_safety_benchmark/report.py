@@ -147,6 +147,18 @@ def build_runtime_result(
         if sample.sidecar_latency_ms is not None and sample.sidecar_outcome == "success"
     ]
     target_latencies = [sample.target_latency_ms for sample in samples]
+    model_active_samples = [
+        sample
+        for sample in samples
+        if sample.execution_mode == "hybrid"
+        and sample.model_invocation_count is not None
+        and sample.model_invocation_count > 0
+    ]
+    model_active_sidecar_latencies = [
+        sample.sidecar_latency_ms
+        for sample in model_active_samples
+        if sample.sidecar_latency_ms is not None and sample.sidecar_outcome == "success"
+    ]
     request_count = len(samples)
     timeout_count = count_matching(samples, "sidecar_outcome", "timeout")
     observed_fallback_count = sum(
@@ -181,6 +193,22 @@ def build_runtime_result(
         "p95SidecarLatencyMs": p95_sidecar,
         "p50TargetLatencyMs": nearest_rank(target_latencies, 0.50),
         "p95TargetLatencyMs": p95_target,
+        "modelActiveRequestCount": len(model_active_samples),
+        "modelInvocationCount": sum(
+            sample.model_invocation_count or 0 for sample in samples
+        ),
+        "acceptedModelDetectionCount": sum(
+            sample.accepted_model_detection_count or 0 for sample in samples
+        ),
+        "p50ModelActiveSidecarLatencyMs": nearest_rank(
+            model_active_sidecar_latencies, 0.50
+        ),
+        "p95ModelActiveSidecarLatencyMs": nearest_rank(
+            model_active_sidecar_latencies, 0.95
+        ),
+        "executionModeCounts": dict(
+            sorted(Counter(sample.execution_mode or "unobserved" for sample in samples).items())
+        ),
         "timeoutCount": timeout_count,
         "observedFallbackCount": observed_fallback_count,
         "unobservedFallbackCount": unobserved_fallback_count,
@@ -214,6 +242,12 @@ def not_run_runtime_result(runtime_profile: str) -> dict[str, Any]:
         "p95SidecarLatencyMs": None,
         "p50TargetLatencyMs": None,
         "p95TargetLatencyMs": None,
+        "modelActiveRequestCount": 0,
+        "modelInvocationCount": 0,
+        "acceptedModelDetectionCount": 0,
+        "p50ModelActiveSidecarLatencyMs": None,
+        "p95ModelActiveSidecarLatencyMs": None,
+        "executionModeCounts": {},
         "timeoutCount": 0,
         "observedFallbackCount": 0,
         "unobservedFallbackCount": 0,
@@ -377,6 +411,7 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         "# Resource / Latency Benchmark Report",
         "",
         "## Run Metadata",
+        f"- reportVersion: `{metadata['reportVersion']}`",
         f"- runId: `{metadata['runId']}`",
         f"- date: `{metadata['date']}`",
         f"- gitSha: `{metadata['gitSha']}`",
@@ -435,8 +470,35 @@ def render_markdown_report(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Model Execution Summary",
+            "| Runtime | rules-only | hybrid | unobserved | model-active requests | "
+            "model invocations | accepted detections | model-active p50 sidecar | "
+            "model-active p95 sidecar |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for runtime in runtime_results:
+        mode_counts = runtime["executionModeCounts"]
+        lines.append(
+            "| {runtime} | {rulesOnly} | {hybrid} | {unobserved} | {activeRequests} | "
+            "{invocations} | {accepted} | {p50} | {p95} |".format(
+                runtime=runtime["runtimeProfile"],
+                rulesOnly=mode_counts.get("rules_only", 0),
+                hybrid=mode_counts.get("hybrid", 0),
+                unobserved=mode_counts.get("unobserved", 0),
+                activeRequests=runtime["modelActiveRequestCount"],
+                invocations=runtime["modelInvocationCount"],
+                accepted=runtime["acceptedModelDetectionCount"],
+                p50=runtime["p50ModelActiveSidecarLatencyMs"],
+                p95=runtime["p95ModelActiveSidecarLatencyMs"],
+            )
+        )
+    lines.extend(
+        [
+            "",
             "## Case Group Summary",
-            "| Group | requests | p50 target | p95 target | max target | timeoutCount | observedFallbackCount | unobservedSidecarCount |",
+            "| Group | requests | p50 target | p95 target | max target | timeoutCount | "
+            "observedFallbackCount | unobservedSidecarCount |",
             "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )

@@ -53,7 +53,7 @@ python -m pip install -e ".[onnx,test]"
 
 `PrivacyFilterAdapter` lazy-loads either the direct OpenAI ONNX Runtime classifier or an Optimum ONNX token-classification pipeline. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
 
-The primary sidecar detector model defaults to `openai/privacy-filter`. For lightweight local Korean privacy NER experiments, keep the primary model and add the quantized KoELECTRA ONNX artifact as an additional detector:
+The default runtime loads only the pinned `openai/privacy-filter` ONNX model. The ML candidate allowlist is limited to `phone_number` and `secret`; other supported PII categories continue through the local rule path. Keep the additional-model setting blank for this OpenAI-only configuration:
 
 ```bash
 AI_SERVICE_TRANSFORMERS_OFFLINE=1
@@ -63,13 +63,14 @@ AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4
 AI_SERVICE_ONNX_INTER_OP_THREADS=1
 AI_SERVICE_ONNX_ALLOW_SPINNING=false
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/releases/tenant-chat-pii-models-20260715/amoeba04--koelectra-small-v3-privacy-ner-quantized
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 ```
 
-Both models are loaded through local ONNX Runtime pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/onnx` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
+The primary model is loaded through the local ONNX Runtime pipeline and its detections are merged through the same sanitized GateLM policy path. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
-For the pinned 2026-07-15 bundle, the accepted KoELECTRA model labels are email, phone number, and resident registration number only. Person-name and organization-name detections are intentionally excluded from both model label maps and currently come from the local rule backstop. The supplied evaluation does not justify claiming model-based Korean name or organization detection.
+The pinned 2026-07-15 delivery bundle still contains the KoELECTRA artifact and the importer verifies all manifest-listed files, but a blank additional-model setting prevents that adapter from loading or warming up. If the allowlisted KoELECTRA path is explicitly enabled for an isolated evaluation, its accepted labels remain email, phone number, and resident registration number only. Person-name and organization-name detections remain rule backstops, and the supplied evaluation does not justify production-grade accuracy claims.
 
 Import only manifest-listed model artifacts from the delivery archive and verify every file hash:
 
@@ -142,8 +143,9 @@ AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4 \
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
 AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
 AI_SERVICE_ONNX_ALLOW_SPINNING=false \
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret \
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/releases/tenant-chat-pii-models-20260715/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS="" \
 python -m app.main
 ```
 
@@ -154,8 +156,9 @@ cd apps/ai-service
 python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret \
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/releases/tenant-chat-pii-models-20260715/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS="" \
 python -m app.main
 ```
 

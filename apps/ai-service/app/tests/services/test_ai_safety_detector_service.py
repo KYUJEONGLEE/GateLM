@@ -54,6 +54,64 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
             ],
         )
 
+    def test_ml_allowlist_filters_model_labels_but_keeps_rules_enabled(self) -> None:
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return []
+
+        adapter = PrivacyFilterAdapter(
+            classifier=classifier,
+            allowed_detector_types=frozenset({"phone_number", "secret"}),
+        )
+        service = AiSafetyDetectorService(
+            adapter=adapter,
+            ml_allowed_detector_types=("phone_number", "secret"),
+        )
+
+        response = service.detect(detect_request("Contact rule-only@example.test."))
+
+        self.assertEqual(adapter.supported_detector_types, {"phone_number", "secret"})
+        self.assertEqual(service.configured_ml_detector_types(), ["phone_number", "secret"])
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(response.execution_summary.execution_mode, "rules_only")
+        self.assertEqual(response.detector_summary.detector_categories, ["email"])
+
+    def test_ml_allowlist_rejects_detector_type_unsupported_by_model(self) -> None:
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            AiSafetyDetectorService(
+                model_id="openai/privacy-filter",
+                ml_allowed_detector_types=("person_name",),
+            )
+
+    def test_ml_allowlist_discards_disallowed_output_from_injected_adapter(self) -> None:
+        prompt = "secret reference synthetic marker"
+        marker_start = prompt.index("synthetic")
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=lambda _text: [
+                    {
+                        "entity_group": "private_url",
+                        "score": 0.99,
+                        "start": marker_start,
+                        "end": marker_start + len("synthetic"),
+                    }
+                ]
+            ),
+            ml_allowed_detector_types=("phone_number", "secret"),
+        )
+
+        response = service.detect(detect_request(prompt))
+
+        self.assertEqual(response.execution_summary.execution_mode, "hybrid")
+        self.assertEqual(response.execution_summary.accepted_model_detection_count, 0)
+        self.assertNotIn(
+            "private_url",
+            response.detector_summary.detector_categories,
+        )
+
     def test_detector_model_states_report_loaded_when_classifier_is_ready(self) -> None:
         service = AiSafetyDetectorService(
             adapter=PrivacyFilterAdapter(

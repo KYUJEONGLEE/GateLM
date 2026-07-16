@@ -27,12 +27,25 @@ import urllib.request
 try:
     with urllib.request.urlopen("http://127.0.0.1:8001/readyz", timeout=5) as response:
         readiness = json.load(response)
+    if readiness.get("status") != "ready":
+        raise RuntimeError
     detector = readiness["dependencies"]["aiSafetyDetector"]
     primary = detector["primaryModel"]
     additional = detector["additionalModels"]
-    if primary.get("loadState") != "loaded":
+    if detector.get("status") != "loaded" or detector.get("required") is not True:
         raise RuntimeError
-    if not additional or any(model.get("loadState") != "loaded" for model in additional):
+    if detector.get("runtime") != "onnx":
+        raise RuntimeError
+    if detector.get("mlAllowedDetectorTypes") != ["phone_number", "secret"]:
+        raise RuntimeError
+    if primary != {
+        "modelId": "openai/privacy-filter",
+        "source": "openai_privacy_filter",
+        "runtime": "onnx",
+        "loadState": "loaded",
+    }:
+        raise RuntimeError
+    if not isinstance(additional, list) or additional:
         raise RuntimeError
 
     probe_value = "runtime.probe@privacy.local"
@@ -60,6 +73,12 @@ try:
     with urllib.request.urlopen(request, timeout=30) as response:
         result = json.load(response)
 
+    model = result.get("model", {})
+    if (
+        model.get("modelId") != "openai/privacy-filter"
+        or model.get("runtime") != "cpu_only"
+    ):
+        raise RuntimeError
     summary = result["executionSummary"]
     if summary.get("executionMode") != "hybrid":
         raise RuntimeError
@@ -75,7 +94,8 @@ try:
 
     print(
         "PII model runtime smoke passed: "
-        f"models_loaded={1 + len(additional)} execution_mode=hybrid masked=true"
+        "models_loaded=1 model_set=openai_only "
+        "ml_allowed=phone_number,secret execution_mode=hybrid masked=true"
     )
 except Exception:
     print("PII model runtime smoke failed; no request or response content was printed.", file=sys.stderr)

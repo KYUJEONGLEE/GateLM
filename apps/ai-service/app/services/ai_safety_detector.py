@@ -347,14 +347,33 @@ class AiSafetyDetectorService:
         additional_model_ids: tuple[str, ...] = (),
         detectors: tuple[SafetyDetector, ...] = DEFAULT_PRIVACY_FILTER_DETECTORS,
         detector_runtime: str = "onnx",
+        ml_allowed_detector_types: tuple[str, ...] | None = None,
     ) -> None:
+        allowed_detector_types = (
+            frozenset(ml_allowed_detector_types)
+            if ml_allowed_detector_types is not None
+            else None
+        )
+        if allowed_detector_types is not None and not allowed_detector_types:
+            raise ValueError("AI safety ML detector type allowlist must not be empty.")
         self.adapters = _resolve_adapters(
             adapter=adapter,
             adapters=adapters,
             model_id=model_id,
             additional_model_ids=additional_model_ids,
             detector_runtime=detector_runtime,
+            allowed_detector_types=allowed_detector_types,
         )
+        supported_detector_types = frozenset().union(
+            *(adapter.supported_detector_types for adapter in self.adapters)
+        )
+        if allowed_detector_types is not None:
+            unsupported_detector_types = allowed_detector_types - supported_detector_types
+            if unsupported_detector_types:
+                raise ValueError(
+                    "AI safety model does not support every configured ML detector type."
+                )
+        self._ml_allowed_detector_types = allowed_detector_types or supported_detector_types
         self.adapter = self.adapters[0]
         self.model_id = public_model_id_for_model(self.adapter.model_name)
         self.detectors = detectors
@@ -370,6 +389,9 @@ class AiSafetyDetectorService:
             }
             for adapter in self.adapters
         ]
+
+    def configured_ml_detector_types(self) -> list[str]:
+        return sorted(self._ml_allowed_detector_types)
 
     def warmup(self) -> None:
         for adapter in self.adapters:
@@ -478,7 +500,10 @@ class AiSafetyDetectorService:
         total_model_candidates = 0
         total_model_windows = 0
         for adapter in self.adapters:
-            supported_types = adapter.supported_detector_types.intersection(detector_config)
+            supported_types = adapter.supported_detector_types.intersection(
+                detector_config,
+                self._ml_allowed_detector_types,
+            )
             if not supported_types:
                 continue
             window_refs: list[tuple[int, MlWindow]] = []
@@ -517,6 +542,8 @@ class AiSafetyDetectorService:
             ):
                 prompt_length = len(work_items[work_index].prompt_text)
                 for detection in detections:
+                    if detection.detector_type not in self._ml_allowed_detector_types:
+                        continue
                     offset_detection = _offset_detection(detection, window.start, prompt_length)
                     if offset_detection is not None:
                         work_items[work_index].model_detections.append(offset_detection)
@@ -889,6 +916,7 @@ def _resolve_adapters(
     model_id: str,
     additional_model_ids: tuple[str, ...],
     detector_runtime: str,
+    allowed_detector_types: frozenset[str] | None,
 ) -> tuple[PrivacyFilterAdapter, ...]:
     if adapters:
         return adapters
@@ -901,6 +929,7 @@ def _resolve_adapters(
             model_name=detector_model_id,
             source=source_for_model(detector_model_id),
             runtime=detector_runtime,
+            allowed_detector_types=allowed_detector_types,
         )
         for detector_model_id in model_ids
     )

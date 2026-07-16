@@ -47,6 +47,9 @@ def run_benchmark(
                 fallback_mode=result.fallback_mode,
                 fallback_observation=result.fallback_observation,
                 sanitized_error_code=result.sanitized_error_code,
+                execution_mode=result.execution_mode,
+                model_invocation_count=result.model_invocation_count,
+                accepted_model_detection_count=result.accepted_model_detection_count,
             )
         )
     return samples

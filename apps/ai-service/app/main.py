@@ -26,10 +26,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = resolved_settings
+    detector_service = create_ai_safety_detector_service(resolved_settings)
     if resolved_settings.ai_safety_preload_enabled:
-        detector_service = create_ai_safety_detector_service(resolved_settings)
         detector_service.warmup()
-        app.state.ai_safety_detector_service = detector_service
+    app.state.ai_safety_detector_service = detector_service
     app.include_router(health.router)
     app.include_router(safety.router)
     app.include_router(ai_safety.router)

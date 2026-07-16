@@ -48,13 +48,15 @@ def readyz(request: Request, response: Response) -> dict[str, object]:
 
 
 def _ai_safety_detector_dependency(request: Request, settings: Settings) -> dict[str, object]:
-    model_states = get_ai_safety_detector_service(request).detector_model_states()
+    service = get_ai_safety_detector_service(request)
+    model_states = service.detector_model_states()
     return {
         "status": _aggregate_load_state(model_states),
         "required": settings.ai_safety_preload_enabled,
         "runtime": _primary_runtime(model_states, settings),
         "primaryModel": model_states[0] if model_states else {},
         "additionalModels": model_states[1:],
+        "mlAllowedDetectorTypes": service.configured_ml_detector_types(),
     }
 
 

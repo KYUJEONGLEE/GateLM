@@ -140,13 +140,25 @@ class PrivacyFilterAdapter:
         min_confidence_by_detector_type: Mapping[str, float] | None = None,
         aggregation_strategy: str | None = None,
         runtime: str = PRIVACY_FILTER_RUNTIME_ONNX,
+        allowed_detector_types: frozenset[str] | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._classifier = classifier
         self._classifier_was_injected = classifier is not None
         self.model_name = model_name
         self.source = source or source_for_model(model_name)
-        self.label_map = label_map if label_map is not None else label_map_for_model(model_name)
+        configured_label_map = label_map if label_map is not None else label_map_for_model(model_name)
+        if allowed_detector_types is not None:
+            configured_label_map = {
+                label: detector_type
+                for label, detector_type in configured_label_map.items()
+                if detector_type in allowed_detector_types
+            }
+            if not configured_label_map:
+                raise ValueError(
+                    "AI safety model does not support any configured ML detector type."
+                )
+        self.label_map = configured_label_map
         self.min_confidence = min_confidence
         self.min_confidence_by_detector_type = (
             DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_TYPE

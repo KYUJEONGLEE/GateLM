@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
+from app.core.config import Settings
 from app.domain.ai_safety_benchmark.corpus import load_benchmark_corpus, render_case_prompt
 from app.domain.ai_safety_benchmark.report import (
     build_report,
@@ -19,8 +20,13 @@ from app.domain.ai_safety_benchmark.report import (
 from app.domain.ai_safety_benchmark.resources import ResourceSampler
 from app.domain.ai_safety_benchmark.runner import run_benchmark
 from app.domain.ai_safety_benchmark.stats import nearest_rank
-from app.domain.ai_safety_benchmark.targets import GatewayHttpBenchmarkTarget, HttpBenchmarkTarget
-from app.domain.ai_safety_benchmark.types import BenchmarkError, TargetResult
+from app.domain.ai_safety_benchmark.targets import (
+    GatewayHttpBenchmarkTarget,
+    HttpBenchmarkTarget,
+    InProcessBenchmarkTarget,
+    result_from_response_body,
+)
+from app.domain.ai_safety_benchmark.types import REPORT_VERSION, BenchmarkError, TargetResult
 from app.services import ai_safety_latency_benchmark_runner
 
 
@@ -47,7 +53,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             },
         )
 
-    def test_active_benchmark_contract_uses_v2_observation_fields_only(self) -> None:
+    def test_active_benchmark_contract_uses_v3_model_execution_fields(self) -> None:
         contract = (
             REPO_ROOT / "docs" / "ai-safety-lab" / "resource-latency-benchmark.md"
         ).read_text(encoding="utf-8")
@@ -65,8 +71,14 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             "observedFallbackCount",
             "unobservedSidecarCount",
             "evidenceCompletenessGate",
+            "modelActiveRequestCount",
+            "modelInvocationCount",
+            "p50ModelActiveSidecarLatencyMs",
+            "p95ModelActiveSidecarLatencyMs",
+            "executionModeCounts",
         ):
             self.assertIn(required_field, contract)
+        self.assertIn(REPORT_VERSION, contract)
 
     def test_renderer_keeps_fixture_templates_out_of_report(self) -> None:
         cases = load_benchmark_corpus(CORPUS_PATH)
@@ -104,6 +116,29 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
         self.assertEqual(runtime["sidecarLatencyGate"], "warn")
         self.assertEqual(report["decisionSummary"]["timeoutFallbackGate"], "pass")
         self.assertEqual([group["requests"] for group in report["caseGroupResults"]], [20, 20, 20, 20, 20])
+
+    def test_report_aggregates_only_observed_model_active_latency(self) -> None:
+        cases = load_benchmark_corpus(CORPUS_PATH)
+        report, _, samples = build_fake_report(cases)
+        runtime = selected_runtime(report)
+        model_active_latencies = [
+            sample.sidecar_latency_ms
+            for sample in samples
+            if sample.execution_mode == "hybrid" and sample.sidecar_latency_ms is not None
+        ]
+
+        self.assertEqual(runtime["modelActiveRequestCount"], 25)
+        self.assertEqual(runtime["modelInvocationCount"], 25)
+        self.assertEqual(runtime["acceptedModelDetectionCount"], 25)
+        self.assertEqual(runtime["executionModeCounts"], {"hybrid": 25, "rules_only": 75})
+        self.assertEqual(
+            runtime["p50ModelActiveSidecarLatencyMs"],
+            nearest_rank(model_active_latencies, 0.50),
+        )
+        self.assertEqual(
+            runtime["p95ModelActiveSidecarLatencyMs"],
+            nearest_rank(model_active_latencies, 0.95),
+        )
 
     def test_gate_results_cover_pass_warn_and_fail(self) -> None:
         cases = load_benchmark_corpus(CORPUS_PATH)
@@ -160,6 +195,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             report = json.loads(json_path.read_text(encoding="utf-8"))
             self.assertEqual(report["evidenceBinding"], evidence_binding())
             self.assertEqual(report["metadata"]["runId"], "benchmark-test-run")
+            self.assertEqual(report["metadata"]["reportVersion"], REPORT_VERSION)
             self.assertEqual(report["metadata"]["modelId"], KOELECTRA_PRIVACY_NER_MODEL)
             self.assertEqual(selected_runtime(report)["requests"], 100)
             self.assertEqual(
@@ -199,6 +235,27 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
 
         self.assertIsInstance(target, GatewayHttpBenchmarkTarget)
 
+    def test_in_process_target_uses_production_ml_detector_allowlist(self) -> None:
+        settings = Settings(
+            ai_safety_additional_detector_model_ids=(),
+            ai_safety_ml_allowed_detector_types=("phone_number", "secret"),
+            ai_safety_detector_runtime="onnx",
+        )
+        fake_service = object()
+        with patch("app.core.config.load_settings", return_value=settings), patch(
+            "app.services.ai_safety_detector.AiSafetyDetectorService",
+            return_value=fake_service,
+        ) as service_class:
+            target = InProcessBenchmarkTarget.create(model_id="openai/privacy-filter")
+
+        self.assertIs(target.service, fake_service)
+        service_class.assert_called_once_with(
+            model_id="openai/privacy-filter",
+            additional_model_ids=(),
+            detector_runtime="onnx",
+            ml_allowed_detector_types=("phone_number", "secret"),
+        )
+
     def test_gateway_total_latency_is_not_reported_as_sidecar_latency(self) -> None:
         response = FakeGatewayResponse(
             {
@@ -219,6 +276,81 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
         self.assertEqual(result.sidecar_observation, "not_observed")
         self.assertEqual(result.fallback_mode, "not_observed")
         self.assertEqual(result.target_kind, "gateway_http")
+        self.assertIsNone(result.execution_mode)
+        self.assertIsNone(result.model_invocation_count)
+        self.assertIsNone(result.accepted_model_detection_count)
+
+    def test_direct_sidecar_records_strict_execution_summary(self) -> None:
+        result = result_from_response_body(
+            {
+                "latencyMs": 42,
+                "executionSummary": {
+                    "executionMode": "hybrid",
+                    "modelInvocationCount": 2,
+                    "acceptedModelDetectionCount": 1,
+                },
+            },
+            target_kind="direct_sidecar_http",
+            target_latency_ms=50,
+            timeout_ms=300,
+        )
+
+        self.assertEqual(result.target_outcome, "success")
+        self.assertEqual(result.execution_mode, "hybrid")
+        self.assertEqual(result.model_invocation_count, 2)
+        self.assertEqual(result.accepted_model_detection_count, 1)
+
+    def test_direct_sidecar_rejects_invalid_execution_summary(self) -> None:
+        invalid_summaries = (
+            None,
+            {},
+            {
+                "executionMode": "hybrid",
+                "modelInvocationCount": 0,
+                "acceptedModelDetectionCount": 0,
+            },
+            {
+                "executionMode": "rules_only",
+                "modelInvocationCount": 1,
+                "acceptedModelDetectionCount": 0,
+            },
+            {
+                "executionMode": "rules_only",
+                "modelInvocationCount": 0,
+                "acceptedModelDetectionCount": 1,
+            },
+            {
+                "executionMode": "hybrid",
+                "modelInvocationCount": True,
+                "acceptedModelDetectionCount": 0,
+            },
+            {
+                "executionMode": "hybrid",
+                "modelInvocationCount": 1,
+                "acceptedModelDetectionCount": -1,
+            },
+            {
+                "executionMode": "hybrid",
+                "modelInvocationCount": 1,
+                "acceptedModelDetectionCount": 0,
+                "unexpected": 1,
+            },
+        )
+        for summary in invalid_summaries:
+            with self.subTest(summary=summary):
+                body = {"latencyMs": 42}
+                if summary is not None:
+                    body["executionSummary"] = summary
+                result = result_from_response_body(
+                    body,
+                    target_kind="direct_sidecar_http",
+                    target_latency_ms=50,
+                    timeout_ms=300,
+                )
+
+                self.assertEqual(result.target_outcome, "invalid_response")
+                self.assertEqual(result.sanitized_error_code, "invalid_execution_summary")
+                self.assertIsNone(result.execution_mode)
 
     def test_gateway_timeout_does_not_claim_sidecar_timeout_or_fallback(self) -> None:
         import httpx
@@ -285,6 +417,9 @@ class FakeBenchmarkTarget:
                 sidecar_observation="observed",
                 fallback_mode="none",
                 fallback_observation="not_applicable",
+                execution_mode="hybrid",
+                model_invocation_count=1,
+                accepted_model_detection_count=1,
             )
         if self.mode == "error":
             return TargetResult(
@@ -309,6 +444,7 @@ class FakeBenchmarkTarget:
                 fallback_mode="not_observed",
                 fallback_observation="not_observed",
             )
+        model_active = call_index % 4 == 0
         return TargetResult(
             target_kind="direct_sidecar_http",
             target_latency_ms=55 + (call_index % 7),
@@ -318,6 +454,9 @@ class FakeBenchmarkTarget:
             sidecar_observation="observed",
             fallback_mode="none",
             fallback_observation="not_applicable",
+            execution_mode="hybrid" if model_active else "rules_only",
+            model_invocation_count=1 if model_active else 0,
+            accepted_model_detection_count=1 if model_active else 0,
         )
 
 

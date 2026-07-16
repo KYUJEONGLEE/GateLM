@@ -40,4 +40,5 @@ def create_ai_safety_detector_service(settings: Settings) -> AiSafetyDetectorSer
         model_id=settings.ai_safety_detector_model_id,
         additional_model_ids=settings.ai_safety_additional_detector_model_ids,
         detector_runtime=settings.ai_safety_detector_runtime,
+        ml_allowed_detector_types=settings.ai_safety_ml_allowed_detector_types,
     )

@@ -30,6 +30,11 @@ FORBIDDEN_RESPONSE_FIELDS = {
     "sampleHash",
     "promptHash",
 }
+EXECUTION_SUMMARY_FIELDS = {
+    "executionMode",
+    "modelInvocationCount",
+    "acceptedModelDetectionCount",
+}
 
 
 class BenchmarkTarget(Protocol):
@@ -136,6 +141,7 @@ class InProcessBenchmarkTarget:
                 model_id=model_id,
                 additional_model_ids=settings.ai_safety_additional_detector_model_ids,
                 detector_runtime=settings.ai_safety_detector_runtime,
+                ml_allowed_detector_types=settings.ai_safety_ml_allowed_detector_types,
             ),
             model_id=model_id,
         )
@@ -354,6 +360,19 @@ def result_from_response_body(
             fallback_observation="not_observed",
             sanitized_error_code="missing_latency",
         )
+    execution_summary = execution_summary_from_response_body(body)
+    if execution_summary is None:
+        return TargetResult(
+            target_kind=target_kind,
+            target_latency_ms=target_latency_ms,
+            target_outcome="invalid_response",
+            sidecar_latency_ms=None,
+            sidecar_outcome="invalid_response",
+            sidecar_observation="observed",
+            fallback_mode="not_observed",
+            fallback_observation="not_observed",
+            sanitized_error_code="invalid_execution_summary",
+        )
     if target_latency_ms > timeout_ms:
         return TargetResult(
             target_kind=target_kind,
@@ -366,6 +385,7 @@ def result_from_response_body(
             fallback_observation="not_observed",
             sanitized_error_code="timeout",
         )
+    execution_mode, model_invocation_count, accepted_model_detection_count = execution_summary
     return TargetResult(
         target_kind=target_kind,
         target_latency_ms=target_latency_ms,
@@ -376,7 +396,33 @@ def result_from_response_body(
         fallback_mode="none",
         fallback_observation="not_applicable",
         sanitized_error_code=None,
+        execution_mode=execution_mode,
+        model_invocation_count=model_invocation_count,
+        accepted_model_detection_count=accepted_model_detection_count,
     )
+
+
+def execution_summary_from_response_body(body: dict[str, Any]) -> tuple[str, int, int] | None:
+    summary = body.get("executionSummary")
+    if not isinstance(summary, dict) or set(summary) != EXECUTION_SUMMARY_FIELDS:
+        return None
+
+    execution_mode = summary.get("executionMode")
+    model_invocation_count = summary.get("modelInvocationCount")
+    accepted_model_detection_count = summary.get("acceptedModelDetectionCount")
+    if execution_mode not in {"rules_only", "hybrid"}:
+        return None
+    if not _is_non_negative_int(model_invocation_count):
+        return None
+    if not _is_non_negative_int(accepted_model_detection_count):
+        return None
+    if execution_mode == "rules_only" and (
+        model_invocation_count != 0 or accepted_model_detection_count != 0
+    ):
+        return None
+    if execution_mode == "hybrid" and model_invocation_count < 1:
+        return None
+    return execution_mode, model_invocation_count, accepted_model_detection_count
 
 
 def first_forbidden_response_field(value: Any) -> str | None:
@@ -393,6 +439,10 @@ def first_forbidden_response_field(value: Any) -> str | None:
             if nested is not None:
                 return nested
     return None
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def elapsed_ms(started: float) -> int:

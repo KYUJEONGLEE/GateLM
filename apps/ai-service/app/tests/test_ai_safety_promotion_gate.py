@@ -216,6 +216,51 @@ class AiSafetyPromotionGateTests(unittest.TestCase):
 
         self.assertTrue(evidence["readyForProduction"])
 
+    def test_v2_warm_runtime_evidence_remains_backward_compatible(self) -> None:
+        fixtures = passing_fixtures()
+        fixtures["benchmark"]["metadata"]["reportVersion"] = (
+            "ai-safety-resource-latency-benchmark.v2"
+        )
+        runtime = fixtures["benchmark"]["runtimeResults"][0]
+        for field_name in (
+            "modelActiveRequestCount",
+            "modelInvocationCount",
+            "acceptedModelDetectionCount",
+            "p50ModelActiveSidecarLatencyMs",
+            "p95ModelActiveSidecarLatencyMs",
+            "executionModeCounts",
+        ):
+            runtime.pop(field_name)
+
+        evidence = build_promotion_evidence(**fixtures)
+
+        self.assertTrue(evidence["readyForProduction"])
+
+    def test_v3_warm_runtime_requires_consistent_model_active_evidence(self) -> None:
+        mutations = {
+            "missing": lambda runtime: runtime.pop("modelActiveRequestCount"),
+            "no_active_requests": lambda runtime: runtime.__setitem__(
+                "modelActiveRequestCount", 0
+            ),
+            "mode_mismatch": lambda runtime: runtime.__setitem__(
+                "executionModeCounts", {"rules_only": 90, "hybrid": 10}
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                fixtures = passing_fixtures()
+                mutate(fixtures["benchmark"]["runtimeResults"][0])
+
+                evidence = build_promotion_evidence(**fixtures)
+
+                self.assertFalse(evidence["readyForProduction"])
+                self.assertTrue(
+                    {
+                        "warm_runtime_model_active_evidence_missing",
+                        "warm_runtime_model_active_evidence_invalid",
+                    }.intersection(all_reason_codes(evidence))
+                )
+
     def test_output_scanner_rejects_raw_content_field(self) -> None:
         evidence = build_promotion_evidence(
             manifest=load_json(CURRENT_MANIFEST),
@@ -352,13 +397,20 @@ def passing_fixtures() -> dict:
     }
     benchmark = {
         "metadata": {
-            "reportVersion": "ai-safety-resource-latency-benchmark.v2",
+            "reportVersion": "ai-safety-resource-latency-benchmark.v3",
             "gitSha": "a" * 40,
         },
         "runtimeResults": [
             {
                 "status": "pass",
+                "requests": 100,
                 "p95SidecarLatencyMs": 100,
+                "modelActiveRequestCount": 20,
+                "modelInvocationCount": 20,
+                "acceptedModelDetectionCount": 10,
+                "p50ModelActiveSidecarLatencyMs": 80,
+                "p95ModelActiveSidecarLatencyMs": 100,
+                "executionModeCounts": {"rules_only": 80, "hybrid": 20},
                 "resource": {"peakRssMb": 100},
             }
         ],
