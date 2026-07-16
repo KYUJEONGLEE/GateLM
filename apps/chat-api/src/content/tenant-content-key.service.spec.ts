@@ -49,7 +49,7 @@ describe('TenantContentKeyService readiness', () => {
     await expect(service.isReady()).resolves.toBe(false);
   });
 
-  it('zeroes every tenant key unwrapped during readiness', async () => {
+  it('zeroes every representative tenant key unwrapped during readiness', async () => {
     const availableKeys = keySet([1, 2]);
     const unwrappedKeys = [Buffer.alloc(32, 3), Buffer.alloc(32, 4)];
     const unwrapSpy = jest.spyOn(contentCrypto, 'unwrapTenantKey')
@@ -69,6 +69,22 @@ describe('TenantContentKeyService readiness', () => {
     } finally {
       unwrapSpy.mockRestore();
     }
+  });
+
+  it('unwraps one representative per non-retired wrapping key version', async () => {
+    const availableKeys = keySet([1, 2]);
+    const unwrapSpy = jest.spyOn(contentCrypto, 'unwrapTenantKey');
+    const service = new TenantContentKeyService(
+      prismaReferences([
+        wrappedContentKey(availableKeys, 'tenant-a', 1, 1),
+        wrappedContentKey(availableKeys, 'tenant-b', 1, 1),
+        wrappedContentKey(availableKeys, 'tenant-c', 1, 2),
+      ]),
+      provider(availableKeys) as WrappingKeyProvider,
+    );
+
+    await expect(service.isReady()).resolves.toBe(true);
+    expect(unwrapSpy).toHaveBeenCalledTimes(2);
   });
 
   it('zeroes an unwrapped tenant key when rewrap persistence fails', async () => {
@@ -110,7 +126,15 @@ function prismaReferences(contentKeys: ReturnType<typeof wrappedContentKey>[]): 
       findFirst: jest.fn().mockResolvedValue({ wrappingKeyRollbackFloor: 2 }),
     },
     tenantChatContentKey: {
-      findMany: jest.fn().mockResolvedValue(contentKeys),
+      groupBy: jest.fn().mockResolvedValue(
+        [...new Set(contentKeys.map((row) => row.wrappingKeyVersion))]
+          .map((wrappingKeyVersion) => ({ wrappingKeyVersion })),
+      ),
+      findFirst: jest.fn().mockImplementation((args: {
+        where: { wrappingKeyVersion: number };
+      }) => Promise.resolve(
+        contentKeys.find((row) => row.wrappingKeyVersion === args.where.wrappingKeyVersion) ?? null,
+      )),
     },
     tenantChatConversation: {
       groupBy: jest.fn().mockResolvedValue([{ creationBindingKeyVersion: 1 }]),
