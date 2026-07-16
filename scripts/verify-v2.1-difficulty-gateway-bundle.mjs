@@ -263,14 +263,20 @@ if (
 ) {
   throw new Error("production Gateway E5 bundle must be prepared before application image builds");
 }
-const releasePackagingIndex = ciWorkflow.indexOf("\n  release-packaging:");
-const ciPrepareInvocation =
-  'bash deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh "${GITHUB_WORKSPACE}"';
-const ciPrepareInvocationIndex = ciWorkflow.indexOf(ciPrepareInvocation, releasePackagingIndex);
-const ciReleaseBuildIndex = ciWorkflow.indexOf(
-  "      - name: Build release images",
-  releasePackagingIndex,
-);
+const releasePackagingMatch = /(?:^|\r?\n)[ \t]+release-packaging[ \t]*:/.exec(ciWorkflow);
+const releasePackagingIndex = releasePackagingMatch?.index ?? -1;
+const releasePackagingWorkflow =
+  releasePackagingIndex >= 0 ? ciWorkflow.slice(releasePackagingIndex) : "";
+const ciPrepareMatch =
+  /bash[ \t]+deploy\/aws-triage\/scripts\/prepare-gateway-e5-runtime-bundle\.sh[ \t]+(["']?)\$\{GITHUB_WORKSPACE\}\1/.exec(
+    releasePackagingWorkflow,
+  );
+const ciPrepareInvocationIndex = ciPrepareMatch?.index ?? -1;
+const ciReleaseBuildMatch =
+  /^[ \t]*-[ \t]*name[ \t]*:[ \t]*(["']?)Build release images\1[ \t]*\r?$/m.exec(
+    releasePackagingWorkflow,
+  );
+const ciReleaseBuildIndex = ciReleaseBuildMatch?.index ?? -1;
 if (
   releasePackagingIndex < 0 ||
   ciPrepareInvocationIndex < 0 ||
