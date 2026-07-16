@@ -116,5 +116,7 @@ function isRecord(value) {
 
 function hasExactKeys(value, expected) {
   const actual = Object.keys(value).sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index]);
 }
