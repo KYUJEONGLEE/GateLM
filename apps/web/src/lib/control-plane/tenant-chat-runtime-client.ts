@@ -170,10 +170,66 @@ function isActiveSnapshot(value: unknown) {
     (record.routingMode === "auto" || record.routingMode === "manual") &&
     typeof record.manualModelRef === "string" &&
     isRoutingMatrix(record.routes) &&
+    isCachePolicy(record.cachePolicy) &&
+    isSafetyPolicy(record.safetyPolicy) &&
     (record.pricingStatus === "current" ||
       record.pricingStatus === "update_available" ||
       record.pricingStatus === "unavailable")
   );
+}
+
+function isCachePolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.enabled === "boolean" &&
+    Number.isSafeInteger(record.ttlSeconds) &&
+    Number(record.ttlSeconds) > 0 &&
+    Number.isSafeInteger(record.maxEntriesPerUser) &&
+    Number(record.maxEntriesPerUser) > 0
+  );
+}
+
+const safetyDetectorTypes = new Set([
+  "email",
+  "phone_number",
+  "postal_address",
+  "person_name",
+  "organization_name",
+  "resident_registration_number",
+  "api_key",
+  "authorization_header",
+  "jwt",
+  "private_key"
+]);
+
+function isSafetyPolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const detectorSet = (value as Record<string, unknown>).detectorSet;
+  if (!Array.isArray(detectorSet) || detectorSet.length < 1 || detectorSet.length > 10) {
+    return false;
+  }
+  const detectorTypes = new Set<string>();
+  return detectorSet.every((detector) => {
+    if (!detector || typeof detector !== "object" || Array.isArray(detector)) {
+      return false;
+    }
+    const record = detector as Record<string, unknown>;
+    if (
+      typeof record.detectorType !== "string" ||
+      !safetyDetectorTypes.has(record.detectorType) ||
+      detectorTypes.has(record.detectorType) ||
+      (record.action !== "allow" && record.action !== "redact" && record.action !== "block")
+    ) {
+      return false;
+    }
+    detectorTypes.add(record.detectorType);
+    return true;
+  });
 }
 
 const routingCategories = [
