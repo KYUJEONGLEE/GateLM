@@ -75,7 +75,7 @@ Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 | `tenant-chat-pii-model-limit-report-and-roadmap-20260716.md` | 현재 규칙·OpenAI·KoELECTRA 비교 결과, 확인된 결함, 한글 발전 계획과 단계별 통과 기준 |
 | `pii-model-manifest-20260715.json` | 전달 모델 revision/file size/SHA-256 manifest |
 | `pii-model-evaluation-summary-20260715.json` | 원문 없는 전달 평가 요약과 promotion 부적합 결정 |
-| `fixtures/` | synthetic safety eval fixture 위치. `master-safety-eval-corpus.jsonl`은 Gateway/detector 기대값을 한 케이스에 함께 둔다. |
+| `fixtures/` | synthetic safety eval fixture 위치. master corpus와 checksum-bound 103건 PII model screening case-ID manifest를 둔다. |
 | `schemas/` | AI Safety Lab 전용 JSON Schema 위치 |
 
 Schema scope:
@@ -92,6 +92,7 @@ Master corpus:
 
 ```text
 fixtures/master-safety-eval-corpus.jsonl
+fixtures/pii-model-screening-subset-v1.json
 ```
 
 `master-safety-eval-corpus.jsonl`은 하나의 synthetic inputTemplate을 기준으로
@@ -103,6 +104,8 @@ Master corpus is the eval dataset, not the always-on contract test payload. It
 contains 1000 synthetic shadow-eval cases for detector and Gateway behavior.
 Cross-service tests should use small representative sidecar responses instead
 of turning the eval corpus into hot-path payload.
+
+`pii-model-screening-subset-v1.json`은 rendered prompt가 아니라 case ID와 원본 corpus SHA-256만 저장한다. `ai_safety_model_ablation_runner`는 rules-only, OpenAI, KoELECTRA, combined를 별도 프로세스로 실행하고 모델별 호출·기여 aggregate만 비교한다. 이 결과는 당일 모델 선택용 screening이며 production promotion evidence가 아니다.
 
 ## 4. Current Main Path
 
