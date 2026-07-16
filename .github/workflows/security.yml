@@ -19,6 +19,9 @@ jobs:
   dependency-review:
     name: dependency review
     if: github.event_name == 'pull_request'
+    env:
+      # Keep this reviewed policy aligned with the repository setting. Enable both together.
+      DEPENDENCY_GRAPH_ENABLED: "false"
     permissions:
       contents: read
       pull-requests: read
@@ -28,45 +31,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Detect Dependency Graph support
+      - name: Apply Dependency Graph support policy
         id: dependency-graph
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          readonly max_attempts=5
-          status=""
 
-          for ((attempt = 1; attempt <= max_attempts; attempt += 1)); do
-            if status="$(
-              gh api "repos/${GITHUB_REPOSITORY}" \
-                --jq '.security_and_analysis.dependency_graph.status // "disabled"' \
-                2>/dev/null
-            )"; then
-              break
-            fi
-
-            if ((attempt == max_attempts)); then
-              echo "::error::Unable to determine Dependency Graph support after ${max_attempts} attempts."
-              exit 1
-            fi
-
-            retry_delay_seconds=$((attempt * 2))
-            echo "::warning::Dependency Graph support probe failed; retrying in ${retry_delay_seconds}s (${attempt}/${max_attempts})."
-            sleep "${retry_delay_seconds}"
-          done
-
-          case "${status}" in
-            enabled)
+          case "${DEPENDENCY_GRAPH_ENABLED}" in
+            true)
               echo "enabled=true" >> "${GITHUB_OUTPUT}"
               ;;
-            disabled)
+            false)
               echo "enabled=false" >> "${GITHUB_OUTPUT}"
-              echo "::warning::Dependency Review skipped because GitHub Dependency Graph is not enabled for this repository."
+              echo "::warning::Dependency Review skipped by the checked-in policy because GitHub Dependency Graph is not enabled for this repository."
               ;;
             *)
-              echo "::error::Dependency Graph support probe returned an unexpected status."
+              echo "::error::DEPENDENCY_GRAPH_ENABLED must be exactly true or false."
               exit 1
               ;;
           esac
