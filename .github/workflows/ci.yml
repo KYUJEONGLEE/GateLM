@@ -346,6 +346,13 @@ jobs:
             -f deploy/selfhost/docker-compose.yml \
             config --quiet
 
+      - name: Prepare local-only Tenant Chat test secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/dev/generate-tenant-chat-local-secrets.mjs
+          find .secrets/tenant-chat -type f -exec chmod 0444 {} +
+
       - name: Run encrypted Tenant Chat and usage smoke with mock provider
         shell: pwsh
         run: |
