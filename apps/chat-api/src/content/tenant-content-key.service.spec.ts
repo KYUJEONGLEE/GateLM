@@ -49,6 +49,28 @@ describe('TenantContentKeyService readiness', () => {
     await expect(service.isReady()).resolves.toBe(false);
   });
 
+  it('zeroes every tenant key unwrapped during readiness', async () => {
+    const availableKeys = keySet([1, 2]);
+    const unwrappedKeys = [Buffer.alloc(32, 3), Buffer.alloc(32, 4)];
+    const unwrapSpy = jest.spyOn(contentCrypto, 'unwrapTenantKey')
+      .mockReturnValueOnce(unwrappedKeys[0])
+      .mockReturnValueOnce(unwrappedKeys[1]);
+    const service = new TenantContentKeyService(
+      prismaReferences([
+        wrappedContentKey(availableKeys, 'tenant', 1, 1),
+        wrappedContentKey(availableKeys, 'tenant', 2, 2),
+      ]),
+      provider(availableKeys) as WrappingKeyProvider,
+    );
+
+    try {
+      await expect(service.isReady()).resolves.toBe(true);
+      expect(unwrappedKeys.every((key) => key.every((byte) => byte === 0))).toBe(true);
+    } finally {
+      unwrapSpy.mockRestore();
+    }
+  });
+
   it('zeroes an unwrapped tenant key when rewrap persistence fails', async () => {
     const unwrapped = Buffer.alloc(32, 7);
     jest.spyOn(contentCrypto, 'unwrapTenantKey').mockReturnValue(unwrapped);
