@@ -1,5 +1,5 @@
 export type ContentRole = 'none' | 'user' | 'assistant';
-export type ContentKind = 'title' | 'message';
+export type ContentKind = 'title' | 'message' | 'message_citations';
 
 export type ContentAad = Readonly<{
   schemaVersion: 1;
@@ -62,6 +62,18 @@ export type WrappingKey = Readonly<{
 export type WrappingKeySet = Readonly<{
   activeVersion: number;
   keys: ReadonlyMap<number, WrappingKey>;
+}>;
+
+// Least-privilege projection for services that wrap tenant DEKs but never
+// calculate Tenant Chat binding MACs.
+export type DataWrappingKey = Readonly<{
+  version: number;
+  wrappingKey: Buffer;
+}>;
+
+export type DataWrappingKeySet = Readonly<{
+  activeVersion: number;
+  keys: ReadonlyMap<number, DataWrappingKey>;
 }>;
 
 export interface TenantDataEncryptor {

@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto';
 
-import { ContentKeyUnavailable, parseWrappingKeySet } from './index';
+import {
+  ContentKeyUnavailable,
+  parseDataWrappingKeySet,
+  parseWrappingKeySet,
+} from './index';
 
 describe('wrapping key set parser', () => {
   it('accepts active and grace reader keys', () => {
@@ -39,10 +43,40 @@ describe('wrapping key set parser', () => {
   });
 });
 
+describe('data wrapping key set parser', () => {
+  it('accepts only the wrapping-key projection', () => {
+    const parsed = parseDataWrappingKeySet({
+      schemaVersion: 1,
+      activeVersion: 2,
+      keys: [dataKey(1), dataKey(2)],
+    });
+
+    expect(parsed.activeVersion).toBe(2);
+    expect([...parsed.keys.keys()]).toEqual([1, 2]);
+  });
+
+  it('rejects integrity material and unknown fields', () => {
+    expect(() =>
+      parseDataWrappingKeySet({
+        schemaVersion: 1,
+        activeVersion: 1,
+        keys: [{ ...dataKey(1), integrityKey: randomBytes(32).toString('base64url') }],
+      }),
+    ).toThrow(ContentKeyUnavailable);
+  });
+});
+
 function key(version: number) {
   return {
     version,
     wrappingKey: randomBytes(32).toString('base64url'),
     integrityKey: randomBytes(32).toString('base64url'),
+  };
+}
+
+function dataKey(version: number) {
+  return {
+    version,
+    wrappingKey: randomBytes(32).toString('base64url'),
   };
 }
