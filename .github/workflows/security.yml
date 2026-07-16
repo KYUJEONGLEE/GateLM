@@ -28,7 +28,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Detect Dependency Graph support
+        id: dependency-graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.security_and_analysis.dependency_graph.status // "disabled"')"
+          if [[ "${status}" == "enabled" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Dependency Review skipped because GitHub Dependency Graph is not enabled for this repository."
+          fi
+
       - name: Reject newly introduced vulnerable dependencies
+        if: steps.dependency-graph.outputs.enabled == 'true'
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
