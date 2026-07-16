@@ -183,6 +183,8 @@ if grep -Fq 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.
 fi
 grep -Fq 'python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7' \
   "${E5_QUANTIZER_DOCKERFILE}" || fail "E5 quantizer base image must be digest-pinned"
+grep -Fq 'RUN chmod 0444 ./quantize_e5_onnx.py' "${E5_QUANTIZER_DOCKERFILE}" || \
+  fail "E5 quantizer script must remain readable under the production checkout umask"
 grep -Fq 'onnxruntime==1.22.1' "${E5_QUANTIZER_REQUIREMENTS}" || \
   fail "E5 quantizer ONNX Runtime dependency must be pinned"
 grep -Fq 'op_types_to_quantize=["MatMul"]' "${E5_QUANTIZER_SCRIPT}" || \
