@@ -8,11 +8,16 @@ from pathlib import Path
 from app.domain.ai_safety_training.koelectra_training import (
     BIO_LABELS,
     align_bio_label_ids,
+    balanced_label_weights,
     entity_chunks,
     exact_span_metric_report,
     label_maps,
     load_and_verify_dataset,
     span_metric_report,
+)
+from app.domain.ai_safety_training.koelectra_dataset import (
+    DATASET_SCHEMA_VERSION,
+    MANIFEST_SCHEMA_VERSION,
 )
 from app.services.pii_ner_export_cli import build_export_report, find_exported_model
 
@@ -69,7 +74,7 @@ class PiiNerTrainingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             record = {
-                "schemaVersion": "gatelm.pii-ner-training.v1",
+                "schemaVersion": DATASET_SCHEMA_VERSION,
                 "caseId": "synthetic_case",
                 "split": "train",
                 "locale": "ko-KR",
@@ -81,7 +86,7 @@ class PiiNerTrainingTests(unittest.TestCase):
             serialized = json.dumps(record) + "\n"
             (root / "train.jsonl").write_text(serialized, encoding="utf-8")
             manifest = {
-                "schemaVersion": "gatelm.pii-ner-training-manifest.v1",
+                "schemaVersion": MANIFEST_SCHEMA_VERSION,
                 "syntheticOnly": True,
                 "customerPromptUsed": False,
                 "splits": {
@@ -92,6 +97,25 @@ class PiiNerTrainingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 load_and_verify_dataset(root, include_splits=("train",))
+
+    def test_balanced_label_weights_reduce_outside_class_dominance(self) -> None:
+        label_to_id, _ = label_maps()
+        rows = [
+            [label_to_id["O"]] * 100
+            + [label_id]
+            for label, label_id in label_to_id.items()
+            if label != "O"
+        ]
+
+        weights, counts = balanced_label_weights(
+            rows,
+            label_count=len(BIO_LABELS),
+            outside_label_id=label_to_id["O"],
+        )
+
+        self.assertEqual(counts[label_to_id["O"]], 100 * (len(BIO_LABELS) - 1))
+        self.assertLess(weights[label_to_id["O"]], weights[label_to_id["B-PER"]])
+        self.assertGreater(weights[label_to_id["B-PER"]], 1.0)
 
     def test_label_contract_is_stable(self) -> None:
         self.assertEqual(

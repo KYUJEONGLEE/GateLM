@@ -14,7 +14,12 @@ from app.domain.ai_safety_training.koelectra_dataset import (
     build_training_manifest,
     serialize_training_records,
 )
-from app.services.ai_safety_master_eval_runner import DEFAULT_CORPUS_PATH
+
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+DEFAULT_CORPUS_PATH = (
+    REPO_ROOT / "docs" / "ai-safety-lab" / "fixtures" / "master-safety-eval-corpus.jsonl"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,4 +72,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

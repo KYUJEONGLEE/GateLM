@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -19,11 +20,48 @@ BIO_LABELS = ("O",) + tuple(
 )
 IGNORE_LABEL_ID = -100
 TRAINING_REPORT_VERSION = "gatelm.pii-ner-training-report.v1"
+MIN_LABEL_WEIGHT = 0.05
+MAX_LABEL_WEIGHT = 4.0
+OUTSIDE_LABEL_WEIGHT_MULTIPLIER = 0.25
 
 
 def label_maps() -> tuple[dict[str, int], dict[int, str]]:
     label_to_id = {label: index for index, label in enumerate(BIO_LABELS)}
     return label_to_id, {index: label for label, index in label_to_id.items()}
+
+
+def balanced_label_weights(
+    label_rows: Iterable[Sequence[int]],
+    *,
+    label_count: int,
+    outside_label_id: int,
+) -> tuple[list[float], list[int]]:
+    if label_count < 2 or not 0 <= outside_label_id < label_count:
+        raise ValueError("invalid balanced label weight contract")
+    counts = [0] * label_count
+    for row in label_rows:
+        for label_id in row:
+            if label_id == IGNORE_LABEL_ID:
+                continue
+            if not 0 <= label_id < label_count:
+                raise ValueError("training label id is outside the label contract")
+            counts[label_id] += 1
+    if any(count == 0 for count in counts):
+        raise ValueError("every PII NER label must occur in the training features")
+
+    total = sum(counts)
+    weights = [
+        min(
+            MAX_LABEL_WEIGHT,
+            max(MIN_LABEL_WEIGHT, math.sqrt(total / (label_count * count))),
+        )
+        for count in counts
+    ]
+    weights[outside_label_id] = max(
+        MIN_LABEL_WEIGHT,
+        weights[outside_label_id] * OUTSIDE_LABEL_WEIGHT_MULTIPLIER,
+    )
+    return [round(weight, 6) for weight in weights], counts
 
 
 def load_and_verify_dataset(

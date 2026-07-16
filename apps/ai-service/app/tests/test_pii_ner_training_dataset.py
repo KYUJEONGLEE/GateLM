@@ -7,14 +7,15 @@ from pathlib import Path
 
 from app.domain.ai_safety_eval.master_corpus import load_master_eval_corpus
 from app.domain.ai_safety_training.koelectra_dataset import (
+    POSITIVE_VARIANTS_PER_RECORD,
     SPLITS,
     TARGET_LABEL_BY_DETECTOR_TYPE,
     build_training_dataset,
     build_training_manifest,
     serialize_training_records,
+    training_record_from_case,
 )
-from app.services.ai_safety_master_eval_runner import DEFAULT_CORPUS_PATH
-from app.services.pii_ner_training_dataset_cli import run
+from app.services.pii_ner_training_dataset_cli import DEFAULT_CORPUS_PATH, run
 
 
 class PiiNerTrainingDatasetTests(unittest.TestCase):
@@ -49,6 +50,36 @@ class PiiNerTrainingDatasetTests(unittest.TestCase):
             for record in dataset[split]:
                 for span in record.spans:
                     self.assertTrue(record.text[span.start : span.end])
+
+    def test_positive_records_are_augmented_with_split_disjoint_values(self) -> None:
+        dataset = build_training_dataset(self.cases)
+        base_positive_counts = {
+            split: sum(
+                bool(record.spans)
+                for case in self.cases
+                if (record := training_record_from_case(case)).split == split
+            )
+            for split in SPLITS
+        }
+        values_by_split: dict[str, set[str]] = {}
+
+        for split in SPLITS:
+            positives = [record for record in dataset[split] if record.spans]
+            self.assertEqual(
+                len(positives),
+                base_positive_counts[split] * POSITIVE_VARIANTS_PER_RECORD,
+            )
+            values_by_split[split] = {
+                record.text[span.start : span.end]
+                for record in positives
+                for span in record.spans
+            }
+
+        for index, split in enumerate(SPLITS):
+            for other_split in SPLITS[index + 1 :]:
+                self.assertTrue(
+                    values_by_split[split].isdisjoint(values_by_split[other_split])
+                )
 
     def test_manifest_contains_only_aggregate_and_case_ids(self) -> None:
         dataset = build_training_dataset(self.cases)

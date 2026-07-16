@@ -12,12 +12,13 @@ from typing import Any, Iterable
 from app.domain.ai_safety_eval.master_corpus import MasterEvalCase
 
 
-DATASET_SCHEMA_VERSION = "gatelm.pii-ner-training.v1"
-MANIFEST_SCHEMA_VERSION = "gatelm.pii-ner-training-manifest.v1"
+DATASET_SCHEMA_VERSION = "gatelm.pii-ner-training.v2"
+MANIFEST_SCHEMA_VERSION = "gatelm.pii-ner-training-manifest.v2"
 SPLITS = ("train", "validation", "holdout")
 TRAIN_PERCENT = 80
 VALIDATION_PERCENT = 10
 MAX_NEGATIVE_TO_POSITIVE_RATIO = 2
+POSITIVE_VARIANTS_PER_RECORD = 8
 TARGET_LABEL_BY_DETECTOR_TYPE = {
     "email": "EMA",
     "organization_name": "ORG",
@@ -117,6 +118,107 @@ SYNTHETIC_VALUES_BY_DETECTOR_TYPE: dict[str, tuple[str, ...]] = {
     ),
 }
 
+DETECTOR_TYPE_BY_TARGET_LABEL = {
+    label: detector_type
+    for detector_type, label in TARGET_LABEL_BY_DETECTOR_TYPE.items()
+}
+SPLIT_VALUE_NAMESPACE = {
+    "train": 0,
+    "validation": 10_000,
+    "holdout": 20_000,
+}
+KOREAN_FAMILY_NAMES = (
+    "김",
+    "이",
+    "박",
+    "최",
+    "정",
+    "강",
+    "조",
+    "윤",
+    "장",
+    "임",
+    "한",
+    "오",
+)
+KOREAN_NAME_SYLLABLES = (
+    "가",
+    "건",
+    "나",
+    "다",
+    "라",
+    "마",
+    "민",
+    "바",
+    "서",
+    "수",
+    "아",
+    "연",
+    "우",
+    "유",
+    "은",
+    "재",
+    "주",
+    "지",
+    "하",
+    "현",
+)
+ORGANIZATION_WORDS = (
+    "가람",
+    "나래",
+    "다온",
+    "라온",
+    "마루",
+    "바른",
+    "새롬",
+    "아람",
+    "여울",
+    "온빛",
+    "이든",
+    "자람",
+    "푸른",
+    "하람",
+)
+ORGANIZATION_SUFFIXES = (
+    "테크",
+    "연구소",
+    "물류",
+    "대학교",
+    "소프트",
+    "데이터",
+    "산업",
+    "재단",
+)
+ADDRESS_WORDS = (
+    "가람",
+    "나래",
+    "다온",
+    "라온",
+    "마루",
+    "바름",
+    "새롬",
+    "아람",
+    "여울",
+    "온빛",
+    "이든",
+    "자람",
+)
+PERSON_SYLLABLES_BY_SPLIT = {
+    "train": KOREAN_NAME_SYLLABLES[0:6],
+    "validation": KOREAN_NAME_SYLLABLES[6:12],
+    "holdout": KOREAN_NAME_SYLLABLES[12:18],
+}
+ORGANIZATION_WORDS_BY_SPLIT = {
+    "train": ORGANIZATION_WORDS[0:4],
+    "validation": ORGANIZATION_WORDS[4:8],
+    "holdout": ORGANIZATION_WORDS[8:12],
+}
+ADDRESS_WORDS_BY_SPLIT = {
+    "train": ADDRESS_WORDS[0:4],
+    "validation": ADDRESS_WORDS[4:8],
+    "holdout": ADDRESS_WORDS[8:12],
+}
+
 
 def build_training_dataset(
     cases: Iterable[MasterEvalCase],
@@ -125,7 +227,12 @@ def build_training_dataset(
     selected: dict[str, list[TrainingRecord]] = {split: [] for split in SPLITS}
     for split in SPLITS:
         split_records = [record for record in all_records if record.split == split]
-        positives = [record for record in split_records if record.spans]
+        positives = [
+            variant
+            for record in split_records
+            if record.spans
+            for variant in positive_record_variants(record)
+        ]
         negatives = [record for record in split_records if not record.spans]
         negative_limit = len(positives) * MAX_NEGATIVE_TO_POSITIVE_RATIO
         ranked_negatives = sorted(
@@ -138,6 +245,116 @@ def build_training_dataset(
         )
     validate_training_dataset(selected)
     return selected
+
+
+def positive_record_variants(record: TrainingRecord) -> tuple[TrainingRecord, ...]:
+    if not record.spans:
+        return (record,)
+    return (record,) + tuple(
+        augmented_positive_record(record, variant_index)
+        for variant_index in range(1, POSITIVE_VARIANTS_PER_RECORD)
+    )
+
+
+def augmented_positive_record(
+    record: TrainingRecord,
+    variant_index: int,
+) -> TrainingRecord:
+    if not record.spans or variant_index < 1:
+        raise ValueError("positive augmentation requires spans and a positive variant index")
+
+    rendered_parts: list[str] = []
+    augmented_spans: list[TrainingSpan] = []
+    replacements: dict[tuple[str, str], str] = {}
+    source_cursor = 0
+    rendered_length = 0
+    for span_index, span in enumerate(record.spans):
+        literal = record.text[source_cursor : span.start]
+        rendered_parts.append(literal)
+        rendered_length += len(literal)
+
+        source_value = record.text[span.start : span.end]
+        replacement_key = (span.label, source_value)
+        replacement = replacements.get(replacement_key)
+        if replacement is None:
+            detector_type = DETECTOR_TYPE_BY_TARGET_LABEL[span.label]
+            replacement = augmented_synthetic_value(
+                split=record.split,
+                detector_type=detector_type,
+                seed=(
+                    f"{record.case_id}:{variant_index}:{span_index}:"
+                    f"{span.label}:{source_value}"
+                ),
+            )
+            replacements[replacement_key] = replacement
+        start = rendered_length
+        rendered_parts.append(replacement)
+        rendered_length += len(replacement)
+        augmented_spans.append(
+            TrainingSpan(start=start, end=rendered_length, label=span.label)
+        )
+        source_cursor = span.end
+
+    rendered_parts.append(record.text[source_cursor:])
+    augmented = TrainingRecord(
+        case_id=f"{record.case_id}__aug_{variant_index:02d}",
+        split=record.split,
+        locale=record.locale,
+        group_id=record.group_id,
+        text="".join(rendered_parts),
+        spans=tuple(augmented_spans),
+    )
+    validate_training_record(augmented)
+    return augmented
+
+
+def augmented_synthetic_value(*, split: str, detector_type: str, seed: str) -> str:
+    namespace = SPLIT_VALUE_NAMESPACE.get(split)
+    if namespace is None:
+        raise ValueError(f"unsupported augmentation split {split!r}")
+    split_index = namespace // 10_000
+    index = int(stable_digest(f"augment:{seed}")[:12], 16) % 9_000
+
+    if detector_type == "person_name":
+        syllables = PERSON_SYLLABLES_BY_SPLIT[split]
+        family = KOREAN_FAMILY_NAMES[index % len(KOREAN_FAMILY_NAMES)]
+        first = syllables[
+            (index // len(KOREAN_FAMILY_NAMES)) % len(syllables)
+        ]
+        second = syllables[
+            (index // (len(KOREAN_FAMILY_NAMES) * len(syllables)))
+            % len(syllables)
+        ]
+        return f"{family}{first}{second}"
+    if detector_type == "organization_name":
+        words = ORGANIZATION_WORDS_BY_SPLIT[split]
+        first = words[index % len(words)]
+        second = words[
+            (index // len(words)) % len(words)
+        ]
+        suffix = ORGANIZATION_SUFFIXES[
+            (index // (len(words) ** 2)) % len(ORGANIZATION_SUFFIXES)
+        ]
+        return f"{first}{second}{suffix}"
+    if detector_type == "postal_address":
+        words = ADDRESS_WORDS_BY_SPLIT[split]
+        city = words[index % len(words)]
+        district = words[(index // len(words)) % len(words)]
+        road = words[(index // (len(words) ** 2)) % len(words)]
+        return f"{city}시 {district}구 {road}로 {10 + index % 890}"
+    if detector_type == "email":
+        return f"synthetic.user{index}@example{split_index}.test"
+    if detector_type == "phone_number":
+        group = 1000 + split_index * 3000 + index % 3000
+        return f"010-{group:04d}-{1000 + (index * 37) % 9000:04d}"
+    if detector_type == "resident_registration_number":
+        year = index % 100
+        month = 1 + (index // 100) % 12
+        day = 1 + (index // 1_200) % 28
+        gender = 1 + split_index * 2
+        serial = 1 + (index * 97) % 999_999
+        return f"{year:02d}{month:02d}{day:02d}-{gender}{serial:06d}"
+    raise ValueError(f"unsupported augmentation detector type {detector_type!r}")
 
 
 def training_record_from_case(case: MasterEvalCase) -> TrainingRecord:
@@ -157,7 +374,12 @@ def training_record_from_case(case: MasterEvalCase) -> TrainingRecord:
         if field_name is None:
             continue
         detector_type = case.placeholder_bindings[field_name]
-        value = synthetic_value_for_case(case.case_id, field_name, detector_type)
+        value = synthetic_value_for_case(
+            case.case_id,
+            field_name,
+            detector_type,
+            split=split,
+        )
         value_start = rendered_length
         rendered_parts.append(value)
         rendered_length += len(value)
@@ -203,7 +425,15 @@ def synthetic_value_for_case(
     case_id: str,
     placeholder: str,
     detector_type: str,
+    *,
+    split: str,
 ) -> str:
+    if detector_type in TARGET_LABEL_BY_DETECTOR_TYPE:
+        return augmented_synthetic_value(
+            split=split,
+            detector_type=detector_type,
+            seed=f"base:{case_id}:{placeholder}:{detector_type}",
+        )
     values = SYNTHETIC_VALUES_BY_DETECTOR_TYPE.get(detector_type)
     if values is None:
         return f"SYNTHETIC_{detector_type.upper()}_VALUE"
@@ -289,6 +519,8 @@ def build_training_manifest(
             "validationPercent": VALIDATION_PERCENT,
             "holdoutPercent": 100 - TRAIN_PERCENT - VALIDATION_PERCENT,
             "maxNegativeToPositiveRatio": MAX_NEGATIVE_TO_POSITIVE_RATIO,
+            "positiveVariantsPerRecord": POSITIVE_VARIANTS_PER_RECORD,
+            "splitDisjointSyntheticValueNamespaces": True,
         },
         "targetLabels": dict(sorted(TARGET_LABEL_BY_DETECTOR_TYPE.items())),
         "sourceCorpus": {

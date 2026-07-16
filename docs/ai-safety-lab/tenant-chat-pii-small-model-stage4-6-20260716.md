@@ -119,3 +119,33 @@ AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 | 6단계 | fail-closed 계약 구현·검증 완료, 배포 차단 | 실패 후보의 activation env 미생성, rules-only rollback env 생성 확인 |
 
 현재 서비스 안전 기본값은 계속 rules-only다. 이번 결과는 작은 모델이 곧 정확한 모델을 뜻하지 않으며, backbone 교체보다 먼저 학습 데이터와 학습 전략을 개선해야 함을 보여준다.
+
+## 4. 2026-07-16 무료 모델 재학습 v2
+
+Microsoft Azure AI Language PII 컨테이너 도입은 중단했다. Azure adapter, 설정, 테스트, Self-host Compose overlay와 기동·smoke 스크립트는 revert 커밋으로 제거했으며 저장소의 Azure PII 연결 흔적은 0건이다. 앞으로 실시간 PII 보완 탐지는 외부 유료 API 없이 `GateLM KoELECTRA-small ONNX dynamic QInt8`만 후보로 사용한다.
+
+첫 자체 학습 후보가 빠르지만 holdout TP 0으로 실패한 주된 원인은 적은 positive 문장과 토큰 대부분을 차지하는 `O` 라벨 쏠림이다. v2는 다음을 변경했다.
+
+1. positive 문장마다 합성 PII 값을 바꾼 variant를 총 8개 만든다.
+2. 학습·검증·holdout의 합성 이름·조직·주소·이메일·전화·주민번호 값 공간을 분리한다.
+3. 전체 record를 540건에서 2,260건으로 늘린다.
+4. inverse-square-root class weight와 별도 `O` down-weight를 적용한다.
+5. 기본 학습을 3 epoch에서 8 epoch로 늘리고 validation micro F1이 가장 높은 epoch만 저장한다.
+6. 기존 holdout, screening FP, p95 50ms, RSS 512MiB, production promotion gate는 낮추거나 우회하지 않는다.
+
+| split | 전체 | positive | negative |
+|---|---:|---:|---:|
+| train | 1,952 | 1,224 | 728 |
+| validation | 189 | 128 | 61 |
+| holdout | 119 | 88 | 31 |
+
+데이터·학습·배포 gate 단위 테스트 19건은 통과했다. 다만 Codex가 실행되는 WSL과 Windows 사이의 `vsock` 장애로 기존 Windows 가상환경을 호출할 수 없었고, WSL 임시 CPU PyTorch 설치도 10분 제한을 넘겨 실제 v2 재학습 결과는 아직 없다. 따라서 이 변경만으로 모델을 서비스에 활성화하지 않는다.
+
+Windows PowerShell에서 다음 명령 하나로 데이터 생성, 재학습, QInt8 변환, candidate 평가까지 실행한다.
+
+```powershell
+cd C:\jungle7\llmops
+.\scripts\tenant_chat_pii_models\retrain_gatelm_koelectra.ps1
+```
+
+스크립트는 candidate gate가 실패하면 non-zero로 종료하고 모델을 활성화하지 않는다. candidate gate가 통과해도 production promotion evidence와 실제 Tenant Chat E2E가 추가로 통과하기 전에는 rules-only를 유지한다.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import random
 import sys
@@ -12,6 +13,7 @@ from app.domain.ai_safety_training.koelectra_training import (
     BIO_LABELS,
     TRAINING_REPORT_VERSION,
     align_bio_label_ids,
+    balanced_label_weights,
     entity_chunks,
     label_maps,
     load_and_verify_dataset,
@@ -28,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset-dir", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
-    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--max-length", type=int, default=512)
     parser.add_argument("--learning-rate", type=float, default=5e-5)
@@ -112,6 +114,12 @@ def run(argv: Sequence[str] | None = None) -> int:
 
         train_dataset = EncodedDataset(records_by_split["train"])
         validation_dataset = EncodedDataset(records_by_split["validation"])
+        label_weights, label_counts = balanced_label_weights(
+            (feature["labels"] for feature in train_dataset.features),
+            label_count=len(BIO_LABELS),
+            outside_label_id=label_to_id["O"],
+        )
+        loss_weights = torch.tensor(label_weights, dtype=torch.float32)
         generator = torch.Generator().manual_seed(args.seed)
         train_loader = DataLoader(
             train_dataset,
@@ -129,16 +137,26 @@ def run(argv: Sequence[str] | None = None) -> int:
         optimizer = AdamW(model.parameters(), lr=args.learning_rate)
         started = perf_counter()
         epochs: list[dict[str, Any]] = []
+        best_epoch = 0
+        best_validation_f1 = -2.0
+        best_state: dict[str, Any] | None = None
         for epoch_index in range(args.epochs):
             model.train()
             losses: list[float] = []
             for batch in train_loader:
                 optimizer.zero_grad(set_to_none=True)
+                labels = batch.pop("labels")
                 output = model(**batch)
-                output.loss.backward()
+                loss = torch.nn.functional.cross_entropy(
+                    output.logits.reshape(-1, len(BIO_LABELS)),
+                    labels.reshape(-1),
+                    weight=loss_weights,
+                    ignore_index=-100,
+                )
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
-                losses.append(float(output.loss.detach().cpu()))
+                losses.append(float(loss.detach().cpu()))
             validation = evaluate_model(model, validation_loader, id_to_label, torch)
             epochs.append(
                 {
@@ -147,6 +165,16 @@ def run(argv: Sequence[str] | None = None) -> int:
                     "validation": validation,
                 }
             )
+            validation_f1 = validation["spanMetrics"]["micro"]["f1"]
+            comparable_f1 = float(validation_f1) if validation_f1 is not None else -1.0
+            if comparable_f1 > best_validation_f1:
+                best_validation_f1 = comparable_f1
+                best_epoch = epoch_index + 1
+                best_state = copy.deepcopy(model.state_dict())
+
+        if best_state is None:
+            raise RuntimeError("PII NER training did not produce a selectable epoch")
+        model.load_state_dict(best_state)
 
         args.out.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(args.out, safe_serialization=True)
@@ -171,6 +199,18 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "seed": args.seed,
                 "cpuThreads": args.cpu_threads,
             },
+            "classBalance": {
+                "labelTokenCounts": {
+                    label: label_counts[label_to_id[label]] for label in BIO_LABELS
+                },
+                "labelWeights": {
+                    label: label_weights[label_to_id[label]] for label in BIO_LABELS
+                },
+            },
+            "selectedEpoch": best_epoch,
+            "selectedValidationMicroF1": (
+                None if best_validation_f1 < 0 else round(best_validation_f1, 6)
+            ),
             "durationSeconds": round(perf_counter() - started, 3),
             "epochs": epochs,
             "holdoutOpened": False,
@@ -184,10 +224,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 2
 
-    final_f1 = epochs[-1]["validation"]["spanMetrics"]["micro"]["f1"]
+    final_f1 = report["selectedValidationMicroF1"]
     print(
         "PII NER training completed: "
-        f"epochs={args.epochs}, validationF1={final_f1}, report={report_path}"
+        f"epochs={args.epochs}, selectedEpoch={best_epoch}, "
+        f"validationF1={final_f1}, report={report_path}"
     )
     return 0
 
@@ -242,4 +283,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -6,9 +6,6 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from app.adapters.safety.privacy_filter_adapter import (
-    GATELM_KOELECTRA_PII_NER_MODEL,
-)
 from app.domain.ai_safety_training.koelectra_training import sha256_file
 from app.domain.safety_eval.report import scan_text_for_forbidden_sensitive_values
 
@@ -16,6 +13,7 @@ from app.domain.safety_eval.report import scan_text_for_forbidden_sensitive_valu
 DEPLOYMENT_REPORT_VERSION = "gatelm.pii-ner-deployment-gate.v1"
 CANDIDATE_REPORT_VERSION = "gatelm.pii-ner-candidate-evaluation.v1"
 PROMOTION_REPORT_VERSION = "pii-production-promotion-evidence.v1"
+GATELM_KOELECTRA_PII_NER_MODEL = "gatelm/koelectra-small-v3-pii-ner"
 DEFAULT_RUNTIME_MODEL_PATH = (
     ".cache/onnx/gatelm--koelectra-small-v3-pii-ner-quantized"
 )
