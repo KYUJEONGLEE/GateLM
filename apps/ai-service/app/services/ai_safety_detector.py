@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from time import perf_counter
 
-from app.adapters.safety import AzurePiiAdapter, PrivacyFilterAdapter
+from app.adapters.safety import PrivacyFilterAdapter
 from app.adapters.safety.heuristic_evaluator import PromptDetector, default_detectors
 from app.adapters.safety.privacy_filter_adapter import public_model_id_for_model, source_for_model
 from app.domain.safety.detections import Detection, safety_signals_from_detections
@@ -206,8 +206,6 @@ ACTION_REDACT_CONTEXT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 MICRO_BATCH_SIZE_ENV = "AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE"
-ML_FULL_TEXT_WINDOW_OVERLAP_CHARS = 80
-ModelAdapter = PrivacyFilterAdapter | AzurePiiAdapter
 
 
 @dataclass(frozen=True)
@@ -343,8 +341,8 @@ class AiSafetyDetectorService:
     def __init__(
         self,
         *,
-        adapter: ModelAdapter | None = None,
-        adapters: tuple[ModelAdapter, ...] | None = None,
+        adapter: PrivacyFilterAdapter | None = None,
+        adapters: tuple[PrivacyFilterAdapter, ...] | None = None,
         model_id: str = AI_SAFETY_DETECTOR_MODEL_ID,
         additional_model_ids: tuple[str, ...] = (),
         detectors: tuple[SafetyDetector, ...] = DEFAULT_PRIVACY_FILTER_DETECTORS,
@@ -498,7 +496,7 @@ class AiSafetyDetectorService:
             for item_index, prompt_text in inputs
         ]
         model_invocation_count = 0
-        model_plans: list[tuple[ModelAdapter, list[tuple[int, MlWindow]]]] = []
+        model_plans: list[tuple[PrivacyFilterAdapter, list[tuple[int, MlWindow]]]] = []
         total_model_candidates = 0
         total_model_windows = 0
         for adapter in self.adapters:
@@ -510,16 +508,6 @@ class AiSafetyDetectorService:
                 continue
             window_refs: list[tuple[int, MlWindow]] = []
             for work_index, work_item in enumerate(work_items):
-                if getattr(adapter, "scan_full_text", False):
-                    item_windows = _full_text_ml_windows_for_prompt(
-                        work_item.prompt_text,
-                        max_chars=int(getattr(adapter, "max_document_chars", ML_WINDOW_MAX_CHARS)),
-                    )
-                    total_model_windows += len(item_windows)
-                    if total_model_windows > ML_MAX_WINDOWS_PER_REQUEST:
-                        raise RuntimeError(ML_WORK_LIMIT_ERROR)
-                    window_refs.extend((work_index, window) for window in item_windows)
-                    continue
                 candidates = _ml_context_candidates(work_item.prompt_text, supported_types)
                 uncovered_candidates = _uncovered_ml_candidates(
                     work_item.prompt_text, work_item.rule_signals, candidates
@@ -833,26 +821,6 @@ def _ml_windows_for_prompt(
     )
 
 
-def _full_text_ml_windows_for_prompt(prompt_text: str, *, max_chars: int) -> tuple[MlWindow, ...]:
-    if prompt_text == "":
-        return ()
-    bounded_max_chars = max(1, max_chars)
-    if len(prompt_text) <= bounded_max_chars:
-        return (MlWindow(0, len(prompt_text), prompt_text),)
-
-    overlap = min(ML_FULL_TEXT_WINDOW_OVERLAP_CHARS, max(0, bounded_max_chars - 1))
-    stride = bounded_max_chars - overlap
-    windows: list[MlWindow] = []
-    start = 0
-    while start < len(prompt_text):
-        end = min(len(prompt_text), start + bounded_max_chars)
-        windows.append(MlWindow(start, end, prompt_text[start:end]))
-        if end == len(prompt_text):
-            break
-        start += stride
-    return tuple(windows)
-
-
 def _ml_candidate_spans(
     candidates: list[MlCandidate],
 ) -> list[tuple[int, int]]:
@@ -943,13 +911,13 @@ def _same_type_overlap(left: SafetySignal, right: SafetySignal) -> bool:
 
 def _resolve_adapters(
     *,
-    adapter: ModelAdapter | None,
-    adapters: tuple[ModelAdapter, ...] | None,
+    adapter: PrivacyFilterAdapter | None,
+    adapters: tuple[PrivacyFilterAdapter, ...] | None,
     model_id: str,
     additional_model_ids: tuple[str, ...],
     detector_runtime: str,
     allowed_detector_types: frozenset[str] | None,
-) -> tuple[ModelAdapter, ...]:
+) -> tuple[PrivacyFilterAdapter, ...]:
     if adapters:
         return adapters
     if adapter is not None:

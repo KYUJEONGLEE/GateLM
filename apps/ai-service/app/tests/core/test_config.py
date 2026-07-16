@@ -10,7 +10,6 @@ from app.core.config import (
     DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID,
     DEFAULT_AI_SAFETY_DETECTOR_RUNTIME,
     DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES,
-    DEFAULT_AZURE_PII_ALLOWED_DETECTOR_TYPES,
     Settings,
     load_settings,
 )
@@ -120,14 +119,6 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "ai_safety_ml_allowed_detector_types",
                 "ai_safety_detector_runtime",
                 "ai_safety_preload_enabled",
-                "ai_safety_local_model_enabled",
-                "azure_pii_enabled",
-                "azure_pii_endpoint",
-                "azure_pii_api_key",
-                "azure_pii_api_version",
-                "azure_pii_language",
-                "azure_pii_timeout_ms",
-                "azure_pii_allowed_detector_types",
             },
         )
 
@@ -140,51 +131,6 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             settings = load_settings()
 
         self.assertTrue(settings.ai_safety_preload_enabled)
-
-    def test_settings_loads_azure_pii_configuration_without_exposing_api_key(self) -> None:
-        env = {
-            "AI_SERVICE_AI_SAFETY_LOCAL_MODEL_ENABLED": "false",
-            "AI_SERVICE_AZURE_PII_ENABLED": "true",
-            "AI_SERVICE_AZURE_PII_ENDPOINT": "http://localhost:5000",
-            "AI_SERVICE_AZURE_PII_API_KEY": "secret-api-key",
-            "AI_SERVICE_AZURE_PII_LANGUAGE": "ko-KR",
-            "AI_SERVICE_AZURE_PII_TIMEOUT_MS": "1250",
-            "AI_SERVICE_AZURE_PII_ALLOWED_DETECTOR_TYPES": "person_name,email,person_name",
-        }
-        with patch.dict(os.environ, env, clear=True):
-            settings = load_settings()
-
-        self.assertFalse(settings.ai_safety_local_model_enabled)
-        self.assertTrue(settings.azure_pii_enabled)
-        self.assertEqual(settings.azure_pii_endpoint, "http://localhost:5000")
-        self.assertEqual(settings.azure_pii_language, "ko-KR")
-        self.assertEqual(settings.azure_pii_timeout_ms, 1250)
-        self.assertEqual(settings.azure_pii_allowed_detector_types, ("person_name", "email"))
-        self.assertNotIn("secret-api-key", repr(settings))
-
-    def test_settings_defaults_azure_pii_detector_type_allowlist(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
-            settings = load_settings()
-
-        self.assertEqual(
-            settings.azure_pii_allowed_detector_types,
-            DEFAULT_AZURE_PII_ALLOWED_DETECTOR_TYPES,
-        )
-
-    def test_settings_rejects_incomplete_or_disabled_model_backends(self) -> None:
-        invalid_envs = (
-            {
-                "AI_SERVICE_AZURE_PII_ENABLED": "true",
-            },
-            {
-                "AI_SERVICE_AI_SAFETY_LOCAL_MODEL_ENABLED": "false",
-                "AI_SERVICE_AZURE_PII_ENABLED": "false",
-            },
-        )
-        for env in invalid_envs:
-            with self.subTest(env=env), patch.dict(os.environ, env, clear=True):
-                with self.assertRaises(ValueError):
-                    load_settings()
 
     def test_launcher_passes_access_log_setting_to_uvicorn(self) -> None:
         env = {
