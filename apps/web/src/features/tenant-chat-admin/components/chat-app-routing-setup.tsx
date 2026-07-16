@@ -278,7 +278,8 @@ export function ChatAppRoutingSetup({
         )
       : categories.flatMap((category) =>
           difficulties.flatMap(
-            (difficulty) => routes[category.id][difficulty.id].modelRefs
+            (difficulty) =>
+              routes[category.id]?.[difficulty.id]?.modelRefs ?? []
           )
         )
   );
@@ -461,7 +462,7 @@ export function ChatAppRoutingSetup({
                               locale={locale}
                               onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
                               providers={providers}
-                              value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}
+                              value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}
                             />
                           ))}
                         </div>

@@ -456,7 +456,7 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - wrong tenant/AAD/key version, tag/ciphertext tamper와 record swap은 `CHAT_CONTENT_INTEGRITY_FAILED`로 fail closed한다. 원인 detail이나 key metadata를 caller/log/metric에 포함하지 않는다.
 - rotation은 reader-first다. 새 wrapping key를 reader set에 배포한 뒤 active version을 올리고 DEK를 rewrap한다. DB의 monotonic `wrappingKeyRollbackFloor` 아래 active version은 readiness와 write 모두 거부한다.
 - content DEK rotation은 새 version을 writer로 선택하고 이전 DEK를 grace reader로 유지한다. row의 `contentKeyVersion`이 없는 key를 가리키면 fail closed한다.
-- readiness는 key file shape, active key, 모든 DB rollback floor 이상 여부를 검사한다. actual key, unwrapped DEK와 canonical plaintext를 log/fixture/metric/artifact에 남기지 않는다.
+- readiness는 key file shape, active key, 모든 DB rollback floor 이상 여부와 non-retired wrapping key version별 대표 persisted DEK 하나가 실제 unwrap되는지를 검사한다. version 번호만 일치하고 key material이 바뀐 경우도 fail closed한다. key set은 최대 8개이므로 readiness crypto 검증도 최대 8개로 제한한다. 개별 row integrity는 실제 read path에서 계속 fail closed한다. actual key, unwrapped DEK와 canonical plaintext를 log/fixture/metric/artifact에 남기지 않는다.
 
 #### 12.2.1 RAG crypto와 고정 profile 경계
 

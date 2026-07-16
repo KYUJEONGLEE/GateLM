@@ -108,6 +108,10 @@ const productionPrepareScript = readFileSync(
   path.join(rootDir, "deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh"),
   "utf8",
 );
+const ciWorkflow = readFileSync(
+  path.join(rootDir, ".github/workflows/ci.yml"),
+  "utf8",
+);
 const holdoutReference = readFileSync(
   path.join(
     rootDir,
@@ -258,6 +262,28 @@ if (
   prepareInvocationIndex > gatewayBuildIndex
 ) {
   throw new Error("production Gateway E5 bundle must be prepared before application image builds");
+}
+const releasePackagingMatch = /(?:^|\r?\n)[ \t]+release-packaging[ \t]*:/.exec(ciWorkflow);
+const releasePackagingIndex = releasePackagingMatch?.index ?? -1;
+const releasePackagingWorkflow =
+  releasePackagingIndex >= 0 ? ciWorkflow.slice(releasePackagingIndex) : "";
+const ciPrepareMatch =
+  /bash[ \t]+deploy\/aws-triage\/scripts\/prepare-gateway-e5-runtime-bundle\.sh[ \t]+(["']?)\$\{GITHUB_WORKSPACE\}\1/.exec(
+    releasePackagingWorkflow,
+  );
+const ciPrepareInvocationIndex = ciPrepareMatch?.index ?? -1;
+const ciReleaseBuildMatch =
+  /^[ \t]*-[ \t]*name[ \t]*:[ \t]*(["']?)Build release images\1[ \t]*\r?$/m.exec(
+    releasePackagingWorkflow,
+  );
+const ciReleaseBuildIndex = ciReleaseBuildMatch?.index ?? -1;
+if (
+  releasePackagingIndex < 0 ||
+  ciPrepareInvocationIndex < 0 ||
+  ciReleaseBuildIndex < 0 ||
+  ciPrepareInvocationIndex > ciReleaseBuildIndex
+) {
+  throw new Error("CI release packaging must prepare the Gateway E5 bundle before image builds");
 }
 if (!verifyNativeScript.includes("--user 1000:1000")) {
   throw new Error("Gateway E5 image smoke must cover the production arbitrary UID boundary");
