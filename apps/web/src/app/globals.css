@@ -19245,7 +19245,6 @@ html:has(.tenant-management-content) {
   display: none;
 }
 
-.tenant-routing-enable-card,
 .tenant-routing-model-card,
 .tenant-routing-off-default-card,
 .tenant-routing-fallback-card {
@@ -19257,16 +19256,10 @@ html:has(.tenant-management-content) {
   box-shadow: var(--shadow-xs);
 }
 
-.tenant-routing-enable-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 94px;
-  align-items: center;
-  gap: 28px;
-  padding: 20px 26px;
+.tenant-routing-default-card {
+  grid-template-columns: minmax(260px, 1fr) minmax(560px, 0.95fr);
 }
 
-.tenant-routing-enable-card h3,
 .tenant-routing-model-heading h3,
 .tenant-routing-off-default-heading h3,
 .tenant-routing-fallback-heading h3 {
@@ -19277,7 +19270,6 @@ html:has(.tenant-management-content) {
   line-height: var(--line-height-tight);
 }
 
-.tenant-routing-enable-card p,
 .tenant-routing-model-heading p,
 .tenant-routing-off-default-heading p,
 .tenant-routing-fallback-heading p {
@@ -19383,10 +19375,24 @@ html:has(.tenant-management-content) {
   flex: 0 0 auto;
   align-items: center;
   gap: 10px;
-  color: var(--foreground);
+  min-width: 148px;
+  justify-content: flex-end;
+  color: var(--text-muted);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
-  cursor: pointer;
+}
+
+.tenant-routing-mode-label {
+  min-width: 32px;
+  transition: color 160ms ease;
+}
+
+.tenant-routing-mode-label:first-child {
+  text-align: right;
+}
+
+.tenant-routing-mode-label[data-active="true"] {
+  color: var(--foreground);
 }
 
 .tenant-routing-switch[data-slot="switch"] {
@@ -19396,6 +19402,7 @@ html:has(.tenant-management-content) {
   overflow: hidden;
   background: var(--border-strong);
   box-shadow: none;
+  transition: background-color 160ms ease;
 }
 
 .tenant-routing-switch[data-slot="switch"][data-checked] {
@@ -19428,13 +19435,46 @@ html:has(.tenant-management-content) {
 
 .tenant-routing-model-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
 }
 
 .tenant-routing-model-heading-copy {
   min-width: 0;
+}
+
+.tenant-routing-heading-mode {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  justify-items: end;
+}
+
+.tenant-routing-heading-mode > span {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.tenant-routing-mode-content {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  animation: tenant-routing-mode-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tenant-routing-mode-enter {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
 .tenant-routing-recommend-button {
@@ -19464,6 +19504,139 @@ html:has(.tenant-management-content) {
   height: 17px;
 }
 
+.tenant-routing-title-with-help {
+  display: inline-grid;
+  grid-template-columns: auto 16px;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  vertical-align: top;
+}
+
+.tenant-routing-info-button {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  line-height: 1;
+  vertical-align: middle;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.tenant-routing-info-button:hover,
+.tenant-routing-info-button:focus-visible,
+.tenant-routing-info-button[data-popup-open] {
+  background: color-mix(in srgb, var(--brand-blue-strong) 10%, transparent);
+  color: var(--brand-blue-strong);
+  outline: 2px solid transparent;
+}
+
+.tenant-routing-info-button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+.tenant-routing-popover-positioner {
+  z-index: 70;
+}
+
+.tenant-routing-criteria-popover {
+  display: grid;
+  width: min(390px, calc(100vw - 28px));
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--foreground) 18%, transparent);
+  transform-origin: var(--transform-origin);
+  transition: opacity 140ms ease, scale 140ms ease;
+}
+
+.tenant-routing-criteria-popover[data-starting-style],
+.tenant-routing-criteria-popover[data-ending-style] {
+  opacity: 0;
+  scale: 0.97;
+}
+
+.tenant-routing-criteria-section {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 5px;
+  padding: 14px 16px;
+}
+
+.tenant-routing-criteria-section + .tenant-routing-criteria-section {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tenant-routing-criteria-section[data-difficulty="simple"] > strong {
+  color: var(--success);
+}
+
+.tenant-routing-criteria-section[data-difficulty="complex"] > strong {
+  color: var(--brand-blue-strong);
+}
+
+.tenant-routing-criteria-section > strong {
+  grid-row: 1 / span 2;
+  padding-top: 1px;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.tenant-routing-criteria-section > p,
+.tenant-routing-criteria-example p,
+.tenant-routing-criteria-note {
+  margin: 0;
+}
+
+.tenant-routing-criteria-section > p {
+  color: var(--foreground);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.tenant-routing-criteria-example {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.tenant-routing-criteria-example > span {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1.45;
+}
+
+.tenant-routing-criteria-example p {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.tenant-routing-criteria-note {
+  padding: 10px 16px 11px;
+  background: var(--surface-subtle);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .tenant-routing-table {
   min-width: 0;
   overflow: hidden;
@@ -19474,7 +19647,7 @@ html:has(.tenant-management-content) {
 .tenant-routing-table-head,
 .tenant-routing-table-row {
   display: grid;
-  grid-template-columns: minmax(170px, 0.58fr) repeat(2, minmax(350px, 1fr));
+  grid-template-columns: minmax(160px, 0.44fr) repeat(2, minmax(400px, 1fr));
   align-items: stretch;
 }
 
@@ -19519,12 +19692,22 @@ html:has(.tenant-management-content) {
   font-weight: var(--font-weight-semibold);
 }
 
+.tenant-routing-category .tenant-routing-info-button {
+  margin-left: -7px;
+}
+
 .tenant-routing-category svg {
   width: 24px;
   height: 24px;
   flex: 0 0 auto;
   color: var(--brand-blue-strong);
   stroke-width: 1.8;
+}
+
+.tenant-routing-category .tenant-routing-info-button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
 }
 
 .tenant-routing-route {
@@ -19603,7 +19786,7 @@ html:has(.tenant-management-content) {
 
 .tenant-routing-model-selectors {
   display: grid;
-  grid-template-columns: minmax(132px, 0.62fr) minmax(190px, 1fr);
+  grid-template-columns: minmax(168px, 0.72fr) minmax(220px, 1fr);
   gap: 10px;
   width: 100%;
 }
@@ -19639,7 +19822,7 @@ html:has(.tenant-management-content) {
 
 .tenant-routing-model-ref-cell {
   display: grid;
-  align-content: start;
+  align-content: center;
   gap: 8px;
 }
 
@@ -19968,6 +20151,48 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   padding: 24px 26px 26px;
 }
 
+.tenant-routing-mode-content > .tenant-routing-fallback-card {
+  background: color-mix(in srgb, var(--surface-subtle) 54%, var(--surface));
+  box-shadow: none;
+}
+
+.tenant-routing-fixed-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.52fr) minmax(420px, 1fr);
+  gap: 32px;
+  align-items: end;
+  min-width: 0;
+  padding: 22px 24px;
+  background: color-mix(in srgb, var(--surface-subtle) 54%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.tenant-routing-fixed-heading {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.tenant-routing-fixed-heading h4 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.tenant-routing-fixed-heading p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-snug);
+}
+
+.tenant-routing-fixed-panel .tenant-routing-standalone-controls {
+  width: min(620px, 100%);
+}
+
 .tenant-routing-off-default-heading,
 .tenant-routing-fallback-heading {
   display: grid;
@@ -19997,10 +20222,9 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 
 .tenant-routing-standalone-controls {
   display: grid;
-  grid-template-columns: minmax(132px, 0.62fr) minmax(190px, 1fr);
+  grid-template-columns: minmax(220px, 0.82fr) minmax(260px, 1fr);
   gap: 10px;
-  width: 100%;
-  max-width: 640px;
+  width: min(720px, 100%);
   justify-self: end;
 }
 
@@ -20019,6 +20243,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 @media (max-width: 1180px) {
+  .tenant-routing-default-card {
+    grid-template-columns: minmax(220px, 0.72fr) minmax(480px, 1fr);
+  }
+
   .tenant-routing-table-head,
   .tenant-routing-table-row {
     grid-template-columns: minmax(150px, 0.48fr) repeat(2, minmax(220px, 1fr));
@@ -20032,6 +20260,21 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   .tenant-routing-fallback-card {
     grid-template-columns: minmax(210px, 0.52fr) minmax(320px, 1fr);
     gap: 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  .tenant-routing-default-card,
+  .tenant-routing-fallback-card,
+  .tenant-routing-fixed-panel {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 20px;
+  }
+
+  .tenant-routing-standalone-controls {
+    width: 100%;
+    justify-self: stretch;
   }
 }
 
@@ -20062,12 +20305,6 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
     border-bottom: 0;
   }
 
-  .tenant-routing-enable-card {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: flex-start;
-    gap: 18px;
-  }
-
   .tenant-routing-table-head {
     display: none;
   }
@@ -20075,6 +20312,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
   .tenant-routing-model-heading {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tenant-routing-heading-mode {
+    justify-items: start;
   }
 
   .tenant-routing-recommend-button {
@@ -20134,7 +20375,6 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
     width: 100%;
   }
 
-  .tenant-routing-enable-card,
   .tenant-routing-model-card,
   .tenant-routing-off-default-card,
   .tenant-routing-fallback-card {
@@ -20161,19 +20401,16 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 @media (min-width: 1101px) {
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-enable-card,
   html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-card,
   html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-fallback-card {
     padding: 30px 34px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-enable-card h3,
   html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-heading h3,
   html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-fallback-heading h3 {
     font-size: 28px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-enable-card p,
   html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-heading p,
   html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-fallback-heading p {
     font-size: 22px;
@@ -20226,6 +20463,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tenant-routing-mode-content,
+  .tenant-routing-switch,
+  .tenant-routing-switch [data-slot="switch-thumb"],
+  .tenant-routing-mode-label,
   .tenant-routing-route,
   .tenant-routing-route[data-recommendation-highlighted="true"],
   .tenant-routing-save-button[data-save-confirmed="true"] {

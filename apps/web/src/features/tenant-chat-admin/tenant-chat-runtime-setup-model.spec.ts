@@ -3,9 +3,13 @@ import { expect, test } from "@playwright/test";
 
 import type { TenantChatAdminRuntimeSetup } from "@/lib/control-plane/tenant-chat-runtime-types";
 import {
+  applyTenantChatSharedFallbackModelRef,
+  getTenantChatFallbackExcludedModelRefs,
   getTenantChatSetupStep,
+  selectTenantChatSharedFallbackModelRef,
   selectTenantChatModelKey,
-  selectTenantChatProviderId
+  selectTenantChatProviderId,
+  updateTenantChatPrimaryModelRef
 } from "./tenant-chat-runtime-setup-model";
 
 const setup: TenantChatAdminRuntimeSetup = {
@@ -125,12 +129,83 @@ test("degraded routing selections render unavailable options instead of an avail
   const source = await readFile(componentSourceUrl, "utf8");
 
   expect(source.match(/<UnavailableModelOption/g)).toHaveLength(1);
-  expect(source).toContain("function TenantRoutingModelSelect");
+  expect(source).toContain("function TenantRoutingProviderModelSelect");
   expect(source).toContain('value={routes[category.id][difficulty.id].modelRefs[0] ?? ""}');
-  expect(source).toContain('<UnavailableModelOption locale={locale} models={models} value={value} />');
+  expect(source).toContain('<UnavailableModelOption locale={locale} models={selectedModels} value={value ?? ""} />');
   expect(source).toContain('return <option disabled value={value}>{copy[locale].modelUnavailable}</option>');
   expect(source).toContain('modelUnavailable: "Selected model unavailable"');
   expect(source).toContain('modelUnavailable: "선택된 모델 사용 불가"');
+});
+
+test("Chat App routing selects Provider first and limits models to that Provider", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source).toContain('className="tenant-routing-provider-control"');
+  expect(source).toContain('className="tenant-routing-model-control"');
+  expect(source).toContain("provider.providerConnectionId === event.target.value");
+  expect(source).toContain('onChange(nextProvider?.models[0]?.modelRef ?? "")');
+  expect(source).toContain("selectedModels.map((model)");
+  expect(source).toContain("{model.modelKey}");
+});
+
+test("Chat App routing projects one shared fallback into every routing cell", () => {
+  const routes = setupWithRoutes().activeSnapshot!.routes;
+  const withFallback = applyTenantChatSharedFallbackModelRef(routes, "tc_tiered");
+
+  expect(selectTenantChatSharedFallbackModelRef(withFallback)).toBe("tc_tiered");
+  expect(withFallback.general.simple.modelRefs).toEqual(["tc_gemini_flash", "tc_tiered"]);
+  expect(withFallback.reasoning.complex.modelRefs).toEqual(["tc_gemini_flash", "tc_tiered"]);
+  expect(selectTenantChatSharedFallbackModelRef(
+    updateTenantChatPrimaryModelRef(withFallback, "reasoning", "complex", "tc_tiered")
+  )).toBeNull();
+  expect(
+    applyTenantChatSharedFallbackModelRef(withFallback, "").general.simple.modelRefs
+  ).toEqual(["tc_gemini_flash"]);
+});
+
+test("Chat App routing rejects malformed shared fallback profiles without throwing", () => {
+  const withFallback = applyTenantChatSharedFallbackModelRef(
+    setupWithRoutes().activeSnapshot!.routes,
+    "tc_tiered"
+  );
+  const malformed = {
+    ...withFallback,
+    reasoning: {
+      ...withFallback.reasoning,
+      complex: undefined
+    }
+  } as unknown as typeof withFallback;
+
+  expect(selectTenantChatSharedFallbackModelRef(malformed)).toBeNull();
+});
+
+test("Chat App routing excludes automatic and fixed primary models from fallback", () => {
+  const routes = setupWithRoutes().activeSnapshot!.routes;
+  const excluded = getTenantChatFallbackExcludedModelRefs(routes, "tc_tiered");
+
+  expect([...excluded]).toEqual(["tc_gemini_flash", "tc_tiered"]);
+  expect(
+    applyTenantChatSharedFallbackModelRef(routes, "tc_tiered", "tc_tiered")
+  ).toBe(routes);
+});
+
+test("Chat App routing keeps existing fallback candidates when a primary changes", () => {
+  const routes = applyTenantChatSharedFallbackModelRef(
+    setupWithRoutes().activeSnapshot!.routes,
+    "tc_tiered"
+  );
+  const updated = updateTenantChatPrimaryModelRef(
+    routes,
+    "general",
+    "simple",
+    "tc_other_primary"
+  );
+
+  expect(updated.general.simple.modelRefs).toEqual([
+    "tc_other_primary",
+    "tc_tiered"
+  ]);
 });
 
 test("Chat App routing reuses the original routing policy presentation", async () => {
@@ -138,14 +213,77 @@ test("Chat App routing reuses the original routing policy presentation", async (
   const source = await readFile(componentSourceUrl, "utf8");
 
   expect(source).toContain('className="console-content management-line-content tenant-management-content"');
-  expect(source).toContain('className="tenant-routing-enable-card"');
   expect(source).toContain('className="tenant-routing-switch"');
   expect(source).toContain('className="tenant-routing-model-card"');
   expect(source).toContain('className="tenant-routing-table"');
-  expect(source).toContain('className="tenant-routing-model-choice-copy"');
+  expect(source).toContain('"tenant-routing-model-selectors"');
+  expect(source).toContain('"tenant-routing-standalone-controls"');
   expect(source).toContain("MessageSquareMore");
   expect(source).toContain("BrainCircuit");
   expect(source).toContain("ProviderFamilyIcon");
+});
+
+test("Chat App routing explains the simple and complex difficulty criteria", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+  const styles = await readFile(stylesUrl, "utf8");
+
+  expect(source).toContain("function RoutingCriteriaPopover");
+  expect(source).toContain("criteria={routingDifficultyCriteria[locale]}");
+  expect(source).toContain("criteria={category.criteria[locale]}");
+  expect(source).toContain("작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.");
+  expect(source).toContain('simpleExample: "함수 하나의 문법 오류를 수정해줘"');
+  expect(source).toContain('complexExample: "법률 용어와 표 형식을 유지해 존댓말로 번역해줘"');
+  expect(source).toContain('className="tenant-routing-info-button"');
+  expect(source).toContain("<PopoverPrimitive.Trigger");
+  expect(source).toContain('data-difficulty="simple"');
+  expect(source).toContain('data-difficulty="complex"');
+  expect(styles).toContain(".tenant-routing-criteria-popover {");
+  expect(styles).toContain('.tenant-routing-criteria-section[data-difficulty="simple"]');
+  expect(styles).toContain('.tenant-routing-criteria-section[data-difficulty="complex"]');
+  expect(styles).toContain("grid-template-columns: auto 16px");
+  expect(styles).toContain(".tenant-routing-info-button:focus-visible");
+  expect(source).not.toContain("tenant-routing-criteria-title");
+});
+
+test("Chat App routing switches one policy card between automatic and fixed modes", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+  const styles = await readFile(stylesUrl, "utf8");
+
+  expect(source).toContain('fixedLabel: "Fixed"');
+  expect(source).toContain('fixedLabel: "고정"');
+  expect(source).toContain('data-routing-mode={routingMode}');
+  expect(source).toContain('className="tenant-routing-heading-mode"');
+  expect(source).toContain('<span>{text.modeTitle}</span>');
+  expect(source).toContain('data-active={routingMode === "manual" ? "true" : undefined}');
+  expect(source).toContain('data-active={routingMode === "auto" ? "true" : undefined}');
+  expect(source).toContain('className="tenant-routing-mode-content" key={routingMode}');
+  expect(source).toContain('className="tenant-routing-fixed-panel"');
+  expect(source).toContain('<p>{text.manualDescription}</p>');
+  expect(source).toContain(')}\n                <section className="tenant-routing-fallback-card"');
+  expect(source).toContain('routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription');
+  expect(styles).toContain('@keyframes tenant-routing-mode-enter');
+  expect(styles).toContain('--tw-translate-x: 23px;');
+  expect(styles).toContain('.tenant-routing-fixed-panel {');
+  expect(styles).toContain('width: min(620px, 100%);');
+  expect(source).not.toContain('tenant-routing-enable-card');
+  expect(styles).not.toContain('.tenant-routing-enable-card');
+});
+
+test("Chat App hides runtime badges and limits pricing warnings to selected models", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const source = await readFile(componentSourceUrl, "utf8");
+
+  expect(source).not.toContain("<ReadinessBadge");
+  expect(source).not.toContain("Snapshot v");
+  expect(source).toContain("const selectedModelRefs = new Set(");
+  expect(source).toContain("[manualModelRef, fallbackModelRef].filter(");
+  expect(source).toContain("selectedModelRefs.has(model.modelRef)");
+  expect(source).toContain("hasSelectedModelWithoutPricing ? (");
+  expect(source).toContain("비용은 임시로 0원 처리되며");
 });
 
 test("Chat App routing publish recovers from a Control Plane network failure", async () => {
@@ -155,3 +293,29 @@ test("Chat App routing publish recovers from a Control Plane network failure", a
   expect(source).toContain('setFeedback({ error: true, message: "Control Plane unavailable." });');
   expect(source).toContain("} finally {\n      setPending(false);");
 });
+
+function setupWithRoutes(): TenantChatAdminRuntimeSetup {
+  return {
+    ...setup,
+    activeSnapshot: {
+      digest: "sha256:fallback-fixture",
+      modelKey: "models/gemini-2.5-flash",
+      policyVersion: 1,
+      pricingStatus: "current",
+      pricingVersion: 1,
+      providerConnectionId: "11111111-1111-4111-8111-111111111111",
+      publishedAt: "2026-07-16T00:00:00Z",
+      snapshotId: "snapshot-fallback-fixture",
+      version: 1,
+      manualModelRef: "tc_gemini_flash",
+      routingMode: "auto",
+      routes: {
+        general: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
+        code: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
+        translation: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
+        summarization: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } },
+        reasoning: { simple: { modelRefs: ["tc_gemini_flash"] }, complex: { modelRefs: ["tc_gemini_flash"] } }
+      }
+    }
+  };
+}
