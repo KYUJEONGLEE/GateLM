@@ -129,6 +129,18 @@ const baselineWaiverIntegration = readFileSync(
   ),
   "utf8",
 );
+const gatewayMain = readFileSync(
+  path.join(rootDir, "apps/gateway-core/cmd/gateway/main.go"),
+  "utf8",
+);
+const tenantChatCompletionService = readFileSync(
+  path.join(rootDir, "apps/gateway-core/internal/services/tenantchat/completion/service.go"),
+  "utf8",
+);
+const tenantChatCompletionTest = readFileSync(
+  path.join(rootDir, "apps/gateway-core/internal/services/tenantchat/completion/service_test.go"),
+  "utf8",
+);
 if (!defaultDockerfile.includes("CGO_ENABLED=0") || defaultDockerfile.includes("difficulty_e5_onnx")) {
   throw new Error("default Gateway image must remain CGO-free and E5-inactive");
 }
@@ -200,6 +212,21 @@ for (const requiredText of [
     throw new Error(`Gateway E5 bundle preparation omitted ${requiredText}`);
   }
 }
+if (!gatewayMain.includes("completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime)")) {
+  throw new Error("Tenant Chat completion must share the process-global Gateway difficulty runtime");
+}
+if (!tenantChatCompletionService.includes("routing.WithDifficultySemanticRuntime(difficultyRuntime)")) {
+  throw new Error("Tenant Chat routing must inject the shared difficulty runtime into SimpleRouter");
+}
+for (const requiredText of [
+  "TestServiceUsesSemanticDifficultyAcrossTenantChatRoutingMatrix",
+  "TestServiceFallsBackToRuleDifficultyWhenSemanticRuntimeIsNotReady",
+  "TestServiceSkipsSemanticRuntimeForTenantChatManualRoute",
+]) {
+  if (!tenantChatCompletionTest.includes(requiredText)) {
+    throw new Error(`Tenant Chat difficulty runtime coverage omitted ${requiredText}`);
+  }
+}
 for (const requiredText of [
   "dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile",
   "difficulty_e5: ../../.tmp/gateway-e5-runtime-bundle",
@@ -259,6 +286,7 @@ const commands = [
       "./apps/gateway-core/cmd/difficulty-model-codegen",
       "./apps/gateway-core/internal/domain/routing",
       "./apps/gateway-core/internal/adapters/routing/e5onnx",
+      "./apps/gateway-core/internal/services/tenantchat/completion",
       "./apps/gateway-core/internal/config",
       "./apps/gateway-core/cmd/gateway",
     ],

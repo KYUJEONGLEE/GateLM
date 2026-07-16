@@ -321,6 +321,7 @@ func main() {
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
 			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluator()),
+			completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),

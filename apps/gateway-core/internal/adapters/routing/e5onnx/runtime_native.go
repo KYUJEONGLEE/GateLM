@@ -172,6 +172,9 @@ func (encoder *nativeEncoder) EncodePooled(
 		return empty, ErrInferenceFailed
 	}
 	if err := encoder.session.Run(inputs, outputs); err != nil {
+		if outputs[0] != nil {
+			outputs[0].Destroy()
+		}
 		return empty, ErrInferenceFailed
 	}
 	if err := ctx.Err(); err != nil {

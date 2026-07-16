@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | Authoritative 106D model-path difficulty runtime |
-| Applies to | Optional Linux amd64 E5 Gateway profile |
+| Applies to | Optional Linux amd64 E5 Gateway profile: public Gateway and Tenant Chat private completion |
 | Category | Existing rule classifier remains authoritative |
 | Failure mode | Per-request or startup rule-difficulty fallback |
 | Active contract | [`../routing/contracts.md`](../routing/contracts.md) |
@@ -24,9 +24,9 @@ Promotion reuses the exact artifact and generated Go arrays already verified in 
 
 ## 2. Runtime Behavior
 
-For a normal `model: "auto"` model-path request, a `ready` 106D result replaces only the rule difficulty before routing-matrix lookup. The category remains rule-based. Manual modelRef, auto-disabled, empty/sentinel and hard-rule paths do not depend on E5 inference.
+For a normal public Gateway or Tenant Chat `model: "auto"` model-path request, a `ready` 106D result replaces only the rule difficulty before routing-matrix lookup. Tenant Chat then resolves the selected category × difficulty cell from the Chat App 5×2 table to its ordered modelRefs. The category remains rule-based. Manual modelRef, auto-disabled, empty/sentinel and hard-rule paths do not depend on E5 inference.
 
-The runtime owns one encoder worker and four bounded waiting jobs. Each request waits at most `GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS` (`100ms` default, `1..1000ms` allowed). Queue saturation, request cancellation, timeout, invalid embedding, inference failure or panic retains that request's rule difficulty. Startup bundle verification or smoke failure starts Gateway in rule-difficulty fallback mode.
+Each Gateway process owns one encoder worker and four bounded waiting jobs shared by the public Gateway and Tenant Chat completion paths; Tenant Chat does not initialize or close a second runtime. Each request waits at most `GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS` (`100ms` default, `1..1000ms` allowed). Queue saturation, request cancellation, timeout, invalid embedding, inference failure or panic retains that request's rule difficulty. Startup bundle verification or smoke failure starts both paths in rule-difficulty fallback mode.
 
 Runtime activation:
 
@@ -40,7 +40,7 @@ Use [`../../infra/docker/gateway-core-e5-runtime.Dockerfile`](../../infra/docker
 
 ## 3. Rollout Guardrails
 
-Set a container memory hard limit of `2 GiB` (`2147483648` bytes). Confirm the startup log contains `difficulty E5 hot-path runtime initialized`. Then verify an auto request can select both the simple and complex matrix cells while manual routes remain unchanged.
+Set a container memory hard limit of `2 GiB` (`2147483648` bytes). Confirm the startup log contains `difficulty E5 hot-path runtime initialized`. Then verify public Gateway and Tenant Chat auto requests can select both the simple and complex matrix cells while manual routes remain unchanged. For Tenant Chat, verify all five Chat App category rows resolve the selected difficulty cell's first eligible modelRef.
 
 Rollback immediately when any one of these occurs:
 
@@ -65,11 +65,11 @@ Set the runtime flag to false and restart the Gateway:
 GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=false
 ```
 
-The process then uses the existing rule classifier for both category and difficulty. No policy, schema, database or cache migration is required. Do not enable historical shadow as part of an emergency rollback.
+Both public Gateway and Tenant Chat completion then use the existing rule classifier for category and difficulty. No policy, schema, database or cache migration is required. Do not enable historical shadow as part of an emergency rollback.
 
 ## 5. Verification
 
-Run the checked-in bundle verifier. It validates immutable hashes, generated Go code, Python/Go pooled-output parity, hot-path routing, timeout/busy/error isolation, the native request-runtime E2E, the optional image and startup smoke. It does not rerun the frozen test set.
+Run the checked-in bundle verifier. It validates immutable hashes, generated Go code, Python/Go pooled-output parity, public and Tenant Chat hot-path routing, Tenant Chat 5×2 mapping/fallback/manual isolation, timeout/busy/error isolation, the native request-runtime E2E, the optional image and startup smoke. It does not rerun the frozen test set.
 
 ```powershell
 corepack pnpm run verify:v2.1-difficulty-gateway-bundle
