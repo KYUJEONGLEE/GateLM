@@ -591,6 +591,19 @@ def operating_point_metrics(
 
     p = np.asarray(probabilities, dtype=float)
     y = np.asarray([int(sample["label"]) for sample in samples], dtype=int)
+    category_correct = np.asarray(
+        [sample["actualCategory"] == sample["expectedCategory"] for sample in samples],
+        dtype=bool,
+    )
+    return _operating_point_metrics_core(y, category_correct, p, threshold)
+
+
+def _operating_point_metrics_core(
+    y: Any, category_correct: Any, probabilities: Any, threshold: float
+) -> dict[str, Any]:
+    import numpy as np
+
+    p = probabilities
     predicted = (p >= float(threshold)).astype(int)
     tp = int(np.sum((y == 1) & (predicted == 1)))
     tn = int(np.sum((y == 0) & (predicted == 0)))
@@ -602,10 +615,6 @@ def operating_point_metrics(
     f1 = 2 * precision * positive_recall / (precision + positive_recall) if precision + positive_recall else 0.0
     denominator = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
     mcc = ((tp * tn) - (fp * fn)) / denominator if denominator else 0.0
-    category_correct = np.asarray(
-        [sample["actualCategory"] == sample["expectedCategory"] for sample in samples],
-        dtype=bool,
-    )
     difficulty_correct = predicted == y
     return {
         "threshold": rounded(threshold),
@@ -641,13 +650,24 @@ def threshold_selection_key(metrics: Mapping[str, Any]) -> tuple[Any, ...]:
 def sweep_thresholds(
     samples: Sequence[Mapping[str, Any]], probabilities: Any
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    evaluated = [operating_point_metrics(samples, probabilities, value) for value in threshold_values(probabilities)]
+    import numpy as np
+
+    p = np.asarray(probabilities, dtype=float)
+    y = np.asarray([int(sample["label"]) for sample in samples], dtype=int)
+    category_correct = np.asarray(
+        [sample["actualCategory"] == sample["expectedCategory"] for sample in samples],
+        dtype=bool,
+    )
+    evaluated = [
+        _operating_point_metrics_core(y, category_correct, p, value)
+        for value in threshold_values(p)
+    ]
     best_key = min(threshold_selection_key(row) for row in evaluated)
     tied = [row for row in evaluated if threshold_selection_key(row) == best_key]
     tied.sort(key=lambda row: float(row["threshold"]))
     midpoint = (float(tied[0]["threshold"]) + float(tied[-1]["threshold"])) / 2
     selected = min(tied, key=lambda row: (abs(float(row["threshold"]) - midpoint), float(row["threshold"])))
-    result = classification_metrics(samples, probabilities, float(selected["threshold"]))
+    result = classification_metrics(samples, p, float(selected["threshold"]))
     result["equivalentBestThresholdRange"] = {
         "minimum": tied[0]["threshold"],
         "maximum": tied[-1]["threshold"],
@@ -783,11 +803,15 @@ def family_bootstrap_joint_accuracy(
     for index, sample in enumerate(samples):
         by_family[str(sample["familyId"])].append(index)
     families = sorted(by_family)
+    family_arrays = {
+        family: np.asarray(indices, dtype=int)
+        for family, indices in by_family.items()
+    }
     rng = np.random.default_rng(RANDOM_SEED)
     values = np.empty(iterations, dtype=float)
     for iteration in range(iterations):
         chosen = rng.choice(families, size=len(families), replace=True)
-        indices = [index for family in chosen for index in by_family[str(family)]]
+        indices = np.concatenate([family_arrays[str(family)] for family in chosen])
         values[iteration] = float(np.mean(correct[indices]))
     return {
         "method": "promptFamily cluster bootstrap percentile interval",
