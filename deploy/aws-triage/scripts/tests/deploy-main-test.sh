@@ -183,6 +183,10 @@ grep -Fq 'onnxruntime==1.22.1' "${E5_QUANTIZER_REQUIREMENTS}" || \
   fail "E5 quantizer ONNX Runtime dependency must be pinned"
 grep -Fq 'op_types_to_quantize=["MatMul"]' "${E5_QUANTIZER_SCRIPT}" || \
   fail "E5 quantizer must preserve the pinned MatMul-only profile"
+grep -Fq 'TemporaryDirectory(prefix="gatelm-e5-quantize-")' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must use its writable scratch mount for shape inference"
+grep -Fq 'shutil.copyfile(args.source, working_source)' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must not run shape inference beside the read-only source"
 for required_setting in \
   'TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"' \
   'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \

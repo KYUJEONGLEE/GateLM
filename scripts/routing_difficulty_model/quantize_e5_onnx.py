@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 
@@ -55,14 +57,18 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     partial_output = args.output.with_name(f"{args.output.name}.partial.{os.getpid()}")
     try:
-        quantize_dynamic(
-            model_input=str(args.source),
-            model_output=str(partial_output),
-            op_types_to_quantize=["MatMul"],
-            per_channel=False,
-            reduce_range=False,
-            weight_type=QuantType.QInt8,
-        )
+        with tempfile.TemporaryDirectory(prefix="gatelm-e5-quantize-") as work_directory:
+            working_source = Path(work_directory) / "model.onnx"
+            shutil.copyfile(args.source, working_source)
+            assert_artifact(working_source, args.source_size, args.source_sha256)
+            quantize_dynamic(
+                model_input=str(working_source),
+                model_output=str(partial_output),
+                op_types_to_quantize=["MatMul"],
+                per_channel=False,
+                reduce_range=False,
+                weight_type=QuantType.QInt8,
+            )
         assert_artifact(partial_output, args.output_size, args.output_sha256)
         os.replace(partial_output, args.output)
     finally:

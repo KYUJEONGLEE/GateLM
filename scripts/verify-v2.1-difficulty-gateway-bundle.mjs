@@ -287,6 +287,8 @@ for (const requiredText of [
 for (const requiredText of [
   'op_types_to_quantize=["MatMul"]',
   "weight_type=QuantType.QInt8",
+  'TemporaryDirectory(prefix="gatelm-e5-quantize-")',
+  "shutil.copyfile(args.source, working_source)",
   "assert_artifact(partial_output",
 ]) {
   if (!e5QuantizerScript.includes(requiredText)) {
