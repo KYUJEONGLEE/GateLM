@@ -37,6 +37,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/contracts.md",
   "docs/tenant-chat/execution-contract.md",
   "docs/tenant-chat/openapi/chat-auth.openapi.json",
+  "docs/tenant-chat/openapi/admin-runtime.openapi.json",
   "docs/tenant-chat/openapi/private-control-plane.openapi.json",
   "docs/tenant-chat/openapi/chat-conversation.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
@@ -304,7 +305,33 @@ function typeName(value) {
 }
 
 function deepEqual(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => deepEqual(value, right[index]))
+    );
+  }
+  if (
+    left === null ||
+    right === null ||
+    typeof left !== "object" ||
+    typeof right !== "object"
+  ) {
+    return false;
+  }
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) => key === rightKeys[index] && deepEqual(left[key], right[key]),
+    )
+  );
 }
 
 function validateData(schema, data, context, rootSchema, localFailures) {
@@ -400,6 +427,41 @@ function validateData(schema, data, context, rootSchema, localFailures) {
     }
     if (schema.maxItems !== undefined && data.length > schema.maxItems) {
       localFailures.push(`${context.path}: expected maxItems ${schema.maxItems}`);
+    }
+    if (schema.uniqueItems) {
+      for (let left = 0; left < data.length; left += 1) {
+        for (let right = left + 1; right < data.length; right += 1) {
+          if (deepEqual(data[left], data[right])) {
+            localFailures.push(
+              `${context.path}: items at indexes ${left} and ${right} must be unique`,
+            );
+          }
+        }
+      }
+    }
+    if (schema.contains) {
+      const containsMatches = data.filter((item, index) => {
+        const trialFailures = [];
+        validateData(
+          schema.contains,
+          item,
+          { ...context, path: `${context.path}[${index}]` },
+          rootSchema,
+          trialFailures,
+        );
+        return trialFailures.length === 0;
+      }).length;
+      const minContains = schema.minContains ?? 1;
+      if (containsMatches < minContains) {
+        localFailures.push(
+          `${context.path}: expected at least ${minContains} item(s) to match contains`,
+        );
+      }
+      if (schema.maxContains !== undefined && containsMatches > schema.maxContains) {
+        localFailures.push(
+          `${context.path}: expected at most ${schema.maxContains} item(s) to match contains`,
+        );
+      }
     }
     if (schema.items) {
       data.forEach((item, index) => {
@@ -632,6 +694,7 @@ function sha256Base64Url(value) {
 
 function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
+  const adminOpenApiPath = "docs/tenant-chat/openapi/admin-runtime.openapi.json";
   const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
   const conversationOpenApiPath = "docs/tenant-chat/openapi/chat-conversation.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
@@ -660,6 +723,139 @@ function assertTenantChatExecutableContract() {
     ]) {
       if (!authOpenApi.paths?.[apiPath]?.[method]) {
         fail(`${authOpenApiPath}: missing ${method.toUpperCase()} ${apiPath}`);
+      }
+    }
+  }
+
+  const adminOpenApi = readJson(adminOpenApiPath);
+  if (adminOpenApi) {
+    if (adminOpenApi.openapi !== "3.1.0") {
+      fail(`${adminOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+
+    const runtimePath = adminOpenApi.paths?.["/admin/v1/tenants/{tenantId}/tenant-chat/runtime"];
+    for (const [method, statuses] of [
+      ["get", ["200", "400", "401", "403"]],
+      ["put", ["200", "400", "401", "403", "404", "409"]],
+    ]) {
+      const operation = runtimePath?.[method];
+      if (!operation) {
+        fail(`${adminOpenApiPath}: missing ${method.toUpperCase()} admin runtime operation`);
+        continue;
+      }
+      for (const status of statuses) {
+        if (!operation.responses?.[status]) {
+          fail(`${adminOpenApiPath}: ${method.toUpperCase()} must declare ${status}`);
+        }
+      }
+    }
+
+    const activationSchema = adminOpenApi.components?.schemas?.ActivateRuntimeRequest;
+    if (!activationSchema) {
+      fail(`${adminOpenApiPath}: missing ActivateRuntimeRequest schema`);
+    } else {
+      const modelRef = "openai:gpt-4o-mini";
+      const routingCell = { modelRefs: [modelRef] };
+      const routingDifficulty = { simple: routingCell, complex: routingCell };
+      const routes = {
+        general: routingDifficulty,
+        code: routingDifficulty,
+        translation: routingDifficulty,
+        summarization: routingDifficulty,
+        reasoning: routingDifficulty,
+      };
+      const mandatoryDetectors = [
+        { detectorType: "resident_registration_number", action: "redact" },
+        { detectorType: "api_key", action: "block" },
+        { detectorType: "authorization_header", action: "block" },
+        { detectorType: "jwt", action: "block" },
+        { detectorType: "private_key", action: "block" },
+      ];
+      const currentPayload = {
+        routingMode: "manual",
+        manualModelRef: modelRef,
+        routes,
+        cachePolicy: { enabled: true, ttlSeconds: 300, maxEntriesPerUser: 100 },
+        safetyPolicy: { detectorSet: mandatoryDetectors },
+      };
+      const compatibilityPayload = {
+        routingMode: "manual",
+        manualModelRef: modelRef,
+        routes,
+        cacheEnabled: true,
+      };
+      const validateActivation = (payload, label) => {
+        const validationFailures = [];
+        validateData(
+          activationSchema,
+          payload,
+          { filePath: adminOpenApiPath, path: label },
+          adminOpenApi,
+          validationFailures,
+        );
+        return validationFailures;
+      };
+
+      for (const [label, payload] of [
+        ["current activation payload", currentPayload],
+        ["compatibility activation payload", compatibilityPayload],
+      ]) {
+        for (const validationFailure of validateActivation(payload, label)) {
+          fail(`${adminOpenApiPath}: ${validationFailure}`);
+        }
+      }
+
+      const missingMandatoryPayload = {
+        ...currentPayload,
+        safetyPolicy: {
+          detectorSet: [
+            ...mandatoryDetectors.slice(0, 4),
+            { detectorType: "email", action: "redact" },
+          ],
+        },
+      };
+      const mandatoryAllowPayload = {
+        ...currentPayload,
+        safetyPolicy: {
+          detectorSet: mandatoryDetectors.map((detector) =>
+            detector.detectorType === "api_key" ? { ...detector, action: "allow" } : detector,
+          ),
+        },
+      };
+      const duplicateDetectorPayload = {
+        ...currentPayload,
+        safetyPolicy: {
+          detectorSet: [...mandatoryDetectors, mandatoryDetectors[0]],
+        },
+      };
+      const duplicateDetectorTypePayload = {
+        ...currentPayload,
+        safetyPolicy: {
+          detectorSet: [
+            ...mandatoryDetectors,
+            { detectorType: "resident_registration_number", action: "block" },
+          ],
+        },
+      };
+      for (const [label, payload] of [
+        ["mixed current and compatibility payload", { ...currentPayload, cacheEnabled: true }],
+        [
+          "current payload missing safetyPolicy",
+          {
+            routingMode: currentPayload.routingMode,
+            manualModelRef: currentPayload.manualModelRef,
+            routes: currentPayload.routes,
+            cachePolicy: currentPayload.cachePolicy,
+          },
+        ],
+        ["payload missing a mandatory detector", missingMandatoryPayload],
+        ["payload allowing a mandatory detector", mandatoryAllowPayload],
+        ["payload with a duplicate detector", duplicateDetectorPayload],
+        ["payload with a duplicate detector type", duplicateDetectorTypePayload],
+      ]) {
+        if (validateActivation(payload, label).length === 0) {
+          fail(`${adminOpenApiPath}: unexpectedly accepted ${label}`);
+        }
       }
     }
   }
@@ -1049,6 +1245,7 @@ function assertTenantChatExecutableContract() {
 
   for (const expectedText of [
     "openapi/chat-auth.openapi.json",
+    "openapi/admin-runtime.openapi.json",
     "openapi/private-control-plane.openapi.json",
     "openapi/chat-conversation.openapi.json",
     "openapi/private-gateway.openapi.json",
