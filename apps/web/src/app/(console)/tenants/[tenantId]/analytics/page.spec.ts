@@ -22,3 +22,15 @@ test("analytics forces project admins onto an assigned project", async () => {
   expect(pageSource).toContain("getVisibleProjectsForConsoleAuth(");
   expect(pageSource).toContain("projectScoped ? null");
 });
+
+test("performance places provider filters before the shared range and project filters", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+  const providerFilterIndex = pageSource.indexOf("<span>{text.provider}</span>");
+  const rangeFilterIndex = pageSource.indexOf("<span>{text.range}</span>");
+  const projectFilterIndex = pageSource.indexOf("<span>{text.project}</span>");
+
+  expect(providerFilterIndex).toBeGreaterThan(-1);
+  expect(rangeFilterIndex).toBeGreaterThan(providerFilterIndex);
+  expect(projectFilterIndex).toBeGreaterThan(rangeFilterIndex);
+  expect(pageSource).not.toContain("analytics-v3-filter-row-secondary");
+});

@@ -323,6 +323,23 @@ const tenantChatPolicyText = {
   }
 } satisfies Record<Locale, CachePolicyControlsText & SafetyDetectorPolicyText>;
 
+const tenantChatExperimentalPolicyText = {
+  en: {
+    aiModelMaskingHint: "Use an AI model to review and mask sensitive information missed by rule-based detectors.",
+    aiModelMaskingTitle: "AI model masking",
+    badge: "Lab",
+    semanticCacheHint: "Reuse eligible responses for requests with a similar meaning, even when their text is not identical.",
+    semanticCacheTitle: "Semantic cache"
+  },
+  ko: {
+    aiModelMaskingHint: "규칙 기반 탐지에서 놓친 민감정보를 AI 모델이 한 번 더 판별해 마스킹합니다.",
+    aiModelMaskingTitle: "AI 모델 마스킹",
+    badge: "실험실",
+    semanticCacheHint: "문장이 완전히 같지 않아도 의미가 유사한 요청의 기존 응답을 재사용합니다.",
+    semanticCacheTitle: "시멘틱 캐시"
+  }
+} satisfies Record<Locale, Record<string, string>>;
+
 export function ChatAppRoutingSetup({
   canManageKnowledgeBase = false,
   initialDocuments = [],
@@ -360,6 +377,8 @@ export function ChatAppRoutingSetup({
   const [detectors, setDetectors] = useState<RuntimePolicyDetector[]>(
     toRuntimePolicyDetectors(initialSetup?.activeSnapshot?.safetyPolicy)
   );
+  const [aiModelMaskingPreviewEnabled, setAiModelMaskingPreviewEnabled] = useState(false);
+  const [semanticCachePreviewEnabled, setSemanticCachePreviewEnabled] = useState(false);
 
   useEffect(() => {
     function syncSectionFromHistory() {
@@ -514,6 +533,8 @@ export function ChatAppRoutingSetup({
         setDetectors
       );
     }
+    setAiModelMaskingPreviewEnabled(false);
+    setSemanticCachePreviewEnabled(false);
     setFeedback({ error: false, message: text.resetMessage });
   }
 
@@ -721,6 +742,17 @@ export function ChatAppRoutingSetup({
               {activePolicySection === "cache" ? (
                 <CachePolicyControls
                   enabled={cachePolicy.enabled}
+                  experimentalSemanticCache={{
+                    badge: tenantChatExperimentalPolicyText[locale].badge,
+                    enabled: semanticCachePreviewEnabled,
+                    hint: tenantChatExperimentalPolicyText[locale].semanticCacheHint,
+                    id: "tenant-chat-semantic-cache-preview",
+                    onEnabledChange: (enabled) => {
+                      setSemanticCachePreviewEnabled(enabled);
+                      setFeedback(null);
+                    },
+                    title: tenantChatExperimentalPolicyText[locale].semanticCacheTitle
+                  }}
                   onEnabledChange={(enabled) => {
                     setCachePolicy((current) => ({ ...current, enabled }));
                     setFeedback(null);
@@ -732,6 +764,17 @@ export function ChatAppRoutingSetup({
                 <SafetyDetectorPolicyControls
                   allowPlaceholderEditing={false}
                   detectors={detectors}
+                  experimentalModelMasking={{
+                    badge: tenantChatExperimentalPolicyText[locale].badge,
+                    enabled: aiModelMaskingPreviewEnabled,
+                    hint: tenantChatExperimentalPolicyText[locale].aiModelMaskingHint,
+                    id: "tenant-chat-ai-model-masking-preview",
+                    onEnabledChange: (enabled) => {
+                      setAiModelMaskingPreviewEnabled(enabled);
+                      setFeedback(null);
+                    },
+                    title: tenantChatExperimentalPolicyText[locale].aiModelMaskingTitle
+                  }}
                   onDetectorChange={(nextDetector) => {
                     setDetectors((current) =>
                       current.map((detector) =>

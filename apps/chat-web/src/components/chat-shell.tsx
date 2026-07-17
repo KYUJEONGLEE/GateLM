@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
@@ -105,6 +105,12 @@ export function ChatShell() {
       // Storage can be unavailable in hardened browser modes; the safe default keeps context.
     }
   }, []);
+
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    resizeComposer(textarea);
+  }, [composer]);
 
   useEffect(() => {
     let active = true;
@@ -693,6 +699,18 @@ function sameCitation(left: Citation, right: Citation): boolean {
   return left.sourceId === right.sourceId && left.documentId === right.documentId && left.displayName === right.displayName &&
     left.pageStart === right.pageStart && left.pageEnd === right.pageEnd && left.lineStart === right.lineStart &&
     left.lineEnd === right.lineEnd && left.ordinal === right.ordinal && left.availability === right.availability;
+}
+
+function resizeComposer(textarea: HTMLTextAreaElement) {
+  textarea.style.height = 'auto';
+  const maxHeight = Number.parseFloat(window.getComputedStyle(textarea).maxHeight);
+  const nextHeight = Number.isFinite(maxHeight)
+    ? Math.min(textarea.scrollHeight, maxHeight)
+    : textarea.scrollHeight;
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = Number.isFinite(maxHeight) && textarea.scrollHeight > maxHeight
+    ? 'auto'
+    : 'hidden';
 }
 
 function idempotencyKey(): string {

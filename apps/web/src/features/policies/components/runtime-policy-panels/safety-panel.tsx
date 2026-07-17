@@ -1,8 +1,12 @@
 "use client";
 
-import { ChevronDown, LockKeyhole } from "lucide-react";
+import { BrainCircuit, ChevronDown, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
+import {
+  ExperimentalFeatureToggleCard,
+  type ExperimentalFeatureToggleCardProps
+} from "@/features/policies/components/exact-cache-toggle-card";
 import type {
   RuntimePolicyDetector,
   RuntimePolicyDraftValues
@@ -122,12 +126,14 @@ export function SafetyPolicyPanel({
 export function SafetyDetectorPolicyControls({
   allowPlaceholderEditing = true,
   detectors,
+  experimentalModelMasking,
   onDetectorChange,
   showAllActionOptions = false,
   text
 }: {
   allowPlaceholderEditing?: boolean;
   detectors: RuntimePolicyDetector[];
+  experimentalModelMasking?: Omit<ExperimentalFeatureToggleCardProps, "icon">;
   onDetectorChange: (detector: RuntimePolicyDetector) => void;
   showAllActionOptions?: boolean;
   text: SafetyDetectorPolicyText;
@@ -190,6 +196,13 @@ export function SafetyDetectorPolicyControls({
             </div>
           ) : null}
         </section>
+
+        {experimentalModelMasking ? (
+          <ExperimentalFeatureToggleCard
+            {...experimentalModelMasking}
+            icon={<BrainCircuit size={19} />}
+          />
+        ) : null}
       </div>
     </article>
   );

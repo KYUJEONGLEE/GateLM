@@ -237,23 +237,6 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           className="analytics-v3-filter-bar"
         >
           <input name="tab" type="hidden" value={activeTab} />
-          <label>
-            <span>{text.range}</span>
-            <select defaultValue={filters.range} name="range">
-              {rangeValues.map((range) => (
-                <option key={range} value={range}>{text.rangeLabels[range]}</option>
-              ))}
-            </select>
-          </label>
-          <label className="analytics-v3-project-filter">
-            <span>{text.project}</span>
-            <select defaultValue={filters.projectId} name="projectId">
-              {projectScoped ? null : <option value="">{text.allProjects}</option>}
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
-          </label>
           {showProviderModelFilters ? (
             <>
               <label>
@@ -276,6 +259,23 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               </label>
             </>
           ) : null}
+          <label>
+            <span>{text.range}</span>
+            <select defaultValue={filters.range} name="range">
+              {rangeValues.map((range) => (
+                <option key={range} value={range}>{text.rangeLabels[range]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="analytics-v3-project-filter">
+            <span>{text.project}</span>
+            <select defaultValue={filters.projectId} name="projectId">
+              {projectScoped ? null : <option value="">{text.allProjects}</option>}
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </label>
           <button aria-label={text.apply} title={text.apply} type="submit">
             <SlidersHorizontal aria-hidden="true" size={19} />
             <span>{text.apply}</span>
