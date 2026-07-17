@@ -7,6 +7,8 @@ import argparse
 import hashlib
 import os
 import re
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Sequence
 
@@ -22,7 +24,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def assert_file(path: Path, expected_size: int, expected_sha256: str) -> None:
+def assert_artifact(path: Path, expected_size: int, expected_sha256: str) -> None:
     if path.is_symlink() or not path.is_file():
         raise ValueError(f"regular file required: {path}")
     if path.stat().st_size != expected_size:
@@ -58,34 +60,38 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if source == output:
         raise ValueError("source and output paths must differ")
-    assert_file(source, args.source_size, args.source_sha256)
+    assert_artifact(source, args.source_size, args.source_sha256)
 
     if output.exists() or output.is_symlink():
-        assert_file(output, args.output_size, args.output_sha256)
+        assert_artifact(output, args.output_size, args.output_sha256)
         print(f"verified existing pinned QInt8 artifact: {output}")
         return 0
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    partial = output.with_name(f"{output.name}.partial.{os.getpid()}")
-    if partial.exists() or partial.is_symlink():
-        raise ValueError(f"refusing to replace existing partial output: {partial}")
+    partial_output = output.with_name(f"{output.name}.partial.{os.getpid()}")
+    if partial_output.exists() or partial_output.is_symlink():
+        raise ValueError(f"refusing to replace existing partial output: {partial_output}")
 
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
     try:
-        quantize_dynamic(
-            model_input=str(source),
-            model_output=str(partial),
-            op_types_to_quantize=["MatMul"],
-            per_channel=False,
-            reduce_range=False,
-            weight_type=QuantType.QInt8,
-        )
-        assert_file(partial, args.output_size, args.output_sha256)
-        os.replace(partial, output)
+        with tempfile.TemporaryDirectory(prefix="gatelm-e5-quantize-") as work_directory:
+            working_source = Path(work_directory) / "model.onnx"
+            shutil.copyfile(args.source, working_source)
+            assert_artifact(working_source, args.source_size, args.source_sha256)
+            quantize_dynamic(
+                model_input=str(working_source),
+                model_output=str(partial_output),
+                op_types_to_quantize=["MatMul"],
+                per_channel=False,
+                reduce_range=False,
+                weight_type=QuantType.QInt8,
+            )
+        assert_artifact(partial_output, args.output_size, args.output_sha256)
+        os.replace(partial_output, output)
     finally:
-        if partial.exists() or partial.is_symlink():
-            partial.unlink()
+        if partial_output.exists() or partial_output.is_symlink():
+            partial_output.unlink()
 
     print(f"generated verified pinned QInt8 artifact: {output}")
     return 0
