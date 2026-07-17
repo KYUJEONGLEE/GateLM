@@ -52,6 +52,7 @@ COPY --from=builder --chown=node:node /app/apps/control-plane-api/package.json .
 COPY --from=builder --chown=node:node /app/apps/control-plane-api/dist ./dist
 COPY --from=builder --chown=node:node /app/apps/control-plane-api/prisma ./prisma
 COPY --from=builder --chown=node:node /app/apps/control-plane-api/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=node:node /app/apps/control-plane-api/src/common/security/credential-secret.ts ./src/common/security/credential-secret.ts
 COPY --from=builder --chown=node:node /app/packages/rag-config/package.json /app/packages/rag-config/package.json
 COPY --from=builder --chown=node:node /app/packages/rag-config/dist /app/packages/rag-config/dist
 COPY --from=builder --chown=node:node /app/packages/tenant-content-crypto/package.json /app/packages/tenant-content-crypto/package.json

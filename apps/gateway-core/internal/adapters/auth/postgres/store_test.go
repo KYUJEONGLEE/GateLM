@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/crypto/scrypt"
 )
 
 func TestStoreAuthenticatesAPIKeyWithHashCandidate(t *testing.T) {
@@ -21,6 +24,7 @@ func TestStoreAuthenticatesAPIKeyWithHashCandidate(t *testing.T) {
 			projectID:     "00000000-0000-4000-8000-000000000200",
 			applicationID: "00000000-0000-4000-8000-000000000300",
 			secretHash:    credentialHash(plaintext),
+			hashAlgorithm: credentialHashAlgorithmSHA256,
 		}}),
 	}
 
@@ -48,10 +52,11 @@ func TestAPIKeyLookupRequiresActiveProject(t *testing.T) {
 func TestStoreRejectsAPIKeyHashMismatch(t *testing.T) {
 	queryer := &fakeQueryer{
 		rows: newFakeRows([]credentialCandidate{{
-			id:         "00000000-0000-4000-8000-000000000400",
-			tenantID:   "00000000-0000-4000-8000-000000000100",
-			projectID:  "00000000-0000-4000-8000-000000000200",
-			secretHash: credentialHash("gsk_live_other_secret_1234"),
+			id:            "00000000-0000-4000-8000-000000000400",
+			tenantID:      "00000000-0000-4000-8000-000000000100",
+			projectID:     "00000000-0000-4000-8000-000000000200",
+			secretHash:    credentialHash("gsk_live_other_secret_1234"),
+			hashAlgorithm: credentialHashAlgorithmSHA256,
 		}}),
 	}
 
@@ -70,6 +75,7 @@ func TestStoreValidatesAppTokenWithApplicationScope(t *testing.T) {
 			projectID:     "00000000-0000-4000-8000-000000000200",
 			applicationID: "00000000-0000-4000-8000-000000000300",
 			secretHash:    credentialHash(plaintext),
+			hashAlgorithm: credentialHashAlgorithmSHA256,
 		}}),
 	}
 
@@ -127,10 +133,28 @@ func TestCredentialLookupSupportsDemoSeedPrefixes(t *testing.T) {
 			if lookup.prefix != tt.prefix || lookup.last4 != tt.last4 {
 				t.Fatalf("unexpected lookup: got prefix=%q last4=%q", lookup.prefix, lookup.last4)
 			}
-			if lookup.secretHash != credentialHash(tt.plaintext) {
-				t.Fatal("expected lookup to hash the normalized credential")
+			if lookup.prefix == "" || lookup.last4 == "" {
+				t.Fatal("expected lookup to preserve credential routing metadata")
 			}
 		})
+	}
+}
+
+func TestStoreAuthenticatesScryptCredentialCandidate(t *testing.T) {
+	plaintext := "gsk_live_scrypt_secret_1234"
+	queryer := &fakeQueryer{
+		rows: newFakeRows([]credentialCandidate{{
+			id:            "00000000-0000-4000-8000-000000000400",
+			tenantID:      "00000000-0000-4000-8000-000000000100",
+			projectID:     "00000000-0000-4000-8000-000000000200",
+			applicationID: "00000000-0000-4000-8000-000000000300",
+			secretHash:    testScryptCredentialHash(t, plaintext),
+			hashAlgorithm: credentialHashAlgorithmScrypt,
+		}}),
+	}
+
+	if _, err := NewStore(queryer).AuthenticateAPIKey(context.Background(), plaintext); err != nil {
+		t.Fatalf("AuthenticateAPIKey returned error: %v", err)
 	}
 }
 
@@ -228,7 +252,7 @@ func (r *fakeRows) Scan(dest ...any) error {
 	if r.index < 0 || r.index >= len(r.candidates) {
 		return errors.New("scan called without current row")
 	}
-	if len(dest) != 5 {
+	if len(dest) != 6 {
 		return errors.New("unexpected scan destination count")
 	}
 	candidate := r.candidates[r.index]
@@ -237,7 +261,28 @@ func (r *fakeRows) Scan(dest ...any) error {
 	*(dest[2].(*string)) = candidate.projectID
 	*(dest[3].(*string)) = candidate.applicationID
 	*(dest[4].(*string)) = candidate.secretHash
+	*(dest[5].(*string)) = candidate.hashAlgorithm
 	return nil
+}
+
+func testScryptCredentialHash(t *testing.T, plaintext string) string {
+	t.Helper()
+	salt := make([]byte, credentialScryptSaltLength)
+	if _, err := rand.Read(salt); err != nil {
+		t.Fatalf("generate salt: %v", err)
+	}
+	derived, err := scrypt.Key([]byte(plaintext), salt, credentialScryptN, credentialScryptR, credentialScryptP, credentialScryptKeyLength)
+	if err != nil {
+		t.Fatalf("derive scrypt credential hash: %v", err)
+	}
+	return strings.Join([]string{
+		credentialHashAlgorithmScrypt,
+		"32768",
+		"8",
+		"1",
+		base64.RawURLEncoding.EncodeToString(salt),
+		base64.RawURLEncoding.EncodeToString(derived),
+	}, "$")
 }
 
 func (r *fakeRows) Values() ([]any, error) {

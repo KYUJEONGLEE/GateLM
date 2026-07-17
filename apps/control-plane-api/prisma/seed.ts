@@ -7,6 +7,10 @@ import {
   RuntimeConfig,
   RuntimeConfigPublishState,
 } from '@prisma/client';
+import {
+  CREDENTIAL_HASH_ALGORITHM,
+  hashCredentialSecret,
+} from '../src/common/security/credential-secret';
 import { createHash } from 'node:crypto';
 
 import type {
@@ -152,7 +156,7 @@ interface DemoRuntimeConfigOptions {
 }
 
 export function credentialHash(plaintext: string): string {
-  return sha256(plaintext.trim());
+  return hashCredentialSecret(plaintext);
 }
 
 export function canonicalJsonForDemo(value: unknown): string {
@@ -514,6 +518,8 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
     );
     const apiKeyPreview = credentialPreview(demoApiKey, 'gsk_live_');
     const appTokenPreview = credentialPreview(demoAppToken, 'gat_app_');
+    const demoApiKeyHash = credentialHash(demoApiKey);
+    const demoAppTokenHash = credentialHash(demoAppToken);
 
     const existingMockProvider = await tx.providerConnection.findFirst({
       where: {
@@ -607,8 +613,8 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         displayName: 'Demo API Key',
         prefix: apiKeyPreview.prefix,
         last4: apiKeyPreview.last4,
-        secretHash: credentialHash(demoApiKey),
-        hashAlgorithm: 'sha256',
+        secretHash: demoApiKeyHash,
+        hashAlgorithm: CREDENTIAL_HASH_ALGORITHM,
         status: CredentialStatus.ACTIVE,
         scopes: ['chat:completions', 'models:read'],
         expiresAt: null,
@@ -621,8 +627,8 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         displayName: 'Demo API Key',
         prefix: apiKeyPreview.prefix,
         last4: apiKeyPreview.last4,
-        secretHash: credentialHash(demoApiKey),
-        hashAlgorithm: 'sha256',
+        secretHash: demoApiKeyHash,
+        hashAlgorithm: CREDENTIAL_HASH_ALGORITHM,
         status: CredentialStatus.ACTIVE,
         scopes: ['chat:completions', 'models:read'],
         expiresAt: null,
@@ -638,8 +644,8 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         displayName: 'Demo App Token',
         prefix: appTokenPreview.prefix,
         last4: appTokenPreview.last4,
-        secretHash: credentialHash(demoAppToken),
-        hashAlgorithm: 'sha256',
+        secretHash: demoAppTokenHash,
+        hashAlgorithm: CREDENTIAL_HASH_ALGORITHM,
         status: CredentialStatus.ACTIVE,
         scopes: ['gateway:invoke'],
         expiresAt: null,
@@ -653,8 +659,8 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         displayName: 'Demo App Token',
         prefix: appTokenPreview.prefix,
         last4: appTokenPreview.last4,
-        secretHash: credentialHash(demoAppToken),
-        hashAlgorithm: 'sha256',
+        secretHash: demoAppTokenHash,
+        hashAlgorithm: CREDENTIAL_HASH_ALGORITHM,
         status: CredentialStatus.ACTIVE,
         scopes: ['gateway:invoke'],
         expiresAt: null,

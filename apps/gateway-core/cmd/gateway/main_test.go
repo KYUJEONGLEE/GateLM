@@ -266,6 +266,46 @@ func TestParsePostgresPoolConfigAppliesBoundsAndIdentity(t *testing.T) {
 	}
 }
 
+func TestParsePostgresPoolConfigRejectsUnsafeConnectionBounds(t *testing.T) {
+	base := config.PostgresPoolConfig{
+		MaxConns:          16,
+		MinConns:          2,
+		MaxConnLifetime:   30 * time.Minute,
+		MaxConnIdleTime:   5 * time.Minute,
+		HealthCheckPeriod: time.Minute,
+	}
+	tests := []struct {
+		name   string
+		tuning config.PostgresPoolConfig
+	}{
+		{name: "maximum is not positive", tuning: config.PostgresPoolConfig{MinConns: base.MinConns}},
+		{name: "maximum exceeds supported bound", tuning: config.PostgresPoolConfig{MaxConns: 1001, MinConns: base.MinConns}},
+		{name: "minimum is negative", tuning: config.PostgresPoolConfig{MaxConns: base.MaxConns, MinConns: -1}},
+		{name: "minimum exceeds maximum", tuning: config.PostgresPoolConfig{MaxConns: base.MaxConns, MinConns: 17}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tuning := base
+			if tt.tuning.MaxConns != 0 {
+				tuning.MaxConns = tt.tuning.MaxConns
+			}
+			if tt.name == "maximum is not positive" {
+				tuning.MaxConns = 0
+			}
+			tuning.MinConns = tt.tuning.MinConns
+
+			if _, err := parsePostgresPoolConfig(
+				"postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public",
+				tuning,
+				"gatelm-gateway-log",
+			); err == nil {
+				t.Fatal("expected invalid connection bounds to be rejected")
+			}
+		})
+	}
+}
+
 func TestIsStrictRuntimeSnapshotMode(t *testing.T) {
 	tests := []struct {
 		name string

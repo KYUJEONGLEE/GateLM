@@ -59,8 +59,6 @@ def create_ai_safety_detector_service(settings: Settings) -> AiSafetyDetectorSer
             settings.ai_safety_ml_detector_thresholds
         ),
     )
-    request.app.state.ai_safety_detector_service = service
-    return service
 
 
 def get_rag_extraction_service(request: Request) -> RagExtractionService:
