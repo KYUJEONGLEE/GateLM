@@ -640,6 +640,13 @@ func newPostgresPool(ctx context.Context, rawURL string, tuning config.PostgresP
 }
 
 func parsePostgresPoolConfig(rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Config, error) {
+	if tuning.MaxConns <= 0 || tuning.MaxConns > 1000 {
+		return nil, errors.New("invalid PostgreSQL pool maximum connections")
+	}
+	if tuning.MinConns < 0 || tuning.MinConns > tuning.MaxConns {
+		return nil, errors.New("invalid PostgreSQL pool minimum connections")
+	}
+
 	poolConfig, err := pgxpool.ParseConfig(config.DatabaseDriverURL(rawURL))
 	if err != nil {
 		return nil, errors.New("invalid PostgreSQL pool connection configuration")

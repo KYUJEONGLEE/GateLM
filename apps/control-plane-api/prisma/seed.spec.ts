@@ -17,6 +17,7 @@ import {
   PROVIDER_PRESETS,
   seedDemoData,
 } from './seed';
+import { verifyCredentialSecret } from '../src/common/security/credential-secret';
 
 const EXPECTED_OPENAI_SEED_MODELS = [
   'gpt-4o-mini',
@@ -161,10 +162,12 @@ describe('Control Plane demo seed baseline', () => {
     expect(serialized).not.toContain('Bearer ');
   });
 
-  it('hashes demo credentials after trimming surrounding whitespace', () => {
-    expect(credentialHash('  synthetic_demo_secret  ')).toBe(
-      credentialHash('synthetic_demo_secret'),
-    );
+  it('hashes demo credentials with scrypt after trimming surrounding whitespace', () => {
+    const encodedHash = credentialHash('  synthetic_demo_secret  ');
+
+    expect(encodedHash).toMatch(/^scrypt-v1\$/);
+    expect(verifyCredentialSecret('synthetic_demo_secret', encodedHash)).toBe(true);
+    expect(verifyCredentialSecret('different_demo_secret', encodedHash)).toBe(false);
   });
 
   it('canonicalizes undefined like JSON for arrays while omitting object fields', () => {

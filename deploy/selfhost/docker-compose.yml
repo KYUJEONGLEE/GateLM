@@ -350,7 +350,6 @@ services:
       AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS: ${AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS:-30}
     volumes:
       - pii_model_data:/models:ro
-      - ../../apps/ai-service/.cache/huggingface/models:/app/.cache/huggingface/models:ro
     tmpfs:
       - /run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777
     mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}

@@ -57,9 +57,9 @@ describe('ApiKeysService', () => {
     expect(result.plaintext).toMatch(/^gsk_live_/);
     expect(result.plaintextShownOnce).toBe(true);
     expect(createData).not.toHaveProperty('plaintext');
-    expect(createData.secretHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(createData.secretHash).toMatch(/^scrypt-v1\$/);
     expect(createData.secretHash).not.toBe(result.plaintext);
-    expect(createData.hashAlgorithm).toBe('sha256');
+    expect(createData.hashAlgorithm).toBe('scrypt-v1');
     expect(createData.scopes).toEqual(['chat:completions', 'models:read']);
   });
 
@@ -114,7 +114,7 @@ describe('ApiKeysService', () => {
         data: expect.objectContaining({
           tenantId,
           projectId,
-          secretHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          secretHash: expect.stringMatching(/^scrypt-v1\$/),
         }),
       }),
     );

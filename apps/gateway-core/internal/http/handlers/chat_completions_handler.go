@@ -1716,7 +1716,7 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 		return nil, "", 0, false
 	}
 
-	keyHash, err := h.buildExactCacheKey(ctx, reqCtx, chatReq, redactedPrompt)
+	keyHash, err := h.buildExactCacheKey(ctx, reqCtx, chatReq)
 	if err != nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusError
 		reqCtx.CacheType = cachestage.CacheTypeExact
@@ -1750,10 +1750,10 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	return lookup.Payload, lookup.CacheHitRequestID, lookup.SavedCostMicroUSD, true
 }
 
-func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) (string, error) {
+func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest) (string, error) {
 	maskedRequestBodyHash := normalizedMaskedRequestBodyHash(chatReq)
 	if maskedRequestBodyHash == "" {
-		maskedRequestBodyHash = redactedPromptHash(redactedPrompt)
+		return "", errors.New("cannot canonicalize masked request body for exact cache")
 	}
 	routingDecisionHash := reqCtx.RoutingDecisionKeyHash
 	if routingDecisionHash == "" {
@@ -3870,11 +3870,6 @@ func normalizedMaskedRequestBodyHash(chatReq provider.ChatCompletionRequest) str
 		return ""
 	}
 	sum := sha256.Sum256(payload)
-	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
-func redactedPromptHash(redactedPrompt string) string {
-	sum := sha256.Sum256([]byte(cachekey.NormalizeRedactedPrompt(redactedPrompt)))
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 

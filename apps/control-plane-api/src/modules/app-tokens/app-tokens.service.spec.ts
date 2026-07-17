@@ -66,12 +66,12 @@ describe('AppTokensService', () => {
         tenantId,
         projectId,
         applicationId,
-        hashAlgorithm: 'sha256',
+        hashAlgorithm: 'scrypt-v1',
         scopes: ['gateway:invoke'],
       }),
     );
     expect(createData).not.toHaveProperty('plaintext');
-    expect(createData.secretHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(createData.secretHash).toMatch(/^scrypt-v1\$/);
   });
 
   it('does not expose plaintext or secretHash from list responses', async () => {
@@ -130,7 +130,7 @@ describe('AppTokensService', () => {
           tenantId,
           projectId,
           applicationId,
-          secretHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          secretHash: expect.stringMatching(/^scrypt-v1\$/),
         }),
       }),
     );
