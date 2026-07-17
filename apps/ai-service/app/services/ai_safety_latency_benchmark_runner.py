@@ -7,7 +7,7 @@ import platform
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Sequence
 

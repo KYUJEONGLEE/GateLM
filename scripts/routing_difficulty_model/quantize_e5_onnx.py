@@ -1,61 +1,79 @@
+#!/usr/bin/env python3
+"""Generate one pinned dynamic-QInt8 ONNX artifact without network access."""
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Sequence
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Create and verify the pinned GateLM E5 QInt8 ONNX artifact.",
-    )
-    parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--source-size", type=int, required=True)
-    parser.add_argument("--source-sha256", required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--output-size", type=int, required=True)
-    parser.add_argument("--output-sha256", required=True)
-    return parser.parse_args()
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
-def sha256(path: Path) -> str:
+def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
 def assert_artifact(path: Path, expected_size: int, expected_sha256: str) -> None:
-    if not path.is_file() or path.is_symlink():
-        raise RuntimeError(f"artifact is missing or is not a regular file: {path}")
-    actual_size = path.stat().st_size
-    if actual_size != expected_size:
-        raise RuntimeError(
-            f"artifact size mismatch for {path}: expected {expected_size}, got {actual_size}",
-        )
-    actual_sha256 = sha256(path)
-    if actual_sha256 != expected_sha256:
-        raise RuntimeError(
-            f"artifact checksum mismatch for {path}: expected {expected_sha256}, got {actual_sha256}",
-        )
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"regular file required: {path}")
+    if path.stat().st_size != expected_size:
+        raise ValueError(f"file size mismatch: {path}")
+    if sha256_file(path) != expected_sha256:
+        raise ValueError(f"file checksum mismatch: {path}")
 
 
-def main() -> None:
-    args = parse_args()
-    assert_artifact(args.source, args.source_size, args.source_sha256)
+def sha256_argument(value: str) -> str:
+    normalized = value.strip().lower()
+    if not SHA256_PATTERN.fullmatch(normalized):
+        raise argparse.ArgumentTypeError("a lowercase 64-character SHA-256 is required")
+    return normalized
 
-    if args.output.exists():
-        assert_artifact(args.output, args.output_size, args.output_sha256)
-        return
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate and verify the pinned GateLM E5 dynamic-QInt8 ONNX artifact."
+    )
+    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--source-size", type=int, required=True)
+    parser.add_argument("--source-sha256", type=sha256_argument, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output-size", type=int, required=True)
+    parser.add_argument("--output-sha256", type=sha256_argument, required=True)
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    source = args.source.resolve(strict=True)
+    output = args.output.resolve(strict=False)
+
+    if source == output:
+        raise ValueError("source and output paths must differ")
+    assert_artifact(source, args.source_size, args.source_sha256)
+
+    if output.exists() or output.is_symlink():
+        assert_artifact(output, args.output_size, args.output_sha256)
+        print(f"verified existing pinned QInt8 artifact: {output}")
+        return 0
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    partial_output = output.with_name(f"{output.name}.partial.{os.getpid()}")
+    if partial_output.exists() or partial_output.is_symlink():
+        raise ValueError(f"refusing to replace existing partial output: {partial_output}")
 
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    partial_output = args.output.with_name(f"{args.output.name}.partial.{os.getpid()}")
     try:
         with tempfile.TemporaryDirectory(prefix="gatelm-e5-quantize-") as work_directory:
             working_source = Path(work_directory) / "model.onnx"
@@ -70,10 +88,14 @@ def main() -> None:
                 weight_type=QuantType.QInt8,
             )
         assert_artifact(partial_output, args.output_size, args.output_sha256)
-        os.replace(partial_output, args.output)
+        os.replace(partial_output, output)
     finally:
-        partial_output.unlink(missing_ok=True)
+        if partial_output.exists() or partial_output.is_symlink():
+            partial_output.unlink()
+
+    print(f"generated verified pinned QInt8 artifact: {output}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
