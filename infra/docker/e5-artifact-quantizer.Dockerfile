@@ -13,5 +13,6 @@ COPY scripts/routing_difficulty_model/e5-quantizer-requirements.lock.txt ./requi
 RUN python -m pip install --no-compile --requirement requirements.lock.txt
 
 COPY scripts/routing_difficulty_model/quantize_e5_onnx.py ./quantize_e5_onnx.py
+RUN chmod 0444 ./quantize_e5_onnx.py
 
 ENTRYPOINT ["python", "/opt/gatelm/quantize_e5_onnx.py"]
