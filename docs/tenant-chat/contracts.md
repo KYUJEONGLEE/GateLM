@@ -127,11 +127,13 @@ Browser
 -> exact immutable tenant RuntimeSnapshot pin
 -> workload JWT(admission) 발급
 -> private Gateway admission: request rate + active concurrency
--> Chat API가 current user message를 encrypted store에 durable 기록
--> Chat API가 turn contextMode에 따라 completed prior context를 bounded decrypt하거나 current user message만 선택
+-> Chat API가 contextMode=conversation이면 completed prior context를 bounded decrypt하고, single_turn이면 prior history를 읽지 않음
+-> workload JWT(sanitization) 발급
+-> private Gateway가 current user와 bounded legacy_unverified user만 pinned safety policy로 검사
+-> Chat API가 passed/redacted content와 safety provenance만 encrypted store에 durable 기록
 -> workload JWT(completion) 발급
 -> private Gateway completion이 admission/body/snapshot binding consume
--> safety
+-> 저장된 message safety provenance를 검증하고 이미 처리된 history의 PII 재검사를 생략
 -> routing eligibility
 -> cache strategy
 -> quota/budget state 계산 및 atomic reservation
@@ -147,6 +149,9 @@ Browser
 Hard ordering rules:
 
 - rate/concurrency deny 전에는 user content/history/diagnostic capture를 저장하지 않는다.
+- admission 성공 뒤에도 sanitization 성공 전에는 user ciphertext를 저장하지 않는다.
+- sanitization이 `CHAT_SAFETY_BLOCKED`이면 Gateway가 admission을 consume하고 slot을 release하며 content-free `safety_blocked` terminal event를 exactly once 기록한다. Chat API는 user ciphertext와 Provider completion을 만들지 않는다.
+- `sanitization` 성공 응답의 ordered content만 user ciphertext로 저장한다. 원래 user input을 별도 보존하거나 dual-write하지 않는다.
 - exact cache hit은 request rate만 소비하고 token quota 및 cost budget debit은 0이다.
 - provider call은 quota/budget reservation이 성공한 뒤에만 시작한다.
 - assistant partial delta는 영구 저장하지 않는다.
@@ -161,8 +166,9 @@ Gateway의 Tenant Chat route는 public `/v1` listener에 등록하지 않는다.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/internal/v1/tenant-chat/admissions` | content 없이 request rate/concurrency/idempotency를 결정하고 30초 admission을 생성 |
+| `POST` | `/internal/v1/tenant-chat/admissions/{admissionId}/sanitizations` | admission에 묶인 ordered user message를 저장 전에 한 번 safety 처리하고 masked content를 반환 |
 | `POST` | `/internal/v1/tenant-chat/admissions/{admissionId}/cancel` | Chat API persistence 실패 또는 user cancel 시 admission/slot을 idempotent 종료 |
-| `POST` | `/internal/v1/tenant-chat/completions` | encrypted user write 후 admission을 consume하고 policy/provider pipeline 실행 |
+| `POST` | `/internal/v1/tenant-chat/completions` | sanitized encrypted user write 후 admission을 consume하고 provenance/cache/routing/provider pipeline 실행 |
 
 Common requirements:
 
@@ -200,13 +206,13 @@ Endpoint별 request/response, required/optional field, status, error code, idemp
 - `aud=gatelm-gateway-tenant-chat`
 - `sub=service:chat-api`
 - `jti`, `iat`, `nbf`, `exp`
-- `phase=admission|completion|cancel`
+- `phase=admission|sanitization|completion|cancel`
 - `requestId`, `turnId`, `idempotencyKey`
 - `tenantId`, `userId`, `actorKind`, optional `employeeId`
 - `actorAuthzVersion`, `tenantAuthzVersion`, `sessionVersion`
 - `snapshotVersion`, `snapshotDigest`
 - `bindingDigest`
-- completion/cancel의 `admissionId`
+- sanitization/completion/cancel의 `admissionId`
 
 Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는 ±5초다. `jti`는 token expiry까지 Redis에서 exactly-once consume하고 Redis continuity를 확인할 수 없으면 fail closed한다.
 
@@ -403,6 +409,16 @@ Idempotency rules:
 - legacy union API는 discriminated union으로만 합친다.
 - Prometheus label에는 bounded `surface="tenant_chat"`만 추가한다.
 - tenantId/userId/employeeId/requestId/turnId/JTI/digest/error detail은 metric label 금지다.
+- AI safety sidecar metric은 원문, 탐지값, span/offset, 모델 경로·버전, URL, 오류 문자열을 포함하지 않는다. 허용 label은 아래 bounded enum만 사용하고 그 밖의 입력은 `unknown` 또는 `invalid_response`로 정규화한다.
+
+| Metric | Bounded labels | Meaning |
+|---|---|---|
+| `gatelm_ai_safety_sidecar_calls_total` | `surface=gateway_v1|tenant_chat|unknown`, `mode=shadow|enforce|unknown`, `outcome=passed|redacted|blocked|timeout|transport_error|http_error|invalid_response|cancelled`, `inference_path=rules_only|hybrid|unknown` | sidecar 호출의 terminal aggregate |
+| `gatelm_ai_safety_sidecar_call_duration_seconds` | calls와 동일 | sidecar 호출 wall-clock duration; Gateway 전체 요청 지연이 아님 |
+| `gatelm_ai_safety_sidecar_fallback_total` | `surface`, `mode`, `reason=timeout|transport_error|http_error|invalid_response` | 실제 local-rule fallback이 실행된 횟수 |
+| `gatelm_gateway_dependency_ready` | `dependency=postgres|postgres_log|redis|mock_provider|control_plane|ai_safety_sidecar|unknown`, `required=true|false` | `/readyz`가 마지막으로 관측한 dependency 상태(1/0) |
+
+`inference_path=hybrid`는 sidecar가 안전한 실행 요약으로 모델 호출을 명시한 경우에만 사용한다. 응답이 그 증거를 제공하지 않으면 `unknown`이며 detection source나 응답 지연으로 추정하지 않는다. readiness gauge는 능동 probe가 아니라 `/readyz` poll 시점의 마지막 관측값이다.
 
 ### 11.2 Required aggregate
 
@@ -446,6 +462,11 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - list cursor는 version, actor, scope, boundary, requested limit을 MAC으로 binding한다. history cursor는 여기에 conversation과 `cacheEpoch`를 추가한다. tamper, scope 변경, epoch 불일치는 `400 CHAT_CURSOR_INVALID`다.
 - history page는 최대 100개, completion context는 최근 completed message 최대 32개와 복호화 plaintext 최대 256 KiB다. request user content는 UTF-8 1~20,000자, title은 1~120자다.
 - completion context의 개별 message도 private Gateway의 20,000자 한도를 따른다. 저장된 assistant가 이 한도를 넘으면 그 message와 더 오래된 history는 context에서 제외하지만 encrypted history resource 자체를 자르거나 변경하지 않는다.
+- 새 user message는 admission 뒤 `sanitization` phase에서 한 번만 검사한다. Chat API는 Gateway가 반환한 ordered content를 `safety.status=sanitized`와 exact `policyDigest`로 저장하며 이후 completion에는 그 ciphertext 복호화 결과만 사용한다.
+- safety policy가 비활성화됐거나 detector/masking runtime이 준비되지 않으면 sanitization은 fail closed한다. 원문을 그대로 반환해 `sanitized`로 저장하는 우회 동작은 허용하지 않는다.
+- assistant message는 이미 sanitized user context로 Provider가 생성한 provenance를 `safety.status=provider_generated`로 저장한다. 이것은 output DLP 검사를 통과했다는 뜻이 아니며 `policyDigest`를 갖지 않는다.
+- completion message의 optional `safety` object는 additive wire compatibility를 위한 것이다. Chat API는 schema v2 AAD로 인증된 provenance만 이 field에 싣고 workload JWT의 `bindingDigest`로 exact completion input을 서명한다. Tenant Chat stored history에서 이 field가 없거나 user status/digest와 role 조합이 맞지 않으면 provider-bound context에서 제외하거나 fail closed하며, Gateway도 이를 trusted history로 보지 않고 방어적으로 safety 처리한다.
+- placeholder counter는 `[EMAIL_2]`의 `EMAIL`처럼 실제 masked text에 쓰는 uppercase placeholder prefix별 이미 사용한 최대 숫자 suffix만 전달할 수 있다. detector type, raw entity, raw-to-placeholder mapping, message/conversation identifier는 포함하지 않는다.
 - exact route와 response field는 OpenAPI, resource shape는 [conversation schema](./schemas/chat-conversation.schema.json), SSE는 [turn event schema](./schemas/chat-turn-sse-event.schema.json)를 따른다.
 
 ### 12.2 Envelope encryption과 key rotation
@@ -453,7 +474,9 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - 저장 format과 column은 [content DDL contract](./db/tenant-chat-content.sql)를 따른다. legacy `conversations`/`chat_messages`를 재사용하거나 dual-write하지 않는다.
 - tenant content key(DEK)는 random 32-byte key이며 title/message마다 random 96-bit nonce를 사용해 AES-256-GCM으로 암호화한다. ciphertext, nonce, 128-bit tag만 content row에 저장한다.
 - DEK는 versioned wrapping key로 AES-256-GCM wrapping한다. Chat API combined key file은 active version과 active+grace `wrappingKey`/`integrityKey`를 포함한다. Control Plane API에는 combined file을 mount하지 않고 동일 wrapping material/version만 가진 `RAG_CONTENT_WRAPPING_KEYS_FILE` exact projection을 별도 전달하며 `integrityKey`는 포함하거나 허용하지 않는다.
-- canonical AAD는 `schemaVersion`, `tenantId`, `conversationId`, `recordId`, `contentKind=title|message`, `role=none|user|assistant`, `contentKeyVersion`을 exact key set과 JCS UTF-8로 binding한다.
+- title, legacy message와 assistant citation의 schema v1 canonical AAD는 `schemaVersion`, `tenantId`, `conversationId`, `recordId`, `contentKind=title|message|message_citations`, `role=none|user|assistant`, `contentKeyVersion`을 exact key set과 JCS UTF-8로 binding한다. `message_citations`는 assistant role에만 허용한다.
+- 새 message write는 schema v2만 사용한다. v2 message canonical AAD는 v1 message exact set에 `safetyStatus`, `safetyPolicyDigest`를 추가한다. user는 `safetyStatus=sanitized`와 valid policy digest가 필수이고 assistant는 `safetyStatus=provider_generated`, `safetyPolicyDigest=null`이 필수다. DB metadata만 바꿔 legacy plaintext를 sanitized로 승격할 수 없도록 AES-GCM tag가 provenance를 인증한다.
+- 기존 schema v1 user message는 `legacy_unverified` reader-only 상태이고, 기존 schema v1 assistant는 `provider_generated`로 표시한다. legacy user를 복호화해 현재 pinned sanitization을 한 번 통과시키고 schema v2로 재암호화하기 전에는 completion context에서 안전한 history로 사용하지 않는다. 일괄 `sanitized` backfill이나 metadata-only 승격은 금지한다.
 - wrong tenant/AAD/key version, tag/ciphertext tamper와 record swap은 `CHAT_CONTENT_INTEGRITY_FAILED`로 fail closed한다. 원인 detail이나 key metadata를 caller/log/metric에 포함하지 않는다.
 - rotation은 reader-first다. 새 wrapping key를 reader set에 배포한 뒤 active version을 올리고 DEK를 rewrap한다. DB의 monotonic `wrappingKeyRollbackFloor` 아래 active version은 readiness와 write 모두 거부한다.
 - content DEK rotation은 새 version을 writer로 선택하고 이전 DEK를 grace reader로 유지한다. row의 `contentKeyVersion`이 없는 key를 가리키면 fail closed한다.
@@ -568,19 +591,21 @@ AI Service의 `POST /internal/v1/rag/extract`는 Control Plane Worker 전용 raw
 1. session/device와 authoritative entitlement를 확인한다.
 2. conversation ownership, request binding, cursor/idempotency bound를 확인한다.
 3. content-free turn identity를 reserve하고 기존 `authorizeAndAdmit`을 호출한다.
-4. admission 성공 뒤 user message ciphertext를 commit한다.
-5. user commit 뒤 `conversation`이면 completed prior history를 bounded decrypt하고, `single_turn`이면 history를 decrypt하지 않고 current user message만으로 `complete`를 호출한다.
-6. private Gateway SSE를 strict consume하며 Chat API-facing `accepted -> delta* -> final|error|cancelled` 순서를 유지한다.
-7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
+4. admission 성공 뒤 conversation이면 completed prior context를 bounded decrypt해 placeholder counter와 legacy migration 대상을 구성하고, single_turn이면 prior history 없이 current user만 준비한다. current user와 bounded legacy_unverified user만 sanitization phase로 보낸다.
+5. block이면 admission terminal 처리 뒤 user ciphertext 없이 종료한다. passed/redacted이면 반환 content와 safety provenance를 schema v2 user ciphertext로 commit한다.
+6. user commit 뒤 context mode에 맞는 completed history와 current sanitized user로 complete를 호출한다. 이미 처리된 v2 history는 PII model에 다시 보내지 않는다.
+7. private Gateway SSE를 strict consume한다. chat.turn.accepted는 committed user message UUID와 sanitized stored content를 포함하고 browser는 optimistic raw text를 즉시 교체한다.
+8. successful assistant 전체를 schema v2 provider_generated provenance로 암호화해 commit한 뒤에만 chat.turn.final을 보낸다.
 
 - Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다. 같은 turn의 HTTP attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다.
+- chat.turn.accepted.userMessageId는 UUID v4이고 userContent는 1~20,000자의 sanitized committed value다. 원래 untrusted input은 accepted/replay/history/durable log에 다시 내보내지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 bounded `quotaState`와 `budgetState`를 전달한다. encrypted assistant만으로 재생하는 completed turn은 두 상태를 복원할 Chat API-owned 근거가 없으므로 생략할 수 있으며, browser는 이를 새 정책 상태로 추정하지 않는다.
 - successful assistant history와 `chat.turn.final`은 Gateway가 확정한 bounded `effectiveModelKey`를 선택적으로 포함한다. Chat API는 이를 assistant message와 함께 저장하며 legacy row 또는 Gateway가 모델을 확정하지 못한 경우 생략한다. Provider connection, fallback attempt, credential과 비용 상세는 직원 응답에 포함하지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 `cacheOutcome`을 선택적으로 포함한다. exact cache hit에서는 assistant history의 모델 표시를 생략하고 browser는 모델 호출이 없었다고 표시한다.
 - public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. 별도 optional `contextMode`는 `conversation|single_turn`이며 미지정 시 기존 호환을 위해 `conversation`이다. `conversation`은 completed prior context와 current user message를 전달하고, `single_turn`은 encrypted history를 삭제하거나 변경하지 않은 채 current user message만 전달한다.
 - Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다. context mode는 actor, employee, tenant usage 귀속을 바꾸지 않으므로 confirmed ledger와 향후 DB-backed employee usage/cost aggregate는 동일 identity 경계를 유지한다.
 - context mode는 keyed turn request binding에 포함한다. legacy/default `conversation` binding shape는 그대로 유지하고 `single_turn`만 explicit discriminator를 추가해 같은 idempotency key로 mode를 바꾸는 replay를 `409 CHAT_IDEMPOTENCY_CONFLICT`로 거절한다.
-- attachment capacity는 admission 전에 reserve한다. admission 뒤 user persistence, history preparation 또는 local attachment activation이 실패하면 마지막 local attachment만 admission과 turn을 best effort cancel하고 reservation을 반드시 해제한다.
+- attachment capacity는 admission 전에 reserve한다. admission 뒤 sanitization, user persistence, history preparation 또는 activation이 실패하면 local reservation을 반드시 해제한다. safety block은 이미 Gateway terminal이므로 cancel하지 않고, 그 밖의 pre-completion 실패만 admission과 turn을 best effort cancel한다.
 - 느린 attachment의 response backpressure는 해당 응답에만 적용하며 공유 Provider stream과 final persistence를 막지 않는다. disconnect된 attachment handle은 취소 시도 결과와 무관하게 local registry에서 해제한다.
 - partial, interrupted, cancelled assistant와 Provider raw error는 저장하지 않는다. 이미 저장된 user message와 confirmed Gateway usage는 assistant persistence 실패 때문에 삭제·변조하지 않는다.
 - duplicate final은 `(turnId,role=assistant)` unique와 locked conversation state로 no-op/replay하며 다른 content면 fail closed한다.

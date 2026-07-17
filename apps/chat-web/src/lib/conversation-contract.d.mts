@@ -11,6 +11,8 @@ export type TurnEvent = Readonly<Record<string, unknown> & {
   quotaState?: PolicyState;
   budgetState?: PolicyState;
   messageId?: string;
+  userMessageId?: string;
+  userContent?: string;
   effectiveModelKey?: string;
   cacheOutcome?: 'off' | 'hit' | 'miss';
   citations?: readonly Citation[];

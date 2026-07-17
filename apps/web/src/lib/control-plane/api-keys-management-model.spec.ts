@@ -5,7 +5,8 @@ import {
   compareApiKeyCreatedAtDescending,
   containsApiKey,
   containsProject,
-  excludeRevokedApiKeys
+  excludeRevokedApiKeys,
+  getApiKeyPreviewPrefix
 } from "@/lib/control-plane/api-keys-management-model";
 
 test("excludes revoked API Keys from management lists", () => {
@@ -48,6 +49,12 @@ test("places invalid API Key creation dates after valid dates", () => {
       { createdAt: "invalid-right" }
     )
   ).toBe(0);
+});
+
+test("uses only the dynamic API Key family in compact previews", () => {
+  expect(getApiKeyPreviewPrefix("gsk_live_")).toBe("gsk");
+  expect(getApiKeyPreviewPrefix("custom_production_")).toBe("custom");
+  expect(getApiKeyPreviewPrefix("opaque")).toBe("opaque");
 });
 
 test("attaches the applied project without exposing secret material", () => {

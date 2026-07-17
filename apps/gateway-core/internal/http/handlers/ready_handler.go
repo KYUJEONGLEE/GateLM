@@ -2,15 +2,20 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 )
 
 type ReadyHandler struct {
-	Timeout time.Duration
-	Checks  map[string]ReadinessCheck
+	Timeout         time.Duration
+	Checks          map[string]ReadinessCheck
+	MetricsRegistry *metrics.Registry
 }
 
 type ReadinessCheck struct {
@@ -37,6 +42,11 @@ func (h ReadyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	deps := runReadinessChecks(ctx, h.Checks)
+	if h.MetricsRegistry != nil {
+		for name, dep := range deps {
+			h.MetricsRegistry.SetGatewayDependencyReady(name, dep.Required, dep.Status == "ok")
+		}
+	}
 
 	status := "ready"
 	httpStatus := http.StatusOK
@@ -154,4 +164,45 @@ func HTTPHealthCheck(client *http.Client, baseURL string) func(ctx context.Conte
 
 		return nil
 	}
+}
+
+// HTTPReadinessCheck derives the process-level /readyz endpoint from an
+// internal service endpoint. Returned errors are deliberately location-free;
+// callers expose only their configured bounded FailureMessage.
+func HTTPReadinessCheck(client *http.Client, serviceEndpoint string) func(ctx context.Context) error {
+	readyURL, buildErr := processReadinessURL(serviceEndpoint)
+	return func(ctx context.Context) error {
+		if buildErr != nil {
+			return errors.New("readiness endpoint is not configured")
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
+		if err != nil {
+			return errors.New("readiness request could not be created")
+		}
+		httpClient := client
+		if httpClient == nil {
+			httpClient = http.DefaultClient
+		}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return errors.New("readiness endpoint call failed")
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+			return errors.New("readiness endpoint is not ready")
+		}
+		return nil
+	}
+}
+
+func processReadinessURL(serviceEndpoint string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(serviceEndpoint))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil {
+		return "", errors.New("invalid service endpoint")
+	}
+	parsed.Path = "/readyz"
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
 }

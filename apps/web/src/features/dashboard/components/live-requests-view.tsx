@@ -263,7 +263,7 @@ export function LiveRequestsView({
               <th scope="col">{locale === "ko" ? "프로젝트" : "Project"}</th>
               <th scope="col">{locale === "ko" ? "처리 모델" : "Model"}</th>
               <th scope="col">{locale === "ko" ? "비용" : "Cost"}</th>
-              <th scope="col">{locale === "ko" ? "정책 결과" : "Policy Result"}</th>
+              <th scope="col">{locale === "ko" ? "처리 결과" : "Outcome"}</th>
               <th scope="col">{locale === "ko" ? "응답 시간" : "Response time"}</th>
               <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
               <th scope="col">{text.detail}</th>

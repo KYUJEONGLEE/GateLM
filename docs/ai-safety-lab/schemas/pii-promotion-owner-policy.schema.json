@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/pii-promotion-owner-policy.schema.json",
+  "title": "Owner-approved PII promotion policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policyVersion", "approvedForProduction", "scope", "thresholds"],
+  "properties": {
+    "policyVersion": {"const": "pii-promotion-owner-policy.v1"},
+    "approvedForProduction": {"const": true},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredPiiTypes", "requiredLocales"],
+      "properties": {
+        "requiredPiiTypes": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "email",
+              "phone_number",
+              "resident_registration_number",
+              "account_number",
+              "postal_address",
+              "private_date",
+              "private_url",
+              "secret",
+              "person_name",
+              "organization_name"
+            ]
+          }
+        },
+        "requiredLocales": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["ko-KR", "en-US"]
+          }
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimumOverallPassRate",
+        "minimumPrecisionByPiiType",
+        "minimumRecallByPiiType",
+        "maximumWarmSidecarP95Ms",
+        "maximumColdP95Ms",
+        "maximumPeakRssMb",
+        "maximumStartupFailureRate",
+        "minimumColdStartRuns"
+      ],
+      "properties": {
+        "minimumOverallPassRate": {"type": "number", "minimum": 0, "maximum": 1},
+        "minimumPrecisionByPiiType": {"$ref": "#/$defs/rateMap"},
+        "minimumRecallByPiiType": {"$ref": "#/$defs/rateMap"},
+        "maximumWarmSidecarP95Ms": {"type": "number", "exclusiveMinimum": 0},
+        "maximumColdP95Ms": {"type": "number", "exclusiveMinimum": 0},
+        "maximumPeakRssMb": {"type": "number", "exclusiveMinimum": 0},
+        "maximumStartupFailureRate": {"type": "number", "minimum": 0, "maximum": 1},
+        "minimumColdStartRuns": {"type": "integer", "minimum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "rateMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "email",
+        "phone_number",
+        "resident_registration_number",
+        "account_number",
+        "postal_address",
+        "private_date",
+        "private_url",
+        "secret",
+        "person_name",
+        "organization_name"
+      ],
+      "properties": {
+        "email": {"$ref": "#/$defs/rate"},
+        "phone_number": {"$ref": "#/$defs/rate"},
+        "resident_registration_number": {"$ref": "#/$defs/rate"},
+        "account_number": {"$ref": "#/$defs/rate"},
+        "postal_address": {"$ref": "#/$defs/rate"},
+        "private_date": {"$ref": "#/$defs/rate"},
+        "private_url": {"$ref": "#/$defs/rate"},
+        "secret": {"$ref": "#/$defs/rate"},
+        "person_name": {"$ref": "#/$defs/rate"},
+        "organization_name": {"$ref": "#/$defs/rate"}
+      },
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"}
+    },
+    "rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

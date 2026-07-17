@@ -116,7 +116,6 @@ describe('EncryptedChatStore concurrency boundaries', () => {
 describe('EncryptedChatStore completion history', () => {
   it('stops before a stored assistant message that exceeds the private message contract', async () => {
     const key = Buffer.alloc(32, 7);
-    const currentUser = encryptedMessage(key, 'user', '<current>', 4n);
     const oversizedAssistant = encryptedMessage(
       key,
       'assistant',
@@ -127,7 +126,7 @@ describe('EncryptedChatStore completion history', () => {
     const prisma = {
       tenantChatConversation: { findFirst: jest.fn().mockResolvedValue({ id: conversationId }) },
       tenantChatMessage: {
-        findMany: jest.fn().mockResolvedValue([currentUser, oversizedAssistant, olderUser]),
+        findMany: jest.fn().mockResolvedValue([oversizedAssistant, olderUser]),
       },
     };
     const keys = {
@@ -139,9 +138,59 @@ describe('EncryptedChatStore completion history', () => {
     };
     const store = new EncryptedChatStore(prisma as never, keys as never, {} as never, {} as never);
 
-    await expect(store.completionHistory(actor, conversationId, currentUser.turnId))
-      .resolves.toEqual([{ role: 'user', content: '<current>' }]);
-    expect(keys.withKeyVersion).toHaveBeenCalledTimes(2);
+    await expect(store.completionHistory(actor, conversationId, Buffer.byteLength('<current>')))
+      .resolves.toEqual({ messages: [], placeholderCounters: {} });
+    expect(keys.withKeyVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not trust v1 user metadata or derive counters from legacy content', async () => {
+    const key = Buffer.alloc(32, 7);
+    const legacy = {
+      ...encryptedMessage(key, 'user', '[EMAIL_9]', 1n),
+      safetyStatus: 'sanitized',
+      safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+    };
+    const prisma = {
+      tenantChatConversation: { findFirst: jest.fn().mockResolvedValue({ id: conversationId }) },
+      tenantChatMessage: { findMany: jest.fn().mockResolvedValue([legacy]) },
+    };
+    const keys = contentKeys(key);
+    const store = new EncryptedChatStore(prisma as never, keys as never, {} as never, {} as never);
+
+    await expect(store.completionHistory(actor, conversationId, 1)).resolves.toEqual({
+      messages: [{
+        id: legacy.id,
+        turnId: legacy.turnId,
+        role: 'user',
+        content: '[EMAIL_9]',
+        safetyStatus: 'legacy_unverified',
+        safetyPolicyDigest: null,
+      }],
+      placeholderCounters: {},
+    });
+  });
+
+  it('derives placeholder counters only from AAD-bound v2 sanitized history', async () => {
+    const key = Buffer.alloc(32, 7);
+    const sanitized = encryptedSanitizedMessage(key, '[EMAIL_9] [PERSON_2]', 1n);
+    const prisma = {
+      tenantChatConversation: { findFirst: jest.fn().mockResolvedValue({ id: conversationId }) },
+      tenantChatMessage: { findMany: jest.fn().mockResolvedValue([sanitized]) },
+    };
+    const keys = contentKeys(key);
+    const store = new EncryptedChatStore(prisma as never, keys as never, {} as never, {} as never);
+
+    await expect(store.completionHistory(actor, conversationId, 1)).resolves.toEqual({
+      messages: [{
+        id: sanitized.id,
+        turnId: sanitized.turnId,
+        role: 'user',
+        content: '[EMAIL_9] [PERSON_2]',
+        safetyStatus: 'sanitized',
+        safetyPolicyDigest: sanitized.safetyPolicyDigest,
+      }],
+      placeholderCounters: { EMAIL: 9, PERSON: 2 },
+    });
   });
 });
 
@@ -275,6 +324,42 @@ function encryptedMessage(
   };
 }
 
+function encryptedSanitizedMessage(key: Buffer, content: string, sequence: bigint) {
+  const id = randomUUID();
+  const turnId = randomUUID();
+  const safetyPolicyDigest = `sha256:${'A'.repeat(43)}`;
+  const encrypted = encryptContent(key, content, {
+    schemaVersion: 2,
+    tenantId: actor.tenantId,
+    conversationId,
+    recordId: id,
+    contentKind: 'message',
+    role: 'user',
+    contentKeyVersion: 1,
+    safetyStatus: 'sanitized',
+    safetyPolicyDigest,
+  });
+  return {
+    id,
+    conversationId,
+    tenantId: actor.tenantId,
+    userId: actor.userId,
+    turnId,
+    requestId: randomUUID(),
+    role: 'user',
+    sequence,
+    ciphertext: Uint8Array.from(encrypted.ciphertext),
+    nonce: Uint8Array.from(encrypted.nonce),
+    tag: Uint8Array.from(encrypted.tag),
+    contentKeyVersion: 1,
+    schemaVersion: 2,
+    safetyStatus: 'sanitized',
+    safetyPolicyDigest,
+    expiresAt: null,
+    createdAt: new Date(),
+  };
+}
+
 function encryptedMessageWithCitations(
   key: Buffer,
   content: string,
@@ -308,4 +393,13 @@ function citation(sourceId: `S${number}`, documentId: string): RagCitation {
     lineEnd: 2,
     ordinal: Number(sourceId.slice(1)),
   };
+}
+
+function contentKeys(key: Buffer) {
+  return {
+    withKeyVersion: jest.fn(async (
+      _tenantId: string,
+      _version: number,
+      operation: (contentKey: Buffer) => Promise<string> | string,
+    ) => operation(key)),  };
 }

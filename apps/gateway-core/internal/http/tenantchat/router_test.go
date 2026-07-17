@@ -54,6 +54,20 @@ type fakeCompletionService struct {
 	request   domain.CompletionRequest
 }
 
+type fakeSanitizationService struct {
+	response domain.SanitizationResponse
+	err      error
+	request  domain.SanitizationRequest
+}
+
+func (s *fakeSanitizationService) Sanitize(
+	_ context.Context,
+	request domain.SanitizationRequest,
+) (domain.SanitizationResponse, error) {
+	s.request = request
+	return s.response, s.err
+}
+
 type fakeReceiptAuth struct{ allowed bool }
 
 func (a *fakeReceiptAuth) Authenticate(string) bool { return a.allowed }
@@ -232,6 +246,71 @@ func TestCompletionAuthenticatesBoundPayloadAndStreamsContractEvents(t *testing.
 	}
 	if !execution.closed {
 		t.Fatal("completion execution was not closed")
+	}
+}
+
+func TestSanitizationAuthenticatesBoundPayloadAndReturnsStorageSafeContent(t *testing.T) {
+	auth := &fakeAuthenticator{}
+	service := &fakeSanitizationService{response: domain.SanitizationResponse{
+		Messages:     []domain.SanitizedMessage{{ItemIndex: 0, Content: "safe [EMAIL_1]"}},
+		PolicyDigest: "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	}}
+	request := domain.SanitizationRequest{
+		Context: domain.RequestContext{
+			Phase: domain.PhaseSanitization, AdmissionID: "admission_fixture_001",
+		},
+		Input: domain.SanitizationInput{
+			Messages:            []domain.EphemeralMessage{{Role: "user", Content: "raw input"}},
+			PlaceholderCounters: map[string]int{"EMAIL": 0},
+		},
+	}
+	recorder := performJSONRequest(
+		t,
+		NewRouter(
+			auth,
+			&fakeAdmissionService{},
+			64*1024,
+			WithSanitizationService(service),
+		),
+		"/internal/v1/tenant-chat/admissions/admission_fixture_001/sanitizations",
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("want sanitization success, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if auth.phase != domain.PhaseSanitization || !reflect.DeepEqual(auth.payload, request.Input) ||
+		!reflect.DeepEqual(service.request, request) {
+		t.Fatalf("sanitization auth/service did not receive exact request: phase=%s payload=%#v", auth.phase, auth.payload)
+	}
+	var response domain.SanitizationResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || !reflect.DeepEqual(response, service.response) {
+		t.Fatalf("unexpected sanitization response: response=%+v err=%v", response, err)
+	}
+}
+
+func TestSanitizationBlockReturnsForbidden(t *testing.T) {
+	request := domain.SanitizationRequest{
+		Context: domain.RequestContext{
+			Phase: domain.PhaseSanitization, AdmissionID: "admission_fixture_001",
+		},
+		Input: domain.SanitizationInput{
+			Messages: []domain.EphemeralMessage{{Role: "user", Content: "blocked input"}},
+		},
+	}
+	recorder := performJSONRequest(
+		t,
+		NewRouter(
+			&fakeAuthenticator{},
+			&fakeAdmissionService{},
+			64*1024,
+			WithSanitizationService(&fakeSanitizationService{err: domain.ErrSafetyBlocked}),
+		),
+		"/internal/v1/tenant-chat/admissions/admission_fixture_001/sanitizations",
+		request,
+	)
+	if recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), "CHAT_SAFETY_BLOCKED") {
+		t.Fatalf("unexpected sanitization block response: %d %s", recorder.Code, recorder.Body.String())
 	}
 }
 

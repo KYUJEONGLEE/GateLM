@@ -12,7 +12,10 @@ from app.adapters.safety.privacy_filter_adapter import (
     source_for_model,
 )
 from app.main import create_app
-from app.services.ai_safety_detector import AiSafetyDetectorService
+from app.services.ai_safety_detector import (
+    ML_MAX_CANDIDATES_PER_REQUEST,
+    AiSafetyDetectorService,
+)
 
 
 SYNTHETIC_EMAIL = "alex@example.test"
@@ -51,6 +54,9 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["redactedPrompt"], "Contact [EMAIL_1] for the demo.")
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email"])
         self.assertEqual(body["detections"][0]["detectorType"], "email")
+        self.assertEqual(body["executionSummary"]["executionMode"], "rules_only")
+        self.assertEqual(body["executionSummary"]["modelInvocationCount"], 0)
+        self.assertIn("latencyMs", body)
         self.assertNotIn(SYNTHETIC_EMAIL, body_text)
         self.assertNotIn("word", body_text)
         self.assertNotIn("start", body_text)
@@ -194,7 +200,7 @@ class AiSafetyRouteTests(unittest.TestCase):
             ["email", "phone_number", "resident_registration_number"],
         )
         detection_sources = {detection["source"] for detection in body["detections"]}
-        self.assertEqual(detection_sources, {"openai_privacy_filter", "koelectra_privacy_ner"})
+        self.assertEqual(detection_sources, {"local_rule", "koelectra_privacy_ner"})
         self.assertNotIn(synthetic_email, body_text)
         self.assertNotIn(synthetic_phone, body_text)
         self.assertNotIn(synthetic_resident_number, body_text)
@@ -906,6 +912,113 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn(SYNTHETIC_EMAIL, response_text)
         self.assertNotIn(prompt, response_text)
 
+    def test_batch_detect_preserves_order_and_returns_sanitized_execution_summary(self) -> None:
+        prompts = [
+            f"Contact {SYNTHETIC_EMAIL} for the demo.",
+            "Write a safe synthetic handoff.",
+        ]
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post(
+            "/internal/ai-safety/v1/detect/batch",
+            json=batch_payload(*prompts),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["contractVersion"], "ai-safety-detector-batch.v1")
+        self.assertEqual([item["itemIndex"] for item in body["results"]], [0, 1])
+        self.assertEqual(body["executionSummary"]["executionMode"], "rules_only")
+        self.assertEqual(body["executionSummary"]["modelInvocationCount"], 0)
+        self.assertIn("latencyMs", body)
+        self.assertTrue(all("latencyMs" not in item for item in body["results"]))
+        self.assertNotIn(SYNTHETIC_EMAIL, body_text)
+        self.assertNotIn("promptText", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
+    def test_batch_detect_continues_seeded_placeholder_counters(self) -> None:
+        prompt = "Contact next-person@example.test."
+        body = batch_payload(prompt)
+        body["placeholderCounters"] = {"EMAIL": 7}
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect/batch", json=body)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        response_body = response.json()
+        self.assertEqual(
+            response_body["results"][0]["redactedPrompt"],
+            "Contact [EMAIL_8].",
+        )
+        self.assertNotIn("placeholderCounters", response_body)
+
+    def test_batch_validation_rejects_untrusted_placeholder_counters(self) -> None:
+        private_marker = "counter-validation-marker@example.test"
+        invalid_counters = (
+            {"UNKNOWN": 1},
+            {"EMAIL": 1_000_001},
+            {"EMAIL": True},
+            {"EMAIL": "1"},
+        )
+        client = TestClient(create_app())
+
+        for counters in invalid_counters:
+            with self.subTest(counters=counters):
+                body = batch_payload(f"Contact {private_marker}.")
+                body["placeholderCounters"] = counters
+
+                response = client.post("/internal/ai-safety/v1/detect/batch", json=body)
+
+                self.assertEqual(response.status_code, 400, response.text)
+                self.assertNotIn(private_marker, json.dumps(response.json(), sort_keys=True))
+
+    def test_batch_validation_rejects_more_than_64_without_echoing_prompt(self) -> None:
+        private_marker = "private-batch-marker@example.test"
+        body = batch_payload(*([f"Contact {private_marker}."] * 65))
+        client = TestClient(create_app())
+
+        response = client.post("/internal/ai-safety/v1/detect/batch", json=body)
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertNotIn(private_marker, json.dumps(response.json(), sort_keys=True))
+
+    def test_batch_validation_rejects_non_contiguous_item_indexes(self) -> None:
+        body = batch_payload("Safe one.", "Safe two.")
+        inputs = body["inputs"]
+        assert isinstance(inputs, list)
+        inputs[1]["itemIndex"] = 3
+        client = TestClient(create_app())
+
+        response = client.post("/internal/ai-safety/v1/detect/batch", json=body)
+
+        self.assertEqual(response.status_code, 400, response.text)
+
+    def test_batch_model_work_limit_returns_sanitized_unavailable_error(self) -> None:
+        private_marker = "private-window-marker"
+        prompt = (
+            f"Review private URL {private_marker}. "
+            * (ML_MAX_CANDIDATES_PER_REQUEST + 1)
+        )
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.post(
+            "/internal/ai-safety/v1/detect/batch",
+            json=batch_payload(prompt),
+        )
+
+        self.assertEqual(response.status_code, 500, response.text)
+        response_text = json.dumps(response.json(), sort_keys=True)
+        self.assertIn("remote_safety_unavailable", response_text)
+        self.assertNotIn(private_marker, response_text)
+
 
 def service_with_classifier(
     classifier: object,
@@ -951,5 +1064,24 @@ def payload(prompt_text: str, *, locale: str = "en-US") -> dict[str, object]:
         "detectorConfig": {
             "detectorSet": "privacy-filter-default",
             "returnConfidence": True,
+        },
+    }
+
+
+def batch_payload(*prompt_texts: str, locale: str = "en-US") -> dict[str, object]:
+    return {
+        "contractVersion": "ai-safety-detector-batch.v1",
+        "mode": "enforce",
+        "inputs": [
+            {
+                "itemIndex": index,
+                "promptText": prompt_text,
+                "locale": locale,
+            }
+            for index, prompt_text in enumerate(prompt_texts)
+        ],
+        "detectorConfig": {
+            "detectorSet": "privacy-filter-default",
+            "returnConfidence": False,
         },
     }

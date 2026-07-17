@@ -39,6 +39,7 @@ import (
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
+	aiservice "gatelm/apps/gateway-core/internal/adapters/safety/aiservice"
 	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
 	redistenantcache "gatelm/apps/gateway-core/internal/adapters/tenantchat/cache/redis"
 	postgrestenantprovider "gatelm/apps/gateway-core/internal/adapters/tenantchat/provider/postgres"
@@ -53,6 +54,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
@@ -74,6 +76,7 @@ import (
 	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 	tenantsafety "gatelm/apps/gateway-core/internal/services/tenantchat/safety"
+	sanitizationservice "gatelm/apps/gateway-core/internal/services/tenantchat/sanitization"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -198,6 +201,16 @@ func main() {
 			Check:          handlers.HTTPHealthCheck(&http.Client{Timeout: cfg.ControlPlaneTimeout}, cfg.ControlPlaneBaseURL),
 		}
 	}
+	if cfg.AISafetySidecar.Enabled {
+		readinessChecks["ai_safety_sidecar"] = handlers.ReadinessCheck{
+			Required:       false,
+			FailureMessage: "not ready",
+			Check: handlers.HTTPReadinessCheck(
+				&http.Client{Timeout: cfg.AISafetySidecar.Timeout},
+				cfg.AISafetySidecar.EndpointURL,
+			),
+		}
+	}
 
 	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(logPostgresPool, postgresinvocationlog.AuthFailureDefaults{
 		TenantID:      cfg.DemoTenantID,
@@ -319,21 +332,43 @@ func main() {
 			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
 		)
+		var tenantChatMaskingEngine tenantsafety.MaskingEngine = maskdomain.NewP0Engine()
+		if cfg.AISafetySidecar.Enabled {
+			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
+				Local:       tenantChatMaskingEngine,
+				EndpointURL: cfg.AISafetySidecar.EndpointURL,
+				Timeout:     cfg.AISafetySidecar.Timeout,
+				ModelID:     cfg.AISafetySidecar.ModelID,
+				DetectorSet: cfg.AISafetySidecar.DetectorSet,
+				Locale:      cfg.AISafetySidecar.Locale,
+				Mode:        cfg.AISafetySidecar.Mode,
+				Surface:     "tenant_chat",
+				Metrics:     metricsRegistry,
+			})
+		}
+		tenantChatSafety := tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)
 		tenantChatCompletions := completionservice.New(
 			tenantChatRuntime,
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
-			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluator()),
+			completionservice.WithSafetyEvaluator(tenantChatSafety),
 			completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),
+		)
+		tenantChatSanitizations := sanitizationservice.New(
+			tenantChatRuntime,
+			tenantChatAdmissions,
+			tenantChatSafety,
+			tenantChatUsage,
 		)
 		tenantChatPrivateRouter := tenantchathttp.NewRouter(
 			tenantChatAuthenticator,
 			tenantChatAdmissions,
 			cfg.MaxRequestBodyBytes,
 			tenantchathttp.WithCompletionService(tenantChatCompletions),
+			tenantchathttp.WithSanitizationService(tenantChatSanitizations),
 			tenantchathttp.WithUsageReceipts(tenantChatReceiptToken, tenantChatUsage),
 		)
 		privateRouter := http.NewServeMux()

@@ -240,6 +240,7 @@ type AISafetySidecarConfig struct {
 	ModelID     string
 	DetectorSet string
 	Locale      string
+	Mode        string
 }
 
 type RuntimeSnapshotCacheConfig struct {
@@ -471,10 +472,11 @@ func LoadWithError() (Config, error) {
 		AISafetySidecar: AISafetySidecarConfig{
 			Enabled:     envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
 			EndpointURL: envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
-			Timeout:     envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 300),
+			Timeout:     envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 750),
 			ModelID:     envString("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter"),
 			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
 			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
+			Mode:        envString("GATEWAY_AI_SAFETY_SIDECAR_MODE", "enforce"),
 		},
 		AsyncLogEnabled:            envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
 		AsyncLogQueueSize:          envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),

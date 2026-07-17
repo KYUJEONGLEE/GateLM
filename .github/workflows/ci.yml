@@ -163,6 +163,47 @@ jobs:
             TIKTOKEN_CACHE_DIR="$GITHUB_WORKSPACE/.cache/tiktoken" python -m compileall -q app
           )
 
+  ai-service-verification:
+    name: AI Service unit, schema, and aggregate evidence verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/ai-service/pyproject.toml
+
+      - name: Install AI Service test dependencies
+        run: python -m pip install -e "./apps/ai-service[test]"
+
+      - name: Run AI Service unit tests
+        working-directory: apps/ai-service
+        run: python -m unittest discover -s app/tests -p "test_*.py"
+
+      - name: Validate promotion schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m json.tool docs/ai-safety-lab/schemas/pii-artifact-verification.schema.json >/dev/null
+          python -m json.tool docs/ai-safety-lab/schemas/pii-promotion-evidence-binding.schema.json >/dev/null
+          python -m json.tool docs/ai-safety-lab/schemas/pii-promotion-evidence.schema.json >/dev/null
+          python -m json.tool docs/ai-safety-lab/schemas/pii-promotion-owner-policy.schema.json >/dev/null
+          python -m json.tool docs/ai-safety-lab/schemas/pii-repeated-cold-evidence.schema.json >/dev/null
+          python -m json.tool docs/ai-safety-lab/schemas/pii-tenant-chat-model-e2e.schema.json >/dev/null
+
+      - name: Confirm current PII evidence remains blocked and aggregate-only
+        working-directory: apps/ai-service
+        run: >-
+          python -m app.services.ai_safety_promotion_gate
+          --expect-blocked
+          --out "${{ runner.temp }}/pii-production-promotion-evidence.json"
+
   application-verification:
     name: application verification (${{ matrix.target }})
     runs-on: ubuntu-latest
@@ -550,6 +591,7 @@ jobs:
       - repository-contracts
       - application-verification
       - gateway-race
+      - ai-service-verification
       - rag-db-foundation
       - service-integration
       - tenant-chat-smoke
@@ -562,6 +604,7 @@ jobs:
           REPOSITORY_CONTRACTS_RESULT: ${{ needs.repository-contracts.result }}
           APPLICATION_VERIFICATION_RESULT: ${{ needs.application-verification.result }}
           GATEWAY_RACE_RESULT: ${{ needs.gateway-race.result }}
+          AI_SERVICE_VERIFICATION_RESULT: ${{ needs.ai-service-verification.result }}
           RAG_DB_FOUNDATION_RESULT: ${{ needs.rag-db-foundation.result }}
           SERVICE_INTEGRATION_RESULT: ${{ needs.service-integration.result }}
           TENANT_CHAT_SMOKE_RESULT: ${{ needs.tenant-chat-smoke.result }}
@@ -573,6 +616,7 @@ jobs:
             "$REPOSITORY_CONTRACTS_RESULT" \
             "$APPLICATION_VERIFICATION_RESULT" \
             "$GATEWAY_RACE_RESULT" \
+            "$AI_SERVICE_VERIFICATION_RESULT" \
             "$RAG_DB_FOUNDATION_RESULT" \
             "$SERVICE_INTEGRATION_RESULT" \
             "$TENANT_CHAT_SMOKE_RESULT"; do
@@ -612,6 +656,9 @@ jobs:
             --env-file deploy/selfhost/.env.example \
             -f deploy/selfhost/docker-compose.yml \
             config --quiet
+          python scripts/tenant_chat_pii_models/verify_selfhost_delivery.py \
+            --env-file deploy/selfhost/.env.example \
+            --compose-file deploy/selfhost/docker-compose.yml
           TENANT_CHAT_RAG_ENABLED=true docker compose \
             --env-file deploy/selfhost/.env.example \
             -f deploy/selfhost/docker-compose.yml \

@@ -344,7 +344,12 @@ export function ChatShell() {
         onAccepted: (accepted) => {
           activeTurnIdRef.current = accepted.turnId;
           setMessages((current) => current.map((message) => message.id === optimisticUserId
-            ? { ...message, turnId: accepted.turnId }
+            ? {
+                ...message,
+                id: accepted.userMessageId ?? message.id,
+                turnId: accepted.turnId,
+                content: accepted.userContent ?? message.content,
+              }
             : message));
         },
         onDelta: (delta, deltaEvent) => {

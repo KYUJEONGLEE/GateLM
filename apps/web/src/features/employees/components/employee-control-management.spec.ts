@@ -6,6 +6,14 @@ import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 
 const employeeManagementSourceUrl = new URL("./employee-control-management.tsx", import.meta.url);
 const employeeStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
+const analyticsChartsSourceUrl = new URL(
+  "../../analytics/components/analytics-charts.tsx",
+  import.meta.url
+);
+const employeePageSourceUrl = new URL(
+  "../../../app/(console)/tenants/[tenantId]/employees/page.tsx",
+  import.meta.url
+);
 const employeesClientSourceUrl = new URL(
   "../../../lib/control-plane/employees-client.ts",
   import.meta.url
@@ -79,11 +87,27 @@ test("employee list actions use the shared primary action scale", async () => {
 });
 
 test("employee ranking and detail controls use unified cost policies", async () => {
-  const source = await readFile(employeeManagementSourceUrl, "utf8");
+  const [source, chartSource] = await Promise.all([
+    readFile(employeeManagementSourceUrl, "utf8"),
+    readFile(analyticsChartsSourceUrl, "utf8")
+  ]);
 
   expect(source).toContain("AnalyticsRankedBarChart");
   expect(source).toContain('kind="micro-usd"');
+  expect(source).toContain('orientation="vertical"');
+  expect(source).toContain("outlierMultiplier={1.5}");
+  expect(source).toContain("평균의 1.5배 이상");
+  expect(source).toContain('useState<EmployeeCostChartPeriod>("daily")');
+  expect(source).toContain('employeeCostChartPeriod === "daily"');
+  expect(source).toContain("employeeUsage.dailyRank <= 3");
+  expect(source).toContain("employeeUsage.weeklyRank <= 3");
   expect(source).toContain("row.dailyCostMicroUsd ?? 0");
+  expect(source).toContain("row.monthlyCostMicroUsd ?? 0");
+  expect(source).not.toContain("return rows.slice(0, 10);");
+  expect(chartSource).toMatch(
+    /const outlierThreshold = useMemo\([\s\S]*?activeRows\.reduce[\s\S]*?\[activeRows, outlierMultiplier\]/
+  );
+  expect(source).toContain('["daily", "weekly", "monthly"]');
   expect(source).toContain('action: "updateCostPolicy"');
   expect(source).toContain("expectedVersion: policy.version");
   expect(source).toContain("daily: toEmployeeCostLimit(draft.daily)");
@@ -103,4 +127,13 @@ test("employee ranking and detail controls use unified cost policies", async () 
   expect(source).toContain('draft.enforcementMode === "restrict_high_cost"');
   expect(source).not.toContain('policy?.version === 0 ? "restrict_high_cost"');
   expect(source).not.toContain("AnalyticsEmployeeTokenBarChart");
+});
+
+test("employee monthly graph loads unified month-to-date cost", async () => {
+  const pageSource = await readFile(employeePageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("getAllEmployeeUsage({");
+  expect(pageSource).toContain('metric: "cost"');
+  expect(pageSource).toContain("monthlyUsage: monthlyEmployeeUsage.ok");
+  expect(pageSource).toContain("Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1)");
 });
