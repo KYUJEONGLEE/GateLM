@@ -334,7 +334,6 @@ export function DashboardOverviewView({
   const liveRequests = snapshot?.liveRequests ?? initialLiveRequests;
   const text = dashboardText[locale];
   const monthToDate = monthToDateOverview ?? overview;
-  const queryBudgetWarning = dashboardQueryBudgetWarning(overview.queryBudget, locale);
   const kpiCards = [
     {
       detail: `${rangeLabel(filters.range, locale)} · ${text.kpi.totalCostDetail}`,
@@ -485,15 +484,6 @@ export function DashboardOverviewView({
             value: range
           }))}
         />
-        {queryBudgetWarning ? (
-          <div
-            className="dashboard-source-warning"
-            data-status={overview.queryBudget?.status ?? "ok"}
-            role="status"
-          >
-            {queryBudgetWarning}
-          </div>
-        ) : null}
       </section>
 
       <section className="dashboard-overview-workspace" aria-label={text.overviewWorkspace}>
@@ -560,37 +550,6 @@ export function DashboardOverviewView({
 
 function formatTtftLatency(value: number | null) {
   return formatResponseTimeSeconds(value);
-}
-
-function dashboardQueryBudgetWarning(
-  queryBudget: DashboardOverview["queryBudget"],
-  locale: Locale
-) {
-  if (!queryBudget || queryBudget.status === "ok") {
-    return null;
-  }
-
-  const guidance = queryBudget.guidance?.trim();
-  if (guidance) {
-    return guidance;
-  }
-
-  const fallback = {
-    en: {
-      partial: "Some aggregate data is unavailable.",
-      stale: "Aggregate data is delayed.",
-      too_broad: "The selected range exceeds the current query budget.",
-      unavailable: "Aggregate data is unavailable."
-    },
-    ko: {
-      partial: "일부 집계 데이터를 사용할 수 없습니다.",
-      stale: "집계 데이터 반영이 지연되고 있습니다.",
-      too_broad: "선택한 범위가 현재 조회 한도를 초과했습니다.",
-      unavailable: "집계 데이터를 사용할 수 없습니다."
-    }
-  } as const;
-
-  return fallback[locale][queryBudget.status];
 }
 
 function rangeLabel(range: DashboardRange, locale: Locale) {
