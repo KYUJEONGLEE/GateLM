@@ -168,12 +168,12 @@ BEGIN
         delta_output := NEW.confirmed_output_tokens;
         delta_unconfirmed := NEW.unconfirmed_tokens;
     ELSE
+        IF NEW.employee_id IS NULL THEN
+            RETURN NEW;
+        END IF;
         IF OLD.employee_id IS DISTINCT FROM NEW.employee_id
            OR OLD.employee_weekly_period_start IS DISTINCT FROM NEW.employee_weekly_period_start THEN
             RAISE EXCEPTION 'tenant chat employee weekly reservation identity is immutable';
-        END IF;
-        IF NEW.employee_id IS NULL THEN
-            RETURN NEW;
         END IF;
         delta_reserved := NEW.reserved_tokens - OLD.reserved_tokens;
         delta_input := NEW.confirmed_input_tokens - OLD.confirmed_input_tokens;
