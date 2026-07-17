@@ -783,6 +783,7 @@ export function ChatAppRoutingSetup({
                     );
                     setFeedback(null);
                   }}
+                  showAllActionOptions
                   text={tenantChatPolicyText[locale]}
                 />
               )}
