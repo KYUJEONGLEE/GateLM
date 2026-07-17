@@ -6,17 +6,20 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import { RagJobRepository } from './rag-job.repository';
 
-const databaseUrl = process.env.DATABASE_URL ?? 'postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public';
+const databaseUrl = process.env.GATELM_TEST_DATABASE_URL;
+const describeIntegration = databaseUrl ? describe : describe.skip;
 
-describe('RagJobRepository PostgreSQL claim integration', () => {
-  const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-  const repository = new RagJobRepository(prisma as PrismaService);
+describeIntegration('RagJobRepository PostgreSQL claim integration', () => {
+  let prisma: PrismaClient;
+  let repository: RagJobRepository;
   const ids = {
     tenant: randomUUID(), user: randomUUID(), knowledgeBase: randomUUID(), document: randomUUID(), job: randomUUID(),
   };
   let recovered: Awaited<ReturnType<RagJobRepository['claimNext']>>;
 
   beforeAll(async () => {
+    prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    repository = new RagJobRepository(prisma as PrismaService);
     await prisma.tenant.create({ data: { id: ids.tenant, name: 'RAG worker integration tenant' } });
     await prisma.user.create({ data: { id: ids.user, email: `rag-worker-${ids.user}@example.invalid` } });
     await prisma.tenantChatContentKey.create({

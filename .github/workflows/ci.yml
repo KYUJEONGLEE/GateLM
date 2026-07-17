@@ -330,6 +330,8 @@ jobs:
             --schema prisma/schema.prisma
           pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
             prisma/rag-foundation.integration.spec.ts
+          pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
+            src/rag-worker/rag-job.repository.integration.spec.ts
           pnpm --filter @gatelm/chat-api test -- --runInBand \
             src/rag/rag-tenant-isolation.integration.spec.ts
 
