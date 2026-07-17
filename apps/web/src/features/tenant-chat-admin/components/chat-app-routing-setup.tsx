@@ -384,7 +384,7 @@ export function ChatAppRoutingSetup({
   useEffect(() => {
     const nextQuota = setup?.activeSnapshot?.quota ?? defaultQuotaPolicy();
     setQuotaLimitInput(formatMonthlyTokenLimitInput(nextQuota.defaultMonthlyTokenLimit));
-  }, [setup?.activeSnapshot?.version]);
+  }, [setup?.activeSnapshot?.quota, setup?.activeSnapshot?.version]);
 
   useEffect(() => {
     function syncSectionFromHistory() {
