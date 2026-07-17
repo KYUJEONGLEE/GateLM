@@ -130,13 +130,22 @@ export class ConversationService {
     return this.guard(async () => this.store.getConversation(await this.actor(accessToken), conversationId));
   }
 
-  rename(accessToken: string, conversationId: string, title: string, expectedVersion: number) {
-    return this.guard(async () => this.store.renameConversation(
-      await this.actor(accessToken),
-      conversationId,
-      title,
-      expectedVersion,
-    ));
+  update(
+    accessToken: string,
+    conversationId: string,
+    input: Readonly<{ expectedVersion: number; title?: string; knowledgeMode?: 'off' | 'tenant' }>,
+  ) {
+    return this.guard(async () => {
+      if (input.title === undefined && input.knowledgeMode === undefined) {
+        throw new HttpException({
+          code: 'CHAT_INVALID_REQUEST',
+          message: 'At least one conversation field must be provided.',
+        }, HttpStatus.BAD_REQUEST);
+      }
+      const authorized = await this.sessions.authorizeExecution(accessToken);
+      if (input.knowledgeMode === 'tenant') await this.retrieval.assertTenantEnabled(authorized.tenantId);
+      return this.store.updateConversation(actorOf(authorized), conversationId, input);
+    });
   }
 
   history(accessToken: string, conversationId: string, cursor: string | undefined, limit: number) {

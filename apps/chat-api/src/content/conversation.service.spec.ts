@@ -727,6 +727,66 @@ describe('ConversationService turn fan-out', () => {
   });
 });
 
+describe('ConversationService knowledge mode updates', () => {
+  it('verifies the tenant RAG feature before persisting a tenant-mode update', async () => {
+    const registry = new ActiveTurnRegistry();
+    const updated = Object.freeze({ id: 'conversation', knowledgeMode: 'tenant' as const });
+    const store = { updateConversation: jest.fn().mockResolvedValue(updated) };
+    const retrieval = { assertTenantEnabled: jest.fn().mockResolvedValue(undefined) };
+    const service = serviceWith({
+      store,
+      bridge: {},
+      registry,
+      retrieval,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.update('access', 'conversation', {
+      expectedVersion: 3,
+      knowledgeMode: 'tenant',
+    })).resolves.toBe(updated);
+
+    expect(retrieval.assertTenantEnabled).toHaveBeenCalledWith(authorized().tenantId);
+    expect(store.updateConversation).toHaveBeenCalledWith(
+      { tenantId: authorized().tenantId, userId: authorized().userId },
+      'conversation',
+      { expectedVersion: 3, knowledgeMode: 'tenant' },
+    );
+  });
+
+  it('does not consult RAG availability when returning an owned conversation to normal mode', async () => {
+    const registry = new ActiveTurnRegistry();
+    const store = { updateConversation: jest.fn().mockResolvedValue({ id: 'conversation', knowledgeMode: 'off' }) };
+    const retrieval = { assertTenantEnabled: jest.fn() };
+    const service = serviceWith({
+      store,
+      bridge: {},
+      registry,
+      retrieval,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await service.update('access', 'conversation', { expectedVersion: 3, knowledgeMode: 'off' });
+
+    expect(retrieval.assertTenantEnabled).not.toHaveBeenCalled();
+  });
+
+  it('rejects an update with no mutable conversation fields', async () => {
+    const registry = new ActiveTurnRegistry();
+    const store = { updateConversation: jest.fn() };
+    const service = serviceWith({
+      store,
+      bridge: {},
+      registry,
+      sessions: { authorizeExecution: jest.fn() },
+    });
+
+    await expect(service.update('access', 'conversation', { expectedVersion: 3 }))
+      .rejects.toMatchObject({ status: 400 });
+    expect(store.updateConversation).not.toHaveBeenCalled();
+  });
+});
+
 function serviceWith(input: {
   store: object;
   bridge: object;

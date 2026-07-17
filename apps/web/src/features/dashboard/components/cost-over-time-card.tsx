@@ -45,7 +45,7 @@ type CostOverTimeStatus = "loading" | "success" | "error";
 const costOverTimeText = {
   en: {
     aria: "Cost over time",
-    average: "Average",
+    average: "Average interval cost",
     chartAria: "Cost over time chart",
     denseAria: "Dense cost range overview chart",
     denseRange: "Dense range",
@@ -55,11 +55,11 @@ const costOverTimeText = {
     rangeAria: "Cost trend time range",
     spend: "Spend (USD)",
     title: "Cost Trend",
-    total: "Total cost"
+    total: "Total spend"
   },
   ko: {
     aria: "비용 추이",
-    average: "평균",
+    average: "평균 구간 비용",
     chartAria: "비용 추이 차트",
     denseAria: "밀집 비용 구간 미리보기 차트",
     denseRange: "밀집 구간",
@@ -69,7 +69,7 @@ const costOverTimeText = {
     rangeAria: "비용 추이 시간 범위",
     spend: "사용 비용(USD)",
     title: "비용 추이",
-    total: "총비용"
+    total: "총 사용 비용"
   }
 } as const;
 
@@ -279,33 +279,43 @@ export function CostOverTimeCard({
   return (
     <section className="dashboard-cost-over-time-panel" aria-label={text.aria}>
       <div className="dashboard-cost-over-time-header">
-        <div>
+        <div className="dashboard-cost-over-time-title">
           <h2>{text.title}</h2>
           <p>{bucketContext}</p>
+          <div className="dashboard-cost-over-time-metrics" aria-label={text.title}>
+            <div data-kind="total">
+              <span>{text.total}</span>
+              <strong>{formatUsd(totalSpendUsd)}</strong>
+            </div>
+            <div data-kind="average">
+              <span>{text.average}</span>
+              <strong>{formatUsd(renderedSummary?.averageSpendUsd ?? 0)}</strong>
+            </div>
+          </div>
         </div>
-        {rangeOptions.length > 0 ? (
-          <nav aria-label={text.rangeAria} className="dashboard-cost-range-tabs">
-            {rangeOptions.map((option) => (
-              <Link
-                aria-current={option.active ? "page" : undefined}
-                data-active={option.active}
-                href={option.href}
-                key={option.label}
-              >
-                {option.label}
-              </Link>
-            ))}
-          </nav>
-        ) : null}
-      </div>
-      <div className="dashboard-cost-over-time-metrics">
-        <div>
-          <span>{text.total}</span>
-          <strong>{formatUsd(totalSpendUsd)}</strong>
-        </div>
-        <div>
-          <span>{text.average}</span>
-          <strong>{formatUsd(renderedSummary?.averageSpendUsd ?? 0)}</strong>
+        <div className="dashboard-cost-over-time-header-side">
+          {rangeOptions.length > 0 ? (
+            <nav aria-label={text.rangeAria} className="dashboard-cost-range-tabs">
+              {rangeOptions.map((option) => (
+                <Link
+                  aria-current={option.active ? "page" : undefined}
+                  data-active={option.active}
+                  href={option.href}
+                  key={option.label}
+                >
+                  {option.label}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+          {hasCostData && renderedSummary ? (
+            <div className="dashboard-cost-over-time-legend">
+              <span data-kind="spend">{text.spend}</span>
+              <span data-kind="average">
+                {text.average}: {formatUsd(renderedSummary.averageSpendUsd)}
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
       {displayedStatus === "loading" && !displayedSummary ? (
@@ -319,12 +329,6 @@ export function CostOverTimeCard({
             averageSpendUsd={renderedSummary.averageSpendUsd}
             points={renderedSummary.points}
           />
-          <div className="dashboard-cost-over-time-legend">
-            <span data-kind="spend">{text.spend}</span>
-            <span data-kind="average">
-              {text.average}: {formatUsd(renderedSummary.averageSpendUsd)}
-            </span>
-          </div>
           <div className="dashboard-cost-density-panel">
             <div className="dashboard-cost-density-header">
               <strong>{text.denseRange}</strong>

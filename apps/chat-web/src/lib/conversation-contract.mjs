@@ -70,10 +70,14 @@ export function createConversationBody(value) {
   return Object.freeze({ idempotencyKey: body.idempotencyKey, title, knowledgeMode });
 }
 
-export function renameConversationBody(value) {
-  const body = record(value, ['expectedVersion', 'title']);
+export function updateConversationBody(value) {
+  const body = record(value, ['expectedVersion'], ['title', 'knowledgeMode']);
   if (!Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 1) invalid();
-  return Object.freeze({ expectedVersion: body.expectedVersion, title: titleValue(body.title) });
+  if (body.title === undefined && body.knowledgeMode === undefined) invalid();
+  const title = body.title === undefined ? {} : { title: titleValue(body.title) };
+  if (body.knowledgeMode !== undefined && !['off', 'tenant'].includes(body.knowledgeMode)) invalid();
+  const knowledgeMode = body.knowledgeMode === undefined ? {} : { knowledgeMode: body.knowledgeMode };
+  return Object.freeze({ expectedVersion: body.expectedVersion, ...title, ...knowledgeMode });
 }
 
 export function createTurnBody(value) {
