@@ -634,9 +634,7 @@ func terminalUsageEventPayload(
 		},
 		"attempts": settlementAttemptsPayload(attempts), "terminalOutcome": terminalOutcome,
 	}
-	if requestContext.TTFTMs != nil && *requestContext.TTFTMs >= 0 {
-		payload["ttftMs"] = *requestContext.TTFTMs
-	}
+	appendTTFT(payload, requestContext)
 	return json.Marshal(payload)
 }
 

@@ -78,6 +78,8 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 		t.Fatalf("replay reservation: result=%+v err=%v", replayed, err)
 	}
 
+	ttftMs := int64(84)
+	completionContext.TTFTMs = &ttftMs
 	settlement, err := store.FinalizeConfirmed(
 		context.Background(), completionContext, reservation.ReservationID, 1,
 		tenantchat.ConfirmedUsage{InputTokens: 150, OutputTokens: 50}, "succeeded",
@@ -122,6 +124,23 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 			"settlement records mismatch: reservedTokens=%d confirmedTokens=%d reservedCost=%d confirmedCost=%d state=%s ledger=%d",
 			remainingReservedTokens, confirmedTokens, remainingReservedCost, confirmedCost, reservationState, settlementLedgerCount,
 		)
+	}
+	var settlementPayload []byte
+	if err := pool.QueryRow(context.Background(), `
+		SELECT payload
+		FROM tenant_chat_invocation_outbox
+		WHERE aggregate_id = $1 AND event_type = 'usage_settled'
+		ORDER BY event_version DESC
+		LIMIT 1
+	`, completionContext.RequestID).Scan(&settlementPayload); err != nil {
+		t.Fatalf("read settlement outbox event: %v", err)
+	}
+	var settlementEvent map[string]any
+	if err := json.Unmarshal(settlementPayload, &settlementEvent); err != nil {
+		t.Fatalf("decode settlement outbox event: %v", err)
+	}
+	if settlementEvent["eventType"] != "usage_settled" || settlementEvent["ttftMs"] != float64(ttftMs) {
+		t.Fatalf("settlement outbox must preserve TTFT: event=%v", settlementEvent)
 	}
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
 }
