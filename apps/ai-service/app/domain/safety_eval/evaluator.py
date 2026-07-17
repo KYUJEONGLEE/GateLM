@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from app.schemas.safety_eval import ActualResult, CorpusCase, DETECTOR_TYPES, GatewayEffects

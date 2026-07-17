@@ -156,10 +156,10 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 		domainOutcomes = log.DomainOutcomes
 	}
 	metadataJSON, err := json.Marshal(map[string]any{
-		"schemaVersion":         1,
-		"budgetScope":           budget.ToMetadata(resolvedBudgetScope, applicationID),
-		"terminalStatus":        invocationlog.StatusBlocked,
-		"domainOutcomes":        domainOutcomes,
+		"schemaVersion":        1,
+		"budgetScope":          budget.ToMetadata(resolvedBudgetScope, applicationID),
+		"terminalStatus":       invocationlog.StatusBlocked,
+		"domainOutcomes":       domainOutcomes,
 		"gatewayStageOutcomes": invocationlog.BuildAuthFailureGatewayStageOutcomes(log),
 	})
 	if err != nil {
