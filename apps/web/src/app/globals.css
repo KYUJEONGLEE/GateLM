@@ -19535,6 +19535,16 @@ html:has(.tenant-management-content) {
   scale: 0.97;
 }
 
+.tenant-routing-criteria-description {
+  margin: 0;
+  padding: 13px 16px;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--foreground);
+  font-size: var(--font-size-xs);
+  line-height: 1.55;
+}
+
 .tenant-routing-criteria-section {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);

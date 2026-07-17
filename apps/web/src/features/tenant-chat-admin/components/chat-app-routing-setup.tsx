@@ -540,11 +540,11 @@ export function ChatAppRoutingSetup({
                     <RoutingCriteriaPopover
                       ariaLabel={text.routingCriteria}
                       criteria={routingDifficultyCriteria[locale]}
+                      description={text.routingDescription}
                       locale={locale}
                       note={text.criteriaNote}
                     />
                   </div>
-                  <p>{text.routingDescription}</p>
                 </div>
                 <div className="tenant-routing-heading-mode">
                   <div className="tenant-routing-switch-control">
@@ -719,9 +719,10 @@ function RoutingCellEditor({ ariaLabel, columnLabel, locale, onChange, providers
   );
 }
 
-function RoutingCriteriaPopover({ ariaLabel, criteria, locale, note }: {
+function RoutingCriteriaPopover({ ariaLabel, criteria, description, locale, note }: {
   ariaLabel: string;
   criteria: DifficultyCriteria[Locale];
+  description?: string;
   locale: Locale;
   note?: string;
 }) {
@@ -733,6 +734,7 @@ function RoutingCriteriaPopover({ ariaLabel, criteria, locale, note }: {
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Positioner align="start" className="tenant-routing-popover-positioner" side="bottom" sideOffset={8}>
           <PopoverPrimitive.Popup className="tenant-routing-criteria-popover">
+            {description ? <p className="tenant-routing-criteria-description">{description}</p> : null}
             <section className="tenant-routing-criteria-section" data-difficulty="simple">
               <strong>{difficulties[0][locale]}</strong>
               <p>{criteria.simple}</p>

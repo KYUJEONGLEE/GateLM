@@ -109,7 +109,7 @@ const copy: Record<Locale, Record<string, string>> = {
     rotateTitle: "Reissue API Key?",
     scopes: "Scopes",
     status: "Status",
-    title: "API Management"
+    title: "API Key Management"
   },
   ko: {
     actions: "작업",
@@ -146,7 +146,7 @@ const copy: Record<Locale, Record<string, string>> = {
     rotateTitle: "API Key를 재발급할까요?",
     scopes: "권한 범위",
     status: "상태",
-    title: "API 관리"
+    title: "API Key 관리"
   }
 };
 

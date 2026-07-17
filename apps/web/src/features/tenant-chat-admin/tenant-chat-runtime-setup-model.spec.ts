@@ -377,7 +377,9 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(styles).toMatch(/\.tenant-routing-fallback-heading p \{[^}]*font-size: 18px;/);
   expect(styles).toMatch(/\.tenant-routing-fallback-title-row \.tenant-routing-fallback-kicker \{[^}]*font-size: 16px;/);
   expect(styles).toMatch(/\.tenant-management-content #tenant-routing-model-title \{[^}]*font-size: 30px;/);
-  expect(styles).toMatch(/\.tenant-routing-model-heading-copy > p \{[^}]*margin-top: 20px;/);
+  expect(source).toContain("description={text.routingDescription}");
+  expect(source).not.toContain("<p>{text.routingDescription}</p>");
+  expect(styles).toMatch(/\.tenant-routing-criteria-description \{[^}]*padding: 13px 16px;[^}]*border-bottom: 1px solid var\(--border-subtle\);/);
   expect(styles).toMatch(/\.tenant-routing-title-with-help \{[^}]*grid-template-columns: auto 16px;[^}]*gap: 5px;/);
   expect(styles).toMatch(/\.tenant-routing-info-button \{[^}]*width: 16px;[^}]*height: 16px;/);
   expect(styles).toMatch(/\.tenant-routing-info-button svg \{[^}]*width: 13px;[^}]*height: 13px;/);
