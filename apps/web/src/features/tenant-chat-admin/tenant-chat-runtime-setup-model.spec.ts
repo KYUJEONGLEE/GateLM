@@ -388,9 +388,9 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(styles).toMatch(/\.tenant-routing-category \.tenant-routing-info-button svg \{[^}]*width: 15px;[^}]*height: 15px;/);
   expect(source.match(/className="tenant-routing-actions"/g)).toHaveLength(2);
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-actions \{[^}]*gap: 12px;/);
-  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-actions button \{[^}]*min-width: 132px;[^}]*min-height: 44px;[^}]*padding-inline: 20px;[^}]*font-size: 16px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-actions button \{[^}]*min-width: 132px;[^}]*min-height: var\(--primary-action-height\);[^}]*padding-inline: var\(--primary-action-padding-inline\);/);
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-save-button \{[^}]*gap: 8px;/);
-  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-save-button svg \{[^}]*width: 18px;[^}]*height: 18px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-save-button svg \{[^}]*width: 16px;[^}]*height: 16px;/);
   expect(source).not.toContain('tenant-routing-enable-card');
   expect(styles).not.toContain('.tenant-routing-enable-card');
 });

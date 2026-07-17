@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 
 const managementPageSourceUrl = new URL("./management-page.tsx", import.meta.url);
 const stylesSourceUrl = new URL("../../app/globals.css", import.meta.url);
+const buttonSourceUrl = new URL("../ui/button.tsx", import.meta.url);
 const managementScreenSourceUrls = [
   new URL(
     "../../features/tenant-chat-admin/components/chat-app-routing-setup.tsx",
@@ -46,13 +47,63 @@ test("primary management screens share one responsive full-width page component"
   );
 });
 
-test("API management uses the enlarged primary action scale", async () => {
+test("API management uses the shared primary action scale", async () => {
   const styles = await readFile(stylesSourceUrl, "utf8");
 
   expect(styles).toMatch(
-    /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger \{[\s\S]*?min-width: 132px;[\s\S]*?min-height: 44px;[\s\S]*?padding-inline: 20px;[\s\S]*?font-size: 16px;/
+    /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger \{[\s\S]*?min-width: 0;[\s\S]*?min-height: var\(--primary-action-height\);[\s\S]*?padding-inline: var\(--primary-action-padding-inline\);/
   );
   expect(styles).toMatch(
-    /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger svg \{\s*width: 18px;\s*height: 18px;/
+    /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger svg \{\s*width: 16px;\s*height: 16px;/
   );
+});
+
+test("primary actions share one visual token contract", async () => {
+  const [styles, buttonSource] = await Promise.all([
+    readFile(stylesSourceUrl, "utf8"),
+    readFile(buttonSourceUrl, "utf8")
+  ]);
+
+  expect(styles).toContain("--primary-action-height: 46px;");
+  expect(styles).toContain("--primary-action-padding-inline: 24px;");
+  expect(styles).toContain("--primary-action-radius: 999px;");
+  expect(styles).toContain("--primary-action-icon-size: 30px;");
+  expect(styles).toContain("--primary-action-background: #17b787;");
+  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(23, 183, 135, 0.3);");
+  expect(styles).toMatch(
+    /\.primary-button,\s*\.secondary-button \{[\s\S]*?height: var\(--primary-action-height\);[\s\S]*?padding: 0 var\(--primary-action-padding-inline\);[\s\S]*?font-size: var\(--primary-action-font-size\);/
+  );
+  expect(buttonSource).toContain("h-[var(--primary-action-height)]");
+  expect(buttonSource).toContain("px-[var(--primary-action-padding-inline)]");
+  expect(buttonSource).toContain("text-[length:var(--primary-action-font-size)]");
+  expect(styles).toContain('[data-slot="button"][data-variant="default"][data-size="default"]');
+  expect(styles).toContain('[data-slot="button"][data-variant="default"][data-size="sm"]');
+  expect(buttonSource).toContain('data-variant={variant}');
+  expect(buttonSource).toContain('data-size={size}');
+});
+
+test("sorting and selection utilities share the compact action contract", async () => {
+  const [styles, projectSource, employeeSource] = await Promise.all([
+    readFile(stylesSourceUrl, "utf8"),
+    readFile(
+      new URL("../../features/projects/components/project-management.tsx", import.meta.url),
+      "utf8"
+    ),
+    readFile(
+      new URL(
+        "../../features/employees/components/employee-control-management.tsx",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  ]);
+
+  expect(styles).toContain("--compact-action-height: 34px;");
+  expect(styles).toContain("--compact-action-radius: 8px;");
+  expect(styles).toContain("--compact-action-font-size: 14px;");
+  expect(styles).toMatch(
+    /\.compact-action-button \{[\s\S]*?height: var\(--compact-action-height\);[\s\S]*?border-radius: var\(--compact-action-radius\);[\s\S]*?font-size: var\(--compact-action-font-size\);/
+  );
+  expect(projectSource).toContain('className="compact-action-button project-sort-button"');
+  expect(employeeSource.match(/className="compact-action-button"/g)).toHaveLength(3);
 });
