@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
+import { orderOnboardingProviderRows } from "../../features/onboarding/components/onboarding-provider-order";
 
 const managementPageSourceUrl = new URL("./management-page.tsx", import.meta.url);
 const stylesSourceUrl = new URL("../../app/globals.css", import.meta.url);
@@ -106,4 +107,32 @@ test("sorting and selection utilities share the compact action contract", async 
   );
   expect(projectSource).toContain('className="compact-action-button project-sort-button"');
   expect(employeeSource.match(/className="compact-action-button"/g)).toHaveLength(3);
+});
+
+test("project onboarding orders Provider choices by registration state before scrolling", async () => {
+  const styles = await readFile(stylesSourceUrl, "utf8");
+  const orderedRows = orderOnboardingProviderRows(
+    [
+      { family: "openai", id: "preset-openai" },
+      { family: "gemini", id: "preset-gemini" },
+      { family: "claude", id: "preset-claude" }
+    ],
+    [
+      { family: "openai", id: "registered-openai" },
+      { family: "anthropic", id: "registered-anthropic" },
+      { family: "custom", id: "registered-custom" }
+    ]
+  );
+
+  expect(orderedRows.map((row) => row.id)).toEqual([
+    "preset-gemini",
+    "registered-openai",
+    "registered-anthropic",
+    "registered-custom",
+    "preset-openai",
+    "preset-claude"
+  ]);
+  expect(styles).toMatch(
+    /\.onboarding-provider-list \{[\s\S]*?max-height: 488px;[\s\S]*?overflow-y: auto;[\s\S]*?scrollbar-gutter: stable;/
+  );
 });

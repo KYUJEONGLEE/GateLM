@@ -3,6 +3,7 @@
 import { Check, KeyRound, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { orderOnboardingProviderRows } from "@/features/onboarding/components/onboarding-provider-order";
 import {
   getProviderConnectionFamily,
   getProviderFamilyFromKey,
@@ -176,11 +177,11 @@ export function OnboardingProviderRegistration({
     [model.providerPresets.items]
   );
   const providerRows = useMemo(
-    () => [...presetProviderRows, ...registeredProviderRows],
+    () => orderOnboardingProviderRows(presetProviderRows, registeredProviderRows),
     [registeredProviderRows, presetProviderRows]
   );
   const [selectedProviderKey, setSelectedProviderKey] = useState(
-    () => presetProviderRows[0]?.providerKey ?? registeredProviderRows[0]?.providerKey ?? ""
+    () => providerRows[0]?.providerKey ?? ""
   );
   const selectedRow =
     providerRows.find((row) => row.providerKey === selectedProviderKey) ?? providerRows[0] ?? null;
