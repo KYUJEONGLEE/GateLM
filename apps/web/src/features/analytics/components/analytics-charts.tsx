@@ -41,6 +41,8 @@ export function AnalyticsRankedBarChart({
   className = "analytics-v3-ranked-chart",
   kind = "count",
   maxRows = 5,
+  orientation = "horizontal",
+  outlierMultiplier,
   presentation = false,
   rows
 }: {
@@ -48,56 +50,106 @@ export function AnalyticsRankedBarChart({
   className?: string;
   kind?: AnalyticsValueKind;
   maxRows?: number;
+  orientation?: "horizontal" | "vertical";
+  outlierMultiplier?: number;
   presentation?: boolean;
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
-  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, maxRows), [maxRows, rows]);
+  const isVertical = orientation === "vertical";
+  const activeRows = useMemo(() => rows.filter((row) => row.value > 0), [rows]);
+  const visibleRows = useMemo(() => activeRows.slice(0, maxRows), [activeRows, maxRows]);
+  const outlierThreshold = useMemo(
+    () =>
+      outlierMultiplier && activeRows.length > 0
+        ? (activeRows.reduce((sum, row) => sum + row.value, 0) / activeRows.length) *
+          outlierMultiplier
+        : null,
+    [activeRows, outlierMultiplier]
+  );
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 360,
-      grid: {
-        bottom: presentation ? 28 : 24,
-        left: presentation ? 178 : 132,
-        right: presentation ? 102 : 82,
-        top: 12
-      },
+      grid: isVertical
+        ? { bottom: presentation ? 92 : 74, left: 76, right: 24, top: 48 }
+        : {
+            bottom: presentation ? 28 : 24,
+            left: presentation ? 178 : 132,
+            right: presentation ? 102 : 82,
+            top: 12
+          },
       tooltip: analyticsTooltip(tooltipUnit(kind), theme),
-      xAxis: {
-        axisLabel: {
-          color: theme.axis,
-          fontSize: presentation ? 17 : 13,
-          fontWeight: 700,
-          formatter: (value: number) => formatValue(value, kind, true)
-        },
-        axisLine: { lineStyle: { color: theme.border } },
-        axisTick: { show: false },
-        minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
-        splitLine: { lineStyle: { color: theme.grid } },
-        type: "value"
-      },
-      yAxis: {
-        axisLabel: {
-          color: theme.label,
-          fontSize: presentation ? 19 : 14,
-          fontWeight: 800,
-          margin: 13,
-          overflow: "truncate",
-          width: presentation ? 154 : 112
-        },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        data: visibleRows.map((row) => row.label),
-        inverse: true,
-        type: "category"
-      },
+      xAxis: isVertical
+        ? {
+            axisLabel: {
+              color: theme.label,
+              fontSize: presentation ? 17 : 14,
+              fontWeight: 800,
+              formatter: (value: string) =>
+                value.length > 9 ? `${value.slice(0, 9)}…` : value,
+              interval: 0,
+              overflow: "truncate",
+              width: 96
+            },
+            axisLine: { lineStyle: { color: theme.border } },
+            axisTick: { show: false },
+            data: visibleRows.map((row) => row.label),
+            type: "category"
+          }
+        : {
+            axisLabel: {
+              color: theme.axis,
+              fontSize: presentation ? 17 : 13,
+              fontWeight: 700,
+              formatter: (value: number) => formatValue(value, kind, true)
+            },
+            axisLine: { lineStyle: { color: theme.border } },
+            axisTick: { show: false },
+            minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
+            splitLine: { lineStyle: { color: theme.grid } },
+            type: "value"
+          },
+      yAxis: isVertical
+        ? {
+            axisLabel: {
+              color: theme.axis,
+              fontSize: presentation ? 17 : 13,
+              fontWeight: 700,
+              formatter: (value: number) => formatValue(value, kind, true)
+            },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
+            splitLine: { lineStyle: { color: theme.grid } },
+            type: "value"
+          }
+        : {
+            axisLabel: {
+              color: theme.label,
+              fontSize: presentation ? 19 : 14,
+              fontWeight: 800,
+              margin: 13,
+              overflow: "truncate",
+              width: presentation ? 154 : 112
+            },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            data: visibleRows.map((row) => row.label),
+            inverse: true,
+            type: "category"
+          },
       series: [
         {
-          barMaxWidth: presentation ? 26 : 18,
+          barMaxWidth: isVertical ? (presentation ? 62 : 54) : presentation ? 26 : 18,
           data: visibleRows.map((row, index) => ({
             itemStyle: {
-              borderRadius: [0, 3, 3, 0],
-              color: outcomeColors[row.id] ?? palette[index] ?? palette[0]
+              borderRadius: isVertical ? [5, 5, 0, 0] : [0, 3, 3, 0],
+              color:
+                outlierThreshold === null
+                  ? (outcomeColors[row.id] ?? palette[index] ?? palette[0])
+                  : row.value >= outlierThreshold
+                    ? palette[3]
+                    : palette[0]
             },
             value: row.value
           })),
@@ -106,14 +158,14 @@ export function AnalyticsRankedBarChart({
             fontSize: presentation ? 20 : 14,
             fontWeight: 900,
             formatter: ({ value }: { value: number }) => formatValue(value, kind, false),
-            position: "right",
+            position: isVertical ? "top" : "right",
             show: true
           },
           type: "bar"
         }
       ]
     }),
-    [kind, presentation, theme, visibleRows]
+    [isVertical, kind, outlierThreshold, presentation, theme, visibleRows]
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;

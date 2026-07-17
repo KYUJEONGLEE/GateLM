@@ -160,11 +160,11 @@ test("Chat App routing selects Provider first and limits models to that Provider
   expect(source).toContain("{model.modelKey}");
   expect(source).toContain("const showProviderIcon = Boolean(selectedProvider || value);");
   expect(source).toContain("{showProviderIcon ? (");
-  expect(styles).toMatch(/\.tenant-routing-provider-control,\r?\n\.tenant-routing-model-control \{[\s\S]*?min-height: 70px;/);
-  expect(styles).toMatch(/\.tenant-routing-provider-control select,\r?\n\.tenant-routing-model-control select \{[\s\S]*?min-height: 68px;[\s\S]*?font-size: 21px;/);
-  expect(styles).toMatch(/\.tenant-routing-table-head \{[\s\S]*?font-size: 21px;/);
-  expect(styles).toMatch(/\.tenant-routing-category \{[\s\S]*?font-size: 21px;/);
-  expect(styles).toMatch(/\.tenant-routing-route::before \{[\s\S]*?font-size: 21px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control \{[\s\S]*?min-height: 52px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control select,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control select \{[\s\S]*?min-height: 50px;[\s\S]*?font-size: 15px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-table-head \{[\s\S]*?min-height: 44px;[\s\S]*?font-size: 14px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-category \{[\s\S]*?font-size: 16px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-route::before \{[\s\S]*?font-size: 14px;/);
 });
 
 test("Chat App routing projects one shared fallback into every routing cell", () => {
@@ -366,21 +366,21 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(source).toMatch(/<h3 id="tenant-routing-fallback-title">\{text\.fallbackTitle\}<\/h3>\r?\n\s+<span className="tenant-routing-fallback-kicker">/);
   expect(source).toContain('routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription');
   expect(styles).toContain('@keyframes tenant-routing-mode-enter');
-  expect(styles).toMatch(/\.tenant-routing-switch-control \{[^}]*gap: 15px;[^}]*min-width: 222px;[^}]*font-size: 21px;/);
-  expect(styles).toMatch(/\.tenant-routing-mode-label \{[^}]*min-width: 48px;/);
-  expect(styles).toMatch(/\.tenant-routing-switch\[data-slot="switch"\] \{[^}]*width: 72px;[^}]*height: 42px;/);
-  expect(styles).toMatch(/\.tenant-routing-switch \[data-slot="switch-thumb"\] \{[^}]*top: 3px;[^}]*left: 3px;[^}]*width: 33px;[^}]*height: 33px;/);
-  expect(styles).toMatch(/\.tenant-routing-switch:is\(\[data-checked\], \[aria-checked="true"\]\)[\s\S]*?left: 33px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-switch-control \{[^}]*gap: 9px;[^}]*min-width: 164px;[^}]*font-size: 14px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-mode-label \{[^}]*min-width: 34px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-switch\[data-slot="switch"\] \{[^}]*width: 52px;[^}]*height: 30px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-switch \[data-slot="switch-thumb"\] \{[^}]*top: 3px;[^}]*left: 3px;[^}]*width: 24px;[^}]*height: 24px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content[\s\S]*?\.tenant-routing-switch:is\(\[data-checked\], \[aria-checked="true"\]\)[\s\S]*?left: 25px;/);
   expect(styles).toContain('.tenant-routing-fixed-panel {');
   expect(styles).toContain('width: min(620px, 100%);');
   expect(styles).toContain('.tenant-routing-fallback-title-row {');
   expect(styles).toContain('.tenant-routing-fallback-title-row .tenant-routing-fallback-kicker {');
   expect(styles).toMatch(/\.tenant-routing-fallback-card \{[^}]*align-items: center;/);
   expect(styles).toMatch(/\.tenant-routing-fallback-heading \{[^}]*align-content: center;[^}]*align-self: center;/);
-  expect(styles).toMatch(/\.tenant-routing-fallback-heading h3 \{[^}]*font-size: 28px;/);
-  expect(styles).toMatch(/\.tenant-routing-fallback-heading p \{[^}]*font-size: 18px;/);
-  expect(styles).toMatch(/\.tenant-routing-fallback-title-row \.tenant-routing-fallback-kicker \{[^}]*font-size: 16px;/);
-  expect(styles).toMatch(/\.tenant-management-content #tenant-routing-model-title \{[^}]*font-size: 30px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-fallback-heading h3 \{[^}]*font-size: 20px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-fallback-heading p \{[^}]*font-size: 14px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content[\s\S]*?\.tenant-routing-fallback-title-row[\s\S]*?\.tenant-routing-fallback-kicker \{[^}]*font-size: 12px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content #tenant-routing-model-title \{[^}]*font-size: 22px;/);
   expect(source).toContain("description={text.routingDescription}");
   expect(source).not.toContain("<p>{text.routingDescription}</p>");
   expect(styles).toMatch(/\.tenant-routing-criteria-description \{[^}]*padding: 13px 16px;[^}]*border-bottom: 1px solid var\(--border-subtle\);/);

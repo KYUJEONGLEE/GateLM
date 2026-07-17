@@ -76,6 +76,8 @@ type SubmitState = {
   status: "error" | "idle" | "success";
 };
 
+type EmployeeCostChartPeriod = "daily" | "monthly" | "weekly";
+
 type CompactUnitStepperProps = {
   ariaLabel: string;
   decimals?: number;
@@ -398,6 +400,55 @@ const employeeUsageText = {
     weeklyTokens: "이번 주 확정 비용"
   }
 } satisfies Record<Locale, Record<string, string>>;
+
+const employeeCostChartText = {
+  en: {
+    daily: {
+      ariaLabel: "Employee cost usage today",
+      button: "Today",
+      empty: "No confirmed employee cost has been recorded today.",
+      subtitle: "Top 10 by confirmed cost today"
+    },
+    monthly: {
+      ariaLabel: "Employee cost usage this month",
+      button: "This month",
+      empty: "No confirmed employee cost has been recorded this month.",
+      subtitle: "Top 10 by confirmed cost this month"
+    },
+    weekly: {
+      ariaLabel: "Employee cost usage this week",
+      button: "This week",
+      empty: "No confirmed employee cost has been recorded this week.",
+      subtitle: "Top 10 by confirmed cost this week"
+    }
+  },
+  ko: {
+    daily: {
+      ariaLabel: "직원별 오늘 사용 비용",
+      button: "오늘",
+      empty: "오늘 확정된 직원 사용 비용이 없습니다.",
+      subtitle: "오늘 확정 비용 상위 10명"
+    },
+    monthly: {
+      ariaLabel: "직원별 이번 달 사용 비용",
+      button: "이번 달",
+      empty: "이번 달에 확정된 직원 사용 비용이 없습니다.",
+      subtitle: "이번 달 확정 비용 상위 10명"
+    },
+    weekly: {
+      ariaLabel: "직원별 이번 주 사용 비용",
+      button: "이번 주",
+      empty: "이번 주에 확정된 직원 사용 비용이 없습니다.",
+      subtitle: "이번 주 확정 비용 상위 10명"
+    }
+  }
+} satisfies Record<
+  Locale,
+  Record<
+    EmployeeCostChartPeriod,
+    { ariaLabel: string; button: string; empty: string; subtitle: string }
+  >
+>;
 
 const projectEmployeeText: Record<
   Locale,
@@ -1480,6 +1531,8 @@ export function EmployeeControlManagement({
     direction: "desc",
     field: "cost"
   });
+  const [employeeCostChartPeriod, setEmployeeCostChartPeriod] =
+    useState<EmployeeCostChartPeriod>("daily");
   const [pageIndex, setPageIndex] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
@@ -1502,14 +1555,35 @@ export function EmployeeControlManagement({
     [usage.rows]
   );
   const employeeCostChartRows = useMemo(
-    () =>
-      usage.rows.slice(0, 10).map((row) => ({
+    () => {
+      const rows = usage.rows.map((row) => ({
         id: row.employeeId,
         label: row.name,
-        value: row.dailyCostMicroUsd ?? 0
-      })),
-    [usage.rows]
+        value:
+          employeeCostChartPeriod === "daily"
+            ? (row.dailyCostMicroUsd ?? 0)
+            : employeeCostChartPeriod === "weekly"
+              ? (row.weeklyCostMicroUsd ?? 0)
+              : (row.monthlyCostMicroUsd ?? 0)
+      }));
+
+      rows.sort(
+        (left, right) => right.value - left.value || left.label.localeCompare(right.label)
+      );
+      return rows;
+    },
+    [employeeCostChartPeriod, usage.rows]
   );
+  const employeeCostChartHasUsage = employeeCostChartRows.some((row) => row.value > 0);
+  const employeeCostChartCopy = employeeCostChartText[locale][employeeCostChartPeriod];
+  const employeeCostChartTotal =
+    employeeCostChartPeriod === "monthly"
+      ? usage.totalMonthlyCostMicroUsd
+      : usage.totalDailyCostMicroUsd;
+  const employeeCostChartTimezone =
+    employeeCostChartPeriod === "monthly"
+      ? usage.monthlyPeriodTimezone
+      : usage.periodTimezone;
   const selectedUsage = selectedEmployeeId
     ? usageByEmployeeId.get(selectedEmployeeId) ?? null
     : null;
@@ -2264,29 +2338,51 @@ export function EmployeeControlManagement({
           <div>
             <h3>{locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}</h3>
             <p>
-              {locale === "ko"
-                ? "오늘 확정 비용 상위 10명"
-                : "Top 10 by confirmed cost today"}
-              {usage.periodTimezone ? ` · ${usage.periodTimezone}` : ""}
+              {employeeCostChartCopy.subtitle}
+              {employeeCostChartTimezone ? ` · ${employeeCostChartTimezone}` : ""}
             </p>
           </div>
-          <span>USD</span>
+          <div className="employee-usage-ranking-actions">
+            <span>USD</span>
+            <span className="employee-cost-outlier-legend">
+              <i aria-hidden="true" />
+              {locale === "ko" ? "평균의 1.5배 이상" : "1.5× above average"}
+            </span>
+            <div
+              aria-label={locale === "ko" ? "비용 그래프 기간" : "Cost chart period"}
+              className="employee-cost-period-switch"
+              role="group"
+            >
+              {(["daily", "weekly", "monthly"] as const).map((period) => (
+                <button
+                  aria-pressed={employeeCostChartPeriod === period}
+                  className="compact-action-button employee-cost-period-button"
+                  data-active={employeeCostChartPeriod === period}
+                  key={period}
+                  onClick={() => setEmployeeCostChartPeriod(period)}
+                  type="button"
+                >
+                  {employeeCostChartText[locale][period].button}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        {usage.totalDailyCostMicroUsd === null ? (
+        {employeeCostChartTotal === null ? (
           <p className="employee-usage-ranking-empty">{usageText.costLoadFailed}</p>
-        ) : usage.totalDailyCostMicroUsd > 0 ? (
+        ) : employeeCostChartHasUsage ? (
           <AnalyticsRankedBarChart
-            ariaLabel={locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}
+            ariaLabel={employeeCostChartCopy.ariaLabel}
             className="employee-cost-ranking-chart"
             kind="micro-usd"
             maxRows={10}
+            orientation="vertical"
+            outlierMultiplier={1.5}
             rows={employeeCostChartRows}
           />
         ) : (
           <p className="employee-usage-ranking-empty">
-            {locale === "ko"
-              ? "오늘 확정된 직원 사용 비용이 없습니다."
-              : "No confirmed employee cost has been recorded today."}
+            {employeeCostChartCopy.empty}
           </p>
         )}
       </section>
@@ -2441,8 +2537,8 @@ export function EmployeeControlManagement({
                           data-rank={
                             employeeUsage &&
                             (employeeUsage.dailyCostMicroUsd ?? 0) > 0 &&
-                            employeeUsage.rank <= 3
-                              ? employeeUsage.rank
+                            employeeUsage.dailyRank <= 3
+                              ? employeeUsage.dailyRank
                               : undefined
                           }
                         >
@@ -2453,7 +2549,15 @@ export function EmployeeControlManagement({
                         className="employee-list-cell employee-token-cell"
                         data-label={usageText.weeklyTokens}
                       >
-                        <strong>
+                        <strong
+                          data-rank={
+                            employeeUsage &&
+                            (employeeUsage.weeklyCostMicroUsd ?? 0) > 0 &&
+                            employeeUsage.weeklyRank <= 3
+                              ? employeeUsage.weeklyRank
+                              : undefined
+                          }
+                        >
                           {formatMicroUsd(
                             employeeUsage?.weeklyCostMicroUsd ?? null,
                             locale
@@ -2701,8 +2805,8 @@ export function EmployeeControlManagement({
                   <strong
                     data-rank={
                       (selectedUsage.dailyCostMicroUsd ?? 0) > 0 &&
-                      selectedUsage.rank <= 3
-                        ? selectedUsage.rank
+                      selectedUsage.dailyRank <= 3
+                        ? selectedUsage.dailyRank
                         : undefined
                     }
                   >
@@ -2711,7 +2815,16 @@ export function EmployeeControlManagement({
                 </article>
                 <article>
                   <span>{usageText.weeklyTokens}</span>
-                  <strong>{formatMicroUsd(selectedUsage.weeklyCostMicroUsd, locale)}</strong>
+                  <strong
+                    data-rank={
+                      (selectedUsage.weeklyCostMicroUsd ?? 0) > 0 &&
+                      selectedUsage.weeklyRank <= 3
+                        ? selectedUsage.weeklyRank
+                        : undefined
+                    }
+                  >
+                    {formatMicroUsd(selectedUsage.weeklyCostMicroUsd, locale)}
+                  </strong>
                 </article>
               </div>
 

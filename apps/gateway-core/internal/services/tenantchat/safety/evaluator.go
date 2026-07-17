@@ -44,6 +44,7 @@ func (e *Evaluator) Evaluate(
 	}
 	result := cloneInput(input)
 	entityScope := masking.NewEntityScope()
+	currentUserMessageIndex := latestUserMessageIndex(result.Messages)
 	for index, message := range result.Messages {
 		masked, err := e.engine.Apply(ctx, masking.ApplyRequest{
 			Prompt:                  message.Content,
@@ -54,7 +55,7 @@ func (e *Evaluator) Evaluate(
 		if err != nil {
 			return tenantchat.SafetyEvaluation{}, ErrUnavailable
 		}
-		if masked.Action == masking.ActionBlocked {
+		if masked.Action == masking.ActionBlocked && index == currentUserMessageIndex {
 			return tenantchat.SafetyEvaluation{Blocked: true}, nil
 		}
 		result.Messages[index].Content = masked.RedactedPrompt
@@ -66,4 +67,13 @@ func cloneInput(input tenantchat.CompletionInput) tenantchat.CompletionInput {
 	cloned := input
 	cloned.Messages = append([]tenantchat.EphemeralMessage(nil), input.Messages...)
 	return cloned
+}
+
+func latestUserMessageIndex(messages []tenantchat.EphemeralMessage) int {
+	for index := len(messages) - 1; index >= 0; index-- {
+		if messages[index].Role == "user" {
+			return index
+		}
+	}
+	return -1
 }
