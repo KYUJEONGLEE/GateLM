@@ -158,6 +158,13 @@ export function safeChatError(value) {
   return Object.freeze({ code, message: safeMessage(code), ...(retryAfterSeconds ? { retryAfterSeconds } : {}) });
 }
 
+export function acceptedUserContentWasMasked(originalContent, acceptedUserContent) {
+  if (typeof originalContent !== 'string' || typeof acceptedUserContent !== 'string') {
+    throw new Error('Accepted user content is unavailable.');
+  }
+  return originalContent !== acceptedUserContent;
+}
+
 export async function consumeTurnSse(stream, options) {
   if (!stream) throw new Error('응답 스트림을 열 수 없습니다.');
   const reader = stream.getReader();

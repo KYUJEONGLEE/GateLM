@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  acceptedUserContentWasMasked,
   consumeTurnSse,
   conversationPage,
   createConversationBody,
@@ -65,6 +66,14 @@ test('conversation knowledge mode defaults off and accepts only an explicit tena
   const base = { idempotencyKey: '1234567890abcdef', title: '새 대화' };
   assert.equal(createConversationBody(base).knowledgeMode, 'off');
   assert.equal(createConversationBody({ ...base, knowledgeMode: 'tenant' }).knowledgeMode, 'tenant');
+});
+
+test('accepted user content marks only provider-bound content changes as masked', () => {
+  const original = '연락처는 synthetic.user@example.com입니다.';
+
+  assert.equal(acceptedUserContentWasMasked(original, original), false);
+  assert.equal(acceptedUserContentWasMasked(original, '연락처는 [EMAIL_1]입니다.'), true);
+  assert.throws(() => acceptedUserContentWasMasked(original, undefined));
 });
 
 test('conversation update accepts only a versioned title and/or knowledge mode change', () => {
@@ -270,6 +279,15 @@ test('ChatShell labels exact cache hits as model-free zero-second responses', ()
   assert.match(source, /캐시 응답 · 모델 호출 없음 · 0s 소요/);
   assert.match(source, /aria-label="캐시 응답, 모델 호출 없음, 0초 소요"/);
   assert.match(source, /const metaText = modelResponseMetaText\(message, userMessagesByTurnId\);/);
+});
+
+test('ChatShell keeps the in-memory user prompt and shows a non-error masking notice', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /maskingApplied:\s*acceptedUserContentWasMasked\(message\.content, accepted\.userContent\)/);
+  assert.doesNotMatch(source, /content:\s*accepted\.userContent/);
+  assert.match(source, /className="message-privacy-notice" role="status"/);
+  assert.match(source, /개인정보 보호를 위해 일부 정보를 마스킹한 뒤 AI 모델에 전달했습니다\./);
 });
 
 test('employee weekly quota uses the same blocked state with its weekly guidance', () => {

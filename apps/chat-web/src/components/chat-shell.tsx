@@ -31,6 +31,7 @@ import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import { getModelBrand } from '@/lib/model-brand.mjs';
 import {
+  acceptedUserContentWasMasked,
   consumeTurnSse,
   isBlockedCode,
   MAX_TENANT_CHAT_OUTPUT_TOKENS,
@@ -420,7 +421,7 @@ export function ChatShell() {
                 ...message,
                 id: accepted.userMessageId ?? message.id,
                 turnId: accepted.turnId,
-                content: accepted.userContent ?? message.content,
+                maskingApplied: acceptedUserContentWasMasked(message.content, accepted.userContent),
               }
             : message));
         },
@@ -610,7 +611,7 @@ export function ChatShell() {
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
               : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
                 {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
-                  {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} /> : <>
+                  {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} maskingApplied={message.maskingApplied} /> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
                     <article>
                       <span className="message-author">GateLM</span>
@@ -668,6 +669,7 @@ type MessagePage = Readonly<{ items: readonly Message[]; nextCursor: string | nu
 type DisplayMessage = Message & Readonly<{
   cacheOutcome?: 'off' | 'hit' | 'miss';
   localId?: string;
+  maskingApplied?: boolean;
   notice?: SafeChatError;
   responseDurationMs?: number;
 }>;
@@ -701,10 +703,18 @@ function citationLocation(citation: Citation): string {
   return '문서 위치 정보 없음';
 }
 
-function UserMessage({ content, createdAt }: Readonly<{ content: string; createdAt: string }>) {
+function UserMessage({ content, createdAt, maskingApplied }: Readonly<{
+  content: string;
+  createdAt: string;
+  maskingApplied?: boolean;
+}>) {
   return <article>
     <span className="sr-only">내 메시지</span>
     <p>{content}</p>
+    {maskingApplied && <div className="message-privacy-notice" role="status">
+      <ShieldCheck size={16} aria-hidden />
+      <span>개인정보 보호를 위해 일부 정보를 마스킹한 뒤 AI 모델에 전달했습니다.</span>
+    </div>}
     <div className="message-user-actions">
       <MessageTime createdAt={createdAt} />
       <MessageCopyButton content={content} label="내 메시지" />
