@@ -548,7 +548,8 @@ export class EncryptedChatStore {
           return;
         }
 
-        if (turn.state !== 'pending_admission' || !encryptions.current) throw new TurnStateConflict();
+        if (turn.state !== 'pending_admission') return;
+        if (!encryptions.current) throw new TurnStateConflict();
         const contentExpiresAt = expiry(conversation.historyRetentionDays);
         await tx.tenantChatMessage.create({
           data: {

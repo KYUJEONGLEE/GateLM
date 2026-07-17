@@ -358,7 +358,13 @@ function copyBytes(value: Uint8Array | null): Uint8Array<ArrayBuffer> | null {
 
 async function apiSse(path: string, accessToken: string, body: unknown): Promise<SseEvent[]> {
   const response = await apiRaw('POST', path, accessToken, body);
-  assert(response.status === 200, 'SseHttpStatus');
+  if (response.status !== 200) {
+    const value = await response.json().catch(() => undefined) as unknown;
+    const code = isRecord(value) && typeof value.code === 'string' && /^CHAT_[A-Z0-9_]+$/.test(value.code)
+      ? value.code
+      : 'CHAT_UNKNOWN';
+    assert(false, `SseHttpStatus:${response.status}:${code}`);
+  }
   assert(response.headers.get('content-type')?.startsWith('text/event-stream') === true, 'SseContentType');
   return parseSse(await response.text());
 }
