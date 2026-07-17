@@ -16,6 +16,7 @@ import {
   Plug,
   ScrollText,
   Settings as SettingsIcon,
+  UserRound,
   Users
 } from "lucide-react";
 import Link from "next/link";
@@ -563,7 +564,6 @@ function ConsoleTopbarActions({
   theme: ConsoleTheme;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel, text);
-  const initials = getUserInitials(displayUser.displayName);
 
   return (
     <div className="console-topbar-actions" aria-label={text.accountActions}>
@@ -576,7 +576,7 @@ function ConsoleTopbarActions({
                 style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
               />
             ) : (
-              <span>{initials}</span>
+              <UserRound className="console-user-avatar-placeholder" strokeWidth={2} />
             )}
           </span>
           <span className="console-user-copy">
@@ -599,7 +599,7 @@ function ConsoleTopbarActions({
                   style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
                 />
               ) : (
-                <span>{initials}</span>
+                <UserRound className="console-user-avatar-placeholder" strokeWidth={2} />
               )}
             </span>
             <div>
@@ -680,16 +680,6 @@ function buildPendingCurrentUser(
     role: text.sessionRequired,
     tenantName: tenantLabel
   };
-}
-
-function getUserInitials(displayName: string) {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length >= 2) {
-    return `${parts[0]?.charAt(0) ?? ""}${parts[1]?.charAt(0) ?? ""}`.toUpperCase();
-  }
-
-  return (parts[0]?.charAt(0) || "A").toUpperCase();
 }
 
 function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {

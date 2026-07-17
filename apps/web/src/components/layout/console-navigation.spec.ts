@@ -30,6 +30,12 @@ test("sidebar omits inactive alerts and consistently names API Key management", 
   expect(apiKeyManagementSource).toContain('title: "API Key 관리"');
 });
 
+test("profile avatars use a person silhouette when no image is available", () => {
+  expect(shellSource.match(/console-user-avatar-placeholder/g)).toHaveLength(2);
+  expect(shellSource).toContain("<UserRound");
+  expect(shellSource).not.toContain("getUserInitials");
+});
+
 test("Chat App and legacy Tenant Chat routes activate one management item", () => {
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/chat-app")).toEqual({
     activeManagementItem: "chat-app",

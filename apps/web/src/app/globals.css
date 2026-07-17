@@ -961,6 +961,12 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   background-size: cover;
 }
 
+.console-user-avatar-placeholder {
+  width: 17px;
+  height: 17px;
+  color: var(--text-muted);
+}
+
 .console-user-copy {
   display: grid;
   min-width: 0;
@@ -1017,6 +1023,11 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 .console-user-popover-header .console-user-avatar {
   width: 38px;
   height: 38px;
+}
+
+.console-user-popover-header .console-user-avatar-placeholder {
+  width: 21px;
+  height: 21px;
 }
 
 .console-user-popover-header div {
