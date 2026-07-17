@@ -62,10 +62,12 @@ export function parseIfMatch(value) {
 }
 
 export function createConversationBody(value) {
-  const body = record(value, ['idempotencyKey', 'title']);
+  const body = record(value, ['idempotencyKey', 'title'], ['knowledgeMode']);
   if (typeof body.idempotencyKey !== 'string' || !IDEMPOTENCY_KEY.test(body.idempotencyKey)) invalid();
   const title = titleValue(body.title);
-  return Object.freeze({ idempotencyKey: body.idempotencyKey, title });
+  const knowledgeMode = body.knowledgeMode ?? 'off';
+  if (!['off', 'tenant'].includes(knowledgeMode)) invalid();
+  return Object.freeze({ idempotencyKey: body.idempotencyKey, title, knowledgeMode });
 }
 
 export function renameConversationBody(value) {
@@ -97,13 +99,14 @@ export function createTurnBody(value) {
 }
 
 export function conversationView(value) {
-  const source = record(value, ['createdAt', 'historyRetentionDays', 'id', 'title', 'updatedAt', 'version']);
+  const source = record(value, ['createdAt', 'historyRetentionDays', 'id', 'knowledgeMode', 'title', 'updatedAt', 'version']);
   if (!UUID_V4.test(source.id) || typeof source.title !== 'string' || source.title.length < 1 || source.title.length > 120) upstreamInvalid();
-  if (!Number.isSafeInteger(source.version) || source.version < 1 || !Number.isSafeInteger(source.historyRetentionDays) || source.historyRetentionDays < 1) upstreamInvalid();
+  if (!['off', 'tenant'].includes(source.knowledgeMode) || !Number.isSafeInteger(source.version) || source.version < 1 || ![0, 7, 30, 90].includes(source.historyRetentionDays)) upstreamInvalid();
   if (!validDate(source.createdAt) || !validDate(source.updatedAt)) upstreamInvalid();
   return Object.freeze({
     id: source.id,
     title: source.title,
+    knowledgeMode: source.knowledgeMode,
     version: source.version,
     historyRetentionDays: source.historyRetentionDays,
     createdAt: source.createdAt,
@@ -180,6 +183,8 @@ export async function consumeTurnSse(stream, options) {
         if (terminal) throw new Error('Terminal SSE event must be last.');
         if (event.type === 'chat.turn.accepted') options.onAccepted?.(event);
         else if (event.type === 'chat.turn.delta') options.onDelta?.(event.delta, event);
+        else if (event.type === 'chat.turn.sources') options.onSources?.(event.citations, event);
+        else if (event.type === 'chat.turn.citations') options.onCitations?.(event.citations, event);
         else {
           terminal = event;
           options.onTerminal?.(event);
@@ -220,6 +225,7 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   const common = ['conversationId', 'schemaVersion', 'sequence', 'turnId', 'type'];
   const extras = event.type === 'chat.turn.accepted' ? ['replayed', 'userContent', 'userMessageId']
     : event.type === 'chat.turn.delta' ? ['delta']
+      : event.type === 'chat.turn.sources' || event.type === 'chat.turn.citations' ? ['citations']
       : event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'messageId', 'quotaState', 'replayed', 'terminalOutcome']
         : ['error'];
   exactKeys(event, [...common, ...extras], event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'quotaState'] : []);
@@ -244,10 +250,11 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
     if (event.budgetState !== undefined && !isPolicyState(event.budgetState)) throw new Error('Invalid policy state.');
     if ((event.quotaState === undefined) !== (event.budgetState === undefined)) throw new Error('Incomplete policy state.');
   }
+  if (event.type === 'chat.turn.sources' || event.type === 'chat.turn.citations') event.citations = citationList(event.citations);
   if (event.type === 'chat.turn.error' || event.type === 'chat.turn.cancelled') {
     event.error = safeErrorEvent(event.error);
     if (event.type === 'chat.turn.cancelled' && event.error.code !== 'CHAT_REQUEST_CANCELLED') throw new Error('Invalid cancelled SSE event.');
-  } else if (!['chat.turn.accepted', 'chat.turn.delta', 'chat.turn.final'].includes(event.type)) {
+  } else if (!['chat.turn.accepted', 'chat.turn.delta', 'chat.turn.sources', 'chat.turn.citations', 'chat.turn.final'].includes(event.type)) {
     throw new Error('Unknown SSE event.');
   }
   return Object.freeze(event);
@@ -268,19 +275,32 @@ function titleValue(value) {
 }
 
 function messageView(value) {
-  const source = record(value, ['content', 'createdAt', 'id', 'role', 'sequence', 'turnId'], ['effectiveModelKey']);
+  const source = record(value, ['content', 'createdAt', 'id', 'role', 'sequence', 'turnId'], ['effectiveModelKey', 'citations']);
   if (!UUID_V4.test(source.id) || !UUID_V4.test(source.turnId) || !['user', 'assistant'].includes(source.role)) upstreamInvalid();
   if (typeof source.content !== 'string' || source.content.length > 1_048_576 || !Number.isSafeInteger(source.sequence) || source.sequence < 1 || !validDate(source.createdAt)) upstreamInvalid();
   if (source.effectiveModelKey !== undefined && (source.role !== 'assistant' || typeof source.effectiveModelKey !== 'string' || !MODEL_KEY.test(source.effectiveModelKey))) upstreamInvalid();
+  const citations = source.citations === undefined ? undefined : citationList(source.citations);
   return Object.freeze({
     id: source.id,
     turnId: source.turnId,
     role: source.role,
     content: source.content,
     ...(source.effectiveModelKey ? { effectiveModelKey: source.effectiveModelKey } : {}),
+    ...(citations !== undefined ? { citations } : {}),
     sequence: source.sequence,
     createdAt: source.createdAt,
   });
+}
+
+function citationList(value) {
+  if (!Array.isArray(value) || value.length > 12) upstreamInvalid();
+  const seen = new Set();
+  return Object.freeze(value.map((item) => {
+    const source = record(item, ['displayName', 'documentId', 'lineEnd', 'lineStart', 'ordinal', 'pageEnd', 'pageStart', 'sourceId'], ['availability']);
+    if (typeof source.sourceId !== 'string' || !/^S[1-9][0-9]{0,2}$/.test(source.sourceId) || seen.has(source.sourceId) || typeof source.documentId !== 'string' || !UUID_V4.test(source.documentId) || typeof source.displayName !== 'string' || source.displayName.length < 1 || source.displayName.length > 255 || !Number.isSafeInteger(source.ordinal) || source.ordinal < 0 || !['pageStart', 'pageEnd', 'lineStart', 'lineEnd'].every((key) => source[key] === null || (Number.isSafeInteger(source[key]) && source[key] >= 1)) || (source.availability !== undefined && !['available', 'unavailable'].includes(source.availability))) upstreamInvalid();
+    seen.add(source.sourceId);
+    return Object.freeze(source);
+  }));
 }
 
 function record(value, required, optional = []) {
@@ -300,6 +320,8 @@ function isPolicyState(value) {
 
 function safeMessage(code) {
   if (isBlockedCode(code)) return '사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요.';
+  if (code === 'CHAT_RAG_DISABLED') return '이 조직에서는 사내 지식 채팅을 사용할 수 없습니다.';
+  if (code === 'CHAT_RAG_UNAVAILABLE') return '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'CHAT_SAFETY_BLOCKED') return '안전 정책에 따라 이 요청에는 답변할 수 없습니다.';
   if (code === 'CHAT_RATE_LIMITED') return '요청이 많습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'CHAT_CONCURRENCY_LIMITED') return '진행 중인 요청이 많습니다. 잠시 후 다시 시도해 주세요.';

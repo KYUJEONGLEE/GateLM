@@ -41,6 +41,8 @@ const (
 	AISafetySidecarCallDurationSeconds     = "gatelm_ai_safety_sidecar_call_duration_seconds"
 	AISafetySidecarFallbackTotal           = "gatelm_ai_safety_sidecar_fallback_total"
 	GatewayDependencyReady                 = "gatelm_gateway_dependency_ready"
+	RagEmbeddingRequestsTotal              = "gatelm_rag_embedding_requests_total"
+	RagEmbeddingInputTokensTotal           = "gatelm_rag_embedding_input_tokens_total"
 	PrometheusTextContentType              = "text/plain; version=0.0.4; charset=utf-8"
 )
 
@@ -107,6 +109,8 @@ var metricSpecs = map[string]metricSpec{
 	AISafetySidecarCallDurationSeconds:     {"histogram", "AI safety sidecar call duration in seconds by bounded execution outcome."},
 	AISafetySidecarFallbackTotal:           {"counter", "Total AI safety sidecar fallbacks by bounded reason."},
 	GatewayDependencyReady:                 {"gauge", "Last readiness-check result for a bounded Gateway dependency."},
+	RagEmbeddingRequestsTotal:              {"counter", "Total private RAG embedding requests by bounded outcome."},
+	RagEmbeddingInputTokensTotal:           {"counter", "Total RAG embedding input tokens returned by the provider."},
 }
 
 var allowedLabels = map[string]struct{}{
@@ -135,6 +139,9 @@ var allowedLabels = map[string]struct{}{
 	"required":           {},
 	"category":           {},
 	"comparison":         {},
+	"service":            {},
+	"job_type":           {},
+	"failure_code":       {},
 }
 
 var forbiddenLabels = map[string]struct{}{
@@ -163,6 +170,12 @@ var forbiddenLabels = map[string]struct{}{
 	"complexity_score":  {},
 	"artifact_hash":     {},
 	"model_ref":         {},
+	"filename":          {},
+	"document_title":    {},
+	"document_id":       {},
+	"chunk":             {},
+	"query":             {},
+	"api_key":           {},
 }
 
 func NewRegistry() *Registry {

@@ -559,6 +559,113 @@ describe('ConversationService turn fan-out', () => {
     expect(prepared.usageIntent.estimatedInputTokens).toBe(Buffer.byteLength('current only', 'utf8'));
     registry.release(reserved.turnId, handle);
   });
+
+  it('adds sanitized user content and the built RAG context to provider messages', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = { ...reservedTurn('pending_admission'), knowledgeMode: 'tenant' as const };
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const policyDigest = `sha256:${'A'.repeat(43)}`;
+    const userMessage = { ...assistantMessage(), role: 'user' as const, content: 'leave policy?' };
+    const ragMessage = Object.freeze({
+      role: 'system' as const,
+      purpose: 'rag_context' as const,
+      content: 'safe RAG context',
+    });
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ message: userMessage, replayed: false }),
+      completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
+    };
+    const retrieval = { retrieve: jest.fn().mockResolvedValue([{ chunkId: 'chunk' }]) };
+    const ragContext = {
+      build: jest.fn().mockReturnValue({
+        message: ragMessage,
+        sources: [{ id: 'S1' }],
+        citationSources: [],
+      }),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockResolvedValue({
+        messages: [{ itemIndex: 0, content: 'leave policy?' }],
+        policyDigest,
+      }),
+    };
+    const service = serviceWith({
+      store, bridge, registry, retrieval, ragContext,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'leave policy?',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(prepared).toMatchObject({
+      kind: 'execute',
+      messages: [
+        ragMessage,
+        {
+          role: 'user',
+          content: 'leave policy?',
+          safety: { status: 'sanitized', policyDigest },
+        },
+      ],
+    });
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(prepared.usageIntent).toEqual(expect.objectContaining({
+      estimatedInputTokens: Buffer.byteLength('safe RAG contextleave policy?', 'utf8'),
+      cacheStrategy: 'off',
+    }));
+    expect(retrieval.retrieve).toHaveBeenCalledWith(authorized(), 'leave policy?');
+    expect(bridge.sanitize).toHaveBeenCalledTimes(2);
+    registry.release(reserved.turnId, handle);
+  });
+
+  it('sanitizes the RAG query before retrieval and stores only the safe no-evidence turn', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = { ...reservedTurn('pending_admission'), knowledgeMode: 'tenant' as const };
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const message = assistantMessage();
+    const userMessage = { ...message, role: 'user' as const, content: '[PERSON_1]' };
+    const policyDigest = `sha256:${'A'.repeat(43)}`;
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistRagNoEvidence: jest.fn().mockResolvedValue({ message, userMessage }),
+    };
+    const bridge = {
+      admitAuthorized: jest.fn().mockResolvedValue(handle),
+      sanitize: jest.fn().mockResolvedValue({
+        messages: [{ itemIndex: 0, content: '[PERSON_1]' }],
+        policyDigest,
+      }),
+      cancel: jest.fn().mockResolvedValue({ state: 'cancelled' }),
+      complete: jest.fn(),
+    };
+    const retrieval = { retrieve: jest.fn().mockResolvedValue([]) };
+    const service = serviceWith({
+      store, bridge, registry, retrieval,
+      ragContext: { build: jest.fn().mockReturnValue({ sources: [], message: {} }) },
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: '?띻만?숈쓽 臾몄꽌??',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).resolves.toMatchObject({ kind: 'local', message, userMessage });
+    expect(retrieval.retrieve).toHaveBeenCalledWith(expect.anything(), '[PERSON_1]');
+    expect(store.persistRagNoEvidence).toHaveBeenCalledWith(
+      expect.anything(), reserved, '[PERSON_1]', policyDigest,
+      '등록된 문서에서 관련 근거를 찾지 못했습니다.',
+    );
+    expect(bridge.admitAuthorized).toHaveBeenCalled();
+    expect(bridge.sanitize).toHaveBeenCalled();
+    expect(bridge.cancel).toHaveBeenCalledWith(handle);
+    expect(bridge.complete).not.toHaveBeenCalled();
+  });
+
   it('cleans up the last admitted attachment when history preparation fails', async () => {
     const registry = new ActiveTurnRegistry();
     const reserved = reservedTurn('pending_admission');
@@ -625,6 +732,8 @@ function serviceWith(input: {
   bridge: object;
   registry: ActiveTurnRegistry;
   sessions?: object;
+  retrieval?: object;
+  ragContext?: object;
   maximumAttachmentsPerTurn?: number;
 }): ConversationService {
   const values: Record<string, number> = {
@@ -641,6 +750,8 @@ function serviceWith(input: {
     input.store as never,
     input.bridge as never,
     input.registry,
+    (input.retrieval ?? {}) as never,
+    (input.ragContext ?? {}) as never,
   );
 }
 
@@ -662,6 +773,7 @@ function execution(
       requestId: '00000000-0000-4000-8000-000000000302',
       idempotencyKey: 'idempotency-key',
       cacheEpoch: 1n,
+      knowledgeMode: 'off' as const,
       state: 'user_persisted',
       replayed: false,
     }),
@@ -675,6 +787,7 @@ function execution(
       cacheStrategy: 'exact' as const,
     }),
     signal: registry.register(turnId, handle, 4),
+    citationSources: Object.freeze([]),
   });
 }
 
@@ -736,6 +849,7 @@ function reservedTurn(state: string, replayed = false) {
     requestId: '00000000-0000-4000-8000-000000000302',
     idempotencyKey: 'idempotency-key',
     cacheEpoch: 1n,
+    knowledgeMode: 'off' as const,
     state,
     replayed,
   });

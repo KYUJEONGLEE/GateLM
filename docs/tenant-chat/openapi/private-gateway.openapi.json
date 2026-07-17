@@ -211,6 +211,38 @@
           "503": { "$ref": "#/components/responses/GuardUnavailable" }
         }
       }
+    },
+    "/internal/v1/rag/embeddings": {
+      "post": {
+        "operationId": "createPrivateRagEmbeddings",
+        "summary": "Create fixed-profile RAG embeddings without exposing the provider credential",
+        "description": "Private-listener-only route. Tenant identity, request identity, operation identity, caller identity, and allowed purpose come from the verified RAG workload JWT; tenantId, provider, model, dimensions, credential, base URL, and cache controls are forbidden request fields.",
+        "security": [{ "ragEmbeddingWorkloadJwt": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "../schemas/rag-embedding-request.schema.json" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Embeddings are returned in the same order as inputs with bounded provider usage metadata.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RagEmbeddingResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/RagEmbeddingInvalidRequest" },
+          "401": { "$ref": "#/components/responses/RagEmbeddingTokenInvalid" },
+          "429": { "$ref": "#/components/responses/RagEmbeddingRateLimited" },
+          "502": { "$ref": "#/components/responses/RagEmbeddingProviderFailed" },
+          "503": { "$ref": "#/components/responses/RagEmbeddingUnavailable" },
+          "504": { "$ref": "#/components/responses/RagEmbeddingProviderTimeout" }
+        }
+      }
     }
   },
   "components": {
@@ -226,6 +258,12 @@
         "scheme": "bearer",
         "bearerFormat": "opaque-service-token",
         "description": "Dedicated token loaded from TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE; never accepted by workload-JWT routes."
+      },
+      "ragEmbeddingWorkloadJwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "gatelm-rag-workload+jwt",
+        "description": "Caller-key-bound Ed25519 JWT defined by rag-embedding-workload-jwt-claims.schema.json. Chat API keys authorize RAG_QUERY only; Control Plane Worker keys authorize RAG_INGESTION only."
       }
     },
     "headers": {
@@ -427,17 +465,20 @@
         "type": "object",
         "additionalProperties": false,
         "required": ["role", "content"],
-        "properties": {
-          "role": { "type": "string", "enum": ["system", "user", "assistant"] },
-          "content": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 20000,
-            "description": "Ephemeral provider-bound content. Never log, persist in Gateway tables, or include in metrics."
-          },
-          "safety": { "$ref": "#/components/schemas/MessageSafetyProvenance" }
-        },
         "allOf": [
+          {
+            "if": {
+              "required": ["purpose"],
+              "properties": { "purpose": { "const": "rag_context" } }
+            },
+            "then": {
+              "properties": {
+                "role": { "const": "system" },
+                "content": { "maxLength": 65536 }
+              }
+            },
+            "else": { "properties": { "content": { "maxLength": 20000 } } }
+          },
           {
             "if": {
               "properties": {
@@ -462,7 +503,22 @@
             },
             "then": { "properties": { "role": { "const": "assistant" } } }
           }
-        ]
+        ],
+        "properties": {
+          "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+          "purpose": {
+            "type": "string",
+            "enum": ["rag_context"],
+            "description": "Optional private marker allowed only with role=system. It is provider- and budget-bound but excluded from routing classification."
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536,
+            "description": "Ephemeral provider-bound content. Non-RAG messages remain capped at 20000 characters; only the private system rag_context marker may use up to 65536. Never log, persist in Gateway tables, or include in metrics."
+          },
+          "safety": { "$ref": "#/components/schemas/MessageSafetyProvenance" }
+        }
       },
       "MessageSafetyProvenance": {
         "type": "object",
@@ -513,6 +569,40 @@
           "replayed": { "type": "boolean" }
         }
       },
+      "RagEmbeddingResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "purpose", "provider", "model", "dimensions", "profileVersion", "embeddings", "usage"],
+        "properties": {
+          "requestId": { "$ref": "#/components/schemas/OpaqueId" },
+          "purpose": { "type": "string", "enum": ["RAG_INGESTION", "RAG_QUERY"] },
+          "provider": { "type": "string", "const": "openai" },
+          "model": { "type": "string", "const": "text-embedding-3-large" },
+          "dimensions": { "type": "integer", "const": 1536 },
+          "profileVersion": { "type": "integer", "const": 1 },
+          "embeddings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+              "type": "array",
+              "minItems": 1536,
+              "maxItems": 1536,
+              "items": { "type": "number" }
+            }
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["inputCount", "promptTokens", "totalTokens"],
+            "properties": {
+              "inputCount": { "type": "integer", "minimum": 1, "maximum": 128 },
+              "promptTokens": { "type": "integer", "minimum": 1, "maximum": 300000 },
+              "totalTokens": { "type": "integer", "minimum": 1, "maximum": 300000 }
+            }
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -540,7 +630,13 @@
               "CHAT_RUNTIME_UNAVAILABLE",
               "CHAT_USAGE_GUARD_UNAVAILABLE",
               "CHAT_NO_ELIGIBLE_ROUTE",
-              "CHAT_PROVIDER_TIMEOUT"
+              "CHAT_PROVIDER_TIMEOUT",
+              "RAG_EMBEDDING_INVALID_REQUEST",
+              "RAG_EMBEDDING_TOKEN_INVALID",
+              "RAG_EMBEDDING_RATE_LIMITED",
+              "RAG_EMBEDDING_PROVIDER_FAILED",
+              "RAG_EMBEDDING_UNAVAILABLE",
+              "RAG_EMBEDDING_PROVIDER_TIMEOUT"
             ]
           },
           "message": { "type": "string", "minLength": 1, "maxLength": 256 },
@@ -615,6 +711,39 @@
       "ProviderTimeout": {
         "description": "504 CHAT_PROVIDER_TIMEOUT",
         "x-error-codes": ["CHAT_PROVIDER_TIMEOUT"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RagEmbeddingInvalidRequest": {
+        "description": "400 RAG_EMBEDDING_INVALID_REQUEST",
+        "x-error-codes": ["RAG_EMBEDDING_INVALID_REQUEST"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RagEmbeddingTokenInvalid": {
+        "description": "401 RAG_EMBEDDING_TOKEN_INVALID",
+        "x-error-codes": ["RAG_EMBEDDING_TOKEN_INVALID"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RagEmbeddingRateLimited": {
+        "description": "429 RAG_EMBEDDING_RATE_LIMITED after bounded provider retries are exhausted",
+        "x-error-codes": ["RAG_EMBEDDING_RATE_LIMITED"],
+        "headers": {
+          "Retry-After": { "schema": { "type": "integer", "minimum": 1, "maximum": 300 } }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RagEmbeddingProviderFailed": {
+        "description": "502 RAG_EMBEDDING_PROVIDER_FAILED",
+        "x-error-codes": ["RAG_EMBEDDING_PROVIDER_FAILED"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RagEmbeddingUnavailable": {
+        "description": "503 RAG_EMBEDDING_UNAVAILABLE for replay-guard, credential, or service unavailability",
+        "x-error-codes": ["RAG_EMBEDDING_UNAVAILABLE"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RagEmbeddingProviderTimeout": {
+        "description": "504 RAG_EMBEDDING_PROVIDER_TIMEOUT",
+        "x-error-codes": ["RAG_EMBEDDING_PROVIDER_TIMEOUT"],
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
       }
     },

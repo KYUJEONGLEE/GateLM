@@ -23,6 +23,18 @@ function sha256(payload) {
   return createHash("sha256").update(payload).digest("hex");
 }
 
+function workflowJobBody(workflow, jobName) {
+  const jobMatch = new RegExp(`(?:^|\\r?\\n)  ${jobName}:\\r?\\n`).exec(workflow);
+  if (!jobMatch) {
+    throw new Error(`CI workflow omitted ${jobName}`);
+  }
+  const bodyStart = jobMatch.index + jobMatch[0].length;
+  const nextJobMatch = /(?:^|\r?\n)  [A-Za-z0-9_-]+:\r?\n/g;
+  nextJobMatch.lastIndex = bodyStart;
+  const nextJob = nextJobMatch.exec(workflow);
+  return workflow.slice(bodyStart, nextJob?.index ?? workflow.length);
+}
+
 const encoderManifestPayload = readFileSync(encoderManifestPath);
 const encoderManifest = JSON.parse(encoderManifestPayload);
 if (
@@ -108,8 +120,24 @@ const productionPrepareScript = readFileSync(
   path.join(rootDir, "deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh"),
   "utf8",
 );
+const e5QuantizerDockerfile = readFileSync(
+  path.join(rootDir, "infra/docker/e5-artifact-quantizer.Dockerfile"),
+  "utf8",
+);
+const e5QuantizerScript = readFileSync(
+  path.join(rootDir, "scripts/routing_difficulty_model/quantize_e5_onnx.py"),
+  "utf8",
+);
+const e5QuantizerRequirements = readFileSync(
+  path.join(rootDir, "scripts/routing_difficulty_model/e5-quantizer-requirements.lock.txt"),
+  "utf8",
+);
 const ciWorkflow = readFileSync(
   path.join(rootDir, ".github/workflows/ci.yml"),
+  "utf8",
+);
+const productionDeployWorkflow = readFileSync(
+  path.join(rootDir, ".github/workflows/deploy-production.yml"),
   "utf8",
 );
 const holdoutReference = readFileSync(
@@ -244,6 +272,15 @@ for (const requiredText of [
 }
 for (const requiredText of [
   encoderManifest.sourceRevision,
+  "onnx/model.onnx",
+  "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
+  "a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94",
+  "--network none",
+  "--read-only",
+  "--cap-drop ALL",
+  ":/input/model.onnx:ro",
+  ":/output:rw",
+  "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg",
   expectedLock.tokenizerNativeArchiveSha256,
   expectedLock.onnxRuntimePackageSha256,
   "model.dynamic-qint8-matmul.onnx",
@@ -251,6 +288,37 @@ for (const requiredText of [
 ]) {
   if (!productionPrepareScript.includes(requiredText)) {
     throw new Error(`production Gateway E5 bundle preparation omitted ${requiredText}`);
+  }
+}
+if (productionPrepareScript.includes('"generated/model.dynamic-qint8-matmul.onnx|')) {
+  throw new Error("production Gateway E5 bundle must generate the QInt8 model instead of downloading a missing URL");
+}
+if (productionPrepareScript.includes("https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1")) {
+  throw new Error("production Gateway E5 bundle must use the immutable GitHub release asset");
+}
+for (const requiredText of [
+  "python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7",
+  "RUN chmod 0444 ./quantize_e5_onnx.py",
+  "ENTRYPOINT",
+]) {
+  if (!e5QuantizerDockerfile.includes(requiredText)) {
+    throw new Error(`Gateway E5 quantizer Dockerfile omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  'op_types_to_quantize=["MatMul"]',
+  "weight_type=QuantType.QInt8",
+  'TemporaryDirectory(prefix="gatelm-e5-quantize-")',
+  "shutil.copyfile(args.source, working_source)",
+  "assert_artifact(partial_output",
+]) {
+  if (!e5QuantizerScript.includes(requiredText)) {
+    throw new Error(`Gateway E5 quantizer omitted ${requiredText}`);
+  }
+}
+for (const requiredText of ["onnx==1.18.0", "onnxruntime==1.22.1", "numpy==2.2.6"]) {
+  if (!e5QuantizerRequirements.includes(requiredText)) {
+    throw new Error(`Gateway E5 quantizer requirements omitted ${requiredText}`);
   }
 }
 const prepareInvocation = 'bash "${gateway_e5_bundle_script}" "${repo_dir}"';
@@ -263,10 +331,9 @@ if (
 ) {
   throw new Error("production Gateway E5 bundle must be prepared before application image builds");
 }
-const releasePackagingMatch = /(?:^|\r?\n)[ \t]+release-packaging[ \t]*:/.exec(ciWorkflow);
-const releasePackagingIndex = releasePackagingMatch?.index ?? -1;
-const releasePackagingWorkflow =
-  releasePackagingIndex >= 0 ? ciWorkflow.slice(releasePackagingIndex) : "";
+const verificationGateWorkflow = workflowJobBody(ciWorkflow, "verification-gate");
+const releasePackagingWorkflow = workflowJobBody(ciWorkflow, "release-packaging");
+const finalCiGateWorkflow = workflowJobBody(ciWorkflow, "ci-gate");
 const ciPrepareMatch =
   /bash[ \t]+deploy\/aws-triage\/scripts\/prepare-gateway-e5-runtime-bundle\.sh[ \t]+(["']?)\$\{GITHUB_WORKSPACE\}\1/.exec(
     releasePackagingWorkflow,
@@ -278,12 +345,49 @@ const ciReleaseBuildMatch =
   );
 const ciReleaseBuildIndex = ciReleaseBuildMatch?.index ?? -1;
 if (
-  releasePackagingIndex < 0 ||
   ciPrepareInvocationIndex < 0 ||
   ciReleaseBuildIndex < 0 ||
   ciPrepareInvocationIndex > ciReleaseBuildIndex
 ) {
   throw new Error("CI release packaging must prepare the Gateway E5 bundle before image builds");
+}
+for (const requiredText of [
+  "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  "github.event_name == 'pull_request' && github.base_ref == 'main'",
+  "needs: [verification-gate]",
+]) {
+  if (!releasePackagingWorkflow.includes(requiredText)) {
+    throw new Error(`CI release packaging omitted pre-merge condition ${requiredText}`);
+  }
+}
+const checkoutStep =
+  /- name: Checkout synthetic merge or pushed commit\r?\n[\s\S]*?(?=\r?\n      - name:)/.exec(
+    releasePackagingWorkflow,
+  )?.[0] ?? "";
+if (!checkoutStep.includes("uses: actions/checkout@v7") || /^\s+ref:/m.test(checkoutStep)) {
+  throw new Error("main pull requests must package the default GitHub synthetic merge commit");
+}
+if (!verificationGateWorkflow.includes("name: verification gate")) {
+  throw new Error("CI verification jobs must be isolated behind verification-gate");
+}
+for (const requiredText of [
+  "name: CI gate",
+  "- verification-gate",
+  "- release-packaging",
+  'RELEASE_PACKAGING_RESULT" != "success"',
+  'RELEASE_PACKAGING_RESULT" != "skipped"',
+]) {
+  if (!finalCiGateWorkflow.includes(requiredText)) {
+    throw new Error(`final CI gate omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "github.event.workflow_run.event == 'push'",
+  "github.event.workflow_run.head_branch == 'main'",
+]) {
+  if (!productionDeployWorkflow.includes(requiredText)) {
+    throw new Error(`production deploy must remain push-main-only: missing ${requiredText}`);
+  }
 }
 if (!verifyNativeScript.includes("--user 1000:1000")) {
   throw new Error("Gateway E5 image smoke must cover the production arbitrary UID boundary");

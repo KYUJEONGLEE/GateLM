@@ -25,6 +25,31 @@ const (
 	RateLimitBackendRedis         = "redis"
 	RateLimitAlgorithmFixedWindow = "fixed_window"
 	RateLimitAlgorithmTokenBucket = "token_bucket"
+
+	RAGEmbeddingProviderOpenAI = "openai"
+	RAGEmbeddingModel          = "text-embedding-3-large"
+	RAGEmbeddingDimensions     = 1536
+	RAGEmbeddingProfileVersion = 1
+	RAGEmbeddingDistanceMetric = "cosine"
+)
+
+const (
+	defaultRAGEmbeddingCredentialRefID   = "credential_ref_openai_main"
+	defaultRAGEmbeddingOpenAIBaseURL     = "https://api.openai.com/v1"
+	defaultRAGEmbeddingAttemptTimeoutMS  = 10_000
+	defaultRAGEmbeddingMaxAttempts       = 3
+	defaultRAGEmbeddingMaxInputs         = 128
+	defaultRAGEmbeddingMaxTokensPerInput = 8192
+	defaultRAGEmbeddingMaxBatchTokens    = 300_000
+	defaultRAGEmbeddingMaxResponseBytes  = 16 * 1024 * 1024
+	defaultRAGEmbeddingWorkloadJTIPrefix = "rag:embedding:workload-jti:"
+	maximumRAGEmbeddingAttemptTimeoutMS  = 120_000
+	maximumRAGEmbeddingMaxAttempts       = 3
+	maximumRAGEmbeddingMaxInputs         = 128
+	maximumRAGEmbeddingMaxTokensPerInput = 8192
+	maximumRAGEmbeddingMaxBatchTokens    = 300_000
+	maximumRAGEmbeddingMaxResponseBytes  = 64 * 1024 * 1024
+	minimumRAGEmbeddingMaxResponseBytes  = 1024
 )
 
 var defaultOpenAIExtraModelNames = []string{
@@ -135,6 +160,7 @@ type Config struct {
 	DifficultyE5Runtime                    DifficultyE5RuntimeConfig
 	DifficultyE5Shadow                     DifficultyE5ShadowConfig
 	TenantChatPrivate                      TenantChatPrivateConfig
+	RAGEmbedding                           RAGEmbeddingConfig
 }
 
 type DifficultyE5RuntimeConfig struct {
@@ -184,6 +210,27 @@ type TenantChatPrivateConfig struct {
 	CacheKeySetsFile      string
 	UsageReceiptTokenFile string
 	WorkloadJTIPrefix     string
+}
+
+type RAGEmbeddingConfig struct {
+	Enabled                bool
+	Provider               string
+	Model                  string
+	Dimensions             int
+	ProfileVersion         int
+	DistanceMetric         string
+	CredentialRefID        string
+	OpenAIBaseURL          string
+	AttemptTimeout         time.Duration
+	MaxAttempts            int
+	MaxInputs              int
+	MaxTokensPerInput      int
+	MaxBatchTokens         int
+	MaxResponseBytes       int64
+	WorkloadJWKSFile       string
+	BindingHMACKeysFile    string
+	WorkloadIdentitiesFile string
+	WorkloadJTIPrefix      string
 }
 
 type AISafetySidecarConfig struct {
@@ -278,6 +325,10 @@ func Load() Config {
 
 func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
+	ragEmbedding, ragEmbeddingErr := loadRAGEmbeddingConfig()
+	if err == nil && ragEmbeddingErr != nil {
+		err = ragEmbeddingErr
+	}
 	difficultyE5RuntimeEnabled := envBool("GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED", false)
 	difficultyE5RuntimeTimeout, difficultyE5RuntimeTimeoutErr := envDurationMillisInRange(
 		"GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS",
@@ -466,6 +517,7 @@ func LoadWithError() (Config, error) {
 			UsageReceiptTokenFile: strings.TrimSpace(envString("TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE", "")),
 			WorkloadJTIPrefix:     strings.TrimSpace(envString("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX", "tenant-chat:workload-jti:")),
 		},
+		RAGEmbedding: ragEmbedding,
 	}
 	if err != nil {
 		return cfg, err
@@ -491,10 +543,115 @@ func LoadWithError() (Config, error) {
 	if err := validateTenantChatPrivateConfig(cfg); err != nil {
 		return cfg, err
 	}
+	if err := validateRAGEmbeddingConfig(cfg); err != nil {
+		return cfg, err
+	}
 	if err := validateObservabilityAuthConfig(cfg); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func loadRAGEmbeddingConfig() (RAGEmbeddingConfig, error) {
+	enabled, err := ragEnvBool("TENANT_CHAT_RAG_ENABLED", false)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	provider, err := ragFixedString("RAG_EMBEDDING_PROVIDER", RAGEmbeddingProviderOpenAI)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	model, err := ragFixedString("RAG_EMBEDDING_MODEL", RAGEmbeddingModel)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	dimensions, err := ragFixedInt("RAG_EMBEDDING_DIMENSIONS", RAGEmbeddingDimensions)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	profileVersion, err := ragFixedInt("RAG_EMBEDDING_PROFILE_VERSION", RAGEmbeddingProfileVersion)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	distanceMetric, err := ragFixedString("RAG_DISTANCE_METRIC", RAGEmbeddingDistanceMetric)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	attemptTimeout, err := envDurationMillisInRange(
+		"RAG_EMBEDDING_ATTEMPT_TIMEOUT_MS",
+		defaultRAGEmbeddingAttemptTimeoutMS,
+		1,
+		maximumRAGEmbeddingAttemptTimeoutMS,
+	)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	maxAttempts, err := ragEnvIntInRange(
+		"RAG_EMBEDDING_MAX_ATTEMPTS",
+		defaultRAGEmbeddingMaxAttempts,
+		1,
+		maximumRAGEmbeddingMaxAttempts,
+	)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	maxInputs, err := ragEnvIntInRange(
+		"RAG_EMBEDDING_MAX_INPUTS",
+		defaultRAGEmbeddingMaxInputs,
+		1,
+		maximumRAGEmbeddingMaxInputs,
+	)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	maxTokensPerInput, err := ragEnvIntInRange(
+		"RAG_EMBEDDING_MAX_TOKENS_PER_INPUT",
+		defaultRAGEmbeddingMaxTokensPerInput,
+		1,
+		maximumRAGEmbeddingMaxTokensPerInput,
+	)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	maxBatchTokens, err := ragEnvIntInRange(
+		"RAG_EMBEDDING_MAX_BATCH_TOKENS",
+		defaultRAGEmbeddingMaxBatchTokens,
+		1,
+		maximumRAGEmbeddingMaxBatchTokens,
+	)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+	maxResponseBytes, err := ragEnvInt64InRange(
+		"RAG_EMBEDDING_MAX_RESPONSE_BYTES",
+		defaultRAGEmbeddingMaxResponseBytes,
+		minimumRAGEmbeddingMaxResponseBytes,
+		maximumRAGEmbeddingMaxResponseBytes,
+	)
+	if err != nil {
+		return RAGEmbeddingConfig{}, err
+	}
+
+	return RAGEmbeddingConfig{
+		Enabled:                enabled,
+		Provider:               provider,
+		Model:                  model,
+		Dimensions:             dimensions,
+		ProfileVersion:         profileVersion,
+		DistanceMetric:         distanceMetric,
+		CredentialRefID:        strings.TrimSpace(envString("RAG_EMBEDDING_CREDENTIAL_REF_ID", defaultRAGEmbeddingCredentialRefID)),
+		OpenAIBaseURL:          strings.TrimRight(strings.TrimSpace(envString("RAG_EMBEDDING_OPENAI_BASE_URL", defaultRAGEmbeddingOpenAIBaseURL)), "/"),
+		AttemptTimeout:         attemptTimeout,
+		MaxAttempts:            maxAttempts,
+		MaxInputs:              maxInputs,
+		MaxTokensPerInput:      maxTokensPerInput,
+		MaxBatchTokens:         maxBatchTokens,
+		MaxResponseBytes:       maxResponseBytes,
+		WorkloadJWKSFile:       strings.TrimSpace(envString("RAG_EMBEDDING_WORKLOAD_JWKS_FILE", "")),
+		BindingHMACKeysFile:    strings.TrimSpace(envString("RAG_EMBEDDING_BINDING_HMAC_KEYS_FILE", "")),
+		WorkloadIdentitiesFile: strings.TrimSpace(envString("RAG_EMBEDDING_WORKLOAD_IDENTITIES_FILE", "")),
+		WorkloadJTIPrefix:      strings.TrimSpace(envString("RAG_EMBEDDING_WORKLOAD_JTI_REDIS_PREFIX", defaultRAGEmbeddingWorkloadJTIPrefix)),
+	}, nil
 }
 
 func parseDifficultyE5ShadowScopes(raw string) []DifficultyE5ShadowScope {
@@ -584,6 +741,94 @@ func validateTenantChatPrivateConfig(cfg Config) error {
 		return fmt.Errorf("TENANT_CHAT_WORKLOAD_JTI_REDIS_PREFIX is required when private Gateway is enabled")
 	}
 	return nil
+}
+
+func validateRAGEmbeddingConfig(cfg Config) error {
+	rag := cfg.RAGEmbedding
+	if rag.Provider != RAGEmbeddingProviderOpenAI {
+		return fmt.Errorf("RAG_EMBEDDING_PROVIDER must be %s", RAGEmbeddingProviderOpenAI)
+	}
+	if rag.Model != RAGEmbeddingModel {
+		return fmt.Errorf("RAG_EMBEDDING_MODEL must be %s", RAGEmbeddingModel)
+	}
+	if rag.Dimensions != RAGEmbeddingDimensions {
+		return fmt.Errorf("RAG_EMBEDDING_DIMENSIONS must be %d", RAGEmbeddingDimensions)
+	}
+	if rag.ProfileVersion != RAGEmbeddingProfileVersion {
+		return fmt.Errorf("RAG_EMBEDDING_PROFILE_VERSION must be %d", RAGEmbeddingProfileVersion)
+	}
+	if rag.DistanceMetric != RAGEmbeddingDistanceMetric {
+		return fmt.Errorf("RAG_DISTANCE_METRIC must be %s", RAGEmbeddingDistanceMetric)
+	}
+	if err := validateRAGEmbeddingBaseURL(rag.OpenAIBaseURL, ragCustomEndpointAllowed(cfg.DeploymentMode)); err != nil {
+		return err
+	}
+	if !rag.Enabled {
+		return nil
+	}
+	if !cfg.TenantChatPrivate.Enabled {
+		return errors.New("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED=true is required when Tenant Chat RAG is enabled")
+	}
+	if rag.WorkloadJWKSFile == "" {
+		return errors.New("RAG_EMBEDDING_WORKLOAD_JWKS_FILE is required when Tenant Chat RAG is enabled")
+	}
+	if rag.BindingHMACKeysFile == "" {
+		return errors.New("RAG_EMBEDDING_BINDING_HMAC_KEYS_FILE is required when Tenant Chat RAG is enabled")
+	}
+	if rag.WorkloadIdentitiesFile == "" {
+		return errors.New("RAG_EMBEDDING_WORKLOAD_IDENTITIES_FILE is required when Tenant Chat RAG is enabled")
+	}
+	if rag.WorkloadJTIPrefix == "" {
+		return errors.New("RAG_EMBEDDING_WORKLOAD_JTI_REDIS_PREFIX is required when Tenant Chat RAG is enabled")
+	}
+	if rag.CredentialRefID == "" {
+		return errors.New("RAG_EMBEDDING_CREDENTIAL_REF_ID is required when Tenant Chat RAG is enabled")
+	}
+	return nil
+}
+
+func validateRAGEmbeddingBaseURL(rawURL string, customEndpointAllowed bool) error {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Hostname() == "" {
+		return errors.New("RAG_EMBEDDING_OPENAI_BASE_URL must be a valid http(s) URL")
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if (scheme != "http" && scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return errors.New("RAG_EMBEDDING_OPENAI_BASE_URL must be a valid http(s) URL without credentials, query, or fragment")
+	}
+	officialEndpoint := scheme == "https" && strings.EqualFold(parsed.Hostname(), "api.openai.com") &&
+		(parsed.Port() == "" || parsed.Port() == "443") && parsed.Path == "/v1" && parsed.RawPath == ""
+	if officialEndpoint {
+		return nil
+	}
+	if !customEndpointAllowed {
+		return errors.New("RAG_EMBEDDING_OPENAI_BASE_URL must use the official OpenAI API origin unless DEPLOYMENT_MODE explicitly selects local or test")
+	}
+	return nil
+}
+
+func ragProductionLikeMode(value string) bool {
+	if productionLikeMode(value) {
+		return true
+	}
+	switch normalizeDeploymentMode(value) {
+	case "self_host", "release", "aws_triage":
+		return true
+	default:
+		return false
+	}
+}
+
+func ragCustomEndpointAllowed(deploymentMode string) bool {
+	if productionLikeEnv() || ragProductionLikeMode(deploymentMode) {
+		return false
+	}
+	switch normalizeDeploymentMode(deploymentMode) {
+	case "local", "dev", "development", "test":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeDeploymentMode(value string) string {
@@ -891,6 +1136,68 @@ func envDurationMillisInRange(key string, fallback int, minimum int, maximum int
 		return 0, fmt.Errorf("%s must be an integer between %d and %d milliseconds", key, minimum, maximum)
 	}
 	return time.Duration(millis) * time.Millisecond, nil
+}
+
+func ragEnvBool(key string, fallback bool) (bool, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	switch value {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s must be either true or false", key)
+	}
+}
+
+func ragFixedString(key string, expected string) (string, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return expected, nil
+	}
+	if value != expected {
+		return "", fmt.Errorf("%s must be %s", key, expected)
+	}
+	return expected, nil
+}
+
+func ragFixedInt(key string, expected int) (int, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return expected, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed != expected {
+		return 0, fmt.Errorf("%s must be %d", key, expected)
+	}
+	return expected, nil
+}
+
+func ragEnvIntInRange(key string, fallback int, minimum int, maximum int) (int, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < minimum || parsed > maximum {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", key, minimum, maximum)
+	}
+	return parsed, nil
+}
+
+func ragEnvInt64InRange(key string, fallback int64, minimum int64, maximum int64) (int64, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed < minimum || parsed > maximum {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", key, minimum, maximum)
+	}
+	return parsed, nil
 }
 
 func envDurationSeconds(key string, fallback int) time.Duration {

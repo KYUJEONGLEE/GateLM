@@ -9,11 +9,16 @@ REPO_ROOT="$(cd "${AWS_TRIAGE_DIR}/../.." && pwd)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
 E5_BUNDLE_SCRIPT="${SCRIPT_DIR}/prepare-gateway-e5-runtime-bundle.sh"
+E5_QUANTIZER_DOCKERFILE="${REPO_ROOT}/infra/docker/e5-artifact-quantizer.Dockerfile"
+E5_QUANTIZER_SCRIPT="${REPO_ROOT}/scripts/routing_difficulty_model/quantize_e5_onnx.py"
+E5_QUANTIZER_REQUIREMENTS="${REPO_ROOT}/scripts/routing_difficulty_model/e5-quantizer-requirements.lock.txt"
 WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/deploy-production.yml"
 MAINTENANCE_WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/tenant-chat-cache-keyset-maintenance.yml"
 MAINTENANCE_SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-cache-keyset-maintenance.sh"
 TEMPLATE_FILE="${AWS_TRIAGE_DIR}/aws/github-actions-cd.template.json"
 COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.yml"
+RAG_COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.rag.yml"
+ENV_EXAMPLE="${AWS_TRIAGE_DIR}/.env.example"
 
 fail() {
   printf '%s\n' "[deploy-main-test] ERROR: $*" >&2
@@ -38,6 +43,18 @@ assert_fails_with() {
 for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${MAINTENANCE_SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
   bash -n "${file}"
 done
+if python3 --version >/dev/null 2>&1; then
+  PYTHON_COMMAND=(python3)
+elif py -3.12 --version >/dev/null 2>&1; then
+  PYTHON_COMMAND=(py -3.12)
+else
+  fail "Python 3.12 is required to verify the E5 quantizer"
+fi
+for file in "${E5_QUANTIZER_DOCKERFILE}" "${E5_QUANTIZER_SCRIPT}" "${E5_QUANTIZER_REQUIREMENTS}"; do
+  [[ -f "${file}" && ! -L "${file}" ]] || fail "Pinned E5 quantizer material is missing: ${file}"
+done
+"${PYTHON_COMMAND[@]}" -m py_compile "${E5_QUANTIZER_SCRIPT}"
+"${PYTHON_COMMAND[@]}" "${E5_QUANTIZER_SCRIPT}" --help >/dev/null
 
 bootstrap_probe="$(printf '%s' 'set -euo pipefail; printf probe-ok' | base64 | tr -d '\n')"
 probe_output="$(sh -c "printf '%s' '${bootstrap_probe}' | base64 --decode | bash")"
@@ -145,6 +162,38 @@ grep -Fq 'wait_for_chat_api_readiness' "${DEPLOY_SCRIPT}" || \
   fail "Deployment must verify Chat API database and key continuity"
 grep -Fq 'Chat API readiness did not verify database and key continuity.' "${DEPLOY_SCRIPT}" || \
   fail "A key continuity failure must fail the deployment"
+grep -Fq 'content-wrapping-keys.json' "${DEPLOY_SCRIPT}" || \
+  fail "RAG wrapping keys must be validated before the image build"
+for rag_secret_file in \
+  'query-signing.jwk.json' \
+  'query-binding-hmac-keys.json' \
+  'worker-signing.jwk.json' \
+  'worker-binding-hmac-keys.json' \
+  'workload-jwks.json' \
+  'workload-binding-hmac-keys.json' \
+  'workload-identities.json'
+do
+  grep -Fq "${rag_secret_file}" "${DEPLOY_SCRIPT}" || \
+    fail "RAG workload secret must be validated before deployment: ${rag_secret_file}"
+done
+grep -Fq 'runtime_services+=(rag-worker)' "${DEPLOY_SCRIPT}" || \
+  fail "Enabled RAG worker must be recreated and covered by runtime health checks"
+grep -Fq 'all_services+=(rag-worker)' "${DEPLOY_SCRIPT}" || \
+  fail "Enabled RAG worker must be included in deployment service health checks"
+grep -Fq 'if [[ "${rag_enabled}" == "true" ]]' "${DEPLOY_SCRIPT}" || \
+  fail "RAG-only deployment dependencies must be gated by the feature flag"
+grep -Fq 'RAG_OBJECT_STORE_DRIVER=fake is not allowed' "${DEPLOY_SCRIPT}" || \
+  fail "Default-off AWS deployment must still reject an explicitly configured fake store"
+grep -Fq 'AWS_ACCESS_KEY_ID' "${DEPLOY_SCRIPT}" || \
+  fail "Default-off AWS deployment must still reject static AWS credentials"
+grep -Fq 'previous_runtime_services+=("${service}")' "${DEPLOY_SCRIPT}" || \
+  fail "Additive RAG worker deployment must preserve the previous rollback service set"
+grep -Fq 'if [[ "${service}" == "rag-worker" ]]' "${DEPLOY_SCRIPT}" || \
+  fail "Only the first additive RAG worker rollout may lack a previous container"
+grep -Fq 'additive_runtime_services+=("${service}")' "${DEPLOY_SCRIPT}" || \
+  fail "A first-rollout RAG worker must be tracked for explicit rollback removal"
+grep -Fq 'compose rm -sf "${service}"' "${DEPLOY_SCRIPT}" || \
+  fail "Rollback must explicitly remove an additive RAG worker"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
@@ -163,13 +212,40 @@ do
 done
 for pinned_material in \
   '614241f622f53c4eeff9890bdc4f31cfecc418b3' \
+  'onnx/model.onnx' \
+  'ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665' \
+  'a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94' \
+  '--network none' \
+  '--read-only' \
+  '--cap-drop ALL' \
+  ':/input/model.onnx:ro' \
+  ':/output:rw' \
+  'https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg' \
   'c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0' \
   '2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58' \
   'sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256'
 do
-  grep -Fq "${pinned_material}" "${E5_BUNDLE_SCRIPT}" || \
+  grep -Fq -- "${pinned_material}" "${E5_BUNDLE_SCRIPT}" || \
     fail "Gateway E5 bundle preparation pin is missing: ${pinned_material}"
 done
+if grep -Fq '"generated/model.dynamic-qint8-matmul.onnx|' "${E5_BUNDLE_SCRIPT}"; then
+  fail "Generated E5 ONNX artifact must not be downloaded from Hugging Face"
+fi
+if grep -Fq 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1' "${E5_BUNDLE_SCRIPT}"; then
+  fail "Production E5 bundle must use the digest-pinned GitHub release asset"
+fi
+grep -Fq 'python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7' \
+  "${E5_QUANTIZER_DOCKERFILE}" || fail "E5 quantizer base image must be digest-pinned"
+grep -Fq 'RUN chmod 0444 ./quantize_e5_onnx.py' "${E5_QUANTIZER_DOCKERFILE}" || \
+  fail "E5 quantizer script must remain readable under the production checkout umask"
+grep -Fq 'onnxruntime==1.22.1' "${E5_QUANTIZER_REQUIREMENTS}" || \
+  fail "E5 quantizer ONNX Runtime dependency must be pinned"
+grep -Fq 'op_types_to_quantize=["MatMul"]' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must preserve the pinned MatMul-only profile"
+grep -Fq 'TemporaryDirectory(prefix="gatelm-e5-quantize-")' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must use its writable scratch mount for shape inference"
+grep -Fq 'shutil.copyfile(args.source, working_source)' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must not run shape inference beside the read-only source"
 for required_setting in \
   'TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"' \
   'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \
@@ -181,10 +257,86 @@ do
   grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
     fail "Tenant Chat production Compose setting is missing: ${required_setting}"
 done
+for required_setting in \
+  'rag-worker:' \
+  'command: ["node", "dist/src/rag-worker.js"]' \
+  'RAG_WORKER_AI_SERVICE_BASE_URL: http://ai-service:8001' \
+  'RAG_WORKER_GATEWAY_BASE_URL: http://gateway-core:8081' \
+  'RAG_WORKER_EMBEDDING_ACTIVE_KID: ${RAG_WORKER_EMBEDDING_ACTIVE_KID:?RAG_WORKER_EMBEDDING_ACTIVE_KID is required}' \
+  'RAG_WORKER_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/worker-signing.jwk.json' \
+  'RAG_WORKER_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/worker-binding-hmac-keys.json' \
+  'RAG_QUERY_EMBEDDING_ACTIVE_KID: ${RAG_QUERY_EMBEDDING_ACTIVE_KID:?RAG_QUERY_EMBEDDING_ACTIVE_KID is required}' \
+  'RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/query-signing.jwk.json' \
+  'RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/query-binding-hmac-keys.json' \
+  'RAG_EMBEDDING_WORKLOAD_JWKS_FILE: /run/secrets/rag/workload-jwks.json' \
+  'RAG_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/workload-binding-hmac-keys.json' \
+  'RAG_EMBEDDING_WORKLOAD_IDENTITIES_FILE: /run/secrets/rag/workload-identities.json' \
+  'AI_SERVICE_RAG_TEMP_DIR: /run/gatelm-rag-tmp' \
+  'AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS: ${AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS:-2}' \
+  'AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES: ${AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES:-536870912}' \
+  'AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS: ${AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS:-30}' \
+  '/run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777' \
+  'mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}' \
+  'pids_limit: ${AI_SERVICE_PIDS_LIMIT:-128}'
+do
+  if ! grep -Fq "${required_setting}" "${COMPOSE_FILE}" && \
+    ! grep -Fq "${required_setting}" "${RAG_COMPOSE_FILE}"; then
+    fail "RAG production Compose setting is missing: ${required_setting}"
+  fi
+done
 [[ "$(grep -v '^[[:space:]]*#' "${COMPOSE_FILE}" | grep -Fc 'target: /run/secrets/tenant-chat/content-keys.json')" == "1" ]] || \
   fail "Tenant Chat content keys must be mounted only into Chat API"
-[[ "$(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}")" == "2" ]] || \
-  fail "Gateway and Chat API must run as the Tenant Chat secret owner"
+[[ "$(grep -v '^[[:space:]]*#' "${RAG_COMPOSE_FILE}" | grep -Fc 'target: /run/secrets/rag/content-wrapping-keys.json')" == "2" ]] || \
+  fail "RAG wrapping keys must be mounted only into Control Plane API and RAG worker"
+for isolated_target in \
+  '/run/secrets/rag/query-signing.jwk.json' \
+  '/run/secrets/rag/query-binding-hmac-keys.json' \
+  '/run/secrets/rag/worker-signing.jwk.json' \
+  '/run/secrets/rag/worker-binding-hmac-keys.json' \
+  '/run/secrets/rag/workload-jwks.json' \
+  '/run/secrets/rag/workload-binding-hmac-keys.json' \
+  '/run/secrets/rag/workload-identities.json'
+do
+  [[ "$(grep -v '^[[:space:]]*#' "${RAG_COMPOSE_FILE}" | grep -Fc "target: ${isolated_target}")" == "1" ]] || \
+    fail "RAG workload secret must have exactly one role-specific mount: ${isolated_target}"
+done
+[[ "$((
+  $(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}") +
+  $(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${RAG_COMPOSE_FILE}")
+))" == "4" ]] || \
+  fail "RAG secret consumers must run as the validated non-root secret owner"
+if grep -Fq '  rag-worker:' "${COMPOSE_FILE}" || grep -Fq '/run/secrets/rag/' "${COMPOSE_FILE}"; then
+  fail "Default-off AWS Compose must not include the RAG worker or RAG secret mounts"
+fi
+for service in control-plane-api gateway-core ai-service rag-worker chat-api; do
+  awk -v service="${service}" '
+    $0 == "  " service ":" { in_service=1; next }
+    in_service && /^  [[:alnum:]_-]+:$/ { exit }
+    in_service && /TENANT_CHAT_RAG_ENABLED: "true"/ { found=1 }
+    END { if (!found) exit 1 }
+  ' "${RAG_COMPOSE_FILE}" || \
+    fail "RAG overlay must enable the shared global flag for ${service}"
+done
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  docker compose \
+    --env-file "${ENV_EXAMPLE}" \
+    -f "${COMPOSE_FILE}" \
+    config --quiet
+  default_services="$(
+    docker compose \
+      --env-file "${ENV_EXAMPLE}" \
+      -f "${COMPOSE_FILE}" \
+      config --services
+  )"
+  if grep -Fxq 'rag-worker' <<<"${default_services}"; then
+    fail "Default-off AWS Compose unexpectedly includes the RAG worker"
+  fi
+  TENANT_CHAT_RAG_ENABLED=true docker compose \
+    --env-file "${ENV_EXAMPLE}" \
+    -f "${COMPOSE_FILE}" \
+    -f "${RAG_COMPOSE_FILE}" \
+    config --quiet
+fi
 grep -Fq 'http://127.0.0.1:8080/v1/chat/completions' "${DEPLOY_SCRIPT}" || \
   fail "Gateway authentication boundary must be verified through loopback"
 grep -Fq 'http://127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" || \

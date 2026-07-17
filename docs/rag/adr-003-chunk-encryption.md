@@ -86,7 +86,7 @@ Staging and production originals use separate private S3 buckets and separate KM
 - Reads use the row's recorded version under existing active/grace/retired policy.
 - Rewrapping a tenant data key after wrapping-key rotation does not rewrite chunks.
 - Rotating the tenant content key may use a separate controlled re-encryption job later; it is not coupled to ordinary ingestion.
-- Hard document deletion removes original/chunk/private-metadata ciphertext, nonce, tag, vector, and document references. Before deletion, linked citation rows are reduced to metadata-free DELETED tombstones so chat history can render `삭제된 자료`; S3 deletion remains independently idempotent.
+- Hard document deletion removes original/chunk/private-metadata ciphertext, nonce, tag, vectors, and document rows. Past citation snapshots remain only inside the tenant-encrypted conversation record, contain no chunk text, and are marked unavailable on replay after a tenant-scoped READY-document check; S3 deletion remains independently idempotent.
 
 ## Rationale
 

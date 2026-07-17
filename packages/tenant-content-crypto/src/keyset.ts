@@ -1,5 +1,10 @@
 import { ContentKeyUnavailable } from './errors';
-import type { WrappingKey, WrappingKeySet } from './types';
+import type {
+  DataWrappingKey,
+  DataWrappingKeySet,
+  WrappingKey,
+  WrappingKeySet,
+} from './types';
 
 const KEY_BYTES = 32;
 
@@ -52,6 +57,54 @@ export function parseWrappingKeySet(value: unknown): WrappingKeySet {
     if (error instanceof ContentKeyUnavailable) {
       throw error;
     }
+    throw new ContentKeyUnavailable();
+  }
+}
+
+export function parseDataWrappingKeySet(value: unknown): DataWrappingKeySet {
+  if (!exactObject(value, ['activeVersion', 'keys', 'schemaVersion'])) {
+    throw new ContentKeyUnavailable();
+  }
+  if (
+    value.schemaVersion !== 1 ||
+    !positiveInteger(value.activeVersion) ||
+    !Array.isArray(value.keys) ||
+    value.keys.length < 1 ||
+    value.keys.length > 8
+  ) {
+    throw new ContentKeyUnavailable();
+  }
+
+  const keys = new Map<number, DataWrappingKey>();
+  const decodedMaterial: Buffer[] = [];
+  try {
+    for (const candidate of value.keys) {
+      if (!exactObject(candidate, ['version', 'wrappingKey'])) {
+        throw new ContentKeyUnavailable();
+      }
+      if (
+        !positiveInteger(candidate.version) ||
+        typeof candidate.wrappingKey !== 'string' ||
+        keys.has(candidate.version)
+      ) {
+        throw new ContentKeyUnavailable();
+      }
+      const wrappingKey = decodeKey(candidate.wrappingKey);
+      decodedMaterial.push(wrappingKey);
+      keys.set(
+        candidate.version,
+        Object.freeze({ version: candidate.version, wrappingKey }),
+      );
+    }
+    if (!keys.has(value.activeVersion)) {
+      throw new ContentKeyUnavailable();
+    }
+    return Object.freeze({ activeVersion: value.activeVersion, keys });
+  } catch (error) {
+    for (const material of decodedMaterial) {
+      material.fill(0);
+    }
+    if (error instanceof ContentKeyUnavailable) throw error;
     throw new ContentKeyUnavailable();
   }
 }

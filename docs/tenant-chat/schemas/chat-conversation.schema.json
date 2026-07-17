@@ -4,10 +4,11 @@
   "title": "Tenant Chat conversation resource",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "title", "version", "historyRetentionDays", "createdAt", "updatedAt"],
+  "required": ["id", "title", "knowledgeMode", "version", "historyRetentionDays", "createdAt", "updatedAt"],
   "properties": {
     "id": { "$ref": "#/$defs/uuid" },
     "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "knowledgeMode": { "enum": ["off", "tenant"] },
     "version": { "type": "integer", "minimum": 1 },
     "historyRetentionDays": { "enum": [0, 7, 30, 90] },
     "createdAt": { "type": "string", "format": "date-time" },

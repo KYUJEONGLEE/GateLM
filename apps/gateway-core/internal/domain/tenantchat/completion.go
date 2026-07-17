@@ -10,6 +10,8 @@ const (
 	CompletionEventFinal         = "tenant_chat.final"
 	ProviderCallNotStarted       = "not_started"
 	ProviderCallStartedOrUnknown = "started_or_unknown"
+	maxEphemeralMessageRunes     = 20_000
+	maxRAGContextMessageRunes    = 65_536
 )
 
 type ProviderCallStartStatus string
@@ -92,7 +94,14 @@ func ValidateCompletionInput(input CompletionInput) error {
 		if message.Role != "system" && message.Role != "user" && message.Role != "assistant" {
 			return fmt.Errorf("tenant chat message %d has an invalid role", index)
 		}
-		if strings.TrimSpace(message.Content) == "" || len([]rune(message.Content)) > 20_000 {
+		if message.Purpose != "" && (message.Role != "system" || message.Purpose != "rag_context") {
+			return fmt.Errorf("tenant chat message %d has invalid purpose", index)
+		}
+		maximumRunes := maxEphemeralMessageRunes
+		if message.Role == "system" && message.Purpose == "rag_context" {
+			maximumRunes = maxRAGContextMessageRunes
+		}
+		if strings.TrimSpace(message.Content) == "" || len([]rune(message.Content)) > maximumRunes {
 			return fmt.Errorf("tenant chat message %d has invalid content", index)
 		}
 	}

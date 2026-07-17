@@ -20,6 +20,7 @@ import { ChatWebServiceGuard } from '@/auth/chat-web-service.guard';
 
 import { ConversationService, type PreparedTurn } from './conversation.service';
 import type { MessageView } from './encrypted-chat-store';
+import type { RagCitation } from '@/rag/rag-citations';
 import {
   ConversationIdParams,
   CreateConversationDto,
@@ -43,7 +44,12 @@ export class ConversationController {
     @Body() body: CreateConversationDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.conversations.create(accessToken, body.idempotencyKey, body.title);
+    const result = await this.conversations.create(
+      accessToken,
+      body.idempotencyKey,
+      body.title,
+      body.knowledgeMode,
+    );
     response.status(result.replayed ? 200 : 201);
     return result.conversation;
   }
@@ -129,14 +135,30 @@ export class ConversationController {
         userMessageId: prepared.userMessage.id,
         userContent: prepared.userMessage.content,
       });
-      if (prepared.kind === 'replay') {
+      const initialCitations = prepared.kind === 'execute'
+        ? prepared.citationSources
+        : prepared.message.citations ?? [];
+      if (initialCitations.length) {
+        sequence += 1;
+        await writeEvent(response, prepared.reserved.turnId, citationEvent('chat.turn.sources', prepared, sequence, initialCitations));
+      }
+      if (prepared.kind === 'replay' || prepared.kind === 'local') {
         sequence = await writeDeltas(response, prepared, prepared.message.content, sequence);
         sequence += 1;
-        await writeEvent(response, prepared.reserved.turnId, finalEvent(prepared, sequence, prepared.message, true));
+        await writeEvent(response, prepared.reserved.turnId, finalEvent(
+          prepared,
+          sequence,
+          prepared.message,
+          prepared.kind === 'replay',
+        ));
       } else {
         const result = await this.conversations.executeTurn(prepared, async (delta) => {
           sequence = await writeDeltas(response, prepared, delta, sequence);
         });
+        if (prepared.citationSources.length) {
+          sequence += 1;
+          await writeEvent(response, prepared.reserved.turnId, citationEvent('chat.turn.citations', prepared, sequence, result.message.citations ?? []));
+        }
         sequence += 1;
         await writeEvent(response, prepared.reserved.turnId, finalEvent(
           prepared,
@@ -178,6 +200,15 @@ export class ConversationController {
   ) {
     return this.conversations.cancel(accessToken, params.conversationId, params.turnId);
   }
+}
+
+function citationEvent(
+  type: 'chat.turn.sources' | 'chat.turn.citations',
+  prepared: PreparedTurn,
+  sequence: number,
+  citations: readonly RagCitation[],
+) {
+  return { type, schemaVersion: 1 as const, conversationId: prepared.reserved.conversationId, turnId: prepared.reserved.turnId, sequence, citations };
 }
 
 function parseIfMatch(value: string): number {

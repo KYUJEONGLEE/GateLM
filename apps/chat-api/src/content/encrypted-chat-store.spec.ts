@@ -4,9 +4,13 @@ import {
   MAX_EPHEMERAL_MESSAGE_CHARACTERS,
   type ClientUsageIntent,
 } from '@/execution/execution.types';
+import {
+  citationSnapshotJson,
+  type RagCitation,
+} from '@/rag/rag-citations';
 
 import { ConversationNotFound } from './chat-store.errors';
-import { encryptContent } from './content-crypto';
+import { createMessageCitationsAad, encryptContent } from './content-crypto';
 import { EncryptedChatStore, type ChatActor } from './encrypted-chat-store';
 
 const actor: ChatActor = Object.freeze({
@@ -190,6 +194,92 @@ describe('EncryptedChatStore completion history', () => {
   });
 });
 
+describe('EncryptedChatStore citation history replay', () => {
+  it('marks only tenant-scoped READY documents available without exposing storage internals', async () => {
+    const key = Buffer.alloc(32, 7);
+    const readyDocumentId = '00000000-0000-4000-8000-000000000401';
+    const deletingDocumentId = '00000000-0000-4000-8000-000000000402';
+    const deletedDocumentId = '00000000-0000-4000-8000-000000000403';
+    const otherTenantDocumentId = '00000000-0000-4000-8000-000000000404';
+    const internalReadyDocumentId = '00000000-0000-4000-8000-000000000499';
+    const rawChunk = '<raw-chunk-must-not-leak>';
+    const citations = [
+      citation('S1', readyDocumentId),
+      citation('S2', deletingDocumentId),
+      citation('S3', deletedDocumentId),
+      citation('S4', otherTenantDocumentId),
+    ] as const;
+    const assistant = encryptedMessageWithCitations(
+      key,
+      'Answer [S1] [S2] [S3] [S4]',
+      1n,
+      citations,
+    );
+    const prisma = {
+      tenantChatConversation: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: conversationId,
+          cacheEpoch: 1n,
+        }),
+      },
+      tenantChatMessage: {
+        findMany: jest.fn().mockResolvedValue([assistant]),
+      },
+      ragDocument: {
+        findMany: jest.fn().mockResolvedValue([{
+          publicId: readyDocumentId,
+          id: internalReadyDocumentId,
+          rawChunk,
+        }]),
+      },
+    };
+    const keys = {
+      withKeyVersion: jest.fn(async (
+        _tenantId: string,
+        _version: number,
+        operation: (contentKey: Buffer) => Promise<string> | string,
+      ) => operation(key)),
+    };
+    const store = new EncryptedChatStore(
+      prisma as never,
+      keys as never,
+      {} as never,
+      {} as never,
+    );
+
+    const history = await store.listMessages(actor, conversationId, {
+      limit: 10,
+    });
+
+    expect(prisma.ragDocument.findMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: actor.tenantId,
+        publicId: {
+          in: [
+            readyDocumentId,
+            deletingDocumentId,
+            deletedDocumentId,
+            otherTenantDocumentId,
+          ],
+        },
+        status: 'READY',
+      },
+      select: { publicId: true },
+    });
+    expect(history.items[0]?.citations).toEqual([
+      { ...citation('S1', readyDocumentId), availability: 'available' },
+      { ...citation('S2', deletingDocumentId), availability: 'unavailable' },
+      { ...citation('S3', deletedDocumentId), availability: 'unavailable' },
+      { ...citation('S4', otherTenantDocumentId), availability: 'unavailable' },
+    ]);
+    const serialized = JSON.stringify(history);
+    expect(serialized).not.toContain(internalReadyDocumentId);
+    expect(serialized).not.toContain(rawChunk);
+    expect(history.items[0]?.citations?.[0]).not.toHaveProperty('chunkId');
+    expect(history.items[0]?.citations?.[0]).not.toHaveProperty('internalDocumentId');
+  });
+});
+
 function bindingMac() {
   return {
     keyVersion: 1,
@@ -270,12 +360,46 @@ function encryptedSanitizedMessage(key: Buffer, content: string, sequence: bigin
   };
 }
 
+function encryptedMessageWithCitations(
+  key: Buffer,
+  content: string,
+  sequence: bigint,
+  citations: readonly RagCitation[],
+) {
+  const message = encryptedMessage(key, 'assistant', content, sequence);
+  const encrypted = encryptContent(
+    key,
+    citationSnapshotJson(citations),
+    createMessageCitationsAad(actor.tenantId, conversationId, message.id, 1),
+  );
+  return {
+    ...message,
+    citationCiphertext: Uint8Array.from(encrypted.ciphertext),
+    citationNonce: Uint8Array.from(encrypted.nonce),
+    citationTag: Uint8Array.from(encrypted.tag),
+    citationContentKeyVersion: encrypted.contentKeyVersion,
+    citationSchemaVersion: encrypted.schemaVersion,
+  };
+}
+
+function citation(sourceId: `S${number}`, documentId: string): RagCitation {
+  return {
+    sourceId,
+    documentId,
+    displayName: `${sourceId}.txt`,
+    pageStart: null,
+    pageEnd: null,
+    lineStart: 1,
+    lineEnd: 2,
+    ordinal: Number(sourceId.slice(1)),
+  };
+}
+
 function contentKeys(key: Buffer) {
   return {
     withKeyVersion: jest.fn(async (
       _tenantId: string,
       _version: number,
       operation: (contentKey: Buffer) => Promise<string> | string,
-    ) => operation(key)),
-  };
+    ) => operation(key)),  };
 }

@@ -36,6 +36,9 @@ gatelm_require_env_vars \
   GATELM_DEMO_TENANT_ID \
   GATELM_DEMO_PROJECT_ID \
   GATELM_DEMO_APPLICATION_ID
+if [[ "${TENANT_CHAT_RAG_ENABLED}" == "true" ]]; then
+  gatelm_require_env_vars SELFHOST_CHAT_WEB_PORT
+fi
 gatelm_require_default_demo_ids
 gatelm_check_docker
 gatelm_need_curl
@@ -55,6 +58,12 @@ gatelm_wait_for_http "Control Plane /readyz" "${control_plane_base}/readyz" 60
 gatelm_wait_for_http "Gateway /healthz" "${gateway_base}/healthz" 60
 gatelm_wait_for_http "Gateway /readyz" "${gateway_base}/readyz" 90
 gatelm_wait_for_http "AI Service /healthz" "${ai_service_base}/healthz" 60
+if [[ "${TENANT_CHAT_RAG_ENABLED}" == "true" ]]; then
+  chat_web_base="http://127.0.0.1:${SELFHOST_CHAT_WEB_PORT}"
+  gatelm_wait_for_compose_service "Chat API" "chat-api" 60
+  gatelm_wait_for_compose_service "RAG worker" "rag-worker" 60
+  gatelm_wait_for_http "Tenant Chat Web" "${chat_web_base}/login" 90
+fi
 gatelm_wait_for_http "Web Console" "${web_base}/" 90
 
 request_id="selfhost_smoke_$(date -u +%Y%m%dT%H%M%SZ)_$$"

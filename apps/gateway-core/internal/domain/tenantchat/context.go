@@ -71,6 +71,7 @@ type RequestContext struct {
 type EphemeralMessage struct {
 	Role    string            `json:"role"`
 	Content string            `json:"content"`
+	Purpose string            `json:"purpose,omitempty"`
 	Safety  *SafetyProvenance `json:"safety,omitempty"`
 }
 

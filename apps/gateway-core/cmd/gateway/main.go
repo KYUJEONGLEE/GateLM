@@ -18,6 +18,7 @@ import (
 	credentialcomposite "gatelm/apps/gateway-core/internal/adapters/credentials/composite"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	credentialpostgres "gatelm/apps/gateway-core/internal/adapters/credentials/postgres"
+	embeddingopenai "gatelm/apps/gateway-core/internal/adapters/embeddings/openai"
 	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
 	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
@@ -31,6 +32,7 @@ import (
 	providerhttpclient "gatelm/apps/gateway-core/internal/adapters/providers/httpclient"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
+	ragworkloadauth "gatelm/apps/gateway-core/internal/adapters/rag/workloadauth"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
 	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
@@ -60,6 +62,7 @@ import (
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
+	raghttp "gatelm/apps/gateway-core/internal/http/rag"
 	tenantchathttp "gatelm/apps/gateway-core/internal/http/tenantchat"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
@@ -67,6 +70,7 @@ import (
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	projectemployeecost "gatelm/apps/gateway-core/internal/services/projectapplication/employeecost"
+	ragembeddingservice "gatelm/apps/gateway-core/internal/services/rag/embedding"
 	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
 	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
@@ -367,9 +371,82 @@ func main() {
 			tenantchathttp.WithSanitizationService(tenantChatSanitizations),
 			tenantchathttp.WithUsageReceipts(tenantChatReceiptToken, tenantChatUsage),
 		)
+		privateRouter := http.NewServeMux()
+		privateRouter.Handle("/internal/v1/tenant-chat/", tenantChatPrivateRouter)
+		if cfg.RAGEmbedding.Enabled {
+			ragWorkloadVerifier, err := ragworkloadauth.Load(
+				cfg.RAGEmbedding.WorkloadJWKSFile,
+				cfg.RAGEmbedding.BindingHMACKeysFile,
+				cfg.RAGEmbedding.WorkloadIdentitiesFile,
+			)
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding workload verifier failed: %v", err)
+			}
+			ragJTIConsumer, err := ragworkloadauth.NewRedisJTIConsumer(
+				redisClient,
+				cfg.RAGEmbedding.WorkloadJTIPrefix,
+			)
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding jti guard failed: %v", err)
+			}
+			ragHTTPClient := providerhttpclient.New(providerhttpclient.Config{
+				MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
+				MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
+				MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
+				IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
+				DialTimeout:           cfg.ProviderTransport.DialTimeout,
+				DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
+				TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
+				ResponseHeaderTimeout: cfg.RAGEmbedding.AttemptTimeout,
+				ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
+			})
+			defer ragHTTPClient.CloseIdleConnections()
+			ragProvider, err := embeddingopenai.NewResolvingProvider(
+				credentialResolver,
+				credentials.Ref{
+					CredentialRefID:   cfg.RAGEmbedding.CredentialRefID,
+					CredentialVersion: 1,
+					CredentialState:   credentials.StateActive,
+				},
+				embeddingopenai.Config{
+					BaseURL:          cfg.RAGEmbedding.OpenAIBaseURL,
+					Model:            cfg.RAGEmbedding.Model,
+					Dimensions:       cfg.RAGEmbedding.Dimensions,
+					Timeout:          cfg.RAGEmbedding.AttemptTimeout,
+					MaxAttempts:      cfg.RAGEmbedding.MaxAttempts,
+					MaxResponseBytes: cfg.RAGEmbedding.MaxResponseBytes,
+					MaxInputs:        cfg.RAGEmbedding.MaxInputs,
+					HTTPClient:       ragHTTPClient,
+				},
+			)
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding provider configuration failed")
+			}
+			ragEmbeddingService, err := ragembeddingservice.New(ragProvider, ragembeddingservice.Config{
+				Provider:          cfg.RAGEmbedding.Provider,
+				Model:             cfg.RAGEmbedding.Model,
+				Dimensions:        cfg.RAGEmbedding.Dimensions,
+				ProfileVersion:    cfg.RAGEmbedding.ProfileVersion,
+				MaxInputs:         cfg.RAGEmbedding.MaxInputs,
+				MaxTokensPerInput: cfg.RAGEmbedding.MaxTokensPerInput,
+				MaxBatchTokens:    cfg.RAGEmbedding.MaxBatchTokens,
+			})
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding service configuration failed")
+			}
+			privateRouter.Handle(
+				"/internal/v1/rag/",
+				raghttp.NewRouter(
+					ragworkloadauth.NewAuthenticator(ragWorkloadVerifier, ragJTIConsumer),
+					ragEmbeddingService,
+					cfg.MaxRequestBodyBytes,
+					raghttp.WithMetrics(metricsRegistry),
+				),
+			)
+		}
 		tenantChatPrivateServer = app.NewServerAtAddress(
 			cfg.TenantChatPrivate.ListenAddress,
-			tenantChatPrivateRouter,
+			privateRouter,
 		)
 	}
 

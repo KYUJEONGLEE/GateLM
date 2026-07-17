@@ -274,7 +274,7 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
-test("Chat App policy navigation exposes editable routing, cache, and security policies", async () => {
+test("Chat App policy navigation exposes routing, cache, security, and tenant-admin Knowledge Base panels", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const runtimeEditorSourceUrl = new URL("../policies/components/runtime-policy-editor.tsx", import.meta.url);
   const [rawSource, runtimeEditorSource] = await Promise.all([
@@ -284,8 +284,12 @@ test("Chat App policy navigation exposes editable routing, cache, and security p
   const source = rawSource.replaceAll("\r\n", "\n");
 
   expect(source).toContain('const chatAppPolicySections: ChatAppPolicySection[] = [');
-  expect(source).toContain('"routing",\n  "cache",\n  "security"');
+  expect(source).toContain('"routing",\n  "cache",\n  "security",\n  "knowledge"');
   expect(source).toContain('securityTab: "보안"');
+  expect(source).toContain('knowledgeTab: "지식 베이스"');
+  expect(source).toContain('section !== "knowledge" || canManageKnowledgeBase');
+  expect(source).toContain("<KnowledgeBaseManagement");
+  expect(source).toContain('activePolicySection === "cache" || activePolicySection === "security"');
   expect(source).toContain("<CachePolicyControls");
   expect(source).toContain("<SafetyDetectorPolicyControls");
   expect(source).not.toContain("ChatAppPolicySummary");
