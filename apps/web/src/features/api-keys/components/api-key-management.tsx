@@ -399,7 +399,7 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
                         <strong className="provider-name">{apiKey.projectName}</strong>
                       </div>
                       <div className="api-key-list-cell" data-label={text.credential}>
-                        <code className="api-key-preview">{apiKey.prefix}••••{apiKey.last4}</code>
+                        <code className="api-key-preview">gsk......{apiKey.last4}</code>
                       </div>
                       <div className="api-key-list-cell" data-label={text.status}>
                         <Badge
