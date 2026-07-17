@@ -198,6 +198,7 @@ services:
     restart: unless-stopped
     user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
     environment:
+      DEPLOYMENT_MODE: aws_triage
       GATEWAY_PORT: "8080"
       DATABASE_URL: ${GATEWAY_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public}
       REDIS_URL: ${GATEWAY_REDIS_URL:-redis://redis:6379}
@@ -243,6 +244,14 @@ services:
       TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
       TENANT_CHAT_CACHE_KEYSETS_FILE: /run/secrets/tenant-chat/cache-keysets.json
       TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE: /run/secrets/tenant-chat/usage-receipt-token
+      TENANT_CHAT_RAG_ENABLED: ${TENANT_CHAT_RAG_ENABLED:-false}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_EMBEDDING_CREDENTIAL_REF_ID: ${RAG_EMBEDDING_CREDENTIAL_REF_ID:-credential_ref_openai_main}
+      RAG_EMBEDDING_OPENAI_BASE_URL: ${RAG_EMBEDDING_OPENAI_BASE_URL:-https://api.openai.com/v1}
     ports:
       - "${AWS_TRIAGE_GATEWAY_BIND:-127.0.0.1}:${AWS_TRIAGE_GATEWAY_PORT:-8080}:8080"
     expose:
@@ -295,6 +304,16 @@ services:
       AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: ${AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME}
       AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: ${AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID}
       AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS}
+      DEPLOYMENT_MODE: aws
+      TENANT_CHAT_RAG_ENABLED: ${TENANT_CHAT_RAG_ENABLED:-false}
+      AI_SERVICE_RAG_TEMP_DIR: /run/gatelm-rag-tmp
+      AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS: ${AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS:-2}
+      AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES: ${AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES:-536870912}
+      AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS: ${AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS:-30}
+    tmpfs:
+      - /run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777
+    mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}
+    pids_limit: ${AI_SERVICE_PIDS_LIMIT:-128}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2).read()\""]
       interval: 10s

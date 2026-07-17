@@ -74,6 +74,11 @@ export function getConsoleNavigationState(pathname: string | null): ConsoleNavig
         activeManagementItem: "employees",
         activeSection: "management"
       };
+    case "knowledge-documents":
+      return {
+        activeManagementItem: "chat-app",
+        activeSection: "management"
+      };
     case "provider-connections":
     case "model-catalog":
       return {

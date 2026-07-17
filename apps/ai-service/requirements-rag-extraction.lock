@@ -1,0 +1,23 @@
+# Reproduced on Windows 11 / CPython 3.12 on 2026-07-16.
+# Install with: python -m pip install -r requirements-rag-extraction.lock
+annotated-types==0.7.0
+anyio==4.14.2
+certifi==2026.6.17
+charset-normalizer==3.4.9
+click==8.4.2
+colorama==0.4.6
+fastapi==0.115.14
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.18
+pydantic==2.10.6
+pydantic_core==2.27.2
+pypdf==6.14.2
+regex==2026.7.10
+requests==2.34.2
+starlette==0.46.2
+tiktoken==0.13.0
+typing_extensions==4.16.0
+urllib3==2.7.0
+uvicorn==0.30.6

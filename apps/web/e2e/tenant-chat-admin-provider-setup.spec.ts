@@ -11,7 +11,9 @@ const tenantRouteId = "tenant_demo_acme";
 const tenantId = "00000000-0000-4000-8000-000000000100";
 const providerId = "22222222-2222-4222-8222-222222222222";
 const controlPlanePort = Number(process.env.GATELM_CONTROL_PLANE_PORT ?? "3001");
-const tenantChatPath = `/tenants/${tenantRouteId}/tenant-chat`;
+const chatAppPath = `/tenants/${tenantRouteId}/chat-app`;
+const legacyKnowledgeDocumentsPath =
+  `/tenants/${tenantRouteId}/knowledge-documents`;
 
 type MockProvider = {
   baseUrl: string;
@@ -31,6 +33,10 @@ type MockProvider = {
 
 let providers: MockProvider[] = [];
 let activeSnapshot: Record<string, unknown> | null = null;
+let authRole: "employee" | "tenant_admin" = "tenant_admin";
+let knowledgeBaseGlobalEnabled = true;
+let knowledgeBaseTenantEnabled = false;
+let knowledgeBaseSettingsRequestCount = 0;
 let controlPlaneServer: Server;
 
 test.describe.configure({ mode: "serial" });
@@ -60,6 +66,10 @@ test.afterAll(async () => {
 test.beforeEach(async ({ context }) => {
   providers = [];
   activeSnapshot = null;
+  authRole = "tenant_admin";
+  knowledgeBaseGlobalEnabled = true;
+  knowledgeBaseTenantEnabled = false;
+  knowledgeBaseSettingsRequestCount = 0;
   await context.addCookies([
     {
       domain: "127.0.0.1",
@@ -76,16 +86,18 @@ test.beforeEach(async ({ context }) => {
 test("registers a Provider, selects exact pricing, activates, and restores ready after reload", async ({
   page
 }) => {
-  await page.goto(tenantChatPath);
+  await page.goto(chatAppPath);
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByRole("heading", { name: "Tenant Chat setup" })).toBeVisible();
-  await expect(page.getByText("Provider needed", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Chat App" })).toBeVisible();
+  await expect(
+    page.getByText("Register an active tenant-level provider to configure the Chat App.")
+  ).toBeVisible();
   const providerSetupHref = await page
     .getByRole("link", { name: "Register or edit provider" })
     .getAttribute("href");
   expect(providerSetupHref).toBe(
-    "/tenants/tenant_demo_acme/provider-connections?intent=tenant-chat-setup&returnTo=%2Ftenants%2Ftenant_demo_acme%2Ftenant-chat"
+    `/tenants/${tenantId}/provider-connections?intent=tenant-chat-setup&returnTo=%2Ftenants%2F${tenantId}%2Fchat-app`
   );
   await page.goto(providerSetupHref!);
 
@@ -97,36 +109,28 @@ test("registers a Provider, selects exact pricing, activates, and restores ready
   await expect(registerButton).toBeEnabled();
   await registerButton.click();
 
-  await expect(page.getByRole("radio", { name: /gpt-5\.4-mini/ })).toBeVisible({
-    timeout: 15_000
-  });
   await expect(page).toHaveURL(
-    new RegExp(`${tenantChatPath.replaceAll("/", "\\/")}$`),
+    new RegExp(`/tenants/${tenantId}/chat-app`),
     { timeout: 15_000 }
   );
-  await expect(
-    page.getByRole("radio").filter({
-      has: page.getByText("gpt-5.4", { exact: true })
-    })
-  ).toBeDisabled();
-  await page.getByRole("radio", { name: /gpt-5\.4-mini/ }).click();
-  await page.getByRole("button", { name: "Activate Tenant Chat" }).click();
+  const generalSimpleModel = page.getByRole("combobox", {
+    name: "General Simple Model"
+  });
+  await expect(generalSimpleModel).toHaveValue(`${providerId}:gpt-5.4-mini`);
+  await page.getByRole("button", { name: "Publish Chat App policy" }).click();
 
-  await expect(page.getByText("Tenant Chat is ready", { exact: false })).toBeVisible();
-  await expect(page.getByText("Snapshot v1", { exact: true })).toBeVisible();
-  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+  await expect(page.getByText("The Chat App policy is active.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Active runtime" })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
-  await expect(page.getByText("Snapshot v1", { exact: true })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /gpt-5\.4-mini/ })).toBeChecked();
+  await expect(generalSimpleModel).toHaveValue(`${providerId}:gpt-5.4-mini`);
 });
 
-test("restores Tenant Chat on Escape and remains usable on a mobile viewport with long labels", async ({
+test("restores the Chat App on Escape and remains usable on a mobile viewport with long labels", async ({
   page
 }) => {
   await page.setViewportSize({ height: 844, width: 390 });
-  await page.goto(tenantChatPath);
+  await page.goto(chatAppPath);
   await page.waitForLoadState("networkidle");
   const providerSetupHref = await page
     .getByRole("link", { name: "Register or edit provider" })
@@ -135,7 +139,7 @@ test("restores Tenant Chat on Escape and remains usable on a mobile viewport wit
   await expect(page.getByRole("dialog", { name: "Register provider model key" })).toBeVisible();
   await page.waitForLoadState("networkidle");
   await page.keyboard.press("Escape");
-  await expect(page).toHaveURL(new RegExp(`${tenantChatPath.replaceAll("/", "\\/")}$`));
+  await expect(page).toHaveURL(new RegExp(`/tenants/${tenantId}/chat-app$`));
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   providers = [
@@ -147,19 +151,82 @@ test("restores Tenant Chat on Escape and remains usable on a mobile viewport wit
   ];
   await page.reload();
 
-  await expect(page.getByRole("radio", { name: /서울 글로벌 고객지원팀/ })).toBeVisible();
-  const supportedModel = page.getByRole("radio", { name: /gpt-5\.4-mini/ });
-  await supportedModel.focus();
-  await page.keyboard.press("Space");
-  await expect(supportedModel).toBeChecked();
-  await expect(
-    page.getByRole("radio").filter({
-      has: page.getByText("gpt-5.4", { exact: true })
-    })
-  ).toBeDisabled();
+  const providerSelect = page.getByRole("combobox", {
+    name: "General Simple Provider"
+  });
+  const modelSelect = page.getByRole("combobox", {
+    name: "General Simple Model"
+  });
+  await expect(providerSelect).toHaveValue(providerId);
+  await modelSelect.selectOption(`${providerId}:gpt-5.4`);
+  await expect(modelSelect).toHaveValue(`${providerId}:gpt-5.4`);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
   ).toBe(true);
+});
+
+test("manages tenant Knowledge Base enablement inside the Chat App without blocking document preparation", async ({
+  page
+}) => {
+  await page.goto(legacyKnowledgeDocumentsPath);
+  await expect(page).toHaveURL(/\/chat-app\?section=knowledge$/);
+
+  await page.goto(chatAppPath);
+  await page.waitForLoadState("networkidle");
+
+  const knowledgeTab = page.getByRole("tab", { name: "Knowledge Base" });
+  await knowledgeTab.click();
+  await expect(page).toHaveURL(/\/chat-app\?section=knowledge$/);
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "Routing" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await page.goForward();
+  await expect(knowledgeTab).toHaveAttribute("aria-selected", "true");
+  await page.reload();
+
+  await expect(knowledgeTab).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  const toggle = page.getByRole("switch", {
+    name: "Enable Knowledge Chat for this tenant"
+  });
+  await expect(toggle).not.toBeChecked();
+  const uploadButton = page.locator("button").filter({ hasText: "Upload document" });
+  await expect(uploadButton).toBeEnabled();
+  await expect(
+    page.getByText("You can still upload and prepare documents until they are Ready.")
+  ).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByText("Available to employees", { exact: true })).toBeVisible();
+
+  knowledgeBaseGlobalEnabled = false;
+  await page.reload();
+  await expect(toggle).toBeChecked();
+  await expect(
+    page.getByText("The platform-wide RAG switch is off.", { exact: false })
+  ).toBeVisible();
+  await expect(page.locator('[data-effective-enabled="false"]')).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(uploadButton).toBeEnabled();
+});
+
+test("rejects a general employee before loading Knowledge Base management", async ({
+  page
+}) => {
+  authRole = "employee";
+  await page.goto(`${chatAppPath}?section=knowledge`);
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Knowledge Base" })).toHaveCount(0);
+  expect(knowledgeBaseSettingsRequestCount).toBe(0);
 });
 
 async function handleControlPlaneRequest(
@@ -170,13 +237,13 @@ async function handleControlPlaneRequest(
   if (url.pathname === "/api/auth/me") {
     return json(response, 200, {
       data: {
-        memberships: [{ role: "tenant_admin", status: "active", tenantId }],
+        memberships: [{ role: authRole, status: "active", tenantId }],
         session: { kind: "full" },
         tenant: { id: tenantId, name: "Acme" },
         user: {
           email: "owner@example.com",
           id: "33333333-3333-4333-8333-333333333333",
-          role: "tenant_admin"
+          role: authRole
         }
       }
     });
@@ -276,30 +343,73 @@ async function handleControlPlaneRequest(
     request.method === "PUT"
   ) {
     const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const cachePolicy = body.cachePolicy as Record<string, unknown>;
+    const manualModelRef = String(body.manualModelRef ?? "");
     activeSnapshot = {
+      cacheEnabled: cachePolicy.enabled,
+      cachePolicy: body.cachePolicy,
       digest: "sha256:tenant-chat-e2e",
-      modelKey: body.modelKey,
+      manualModelRef,
+      modelKey: manualModelRef.split(":").slice(1).join(":"),
       policyVersion: 1,
       pricingStatus: "current",
       pricingVersion: 1,
-      providerConnectionId: body.providerConnectionId,
+      providerConnectionId: providerId,
       publishedAt: "2026-07-14T00:00:00Z",
+      routes: body.routes,
+      routingMode: body.routingMode,
+      safetyPolicy: body.safetyPolicy,
       snapshotId: "tenant_chat_snapshot_e2e",
       version: 1
     };
     return json(response, 200, { data: runtimeSetup() });
   }
+  if (
+    url.pathname === `/admin/v1/tenants/${tenantId}/rag/knowledge-base` &&
+    request.method === "GET"
+  ) {
+    knowledgeBaseSettingsRequestCount += 1;
+    return json(response, 200, { data: knowledgeBaseSettings() });
+  }
+  if (
+    url.pathname === `/admin/v1/tenants/${tenantId}/rag/knowledge-base` &&
+    request.method === "PATCH"
+  ) {
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    if (typeof body.enabled !== "boolean" || Object.keys(body).length !== 1) {
+      return json(response, 400, { message: "Invalid Knowledge Base request" });
+    }
+    knowledgeBaseTenantEnabled = body.enabled;
+    return json(response, 200, { data: knowledgeBaseSettings() });
+  }
+  if (
+    url.pathname === `/admin/v1/tenants/${tenantId}/rag/documents` &&
+    request.method === "GET"
+  ) {
+    return json(response, 200, {
+      data: [],
+      pagination: { hasMore: false, limit: 50, nextCursor: null }
+    });
+  }
 
   return json(response, 404, { message: "Not found" });
+}
+
+function knowledgeBaseSettings() {
+  return {
+    effectiveEnabled: knowledgeBaseGlobalEnabled && knowledgeBaseTenantEnabled,
+    globalEnabled: knowledgeBaseGlobalEnabled,
+    tenantEnabled: knowledgeBaseTenantEnabled
+  };
 }
 
 function runtimeSetup() {
   const candidates = providers.map((provider) => ({
     displayName: provider.displayName,
     models: readModels(provider.providerConfig).map((modelKey) => ({
-      activationStatus:
-        modelKey === "gpt-5.4-mini" ? "available" : "pricing_unavailable",
+      activationStatus: "available",
       modelKey,
+      modelRef: `${provider.id}:${modelKey}`,
       pricing:
         modelKey === "gpt-5.4-mini"
           ? {
@@ -307,7 +417,8 @@ function runtimeSetup() {
               inputMicroUsdPerMillionTokens: 750_000,
               outputMicroUsdPerMillionTokens: 4_500_000
             }
-          : null
+          : null,
+      pricingStatus: modelKey === "gpt-5.4-mini" ? "available" : "unavailable"
     })),
     providerConnectionId: provider.id,
     providerFamily: "openai",

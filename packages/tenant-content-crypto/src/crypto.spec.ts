@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import {
   ContentIntegrityError,
   createMessageAad,
+  createMessageCitationsAad,
   createRagChunkAadV1,
   createRagDocumentPrivateMetadataAadV1,
   createTitleAad,
@@ -118,6 +119,30 @@ describe('tenant content crypto compatibility', () => {
       expect(encrypted.nonce).toHaveLength(12);
       expect(encrypted.tag).toHaveLength(16);
       expect(decryptContent(key, encrypted, aad)).toBe('synthetic-rag-chunk');
+    } finally {
+      key.fill(0);
+    }
+  });
+
+  it('encrypts a citation snapshot under a distinct assistant-record AAD', () => {
+    const key = newTenantKey();
+    const citationAad = createMessageCitationsAad(
+      ids.tenantId,
+      ids.knowledgeBaseId,
+      ids.documentId,
+      7,
+    );
+    const messageAad = createMessageAad(
+      ids.tenantId,
+      ids.knowledgeBaseId,
+      ids.documentId,
+      'assistant',
+      7,
+    );
+    try {
+      const encrypted = encryptContent(key, '[{\"sourceId\":\"S1\"}]', citationAad);
+      expect(decryptContent(key, encrypted, citationAad)).toBe('[{\"sourceId\":\"S1\"}]');
+      expect(() => decryptContent(key, encrypted, messageAad)).toThrow(ContentIntegrityError);
     } finally {
       key.fill(0);
     }

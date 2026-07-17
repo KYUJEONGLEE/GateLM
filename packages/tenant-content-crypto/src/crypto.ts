@@ -155,7 +155,7 @@ function contentAadBytes(aad: TenantContentAad): Buffer {
   if (!aad || typeof aad !== 'object') {
     throw new ContentIntegrityError();
   }
-  if (aad.contentKind === 'title' || aad.contentKind === 'message') {
+  if (aad.contentKind === 'title' || aad.contentKind === 'message' || aad.contentKind === 'message_citations') {
     validateChatAad(aad);
   } else if (aad.contentKind === 'rag_chunk') {
     validateRagChunkAad(aad);
@@ -171,10 +171,11 @@ function validateChatAad(aad: ContentAad): void {
   if (
     aad.schemaVersion !== 1 ||
     !positiveVersion(aad.contentKeyVersion) ||
-    !['title', 'message'].includes(aad.contentKind) ||
+    !['title', 'message', 'message_citations'].includes(aad.contentKind) ||
     !['none', 'user', 'assistant'].includes(aad.role) ||
     (aad.contentKind === 'title' && aad.role !== 'none') ||
-    (aad.contentKind === 'message' && aad.role === 'none')
+    (aad.contentKind === 'message' && aad.role === 'none') ||
+    (aad.contentKind === 'message_citations' && aad.role !== 'assistant')
   ) {
     throw new ContentIntegrityError();
   }

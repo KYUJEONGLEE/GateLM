@@ -1,0 +1,1 @@
+"""Stateless RAG extraction domain."""

@@ -38,6 +38,15 @@ interface ControlPlaneEnv extends RagRuntimeConfig {
   TENANT_CHAT_PROJECTOR_ENABLED?: string;
   TENANT_CHAT_PROJECTOR_INTERVAL_MS?: number;
   TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS?: number;
+  TENANT_CHAT_CONTENT_KEYS_FILE?: string;
+  RAG_CONTENT_WRAPPING_KEYS_FILE?: string;
+  RAG_OBJECT_STORE_DRIVER: 's3' | 'fake';
+  RAG_MAX_UPLOAD_BYTES: number;
+  RAG_S3_REGION?: string;
+  RAG_S3_BUCKET?: string;
+  RAG_S3_KMS_KEY_ID?: string;
+  RAG_S3_ENDPOINT?: string;
+  RAG_S3_FORCE_PATH_STYLE: string;
 }
 
 type ValidatedControlPlaneEnv = Record<string, string | number | undefined> &
@@ -48,6 +57,7 @@ const DEFAULT_ADMIN_AUTH_MODE = 'session_cookie';
 const DEFAULT_CONTROL_PLANE_WEB_ORIGIN = 'http://localhost:3000';
 const DEFAULT_AUTH_EMAIL_TRANSPORT = 'dev_memory';
 const DEMO_ADMIN_AUTH_MODE = 'demo_admin_placeholder';
+const MAX_RAG_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 function requireString(env: RawEnv, key: keyof ControlPlaneEnv): string {
   const value = env[key];
@@ -192,6 +202,33 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     config,
     'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN',
   );
+  const ragRuntimeConfig = validateRagRuntimeConfig(config);
+  const ragEnabled = ragRuntimeConfig.TENANT_CHAT_RAG_ENABLED === 'true';
+  const productionLike = isProductionLikeEnv(config);
+  const ragObjectStoreDriver = readRagObjectStoreDriver(
+    config,
+    productionLike,
+    ragEnabled,
+  );
+  const ragS3Region = readOptionalString(config, 'RAG_S3_REGION');
+  const ragS3Bucket = readOptionalString(config, 'RAG_S3_BUCKET');
+  const ragS3KmsKeyId = readOptionalString(config, 'RAG_S3_KMS_KEY_ID');
+  const ragS3Endpoint = readOptionalString(config, 'RAG_S3_ENDPOINT');
+  const ragContentWrappingKeysFile = readOptionalString(
+    config,
+    'RAG_CONTENT_WRAPPING_KEYS_FILE',
+  );
+  const ragS3ForcePathStyle =
+    readBooleanString(config, 'RAG_S3_FORCE_PATH_STYLE') ?? 'false';
+  if (
+    (ragS3Endpoint || ragS3ForcePathStyle === 'true') &&
+    !productionLike &&
+    !isExplicitLocalOrTestEnv(config)
+  ) {
+    throw new Error(
+      'RAG_S3_ENDPOINT and RAG_S3_FORCE_PATH_STYLE are allowed only in explicit local/test environments',
+    );
+  }
   if (emailTransport === 'smtp') {
     requireString(config, 'SMTP_HOST');
     requireString(config, 'SMTP_FROM');
@@ -203,7 +240,7 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
       throw new Error('SMTP_USER and SMTP_PASSWORD must be configured together');
     }
   }
-  if (isProductionLikeEnv(config)) {
+  if (productionLike) {
     if (adminAuthMode !== DEFAULT_ADMIN_AUTH_MODE) {
       throw new Error(
         'CONTROL_PLANE_ADMIN_AUTH_MODE must be session_cookie in production-like environments',
@@ -235,11 +272,37 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
         'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
       );
     }
+    const ragStorage = {
+      driver: ragObjectStoreDriver,
+      endpoint: ragS3Endpoint,
+      forcePathStyle: ragS3ForcePathStyle,
+      region: ragS3Region,
+      bucket: ragS3Bucket,
+      kmsKeyId: ragS3KmsKeyId,
+    } as const;
+    assertProductionRagStorageSafety(config, ragStorage);
+    if (ragEnabled) {
+      assertProductionRagStorage(config, ragStorage);
+    }
+    if (readOptionalString(config, 'TENANT_CHAT_CONTENT_KEYS_FILE')) {
+      throw new Error(
+        'TENANT_CHAT_CONTENT_KEYS_FILE must not be mounted in Control Plane production-like environments',
+      );
+    }
+    if (ragEnabled && !ragContentWrappingKeysFile) {
+      throw new Error(
+        'Missing required environment variable: RAG_CONTENT_WRAPPING_KEYS_FILE',
+      );
+    }
+  }
+
+  if (ragEnabled && ragObjectStoreDriver === 's3') {
+    requireConfiguredRagS3(ragS3Region, ragS3Bucket, ragS3KmsKeyId);
   }
 
   return {
     ...config,
-    ...validateRagRuntimeConfig(config),
+    ...ragRuntimeConfig,
     AUTH_EMAIL_TRANSPORT: emailTransport,
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: internalServiceToken,
     TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: tenantChatServiceToken,
@@ -327,7 +390,125 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
         1,
         100,
       ) ?? 5,
+    RAG_CONTENT_WRAPPING_KEYS_FILE: ragContentWrappingKeysFile,
+    RAG_OBJECT_STORE_DRIVER: ragObjectStoreDriver,
+    RAG_MAX_UPLOAD_BYTES:
+      readOptionalInteger(
+        config,
+        'RAG_MAX_UPLOAD_BYTES',
+        1,
+        MAX_RAG_UPLOAD_BYTES,
+      ) ?? MAX_RAG_UPLOAD_BYTES,
+    RAG_S3_REGION: ragS3Region,
+    RAG_S3_BUCKET: ragS3Bucket,
+    RAG_S3_KMS_KEY_ID: ragS3KmsKeyId,
+    RAG_S3_ENDPOINT: ragS3Endpoint,
+    RAG_S3_FORCE_PATH_STYLE: ragS3ForcePathStyle,
   };
+}
+
+function readRagObjectStoreDriver(
+  env: RawEnv,
+  productionLike: boolean,
+  ragEnabled: boolean,
+): 's3' | 'fake' {
+  const explicitlyLocal = isExplicitLocalOrTestEnv(env);
+  const configured = env.RAG_OBJECT_STORE_DRIVER?.trim();
+  let value = configured;
+  if (!value) {
+    if (!ragEnabled) value = explicitlyLocal ? 'fake' : 's3';
+    else if (productionLike) value = 's3';
+    else if (explicitlyLocal) value = 'fake';
+    else value = '';
+  }
+  if (value !== 's3' && value !== 'fake') {
+    throw new Error(
+      'RAG_OBJECT_STORE_DRIVER must be explicitly configured outside local/test environments',
+    );
+  }
+  if (productionLike && value !== 's3') {
+    throw new Error(
+      'RAG_OBJECT_STORE_DRIVER must be s3 in production-like environments',
+    );
+  }
+  if (value === 'fake' && !explicitlyLocal) {
+    throw new Error(
+      'RAG_OBJECT_STORE_DRIVER=fake is allowed only in explicit local/test environments',
+    );
+  }
+  return value;
+}
+
+function requireConfiguredRagS3(
+  region: string | undefined,
+  bucket: string | undefined,
+  kmsKeyId: string | undefined,
+): void {
+  if (!region) {
+    throw new Error('Missing required environment variable: RAG_S3_REGION');
+  }
+  if (!bucket) {
+    throw new Error('Missing required environment variable: RAG_S3_BUCKET');
+  }
+  if (!kmsKeyId) {
+    throw new Error('Missing required environment variable: RAG_S3_KMS_KEY_ID');
+  }
+}
+
+function assertProductionRagStorage(
+  env: RawEnv,
+  storage: Readonly<{
+    driver: 's3' | 'fake';
+    endpoint: string | undefined;
+    forcePathStyle: string;
+    region: string | undefined;
+    bucket: string | undefined;
+    kmsKeyId: string | undefined;
+  }>,
+): void {
+  assertProductionRagStorageSafety(env, storage);
+  requireConfiguredRagS3(storage.region, storage.bucket, storage.kmsKeyId);
+}
+
+function assertProductionRagStorageSafety(
+  env: RawEnv,
+  storage: Readonly<{
+    driver: 's3' | 'fake';
+    endpoint: string | undefined;
+    forcePathStyle: string;
+    region: string | undefined;
+    bucket: string | undefined;
+    kmsKeyId: string | undefined;
+  }>,
+): void {
+  if (storage.driver !== 's3') {
+    throw new Error(
+      'RAG_OBJECT_STORE_DRIVER must be s3 in production-like environments',
+    );
+  }
+  if (storage.endpoint) {
+    throw new Error(
+      'RAG_S3_ENDPOINT is not allowed in production-like environments',
+    );
+  }
+  if (storage.forcePathStyle === 'true') {
+    throw new Error(
+      'RAG_S3_FORCE_PATH_STYLE=true is not allowed in production-like environments',
+    );
+  }
+  for (const key of [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_SESSION_TOKEN',
+    'AWS_PROFILE',
+    'AWS_SHARED_CREDENTIALS_FILE',
+  ]) {
+    if (env[key]?.trim()) {
+      throw new Error(
+        `${key} is not allowed in production-like environments; use an IAM role`,
+      );
+    }
+  }
 }
 
 function isProductionLikeEnv(env: RawEnv): boolean {
@@ -346,6 +527,7 @@ function isProductionLikeEnv(env: RawEnv): boolean {
     env.GATELM_DEPLOYMENT_ENV ??
     env.CONTROL_PLANE_DEPLOYMENT_ENV ??
     env.DEPLOYMENT_ENV ??
+    env.DEPLOYMENT_MODE ??
     env.APP_ENV ??
     ''
   )
@@ -355,13 +537,32 @@ function isProductionLikeEnv(env: RawEnv): boolean {
   return [
     'aws',
     'aws-triage',
+    'aws_triage',
     'prod',
     'production',
     'release',
     'selfhost',
+    'self_host',
     'staging',
     'stage',
   ].includes(deploymentEnv);
+}
+
+function isExplicitLocalOrTestEnv(env: RawEnv): boolean {
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase();
+  if (nodeEnv === 'development' || nodeEnv === 'test') return true;
+
+  const deploymentEnv = (
+    env.GATELM_DEPLOYMENT_ENV ??
+    env.CONTROL_PLANE_DEPLOYMENT_ENV ??
+    env.DEPLOYMENT_ENV ??
+    env.DEPLOYMENT_MODE ??
+    env.APP_ENV ??
+    ''
+  )
+    .trim()
+    .toLowerCase();
+  return deploymentEnv === 'local' || deploymentEnv === 'test';
 }
 
 function isWeakInternalServiceToken(value: string): boolean {

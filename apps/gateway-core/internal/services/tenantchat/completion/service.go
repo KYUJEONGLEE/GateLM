@@ -549,7 +549,7 @@ func currentTurnRoutingMessages(messages []tenantchat.EphemeralMessage) []routin
 	current := make([]routing.PromptMessage, 0, 2)
 	latestUserIndex := -1
 	for index, message := range messages {
-		if message.Role == "system" {
+		if message.Role == "system" && message.Purpose != "rag_context" {
 			current = append(current, routing.PromptMessage{Role: message.Role, Text: message.Content})
 		}
 		if message.Role == "user" {

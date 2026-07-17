@@ -6,7 +6,7 @@ It differs from `deploy/selfhost` on purpose:
 
 - app images are built from the current repo on the EC2 instance
 - no ECR, ECS, RDS, ElastiCache, ALB, Route53, or Secrets Manager is required
-- PostgreSQL, Redis, mock provider, AI service, Control Plane, Gateway, Web Console, Chat API, and Chat Web run on one Docker network
+- PostgreSQL, Redis, mock provider, AI service, Control Plane API, Gateway, Web Console, Chat API, and Chat Web run on one Docker network; the separate RAG worker joins only when RAG is enabled
 - PostgreSQL, Redis, mock provider, and AI service are not published to the EC2 host
 - GateLM Chat Web runs on port 3002; Chat API remains private on the Docker network at port 3003
 - the legacy `apps/application` image is not part of this production-like stack
@@ -52,6 +52,9 @@ Replace:
 - `TENANT_CHAT_ACCESS_JWT_SECRET`
 - `TENANT_CHAT_INTENT_SECRET`
 - `TENANT_CHAT_WORKLOAD_ACTIVE_KID`
+- when enabling RAG: `RAG_QUERY_EMBEDDING_ACTIVE_KID`
+- when enabling RAG: `RAG_WORKER_EMBEDDING_ACTIVE_KID`
+- when enabling RAG: `AI_SERVICE_RAG_SERVICE_TOKEN`
 - `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` (use the same value)
 - `GATEWAY_OBSERVABILITY_INTERNAL_TOKEN` (use a separate value)
 - `GATELM_GATEWAY_API_KEY`
@@ -130,6 +133,41 @@ backup ID emitted by `apply`; it may restore the previous environment selection
 but deliberately retains the additive alias so a rollback cannot recreate the
 same runtime outage.
 
+When Tenant Chat RAG is enabled, provision `.secrets/rag` through the approved
+production secret process. Do not use the local secret generator or commit the
+files. The deployment preflight requires these role-separated files:
+
+```text
+content-wrapping-keys.json
+query-signing.jwk.json
+query-binding-hmac-keys.json
+worker-signing.jwk.json
+worker-binding-hmac-keys.json
+workload-jwks.json
+workload-binding-hmac-keys.json
+workload-identities.json
+```
+
+The query private material is mounted only into Chat API, worker private
+material only into `rag-worker`, and the combined public JWKS, binding keys,
+and identity allowlist only into Gateway. These credentials are separate from
+the existing Tenant Chat completion signing files. Give every RAG secret file
+the same non-root owner as `.secrets/tenant-chat`, with directory mode `700`
+and file mode `600`. `RAG_QUERY_EMBEDDING_ACTIVE_KID` and
+`RAG_WORKER_EMBEDDING_ACTIVE_KID` must match their respective private files;
+the production preflight rejects placeholders.
+
+The `rag-worker` reuses the Control Plane image with its dedicated worker
+entrypoint. AI extraction uses a size-bounded tmpfs plus process, memory, and
+PID limits; plaintext upload temp files are never written to the container
+writable layer in this production-like Compose path.
+
+The deployment script uses `docker-compose.yml` for the rollback-safe
+RAG-disabled stack and adds `docker-compose.rag.yml` only when
+`TENANT_CHAT_RAG_ENABLED=true`. RAG-disabled deployment does not require or
+mount `.secrets/rag` and does not start `rag-worker`. Explicit fake storage or
+static AWS credential settings are rejected in either mode.
+
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
 `.env.example`.
@@ -200,8 +238,16 @@ docker compose --env-file .env config --quiet
 docker compose --env-file .env build
 ```
 
-Compose requires the six files under `.secrets/tenant-chat` and an active
-workload `kid` before it can start Gateway and Chat API. On a small instance,
+For an enabled RAG runtime, manual Compose commands must use both files:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml config --quiet
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml build
+```
+
+Compose requires the six files under `.secrets/tenant-chat`, the eight files
+under `.secrets/rag`, and the corresponding active workload `kid` values before
+it can start the RAG-enabled runtime. On a small instance,
 the first build can be slow. Keep `AI_SERVICE_INSTALL_ML_DEPS=false` unless you
 are intentionally testing the heavier AI safety path.
 
@@ -261,6 +307,12 @@ Then publish a new RuntimeSnapshot from the Console or admin API and recreate th
 
 ```bash
 docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core web chat-api chat-web
+```
+
+When `TENANT_CHAT_RAG_ENABLED=true`, use the RAG overlay and include the worker:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml up -d --force-recreate control-plane-api gateway-core rag-worker web chat-api chat-web
 ```
 
 ## Isolated Mock Performance Environment
@@ -659,6 +711,13 @@ docker compose --env-file .env up -d ai-service control-plane-api gateway-core w
 docker compose --env-file .env ps
 ```
 
+When `TENANT_CHAT_RAG_ENABLED=true`, start the overlay and worker instead:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml up -d ai-service control-plane-api gateway-core rag-worker web chat-api chat-web
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml ps
+```
+
 Local checks from the EC2 instance:
 
 ```bash
@@ -730,6 +789,16 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/004_add_p0_dashboard_rollup_indexes.sql
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core web chat-api chat-web
 docker compose --env-file .env ps
+```
+
+For an enabled RAG host, run the same sequence with both Compose files for every
+Compose operation. Rebuild and recreate the worker with the runtime services:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml config --quiet
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml build
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml up -d --force-recreate ai-service control-plane-api gateway-core rag-worker web chat-api chat-web
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml ps
 ```
 
 ## GitHub Actions CD Through OIDC And SSM

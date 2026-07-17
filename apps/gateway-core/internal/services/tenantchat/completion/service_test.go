@@ -363,6 +363,27 @@ func TestServiceRoutesAnExistingConversationByTheLatestUserMessage(t *testing.T)
 	}
 }
 
+func TestCurrentTurnRoutingMessagesExcludesRagContextButKeepsItForProviderInput(t *testing.T) {
+	messages := []tenantchat.EphemeralMessage{
+		{Role: "system", Content: "normal system context"},
+		{Role: "system", Purpose: "rag_context", Content: "untrusted retrieved source text"},
+		{Role: "user", Content: "What is the leave policy?"},
+	}
+
+	routingMessages := currentTurnRoutingMessages(messages)
+	if len(routingMessages) != 2 {
+		t.Fatalf("routing input length = %d, want 2", len(routingMessages))
+	}
+	for _, message := range routingMessages {
+		if message.Text == "untrusted retrieved source text" {
+			t.Fatal("rag context must not affect routing")
+		}
+	}
+	if messages[1].Content != "untrusted retrieved source text" {
+		t.Fatal("routing preparation must not mutate the provider-bound messages")
+	}
+}
+
 func TestServiceFailsClosedBeforeReservationWhenExactCacheAdapterIsMissing(t *testing.T) {
 	snapshot := completionSnapshot()
 	snapshot.Policies.Cache.Enabled = true

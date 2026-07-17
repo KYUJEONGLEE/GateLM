@@ -123,7 +123,7 @@
         },
         "responses": {
           "200": {
-            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. Success final is sent only after assistant ciphertext commit. Success may include the bounded effectiveModelKey stored with the assistant message. Fresh success includes bounded quotaState and budgetState; encrypted-content replay may omit policy state.",
+            "description": "Strict accepted, optional server-owned sources, zero or more delta, optional validated citations, then one final/error/cancelled SSE sequence. Success final is sent only after assistant ciphertext commit. Success may include the bounded effectiveModelKey stored with the assistant message. Fresh success includes bounded quotaState and budgetState; encrypted-content replay may omit policy state.",
             "headers": {
               "Cache-Control": { "schema": { "type": "string", "const": "no-store" } },
               "X-Accel-Buffering": { "schema": { "type": "string", "const": "no" } }
@@ -214,10 +214,11 @@
       "Conversation": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "version", "historyRetentionDays", "createdAt", "updatedAt"],
+        "required": ["id", "title", "knowledgeMode", "version", "historyRetentionDays", "createdAt", "updatedAt"],
         "properties": {
           "id": { "$ref": "#/components/schemas/Uuid" },
           "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "knowledgeMode": { "enum": ["off", "tenant"] },
           "version": { "type": "integer", "minimum": 1 },
           "historyRetentionDays": { "enum": [0, 7, 30, 90] },
           "createdAt": { "type": "string", "format": "date-time" },
@@ -230,7 +231,8 @@
         "required": ["idempotencyKey", "title"],
         "properties": {
           "idempotencyKey": { "$ref": "#/components/schemas/OpaqueKey" },
-          "title": { "type": "string", "minLength": 1, "maxLength": 120 }
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "knowledgeMode": { "enum": ["off", "tenant"], "default": "off" }
         }
       },
       "RenameConversationRequest": {
@@ -258,8 +260,24 @@
           "role": { "enum": ["user", "assistant"] },
           "content": { "type": "string", "minLength": 1, "maxLength": 1048576 },
           "effectiveModelKey": { "$ref": "#/components/schemas/ModelKey" },
+          "citations": { "type": "array", "maxItems": 12, "items": { "$ref": "#/components/schemas/Citation" } },
           "sequence": { "type": "integer", "minimum": 1 },
           "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Citation": {
+        "type": "object", "additionalProperties": false,
+        "required": ["sourceId", "documentId", "displayName", "pageStart", "pageEnd", "lineStart", "lineEnd", "ordinal"],
+        "properties": {
+          "sourceId": { "type": "string", "pattern": "^S[1-9][0-9]{0,2}$" },
+          "documentId": { "$ref": "#/components/schemas/Uuid" },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "pageStart": { "type": ["integer", "null"], "minimum": 1 },
+          "pageEnd": { "type": ["integer", "null"], "minimum": 1 },
+          "lineStart": { "type": ["integer", "null"], "minimum": 1 },
+          "lineEnd": { "type": ["integer", "null"], "minimum": 1 },
+          "ordinal": { "type": "integer", "minimum": 0 },
+          "availability": { "enum": ["available", "unavailable"] }
         }
       },
       "MessagePage": {

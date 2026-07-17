@@ -126,6 +126,33 @@ describe('ConversationController SSE cleanup', () => {
     expect(finalPayload(response)).not.toHaveProperty('budgetState');
     expect(finalPayload(response)).not.toHaveProperty('cacheOutcome');
   });
+
+  it('uses the existing SSE event shape for a local RAG no-evidence response', async () => {
+    const prepared = local();
+    const conversations = {
+      prepareTurn: jest.fn().mockResolvedValue(prepared),
+      disconnect: jest.fn().mockResolvedValue(undefined),
+      streamError: jest.fn(),
+    };
+    const response = testResponse();
+
+    await new ConversationController(conversations as never).turn(
+      'access',
+      { conversationId: prepared.reserved.conversationId },
+      {} as never,
+      request(),
+      response as unknown as Response,
+    );
+
+    expect(response.write.mock.calls.map(([frame]) => String(frame)).join('')).toContain(
+      '등록된 문서에서 관련 근거를 찾지 못했습니다.',
+    );
+    expect(finalPayload(response)).toMatchObject({
+      type: 'chat.turn.final',
+      replayed: false,
+    });
+    expect(conversations.disconnect).not.toHaveBeenCalled();
+  });
 });
 
 function finalPayload(response: ReturnType<typeof testResponse>): Record<string, unknown> {
@@ -204,6 +231,23 @@ function execution(): Extract<PreparedTurn, { kind: 'execute' }> {
       cacheStrategy: 'exact' as const,
     }),
     signal: new AbortController().signal,
+    citationSources: Object.freeze([]),
+  });
+}
+
+function local(): Extract<PreparedTurn, { kind: 'local' }> {
+  return Object.freeze({
+    kind: 'local' as const,
+    actor: actor(),
+    reserved: reserved('completed'),
+    message: Object.freeze({
+      id: '00000000-0000-4000-8000-000000000400',
+      turnId: '00000000-0000-4000-8000-000000000301',
+      role: 'assistant' as const,
+      content: '등록된 문서에서 관련 근거를 찾지 못했습니다.',
+      sequence: 2,
+      createdAt: '2026-07-14T00:00:00.000Z',
+    }),
   });
 }
 
@@ -221,6 +265,7 @@ function reserved(state: string) {
     requestId: '00000000-0000-4000-8000-000000000302',
     idempotencyKey: 'idempotency-key',
     cacheEpoch: 1n,
+    knowledgeMode: 'off' as const,
     state,
     replayed: false,
   });

@@ -39,6 +39,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/openapi/chat-auth.openapi.json",
   "docs/tenant-chat/openapi/admin-runtime.openapi.json",
   "docs/tenant-chat/openapi/private-control-plane.openapi.json",
+  "docs/tenant-chat/openapi/admin-rag.openapi.json",
   "docs/tenant-chat/openapi/chat-conversation.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
   "docs/tenant-chat/db/tenant-chat-content.sql",
@@ -216,6 +217,9 @@ function assertDocumentationRouting() {
     assertIncludes("docs/current/README.md", `${versionDir}/README.md`);
     assertIncludes(versionStatusDoc, "../current/README.md");
   }
+
+  assertIncludes("docs/tenant-chat/README.md", "openapi/admin-rag.openapi.json");
+  assertIncludes("docs/tenant-chat/contracts.md", "openapi/admin-rag.openapi.json");
 
   for (const expectedText of [
     "Historical baseline",
@@ -710,6 +714,7 @@ function assertTenantChatExecutableContract() {
   const authOpenApiPath = "docs/tenant-chat/openapi/chat-auth.openapi.json";
   const adminOpenApiPath = "docs/tenant-chat/openapi/admin-runtime.openapi.json";
   const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
+  const adminRagOpenApiPath = "docs/tenant-chat/openapi/admin-rag.openapi.json";
   const conversationOpenApiPath = "docs/tenant-chat/openapi/chat-conversation.openapi.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
@@ -951,6 +956,189 @@ function assertTenantChatExecutableContract() {
     }
   }
 
+  const adminRagOpenApi = readJson(adminRagOpenApiPath);
+  if (adminRagOpenApi) {
+    if (adminRagOpenApi.openapi !== "3.1.0") {
+      fail(`${adminRagOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+
+    const collectionPath = "/admin/v1/tenants/{tenantId}/rag/documents";
+    const resourcePath = "/admin/v1/tenants/{tenantId}/rag/documents/{documentId}";
+    const knowledgeBasePath = "/admin/v1/tenants/{tenantId}/rag/knowledge-base";
+    const upload = adminRagOpenApi.paths?.[collectionPath]?.post;
+    const list = adminRagOpenApi.paths?.[collectionPath]?.get;
+    const getOne = adminRagOpenApi.paths?.[resourcePath]?.get;
+    const deleteOne = adminRagOpenApi.paths?.[resourcePath]?.delete;
+    const getKnowledgeBase = adminRagOpenApi.paths?.[knowledgeBasePath]?.get;
+    const updateKnowledgeBase = adminRagOpenApi.paths?.[knowledgeBasePath]?.patch;
+    for (const [method, operation] of [
+      ["POST", upload],
+      ["GET collection", list],
+      ["GET resource", getOne],
+      ["DELETE resource", deleteOne],
+      ["GET Knowledge Base", getKnowledgeBase],
+      ["PATCH Knowledge Base", updateKnowledgeBase],
+    ]) {
+      if (!operation) {
+        fail(`${adminRagOpenApiPath}: missing ${method} RAG admin operation`);
+      }
+    }
+
+    if (adminRagOpenApi.paths?.[collectionPath]?.delete ||
+        adminRagOpenApi.paths?.[knowledgeBasePath]?.post ||
+        adminRagOpenApi.paths?.[knowledgeBasePath]?.put ||
+        adminRagOpenApi.paths?.[knowledgeBasePath]?.delete) {
+      fail(`${adminRagOpenApiPath}: collection DELETE and non-GET/PATCH Knowledge Base methods are forbidden`);
+    }
+
+    for (const [operationName, operation, expectedStatuses] of [
+      ["upload", upload, ["202", "400", "401", "403", "409", "413", "503"]],
+      ["list", list, ["200", "400", "401", "403", "503"]],
+      ["status", getOne, ["200", "400", "401", "403", "404", "503"]],
+      ["delete", deleteOne, ["202", "400", "401", "403", "404", "503"]],
+      ["knowledge-base read", getKnowledgeBase, ["200", "400", "401", "403", "503"]],
+      ["knowledge-base update", updateKnowledgeBase, ["200", "400", "401", "403", "503"]],
+    ]) {
+      for (const status of expectedStatuses) {
+        if (!operation?.responses?.[status]) {
+          fail(`${adminRagOpenApiPath}: ${operationName} response ${status} is missing`);
+        }
+      }
+    }
+
+    const globalSecurity = adminRagOpenApi.security ?? [];
+    if (!globalSecurity.some((entry) => Object.hasOwn(entry, "adminSession"))) {
+      fail(`${adminRagOpenApiPath}: RAG admin routes must require adminSession`);
+    }
+
+    const uploadMedia = upload?.requestBody?.content?.["multipart/form-data"];
+    if (!upload?.requestBody?.required || uploadMedia?.schema?.$ref !== "#/components/schemas/UploadDocumentRequest") {
+      fail(`${adminRagOpenApiPath}: upload must require the multipart UploadDocumentRequest`);
+    }
+    const uploadRequest = adminRagOpenApi.components?.schemas?.UploadDocumentRequest;
+    const uploadProperties = Object.keys(uploadRequest?.properties ?? {}).sort();
+    if (uploadRequest?.additionalProperties !== false ||
+        JSON.stringify(uploadProperties) !== JSON.stringify(["displayName", "file"]) ||
+        !uploadRequest?.required?.includes("file")) {
+      fail(`${adminRagOpenApiPath}: upload request must contain only required file and optional displayName`);
+    }
+
+    const knowledgeBaseMedia = updateKnowledgeBase?.requestBody?.content?.["application/json"];
+    const knowledgeBaseUpdate = adminRagOpenApi.components?.schemas?.UpdateKnowledgeBaseSettingsRequest;
+    if (!updateKnowledgeBase?.requestBody?.required ||
+        knowledgeBaseMedia?.schema?.$ref !== "#/components/schemas/UpdateKnowledgeBaseSettingsRequest" ||
+        knowledgeBaseUpdate?.additionalProperties !== false ||
+        JSON.stringify(knowledgeBaseUpdate?.required ?? []) !== JSON.stringify(["enabled"]) ||
+        JSON.stringify(Object.keys(knowledgeBaseUpdate?.properties ?? {})) !== JSON.stringify(["enabled"]) ||
+        knowledgeBaseUpdate?.properties?.enabled?.type !== "boolean") {
+      fail(`${adminRagOpenApiPath}: Knowledge Base PATCH must require only boolean enabled`);
+    }
+    const knowledgeBaseSettings = adminRagOpenApi.components?.schemas?.KnowledgeBaseSettings;
+    const expectedKnowledgeBaseFields = ["tenantEnabled", "globalEnabled", "effectiveEnabled"].sort();
+    if (knowledgeBaseSettings?.additionalProperties !== false ||
+        JSON.stringify([...(knowledgeBaseSettings?.required ?? [])].sort()) !== JSON.stringify(expectedKnowledgeBaseFields) ||
+        JSON.stringify(Object.keys(knowledgeBaseSettings?.properties ?? {}).sort()) !== JSON.stringify(expectedKnowledgeBaseFields) ||
+        expectedKnowledgeBaseFields.some((field) => knowledgeBaseSettings?.properties?.[field]?.type !== "boolean")) {
+      fail(`${adminRagOpenApiPath}: Knowledge Base response must expose only the three boolean enablement fields`);
+    }
+
+    const documentSchema = adminRagOpenApi.components?.schemas?.RagDocument;
+    const expectedDocumentFields = [
+      "documentId",
+      "displayName",
+      "mimeType",
+      "sizeBytes",
+      "status",
+      "failureCode",
+      "failureMessage",
+      "uploadedBy",
+      "createdAt",
+      "updatedAt",
+    ].sort();
+    const requiredDocumentFields = new Set(documentSchema?.required ?? []);
+    for (const field of expectedDocumentFields) {
+      if (!requiredDocumentFields.has(field)) {
+        fail(`${adminRagOpenApiPath}: RagDocument must require ${field}`);
+      }
+    }
+    if (JSON.stringify(Object.keys(documentSchema?.properties ?? {}).sort()) !==
+        JSON.stringify(expectedDocumentFields)) {
+      fail(`${adminRagOpenApiPath}: RagDocument properties must match the exact external allowlist`);
+    }
+    for (const forbidden of [
+      "id",
+      "tenantId",
+      "knowledgeBaseId",
+      "originalFilename",
+      "sha256Digest",
+      "s3ObjectKey",
+      "bucket",
+      "kmsKeyId",
+      "vector",
+      "jobId",
+      "lockedAt",
+      "lockedBy",
+      "leaseExpiresAt",
+    ]) {
+      if (Object.hasOwn(documentSchema?.properties ?? {}, forbidden)) {
+        fail(`${adminRagOpenApiPath}: RagDocument must not expose ${forbidden}`);
+      }
+    }
+    const uploadedBy = documentSchema?.properties?.uploadedBy;
+    if (documentSchema?.additionalProperties !== false ||
+        documentSchema?.properties?.documentId?.format !== "uuid" ||
+        uploadedBy?.type !== "object" ||
+        uploadedBy?.additionalProperties !== false ||
+        JSON.stringify(uploadedBy?.required ?? []) !== JSON.stringify(["displayName"]) ||
+        JSON.stringify(Object.keys(uploadedBy?.properties ?? {})) !== JSON.stringify(["displayName"]) ||
+        !uploadedBy?.properties?.displayName) {
+      fail(`${adminRagOpenApiPath}: RagDocument must be allowlisted and hide internal uploader IDs`);
+    }
+
+    const listLimit = list?.parameters?.find((parameter) => parameter.name === "limit")?.schema;
+    const listCursor = list?.parameters?.find((parameter) => parameter.name === "cursor")?.schema;
+    if (listLimit?.minimum !== 1 || listLimit?.maximum !== 100 || listLimit?.default !== 50 ||
+        listCursor?.format !== "uuid") {
+      fail(`${adminRagOpenApiPath}: list pagination must use limit 1..100/default 50 and a safe UUID cursor`);
+    }
+
+    const conflictRef = upload?.responses?.["409"]?.$ref;
+    const conflictName = conflictRef?.split("/").at(-1);
+    const conflict = conflictName ? adminRagOpenApi.components?.responses?.[conflictName] : undefined;
+    const conflictCodes = new Set(conflict?.["x-error-codes"] ?? []);
+    for (const code of ["RAG_DOCUMENT_DUPLICATE", "RAG_DOCUMENT_LIMIT_REACHED"]) {
+      if (!conflictCodes.has(code)) {
+        fail(`${adminRagOpenApiPath}: upload 409 must declare ${code}`);
+      }
+    }
+
+    const requiredResponseCodes = new Map([
+      ["InvalidKnowledgeBaseSettings", ["VALIDATION_ERROR"]],
+      ["KnowledgeBaseServiceUnavailable", ["RAG_KNOWLEDGE_BASE_UNAVAILABLE"]],
+      ["InvalidUpload", ["RAG_DOCUMENT_INVALID_UPLOAD"]],
+      ["InvalidCursor", ["RAG_DOCUMENT_CURSOR_INVALID"]],
+      ["InvalidDocumentId", ["VALIDATION_ERROR"]],
+      ["AuthenticationRequired", ["UNAUTHORIZED"]],
+      ["TenantScopeForbidden", ["FORBIDDEN"]],
+      ["DocumentNotFound", ["RAG_DOCUMENT_NOT_FOUND"]],
+      ["UploadConflict", ["RAG_DOCUMENT_DUPLICATE", "RAG_DOCUMENT_LIMIT_REACHED"]],
+      ["DocumentTooLarge", ["RAG_DOCUMENT_TOO_LARGE"]],
+      ["DocumentServiceUnavailable", [
+        "RAG_METADATA_KEY_UNAVAILABLE",
+        "RAG_PERSISTENCE_UNAVAILABLE",
+        "RAG_STORAGE_UNAVAILABLE",
+      ]],
+    ]);
+    for (const [name, expectedCodes] of requiredResponseCodes) {
+      const actualCodes = [
+        ...(adminRagOpenApi.components?.responses?.[name]?.["x-error-codes"] ?? []),
+      ].sort();
+      if (JSON.stringify(actualCodes) !== JSON.stringify([...expectedCodes].sort())) {
+        fail(`${adminRagOpenApiPath}: ${name} must declare the exact stable error-code set`);
+      }
+    }
+  }
+
   const conversationOpenApi = readJson(conversationOpenApiPath);
   if (conversationOpenApi) {
     if (conversationOpenApi.openapi !== "3.1.0") {
@@ -989,6 +1177,7 @@ function assertTenantChatExecutableContract() {
       "/internal/v1/tenant-chat/admissions/{admissionId}/cancel": ["200", "400", "401", "409", "503"],
       "/internal/v1/tenant-chat/completions": ["200", "400", "401", "403", "409", "429", "502", "503", "504"],
       "/internal/v1/tenant-chat/usage-receipts": ["200", "400", "401", "409", "503"],
+      "/internal/v1/rag/embeddings": ["200", "400", "401", "429", "502", "503", "504"],
     };
     const errorStatus = new Map([
       ["CHAT_INVALID_REQUEST", "400"],
@@ -1011,6 +1200,12 @@ function assertTenantChatExecutableContract() {
       ["CHAT_USAGE_GUARD_UNAVAILABLE", "503"],
       ["CHAT_NO_ELIGIBLE_ROUTE", "503"],
       ["CHAT_PROVIDER_TIMEOUT", "504"],
+      ["RAG_EMBEDDING_INVALID_REQUEST", "400"],
+      ["RAG_EMBEDDING_TOKEN_INVALID", "401"],
+      ["RAG_EMBEDDING_RATE_LIMITED", "429"],
+      ["RAG_EMBEDDING_PROVIDER_FAILED", "502"],
+      ["RAG_EMBEDDING_UNAVAILABLE", "503"],
+      ["RAG_EMBEDDING_PROVIDER_TIMEOUT", "504"],
     ]);
 
     for (const [apiPath, statuses] of Object.entries(expectedPaths)) {
@@ -1042,6 +1237,26 @@ function assertTenantChatExecutableContract() {
             fail(`${openApiPath}: ${errorCode} is not a valid ${status} error`);
           }
         }
+      }
+    }
+
+    const ragOperation = openApi.paths?.["/internal/v1/rag/embeddings"]?.post;
+    if (ragOperation) {
+      const security = ragOperation.security ?? [];
+      if (!security.some((entry) => Object.hasOwn(entry, "ragEmbeddingWorkloadJwt"))) {
+        fail(`${openApiPath}: RAG embeddings must use the dedicated workload JWT`);
+      }
+      const requestRef = ragOperation.requestBody?.content?.["application/json"]?.schema?.$ref;
+      if (requestRef !== "../schemas/rag-embedding-request.schema.json") {
+        fail(`${openApiPath}: RAG embeddings must use the paired request schema`);
+      }
+      const response = openApi.components?.schemas?.RagEmbeddingResponse;
+      if (response?.properties?.dimensions?.const !== 1536 || response?.properties?.profileVersion?.const !== 1) {
+        fail(`${openApiPath}: RAG embedding response must fix dimensions=1536 and profileVersion=1`);
+      }
+      if (response?.properties?.embeddings?.items?.minItems !== 1536 ||
+          response?.properties?.embeddings?.items?.maxItems !== 1536) {
+        fail(`${openApiPath}: every RAG embedding vector must contain exactly 1536 values`);
       }
     }
 
@@ -1320,6 +1535,8 @@ function assertTenantChatExecutableContract() {
     "schemas/completion-sse-event.schema.json",
     "schemas/chat-turn-sse-event.schema.json",
     "schemas/chat-conversation.schema.json",
+    "schemas/rag-embedding-request.schema.json",
+    "schemas/rag-embedding-workload-jwt-claims.schema.json",
   ]) {
     assertIncludes("docs/tenant-chat/README.md", expectedText);
     assertIncludes("docs/tenant-chat/execution-contract.md", expectedText);

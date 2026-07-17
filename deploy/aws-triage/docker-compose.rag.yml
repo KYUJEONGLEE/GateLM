@@ -1,0 +1,133 @@
+services:
+  control-plane-api:
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
+    environment:
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_OBJECT_STORE_DRIVER: ${RAG_OBJECT_STORE_DRIVER:?RAG_OBJECT_STORE_DRIVER is required}
+      RAG_MAX_UPLOAD_BYTES: "${RAG_MAX_UPLOAD_BYTES:-20971520}"
+      RAG_S3_REGION: ${RAG_S3_REGION:?RAG_S3_REGION is required}
+      RAG_S3_BUCKET: ${RAG_S3_BUCKET:?RAG_S3_BUCKET is required}
+      RAG_S3_KMS_KEY_ID: ${RAG_S3_KMS_KEY_ID:?RAG_S3_KMS_KEY_ID is required}
+      RAG_CONTENT_WRAPPING_KEYS_FILE: /run/secrets/rag/content-wrapping-keys.json
+    secrets:
+      - source: rag_content_wrapping_keys
+        target: /run/secrets/rag/content-wrapping-keys.json
+
+  gateway-core:
+    environment:
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_EMBEDDING_CREDENTIAL_REF_ID: ${RAG_EMBEDDING_CREDENTIAL_REF_ID:-credential_ref_openai_main}
+      RAG_EMBEDDING_OPENAI_BASE_URL: ${RAG_EMBEDDING_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      RAG_EMBEDDING_WORKLOAD_JWKS_FILE: /run/secrets/rag/workload-jwks.json
+      RAG_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/workload-binding-hmac-keys.json
+      RAG_EMBEDDING_WORKLOAD_IDENTITIES_FILE: /run/secrets/rag/workload-identities.json
+    secrets:
+      - source: rag_embedding_workload_jwks
+        target: /run/secrets/rag/workload-jwks.json
+      - source: rag_embedding_workload_binding_hmac_keys
+        target: /run/secrets/rag/workload-binding-hmac-keys.json
+      - source: rag_embedding_workload_identities
+        target: /run/secrets/rag/workload-identities.json
+
+  ai-service:
+    environment:
+      TENANT_CHAT_RAG_ENABLED: "true"
+      AI_SERVICE_RAG_SERVICE_TOKEN: ${AI_SERVICE_RAG_SERVICE_TOKEN:?AI_SERVICE_RAG_SERVICE_TOKEN is required}
+      AI_SERVICE_RAG_MAX_INPUT_BYTES: ${AI_SERVICE_RAG_MAX_INPUT_BYTES:-20971520}
+      AI_SERVICE_RAG_MAX_PDF_PAGES: ${AI_SERVICE_RAG_MAX_PDF_PAGES:-300}
+      AI_SERVICE_RAG_MAX_EXTRACTED_CHARS: ${AI_SERVICE_RAG_MAX_EXTRACTED_CHARS:-2000000}
+      AI_SERVICE_RAG_PDF_PARSE_TIMEOUT_SECONDS: ${AI_SERVICE_RAG_PDF_PARSE_TIMEOUT_SECONDS:-30}
+      AI_SERVICE_RAG_MIN_PDF_TEXT_CHARS: ${AI_SERVICE_RAG_MIN_PDF_TEXT_CHARS:-20}
+      AI_SERVICE_RAG_MAX_CHUNKS: ${AI_SERVICE_RAG_MAX_CHUNKS:-10000}
+      AI_SERVICE_RAG_CHUNK_TARGET_TOKENS: ${AI_SERVICE_RAG_CHUNK_TARGET_TOKENS:-600}
+      AI_SERVICE_RAG_CHUNK_OVERLAP_TOKENS: ${AI_SERVICE_RAG_CHUNK_OVERLAP_TOKENS:-100}
+      AI_SERVICE_RAG_CHUNK_MAX_TOKENS: ${AI_SERVICE_RAG_CHUNK_MAX_TOKENS:-900}
+
+  rag-worker:
+    image: gatelm/control-plane-api:aws-triage
+    restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
+    command: ["node", "dist/src/rag-worker.js"]
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_MODE: aws_triage
+      DATABASE_URL: ${CONTROL_PLANE_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public}
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_OBJECT_STORE_DRIVER: ${RAG_OBJECT_STORE_DRIVER:?RAG_OBJECT_STORE_DRIVER is required}
+      RAG_S3_REGION: ${RAG_S3_REGION:?RAG_S3_REGION is required}
+      RAG_S3_BUCKET: ${RAG_S3_BUCKET:?RAG_S3_BUCKET is required}
+      RAG_S3_KMS_KEY_ID: ${RAG_S3_KMS_KEY_ID:?RAG_S3_KMS_KEY_ID is required}
+      RAG_CONTENT_WRAPPING_KEYS_FILE: /run/secrets/rag/content-wrapping-keys.json
+      RAG_WORKER_POLL_INTERVAL_MS: ${RAG_WORKER_POLL_INTERVAL_MS:-1000}
+      RAG_WORKER_LEASE_DURATION_MS: ${RAG_WORKER_LEASE_DURATION_MS:-120000}
+      RAG_WORKER_RETRY_BASE_MS: ${RAG_WORKER_RETRY_BASE_MS:-1000}
+      RAG_WORKER_RETRY_CAP_MS: ${RAG_WORKER_RETRY_CAP_MS:-300000}
+      RAG_WORKER_EMBEDDING_BATCH_SIZE: ${RAG_WORKER_EMBEDDING_BATCH_SIZE:-64}
+      RAG_WORKER_AI_SERVICE_BASE_URL: http://ai-service:8001
+      RAG_WORKER_AI_SERVICE_TOKEN: ${AI_SERVICE_RAG_SERVICE_TOKEN:?AI_SERVICE_RAG_SERVICE_TOKEN is required}
+      RAG_WORKER_GATEWAY_BASE_URL: http://gateway-core:8081
+      RAG_WORKER_EMBEDDING_ACTIVE_KID: ${RAG_WORKER_EMBEDDING_ACTIVE_KID:?RAG_WORKER_EMBEDDING_ACTIVE_KID is required}
+      RAG_WORKER_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/worker-signing.jwk.json
+      RAG_WORKER_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/worker-binding-hmac-keys.json
+    secrets:
+      - source: rag_content_wrapping_keys
+        target: /run/secrets/rag/content-wrapping-keys.json
+      - source: rag_worker_embedding_signing_jwk
+        target: /run/secrets/rag/worker-signing.jwk.json
+      - source: rag_worker_embedding_binding_hmac_keys
+        target: /run/secrets/rag/worker-binding-hmac-keys.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway-core:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq 'dist/src/rag-worker.js' /proc/1/cmdline"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - gatelm_internal
+
+  chat-api:
+    environment:
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_QUERY_EMBEDDING_ACTIVE_KID: ${RAG_QUERY_EMBEDDING_ACTIVE_KID:?RAG_QUERY_EMBEDDING_ACTIVE_KID is required}
+      RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/query-signing.jwk.json
+      RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/query-binding-hmac-keys.json
+    secrets:
+      - source: rag_query_embedding_signing_jwk
+        target: /run/secrets/rag/query-signing.jwk.json
+      - source: rag_query_embedding_binding_hmac_keys
+        target: /run/secrets/rag/query-binding-hmac-keys.json
+
+secrets:
+  rag_content_wrapping_keys:
+    file: .secrets/rag/content-wrapping-keys.json
+  rag_query_embedding_signing_jwk:
+    file: .secrets/rag/query-signing.jwk.json
+  rag_query_embedding_binding_hmac_keys:
+    file: .secrets/rag/query-binding-hmac-keys.json
+  rag_worker_embedding_signing_jwk:
+    file: .secrets/rag/worker-signing.jwk.json
+  rag_worker_embedding_binding_hmac_keys:
+    file: .secrets/rag/worker-binding-hmac-keys.json
+  rag_embedding_workload_jwks:
+    file: .secrets/rag/workload-jwks.json
+  rag_embedding_workload_binding_hmac_keys:
+    file: .secrets/rag/workload-binding-hmac-keys.json
+  rag_embedding_workload_identities:
+    file: .secrets/rag/workload-identities.json

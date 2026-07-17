@@ -1,0 +1,15 @@
+{
+  "iss": "gatelm-chat-api",
+  "aud": "gatelm-gateway-rag-embedding",
+  "sub": "service:chat-api",
+  "jti": "jti_rag_query_fixture_001",
+  "iat": 1783828800,
+  "nbf": 1783828795,
+  "exp": 1783828830,
+  "requestId": "request_rag_query_fixture_001",
+  "operationId": "operation_rag_query_fixture_001",
+  "tenantId": "00000000-0000-4000-8000-000000000100",
+  "purpose": "RAG_QUERY",
+  "profileVersion": 1,
+  "bindingDigest": "hmac-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+}
