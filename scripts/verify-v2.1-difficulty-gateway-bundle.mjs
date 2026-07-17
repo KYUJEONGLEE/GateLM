@@ -120,6 +120,18 @@ const productionPrepareScript = readFileSync(
   path.join(rootDir, "deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh"),
   "utf8",
 );
+const e5QuantizerDockerfile = readFileSync(
+  path.join(rootDir, "infra/docker/e5-artifact-quantizer.Dockerfile"),
+  "utf8",
+);
+const e5QuantizerScript = readFileSync(
+  path.join(rootDir, "scripts/routing_difficulty_model/quantize_e5_onnx.py"),
+  "utf8",
+);
+const e5QuantizerRequirements = readFileSync(
+  path.join(rootDir, "scripts/routing_difficulty_model/e5-quantizer-requirements.lock.txt"),
+  "utf8",
+);
 const ciWorkflow = readFileSync(
   path.join(rootDir, ".github/workflows/ci.yml"),
   "utf8",
@@ -260,6 +272,15 @@ for (const requiredText of [
 }
 for (const requiredText of [
   encoderManifest.sourceRevision,
+  "onnx/model.onnx",
+  "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
+  "a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94",
+  "--network none",
+  "--read-only",
+  "--cap-drop ALL",
+  ":/input/model.onnx:ro",
+  ":/output:rw",
+  "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg",
   expectedLock.tokenizerNativeArchiveSha256,
   expectedLock.onnxRuntimePackageSha256,
   "model.dynamic-qint8-matmul.onnx",
@@ -267,6 +288,37 @@ for (const requiredText of [
 ]) {
   if (!productionPrepareScript.includes(requiredText)) {
     throw new Error(`production Gateway E5 bundle preparation omitted ${requiredText}`);
+  }
+}
+if (productionPrepareScript.includes('"generated/model.dynamic-qint8-matmul.onnx|')) {
+  throw new Error("production Gateway E5 bundle must generate the QInt8 model instead of downloading a missing URL");
+}
+if (productionPrepareScript.includes("https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1")) {
+  throw new Error("production Gateway E5 bundle must use the immutable GitHub release asset");
+}
+for (const requiredText of [
+  "python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7",
+  "RUN chmod 0444 ./quantize_e5_onnx.py",
+  "ENTRYPOINT",
+]) {
+  if (!e5QuantizerDockerfile.includes(requiredText)) {
+    throw new Error(`Gateway E5 quantizer Dockerfile omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  'op_types_to_quantize=["MatMul"]',
+  "weight_type=QuantType.QInt8",
+  'TemporaryDirectory(prefix="gatelm-e5-quantize-")',
+  "shutil.copyfile(args.source, working_source)",
+  "assert_artifact(partial_output",
+]) {
+  if (!e5QuantizerScript.includes(requiredText)) {
+    throw new Error(`Gateway E5 quantizer omitted ${requiredText}`);
+  }
+}
+for (const requiredText of ["onnx==1.18.0", "onnxruntime==1.22.1", "numpy==2.2.6"]) {
+  if (!e5QuantizerRequirements.includes(requiredText)) {
+    throw new Error(`Gateway E5 quantizer requirements omitted ${requiredText}`);
   }
 }
 const prepareInvocation = 'bash "${gateway_e5_bundle_script}" "${repo_dir}"';

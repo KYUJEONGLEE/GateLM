@@ -9,6 +9,9 @@ REPO_ROOT="$(cd "${AWS_TRIAGE_DIR}/../.." && pwd)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
 E5_BUNDLE_SCRIPT="${SCRIPT_DIR}/prepare-gateway-e5-runtime-bundle.sh"
+E5_QUANTIZER_DOCKERFILE="${REPO_ROOT}/infra/docker/e5-artifact-quantizer.Dockerfile"
+E5_QUANTIZER_SCRIPT="${REPO_ROOT}/scripts/routing_difficulty_model/quantize_e5_onnx.py"
+E5_QUANTIZER_REQUIREMENTS="${REPO_ROOT}/scripts/routing_difficulty_model/e5-quantizer-requirements.lock.txt"
 WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/deploy-production.yml"
 MAINTENANCE_WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/tenant-chat-cache-keyset-maintenance.yml"
 MAINTENANCE_SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-cache-keyset-maintenance.sh"
@@ -38,6 +41,18 @@ assert_fails_with() {
 for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${MAINTENANCE_SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
   bash -n "${file}"
 done
+if python3 --version >/dev/null 2>&1; then
+  PYTHON_COMMAND=(python3)
+elif py -3.12 --version >/dev/null 2>&1; then
+  PYTHON_COMMAND=(py -3.12)
+else
+  fail "Python 3.12 is required to verify the E5 quantizer"
+fi
+for file in "${E5_QUANTIZER_DOCKERFILE}" "${E5_QUANTIZER_SCRIPT}" "${E5_QUANTIZER_REQUIREMENTS}"; do
+  [[ -f "${file}" && ! -L "${file}" ]] || fail "Pinned E5 quantizer material is missing: ${file}"
+done
+"${PYTHON_COMMAND[@]}" -m py_compile "${E5_QUANTIZER_SCRIPT}"
+"${PYTHON_COMMAND[@]}" "${E5_QUANTIZER_SCRIPT}" --help >/dev/null
 
 bootstrap_probe="$(printf '%s' 'set -euo pipefail; printf probe-ok' | base64 | tr -d '\n')"
 probe_output="$(sh -c "printf '%s' '${bootstrap_probe}' | base64 --decode | bash")"
@@ -163,13 +178,40 @@ do
 done
 for pinned_material in \
   '614241f622f53c4eeff9890bdc4f31cfecc418b3' \
+  'onnx/model.onnx' \
+  'ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665' \
+  'a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94' \
+  '--network none' \
+  '--read-only' \
+  '--cap-drop ALL' \
+  ':/input/model.onnx:ro' \
+  ':/output:rw' \
+  'https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg' \
   'c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0' \
   '2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58' \
   'sha256sum --check difficulty-e5-gateway-image.linux-amd64.v2.sha256'
 do
-  grep -Fq "${pinned_material}" "${E5_BUNDLE_SCRIPT}" || \
+  grep -Fq -- "${pinned_material}" "${E5_BUNDLE_SCRIPT}" || \
     fail "Gateway E5 bundle preparation pin is missing: ${pinned_material}"
 done
+if grep -Fq '"generated/model.dynamic-qint8-matmul.onnx|' "${E5_BUNDLE_SCRIPT}"; then
+  fail "Generated E5 ONNX artifact must not be downloaded from Hugging Face"
+fi
+if grep -Fq 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1' "${E5_BUNDLE_SCRIPT}"; then
+  fail "Production E5 bundle must use the digest-pinned GitHub release asset"
+fi
+grep -Fq 'python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7' \
+  "${E5_QUANTIZER_DOCKERFILE}" || fail "E5 quantizer base image must be digest-pinned"
+grep -Fq 'RUN chmod 0444 ./quantize_e5_onnx.py' "${E5_QUANTIZER_DOCKERFILE}" || \
+  fail "E5 quantizer script must remain readable under the production checkout umask"
+grep -Fq 'onnxruntime==1.22.1' "${E5_QUANTIZER_REQUIREMENTS}" || \
+  fail "E5 quantizer ONNX Runtime dependency must be pinned"
+grep -Fq 'op_types_to_quantize=["MatMul"]' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must preserve the pinned MatMul-only profile"
+grep -Fq 'TemporaryDirectory(prefix="gatelm-e5-quantize-")' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must use its writable scratch mount for shape inference"
+grep -Fq 'shutil.copyfile(args.source, working_source)' "${E5_QUANTIZER_SCRIPT}" || \
+  fail "E5 quantizer must not run shape inference beside the read-only source"
 for required_setting in \
   'TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"' \
   'TENANT_CHAT_GATEWAY_BASE_URL: http://gateway-core:8081' \
