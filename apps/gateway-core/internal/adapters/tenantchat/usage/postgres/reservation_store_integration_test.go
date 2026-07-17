@@ -313,6 +313,49 @@ func TestEmployeeWeeklyQuotaLoweringPreservesUsageAndBlocksIntegration(t *testin
 	}
 }
 
+func TestEmployeeWeeklyReservationIdentityCannotBeClearedIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), fixture.admissionContext(),
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create employee weekly identity admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
+	}}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	if _, err := store.BeginExecution(context.Background(), completionContext, snapshot); err != nil {
+		t.Fatalf("reserve employee weekly identity fixture: %v", err)
+	}
+
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE tenant_chat_usage_reservations
+		SET employee_id = NULL, employee_weekly_period_start = NULL
+		WHERE tenant_id = $1::uuid AND request_id = $2
+	`, fixture.tenantID, completionContext.RequestID); err == nil {
+		t.Fatal("employee weekly reservation identity must not be removable")
+	}
+
+	var employeeID string
+	var periodStart time.Time
+	if err := pool.QueryRow(context.Background(), `
+		SELECT employee_id::text, employee_weekly_period_start
+		FROM tenant_chat_usage_reservations
+		WHERE tenant_id = $1::uuid AND request_id = $2
+	`, fixture.tenantID, completionContext.RequestID).Scan(&employeeID, &periodStart); err != nil {
+		t.Fatalf("read preserved employee weekly reservation identity: %v", err)
+	}
+	if employeeID != fixture.employeeID || periodStart.IsZero() {
+		t.Fatalf("employee weekly reservation identity changed: employee=%s period=%s", employeeID, periodStart)
+	}
+}
+
 func TestEmployeeWeeklyFallbackSettlementIsAppliedExactlyOnceIntegration(t *testing.T) {
 	pool, fixture := setupUsageIntegration(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
