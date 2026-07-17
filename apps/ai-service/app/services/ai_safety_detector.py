@@ -3,13 +3,18 @@ from __future__ import annotations
 import os
 import re
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from time import perf_counter
 
 from app.adapters.safety import PrivacyFilterAdapter
 from app.adapters.safety.heuristic_evaluator import PromptDetector, default_detectors
 from app.adapters.safety.privacy_filter_adapter import public_model_id_for_model, source_for_model
-from app.domain.safety.detections import Detection, safety_signals_from_detections
+from app.domain.safety.detections import (
+    DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_TYPE,
+    Detection,
+    safety_signals_from_detections,
+)
 from app.domain.safety.policy import (
     BUSINESS_ROLE_LABELS,
     EntityMaskingScope,
@@ -348,6 +353,7 @@ class AiSafetyDetectorService:
         detectors: tuple[SafetyDetector, ...] = DEFAULT_PRIVACY_FILTER_DETECTORS,
         detector_runtime: str = "onnx",
         ml_allowed_detector_types: tuple[str, ...] | None = None,
+        ml_min_confidence_by_detector_type: Mapping[str, float] | None = None,
     ) -> None:
         allowed_detector_types = (
             frozenset(ml_allowed_detector_types)
@@ -363,6 +369,7 @@ class AiSafetyDetectorService:
             additional_model_ids=additional_model_ids,
             detector_runtime=detector_runtime,
             allowed_detector_types=allowed_detector_types,
+            min_confidence_by_detector_type=ml_min_confidence_by_detector_type,
         )
         supported_detector_types = frozenset().union(
             *(adapter.supported_detector_types for adapter in self.adapters)
@@ -917,6 +924,7 @@ def _resolve_adapters(
     additional_model_ids: tuple[str, ...],
     detector_runtime: str,
     allowed_detector_types: frozenset[str] | None,
+    min_confidence_by_detector_type: Mapping[str, float] | None,
 ) -> tuple[PrivacyFilterAdapter, ...]:
     if adapters:
         return adapters
@@ -924,12 +932,15 @@ def _resolve_adapters(
         return (adapter,)
 
     model_ids = _model_ids(model_id, additional_model_ids)
+    resolved_thresholds = dict(DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_TYPE)
+    resolved_thresholds.update(min_confidence_by_detector_type or {})
     return tuple(
         PrivacyFilterAdapter(
             model_name=detector_model_id,
             source=source_for_model(detector_model_id),
             runtime=detector_runtime,
             allowed_detector_types=allowed_detector_types,
+            min_confidence_by_detector_type=resolved_thresholds,
         )
         for detector_model_id in model_ids
     )

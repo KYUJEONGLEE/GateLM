@@ -326,6 +326,30 @@ describe('Control Plane demo seed baseline', () => {
     expect(client.$transaction).toHaveBeenCalledTimes(1);
   });
 
+  it('reuses an existing RuntimeSnapshot id when reseeding the same version', async () => {
+    const tx = createMockTransaction();
+    const existingSnapshotId = '00000000-0000-4000-8000-000000000799';
+    tx.runtimeSnapshot.findUnique.mockResolvedValue({ id: existingSnapshotId });
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await seedDemoData(client as unknown as PrismaClient);
+
+    expect(tx.runtimeSnapshot.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          snapshotBody: expect.objectContaining({
+            runtimeSnapshotId: existingSnapshotId,
+          }),
+        }),
+        create: expect.objectContaining({ id: existingSnapshotId }),
+      }),
+    );
+  });
+
   it('publishes the configured rate limit for an isolated perf Mock seed', async () => {
     const tx = createMockTransaction();
     const client = {
@@ -538,6 +562,7 @@ function createMockTransaction() {
       }),
     },
     runtimeSnapshot: {
+      findUnique: jest.fn().mockResolvedValue(null),
       upsert: jest.fn().mockResolvedValue({
         id: '00000000-0000-4000-8000-000000000701',
       }),

@@ -1,4 +1,4 @@
-﻿import {
+import {
   CredentialStatus,
   Prisma,
   PrismaClient,
@@ -715,9 +715,23 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         publishedAt: new Date(DEMO_GENERATED_AT),
       },
     });
+    const runtimeSnapshotVersion = toRuntimeSnapshotVersion(
+      savedRuntimeConfig,
+      runtimeConfig,
+    );
+    const existingRuntimeSnapshot = await tx.runtimeSnapshot.findUnique({
+      where: {
+        applicationId_version: {
+          applicationId: DEMO_APPLICATION_ID,
+          version: BigInt(runtimeSnapshotVersion),
+        },
+      },
+      select: { id: true },
+    });
     const runtimeSnapshot = buildDemoRuntimeSnapshot(
       savedRuntimeConfig,
       runtimeConfig,
+      existingRuntimeSnapshot?.id,
     );
     const savedRuntimeSnapshot = await tx.runtimeSnapshot.upsert({
       where: {
@@ -736,7 +750,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         publishedBy: runtimeSnapshot.publishedBy,
       },
       create: {
-        id: savedRuntimeConfig.id,
+        id: runtimeSnapshot.runtimeSnapshotId,
         tenantId: runtimeSnapshot.lookupKey.tenantId,
         projectId: runtimeSnapshot.lookupKey.projectId,
         applicationId: runtimeSnapshot.lookupKey.applicationId,
@@ -1063,6 +1077,7 @@ function providerPresetModelMetadata(
 function buildDemoRuntimeSnapshot(
   runtimeConfig: RuntimeConfig,
   document: ActiveRuntimeConfigResponseDto,
+  existingRuntimeSnapshotId?: string,
 ): RuntimeSnapshotResponseDto {
   const runtimeSnapshotVersion = toRuntimeSnapshotVersion(
     runtimeConfig,
@@ -1074,7 +1089,7 @@ function buildDemoRuntimeSnapshot(
   );
   const snapshotWithoutContentHash = {
     schemaVersion: 'gatelm.runtime-snapshot.v2',
-    runtimeSnapshotId: runtimeConfig.id,
+    runtimeSnapshotId: existingRuntimeSnapshotId ?? runtimeConfig.id,
     runtimeSnapshotVersion,
     contentHash: undefined,
     runtimeState: 'snapshot_active',

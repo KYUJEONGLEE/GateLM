@@ -79,6 +79,23 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
         self.assertEqual(response.execution_summary.execution_mode, "rules_only")
         self.assertEqual(response.detector_summary.detector_categories, ["email"])
 
+    def test_ml_threshold_overrides_are_merged_with_safe_defaults(self) -> None:
+        service = AiSafetyDetectorService(
+            ml_min_confidence_by_detector_type={
+                "organization_name": 0.9,
+                "person_name": 0.9,
+                "phone_number": 0.99,
+                "postal_address": 0.9,
+            },
+        )
+
+        thresholds = service.adapter.min_confidence_by_detector_type
+        self.assertEqual(thresholds["organization_name"], 0.9)
+        self.assertEqual(thresholds["person_name"], 0.9)
+        self.assertEqual(thresholds["phone_number"], 0.99)
+        self.assertEqual(thresholds["postal_address"], 0.9)
+        self.assertIn("secret", thresholds)
+
     def test_ml_allowlist_rejects_detector_type_unsupported_by_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not support"):
             AiSafetyDetectorService(

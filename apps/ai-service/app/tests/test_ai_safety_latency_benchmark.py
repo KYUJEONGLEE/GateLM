@@ -239,6 +239,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
         settings = Settings(
             ai_safety_additional_detector_model_ids=(),
             ai_safety_ml_allowed_detector_types=("phone_number", "secret"),
+            ai_safety_ml_detector_thresholds=(("phone_number", 0.99),),
             ai_safety_detector_runtime="onnx",
         )
         fake_service = Mock()
@@ -255,6 +256,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             additional_model_ids=(),
             detector_runtime="onnx",
             ml_allowed_detector_types=("phone_number", "secret"),
+            ml_min_confidence_by_detector_type={"phone_number": 0.99},
         )
 
     def test_gateway_total_latency_is_not_reported_as_sidecar_latency(self) -> None:

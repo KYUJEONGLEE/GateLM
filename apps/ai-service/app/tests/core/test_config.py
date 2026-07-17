@@ -86,6 +86,40 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     load_settings()
 
+    def test_settings_loads_ml_detector_thresholds(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": (
+                    "organization_name=0.9,person_name=0.9,"
+                    "phone_number=0.99,postal_address=0.9"
+                )
+            },
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertEqual(
+            settings.ai_safety_ml_detector_thresholds,
+            (
+                ("organization_name", 0.9),
+                ("person_name", 0.9),
+                ("phone_number", 0.99),
+                ("postal_address", 0.9),
+            ),
+        )
+
+    def test_settings_rejects_invalid_ml_detector_thresholds(self) -> None:
+        values = ("unknown=0.9", "person_name=nan", "person_name=1.1", "person_name")
+        for configured_value in values:
+            with self.subTest(configured_value=configured_value), patch.dict(
+                os.environ,
+                {"AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": configured_value},
+                clear=True,
+            ):
+                with self.assertRaises(ValueError):
+                    load_settings()
+
     def test_settings_loads_ai_safety_detector_runtime(self) -> None:
         with patch.dict(os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx"}, clear=True):
             settings = load_settings()
@@ -117,6 +151,7 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "ai_safety_detector_model_id",
                 "ai_safety_additional_detector_model_ids",
                 "ai_safety_ml_allowed_detector_types",
+                "ai_safety_ml_detector_thresholds",
                 "ai_safety_detector_runtime",
                 "ai_safety_preload_enabled",
             },

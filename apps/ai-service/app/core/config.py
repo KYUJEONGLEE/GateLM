@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 
@@ -32,6 +33,7 @@ class Settings:
     ai_safety_ml_allowed_detector_types: tuple[str, ...] = (
         DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES
     )
+    ai_safety_ml_detector_thresholds: tuple[tuple[str, float], ...] = ()
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
     ai_safety_preload_enabled: bool = False
 
@@ -51,6 +53,7 @@ def load_settings() -> Settings:
             "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS",
         ),
         ai_safety_ml_allowed_detector_types=_env_ml_allowed_detector_types(),
+        ai_safety_ml_detector_thresholds=_env_ml_detector_thresholds(),
         ai_safety_detector_runtime=_env_ai_safety_detector_runtime(),
         ai_safety_preload_enabled=_env_bool(
             "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED",
@@ -130,6 +133,35 @@ def _env_model_ids(key: str) -> tuple[str, ...]:
         model_ids.append(model_id)
         seen.add(model_id)
     return tuple(model_ids)
+
+
+def _env_ml_detector_thresholds() -> tuple[tuple[str, float], ...]:
+    key = 'AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS'
+    value = os.environ.get(key)
+    if value is None or value.strip() == '':
+        return ()
+
+    thresholds: list[tuple[str, float]] = []
+    seen: set[str] = set()
+    for raw_item in value.split(','):
+        detector_type, separator, raw_threshold = raw_item.partition('=')
+        detector_type = detector_type.strip()
+        raw_threshold = raw_threshold.strip()
+        if (
+            separator == ''
+            or detector_type not in ALLOWED_DETECTOR_TYPES
+            or detector_type in seen
+        ):
+            raise ValueError(f'{key} contains an invalid detector threshold')
+        try:
+            threshold = float(raw_threshold)
+        except ValueError as exc:
+            raise ValueError(f'{key} contains an invalid detector threshold') from exc
+        if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+            raise ValueError(f'{key} threshold must be between 0 and 1')
+        thresholds.append((detector_type, round(threshold, 6)))
+        seen.add(detector_type)
+    return tuple(thresholds)
 
 
 def _env_ml_allowed_detector_types() -> tuple[str, ...]:

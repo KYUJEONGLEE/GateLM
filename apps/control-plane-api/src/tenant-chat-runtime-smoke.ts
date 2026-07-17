@@ -14,6 +14,11 @@ import type { TenantChatRuntimeSnapshotDocument } from './modules/tenant-chat-ru
 const DEMO_TENANT_ID = '00000000-0000-4000-8000-000000000100';
 const DEMO_MOCK_PROVIDER_ID = '00000000-0000-4000-8000-000000000600';
 
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
 async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
   try {
@@ -127,6 +132,8 @@ async function verifyReadback(prisma: PrismaService, requestId: string): Promise
 }
 
 function smokeSnapshot(): TenantChatRuntimeSnapshotDocument {
+  const snapshotVersion = positiveIntegerEnv('TENANT_CHAT_SMOKE_SNAPSHOT_VERSION', 3);
+  const rateLimitRequests = positiveIntegerEnv('TENANT_CHAT_SMOKE_RATE_LIMIT_REQUESTS', 60);
   const standardRoute = {
     routeId: 'tenant_chat_smoke_standard',
     providerId: DEMO_MOCK_PROVIDER_ID,
@@ -150,15 +157,15 @@ function smokeSnapshot(): TenantChatRuntimeSnapshotDocument {
   };
   pricing.digest = computeTenantChatPricingDigest(pricing);
   const snapshot: TenantChatRuntimeSnapshotDocument = {
-    snapshotId: 'tenant_chat_local_smoke_snapshot_1',
-    version: 1,
+    snapshotId: `tenant_chat_local_smoke_snapshot_${snapshotVersion}`,
+    version: snapshotVersion,
     digest: 'sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     tenantId: DEMO_TENANT_ID,
-    policyVersion: 1,
+    policyVersion: snapshotVersion,
     employeeNoticeVersion: 1,
     pricing,
     policies: {
-      rateLimit: { requests: 60, windowSeconds: 60 },
+      rateLimit: { requests: rateLimitRequests, windowSeconds: 60 },
       concurrency: { maxActiveAdmissionsPerUser: 2, admissionTtlSeconds: 30 },
       quota: {
         period: 'calendar_month', timezone: 'Asia/Seoul', defaultMonthlyTokenLimit: 1_000_000,
@@ -188,6 +195,10 @@ function smokeSnapshot(): TenantChatRuntimeSnapshotDocument {
         detectorSet: [
           { detectorType: 'email', action: 'redact' },
           { detectorType: 'api_key', action: 'block' },
+          { detectorType: 'organization_name', action: 'redact' },
+          { detectorType: 'person_name', action: 'redact' },
+          { detectorType: 'phone_number', action: 'redact' },
+          { detectorType: 'postal_address', action: 'redact' },
         ],
       },
       streaming: { enabled: true, maxDurationSeconds: 120, finalEventRequired: true },
