@@ -39,6 +39,8 @@ test('runs an authenticated turn and removes the smoke conversation', async () =
     `DELETE /api/tenant-chat/conversations/${conversationId}`,
     'POST /api/tenant-chat/auth/logout',
   ]);
+  const turn = fake.calls.find((call) => call.method === 'POST' && call.path.endsWith('/turns'));
+  assert.equal(turn.body.usageIntent.maxOutputTokens, 16);
   assert.equal(fake.calls[6].headers.get('if-match'), '"2"');
 });
 
