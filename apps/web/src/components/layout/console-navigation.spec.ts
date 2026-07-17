@@ -36,6 +36,12 @@ test("profile avatars use a person silhouette when no image is available", () =>
   expect(shellSource).not.toContain("getUserInitials");
 });
 
+test("profile role localizes Tenant Admin for the Korean console", () => {
+  expect(shellSource).toContain('tenantAdmin: "Tenant Admin"');
+  expect(shellSource).toContain('tenantAdmin: "관리자"');
+  expect(shellSource).toContain('displayUser.role === "Tenant Admin" ? text.tenantAdmin');
+});
+
 test("Chat App and legacy Tenant Chat routes activate one management item", () => {
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/chat-app")).toEqual({
     activeManagementItem: "chat-app",
