@@ -101,6 +101,8 @@ test("employee ranking and detail controls use unified cost policies", async () 
   expect(source).toContain('employeeCostChartPeriod === "daily"');
   expect(source).toContain("employeeUsage.dailyRank <= 3");
   expect(source).toContain("employeeUsage.weeklyRank <= 3");
+  expect(source).toContain('renderEmployeeSortHeader("weeklyCost", usageText.weeklyTokens)');
+  expect(source).toContain("?.weeklyCostMicroUsd ?? -1");
   expect(source).toContain("row.dailyCostMicroUsd ?? 0");
   expect(source).toContain("row.monthlyCostMicroUsd ?? 0");
   expect(source).not.toContain("return rows.slice(0, 10);");

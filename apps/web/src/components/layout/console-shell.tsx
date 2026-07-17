@@ -16,6 +16,7 @@ import {
   Plug,
   ScrollText,
   Settings as SettingsIcon,
+  UserRound,
   Users
 } from "lucide-react";
 import Link from "next/link";
@@ -201,6 +202,7 @@ const shellText: Record<
     theme: string;
     planned: string;
     tenant: string;
+    tenantAdmin: string;
     userProfile: string;
   }
 > = {
@@ -223,6 +225,7 @@ const shellText: Record<
     sessionRequired: "Session required",
     settings: "Settings",
     tenant: "tenant",
+    tenantAdmin: "Tenant Admin",
     theme: "Theme",
     userProfile: "User profile"
   },
@@ -245,6 +248,7 @@ const shellText: Record<
     sessionRequired: "로그인 필요",
     settings: "설정",
     tenant: "테넌트",
+    tenantAdmin: "관리자",
     theme: "테마",
     userProfile: "사용자 프로필"
   }
@@ -563,7 +567,7 @@ function ConsoleTopbarActions({
   theme: ConsoleTheme;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel, text);
-  const initials = getUserInitials(displayUser.displayName);
+  const displayRole = displayUser.role === "Tenant Admin" ? text.tenantAdmin : displayUser.role;
 
   return (
     <div className="console-topbar-actions" aria-label={text.accountActions}>
@@ -576,12 +580,12 @@ function ConsoleTopbarActions({
                 style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
               />
             ) : (
-              <span>{initials}</span>
+              <UserRound className="console-user-avatar-placeholder" strokeWidth={2} />
             )}
           </span>
           <span className="console-user-copy">
             <strong>{displayUser.displayName}</strong>
-            <small>{displayUser.role}</small>
+            <small>{displayRole}</small>
           </span>
           <ChevronDown aria-hidden="true" size={14} strokeWidth={2.4} />
         </DropdownMenuTrigger>
@@ -599,7 +603,7 @@ function ConsoleTopbarActions({
                   style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
                 />
               ) : (
-                <span>{initials}</span>
+                <UserRound className="console-user-avatar-placeholder" strokeWidth={2} />
               )}
             </span>
             <div>
@@ -611,7 +615,7 @@ function ConsoleTopbarActions({
           <dl className="console-user-meta">
             <div>
               <dt>{text.role}</dt>
-              <dd>{displayUser.role}</dd>
+              <dd>{displayRole}</dd>
             </div>
             <div>
               <dt>{text.organization}</dt>
@@ -680,16 +684,6 @@ function buildPendingCurrentUser(
     role: text.sessionRequired,
     tenantName: tenantLabel
   };
-}
-
-function getUserInitials(displayName: string) {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length >= 2) {
-    return `${parts[0]?.charAt(0) ?? ""}${parts[1]?.charAt(0) ?? ""}`.toUpperCase();
-  }
-
-  return (parts[0]?.charAt(0) || "A").toUpperCase();
 }
 
 function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {

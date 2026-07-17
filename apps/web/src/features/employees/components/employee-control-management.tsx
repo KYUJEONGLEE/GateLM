@@ -91,7 +91,7 @@ type CompactUnitStepperProps = {
 };
 
 type EmployeeSortDirection = "asc" | "desc";
-type EmployeeSortField = "cost" | "department" | "name" | "project";
+type EmployeeSortField = "cost" | "department" | "name" | "project" | "weeklyCost";
 type EmployeeAddMethod = "csv" | "invite";
 type EmployeeCostLimitDraft = {
   enabled: boolean;
@@ -1639,6 +1639,10 @@ export function EmployeeControlManagement({
         result =
           (usageByEmployeeId.get(left.id)?.dailyCostMicroUsd ?? -1) -
           (usageByEmployeeId.get(right.id)?.dailyCostMicroUsd ?? -1);
+      } else if (sortState.field === "weeklyCost") {
+        result =
+          (usageByEmployeeId.get(left.id)?.weeklyCostMicroUsd ?? -1) -
+          (usageByEmployeeId.get(right.id)?.weeklyCostMicroUsd ?? -1);
       } else {
         result = compareEmployeeName(left, right);
       }
@@ -2455,7 +2459,7 @@ export function EmployeeControlManagement({
                 {renderEmployeeSortHeader("name", text.name)}
                 {renderEmployeeSortHeader("department", text.department)}
                 {renderEmployeeSortHeader("cost", usageText.tokens)}
-                <span className="employee-list-header-label">{usageText.weeklyTokens}</span>
+                {renderEmployeeSortHeader("weeklyCost", usageText.weeklyTokens)}
                 {renderEmployeeSortHeader("project", text.projectCount)}
                 <span aria-hidden="true" className="employee-list-header-spacer" />
               </div>

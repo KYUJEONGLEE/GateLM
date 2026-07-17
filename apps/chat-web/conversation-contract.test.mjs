@@ -252,6 +252,12 @@ test('ChatShell defaults new conversations to normal and forwards an explicit kn
   assert.match(source, /setNewConversationKnowledgeMode\('off'\)/);
 });
 
+test('ChatShell resizes the composer after client rendering without a layout effect', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  assert.match(source, /useEffect\(\(\) => \{\s*const textarea = composerRef\.current;[\s\S]*?resizeComposer\(textarea\);[\s\S]*?\}, \[composer\]\);/);
+  assert.doesNotMatch(source, /useLayoutEffect/);
+});
+
 test('RAG failures use bounded user-safe Korean copy', () => {
   assert.equal(safeChatError({ code: 'CHAT_RAG_DISABLED' }).message, '이 조직에서는 사내 지식 채팅을 사용할 수 없습니다.');
   assert.equal(safeChatError({ code: 'CHAT_RAG_UNAVAILABLE', detail: 'provider secret' }).message, '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
