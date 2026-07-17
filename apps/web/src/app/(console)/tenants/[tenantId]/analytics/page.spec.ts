@@ -34,3 +34,11 @@ test("performance places provider filters before the shared range and project fi
   expect(projectFilterIndex).toBeGreaterThan(rangeFilterIndex);
   expect(pageSource).not.toContain("analytics-v3-filter-row-secondary");
 });
+
+test("analytics preserves an unavailable selected project in the filter", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("filters.projectId && !projects.some((project) => project.id === filters.projectId)");
+  expect(pageSource).toContain("<option disabled value={filters.projectId}>{text.projectUnavailable}</option>");
+  expect(pageSource).toContain('projectUnavailable: "선택한 프로젝트를 사용할 수 없음"');
+});

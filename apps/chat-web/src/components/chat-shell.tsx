@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
@@ -106,7 +106,7 @@ export function ChatShell() {
     }
   }, []);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const textarea = composerRef.current;
     if (!textarea) return;
     resizeComposer(textarea);

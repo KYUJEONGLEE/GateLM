@@ -88,6 +88,7 @@ const pageText = {
     filterAria: "Analytics filters",
     model: "Model",
     project: "Project",
+    projectUnavailable: "Selected project unavailable",
     provider: "Provider",
     range: "Time range",
     rangeLabels: { "15m": "15 minutes", "1h": "1 hour", "1d": "24 hours", "1w": "7 days" },
@@ -111,6 +112,7 @@ const pageText = {
     filterAria: "분석 필터",
     model: "모델",
     project: "프로젝트",
+    projectUnavailable: "선택한 프로젝트를 사용할 수 없음",
     provider: "Provider",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
@@ -271,6 +273,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
             <span>{text.project}</span>
             <select defaultValue={filters.projectId} name="projectId">
               {projectScoped ? null : <option value="">{text.allProjects}</option>}
+              {filters.projectId && !projects.some((project) => project.id === filters.projectId) ? (
+                <option disabled value={filters.projectId}>{text.projectUnavailable}</option>
+              ) : null}
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}

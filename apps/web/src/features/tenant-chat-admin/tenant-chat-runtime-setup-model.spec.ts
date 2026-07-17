@@ -313,6 +313,7 @@ test("Chat App cache policy reuses the shared existing policy card", async () =>
   expect(sharedCardSource).toContain('className="policy-cache-card"');
   expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
   expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
+  expect(sharedCardSource).toContain('<label className="policy-experimental-card-copy" htmlFor={id}>');
   expect(styles).toMatch(/\.tenant-chat-app-content \.policy-cache-card-copy strong \{[^}]*font-size: calc\(var\(--font-size-base\) \+ var\(--global-font-lift\)\);[^}]*font-weight: var\(--font-weight-bold\);/);
 });
 

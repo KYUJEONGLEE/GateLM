@@ -66,13 +66,13 @@ export function ExperimentalFeatureToggleCard({
         <span className="policy-cache-card-icon" aria-hidden="true">
           {icon}
         </span>
-        <span className="policy-experimental-card-copy">
+        <label className="policy-experimental-card-copy" htmlFor={id}>
           <span className="policy-experimental-card-title">
             <strong>{title}</strong>
             <em>{badge}</em>
           </span>
           <small>{hint}</small>
-        </span>
+        </label>
         <Switch
           aria-label={title}
           checked={enabled}
