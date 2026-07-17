@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { createHash, createHmac, randomUUID, sign } from 'node:crypto';
 
 import { RAG_EMBEDDING_PROFILE } from '@gatelm/rag-config';
@@ -12,6 +13,7 @@ export type RagQueryEmbeddingRequest = Readonly<{
   inputs: readonly [string];
 }>;
 
+@Injectable()
 export class RagQueryWorkloadSigner {
   constructor(private readonly credentials: RagQueryCredentialsService) {}
 
