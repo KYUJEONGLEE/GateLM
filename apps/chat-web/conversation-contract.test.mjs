@@ -13,6 +13,7 @@ import {
   parsePageQuery,
   safeChatError,
   strongestPolicyState,
+  updateConversationBody,
 } from './src/lib/conversation-contract.mjs';
 
 const conversationId = '00000000-0000-4000-8000-000000000300';
@@ -63,6 +64,14 @@ test('conversation knowledge mode defaults off and accepts only an explicit tena
   const base = { idempotencyKey: '1234567890abcdef', title: '새 대화' };
   assert.equal(createConversationBody(base).knowledgeMode, 'off');
   assert.equal(createConversationBody({ ...base, knowledgeMode: 'tenant' }).knowledgeMode, 'tenant');
+});
+
+test('conversation update accepts only a versioned title and/or knowledge mode change', () => {
+  assert.deepEqual(updateConversationBody({ expectedVersion: 4, knowledgeMode: 'tenant' }), { expectedVersion: 4, knowledgeMode: 'tenant' });
+  assert.deepEqual(updateConversationBody({ expectedVersion: 4, title: '이름 변경' }), { expectedVersion: 4, title: '이름 변경' });
+  assert.throws(() => updateConversationBody({ expectedVersion: 4 }));
+  assert.throws(() => updateConversationBody({ expectedVersion: 4, knowledgeMode: 'global' }));
+  assert.throws(() => updateConversationBody({ expectedVersion: 4, tenantId: conversationId, knowledgeMode: 'tenant' }));
 });
 
 test('turn context mode defaults to conversation and accepts single-turn isolation', () => {
@@ -229,9 +238,9 @@ test('SSE parser accepts only safe citation metadata and keeps event order', asy
   ]), { conversationId }));
 });
 
-test('ChatShell applies replay sources and final citations through one replace handler', () => {
+test('ChatShell displays only final server-validated citations', () => {
   const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
-  assert.match(source, /onSources:\s*applyCitations/);
+  assert.match(source, /onSources:\s*\(\)\s*=>\s*undefined/);
   assert.match(source, /onCitations:\s*applyCitations/);
   assert.match(source, /replaceCitations\(message, citations\)/);
 });
