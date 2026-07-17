@@ -12,17 +12,18 @@ import (
 )
 
 type tokenPeriod struct {
-	Start       time.Time
-	End         time.Time
-	Timezone    string
-	Limit       int64
-	Warning     int64
-	Economy     int64
-	HardStop    int64
-	Reserved    int64
-	Confirmed   int64
-	Unconfirmed int64
-	State       string
+	Start         time.Time
+	End           time.Time
+	Timezone      string
+	Limit         int64
+	Warning       int64
+	Economy       int64
+	HardStop      int64
+	Reserved      int64
+	Confirmed     int64
+	Unconfirmed   int64
+	State         string
+	PolicyVersion int64
 }
 
 type costPeriod struct {
@@ -179,7 +180,15 @@ func ensureEmployeeWeeklyTokenPeriod(
 	}
 	period, err := findEmployeeWeeklyTokenPeriod(ctx, tx, requestContext, now)
 	if err == nil {
-		return &period, nil
+		return syncEmployeeWeeklyTokenPeriodPolicy(
+			ctx,
+			tx,
+			requestContext,
+			period,
+			limit,
+			snapshot.PolicyVersion,
+			now,
+		)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
@@ -220,7 +229,7 @@ func ensureEmployeeWeeklyTokenPeriod(
 		  tenant_id, employee_id, period_start, period_end, period_timezone,
 		  limit_tokens, reserved_tokens, confirmed_input_tokens, confirmed_output_tokens,
 		  confirmed_total_tokens, unconfirmed_tokens, state, policy_version
-		) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $8 + $9, $10, $11, $12)
+		) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $8::bigint + $9::bigint, $10, $11, $12)
 		ON CONFLICT (tenant_id, employee_id, period_start) DO NOTHING
 	`, requestContext.ExecutionScope.TenantID, actor.EmployeeID, start, end,
 		snapshot.Policies.Quota.Timezone, limit, reserved, confirmedInput, confirmedOutput,
@@ -235,6 +244,48 @@ func ensureEmployeeWeeklyTokenPeriod(
 	return &period, nil
 }
 
+// syncEmployeeWeeklyTokenPeriodPolicy applies a newly published employee
+// limit to the current week without clearing usage already recorded for that
+// week. The caller holds the employee-week advisory lock, so the new policy
+// and the following admission decision remain atomic.
+func syncEmployeeWeeklyTokenPeriodPolicy(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	period tokenPeriod,
+	limit int64,
+	policyVersion int64,
+	now time.Time,
+) (*tokenPeriod, error) {
+	state := "normal"
+	if limit == 0 || period.Reserved+period.Confirmed+period.Unconfirmed >= limit {
+		state = "blocked"
+	}
+	if period.Limit == limit && period.PolicyVersion == policyVersion && period.State == state {
+		return &period, nil
+	}
+	_, err := tx.Exec(ctx, `
+		UPDATE tenant_chat_employee_weekly_token_periods
+		SET limit_tokens = $4,
+		    policy_version = $5,
+		    state = $6,
+		    version = version + 1,
+		    updated_at = $7
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid AND period_start = $3
+	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.EmployeeID,
+		period.Start, limit, policyVersion, state, now)
+	if err != nil {
+		return nil, err
+	}
+	period.Limit = limit
+	period.Warning = limit
+	period.Economy = limit
+	period.HardStop = limit
+	period.PolicyVersion = policyVersion
+	period.State = state
+	return &period, nil
+}
+
 func findEmployeeWeeklyTokenPeriod(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -244,7 +295,7 @@ func findEmployeeWeeklyTokenPeriod(
 	err = tx.QueryRow(ctx, `
 		SELECT period_start, period_end, period_timezone, limit_tokens,
 		       limit_tokens, limit_tokens, limit_tokens,
-		       reserved_tokens, confirmed_total_tokens, unconfirmed_tokens, state
+		       reserved_tokens, confirmed_total_tokens, unconfirmed_tokens, state, policy_version
 		FROM tenant_chat_employee_weekly_token_periods
 		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
 		  AND period_start <= $3 AND period_end > $3
@@ -253,7 +304,7 @@ func findEmployeeWeeklyTokenPeriod(
 		requestContext.ExecutionScope.Actor.EmployeeID, now).Scan(
 		&result.Start, &result.End, &result.Timezone, &result.Limit,
 		&result.Warning, &result.Economy, &result.HardStop,
-		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State,
+		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State, &result.PolicyVersion,
 	)
 	return result, err
 }

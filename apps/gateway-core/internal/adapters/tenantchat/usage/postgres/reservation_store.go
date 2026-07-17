@@ -63,6 +63,21 @@ func (s *ReservationStore) BeginExecution(
 	return s.consumeAndReserve(ctx, requestContext, snapshot, true)
 }
 
+// commitUsageGuardRejection preserves an active Snapshot policy that was
+// synchronized into a current period before the request was rejected. Without
+// this commit, a newly published zero limit would be rolled back together with
+// the rejected request and the next request could observe the stale policy.
+func commitUsageGuardRejection(
+	ctx context.Context,
+	tx pgx.Tx,
+	rejection error,
+) (tenantchat.UsageReservation, error) {
+	if err := tx.Commit(ctx); err != nil {
+		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	return tenantchat.UsageReservation{}, rejection
+}
+
 func (s *ReservationStore) consumeAndReserve(
 	ctx context.Context,
 	requestContext tenantchat.RequestContext,
@@ -138,17 +153,17 @@ func (s *ReservationStore) consumeAndReserve(
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if userPeriod.State == "blocked" {
-		return tenantchat.UsageReservation{}, tenantchat.ErrQuotaHardLimit
+		return commitUsageGuardRejection(ctx, tx, tenantchat.ErrQuotaHardLimit)
 	}
 	if tenantPeriod.State == "blocked" {
-		return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
+		return commitUsageGuardRejection(ctx, tx, tenantchat.ErrBudgetHardLimit)
 	}
 	employeeWeeklyPeriod, err := ensureEmployeeWeeklyTokenPeriod(ctx, tx, requestContext, snapshot, now)
 	if err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if employeeWeeklyPeriod != nil && employeeWeeklyPeriod.State == "blocked" {
-		return tenantchat.UsageReservation{}, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit
+		return commitUsageGuardRejection(ctx, tx, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit)
 	}
 
 	route, err := selectExecutionRoute(snapshot, requestContext, userPeriod.State, tenantPeriod.State)
@@ -170,17 +185,17 @@ func (s *ReservationStore) consumeAndReserve(
 	}
 	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + userPeriod.Reserved + reservedTokens
 	if projectedTokens < reservedTokens || projectedTokens > userPeriod.HardStop {
-		return tenantchat.UsageReservation{}, tenantchat.ErrQuotaHardLimit
+		return commitUsageGuardRejection(ctx, tx, tenantchat.ErrQuotaHardLimit)
 	}
 	if employeeWeeklyPeriod != nil {
 		projectedEmployeeTokens := employeeWeeklyPeriod.Confirmed + employeeWeeklyPeriod.Unconfirmed + employeeWeeklyPeriod.Reserved + reservedTokens
 		if projectedEmployeeTokens < reservedTokens || projectedEmployeeTokens > employeeWeeklyPeriod.HardStop {
-			return tenantchat.UsageReservation{}, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit
+			return commitUsageGuardRejection(ctx, tx, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit)
 		}
 	}
 	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + tenantPeriod.Reserved + reservedCost
 	if projectedCost < reservedCost || projectedCost > tenantPeriod.HardStop {
-		return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
+		return commitUsageGuardRejection(ctx, tx, tenantchat.ErrBudgetHardLimit)
 	}
 	quotaState := usageState(projectedTokens, userPeriod.Warning, userPeriod.Economy, userPeriod.HardStop)
 	budgetState := usageState(projectedCost, tenantPeriod.Warning, tenantPeriod.Economy, tenantPeriod.HardStop)
