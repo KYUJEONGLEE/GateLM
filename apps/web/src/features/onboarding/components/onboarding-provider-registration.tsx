@@ -180,11 +180,14 @@ export function OnboardingProviderRegistration({
     () => orderOnboardingProviderRows(presetProviderRows, registeredProviderRows),
     [registeredProviderRows, presetProviderRows]
   );
-  const [selectedProviderKey, setSelectedProviderKey] = useState(
-    () => providerRows[0]?.providerKey ?? ""
-  );
+  const [selectedProviderKeyState, setSelectedProviderKey] = useState<string | null>(null);
+  const selectedProviderKey = providerRows.some(
+    (row) => row.providerKey === selectedProviderKeyState
+  )
+    ? (selectedProviderKeyState ?? "")
+    : (providerRows[0]?.providerKey ?? "");
   const selectedRow =
-    providerRows.find((row) => row.providerKey === selectedProviderKey) ?? providerRows[0] ?? null;
+    providerRows.find((row) => row.providerKey === selectedProviderKey) ?? null;
   const [selectedModel, setSelectedModel] = useState(() => selectedRow?.models[0] ?? "");
   const [formValues, setFormValues] = useState<ProviderConnectionFormValues>(() =>
     selectedRow

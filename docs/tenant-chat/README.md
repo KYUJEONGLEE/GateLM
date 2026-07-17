@@ -3,7 +3,7 @@
 상태: **Active implementation contract**
 적용 범위: 신규 Tenant Chat Product
 계약 revision: `tenant-chat/v1`
-기준일: 2026-07-15
+기준일: 2026-07-16
 소유 범위: Tenant Chat workstream
 
 이 디렉터리는 신규 Tenant Chat의 구현 기준이다. `proposal`이 아니라 구현 중 active로 간주하며, 명시적인 후속 ADR 또는 contract revision이 merge되기 전까지 구현 에이전트는 이 기준을 따른다.
@@ -27,15 +27,16 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 3. `docs/tenant-chat/openapi/chat-auth.openapi.json`
 4. `docs/tenant-chat/openapi/private-control-plane.openapi.json`
 5. `docs/tenant-chat/openapi/admin-runtime.openapi.json`
-6. `docs/tenant-chat/openapi/chat-conversation.openapi.json`
-7. `docs/tenant-chat/openapi/private-gateway.openapi.json`
-8. `docs/tenant-chat/db/tenant-chat-content.sql`
-9. `docs/tenant-chat/db/tenant-chat-usage.sql`
-10. `docs/tenant-chat/schemas/*.schema.json`
-11. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
-12. `docs/tenant-chat/implementation-plan.md`
-13. `docs/tenant-chat/handoffs/*.md`
-14. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
+6. `docs/tenant-chat/openapi/admin-rag.openapi.json`
+7. `docs/tenant-chat/openapi/chat-conversation.openapi.json`
+8. `docs/tenant-chat/openapi/private-gateway.openapi.json`
+9. `docs/tenant-chat/db/tenant-chat-content.sql`
+10. `docs/tenant-chat/db/tenant-chat-usage.sql`
+11. `docs/tenant-chat/schemas/*.schema.json`
+12. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
+13. `docs/tenant-chat/implementation-plan.md`
+14. `docs/tenant-chat/handoffs/*.md`
+15. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
 
 `contracts.md`와 schema/fixture가 충돌하면 `contracts.md`를 먼저 고치고 schema/fixture를 함께 맞춘다. 로컬 PR packet은 구현 순서와 acceptance를 제공하지만 active contract를 덮어쓰지 않는다.
 
@@ -88,6 +89,7 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)
 - [Private Control Plane OpenAPI](./openapi/private-control-plane.openapi.json)
 - [Admin Runtime OpenAPI](./openapi/admin-runtime.openapi.json)
+- [Admin RAG document OpenAPI](./openapi/admin-rag.openapi.json)
 - [Chat conversation OpenAPI](./openapi/chat-conversation.openapi.json)
 - [Private Gateway OpenAPI](./openapi/private-gateway.openapi.json)
 - [Tenant Chat content DDL contract](./db/tenant-chat-content.sql)
@@ -101,6 +103,8 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Usage event transition vectors](./vectors/usage-event-vectors.json)
 - [Workload JWT phase vectors](./vectors/workload-jwt-phase-vectors.json)
 - [Workload JWT claims schema](./schemas/workload-jwt-claims.schema.json)
+- [RAG embedding request schema](./schemas/rag-embedding-request.schema.json)
+- [RAG embedding workload JWT claims schema](./schemas/rag-embedding-workload-jwt-claims.schema.json)
 - [Gateway request context schema](./schemas/gateway-request-context.schema.json)
 - [Usage settlement event schema](./schemas/usage-settlement-event.schema.json)
 - [Pre-ledger terminal event schema](./schemas/invocation-terminal-event.schema.json)

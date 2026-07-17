@@ -3,19 +3,23 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
-from app.api.routes import ai_safety, health, safety
+from app.api.routes import ai_safety, health, rag_extraction, safety
 from app.core.config import Settings, load_settings
 from app.core.errors import (
     RemoteSafetyHTTPError,
+    rag_extraction_error_handler,
     remote_safety_http_error_handler,
     unhandled_error_handler,
     validation_error_handler,
 )
+from app.domain.rag_extraction.errors import RagExtractionError
+from app.domain.rag_extraction.temp_files import prepare_rag_temp_directory
 from app.core.logging import configure_logging
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved_settings = settings or load_settings()
+    prepare_rag_temp_directory(resolved_settings)
     configure_logging(resolved_settings.log_level)
 
     app = FastAPI(
@@ -28,7 +32,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(safety.router)
     app.include_router(ai_safety.router)
+    app.include_router(rag_extraction.router)
     app.add_exception_handler(RemoteSafetyHTTPError, remote_safety_http_error_handler)
+    app.add_exception_handler(RagExtractionError, rag_extraction_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
     return app

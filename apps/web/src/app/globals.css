@@ -85,8 +85,8 @@
   --popover-foreground: #0f172a;
   --primary: #10a37f;
   --primary-foreground: #ffffff;
-  --primary-action-background: #17b787;
-  --primary-action-background-hover: #14a67a;
+  --primary-action-background: #0f7f63;
+  --primary-action-background-hover: #0c765b;
   --primary-action-border: transparent;
   --primary-action-foreground: #ffffff;
   --primary-action-height: 46px;
@@ -96,9 +96,9 @@
   --primary-action-icon-size: 30px;
   --primary-action-icon-padding: 7px;
   --primary-action-icon-background: rgba(255, 255, 255, 0.22);
-  --primary-action-shadow: 0 4px 10px rgba(23, 183, 135, 0.3);
-  --primary-action-shadow-hover: 0 6px 14px rgba(23, 183, 135, 0.4);
-  --primary-action-shadow-active: 0 2px 6px rgba(23, 183, 135, 0.3);
+  --primary-action-shadow: 0 4px 10px rgba(15, 127, 99, 0.3);
+  --primary-action-shadow-hover: 0 6px 14px rgba(15, 127, 99, 0.4);
+  --primary-action-shadow-active: 0 2px 6px rgba(15, 127, 99, 0.3);
   --compact-action-height: 34px;
   --compact-action-padding-inline: 12px;
   --compact-action-radius: 8px;

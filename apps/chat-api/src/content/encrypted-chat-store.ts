@@ -21,11 +21,13 @@ import {
 import { ContentIntegrityError } from './content.errors';
 import {
   createMessageAad,
+  createMessageCitationsAad,
   createTitleAad,
   decryptContent,
   encryptContent,
   type ContentRole,
 } from './content-crypto';
+import { citationSnapshotJson, parseCitationSnapshot, type RagCitation } from '@/rag/rag-citations';
 import { ContentIntegrityService } from './content-integrity.service';
 import { CursorCodec, InvalidCursor } from './cursor-codec';
 import { TenantContentKeyService } from './tenant-content-key.service';
@@ -48,6 +50,7 @@ export type ConversationView = Readonly<{
   title: string;
   version: number;
   historyRetentionDays: number;
+  knowledgeMode: 'off' | 'tenant';
   createdAt: string;
   updatedAt: string;
 }>;
@@ -58,6 +61,7 @@ export type MessageView = Readonly<{
   role: 'user' | 'assistant';
   content: string;
   effectiveModelKey?: string;
+  citations?: readonly RagCitation[];
   sequence: number;
   createdAt: string;
 }>;
@@ -69,6 +73,7 @@ export type ReservedTurn = Readonly<{
   idempotencyKey: string;
   cacheEpoch: bigint;
   state: string;
+  knowledgeMode: 'off' | 'tenant';
   replayed: boolean;
 }>;
 
@@ -83,9 +88,14 @@ export class EncryptedChatStore {
 
   async createConversation(
     actor: ChatActor,
-    input: Readonly<{ idempotencyKey: string; title: string; historyRetentionDays: number }>,
+    input: Readonly<{
+      idempotencyKey: string;
+      title: string;
+      historyRetentionDays: number;
+      knowledgeMode: 'off' | 'tenant';
+    }>,
   ): Promise<Readonly<{ conversation: ConversationView; replayed: boolean }>> {
-    const binding = createBinding(actor, input.idempotencyKey, input.title);
+    const binding = createBinding(actor, input.idempotencyKey, input.title, input.knowledgeMode);
     const signed = await this.integrity.sign(binding);
     const id = randomUUID();
     const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
@@ -102,6 +112,7 @@ export class EncryptedChatStore {
           creationBindingMac: signed.mac,
           creationBindingKeyVersion: signed.keyVersion,
           historyRetentionDays: input.historyRetentionDays,
+          knowledgeMode: input.knowledgeMode,
           expiresAt,
           titleCiphertext: bytes(encrypted.ciphertext),
           titleNonce: bytes(encrypted.nonce),
@@ -350,9 +361,9 @@ export class EncryptedChatStore {
     const turnId = randomUUID();
     const requestId = randomUUID();
     try {
-      const turn = await this.prisma.$transaction(async (tx) => {
+      const created = await this.prisma.$transaction(async (tx) => {
         const conversation = await lockActiveConversation(tx, actor, conversationId);
-        return tx.tenantChatTurn.create({
+        const turn = await tx.tenantChatTurn.create({
           data: {
             id: turnId,
             conversationId,
@@ -365,13 +376,14 @@ export class EncryptedChatStore {
             capturedCacheEpoch: conversation.cacheEpoch,
           },
         });
+        return { turn, knowledgeMode: conversation.knowledgeMode };
       });
-      return reservedView(turn, false);
+      return reservedView(created.turn, false, created.knowledgeMode);
     } catch (error) {
       if (!uniqueConflict(error)) throw error;
-      const turn = await this.prisma.$transaction(async (tx) => {
-        await lockActiveConversation(tx, actor, conversationId);
-        return tx.tenantChatTurn.findUnique({
+      const result = await this.prisma.$transaction(async (tx) => {
+        const conversation = await lockActiveConversation(tx, actor, conversationId);
+        const turn = await tx.tenantChatTurn.findUnique({
           where: {
             tenantId_userId_idempotencyKey: {
               tenantId: actor.tenantId,
@@ -380,10 +392,11 @@ export class EncryptedChatStore {
             },
           },
         });
+        return { turn, knowledgeMode: conversation.knowledgeMode };
       });
-      if (!turn || turn.conversationId !== conversationId) throw new IdempotencyConflict();
-      await this.verifyBinding(binding, turn.requestBindingKeyVersion, turn.requestBindingMac);
-      return reservedView(turn, true);
+      if (!result.turn || result.turn.conversationId !== conversationId) throw new IdempotencyConflict();
+      await this.verifyBinding(binding, result.turn.requestBindingKeyVersion, result.turn.requestBindingMac);
+      return reservedView(result.turn, true, result.knowledgeMode);
     }
   }
 
@@ -481,6 +494,78 @@ export class EncryptedChatStore {
     }
   }
 
+  async persistRagNoEvidence(
+    actor: ChatActor,
+    reserved: ReservedTurn,
+    userContent: string,
+    assistantContent: string,
+  ): Promise<MessageView> {
+    const userMessageId = randomUUID();
+    const assistantMessageId = randomUUID();
+    const completed = await this.keys.withActiveKey(actor.tenantId, async (key, version) => {
+      const user = encryptContent(
+        key,
+        userContent,
+        createMessageAad(actor.tenantId, reserved.conversationId, userMessageId, 'user', version),
+      );
+      const assistant = encryptContent(
+        key,
+        assistantContent,
+        createMessageAad(actor.tenantId, reserved.conversationId, assistantMessageId, 'assistant', version),
+      );
+      return this.prisma.$transaction(async (tx) => {
+        const conversation = await lockActiveConversation(tx, actor, reserved.conversationId);
+        if (conversation.cacheEpoch !== reserved.cacheEpoch) throw new TurnStateConflict();
+        const turn = await tx.tenantChatTurn.findFirst({
+          where: {
+            id: reserved.turnId,
+            conversationId: reserved.conversationId,
+            tenantId: actor.tenantId,
+            userId: actor.userId,
+          },
+        });
+        if (!turn) throw new TurnStateConflict();
+        if (turn.state === 'completed') return true;
+        if (turn.state !== 'pending_admission') throw new TurnStateConflict();
+        const expiresAt = expiry(conversation.historyRetentionDays);
+        await tx.tenantChatMessage.createMany({
+          data: [
+            {
+              id: userMessageId, conversationId: reserved.conversationId, tenantId: actor.tenantId,
+              userId: actor.userId, turnId: reserved.turnId, requestId: reserved.requestId,
+              role: 'user', sequence: conversation.nextMessageSequence,
+              ciphertext: bytes(user.ciphertext), nonce: bytes(user.nonce), tag: bytes(user.tag),
+              contentKeyVersion: user.contentKeyVersion, schemaVersion: user.schemaVersion, expiresAt,
+            },
+            {
+              id: assistantMessageId, conversationId: reserved.conversationId, tenantId: actor.tenantId,
+              userId: actor.userId, turnId: reserved.turnId, requestId: reserved.requestId,
+              role: 'assistant', sequence: conversation.nextMessageSequence + 1n,
+              ciphertext: bytes(assistant.ciphertext), nonce: bytes(assistant.nonce), tag: bytes(assistant.tag),
+              contentKeyVersion: assistant.contentKeyVersion, schemaVersion: assistant.schemaVersion,
+              effectiveModelKey: null, expiresAt,
+            },
+          ],
+        });
+        await tx.tenantChatTurn.update({
+          where: { id: reserved.turnId },
+          data: { state: 'completed', safeErrorCode: null, completedAt: new Date() },
+        });
+        await tx.tenantChatConversation.update({
+          where: { id: reserved.conversationId },
+          data: { nextMessageSequence: { increment: 2 }, expiresAt },
+        });
+        return false;
+      });
+    });
+    const message = completed
+      ? await this.findTurnMessage(actor, reserved.turnId, 'assistant')
+      : await this.prisma.tenantChatMessage.findUnique({ where: { id: assistantMessageId } });
+    if (!message) throw new TurnStateConflict();
+    if (completed) await this.assertMessageContent(message, assistantContent);
+    return this.messageView(message);
+  }
+
   async completionHistory(
     actor: ChatActor,
     conversationId: string,
@@ -528,6 +613,7 @@ export class EncryptedChatStore {
     reserved: ReservedTurn,
     content: string,
     effectiveModelKey: string | null,
+    citations?: readonly RagCitation[],
   ): Promise<Readonly<{ message: MessageView; replayed: boolean }>> {
     assertEffectiveModelKey(effectiveModelKey);
     const existing = await this.findTurnMessage(actor, reserved.turnId, 'assistant');
@@ -537,8 +623,8 @@ export class EncryptedChatStore {
       return Object.freeze({ message: await this.messageView(existing), replayed: true });
     }
     const messageId = randomUUID();
-    const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(
+    const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) => {
+      const payload = encryptContent(
         key,
         content,
         createMessageAad(
@@ -548,8 +634,13 @@ export class EncryptedChatStore {
           'assistant',
           version,
         ),
-      ),
-    );
+      );
+      const citation = citations === undefined ? undefined : encryptContent(
+        key, citationSnapshotJson(citations),
+        createMessageCitationsAad(actor.tenantId, reserved.conversationId, messageId, version),
+      );
+      return { content: payload, citation };
+    });
     try {
       const message = await this.prisma.$transaction(async (tx) => {
         const conversation = await lockActiveConversation(tx, actor, reserved.conversationId);
@@ -576,11 +667,18 @@ export class EncryptedChatStore {
             requestId: reserved.requestId,
             role: 'assistant',
             sequence: conversation.nextMessageSequence,
-            ciphertext: bytes(encrypted.ciphertext),
-            nonce: bytes(encrypted.nonce),
-            tag: bytes(encrypted.tag),
-            contentKeyVersion: encrypted.contentKeyVersion,
-            schemaVersion: encrypted.schemaVersion,
+            ciphertext: bytes(encrypted.content.ciphertext),
+            nonce: bytes(encrypted.content.nonce),
+            tag: bytes(encrypted.content.tag),
+            contentKeyVersion: encrypted.content.contentKeyVersion,
+            schemaVersion: encrypted.content.schemaVersion,
+            ...(encrypted.citation ? {
+              citationCiphertext: bytes(encrypted.citation.ciphertext),
+              citationNonce: bytes(encrypted.citation.nonce),
+              citationTag: bytes(encrypted.citation.tag),
+              citationContentKeyVersion: encrypted.citation.contentKeyVersion,
+              citationSchemaVersion: encrypted.citation.schemaVersion,
+            } : {}),
             effectiveModelKey,
             expiresAt: contentExpiresAt,
           },
@@ -730,6 +828,7 @@ export class EncryptedChatStore {
       title,
       version: row.version,
       historyRetentionDays: row.historyRetentionDays,
+      knowledgeMode: knowledgeMode(row.knowledgeMode),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     });
@@ -738,15 +837,37 @@ export class EncryptedChatStore {
   private async messageView(row: TenantChatMessage): Promise<MessageView> {
     const content = await this.decryptMessage(row);
     const effectiveModelKey = messageEffectiveModelKey(row);
+    const citations = await this.decryptCitations(row);
     return Object.freeze({
       id: row.id,
       turnId: row.turnId,
       role: row.role as 'user' | 'assistant',
       content,
       ...(effectiveModelKey ? { effectiveModelKey } : {}),
+      ...(citations ? { citations: await this.withCitationAvailability(row.tenantId, citations) } : {}),
       sequence: safeSequence(row.sequence),
       createdAt: row.createdAt.toISOString(),
     });
+  }
+
+  private async decryptCitations(row: TenantChatMessage): Promise<readonly RagCitation[] | undefined> {
+    const values = [row.citationCiphertext, row.citationNonce, row.citationTag, row.citationContentKeyVersion, row.citationSchemaVersion];
+    if (values.every((value) => value === null)) return undefined;
+    if (!row.citationCiphertext || !row.citationNonce || !row.citationTag || !row.citationContentKeyVersion || row.citationSchemaVersion !== 1 || row.role !== 'assistant') throw new ContentIntegrityError();
+    const plaintext = await this.keys.withKeyVersion(row.tenantId, row.citationContentKeyVersion, (key) => decryptContent(key, {
+      ciphertext: Buffer.from(row.citationCiphertext!), nonce: Buffer.from(row.citationNonce!), tag: Buffer.from(row.citationTag!),
+    }, createMessageCitationsAad(row.tenantId, row.conversationId, row.id, row.citationContentKeyVersion!)));
+    try { return parseCitationSnapshot(plaintext); } catch { throw new ContentIntegrityError(); }
+  }
+
+  private async withCitationAvailability(tenantId: string, citations: readonly RagCitation[]): Promise<readonly RagCitation[]> {
+    if (citations.length === 0) return citations;
+    const documents = await this.prisma.ragDocument.findMany({
+      where: { tenantId, publicId: { in: citations.map((citation) => citation.documentId) }, status: 'READY' },
+      select: { publicId: true },
+    });
+    const available = new Set(documents.map((document) => document.publicId));
+    return Object.freeze(citations.map((citation) => Object.freeze({ ...citation, availability: available.has(citation.documentId) ? 'available' as const : 'unavailable' as const })));
   }
 
   private async decryptMessage(row: TenantChatMessage): Promise<string> {
@@ -836,10 +957,17 @@ type LockedConversation = Readonly<{
   version: number;
   cacheEpoch: bigint;
   expiresAt: Date | null;
+  knowledgeMode: string;
 }>;
 
-function createBinding(actor: ChatActor, idempotencyKey: string, title: string): JsonValue {
-  return { actor: actorValue(actor), idempotencyKey, scope: CREATE_SCOPE, title, version: 1 };
+function createBinding(
+  actor: ChatActor,
+  idempotencyKey: string,
+  title: string,
+  knowledgeMode: 'off' | 'tenant',
+): JsonValue {
+  const legacy = { actor: actorValue(actor), idempotencyKey, scope: CREATE_SCOPE, title, version: 1 };
+  return knowledgeMode === 'tenant' ? { ...legacy, knowledgeMode } : legacy;
 }
 
 function turnBinding(
@@ -881,9 +1009,11 @@ async function lockActiveConversation(
     nextMessageSequence: bigint;
     historyRetentionDays: number;
     expiresAt: Date | null;
+    knowledgeMode: string;
   }>>(Prisma.sql`
     SELECT id, cache_epoch AS "cacheEpoch", next_message_sequence AS "nextMessageSequence",
-      history_retention_days AS "historyRetentionDays", expires_at AS "expiresAt"
+      history_retention_days AS "historyRetentionDays", expires_at AS "expiresAt",
+      knowledge_mode AS "knowledgeMode"
     FROM tenant_chat_conversations
     WHERE id = ${conversationId}::uuid
       AND tenant_id = ${actor.tenantId}::uuid
@@ -918,6 +1048,7 @@ function reservedView(
     state: string;
   }>,
   replayed: boolean,
+  mode: string,
 ): ReservedTurn {
   return Object.freeze({
     conversationId: row.conversationId,
@@ -926,8 +1057,14 @@ function reservedView(
     idempotencyKey: row.idempotencyKey,
     cacheEpoch: row.capturedCacheEpoch,
     state: row.state,
+    knowledgeMode: knowledgeMode(mode),
     replayed,
   });
+}
+
+function knowledgeMode(value: string): 'off' | 'tenant' {
+  if (value === 'off' || value === 'tenant') return value;
+  throw new ContentIntegrityError();
 }
 
 function expiry(days: number): Date | null {

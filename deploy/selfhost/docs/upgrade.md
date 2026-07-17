@@ -48,7 +48,9 @@ Change it to the target version:
 GATELM_IMAGE_TAG=<target-version>
 ```
 
-Keep app service image tags aligned. Do not upgrade only one of `web`, `control-plane-api`, `gateway-core`, or `ai-service` unless GateLM support explicitly tells you to.
+Keep app service image tags aligned. Do not upgrade only one of `web`,
+`control-plane-api`/`rag-worker`, `gateway-core`, `ai-service`, `chat-api`, or
+`chat-web` unless GateLM support explicitly tells you to.
 
 ## 3. Registry Login
 
@@ -66,6 +68,10 @@ Do not put registry passwords or tokens in `.env`.
 docker compose --env-file .env pull
 ```
 
+If RAG is enabled, include `-f docker-compose.yml -f docker-compose.rag.yml`,
+or use `bash scripts/install.sh` as described below so the overlay and secret
+preflight are selected automatically.
+
 If pull fails, check:
 
 - `GATELM_IMAGE_REGISTRY`
@@ -75,8 +81,12 @@ If pull fails, check:
 
 ## 5. Restart The Stack
 
+Use the idempotent installer. It preserves the base non-RAG service set when
+the flag is false; when the flag is true it validates role-separated Tenant
+Chat/RAG secrets and includes `rag-worker`, `chat-api`, and `chat-web`:
+
 ```bash
-docker compose --env-file .env up -d
+bash scripts/install.sh
 docker compose --env-file .env ps
 ```
 
@@ -112,8 +122,7 @@ If the upgrade fails before migrations changed production data:
 4. Run smoke test.
 
 ```bash
-docker compose --env-file .env pull
-docker compose --env-file .env up -d
+bash scripts/install.sh
 bash scripts/smoke-test.sh
 ```
 

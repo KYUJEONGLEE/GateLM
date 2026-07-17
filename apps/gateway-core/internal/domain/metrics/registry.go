@@ -37,6 +37,8 @@ const (
 	TenantChatCompletionTotal              = "gatelm_tenant_chat_completion_total"
 	TenantChatUsageReconciliationTotal     = "gatelm_tenant_chat_usage_reconciliation_total"
 	TenantChatAccountingTransactionSeconds = "gatelm_tenant_chat_accounting_transaction_seconds"
+	RagEmbeddingRequestsTotal              = "gatelm_rag_embedding_requests_total"
+	RagEmbeddingInputTokensTotal           = "gatelm_rag_embedding_input_tokens_total"
 	PrometheusTextContentType              = "text/plain; version=0.0.4; charset=utf-8"
 )
 
@@ -99,6 +101,8 @@ var metricSpecs = map[string]metricSpec{
 	TenantChatCompletionTotal:              {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
 	TenantChatUsageReconciliationTotal:     {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
 	TenantChatAccountingTransactionSeconds: {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},
+	RagEmbeddingRequestsTotal:              {"counter", "Total private RAG embedding requests by bounded outcome."},
+	RagEmbeddingInputTokensTotal:           {"counter", "Total RAG embedding input tokens returned by the provider."},
 }
 
 var allowedLabels = map[string]struct{}{
@@ -121,6 +125,9 @@ var allowedLabels = map[string]struct{}{
 	"transition":         {},
 	"category":           {},
 	"comparison":         {},
+	"service":            {},
+	"job_type":           {},
+	"failure_code":       {},
 }
 
 var forbiddenLabels = map[string]struct{}{
@@ -149,6 +156,12 @@ var forbiddenLabels = map[string]struct{}{
 	"complexity_score":  {},
 	"artifact_hash":     {},
 	"model_ref":         {},
+	"filename":          {},
+	"document_title":    {},
+	"document_id":       {},
+	"chunk":             {},
+	"query":             {},
+	"api_key":           {},
 }
 
 func NewRegistry() *Registry {

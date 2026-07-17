@@ -237,6 +237,72 @@ describe('ConversationService turn fan-out', () => {
     registry.release(reserved.turnId, handle);
   });
 
+  it('adds the built RAG context to the final provider messages and bypasses cache', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = { ...reservedTurn('pending_admission'), knowledgeMode: 'tenant' as const };
+    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+    const ragMessage = Object.freeze({
+      role: 'system' as const,
+      purpose: 'rag_context' as const,
+      content: 'safe RAG context',
+    });
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistAdmittedUser: jest.fn().mockResolvedValue({ replayed: false }),
+      completionHistory: jest.fn().mockResolvedValue([{ role: 'user', content: 'leave policy?' }]),
+    };
+    const retrieval = { retrieve: jest.fn().mockResolvedValue([{ chunkId: 'chunk' }]) };
+    const ragContext = { build: jest.fn().mockReturnValue({ message: ragMessage, sources: [{ id: 'S1' }] }) };
+    const bridge = { admitAuthorized: jest.fn().mockResolvedValue(handle) };
+    const service = serviceWith({
+      store, bridge, registry, retrieval, ragContext,
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    const prepared = await service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'leave policy?',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    });
+
+    expect(prepared).toMatchObject({ kind: 'execute', messages: [ragMessage, { role: 'user', content: 'leave policy?' }] });
+    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+    expect(prepared.usageIntent).toEqual(expect.objectContaining({
+      estimatedInputTokens: Buffer.byteLength('safe RAG contextleave policy?', 'utf8'),
+      cacheStrategy: 'off',
+    }));
+    expect(retrieval.retrieve).toHaveBeenCalledWith(authorized(), 'leave policy?');
+    registry.release(reserved.turnId, handle);
+  });
+
+  it('stores the deterministic no-evidence response without Gateway admission or completion', async () => {
+    const registry = new ActiveTurnRegistry();
+    const reserved = { ...reservedTurn('pending_admission'), knowledgeMode: 'tenant' as const };
+    const message = assistantMessage();
+    const store = {
+      reserveTurn: jest.fn().mockResolvedValue(reserved),
+      persistRagNoEvidence: jest.fn().mockResolvedValue(message),
+    };
+    const bridge = { admitAuthorized: jest.fn(), complete: jest.fn() };
+    const service = serviceWith({
+      store, bridge, registry,
+      retrieval: { retrieve: jest.fn().mockResolvedValue([]) },
+      ragContext: { build: jest.fn().mockReturnValue({ sources: [], message: {} }) },
+      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+    });
+
+    await expect(service.prepareTurn('access', reserved.conversationId, {
+      idempotencyKey: reserved.idempotencyKey,
+      content: 'not in documents',
+      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
+    })).resolves.toMatchObject({ kind: 'local', message });
+    expect(store.persistRagNoEvidence).toHaveBeenCalledWith(
+      expect.anything(), reserved, 'not in documents', '등록된 문서에서 관련 근거를 찾지 못했습니다.',
+    );
+    expect(bridge.admitAuthorized).not.toHaveBeenCalled();
+    expect(bridge.complete).not.toHaveBeenCalled();
+  });
+
   it('cleans up the last admitted attachment when history preparation fails', async () => {
     const registry = new ActiveTurnRegistry();
     const reserved = reservedTurn('pending_admission');
@@ -303,6 +369,8 @@ function serviceWith(input: {
   bridge: object;
   registry: ActiveTurnRegistry;
   sessions?: object;
+  retrieval?: object;
+  ragContext?: object;
   maximumAttachmentsPerTurn?: number;
 }): ConversationService {
   const values: Record<string, number> = {
@@ -319,6 +387,8 @@ function serviceWith(input: {
     input.store as never,
     input.bridge as never,
     input.registry,
+    (input.retrieval ?? {}) as never,
+    (input.ragContext ?? {}) as never,
   );
 }
 
@@ -340,6 +410,7 @@ function execution(
       requestId: '00000000-0000-4000-8000-000000000302',
       idempotencyKey: 'idempotency-key',
       cacheEpoch: 1n,
+      knowledgeMode: 'off' as const,
       state: 'user_persisted',
       replayed: false,
     }),
@@ -352,6 +423,7 @@ function execution(
       cacheStrategy: 'exact' as const,
     }),
     signal: registry.register(turnId, handle, 4),
+    citationSources: Object.freeze([]),
   });
 }
 
@@ -402,6 +474,7 @@ function reservedTurn(state: string) {
     requestId: '00000000-0000-4000-8000-000000000302',
     idempotencyKey: 'idempotency-key',
     cacheEpoch: 1n,
+    knowledgeMode: 'off' as const,
     state,
     replayed: false,
   });

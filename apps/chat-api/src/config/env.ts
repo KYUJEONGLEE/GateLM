@@ -11,6 +11,15 @@ export type ChatApiEnv = RagRuntimeConfig & {
   TENANT_CHAT_INTENT_SECRET: string;
   TENANT_CHAT_WEB_SERVICE_TOKEN: string;
   TENANT_CHAT_GATEWAY_BASE_URL?: string;
+  RAG_QUERY_EMBEDDING_ACTIVE_KID?: string;
+  RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE?: string;
+  RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE?: string;
+  RAG_QUERY_EMBEDDING_TIMEOUT_MS: number;
+  RAG_TOP_K: number;
+  RAG_MIN_SCORE: number;
+  RAG_CONTEXT_MAX_TOKENS: number;
+  RAG_PROMPT_VERSION: 1;
+  RAG_RETRIEVAL_QUERY_MAX_UTF8_BYTES: number;
   TENANT_CHAT_WORKLOAD_ACTIVE_KID?: string;
   TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE?: string;
   TENANT_CHAT_BINDING_HMAC_KEYS_FILE?: string;
@@ -35,7 +44,7 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('CHAT_API_PORT must be a valid port.');
   }
-  return {
+  const validated: ChatApiEnv = {
     ...validateRagRuntimeConfig(env),
     CHAT_API_PORT: port,
     DATABASE_URL: boundedDatabaseUrl(env),
@@ -51,6 +60,48 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
     TENANT_CHAT_INTENT_SECRET: strong(env, 'TENANT_CHAT_INTENT_SECRET'),
     TENANT_CHAT_WEB_SERVICE_TOKEN: strong(env, 'TENANT_CHAT_WEB_SERVICE_TOKEN'),
     TENANT_CHAT_GATEWAY_BASE_URL: optionalHttpOrigin(env, 'TENANT_CHAT_GATEWAY_BASE_URL'),
+    RAG_QUERY_EMBEDDING_ACTIVE_KID: optional(env, 'RAG_QUERY_EMBEDDING_ACTIVE_KID'),
+    RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE: optional(env, 'RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE'),
+    RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE: optional(
+      env,
+      'RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE',
+    ),
+    RAG_QUERY_EMBEDDING_TIMEOUT_MS: boundedInteger(
+      env,
+      'RAG_QUERY_EMBEDDING_TIMEOUT_MS',
+      10_000,
+      100,
+      120_000,
+    ),
+    RAG_TOP_K: boundedInteger(
+      env,
+      'RAG_TOP_K',
+      6,
+      1,
+      12,
+    ),
+    RAG_MIN_SCORE: boundedDecimal(
+      env,
+      'RAG_MIN_SCORE',
+      0.3,
+      0,
+      1,
+    ),
+    RAG_CONTEXT_MAX_TOKENS: boundedInteger(
+      env,
+      'RAG_CONTEXT_MAX_TOKENS',
+      6_000,
+      1,
+      6_000,
+    ),
+    RAG_PROMPT_VERSION: fixedInteger(env, 'RAG_PROMPT_VERSION', 1),
+    RAG_RETRIEVAL_QUERY_MAX_UTF8_BYTES: boundedInteger(
+      env,
+      'RAG_RETRIEVAL_QUERY_MAX_UTF8_BYTES',
+      8192,
+      1,
+      8192,
+    ),
     TENANT_CHAT_WORKLOAD_ACTIVE_KID: optional(env, 'TENANT_CHAT_WORKLOAD_ACTIVE_KID'),
     TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: optional(env, 'TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE'),
     TENANT_CHAT_BINDING_HMAC_KEYS_FILE: optional(env, 'TENANT_CHAT_BINDING_HMAC_KEYS_FILE'),
@@ -141,6 +192,8 @@ export function validateEnv(env: RawEnv): ChatApiEnv {
       16,
     ),
   };
+  assertRagQueryConfiguration(validated);
+  return validated;
 }
 
 function retentionDays(env: RawEnv): 0 | 7 | 30 | 90 {
@@ -204,4 +257,38 @@ function boundedInteger(
     throw new Error(`${key} must be an integer between ${minimum} and ${maximum}.`);
   }
   return value;
+}
+
+function boundedDecimal(
+  env: RawEnv,
+  key: string,
+  defaultValue: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const value = Number(env[key] ?? defaultValue);
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(`${key} must be a number between ${minimum} and ${maximum}.`);
+  }
+  return value;
+}
+
+function fixedInteger(env: RawEnv, key: string, expected: 1): 1 {
+  const value = Number(env[key] ?? expected);
+  if (value !== expected) throw new Error(`${key} must be ${expected}.`);
+  return expected;
+}
+
+function assertRagQueryConfiguration(env: ChatApiEnv): void {
+  if (env.TENANT_CHAT_RAG_ENABLED !== 'true') return;
+  if (!env.TENANT_CHAT_GATEWAY_BASE_URL) {
+    throw new Error('TENANT_CHAT_GATEWAY_BASE_URL is required when Tenant Chat RAG is enabled.');
+  }
+  for (const key of [
+    'RAG_QUERY_EMBEDDING_ACTIVE_KID',
+    'RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE',
+    'RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE',
+  ] as const) {
+    if (!env[key]) throw new Error(`${key} is required when Tenant Chat RAG is enabled.`);
+  }
 }

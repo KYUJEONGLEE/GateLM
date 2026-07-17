@@ -27,6 +27,9 @@ describe('validateEnv', () => {
     expect(env.RAG_EMBEDDING_DIMENSIONS).toBe(1536);
     expect(env.RAG_EMBEDDING_PROFILE_VERSION).toBe(1);
     expect(env.RAG_DISTANCE_METRIC).toBe('cosine');
+    expect(env.RAG_OBJECT_STORE_DRIVER).toBe('fake');
+    expect(env.RAG_MAX_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
+    expect(env.RAG_S3_FORCE_PATH_STYLE).toBe('false');
   });
 
   it('accepts a bounded Tenant Chat cache key-set identifier', () => {
@@ -176,6 +179,122 @@ describe('validateEnv', () => {
     expect(env.TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN).toBe(
       'prod-chat-service-token-1234567890abcdef',
     );
+    expect(env.RAG_OBJECT_STORE_DRIVER).toBe('s3');
+    expect(env.RAG_S3_BUCKET).toBe('gatelm-rag-prod');
+  });
+
+  it('starts in production-like mode with RAG disabled and no RAG storage or wrapping key', () => {
+    const env = validateEnv({
+      ...prodEnv(),
+      TENANT_CHAT_RAG_ENABLED: 'false',
+      RAG_CONTENT_WRAPPING_KEYS_FILE: undefined,
+      RAG_OBJECT_STORE_DRIVER: undefined,
+      RAG_S3_BUCKET: undefined,
+      RAG_S3_KMS_KEY_ID: undefined,
+      RAG_S3_REGION: undefined,
+    });
+
+    expect(env.TENANT_CHAT_RAG_ENABLED).toBe('false');
+    expect(env.RAG_OBJECT_STORE_DRIVER).toBe('s3');
+    expect(env.RAG_S3_BUCKET).toBeUndefined();
+    expect(env.RAG_CONTENT_WRAPPING_KEYS_FILE).toBeUndefined();
+  });
+
+  it('accepts an explicitly configured local S3-compatible endpoint', () => {
+    const env = validateEnv({
+      ...baseEnv(),
+      RAG_OBJECT_STORE_DRIVER: 's3',
+      RAG_S3_BUCKET: 'gatelm-rag-local',
+      RAG_S3_ENDPOINT: 'http://localhost:9000',
+      RAG_S3_FORCE_PATH_STYLE: 'true',
+      RAG_S3_KMS_KEY_ID: 'local-kms-key',
+      RAG_S3_REGION: 'ap-northeast-2',
+      RAG_MAX_UPLOAD_BYTES: '1048576',
+    });
+
+    expect(env.RAG_OBJECT_STORE_DRIVER).toBe('s3');
+    expect(env.RAG_S3_FORCE_PATH_STYLE).toBe('true');
+    expect(env.RAG_MAX_UPLOAD_BYTES).toBe(1048576);
+  });
+
+  it('recognizes the repository DEPLOYMENT_MODE marker for local and release environments', () => {
+    const local = validateEnv({
+      ...baseEnv(),
+      NODE_ENV: undefined,
+      DEPLOYMENT_MODE: 'local',
+      RAG_OBJECT_STORE_DRIVER: 'fake',
+    });
+    expect(local.RAG_OBJECT_STORE_DRIVER).toBe('fake');
+
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        NODE_ENV: undefined,
+        DEPLOYMENT_MODE: 'self_host',
+        RAG_OBJECT_STORE_DRIVER: 'fake',
+      }),
+    ).toThrow('RAG_OBJECT_STORE_DRIVER must be s3');
+  });
+
+  it('rejects fake storage, custom endpoints, and static AWS credentials in production', () => {
+    expect(() =>
+      validateEnv({ ...prodEnv(), RAG_OBJECT_STORE_DRIVER: 'fake' }),
+    ).toThrow('RAG_OBJECT_STORE_DRIVER must be s3');
+    expect(() =>
+      validateEnv({ ...prodEnv(), RAG_S3_ENDPOINT: 'http://localhost:9000' }),
+    ).toThrow('RAG_S3_ENDPOINT is not allowed');
+    expect(() =>
+      validateEnv({ ...prodEnv(), AWS_ACCESS_KEY_ID: 'static-key' }),
+    ).toThrow('AWS_ACCESS_KEY_ID is not allowed');
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        TENANT_CHAT_RAG_ENABLED: 'false',
+        RAG_OBJECT_STORE_DRIVER: 'fake',
+      }),
+    ).toThrow('RAG_OBJECT_STORE_DRIVER must be s3');
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        TENANT_CHAT_RAG_ENABLED: 'false',
+        AWS_SECRET_ACCESS_KEY: 'static-secret',
+      }),
+    ).toThrow('AWS_SECRET_ACCESS_KEY is not allowed');
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        TENANT_CHAT_CONTENT_KEYS_FILE:
+          '/run/secrets/tenant-chat/content-keys.json',
+      }),
+    ).toThrow('TENANT_CHAT_CONTENT_KEYS_FILE must not be mounted');
+  });
+
+  it('fails closed when the environment is unknown and fake storage is requested', () => {
+    const unknown = { ...baseEnv(), NODE_ENV: undefined };
+    expect(() =>
+      validateEnv({ ...unknown, RAG_OBJECT_STORE_DRIVER: 'fake' }),
+    ).toThrow('allowed only in explicit local/test');
+    expect(validateEnv(unknown).RAG_OBJECT_STORE_DRIVER).toBe('s3');
+    expect(() =>
+      validateEnv({ ...unknown, TENANT_CHAT_RAG_ENABLED: 'true' }),
+    ).toThrow('must be explicitly configured outside local/test');
+    expect(() =>
+      validateEnv({
+        ...unknown,
+        RAG_OBJECT_STORE_DRIVER: 's3',
+        RAG_S3_BUCKET: 'local-bucket',
+        RAG_S3_ENDPOINT: 'http://localhost:9000',
+        RAG_S3_FORCE_PATH_STYLE: 'true',
+        RAG_S3_KMS_KEY_ID: 'local-kms',
+        RAG_S3_REGION: 'ap-northeast-2',
+      }),
+    ).toThrow('allowed only in explicit local/test');
+  });
+
+  it('rejects upload limits that exceed the database constraint', () => {
+    expect(() =>
+      validateEnv({ ...baseEnv(), RAG_MAX_UPLOAD_BYTES: '20971521' }),
+    ).toThrow('RAG_MAX_UPLOAD_BYTES');
   });
 
   it.each([
@@ -193,6 +312,7 @@ describe('validateEnv', () => {
     return {
       CONTROL_PLANE_AUTH_STATE_SECRET: 'state-secret-for-test',
       DATABASE_URL: 'postgresql://gatelm:gatelm@localhost:5432/gatelm',
+      NODE_ENV: 'test',
       REDIS_URL: 'redis://localhost:6379',
     };
   }
@@ -206,9 +326,16 @@ describe('validateEnv', () => {
         'prod-internal-token-1234567890abcdef123456',
       TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:
         'prod-chat-service-token-1234567890abcdef',
+      TENANT_CHAT_RAG_ENABLED: 'true',
+      RAG_CONTENT_WRAPPING_KEYS_FILE:
+        '/run/secrets/rag/content-wrapping-keys.json',
       NODE_ENV: 'production',
       SMTP_FROM: 'security@example.test',
       SMTP_HOST: 'smtp.example.test',
+      RAG_OBJECT_STORE_DRIVER: 's3',
+      RAG_S3_BUCKET: 'gatelm-rag-prod',
+      RAG_S3_KMS_KEY_ID: 'arn:aws:kms:ap-northeast-2:123456789012:key/test',
+      RAG_S3_REGION: 'ap-northeast-2',
     };
   }
 });

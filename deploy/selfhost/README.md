@@ -2,14 +2,19 @@
 
 This bundle is the v2.1.0 single-node Docker Compose path.
 
-It runs these services:
+The base bundle runs the existing non-RAG services. When
+`TENANT_CHAT_RAG_ENABLED=true`, the lifecycle scripts also apply
+`docker-compose.rag.yml` and start the rows marked **RAG overlay**.
 
 | Service | Image |
 |---|---|
 | Web Console | `gatelm/web:2.1.0` |
 | Control Plane API | `gatelm/control-plane-api:2.1.0` |
+| RAG Worker (`rag-worker`, RAG overlay) | `gatelm/control-plane-api:2.1.0` |
 | Gateway Core | `gatelm/gateway-core:2.1.0` |
 | AI Service | `gatelm/ai-service:2.1.0` |
+| Tenant Chat API (`chat-api`, RAG overlay) | `gatelm/chat-api:2.1.0` |
+| Tenant Chat Web (`chat-web`, RAG overlay) | `gatelm/chat-web:2.1.0` |
 | PostgreSQL | `pgvector/pgvector:0.8.5-pg16-trixie` (digest pinned in Compose) |
 | Redis | `redis:7-alpine` |
 | Mock Provider | `python:3.12-alpine` |
@@ -38,6 +43,17 @@ bash scripts/smoke-test.sh
 
 Before exposing the stack, edit `.env` and replace placeholder secret values. Keep runtime credentials in `.env` or a customer-managed secret system. Do not bake them into images.
 
+When enabling RAG, provision the six files under `.secrets/tenant-chat` and the
+eight files under `.secrets/rag` through your approved secret system before
+running install. RAG-disabled installs do not require or mount these files. The
+RAG files are `content-wrapping-keys.json`, query and worker signing JWK/binding
+key pairs, and the Gateway-only `workload-jwks.json`,
+`workload-binding-hmac-keys.json`, and `workload-identities.json`. Query private
+material is mounted only into `chat-api`, worker private material only into
+`rag-worker`, and combined verification material only into `gateway-core`.
+These credentials are separate from Tenant Chat completion signing material.
+No production secret generator is included in the self-host bundle.
+
 If your shell says `permission denied`, keep using the explicit `bash scripts/<name>.sh` form. The scripts intentionally avoid printing secret values, request bodies, and response bodies.
 
 Before running smoke tests, create a real tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API. Demo seed is disabled for self-host/prod-like deployments.
@@ -49,6 +65,7 @@ Default local ports:
 | Surface | URL |
 |---|---|
 | Web Console | `http://localhost:3000` |
+| Tenant Chat Web (RAG overlay) | `http://localhost:3002` |
 | Control Plane API | `http://localhost:3001` |
 | Gateway Core | `http://localhost:8080` |
 | AI Service | `http://localhost:8001` |
@@ -69,6 +86,13 @@ Production deployments should route public traffic through a reverse proxy and T
 - separate Web-to-Gateway observability read token
 - provider mode, defaulting to mock mode
 - AI Service mode
+- Tenant Chat service credentials and shared non-root secret-reader UID/GID
+- private S3/KMS RAG storage, worker, and embedding workload identities
+
+The lifecycle scripts select `docker-compose.rag.yml` only when the feature
+flag is true. For a manual Compose command in that mode, pass both
+`-f docker-compose.yml -f docker-compose.rag.yml`; the base file by itself is
+the rollback-safe non-RAG stack.
 
 PostgreSQL and Redis use named volumes:
 
@@ -87,6 +111,9 @@ The Compose file includes health checks for all services:
 - Control Plane `/healthz`
 - Gateway process liveness
 - AI Service `/healthz`
+- Tenant Chat API `/readyz` when the RAG overlay is enabled
+- Tenant Chat Web `/login` when the RAG overlay is enabled
+- RAG worker process health when the RAG overlay is enabled
 - Mock Provider `/healthz`
 
 The full Gateway `/healthz`, `/readyz`, request, and Request Log smoke path is handled by:

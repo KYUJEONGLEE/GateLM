@@ -39,4 +39,8 @@ test("Chat App and legacy Tenant Chat routes activate one management item", () =
     activeManagementItem: "chat-app",
     activeSection: "management"
   });
+  expect(getConsoleNavigationState("/tenants/tenant_demo_acme/knowledge-documents")).toEqual({
+    activeManagementItem: "chat-app",
+    activeSection: "management"
+  });
 });

@@ -9,6 +9,10 @@ const invariantsMigrationPath = resolve(
   __dirname,
   'migrations/20260716153000_rag_db_foundation_invariants/migration.sql',
 );
+const conversationModeMigrationPath = resolve(
+  __dirname,
+  'migrations/20260717000000_rag_conversation_knowledge_mode/migration.sql',
+);
 const schemaPath = resolve(__dirname, 'schema.prisma');
 const repositoryRoot = resolve(__dirname, '../../..');
 const pgvectorImage =
@@ -18,6 +22,7 @@ const invariantsMigrationSql = readFileSync(invariantsMigrationPath, 'utf8');
 const schema = readFileSync(schemaPath, 'utf8');
 const compactSql = migrationSql.replace(/\s+/g, ' ').trim();
 const compactInvariantsSql = invariantsMigrationSql.replace(/\s+/g, ' ').trim();
+const conversationModeMigrationSql = readFileSync(conversationModeMigrationPath, 'utf8');
 
 describe('Tenant Chat RAG database foundation migration', () => {
   it('pins one immutable pgvector PostgreSQL 16 image across local, CI, and deployments', () => {
@@ -208,6 +213,24 @@ describe('Tenant Chat RAG database foundation migration', () => {
     );
     expect(migrationSql).not.toMatch(
       /raw_(?:prompt|response|query|document|chunk)|authorization|api_key|app_token|provider_key/i,
+    );
+  });
+
+  it('adds the default-off conversation RAG mode without rewriting existing conversations', () => {
+    expect(conversationModeMigrationSql).toMatch(
+      /ADD COLUMN "knowledge_mode" TEXT NOT NULL DEFAULT 'off'/,
+    );
+    expect(conversationModeMigrationSql).toContain(
+      'tenant_chat_conversations_knowledge_mode_check',
+    );
+    expect(conversationModeMigrationSql).toContain(
+      '"knowledge_mode" IN (\'off\', \'tenant\')',
+    );
+    expect(conversationModeMigrationSql).not.toMatch(
+      /^\s*(?:DROP|TRUNCATE|UPDATE|DELETE\s+FROM)\b/im,
+    );
+    expect(schema).toContain(
+      'knowledgeMode             String    @default("off") @map("knowledge_mode")',
     );
   });
 });

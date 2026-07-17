@@ -8,6 +8,9 @@
   },
   "scripts": {
     "verify:v2-docs": "node scripts/verify-v2-docs.mjs",
+    "rag:evaluate": "node --test scripts/rag/evaluate-retrieval.test.mjs && node scripts/rag/evaluate-retrieval.mjs",
+    "rag:evaluate:openai": "node scripts/rag/evaluate-openai-opt-in.mjs",
+    "rag:benchmark:exact": "node scripts/rag/benchmark-exact-search.mjs",
     "verify:routing-contract": "node --test scripts/verify-routing-contract.test.mjs && node scripts/verify-routing-contract.mjs",
     "verify:v2.1-category-eval": "node --test scripts/verify-v2.1-category-eval.test.mjs && node scripts/verify-v2.1-category-eval.mjs",
     "verify:v2.1-difficulty-eval": "node --test scripts/verify-v2.1-difficulty-eval.test.mjs && node scripts/verify-v2.1-difficulty-eval.mjs",
@@ -67,6 +70,7 @@
     "verify:v2-final": "node scripts/verify-v2-final.mjs",
     "tenant-chat:auth-shell:load-smoke": "node scripts/dev/tenant-chat-auth-shell-load-smoke.mjs",
     "tenant-chat:local-provider-env": "node scripts/dev/ensure-tenant-chat-local-provider-env.mjs --env-file=.env.tenant-chat.local",
+    "tenant-chat:rag-wrapping-keys": "node scripts/dev/generate-rag-wrapping-key-projection.mjs",
     "tenant-chat:encrypted-conversation:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/tenant-chat-encrypted-conversation-smoke.ps1",
     "v2:p0:bootstrap:describe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -DescribeOnly",
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",

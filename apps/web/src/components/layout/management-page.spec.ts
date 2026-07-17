@@ -69,14 +69,17 @@ test("primary actions share one visual token contract", async () => {
   expect(styles).toContain("--primary-action-padding-inline: 24px;");
   expect(styles).toContain("--primary-action-radius: 999px;");
   expect(styles).toContain("--primary-action-icon-size: 30px;");
-  expect(styles).toContain("--primary-action-background: #17b787;");
-  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(23, 183, 135, 0.3);");
+  expect(styles).toContain("--primary-action-background: #0f7f63;");
+  expect(styles).toContain("--primary-action-background-hover: #0c765b;");
+  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(15, 127, 99, 0.3);");
   expect(styles).toMatch(
     /\.primary-button,\s*\.secondary-button \{[\s\S]*?height: var\(--primary-action-height\);[\s\S]*?padding: 0 var\(--primary-action-padding-inline\);[\s\S]*?font-size: var\(--primary-action-font-size\);/
   );
   expect(buttonSource).toContain("h-[var(--primary-action-height)]");
   expect(buttonSource).toContain("px-[var(--primary-action-padding-inline)]");
   expect(buttonSource).toContain("text-[length:var(--primary-action-font-size)]");
+  expect(buttonSource).toContain("bg-[var(--primary-action-background)]");
+  expect(buttonSource).toContain("hover:bg-[var(--primary-action-background-hover)]");
   expect(styles).toContain('[data-slot="button"][data-variant="default"][data-size="default"]');
   expect(styles).toContain('[data-slot="button"][data-variant="default"][data-size="sm"]');
   expect(buttonSource).toContain('data-variant={variant}');
@@ -110,7 +113,16 @@ test("sorting and selection utilities share the compact action contract", async 
 });
 
 test("project onboarding orders Provider choices by registration state before scrolling", async () => {
-  const styles = await readFile(stylesSourceUrl, "utf8");
+  const [styles, onboardingSource] = await Promise.all([
+    readFile(stylesSourceUrl, "utf8"),
+    readFile(
+      new URL(
+        "../../features/onboarding/components/onboarding-provider-registration.tsx",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  ]);
   const orderedRows = orderOnboardingProviderRows(
     [
       { family: "openai", id: "preset-openai" },
@@ -135,4 +147,8 @@ test("project onboarding orders Provider choices by registration state before sc
   expect(styles).toMatch(
     /\.onboarding-provider-list \{[\s\S]*?max-height: 488px;[\s\S]*?overflow-y: auto;[\s\S]*?scrollbar-gutter: stable;/
   );
+  expect(onboardingSource).toContain(
+    "const [selectedProviderKeyState, setSelectedProviderKey] = useState<string | null>(null);"
+  );
+  expect(onboardingSource).toContain("providerRows[0]?.providerKey ?? \"\"");
 });

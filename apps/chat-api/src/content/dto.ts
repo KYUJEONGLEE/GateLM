@@ -39,6 +39,10 @@ export class CreateConversationDto {
   @MinLength(1)
   @MaxLength(120)
   title!: string;
+
+  @IsOptional()
+  @IsIn(['off', 'tenant'])
+  knowledgeMode?: 'off' | 'tenant';
 }
 
 export class RenameConversationDto {

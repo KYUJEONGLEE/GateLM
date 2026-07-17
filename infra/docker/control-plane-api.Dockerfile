@@ -21,6 +21,7 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/control-plane-api/package.json apps/control-plane-api/package.json
 COPY packages/rag-config/package.json packages/rag-config/package.json
+COPY packages/tenant-content-crypto/package.json packages/tenant-content-crypto/package.json
 
 RUN pnpm install --frozen-lockfile --filter @gatelm/control-plane-api...
 
@@ -28,6 +29,7 @@ FROM deps AS builder
 
 COPY apps/control-plane-api apps/control-plane-api
 COPY packages/rag-config packages/rag-config
+COPY packages/tenant-content-crypto packages/tenant-content-crypto
 COPY scripts/dev/ensure-control-plane-prisma-client.mjs scripts/dev/ensure-control-plane-prisma-client.mjs
 
 RUN pnpm --filter @gatelm/control-plane-api db:generate \
@@ -52,6 +54,8 @@ COPY --from=builder --chown=node:node /app/apps/control-plane-api/prisma ./prism
 COPY --from=builder --chown=node:node /app/apps/control-plane-api/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=node:node /app/packages/rag-config/package.json /app/packages/rag-config/package.json
 COPY --from=builder --chown=node:node /app/packages/rag-config/dist /app/packages/rag-config/dist
+COPY --from=builder --chown=node:node /app/packages/tenant-content-crypto/package.json /app/packages/tenant-content-crypto/package.json
+COPY --from=builder --chown=node:node /app/packages/tenant-content-crypto/dist /app/packages/tenant-content-crypto/dist
 
 USER node
 

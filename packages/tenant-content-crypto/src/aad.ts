@@ -41,6 +41,23 @@ export function createMessageAad(
   });
 }
 
+export function createMessageCitationsAad(
+  tenantId: string,
+  conversationId: string,
+  recordId: string,
+  contentKeyVersion: number,
+): ContentAad {
+  return Object.freeze({
+    schemaVersion: 1,
+    tenantId,
+    conversationId,
+    recordId,
+    contentKind: 'message_citations',
+    role: 'assistant',
+    contentKeyVersion,
+  });
+}
+
 export function createRagChunkAadV1(input: Readonly<{
   tenantId: string;
   knowledgeBaseId: string;

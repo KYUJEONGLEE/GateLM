@@ -2,6 +2,16 @@
 
 This service owns optional AI Safety and Evaluation Lab work for the v1.0.0 baseline. It is not a required dependency of the Gateway hot path.
 
+## Private RAG extraction
+
+`POST /internal/v1/rag/extract` is a stateless raw-body endpoint for the future Control Plane Worker. It requires `X-GateLM-AI-Service-Token` and accepts only `text/plain` (UTF-8, optional BOM) or `application/pdf` with a text layer. The service does not read S3 or PostgreSQL, call OpenAI, create embeddings, resolve tenant keys, persist chunks, or mutate jobs.
+
+TXT normalization removes NUL characters, converts CRLF/CR to LF, applies Unicode NFC (not compatibility-changing NFKC), and collapses horizontal whitespace per line while preserving blank-line paragraph boundaries and 1-based source line ranges. PDF extraction preserves 1-based page ranges. Encrypted, damaged, scanned/image-only, over-limit, and timed-out PDFs return stable sanitized errors; OCR and embedded images/attachments are never processed.
+
+Chunking uses the local `cl100k_base` tokenizer mapped to `text-embedding-3-large`. Profile defaults are target 600, overlap 100, and maximum 900 tokens. The tokenizer performs no OpenAI request. Runtime dependencies are pinned in `requirements-rag-extraction.lock`.
+
+Local configuration uses `AI_SERVICE_RAG_SERVICE_TOKEN` and the `AI_SERVICE_RAG_*` bounds in `.env.example`. When `TENANT_CHAT_RAG_ENABLED=true`, `self_host`, `staging`, `production`, and `aws` deployment modes fail startup if the token is missing, shorter than 32 characters, or marked as a local/fake/example placeholder. Enabled non-local modes also require `AI_SERVICE_RAG_TEMP_DIR` to be a dedicated absolute mount; the production Compose paths bind it to a size-bounded tmpfs and clean only stale `gatelm-rag-*.source` files on startup. With the flag disabled, those RAG-only token and temp-directory dependencies are not required. `AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS` bounds extraction concurrency, and PDF child processes receive configurable address-space and CPU limits in addition to the container memory and PID limits. Access logging remains disabled by default because request bodies contain document plaintext.
+
 ## RemoteSafetyEngine Prototype
 
 RemoteSafetyEngine is an internal shadow/evaluation prototype for v2 evidence. It is disabled by default and is not connected to Gateway production blocking.

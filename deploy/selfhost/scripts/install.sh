@@ -21,6 +21,7 @@ gatelm_require_env_vars \
   POSTGRES_USER \
   POSTGRES_PASSWORD \
   POSTGRES_DB \
+  TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN \
   GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
   GATEWAY_EXACT_CACHE_KEY_SECRET \
   GATELM_DEMO_API_KEY \
@@ -30,6 +31,51 @@ gatelm_warn_placeholder_values \
   GATEWAY_EXACT_CACHE_KEY_SECRET \
   GATELM_DEMO_API_KEY \
   GATELM_DEMO_APP_TOKEN
+
+gatelm_require_strong_secret_values TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN
+gatelm_validate_rag_runtime_env
+
+services=(
+  postgres
+  redis
+  mock-provider
+  control-plane-api
+  gateway-core
+  ai-service
+  web
+)
+
+if [[ "${TENANT_CHAT_RAG_ENABLED}" == "true" ]]; then
+  gatelm_require_env_vars \
+    GATELM_CHAT_WEB_ORIGIN \
+    SELFHOST_CHAT_WEB_PORT \
+    TENANT_CHAT_RUNTIME_UID \
+    TENANT_CHAT_RUNTIME_GID \
+    TENANT_CHAT_WEB_SERVICE_TOKEN \
+    TENANT_CHAT_ACCESS_JWT_SECRET \
+    TENANT_CHAT_INTENT_SECRET \
+    TENANT_CHAT_WORKLOAD_ACTIVE_KID \
+    RAG_OBJECT_STORE_DRIVER \
+    RAG_QUERY_EMBEDDING_ACTIVE_KID \
+    RAG_WORKER_EMBEDDING_ACTIVE_KID \
+    AI_SERVICE_RAG_SERVICE_TOKEN
+
+  [[ "${TENANT_CHAT_RUNTIME_UID}" =~ ^[1-9][0-9]*$ ]] || \
+    gatelm_fail "TENANT_CHAT_RUNTIME_UID must be a positive numeric UID."
+  [[ "${TENANT_CHAT_RUNTIME_GID}" =~ ^[1-9][0-9]*$ ]] || \
+    gatelm_fail "TENANT_CHAT_RUNTIME_GID must be a positive numeric GID."
+  gatelm_require_strong_secret_values \
+    TENANT_CHAT_WEB_SERVICE_TOKEN \
+    TENANT_CHAT_ACCESS_JWT_SECRET \
+    TENANT_CHAT_INTENT_SECRET \
+    AI_SERVICE_RAG_SERVICE_TOKEN
+  gatelm_require_opaque_ids \
+    TENANT_CHAT_WORKLOAD_ACTIVE_KID \
+    RAG_QUERY_EMBEDDING_ACTIVE_KID \
+    RAG_WORKER_EMBEDDING_ACTIVE_KID
+  gatelm_validate_selfhost_secret_files
+  services+=(rag-worker chat-api chat-web)
+fi
 
 observability_token="${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN}"
 observability_token_compact="$(
@@ -51,12 +97,12 @@ gatelm_check_docker
 gatelm_validate_compose
 
 gatelm_log "Pulling Docker images. This can take a few minutes on the first run."
-if ! gatelm_compose pull; then
+if ! gatelm_compose pull "${services[@]}"; then
   gatelm_fail "Docker image pull failed. Check internet access, registry permissions, GATELM_IMAGE_REGISTRY, and GATELM_IMAGE_TAG in .env."
 fi
 
 gatelm_log "Starting services in the background."
-if ! gatelm_compose up -d postgres redis mock-provider control-plane-api gateway-core ai-service web; then
+if ! gatelm_compose up -d "${services[@]}"; then
   gatelm_fail "Docker Compose could not start the stack. Check port conflicts in .env, then run: docker compose --env-file .env ps"
 fi
 
