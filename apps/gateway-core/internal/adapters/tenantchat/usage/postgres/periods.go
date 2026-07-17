@@ -48,7 +48,7 @@ func ensureTokenPeriod(
 ) (tokenPeriod, error) {
 	period, err := findTokenPeriod(ctx, tx, requestContext, now)
 	if err == nil {
-		return period, nil
+		return syncTokenPeriodPolicy(ctx, tx, requestContext, snapshot, period, now)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return tokenPeriod{}, err
@@ -82,6 +82,61 @@ func ensureTokenPeriod(
 	return findTokenPeriod(ctx, tx, requestContext, now)
 }
 
+// syncTokenPeriodPolicy applies the active Snapshot's quota to the current
+// period without changing its calendar boundary or resetting any usage. The
+// period row is already locked by findTokenPeriod, and ConsumeAndReserve holds
+// the actor advisory lock, so the policy and the next reservation are atomic.
+func syncTokenPeriodPolicy(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+	period tokenPeriod,
+	now time.Time,
+) (tokenPeriod, error) {
+	configured := tokenPeriodForQuotaPolicy(period, snapshot.Policies.Quota)
+	if configured.Limit == period.Limit &&
+		configured.Warning == period.Warning &&
+		configured.Economy == period.Economy &&
+		configured.HardStop == period.HardStop &&
+		configured.State == period.State {
+		return period, nil
+	}
+
+	_, err := tx.Exec(ctx, `
+		UPDATE tenant_chat_user_token_periods
+		SET limit_tokens = $4,
+		    warning_threshold_tokens = $5,
+		    economy_threshold_tokens = $6,
+		    hard_stop_tokens = $7,
+		    state = $8,
+		    version = version + 1,
+		    updated_at = $9
+		WHERE tenant_id = $1::uuid AND user_id = $2::uuid AND period_start = $3
+	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID,
+		period.Start, configured.Limit, configured.Warning, configured.Economy,
+		configured.HardStop, configured.State, now)
+	if err != nil {
+		return tokenPeriod{}, err
+	}
+	return configured, nil
+}
+
+func tokenPeriodForQuotaPolicy(period tokenPeriod, policy tenantruntime.QuotaPolicy) tokenPeriod {
+	warning, economy, hardStop := thresholds(
+		policy.DefaultMonthlyTokenLimit,
+		policy.WarningPercent,
+		policy.EconomyPercent,
+		policy.HardStopPercent,
+	)
+	period.Limit = policy.DefaultMonthlyTokenLimit
+	period.Warning = warning
+	period.Economy = economy
+	period.HardStop = hardStop
+	period.State = usageState(period.Reserved+period.Confirmed+period.Unconfirmed, warning, economy, hardStop)
+	return period
+}
+
 func findTokenPeriod(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -97,6 +152,105 @@ func findTokenPeriod(
 		  AND period_start <= $3 AND period_end > $3
 		ORDER BY period_start DESC LIMIT 1 FOR UPDATE
 	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID, now).Scan(
+		&result.Start, &result.End, &result.Timezone, &result.Limit,
+		&result.Warning, &result.Economy, &result.HardStop,
+		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State,
+	)
+	return result, err
+}
+
+// ensureEmployeeWeeklyTokenPeriod is deliberately driven only by the signed
+// Tenant Chat employee actor and the published snapshot. Admin actors and
+// snapshots without a matching employee entry remain unlimited.
+func ensureEmployeeWeeklyTokenPeriod(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+	now time.Time,
+) (*tokenPeriod, error) {
+	actor := requestContext.ExecutionScope.Actor
+	if actor.ActorKind != "employee" || actor.EmployeeID == "" {
+		return nil, nil
+	}
+	limit, enabled := snapshot.Policies.Quota.EmployeeWeeklyTokenLimit(actor.EmployeeID)
+	if !enabled {
+		return nil, nil
+	}
+	period, err := findEmployeeWeeklyTokenPeriod(ctx, tx, requestContext, now)
+	if err == nil {
+		return &period, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	start, end, err := calendarWeek(now, snapshot.Policies.Quota.Timezone)
+	if err != nil {
+		return nil, err
+	}
+	// This bootstrap is authoritative: it reads the reservation/admission
+	// ledger rather than a dashboard or invocation-log projection.
+	var reserved, confirmedInput, confirmedOutput, unconfirmed int64
+	err = tx.QueryRow(ctx, `
+		SELECT coalesce(sum(reservation.reserved_tokens), 0)::bigint,
+		       coalesce(sum(reservation.confirmed_input_tokens), 0)::bigint,
+		       coalesce(sum(reservation.confirmed_output_tokens), 0)::bigint,
+		       coalesce(sum(reservation.unconfirmed_tokens), 0)::bigint
+		FROM tenant_chat_usage_reservations reservation
+		JOIN tenant_chat_request_admissions admission
+		  ON admission.tenant_id = reservation.tenant_id
+		 AND admission.user_id = reservation.user_id
+		 AND admission.request_id = reservation.request_id
+		WHERE reservation.tenant_id = $1::uuid
+		  AND admission.employee_id = $2::uuid
+		  AND reservation.reserved_at >= $3
+		  AND reservation.reserved_at < $4
+	`, requestContext.ExecutionScope.TenantID, actor.EmployeeID, start, end).Scan(
+		&reserved, &confirmedInput, &confirmedOutput, &unconfirmed,
+	)
+	if err != nil {
+		return nil, err
+	}
+	state := "normal"
+	if limit == 0 || reserved+confirmedInput+confirmedOutput+unconfirmed >= limit {
+		state = "blocked"
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO tenant_chat_employee_weekly_token_periods (
+		  tenant_id, employee_id, period_start, period_end, period_timezone,
+		  limit_tokens, reserved_tokens, confirmed_input_tokens, confirmed_output_tokens,
+		  confirmed_total_tokens, unconfirmed_tokens, state, policy_version
+		) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $8 + $9, $10, $11, $12)
+		ON CONFLICT (tenant_id, employee_id, period_start) DO NOTHING
+	`, requestContext.ExecutionScope.TenantID, actor.EmployeeID, start, end,
+		snapshot.Policies.Quota.Timezone, limit, reserved, confirmedInput, confirmedOutput,
+		unconfirmed, state, snapshot.PolicyVersion)
+	if err != nil {
+		return nil, err
+	}
+	period, err = findEmployeeWeeklyTokenPeriod(ctx, tx, requestContext, now)
+	if err != nil {
+		return nil, err
+	}
+	return &period, nil
+}
+
+func findEmployeeWeeklyTokenPeriod(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	now time.Time,
+) (result tokenPeriod, err error) {
+	err = tx.QueryRow(ctx, `
+		SELECT period_start, period_end, period_timezone, limit_tokens,
+		       limit_tokens, limit_tokens, limit_tokens,
+		       reserved_tokens, confirmed_total_tokens, unconfirmed_tokens, state
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+		  AND period_start <= $3 AND period_end > $3
+		ORDER BY period_start DESC LIMIT 1 FOR UPDATE
+	`, requestContext.ExecutionScope.TenantID,
+		requestContext.ExecutionScope.Actor.EmployeeID, now).Scan(
 		&result.Start, &result.End, &result.Timezone, &result.Limit,
 		&result.Warning, &result.Economy, &result.HardStop,
 		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State,

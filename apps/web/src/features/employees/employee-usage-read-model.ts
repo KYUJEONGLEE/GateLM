@@ -4,16 +4,15 @@ import type {
   ProjectEmployeeAssignmentRecord,
   ProjectEmployeeQuotaStatus
 } from "@/lib/control-plane/employees-types";
-import type {
-  EmployeeCostPoliciesResponse,
-  EmployeeCostPolicyListItem
-} from "@/lib/control-plane/employee-cost-policy-types";
+import type { EmployeeWeeklyTokenQuotasResponse, EmployeeWeeklyTokenQuota } from "@/lib/control-plane/employee-weekly-token-quota-types";
 import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
+import type { EmployeeCostPolicyListItem } from "@/lib/control-plane/employee-cost-policy-types";
 
 const MICRO_USD_PER_USD = 1_000_000;
 
-export type EmployeeCostPolicySnapshot = {
-  costPolicies?: EmployeeCostPoliciesResponse | null;
+export type EmployeeUsageSnapshot = {
+  tenantChatUsage?: EmployeeUsageResponse | null;
+  weeklyTokenQuotas?: EmployeeWeeklyTokenQuotasResponse | null;
   loadError?: string | null;
   monthlyUsage?: EmployeeUsageResponse | null;
   monthlyUsageLoadError?: string | null;
@@ -31,7 +30,9 @@ export type EmployeeProjectUsage = {
 };
 
 export type EmployeeUsageRow = {
+  /** Retained only so the retired editor can render old cached props safely. */
   costPolicy: EmployeeCostPolicyListItem | null;
+  weeklyTokenQuota: EmployeeWeeklyTokenQuota | null;
   costShare: number | null;
   dailyCostMicroUsd: number | null;
   dailyRank: number;
@@ -54,7 +55,7 @@ export type EmployeeUsageRow = {
 
 export type EmployeeUsageReadModel = {
   activeEmployees: number;
-  costPolicyLoadError: string | null;
+  quotaLoadError: string | null;
   monthlyCostLoadError: string | null;
   monthlyPeriodTimezone: string | null;
   periodTimezone: string | null;
@@ -78,12 +79,15 @@ const quotaSeverity: Record<ProjectEmployeeQuotaStatus, number> = {
 
 export function buildEmployeeUsageReadModel(
   model: EmployeeControlModel,
-  snapshot: EmployeeCostPolicySnapshot = {}
+  snapshot: EmployeeUsageSnapshot = {}
 ): EmployeeUsageReadModel {
   const projectNames = new Map(model.projects.map((project) => [project.id, project.name]));
   const assignmentsByEmployeeId = new Map<string, ProjectEmployeeAssignmentRecord[]>();
-  const policyByEmployeeId = new Map(
-    (snapshot.costPolicies?.data ?? []).map((row) => [row.employeeId, row])
+  const quotaByEmployeeId = new Map(
+    (snapshot.weeklyTokenQuotas?.data ?? []).map((row) => [row.employeeId, row])
+  );
+  const usageByEmployeeId = new Map(
+    (snapshot.tenantChatUsage?.data ?? []).map((row) => [row.employeeId, row])
   );
   const monthlyUsageByEmployeeId = new Map(
     (snapshot.monthlyUsage?.data ?? []).map((row) => [row.employeeId, row])
@@ -110,11 +114,13 @@ export function buildEmployeeUsageReadModel(
     const projects = assignments
       .map((assignment) => buildProjectUsage(assignment, projectNames.get(assignment.projectId)))
       .sort((left, right) => left.projectName.localeCompare(right.projectName));
-    const costPolicy = policyByEmployeeId.get(employee.id) ?? null;
+    const weeklyTokenQuota = quotaByEmployeeId.get(employee.id) ?? null;
+    const tenantChatUsage = usageByEmployeeId.get(employee.id)?.sources.tenantChat;
 
     return {
-      costPolicy,
-      dailyCostMicroUsd: costPolicy?.daily.confirmedCostMicroUsd ?? null,
+      costPolicy: null,
+      weeklyTokenQuota,
+      dailyCostMicroUsd: tenantChatUsage?.costMicroUsd ?? null,
       department: employee.department,
       email: employee.email,
       employeeId: employee.id,
@@ -138,7 +144,7 @@ export function buildEmployeeUsageReadModel(
         "not_configured"
       ),
       status: employee.status,
-      weeklyCostMicroUsd: costPolicy?.weekly.confirmedCostMicroUsd ?? null
+      weeklyCostMicroUsd: null
     } satisfies EmployeeUsageCandidate;
   });
 
@@ -154,20 +160,17 @@ export function buildEmployeeUsageReadModel(
     return left.name.localeCompare(right.name);
   });
 
-  const costPoliciesComplete = Boolean(
-    snapshot.costPolicies &&
-      policyByEmployeeId.size === modelEmployeeIds.size &&
-      model.employees.every((employee) => policyByEmployeeId.has(employee.id))
+  const tenantChatUsageComplete = Boolean(
+    snapshot.tenantChatUsage &&
+      hasExactlyEmployeeIds(usageByEmployeeId, modelEmployeeIds)
   );
-  const totalDailyCostMicroUsd = costPoliciesComplete
+  const totalDailyCostMicroUsd = tenantChatUsageComplete
     ? unrankedRows.reduce((sum, row) => sum + (row.dailyCostMicroUsd ?? 0), 0)
     : null;
   const totalMonthlyCostMicroUsd = monthlyUsageComplete
     ? unrankedRows.reduce((sum, row) => sum + (row.monthlyCostMicroUsd ?? 0), 0)
     : null;
-  const periodTimezone = costPoliciesComplete
-    ? snapshot.costPolicies?.data[0]?.policy.periodTimezone ?? null
-    : null;
+  const periodTimezone = snapshot.weeklyTokenQuotas?.data[0]?.timezone ?? null;
   const dailyRankByEmployeeId = buildCostRankByEmployeeId(
     unrankedRows,
     (row) => row.dailyCostMicroUsd
@@ -195,10 +198,12 @@ export function buildEmployeeUsageReadModel(
 
   return {
     activeEmployees: model.employees.filter((employee) => employee.status === "active").length,
-    costPolicyLoadError:
+    quotaLoadError:
       snapshot.loadError ??
-      (snapshot.costPolicies && !costPoliciesComplete
-        ? "Control Plane returned incomplete employee cost policies."
+      (snapshot.tenantChatUsage && !tenantChatUsageComplete
+        ? "Control Plane returned incomplete Tenant Chat employee usage."
+        : snapshot.weeklyTokenQuotas && !hasExactlyEmployeeIds(quotaByEmployeeId, modelEmployeeIds)
+        ? "Control Plane returned incomplete employee weekly token quotas."
         : null),
     monthlyCostLoadError:
       snapshot.monthlyUsageLoadError ??
@@ -233,6 +238,16 @@ function buildCostRankByEmployeeId(
   });
 
   return new Map(rankedRows.map((row, index) => [row.employeeId, index + 1]));
+}
+
+function hasExactlyEmployeeIds<T>(
+  rowsByEmployeeId: Map<string, T>,
+  employeeIds: Set<string>
+) {
+  return (
+    rowsByEmployeeId.size === employeeIds.size &&
+    Array.from(rowsByEmployeeId.keys()).every((employeeId) => employeeIds.has(employeeId))
+  );
 }
 
 function buildProjectUsage(

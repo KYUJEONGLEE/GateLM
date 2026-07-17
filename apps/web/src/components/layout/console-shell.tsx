@@ -272,6 +272,7 @@ export function ConsoleShell({
   const resolvedActiveMonitoringItem =
     activeMonitoringItem ?? navigationState.activeMonitoringItem;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isResponsiveCompact, setIsResponsiveCompact] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
@@ -289,6 +290,15 @@ export function ConsoleShell({
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1101px) and (max-width: 1280px)");
+    const syncResponsiveCompactState = () => setIsResponsiveCompact(mediaQuery.matches);
+
+    syncResponsiveCompactState();
+    mediaQuery.addEventListener("change", syncResponsiveCompactState);
+    return () => mediaQuery.removeEventListener("change", syncResponsiveCompactState);
+  }, []);
+
+  useEffect(() => {
     const initialTheme = readStoredTheme() ?? readDocumentTheme();
     setTheme(initialTheme);
     applyTheme(initialTheme);
@@ -297,6 +307,12 @@ export function ConsoleShell({
   function toggleSidebar() {
     if (isMobileViewport()) {
       setIsMobileNavigationOpen((current) => !current);
+      return;
+    }
+
+    // At split-window widths the rail deliberately stays compact so every
+    // primary destination remains available without squeezing page content.
+    if (isResponsiveCompact) {
       return;
     }
 
@@ -370,7 +386,7 @@ export function ConsoleShell({
           data-active={isChildActive(child)}
           data-tooltip={childLabel}
           href={child.path(tenantId)}
-          intentPrefetch={!isSidebarCollapsed}
+          intentPrefetch={!sidebarCollapsed}
           key={child.item}
           onClick={closeMobileNavigation}
           title={childLabel}
@@ -383,11 +399,14 @@ export function ConsoleShell({
     });
   }
 
+  const sidebarCollapsed = isSidebarCollapsed || isResponsiveCompact;
+
   return (
     <div
       className="console-shell"
       data-mobile-nav-open={isMobileNavigationOpen}
-      data-sidebar-collapsed={isSidebarCollapsed}
+      data-responsive-compact={isResponsiveCompact}
+      data-sidebar-collapsed={sidebarCollapsed}
     >
       <header className="console-mobile-topbar">
         <button
@@ -416,7 +435,7 @@ export function ConsoleShell({
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
           <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
-            <GateLMLogo compact={isSidebarCollapsed} />
+          <GateLMLogo compact={sidebarCollapsed} />
           </Link>
         </div>
 
@@ -441,18 +460,18 @@ export function ConsoleShell({
                       <span>{label}</span>
                       {item.section === "monitoring" ? (
                         <button
-                          aria-expanded={!isSidebarCollapsed}
+                          aria-expanded={!sidebarCollapsed}
                           aria-label={
-                            isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
                           }
                           className="console-sidebar-toggle console-nav-sidebar-toggle"
                           onClick={toggleSidebar}
                           title={
-                            isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
                           }
                           type="button"
                         >
-                          {isSidebarCollapsed ? (
+                          {sidebarCollapsed ? (
                             <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
                           ) : (
                             <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
@@ -505,7 +524,7 @@ export function ConsoleShell({
             );
           })}
         </nav>
-        <div className="console-mobile-subnavs" aria-hidden={isSidebarCollapsed}>
+        <div className="console-mobile-subnavs" aria-hidden={sidebarCollapsed}>
           {navigationItems.map((item) => {
             const label = item.labels[locale];
 

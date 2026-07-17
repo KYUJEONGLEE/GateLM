@@ -25,6 +25,7 @@ export async function getEmployeeUsage(
   if (query.limit !== undefined) search.set('limit', String(query.limit));
   if (query.metric) search.set('metric', query.metric);
   if (query.order) search.set('order', query.order);
+  if (query.source) search.set('source', query.source);
 
   try {
     const response = await fetch(

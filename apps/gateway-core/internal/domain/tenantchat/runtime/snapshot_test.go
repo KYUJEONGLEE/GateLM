@@ -82,6 +82,61 @@ func TestRuntimeSnapshotValidationVectors(t *testing.T) {
 	}
 }
 
+func TestSnapshotAcceptsEmployeeWeeklyTokenQuotaAndRejectsDuplicates(t *testing.T) {
+	docsRoot := tenantChatDocsRoot(t)
+	fixtureRaw, err := os.ReadFile(filepath.Join(docsRoot, "fixtures/tenant-runtime-snapshot.fixture.json"))
+	if err != nil {
+		t.Fatalf("read runtime snapshot fixture: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(fixtureRaw, &document); err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	policies := document["policies"].(map[string]any)
+	quota := policies["quota"].(map[string]any)
+	quota["employeeWeeklyTokenLimits"] = []any{
+		map[string]any{"employeeId": "employee_fixture_001", "limitTokens": 0},
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode quota fixture: %v", err)
+	}
+	snapshot, err := ParseSnapshot(encoded)
+	if err != nil {
+		t.Fatalf("parse employee quota snapshot: %v", err)
+	}
+	limit, enabled := snapshot.Policies.Quota.EmployeeWeeklyTokenLimit("employee_fixture_001")
+	if !enabled || limit != 0 {
+		t.Fatalf("unexpected employee weekly limit: limit=%d enabled=%t", limit, enabled)
+	}
+
+	quota["employeeWeeklyTokenLimits"] = []any{
+		map[string]any{"employeeId": "employee_fixture_001", "limitTokens": 1},
+		map[string]any{"employeeId": "employee_fixture_001", "limitTokens": 2},
+	}
+	encoded, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode duplicate quota fixture: %v", err)
+	}
+	if _, err := ParseSnapshot(encoded); err == nil {
+		t.Fatal("duplicate employee weekly token limit was accepted")
+	}
+
+	quota["employeeWeeklyTokenLimits"] = []any{
+		map[string]any{
+			"employeeId":  "employee_fixture_001",
+			"limitTokens": quota["defaultMonthlyTokenLimit"].(float64) + 1,
+		},
+	}
+	encoded, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode over-limit quota fixture: %v", err)
+	}
+	if _, err := ParseSnapshot(encoded); err == nil {
+		t.Fatal("employee weekly token limit above the shared monthly token limit was accepted")
+	}
+}
+
 func tenantChatDocsRoot(t *testing.T) string {
 	t.Helper()
 	_, currentFile, _, ok := runtime.Caller(0)

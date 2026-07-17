@@ -35,6 +35,10 @@ export class ListEmployeeUsageQueryDto {
   @IsIn(EMPLOYEE_USAGE_ORDERS)
   order?: EmployeeUsageOrder = 'desc';
 
+  @IsOptional()
+  @IsIn(['project_application', 'tenant_chat'])
+  source?: EmployeeUsageSource;
+
   @Type(() => Number)
   @IsOptional()
   @IsInt()

@@ -7,9 +7,10 @@ import {
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { resolveControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { getAllEmployeeCostPolicies } from "@/lib/control-plane/employee-cost-policy-client";
 import { getAllEmployeeUsage } from "@/lib/control-plane/employee-usage-client";
+import { getEmployeeWeeklyTokenQuotas } from "@/lib/control-plane/employee-weekly-token-quota-client";
 import { getEmployeeControlModel } from "@/lib/control-plane/employees-client";
+import { getTenantChatAdminRuntimeSetup } from "@/lib/control-plane/tenant-chat-runtime-client";
 import { getLiveMonthlyProjectCostReport } from "@/lib/gateway/live-cost-report";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -36,24 +37,30 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
   }
 
   const controlPlaneTenantId = resolveControlPlaneTenantId(effectiveTenantId);
-  const monthToDateRange = getMonthToDateRange();
-  const [model, monthlyCostReport, costPolicies, monthlyEmployeeUsage] = await Promise.all([
+  const usageTo = new Date();
+  const usageFrom = new Date(usageTo.getTime() - 24 * 60 * 60 * 1000);
+  const [model, monthlyCostReport, weeklyTokenQuotas, tenantChatUsage, tenantChatRuntime] = await Promise.all([
     getEmployeeControlModel(effectiveTenantId),
     getLiveMonthlyProjectCostReport(effectiveTenantId),
-    getAllEmployeeCostPolicies(controlPlaneTenantId),
+    getEmployeeWeeklyTokenQuotas(controlPlaneTenantId),
     getAllEmployeeUsage({
-      from: monthToDateRange.from,
+      from: usageFrom.toISOString(),
       metric: "cost",
       order: "desc",
+      source: "tenant_chat",
       tenantId: controlPlaneTenantId,
-      to: monthToDateRange.to
-    })
+      to: usageTo.toISOString()
+    }),
+    getTenantChatAdminRuntimeSetup(effectiveTenantId)
   ]);
   const usage = buildEmployeeUsageReadModel(model, {
-    costPolicies: costPolicies.ok ? costPolicies.data : undefined,
-    loadError: costPolicies.ok ? null : costPolicies.error,
-    monthlyUsage: monthlyEmployeeUsage.ok ? monthlyEmployeeUsage.data : undefined,
-    monthlyUsageLoadError: monthlyEmployeeUsage.ok ? null : monthlyEmployeeUsage.error
+    loadError: !weeklyTokenQuotas.ok
+      ? weeklyTokenQuotas.error
+      : !tenantChatUsage.ok
+        ? tenantChatUsage.error
+        : null,
+    tenantChatUsage: tenantChatUsage.ok ? tenantChatUsage.data : undefined,
+    weeklyTokenQuotas: weeklyTokenQuotas.ok ? weeklyTokenQuotas.data : undefined
   });
 
   return (
@@ -62,14 +69,12 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
       locale={locale}
       model={model}
       monthlyCostReport={monthlyCostReport}
+      tenantMonthlyTokenLimit={
+        tenantChatRuntime.ok
+          ? tenantChatRuntime.data.activeSnapshot?.quota.defaultMonthlyTokenLimit ?? null
+          : null
+      }
       usage={usage}
     />
   );
-}
-
-function getMonthToDateRange() {
-  const to = new Date();
-  const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
-
-  return { from: from.toISOString(), to: to.toISOString() };
 }

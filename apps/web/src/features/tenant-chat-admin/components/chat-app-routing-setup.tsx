@@ -17,7 +17,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,6 +25,12 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
 import { KnowledgeBaseManagement } from "@/features/rag-documents/knowledge-base-management";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import {
   CachePolicyControls,
   type CachePolicyControlsText
@@ -44,6 +50,7 @@ import {
 import type {
   TenantChatAdminRuntimeSetup,
   TenantChatAdminCachePolicy,
+  TenantChatAdminQuotaPolicy,
   TenantChatAdminSafetyPolicy,
   TenantChatRoutingCategory,
   TenantChatRoutingDifficulty,
@@ -156,14 +163,22 @@ const routingDifficultyCriteria: DifficultyCriteria = {
 };
 
 type RoutingProviderOption = TenantChatAdminRuntimeSetup["providers"][number];
-export type ChatAppPolicySection = "routing" | "cache" | "security" | "knowledge";
+export type ChatAppPolicySection =
+  | "routing"
+  | "cache"
+  | "security"
+  | "quota"
+  | "knowledge";
 
 const chatAppPolicySections: ChatAppPolicySection[] = [
   "routing",
   "cache",
   "security",
+  "quota",
   "knowledge"
 ];
+const MONTHLY_TOKEN_LIMIT_SLIDER_MAX = 10_000_000;
+const MONTHLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000;
 
 function isChatAppPolicySection(value: string | null): value is ChatAppPolicySection {
   return chatAppPolicySections.includes(value as ChatAppPolicySection);
@@ -360,6 +375,16 @@ export function ChatAppRoutingSetup({
   const [detectors, setDetectors] = useState<RuntimePolicyDetector[]>(
     toRuntimePolicyDetectors(initialSetup?.activeSnapshot?.safetyPolicy)
   );
+  const initialQuota = initialSetup?.activeSnapshot?.quota ?? defaultQuotaPolicy();
+  const [quota, setQuota] = useState<TenantChatAdminQuotaPolicy>(initialQuota);
+  const [quotaLimitInput, setQuotaLimitInput] = useState(() =>
+    formatMonthlyTokenLimitInput(initialQuota.defaultMonthlyTokenLimit)
+  );
+
+  useEffect(() => {
+    const nextQuota = setup?.activeSnapshot?.quota ?? defaultQuotaPolicy();
+    setQuotaLimitInput(formatMonthlyTokenLimitInput(nextQuota.defaultMonthlyTokenLimit));
+  }, [setup?.activeSnapshot?.version]);
 
   useEffect(() => {
     function syncSectionFromHistory() {
@@ -414,7 +439,8 @@ export function ChatAppRoutingSetup({
           setManualModelRef,
           setRoutes,
           setCachePolicy,
-          setDetectors
+          setDetectors,
+          setQuota
         );
         setLoadError(null);
       } else setLoadError(result.error);
@@ -439,7 +465,8 @@ export function ChatAppRoutingSetup({
         setManualModelRef,
         setRoutes,
         setCachePolicy,
-        setDetectors
+        setDetectors,
+        setQuota
       );
       setLoadError(null);
     } else setLoadError(result.error);
@@ -456,14 +483,21 @@ export function ChatAppRoutingSetup({
           manualModelRef,
           routes,
           routingMode,
-          safetyPolicy: toTenantChatSafetyPolicy(detectors)
+          safetyPolicy: toTenantChatSafetyPolicy(detectors),
+          quota
         }),
         headers: { "Content-Type": "application/json" },
         method: "PUT"
       });
       const payload = (await response.json().catch(() => ({}))) as unknown;
       if (!response.ok || !isRuntimeSetup(payload)) {
-        setFeedback({ error: true, message: readPayloadError(payload, "Chat App policy publish failed.") });
+        setFeedback({
+          error: true,
+          message: localizeTenantChatPolicyError(
+            readPayloadError(payload, "Chat App policy publish failed."),
+            locale
+          )
+        });
       } else {
         applySetup(
           payload,
@@ -472,7 +506,8 @@ export function ChatAppRoutingSetup({
           setManualModelRef,
           setRoutes,
           setCachePolicy,
-          setDetectors
+          setDetectors,
+          setQuota
         );
         setFeedback({ error: false, message: text.ready, published: true });
       }
@@ -502,6 +537,24 @@ export function ChatAppRoutingSetup({
     setFeedback(null);
   }
 
+  function updateQuotaLimitInput(value: string) {
+    setQuotaLimitInput(value);
+    const parsed = parseMonthlyTokenLimitInput(value);
+    if (parsed === null) return;
+    setQuota((current) => ({ ...current, defaultMonthlyTokenLimit: parsed }));
+    setFeedback(null);
+  }
+
+  function resetQuotaLimitInput() {
+    setQuotaLimitInput(formatMonthlyTokenLimitInput(quota.defaultMonthlyTokenLimit));
+  }
+
+  function updateQuotaFromSlider(value: number) {
+    setQuota((current) => ({ ...current, defaultMonthlyTokenLimit: value }));
+    setQuotaLimitInput(formatMonthlyTokenLimitInput(value));
+    setFeedback(null);
+  }
+
   function resetDraft() {
     if (setup) {
       applySetup(
@@ -511,7 +564,13 @@ export function ChatAppRoutingSetup({
         setManualModelRef,
         setRoutes,
         setCachePolicy,
-        setDetectors
+        setDetectors,
+        setQuota
+      );
+      setQuotaLimitInput(
+        formatMonthlyTokenLimitInput(
+          (setup.activeSnapshot?.quota ?? defaultQuotaPolicy()).defaultMonthlyTokenLimit
+        )
       );
     }
     setFeedback({ error: false, message: text.resetMessage });
@@ -531,6 +590,18 @@ export function ChatAppRoutingSetup({
   const readiness = setup?.readiness ?? "degraded";
   const refs = new Set(models.map((model) => model.modelRef));
   const canPublish = refs.has(manualModelRef) && matrixUsesOnly(routes, refs);
+  const monthlySliderMax = Math.max(
+    MONTHLY_TOKEN_LIMIT_SLIDER_MAX,
+    Math.ceil(quota.defaultMonthlyTokenLimit / MONTHLY_TOKEN_LIMIT_SLIDER_STEP) *
+      MONTHLY_TOKEN_LIMIT_SLIDER_STEP
+  );
+  const monthlySliderPosition = Math.min(
+    100,
+    Math.max(0, (quota.defaultMonthlyTokenLimit / monthlySliderMax) * 100)
+  );
+  const monthlySliderPositionStyle = {
+    "--tenant-monthly-token-slider-position": `${monthlySliderPosition}%`
+  } as CSSProperties;
 
   return (
     <ManagementPage
@@ -550,7 +621,9 @@ export function ChatAppRoutingSetup({
                 ? text.cacheTab
                 : section === "security"
                   ? text.securityTab
-                  : text.knowledgeTab;
+                  : section === "quota"
+                    ? locale === "ko" ? "사용량 한도" : "Usage limits"
+                    : text.knowledgeTab;
 
             return (
               <button
@@ -704,7 +777,11 @@ export function ChatAppRoutingSetup({
           </form>
         )}
       </div>
-      ) : activePolicySection === "cache" || activePolicySection === "security" ? (
+      ) : (
+        activePolicySection === "cache" ||
+        activePolicySection === "security" ||
+        activePolicySection === "quota"
+      ) ? (
         <form
           aria-labelledby={`chat-app-${activePolicySection}-tab`}
           className="chat-app-policy-form"
@@ -728,7 +805,7 @@ export function ChatAppRoutingSetup({
                   showSemanticCache={false}
                   text={tenantChatPolicyText[locale]}
                 />
-              ) : (
+              ) : activePolicySection === "security" ? (
                 <SafetyDetectorPolicyControls
                   allowPlaceholderEditing={false}
                   detectors={detectors}
@@ -742,6 +819,84 @@ export function ChatAppRoutingSetup({
                   }}
                   text={tenantChatPolicyText[locale]}
                 />
+              ) : (
+                <section
+                  aria-label={locale === "ko" ? "모든 사용자 월간 토큰 한도" : "Monthly token limit for all users"}
+                  className="tenant-monthly-token-section"
+                >
+                  <div className="tenant-monthly-token-title-row">
+                    <h3>{locale === "ko" ? "모든 사용자 월간 토큰 한도" : "Monthly token limit for all users"}</h3>
+                    <MonthlyTokenQuotaInfo locale={locale} />
+                  </div>
+                  <article className="tenant-monthly-token-card">
+                    <header className="tenant-monthly-token-card-header">
+                      <div>
+                        <strong>{locale === "ko" ? "월간 한도" : "Monthly limit"}</strong>
+                        <p>
+                          {locale === "ko"
+                            ? "모든 Tenant Chat 사용자의 사용량을 합산해 적용합니다."
+                            : "Applies to the combined usage of every Tenant Chat user."}
+                        </p>
+                      </div>
+                    </header>
+                    <div className="tenant-monthly-token-controls">
+                      <label className="tenant-monthly-token-input-field">
+                        <span>{locale === "ko" ? "월간 한도" : "Monthly limit"}</span>
+                        <input
+                          aria-describedby="tenant-monthly-token-input-hint"
+                          aria-label={locale === "ko" ? "월간 토큰 한도" : "Monthly token limit"}
+                          disabled={pending}
+                          inputMode="decimal"
+                          onBlur={resetQuotaLimitInput}
+                          onChange={(event) => updateQuotaLimitInput(event.target.value)}
+                          placeholder="1M"
+                          type="text"
+                          value={quotaLimitInput}
+                        />
+                        <small id="tenant-monthly-token-input-hint">
+                          {locale === "ko" ? "예: 1M 또는 1,250,000" : "For example: 1M or 1,250,000"}
+                        </small>
+                      </label>
+                      <div className="tenant-monthly-token-slider-field">
+                        <div className="tenant-monthly-token-slider-track" style={monthlySliderPositionStyle}>
+                          <output className="tenant-monthly-token-slider-current">
+                            {formatCompactMonthlyTokenCount(quota.defaultMonthlyTokenLimit)}
+                          </output>
+                          <input
+                            aria-label={locale === "ko" ? "월간 토큰 한도 슬라이더" : "Monthly token limit slider"}
+                            aria-valuetext={formatCompactMonthlyTokenCount(quota.defaultMonthlyTokenLimit)}
+                            className="tenant-monthly-token-range"
+                            disabled={pending}
+                            max={monthlySliderMax}
+                            min={0}
+                            onChange={(event) => updateQuotaFromSlider(Number(event.target.value))}
+                            step={MONTHLY_TOKEN_LIMIT_SLIDER_STEP}
+                            type="range"
+                            value={quota.defaultMonthlyTokenLimit}
+                          />
+                        </div>
+                        <div className="tenant-monthly-token-slider-endpoints" aria-hidden="true">
+                          <span>0</span>
+                          <span>{formatCompactMonthlyTokenCount(monthlySliderMax)}</span>
+                        </div>
+                      </div>
+                      {quota.defaultMonthlyTokenLimit === 0 ? (
+                        <p className="tenant-monthly-token-block-notice">
+                          {locale === "ko"
+                            ? "발행하면 다음 새 Provider 요청부터 모든 사용자를 즉시 차단합니다."
+                            : "Publishing this blocks every new Provider request immediately."}
+                        </p>
+                      ) : null}
+                    </div>
+                    <footer className="tenant-monthly-token-footer">
+                      <p>
+                        {locale === "ko"
+                          ? `기준 시간대: ${quota.timezone} · 적용된 정책: ${setup?.activeSnapshot?.version ?? "-"}`
+                          : `Timezone: ${quota.timezone} · Active policy: ${setup?.activeSnapshot?.version ?? "-"}`}
+                      </p>
+                    </footer>
+                  </article>
+                </section>
               )}
             </div>
           </section>
@@ -964,6 +1119,16 @@ function defaultCachePolicy(): TenantChatAdminCachePolicy {
   return { enabled: true, maxEntriesPerUser: 100, ttlSeconds: 300 };
 }
 
+function defaultQuotaPolicy(): TenantChatAdminQuotaPolicy {
+  return {
+    defaultMonthlyTokenLimit: 1_000_000,
+    timezone: "Asia/Seoul",
+    warningPercent: 80,
+    economyPercent: 90,
+    hardStopPercent: 100
+  };
+}
+
 function toRuntimePolicyDetectors(
   safetyPolicy?: TenantChatAdminSafetyPolicy
 ): RuntimePolicyDetector[] {
@@ -999,6 +1164,63 @@ function toTenantChatSafetyPolicy(
   };
 }
 
+function MonthlyTokenQuotaInfo({ locale }: { locale: Locale }) {
+  const description =
+    locale === "ko"
+      ? "모든 Tenant Chat 사용자의 합산 월간 토큰 한도입니다. 매월 1일 0시(Asia/Seoul)에 초기화됩니다."
+      : "The combined monthly token limit for all Tenant Chat users. It resets on the first day of each month at 00:00 (Asia/Seoul).";
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              aria-label={locale === "ko" ? "월간 토큰 한도 안내" : "Monthly token limit information"}
+              className="tenant-monthly-token-info-trigger"
+              type="button"
+            />
+          }
+        >
+          <Info aria-hidden="true" />
+        </TooltipTrigger>
+        <TooltipContent className="tenant-monthly-token-info-tooltip" sideOffset={8}>
+          {description}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function formatCompactMonthlyTokenCount(value: number) {
+  const normalized = Math.max(0, Math.trunc(value));
+  if (normalized >= 1_000_000 && normalized % 1_000_000 === 0) {
+    return `${normalized / 1_000_000}M`;
+  }
+  if (normalized >= 1_000 && normalized % 1_000 === 0) {
+    return `${normalized / 1_000}K`;
+  }
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(normalized);
+}
+
+function formatMonthlyTokenLimitInput(value: number) {
+  return formatCompactMonthlyTokenCount(value);
+}
+
+function parseMonthlyTokenLimitInput(value: string): number | null {
+  const normalized = value.replaceAll(",", "").trim();
+  const match = /^(\d+(?:\.\d+)?)\s*([kKmM])?$/.exec(normalized);
+  if (!match) return null;
+
+  const multiplier = match[2]?.toLowerCase() === "m"
+    ? 1_000_000
+    : match[2]?.toLowerCase() === "k"
+      ? 1_000
+      : 1;
+  const parsed = Number(match[1]) * multiplier;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function applySetup(
   next: TenantChatAdminRuntimeSetup,
   setSetup: (value: TenantChatAdminRuntimeSetup) => void,
@@ -1006,7 +1228,8 @@ function applySetup(
   setManual: (value: string) => void,
   setRoutes: (value: TenantChatRoutingMatrix) => void,
   setCachePolicy: (value: TenantChatAdminCachePolicy) => void,
-  setDetectors: (value: RuntimePolicyDetector[]) => void
+  setDetectors: (value: RuntimePolicyDetector[]) => void,
+  setQuota: (value: TenantChatAdminQuotaPolicy) => void
 ) {
   const modelRef = next.activeSnapshot?.manualModelRef ?? firstModelRef(next);
   setSetup(next);
@@ -1015,6 +1238,7 @@ function applySetup(
   setRoutes(next.activeSnapshot?.routes ?? uniformRoutingMatrix(modelRef));
   setCachePolicy(next.activeSnapshot?.cachePolicy ?? defaultCachePolicy());
   setDetectors(toRuntimePolicyDetectors(next.activeSnapshot?.safetyPolicy));
+  setQuota(next.activeSnapshot?.quota ?? defaultQuotaPolicy());
 }
 
 async function loadSetup(tenantId: string): Promise<{ data: TenantChatAdminRuntimeSetup; ok: true } | { error: string; ok: false }> {
@@ -1028,6 +1252,16 @@ async function loadSetup(tenantId: string): Promise<{ data: TenantChatAdminRunti
 function readPayloadError(payload: unknown, fallback: string) {
   const error = payload && typeof payload === "object" ? (payload as Record<string, unknown>).error : null;
   return typeof error === "string" && error.trim() ? error : fallback;
+}
+
+function localizeTenantChatPolicyError(error: string, locale: Locale) {
+  if (
+    locale === "ko" &&
+    error === "Employee weekly token limit cannot exceed the shared monthly token limit."
+  ) {
+    return "공통 월간 한도를 활성 직원의 주간 한도보다 낮게 설정할 수 없습니다.";
+  }
+  return error;
 }
 function isRuntimeSetup(value: unknown): value is TenantChatAdminRuntimeSetup {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : null;

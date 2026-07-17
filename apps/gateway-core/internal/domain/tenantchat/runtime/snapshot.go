@@ -87,6 +87,23 @@ type QuotaPolicy struct {
 	WarningPercent           int    `json:"warningPercent"`
 	EconomyPercent           int    `json:"economyPercent"`
 	HardStopPercent          int    `json:"hardStopPercent"`
+	// Nil is a compatible pre-employee-quota snapshot. Entries exist only for
+	// employees whose weekly quota is enabled.
+	EmployeeWeeklyTokenLimits []EmployeeWeeklyTokenLimit `json:"employeeWeeklyTokenLimits,omitempty"`
+}
+
+type EmployeeWeeklyTokenLimit struct {
+	EmployeeID  string `json:"employeeId"`
+	LimitTokens int64  `json:"limitTokens"`
+}
+
+func (policy QuotaPolicy) EmployeeWeeklyTokenLimit(employeeID string) (int64, bool) {
+	for _, candidate := range policy.EmployeeWeeklyTokenLimits {
+		if candidate.EmployeeID == employeeID {
+			return candidate.LimitTokens, true
+		}
+	}
+	return 0, false
 }
 
 type BudgetPolicy struct {
@@ -296,6 +313,19 @@ func ParseSnapshot(document []byte) (Snapshot, error) {
 		if masking.IsMandatoryDetector(detector.DetectorType) && detector.Action == string(masking.PolicyActionAllow) {
 			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: mandatory detector %d cannot allow", index)
 		}
+	}
+	employeeLimits := make(map[string]struct{}, len(snapshot.Policies.Quota.EmployeeWeeklyTokenLimits))
+	for index, limit := range snapshot.Policies.Quota.EmployeeWeeklyTokenLimits {
+		if limit.EmployeeID == "" || limit.LimitTokens < 0 {
+			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: invalid employee weekly token limit at index %d", index)
+		}
+		if limit.LimitTokens > snapshot.Policies.Quota.DefaultMonthlyTokenLimit {
+			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: employee weekly token limit at index %d exceeds the shared monthly token limit", index)
+		}
+		if _, exists := employeeLimits[limit.EmployeeID]; exists {
+			return Snapshot{}, fmt.Errorf("validate tenant chat runtime snapshot: duplicate employee weekly token limit at index %d", index)
+		}
+		employeeLimits[limit.EmployeeID] = struct{}{}
 	}
 	return snapshot, nil
 }

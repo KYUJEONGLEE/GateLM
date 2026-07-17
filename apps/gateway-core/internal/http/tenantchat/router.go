@@ -335,6 +335,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusTooManyRequests, "CHAT_CONCURRENCY_LIMITED", "Tenant chat active request limit was reached.", 1)
 	case errors.Is(err, domain.ErrQuotaHardLimit):
 		writeError(w, http.StatusForbidden, "CHAT_QUOTA_HARD_LIMIT", "Tenant chat user quota was reached.", 0)
+	case errors.Is(err, domain.ErrEmployeeWeeklyTokenQuotaHardLimit):
+		writeError(w, http.StatusForbidden, "CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT", "이번 주 사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요.", 0)
 	case errors.Is(err, domain.ErrBudgetHardLimit):
 		writeError(w, http.StatusForbidden, "CHAT_BUDGET_HARD_LIMIT", "Tenant chat tenant budget was reached.", 0)
 	case errors.Is(err, domain.ErrNoEligibleRoute):

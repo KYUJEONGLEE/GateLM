@@ -147,7 +147,25 @@
         },
         "warningPercent": { "type": "integer", "minimum": 1, "maximum": 99 },
         "economyPercent": { "type": "integer", "minimum": 2, "maximum": 119 },
-        "hardStopPercent": { "type": "integer", "minimum": 3, "maximum": 1000 }
+        "hardStopPercent": { "type": "integer", "minimum": 3, "maximum": 1000 },
+        "employeeWeeklyTokenLimits": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/employeeWeeklyTokenLimit" },
+          "description": "Optional per-employee Tenant Chat weekly token limits. Every enabled limit must not exceed defaultMonthlyTokenLimit. Absence is compatible with snapshots published before this policy existed."
+        }
+      }
+    },
+    "employeeWeeklyTokenLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["employeeId", "limitTokens"],
+      "properties": {
+        "employeeId": { "$ref": "#/$defs/opaqueId" },
+        "limitTokens": {
+          "allOf": [{ "$ref": "#/$defs/nonNegativeInteger" }],
+          "description": "A value of 0 means immediate blocked state for the employee."
+        }
       }
     },
     "budget": {

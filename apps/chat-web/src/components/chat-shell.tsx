@@ -115,13 +115,18 @@ export function ChatShell() {
           router.replace('/tenants');
           return;
         }
-        const page = await api<ConversationPage>('/api/tenant-chat/conversations?limit=20');
         if (!active) return;
         setSession(value);
-        setConversations(page.items);
-        setConversationCursor(page.nextCursor);
-        setSelectedId(page.items[0]?.id ?? null);
-        setStatus(page.items.length ? '최근 대화를 불러왔습니다.' : '메시지를 입력해 새 대화를 시작하세요.');
+        try {
+          const page = await api<ConversationPage>('/api/tenant-chat/conversations?limit=20');
+          if (!active) return;
+          setConversations(page.items);
+          setConversationCursor(page.nextCursor);
+          setSelectedId(page.items[0]?.id ?? null);
+          setStatus(page.items.length ? '최근 대화를 불러왔습니다.' : '메시지를 입력해 새 대화를 시작하세요.');
+        } catch (reason) {
+          if (active) reportError(reason);
+        }
       } catch {
         router.replace('/login');
       } finally {
@@ -130,7 +135,7 @@ export function ChatShell() {
     }
     void initialize();
     return () => { active = false; };
-  }, [router]);
+  }, [reportError, router]);
 
   useEffect(() => {
     if (!selectedId) {

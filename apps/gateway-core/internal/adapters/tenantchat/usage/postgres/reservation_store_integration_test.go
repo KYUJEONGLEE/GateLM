@@ -126,6 +126,59 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
 }
 
+func TestConsumeAndReserveAppliesNewMonthlyZeroQuotaToExistingPeriodIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	fixture.configureEmployeeLedgerRollout(t, pool, "off")
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admissionStore := admissionpostgres.NewStore(pool)
+	firstAdmission, err := admissionStore.Create(context.Background(), fixture.admissionContext(), tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create first admission: %v", err)
+	}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	if _, err := store.BeginExecution(
+		context.Background(), fixture.completionContext(firstAdmission.AdmissionID), fixture.snapshot(10_000, 1_000_000),
+	); err != nil {
+		t.Fatalf("create initial monthly token period: %v", err)
+	}
+
+	secondAdmissionContext := fixture.admissionContext()
+	secondAdmissionContext.RequestID = "monthly_zero_request_002"
+	secondAdmissionContext.TurnID = "monthly_zero_turn_002"
+	secondAdmissionContext.IdempotencyKey = "monthly_zero_attempt_002"
+	secondAdmission, err := admissionStore.Create(context.Background(), secondAdmissionContext, tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create second admission: %v", err)
+	}
+	secondCompletionContext := fixture.completionContext(secondAdmission.AdmissionID)
+	secondCompletionContext.RequestID = secondAdmissionContext.RequestID
+	secondCompletionContext.TurnID = secondAdmissionContext.TurnID
+	secondCompletionContext.IdempotencyKey = secondAdmissionContext.IdempotencyKey
+	if _, err := store.BeginExecution(
+		context.Background(), secondCompletionContext, fixture.snapshot(0, 1_000_000),
+	); !errors.Is(err, tenantchat.ErrQuotaHardLimit) {
+		t.Fatalf("zero monthly quota must block the next provider request, got %v", err)
+	}
+
+	var limit, warning, economy, hardStop int64
+	var state string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT limit_tokens, warning_threshold_tokens, economy_threshold_tokens, hard_stop_tokens, state
+		FROM tenant_chat_user_token_periods
+		WHERE tenant_id = $1::uuid AND user_id = $2::uuid
+	`, fixture.tenantID, fixture.userID).Scan(&limit, &warning, &economy, &hardStop, &state); err != nil {
+		t.Fatalf("read synchronized monthly period: %v", err)
+	}
+	if limit != 0 || warning != 0 || economy != 0 || hardStop != 0 || state != "blocked" {
+		t.Fatalf("existing monthly period was not synchronized to the zero policy: limit=%d warning=%d economy=%d hardStop=%d state=%s", limit, warning, economy, hardStop, state)
+	}
+}
+
 func TestRoutingV2WithoutTierAllowsRolloutOffIntegration(t *testing.T) {
 	pool, fixture := setupUsageIntegration(t)
 	now := time.Now().UTC()

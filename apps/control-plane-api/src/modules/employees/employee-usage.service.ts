@@ -11,6 +11,7 @@ import {
   EmployeeUsageMetric,
   EmployeeUsageMetricDto,
   EmployeeUsageOrder,
+  EmployeeUsageSource,
   EmployeeUsageResponseDto,
   ListEmployeeUsageQueryDto,
 } from './dto/employee-usage.dto';
@@ -22,6 +23,7 @@ type EmployeeUsageCursor = {
   employeeId: string;
   metric: EmployeeUsageMetric;
   order: EmployeeUsageOrder;
+  source?: EmployeeUsageSource;
   value: string;
   version: 1;
 };
@@ -83,14 +85,15 @@ export class EmployeeUsageService {
     const period = this.validatePeriod(query.from, query.to);
     const metric = query.metric ?? 'tokens';
     const order = query.order ?? 'desc';
+    const source = query.source;
     const limit = query.limit ?? 50;
     const cursor = query.cursor
-      ? this.decodeCursor(query.cursor, metric, order)
+      ? this.decodeCursor(query.cursor, metric, order, source)
       : null;
 
     const [coverageRows, rows, unattributedRows] = await Promise.all([
       this.queryCoverage(tenantId, period.from, period.to),
-      this.queryRows(tenantId, period.from, period.to, metric, order, limit, cursor),
+      this.queryRows(tenantId, period.from, period.to, metric, order, limit, cursor, undefined, source),
       this.queryUnattributed(tenantId, period.from, period.to),
     ]);
     const hasMore = rows.length > limit;
@@ -99,17 +102,18 @@ export class EmployeeUsageService {
     const unattributed = unattributedRows[0] ?? emptyUnattributedRow();
     const projectApplication = toMetric(unattributed, 'project');
     const tenantChat = toMetric(unattributed, 'tenantChat');
-    const lastSourceAt = maxDate(
-      unattributed.projectSourceMaxAt,
-      unattributed.tenantChatSourceMaxAt,
-    );
+    const lastSourceAt = source === 'tenant_chat'
+      ? unattributed.tenantChatSourceMaxAt
+      : source === 'project_application'
+        ? unattributed.projectSourceMaxAt
+        : maxDate(unattributed.projectSourceMaxAt, unattributed.tenantChatSourceMaxAt);
     const coverage = coverageRows[0] ?? {
       coveredBucketCount: 0n,
       hasRawUsage: false,
     };
 
     return {
-      data: page.map(toResponseRow),
+      data: page.map((row) => toResponseRow(row, source)),
       pagination: {
         hasMore,
         limit,
@@ -119,6 +123,7 @@ export class EmployeeUsageService {
                 employeeId: last.employeeId,
                 metric,
                 order,
+                source,
                 value: last.sortValue.toString(),
                 version: 1,
               })
@@ -131,7 +136,11 @@ export class EmployeeUsageService {
       },
       unattributed: {
         sources: { projectApplication, tenantChat },
-        total: addMetrics(projectApplication, tenantChat),
+        total: source === 'tenant_chat'
+          ? tenantChat
+          : source === 'project_application'
+            ? projectApplication
+            : addMetrics(projectApplication, tenantChat),
       },
       provenance: {
         generatedAt: new Date().toISOString(),
@@ -170,6 +179,7 @@ export class EmployeeUsageService {
           employeeIds.length,
           null,
           employeeIds,
+          'tenant_chat',
         ),
       ),
     );
@@ -265,6 +275,7 @@ export class EmployeeUsageService {
     limit: number,
     cursor: EmployeeUsageCursor | null,
     employeeIds?: string[],
+    source?: EmployeeUsageSource,
   ): Promise<EmployeeUsageDatabaseRow[]> {
     const sortColumn = {
       cost: 'cost_micro_usd',
@@ -418,19 +429,19 @@ export class EmployeeUsageService {
           employee.email,
           employee.department,
           employee.status,
-          coalesce(project.request_count, 0)::bigint AS project_request_count,
-          coalesce(project.input_tokens, 0)::bigint AS project_input_tokens,
-          coalesce(project.output_tokens, 0)::bigint AS project_output_tokens,
-          coalesce(project.total_tokens, 0)::bigint AS project_total_tokens,
-          coalesce(project.cost_micro_usd, 0)::bigint AS project_cost_micro_usd,
-          coalesce(chat.request_count, 0)::bigint AS tenant_chat_request_count,
-          coalesce(chat.input_tokens, 0)::bigint AS tenant_chat_input_tokens,
-          coalesce(chat.output_tokens, 0)::bigint AS tenant_chat_output_tokens,
-          coalesce(chat.total_tokens, 0)::bigint AS tenant_chat_total_tokens,
-          coalesce(chat.cost_micro_usd, 0)::bigint AS tenant_chat_cost_micro_usd,
-          (coalesce(project.request_count, 0) + coalesce(chat.request_count, 0))::bigint AS request_count,
-          (coalesce(project.total_tokens, 0) + coalesce(chat.total_tokens, 0))::bigint AS total_tokens,
-          (coalesce(project.cost_micro_usd, 0) + coalesce(chat.cost_micro_usd, 0))::bigint AS cost_micro_usd
+          (CASE WHEN ${source === 'tenant_chat'} THEN 0 ELSE coalesce(project.request_count, 0) END)::bigint AS project_request_count,
+          (CASE WHEN ${source === 'tenant_chat'} THEN 0 ELSE coalesce(project.input_tokens, 0) END)::bigint AS project_input_tokens,
+          (CASE WHEN ${source === 'tenant_chat'} THEN 0 ELSE coalesce(project.output_tokens, 0) END)::bigint AS project_output_tokens,
+          (CASE WHEN ${source === 'tenant_chat'} THEN 0 ELSE coalesce(project.total_tokens, 0) END)::bigint AS project_total_tokens,
+          (CASE WHEN ${source === 'tenant_chat'} THEN 0 ELSE coalesce(project.cost_micro_usd, 0) END)::bigint AS project_cost_micro_usd,
+          (CASE WHEN ${source === 'project_application'} THEN 0 ELSE coalesce(chat.request_count, 0) END)::bigint AS tenant_chat_request_count,
+          (CASE WHEN ${source === 'project_application'} THEN 0 ELSE coalesce(chat.input_tokens, 0) END)::bigint AS tenant_chat_input_tokens,
+          (CASE WHEN ${source === 'project_application'} THEN 0 ELSE coalesce(chat.output_tokens, 0) END)::bigint AS tenant_chat_output_tokens,
+          (CASE WHEN ${source === 'project_application'} THEN 0 ELSE coalesce(chat.total_tokens, 0) END)::bigint AS tenant_chat_total_tokens,
+          (CASE WHEN ${source === 'project_application'} THEN 0 ELSE coalesce(chat.cost_micro_usd, 0) END)::bigint AS tenant_chat_cost_micro_usd,
+          (CASE WHEN ${source === 'tenant_chat'} THEN coalesce(chat.request_count, 0) WHEN ${source === 'project_application'} THEN coalesce(project.request_count, 0) ELSE coalesce(project.request_count, 0) + coalesce(chat.request_count, 0) END)::bigint AS request_count,
+          (CASE WHEN ${source === 'tenant_chat'} THEN coalesce(chat.total_tokens, 0) WHEN ${source === 'project_application'} THEN coalesce(project.total_tokens, 0) ELSE coalesce(project.total_tokens, 0) + coalesce(chat.total_tokens, 0) END)::bigint AS total_tokens,
+          (CASE WHEN ${source === 'tenant_chat'} THEN coalesce(chat.cost_micro_usd, 0) WHEN ${source === 'project_application'} THEN coalesce(project.cost_micro_usd, 0) ELSE coalesce(project.cost_micro_usd, 0) + coalesce(chat.cost_micro_usd, 0) END)::bigint AS cost_micro_usd
         FROM employees employee
         LEFT JOIN project_usage project ON project.employee_id = employee.id
         LEFT JOIN tenant_chat_usage chat ON chat.employee_id = employee.id
@@ -665,6 +676,7 @@ export class EmployeeUsageService {
     value: string,
     metric: EmployeeUsageMetric,
     order: EmployeeUsageOrder,
+    source: EmployeeUsageSource | undefined,
   ): EmployeeUsageCursor {
     try {
       const parsed = JSON.parse(
@@ -674,6 +686,7 @@ export class EmployeeUsageService {
         parsed.version !== 1 ||
         parsed.metric !== metric ||
         parsed.order !== order ||
+        parsed.source !== source ||
         typeof parsed.employeeId !== 'string' ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
           parsed.employeeId,
@@ -690,7 +703,7 @@ export class EmployeeUsageService {
   }
 }
 
-function toResponseRow(row: EmployeeUsageDatabaseRow) {
+function toResponseRow(row: EmployeeUsageDatabaseRow, source?: EmployeeUsageSource) {
   const projectApplication = toMetric(row, 'project');
   const tenantChat = toMetric(row, 'tenantChat');
   return {
@@ -701,7 +714,11 @@ function toResponseRow(row: EmployeeUsageDatabaseRow) {
     rank: Number(row.rank),
     sources: { projectApplication, tenantChat },
     status: normalizeEmployeeStatus(row.status),
-    total: addMetrics(projectApplication, tenantChat),
+    total: source === 'tenant_chat'
+      ? tenantChat
+      : source === 'project_application'
+        ? projectApplication
+        : addMetrics(projectApplication, tenantChat),
   };
 }
 

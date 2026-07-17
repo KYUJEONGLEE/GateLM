@@ -97,6 +97,12 @@ func (s *ReservationStore) consumeAndReserve(
 		"tenant-chat-cost:"+requestContext.ExecutionScope.TenantID); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
+	if actor.ActorKind == "employee" && actor.EmployeeID != "" {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+			"tenant-chat-employee-week:"+requestContext.ExecutionScope.TenantID+":"+actor.EmployeeID); err != nil {
+			return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+		}
+	}
 
 	replay, found, replayErr := findReservationReplay(ctx, tx, requestContext)
 	if replayErr != nil {
@@ -137,6 +143,13 @@ func (s *ReservationStore) consumeAndReserve(
 	if tenantPeriod.State == "blocked" {
 		return tenantchat.UsageReservation{}, tenantchat.ErrBudgetHardLimit
 	}
+	employeeWeeklyPeriod, err := ensureEmployeeWeeklyTokenPeriod(ctx, tx, requestContext, snapshot, now)
+	if err != nil {
+		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
+	}
+	if employeeWeeklyPeriod != nil && employeeWeeklyPeriod.State == "blocked" {
+		return tenantchat.UsageReservation{}, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit
+	}
 
 	route, err := selectExecutionRoute(snapshot, requestContext, userPeriod.State, tenantPeriod.State)
 	if err != nil {
@@ -158,6 +171,12 @@ func (s *ReservationStore) consumeAndReserve(
 	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + userPeriod.Reserved + reservedTokens
 	if projectedTokens < reservedTokens || projectedTokens > userPeriod.HardStop {
 		return tenantchat.UsageReservation{}, tenantchat.ErrQuotaHardLimit
+	}
+	if employeeWeeklyPeriod != nil {
+		projectedEmployeeTokens := employeeWeeklyPeriod.Confirmed + employeeWeeklyPeriod.Unconfirmed + employeeWeeklyPeriod.Reserved + reservedTokens
+		if projectedEmployeeTokens < reservedTokens || projectedEmployeeTokens > employeeWeeklyPeriod.HardStop {
+			return tenantchat.UsageReservation{}, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit
+		}
 	}
 	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + tenantPeriod.Reserved + reservedCost
 	if projectedCost < reservedCost || projectedCost > tenantPeriod.HardStop {
@@ -227,7 +246,7 @@ func (s *ReservationStore) consumeAndReserve(
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
 	if err = persistReservation(
-		ctx, tx, requestContext, snapshot, route, userPeriod, tenantPeriod,
+		ctx, tx, requestContext, snapshot, route, userPeriod, tenantPeriod, employeeWeeklyPeriod,
 		reservationID, eventID, reservedTokens, reservedCost, quotaState, budgetState, cacheOutcome, now,
 	); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
@@ -266,6 +285,13 @@ func (s *ReservationStore) reserveEmployeeCost(
 	startPrimary bool,
 	restrictedFromHigh bool,
 ) (employeepostgres.ReserveResult, error) {
+	// Tenant Chat employee cost enforcement was retired in favour of the
+	// snapshot-bound weekly token ledger. The legacy cross-surface cost tables
+	// are intentionally retained for audit/history but are not read or written
+	// by new Tenant Chat execution.
+	if employeeCostEmployeeID(requestContext) == "" {
+		return employeepostgres.ReserveResult{}, nil
+	}
 	if s == nil || s.employeeCosts == nil {
 		return employeepostgres.ReserveResult{}, tenantchat.ErrUsageGuardUnavailable
 	}
@@ -304,10 +330,7 @@ func (s *ReservationStore) reserveEmployeeCost(
 }
 
 func employeeCostEmployeeID(requestContext tenantchat.RequestContext) string {
-	if requestContext.ExecutionScope.Actor.ActorKind != "employee" {
-		return ""
-	}
-	return requestContext.ExecutionScope.Actor.EmployeeID
+	return ""
 }
 
 func employeeCostAdapterError(err error) error {

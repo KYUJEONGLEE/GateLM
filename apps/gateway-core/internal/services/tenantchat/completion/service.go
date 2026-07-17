@@ -956,6 +956,8 @@ func completionErrorFor(err error) *tenantchat.CompletionError {
 		return &tenantchat.CompletionError{Code: "CHAT_PROVIDER_TIMEOUT", Message: "Tenant chat provider timed out."}
 	case errors.Is(err, tenantchat.ErrQuotaHardLimit):
 		return &tenantchat.CompletionError{Code: "CHAT_QUOTA_HARD_LIMIT", Message: "Tenant chat user quota was reached."}
+	case errors.Is(err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit):
+		return &tenantchat.CompletionError{Code: "CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT", Message: "이번 주 사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요."}
 	case errors.Is(err, tenantchat.ErrBudgetHardLimit):
 		return &tenantchat.CompletionError{Code: "CHAT_BUDGET_HARD_LIMIT", Message: "Tenant chat tenant budget was reached."}
 	case errors.Is(err, tenantchat.ErrRateLimited):

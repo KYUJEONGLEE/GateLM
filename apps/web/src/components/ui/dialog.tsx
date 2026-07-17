@@ -43,7 +43,7 @@ function DialogContent({
       <DialogPrimitive.Backdrop
         data-slot="dialog-backdrop"
         className={cn(
-          "fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[1px] transition-opacity data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
+          "fixed inset-0 z-[100] bg-foreground/40 backdrop-blur-[1px] transition-opacity data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
           backdropClassName
         )}
       />
@@ -51,7 +51,7 @@ function DialogContent({
         data-slot="dialog-content"
         style={anchorStyle}
         className={cn(
-          "fixed z-50 grid w-full max-w-lg gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-lg",
+          "fixed z-[100] grid w-full max-w-lg gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-lg",
           positioning === "centered" &&
             "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
           "transition-all data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0",

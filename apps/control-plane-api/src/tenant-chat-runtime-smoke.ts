@@ -169,7 +169,8 @@ function smokeSnapshot(): TenantChatRuntimeSnapshotDocument {
       concurrency: { maxActiveAdmissionsPerUser: 2, admissionTtlSeconds: 30 },
       quota: {
         period: 'calendar_month', timezone: 'Asia/Seoul', defaultMonthlyTokenLimit: 1_000_000,
-        warningPercent: 80, economyPercent: 100, hardStopPercent: 120,
+        warningPercent: 80, economyPercent: 90, hardStopPercent: 100,
+        employeeWeeklyTokenLimits: [],
       },
       budget: {
         period: 'calendar_month', timezone: 'Asia/Seoul', currency: 'USD',

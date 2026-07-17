@@ -92,14 +92,45 @@ function isActivationPayload(
   if (!hasValidRouting) {
     return false;
   }
-  const keys = Object.keys(record);
   const hasCurrentPolicyPayload =
-    keys.length === 5 &&
+    hasExactKeys(record, [
+      "cachePolicy",
+      "manualModelRef",
+      "quota",
+      "routes",
+      "routingMode",
+      "safetyPolicy"
+    ]) &&
     isCachePolicy(record.cachePolicy) &&
-    isSafetyPolicy(record.safetyPolicy);
+    isSafetyPolicy(record.safetyPolicy) &&
+    isQuotaPolicy(record.quota);
   const hasCompatibilityCacheToggle =
-    keys.length === 4 && typeof record.cacheEnabled === "boolean";
+    hasExactKeys(record, ["cacheEnabled", "manualModelRef", "routes", "routingMode"]) &&
+    typeof record.cacheEnabled === "boolean";
   return hasCurrentPolicyPayload || hasCompatibilityCacheToggle;
+}
+
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
+  const keys = Object.keys(record);
+  return keys.length === expected.length && expected.every((key) => key in record);
+}
+
+function isQuotaPolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    Object.keys(record).length === 5 &&
+    Number.isSafeInteger(record.defaultMonthlyTokenLimit) &&
+    Number(record.defaultMonthlyTokenLimit) >= 0 &&
+    typeof record.timezone === "string" &&
+    record.timezone.length >= 1 &&
+    record.timezone.length <= 64 &&
+    record.warningPercent === 80 &&
+    record.economyPercent === 90 &&
+    record.hardStopPercent === 100
+  );
 }
 
 function isCachePolicy(value: unknown) {

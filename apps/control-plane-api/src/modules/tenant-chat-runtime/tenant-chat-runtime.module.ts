@@ -5,10 +5,15 @@ import { TenantChatIdentityModule } from '@/modules/tenant-chat-identity/tenant-
 
 import { TenantChatRuntimeController } from './tenant-chat-runtime.controller';
 import { TenantChatAdminRuntimeController } from './tenant-chat-admin-runtime.controller';
+import { EmployeeWeeklyTokenQuotaController } from './employee-weekly-token-quota.controller';
 import { TenantChatRuntimeService } from './tenant-chat-runtime.service';
 
 @Module({
-  controllers: [TenantChatAdminRuntimeController, TenantChatRuntimeController],
+  controllers: [
+    TenantChatAdminRuntimeController,
+    TenantChatRuntimeController,
+    EmployeeWeeklyTokenQuotaController,
+  ],
   imports: [DatabaseModule, TenantChatIdentityModule],
   providers: [TenantChatRuntimeService],
   exports: [TenantChatRuntimeService],

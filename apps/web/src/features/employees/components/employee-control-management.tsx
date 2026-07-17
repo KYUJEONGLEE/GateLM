@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Info,
   Save,
   Trash2,
   Upload,
@@ -15,7 +16,7 @@ import {
   Wallet
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
 import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,12 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import { AnalyticsRankedBarChart } from "@/features/analytics/components/analytics-charts";
 import { parseEmployeeCostPolicy } from "@/lib/control-plane/employee-cost-policy-parser";
 import type {
@@ -44,6 +51,7 @@ import type {
   ProjectEmployeeAssignmentValues
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
 import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
 import {
   getRateLimitRefillTokensPerSecond,
@@ -62,6 +70,7 @@ type EmployeeControlManagementProps = {
   locale: Locale;
   model: EmployeeControlModel;
   monthlyCostReport: ProjectMonthlyCostReport;
+  tenantMonthlyTokenLimit: number | null;
   usage: EmployeeUsageReadModel;
 };
 
@@ -75,8 +84,6 @@ type SubmitState = {
   message: string;
   status: "error" | "idle" | "success";
 };
-
-type EmployeeCostChartPeriod = "daily" | "monthly" | "weekly";
 
 type CompactUnitStepperProps = {
   ariaLabel: string;
@@ -93,6 +100,10 @@ type CompactUnitStepperProps = {
 type EmployeeSortDirection = "asc" | "desc";
 type EmployeeSortField = "cost" | "department" | "name" | "project";
 type EmployeeAddMethod = "csv" | "invite";
+type EmployeeCostRange = "24h" | "7d" | "30d";
+const EMPLOYEE_WEEKLY_TOKEN_LIMIT_DEFAULT = 1_000_000;
+const EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_MAX = 10_000_000;
+const EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000;
 type EmployeeCostLimitDraft = {
   enabled: boolean;
   limitUsd: number;
@@ -126,6 +137,12 @@ type EmployeeInvitationResponsePayload = {
 type ProjectEmployeeResponsePayload = {
   assignment?: ProjectEmployeeAssignmentRecord;
   error?: string;
+};
+
+type EmployeeWeeklyTokenQuotaResponsePayload = {
+  error?: string;
+  status?: number;
+  weeklyTokenQuota?: unknown;
 };
 
 type EmployeeCostPolicyResponsePayload = {
@@ -400,55 +417,6 @@ const employeeUsageText = {
     weeklyTokens: "이번 주 확정 비용"
   }
 } satisfies Record<Locale, Record<string, string>>;
-
-const employeeCostChartText = {
-  en: {
-    daily: {
-      ariaLabel: "Employee cost usage today",
-      button: "Today",
-      empty: "No confirmed employee cost has been recorded today.",
-      subtitle: "Top 10 by confirmed cost today"
-    },
-    monthly: {
-      ariaLabel: "Employee cost usage this month",
-      button: "This month",
-      empty: "No confirmed employee cost has been recorded this month.",
-      subtitle: "Top 10 by confirmed cost this month"
-    },
-    weekly: {
-      ariaLabel: "Employee cost usage this week",
-      button: "This week",
-      empty: "No confirmed employee cost has been recorded this week.",
-      subtitle: "Top 10 by confirmed cost this week"
-    }
-  },
-  ko: {
-    daily: {
-      ariaLabel: "직원별 오늘 사용 비용",
-      button: "오늘",
-      empty: "오늘 확정된 직원 사용 비용이 없습니다.",
-      subtitle: "오늘 확정 비용 상위 10명"
-    },
-    monthly: {
-      ariaLabel: "직원별 이번 달 사용 비용",
-      button: "이번 달",
-      empty: "이번 달에 확정된 직원 사용 비용이 없습니다.",
-      subtitle: "이번 달 확정 비용 상위 10명"
-    },
-    weekly: {
-      ariaLabel: "직원별 이번 주 사용 비용",
-      button: "이번 주",
-      empty: "이번 주에 확정된 직원 사용 비용이 없습니다.",
-      subtitle: "이번 주 확정 비용 상위 10명"
-    }
-  }
-} satisfies Record<
-  Locale,
-  Record<
-    EmployeeCostChartPeriod,
-    { ariaLabel: string; button: string; empty: string; subtitle: string }
-  >
->;
 
 const projectEmployeeText: Record<
   Locale,
@@ -1493,6 +1461,7 @@ export function EmployeeControlManagement({
   locale,
   model,
   monthlyCostReport,
+  tenantMonthlyTokenLimit,
   usage
 }: EmployeeControlManagementProps) {
   const router = useRouter();
@@ -1531,8 +1500,6 @@ export function EmployeeControlManagement({
     direction: "desc",
     field: "cost"
   });
-  const [employeeCostChartPeriod, setEmployeeCostChartPeriod] =
-    useState<EmployeeCostChartPeriod>("daily");
   const [pageIndex, setPageIndex] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
@@ -1554,36 +1521,66 @@ export function EmployeeControlManagement({
     () => new Map(usage.rows.map((row) => [row.employeeId, row])),
     [usage.rows]
   );
-  const employeeCostChartRows = useMemo(
-    () => {
-      const rows = usage.rows.map((row) => ({
+  const initialEmployeeCostChartRows = useMemo(
+    () =>
+      usage.rows.slice(0, 10).map((row) => ({
         id: row.employeeId,
         label: row.name,
-        value:
-          employeeCostChartPeriod === "daily"
-            ? (row.dailyCostMicroUsd ?? 0)
-            : employeeCostChartPeriod === "weekly"
-              ? (row.weeklyCostMicroUsd ?? 0)
-              : (row.monthlyCostMicroUsd ?? 0)
-      }));
-
-      rows.sort(
-        (left, right) => right.value - left.value || left.label.localeCompare(right.label)
-      );
-      return rows;
-    },
-    [employeeCostChartPeriod, usage.rows]
+        value: row.dailyCostMicroUsd ?? 0
+      })),
+    [usage.rows]
   );
-  const employeeCostChartHasUsage = employeeCostChartRows.some((row) => row.value > 0);
-  const employeeCostChartCopy = employeeCostChartText[locale][employeeCostChartPeriod];
-  const employeeCostChartTotal =
-    employeeCostChartPeriod === "monthly"
-      ? usage.totalMonthlyCostMicroUsd
-      : usage.totalDailyCostMicroUsd;
-  const employeeCostChartTimezone =
-    employeeCostChartPeriod === "monthly"
-      ? usage.monthlyPeriodTimezone
-      : usage.periodTimezone;
+  const [employeeCostRange, setEmployeeCostRange] = useState<EmployeeCostRange>("24h");
+  const [employeeCostChartRows, setEmployeeCostChartRows] = useState(
+    initialEmployeeCostChartRows
+  );
+  const [employeeCostChartLoading, setEmployeeCostChartLoading] = useState(false);
+  const [employeeCostChartError, setEmployeeCostChartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const namesByEmployeeId = new Map(usage.rows.map((row) => [row.employeeId, row.name]));
+    setEmployeeCostChartLoading(true);
+    setEmployeeCostChartError(null);
+
+    void fetch(
+      `/api/control-plane/employees?tenantId=${encodeURIComponent(model.controlPlaneTenantId)}&range=${employeeCostRange}`,
+      { signal: controller.signal }
+    )
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          data?: EmployeeUsageResponse;
+          error?: string;
+        };
+        if (!response.ok || !payload.data) {
+          throw new Error(payload.error ?? "Unable to load tenant chat employee usage.");
+        }
+        setEmployeeCostChartRows(
+          payload.data.data.map((row) => ({
+            id: row.employeeId,
+            label: namesByEmployeeId.get(row.employeeId) ?? row.name ?? row.email,
+            value: row.sources.tenantChat.costMicroUsd
+          }))
+        );
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setEmployeeCostChartError(
+          locale === "ko"
+            ? "Tenant Chat 사용 비용을 불러오지 못했습니다."
+            : "Unable to load Tenant Chat cost usage."
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setEmployeeCostChartLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [employeeCostRange, locale, model.controlPlaneTenantId, usage.rows]);
   const selectedUsage = selectedEmployeeId
     ? usageByEmployeeId.get(selectedEmployeeId) ?? null
     : null;
@@ -2338,41 +2335,39 @@ export function EmployeeControlManagement({
           <div>
             <h3>{locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}</h3>
             <p>
-              {employeeCostChartCopy.subtitle}
-              {employeeCostChartTimezone ? ` · ${employeeCostChartTimezone}` : ""}
+              {locale === "ko"
+                ? "Tenant Chat의 Provider 확정 비용만 표시하는 읽기 전용 지표입니다."
+                : "A read-only view of Provider-confirmed Tenant Chat cost only."}
+              {usage.periodTimezone ? ` · ${usage.periodTimezone}` : ""}
             </p>
           </div>
-          <div className="employee-usage-ranking-actions">
+          <div className="employee-cost-range-actions" role="group">
+            {(["24h", "7d", "30d"] as const).map((range) => (
+              <Button
+                aria-pressed={employeeCostRange === range}
+                key={range}
+                onClick={() => setEmployeeCostRange(range)}
+                size="sm"
+                type="button"
+                variant={employeeCostRange === range ? "default" : "outline"}
+              >
+                {range === "24h" ? (locale === "ko" ? "1일" : "24h") : range === "7d" ? (locale === "ko" ? "1주일" : "7d") : (locale === "ko" ? "1개월" : "30d")}
+              </Button>
+            ))}
             <span>USD</span>
-            <span className="employee-cost-outlier-legend">
-              <i aria-hidden="true" />
-              {locale === "ko" ? "평균의 1.5배 이상" : "1.5× above average"}
-            </span>
-            <div
-              aria-label={locale === "ko" ? "비용 그래프 기간" : "Cost chart period"}
-              className="employee-cost-period-switch"
-              role="group"
-            >
-              {(["daily", "weekly", "monthly"] as const).map((period) => (
-                <button
-                  aria-pressed={employeeCostChartPeriod === period}
-                  className="compact-action-button employee-cost-period-button"
-                  data-active={employeeCostChartPeriod === period}
-                  key={period}
-                  onClick={() => setEmployeeCostChartPeriod(period)}
-                  type="button"
-                >
-                  {employeeCostChartText[locale][period].button}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
-        {employeeCostChartTotal === null ? (
-          <p className="employee-usage-ranking-empty">{usageText.costLoadFailed}</p>
-        ) : employeeCostChartHasUsage ? (
+        {employeeCostChartError ? (
+          <p className="employee-usage-ranking-empty">{employeeCostChartError}</p>
+        ) : employeeCostChartLoading ? (
+          <p className="employee-usage-ranking-empty">
+            {locale === "ko" ? "사용 비용을 불러오는 중입니다." : "Loading cost usage."}
+          </p>
+        ) : employeeCostChartRows.some((row) => row.value > 0) ? (
           <AnalyticsRankedBarChart
-            ariaLabel={employeeCostChartCopy.ariaLabel}
+            ariaLabel={
+              locale === "ko" ? "기간별 직원 사용 비용" : "Employee cost usage by period"
+            }
             className="employee-cost-ranking-chart"
             kind="micro-usd"
             maxRows={10}
@@ -2382,7 +2377,9 @@ export function EmployeeControlManagement({
           />
         ) : (
           <p className="employee-usage-ranking-empty">
-            {employeeCostChartCopy.empty}
+            {locale === "ko"
+              ? "선택한 기간에 확정된 Tenant Chat 사용 비용이 없습니다."
+              : "No confirmed Tenant Chat cost was recorded during the selected period."}
           </p>
         )}
       </section>
@@ -2828,15 +2825,16 @@ export function EmployeeControlManagement({
                 </article>
               </div>
 
-              <EmployeeCostPolicyEditor
+              <EmployeeWeeklyTokenQuotaEditor
                 employee={selectedUsage}
-                key={`${selectedUsage.employeeId}:${selectedUsage.costPolicy?.policy.version ?? "unavailable"}`}
+                key={`${selectedUsage.employeeId}:${selectedUsage.weeklyTokenQuota?.version ?? "new"}:${tenantMonthlyTokenLimit ?? "unknown"}`}
                 locale={locale}
                 onSaved={() => router.refresh()}
                 routeTenantId={model.controlPlaneTenantId}
+                tenantMonthlyTokenLimit={tenantMonthlyTokenLimit}
               />
 
-              <section className="employee-usage-projects">
+              <section className="employee-usage-projects employee-projects-after-quota">
                 <div className="employee-usage-section-heading">
                   <h3>{usageText.projects}</h3>
                   <Button
@@ -3086,6 +3084,323 @@ export function EmployeeControlManagement({
         </DialogContent>
       </Dialog>
     </ManagementPage>
+  );
+}
+
+function EmployeeWeeklyTokenQuotaEditor({
+  employee,
+  locale,
+  onSaved,
+  routeTenantId,
+  tenantMonthlyTokenLimit
+}: {
+  employee: EmployeeUsageRow;
+  locale: Locale;
+  onSaved: () => void;
+  routeTenantId: string;
+  tenantMonthlyTokenLimit: number | null;
+}) {
+  const sourceQuota = employee.weeklyTokenQuota;
+  const defaultLimitTokens = sourceQuota && sourceQuota.version > 0
+    ? sourceQuota.limitTokens
+    : defaultEmployeeWeeklyTokenLimit(tenantMonthlyTokenLimit);
+  const [enabled, setEnabled] = useState(sourceQuota?.enabled ?? false);
+  const [limitTokens, setLimitTokens] = useState(defaultLimitTokens);
+  const [limitInput, setLimitInput] = useState(() => formatWeeklyTokenLimitInput(defaultLimitTokens));
+  const [pending, setPending] = useState(false);
+  const [submitState, setSubmitState] = useState<SubmitState>({
+    message: "",
+    status: "idle"
+  });
+  const currentWeek = sourceQuota?.currentWeek;
+  const currentUsageTokens = currentWeek
+    ? currentWeek.confirmedTotalTokens + currentWeek.reservedTokens + currentWeek.unconfirmedTokens
+    : null;
+  const remainingTokens = currentWeek
+    ? currentWeek.limitTokens === 0
+      ? 0
+      : currentWeek.remainingTokens
+    : limitTokens;
+  const desiredSliderMax = Math.max(
+    EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_MAX,
+    Math.ceil(limitTokens / EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP) *
+      EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP
+  );
+  const sliderMax = tenantMonthlyTokenLimit === null
+    ? desiredSliderMax
+    : Math.min(tenantMonthlyTokenLimit, desiredSliderMax);
+  const sliderStep = sliderMax > 0 && sliderMax < EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP
+    ? Math.max(1, Math.floor(sliderMax / 10))
+    : EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP;
+  const sliderPosition = sliderMax === 0
+    ? 0
+    : Math.min(100, Math.max(0, (Math.min(limitTokens, sliderMax) / sliderMax) * 100));
+  const sliderPositionStyle = {
+    "--employee-token-slider-position": `${sliderPosition}%`
+  } as CSSProperties;
+  const monthlyLimitExceeded =
+    enabled &&
+    tenantMonthlyTokenLimit !== null &&
+    limitTokens > tenantMonthlyTokenLimit;
+  const changed =
+    enabled !== (sourceQuota?.enabled ?? false) ||
+    (enabled &&
+      limitTokens !==
+        (sourceQuota && sourceQuota.version > 0
+          ? sourceQuota.limitTokens
+          : defaultEmployeeWeeklyTokenLimit(tenantMonthlyTokenLimit)));
+
+  async function save() {
+    if (pending || !changed) {
+      return;
+    }
+    if (monthlyLimitExceeded) {
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? `직원 주간 한도는 공통 월간 한도(${formatCompactTokenCount(tenantMonthlyTokenLimit ?? 0, locale)})를 초과할 수 없습니다.`
+            : `The weekly employee limit cannot exceed the shared monthly limit (${formatCompactTokenCount(tenantMonthlyTokenLimit ?? 0, locale)}).`,
+        status: "error"
+      });
+      return;
+    }
+
+    setPending(true);
+    setSubmitState({ message: "", status: "idle" });
+    try {
+      const response = await fetch("/api/control-plane/employees", {
+        body: JSON.stringify({
+          action: "updateWeeklyTokenQuota",
+          values: {
+            employeeId: employee.employeeId,
+            enabled,
+            ...(sourceQuota && sourceQuota.version > 0
+              ? { expectedVersion: sourceQuota.version }
+              : {}),
+            limitTokens,
+            tenantId: routeTenantId
+          }
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response
+        .json()
+        .catch(() => ({}))) as EmployeeWeeklyTokenQuotaResponsePayload;
+      if (!response.ok) {
+        setSubmitState({
+          message:
+            response.status === 409
+              ? locale === "ko"
+                ? "다른 관리자가 한도를 변경했습니다. 최신 상태를 다시 불러옵니다."
+                : "Another administrator updated this limit. Refreshing the latest state."
+              : payload.error ??
+                (locale === "ko" ? "주간 토큰 한도를 저장하지 못했습니다." : "Unable to save the weekly token limit."),
+          status: "error"
+        });
+        if (response.status === 409) {
+          onSaved();
+        }
+        return;
+      }
+
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? "주간 토큰 한도를 저장하고 새 Runtime Snapshot을 발행했습니다."
+            : "The weekly token limit was saved and a new Runtime Snapshot was published.",
+        status: "success"
+      });
+      onSaved();
+    } catch {
+      setSubmitState({
+        message: locale === "ko" ? "주간 토큰 한도를 저장하지 못했습니다." : "Unable to save the weekly token limit.",
+        status: "error"
+      });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function updateLimitInput(value: string) {
+    setLimitInput(value);
+    const parsed = parseWeeklyTokenLimitInput(value);
+    if (parsed !== null) {
+      setLimitTokens(parsed);
+    }
+  }
+
+  function resetLimitInput() {
+    setLimitInput(formatWeeklyTokenLimitInput(limitTokens));
+  }
+
+  function updateLimitFromSlider(value: number) {
+    setLimitTokens(value);
+    setLimitInput(formatWeeklyTokenLimitInput(value));
+  }
+
+  return (
+    <section className="employee-chat-usage employee-weekly-token-section">
+      <div className="employee-weekly-token-section-heading">
+        <div className="employee-weekly-token-title-row">
+          <h3>{locale === "ko" ? "주간 토큰 한도" : "Weekly token limit"}</h3>
+          <WeeklyTokenQuotaInfo locale={locale} />
+        </div>
+      </div>
+
+      {submitState.message ? (
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <article className="employee-weekly-token-card" data-enabled={enabled ? "true" : "false"}>
+        <header className="employee-weekly-token-card-header">
+          <div>
+            <strong>{locale === "ko" ? "주간 한도 적용" : "Apply weekly limit"}</strong>
+            <p>
+              {locale === "ko"
+                ? "토글을 켜면 이 직원에게만 주간 토큰 한도를 적용합니다."
+                : "Turn this on to apply a weekly token limit to this employee."}
+            </p>
+          </div>
+          <Switch
+            aria-label={locale === "ko" ? "주간 토큰 한도 적용" : "Apply weekly token limit"}
+            checked={enabled}
+            className="employee-weekly-token-switch"
+            disabled={pending}
+            onCheckedChange={setEnabled}
+          />
+        </header>
+        <dl className="employee-weekly-token-metrics">
+          <div>
+            <dt>{locale === "ko" ? "사용" : "Used"}</dt>
+            <dd>{currentUsageTokens === null ? "-" : formatCompactTokenCount(currentUsageTokens, locale)}</dd>
+          </div>
+          <div>
+            <dt>{locale === "ko" ? "잔여" : "Remaining"}</dt>
+            <dd>
+              {!enabled
+                ? "-"
+                : limitTokens === 0
+                  ? locale === "ko"
+                    ? "즉시 차단"
+                    : "Block immediately"
+                  : formatCompactTokenCount(remainingTokens, locale)}
+            </dd>
+          </div>
+        </dl>
+        {enabled ? (
+          <div className="employee-weekly-token-controls">
+            <label className="employee-weekly-token-input-field">
+              <span>
+                {locale === "ko" ? "주간 한도" : "Weekly limit"}
+                {tenantMonthlyTokenLimit !== null
+                  ? ` · ${locale === "ko" ? "최대" : "Maximum"} ${formatCompactTokenCount(tenantMonthlyTokenLimit, locale)}`
+                  : ""}
+              </span>
+              <input
+                aria-describedby="employee-weekly-token-input-hint"
+                aria-label={locale === "ko" ? "주간 토큰 한도" : "Weekly token limit"}
+                disabled={pending}
+                inputMode="decimal"
+                onBlur={resetLimitInput}
+                onChange={(event) => updateLimitInput(event.target.value)}
+                placeholder="1M"
+                type="text"
+                value={limitInput}
+              />
+              <small id="employee-weekly-token-input-hint">
+                {locale === "ko" ? "예: 1M 또는 1,250,000" : "For example: 1M or 1,250,000"}
+              </small>
+            </label>
+            <div className="employee-weekly-token-slider-field">
+              <div className="employee-weekly-token-slider-track" style={sliderPositionStyle}>
+                <output className="employee-weekly-token-slider-current">
+                  {formatCompactTokenCount(limitTokens, locale)}
+                </output>
+                <input
+                  aria-label={locale === "ko" ? "주간 토큰 한도 슬라이더" : "Weekly token limit slider"}
+                  aria-valuetext={formatCompactTokenCount(limitTokens, locale)}
+                  className="employee-token-limit-range"
+                  disabled={pending}
+                  max={sliderMax}
+                  min={0}
+                  onChange={(event) => updateLimitFromSlider(Number(event.target.value))}
+                  step={sliderStep}
+                  type="range"
+                  value={Math.min(limitTokens, sliderMax)}
+                />
+              </div>
+              <div className="employee-weekly-token-slider-endpoints" aria-hidden="true">
+                <span>0</span>
+                <span>{formatCompactTokenCount(sliderMax, locale)}</span>
+              </div>
+            </div>
+            {monthlyLimitExceeded ? (
+              <p className="employee-weekly-token-limit-error">
+                {locale === "ko"
+                  ? `공통 월간 한도 ${formatCompactTokenCount(tenantMonthlyTokenLimit ?? 0, locale)} 이하로 입력하세요.`
+                  : `Enter a value at or below the shared monthly limit of ${formatCompactTokenCount(tenantMonthlyTokenLimit ?? 0, locale)}.`}
+              </p>
+            ) : null}
+            {limitTokens === 0 ? (
+              <p className="employee-weekly-token-block-notice">
+                {locale === "ko"
+                  ? "적용하면 다음 새 Provider 요청부터 즉시 차단됩니다."
+                  : "Applying this blocks the next new Provider request immediately."}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+
+      <div className="employee-weekly-token-footer">
+        <p className="employee-weekly-token-snapshot">
+          {locale === "ko"
+            ? `현재 적용 Snapshot 버전: ${sourceQuota?.snapshotVersion ?? "-"}`
+            : `Current Snapshot version: ${sourceQuota?.snapshotVersion ?? "-"}`}
+        </p>
+        <Button
+          className="employee-weekly-token-apply-button"
+          disabled={pending || !changed || monthlyLimitExceeded}
+          onClick={() => void save()}
+          size="lg"
+          type="button"
+        >
+          <Save aria-hidden="true" />
+          {pending ? "..." : locale === "ko" ? "적용" : "Apply"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function WeeklyTokenQuotaInfo({ locale }: { locale: Locale }) {
+  const description =
+    locale === "ko"
+      ? "Tenant Chat에서 이 직원이 이번 주 사용할 수 있는 토큰 수입니다. 매주 월요일 0시(Asia/Seoul)에 초기화됩니다."
+      : "The number of Tenant Chat tokens this employee can use this week. It resets every Monday at 00:00 (Asia/Seoul).";
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              aria-label={locale === "ko" ? "주간 토큰 한도 안내" : "Weekly token limit information"}
+              className="employee-weekly-token-info-trigger"
+              type="button"
+            />
+          }
+        >
+          <Info aria-hidden="true" />
+        </TooltipTrigger>
+        <TooltipContent className="employee-weekly-token-info-tooltip" sideOffset={8}>
+          {description}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -3569,6 +3884,45 @@ function formatTokenCount(value: number, locale: Locale) {
   return new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", {
     maximumFractionDigits: 0
   }).format(Math.max(0, value));
+}
+
+function formatCompactTokenCount(value: number, locale: Locale) {
+  const normalized = Math.max(0, Math.trunc(value));
+  if (normalized >= 1_000_000 && normalized % 1_000_000 === 0) {
+    return `${normalized / 1_000_000}M`;
+  }
+  if (normalized >= 1_000 && normalized % 1_000 === 0) {
+    return `${normalized / 1_000}K`;
+  }
+  return formatTokenCount(normalized, locale);
+}
+
+function defaultEmployeeWeeklyTokenLimit(tenantMonthlyTokenLimit: number | null) {
+  return tenantMonthlyTokenLimit === null
+    ? EMPLOYEE_WEEKLY_TOKEN_LIMIT_DEFAULT
+    : Math.min(EMPLOYEE_WEEKLY_TOKEN_LIMIT_DEFAULT, tenantMonthlyTokenLimit);
+}
+
+function formatWeeklyTokenLimitInput(value: number) {
+  const normalized = Math.max(0, Math.trunc(value));
+  if (normalized >= 1_000_000 && normalized % 1_000_000 === 0) {
+    return `${normalized / 1_000_000}M`;
+  }
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(normalized);
+}
+
+function parseWeeklyTokenLimitInput(value: string): number | null {
+  const normalized = value.replaceAll(",", "").trim();
+  const match = /^(\d+(?:\.\d+)?)\s*([kKmM])?$/.exec(normalized);
+  if (!match) return null;
+
+  const multiplier = match[2]?.toLowerCase() === "m"
+    ? 1_000_000
+    : match[2]?.toLowerCase() === "k"
+      ? 1_000
+      : 1;
+  const parsed = Number(match[1]) * multiplier;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function formatTokenLimit(

@@ -25,7 +25,7 @@ test("snapshot route shares one provider directory across both live-request surf
   const routeSource = await readFile(routeSourceUrl, "utf8");
 
   expect(routeSource.match(/providerDirectoryPromise\.then/g)).toHaveLength(2);
-  expect(routeSource).toContain("projects,\n              providerDirectory");
+  expect(routeSource).toMatch(/projects,\s+providerDirectory/);
   expect(routeSource).toContain("{ providerDirectory }");
 });
 

@@ -2,6 +2,7 @@ import type { EmployeeStatus } from '@/lib/control-plane/employees-types';
 
 export type EmployeeUsageMetricName = 'cost' | 'requests' | 'tokens';
 export type EmployeeUsageOrder = 'asc' | 'desc';
+export type EmployeeUsageSource = 'project_application' | 'tenant_chat';
 export type EmployeeUsageReadSource = 'hybrid' | 'raw' | 'rollup';
 
 export type EmployeeUsageMetric = {
@@ -57,6 +58,7 @@ export type EmployeeUsageQuery = {
   limit?: number;
   metric?: EmployeeUsageMetricName;
   order?: EmployeeUsageOrder;
+  source?: EmployeeUsageSource;
   tenantId: string;
   to: string;
 };

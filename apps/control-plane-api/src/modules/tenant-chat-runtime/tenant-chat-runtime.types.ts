@@ -73,6 +73,11 @@ export interface TenantChatRuntimeRoute {
   enabled: boolean;
 }
 
+export interface TenantChatEmployeeWeeklyTokenLimit {
+  employeeId: string;
+  limitTokens: number;
+}
+
 export interface TenantChatRuntimePolicies {
   rateLimit: {
     requests: number;
@@ -89,6 +94,8 @@ export interface TenantChatRuntimePolicies {
     warningPercent: number;
     economyPercent: number;
     hardStopPercent: number;
+    /** Omitted by snapshots published before employee quotas were introduced. */
+    employeeWeeklyTokenLimits?: TenantChatEmployeeWeeklyTokenLimit[];
   };
   budget: {
     period: 'calendar_month';
@@ -198,6 +205,15 @@ export interface TenantChatAdminActiveSnapshot {
   cachePolicy: TenantChatAdminCachePolicy;
   safetyPolicy: TenantChatAdminSafetyPolicy;
   cacheEnabled: boolean;
+  quota: TenantChatAdminQuotaPolicy;
+}
+
+export interface TenantChatAdminQuotaPolicy {
+  defaultMonthlyTokenLimit: number;
+  timezone: string;
+  warningPercent: number;
+  economyPercent: number;
+  hardStopPercent: number;
 }
 
 export interface TenantChatAdminCachePolicy {
@@ -226,5 +242,6 @@ export interface ActivateTenantChatRuntimeInput {
   cachePolicy?: TenantChatAdminCachePolicy;
   safetyPolicy?: TenantChatAdminSafetyPolicy;
   cacheEnabled?: boolean;
+  quota?: TenantChatAdminQuotaPolicy;
   publishedBy: string;
 }
