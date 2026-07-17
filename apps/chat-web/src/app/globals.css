@@ -204,7 +204,7 @@ a { color: inherit; }
 .composer { display: flex; align-items: flex-end; gap: 9px; width: min(100%, 880px); margin: 0 auto; border: 1px solid #d6d9e1; border-radius: 17px; background: var(--g-surface); padding: 9px 9px 9px 14px; box-shadow: 0 10px 30px rgb(28 35 52 / 8%); transition: border-color 140ms ease, box-shadow 140ms ease; }
 .composer:focus-within { border-color: #9a91ef; box-shadow: 0 0 0 3px rgb(118 108 241 / 14%), 0 12px 32px rgb(28 35 52 / 9%); }
 .composer.is-streaming { border-color: #afa9ef; }
-.composer textarea { flex: 1; min-width: 0; max-height: 160px; min-height: 42px; resize: vertical; border: 0; outline: 0; background: transparent; padding: 9px 2px 7px; color: var(--g-text); font: inherit; line-height: 1.5; }
+.composer textarea { flex: 1; min-width: 0; max-height: calc(6em + 16px); min-height: 42px; overflow-y: hidden; resize: none; border: 0; outline: 0; background: transparent; padding: 9px 2px 7px; color: var(--g-text); font: inherit; line-height: 1.5; }
 .composer textarea::placeholder { color: #8a91a0; }
 .composer textarea:disabled { cursor: not-allowed; }
 .composer .g-button { flex: 0 0 auto; min-width: 42px; min-height: 42px; padding: 9px 11px; }

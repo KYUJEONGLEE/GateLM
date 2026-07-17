@@ -326,6 +326,7 @@ test("Chat App cache policy reuses the shared existing policy card", async () =>
   expect(sharedCardSource).toContain('className="policy-cache-card"');
   expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
   expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
+  expect(sharedCardSource).toContain('<label className="policy-experimental-card-copy" htmlFor={id}>');
   expect(styles).toMatch(/\.tenant-chat-app-content \.policy-cache-card-copy strong \{[^}]*font-size: calc\(var\(--font-size-base\) \+ var\(--global-font-lift\)\);[^}]*font-weight: var\(--font-weight-bold\);/);
 });
 
@@ -440,14 +441,27 @@ test("Chat App routing publish recovers from a Control Plane network failure", a
 test("Chat App cache and security tabs publish the Tenant Chat snapshot policy", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
+  const publishPayload = source.match(
+    /body: JSON\.stringify\(\{([\s\S]*?)\}\),\r?\n {8}headers:/
+  )?.[1];
 
   expect(source).toContain("<CachePolicyControls");
   expect(source).toContain("<SafetyDetectorPolicyControls");
+  expect(source).toContain("showAllActionOptions");
   expect(source).toContain("showSemanticCache={false}");
+  expect(source).toContain("experimentalSemanticCache={{");
+  expect(source).toContain("experimentalModelMasking={{");
+  expect(source).not.toContain("현재 UI 미리보기입니다.");
+  expect(source).not.toContain("정책 발행과 실제 실행에는 반영되지 않습니다.");
+  expect(source).toContain("setSemanticCachePreviewEnabled(false)");
+  expect(source).toContain("setAiModelMaskingPreviewEnabled(false)");
   expect(source).toContain("allowPlaceholderEditing={false}");
   expect(source).toContain("return { enabled: true, maxEntriesPerUser: 100, ttlSeconds: 300 };");
   expect(source).toContain("cachePolicy,");
   expect(source).toContain("safetyPolicy: toTenantChatSafetyPolicy(detectors)");
+  expect(publishPayload).toBeTruthy();
+  expect(publishPayload).not.toContain("semanticCachePreviewEnabled");
+  expect(publishPayload).not.toContain("aiModelMaskingPreviewEnabled");
   expect(source).not.toContain("ChatAppPolicySummary");
 });
 

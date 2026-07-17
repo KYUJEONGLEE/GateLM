@@ -94,6 +94,8 @@ test("employee ranking and detail controls use Tenant Chat cost observation and 
   expect(source).toContain("outlierMultiplier={1.5}");
   expect(source).toContain("employeeUsage.dailyRank <= 3");
   expect(source).toContain("employeeUsage.weeklyRank <= 3");
+  expect(source).toContain('renderEmployeeSortHeader("weeklyCost", usageText.weeklyTokens)');
+  expect(source).toContain("?.weeklyCostMicroUsd ?? -1");
   expect(source).toContain("row.dailyCostMicroUsd ?? 0");
   expect(source).toContain('action: "updateWeeklyTokenQuota"');
   expect(source).toContain("sourceQuota && sourceQuota.version > 0");
