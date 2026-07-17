@@ -53,6 +53,7 @@ func (e *Evaluator) Evaluate(
 	policies := detectorPolicies(snapshot)
 	result := cloneInput(input)
 	entityScope := masking.NewEntityScope()
+	currentUserMessageIndex := latestUserMessageIndex(result.Messages)
 	requests := make([]masking.ApplyRequest, 0, len(result.Messages))
 	requestIndexes := make([]int, 0, len(result.Messages))
 	for index, message := range result.Messages {
@@ -76,7 +77,7 @@ func (e *Evaluator) Evaluate(
 		return tenantchat.SafetyEvaluation{}, ErrUnavailable
 	}
 	for resultIndex, masked := range maskedResults {
-		if masked.Action == masking.ActionBlocked {
+		if masked.Action == masking.ActionBlocked && requestIndexes[resultIndex] == currentUserMessageIndex {
 			return tenantchat.SafetyEvaluation{Blocked: true}, nil
 		}
 		result.Messages[requestIndexes[resultIndex]].Content = masked.RedactedPrompt
@@ -184,4 +185,13 @@ func cloneInput(input tenantchat.CompletionInput) tenantchat.CompletionInput {
 	cloned := input
 	cloned.Messages = append([]tenantchat.EphemeralMessage(nil), input.Messages...)
 	return cloned
+}
+
+func latestUserMessageIndex(messages []tenantchat.EphemeralMessage) int {
+	for index := len(messages) - 1; index >= 0; index-- {
+		if messages[index].Role == "user" {
+			return index
+		}
+	}
+	return -1
 }

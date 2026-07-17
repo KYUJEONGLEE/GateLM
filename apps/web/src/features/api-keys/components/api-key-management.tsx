@@ -29,7 +29,8 @@ import type {
 } from "@/lib/control-plane/api-keys-types";
 import {
   compareApiKeyCreatedAtDescending,
-  excludeRevokedApiKeys
+  excludeRevokedApiKeys,
+  getApiKeyPreviewPrefix
 } from "@/lib/control-plane/api-keys-management-model";
 import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
@@ -399,7 +400,9 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
                         <strong className="provider-name">{apiKey.projectName}</strong>
                       </div>
                       <div className="api-key-list-cell" data-label={text.credential}>
-                        <code className="api-key-preview">{apiKey.prefix}••••{apiKey.last4}</code>
+                        <code className="api-key-preview">
+                          {getApiKeyPreviewPrefix(apiKey.prefix)}......{apiKey.last4}
+                        </code>
                       </div>
                       <div className="api-key-list-cell" data-label={text.status}>
                         <Badge
