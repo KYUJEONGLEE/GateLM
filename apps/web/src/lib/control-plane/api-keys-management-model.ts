@@ -27,6 +27,11 @@ export function compareApiKeyCreatedAtDescending(
   return rightTime - leftTime;
 }
 
+export function getApiKeyPreviewPrefix(prefix: string): string {
+  const separatorIndex = prefix.indexOf("_");
+  return separatorIndex > 0 ? prefix.slice(0, separatorIndex) : prefix;
+}
+
 export function containsProject(
   projects: ApiKeyProject[],
   projectId: string

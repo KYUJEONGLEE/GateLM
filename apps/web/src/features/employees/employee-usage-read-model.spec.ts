@@ -105,6 +105,20 @@ test("does not publish a partial monthly employee usage total", () => {
   expect(usage.rows.every((row) => row.monthlyCostMicroUsd === null)).toBe(true);
 });
 
+test("keeps monthly usage complete when the response includes historical employees", () => {
+  const usage = buildEmployeeUsageReadModel(buildModel(), {
+    monthlyUsage: buildMonthlyUsage([
+      ["employee-a", 4_000_000],
+      ["employee-b", 3_000_000],
+      ["employee-historical", 9_000_000]
+    ])
+  });
+
+  expect(usage.monthlyCostLoadError).toBeNull();
+  expect(usage.totalMonthlyCostMicroUsd).toBe(7_000_000);
+  expect(usage.rows.map((row) => row.employeeId)).not.toContain("employee-historical");
+});
+
 test("rejects cost policy rows for employees omitted by the bounded employee read", () => {
   const usage = buildEmployeeUsageReadModel(buildModel(), {
     costPolicies: buildCostPolicies([

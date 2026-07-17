@@ -6,6 +6,10 @@ import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 
 const employeeManagementSourceUrl = new URL("./employee-control-management.tsx", import.meta.url);
 const employeeStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
+const analyticsChartsSourceUrl = new URL(
+  "../../analytics/components/analytics-charts.tsx",
+  import.meta.url
+);
 const employeePageSourceUrl = new URL(
   "../../../app/(console)/tenants/[tenantId]/employees/page.tsx",
   import.meta.url
@@ -83,7 +87,10 @@ test("employee list actions use the shared primary action scale", async () => {
 });
 
 test("employee ranking and detail controls use unified cost policies", async () => {
-  const source = await readFile(employeeManagementSourceUrl, "utf8");
+  const [source, chartSource] = await Promise.all([
+    readFile(employeeManagementSourceUrl, "utf8"),
+    readFile(analyticsChartsSourceUrl, "utf8")
+  ]);
 
   expect(source).toContain("AnalyticsRankedBarChart");
   expect(source).toContain('kind="micro-usd"');
@@ -96,6 +103,10 @@ test("employee ranking and detail controls use unified cost policies", async () 
   expect(source).toContain("employeeUsage.weeklyRank <= 3");
   expect(source).toContain("row.dailyCostMicroUsd ?? 0");
   expect(source).toContain("row.monthlyCostMicroUsd ?? 0");
+  expect(source).not.toContain("return rows.slice(0, 10);");
+  expect(chartSource).toMatch(
+    /const outlierThreshold = useMemo\([\s\S]*?activeRows\.reduce[\s\S]*?\[activeRows, outlierMultiplier\]/
+  );
   expect(source).toContain('["daily", "weekly", "monthly"]');
   expect(source).toContain('action: "updateCostPolicy"');
   expect(source).toContain("expectedVersion: policy.version");

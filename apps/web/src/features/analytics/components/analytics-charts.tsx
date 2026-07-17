@@ -57,14 +57,15 @@ export function AnalyticsRankedBarChart({
 }) {
   const theme = useAnalyticsChartTheme();
   const isVertical = orientation === "vertical";
-  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, maxRows), [maxRows, rows]);
+  const activeRows = useMemo(() => rows.filter((row) => row.value > 0), [rows]);
+  const visibleRows = useMemo(() => activeRows.slice(0, maxRows), [activeRows, maxRows]);
   const outlierThreshold = useMemo(
     () =>
-      outlierMultiplier && visibleRows.length > 0
-        ? (visibleRows.reduce((sum, row) => sum + row.value, 0) / visibleRows.length) *
+      outlierMultiplier && activeRows.length > 0
+        ? (activeRows.reduce((sum, row) => sum + row.value, 0) / activeRows.length) *
           outlierMultiplier
         : null,
-    [outlierMultiplier, visibleRows]
+    [activeRows, outlierMultiplier]
   );
   const option = useMemo<AnalyticsEChartOption>(
     () => ({

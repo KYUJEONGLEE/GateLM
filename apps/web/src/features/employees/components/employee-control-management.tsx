@@ -1570,7 +1570,7 @@ export function EmployeeControlManagement({
       rows.sort(
         (left, right) => right.value - left.value || left.label.localeCompare(right.label)
       );
-      return rows.slice(0, 10);
+      return rows;
     },
     [employeeCostChartPeriod, usage.rows]
   );

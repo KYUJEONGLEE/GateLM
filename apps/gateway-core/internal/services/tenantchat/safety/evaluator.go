@@ -55,8 +55,7 @@ func (e *Evaluator) Evaluate(
 		if err != nil {
 			return tenantchat.SafetyEvaluation{}, ErrUnavailable
 		}
-		if masked.Action == masking.ActionBlocked &&
-			(currentUserMessageIndex < 0 || index == currentUserMessageIndex) {
+		if masked.Action == masking.ActionBlocked && index == currentUserMessageIndex {
 			return tenantchat.SafetyEvaluation{Blocked: true}, nil
 		}
 		result.Messages[index].Content = masked.RedactedPrompt

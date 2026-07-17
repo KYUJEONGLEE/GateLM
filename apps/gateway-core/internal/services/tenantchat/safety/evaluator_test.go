@@ -71,6 +71,30 @@ func TestEvaluatorMasksBlockedPriorContextWithoutBlockingCurrentMessage(t *testi
 	}
 }
 
+func TestEvaluatorMasksBlockedContextWhenThereIsNoUserMessage(t *testing.T) {
+	evaluator := NewEvaluator()
+	snapshot := tenantruntime.Snapshot{Policies: tenantruntime.Policies{Safety: tenantruntime.SafetyPolicy{
+		Enabled: true, PolicyDigest: "sha256:synthetic",
+		DetectorSet: []tenantruntime.SafetyDetector{{DetectorType: "email", Action: "block"}},
+	}}}
+	result, err := evaluator.Evaluate(context.Background(), snapshot, tenantchat.CompletionInput{
+		Messages: []tenantchat.EphemeralMessage{
+			{Role: "system", Content: "Synthetic contact is system@example.test"},
+			{Role: "assistant", Content: "Previous contact was assistant@example.test"},
+		},
+		Stream: true,
+	})
+	if err != nil || result.Blocked {
+		t.Fatalf("context without a user message must be masked instead of blocked: result=%+v err=%v", result, err)
+	}
+	for index, message := range result.Input.Messages {
+		if strings.Contains(message.Content, "@example.test") ||
+			!strings.Contains(message.Content, "[EMAIL_REDACTED]") {
+			t.Fatalf("message %d was not masked: %q", index, message.Content)
+		}
+	}
+}
+
 func TestEvaluatorStillBlocksCurrentUserMessage(t *testing.T) {
 	evaluator := NewEvaluator()
 	for _, test := range []struct {

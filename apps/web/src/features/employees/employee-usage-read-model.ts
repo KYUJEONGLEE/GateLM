@@ -91,7 +91,6 @@ export function buildEmployeeUsageReadModel(
   const modelEmployeeIds = new Set(model.employees.map((employee) => employee.id));
   const monthlyUsageComplete = Boolean(
     snapshot.monthlyUsage &&
-      monthlyUsageByEmployeeId.size === modelEmployeeIds.size &&
       model.employees.every((employee) => monthlyUsageByEmployeeId.has(employee.id))
   );
 
