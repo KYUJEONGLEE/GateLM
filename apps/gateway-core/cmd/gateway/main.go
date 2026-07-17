@@ -643,7 +643,7 @@ func parsePostgresPoolConfig(rawURL string, tuning config.PostgresPoolConfig, ap
 	if tuning.MaxConns <= 0 || tuning.MaxConns > 1000 {
 		return nil, errors.New("invalid PostgreSQL pool maximum connections")
 	}
-	if tuning.MinConns < 0 || tuning.MinConns > tuning.MaxConns {
+	if tuning.MinConns < 0 || tuning.MinConns > 1000 || tuning.MinConns > tuning.MaxConns {
 		return nil, errors.New("invalid PostgreSQL pool minimum connections")
 	}
 

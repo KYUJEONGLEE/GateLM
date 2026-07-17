@@ -281,6 +281,7 @@ func TestParsePostgresPoolConfigRejectsUnsafeConnectionBounds(t *testing.T) {
 		{name: "maximum is not positive", tuning: config.PostgresPoolConfig{MinConns: base.MinConns}},
 		{name: "maximum exceeds supported bound", tuning: config.PostgresPoolConfig{MaxConns: 1001, MinConns: base.MinConns}},
 		{name: "minimum is negative", tuning: config.PostgresPoolConfig{MaxConns: base.MaxConns, MinConns: -1}},
+		{name: "minimum exceeds supported bound", tuning: config.PostgresPoolConfig{MaxConns: 1000, MinConns: 1001}},
 		{name: "minimum exceeds maximum", tuning: config.PostgresPoolConfig{MaxConns: base.MaxConns, MinConns: 17}},
 	}
 
