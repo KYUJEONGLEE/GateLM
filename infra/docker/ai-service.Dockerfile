@@ -20,11 +20,9 @@ COPY apps/ai-service/pyproject.toml ./pyproject.toml
 COPY apps/ai-service/requirements-rag-extraction.lock ./requirements-rag-extraction.lock
 COPY apps/ai-service/app ./app
 
-RUN if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
-    pip install --no-cache-dir ".[onnx]"; \
 RUN pip install --no-cache-dir --requirement requirements-rag-extraction.lock \
   && if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
-    pip install --no-cache-dir ".[ml]"; \
+    pip install --no-cache-dir ".[onnx]"; \
   else \
     pip install --no-cache-dir --no-deps .; \
   fi \
