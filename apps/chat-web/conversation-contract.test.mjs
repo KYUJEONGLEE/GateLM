@@ -7,6 +7,7 @@ import {
   conversationPage,
   createConversationBody,
   createTurnBody,
+  isBlockedCode,
   MAX_TENANT_CHAT_OUTPUT_TOKENS,
   messagePage,
   parseIfMatch,
@@ -246,6 +247,21 @@ test('ChatShell defaults new conversations to normal and forwards an explicit kn
 test('RAG failures use bounded user-safe Korean copy', () => {
   assert.equal(safeChatError({ code: 'CHAT_RAG_DISABLED' }).message, '이 조직에서는 사내 지식 채팅을 사용할 수 없습니다.');
   assert.equal(safeChatError({ code: 'CHAT_RAG_UNAVAILABLE', detail: 'provider secret' }).message, '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+});
+
+test('employee weekly quota uses the same blocked state with its weekly guidance', () => {
+  const error = safeChatError({ code: 'CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT' });
+
+  assert.equal(isBlockedCode(error.code), true);
+  assert.equal(error.message, '이번 주 사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요.');
+});
+
+test('blocked quota state keeps the composer available for exact cache hits', () => {
+  const shell = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(shell, /creatingConversation \|\| policyState === 'blocked' \|\| !composer\.trim\(\)/);
+  assert.doesNotMatch(shell, /disabled=\{policyState === 'blocked'\}/);
+  assert.match(shell, /캐시된 동일 질문은 답변을 다시 볼 수 있습니다/);
 });
 
 test('SSE parser rejects invalid effective model metadata', async () => {

@@ -57,7 +57,7 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	snapshot := tenantruntime.Snapshot{
 		Digest: "sha256:synthetic", Policies: tenantruntime.Policies{Cache: tenantruntime.CachePolicy{
 			Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 10, KeySetID: "keys_001",
-		}},
+		}, Quota: tenantruntime.QuotaPolicy{DefaultMonthlyTokenLimit: 1_000_000}},
 	}
 	input := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "synthetic private prompt"}}, Stream: true}
 	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
@@ -73,17 +73,49 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	if err != nil || differentField == originalField {
 		t.Fatalf("usage intent must be bound into exact-cache fingerprint: field=%q err=%v", differentField, err)
 	}
-	differentSnapshot := snapshot
-	differentSnapshot.Digest = "sha256:different-policy-snapshot"
-	_, _, differentSnapshotField, err := store.resolve(requestContext, differentSnapshot, input)
-	if err != nil || differentSnapshotField == originalField {
-		t.Fatalf("snapshot policy must be bound into exact-cache fingerprint: field=%q err=%v", differentSnapshotField, err)
+	differentQuota := snapshot
+	differentQuota.Digest = "sha256:quota-policy-snapshot"
+	differentQuota.Policies.Quota.DefaultMonthlyTokenLimit = 0
+	differentQuota.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: "employee_001", LimitTokens: 0,
+	}}
+	_, _, quotaOnlyField, err := store.resolve(requestContext, differentQuota, input)
+	if err != nil || quotaOnlyField != originalField {
+		t.Fatalf("quota-only snapshot change must preserve exact-cache hit: field=%q err=%v", quotaOnlyField, err)
+	}
+	differentCache := snapshot
+	differentCache.Digest = "sha256:different-cache-policy-snapshot"
+	differentCache.Policies.Cache.TTLSeconds = 301
+	_, _, differentCacheField, err := store.resolve(requestContext, differentCache, input)
+	if err != nil || differentCacheField == originalField {
+		t.Fatalf("cache policy must be bound into exact-cache fingerprint: field=%q err=%v", differentCacheField, err)
+	}
+	differentSafety := snapshot
+	differentSafety.Digest = "sha256:different-safety-policy-snapshot"
+	differentSafety.Policies.Safety.Enabled = true
+	_, _, differentSafetyField, err := store.resolve(requestContext, differentSafety, input)
+	if err != nil || differentSafetyField == originalField {
+		t.Fatalf("entire safety policy must be bound into exact-cache fingerprint: field=%q err=%v", differentSafetyField, err)
 	}
 	differentModel := requestContext
-	differentModel.Routing = &tenantchat.RoutingDecision{ModelRef: "tc_different"}
+	differentModel.Routing = &tenantchat.RoutingDecision{
+		ModelRef:               "tc_different",
+		RoutingPolicyHash:      "sha256:routing-policy",
+		RoutingDecisionKeyHash: "sha256:routing-decision",
+	}
 	_, _, differentModelField, err := store.resolve(differentModel, snapshot, input)
 	if err != nil || differentModelField == originalField {
 		t.Fatalf("routed model must be bound into exact-cache fingerprint: field=%q err=%v", differentModelField, err)
+	}
+	differentRoutingDecision := differentModel
+	differentRoutingDecision.Routing = &tenantchat.RoutingDecision{
+		ModelRef:               differentModel.Routing.ModelRef,
+		RoutingPolicyHash:      differentModel.Routing.RoutingPolicyHash,
+		RoutingDecisionKeyHash: "sha256:other-routing-decision",
+	}
+	_, _, differentRoutingDecisionField, err := store.resolve(differentRoutingDecision, snapshot, input)
+	if err != nil || differentRoutingDecisionField == differentModelField {
+		t.Fatalf("routing decision must be bound into exact-cache fingerprint: field=%q err=%v", differentRoutingDecisionField, err)
 	}
 	if client.key != "tenant-chat:exact-cache:v1:tenant_001:user_001" || strings.Contains(client.key, client.field) {
 		t.Fatalf("unexpected cache namespace: %q", client.key)

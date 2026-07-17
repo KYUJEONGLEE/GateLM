@@ -138,7 +138,9 @@ export function strongestPolicyState(quotaState = 'normal', budgetState = 'norma
 }
 
 export function isBlockedCode(code) {
-  return code === 'CHAT_QUOTA_HARD_LIMIT' || code === 'CHAT_BUDGET_HARD_LIMIT';
+  return code === 'CHAT_QUOTA_HARD_LIMIT' ||
+    code === 'CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT' ||
+    code === 'CHAT_BUDGET_HARD_LIMIT';
 }
 
 export function safeChatError(value) {
@@ -319,6 +321,9 @@ function isPolicyState(value) {
 }
 
 function safeMessage(code) {
+  if (code === 'CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT') {
+    return '이번 주 사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요.';
+  }
   if (isBlockedCode(code)) return '사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요.';
   if (code === 'CHAT_RAG_DISABLED') return '이 조직에서는 사내 지식 채팅을 사용할 수 없습니다.';
   if (code === 'CHAT_RAG_UNAVAILABLE') return '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.';

@@ -363,7 +363,10 @@ export class TenantChatObservabilityService {
         freshness: {
           projectedAt: (projectedAt ?? new Date(0)).toISOString(),
           lagSeconds,
-          state: pendingOutbox > 0 ? 'partial' : lagSeconds > 30 ? 'stale' : 'fresh',
+          // The most recent invocation can be old simply because the tenant is
+          // idle. Projection freshness is about whether any outbox work remains,
+          // not about the age of the latest completed request.
+          state: pendingOutbox > 0 ? 'partial' : 'fresh',
         },
         requests: {
           total: numberFrom(row.total),

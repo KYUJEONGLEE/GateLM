@@ -153,7 +153,7 @@ Hard ordering rules:
 - admission 성공 뒤에도 sanitization 성공 전에는 user ciphertext를 저장하지 않는다.
 - sanitization이 `CHAT_SAFETY_BLOCKED`이면 Gateway가 admission을 consume하고 slot을 release하며 content-free `safety_blocked` terminal event를 exactly once 기록한다. Chat API는 user ciphertext와 Provider completion을 만들지 않는다.
 - `sanitization` 성공 응답의 ordered content만 user ciphertext로 저장한다. 원래 user input을 별도 보존하거나 dual-write하지 않는다.
-- exact cache hit은 request rate만 소비하고 token quota 및 cost budget debit은 0이다.
+- exact cache hit은 request rate만 소비하고 token quota 및 cost budget debit은 0이다. quota/budget만 변경되어 새 RuntimeSnapshot이 발행돼도 cache 호환 material이 유지되면 기존 exact cache entry를 재사용한다. 따라서 `0` 한도는 cache hit이 아닌 다음 새 Provider 호출을 즉시 차단한다.
 - provider call은 quota/budget reservation이 성공한 뒤에만 시작한다.
 - assistant partial delta는 영구 저장하지 않는다.
 - raw content, body binding digest, JWT/JTI는 structured log나 metric label에 남기지 않는다.
@@ -272,7 +272,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - 현재 runtime/API/schema/UI 지원 전략은 `off|exact`다.
 - Semantic Cache는 닫힌 non-goal이 아니라 follow-up capability지만, backend API와 Gateway adapter가 없으므로 현재 DTO, published RuntimeSnapshot, Admin UI에 선택지를 노출하지 않는다.
 - cache adapter/interface, versioned policy discriminator, capabilities response는 후속 contract revision에서 `semantic` 전략을 추가할 수 있어야 한다.
-- exact cache는 tenant+user scoped, encrypted이며 실제 private completion에 전달된 message 배열을 fingerprint한다. `contextMode=single_turn`은 current user message만 fingerprint하므로 context 유지 여부와 cache hit을 독립적으로 검증할 수 있다.
+- exact cache는 tenant+user scoped, encrypted이며 실제 private completion에 전달된 message 배열을 fingerprint한다. fingerprint는 cache policy, 전체 safety policy, 고정된 routing decision/modelRef, usage intent와 sanitized input을 포함하고 quota/budget·가격·rate/concurrency의 usage-only 정책은 포함하지 않는다. `contextMode=single_turn`은 current user message만 fingerprint하므로 context 유지 여부와 cache hit을 독립적으로 검증할 수 있다.
 - exact cache outer key는 tenant+user namespace만 포함하고 keyed fingerprint는 Redis hash field로만 사용한다. value는 AES-256-GCM으로 암호화하며 confirmed primary 성공만 저장한다.
 - Semantic Cache를 구현할 때 tenant isolation, embedding/version, safety/policy/snapshot binding, content retention, invalidation, false-hit evaluation과 Admin API/UI를 별도 contract revision으로 고정한다.
 
@@ -448,6 +448,8 @@ Idempotency rules:
 - p50/p95/p99 total/provider latency
 - snapshotVersion/pricingVersion별 safe provenance
 - projection freshness/lag
+
+Projection freshness는 마지막 invocation의 경과 시간이 아니라 미처리 outbox 유무를 뜻한다. 미처리 outbox가 없으면 tenant가 유휴 상태여도 `fresh`이며, `lagSeconds`는 마지막 projected invocation의 경과 시간을 관측용으로만 전달한다. 미처리 outbox가 있으면 `partial`로 표시한다.
 
 Paired [Dashboard schema](./schemas/dashboard-aggregate.schema.json)는 content-free aggregate만 허용한다.
 메인 Dashboard 비용 추이와 legacy union reader는 additive [cost series schema](./schemas/cost-series.schema.json)를 사용하며 confirmed cost만 포함한다.

@@ -303,7 +303,10 @@ export function ChatShell() {
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
-    if (streaming || creatingConversation || policyState === 'blocked' || !composer.trim()) return;
+    // The Gateway remains the policy decision point. Keep the composer available
+    // after a quota block so an exact cache hit can still be served without a
+    // new Provider call or any token deduction.
+    if (streaming || creatingConversation || !composer.trim()) return;
     const content = composer;
     const responseStartedAt = performance.now();
     let conversationId = selectedId;
@@ -571,9 +574,9 @@ export function ChatShell() {
         <form className="composer-area" onSubmit={sendMessage}>
           <div className={`composer${streaming ? ' is-streaming' : ''}`}>
             <label className="sr-only" htmlFor="chat-composer">메시지 입력</label>
-            <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={policyState === 'blocked'} placeholder={policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
+            <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} placeholder={policyState === 'blocked' ? '캐시된 동일 질문은 답변을 다시 볼 수 있습니다' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
             {streaming ? <Button type="button" className="stop-button" aria-label={stopping ? '답변 생성 중지 중' : '답변 생성 중지'} onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden /></Button>
-              : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim() || policyState === 'blocked'}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
+              : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim()}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
           </div>
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
         </form>
@@ -733,6 +736,6 @@ function persistedResponseDurationMs(
 function policyText(state: PolicyState): Readonly<{ label: string; description: string }> {
   if (state === 'warning') return { label: '사용량 주의', description: '조직 사용량이 기준에 가까워지고 있습니다.' };
   if (state === 'economy') return { label: '절약 모드', description: '비용을 아끼도록 경제적인 실행 경로를 사용합니다.' };
-  if (state === 'blocked') return { label: '사용 한도 도달', description: '새 요청이 차단되었습니다. 조직 관리자에게 문의해 주세요.' };
+  if (state === 'blocked') return { label: '사용 한도 도달', description: '새로운 답변 생성 요청이 차단되었습니다. 캐시된 동일 질문은 다시 볼 수 있습니다.' };
   return { label: '정상 모드', description: '조직 정책과 사용 한도 안에서 실행 중입니다.' };
 }

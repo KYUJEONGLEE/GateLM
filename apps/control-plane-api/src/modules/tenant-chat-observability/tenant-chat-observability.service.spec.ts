@@ -125,6 +125,57 @@ describe('TenantChatObservabilityService', () => {
     );
     expect(sql).toContain("ELSE '[]'::jsonb");
   });
+
+  it('keeps an idle, caught-up projection fresh even when its latest invocation is old', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ projected_at: new Date(Date.now() - 120_000) }])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    prisma.tenantChatInvocationLog.groupBy.mockResolvedValue([]);
+    prisma.tenantChatInvocationOutbox.count.mockResolvedValue(0);
+    prisma.tenantChatActiveRuntimeSnapshot.findUnique.mockResolvedValue({
+      snapshot: { version: 1n, pricingVersion: 1n },
+    });
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getDashboard(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+    });
+
+    expect(result.data.freshness.lagSeconds).toBeGreaterThan(30);
+    expect(result.data.freshness.state).toBe('fresh');
+  });
+
+  it('marks a projection partial while outbox work remains', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ projected_at: new Date() }])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    prisma.tenantChatInvocationLog.groupBy.mockResolvedValue([]);
+    prisma.tenantChatInvocationOutbox.count.mockResolvedValue(1);
+    prisma.tenantChatActiveRuntimeSnapshot.findUnique.mockResolvedValue({
+      snapshot: { version: 1n, pricingVersion: 1n },
+    });
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getDashboard(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+    });
+
+    expect(result.data.freshness.state).toBe('partial');
+  });
 });
 
 function createPrisma() {
