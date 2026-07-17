@@ -26,6 +26,8 @@ services:
       RAG_OBJECT_STORE_DRIVER: fake
       RAG_MAX_UPLOAD_BYTES: "${RAG_MAX_UPLOAD_BYTES:-20971520}"
       TS_NODE_COMPILER_OPTIONS: '{"module":"NodeNext","moduleResolution":"NodeNext"}'
+    ports:
+      - "127.0.0.1:${CONTROL_PLANE_PORT:-3001}:3001"
     depends_on:
       postgres:
         condition: service_healthy

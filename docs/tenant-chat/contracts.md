@@ -354,6 +354,8 @@ Correctness source는 period/reservation/ledger transaction이다. `TenantChatIn
 
 ### 9.2 Event
 
+최신 terminal usage v3와 content-free terminal v2 event에는 선택적 `ttftMs`를 추가한다. 값은 private completion 시작부터 browser 전달에 성공한 첫 non-empty `tenant_chat.delta`까지 한 번만 측정한다. fallback은 최초 시작점을 유지하고 exact cache hit은 `0`을 기록한다. delta 없이 끝난 요청과 이전 event는 필드를 보내지 않으며 invocation log/API에서는 `null`과 `—`로 표현한다. replay/attach가 별도 TTFT event를 만들지 않고, `latencyMs`와 총 처리 시간의 기존 의미도 유지한다.
+
 Ledger transition outbox의 최신 writer는 paired [usage settlement schema v3](./schemas/usage-settlement-event-v3.schema.json)를 따르고 reservation에 고정된 필수 `cacheOutcome=off|miss`를 모든 transition에 전달한다. Exact Cache hit는 usage reservation을 만들지 않으므로 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)의 `cacheOutcome=hit`을 사용한다. projector는 v1/v2를 계속 읽으며 해당 필드가 없으면 backfill된 reservation provenance를 사용한다.
 
 Idempotency rules:

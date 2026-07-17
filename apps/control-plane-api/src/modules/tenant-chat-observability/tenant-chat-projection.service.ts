@@ -387,6 +387,7 @@ export class TenantChatProjectionService
       (isLateUsageDelta ? existing?.confirmedCostMicroUsd ?? 0n : 0n);
     const snapshotDigest = runtimeSnapshot.digest;
     const pricingVersion = runtimePricingVersion;
+    const ttftMs = event.ttftMs === undefined ? undefined : BigInt(event.ttftMs);
 
     await tx.tenantChatInvocationLog.upsert({
       where: { requestId: event.requestId },
@@ -416,6 +417,7 @@ export class TenantChatProjectionService
         latencyMs: BigInt(
           event.latencyMs ?? Math.max(0, occurredAt.getTime() - startedAt.getTime()),
         ),
+        ttftMs: ttftMs ?? null,
         startedAt,
         completedAt: occurredAt,
         projectedEventVersion: BigInt(event.eventVersion),
@@ -435,6 +437,7 @@ export class TenantChatProjectionService
         latencyMs: BigInt(
           event.latencyMs ?? Math.max(0, occurredAt.getTime() - startedAt.getTime()),
         ),
+        ...(ttftMs === undefined ? {} : { ttftMs }),
         completedAt: occurredAt,
         projectedEventVersion: BigInt(event.eventVersion),
       },

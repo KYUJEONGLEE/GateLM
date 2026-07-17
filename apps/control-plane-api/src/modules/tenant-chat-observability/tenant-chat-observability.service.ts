@@ -449,6 +449,7 @@ function toInvocationResponse(
     budgetState: row.budgetState,
     cacheOutcome: row.cacheOutcome,
     latencyMs: Number(row.latencyMs),
+    ttftMs: row.ttftMs === null ? null : Number(row.ttftMs),
     snapshotVersion: Number(row.snapshotVersion),
     pricingVersion: Number(row.pricingVersion),
     startedAt: row.startedAt.toISOString(),

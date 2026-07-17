@@ -1433,6 +1433,7 @@ model TenantChatInvocationLog {
   budgetState           String   @map("budget_state")
   cacheOutcome          String   @map("cache_outcome")
   latencyMs             BigInt   @map("latency_ms")
+  ttftMs                BigInt?  @map("ttft_ms")
   startedAt             DateTime @map("started_at") @db.Timestamptz(6)
   completedAt           DateTime @map("completed_at") @db.Timestamptz(6)
   projectedEventVersion BigInt   @map("projected_event_version")

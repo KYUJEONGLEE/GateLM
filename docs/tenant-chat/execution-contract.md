@@ -34,6 +34,7 @@ revision: `tenant-chat/v1`
 | Event transition vectors | [`vectors/usage-event-vectors.json`](./vectors/usage-event-vectors.json) |
 | Mixed/late event vectors | [`vectors/usage-event-v2-vectors.json`](./vectors/usage-event-v2-vectors.json) |
 | Cache-aware event vectors | [`vectors/usage-event-v3-vectors.json`](./vectors/usage-event-v3-vectors.json) |
+| Content-free terminal v2 vectors | [`vectors/invocation-terminal-event-v2-vectors.json`](./vectors/invocation-terminal-event-v2-vectors.json) |
 
 ## 2. API idempotency와 retry
 
@@ -337,6 +338,8 @@ admitted -> reserved -> settled
 - ledger 이전 rate/concurrency/policy/runtime block은 `invocation_terminal`을 admission transaction의 outbox에 기록한다. content와 usage delta는 없으며 Dashboard projector만 소비한다.
 
 Transaction 경계는 blocked sanitization의 ledgerless terminal(admission consume, slot release, safety_blocked outbox), BeginExecution, BeginFallback, terminal/reconciliation transaction으로 나눈다. Sanitization 성공은 admission에 별도 상태를 쓰지 않는다. completion 전 Gateway가 signed provenance를 검증하며 없거나 invalid하면 방어적으로 safety 처리한다. Provider, Redis, safety, 암호화 연산 중에는 DB transaction을 열어두지 않는다.
+
+- 최신 terminal usage event v3와 content-free terminal event v2는 선택적 `ttftMs`를 가진다. Gateway는 private completion 시작부터 browser에 성공적으로 전달된 첫 non-empty `tenant_chat.delta`까지 한 번만 기록하며, fallback도 동일한 시작점을 유지한다. exact cache hit은 `0`, 표시 delta가 없는 종료는 필드를 생략해 projector가 `null`로 보관한다. replay/attach는 새 terminal 관측값을 만들지 않으며 `latencyMs`의 기존 의미는 바꾸지 않는다.
 
 ## 8. 구현 소유권
 

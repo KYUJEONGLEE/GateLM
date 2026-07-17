@@ -249,6 +249,14 @@ test('RAG failures use bounded user-safe Korean copy', () => {
   assert.equal(safeChatError({ code: 'CHAT_RAG_UNAVAILABLE', detail: 'provider secret' }).message, '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
 });
 
+test('ChatShell labels exact cache hits as model-free zero-second responses', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /캐시 응답 · 모델 호출 없음 · 0s 소요/);
+  assert.match(source, /aria-label="캐시 응답, 모델 호출 없음, 0초 소요"/);
+  assert.match(source, /const metaText = modelResponseMetaText\(message, userMessagesByTurnId\);/);
+});
+
 test('employee weekly quota uses the same blocked state with its weekly guidance', () => {
   const error = safeChatError({ code: 'CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT' });
 

@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import type { TenantChatInvocationLog } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -126,6 +127,27 @@ describe('TenantChatObservabilityService', () => {
     expect(sql).toContain("ELSE '[]'::jsonb");
   });
 
+  it('returns observed TTFT and preserves an unobserved value as null', async () => {
+    const prisma = createPrisma();
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    prisma.tenantChatInvocationLog.findFirst.mockResolvedValue(
+      invocationLog({ ttftMs: 84n }),
+    );
+    await expect(
+      service.getInvocation(tenantId, 'request_projection_001'),
+    ).resolves.toMatchObject({ latencyMs: 350, ttftMs: 84 });
+
+    prisma.tenantChatInvocationLog.findFirst.mockResolvedValue(
+      invocationLog({ ttftMs: null }),
+    );
+    await expect(
+      service.getInvocation(tenantId, 'request_projection_001'),
+    ).resolves.toMatchObject({ latencyMs: 350, ttftMs: null });
+  });
+
   it('keeps an idle, caught-up projection fresh even when its latest invocation is old', async () => {
     const prisma = createPrisma();
     prisma.$queryRaw
@@ -193,4 +215,41 @@ function createPrisma() {
       findUnique: jest.fn(),
     },
   };
+}
+
+function invocationLog(
+  overrides: Partial<TenantChatInvocationLog> = {},
+): TenantChatInvocationLog {
+  return {
+    requestId: 'request_projection_001',
+    tenantId,
+    userId: '00000000-0000-4000-8000-000000000101',
+    employeeId: null,
+    actorKind: 'tenant_admin',
+    turnId: 'turn_projection_001',
+    surface: 'tenant_chat',
+    executionScopeKind: 'tenant_chat',
+    terminalOutcome: 'succeeded',
+    effectiveProviderId: 'provider_fixture_001',
+    effectiveModelKey: 'model_fixture_001',
+    attemptCount: 1,
+    confirmedInputTokens: 100n,
+    confirmedOutputTokens: 20n,
+    confirmedTotalTokens: 120n,
+    confirmedCostMicroUsd: 50n,
+    quotaState: 'normal',
+    budgetState: 'normal',
+    cacheOutcome: 'miss',
+    latencyMs: 350n,
+    ttftMs: 84n,
+    snapshotVersion: 1n,
+    pricingVersion: 1n,
+    snapshotDigest: `sha256:${'a'.repeat(43)}`,
+    startedAt: new Date('2026-07-18T00:00:00Z'),
+    completedAt: new Date('2026-07-18T00:00:00.350Z'),
+    projectedEventVersion: 1n,
+    createdAt: new Date('2026-07-18T00:00:00Z'),
+    updatedAt: new Date('2026-07-18T00:00:00.350Z'),
+    ...overrides,
+  } as TenantChatInvocationLog;
 }

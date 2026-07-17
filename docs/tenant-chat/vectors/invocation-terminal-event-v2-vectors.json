@@ -1,0 +1,56 @@
+{
+  "schema": "../schemas/invocation-terminal-event-v2.schema.json",
+  "events": [
+    {
+      "eventId": "invocation_cache_hit_v2_fixture_001",
+      "schemaVersion": 2,
+      "eventType": "invocation_terminal",
+      "eventVersion": 1,
+      "occurredAt": "2026-07-18T00:00:00Z",
+      "aggregateId": "request_cache_hit_fixture_001",
+      "requestId": "request_cache_hit_fixture_001",
+      "turnId": "turn_cache_hit_fixture_001",
+      "idempotencyKey": "idempotency_cache_hit_fixture_001",
+      "executionScope": {
+        "kind": "tenant_chat",
+        "tenantId": "tenant_fixture_001",
+        "userId": "user_fixture_001",
+        "actorKind": "employee",
+        "employeeId": "employee_fixture_001"
+      },
+      "snapshotVersion": 13,
+      "pricingVersion": 6,
+      "terminalOutcome": "cache_hit",
+      "quotaState": "normal",
+      "budgetState": "normal",
+      "cacheOutcome": "hit",
+      "latencyMs": 0,
+      "ttftMs": 0
+    },
+    {
+      "eventId": "invocation_safety_blocked_v2_fixture_001",
+      "schemaVersion": 2,
+      "eventType": "invocation_terminal",
+      "eventVersion": 1,
+      "occurredAt": "2026-07-18T00:00:01Z",
+      "aggregateId": "request_safety_fixture_001",
+      "requestId": "request_safety_fixture_001",
+      "turnId": "turn_safety_fixture_001",
+      "idempotencyKey": "idempotency_safety_fixture_001",
+      "executionScope": {
+        "kind": "tenant_chat",
+        "tenantId": "tenant_fixture_001",
+        "userId": "user_fixture_001",
+        "actorKind": "tenant_admin"
+      },
+      "snapshotVersion": 13,
+      "pricingVersion": 6,
+      "terminalOutcome": "safety_blocked",
+      "errorCode": "CHAT_SAFETY_BLOCKED",
+      "quotaState": "normal",
+      "budgetState": "normal",
+      "cacheOutcome": "off",
+      "latencyMs": 12
+    }
+  ]
+}

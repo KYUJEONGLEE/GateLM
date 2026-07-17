@@ -27,7 +27,8 @@ test("maps an exact cache hit without a provider attempt or cost", () => {
     attemptCount: 0,
     cacheOutcome: "hit",
     confirmedCostMicroUsd: 0,
-    terminalOutcome: "cache_hit"
+    terminalOutcome: "cache_hit",
+    ttftMs: 0
   }));
 
   expect(record.status).toBe("success");
@@ -35,6 +36,7 @@ test("maps an exact cache hit without a provider attempt or cost", () => {
   expect(record.providerCalled).toBe(false);
   expect(record.providerAttempt).toBeNull();
   expect(record.costMicroUsd).toBe(0);
+  expect(record.ttftMs).toBe(0);
   expect(record.domainOutcomes?.provider.outcome).toBe("not_called");
 });
 
@@ -44,7 +46,8 @@ test("maps a safety block without exposing the detected value", () => {
     cacheOutcome: "off",
     modelKey: null,
     providerId: null,
-    terminalOutcome: "safety_blocked"
+    terminalOutcome: "safety_blocked",
+    ttftMs: null
   }));
 
   expect(record.status).toBe("blocked");
@@ -53,6 +56,7 @@ test("maps a safety block without exposing the detected value", () => {
   expect(record.redactedPromptPreview).toBeNull();
   expect(record.providerCalled).toBe(false);
   expect(record.errorStage).toBe("safety");
+  expect(record.ttftMs).toBeNull();
 });
 
 function invocation(overrides: Partial<TenantChatInvocation> = {}): TenantChatInvocation {
@@ -77,6 +81,7 @@ function invocation(overrides: Partial<TenantChatInvocation> = {}): TenantChatIn
     budgetState: "normal",
     cacheOutcome: "miss",
     latencyMs: 350,
+    ttftMs: 84,
     snapshotVersion: 14,
     pricingVersion: 1,
     startedAt: "2026-07-15T00:00:00.000Z",

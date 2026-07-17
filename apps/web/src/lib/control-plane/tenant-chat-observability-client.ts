@@ -26,6 +26,7 @@ export type TenantChatInvocation = {
   budgetState: string;
   cacheOutcome: string;
   latencyMs: number;
+  ttftMs: number | null;
   snapshotVersion: number;
   pricingVersion: number;
   startedAt: string;

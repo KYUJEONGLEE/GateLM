@@ -186,7 +186,28 @@ describe('TenantChatProjectionService', () => {
           snapshotDigest: `sha256:${'a'.repeat(43)}`,
           pricingVersion: 5n,
           latencyMs: 12n,
+          ttftMs: null,
         }),
+      }),
+    );
+  });
+
+  it('projects a cache-hit TTFT from a v2 ledgerless terminal event', async () => {
+    const row = terminalRow();
+    row.payload.schemaVersion = 2;
+    Object.assign(row.payload, {
+      cacheOutcome: 'hit',
+      terminalOutcome: 'cache_hit',
+      ttftMs: 0,
+    });
+    const harness = createHarness(row);
+    harness.tx.tenantChatUsageReservation.findUnique.mockResolvedValue(null);
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ ttftMs: 0n }),
       }),
     );
   });

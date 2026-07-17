@@ -559,7 +559,7 @@ export function ChatShell() {
                       {message.content && <div className="message-assistant-actions">
                         <MessageCopyButton content={message.content} label="모델 답변" />
                         {message.cacheOutcome === 'hit'
-                          ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
+                          ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음, 0초 소요">캐시 응답 · 모델 호출 없음 · 0s 소요</div>
                           : message.effectiveModelKey
                             ? <ModelResponseMeta message={message} userMessagesByTurnId={userMessagesByTurnId} />
                             : null}
