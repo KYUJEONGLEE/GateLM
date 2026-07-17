@@ -58,15 +58,21 @@ test("pending employee invitations can be deleted without deleting the employee"
   expect(clientSource).toContain('method: "DELETE"');
 });
 
-test("employee list actions match the chat app policy action scale", async () => {
-  const styles = await readFile(employeeStylesSourceUrl, "utf8");
+test("employee list actions use the shared primary action scale", async () => {
+  const [source, styles] = await Promise.all([
+    readFile(employeeManagementSourceUrl, "utf8"),
+    readFile(employeeStylesSourceUrl, "utf8")
+  ]);
 
   expect(styles).toMatch(
-    /\.employee-list-toolbar \[data-slot="button"\] \{[\s\S]*?min-width: 132px;[\s\S]*?min-height: 44px;[\s\S]*?padding-inline: 20px;[\s\S]*?font-size: 16px;/
+    /\.employee-list-toolbar \[data-slot="button"\]\.employee-add-trigger \{[\s\S]*?min-width: 0;[\s\S]*?min-height: var\(--primary-action-height\);[\s\S]*?padding-inline: var\(--primary-action-padding-inline\);/
   );
   expect(styles).toMatch(
-    /\.employee-list-toolbar \[data-slot="button"\] svg \{\s*width: 18px;\s*height: 18px;/
+    /\.employee-list-toolbar \[data-slot="button"\]\.employee-add-trigger svg \{\s*width: 16px;\s*height: 16px;/
   );
+  expect(source.match(/className="compact-action-button"/g)).toHaveLength(3);
+  expect(styles).toContain("--compact-action-height: 34px;");
+  expect(styles).toContain("--compact-action-radius: 8px;");
   expect(styles).toMatch(
     /\.employee-list-section > \.project-empty \{[\s\S]*?font-size: calc\(var\(--font-size-lg\) \+ var\(--global-font-lift\)\);/
   );
