@@ -7,6 +7,7 @@ const SAFE_ERROR_CODE = /^CHAT_[A-Z0-9_]{1,59}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const REQUEST_TIMEOUT_MS = 30_000;
 const TURN_TIMEOUT_MS = 120_000;
+const SMOKE_MAX_OUTPUT_TOKENS = 16;
 
 export async function runProductionTenantChatSmoke({
   email,
@@ -107,7 +108,7 @@ async function executeTurn(fetchImpl, baseUrl, jar, conversationId, content, cac
       idempotencyKey: smokeKey('turn'),
       usageIntent: {
         cacheStrategy,
-        maxOutputTokens: 8,
+        maxOutputTokens: SMOKE_MAX_OUTPUT_TOKENS,
         requestedTier: 'auto',
       },
     }),
