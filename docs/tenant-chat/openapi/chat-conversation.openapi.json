@@ -60,12 +60,12 @@
         }
       },
       "patch": {
-        "operationId": "renameTenantChatConversation",
+        "operationId": "updateTenantChatConversation",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RenameConversationRequest" }
+              "schema": { "$ref": "#/components/schemas/UpdateConversationRequest" }
             }
           }
         },
@@ -236,12 +236,17 @@
           "knowledgeMode": { "enum": ["off", "tenant"], "default": "off" }
         }
       },
-      "RenameConversationRequest": {
+      "UpdateConversationRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "expectedVersion"],
+        "required": ["expectedVersion"],
+        "anyOf": [
+          { "required": ["title"] },
+          { "required": ["knowledgeMode"] }
+        ],
         "properties": {
           "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "knowledgeMode": { "enum": ["off", "tenant"] },
           "expectedVersion": { "type": "integer", "minimum": 1 }
         }
       },

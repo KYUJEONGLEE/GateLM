@@ -5,7 +5,7 @@ import {
   conversationId,
   conversationView,
   parseIfMatch,
-  renameConversationBody,
+  updateConversationBody,
 } from '@/lib/conversation-contract.mjs';
 import { conversationError, jsonFromConversationApi } from '@/lib/conversation-server';
 import { secureEmptyMutation, secureJson } from '@/lib/route-security';
@@ -28,7 +28,7 @@ export async function PATCH(request: Request, context: Context) {
   try {
     assertNoQuery(request.url);
     const id = conversationId((await context.params).conversationId);
-    const body = renameConversationBody(await secureJson(request, await cookies()));
+    const body = updateConversationBody(await secureJson(request, await cookies()));
     return jsonFromConversationApi({ body, method: 'PATCH', path: upstream(id), request, shape: conversationView });
   } catch (error) {
     return conversationError(error);

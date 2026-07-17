@@ -206,16 +206,21 @@ export class EncryptedChatStore {
     return this.conversationView(row);
   }
 
-  async renameConversation(
+  async updateConversation(
     actor: ChatActor,
     conversationId: string,
-    title: string,
-    expectedVersion: number,
+    input: Readonly<{
+      expectedVersion: number;
+      title?: string;
+      knowledgeMode?: 'off' | 'tenant';
+    }>,
   ): Promise<ConversationView> {
-    const current = await this.activeConversation(actor, conversationId);
-    const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(key, title, createTitleAad(actor.tenantId, conversationId, version)),
-    );
+    await this.activeConversation(actor, conversationId);
+    const encrypted = input.title === undefined
+      ? undefined
+      : await this.keys.withActiveKey(actor.tenantId, (key, version) =>
+        encryptContent(key, input.title!, createTitleAad(actor.tenantId, conversationId, version)),
+      );
     const changed = await this.prisma.tenantChatConversation.updateMany({
       where: {
         id: conversationId,
@@ -223,15 +228,18 @@ export class EncryptedChatStore {
         userId: actor.userId,
         status: 'active',
         deletedAt: null,
-        version: expectedVersion,
+        version: input.expectedVersion,
       },
       data: {
         version: { increment: 1 },
-        titleCiphertext: bytes(encrypted.ciphertext),
-        titleNonce: bytes(encrypted.nonce),
-        titleTag: bytes(encrypted.tag),
-        titleContentKeyVersion: encrypted.contentKeyVersion,
-        titleSchemaVersion: encrypted.schemaVersion,
+        ...(encrypted === undefined ? {} : {
+          titleCiphertext: bytes(encrypted.ciphertext),
+          titleNonce: bytes(encrypted.nonce),
+          titleTag: bytes(encrypted.tag),
+          titleContentKeyVersion: encrypted.contentKeyVersion,
+          titleSchemaVersion: encrypted.schemaVersion,
+        }),
+        ...(input.knowledgeMode === undefined ? {} : { knowledgeMode: input.knowledgeMode }),
       },
     });
     if (changed.count !== 1) {
