@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/pii-promotion-evidence-binding.schema.json",
+  "title": "PII promotion evidence provenance binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestVersion",
+    "modelRevisions",
+    "artifactChecksumsVerified",
+    "gitRevision"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "pii-promotion-evidence-binding.v1"},
+    "manifestVersion": {"type": "string", "minLength": 1, "maxLength": 200},
+    "modelRevisions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$"}
+    },
+    "artifactChecksumsVerified": {"const": true},
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    }
+  }
+}

@@ -127,11 +127,13 @@ Browser
 -> exact immutable tenant RuntimeSnapshot pin
 -> workload JWT(admission) 발급
 -> private Gateway admission: request rate + active concurrency
--> Chat API가 current user message를 encrypted store에 durable 기록
--> Chat API가 turn contextMode에 따라 completed prior context를 bounded decrypt하거나 current user message만 선택
+-> Chat API가 contextMode=conversation이면 completed prior context를 bounded decrypt하고, single_turn이면 prior history를 읽지 않음
+-> workload JWT(sanitization) 발급
+-> private Gateway가 current user와 bounded legacy_unverified user만 pinned safety policy로 검사
+-> Chat API가 passed/redacted content와 safety provenance만 encrypted store에 durable 기록
 -> workload JWT(completion) 발급
 -> private Gateway completion이 admission/body/snapshot binding consume
--> safety
+-> 저장된 message safety provenance를 검증하고 이미 처리된 history의 PII 재검사를 생략
 -> routing eligibility
 -> cache strategy
 -> quota/budget state 계산 및 atomic reservation
@@ -147,6 +149,9 @@ Browser
 Hard ordering rules:
 
 - rate/concurrency deny 전에는 user content/history/diagnostic capture를 저장하지 않는다.
+- admission 성공 뒤에도 sanitization 성공 전에는 user ciphertext를 저장하지 않는다.
+- sanitization이 `CHAT_SAFETY_BLOCKED`이면 Gateway가 admission을 consume하고 slot을 release하며 content-free `safety_blocked` terminal event를 exactly once 기록한다. Chat API는 user ciphertext와 Provider completion을 만들지 않는다.
+- `sanitization` 성공 응답의 ordered content만 user ciphertext로 저장한다. 원래 user input을 별도 보존하거나 dual-write하지 않는다.
 - exact cache hit은 request rate만 소비하고 token quota 및 cost budget debit은 0이다.
 - provider call은 quota/budget reservation이 성공한 뒤에만 시작한다.
 - assistant partial delta는 영구 저장하지 않는다.
@@ -161,8 +166,9 @@ Gateway의 Tenant Chat route는 public `/v1` listener에 등록하지 않는다.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/internal/v1/tenant-chat/admissions` | content 없이 request rate/concurrency/idempotency를 결정하고 30초 admission을 생성 |
+| `POST` | `/internal/v1/tenant-chat/admissions/{admissionId}/sanitizations` | admission에 묶인 ordered user message를 저장 전에 한 번 safety 처리하고 masked content를 반환 |
 | `POST` | `/internal/v1/tenant-chat/admissions/{admissionId}/cancel` | Chat API persistence 실패 또는 user cancel 시 admission/slot을 idempotent 종료 |
-| `POST` | `/internal/v1/tenant-chat/completions` | encrypted user write 후 admission을 consume하고 policy/provider pipeline 실행 |
+| `POST` | `/internal/v1/tenant-chat/completions` | sanitized encrypted user write 후 admission을 consume하고 provenance/cache/routing/provider pipeline 실행 |
 
 Common requirements:
 
@@ -200,13 +206,13 @@ Endpoint별 request/response, required/optional field, status, error code, idemp
 - `aud=gatelm-gateway-tenant-chat`
 - `sub=service:chat-api`
 - `jti`, `iat`, `nbf`, `exp`
-- `phase=admission|completion|cancel`
+- `phase=admission|sanitization|completion|cancel`
 - `requestId`, `turnId`, `idempotencyKey`
 - `tenantId`, `userId`, `actorKind`, optional `employeeId`
 - `actorAuthzVersion`, `tenantAuthzVersion`, `sessionVersion`
 - `snapshotVersion`, `snapshotDigest`
 - `bindingDigest`
-- completion/cancel의 `admissionId`
+- sanitization/completion/cancel의 `admissionId`
 
 Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는 ±5초다. `jti`는 token expiry까지 Redis에서 exactly-once consume하고 Redis continuity를 확인할 수 없으면 fail closed한다.
 
@@ -403,6 +409,16 @@ Idempotency rules:
 - legacy union API는 discriminated union으로만 합친다.
 - Prometheus label에는 bounded `surface="tenant_chat"`만 추가한다.
 - tenantId/userId/employeeId/requestId/turnId/JTI/digest/error detail은 metric label 금지다.
+- AI safety sidecar metric은 원문, 탐지값, span/offset, 모델 경로·버전, URL, 오류 문자열을 포함하지 않는다. 허용 label은 아래 bounded enum만 사용하고 그 밖의 입력은 `unknown` 또는 `invalid_response`로 정규화한다.
+
+| Metric | Bounded labels | Meaning |
+|---|---|---|
+| `gatelm_ai_safety_sidecar_calls_total` | `surface=gateway_v1|tenant_chat|unknown`, `mode=shadow|enforce|unknown`, `outcome=passed|redacted|blocked|timeout|transport_error|http_error|invalid_response|cancelled`, `inference_path=rules_only|hybrid|unknown` | sidecar 호출의 terminal aggregate |
+| `gatelm_ai_safety_sidecar_call_duration_seconds` | calls와 동일 | sidecar 호출 wall-clock duration; Gateway 전체 요청 지연이 아님 |
+| `gatelm_ai_safety_sidecar_fallback_total` | `surface`, `mode`, `reason=timeout|transport_error|http_error|invalid_response` | 실제 local-rule fallback이 실행된 횟수 |
+| `gatelm_gateway_dependency_ready` | `dependency=postgres|postgres_log|redis|mock_provider|control_plane|ai_safety_sidecar|unknown`, `required=true|false` | `/readyz`가 마지막으로 관측한 dependency 상태(1/0) |
+
+`inference_path=hybrid`는 sidecar가 안전한 실행 요약으로 모델 호출을 명시한 경우에만 사용한다. 응답이 그 증거를 제공하지 않으면 `unknown`이며 detection source나 응답 지연으로 추정하지 않는다. readiness gauge는 능동 probe가 아니라 `/readyz` poll 시점의 마지막 관측값이다.
 
 ### 11.2 Required aggregate
 
@@ -446,14 +462,21 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - list cursor는 version, actor, scope, boundary, requested limit을 MAC으로 binding한다. history cursor는 여기에 conversation과 `cacheEpoch`를 추가한다. tamper, scope 변경, epoch 불일치는 `400 CHAT_CURSOR_INVALID`다.
 - history page는 최대 100개, completion context는 최근 completed message 최대 32개와 복호화 plaintext 최대 256 KiB다. request user content는 UTF-8 1~20,000자, title은 1~120자다.
 - completion context의 개별 message도 private Gateway의 20,000자 한도를 따른다. 저장된 assistant가 이 한도를 넘으면 그 message와 더 오래된 history는 context에서 제외하지만 encrypted history resource 자체를 자르거나 변경하지 않는다.
+- 새 user message는 admission 뒤 `sanitization` phase에서 한 번만 검사한다. Chat API는 Gateway가 반환한 ordered content를 `safety.status=sanitized`와 exact `policyDigest`로 저장하며 이후 completion에는 그 ciphertext 복호화 결과만 사용한다.
+- safety policy가 비활성화됐거나 detector/masking runtime이 준비되지 않으면 sanitization은 fail closed한다. 원문을 그대로 반환해 `sanitized`로 저장하는 우회 동작은 허용하지 않는다.
+- assistant message는 이미 sanitized user context로 Provider가 생성한 provenance를 `safety.status=provider_generated`로 저장한다. 이것은 output DLP 검사를 통과했다는 뜻이 아니며 `policyDigest`를 갖지 않는다.
+- completion message의 optional `safety` object는 additive wire compatibility를 위한 것이다. Chat API는 schema v2 AAD로 인증된 provenance만 이 field에 싣고 workload JWT의 `bindingDigest`로 exact completion input을 서명한다. Tenant Chat stored history에서 이 field가 없거나 user status/digest와 role 조합이 맞지 않으면 provider-bound context에서 제외하거나 fail closed하며, Gateway도 이를 trusted history로 보지 않고 방어적으로 safety 처리한다.
+- placeholder counter는 `[EMAIL_2]`의 `EMAIL`처럼 실제 masked text에 쓰는 uppercase placeholder prefix별 이미 사용한 최대 숫자 suffix만 전달할 수 있다. detector type, raw entity, raw-to-placeholder mapping, message/conversation identifier는 포함하지 않는다.
 - exact route와 response field는 OpenAPI, resource shape는 [conversation schema](./schemas/chat-conversation.schema.json), SSE는 [turn event schema](./schemas/chat-turn-sse-event.schema.json)를 따른다.
 
 ### 12.2 Envelope encryption과 key rotation
 
 - 저장 format과 column은 [content DDL contract](./db/tenant-chat-content.sql)를 따른다. legacy `conversations`/`chat_messages`를 재사용하거나 dual-write하지 않는다.
 - tenant content key(DEK)는 random 32-byte key이며 title/message마다 random 96-bit nonce를 사용해 AES-256-GCM으로 암호화한다. ciphertext, nonce, 128-bit tag만 content row에 저장한다.
-- DEK는 versioned wrapping key로 AES-256-GCM wrapping한다. wrapping key file은 active version과 active+grace reader key를 포함하며 Chat API 외 서비스에 mount하지 않는다.
-- canonical AAD는 `schemaVersion`, `tenantId`, `conversationId`, `recordId`, `contentKind=title|message`, `role=none|user|assistant`, `contentKeyVersion`을 exact key set과 JCS UTF-8로 binding한다.
+- DEK는 versioned wrapping key로 AES-256-GCM wrapping한다. Chat API combined key file은 active version과 active+grace `wrappingKey`/`integrityKey`를 포함한다. Control Plane API에는 combined file을 mount하지 않고 동일 wrapping material/version만 가진 `RAG_CONTENT_WRAPPING_KEYS_FILE` exact projection을 별도 전달하며 `integrityKey`는 포함하거나 허용하지 않는다.
+- title, legacy message와 assistant citation의 schema v1 canonical AAD는 `schemaVersion`, `tenantId`, `conversationId`, `recordId`, `contentKind=title|message|message_citations`, `role=none|user|assistant`, `contentKeyVersion`을 exact key set과 JCS UTF-8로 binding한다. `message_citations`는 assistant role에만 허용한다.
+- 새 message write는 schema v2만 사용한다. v2 message canonical AAD는 v1 message exact set에 `safetyStatus`, `safetyPolicyDigest`를 추가한다. user는 `safetyStatus=sanitized`와 valid policy digest가 필수이고 assistant는 `safetyStatus=provider_generated`, `safetyPolicyDigest=null`이 필수다. DB metadata만 바꿔 legacy plaintext를 sanitized로 승격할 수 없도록 AES-GCM tag가 provenance를 인증한다.
+- 기존 schema v1 user message는 `legacy_unverified` reader-only 상태이고, 기존 schema v1 assistant는 `provider_generated`로 표시한다. legacy user를 복호화해 현재 pinned sanitization을 한 번 통과시키고 schema v2로 재암호화하기 전에는 completion context에서 안전한 history로 사용하지 않는다. 일괄 `sanitized` backfill이나 metadata-only 승격은 금지한다.
 - wrong tenant/AAD/key version, tag/ciphertext tamper와 record swap은 `CHAT_CONTENT_INTEGRITY_FAILED`로 fail closed한다. 원인 detail이나 key metadata를 caller/log/metric에 포함하지 않는다.
 - rotation은 reader-first다. 새 wrapping key를 reader set에 배포한 뒤 active version을 올리고 DEK를 rewrap한다. DB의 monotonic `wrappingKeyRollbackFloor` 아래 active version은 readiness와 write 모두 거부한다.
 - content DEK rotation은 새 version을 writer로 선택하고 이전 DEK를 grace reader로 유지한다. row의 `contentKeyVersion`이 없는 key를 가리키면 fail closed한다.
@@ -484,26 +507,105 @@ RAG_DISTANCE_METRIC=cosine
 - 각 값은 미지정 시 위 고정값을 사용한다. 명시적으로 빈 값, 다른 provider/model/dimension/profile version/distance는 service listen 전에 거부한다.
 - Chat API와 Control Plane은 global flag 값과 무관하게 listen 전에 mismatch existence query로 `RagKnowledgeBase` profile을 고정 runtime profile과 비교한다. 하나라도 다르면 identifier나 row detail 없이 startup을 실패시킨다.
 - 이 startup guard는 M2 migration이 먼저 배포됐다는 expand-first 순서를 전제로 한다. global flag가 `false`이면 profile 정합성만 확인하고 RAG 실행은 계속 허용하지 않는다.
-- worker process와 worker secret mount는 이 milestone에서 만들지 않는다. 향후 Control Plane worker는 동일 공용 package를 사용하되 least-privilege key delivery를 별도 worker contract에서 확정한다.
+- dedicated worker process와 worker-only secret delivery는 M6에서 아래 ingestion contract로 확정한다. HTTP Control Plane process는 parsing, extraction, embedding을 실행하지 않는다.
+
+#### 12.2.2 Private RAG embedding 계약
+
+Gateway의 `POST /internal/v1/rag/embeddings`는 private `:8081` listener에만 등록한다. public OpenAI-compatible `/v1`, 기존 Application Chat, public Gateway router에는 route, alias, discovery 항목을 만들지 않는다.
+
+- request body의 exact shape는 paired [RAG embedding request schema](./schemas/rag-embedding-request.schema.json)다. `purpose`, `profileVersion=1`, ordered `inputs`만 받으며 `tenantId`, `knowledgeBaseId`, provider, model, dimensions, credential, base URL, cache control은 unknown-field rejection으로 거부한다.
+- `tenantId`, `requestId`, `operationId`와 caller identity는 [RAG workload JWT schema](./schemas/rag-embedding-workload-jwt-claims.schema.json)를 검증한 결과에서만 가져온다. body/header의 별도 tenant field를 신뢰하지 않는다.
+- RAG workload JWT는 기존 Chat workload key를 Worker에 공유하지 않는다. 서명 `kid`는 issuer, subject, allowed purposes에 원자적으로 결합되고 Chat API는 `RAG_QUERY`, Control Plane Worker는 `RAG_INGESTION`만 허용한다.
+- exact ordered request body 전체의 JCS SHA-256을 tenant/request/operation/purpose/profile과 HMAC binding한다. 변경된 input, input order, purpose 또는 profile은 Provider 호출 전에 거부하고 JTI는 전체 검증 후 한 번만 consume한다.
+- Gateway가 선택하는 provider/model/dimensions는 각각 `openai`, `text-embedding-3-large`, `1536`이다. OpenAI 요청에 `dimensions=1536`을 명시하며 response의 index/count, vector 1536차원, finite number, model과 bounded usage를 검증한다.
+- endpoint는 1~128 inputs, input별 conservative token upper bound 8,192, batch upper bound 300,000과 bounded request/response bytes를 적용한다. 이 upper bound는 tokenizer dependency를 추가하지 않고 UTF-8 bytes를 token count의 보수적 상한으로 취급하며, 실제 provider token usage는 response metadata로만 반환한다.
+- Provider attempt에는 timeout을 적용한다. timeout, HTTP 408/429/5xx와 retryable transport failure만 최대 3회 bounded retry하고, credential/authorization/other permanent 4xx, malformed response, caller cancellation은 재시도하지 않는다.
+- `DEPLOYMENT_MODE=local|test`로 명시한 환경만 `httptest` 또는 custom OpenAI-compatible base URL을 허용한다. 환경 분류가 비어 있거나 staging/production/self-host release이면 feature flag가 꺼져 있어도 `https://api.openai.com/v1`만 허용하고 다른 host/path, HTTP, loopback endpoint를 startup에서 거부한다.
+- response는 input order와 같은 embedding 배열, fixed profile, request ID, request purpose, `inputCount`, provider-reported prompt/total tokens만 반환한다. tenant ID, credential, Provider raw body, operation ID, input, object key, DB ID는 반환하지 않는다.
+- 이 usage metadata는 M6/M7 caller가 tenant-scoped idempotent `RagEmbeddingUsage`를 기록하기 위한 근거다. Gateway는 기존 employee/tenant chat budget ledger를 차감하거나 DB usage row를 만들지 않는다.
+- embedding path에는 response cache나 Semantic Cache read/write가 없다. RAG chat cache bypass의 authoritative 실행 계약은 기존 `UsageIntent.cacheStrategy=off`이며 M7에서 Chat API가 강제한다. 별도 client-controlled `cacheMode` 또는 `semanticCache` field를 추가하지 않는다.
+- input, vector, raw query/chunk, API key와 Provider raw error body는 log, metric, DB, cache에 남기지 않는다. 기본 test suite는 fake/`httptest`만 사용하며 OpenAI를 호출하지 않는다.
+
+#### 12.2.3 Tenant Admin RAG enablement 및 문서 upload/read/delete 계약
+
+Control Plane의 Tenant Admin wire는 [Admin RAG OpenAPI](./openapi/admin-rag.openapi.json)를 따른다. 이 revision의 active surface는 tenant enablement, upload, 목록, 단건 상태 조회, 비동기 hard delete다.
+
+- `GET /admin/v1/tenants/{tenantId}/rag/knowledge-base`는 row를 만들지 않는 read다. tenant Knowledge Base가 아직 없으면 `tenantEnabled=false`를 반환한다. `PATCH` body는 additional property 없는 exact `{enabled:boolean}`이고, 같은 값의 반복은 idempotent하다. response는 safe boolean인 `tenantEnabled`, process configuration을 반영한 read-only `globalEnabled`, 둘의 AND인 `effectiveEnabled`만 반환하며 Knowledge Base ID, profile row, revision은 노출하지 않는다.
+- `PATCH`는 tenant singleton Knowledge Base가 없으면 고정 embedding profile과 요청 status로 생성하고, 있으면 `status=ENABLED|DISABLED`만 갱신한다. document, index, chunk, job, revision과 encrypted citation snapshot은 변경하거나 삭제하지 않는다. 다시 활성화하면 기존 `READY` document와 `ACTIVE` index를 재수집 없이 사용한다.
+- tenant `DISABLED`여도 관리자 upload와 worker ingestion은 허용되어 문서를 `READY`로 준비할 수 있다. 이 준비 흐름은 RAG infrastructure가 배포되어 process-wide flag가 켜진 환경을 전제로 한다. process-wide flag가 꺼진 운영 kill-switch 상태에서는 Control Plane의 현재 fail-closed storage/worker 구성이 우선한다.
+- employee retrieval과 새 RAG turn은 `TENANT_CHAT_RAG_ENABLED=true`와 tenant `status=ENABLED`를 모두 매 요청 확인한다. disable commit 이후 시작하는 create/retrieval은 embedding 및 provider 호출 전에 `CHAT_RAG_DISABLED`로 실패하고 일반 chat으로 자동 fallback하지 않는다. 이미 provider streaming이 시작된 in-flight turn의 distributed cancellation은 이 계약 범위가 아니다.
+- `TENANT_CHAT_RAG_ENABLED`는 process-local 환경값이므로 Control Plane의 `globalEnabled` 표시와 Chat API의 실제 집행값은 배포 단위에서 반드시 같아야 한다. 지원하는 self-host/AWS Compose RAG overlay는 Control Plane, Gateway, AI Service, worker, Chat API 모두에 동일한 enabled 값을 주입하며 wiring test가 이 parity를 검증한다. 별도 orchestrator는 같은 불변식을 보장해야 하고, 값을 독립적으로 변경하는 배포는 지원하지 않는다. 실제 retrieval은 표시값을 신뢰하지 않고 Chat API 자신의 global flag와 DB의 tenant status를 다시 확인해 fail-closed한다.
+- enablement route도 기존 `AdminAuthGuard`, full admin session과 route tenant만 신뢰한다. 일반 직원, 다른 tenant 관리자, body/query의 `tenantId`·`knowledgeBaseId` override는 controller 실행 또는 validation에서 거부한다. DB 장애는 내부 detail 없이 `503 RAG_KNOWLEDGE_BASE_UNAVAILABLE`이다.
+
+- `POST /admin/v1/tenants/{tenantId}/rag/documents`, `GET /admin/v1/tenants/{tenantId}/rag/documents`, `GET /admin/v1/tenants/{tenantId}/rag/documents/{documentId}`는 기존 `AdminAuthGuard`와 full admin session을 사용한다. route의 tenant scope와 `CurrentAdminUserId`만 신뢰하며 body/query의 `tenantId`, `knowledgeBaseId`, uploader ID는 unknown-field validation으로 거부한다. 일반 직원 session과 다른 tenant의 Tenant Admin은 controller 실행 전에 거부한다.
+- upload body는 `multipart/form-data`의 단일 `file`과 optional `displayName`만 받는다. `RAG_MAX_UPLOAD_BYTES` 기본값과 상한은 모두 `20 * 1024 * 1024` bytes이고 환경은 1 byte 이상 이 상한 이하로만 낮출 수 있다. 빈 파일은 거부한다.
+- `.txt`는 declared `text/plain`, 유효한 UTF-8과 NUL 부재를 확인하고, `.pdf`는 declared `application/pdf`와 leading `%PDF-` signature를 확인한다. extension, declared MIME, 최소 signature/content 검사가 일치하지 않으면 `400 RAG_DOCUMENT_INVALID_UPLOAD`이다. PDF page 수와 text layer 유효성은 upload 성공을 판정하는 근거가 아니다.
+- raw multipart filename은 basename으로 축약하기 전에 path separator, traversal segment, NUL/control character와 길이를 검증한다. original filename과 display name은 NFC normalization과 bounded validation 뒤 tenant document-private-metadata AES-256-GCM payload에만 저장한다. client `displayName`이 없으면 검증된 normalized original filename을 사용한다. extension, MIME, byte size만 허용된 평문 metadata다.
+- API는 전체 파일을 하나의 `Buffer`나 plaintext 임시 파일로 만들지 않는다. 입력 stream을 bounded validation 및 SHA-256 계산과 함께 object store로 전달한다. file limit 외에도 bounded multipart overhead, declared/actual total request byte limit과 idle deadline을 적용하며 invalid/aborted multipart upload는 시작된 provider operation의 성공 응답이 유실된 경우까지 UUID key를 best-effort 삭제한다.
+- object key는 server-generated internal document UUID로 만든 `rag/{tenantUuid}/{documentUuid}/source` 형태이고 filename, tenant name, display name을 포함하지 않는다. staging/production adapter는 environment-private bucket, SSE-KMS와 ECS/IRSA/EC2 IAM role source만 사용한다. SDK default credential chain을 사용하지 않아 static env key뿐 아니라 shared credentials/profile/credential process도 선택하지 않으며 public ACL, fake/local endpoint를 startup에서 거부한다.
+- 관리자/tenant 확인 뒤 tenant Knowledge Base를 먼저 조회하거나 생성한다. S3 성공 전에는 `RagDocument`나 `RagJob`을 만들지 않는다. object가 durable해진 뒤 한 database transaction에서 해당 Knowledge Base row를 잠그고 tenant document count와 duplicate를 재검증하며, encrypted metadata를 포함한 `RagDocument(status=UPLOADED)`와 정확히 한 `RagJob(type=INGEST,status=PENDING)`을 함께 생성한다. 둘 중 하나만 commit되는 상태는 허용하지 않는다. S3 실패 뒤 빈 Knowledge Base가 남는 것은 허용하지만 Document와 Job은 남기지 않는다.
+- S3 실패는 Document/Job을 만들지 않고 `503 RAG_STORAGE_UNAVAILABLE`이다. S3 성공 뒤 database transaction이 실패하거나 duplicate/limit 검사가 거부하면 업로드 object를 best effort 삭제한다. transaction COMMIT 결과가 불명확하면 같은 predetermined IDs로 Knowledge Base lock 아래 idempotent finalization을 재실행하여 committed row를 확인하거나 안전하게 완성하고, 결과를 직렬화해 확인할 수 없으면 object를 보존해 reconciliation 대상으로 남긴다. 보상 삭제 실패는 server-generated opaque operation UUID와 stable code만 구조화해 기록하고 filename, display name, digest, bucket, object key, KMS key, raw SDK error를 log/metric에 남기지 않는다.
+- duplicate 판단은 동일 tenant 안의 같은 SHA-256 digest를 가진 `READY` 또는 비종료 처리 상태(`UPLOADING`, `UPLOADED`, `EXTRACTING`, `CHUNKING`, `EMBEDDING`, `INDEXING`)만 대상으로 한다. digest는 encrypted private metadata에서만 비교하며 다른 tenant를 조회하거나 deduplicate하지 않는다. duplicate conflict는 `409 RAG_DOCUMENT_DUPLICATE`만 반환하고 기존 document ID나 digest를 공개하지 않는다. DELETING을 포함해 tenant에 이미 500개 Document row가 있으면 `409 RAG_DOCUMENT_LIMIT_REACHED`이다.
+- upload 성공은 `202`이며 response의 status는 `UPLOADED`, failure fields는 `null`이다. list는 `limit=1..100`(default 50)과 이전 page의 safe `documentId` UUID cursor를 사용하고 `createdAt DESC, documentId DESC`로 안정 정렬한다. cursor가 다른 tenant이거나 존재하지 않으면 `400 RAG_DOCUMENT_CURSOR_INVALID`이다.
+- 외부 `documentId`는 `RagDocument.publicId` UUID만 사용한다. 단건 조회는 `(tenantId,publicId)`로 제한하고 다른 tenant와 미존재를 동일한 `404 RAG_DOCUMENT_NOT_FOUND`로 처리한다.
+- `DELETE /admin/v1/tenants/{tenantId}/rag/documents/{documentId}`도 같은 `AdminAuthGuard` tenant scope를 사용한다. 한 transaction에서 tenant-scoped document row를 lock하고 `DELETING` 전환 및 `DELETE/PENDING` job 생성(opaque object-key snapshot 포함)을 함께 commit한다. 이미 `DELETING`이면 새 job을 만들지 않고 같은 safe document resource를 `202`으로 반환한다. hard delete 후에는 status 조회와 반복 DELETE 모두 기존 absent-resource 정책인 `404 RAG_DOCUMENT_NOT_FOUND`다.
+- `DELETING`은 retrieval SQL의 즉시 제외 조건이다. delete worker는 snapshot으로 S3를 먼저 삭제하고, `DeleteObject`의 이미 없는 object를 success로 취급한다. 이후 하나의 DB transaction에서 non-terminal `INGEST`/`REINDEX`/legacy DELETE jobs를 CANCELLED로 terminalize하고 lease를 clear한 뒤 모든 job의 `documentId`를 detach하고, chunks/indexes/document를 hard delete한다. DB finalization이 실패하면 Document row와 snapshot이 rollback으로 유지되어 S3 delete를 idempotent하게 다시 호출한다. S3 실패 또는 retry exhaustion은 document를 계속 `DELETING`으로 남긴다.
+- Citation persistence와 Tenant Chat history UI는 구현됐다. 서버 검증을 통과한 safe citation snapshot만 assistant message와 별도 AAD로 tenant 암호화하며 document original, raw RAG context, chunk text를 복제하지 않는다. Document hard delete는 과거 대화 자체를 삭제하거나 snapshot을 재작성하지 않는다. History는 tenant-scoped READY-document 조회로 `available | unavailable`을 계산하고, UI는 unavailable source의 링크를 제거해 `삭제된 자료 또는 현재 사용할 수 없는 출처`로 표시한다.
+- document response는 `documentId`, 서버에서 복호화한 `displayName`, `mimeType`, `sizeBytes`, `status`, bounded `failureCode`, 내부 `sanitizedFailureMessage`를 safe response 이름으로 바꾼 `failureMessage`, 내부 user ID 없이 `{displayName: string|null}`만 가진 `uploadedBy`, `createdAt`, `updatedAt`만 가진다. bucket, object key, KMS key, digest, original filename, internal user/document/Knowledge Base/job/index/chunk ID, vector와 job lease 정보는 반환하지 않는다.
+- 기본 unit/integration suite는 fake object store와 local test double만 사용하며 AWS를 호출하지 않는다. `NODE_ENV=development|test` 또는 명시적인 local/test deployment marker에서만 fake를 허용하고, 분류되지 않은 환경과 staging/production은 fail closed한다. staging/production은 실제 IAM-role S3/KMS adapter와 readable rollback-safe wrapping-only key projection만 등록하며 fake 설정이나 combined Tenant Chat key mount를 발견하면 startup을 실패시킨다.
+
+#### 12.2.4 Private RAG extraction 계약
+
+AI Service의 `POST /internal/v1/rag/extract`는 Control Plane Worker 전용 raw-body route다. `X-GateLM-AI-Service-Token`을 환경별 secret과 constant-time 비교한 뒤에만 body를 읽는다. token이 없거나 다르면 `401 RAG_EXTRACTION_AUTH_REQUIRED`이고, `self_host`, `staging`, `production`, `aws`는 32자 미만 또는 local/fake/example placeholder token으로 시작하지 못한다. 이 route는 public Gateway/OpenAI-compatible/Application Chat surface에 등록하지 않는다.
+
+- request는 bounded `text/plain`(optional `charset=utf-8`) 또는 parameter 없는 `application/pdf` body다. multipart, filename, tenant ID, Knowledge Base ID, storage key는 받지 않는다.
+- TXT는 UTF-8 strict/BOM, NUL 제거, CRLF/CR→LF, Unicode NFC, line 내부 horizontal whitespace 축약을 적용한다. blank line 문단 경계와 1-based original line range는 보존하며 빈 결과는 영구 실패다.
+- PDF는 pinned `pypdf==6.14.2`를 timeout 시 종료 가능한 child process에서 사용해 page text만 읽는다. encrypted, damaged, page/character limit 초과, text layer 부족은 stable error다. OCR, image, attachment, script, external reference는 읽거나 실행하지 않는다.
+- tokenizer는 pinned `tiktoken==0.13.0`의 `text-embedding-3-large -> cl100k_base` mapping이다. `chunkingProfileVersion=1` 기본값은 target 600, overlap 100, maximum 900이며 환경 설정은 overlap < target <= maximum을 만족해야 한다.
+- success는 ordered `chunks`와 top-level `parserVersion`, `chunkerVersion`을 반환한다. 각 chunk는 `ordinal`, `text`, tokenizer-derived `tokenCount`, nullable paired `pageStart/pageEnd`, nullable paired `lineStart/lineEnd`, bounded `sourceMetadata`, `parserVersion`, `chunkerVersion`만 가진다. 동일 bytes/config/dependency versions는 동일 결과와 순서를 만든다.
+- AI Service는 PostgreSQL, S3, OpenAI, embedding, tenant key, chunk persistence, RagJob state를 소유하지 않는다. raw document/chunk와 parser raw exception은 log/metric/error에 넣지 않고 임시 파일은 success/failure/timeout 모두 삭제한다.
+- default unit/integration suite는 network와 database 없이 동작한다. prompt-injection 문구도 실행 명령이 아니라 반환 text일 뿐이며, scanned/image-only PDF는 success 결과가 될 수 없다.
+
+#### 12.2.5 Dedicated RAG ingestion worker
+
+- `apps/control-plane-api`의 `start:rag-worker`는 HTTP API와 별도 process다. PostgreSQL `RagJob`을 `FOR UPDATE SKIP LOCKED`로 claim하고, RUNNING lease heartbeat·lease expiration·bounded exponential backoff·max attempts로 여러 worker와 crash recovery를 처리한다. Celery, BullMQ, Redis queue, transactional outbox는 MVP에 추가하지 않는다.
+- worker는 `INGEST`와 `DELETE`를 처리한다. tenant/document/Knowledge Base identity는 claimed job과 tenant-scoped DB relation에서만 읽고, request body나 object metadata에서 tenant identity를 받지 않는다. INGEST document가 `DELETING`/missing이면 job을 CANCELLED로 끝내며, READY replay는 no-op SUCCEEDED다. DELETE는 durable object-key snapshot만 사용해 S3 삭제를 먼저 수행하고, 그 뒤 transaction에서 job detach와 Document cascade hard delete를 완료한다.
+- extraction/Gateway 외부 호출 중에는 DB transaction을 열지 않는다. worker는 S3 object stream을 AI Service로 전달하고, ordered chunks를 검증한 뒤 새 BUILDING index에서 batch embedding을 요청한다. 모든 batch의 count/finite 1536-dimensional vector가 검증되기 전에는 chunk를 저장하거나 ACTIVE index를 만들지 않는다.
+- chunk plaintext는 active tenant DEK로 `rag_chunk` AES-256-GCM AAD (`tenantId`, Knowledge Base, document, index, chunk ID, content-key version)를 사용해 암호화한다. final transaction에서 encrypted chunks/vector를 저장하고 existing ACTIVE index를 RETIRED로 바꾼 뒤 replacement를 ACTIVE로 승격하며 Document READY, Knowledge Base revision increment, job SUCCEEDED를 함께 commit한다. BUILDING/FAILED/RETIRED index는 retrieval SQL 대상이 아니다.
+- permanent extraction/profile/dimension errors terminate Document/Job as FAILED. S3, AI Service, Gateway, timeout/rate-limit, and transient DB errors become RETRY_WAIT until `maxAttempts`; each failed staged index is FAILED and a retry creates a new BUILDING version. No error/log/metric contains source text, chunk text, vector, object key, bucket, filename, or provider body.
+- worker Gateway credential files are worker-only: `RAG_WORKER_EMBEDDING_SIGNING_JWK_FILE`, `RAG_WORKER_EMBEDDING_BINDING_HMAC_KEYS_FILE`, and `RAG_WORKER_EMBEDDING_ACTIVE_KID`. Their `kid` must map only to issuer `gatelm-control-plane-worker`, subject `service:control-plane-worker`, and purpose `RAG_INGESTION`; Worker never mounts a Chat API private key. `RAG_WORKER_AI_SERVICE_TOKEN` is a separate environment-specific AI Service token. staging/production rejects fake object storage, local endpoints, and placeholder worker token values at startup.
+- each gateway batch creates an idempotent `RagEmbeddingUsage` row keyed by `(tenantId,purpose,operationId,batchOrdinal)` with profile and bounded usage counts only. It measures platform RAG cost and never debits chat budget ledger.
+
+#### 12.2.6 Tenant Chat RAG turn composition
+
+- `TenantChatConversation.knowledgeMode` is a server-persisted `off|tenant` field. Create accepts the optional mode only; it defaults to `off`, existing conversations remain `off`, and no turn request accepts a Knowledge Base, document, embedding model, dimension, or retrieval filter. `tenant` creation requires the authenticated tenant's globally and tenant-enabled Knowledge Base.
+- For `knowledgeMode=tenant`, Chat API embeds the most recent non-empty current user message with `RAG_QUERY`, searches only the authenticated tenant through the tenant-scoped retrieval SQL, then creates request-local `S1...Sn` source IDs. The selected complete chunks are bounded by `RAG_TOP_K` (default 6) and `RAG_CONTEXT_MAX_TOKENS` (default 6000); adjacent chunks from one document are deterministically de-duplicated and chunks are never truncated.
+- The context is safe JSON inside a length-delimited block and is sent as a private `system` message with `purpose=rag_context`. Source text is explicitly untrusted: it cannot alter system/developer instructions or execute commands, answers require supplied evidence, and citations may only use emitted source IDs. Selection accounts for the fixed instruction, source metadata, JSON escaping expansion, and the tokenizer-derived chunk counts before enforcing `RAG_CONTEXT_MAX_TOKENS`; the request-local `rag_context` message has a separate 65,536-character ceiling while every non-RAG message remains capped at 20,000. The private marker is signed, size-validated, safety/provider/token/budget-accounted, and excluded only from routing classification.
+- RAG context is never stored in encrypted conversation messages, logs, metrics, cache, or public REST search output. Only the user message and the final assistant response use the existing encrypted conversation persistence path.
+- Every RAG turn forces `UsageIntent.cacheStrategy=off`; this is the private Gateway cache-bypass signal. It prevents exact response-cache read/write, and the private Tenant Chat route does not use the public Semantic Cache. Final reservation and token estimate use the completed provider message list including the context; a budget rejection occurs before a provider call.
+- A retrieval no-hit does not downgrade to ordinary chat or call Gateway. Chat API persists the deterministic Korean product answer `등록된 문서에서 관련 근거를 찾지 못했습니다.` and returns it using the existing `chat.turn.accepted`, delta, and final SSE event shapes. Retrieval, embedding, key, decryption, or context failures return the stable RAG-unavailable error and never call the normal LLM route.
+- Citation metadata is server-owned. Chat API maps each retrieval result to `S1...Sn`, accepts only those markers found in the final assistant text, removes duplicates, and ignores fabricated IDs. `documentId`, display name, page/line range and ordinal always come from that source map, never from model text. The encrypted assistant record stores only the validated citation snapshot, never chunk/context plaintext. `chat.turn.sources` is emitted after accepted and before deltas; `chat.turn.citations` is emitted after encrypted assistant persistence and before the existing final event. Both are additive `chat.turn.*` SSE events and contain only safe citation metadata; chunk/index IDs and storage/crypto fields are not part of the external citation contract. History rehydrates the snapshot and marks citations unavailable when their tenant-scoped document is no longer READY.
 
 ### 12.3 Turn lifecycle, SSE와 DOC-013
 
 1. session/device와 authoritative entitlement를 확인한다.
 2. conversation ownership, request binding, cursor/idempotency bound를 확인한다.
 3. content-free turn identity를 reserve하고 기존 `authorizeAndAdmit`을 호출한다.
-4. admission 성공 뒤 user message ciphertext를 commit한다.
-5. user commit 뒤 `conversation`이면 completed prior history를 bounded decrypt하고, `single_turn`이면 history를 decrypt하지 않고 current user message만으로 `complete`를 호출한다.
-6. private Gateway SSE를 strict consume하며 Chat API-facing `accepted -> delta* -> final|error|cancelled` 순서를 유지한다.
-7. successful assistant 전체를 한 번 암호화해 commit한 뒤에만 `chat.turn.final`을 보낸다.
+4. admission 성공 뒤 conversation이면 completed prior context를 bounded decrypt해 placeholder counter와 legacy migration 대상을 구성하고, single_turn이면 prior history 없이 current user만 준비한다. current user와 bounded legacy_unverified user만 sanitization phase로 보낸다.
+5. block이면 admission terminal 처리 뒤 user ciphertext 없이 종료한다. passed/redacted이면 반환 content와 safety provenance를 schema v2 user ciphertext로 commit한다.
+6. user commit 뒤 context mode에 맞는 completed history와 current sanitized user로 complete를 호출한다. 이미 처리된 v2 history는 PII model에 다시 보내지 않는다.
+7. private Gateway SSE를 strict consume한다. chat.turn.accepted는 committed user message UUID와 sanitized stored content를 포함하고 browser는 optimistic raw text를 즉시 교체한다.
+8. successful assistant 전체를 schema v2 provider_generated provenance로 암호화해 commit한 뒤에만 chat.turn.final을 보낸다.
 
 - Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다. 같은 turn의 HTTP attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다.
+- chat.turn.accepted.userMessageId는 UUID v4이고 userContent는 1~20,000자의 sanitized committed value다. 원래 untrusted input은 accepted/replay/history/durable log에 다시 내보내지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 bounded `quotaState`와 `budgetState`를 전달한다. encrypted assistant만으로 재생하는 completed turn은 두 상태를 복원할 Chat API-owned 근거가 없으므로 생략할 수 있으며, browser는 이를 새 정책 상태로 추정하지 않는다.
 - successful assistant history와 `chat.turn.final`은 Gateway가 확정한 bounded `effectiveModelKey`를 선택적으로 포함한다. Chat API는 이를 assistant message와 함께 저장하며 legacy row 또는 Gateway가 모델을 확정하지 못한 경우 생략한다. Provider connection, fallback attempt, credential과 비용 상세는 직원 응답에 포함하지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 `cacheOutcome`을 선택적으로 포함한다. exact cache hit에서는 assistant history의 모델 표시를 생략하고 browser는 모델 호출이 없었다고 표시한다.
 - public turn `usageIntent`는 `requestedTier`, `maxOutputTokens`, `cacheStrategy`만 받는다. 별도 optional `contextMode`는 `conversation|single_turn`이며 미지정 시 기존 호환을 위해 `conversation`이다. `conversation`은 completed prior context와 current user message를 전달하고, `single_turn`은 encrypted history를 삭제하거나 변경하지 않은 채 current user message만 전달한다.
 - Chat API는 실제 private completion에 포함하는 bounded message content의 UTF-8 byte length 합계(최소 1)를 conservative `estimatedInputTokens`로 계산하며 caller estimate를 받거나 신뢰하지 않는다. context mode는 actor, employee, tenant usage 귀속을 바꾸지 않으므로 confirmed ledger와 향후 DB-backed employee usage/cost aggregate는 동일 identity 경계를 유지한다.
 - context mode는 keyed turn request binding에 포함한다. legacy/default `conversation` binding shape는 그대로 유지하고 `single_turn`만 explicit discriminator를 추가해 같은 idempotency key로 mode를 바꾸는 replay를 `409 CHAT_IDEMPOTENCY_CONFLICT`로 거절한다.
-- attachment capacity는 admission 전에 reserve한다. admission 뒤 user persistence, history preparation 또는 local attachment activation이 실패하면 마지막 local attachment만 admission과 turn을 best effort cancel하고 reservation을 반드시 해제한다.
+- attachment capacity는 admission 전에 reserve한다. admission 뒤 sanitization, user persistence, history preparation 또는 activation이 실패하면 local reservation을 반드시 해제한다. safety block은 이미 Gateway terminal이므로 cancel하지 않고, 그 밖의 pre-completion 실패만 admission과 turn을 best effort cancel한다.
 - 느린 attachment의 response backpressure는 해당 응답에만 적용하며 공유 Provider stream과 final persistence를 막지 않는다. disconnect된 attachment handle은 취소 시도 결과와 무관하게 local registry에서 해제한다.
 - partial, interrupted, cancelled assistant와 Provider raw error는 저장하지 않는다. 이미 저장된 user message와 confirmed Gateway usage는 assistant persistence 실패 때문에 삭제·변조하지 않는다.
 - duplicate final은 `(turnId,role=assistant)` unique와 locked conversation state로 no-op/replay하며 다른 content면 fail closed한다.

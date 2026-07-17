@@ -22,6 +22,12 @@ Use this order:
 
 Do not skip the backup step for production data.
 
+If optional PII models are enabled, read the target release notes for its model
+release id and obtain a fresh approved HTTPS bundle URL before restarting. Keep
+at least 4 GiB of temporary free space. Model release descriptors are pinned to
+the matching AI Service image and Self-host Compose bundle; do not override
+their hashes in `.env`.
+
 ## 1. Backup First
 
 Create a PostgreSQL backup before changing images:
@@ -48,7 +54,9 @@ Change it to the target version:
 GATELM_IMAGE_TAG=<target-version>
 ```
 
-Keep app service image tags aligned. Do not upgrade only one of `web`, `control-plane-api`, `gateway-core`, or `ai-service` unless GateLM support explicitly tells you to.
+Keep app service image tags aligned. Do not upgrade only one of `web`,
+`control-plane-api`/`rag-worker`, `gateway-core`, `ai-service`, `chat-api`, or
+`chat-web` unless GateLM support explicitly tells you to.
 
 ## 3. Registry Login
 
@@ -66,6 +74,10 @@ Do not put registry passwords or tokens in `.env`.
 docker compose --env-file .env pull
 ```
 
+If RAG is enabled, include `-f docker-compose.yml -f docker-compose.rag.yml`,
+or use `bash scripts/install.sh` as described below so the overlay and secret
+preflight are selected automatically.
+
 If pull fails, check:
 
 - `GATELM_IMAGE_REGISTRY`
@@ -75,8 +87,16 @@ If pull fails, check:
 
 ## 5. Restart The Stack
 
+If the target release uses a new PII model bundle, edit the existing secret file
+with a fresh presigned HTTPS URL. Never put that URL in `.env` or a command
+argument. The previous versioned model directory remains in `pii_model_data`
+for rollback until an operator deliberately removes it.
+Use the idempotent installer. It preserves the base non-RAG service set when
+the flag is false; when the flag is true it validates role-separated Tenant
+Chat/RAG secrets and includes `rag-worker`, `chat-api`, and `chat-web`:
+
 ```bash
-docker compose --env-file .env up -d
+bash scripts/install.sh
 docker compose --env-file .env ps
 ```
 
@@ -102,6 +122,12 @@ Upgrade is complete only after the smoke test confirms:
 - Gateway request succeeds
 - Request Log contains the smoke request
 
+When PII models are enabled, also run:
+
+```bash
+bash scripts/pii-model-smoke.sh
+```
+
 ## Rollback
 
 If the upgrade fails before migrations changed production data:
@@ -112,8 +138,7 @@ If the upgrade fails before migrations changed production data:
 4. Run smoke test.
 
 ```bash
-docker compose --env-file .env pull
-docker compose --env-file .env up -d
+bash scripts/install.sh
 bash scripts/smoke-test.sh
 ```
 

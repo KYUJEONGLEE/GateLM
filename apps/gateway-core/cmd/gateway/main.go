@@ -18,6 +18,7 @@ import (
 	credentialcomposite "gatelm/apps/gateway-core/internal/adapters/credentials/composite"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	credentialpostgres "gatelm/apps/gateway-core/internal/adapters/credentials/postgres"
+	embeddingopenai "gatelm/apps/gateway-core/internal/adapters/embeddings/openai"
 	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
 	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
@@ -31,12 +32,14 @@ import (
 	providerhttpclient "gatelm/apps/gateway-core/internal/adapters/providers/httpclient"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
+	ragworkloadauth "gatelm/apps/gateway-core/internal/adapters/rag/workloadauth"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
 	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
+	aiservice "gatelm/apps/gateway-core/internal/adapters/safety/aiservice"
 	postgresadmission "gatelm/apps/gateway-core/internal/adapters/tenantchat/admission/postgres"
 	redistenantcache "gatelm/apps/gateway-core/internal/adapters/tenantchat/cache/redis"
 	postgrestenantprovider "gatelm/apps/gateway-core/internal/adapters/tenantchat/provider/postgres"
@@ -51,6 +54,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
@@ -58,6 +62,7 @@ import (
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
+	raghttp "gatelm/apps/gateway-core/internal/http/rag"
 	tenantchathttp "gatelm/apps/gateway-core/internal/http/tenantchat"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
@@ -65,11 +70,13 @@ import (
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	projectemployeecost "gatelm/apps/gateway-core/internal/services/projectapplication/employeecost"
+	ragembeddingservice "gatelm/apps/gateway-core/internal/services/rag/embedding"
 	admissionservice "gatelm/apps/gateway-core/internal/services/tenantchat/admission"
 	completionservice "gatelm/apps/gateway-core/internal/services/tenantchat/completion"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/reconciliation"
 	"gatelm/apps/gateway-core/internal/services/tenantchat/requestauth"
 	tenantsafety "gatelm/apps/gateway-core/internal/services/tenantchat/safety"
+	sanitizationservice "gatelm/apps/gateway-core/internal/services/tenantchat/sanitization"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -194,6 +201,16 @@ func main() {
 			Check:          handlers.HTTPHealthCheck(&http.Client{Timeout: cfg.ControlPlaneTimeout}, cfg.ControlPlaneBaseURL),
 		}
 	}
+	if cfg.AISafetySidecar.Enabled {
+		readinessChecks["ai_safety_sidecar"] = handlers.ReadinessCheck{
+			Required:       false,
+			FailureMessage: "not ready",
+			Check: handlers.HTTPReadinessCheck(
+				&http.Client{Timeout: cfg.AISafetySidecar.Timeout},
+				cfg.AISafetySidecar.EndpointURL,
+			),
+		}
+	}
 
 	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(logPostgresPool, postgresinvocationlog.AuthFailureDefaults{
 		TenantID:      cfg.DemoTenantID,
@@ -315,26 +332,121 @@ func main() {
 			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
 		)
+		var tenantChatMaskingEngine tenantsafety.MaskingEngine = maskdomain.NewP0Engine()
+		if cfg.AISafetySidecar.Enabled {
+			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
+				Local:       tenantChatMaskingEngine,
+				EndpointURL: cfg.AISafetySidecar.EndpointURL,
+				Timeout:     cfg.AISafetySidecar.Timeout,
+				ModelID:     cfg.AISafetySidecar.ModelID,
+				DetectorSet: cfg.AISafetySidecar.DetectorSet,
+				Locale:      cfg.AISafetySidecar.Locale,
+				Mode:        cfg.AISafetySidecar.Mode,
+				Surface:     "tenant_chat",
+				Metrics:     metricsRegistry,
+			})
+		}
+		tenantChatSafety := tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)
 		tenantChatCompletions := completionservice.New(
 			tenantChatRuntime,
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
-			completionservice.WithSafetyEvaluator(tenantsafety.NewEvaluator()),
+			completionservice.WithSafetyEvaluator(tenantChatSafety),
 			completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),
+		)
+		tenantChatSanitizations := sanitizationservice.New(
+			tenantChatRuntime,
+			tenantChatAdmissions,
+			tenantChatSafety,
+			tenantChatUsage,
 		)
 		tenantChatPrivateRouter := tenantchathttp.NewRouter(
 			tenantChatAuthenticator,
 			tenantChatAdmissions,
 			cfg.MaxRequestBodyBytes,
 			tenantchathttp.WithCompletionService(tenantChatCompletions),
+			tenantchathttp.WithSanitizationService(tenantChatSanitizations),
 			tenantchathttp.WithUsageReceipts(tenantChatReceiptToken, tenantChatUsage),
 		)
+		privateRouter := http.NewServeMux()
+		privateRouter.Handle("/internal/v1/tenant-chat/", tenantChatPrivateRouter)
+		if cfg.RAGEmbedding.Enabled {
+			ragWorkloadVerifier, err := ragworkloadauth.Load(
+				cfg.RAGEmbedding.WorkloadJWKSFile,
+				cfg.RAGEmbedding.BindingHMACKeysFile,
+				cfg.RAGEmbedding.WorkloadIdentitiesFile,
+			)
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding workload verifier failed: %v", err)
+			}
+			ragJTIConsumer, err := ragworkloadauth.NewRedisJTIConsumer(
+				redisClient,
+				cfg.RAGEmbedding.WorkloadJTIPrefix,
+			)
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding jti guard failed: %v", err)
+			}
+			ragHTTPClient := providerhttpclient.New(providerhttpclient.Config{
+				MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
+				MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
+				MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
+				IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
+				DialTimeout:           cfg.ProviderTransport.DialTimeout,
+				DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
+				TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
+				ResponseHeaderTimeout: cfg.RAGEmbedding.AttemptTimeout,
+				ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
+			})
+			defer ragHTTPClient.CloseIdleConnections()
+			ragProvider, err := embeddingopenai.NewResolvingProvider(
+				credentialResolver,
+				credentials.Ref{
+					CredentialRefID:   cfg.RAGEmbedding.CredentialRefID,
+					CredentialVersion: 1,
+					CredentialState:   credentials.StateActive,
+				},
+				embeddingopenai.Config{
+					BaseURL:          cfg.RAGEmbedding.OpenAIBaseURL,
+					Model:            cfg.RAGEmbedding.Model,
+					Dimensions:       cfg.RAGEmbedding.Dimensions,
+					Timeout:          cfg.RAGEmbedding.AttemptTimeout,
+					MaxAttempts:      cfg.RAGEmbedding.MaxAttempts,
+					MaxResponseBytes: cfg.RAGEmbedding.MaxResponseBytes,
+					MaxInputs:        cfg.RAGEmbedding.MaxInputs,
+					HTTPClient:       ragHTTPClient,
+				},
+			)
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding provider configuration failed")
+			}
+			ragEmbeddingService, err := ragembeddingservice.New(ragProvider, ragembeddingservice.Config{
+				Provider:          cfg.RAGEmbedding.Provider,
+				Model:             cfg.RAGEmbedding.Model,
+				Dimensions:        cfg.RAGEmbedding.Dimensions,
+				ProfileVersion:    cfg.RAGEmbedding.ProfileVersion,
+				MaxInputs:         cfg.RAGEmbedding.MaxInputs,
+				MaxTokensPerInput: cfg.RAGEmbedding.MaxTokensPerInput,
+				MaxBatchTokens:    cfg.RAGEmbedding.MaxBatchTokens,
+			})
+			if err != nil {
+				log.Fatalf("gateway-core rag embedding service configuration failed")
+			}
+			privateRouter.Handle(
+				"/internal/v1/rag/",
+				raghttp.NewRouter(
+					ragworkloadauth.NewAuthenticator(ragWorkloadVerifier, ragJTIConsumer),
+					ragEmbeddingService,
+					cfg.MaxRequestBodyBytes,
+					raghttp.WithMetrics(metricsRegistry),
+				),
+			)
+		}
 		tenantChatPrivateServer = app.NewServerAtAddress(
 			cfg.TenantChatPrivate.ListenAddress,
-			tenantChatPrivateRouter,
+			privateRouter,
 		)
 	}
 
@@ -528,6 +640,13 @@ func newPostgresPool(ctx context.Context, rawURL string, tuning config.PostgresP
 }
 
 func parsePostgresPoolConfig(rawURL string, tuning config.PostgresPoolConfig, applicationName string) (*pgxpool.Config, error) {
+	if tuning.MaxConns <= 0 || tuning.MaxConns > 1000 {
+		return nil, errors.New("invalid PostgreSQL pool maximum connections")
+	}
+	if tuning.MinConns < 0 || tuning.MinConns > 1000 || tuning.MinConns > tuning.MaxConns {
+		return nil, errors.New("invalid PostgreSQL pool minimum connections")
+	}
+
 	poolConfig, err := pgxpool.ParseConfig(config.DatabaseDriverURL(rawURL))
 	if err != nil {
 		return nil, errors.New("invalid PostgreSQL pool connection configuration")

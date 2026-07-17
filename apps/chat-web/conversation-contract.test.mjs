@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -10,16 +11,33 @@ import {
   messagePage,
   parseIfMatch,
   parsePageQuery,
+  safeChatError,
   strongestPolicyState,
 } from './src/lib/conversation-contract.mjs';
 
 const conversationId = '00000000-0000-4000-8000-000000000300';
 const turnId = '00000000-0000-4000-8000-000000000301';
 const messageId = '00000000-0000-4000-8000-000000000400';
+const userMessageId = '00000000-0000-4000-8000-000000000401';
+
+function accepted(extra = {}) {
+  return frame('chat.turn.accepted', 1, {
+    replayed: false,
+    userContent: '연락처는 [EMAIL_1]입니다.',
+    userMessageId,
+    ...extra,
+  });
+}
 
 test('conversation inputs reject browser-provided scope and unknown keys', () => {
   assert.throws(() => createConversationBody({
     idempotencyKey: '1234567890abcdef', title: '새 대화', tenantId: conversationId,
+  }));
+  assert.throws(() => createConversationBody({
+    idempotencyKey: '1234567890abcdef', knowledgeBaseId: conversationId, title: '새 대화',
+  }));
+  assert.throws(() => createConversationBody({
+    idempotencyKey: '1234567890abcdef', knowledgeMode: 'global', title: '새 대화',
   }));
   assert.throws(() => createTurnBody({
     content: '질문',
@@ -39,6 +57,12 @@ test('conversation inputs reject browser-provided scope and unknown keys', () =>
     idempotencyKey: '1234567890abcdef',
     usageIntent: { cacheStrategy: 'exact', maxOutputTokens: 1024, requestedTier: 'auto' },
   }));
+});
+
+test('conversation knowledge mode defaults off and accepts only an explicit tenant mode', () => {
+  const base = { idempotencyKey: '1234567890abcdef', title: '새 대화' };
+  assert.equal(createConversationBody(base).knowledgeMode, 'off');
+  assert.equal(createConversationBody({ ...base, knowledgeMode: 'tenant' }).knowledgeMode, 'tenant');
 });
 
 test('turn context mode defaults to conversation and accepts single-turn isolation', () => {
@@ -69,18 +93,39 @@ test('turn output token limit matches the public Tenant Chat API limit', () => {
 });
 
 test('success response shaping rejects tenant or user scope fields', () => {
+  const conversation = {
+    id: conversationId,
+    title: '새 대화',
+    knowledgeMode: 'off',
+    version: 1,
+    historyRetentionDays: 30,
+    createdAt: '2026-07-15T00:00:00.000Z',
+    updatedAt: '2026-07-15T00:00:00.000Z',
+  };
   assert.throws(() => conversationPage({
+    items: [{ ...conversation, tenantId: conversationId }],
+    nextCursor: null,
+  }));
+  assert.throws(() => conversationPage({ items: [{ ...conversation, knowledgeMode: 'global' }], nextCursor: null }));
+  const withoutKnowledgeMode = Object.fromEntries(Object.entries(conversation).filter(([key]) => key !== 'knowledgeMode'));
+  assert.throws(() => conversationPage({ items: [withoutKnowledgeMode], nextCursor: null }));
+});
+
+test('conversation response accepts required knowledge mode and no-retention policy', () => {
+  const page = conversationPage({
     items: [{
       id: conversationId,
       title: '새 대화',
+      knowledgeMode: 'tenant',
       version: 1,
-      historyRetentionDays: 30,
+      historyRetentionDays: 0,
       createdAt: '2026-07-15T00:00:00.000Z',
       updatedAt: '2026-07-15T00:00:00.000Z',
-      tenantId: conversationId,
     }],
     nextCursor: null,
-  }));
+  });
+  assert.equal(page.items[0].knowledgeMode, 'tenant');
+  assert.equal(page.items[0].historyRetentionDays, 0);
 });
 
 test('policy reducer uses the most severe bounded state', () => {
@@ -111,8 +156,9 @@ test('history accepts bounded assistant model metadata and rejects it on user me
 
 test('SSE parser enforces accepted, contiguous deltas, and one terminal event', async () => {
   const deltas = [];
+  const acceptedEvents = [];
   const terminal = await consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }),
+    accepted(),
     frame('chat.turn.delta', 2, { delta: '안녕' }),
     frame('chat.turn.final', 3, {
       messageId,
@@ -123,8 +169,14 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
       budgetState: 'warning',
       replayed: false,
     }),
-  ]), { conversationId, onDelta: (delta) => deltas.push(delta) });
+  ]), {
+    conversationId,
+    onAccepted: (event) => acceptedEvents.push(event),
+    onDelta: (delta) => deltas.push(delta),
+  });
   assert.deepEqual(deltas, ['안녕']);
+  assert.equal(acceptedEvents[0].userContent, '연락처는 [EMAIL_1]입니다.');
+  assert.equal(acceptedEvents[0].userMessageId, userMessageId);
   assert.equal(terminal.type, 'chat.turn.final');
   assert.equal(terminal.quotaState, 'economy');
   assert.equal(terminal.effectiveModelKey, 'gpt-5.4-mini');
@@ -133,7 +185,7 @@ test('SSE parser enforces accepted, contiguous deltas, and one terminal event', 
 
 test('SSE parser accepts an exact cache hit', async () => {
   const terminal = await consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }),
+    accepted(),
     frame('chat.turn.final', 2, {
       messageId,
       terminalOutcome: 'succeeded',
@@ -145,9 +197,60 @@ test('SSE parser accepts an exact cache hit', async () => {
   assert.equal(terminal.effectiveModelKey, undefined);
 });
 
+test('SSE parser accepts only safe citation metadata and keeps event order', async () => {
+  const citation = { sourceId: 'S1', documentId: '00000000-0000-4000-8000-000000000101', displayName: 'Policy.pdf', pageStart: 2, pageEnd: 2, lineStart: null, lineEnd: null, ordinal: 1 };
+  let current = [];
+  let applyCount = 0;
+  const applyCitations = (citations) => {
+    current = citations;
+    applyCount += 1;
+  };
+  await consumeTurnSse(stream([
+    accepted(),
+    frame('chat.turn.sources', 2, { citations: [citation] }),
+    frame('chat.turn.delta', 3, { delta: 'Answer [S1] [S999]' }),
+    frame('chat.turn.citations', 4, { citations: [citation] }),
+    frame('chat.turn.final', 5, { messageId, terminalOutcome: 'succeeded', replayed: false }),
+  ]), { conversationId, onSources: applyCitations, onCitations: applyCitations });
+  assert.equal(applyCount, 2);
+  assert.deepEqual(current, [citation]);
+
+  current = [];
+  await consumeTurnSse(stream([
+    accepted({ replayed: true }),
+    frame('chat.turn.sources', 2, { citations: [citation] }),
+    frame('chat.turn.delta', 3, { delta: 'Replay [S1]' }),
+    frame('chat.turn.final', 4, { messageId, terminalOutcome: 'succeeded', replayed: true }),
+  ]), { conversationId, onSources: applyCitations, onCitations: applyCitations });
+  assert.deepEqual(current, [citation]);
+  await assert.rejects(() => consumeTurnSse(stream([
+    accepted(),
+    frame('chat.turn.sources', 2, { citations: [{ ...citation, ciphertext: 'not-safe' }] }),
+  ]), { conversationId }));
+});
+
+test('ChatShell applies replay sources and final citations through one replace handler', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  assert.match(source, /onSources:\s*applyCitations/);
+  assert.match(source, /onCitations:\s*applyCitations/);
+  assert.match(source, /replaceCitations\(message, citations\)/);
+});
+
+test('ChatShell defaults new conversations to normal and forwards an explicit knowledge mode', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  assert.match(source, /useState<KnowledgeMode>\('off'\)/);
+  assert.match(source, /knowledgeMode:\s*requestedKnowledgeMode/);
+  assert.match(source, /setNewConversationKnowledgeMode\('off'\)/);
+});
+
+test('RAG failures use bounded user-safe Korean copy', () => {
+  assert.equal(safeChatError({ code: 'CHAT_RAG_DISABLED' }).message, '이 조직에서는 사내 지식 채팅을 사용할 수 없습니다.');
+  assert.equal(safeChatError({ code: 'CHAT_RAG_UNAVAILABLE', detail: 'provider secret' }).message, '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+});
+
 test('SSE parser rejects invalid effective model metadata', async () => {
   await assert.rejects(() => consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }),
+    accepted(),
     frame('chat.turn.final', 2, {
       messageId,
       terminalOutcome: 'succeeded',
@@ -159,11 +262,11 @@ test('SSE parser rejects invalid effective model metadata', async () => {
 
 test('SSE parser rejects gaps, mismatched ids, and oversized frames', async () => {
   await assert.rejects(() => consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }),
+    accepted(),
     frame('chat.turn.delta', 3, { delta: 'gap' }),
   ]), { conversationId }));
   await assert.rejects(() => consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }).replace(`${turnId}:1`, `${turnId}:2`),
+    accepted().replace(`${turnId}:1`, `${turnId}:2`),
   ]), { conversationId }));
   await assert.rejects(() => consumeTurnSse(stream([`event: chat.turn.delta\ndata: ${'x'.repeat(70_000)}\n\n`]), { conversationId }));
   await assert.rejects(() => consumeTurnSse(stream([
@@ -177,7 +280,7 @@ test('SSE parser cancels the upstream reader after a malformed sequence', async 
   const malformedStream = new ReadableStream({
     start(controller) {
       controller.enqueue(encoder.encode([
-        frame('chat.turn.accepted', 1, { replayed: false }),
+        accepted(),
         frame('chat.turn.delta', 3, { delta: 'gap' }),
       ].join('')));
     },

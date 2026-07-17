@@ -8,12 +8,15 @@ import type {
   EmployeeCostPoliciesResponse,
   EmployeeCostPolicyListItem
 } from "@/lib/control-plane/employee-cost-policy-types";
+import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
 
 const MICRO_USD_PER_USD = 1_000_000;
 
 export type EmployeeCostPolicySnapshot = {
   costPolicies?: EmployeeCostPoliciesResponse | null;
   loadError?: string | null;
+  monthlyUsage?: EmployeeUsageResponse | null;
+  monthlyUsageLoadError?: string | null;
 };
 
 export type EmployeeProjectUsage = {
@@ -31,31 +34,40 @@ export type EmployeeUsageRow = {
   costPolicy: EmployeeCostPolicyListItem | null;
   costShare: number | null;
   dailyCostMicroUsd: number | null;
+  dailyRank: number;
   department: string | null;
   email: string;
   employeeId: string;
   invitationStatus: EmployeeRecord["invitationStatus"];
   monthlyBudgetLimitUsd: number;
+  monthlyCostMicroUsd: number | null;
   monthlyCostUsd: number;
+  monthlyRank: number;
   name: string;
   projectCount: number;
   projects: EmployeeProjectUsage[];
   quotaStatus: ProjectEmployeeQuotaStatus;
-  rank: number;
   status: EmployeeRecord["status"];
   weeklyCostMicroUsd: number | null;
+  weeklyRank: number;
 };
 
 export type EmployeeUsageReadModel = {
   activeEmployees: number;
   costPolicyLoadError: string | null;
+  monthlyCostLoadError: string | null;
+  monthlyPeriodTimezone: string | null;
   periodTimezone: string | null;
   rows: EmployeeUsageRow[];
   totalDailyCostMicroUsd: number | null;
+  totalMonthlyCostMicroUsd: number | null;
   trackedEmployees: number;
 };
 
-type EmployeeUsageCandidate = Omit<EmployeeUsageRow, "costShare" | "rank">;
+type EmployeeUsageCandidate = Omit<
+  EmployeeUsageRow,
+  "costShare" | "dailyRank" | "monthlyRank" | "weeklyRank"
+>;
 
 const quotaSeverity: Record<ProjectEmployeeQuotaStatus, number> = {
   exceeded: 3,
@@ -73,7 +85,14 @@ export function buildEmployeeUsageReadModel(
   const policyByEmployeeId = new Map(
     (snapshot.costPolicies?.data ?? []).map((row) => [row.employeeId, row])
   );
+  const monthlyUsageByEmployeeId = new Map(
+    (snapshot.monthlyUsage?.data ?? []).map((row) => [row.employeeId, row])
+  );
   const modelEmployeeIds = new Set(model.employees.map((employee) => employee.id));
+  const monthlyUsageComplete = Boolean(
+    snapshot.monthlyUsage &&
+      model.employees.every((employee) => monthlyUsageByEmployeeId.has(employee.id))
+  );
 
   for (const assignments of Object.values(model.assignmentsByProjectId)) {
     for (const assignment of assignments) {
@@ -104,6 +123,9 @@ export function buildEmployeeUsageReadModel(
         (sum, project) => sum + project.monthlyBudgetLimitUsd,
         0
       ),
+      monthlyCostMicroUsd: monthlyUsageComplete
+        ? (monthlyUsageByEmployeeId.get(employee.id)?.total.costMicroUsd ?? null)
+        : null,
       monthlyCostUsd: projects.reduce((sum, project) => sum + project.monthlyCostUsd, 0),
       name: employee.name?.trim() || employee.email,
       projectCount: projects.length,
@@ -140,9 +162,24 @@ export function buildEmployeeUsageReadModel(
   const totalDailyCostMicroUsd = costPoliciesComplete
     ? unrankedRows.reduce((sum, row) => sum + (row.dailyCostMicroUsd ?? 0), 0)
     : null;
+  const totalMonthlyCostMicroUsd = monthlyUsageComplete
+    ? unrankedRows.reduce((sum, row) => sum + (row.monthlyCostMicroUsd ?? 0), 0)
+    : null;
   const periodTimezone = costPoliciesComplete
     ? snapshot.costPolicies?.data[0]?.policy.periodTimezone ?? null
     : null;
+  const dailyRankByEmployeeId = buildCostRankByEmployeeId(
+    unrankedRows,
+    (row) => row.dailyCostMicroUsd
+  );
+  const weeklyRankByEmployeeId = buildCostRankByEmployeeId(
+    unrankedRows,
+    (row) => row.weeklyCostMicroUsd
+  );
+  const monthlyRankByEmployeeId = buildCostRankByEmployeeId(
+    unrankedRows,
+    (row) => row.monthlyCostMicroUsd
+  );
   const rows = unrankedRows.map((row, index) => ({
     ...row,
     costShare:
@@ -151,7 +188,9 @@ export function buildEmployeeUsageReadModel(
       totalDailyCostMicroUsd > 0
         ? row.dailyCostMicroUsd / totalDailyCostMicroUsd
         : null,
-    rank: index + 1
+    dailyRank: dailyRankByEmployeeId.get(row.employeeId) ?? index + 1,
+    monthlyRank: monthlyRankByEmployeeId.get(row.employeeId) ?? index + 1,
+    weeklyRank: weeklyRankByEmployeeId.get(row.employeeId) ?? index + 1
   }));
 
   return {
@@ -161,11 +200,39 @@ export function buildEmployeeUsageReadModel(
       (snapshot.costPolicies && !costPoliciesComplete
         ? "Control Plane returned incomplete employee cost policies."
         : null),
+    monthlyCostLoadError:
+      snapshot.monthlyUsageLoadError ??
+      (snapshot.monthlyUsage && !monthlyUsageComplete
+        ? "Control Plane returned incomplete monthly employee usage."
+        : null),
+    monthlyPeriodTimezone: monthlyUsageComplete
+      ? snapshot.monthlyUsage?.period.timezone ?? null
+      : null,
     periodTimezone,
     rows,
     totalDailyCostMicroUsd,
+    totalMonthlyCostMicroUsd,
     trackedEmployees: rows.filter((row) => (row.dailyCostMicroUsd ?? 0) > 0).length
   };
+}
+
+function buildCostRankByEmployeeId(
+  rows: EmployeeUsageCandidate[],
+  getCost: (row: EmployeeUsageCandidate) => number | null
+) {
+  const rankedRows = [...rows].sort((left, right) => {
+    const leftCost = getCost(left);
+    const rightCost = getCost(right);
+
+    if (leftCost !== null && rightCost !== null) {
+      return rightCost - leftCost || left.name.localeCompare(right.name);
+    }
+    if (leftCost !== null) return -1;
+    if (rightCost !== null) return 1;
+    return left.name.localeCompare(right.name);
+  });
+
+  return new Map(rankedRows.map((row, index) => [row.employeeId, index + 1]));
 }
 
 function buildProjectUsage(

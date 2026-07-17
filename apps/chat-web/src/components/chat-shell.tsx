@@ -19,6 +19,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -26,6 +27,7 @@ import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
 import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
+import { getModelBrand } from '@/lib/model-brand.mjs';
 import {
   consumeTurnSse,
   isBlockedCode,
@@ -33,6 +35,7 @@ import {
   safeChatError,
   strongestPolicyState,
   type Conversation,
+  type Citation,
   type Message,
   type PolicyState,
   type SafeChatError,
@@ -40,6 +43,7 @@ import {
 
 const CONTEXT_MODE_STORAGE_KEY = 'gatelm.tenant-chat.context-mode';
 type ContextMode = 'conversation' | 'single_turn';
+type KnowledgeMode = 'off' | 'tenant';
 
 export function ChatShell() {
   const router = useRouter();
@@ -51,6 +55,7 @@ export function ChatShell() {
   const [messageCursor, setMessageCursor] = useState<string | null>(null);
   const [composer, setComposer] = useState('');
   const [contextMode, setContextMode] = useState<ContextMode>('conversation');
+  const [newConversationKnowledgeMode, setNewConversationKnowledgeMode] = useState<KnowledgeMode>('off');
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -191,11 +196,12 @@ export function ChatShell() {
 
   async function createConversation(): Promise<Conversation | null> {
     if (streaming || creatingConversation) return null;
+    const requestedKnowledgeMode = newConversationKnowledgeMode;
     setCreatingConversation(true);
     setError(null);
     try {
       const created = await api<Conversation>('/api/tenant-chat/conversations', {
-        body: JSON.stringify({ idempotencyKey: idempotencyKey(), title: '새 대화' }),
+        body: JSON.stringify({ idempotencyKey: idempotencyKey(), knowledgeMode: requestedKnowledgeMode, title: '새 대화' }),
         method: 'POST',
       });
       newConversationIdRef.current = created.id;
@@ -204,7 +210,10 @@ export function ChatShell() {
       setMessages([]);
       setMessageCursor(null);
       setPolicyState('normal');
-      setStatus('새 대화를 만들었습니다. 메시지를 입력하세요.');
+      setNewConversationKnowledgeMode('off');
+      setStatus(requestedKnowledgeMode === 'tenant'
+        ? '사내 지식 대화를 만들었습니다. 메시지를 입력하세요.'
+        : '일반 대화를 만들었습니다. 메시지를 입력하세요.');
       closeDrawer(false);
       requestAnimationFrame(() => composerRef.current?.focus());
       return created;
@@ -325,12 +334,22 @@ export function ChatShell() {
         method: 'POST',
         signal: controller.signal,
       });
+      const applyCitations = (citations: readonly Citation[]) => {
+        setMessages((current) => current.map((message) => message.id === draftId
+          ? replaceCitations(message, citations)
+          : message));
+      };
       const terminal = await consumeTurnSse(response.body, {
         conversationId,
         onAccepted: (accepted) => {
           activeTurnIdRef.current = accepted.turnId;
           setMessages((current) => current.map((message) => message.id === optimisticUserId
-            ? { ...message, turnId: accepted.turnId }
+            ? {
+                ...message,
+                id: accepted.userMessageId ?? message.id,
+                turnId: accepted.turnId,
+                content: accepted.userContent ?? message.content,
+              }
             : message));
         },
         onDelta: (delta, deltaEvent) => {
@@ -338,6 +357,8 @@ export function ChatShell() {
             ? { ...message, turnId: deltaEvent.turnId, content: message.content + delta }
             : message));
         },
+        onSources: applyCitations,
+        onCitations: applyCitations,
       });
       if (terminal.type === 'chat.turn.final') {
         setMessages((current) => current.map((message) => message.id === draftId
@@ -479,8 +500,19 @@ export function ChatShell() {
     <section className="chat-main">
       <header className="chat-topbar">
         <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
-        <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}</span></div>
+        <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}{selected ? ` · ${selected.knowledgeMode === 'tenant' ? '사내 지식 채팅' : '일반 채팅'}` : ''}</span></div>
         <div className="topbar-actions">
+          <label className="context-setting" title="다음에 만들 새 대화에서 사내 지식을 사용할지 선택합니다.">
+            <input
+              aria-label="다음 새 대화에 사내 지식 사용"
+              checked={newConversationKnowledgeMode === 'tenant'}
+              disabled={streaming || creatingConversation}
+              onChange={(event) => setNewConversationKnowledgeMode(event.target.checked ? 'tenant' : 'off')}
+              type="checkbox"
+            />
+            <span className="context-switch" aria-hidden="true" />
+            <span className="context-setting-copy"><strong>새 대화 유형</strong><span>{newConversationKnowledgeMode === 'tenant' ? '사내 지식' : '일반'}</span></span>
+          </label>
           <label className="context-setting" title="끄면 다음 요청은 이전 대화 없이 현재 메시지만 모델과 캐시에 전달됩니다.">
             <input
               aria-label="이전 대화 컨텍스트 유지"
@@ -511,17 +543,17 @@ export function ChatShell() {
                     <article>
                       <span className="message-author">GateLM</span>
                       {message.content
-                        ? <MarkdownMessage content={message.content} />
+                        ? <><MarkdownMessage content={message.content} />{message.citations?.length ? <ol className="citation-list" aria-label="답변 출처">{message.citations.map((citation) => <li key={citation.sourceId}><strong>[{citation.sourceId}]</strong> {citation.availability === 'unavailable' ? '현재 사용할 수 없는 출처' : <>{citation.displayName} · {citation.pageStart ? `p. ${citation.pageStart}${citation.pageEnd && citation.pageEnd !== citation.pageStart ? `–${citation.pageEnd}` : ''}` : `line ${citation.lineStart ?? '?'}${citation.lineEnd && citation.lineEnd !== citation.lineStart ? `–${citation.lineEnd}` : ''}`}</>}</li>)}</ol> : null}</>
                         : streaming && message === messages.at(-1) && !message.notice
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
                       {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
-                      {message.content && (message.cacheOutcome === 'hit' || message.effectiveModelKey) && <div className="message-assistant-actions">
+                      {message.content && <div className="message-assistant-actions">
                         <MessageCopyButton content={message.content} label="모델 답변" />
                         {message.cacheOutcome === 'hit'
                           ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
                           : message.effectiveModelKey
-                            ? <div className="message-meta" aria-label={`응답 ${modelResponseMetaText(message, userMessagesByTurnId)}`}>{modelResponseMetaText(message, userMessagesByTurnId)}</div>
+                            ? <ModelResponseMeta message={message} userMessagesByTurnId={userMessagesByTurnId} />
                             : null}
                       </div>}
                     </article>
@@ -535,7 +567,7 @@ export function ChatShell() {
           <div className={`composer${streaming ? ' is-streaming' : ''}`}>
             <label className="sr-only" htmlFor="chat-composer">메시지 입력</label>
             <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={policyState === 'blocked'} placeholder={policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
-            {streaming ? <Button type="button" className="stop-button" aria-label="답변 생성 중지" onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden />{stopping ? '중지 중' : '중지'}</Button>
+            {streaming ? <Button type="button" className="stop-button" aria-label={stopping ? '답변 생성 중지 중' : '답변 생성 중지'} onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden /></Button>
               : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim() || policyState === 'blocked'}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
           </div>
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
@@ -637,6 +669,35 @@ function MessageCopyButton({ content, label }: Readonly<{ content: string; label
       {copyState === 'copied' ? `${label}을 클립보드에 복사했습니다.` : copyState === 'failed' ? `${label}을 복사하지 못했습니다.` : ''}
     </span>
   </>;
+}
+
+function ModelResponseMeta({
+  message,
+  userMessagesByTurnId,
+}: Readonly<{
+  message: DisplayMessage;
+  userMessagesByTurnId: ReadonlyMap<string, DisplayMessage>;
+}>) {
+  const metaText = modelResponseMetaText(message, userMessagesByTurnId);
+  const brand = getModelBrand(message.effectiveModelKey);
+
+  return <div className="message-meta message-model-meta" aria-label={`응답 ${metaText}`}>
+    {brand && <span className="message-model-logo" data-brand={brand.key} aria-hidden="true">
+      <Image alt="" height={16} src={brand.logoSrc} width={16} />
+    </span>}
+    <span>{metaText}</span>
+  </div>;
+}
+
+function replaceCitations(message: DisplayMessage, citations: readonly Citation[]): DisplayMessage {
+  if (message.citations?.length === citations.length && message.citations.every((citation, index) => sameCitation(citation, citations[index]))) return message;
+  return { ...message, citations };
+}
+
+function sameCitation(left: Citation, right: Citation): boolean {
+  return left.sourceId === right.sourceId && left.documentId === right.documentId && left.displayName === right.displayName &&
+    left.pageStart === right.pageStart && left.pageEnd === right.pageEnd && left.lineStart === right.lineStart &&
+    left.lineEnd === right.lineEnd && left.ordinal === right.ordinal && left.availability === right.availability;
 }
 
 function idempotencyKey(): string {

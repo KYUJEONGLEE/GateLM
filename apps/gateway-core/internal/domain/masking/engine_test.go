@@ -261,6 +261,38 @@ func TestEntityScopeNormalizesKoreanPersonNamesWithContiguousBusinessRoleSuffix(
 	}
 }
 
+func TestEntityScopeSeedsCountersFromTrustedRedactedHistory(t *testing.T) {
+	scope := NewEntityScope()
+	scope.SeedFromRedactedText("Prior [EMAIL_4], [PERSON_2], and ignored [UNKNOWN_99].")
+
+	if got := scope.PlaceholderFor(string(DetectorEmail), "new@example.test", PlaceholderEmail); got != "[EMAIL_5]" {
+		t.Fatalf("expected seeded email counter, got %q", got)
+	}
+	if got := scope.PlaceholderFor(string(DetectorPersonName), "홍길동", PlaceholderPersonName); got != "[PERSON_3]" {
+		t.Fatalf("expected seeded person counter, got %q", got)
+	}
+}
+
+func TestEntityScopePlaceholderCountersReturnsBoundedDefensiveSnapshot(t *testing.T) {
+	scope := NewEntityScope()
+	scope.SeedPlaceholderCounters(map[string]int{"EMAIL": 4, "PERSON": 2, "UNKNOWN": 99})
+	scope.counters["ORGANIZATION"] = maximumSeededPlaceholderCounter + 1
+
+	snapshot := scope.PlaceholderCounters()
+	if !reflect.DeepEqual(snapshot, map[string]int{
+		"EMAIL":        4,
+		"ORGANIZATION": maximumSeededPlaceholderCounter,
+		"PERSON":       2,
+	}) {
+		t.Fatalf("unexpected placeholder counter snapshot: %#v", snapshot)
+	}
+
+	snapshot["EMAIL"] = 99
+	if got := scope.PlaceholderFor(string(DetectorEmail), "new@example.test", PlaceholderEmail); got != "[EMAIL_5]" {
+		t.Fatalf("mutating snapshot must not change scope, got %q", got)
+	}
+}
+
 func TestEngineDoesNotLinkAmbiguousKoreanPersonAlias(t *testing.T) {
 	firstName := "\uc774\uc724\uc9c0"
 	secondName := "\ubc15\uc724\uc9c0"

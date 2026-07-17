@@ -2,9 +2,15 @@ package masking
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
+
+const maximumSeededPlaceholderCounter = 1_000_000
+
+var numberedPlaceholderPattern = regexp.MustCompile(`\[([A-Z][A-Z_]*)_([1-9][0-9]{0,6})\]`)
 
 type EntityScope struct {
 	placeholders  map[string]map[string]string
@@ -25,6 +31,68 @@ func NewEntityScope() *EntityScope {
 		counters:      map[string]int{},
 		personAnchors: map[string]personAliasAnchor{},
 	}
+}
+
+// SeedPlaceholderCounters reserves identifiers that already exist in trusted,
+// redacted conversation history. It never restores or retains raw entity
+// values; it only prevents a new entity from reusing an existing identifier.
+func (s *EntityScope) SeedPlaceholderCounters(counters map[string]int) {
+	if s == nil {
+		return
+	}
+	s.ensureState()
+	for prefix, count := range counters {
+		if !isSupportedPlaceholderPrefix(prefix) || count < 0 || count > maximumSeededPlaceholderCounter {
+			continue
+		}
+		if count > s.counters[prefix] {
+			s.counters[prefix] = count
+		}
+	}
+}
+
+// PlaceholderCounters returns a defensive, raw-value-free snapshot that can
+// seed another masking runtime without exposing entity-to-placeholder maps.
+func (s *EntityScope) PlaceholderCounters() map[string]int {
+	if s == nil || len(s.counters) == 0 {
+		return nil
+	}
+	counters := make(map[string]int, len(s.counters))
+	for prefix, count := range s.counters {
+		if !isSupportedPlaceholderPrefix(prefix) || count <= 0 {
+			continue
+		}
+		if count > maximumSeededPlaceholderCounter {
+			count = maximumSeededPlaceholderCounter
+		}
+		counters[prefix] = count
+	}
+	if len(counters) == 0 {
+		return nil
+	}
+	return counters
+}
+
+// SeedFromRedactedText scans only GateLM placeholder tokens. It does not run
+// PII detectors and does not reinterpret the surrounding trusted text.
+func (s *EntityScope) SeedFromRedactedText(value string) {
+	if s == nil || value == "" {
+		return
+	}
+	counters := make(map[string]int)
+	for _, match := range numberedPlaceholderPattern.FindAllStringSubmatch(value, -1) {
+		if len(match) != 3 || !isSupportedPlaceholderPrefix(match[1]) {
+			continue
+		}
+		count, err := strconv.Atoi(match[2])
+		if err != nil || count > maximumSeededPlaceholderCounter {
+			continue
+		}
+		if count > counters[match[1]] {
+			counters[match[1]] = count
+		}
+	}
+	s.SeedPlaceholderCounters(counters)
 }
 
 func (s *EntityScope) PlaceholderFor(detectorType string, rawValue string, fallback string) string {
@@ -133,6 +201,15 @@ func isSupportedPersonRolePrefix(prefix string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func isSupportedPlaceholderPrefix(prefix string) bool {
+	switch prefix {
+	case "PERSON", "ORGANIZATION", "ADDRESS", "EMAIL", "PHONE_NUMBER":
+		return true
+	default:
+		return isSupportedPersonRolePrefix(prefix)
 	}
 }
 

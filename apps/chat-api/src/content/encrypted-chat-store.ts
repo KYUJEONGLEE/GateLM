@@ -7,7 +7,6 @@ import {
   MAX_EPHEMERAL_MESSAGE_CHARACTERS,
   type AdmissionHandle,
   type ClientUsageIntent,
-  type EphemeralMessage,
   type TenantChatContextMode,
 } from '@/execution/execution.types';
 import type { JsonValue } from '@/execution/jcs';
@@ -21,11 +20,13 @@ import {
 import { ContentIntegrityError } from './content.errors';
 import {
   createMessageAad,
-  createTitleAad,
+  createMessageCitationsAad,  createTitleAad,
   decryptContent,
   encryptContent,
   type ContentRole,
+  type EncryptedContent,
 } from './content-crypto';
+import { citationSnapshotJson, parseCitationSnapshot, type RagCitation } from '@/rag/rag-citations';
 import { ContentIntegrityService } from './content-integrity.service';
 import { CursorCodec, InvalidCursor } from './cursor-codec';
 import { TenantContentKeyService } from './tenant-content-key.service';
@@ -36,6 +37,8 @@ const CONVERSATION_CURSOR_SCOPE = 'tenant-chat:conversation:list:v1';
 const MESSAGE_CURSOR_SCOPE = 'tenant-chat:message:list:v1';
 const MAX_HISTORY_MESSAGES = 32;
 const MAX_HISTORY_BYTES = 256 * 1024;
+const MAX_PLACEHOLDER_COUNTER = 1_000_000;
+const PLACEHOLDER_PATTERN = /\[(EMAIL|PHONE_NUMBER|ADDRESS|PERSON|ORGANIZATION|CUSTOMER|AGENT|DOCTOR|PATIENT|APPLICANT|INTERVIEWER)_([1-9][0-9]{0,6})\]/g;
 const MODEL_KEY = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 
 export type ChatActor = Readonly<{
@@ -48,6 +51,7 @@ export type ConversationView = Readonly<{
   title: string;
   version: number;
   historyRetentionDays: number;
+  knowledgeMode: 'off' | 'tenant';
   createdAt: string;
   updatedAt: string;
 }>;
@@ -58,8 +62,30 @@ export type MessageView = Readonly<{
   role: 'user' | 'assistant';
   content: string;
   effectiveModelKey?: string;
+  citations?: readonly RagCitation[];
   sequence: number;
   createdAt: string;
+}>;
+
+export type MessageSafetyStatus = 'legacy_unverified' | 'sanitized' | 'provider_generated';
+
+export type CompletionHistoryMessage = Readonly<{
+  id: string;
+  turnId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  safetyStatus: MessageSafetyStatus;
+  safetyPolicyDigest: string | null;
+}>;
+
+export type CompletionHistory = Readonly<{
+  messages: readonly CompletionHistoryMessage[];
+  placeholderCounters: Readonly<Record<string, number>>;
+}>;
+
+export type LegacyUserSanitization = Readonly<{
+  messageId: string;
+  content: string;
 }>;
 
 export type ReservedTurn = Readonly<{
@@ -69,6 +95,7 @@ export type ReservedTurn = Readonly<{
   idempotencyKey: string;
   cacheEpoch: bigint;
   state: string;
+  knowledgeMode: 'off' | 'tenant';
   replayed: boolean;
 }>;
 
@@ -83,9 +110,14 @@ export class EncryptedChatStore {
 
   async createConversation(
     actor: ChatActor,
-    input: Readonly<{ idempotencyKey: string; title: string; historyRetentionDays: number }>,
+    input: Readonly<{
+      idempotencyKey: string;
+      title: string;
+      historyRetentionDays: number;
+      knowledgeMode: 'off' | 'tenant';
+    }>,
   ): Promise<Readonly<{ conversation: ConversationView; replayed: boolean }>> {
-    const binding = createBinding(actor, input.idempotencyKey, input.title);
+    const binding = createBinding(actor, input.idempotencyKey, input.title, input.knowledgeMode);
     const signed = await this.integrity.sign(binding);
     const id = randomUUID();
     const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
@@ -102,6 +134,7 @@ export class EncryptedChatStore {
           creationBindingMac: signed.mac,
           creationBindingKeyVersion: signed.keyVersion,
           historyRetentionDays: input.historyRetentionDays,
+          knowledgeMode: input.knowledgeMode,
           expiresAt,
           titleCiphertext: bytes(encrypted.ciphertext),
           titleNonce: bytes(encrypted.nonce),
@@ -350,9 +383,9 @@ export class EncryptedChatStore {
     const turnId = randomUUID();
     const requestId = randomUUID();
     try {
-      const turn = await this.prisma.$transaction(async (tx) => {
+      const created = await this.prisma.$transaction(async (tx) => {
         const conversation = await lockActiveConversation(tx, actor, conversationId);
-        return tx.tenantChatTurn.create({
+        const turn = await tx.tenantChatTurn.create({
           data: {
             id: turnId,
             conversationId,
@@ -365,13 +398,14 @@ export class EncryptedChatStore {
             capturedCacheEpoch: conversation.cacheEpoch,
           },
         });
+        return { turn, knowledgeMode: conversation.knowledgeMode };
       });
-      return reservedView(turn, false);
+      return reservedView(created.turn, false, created.knowledgeMode);
     } catch (error) {
       if (!uniqueConflict(error)) throw error;
-      const turn = await this.prisma.$transaction(async (tx) => {
-        await lockActiveConversation(tx, actor, conversationId);
-        return tx.tenantChatTurn.findUnique({
+      const result = await this.prisma.$transaction(async (tx) => {
+        const conversation = await lockActiveConversation(tx, actor, conversationId);
+        const turn = await tx.tenantChatTurn.findUnique({
           where: {
             tenantId_userId_idempotencyKey: {
               tenantId: actor.tenantId,
@@ -380,39 +414,74 @@ export class EncryptedChatStore {
             },
           },
         });
+        return { turn, knowledgeMode: conversation.knowledgeMode };
       });
-      if (!turn || turn.conversationId !== conversationId) throw new IdempotencyConflict();
-      await this.verifyBinding(binding, turn.requestBindingKeyVersion, turn.requestBindingMac);
-      return reservedView(turn, true);
+      if (!result.turn || result.turn.conversationId !== conversationId) throw new IdempotencyConflict();
+      await this.verifyBinding(binding, result.turn.requestBindingKeyVersion, result.turn.requestBindingMac);
+      return reservedView(result.turn, true, result.knowledgeMode);
     }
   }
 
   async persistAdmittedUser(
     actor: ChatActor,
     reserved: ReservedTurn,
-    content: string,
+    sanitizedContent: string,
+    policyDigest: string,
     handle: AdmissionHandle,
-  ): Promise<Readonly<{ replayed: boolean }>> {
+    legacyUsers: readonly LegacyUserSanitization[] = [],
+    legacyPolicyDigest = policyDigest,
+  ): Promise<Readonly<{ message: MessageView; replayed: boolean }>> {
     assertHandle(actor, reserved, handle);
-    const existing = await this.findTurnMessage(actor, reserved.turnId, 'user');
-    if (existing) {
-      await this.assertMessageContent(existing, content);
-      return Object.freeze({ replayed: true });
+    if (!validPolicyDigest(policyDigest) || !validPolicyDigest(legacyPolicyDigest)) {
+      throw new ContentIntegrityError();
     }
-    const messageId = randomUUID();
-    const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(
-        key,
-        content,
-        createMessageAad(
-          actor.tenantId,
-          reserved.conversationId,
-          messageId,
-          'user',
-          version,
+    if (legacyUsers.length > MAX_HISTORY_MESSAGES - 1) throw new ContentIntegrityError();
+    const existing = await this.findTurnMessage(actor, reserved.turnId, 'user');
+    if (existing && messageSafety(existing).status === 'sanitized') {
+      await this.assertMessageContent(existing, sanitizedContent);
+      assertSanitizedPolicy(existing, policyDigest);
+      if (legacyUsers.length === 0) {
+        return Object.freeze({ message: await this.messageView(existing), replayed: true });
+      }
+    }
+
+    const messageId = existing?.id ?? randomUUID();
+    const uniqueLegacy = uniqueLegacySanitizations(legacyUsers, messageId);
+    const concurrentlyMigratedIds = new Set<string>();
+    const encryptions = await this.keys.withActiveKey(actor.tenantId, (key, version) => {
+      const current = existing && messageSafety(existing).status === 'sanitized'
+        ? undefined
+        : encryptContent(
+          key,
+          sanitizedContent,
+          messageAadV2(
+            actor.tenantId,
+            reserved.conversationId,
+            messageId,
+            'user',
+            version,
+            'sanitized',
+            policyDigest,
+          ),
+        );
+      const migrated = uniqueLegacy.map((legacy) => ({
+        ...legacy,
+        encrypted: encryptContent(
+          key,
+          legacy.content,
+          messageAadV2(
+            actor.tenantId,
+            reserved.conversationId,
+            legacy.messageId,
+            'user',
+            version,
+            'sanitized',
+            legacyPolicyDigest,
+          ),
         ),
-      ),
-    );
+      }));
+      return { current, migrated };
+    });
     try {
       await this.prisma.$transaction(async (tx) => {
         const conversation = await lockActiveConversation(tx, actor, reserved.conversationId);
@@ -428,7 +497,59 @@ export class EncryptedChatStore {
         if (!turn || !['pending_admission', 'user_persisted', 'streaming'].includes(turn.state)) {
           throw new TurnStateConflict();
         }
+
+        for (const migration of encryptions.migrated) {
+          const changed = await tx.tenantChatMessage.updateMany({
+            where: {
+              id: migration.messageId,
+              conversationId: reserved.conversationId,
+              tenantId: actor.tenantId,
+              userId: actor.userId,
+              role: 'user',
+              schemaVersion: 1,
+              safetyStatus: 'legacy_unverified',
+            },
+            data: sanitizedMessageData(migration.encrypted, legacyPolicyDigest),
+          });
+          if (changed.count !== 1) {
+            const concurrentlyMigrated = await tx.tenantChatMessage.findFirst({
+              where: {
+                id: migration.messageId,
+                conversationId: reserved.conversationId,
+                tenantId: actor.tenantId,
+                userId: actor.userId,
+                role: 'user',
+              },
+            });
+            if (!concurrentlyMigrated) throw new TurnStateConflict();
+            assertSanitizedPolicy(concurrentlyMigrated, legacyPolicyDigest);
+            concurrentlyMigratedIds.add(migration.messageId);
+          }
+        }
+
+        if (existing) {
+          if (messageSafety(existing).status === 'legacy_unverified') {
+            if (!encryptions.current) throw new ContentIntegrityError();
+            const changed = await tx.tenantChatMessage.updateMany({
+              where: {
+                id: existing.id,
+                conversationId: reserved.conversationId,
+                tenantId: actor.tenantId,
+                userId: actor.userId,
+                turnId: reserved.turnId,
+                role: 'user',
+                schemaVersion: 1,
+                safetyStatus: 'legacy_unverified',
+              },
+              data: sanitizedMessageData(encryptions.current, policyDigest),
+            });
+            if (changed.count !== 1) throw new TurnStateConflict();
+          }
+          return;
+        }
+
         if (turn.state !== 'pending_admission') return;
+        if (!encryptions.current) throw new TurnStateConflict();
         const contentExpiresAt = expiry(conversation.historyRetentionDays);
         await tx.tenantChatMessage.create({
           data: {
@@ -440,11 +561,7 @@ export class EncryptedChatStore {
             requestId: reserved.requestId,
             role: 'user',
             sequence: conversation.nextMessageSequence,
-            ciphertext: bytes(encrypted.ciphertext),
-            nonce: bytes(encrypted.nonce),
-            tag: bytes(encrypted.tag),
-            contentKeyVersion: encrypted.contentKeyVersion,
-            schemaVersion: encrypted.schemaVersion,
+            ...sanitizedMessageData(encryptions.current, policyDigest),
             expiresAt: contentExpiresAt,
           },
         });
@@ -471,43 +588,185 @@ export class EncryptedChatStore {
           },
         });
       });
-      return Object.freeze({ replayed: false });
+      for (const migration of encryptions.migrated) {
+        if (!concurrentlyMigratedIds.has(migration.messageId)) continue;
+        const concurrentlyMigrated = await this.prisma.tenantChatMessage.findFirst({
+          where: {
+            id: migration.messageId,
+            conversationId: reserved.conversationId,
+            tenantId: actor.tenantId,
+            userId: actor.userId,
+            role: 'user',
+          },
+        });
+        if (!concurrentlyMigrated) throw new TurnStateConflict();
+        assertSanitizedPolicy(concurrentlyMigrated, legacyPolicyDigest);
+        await this.assertMessageContent(concurrentlyMigrated, migration.content);
+      }
+      const persisted = await this.findTurnMessage(actor, reserved.turnId, 'user');
+      if (!persisted || messageSafety(persisted).status !== 'sanitized') throw new TurnStateConflict();
+      await this.assertMessageContent(persisted, sanitizedContent);
+      assertSanitizedPolicy(persisted, policyDigest);
+      return Object.freeze({ message: await this.messageView(persisted), replayed: existing !== null });
     } catch (error) {
       if (!uniqueConflict(error)) throw error;
       const duplicate = await this.findTurnMessage(actor, reserved.turnId, 'user');
       if (!duplicate) throw error;
-      await this.assertMessageContent(duplicate, content);
-      return Object.freeze({ replayed: true });
+      if (messageSafety(duplicate).status !== 'sanitized') throw new TurnStateConflict();
+      await this.assertMessageContent(duplicate, sanitizedContent);
+      assertSanitizedPolicy(duplicate, policyDigest);
+      return Object.freeze({ message: await this.messageView(duplicate), replayed: true });
     }
+  }
+
+  async persistRagNoEvidence(
+    actor: ChatActor,
+    reserved: ReservedTurn,
+    userContent: string,
+    userPolicyDigest: string,
+    assistantContent: string,
+  ): Promise<Readonly<{ message: MessageView; userMessage: MessageView }>> {
+    const userMessageId = randomUUID();
+    const assistantMessageId = randomUUID();
+    const completed = await this.keys.withActiveKey(actor.tenantId, async (key, version) => {
+      const user = encryptContent(
+        key,
+        userContent,
+        messageAadV2(
+          actor.tenantId,
+          reserved.conversationId,
+          userMessageId,
+          'user',
+          version,
+          'sanitized',
+          userPolicyDigest,
+        ),
+      );
+      const assistant = encryptContent(
+        key,
+        assistantContent,
+        messageAadV2(
+          actor.tenantId,
+          reserved.conversationId,
+          assistantMessageId,
+          'assistant',
+          version,
+          'provider_generated',
+          null,
+        ),
+      );
+      return this.prisma.$transaction(async (tx) => {
+        const conversation = await lockActiveConversation(tx, actor, reserved.conversationId);
+        if (conversation.cacheEpoch !== reserved.cacheEpoch) throw new TurnStateConflict();
+        const turn = await tx.tenantChatTurn.findFirst({
+          where: {
+            id: reserved.turnId,
+            conversationId: reserved.conversationId,
+            tenantId: actor.tenantId,
+            userId: actor.userId,
+          },
+        });
+        if (!turn) throw new TurnStateConflict();
+        if (turn.state === 'completed') return true;
+        if (turn.state !== 'pending_admission') throw new TurnStateConflict();
+        const expiresAt = expiry(conversation.historyRetentionDays);
+        await tx.tenantChatMessage.createMany({
+          data: [
+            {
+              id: userMessageId, conversationId: reserved.conversationId, tenantId: actor.tenantId,
+              userId: actor.userId, turnId: reserved.turnId, requestId: reserved.requestId,
+              role: 'user', sequence: conversation.nextMessageSequence,
+              ciphertext: bytes(user.ciphertext), nonce: bytes(user.nonce), tag: bytes(user.tag),
+              contentKeyVersion: user.contentKeyVersion, schemaVersion: user.schemaVersion,
+              safetyStatus: 'sanitized', safetyPolicyDigest: userPolicyDigest, expiresAt,
+            },
+            {
+              id: assistantMessageId, conversationId: reserved.conversationId, tenantId: actor.tenantId,
+              userId: actor.userId, turnId: reserved.turnId, requestId: reserved.requestId,
+              role: 'assistant', sequence: conversation.nextMessageSequence + 1n,
+              ciphertext: bytes(assistant.ciphertext), nonce: bytes(assistant.nonce), tag: bytes(assistant.tag),
+              contentKeyVersion: assistant.contentKeyVersion, schemaVersion: assistant.schemaVersion,
+              safetyStatus: 'provider_generated', safetyPolicyDigest: null,
+              effectiveModelKey: null, expiresAt,
+            },
+          ],
+        });
+        await tx.tenantChatTurn.update({
+          where: { id: reserved.turnId },
+          data: { state: 'completed', safeErrorCode: null, completedAt: new Date() },
+        });
+        await tx.tenantChatConversation.update({
+          where: { id: reserved.conversationId },
+          data: { nextMessageSequence: { increment: 2 }, expiresAt },
+        });
+        return false;
+      });
+    });
+    const [message, userMessage] = completed
+      ? await Promise.all([
+          this.findTurnMessage(actor, reserved.turnId, 'assistant'),
+          this.findTurnMessage(actor, reserved.turnId, 'user'),
+        ])
+      : await Promise.all([
+          this.prisma.tenantChatMessage.findUnique({ where: { id: assistantMessageId } }),
+          this.prisma.tenantChatMessage.findUnique({ where: { id: userMessageId } }),
+        ]);
+    if (!message || !userMessage) throw new TurnStateConflict();
+    if (completed) {
+      await Promise.all([
+        this.assertMessageContent(message, assistantContent),
+        this.assertMessageContent(userMessage, userContent),
+      ]);
+    }
+    const [messageView, userMessageView] = await Promise.all([
+      this.messageView(message),
+      this.messageView(userMessage),
+    ]);
+    return Object.freeze({ message: messageView, userMessage: userMessageView });
   }
 
   async completionHistory(
     actor: ChatActor,
     conversationId: string,
-    currentTurnId: string,
-  ): Promise<readonly EphemeralMessage[]> {
+    currentContentBytes: number,
+  ): Promise<CompletionHistory> {
     await this.activeConversation(actor, conversationId);
+    if (!Number.isSafeInteger(currentContentBytes) || currentContentBytes < 1 || currentContentBytes > MAX_HISTORY_BYTES) {
+      throw new ContentIntegrityError();
+    }
     const rows = await this.prisma.tenantChatMessage.findMany({
       where: {
         conversationId,
         tenantId: actor.tenantId,
         userId: actor.userId,
-        OR: [{ turn: { state: 'completed' } }, { turnId: currentTurnId, role: 'user' }],
+        turn: { state: 'completed' },
       },
       orderBy: { sequence: 'desc' },
-      take: MAX_HISTORY_MESSAGES,
+      take: MAX_HISTORY_MESSAGES - 1,
     });
-    const selected: EphemeralMessage[] = [];
-    let bytesUsed = 0;
+    const selected: CompletionHistoryMessage[] = [];
+    let bytesUsed = currentContentBytes;
     for (const row of rows) {
       const content = await this.decryptMessage(row);
       if (content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS) break;
       const contentBytes = Buffer.byteLength(content, 'utf8');
       if (bytesUsed + contentBytes > MAX_HISTORY_BYTES) break;
       bytesUsed += contentBytes;
-      selected.push(Object.freeze({ role: row.role as 'user' | 'assistant', content }));
+      const safety = messageSafety(row);
+      selected.push(Object.freeze({
+        id: row.id,
+        turnId: row.turnId,
+        role: row.role as 'user' | 'assistant',
+        content,
+        safetyStatus: safety.status,
+        safetyPolicyDigest: safety.policyDigest,
+      }));
     }
-    return Object.freeze(selected.reverse());
+    selected.reverse();
+    return Object.freeze({
+      messages: Object.freeze(selected),
+      placeholderCounters: Object.freeze(placeholderCounters(selected)),
+    });
   }
 
   async markStreaming(actor: ChatActor, turnId: string): Promise<void> {
@@ -528,6 +787,7 @@ export class EncryptedChatStore {
     reserved: ReservedTurn,
     content: string,
     effectiveModelKey: string | null,
+    citations?: readonly RagCitation[],
   ): Promise<Readonly<{ message: MessageView; replayed: boolean }>> {
     assertEffectiveModelKey(effectiveModelKey);
     const existing = await this.findTurnMessage(actor, reserved.turnId, 'assistant');
@@ -537,19 +797,26 @@ export class EncryptedChatStore {
       return Object.freeze({ message: await this.messageView(existing), replayed: true });
     }
     const messageId = randomUUID();
-    const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) =>
-      encryptContent(
+    const encrypted = await this.keys.withActiveKey(actor.tenantId, (key, version) => {
+      const payload = encryptContent(
         key,
         content,
-        createMessageAad(
+        messageAadV2(
           actor.tenantId,
           reserved.conversationId,
           messageId,
           'assistant',
           version,
+          'provider_generated',
+          null,
         ),
-      ),
-    );
+      );
+      const citation = citations === undefined ? undefined : encryptContent(
+        key, citationSnapshotJson(citations),
+        createMessageCitationsAad(actor.tenantId, reserved.conversationId, messageId, version),
+      );
+      return { content: payload, citation };
+    });
     try {
       const message = await this.prisma.$transaction(async (tx) => {
         const conversation = await lockActiveConversation(tx, actor, reserved.conversationId);
@@ -576,12 +843,20 @@ export class EncryptedChatStore {
             requestId: reserved.requestId,
             role: 'assistant',
             sequence: conversation.nextMessageSequence,
-            ciphertext: bytes(encrypted.ciphertext),
-            nonce: bytes(encrypted.nonce),
-            tag: bytes(encrypted.tag),
-            contentKeyVersion: encrypted.contentKeyVersion,
-            schemaVersion: encrypted.schemaVersion,
-            effectiveModelKey,
+            ciphertext: bytes(encrypted.content.ciphertext),
+            nonce: bytes(encrypted.content.nonce),
+            tag: bytes(encrypted.content.tag),
+            contentKeyVersion: encrypted.content.contentKeyVersion,
+            schemaVersion: encrypted.content.schemaVersion,
+            safetyStatus: 'provider_generated',
+            safetyPolicyDigest: null,
+            ...(encrypted.citation ? {
+              citationCiphertext: bytes(encrypted.citation.ciphertext),
+              citationNonce: bytes(encrypted.citation.nonce),
+              citationTag: bytes(encrypted.citation.tag),
+              citationContentKeyVersion: encrypted.citation.contentKeyVersion,
+              citationSchemaVersion: encrypted.citation.schemaVersion,
+            } : {}),            effectiveModelKey,
             expiresAt: contentExpiresAt,
           },
         });
@@ -617,6 +892,52 @@ export class EncryptedChatStore {
       },
     });
     return row ? this.messageView(row) : null;
+  }
+
+  async readSanitizedUser(
+    actor: ChatActor,
+    reserved: ReservedTurn,
+  ): Promise<MessageView | null> {
+    const row = await this.prisma.tenantChatMessage.findFirst({
+      where: {
+        turnId: reserved.turnId,
+        conversationId: reserved.conversationId,
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        role: 'user',
+      },
+    });
+    if (!row) return null;
+    const safety = messageSafety(row);
+    if (safety.status !== 'sanitized' || !safety.policyDigest) {
+      throw new ContentIntegrityError();
+    }
+    return this.messageView(row);
+  }
+
+  async readCurrentUserSafety(
+    actor: ChatActor,
+    reserved: ReservedTurn,
+  ): Promise<CompletionHistoryMessage | null> {
+    const row = await this.prisma.tenantChatMessage.findFirst({
+      where: {
+        turnId: reserved.turnId,
+        conversationId: reserved.conversationId,
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        role: 'user',
+      },
+    });
+    if (!row) return null;
+    const safety = messageSafety(row);
+    return Object.freeze({
+      id: row.id,
+      turnId: row.turnId,
+      role: 'user' as const,
+      content: await this.decryptMessage(row),
+      safetyStatus: safety.status,
+      safetyPolicyDigest: safety.policyDigest,
+    });
   }
 
   async markTerminalFailure(actor: ChatActor, turnId: string, code: string): Promise<void> {
@@ -730,6 +1051,7 @@ export class EncryptedChatStore {
       title,
       version: row.version,
       historyRetentionDays: row.historyRetentionDays,
+      knowledgeMode: knowledgeMode(row.knowledgeMode),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     });
@@ -738,21 +1060,44 @@ export class EncryptedChatStore {
   private async messageView(row: TenantChatMessage): Promise<MessageView> {
     const content = await this.decryptMessage(row);
     const effectiveModelKey = messageEffectiveModelKey(row);
+    const citations = await this.decryptCitations(row);
     return Object.freeze({
       id: row.id,
       turnId: row.turnId,
       role: row.role as 'user' | 'assistant',
       content,
       ...(effectiveModelKey ? { effectiveModelKey } : {}),
+      ...(citations ? { citations: await this.withCitationAvailability(row.tenantId, citations) } : {}),
       sequence: safeSequence(row.sequence),
       createdAt: row.createdAt.toISOString(),
     });
   }
 
+  private async decryptCitations(row: TenantChatMessage): Promise<readonly RagCitation[] | undefined> {
+    const values = [row.citationCiphertext, row.citationNonce, row.citationTag, row.citationContentKeyVersion, row.citationSchemaVersion];
+    if (values.every((value) => value === null)) return undefined;
+    if (!row.citationCiphertext || !row.citationNonce || !row.citationTag || !row.citationContentKeyVersion || row.citationSchemaVersion !== 1 || row.role !== 'assistant') throw new ContentIntegrityError();
+    const plaintext = await this.keys.withKeyVersion(row.tenantId, row.citationContentKeyVersion, (key) => decryptContent(key, {
+      ciphertext: Buffer.from(row.citationCiphertext!), nonce: Buffer.from(row.citationNonce!), tag: Buffer.from(row.citationTag!),
+    }, createMessageCitationsAad(row.tenantId, row.conversationId, row.id, row.citationContentKeyVersion!)));
+    try { return parseCitationSnapshot(plaintext); } catch { throw new ContentIntegrityError(); }
+  }
+
+  private async withCitationAvailability(tenantId: string, citations: readonly RagCitation[]): Promise<readonly RagCitation[]> {
+    if (citations.length === 0) return citations;
+    const documents = await this.prisma.ragDocument.findMany({
+      where: { tenantId, publicId: { in: citations.map((citation) => citation.documentId) }, status: 'READY' },
+      select: { publicId: true },
+    });
+    const available = new Set(documents.map((document) => document.publicId));
+    return Object.freeze(citations.map((citation) => Object.freeze({ ...citation, availability: available.has(citation.documentId) ? 'available' as const : 'unavailable' as const })));
+  }
+
   private async decryptMessage(row: TenantChatMessage): Promise<string> {
-    if (row.schemaVersion !== 1 || !['user', 'assistant'].includes(row.role)) {
+    if (![1, 2].includes(row.schemaVersion) || !['user', 'assistant'].includes(row.role)) {
       throw new ContentIntegrityError();
     }
+    const safety = messageSafety(row);
     return this.keys.withKeyVersion(row.tenantId, row.contentKeyVersion, (key) =>
       decryptContent(
         key,
@@ -761,13 +1106,23 @@ export class EncryptedChatStore {
           nonce: Buffer.from(row.nonce),
           tag: Buffer.from(row.tag),
         },
-        createMessageAad(
-          row.tenantId,
-          row.conversationId,
-          row.id,
-          row.role as 'user' | 'assistant',
-          row.contentKeyVersion,
-        ),
+        row.schemaVersion === 1
+          ? messageAadV1(
+            row.tenantId,
+            row.conversationId,
+            row.id,
+            row.role as 'user' | 'assistant',
+            row.contentKeyVersion,
+          )
+          : messageAadV2(
+            row.tenantId,
+            row.conversationId,
+            row.id,
+            row.role as 'user' | 'assistant',
+            row.contentKeyVersion,
+            safety.status as 'sanitized' | 'provider_generated',
+            safety.policyDigest,
+          ),
       ),
     );
   }
@@ -805,7 +1160,7 @@ export class EncryptedChatStore {
     if (!isRecord(value) || !exactKeys(value, ['actor', 'boundary', 'limit', 'scope', 'version'])) throw new InvalidCursor();
     if (value.version !== 1 || value.scope !== CONVERSATION_CURSOR_SCOPE || value.limit !== limit || !sameActor(value.actor, actor)) throw new InvalidCursor();
     if (!isRecord(value.boundary) || !exactKeys(value.boundary, ['id', 'updatedAt'])) throw new InvalidCursor();
-    if (typeof value.boundary.id !== 'string' || !uuidV4(value.boundary.id) || typeof value.boundary.updatedAt !== 'string') throw new InvalidCursor();
+    if (typeof value.boundary.id !== 'string' || !isUuidV4(value.boundary.id) || typeof value.boundary.updatedAt !== 'string') throw new InvalidCursor();
     const updatedAt = new Date(value.boundary.updatedAt);
     if (!Number.isFinite(updatedAt.getTime())) throw new InvalidCursor();
     return { id: value.boundary.id, updatedAt };
@@ -836,10 +1191,17 @@ type LockedConversation = Readonly<{
   version: number;
   cacheEpoch: bigint;
   expiresAt: Date | null;
+  knowledgeMode: string;
 }>;
 
-function createBinding(actor: ChatActor, idempotencyKey: string, title: string): JsonValue {
-  return { actor: actorValue(actor), idempotencyKey, scope: CREATE_SCOPE, title, version: 1 };
+function createBinding(
+  actor: ChatActor,
+  idempotencyKey: string,
+  title: string,
+  knowledgeMode: 'off' | 'tenant',
+): JsonValue {
+  const legacy = { actor: actorValue(actor), idempotencyKey, scope: CREATE_SCOPE, title, version: 1 };
+  return knowledgeMode === 'tenant' ? { ...legacy, knowledgeMode } : legacy;
 }
 
 function turnBinding(
@@ -870,6 +1232,128 @@ function actorValue(actor: ChatActor): JsonValue {
   return { tenantId: actor.tenantId, userId: actor.userId };
 }
 
+
+function messageAadV1(
+  tenantId: string,
+  conversationId: string,
+  recordId: string,
+  role: 'user' | 'assistant',
+  contentKeyVersion: number,
+) {
+  return {
+    schemaVersion: 1 as const,
+    tenantId,
+    conversationId,
+    recordId,
+    contentKind: 'message' as const,
+    role,
+    contentKeyVersion,
+  };
+}
+
+function messageAadV2(
+  tenantId: string,
+  conversationId: string,
+  recordId: string,
+  role: 'user' | 'assistant',
+  contentKeyVersion: number,
+  safetyStatus: 'sanitized' | 'provider_generated',
+  safetyPolicyDigest: string | null,
+) {
+  return {
+    schemaVersion: 2 as const,
+    tenantId,
+    conversationId,
+    recordId,
+    contentKind: 'message' as const,
+    role,
+    contentKeyVersion,
+    safetyStatus,
+    safetyPolicyDigest,
+  };
+}
+
+function sanitizedMessageData(encrypted: EncryptedContent, policyDigest: string) {
+  if (encrypted.schemaVersion !== 2 || !validPolicyDigest(policyDigest)) {
+    throw new ContentIntegrityError();
+  }
+  return {
+    ciphertext: bytes(encrypted.ciphertext),
+    nonce: bytes(encrypted.nonce),
+    tag: bytes(encrypted.tag),
+    contentKeyVersion: encrypted.contentKeyVersion,
+    schemaVersion: 2,
+    safetyStatus: 'sanitized',
+    safetyPolicyDigest: policyDigest,
+  } as const;
+}
+
+function messageSafety(row: TenantChatMessage): Readonly<{
+  status: MessageSafetyStatus;
+  policyDigest: string | null;
+}> {
+  if (row.role !== 'user' && row.role !== 'assistant') throw new ContentIntegrityError();
+  if (row.schemaVersion === 1) {
+    return row.role === 'user'
+      ? Object.freeze({ status: 'legacy_unverified', policyDigest: null })
+      : Object.freeze({ status: 'provider_generated', policyDigest: null });
+  }
+  if (row.schemaVersion !== 2) throw new ContentIntegrityError();
+  if (
+    row.role === 'user' && row.safetyStatus === 'sanitized' &&
+    validPolicyDigest(row.safetyPolicyDigest)
+  ) {
+    return Object.freeze({ status: 'sanitized', policyDigest: row.safetyPolicyDigest });
+  }
+  if (
+    row.role === 'assistant' && row.safetyStatus === 'provider_generated' &&
+    row.safetyPolicyDigest === null
+  ) {
+    return Object.freeze({ status: 'provider_generated', policyDigest: null });
+  }
+  throw new ContentIntegrityError();
+}
+
+function assertSanitizedPolicy(row: TenantChatMessage, expected: string): void {
+  const safety = messageSafety(row);
+  if (safety.status !== 'sanitized' || safety.policyDigest !== expected) {
+    throw new ContentIntegrityError();
+  }
+}
+
+function uniqueLegacySanitizations(
+  values: readonly LegacyUserSanitization[],
+  currentMessageId: string,
+): readonly LegacyUserSanitization[] {
+  const seen = new Set<string>([currentMessageId]);
+  return Object.freeze(values.map((value) => {
+    if (!isUuidV4(value.messageId) || seen.has(value.messageId) || !value.content) {
+      throw new ContentIntegrityError();
+    }
+    seen.add(value.messageId);
+    return Object.freeze({ messageId: value.messageId, content: value.content });
+  }));
+}
+
+function placeholderCounters(messages: readonly CompletionHistoryMessage[]): Record<string, number> {
+  const counters: Record<string, number> = {};
+  for (const message of messages) {
+    if (message.safetyStatus !== 'sanitized') continue;
+    PLACEHOLDER_PATTERN.lastIndex = 0;
+    for (let match = PLACEHOLDER_PATTERN.exec(message.content); match; match = PLACEHOLDER_PATTERN.exec(message.content)) {
+      const prefix = match[1];
+      const count = Number(match[2]);
+      if (!prefix || !Number.isSafeInteger(count) || count < 1 || count > MAX_PLACEHOLDER_COUNTER) continue;
+      counters[prefix] = Math.max(counters[prefix] ?? 0, count);
+    }
+  }
+  return counters;
+}
+
+function validPolicyDigest(value: unknown): value is string {
+  return typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value);
+}
+
 async function lockActiveConversation(
   tx: Prisma.TransactionClient,
   actor: ChatActor,
@@ -881,9 +1365,11 @@ async function lockActiveConversation(
     nextMessageSequence: bigint;
     historyRetentionDays: number;
     expiresAt: Date | null;
+    knowledgeMode: string;
   }>>(Prisma.sql`
     SELECT id, cache_epoch AS "cacheEpoch", next_message_sequence AS "nextMessageSequence",
-      history_retention_days AS "historyRetentionDays", expires_at AS "expiresAt"
+      history_retention_days AS "historyRetentionDays", expires_at AS "expiresAt",
+      knowledge_mode AS "knowledgeMode"
     FROM tenant_chat_conversations
     WHERE id = ${conversationId}::uuid
       AND tenant_id = ${actor.tenantId}::uuid
@@ -918,6 +1404,7 @@ function reservedView(
     state: string;
   }>,
   replayed: boolean,
+  mode: string,
 ): ReservedTurn {
   return Object.freeze({
     conversationId: row.conversationId,
@@ -926,8 +1413,14 @@ function reservedView(
     idempotencyKey: row.idempotencyKey,
     cacheEpoch: row.capturedCacheEpoch,
     state: row.state,
+    knowledgeMode: knowledgeMode(mode),
     replayed,
   });
+}
+
+function knowledgeMode(value: string): 'off' | 'tenant' {
+  if (value === 'off' || value === 'tenant') return value;
+  throw new ContentIntegrityError();
 }
 
 function expiry(days: number): Date | null {
@@ -990,6 +1483,6 @@ function sameActor(value: JsonValue, actor: ChatActor): boolean {
   return isRecord(value) && exactKeys(value, ['tenantId', 'userId']) && value.tenantId === actor.tenantId && value.userId === actor.userId;
 }
 
-function uuidV4(value: string): boolean {
+function isUuidV4(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
 }

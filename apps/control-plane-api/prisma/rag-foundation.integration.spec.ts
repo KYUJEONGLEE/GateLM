@@ -208,7 +208,7 @@ describeIntegration('Tenant Chat RAG database foundation integration', () => {
     ).rejects.toThrow('expected 1536 dimensions');
 
     await expect(
-      createChunk(tenantId, documentId, indexId, zeroVector1536, 801),
+      createChunk(tenantId, documentId, indexId, zeroVector1536, 901),
     ).rejects.toThrow('rag_chunks_counts_check');
 
     await expect(

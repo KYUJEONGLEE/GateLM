@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-REPORT_VERSION = "ai-safety-resource-latency-benchmark.v1"
+REPORT_VERSION = "ai-safety-resource-latency-benchmark.v3"
 MODEL_ID = "openai/privacy-filter"
 CONTRACT_VERSION = "ai-safety-detector.v1"
 DEFAULT_ENDPOINT_PATH = "/internal/ai-safety/v1/detect"
@@ -34,11 +34,18 @@ class BenchmarkCase:
 
 @dataclass(frozen=True)
 class TargetResult:
+    target_kind: str
+    target_latency_ms: int
+    target_outcome: str
     sidecar_latency_ms: int | None
-    full_safety_latency_ms: int
     sidecar_outcome: str
+    sidecar_observation: str
     fallback_mode: str
+    fallback_observation: str
     sanitized_error_code: str | None = None
+    execution_mode: str | None = None
+    model_invocation_count: int | None = None
+    accepted_model_detection_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -47,11 +54,18 @@ class BenchmarkSample:
     case_group: str
     input_length_bucket: str
     runtime_profile: str
+    target_kind: str
+    target_latency_ms: int
+    target_outcome: str
     sidecar_latency_ms: int | None
-    full_safety_latency_ms: int
     sidecar_outcome: str
+    sidecar_observation: str
     fallback_mode: str
+    fallback_observation: str
     sanitized_error_code: str | None = None
+    execution_mode: str | None = None
+    model_invocation_count: int | None = None
+    accepted_model_detection_count: int | None = None
 
 
 @dataclass(frozen=True)

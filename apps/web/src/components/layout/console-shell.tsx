@@ -124,14 +124,6 @@ const navigationItems: Array<{
         },
         item: "analytics",
         path: (tenantId) => `/tenants/${tenantId}/analytics`
-      },
-      {
-        labels: {
-          en: "Alerts",
-          ko: "알림"
-        },
-        item: "alerts",
-        path: (tenantId) => `/tenants/${tenantId}/alerts`
       }
     ],
     section: "monitoring"
@@ -176,8 +168,8 @@ const navigationItems: Array<{
       },
       {
         labels: {
-          en: "API Management",
-          ko: "API 관리"
+          en: "API Key Management",
+          ko: "API Key 관리"
         },
         item: "api-keys",
         path: (tenantId) => `/tenants/${tenantId}/api-keys`

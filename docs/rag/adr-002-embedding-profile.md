@@ -1,6 +1,6 @@
 # ADR-002: Fixed embedding profile and vector search
 
-Status: **Accepted / M1 runtime profile validation and M2 database storage applied / Gateway and retrieval contracts pending**
+Status: **Accepted / M1 runtime validation, M2 database storage, and M4 Gateway private embedding contract applied / retrieval pending**
 
 Date: 2026-07-16
 
@@ -34,6 +34,7 @@ The generic OpenAI embeddings HTTP implementation moves from Semantic Cache-spec
 
 - Semantic Cache keeps its current profile, configuration, index, and public-handler behavior.
 - RAG gets a separate private workload-authenticated route and separate `RAG_EMBEDDING_*` configuration.
+- The RAG route uses a dedicated workload JWT contract because the existing Chat token is tied to turn/admission/snapshot semantics. Each signing `kid` is bound to exactly one issuer/subject and allowed purpose set; Chat API authorizes query and Control Plane Worker authorizes ingestion without sharing private keys.
 - Gateway alone reads the OpenAI key and maps provider errors to safe internal codes.
 - Control Plane worker submits chunk batches; Tenant Chat API submits the current query.
 - Default tests use a fake adapter or Go `httptest`; they never call OpenAI. Fake adapters are test/explicit-local only; staging/production startup rejects them and registers the actual OpenAI adapter.
@@ -49,7 +50,7 @@ The generic OpenAI embeddings HTTP implementation moves from Semantic Cache-spec
 
 ### Approved MVP profiles
 
-`chunkingProfileVersion = 1` uses 800 target tokens, 120-token overlap, PDF page preservation, a frozen tokenizer name/version, and deterministic paragraph/sentence-aware boundaries.
+`chunkingProfileVersion = 1` uses 600 target tokens, 100-token overlap, a 900-token maximum, PDF page preservation, pinned `tiktoken==0.13.0` with `cl100k_base`, and deterministic paragraph/sentence-aware boundaries.
 
 `retrievalProfileVersion = 1` initially uses:
 
@@ -58,7 +59,7 @@ The generic OpenAI embeddings HTTP implementation moves from Semantic Cache-spec
 - at most 6,000 RAG-context tokens including source envelopes;
 - deterministic removal of the lowest-ranked complete chunks when either limit is exceeded.
 
-These values are server-owned and not client parameters. Evaluation fixtures validate/tune version 1 before launch. After production enablement, changing retrieval values increments `retrievalProfileVersion`; changing 800/120 increments `chunkingProfileVersion` and requires re-chunking/re-embedding.
+These values are server-owned and not client parameters. Evaluation fixtures validate/tune version 1 before launch. After production enablement, changing retrieval values increments `retrievalProfileVersion`; changing 600/100/900 increments `chunkingProfileVersion` and requires re-chunking/re-embedding.
 
 ### Embedding usage and cost
 
@@ -107,5 +108,5 @@ Per-Document index build and activation are separated:
 - Fresh and upgrade migrations install/verify `vector` and enforce 1536 dimensions.
 - Two-tenant tests place the nearest vector in the wrong tenant and prove SQL never returns it.
 - Gateway tests prove fixed model/dimensions, batching limits, response validation, error redaction, and no public route.
-- Evaluation fixtures validate 800/120 chunking and top-six/0.30/6,000-token retrieval before production enablement.
+- Evaluation fixtures validate 600/100/900 chunking and top-six/0.30/6,000-token retrieval before production enablement.
 - Deployment tests verify the PostgreSQL image version/digest and reject fake embedding adapters in staging/production.

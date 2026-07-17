@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from app.domain.safety.decision import (
@@ -12,7 +13,11 @@ from app.domain.safety.decision import (
     BLOCK_REASON_SENSITIVE_DATA_BLOCKED,
     SafetyDecision,
 )
-from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
+from app.domain.safety.detectors import (
+    ALLOWED_DETECTOR_TYPES,
+    ALLOWED_PLACEHOLDER_PREFIXES,
+    MAXIMUM_PLACEHOLDER_COUNTER,
+)
 from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import SafetyDetector
 
@@ -383,6 +388,17 @@ class EntityMaskingScope:
         self._placeholders: dict[str, dict[str, str]] = {}
         self._counters: dict[str, int] = {}
         self._person_anchors: dict[str, PersonAliasAnchor] = {}
+
+    def seed_placeholder_counters(self, counters: Mapping[str, int]) -> None:
+        for prefix, count in counters.items():
+            if (
+                prefix not in ALLOWED_PLACEHOLDER_PREFIXES
+                or type(count) is not int
+                or count < 0
+                or count > MAXIMUM_PLACEHOLDER_COUNTER
+            ):
+                continue
+            self._counters[prefix] = max(self._counters.get(prefix, 0), count)
 
     def placeholder_for(
         self,

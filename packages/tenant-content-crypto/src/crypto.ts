@@ -38,7 +38,7 @@ export function encryptContent(
       nonce,
       tag: cipher.getAuthTag(),
       contentKeyVersion: aad.contentKeyVersion,
-      schemaVersion: 1,
+      schemaVersion: aad.schemaVersion,
     });
   } finally {
     input.fill(0);
@@ -155,7 +155,7 @@ function contentAadBytes(aad: TenantContentAad): Buffer {
   if (!aad || typeof aad !== 'object') {
     throw new ContentIntegrityError();
   }
-  if (aad.contentKind === 'title' || aad.contentKind === 'message') {
+  if (aad.contentKind === 'title' || aad.contentKind === 'message' || aad.contentKind === 'message_citations') {
     validateChatAad(aad);
   } else if (aad.contentKind === 'rag_chunk') {
     validateRagChunkAad(aad);
@@ -168,13 +168,47 @@ function contentAadBytes(aad: TenantContentAad): Buffer {
 }
 
 function validateChatAad(aad: ContentAad): void {
+  if (!positiveVersion(aad.contentKeyVersion)) {
+    throw new ContentIntegrityError();
+  }
+  if (aad.schemaVersion === 1) {
+    if (
+      !exactKeys(aad, [
+        'schemaVersion',
+        'tenantId',
+        'conversationId',
+        'recordId',
+        'contentKind',
+        'role',
+        'contentKeyVersion',
+      ]) ||
+      !['title', 'message', 'message_citations'].includes(aad.contentKind) ||
+      !['none', 'user', 'assistant'].includes(aad.role) ||
+      (aad.contentKind === 'title' && aad.role !== 'none') ||
+      (aad.contentKind === 'message' && aad.role === 'none') ||
+      (aad.contentKind === 'message_citations' && aad.role !== 'assistant')
+    ) {
+      throw new ContentIntegrityError();
+    }
+    return;
+  }
   if (
-    aad.schemaVersion !== 1 ||
-    !positiveVersion(aad.contentKeyVersion) ||
-    !['title', 'message'].includes(aad.contentKind) ||
-    !['none', 'user', 'assistant'].includes(aad.role) ||
-    (aad.contentKind === 'title' && aad.role !== 'none') ||
-    (aad.contentKind === 'message' && aad.role === 'none')
+    !exactKeys(aad, [
+      'schemaVersion',
+      'tenantId',
+      'conversationId',
+      'recordId',
+      'contentKind',
+      'role',
+      'contentKeyVersion',
+      'safetyStatus',
+      'safetyPolicyDigest',
+    ]) ||
+    aad.contentKind !== 'message' ||
+    (aad.role === 'user' &&
+      (aad.safetyStatus !== 'sanitized' || !policyDigest(aad.safetyPolicyDigest))) ||
+    (aad.role === 'assistant' &&
+      (aad.safetyStatus !== 'provider_generated' || aad.safetyPolicyDigest !== null))
   ) {
     throw new ContentIntegrityError();
   }
@@ -257,4 +291,8 @@ function exactKeys(value: object, expected: string[]): boolean {
   const actual = Object.keys(value).sort();
   const wanted = [...expected].sort();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+}
+
+function policyDigest(value: unknown): value is string {
+  return typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value);
 }

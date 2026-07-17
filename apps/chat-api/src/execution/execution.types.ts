@@ -1,4 +1,4 @@
-export type ExecutionPhase = 'admission' | 'completion' | 'cancel';
+export type ExecutionPhase = 'admission' | 'sanitization' | 'completion' | 'cancel';
 
 export type ExecutionScope = Readonly<{
   kind: 'tenant_chat';
@@ -21,6 +21,10 @@ export type SnapshotReference = Readonly<{
 }>;
 
 export const MAX_EPHEMERAL_MESSAGE_CHARACTERS = 20_000;
+// RAG context is request-local provider input, not a user-authored or persisted
+// chat message. Keep its transport ceiling separate so a valid 6k-token context
+// is not rejected by the public message limit.
+export const MAX_RAG_CONTEXT_MESSAGE_CHARACTERS = 65_536;
 
 export type TenantChatContextMode = 'conversation' | 'single_turn';
 
@@ -72,6 +76,22 @@ export type AdmissionHandle = Readonly<AdmissionSeed & {
 export type EphemeralMessage = Readonly<{
   role: 'system' | 'user' | 'assistant';
   content: string;
+  purpose?: 'rag_context';
+  safety?: SafetyProvenance;
+}>;
+
+export type SafetyProvenance =
+  | Readonly<{ status: 'sanitized'; policyDigest: string }>
+  | Readonly<{ status: 'provider_generated' }>;
+
+export type SanitizationInput = Readonly<{
+  messages: readonly Readonly<{ role: 'user'; content: string }>[];
+  placeholderCounters?: Readonly<Record<string, number>>;
+}>;
+
+export type SanitizationResult = Readonly<{
+  messages: readonly Readonly<{ itemIndex: number; content: string }>[];
+  policyDigest: string;
 }>;
 
 export type CompletionInput = Readonly<{

@@ -282,6 +282,9 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 			ModelID:     cfg.AISafetySidecar.ModelID,
 			DetectorSet: cfg.AISafetySidecar.DetectorSet,
 			Locale:      cfg.AISafetySidecar.Locale,
+			Mode:        cfg.AISafetySidecar.Mode,
+			Surface:     "gateway_v1",
+			Metrics:     metricsRegistry,
 		})
 	}
 	observabilityToken := cfg.ObservabilityInternalToken
@@ -293,8 +296,9 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /metrics", handlers.MetricsHandler{Registry: metricsRegistry})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
-		Timeout: cfg.ReadinessTimeout,
-		Checks:  readinessChecks,
+		Timeout:         cfg.ReadinessTimeout,
+		Checks:          readinessChecks,
+		MetricsRegistry: metricsRegistry,
 	})
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{
 		ProviderCatalogResolver: routerOptions.ProviderCatalogs,

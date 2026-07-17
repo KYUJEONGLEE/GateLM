@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/ai-safety-lab/detector-sidecar-batch-response.schema.json",
+  "title": "GateLM AI Safety Detector Batch Response",
+  "description": "Ordered sanitized response for POST /internal/ai-safety/v1/detect/batch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "model",
+    "mode",
+    "results",
+    "executionSummary",
+    "latencyMs"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "ai-safety-detector-batch.v1"
+    },
+    "model": {
+      "$ref": "detector-sidecar-response.schema.json#/$defs/model"
+    },
+    "mode": {
+      "enum": [
+        "enforce",
+        "shadow"
+      ]
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    },
+    "executionSummary": {
+      "$ref": "detector-sidecar-response.schema.json#/$defs/executionSummary"
+    },
+    "latencyMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemIndex",
+        "outcome",
+        "redactedPrompt",
+        "logSafePrompt",
+        "redactedPromptPreview",
+        "detectorSummary",
+        "detections"
+      ],
+      "properties": {
+        "itemIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "outcome": {
+          "enum": [
+            "passed",
+            "redacted",
+            "blocked"
+          ]
+        },
+        "redactedPrompt": {
+          "type": "string",
+          "description": "Provider-safe result. Never log this field because an explicit allow policy can retain sensitive text."
+        },
+        "logSafePrompt": {
+          "type": "string"
+        },
+        "redactedPromptPreview": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detectorSummary": {
+          "$ref": "detector-sidecar-response.schema.json#/$defs/detectorSummary"
+        },
+        "detections": {
+          "type": "array",
+          "items": {
+            "$ref": "detector-sidecar-response.schema.json#/$defs/detection"
+          }
+        }
+      }
+    }
+  }
+}

@@ -10,7 +10,12 @@ from app.adapters.safety.heuristic_evaluator import (
     HeuristicSafetyEvaluator,
     RegexDetector,
 )
-from app.domain.safety.policy import PREVIEW_MAX_CHARS, effective_signals, redact_prompt
+from app.domain.safety.policy import (
+    PREVIEW_MAX_CHARS,
+    EntityMaskingScope,
+    effective_signals,
+    redact_prompt,
+)
 from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
@@ -504,7 +509,6 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             "Contact Alex Kim at alex@example.test. "
             "Alex Kim can use alex@example.test or 010-0000-0000 and 010 0000 0000."
         )
-
         signals = [
             signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
             signal(prompt, "email", "alex@example.test", "[EMAIL_REDACTED]"),
@@ -521,6 +525,32 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
                 "[PERSON_1] can use [EMAIL_1] or [PHONE_NUMBER_1] and [PHONE_NUMBER_1]."
             ),
         )
+
+    def test_entity_masking_scope_seeds_only_bounded_placeholder_counters(self) -> None:
+        scope = EntityMaskingScope()
+        scope.seed_placeholder_counters(
+            {
+                "EMAIL": 3,
+                "PERSON": 1_000_001,
+                "UNKNOWN": 99,
+            }
+        )
+        first_prompt = "Contact first@example.test."
+        second_prompt = "Contact second@example.test."
+
+        first = redact_prompt(
+            first_prompt,
+            [signal(first_prompt, "email", "first@example.test", "[EMAIL_REDACTED]")],
+            entity_scope=scope,
+        )
+        second = redact_prompt(
+            second_prompt,
+            [signal(second_prompt, "email", "second@example.test", "[EMAIL_REDACTED]")],
+            entity_scope=scope,
+        )
+
+        self.assertEqual(first, "Contact [EMAIL_4].")
+        self.assertEqual(second, "Contact [EMAIL_5].")
 
     def test_redact_prompt_uses_role_aware_placeholders_for_explicit_person_roles(self) -> None:
         prompt = (

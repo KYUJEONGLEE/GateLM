@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/crypto/scrypt"
 )
 
 type Queryer interface {
@@ -30,6 +33,7 @@ type credentialCandidate struct {
 	projectID     string
 	applicationID string
 	secretHash    string
+	hashAlgorithm string
 }
 
 func NewStore(db Queryer) *Store {
@@ -73,7 +77,7 @@ func (s *Store) findMatchingCredential(ctx context.Context, plaintext string, qu
 	}
 
 	lookup := credentialLookupFromPlaintext(plaintext)
-	if lookup.prefix == "" || lookup.last4 == "" || lookup.secretHash == "" {
+	if lookup.prefix == "" || lookup.last4 == "" {
 		return credentialCandidate{}, invalidErr
 	}
 
@@ -92,11 +96,12 @@ func (s *Store) findMatchingCredential(ctx context.Context, plaintext string, qu
 			&candidate.projectID,
 			&candidate.applicationID,
 			&candidate.secretHash,
+			&candidate.hashAlgorithm,
 		); err != nil {
 			return credentialCandidate{}, fmt.Errorf("scan gateway credential candidate: %w", err)
 		}
 
-		if credentialHashesEqual(candidate.secretHash, lookup.secretHash) {
+		if credentialSecretMatches(candidate.hashAlgorithm, candidate.secretHash, plaintext) {
 			matched = candidate
 		}
 	}
@@ -111,9 +116,8 @@ func (s *Store) findMatchingCredential(ctx context.Context, plaintext string, qu
 }
 
 type credentialLookup struct {
-	prefix     string
-	last4      string
-	secretHash string
+	prefix string
+	last4  string
 }
 
 func credentialLookupFromPlaintext(plaintext string) credentialLookup {
@@ -133,9 +137,8 @@ func credentialLookupFromPlaintext(plaintext string) credentialLookup {
 	}
 
 	return credentialLookup{
-		prefix:     prefix,
-		last4:      last4,
-		secretHash: credentialHash(normalized),
+		prefix: prefix,
+		last4:  last4,
 	}
 }
 
@@ -183,13 +186,64 @@ func credentialHashesEqual(expected string, actual string) bool {
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(actual)) == 1
 }
 
+const (
+	credentialHashAlgorithmSHA256 = "sha256"
+	credentialHashAlgorithmScrypt = "scrypt-v1"
+	credentialScryptN             = 32768
+	credentialScryptR             = 8
+	credentialScryptP             = 1
+	credentialScryptKeyLength     = 32
+	credentialScryptSaltLength    = 16
+)
+
+func credentialSecretMatches(hashAlgorithm, encodedHash, plaintext string) bool {
+	normalized := strings.TrimSpace(plaintext)
+	if normalized == "" || encodedHash == "" {
+		return false
+	}
+
+	switch hashAlgorithm {
+	case credentialHashAlgorithmSHA256:
+		return credentialHashesEqual(encodedHash, credentialHash(normalized))
+	case credentialHashAlgorithmScrypt:
+		return scryptCredentialSecretMatches(encodedHash, normalized)
+	default:
+		return false
+	}
+}
+
+func scryptCredentialSecretMatches(encodedHash, plaintext string) bool {
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 6 || parts[0] != credentialHashAlgorithmScrypt ||
+		parts[1] != strconv.Itoa(credentialScryptN) ||
+		parts[2] != strconv.Itoa(credentialScryptR) ||
+		parts[3] != strconv.Itoa(credentialScryptP) {
+		return false
+	}
+
+	salt, err := base64.RawURLEncoding.DecodeString(parts[4])
+	if err != nil || len(salt) != credentialScryptSaltLength {
+		return false
+	}
+	expected, err := base64.RawURLEncoding.DecodeString(parts[5])
+	if err != nil || len(expected) != credentialScryptKeyLength {
+		return false
+	}
+	actual, err := scrypt.Key([]byte(plaintext), salt, credentialScryptN, credentialScryptR, credentialScryptP, credentialScryptKeyLength)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare(expected, actual) == 1
+}
+
 const apiKeyLookupSQL = `
 select
   api_keys.id::text,
   api_keys."tenantId"::text,
   api_keys."projectId"::text,
   coalesce(default_application.id::text, '') as "applicationId",
-  api_keys."secretHash"
+  api_keys."secretHash",
+  api_keys."hashAlgorithm"
 from gateway_api_keys api_keys
 join projects on projects.id = api_keys."projectId"
   and projects."tenantId" = api_keys."tenantId"
@@ -205,7 +259,7 @@ left join lateral (
 ) default_application on true
 where api_keys.prefix = $1
   and api_keys."last4" = $2
-  and api_keys."hashAlgorithm" = 'sha256'
+  and api_keys."hashAlgorithm" in ('sha256', 'scrypt-v1')
   and api_keys.status = 'ACTIVE'
   and (api_keys."expiresAt" is null or api_keys."expiresAt" > now())
 order by api_keys."createdAt" desc`
@@ -216,11 +270,12 @@ select
   "tenantId"::text,
   "projectId"::text,
   "applicationId"::text,
-  "secretHash"
+  "secretHash",
+  "hashAlgorithm"
 from app_tokens
 where prefix = $1
   and "last4" = $2
-  and "hashAlgorithm" = 'sha256'
+  and "hashAlgorithm" in ('sha256', 'scrypt-v1')
   and status = 'ACTIVE'
   and ("expiresAt" is null or "expiresAt" > now())
 order by "createdAt" desc`

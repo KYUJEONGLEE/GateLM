@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Switch } from "@/components/ui/switch";
+import { KnowledgeBaseManagement } from "@/features/rag-documents/knowledge-base-management";
 import {
   CachePolicyControls,
   type CachePolicyControlsText
@@ -49,11 +50,19 @@ import type {
   TenantChatRoutingMatrix,
   TenantChatRoutingMode
 } from "@/lib/control-plane/tenant-chat-runtime-types";
+import type { TenantRagDocument } from "@/lib/control-plane/rag-documents-types";
+import type { TenantRagKnowledgeBaseSettings } from "@/lib/control-plane/rag-knowledge-base-types";
 import type { RuntimePolicyDetector } from "@/lib/control-plane/runtime-policy-types";
 import type { Locale } from "@/lib/i18n/locale";
 
 type Props = {
+  canManageKnowledgeBase?: boolean;
+  initialDocuments?: TenantRagDocument[];
+  initialDocumentsError?: string | null;
+  initialKnowledgeBaseSettings?: TenantRagKnowledgeBaseSettings | null;
+  initialKnowledgeBaseSettingsError?: string | null;
   initialLoadError: string | null;
+  initialPolicySection?: ChatAppPolicySection;
   initialSetup: TenantChatAdminRuntimeSetup | null;
   locale: Locale;
   onboardingReturn?: boolean;
@@ -147,13 +156,18 @@ const routingDifficultyCriteria: DifficultyCriteria = {
 };
 
 type RoutingProviderOption = TenantChatAdminRuntimeSetup["providers"][number];
-type ChatAppPolicySection = "routing" | "cache" | "security";
+export type ChatAppPolicySection = "routing" | "cache" | "security" | "knowledge";
 
 const chatAppPolicySections: ChatAppPolicySection[] = [
   "routing",
   "cache",
-  "security"
+  "security",
+  "knowledge"
 ];
+
+function isChatAppPolicySection(value: string | null): value is ChatAppPolicySection {
+  return chatAppPolicySections.includes(value as ChatAppPolicySection);
+}
 
 const copy = {
   en: {
@@ -162,6 +176,7 @@ const copy = {
     modeTitle: "Routing mode",
     breadcrumb: "Chat App",
     cacheTab: "Cache",
+    knowledgeTab: "Knowledge Base",
     configureProvider: "Register or edit provider",
     degraded: "The active runtime references a provider or model that is no longer available. Review and publish again.",
     description: "Manage the built-in Tenant Chat app and publish its immutable 5 × 2 routing and cache policy.",
@@ -203,6 +218,7 @@ const copy = {
     modeTitle: "라우팅 방식",
     breadcrumb: "채팅 앱",
     cacheTab: "캐시",
+    knowledgeTab: "지식 베이스",
     configureProvider: "Provider 등록 또는 수정",
     degraded: "현재 Runtime이 더 이상 사용할 수 없는 Provider 또는 모델을 참조합니다. 정책을 확인한 뒤 다시 발행하세요.",
     description: "내장 Tenant Chat 앱과 실제 실행되는 5 × 2 라우팅 및 캐시 정책을 관리합니다.",
@@ -308,7 +324,13 @@ const tenantChatPolicyText = {
 } satisfies Record<Locale, CachePolicyControlsText & SafetyDetectorPolicyText>;
 
 export function ChatAppRoutingSetup({
+  canManageKnowledgeBase = false,
+  initialDocuments = [],
+  initialDocumentsError = null,
+  initialKnowledgeBaseSettings = null,
+  initialKnowledgeBaseSettingsError = null,
   initialLoadError,
+  initialPolicySection = "routing",
   initialSetup,
   locale,
   onboardingReturn = false,
@@ -322,7 +344,11 @@ export function ChatAppRoutingSetup({
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [activePolicySection, setActivePolicySection] =
-    useState<ChatAppPolicySection>("routing");
+    useState<ChatAppPolicySection>(
+      initialPolicySection === "knowledge" && !canManageKnowledgeBase
+        ? "routing"
+        : initialPolicySection
+    );
   const [feedback, setFeedback] = useState<{ message: string; error: boolean; published?: boolean } | null>(null);
   const initialRef = firstModelRef(initialSetup);
   const [routingMode, setRoutingMode] = useState<TenantChatRoutingMode>(initialSetup?.activeSnapshot?.routingMode ?? "auto");
@@ -334,6 +360,19 @@ export function ChatAppRoutingSetup({
   const [detectors, setDetectors] = useState<RuntimePolicyDetector[]>(
     toRuntimePolicyDetectors(initialSetup?.activeSnapshot?.safetyPolicy)
   );
+
+  useEffect(() => {
+    function syncSectionFromHistory() {
+      const requested = new URL(window.location.href).searchParams.get("section");
+      const section = isChatAppPolicySection(requested) ? requested : "routing";
+      setActivePolicySection(
+        section === "knowledge" && !canManageKnowledgeBase ? "routing" : section
+      );
+    }
+
+    window.addEventListener("popstate", syncSectionFromHistory);
+    return () => window.removeEventListener("popstate", syncSectionFromHistory);
+  }, [canManageKnowledgeBase]);
 
   const providers = useMemo(
     () => (setup?.providers ?? []).filter((provider) => provider.models.length > 0),
@@ -478,6 +517,17 @@ export function ChatAppRoutingSetup({
     setFeedback({ error: false, message: text.resetMessage });
   }
 
+  function selectPolicySection(section: ChatAppPolicySection) {
+    setActivePolicySection(section);
+    const url = new URL(window.location.href);
+    if (section === "routing") {
+      url.searchParams.delete("section");
+    } else {
+      url.searchParams.set("section", section);
+    }
+    window.history.pushState(window.history.state, "", url);
+  }
+
   const readiness = setup?.readiness ?? "degraded";
   const refs = new Set(models.map((model) => model.modelRef));
   const canPublish = refs.has(manualModelRef) && matrixUsesOnly(routes, refs);
@@ -490,13 +540,17 @@ export function ChatAppRoutingSetup({
       <div className="tenant-page-header-rule" aria-hidden="true" />
       <div className="policy-section-toolbar">
         <div aria-label={text.breadcrumb} className="policy-section-tabs tenant-management-tabs" role="tablist">
-          {chatAppPolicySections.map((section) => {
+          {chatAppPolicySections
+            .filter((section) => section !== "knowledge" || canManageKnowledgeBase)
+            .map((section) => {
             const isActive = activePolicySection === section;
             const label = section === "routing"
               ? text.routingTab
               : section === "cache"
                 ? text.cacheTab
-                : text.securityTab;
+                : section === "security"
+                  ? text.securityTab
+                  : text.knowledgeTab;
 
             return (
               <button
@@ -505,7 +559,7 @@ export function ChatAppRoutingSetup({
                 data-active={isActive}
                 id={`chat-app-${section}-tab`}
                 key={section}
-                onClick={() => setActivePolicySection(section)}
+                onClick={() => selectPolicySection(section)}
                 role="tab"
                 type="button"
               >
@@ -516,9 +570,9 @@ export function ChatAppRoutingSetup({
         </div>
       </div>
 
-      {loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
-      {readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
-      {feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <Check />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
+      {activePolicySection !== "knowledge" && loadError ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>{text.loadError}</AlertTitle><AlertDescription><p>{loadError}</p><Button disabled={loading} onClick={() => void refresh()} size="sm" variant="outline">{loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}{text.refresh}</Button></AlertDescription></Alert> : null}
+      {activePolicySection !== "knowledge" && readiness === "degraded" && !loadError ? <Alert variant="warning"><AlertTriangle /><AlertDescription>{text.degraded}</AlertDescription></Alert> : null}
+      {activePolicySection !== "knowledge" && feedback ? <Alert variant={feedback.error ? "destructive" : "success"}>{feedback.error ? <AlertTriangle /> : <Check />}<AlertDescription>{feedback.message}</AlertDescription></Alert> : null}
 
       {activePolicySection === "routing" ? (
       <div aria-labelledby="chat-app-routing-tab" className="policy-tab-panel space-y-5" id="chat-app-routing-panel" role="tabpanel" tabIndex={0}>
@@ -540,11 +594,11 @@ export function ChatAppRoutingSetup({
                     <RoutingCriteriaPopover
                       ariaLabel={text.routingCriteria}
                       criteria={routingDifficultyCriteria[locale]}
+                      description={text.routingDescription}
                       locale={locale}
                       note={text.criteriaNote}
                     />
                   </div>
-                  <p>{text.routingDescription}</p>
                 </div>
                 <div className="tenant-routing-heading-mode">
                   <div className="tenant-routing-switch-control">
@@ -650,7 +704,7 @@ export function ChatAppRoutingSetup({
           </form>
         )}
       </div>
-      ) : (
+      ) : activePolicySection === "cache" || activePolicySection === "security" ? (
         <form
           aria-labelledby={`chat-app-${activePolicySection}-tab`}
           className="chat-app-policy-form"
@@ -699,7 +753,19 @@ export function ChatAppRoutingSetup({
             </button>
           </div>
         </form>
-      )}
+      ) : null}
+
+      {canManageKnowledgeBase ? (
+        <KnowledgeBaseManagement
+          active={activePolicySection === "knowledge"}
+          initialDocuments={initialDocuments}
+          initialDocumentsError={initialDocumentsError}
+          initialSettings={initialKnowledgeBaseSettings}
+          initialSettingsError={initialKnowledgeBaseSettingsError}
+          locale={locale}
+          tenantId={tenantId}
+        />
+      ) : null}
     </ManagementPage>
   );
 }
@@ -719,9 +785,10 @@ function RoutingCellEditor({ ariaLabel, columnLabel, locale, onChange, providers
   );
 }
 
-function RoutingCriteriaPopover({ ariaLabel, criteria, locale, note }: {
+function RoutingCriteriaPopover({ ariaLabel, criteria, description, locale, note }: {
   ariaLabel: string;
   criteria: DifficultyCriteria[Locale];
+  description?: string;
   locale: Locale;
   note?: string;
 }) {
@@ -733,6 +800,7 @@ function RoutingCriteriaPopover({ ariaLabel, criteria, locale, note }: {
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Positioner align="start" className="tenant-routing-popover-positioner" side="bottom" sideOffset={8}>
           <PopoverPrimitive.Popup className="tenant-routing-criteria-popover">
+            {description ? <p className="tenant-routing-criteria-description">{description}</p> : null}
             <section className="tenant-routing-criteria-section" data-difficulty="simple">
               <strong>{difficulties[0][locale]}</strong>
               <p>{criteria.simple}</p>

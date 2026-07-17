@@ -10,6 +10,8 @@ const (
 	CompletionEventFinal         = "tenant_chat.final"
 	ProviderCallNotStarted       = "not_started"
 	ProviderCallStartedOrUnknown = "started_or_unknown"
+	maxEphemeralMessageRunes     = 20_000
+	maxRAGContextMessageRunes    = 65_536
 )
 
 type ProviderCallStartStatus string
@@ -30,6 +32,12 @@ type CompletionError struct {
 type SafetyEvaluation struct {
 	Input   CompletionInput
 	Blocked bool
+}
+
+type SanitizationEvaluation struct {
+	Messages     []SanitizedMessage
+	PolicyDigest string
+	Blocked      bool
 }
 
 type ExactCacheEntry struct {
@@ -86,9 +94,44 @@ func ValidateCompletionInput(input CompletionInput) error {
 		if message.Role != "system" && message.Role != "user" && message.Role != "assistant" {
 			return fmt.Errorf("tenant chat message %d has an invalid role", index)
 		}
-		if strings.TrimSpace(message.Content) == "" || len([]rune(message.Content)) > 20_000 {
+		if message.Purpose != "" && (message.Role != "system" || message.Purpose != "rag_context") {
+			return fmt.Errorf("tenant chat message %d has invalid purpose", index)
+		}
+		maximumRunes := maxEphemeralMessageRunes
+		if message.Role == "system" && message.Purpose == "rag_context" {
+			maximumRunes = maxRAGContextMessageRunes
+		}
+		if strings.TrimSpace(message.Content) == "" || len([]rune(message.Content)) > maximumRunes {
 			return fmt.Errorf("tenant chat message %d has invalid content", index)
 		}
 	}
 	return nil
+}
+
+func ValidateSanitizationInput(input SanitizationInput) error {
+	if len(input.Messages) < 1 || len(input.Messages) > 64 {
+		return fmt.Errorf("tenant chat sanitization messages must contain between 1 and 64 items")
+	}
+	for index, message := range input.Messages {
+		if message.Role != "user" || message.Safety != nil {
+			return fmt.Errorf("tenant chat sanitization message %d must be an untrusted user message", index)
+		}
+		if strings.TrimSpace(message.Content) == "" || len([]rune(message.Content)) > 20_000 {
+			return fmt.Errorf("tenant chat sanitization message %d has invalid content", index)
+		}
+	}
+	if len(input.PlaceholderCounters) > len(allowedPlaceholderCounterPrefixes) {
+		return fmt.Errorf("tenant chat sanitization has too many placeholder counters")
+	}
+	for prefix, count := range input.PlaceholderCounters {
+		if _, ok := allowedPlaceholderCounterPrefixes[prefix]; !ok || count < 0 || count > 1_000_000 {
+			return fmt.Errorf("tenant chat sanitization placeholder counter is invalid")
+		}
+	}
+	return nil
+}
+
+var allowedPlaceholderCounterPrefixes = map[string]struct{}{
+	"PERSON": {}, "ORGANIZATION": {}, "ADDRESS": {}, "EMAIL": {}, "PHONE_NUMBER": {},
+	"CUSTOMER": {}, "AGENT": {}, "DOCTOR": {}, "PATIENT": {}, "APPLICANT": {}, "INTERVIEWER": {},
 }

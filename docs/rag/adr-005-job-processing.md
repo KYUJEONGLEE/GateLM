@@ -82,7 +82,7 @@ Terminal:
 - maximum upload: 20 MB, implemented as `20 * 1024 * 1024` bytes;
 - maximum PDF pages: 300;
 - maximum existing document rows per tenant: 500, counting DELETING until hard deletion completes;
-- `chunkingProfileVersion = 1`: 800 target tokens, 120-token overlap, frozen tokenizer name/version, deterministic paragraph/sentence-aware boundaries, PDF page identity preserved;
+- `chunkingProfileVersion = 1`: 600 target tokens, 100-token overlap, 900-token maximum, pinned `cl100k_base` tokenizer, deterministic paragraph/sentence-aware boundaries, PDF page identity preserved;
 - empty extractable text, scanned/image-only PDF, encrypted PDF, or bound violation is terminal.
 
 ### PDF library selection gate
@@ -101,7 +101,7 @@ The implementation milestone may select a library only if it:
 1. Admin transaction locks the tenant-scoped document, marks DELETING, and inserts/deduplicates DELETE with the server-owned opaque object-key snapshot already populated.
 2. Retrieval excludes DELETING in SQL immediately.
 3. Worker deletes the S3 object; not-found is success.
-4. Worker converts linked citations to metadata-free DELETED tombstones and, in one database transaction, verifies/preserves the DELETE job's existing `deletionObjectKeySnapshot`, cancels any non-terminal INGEST/REINDEX jobs, clears their leases, clears `documentId` on every job that references the Document, and finalizes DELETE before hard-deleting the Document. Indexes/chunks cascade; detached terminal/history jobs survive.
+4. In one database transaction, the worker verifies/preserves the DELETE job's existing `deletionObjectKeySnapshot`, cancels any non-terminal INGEST/REINDEX jobs, clears their leases, clears `documentId` on every job that references the Document, and finalizes DELETE before hard-deleting the Document. Indexes/chunks cascade; detached terminal/history jobs survive. Past citations are tenant-encrypted conversation snapshots, so deletion does not rewrite them; history marks them unavailable when their tenant-scoped READY document no longer exists.
 5. If the database transaction fails after S3 deletion, retry observes S3 not-found and completes.
 
 A delete request supersedes ingestion. An ingestion worker that observes DELETING stops without making the document READY.

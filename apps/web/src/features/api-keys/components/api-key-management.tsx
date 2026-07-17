@@ -29,7 +29,8 @@ import type {
 } from "@/lib/control-plane/api-keys-types";
 import {
   compareApiKeyCreatedAtDescending,
-  excludeRevokedApiKeys
+  excludeRevokedApiKeys,
+  getApiKeyPreviewPrefix
 } from "@/lib/control-plane/api-keys-management-model";
 import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
@@ -109,7 +110,7 @@ const copy: Record<Locale, Record<string, string>> = {
     rotateTitle: "Reissue API Key?",
     scopes: "Scopes",
     status: "Status",
-    title: "API Management"
+    title: "API Key Management"
   },
   ko: {
     actions: "작업",
@@ -146,7 +147,7 @@ const copy: Record<Locale, Record<string, string>> = {
     rotateTitle: "API Key를 재발급할까요?",
     scopes: "권한 범위",
     status: "상태",
-    title: "API 관리"
+    title: "API Key 관리"
   }
 };
 
@@ -399,7 +400,9 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
                         <strong className="provider-name">{apiKey.projectName}</strong>
                       </div>
                       <div className="api-key-list-cell" data-label={text.credential}>
-                        <code className="api-key-preview">{apiKey.prefix}••••{apiKey.last4}</code>
+                        <code className="api-key-preview">
+                          {getApiKeyPreviewPrefix(apiKey.prefix)}......{apiKey.last4}
+                        </code>
                       </div>
                       <div className="api-key-list-cell" data-label={text.status}>
                         <Badge

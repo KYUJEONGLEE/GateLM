@@ -22,6 +22,12 @@ import { WorkloadCredentialsService } from './execution/workload-credentials';
 import { WorkloadSigner } from './execution/workload-signer';
 import { HealthController } from './health.controller';
 import { RagProfileStartupService } from './rag/rag-profile-startup.service';
+import { RagEmbeddingClient } from './rag/rag-embedding.client';
+import { RagContextBuilder } from './rag/rag-context.builder';
+import { RagQueryCredentialsService } from './rag/rag-query-credentials.service';
+import { RagQueryWorkloadSigner } from './rag/rag-query-workload-signer';
+import { RagRetrievalRepository } from './rag/rag-retrieval.repository';
+import { RagRetrievalService } from './rag/rag-retrieval.service';
 
 @Module({
   controllers: [AuthController, ConversationController, HealthController],
@@ -37,7 +43,13 @@ import { RagProfileStartupService } from './rag/rag-profile-startup.service';
     ExecutionBridgeService,
     PrismaService,
     PrivateGatewayClient,
+    RagContextBuilder,
+    RagEmbeddingClient,
     RagProfileStartupService,
+    RagQueryCredentialsService,
+    RagQueryWorkloadSigner,
+    RagRetrievalRepository,
+    RagRetrievalService,
     RetentionService,
     SessionService,
     TenantContentKeyService,

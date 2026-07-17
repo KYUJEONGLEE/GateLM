@@ -31,7 +31,11 @@ export default async function ConsoleTenantLayout({
   }
 
   return (
-    <ConsoleShell currentUser={auth.currentUser} locale={locale} tenantId={effectiveTenantId}>
+    <ConsoleShell
+      currentUser={auth.currentUser}
+      locale={locale}
+      tenantId={effectiveTenantId}
+    >
       {children}
     </ConsoleShell>
   );

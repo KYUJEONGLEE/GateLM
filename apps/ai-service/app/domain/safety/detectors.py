@@ -39,3 +39,20 @@ ALLOWED_DETECTOR_TYPES = frozenset(
         "unknown_pii",
     }
 )
+
+MAXIMUM_PLACEHOLDER_COUNTER = 1_000_000
+ALLOWED_PLACEHOLDER_PREFIXES = frozenset(
+    {
+        "ADDRESS",
+        "AGENT",
+        "APPLICANT",
+        "CUSTOMER",
+        "DOCTOR",
+        "EMAIL",
+        "INTERVIEWER",
+        "ORGANIZATION",
+        "PATIENT",
+        "PERSON",
+        "PHONE_NUMBER",
+    }
+)

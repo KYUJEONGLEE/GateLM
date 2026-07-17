@@ -24,6 +24,19 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+func TestPublicRouterDoesNotExposePrivateRAGEmbeddings(t *testing.T) {
+	router := NewRouter(config.Config{}, provider.NewRegistry("mock"), nil)
+	request := httptest.NewRequest(http.MethodPost, "/internal/v1/rag/embeddings", strings.NewReader(`{"purpose":"RAG_QUERY","profileVersion":1,"inputs":["synthetic"]}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("private RAG embedding route leaked onto public router: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestNewRouterWiresAuthBeforeProviderCall(t *testing.T) {
 	chatCalls := 0
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

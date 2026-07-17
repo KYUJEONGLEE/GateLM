@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	embeddingdomain "gatelm/apps/gateway-core/internal/domain/embedding"
 )
 
 func TestOpenAIEmbeddingProviderSendsExpectedRequest(t *testing.T) {
@@ -50,8 +52,16 @@ func TestOpenAIEmbeddingProviderSendsExpectedRequest(t *testing.T) {
 			t.Fatalf("OpenAI API key가 request body에 들어가면 안 됨")
 		}
 
+		vector := make([]float64, 256)
+		vector[0], vector[1], vector[2] = 0.1, 0.2, 0.3
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"object":"list","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2,0.3]}],"model":"text-embedding-3-small"}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data": []map[string]any{{
+				"object": "embedding", "index": 0, "embedding": vector,
+			}},
+			"model": "text-embedding-3-small",
+		})
 	}))
 	defer server.Close()
 
@@ -76,15 +86,72 @@ func TestOpenAIEmbeddingProviderSendsExpectedRequest(t *testing.T) {
 	if result.Model != "text-embedding-3-small" {
 		t.Fatalf("embedding result model 불일치: %q", result.Model)
 	}
-	if got := len(result.Vector); got != 3 {
+	if got := len(result.Vector); got != 256 {
 		t.Fatalf("embedding vector 길이 불일치: got %d", got)
+	}
+}
+
+func TestOpenAIEmbeddingProviderPreservesLegacyResponseCompatibility(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/semantic_openai_legacy_response.json")
+	if err != nil {
+		t.Fatalf("legacy response fixture read failed: %v", err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fixture)
+	}))
+	defer server.Close()
+
+	provider, err := NewOpenAIEmbeddingProvider(OpenAIEmbeddingProviderConfig{
+		APIKey:     "test_openai_api_key_redacted",
+		BaseURL:    server.URL,
+		ModelName:  "text-embedding-3-small",
+		Dimensions: 1536,
+		Timeout:    time.Second,
+	})
+	if err != nil {
+		t.Fatalf("OpenAIEmbeddingProvider 생성 실패: %v", err)
+	}
+
+	result, err := provider.Embed(context.Background(), EmbeddingInput{NormalizedText: "legacy semantic input"})
+	if err != nil {
+		t.Fatalf("legacy response는 model/index/usage/dimension 없이 성공해야 함: %v", err)
+	}
+	if len(result.Vector) != 3 || result.Vector[0] != 0.1 || result.Model != "text-embedding-3-small" {
+		t.Fatalf("legacy response 결과 불일치: %+v", result)
+	}
+}
+
+func TestOpenAIEmbeddingProviderKeepsLegacyOneMiBResponseCap(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(strings.Repeat("x", (1<<20)+1)))
+	}))
+	defer server.Close()
+
+	provider, err := NewOpenAIEmbeddingProvider(OpenAIEmbeddingProviderConfig{
+		APIKey:    "test_openai_api_key_redacted",
+		BaseURL:   server.URL,
+		ModelName: "text-embedding-3-small",
+		Timeout:   time.Second,
+	})
+	if err != nil {
+		t.Fatalf("OpenAIEmbeddingProvider 생성 실패: %v", err)
+	}
+
+	_, err = provider.Embed(context.Background(), EmbeddingInput{NormalizedText: "legacy semantic input"})
+	if !errors.Is(err, embeddingdomain.ErrResponseTooLarge) || requests != 1 {
+		t.Fatalf("legacy response cap/no-retry 불일치: requests=%d err=%v", requests, err)
 	}
 }
 
 func TestOpenAIEmbeddingProviderDoesNotLeakSecretsOrRawErrorBody(t *testing.T) {
 	const apiKey = "test_openai_api_key_redacted"
 	const rawErrorBody = "openai raw error body must not leak"
+	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
 		http.Error(w, rawErrorBody, http.StatusTooManyRequests)
 	}))
 	defer server.Close()
@@ -105,6 +172,9 @@ func TestOpenAIEmbeddingProviderDoesNotLeakSecretsOrRawErrorBody(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), apiKey) || strings.Contains(err.Error(), rawErrorBody) {
 		t.Fatalf("OpenAI provider error에는 API key나 raw error body가 남으면 안 됨: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("Semantic Cache compatibility mode는 retry하면 안 됨: requests=%d", requests)
 	}
 }
 
@@ -755,51 +825,19 @@ func (p OpenAIEmbeddingProvider) embedRawForEval(ctx context.Context, text strin
 	if strings.TrimSpace(text) == "" {
 		return EmbeddingResult{}, ErrOpenAIEmbeddingInputEmpty
 	}
-	body, err := json.Marshal(openAIEmbeddingRequest{
-		Input:      text,
+	result, err := p.client.Embed(ctx, embeddingdomain.Request{
+		Inputs:     []string{text},
 		Model:      p.modelName,
-		Dimensions: optionalPositiveInt(p.dimensions),
+		Dimensions: p.dimensions,
 	})
 	if err != nil {
-		return EmbeddingResult{}, fmt.Errorf("%w: encode request", ErrOpenAIEmbeddingRequestFailed)
+		return EmbeddingResult{}, err
 	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, p.timeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, openAIEmbeddingEndpoint(p.baseURL), strings.NewReader(string(body)))
-	if err != nil {
-		return EmbeddingResult{}, fmt.Errorf("%w: build request", ErrOpenAIEmbeddingRequestFailed)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) || errors.Is(reqCtx.Err(), context.Canceled) {
-			return EmbeddingResult{}, context.Canceled
-		}
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(reqCtx.Err(), context.DeadlineExceeded) {
-			return EmbeddingResult{}, context.DeadlineExceeded
-		}
-		return EmbeddingResult{}, fmt.Errorf("%w: transport", ErrOpenAIEmbeddingRequestFailed)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		drainOpenAIEmbeddingBody(resp.Body)
-		return EmbeddingResult{}, fmt.Errorf("%w: status %d", ErrOpenAIEmbeddingRequestFailed, resp.StatusCode)
-	}
-
-	var decoded openAIEmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return EmbeddingResult{}, fmt.Errorf("%w: decode", ErrOpenAIEmbeddingInvalidReply)
-	}
-	if len(decoded.Data) == 0 || len(decoded.Data[0].Embedding) == 0 {
+	if len(result.Vectors) != 1 || len(result.Vectors[0]) == 0 {
 		return EmbeddingResult{}, ErrOpenAIEmbeddingEmptyVector
 	}
 	return EmbeddingResult{
-		Vector: append([]float64(nil), decoded.Data[0].Embedding...),
+		Vector: append([]float64(nil), result.Vectors[0]...),
 		Model:  p.modelName,
 	}, nil
 }

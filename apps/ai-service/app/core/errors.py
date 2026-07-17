@@ -10,6 +10,8 @@ from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.domain.rag_extraction.errors import RagExtractionError
+
 
 ERROR_INVALID_REMOTE_SAFETY_REQUEST = "invalid_remote_safety_request"
 ERROR_REMOTE_SAFETY_UNAVAILABLE = "remote_safety_unavailable"
@@ -37,6 +39,10 @@ def generated_request_id() -> str:
     return f"remote_safety_{uuid4().hex}"
 
 
+def generated_rag_request_id() -> str:
+    return f"rag_extract_{uuid4().hex}"
+
+
 def build_error_payload(
     *,
     code: str,
@@ -62,7 +68,9 @@ def build_error_payload(
     }
 
 
-async def remote_safety_http_error_handler(_request: Request, exc: RemoteSafetyHTTPError) -> JSONResponse:
+async def remote_safety_http_error_handler(
+    _request: Request, exc: RemoteSafetyHTTPError
+) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content=build_error_payload(
@@ -75,7 +83,24 @@ async def remote_safety_http_error_handler(_request: Request, exc: RemoteSafetyH
     )
 
 
-async def validation_error_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+async def rag_extraction_error_handler(
+    _request: Request, exc: RagExtractionError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=build_error_payload(
+            code=exc.code,
+            message=exc.message,
+            request_id=generated_rag_request_id(),
+            retryable=exc.retryable,
+            fields=[],
+        ),
+    )
+
+
+async def validation_error_handler(
+    _request: Request, exc: RequestValidationError
+) -> JSONResponse:
     return JSONResponse(
         status_code=400,
         content=build_error_payload(

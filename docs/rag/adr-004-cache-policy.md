@@ -47,7 +47,7 @@ This marker is private server-to-server data, not a public/client message role.
 
 ## No-hit and failure policy
 
-- No chunk at cosine similarity 0.30 or above: continue without RAG context, return empty citations, keep cache off.
+- No chunk at cosine similarity 0.30 or above: do not call Gateway or fall back to ordinary chat. Persist and return the deterministic product response `등록된 문서에서 관련 근거를 찾지 못했습니다.` through the existing SSE event shape, without citations, and keep cache off.
 - Retrieval infrastructure, Gateway embedding, key, or decryption failure: return stable `CHAT_RAG_UNAVAILABLE`; do not silently downgrade to ordinary chat.
 - Tenant Knowledge Base disabled: return stable `CHAT_RAG_DISABLED`; the UI disables new RAG selection and existing RAG conversations do not silently change mode.
 - Context uses at most six complete chunks and 6,000 tokens. Overflow drops the lowest-ranked complete chunks deterministically and never arbitrary-byte-truncates a chunk.

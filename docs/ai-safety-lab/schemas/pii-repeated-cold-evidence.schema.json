@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/pii-repeated-cold-evidence.schema.json",
+  "title": "Aggregate repeated cold-start evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "aggregateOnly",
+    "runs",
+    "successfulRuns",
+    "failedRuns",
+    "startupFailureRate",
+    "coldP50Ms",
+    "coldP95Ms",
+    "peakRssMb",
+    "evidenceBinding",
+    "contentSafety"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "pii-repeated-cold-evidence.v1"},
+    "aggregateOnly": {"const": true},
+    "runs": {"type": "integer", "minimum": 1},
+    "successfulRuns": {"type": "integer", "minimum": 0},
+    "failedRuns": {"type": "integer", "minimum": 0},
+    "startupFailureRate": {"type": "number", "minimum": 0, "maximum": 1},
+    "coldP50Ms": {"type": ["integer", "null"], "minimum": 0},
+    "coldP95Ms": {"type": ["integer", "null"], "minimum": 0},
+    "peakRssMb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "evidenceBinding": {"$ref": "pii-promotion-evidence-binding.schema.json"},
+    "contentSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rawContentIncluded",
+        "requestIdentifiersIncluded",
+        "endpointLocationsIncluded",
+        "artifactDigestsIncluded",
+        "childErrorDetailIncluded"
+      ],
+      "properties": {
+        "rawContentIncluded": {"const": false},
+        "requestIdentifiersIncluded": {"const": false},
+        "endpointLocationsIncluded": {"const": false},
+        "artifactDigestsIncluded": {"const": false},
+        "childErrorDetailIncluded": {"const": false}
+      }
+    }
+  }
+}

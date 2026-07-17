@@ -111,8 +111,9 @@ test("live request columns place cost before status and size columns by content 
     /dashboard-live-col-model[\s\S]*dashboard-live-col-cost[\s\S]*dashboard-live-col-policy[\s\S]*dashboard-live-col-latency[\s\S]*dashboard-live-col-status[\s\S]*dashboard-live-col-action/
   );
   expect(tableSource).toMatch(
-    /"Model"[\s\S]*"Cost"[\s\S]*"Policy Result"[\s\S]*"Response time"[\s\S]*"Status"[\s\S]*text\.detail/
+    /"Model"[\s\S]*"Cost"[\s\S]*"Outcome"[\s\S]*"Response time"[\s\S]*"Status"[\s\S]*text\.detail/
   );
+  expect(tableSource).toContain('locale === "ko" ? "처리 결과" : "Outcome"');
   expect(tableSource).toMatch(
     /LiveRequestRouting[\s\S]*formatLiveRequestCostUsd[\s\S]*PolicyBadges[\s\S]*formatResponseTimeSeconds[\s\S]*statusTone/
   );

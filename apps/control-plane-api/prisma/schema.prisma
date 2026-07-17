@@ -97,6 +97,7 @@ model Tenant {
   ragDocumentIndexes              RagDocumentIndex[]
   ragChunks                       RagChunk[]
   ragJobs                         RagJob[]
+  ragEmbeddingUsages              RagEmbeddingUsage[]
 
   @@map("tenants")
 }
@@ -1419,6 +1420,7 @@ model TenantChatConversation {
   cacheEpoch                BigInt    @default(1) @map("cache_epoch")
   nextMessageSequence       BigInt    @default(1) @map("next_message_sequence")
   historyRetentionDays      Int       @default(30) @map("history_retention_days")
+  knowledgeMode             String    @default("off") @map("knowledge_mode")
   titleCiphertext           Bytes?    @map("title_ciphertext")
   titleNonce                Bytes?    @map("title_nonce")
   titleTag                  Bytes?    @map("title_tag")
@@ -1437,6 +1439,7 @@ model TenantChatConversation {
 
   @@unique([id, tenantId, userId], map: "tenant_chat_conversation_actor_identity_key")
   @@unique([tenantId, userId, createIdempotencyKey], map: "tenant_chat_conversation_create_idempotency_key")
+  @@index([tenantId, knowledgeMode], map: "tenant_chat_conversations_tenant_knowledge_mode_idx")
   @@map("tenant_chat_conversations")
 }
 
@@ -1492,6 +1495,13 @@ model TenantChatMessage {
   tag               Bytes
   contentKeyVersion Int       @map("content_key_version")
   schemaVersion     Int       @default(1) @map("schema_version")
+  safetyStatus      String    @default("legacy_unverified") @map("safety_status")
+  safetyPolicyDigest String?  @map("safety_policy_digest")
+  citationCiphertext Bytes?   @map("citation_ciphertext")
+  citationNonce      Bytes?   @map("citation_nonce")
+  citationTag        Bytes?   @map("citation_tag")
+  citationContentKeyVersion Int? @map("citation_content_key_version")
+  citationSchemaVersion Int? @map("citation_schema_version")
   effectiveModelKey String?   @map("effective_model_key")
   expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1655,6 +1665,28 @@ model RagJob {
   @@index([tenantId, status, availableAt], map: "rag_jobs_tenant_status_available_idx")
   @@index([tenantId, documentId], map: "rag_jobs_tenant_document_idx")
   @@map("rag_jobs")
+}
+
+model RagEmbeddingUsage {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @map("tenant_id") @db.Uuid
+  purpose                 String
+  operationId             String   @map("operation_id")
+  batchOrdinal            Int      @map("batch_ordinal")
+  embeddingProvider       String   @default("openai") @map("embedding_provider")
+  embeddingModel          String   @default("text-embedding-3-large") @map("embedding_model")
+  embeddingDimensions     Int      @default(1536) @map("embedding_dimensions")
+  embeddingProfileVersion Int      @default(1) @map("embedding_profile_version")
+  inputCount              Int      @map("input_count")
+  promptTokens            Int?     @map("prompt_tokens")
+  totalTokens             Int?     @map("total_tokens")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "rag_embedding_usages_tenant_fkey")
+
+  @@unique([tenantId, purpose, operationId, batchOrdinal], map: "rag_embedding_usages_idempotency_key")
+  @@index([tenantId, createdAt], map: "rag_embedding_usages_tenant_created_idx")
+  @@map("rag_embedding_usages")
 }
 
 model DashboardRollupSourceCursor {

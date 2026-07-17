@@ -6,6 +6,14 @@ import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 
 const employeeManagementSourceUrl = new URL("./employee-control-management.tsx", import.meta.url);
 const employeeStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
+const analyticsChartsSourceUrl = new URL(
+  "../../analytics/components/analytics-charts.tsx",
+  import.meta.url
+);
+const employeePageSourceUrl = new URL(
+  "../../../app/(console)/tenants/[tenantId]/employees/page.tsx",
+  import.meta.url
+);
 const employeesClientSourceUrl = new URL(
   "../../../lib/control-plane/employees-client.ts",
   import.meta.url
@@ -58,26 +66,48 @@ test("pending employee invitations can be deleted without deleting the employee"
   expect(clientSource).toContain('method: "DELETE"');
 });
 
-test("employee list actions match the chat app policy action scale", async () => {
-  const styles = await readFile(employeeStylesSourceUrl, "utf8");
+test("employee list actions use the shared primary action scale", async () => {
+  const [source, styles] = await Promise.all([
+    readFile(employeeManagementSourceUrl, "utf8"),
+    readFile(employeeStylesSourceUrl, "utf8")
+  ]);
 
   expect(styles).toMatch(
-    /\.employee-list-toolbar \[data-slot="button"\] \{[\s\S]*?min-width: 132px;[\s\S]*?min-height: 44px;[\s\S]*?padding-inline: 20px;[\s\S]*?font-size: 16px;/
+    /\.employee-list-toolbar \[data-slot="button"\]\.employee-add-trigger \{[\s\S]*?min-width: 0;[\s\S]*?min-height: var\(--primary-action-height\);[\s\S]*?padding-inline: var\(--primary-action-padding-inline\);/
   );
   expect(styles).toMatch(
-    /\.employee-list-toolbar \[data-slot="button"\] svg \{\s*width: 18px;\s*height: 18px;/
+    /\.employee-list-toolbar \[data-slot="button"\]\.employee-add-trigger svg \{\s*width: 16px;\s*height: 16px;/
   );
+  expect(source.match(/className="compact-action-button"/g)).toHaveLength(3);
+  expect(styles).toContain("--compact-action-height: 34px;");
+  expect(styles).toContain("--compact-action-radius: 8px;");
   expect(styles).toMatch(
     /\.employee-list-section > \.project-empty \{[\s\S]*?font-size: calc\(var\(--font-size-lg\) \+ var\(--global-font-lift\)\);/
   );
 });
 
 test("employee ranking and detail controls use unified cost policies", async () => {
-  const source = await readFile(employeeManagementSourceUrl, "utf8");
+  const [source, chartSource] = await Promise.all([
+    readFile(employeeManagementSourceUrl, "utf8"),
+    readFile(analyticsChartsSourceUrl, "utf8")
+  ]);
 
   expect(source).toContain("AnalyticsRankedBarChart");
   expect(source).toContain('kind="micro-usd"');
+  expect(source).toContain('orientation="vertical"');
+  expect(source).toContain("outlierMultiplier={1.5}");
+  expect(source).toContain("평균의 1.5배 이상");
+  expect(source).toContain('useState<EmployeeCostChartPeriod>("daily")');
+  expect(source).toContain('employeeCostChartPeriod === "daily"');
+  expect(source).toContain("employeeUsage.dailyRank <= 3");
+  expect(source).toContain("employeeUsage.weeklyRank <= 3");
   expect(source).toContain("row.dailyCostMicroUsd ?? 0");
+  expect(source).toContain("row.monthlyCostMicroUsd ?? 0");
+  expect(source).not.toContain("return rows.slice(0, 10);");
+  expect(chartSource).toMatch(
+    /const outlierThreshold = useMemo\([\s\S]*?activeRows\.reduce[\s\S]*?\[activeRows, outlierMultiplier\]/
+  );
+  expect(source).toContain('["daily", "weekly", "monthly"]');
   expect(source).toContain('action: "updateCostPolicy"');
   expect(source).toContain("expectedVersion: policy.version");
   expect(source).toContain("daily: toEmployeeCostLimit(draft.daily)");
@@ -97,4 +127,13 @@ test("employee ranking and detail controls use unified cost policies", async () 
   expect(source).toContain('draft.enforcementMode === "restrict_high_cost"');
   expect(source).not.toContain('policy?.version === 0 ? "restrict_high_cost"');
   expect(source).not.toContain("AnalyticsEmployeeTokenBarChart");
+});
+
+test("employee monthly graph loads unified month-to-date cost", async () => {
+  const pageSource = await readFile(employeePageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("getAllEmployeeUsage({");
+  expect(pageSource).toContain('metric: "cost"');
+  expect(pageSource).toContain("monthlyUsage: monthlyEmployeeUsage.ok");
+  expect(pageSource).toContain("Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1)");
 });

@@ -19,6 +19,7 @@
 
 - [`implementation-status.md`](implementation-status.md): 현재 구현 사실을 확인할 때
 - [`documentation-gaps.md`](documentation-gaps.md): 문서/코드 충돌이나 미결정 항목을 확인할 때
+- [`technical-challenges.md`](technical-challenges.md): 현재 구현의 기술적 난제와 코드·테스트 근거를 설명할 때
 
 Tenant Chat handoff 준비 자료는 계약이 아니라 검토 및 수신 도구다.
 

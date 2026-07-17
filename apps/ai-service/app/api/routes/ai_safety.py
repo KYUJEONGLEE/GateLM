@@ -3,7 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_ai_safety_detector_service
-from app.schemas.safety import AiSafetyDetectRequest, AiSafetyDetectResponse
+from app.schemas.safety import (
+    AiSafetyBatchDetectRequest,
+    AiSafetyBatchDetectResponse,
+    AiSafetyDetectRequest,
+    AiSafetyDetectResponse,
+)
 from app.services.ai_safety_detector import AiSafetyDetectorService
 
 
@@ -20,3 +25,15 @@ def detect_ai_safety(
     service: AiSafetyDetectorService = Depends(get_ai_safety_detector_service),
 ) -> AiSafetyDetectResponse:
     return service.detect(request_body)
+
+
+@router.post(
+    "/internal/ai-safety/v1/detect/batch",
+    response_model=AiSafetyBatchDetectResponse,
+    response_model_by_alias=True,
+)
+def detect_ai_safety_batch(
+    request_body: AiSafetyBatchDetectRequest,
+    service: AiSafetyDetectorService = Depends(get_ai_safety_detector_service),
+) -> AiSafetyBatchDetectResponse:
+    return service.detect_batch(request_body)

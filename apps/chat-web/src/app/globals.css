@@ -174,6 +174,10 @@ a { color: inherit; }
 .message-warning strong { display: block; font-size: 14px; }
 .message-warning p { margin-top: 2px; color: #9e4c45; font-size: 14px; line-height: 1.55; }
 .message-meta { margin-top: 8px; color: var(--g-text-muted); font-size: 16px; line-height: 1.45; }
+.message-model-meta { display: inline-flex; align-items: center; gap: 6px; }
+.message-model-logo { display: inline-grid; width: 18px; height: 18px; flex: 0 0 18px; place-items: center; }
+.message-model-logo img { display: block; width: 16px; height: 16px; object-fit: contain; }
+.message-model-logo[data-brand="openai"] img { width: 15px; height: 15px; }
 .history-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px; color: var(--g-text-muted); font-size: 14px; }
 .history-more { justify-self: center; margin: 0 0 14px; }
 .composer-area { flex: 0 0 auto; border-top: 1px solid var(--g-border); background: rgb(248 249 251 / 92%); padding: 14px 24px 12px; }
@@ -187,7 +191,8 @@ a { color: inherit; }
 .composer .send-button { display: grid; width: 42px; height: 42px; place-items: center; padding: 0; }
 .composer .send-button > svg { display: block; }
 .composer .g-button:disabled { background: #d7dae2; color: #717887; opacity: 1; }
-.composer .stop-button { min-width: auto; background: #2f3340; }
+.composer .stop-button { display: grid; width: 42px; height: 42px; min-width: 42px; place-items: center; background: #2f3340; padding: 0; }
+.composer .stop-button > svg { display: block; }
 .composer-note { margin: 7px 0 0; color: var(--g-text-muted); font-size: 12px; text-align: center; }
 @media (max-width: 840px) {
   .auth-page { grid-template-columns: 1fr; }
@@ -233,7 +238,6 @@ a { color: inherit; }
   .context-setting-copy { display: none; }
   .topbar-title span { font-size: 12px; }
   .policy-banner { font-size: 12px; }
-  .composer .stop-button { padding-inline: 9px; font-size: 13px; }
 }
 @media (hover: none) { .message-user-actions { opacity: 1; pointer-events: auto; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .01ms !important; } }

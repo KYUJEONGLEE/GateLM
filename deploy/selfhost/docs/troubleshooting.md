@@ -22,11 +22,45 @@ View recent logs:
 ```bash
 docker compose --env-file .env logs --tail=100 gateway-core
 docker compose --env-file .env logs --tail=100 control-plane-api
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml logs --tail=100 rag-worker chat-api chat-web
 docker compose --env-file .env logs --tail=100 postgres
 docker compose --env-file .env logs --tail=100 redis
+docker compose --env-file .env logs --tail=100 pii-model-init
 ```
 
 Before sharing logs, remove secrets, Authorization headers, provider keys, API keys, app tokens, raw prompts, raw responses, and provider raw error bodies.
+
+## PII Model Initializer Failed
+
+PII models are optional and disabled by default. When enabled, common causes are:
+
+- the configured secret file does not exist
+- `AI_SERVICE_INSTALL_ML_DEPS` is false, so the AI Service image lacks ONNX runtime dependencies
+- the secret file contains zero or multiple non-comment lines
+- the source is not HTTPS or the presigned URL expired
+- the downloaded bundle does not match the release's fixed size or SHA-256
+- fewer than roughly 4 GiB of temporary disk space is available
+
+Check status and sanitized logs:
+
+```bash
+docker compose --env-file .env ps pii-model-init ai-service
+docker compose --env-file .env logs --tail=100 pii-model-init
+```
+
+The initializer never prints the bundle URL or its query. Do not paste the URL
+into diagnostic commands. Refresh it by editing the secret file, then recreate
+the initializer and dependent services:
+
+```bash
+${EDITOR:-vi} secrets/pii-model-bundle-url
+docker compose --env-file .env up --force-recreate pii-model-init
+docker compose --env-file .env up -d ai-service gateway-core
+bash scripts/pii-model-smoke.sh
+```
+
+A hash mismatch fails closed and does not activate a partial release. Do not
+change the pinned hash to make an unapproved bundle pass.
 
 ## `docker: command not found`
 
@@ -92,6 +126,7 @@ Default ports:
 |---|---|
 | `SELFHOST_WEB_PORT` | `3000` |
 | `SELFHOST_CONTROL_PLANE_PORT` | `3001` |
+| `SELFHOST_CHAT_WEB_PORT` | `3002` |
 | `SELFHOST_GATEWAY_PORT` | `8080` |
 | `SELFHOST_AI_SERVICE_PORT` | `8001` |
 | `SELFHOST_POSTGRES_PORT` | `5432` |
@@ -325,6 +360,31 @@ Then run:
 ```bash
 bash scripts/smoke-test.sh
 ```
+
+## Tenant Chat Or RAG Worker Does Not Become Ready
+
+Cause:
+
+Common causes:
+
+- one or more role-specific files under `.secrets/tenant-chat` or `.secrets/rag` are missing, empty, symlinked, or have unsafe Linux ownership or permissions
+- a configured active signing key ID does not match the corresponding private key or JWKS document
+- `rag-worker` cannot reach the private Gateway or AI Service endpoint
+- `TENANT_CHAT_RAG_ENABLED=true` is configured without a real S3 bucket, region, KMS key, or workload identity
+- PostgreSQL migrations have not completed
+
+Fix:
+
+Run the idempotent installer again so that its configuration and secret-file preflight runs before recreating the services:
+
+```bash
+bash scripts/install.sh
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml ps rag-worker chat-api chat-web gateway-core ai-service
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml logs --tail=100 rag-worker chat-api chat-web gateway-core ai-service
+bash scripts/smoke-test.sh
+```
+
+Do not copy a query signer, worker signer, verification JWKS, binding, or wrapping-key projection into another role just to make a service start. Restore the role-specific file and configuration described in `docs/install.md`.
 
 ## Need A Clean Local Retry
 

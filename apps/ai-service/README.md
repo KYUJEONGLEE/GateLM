@@ -2,6 +2,16 @@
 
 This service owns optional AI Safety and Evaluation Lab work for the v1.0.0 baseline. It is not a required dependency of the Gateway hot path.
 
+## Private RAG extraction
+
+`POST /internal/v1/rag/extract` is a stateless raw-body endpoint for the future Control Plane Worker. It requires `X-GateLM-AI-Service-Token` and accepts only `text/plain` (UTF-8, optional BOM) or `application/pdf` with a text layer. The service does not read S3 or PostgreSQL, call OpenAI, create embeddings, resolve tenant keys, persist chunks, or mutate jobs.
+
+TXT normalization removes NUL characters, converts CRLF/CR to LF, applies Unicode NFC (not compatibility-changing NFKC), and collapses horizontal whitespace per line while preserving blank-line paragraph boundaries and 1-based source line ranges. PDF extraction preserves 1-based page ranges. Encrypted, damaged, scanned/image-only, over-limit, and timed-out PDFs return stable sanitized errors; OCR and embedded images/attachments are never processed.
+
+Chunking uses the local `cl100k_base` tokenizer mapped to `text-embedding-3-large`. Profile defaults are target 600, overlap 100, and maximum 900 tokens. The tokenizer performs no OpenAI request. Runtime dependencies are pinned in `requirements-rag-extraction.lock`.
+
+Local configuration uses `AI_SERVICE_RAG_SERVICE_TOKEN` and the `AI_SERVICE_RAG_*` bounds in `.env.example`. When `TENANT_CHAT_RAG_ENABLED=true`, `self_host`, `staging`, `production`, and `aws` deployment modes fail startup if the token is missing, shorter than 32 characters, or marked as a local/fake/example placeholder. Enabled non-local modes also require `AI_SERVICE_RAG_TEMP_DIR` to be a dedicated absolute mount; the production Compose paths bind it to a size-bounded tmpfs and clean only stale `gatelm-rag-*.source` files on startup. With the flag disabled, those RAG-only token and temp-directory dependencies are not required. `AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS` bounds extraction concurrency, and PDF child processes receive configurable address-space and CPU limits in addition to the container memory and PID limits. Access logging remains disabled by default because request bodies contain document plaintext.
+
 ## RemoteSafetyEngine Prototype
 
 RemoteSafetyEngine is an internal shadow/evaluation prototype for v2 evidence. It is disabled by default and is not connected to Gateway production blocking.
@@ -44,27 +54,58 @@ prompt
 -> redaction preview
 ```
 
-Install ML dependencies only in a local sidecar image or experiment environment:
+Install ONNX dependencies only in a local sidecar image or experiment environment:
 
 ```bash
 cd apps/ai-service
-python -m pip install -e ".[ml,test]"
+python -m pip install -e ".[onnx,test]"
 ```
 
-`PrivacyFilterAdapter` lazy-loads `transformers.pipeline(task="token-classification")` and is not wired into the default evaluator unless it is explicitly injected. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
+`PrivacyFilterAdapter` lazy-loads either the direct OpenAI ONNX Runtime classifier or an Optimum ONNX token-classification pipeline. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
 
-The primary sidecar detector model defaults to `openai/privacy-filter`. For lightweight local Korean privacy NER experiments, keep the primary model and add the quantized KoELECTRA ONNX artifact as an additional detector:
+The default runtime loads only the pinned `openai/privacy-filter` ONNX model. The ML candidate allowlist is limited to `phone_number` and `secret`; other supported PII categories continue through the local rule path. Keep the additional-model setting blank for this OpenAI-only configuration:
 
 ```bash
 AI_SERVICE_TRANSFORMERS_OFFLINE=1
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
+AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4
+AI_SERVICE_ONNX_INTRA_OP_THREADS=4
+AI_SERVICE_ONNX_INTER_OP_THREADS=1
+AI_SERVICE_ONNX_ALLOW_SPINNING=false
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 ```
 
-Both models are loaded through local ONNX Runtime pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/onnx` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
+The primary model is loaded through the local ONNX Runtime pipeline and its detections are merged through the same sanitized GateLM policy path. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
-KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`. The `amoeba04--koelectra-small-v3-privacy-ner-quantized` local artifact keeps the same public model identity and sanitized source as the non-quantized KoELECTRA detector.
+The pinned 2026-07-15 delivery bundle still contains the KoELECTRA artifact and the importer verifies all manifest-listed files, but a blank additional-model setting prevents that adapter from loading or warming up. If the allowlisted KoELECTRA path is explicitly enabled for an isolated evaluation, its accepted labels remain email, phone number, and resident registration number only. Person-name and organization-name detections remain rule backstops, and the supplied evaluation does not justify production-grade accuracy claims.
+
+Import only manifest-listed model artifacts from the delivery archive and verify every file hash:
+
+```bash
+python scripts/tenant_chat_pii_models/import_bundle.py \
+  apps/ai-service/.cache/bundles/tenant-chat-pii-model-bundle-20260715.zip
+```
+
+The importer verifies the outer bundle pin and installs into `.cache/onnx/releases/tenant-chat-pii-models-20260715` only after every manifest-listed file passes size and SHA-256 verification. These runtime assets are ignored by Git. The manifest, evaluation summary, release descriptor, third-party notices, and Apache-2.0 text remain versioned in the repository. See `docs/ai-safety-lab/tenant-chat-pii-model-integration-20260715.md` for measured evidence and promotion limits.
+
+To produce the artifact-integrity input for the production promotion gate, bind
+the verification to the same Git revision used by the other evidence runs:
+
+```bash
+python scripts/tenant_chat_pii_models/import_bundle.py \
+  apps/ai-service/.cache/bundles/tenant-chat-pii-model-bundle-20260715.zip \
+  --evidence-out .tmp/pii-artifact-verification.json \
+  --git-revision <deployed-full-git-object-id>
+```
+
+Evidence is written only after another complete checksum verification. The JSON
+contains aggregate file counts plus manifest/model/Git provenance binding; it
+does not contain the bundle source, artifact paths, or artifact digests. The Git
+revision must be the immutable full lowercase 40- or 64-hex object ID used by
+every other promotion evidence run; branch names and abbreviated SHAs fail closed.
 
 ## AI Safety Detector Sidecar
 
@@ -72,23 +113,30 @@ The local detector sidecar endpoint is available at:
 
 ```text
 POST /internal/ai-safety/v1/detect
+POST /internal/ai-safety/v1/detect/batch
 ```
 
-It uses the `ai-safety-detector.v1` draft contract and returns `redactedPrompt`, `detectorSummary`, and sanitized `detections`. The endpoint is `shadow` mode by default and uses CPU-only local token-classification adapters. `openai/privacy-filter` remains the primary default adapter, and additional adapters such as KoELECTRA can be enabled through configuration. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+The single route uses `ai-safety-detector.v1`; the ordered 1-to-64 item route uses `ai-safety-detector-batch.v1`. Both return Provider-safe `redactedPrompt`, storage-safe `logSafePrompt`, sanitized detections, and an `executionSummary` that distinguishes `rules_only` from actual `hybrid` model execution. The endpoint accepts `shadow` and `enforce`: shadow observations do not change the Provider prompt or final action, while enforce results can redact or block before Provider execution. `logSafePrompt` and the preview redact detections even when the Provider policy action is `allow`. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+
+Tenant Chat sends all local-P0-redacted messages in one batch without concatenating message text. The sidecar preserves item boundaries and order, runs detector-type-aware dynamic ONNX micro-batches, and maps every result back to its `itemIndex`. The pinned models do not support person or organization labels, so name/organization-only candidates stay rules-only. A malformed or partial batch is rejected so Gateway can use the complete local result set.
 
 Example request shape:
 
 ```json
 {
   "contractVersion": "ai-safety-detector.v1",
-  "mode": "shadow",
+  "mode": "enforce",
   "input": {
     "promptText": "Use synthetic text only.",
     "locale": "en-US"
   },
   "detectorConfig": {
     "detectorSet": "privacy-filter-default",
-    "returnConfidence": true
+    "returnConfidence": true,
+    "detectorPolicies": [
+      {"detectorType": "email", "action": "redact"},
+      {"detectorType": "api_key", "action": "block"}
+    ]
   }
 }
 ```
@@ -100,8 +148,14 @@ cd apps/ai-service
 python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true \
+AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4 \
+AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
+AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
+AI_SERVICE_ONNX_ALLOW_SPINNING=false \
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS="" \
 python -m app.main
 ```
 
@@ -112,8 +166,9 @@ cd apps/ai-service
 python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS="" \
 python -m app.main
 ```
 

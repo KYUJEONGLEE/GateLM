@@ -1,6 +1,12 @@
 import { ConfigService } from '@nestjs/config';
 
-import type { AdmissionHandle, AdmissionSeed, CompletionInput, UsageIntent } from './execution.types';
+import type {
+  AdmissionHandle,
+  AdmissionSeed,
+  CompletionInput,
+  SanitizationInput,
+  UsageIntent,
+} from './execution.types';
 import { PrivateGatewayClient, PrivateGatewayError, PrivateGatewayTerminalError } from './private-gateway.client';
 import { TerminalReplayContentUnavailable } from './sse-parser';
 
@@ -21,6 +27,10 @@ const handle: AdmissionHandle = Object.freeze({
   ...seed, admissionId: 'admission_001', expiresAt: '2026-07-14T00:00:30.000Z',
 });
 const input: CompletionInput = { messages: [{ role: 'user', content: '<synthetic>' }], stream: true };
+const sanitizationInput: SanitizationInput = {
+  messages: [{ role: 'user', content: 'user@example.com' }],
+  placeholderCounters: { EMAIL: 2 },
+};
 const usageIntent: UsageIntent = {
   estimatedInputTokens: 8, maxOutputTokens: 32, requestedTier: 'auto', cacheStrategy: 'off',
 };
@@ -95,12 +105,105 @@ describe('PrivateGatewayClient', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('sanitizes only the supplied user messages and preserves their order', async () => {
+    const signer = signerMock();
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse(200, {
+      messages: [{ itemIndex: 0, content: '[EMAIL_3]' }],
+      policyDigest: `sha256:${'B'.repeat(43)}`,
+    })) as typeof fetch;
+
+    await expect(client(signer).sanitize(handle, sanitizationInput)).resolves.toEqual({
+      messages: [{ itemIndex: 0, content: '[EMAIL_3]' }],
+      policyDigest: `sha256:${'B'.repeat(43)}`,
+    });
+    expect(signer.authorize).toHaveBeenCalledWith(
+      handle,
+      'sanitization',
+      sanitizationInput,
+      handle.admissionId,
+      undefined,
+    );
+    const [url, request] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(String(url)).toContain(`/internal/v1/tenant-chat/admissions/${handle.admissionId}/sanitizations`);
+    expect(JSON.parse(String(request.body))).toMatchObject({ input: sanitizationInput });
+  });
+
+  it.each([
+    [{ messages: [], policyDigest: `sha256:${'B'.repeat(43)}` }],
+    [{ messages: [{ itemIndex: 1, content: '[EMAIL_3]' }], policyDigest: `sha256:${'B'.repeat(43)}` }],
+  ])('rejects malformed sanitization cardinality or ordering', async (response) => {
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse(200, response)) as typeof fetch;
+    await expect(client(signerMock()).sanitize(handle, sanitizationInput))
+      .rejects.toMatchObject({ code: 'CHAT_PRIVATE_RESPONSE_INVALID' });
+  });
+
+  it('accepts a bounded sanitization response larger than the small control JSON limit', async () => {
+    const largeInput: SanitizationInput = {
+      messages: Array.from({ length: 4 }, () => ({
+        role: 'user' as const,
+        content: 'x'.repeat(20_000),
+      })),
+    };
+    const messages = largeInput.messages.map((_, itemIndex) => ({
+      itemIndex,
+      content: 'y'.repeat(20_000),
+    }));
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse(200, {
+      messages,
+      policyDigest: `sha256:${'B'.repeat(43)}`,
+    })) as typeof fetch;
+
+    await expect(client(signerMock()).sanitize(handle, largeInput)).resolves.toMatchObject({
+      messages,
+    });
+  });
+
   it('rejects a replayed final that cannot reconstruct assistant content', async () => {
     global.fetch = jest.fn().mockResolvedValue(sseResponse(textStream([
       frame({ ...final(5), replayed: true }),
     ]), true)) as typeof fetch;
     await expect(client(signerMock()).complete(handle, input, usageIntent))
       .rejects.toBeInstanceOf(TerminalReplayContentUnavailable);
+  });
+
+  it('accepts only the private system RAG context marker before signing', async () => {
+    const signer = signerMock();
+    global.fetch = jest.fn().mockResolvedValue(sseResponse(textStream([frame(final(1))]))) as typeof fetch;
+    await expect(client(signer).complete(handle, {
+      messages: [
+        { role: 'system', purpose: 'rag_context', content: 'untrusted source text' },
+        { role: 'user', content: 'question' },
+      ],
+      stream: true,
+    }, usageIntent)).resolves.toMatchObject({ final: { sequence: 1 } });
+    expect(signer.authorize).toHaveBeenCalled();
+
+    global.fetch = jest.fn() as typeof fetch;
+    await expect(client(signerMock()).complete(handle, {
+      messages: [{ role: 'user', purpose: 'rag_context', content: 'question' }],
+      stream: true,
+    }, usageIntent)).rejects.toMatchObject({ code: 'CHAT_INVALID_REQUEST' });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('uses a separate request-local size ceiling for RAG context only', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      sseResponse(textStream([frame(final(1))])),
+    ) as typeof fetch;
+    await expect(client(signerMock()).complete(handle, {
+      messages: [
+        { role: 'system', purpose: 'rag_context', content: 'r'.repeat(30_000) },
+        { role: 'user', content: 'question' },
+      ],
+      stream: true,
+    }, usageIntent)).resolves.toMatchObject({ final: { sequence: 1 } });
+
+    global.fetch = jest.fn() as typeof fetch;
+    await expect(client(signerMock()).complete(handle, {
+      messages: [{ role: 'system', content: 'x'.repeat(20_001) }],
+      stream: true,
+    }, usageIntent)).rejects.toMatchObject({ code: 'CHAT_INVALID_REQUEST' });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('rejects oversized JSON and cancel conflicts without retry', async () => {

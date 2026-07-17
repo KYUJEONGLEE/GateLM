@@ -17,6 +17,8 @@ MAINTENANCE_WORKFLOW_FILE="${REPO_ROOT}/.github/workflows/tenant-chat-cache-keys
 MAINTENANCE_SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-cache-keyset-maintenance.sh"
 TEMPLATE_FILE="${AWS_TRIAGE_DIR}/aws/github-actions-cd.template.json"
 COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.yml"
+RAG_COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.rag.yml"
+ENV_EXAMPLE="${AWS_TRIAGE_DIR}/.env.example"
 
 fail() {
   printf '%s\n' "[deploy-main-test] ERROR: $*" >&2
@@ -160,6 +162,38 @@ grep -Fq 'wait_for_chat_api_readiness' "${DEPLOY_SCRIPT}" || \
   fail "Deployment must verify Chat API database and key continuity"
 grep -Fq 'Chat API readiness did not verify database and key continuity.' "${DEPLOY_SCRIPT}" || \
   fail "A key continuity failure must fail the deployment"
+grep -Fq 'content-wrapping-keys.json' "${DEPLOY_SCRIPT}" || \
+  fail "RAG wrapping keys must be validated before the image build"
+for rag_secret_file in \
+  'query-signing.jwk.json' \
+  'query-binding-hmac-keys.json' \
+  'worker-signing.jwk.json' \
+  'worker-binding-hmac-keys.json' \
+  'workload-jwks.json' \
+  'workload-binding-hmac-keys.json' \
+  'workload-identities.json'
+do
+  grep -Fq "${rag_secret_file}" "${DEPLOY_SCRIPT}" || \
+    fail "RAG workload secret must be validated before deployment: ${rag_secret_file}"
+done
+grep -Fq 'runtime_services+=(rag-worker)' "${DEPLOY_SCRIPT}" || \
+  fail "Enabled RAG worker must be recreated and covered by runtime health checks"
+grep -Fq 'all_services+=(rag-worker)' "${DEPLOY_SCRIPT}" || \
+  fail "Enabled RAG worker must be included in deployment service health checks"
+grep -Fq 'if [[ "${rag_enabled}" == "true" ]]' "${DEPLOY_SCRIPT}" || \
+  fail "RAG-only deployment dependencies must be gated by the feature flag"
+grep -Fq 'RAG_OBJECT_STORE_DRIVER=fake is not allowed' "${DEPLOY_SCRIPT}" || \
+  fail "Default-off AWS deployment must still reject an explicitly configured fake store"
+grep -Fq 'AWS_ACCESS_KEY_ID' "${DEPLOY_SCRIPT}" || \
+  fail "Default-off AWS deployment must still reject static AWS credentials"
+grep -Fq 'previous_runtime_services+=("${service}")' "${DEPLOY_SCRIPT}" || \
+  fail "Additive RAG worker deployment must preserve the previous rollback service set"
+grep -Fq 'if [[ "${service}" == "rag-worker" ]]' "${DEPLOY_SCRIPT}" || \
+  fail "Only the first additive RAG worker rollout may lack a previous container"
+grep -Fq 'additive_runtime_services+=("${service}")' "${DEPLOY_SCRIPT}" || \
+  fail "A first-rollout RAG worker must be tracked for explicit rollback removal"
+grep -Fq 'compose rm -sf "${service}"' "${DEPLOY_SCRIPT}" || \
+  fail "Rollback must explicitly remove an additive RAG worker"
 grep -Fq 'gatelm/rollback:${run_id}-${service}' "${DEPLOY_SCRIPT}" || \
   fail "Rollback images must be protected by a dedicated Docker tag"
 grep -Fq 'cleanup_rollback_tags' "${DEPLOY_SCRIPT}" || \
@@ -223,10 +257,86 @@ do
   grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
     fail "Tenant Chat production Compose setting is missing: ${required_setting}"
 done
+for required_setting in \
+  'rag-worker:' \
+  'command: ["node", "dist/src/rag-worker.js"]' \
+  'RAG_WORKER_AI_SERVICE_BASE_URL: http://ai-service:8001' \
+  'RAG_WORKER_GATEWAY_BASE_URL: http://gateway-core:8081' \
+  'RAG_WORKER_EMBEDDING_ACTIVE_KID: ${RAG_WORKER_EMBEDDING_ACTIVE_KID:?RAG_WORKER_EMBEDDING_ACTIVE_KID is required}' \
+  'RAG_WORKER_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/worker-signing.jwk.json' \
+  'RAG_WORKER_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/worker-binding-hmac-keys.json' \
+  'RAG_QUERY_EMBEDDING_ACTIVE_KID: ${RAG_QUERY_EMBEDDING_ACTIVE_KID:?RAG_QUERY_EMBEDDING_ACTIVE_KID is required}' \
+  'RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/query-signing.jwk.json' \
+  'RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/query-binding-hmac-keys.json' \
+  'RAG_EMBEDDING_WORKLOAD_JWKS_FILE: /run/secrets/rag/workload-jwks.json' \
+  'RAG_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/workload-binding-hmac-keys.json' \
+  'RAG_EMBEDDING_WORKLOAD_IDENTITIES_FILE: /run/secrets/rag/workload-identities.json' \
+  'AI_SERVICE_RAG_TEMP_DIR: /run/gatelm-rag-tmp' \
+  'AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS: ${AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS:-2}' \
+  'AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES: ${AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES:-536870912}' \
+  'AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS: ${AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS:-30}' \
+  '/run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777' \
+  'mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}' \
+  'pids_limit: ${AI_SERVICE_PIDS_LIMIT:-128}'
+do
+  if ! grep -Fq "${required_setting}" "${COMPOSE_FILE}" && \
+    ! grep -Fq "${required_setting}" "${RAG_COMPOSE_FILE}"; then
+    fail "RAG production Compose setting is missing: ${required_setting}"
+  fi
+done
 [[ "$(grep -v '^[[:space:]]*#' "${COMPOSE_FILE}" | grep -Fc 'target: /run/secrets/tenant-chat/content-keys.json')" == "1" ]] || \
   fail "Tenant Chat content keys must be mounted only into Chat API"
-[[ "$(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}")" == "2" ]] || \
-  fail "Gateway and Chat API must run as the Tenant Chat secret owner"
+[[ "$(grep -v '^[[:space:]]*#' "${RAG_COMPOSE_FILE}" | grep -Fc 'target: /run/secrets/rag/content-wrapping-keys.json')" == "2" ]] || \
+  fail "RAG wrapping keys must be mounted only into Control Plane API and RAG worker"
+for isolated_target in \
+  '/run/secrets/rag/query-signing.jwk.json' \
+  '/run/secrets/rag/query-binding-hmac-keys.json' \
+  '/run/secrets/rag/worker-signing.jwk.json' \
+  '/run/secrets/rag/worker-binding-hmac-keys.json' \
+  '/run/secrets/rag/workload-jwks.json' \
+  '/run/secrets/rag/workload-binding-hmac-keys.json' \
+  '/run/secrets/rag/workload-identities.json'
+do
+  [[ "$(grep -v '^[[:space:]]*#' "${RAG_COMPOSE_FILE}" | grep -Fc "target: ${isolated_target}")" == "1" ]] || \
+    fail "RAG workload secret must have exactly one role-specific mount: ${isolated_target}"
+done
+[[ "$((
+  $(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${COMPOSE_FILE}") +
+  $(grep -Fc 'user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"' "${RAG_COMPOSE_FILE}")
+))" == "4" ]] || \
+  fail "RAG secret consumers must run as the validated non-root secret owner"
+if grep -Fq '  rag-worker:' "${COMPOSE_FILE}" || grep -Fq '/run/secrets/rag/' "${COMPOSE_FILE}"; then
+  fail "Default-off AWS Compose must not include the RAG worker or RAG secret mounts"
+fi
+for service in control-plane-api gateway-core ai-service rag-worker chat-api; do
+  awk -v service="${service}" '
+    $0 == "  " service ":" { in_service=1; next }
+    in_service && /^  [[:alnum:]_-]+:$/ { exit }
+    in_service && /TENANT_CHAT_RAG_ENABLED: "true"/ { found=1 }
+    END { if (!found) exit 1 }
+  ' "${RAG_COMPOSE_FILE}" || \
+    fail "RAG overlay must enable the shared global flag for ${service}"
+done
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  docker compose \
+    --env-file "${ENV_EXAMPLE}" \
+    -f "${COMPOSE_FILE}" \
+    config --quiet
+  default_services="$(
+    docker compose \
+      --env-file "${ENV_EXAMPLE}" \
+      -f "${COMPOSE_FILE}" \
+      config --services
+  )"
+  if grep -Fxq 'rag-worker' <<<"${default_services}"; then
+    fail "Default-off AWS Compose unexpectedly includes the RAG worker"
+  fi
+  TENANT_CHAT_RAG_ENABLED=true docker compose \
+    --env-file "${ENV_EXAMPLE}" \
+    -f "${COMPOSE_FILE}" \
+    -f "${RAG_COMPOSE_FILE}" \
+    config --quiet
+fi
 grep -Fq 'http://127.0.0.1:8080/v1/chat/completions' "${DEPLOY_SCRIPT}" || \
   fail "Gateway authentication boundary must be verified through loopback"
 grep -Fq 'http://127.0.0.1:3002/api/tenant-chat/auth/session' "${DEPLOY_SCRIPT}" || \

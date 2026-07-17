@@ -1,7 +1,9 @@
 export type ContentRole = 'none' | 'user' | 'assistant';
-export type ContentKind = 'title' | 'message';
+export type ContentKind = 'title' | 'message' | 'message_citations';
 
-export type ContentAad = Readonly<{
+export type BoundMessageSafetyStatus = 'sanitized' | 'provider_generated';
+
+export type ContentAadV1 = Readonly<{
   schemaVersion: 1;
   tenantId: string;
   conversationId: string;
@@ -10,6 +12,20 @@ export type ContentAad = Readonly<{
   role: ContentRole;
   contentKeyVersion: number;
 }>;
+
+export type ContentAadV2 = Readonly<{
+  schemaVersion: 2;
+  tenantId: string;
+  conversationId: string;
+  recordId: string;
+  contentKind: 'message';
+  role: 'user' | 'assistant';
+  contentKeyVersion: number;
+  safetyStatus: BoundMessageSafetyStatus;
+  safetyPolicyDigest: string | null;
+}>;
+
+export type ContentAad = ContentAadV1 | ContentAadV2;
 
 export type RagChunkAadV1 = Readonly<{
   schemaVersion: 1;
@@ -41,7 +57,7 @@ export type EncryptedPayload = Readonly<{
   nonce: Buffer;
   tag: Buffer;
   contentKeyVersion: number;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
 }>;
 
 export type EncryptedContent = EncryptedPayload;
@@ -62,6 +78,18 @@ export type WrappingKey = Readonly<{
 export type WrappingKeySet = Readonly<{
   activeVersion: number;
   keys: ReadonlyMap<number, WrappingKey>;
+}>;
+
+// Least-privilege projection for services that wrap tenant DEKs but never
+// calculate Tenant Chat binding MACs.
+export type DataWrappingKey = Readonly<{
+  version: number;
+  wrappingKey: Buffer;
+}>;
+
+export type DataWrappingKeySet = Readonly<{
+  activeVersion: number;
+  keys: ReadonlyMap<number, DataWrappingKey>;
 }>;
 
 export interface TenantDataEncryptor {

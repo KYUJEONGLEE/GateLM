@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/pii-artifact-verification.schema.json",
+  "title": "Aggregate PII model artifact verification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "aggregateOnly",
+    "filesExpected",
+    "filesVerified",
+    "checksumFailures",
+    "evidenceBinding"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "pii-artifact-verification.v1"},
+    "aggregateOnly": {"const": true},
+    "filesExpected": {"type": "integer", "minimum": 1},
+    "filesVerified": {"type": "integer", "minimum": 0},
+    "checksumFailures": {"type": "integer", "minimum": 0},
+    "evidenceBinding": {"$ref": "pii-promotion-evidence-binding.schema.json"}
+  }
+}

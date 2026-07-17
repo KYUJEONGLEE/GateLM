@@ -38,11 +38,18 @@ def run_benchmark(
                 case_group=case.case_group,
                 input_length_bucket=case.input_length_bucket,
                 runtime_profile=runtime_profile,
+                target_kind=result.target_kind,
+                target_latency_ms=result.target_latency_ms,
+                target_outcome=result.target_outcome,
                 sidecar_latency_ms=result.sidecar_latency_ms,
-                full_safety_latency_ms=result.full_safety_latency_ms,
                 sidecar_outcome=result.sidecar_outcome,
+                sidecar_observation=result.sidecar_observation,
                 fallback_mode=result.fallback_mode,
+                fallback_observation=result.fallback_observation,
                 sanitized_error_code=result.sanitized_error_code,
+                execution_mode=result.execution_mode,
+                model_invocation_count=result.model_invocation_count,
+                accepted_model_detection_count=result.accepted_model_detection_count,
             )
         )
     return samples

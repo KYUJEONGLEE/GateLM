@@ -12,6 +12,8 @@ import type {
   CompletionInput,
   CompletionResult,
   ExecutionScope,
+  SanitizationInput,
+  SanitizationResult,
   SnapshotReference,
   UsageIntent,
 } from './execution.types';
@@ -101,6 +103,14 @@ export class ExecutionBridgeService {
       }
       throw error;
     }
+  }
+
+  async sanitize(
+    handle: AdmissionHandle,
+    input: SanitizationInput,
+  ): Promise<SanitizationResult> {
+    this.assertIssued(handle);
+    return this.gateway.sanitize(handle, input);
   }
 
   async cancel(handle: AdmissionHandle) {

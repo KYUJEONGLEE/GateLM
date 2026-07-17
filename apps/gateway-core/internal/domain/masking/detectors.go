@@ -20,12 +20,12 @@ type CaptureRegexDetector struct {
 }
 
 type MultiCaptureRegexDetector struct {
-	detectorType   string
-	pattern        *regexp.Regexp
-	captureGroups  []int
-	priority       int
-	action         Action
-	placeholder    string
+	detectorType  string
+	pattern       *regexp.Regexp
+	captureGroups []int
+	priority      int
+	action        Action
+	placeholder   string
 }
 
 func NewRegexDetector(detectorType string, pattern string, priority int) RegexDetector {

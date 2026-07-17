@@ -7,9 +7,14 @@ import type {
   CompleteOptions,
   CompletionInput,
   CompletionResult,
+  SanitizationInput,
+  SanitizationResult,
   UsageIntent,
 } from './execution.types';
-import { MAX_EPHEMERAL_MESSAGE_CHARACTERS } from './execution.types';
+import {
+  MAX_EPHEMERAL_MESSAGE_CHARACTERS,
+  MAX_RAG_CONTEXT_MESSAGE_CHARACTERS,
+} from './execution.types';
 import {
   CompletionStreamDisconnected,
   StrictCompletionStreamParser,
@@ -126,6 +131,43 @@ export class PrivateGatewayClient {
     });
   }
 
+  async sanitize(
+    handle: AdmissionHandle,
+    input: SanitizationInput,
+  ): Promise<SanitizationResult> {
+    validateSanitizationInput(input);
+    const value = await this.requestJson(
+      `/internal/v1/tenant-chat/admissions/${encodeURIComponent(handle.admissionId)}/sanitizations`,
+      handle,
+      'sanitization',
+      this.completionTimeoutMs,
+      handle.admissionId,
+      undefined,
+      input,
+      this.requestMaxBytes,
+    );
+    assertExactKeys(value, ['messages', 'policyDigest']);
+    if (!policyDigest(value.policyDigest) || !Array.isArray(value.messages) || value.messages.length !== input.messages.length) {
+      throw invalidResponse();
+    }
+    const messages = value.messages.map((candidate, index) => {
+      if (
+        !hasExactKeys(candidate, ['content', 'itemIndex']) ||
+        candidate.itemIndex !== index ||
+        typeof candidate.content !== 'string' ||
+        candidate.content.length < 1 ||
+        candidate.content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS
+      ) {
+        throw invalidResponse();
+      }
+      return Object.freeze({ itemIndex: index, content: candidate.content });
+    });
+    return Object.freeze({
+      messages: Object.freeze(messages),
+      policyDigest: value.policyDigest,
+    });
+  }
+
   async complete(
     handle: AdmissionHandle,
     input: CompletionInput,
@@ -207,20 +249,25 @@ export class PrivateGatewayClient {
   private async requestJson(
     path: string,
     seed: AdmissionSeed,
-    phase: 'admission' | 'cancel',
+    phase: 'admission' | 'sanitization' | 'cancel',
     timeoutMs: number,
     admissionId: string | undefined,
     usageIntent: UsageIntent | undefined,
+    input?: SanitizationInput,
+    successResponseMaxBytes = this.jsonMaxBytes,
   ): Promise<Record<string, unknown>> {
     for (let attempt = 0; attempt < MAX_TRANSPORT_ATTEMPTS; attempt += 1) {
       const authorization = await this.signer.authorize(
         seed,
         phase,
-        undefined,
+        input,
         admissionId,
         usageIntent,
       );
-      const body = encodeBody({ context: authorization.context }, this.requestMaxBytes);
+      const body = encodeBody({
+        context: authorization.context,
+        ...(input ? { input } : {}),
+      }, this.requestMaxBytes);
       let response: Response;
       try {
         response = await this.post(path, authorization.token, body, timeoutMs);
@@ -236,7 +283,7 @@ export class PrivateGatewayClient {
       }
       if (!response.ok) throw await responseError(response, this.jsonMaxBytes);
       if (!isContentType(response, 'application/json')) throw invalidResponse();
-      return parseJsonObject(await readLimited(response, this.jsonMaxBytes));
+      return parseJsonObject(await readLimited(response, successResponseMaxBytes));
     }
     throw new PrivateGatewayError('CHAT_USAGE_GUARD_UNAVAILABLE', 503);
   }
@@ -290,17 +337,79 @@ function validateCompletionInput(input: unknown): void {
     throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
   }
   for (const message of input.messages) {
+    const isRagContext = message?.role === 'system' && message?.purpose === 'rag_context';
+    const maximumCharacters = isRagContext
+      ? MAX_RAG_CONTEXT_MESSAGE_CHARACTERS
+      : MAX_EPHEMERAL_MESSAGE_CHARACTERS;
     if (
-      !hasExactKeys(message, ['content', 'role']) ||
-      typeof message.role !== 'string' ||
+      !hasAllowedKeys(message, ['content', 'purpose', 'role', 'safety']) ||      typeof message.role !== 'string' ||
       !['system', 'user', 'assistant'].includes(message.role) ||
       typeof message.content !== 'string' ||
       message.content.length < 1 ||
-      message.content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS
+      message.content.length > maximumCharacters ||
+      (message.purpose !== undefined && (message.role !== 'system' || message.purpose !== 'rag_context')) ||
+      ('safety' in message && !validSafetyProvenance(message.safety, message.role))
     ) {
       throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
     }
   }
+}
+
+const PLACEHOLDER_PREFIXES = new Set([
+  'EMAIL',
+  'PHONE_NUMBER',
+  'ADDRESS',
+  'PERSON',
+  'ORGANIZATION',
+  'CUSTOMER',
+  'AGENT',
+  'DOCTOR',
+  'PATIENT',
+  'APPLICANT',
+  'INTERVIEWER',
+]);
+
+function validateSanitizationInput(input: unknown): asserts input is SanitizationInput {
+  if (
+    (!hasExactKeys(input, ['messages']) && !hasExactKeys(input, ['messages', 'placeholderCounters'])) ||
+    !Array.isArray(input.messages) ||
+    input.messages.length < 1 ||
+    input.messages.length > 64
+  ) {
+    throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
+  }
+  for (const message of input.messages) {
+    if (
+      !hasExactKeys(message, ['content', 'role']) ||
+      message.role !== 'user' ||
+      typeof message.content !== 'string' ||
+      message.content.length < 1 ||
+      message.content.length > MAX_EPHEMERAL_MESSAGE_CHARACTERS    ) {
+      throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
+    }
+  }
+  if ('placeholderCounters' in input) {
+    if (!input.placeholderCounters || typeof input.placeholderCounters !== 'object' || Array.isArray(input.placeholderCounters)) {
+      throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
+    }
+    for (const [prefix, count] of Object.entries(input.placeholderCounters)) {
+      if (!PLACEHOLDER_PREFIXES.has(prefix) || !Number.isInteger(count) || count < 0 || count > 1_000_000) {
+        throw new PrivateGatewayError('CHAT_INVALID_REQUEST', 400);
+      }
+    }
+  }
+}
+
+function validSafetyProvenance(value: unknown, role: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (hasExactKeys(value, ['policyDigest', 'status'])) {
+    return role === 'user' && value.status === 'sanitized' && policyDigest(value.policyDigest);
+  }
+  return hasExactKeys(value, ['status']) && role === 'assistant' && value.status === 'provider_generated';
+}
+
+function policyDigest(value: unknown): value is string {
+  return typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value);
 }
 
 function validateUsageIntent(value: unknown): void {
@@ -391,6 +500,11 @@ function hasExactKeys(value: unknown, expected: string[]): value is Record<strin
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.keys(value).sort();
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+
+function hasAllowedKeys(value: unknown, allowed: string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.keys(value).every((key) => allowed.includes(key));
 }
 
 function isContentType(response: Response, expected: string): boolean {

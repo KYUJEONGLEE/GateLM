@@ -3,9 +3,10 @@ package tenantchat
 type Phase string
 
 const (
-	PhaseAdmission  Phase = "admission"
-	PhaseCompletion Phase = "completion"
-	PhaseCancel     Phase = "cancel"
+	PhaseAdmission    Phase = "admission"
+	PhaseSanitization Phase = "sanitization"
+	PhaseCompletion   Phase = "completion"
+	PhaseCancel       Phase = "cancel"
 )
 
 type Actor struct {
@@ -68,13 +69,25 @@ type RequestContext struct {
 }
 
 type EphemeralMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string            `json:"role"`
+	Content string            `json:"content"`
+	Purpose string            `json:"purpose,omitempty"`
+	Safety  *SafetyProvenance `json:"safety,omitempty"`
+}
+
+type SafetyProvenance struct {
+	Status       string `json:"status"`
+	PolicyDigest string `json:"policyDigest,omitempty"`
 }
 
 type CompletionInput struct {
 	Messages []EphemeralMessage `json:"messages"`
 	Stream   bool               `json:"stream"`
+}
+
+type SanitizationInput struct {
+	Messages            []EphemeralMessage `json:"messages"`
+	PlaceholderCounters map[string]int     `json:"placeholderCounters,omitempty"`
 }
 
 type AdmissionRequest struct {
@@ -88,6 +101,21 @@ type CancelRequest struct {
 type CompletionRequest struct {
 	Context RequestContext  `json:"context"`
 	Input   CompletionInput `json:"input"`
+}
+
+type SanitizationRequest struct {
+	Context RequestContext    `json:"context"`
+	Input   SanitizationInput `json:"input"`
+}
+
+type SanitizedMessage struct {
+	ItemIndex int    `json:"itemIndex"`
+	Content   string `json:"content"`
+}
+
+type SanitizationResponse struct {
+	Messages     []SanitizedMessage `json:"messages"`
+	PolicyDigest string             `json:"policyDigest"`
 }
 
 type AdmissionResponse struct {

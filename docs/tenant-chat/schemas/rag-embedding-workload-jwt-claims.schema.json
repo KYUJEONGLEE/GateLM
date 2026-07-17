@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/tenant-chat/v1/rag-embedding-workload-jwt-claims.schema.json",
+  "title": "Private RAG embedding workload JWT claims",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "iss",
+    "aud",
+    "sub",
+    "jti",
+    "iat",
+    "nbf",
+    "exp",
+    "requestId",
+    "operationId",
+    "tenantId",
+    "purpose",
+    "profileVersion",
+    "bindingDigest"
+  ],
+  "properties": {
+    "iss": { "$ref": "#/$defs/principal" },
+    "aud": { "const": "gatelm-gateway-rag-embedding" },
+    "sub": { "$ref": "#/$defs/principal" },
+    "jti": { "$ref": "#/$defs/opaqueId" },
+    "iat": { "type": "integer", "minimum": 0 },
+    "nbf": { "type": "integer", "minimum": 0 },
+    "exp": { "type": "integer", "minimum": 0 },
+    "requestId": { "$ref": "#/$defs/opaqueId" },
+    "operationId": { "$ref": "#/$defs/opaqueId" },
+    "tenantId": { "type": "string", "format": "uuid" },
+    "purpose": {
+      "type": "string",
+      "enum": ["RAG_INGESTION", "RAG_QUERY"]
+    },
+    "profileVersion": { "type": "integer", "const": 1 },
+    "bindingDigest": {
+      "type": "string",
+      "pattern": "^hmac-sha256:[A-Za-z0-9_-]{43}$"
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "principal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\s]+$"
+    }
+  }
+}
