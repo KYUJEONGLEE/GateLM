@@ -5,8 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { MarkdownMessage } from './src/components/markdown-message.mjs';
 
-function render(content) {
-  return renderToStaticMarkup(MarkdownMessage({ content }));
+function render(content, citations = []) {
+  return renderToStaticMarkup(MarkdownMessage({ content, citations }));
 }
 
 test('assistant markdown renders headings, emphasis, lists, code, and GFM tables', () => {
@@ -49,4 +49,14 @@ test('assistant markdown blocks raw HTML and unsafe link protocols', () => {
   assert.match(html, /rel="noopener noreferrer"/);
   assert.match(html, /target="_blank"/);
   assert.match(html, /\[이미지: 추적 이미지\]/);
+});
+
+test('assistant markdown renders only verified RAG source markers as citation anchors', () => {
+  const html = render('근거가 있습니다[S1]. 위조된 [S999]는 그대로 둡니다.', [{ sourceId: 'S1' }]);
+
+  assert.match(html, /class="message-citation-marker"/);
+  assert.match(html, /href="#citation-S1"/);
+  assert.match(html, />1<\/a>/);
+  assert.match(html, /\[S999\]/);
+  assert.doesNotMatch(html, /citation-S999/);
 });

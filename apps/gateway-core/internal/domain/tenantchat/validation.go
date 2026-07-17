@@ -44,8 +44,8 @@ func ValidateContext(value RequestContext, expectedPhase Phase) error {
 	if expectedPhase == PhaseCompletion && value.UsageIntent == nil {
 		return fmt.Errorf("completion usageIntent is required")
 	}
-	if expectedPhase == PhaseCancel && value.UsageIntent != nil {
-		return fmt.Errorf("cancel usageIntent is forbidden")
+	if (expectedPhase == PhaseCancel || expectedPhase == PhaseSanitization) && value.UsageIntent != nil {
+		return fmt.Errorf("non-completion usageIntent is forbidden")
 	}
 	if err := ValidateExecutionScope(value.ExecutionScope); err != nil {
 		return err

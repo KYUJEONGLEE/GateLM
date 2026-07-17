@@ -12,6 +12,8 @@
     "turnId": { "$ref": "#/$defs/uuid" },
     "sequence": { "type": "integer", "minimum": 1 },
     "replayed": { "type": "boolean" },
+    "userMessageId": { "$ref": "#/$defs/uuid" },
+    "userContent": { "type": "string", "minLength": 1, "maxLength": 20000 },
     "delta": { "type": "string", "minLength": 1, "maxLength": 16384 },
     "messageId": { "$ref": "#/$defs/uuid" },
     "terminalOutcome": { "const": "succeeded" },
@@ -62,14 +64,21 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "replayed"],
+          "required": ["type", "schemaVersion", "conversationId", "turnId", "sequence", "replayed", "userMessageId", "userContent"],
           "properties": {
             "type": { "const": "chat.turn.accepted" },
             "schemaVersion": { "const": 1 },
             "conversationId": { "$ref": "#/$defs/uuid" },
             "turnId": { "$ref": "#/$defs/uuid" },
             "sequence": { "const": 1 },
-            "replayed": { "type": "boolean" }
+            "replayed": { "type": "boolean" },
+            "userMessageId": { "$ref": "#/$defs/uuid" },
+            "userContent": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000,
+              "description": "The sanitized content committed as the user message. It is never the original untrusted input."
+            }
           }
         }
       ]

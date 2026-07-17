@@ -27,7 +27,7 @@ import {
   CreateTurnDto,
   ConversationPageQueryDto,
   MessagePageQueryDto,
-  RenameConversationDto,
+  UpdateConversationDto,
   TurnIdParams,
 } from './dto';
 
@@ -71,12 +71,12 @@ export class ConversationController {
   }
 
   @Patch(':conversationId')
-  rename(
+  update(
     @Headers('x-gatelm-chat-access') accessToken: string,
     @Param() params: ConversationIdParams,
-    @Body() body: RenameConversationDto,
+    @Body() body: UpdateConversationDto,
   ) {
-    return this.conversations.rename(accessToken, params.conversationId, body.title, body.expectedVersion);
+    return this.conversations.update(accessToken, params.conversationId, body);
   }
 
   @Delete(':conversationId')
@@ -132,6 +132,8 @@ export class ConversationController {
         turnId: prepared.reserved.turnId,
         sequence,
         replayed: prepared.kind === 'replay' || prepared.reserved.replayed,
+        userMessageId: prepared.userMessage.id,
+        userContent: prepared.userMessage.content,
       });
       const initialCitations = prepared.kind === 'execute'
         ? prepared.citationSources

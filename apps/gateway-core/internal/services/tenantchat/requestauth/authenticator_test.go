@@ -109,6 +109,56 @@ func TestAuthenticateFailsClosedWhenJTIStoreIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestAuthenticateBindsSanitizationInputBeforeConsumingJTI(t *testing.T) {
+	key := []byte("01234567890123456789012345678901")
+	requestContext := admissionContextFixture()
+	requestContext.Phase = tenantchat.PhaseSanitization
+	requestContext.AdmissionID = "00000000-0000-4000-8000-000000000400"
+	input := tenantchat.SanitizationInput{
+		Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "raw input"}},
+	}
+	payloadDigest, err := tenantchat.ComputePayloadDigest(input)
+	if err != nil {
+		t.Fatalf("compute sanitization payload digest: %v", err)
+	}
+	bindingDigest, _, err := tenantchat.ComputeBindingDigest(
+		tenantchat.BuildBindingObject(requestContext, payloadDigest),
+		key,
+	)
+	if err != nil {
+		t.Fatalf("compute sanitization binding: %v", err)
+	}
+	requestContext.BindingDigest = bindingDigest
+	claims := claimsForContext(requestContext, bindingDigest)
+
+	consumer := &fakeJTIConsumer{}
+	authenticator := New(fakeVerifier{token: workloadauth.VerifiedToken{
+		Claims: claims, BindingKey: key,
+	}}, consumer)
+	if _, err := authenticator.Authenticate(
+		context.Background(), "Bearer signed-token", tenantchat.PhaseSanitization, requestContext, input,
+	); err != nil {
+		t.Fatalf("authenticate sanitization input: %v", err)
+	}
+	if consumer.calls != 1 {
+		t.Fatalf("valid sanitization did not consume jti exactly once: %d", consumer.calls)
+	}
+
+	tamperedConsumer := &fakeJTIConsumer{}
+	tamperedAuthenticator := New(fakeVerifier{token: workloadauth.VerifiedToken{
+		Claims: claims, BindingKey: key,
+	}}, tamperedConsumer)
+	input.Messages[0].Content = "tampered raw input"
+	if _, err := tamperedAuthenticator.Authenticate(
+		context.Background(), "Bearer signed-token", tenantchat.PhaseSanitization, requestContext, input,
+	); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("want invalid token for changed sanitization payload, got %v", err)
+	}
+	if tamperedConsumer.calls != 0 {
+		t.Fatalf("tampered sanitization consumed jti: calls=%d", tamperedConsumer.calls)
+	}
+}
+
 func TestAuthenticateRejectsNonUUIDPersistenceIdentityBeforeJTIConsumption(t *testing.T) {
 	key := []byte("01234567890123456789012345678901")
 	requestContext := admissionContextFixture()
@@ -194,6 +244,7 @@ func claimsForContext(context tenantchat.RequestContext, bindingDigest string) w
 		SnapshotVersion:    context.Snapshot.Version,
 		SnapshotDigest:     context.Snapshot.Digest,
 		BindingDigest:      bindingDigest,
+		AdmissionID:        context.AdmissionID,
 		ActorAuthzVersion:  1,
 		TenantAuthzVersion: 1,
 		SessionVersion:     1,

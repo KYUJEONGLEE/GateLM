@@ -1,0 +1,1 @@
+"""Model artifact delivery tests."""

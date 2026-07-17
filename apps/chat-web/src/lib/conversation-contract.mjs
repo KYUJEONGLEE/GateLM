@@ -70,10 +70,14 @@ export function createConversationBody(value) {
   return Object.freeze({ idempotencyKey: body.idempotencyKey, title, knowledgeMode });
 }
 
-export function renameConversationBody(value) {
-  const body = record(value, ['expectedVersion', 'title']);
+export function updateConversationBody(value) {
+  const body = record(value, ['expectedVersion'], ['title', 'knowledgeMode']);
   if (!Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 1) invalid();
-  return Object.freeze({ expectedVersion: body.expectedVersion, title: titleValue(body.title) });
+  if (body.title === undefined && body.knowledgeMode === undefined) invalid();
+  const title = body.title === undefined ? {} : { title: titleValue(body.title) };
+  if (body.knowledgeMode !== undefined && !['off', 'tenant'].includes(body.knowledgeMode)) invalid();
+  const knowledgeMode = body.knowledgeMode === undefined ? {} : { knowledgeMode: body.knowledgeMode };
+  return Object.freeze({ expectedVersion: body.expectedVersion, ...title, ...knowledgeMode });
 }
 
 export function createTurnBody(value) {
@@ -223,7 +227,7 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   try { event = JSON.parse(fields.data); } catch { throw new Error('Invalid SSE data.'); }
   if (!event || Array.isArray(event) || typeof event !== 'object') throw new Error('Invalid SSE data.');
   const common = ['conversationId', 'schemaVersion', 'sequence', 'turnId', 'type'];
-  const extras = event.type === 'chat.turn.accepted' ? ['replayed']
+  const extras = event.type === 'chat.turn.accepted' ? ['replayed', 'userContent', 'userMessageId']
     : event.type === 'chat.turn.delta' ? ['delta']
       : event.type === 'chat.turn.sources' || event.type === 'chat.turn.citations' ? ['citations']
       : event.type === 'chat.turn.final' ? ['budgetState', 'cacheOutcome', 'effectiveModelKey', 'messageId', 'quotaState', 'replayed', 'terminalOutcome']
@@ -232,7 +236,14 @@ function parseFrame(frame, frameByteLength, expectedConversationId, expectedTurn
   if (fields.event !== event.type || event.schemaVersion !== 1 || event.conversationId !== expectedConversationId || !UUID_V4.test(event.turnId)) throw new Error('Mismatched SSE event.');
   if (expectedTurnId && event.turnId !== expectedTurnId) throw new Error('Mismatched SSE turn.');
   if (event.sequence !== expectedSequence || fields.id !== `${event.turnId}:${event.sequence}`) throw new Error('Invalid SSE sequence.');
-  if (expectedSequence === 1 && (event.type !== 'chat.turn.accepted' || event.replayed !== Boolean(event.replayed))) throw new Error('Accepted SSE event must be first.');
+  if (expectedSequence === 1 && (
+    event.type !== 'chat.turn.accepted' ||
+    event.replayed !== Boolean(event.replayed) ||
+    !UUID_V4.test(event.userMessageId) ||
+    typeof event.userContent !== 'string' ||
+    event.userContent.length < 1 ||
+    event.userContent.length > 20_000
+  )) throw new Error('Accepted SSE event must be first.');
   if (expectedSequence > 1 && event.type === 'chat.turn.accepted') throw new Error('Duplicate accepted SSE event.');
   if (event.type === 'chat.turn.delta' && (typeof event.delta !== 'string' || !event.delta || event.delta.length > 16_384)) throw new Error('Invalid SSE delta.');
   if (event.type === 'chat.turn.final') {

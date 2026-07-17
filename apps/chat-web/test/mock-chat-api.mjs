@@ -136,7 +136,10 @@ async function streamTurn(response, conversation, input) {
     'x-accel-buffering': 'no',
   });
   let sequence = 1;
-  writeSse(response, turnId, { type: 'chat.turn.accepted', schemaVersion: 1, conversationId: conversation.id, turnId, sequence, replayed: false });
+  writeSse(response, turnId, {
+    type: 'chat.turn.accepted', schemaVersion: 1, conversationId: conversation.id, turnId, sequence,
+    replayed: false, userMessageId: userMessage.id, userContent: userMessage.content,
+  });
   const deltas = input.content.toLowerCase().includes('slow')
     ? ['요청을 ', '안전하게 ', '처리한 ', '테스트 ', '답변입니다.']
     : ['요청을 안전하게 처리한 ', '테스트 답변입니다.'];

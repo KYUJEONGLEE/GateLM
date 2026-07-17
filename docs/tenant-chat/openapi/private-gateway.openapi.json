@@ -104,6 +104,50 @@
         }
       }
     },
+    "/internal/v1/tenant-chat/admissions/{admissionId}/sanitizations": {
+      "post": {
+        "operationId": "sanitizeTenantChatUserMessages",
+        "summary": "Sanitize ordered user messages before encrypted persistence",
+        "description": "Runs the pinned safety policy only for newly submitted user content and, during a bounded rollout migration, legacy_unverified user messages. A passed or redacted result keeps the admission active; a safety block atomically consumes it, releases the slot, and writes the content-free safety_blocked terminal event.",
+        "parameters": [
+          {
+            "name": "admissionId",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/OpaqueId" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SanitizationRequest" },
+              "examples": {
+                "newUserMessage": { "$ref": "#/components/examples/SanitizationRequestExample" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Every input item was processed in order. Returned content is the only user content eligible for encrypted persistence.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SanitizationResponse" },
+                "examples": {
+                  "redacted": { "$ref": "#/components/examples/SanitizationResponseExample" }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/TokenInvalid" },
+          "403": { "$ref": "#/components/responses/SafetyDenied" },
+          "409": { "$ref": "#/components/responses/AdmissionExpiredOrConflict" },
+          "503": { "$ref": "#/components/responses/RuntimeOrGuardUnavailable" }
+        }
+      }
+    },
     "/internal/v1/tenant-chat/completions": {
       "post": {
         "operationId": "completeTenantChatTurn",
@@ -263,6 +307,15 @@
           }
         ]
       },
+      "SanitizationContext": {
+        "allOf": [
+          { "$ref": "../schemas/gateway-request-context.schema.json" },
+          {
+            "type": "object",
+            "properties": { "phase": { "const": "sanitization" } }
+          }
+        ]
+      },
       "AdmissionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -282,6 +335,92 @@
         "properties": {
           "context": { "$ref": "#/components/schemas/CompletionContext" },
           "input": { "$ref": "#/components/schemas/CompletionInput" }
+        }
+      },
+      "SanitizationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["context", "input"],
+        "properties": {
+          "context": { "$ref": "#/components/schemas/SanitizationContext" },
+          "input": { "$ref": "#/components/schemas/SanitizationInput" }
+        }
+      },
+      "SanitizationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["messages"],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": { "$ref": "#/components/schemas/SanitizationMessage" },
+            "description": "Ordered new-user inputs. More than one item is permitted only for bounded one-time migration of legacy_unverified user ciphertext plus the current user message."
+          },
+          "placeholderCounters": { "$ref": "#/components/schemas/PlaceholderCounters" }
+        }
+      },
+      "SanitizationMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": { "const": "user" },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "Ephemeral user content. Never log, persist in Gateway tables, or include in metrics."
+          }
+        }
+      },
+      "PlaceholderCounters": {
+        "type": "object",
+        "maxProperties": 11,
+        "propertyNames": {
+          "enum": [
+            "PERSON",
+            "ORGANIZATION",
+            "ADDRESS",
+            "EMAIL",
+            "PHONE_NUMBER",
+            "CUSTOMER",
+            "AGENT",
+            "DOCTOR",
+            "PATIENT",
+            "APPLICANT",
+            "INTERVIEWER"
+          ]
+        },
+        "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "description": "Optional placeholder-prefix to highest previously allocated suffix. Keys are the exact uppercase prefixes emitted in masked text, not detector types. It preserves monotonic numbering without sending prior masked history or any raw entity mapping."
+      },
+      "SanitizationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["messages", "policyDigest"],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": { "$ref": "#/components/schemas/SanitizedMessage" },
+            "description": "Exact-cardinality results in input order. itemIndex must be contiguous from zero and equal its array position."
+          },
+          "policyDigest": {
+            "type": "string",
+            "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+          }
+        }
+      },
+      "SanitizedMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemIndex", "content"],
+        "properties": {
+          "itemIndex": { "type": "integer", "minimum": 0, "maximum": 63 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 20000 }
         }
       },
       "CompletionInput": {
@@ -339,6 +478,30 @@
               }
             },
             "else": { "properties": { "content": { "maxLength": 20000 } } }
+          },
+          {
+            "if": {
+              "properties": {
+                "safety": {
+                  "properties": { "status": { "const": "sanitized" } },
+                  "required": ["status"]
+                }
+              },
+              "required": ["safety"]
+            },
+            "then": { "properties": { "role": { "const": "user" } } }
+          },
+          {
+            "if": {
+              "properties": {
+                "safety": {
+                  "properties": { "status": { "const": "provider_generated" } },
+                  "required": ["status"]
+                }
+              },
+              "required": ["safety"]
+            },
+            "then": { "properties": { "role": { "const": "assistant" } } }
           }
         ],
         "properties": {
@@ -353,8 +516,34 @@
             "minLength": 1,
             "maxLength": 65536,
             "description": "Ephemeral provider-bound content. Non-RAG messages remain capped at 20000 characters; only the private system rag_context marker may use up to 65536. Never log, persist in Gateway tables, or include in metrics."
-          }
+          },
+          "safety": { "$ref": "#/components/schemas/MessageSafetyProvenance" }
         }
+      },
+      "MessageSafetyProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["sanitized", "provider_generated"] },
+          "policyDigest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "status": { "const": "sanitized" } },
+              "required": ["status"]
+            },
+            "then": { "required": ["policyDigest"] }
+          },
+          {
+            "if": {
+              "properties": { "status": { "const": "provider_generated" } },
+              "required": ["status"]
+            },
+            "then": { "not": { "required": ["policyDigest"] } }
+          }
+        ]
       },
       "AdmissionResponse": {
         "type": "object",
@@ -469,6 +658,11 @@
       "LimitDenied": {
         "description": "403 CHAT_SAFETY_BLOCKED, CHAT_QUOTA_HARD_LIMIT, or CHAT_BUDGET_HARD_LIMIT. User and Employee entitlement errors are owned by Chat API, not this private Gateway API.",
         "x-error-codes": ["CHAT_SAFETY_BLOCKED", "CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT"],
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "SafetyDenied": {
+        "description": "403 CHAT_SAFETY_BLOCKED. The admission is terminally consumed and no user ciphertext may be written.",
+        "x-error-codes": ["CHAT_SAFETY_BLOCKED"],
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
       },
       "IdempotencyConflict": {
@@ -633,6 +827,51 @@
           "replayed": false
         }
       },
+      "SanitizationRequestExample": {
+        "value": {
+          "context": {
+            "surface": "tenant_chat",
+            "phase": "sanitization",
+            "requestId": "request_fixture_001",
+            "turnId": "turn_fixture_001",
+            "idempotencyKey": "turn_fixture_001_attempt_1",
+            "admissionId": "admission_fixture_001",
+            "executionScope": {
+              "kind": "tenant_chat",
+              "tenantId": "tenant_fixture_001",
+              "actor": {
+                "userId": "user_fixture_001",
+                "actorKind": "employee",
+                "employeeId": "employee_fixture_001"
+              },
+              "quotaScope": { "type": "user", "id": "user_fixture_001" },
+              "budgetScope": { "type": "tenant", "id": "tenant_fixture_001" }
+            },
+            "snapshot": {
+              "version": 12,
+              "digest": "sha256:QTJXSkcD9dvUyD2iz63k6npQETJmbS9IvHe9Bx8xx9M",
+              "policyVersion": 8,
+              "employeeNoticeVersion": 3,
+              "pricingVersion": 5
+            },
+            "bindingDigest": "hmac-sha256:NT0qVTJv5oEoqUXQVfd4pQWQhw0K5WI9Ka7qShjB9EA"
+          },
+          "input": {
+            "messages": [
+              { "role": "user", "content": "Reply to synthetic.user@example.com." }
+            ],
+            "placeholderCounters": { "EMAIL": 1 }
+          }
+        }
+      },
+      "SanitizationResponseExample": {
+        "value": {
+          "messages": [
+            { "itemIndex": 0, "content": "Reply to [EMAIL_2]." }
+          ],
+          "policyDigest": "sha256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+        }
+      },
       "CompletionRequestExample": {
         "value": {
           "context": {
@@ -660,17 +899,24 @@
               "employeeNoticeVersion": 3,
               "pricingVersion": 5
             },
-            "bindingDigest": "hmac-sha256:9q5GSRXGlGvD0AG0P367oxDQVoYsLusfPsRQpxOYZh0",
+            "bindingDigest": "hmac-sha256:DVP_Yiv2GzDYYmGKZtK4lm6no2iNnHHMD1mNsekhZfI",
             "usageIntent": {
               "estimatedInputTokens": 640,
               "maxOutputTokens": 1024,
-              "requestedTier": "auto",
+              "requestedTier": "standard",
               "cacheStrategy": "exact"
             }
           },
           "input": {
             "messages": [
-              { "role": "user", "content": "<ephemeral>" }
+              {
+                "role": "user",
+                "content": "<ephemeral>",
+                "safety": {
+                  "status": "sanitized",
+                  "policyDigest": "sha256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                }
+              }
             ],
             "stream": true
           }

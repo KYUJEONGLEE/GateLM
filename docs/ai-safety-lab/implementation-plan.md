@@ -84,15 +84,16 @@ HF model output label
 |---|---|
 | `private_email` | `email` |
 | `private_phone` | `phone_number` |
-| `private_person` | `person_name` |
 | `private_address` | `postal_address` |
 | `account_number` | `account_number` |
 | `private_url` | `private_url` |
 | `private_date` | `private_date` |
 | `secret` | `secret` |
-| `ORG-B` / `ORG-I` | `organization_name` |
+| `EMA-*` / `email` | `email` |
+| `PHN-*` / `phone` / `telephone` | `phone_number` |
+| `RRN-*` | `resident_registration_number` |
 
-모델마다 label 이름이 다르므로 adapter가 label을 GateLM detector type으로 번역한다.
+모델마다 label 이름이 다르므로 adapter가 label을 GateLM detector type으로 번역한다. 2026-07-15 pinned bundle의 `person_name`과 `organization_name`은 모델 mapping이 아니라 local rule backstop이다.
 
 ## 5. Phase 3. Policy Evaluator
 

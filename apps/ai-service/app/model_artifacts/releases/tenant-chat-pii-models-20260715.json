@@ -1,0 +1,23 @@
+{
+  "descriptorVersion": "gatelm.pii-model-release.v1",
+  "releaseId": "tenant-chat-pii-models-20260715",
+  "bundle": {
+    "bytes": 1470555312,
+    "sha256": "6197ab1a7e4ebd05b94ab8e4e8928353b23f7707def05fa9d252df81a0c76c9a",
+    "manifestSuffix": "docs/pii-model-manifest-20260715.json",
+    "manifestBytes": 2560,
+    "manifestSha256": "eee20de5d545e83b9722925839b5144dcad788d9dc0387094ae5ff69f685ee7f"
+  },
+  "runtime": {
+    "artifactFiles": 12,
+    "artifactBytes": 1661718450,
+    "modelDirectories": [
+      "openai--privacy-filter",
+      "amoeba04--koelectra-small-v3-privacy-ner-quantized"
+    ],
+    "primaryModelDirectory": "openai--privacy-filter",
+    "additionalModelDirectories": [
+      "amoeba04--koelectra-small-v3-privacy-ner-quantized"
+    ]
+  }
+}

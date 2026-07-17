@@ -4,7 +4,9 @@ import { Badge, Button } from '@gatelm/ui';
 import {
   AlertTriangle,
   Building2,
+  BookOpenText,
   Check,
+  CheckCircle2,
   Copy,
   Gauge,
   LoaderCircle,
@@ -44,6 +46,7 @@ import {
 const CONTEXT_MODE_STORAGE_KEY = 'gatelm.tenant-chat.context-mode';
 type ContextMode = 'conversation' | 'single_turn';
 type KnowledgeMode = 'off' | 'tenant';
+type KnowledgeModeToast = Readonly<{ title: string; description: string }>;
 
 export function ChatShell() {
   const router = useRouter();
@@ -56,10 +59,12 @@ export function ChatShell() {
   const [composer, setComposer] = useState('');
   const [contextMode, setContextMode] = useState<ContextMode>('conversation');
   const [newConversationKnowledgeMode, setNewConversationKnowledgeMode] = useState<KnowledgeMode>('off');
+  const [knowledgeModeToast, setKnowledgeModeToast] = useState<KnowledgeModeToast | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [updatingKnowledgeMode, setUpdatingKnowledgeMode] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [policyState, setPolicyState] = useState<PolicyState>('normal');
@@ -83,6 +88,7 @@ export function ChatShell() {
   const streamControllerRef = useRef<AbortController | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
   const newConversationIdRef = useRef<string | null>(null);
+  const knowledgeModeToastTimerRef = useRef<number | null>(null);
 
   const reportError = useCallback((caught: unknown) => {
     const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
@@ -137,6 +143,10 @@ export function ChatShell() {
     void initialize();
     return () => { active = false; };
   }, [router]);
+
+  useEffect(() => () => {
+    if (knowledgeModeToastTimerRef.current !== null) window.clearTimeout(knowledgeModeToastTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!selectedId) {
@@ -229,6 +239,54 @@ export function ChatShell() {
     } finally {
       setCreatingConversation(false);
     }
+  }
+
+  async function changeKnowledgeMode(enabled: boolean) {
+    const knowledgeMode: KnowledgeMode = enabled ? 'tenant' : 'off';
+    if (!selected) {
+      setNewConversationKnowledgeMode(knowledgeMode);
+      showKnowledgeModeToast(knowledgeMode, false);
+      return;
+    }
+    if (streaming || creatingConversation || updatingKnowledgeMode) return;
+    setUpdatingKnowledgeMode(true);
+    setError(null);
+    try {
+      const updated = await api<Conversation>(`/api/tenant-chat/conversations/${selected.id}`, {
+        body: JSON.stringify({ expectedVersion: selected.version, knowledgeMode }),
+        method: 'PATCH',
+      });
+      setConversations((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setStatus(knowledgeMode === 'tenant'
+        ? '이 대화를 사내 지식 모드로 전환했습니다.'
+        : '이 대화를 일반 모드로 전환했습니다.');
+      showKnowledgeModeToast(knowledgeMode, true);
+    } catch (caught) {
+      reportError(caught);
+    } finally {
+      setUpdatingKnowledgeMode(false);
+    }
+  }
+
+  function showKnowledgeModeToast(knowledgeMode: KnowledgeMode, activeConversation: boolean) {
+    if (knowledgeModeToastTimerRef.current !== null) window.clearTimeout(knowledgeModeToastTimerRef.current);
+    setKnowledgeModeToast(knowledgeMode === 'tenant'
+      ? {
+          title: '사내 지식 기반 답변이 켜졌습니다.',
+          description: activeConversation
+            ? '이 대화의 다음 메시지부터 등록된 문서를 찾아 근거와 함께 답변합니다.'
+            : '새 대화에서 등록된 문서를 찾아 근거와 함께 답변합니다.',
+        }
+      : {
+          title: '일반 대화로 전환했습니다.',
+          description: activeConversation
+            ? '이 대화의 다음 메시지부터 등록된 문서를 검색하지 않습니다.'
+            : '새 대화에서는 등록된 문서를 검색하지 않습니다.',
+        });
+    knowledgeModeToastTimerRef.current = window.setTimeout(() => {
+      setKnowledgeModeToast(null);
+      knowledgeModeToastTimerRef.current = null;
+    }, 3600);
   }
 
   async function loadMoreConversations() {
@@ -350,7 +408,12 @@ export function ChatShell() {
         onAccepted: (accepted) => {
           activeTurnIdRef.current = accepted.turnId;
           setMessages((current) => current.map((message) => message.id === optimisticUserId
-            ? { ...message, turnId: accepted.turnId }
+            ? {
+                ...message,
+                id: accepted.userMessageId ?? message.id,
+                turnId: accepted.turnId,
+                content: accepted.userContent ?? message.content,
+              }
             : message));
         },
         onDelta: (delta, deltaEvent) => {
@@ -358,7 +421,7 @@ export function ChatShell() {
             ? { ...message, turnId: deltaEvent.turnId, content: message.content + delta }
             : message));
         },
-        onSources: applyCitations,
+        onSources: () => undefined,
         onCitations: applyCitations,
       });
       if (terminal.type === 'chat.turn.final') {
@@ -503,16 +566,16 @@ export function ChatShell() {
         <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
         <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}{selected ? ` · ${selected.knowledgeMode === 'tenant' ? '사내 지식 채팅' : '일반 채팅'}` : ''}</span></div>
         <div className="topbar-actions">
-          <label className="context-setting" title="다음에 만들 새 대화에서 사내 지식을 사용할지 선택합니다.">
+          <label className="context-setting" title={selected ? '이 대화의 다음 메시지에 사내 지식을 사용할지 선택합니다.' : '다음에 만들 새 대화에서 사내 지식을 사용할지 선택합니다.'}>
             <input
-              aria-label="다음 새 대화에 사내 지식 사용"
-              checked={newConversationKnowledgeMode === 'tenant'}
-              disabled={streaming || creatingConversation}
-              onChange={(event) => setNewConversationKnowledgeMode(event.target.checked ? 'tenant' : 'off')}
+              aria-label={selected ? '이 대화에 사내 지식 사용' : '다음 새 대화에 사내 지식 사용'}
+              checked={selected ? selected.knowledgeMode === 'tenant' : newConversationKnowledgeMode === 'tenant'}
+              disabled={streaming || creatingConversation || updatingKnowledgeMode}
+              onChange={(event) => { void changeKnowledgeMode(event.target.checked); }}
               type="checkbox"
             />
             <span className="context-switch" aria-hidden="true" />
-            <span className="context-setting-copy"><strong>새 대화 유형</strong><span>{newConversationKnowledgeMode === 'tenant' ? '사내 지식' : '일반'}</span></span>
+            <span className="context-setting-copy"><strong>{selected ? '대화 유형' : '새 대화 유형'}</strong><span>{(selected?.knowledgeMode ?? newConversationKnowledgeMode) === 'tenant' ? '사내 지식' : '일반'}</span></span>
           </label>
           <label className="context-setting" title="끄면 다음 요청은 이전 대화 없이 현재 메시지만 모델과 캐시에 전달됩니다.">
             <input
@@ -544,7 +607,7 @@ export function ChatShell() {
                     <article>
                       <span className="message-author">GateLM</span>
                       {message.content
-                        ? <><MarkdownMessage content={message.content} />{message.citations?.length ? <ol className="citation-list" aria-label="답변 출처">{message.citations.map((citation) => <li key={citation.sourceId}><strong>[{citation.sourceId}]</strong> {citation.availability === 'unavailable' ? '현재 사용할 수 없는 출처' : <>{citation.displayName} · {citation.pageStart ? `p. ${citation.pageStart}${citation.pageEnd && citation.pageEnd !== citation.pageStart ? `–${citation.pageEnd}` : ''}` : `line ${citation.lineStart ?? '?'}${citation.lineEnd && citation.lineEnd !== citation.lineStart ? `–${citation.lineEnd}` : ''}`}</>}</li>)}</ol> : null}</>
+                        ? <><MarkdownMessage content={message.content} citations={message.citations} />{message.citations?.length ? <CitationList citations={message.citations} /> : null}</>
                         : streaming && message === messages.at(-1) && !message.notice
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
@@ -565,6 +628,11 @@ export function ChatShell() {
           {selected && messageCursor && <Button className="history-more" variant="ghost" onClick={loadMoreMessages} disabled={historyLoading}>대화 기록 더 보기</Button>}
         </div>
         <form className="composer-area" onSubmit={sendMessage}>
+          {knowledgeModeToast && <div className="knowledge-mode-toast" role="status" aria-live="polite">
+            <CheckCircle2 className="knowledge-mode-toast-icon" size={25} aria-hidden />
+            <div><strong>{knowledgeModeToast.title}</strong><span>{knowledgeModeToast.description}</span></div>
+            <button aria-label="모드 전환 알림 닫기" onClick={() => setKnowledgeModeToast(null)}><X size={20} aria-hidden /></button>
+          </div>}
           <div className={`composer${streaming ? ' is-streaming' : ''}`}>
             <label className="sr-only" htmlFor="chat-composer">메시지 입력</label>
             <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={policyState === 'blocked'} placeholder={policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
@@ -595,6 +663,35 @@ type DisplayMessage = Message & Readonly<{
   notice?: SafeChatError;
   responseDurationMs?: number;
 }>;
+
+function CitationList({ citations }: Readonly<{ citations: readonly Citation[] }>) {
+  return <section className="citation-list" aria-label="답변 출처">
+    <div className="citation-list-heading"><BookOpenText size={15} aria-hidden />출처</div>
+    <ol>
+      {citations.map((citation, index) => <li id={`citation-${citation.sourceId}`} key={citation.sourceId}>
+        <span className="citation-number" aria-hidden>{index + 1}</span>
+        <div>
+          <strong>{citation.availability === 'unavailable' ? '현재 사용할 수 없는 출처' : citation.displayName}</strong>
+          {citation.availability !== 'unavailable' && <span>{citationLocation(citation)}</span>}
+        </div>
+      </li>)}
+    </ol>
+  </section>;
+}
+
+function citationLocation(citation: Citation): string {
+  if (citation.pageStart) {
+    return citation.pageEnd && citation.pageEnd !== citation.pageStart
+      ? `${citation.pageStart}–${citation.pageEnd}페이지`
+      : `${citation.pageStart}페이지`;
+  }
+  if (citation.lineStart) {
+    return citation.lineEnd && citation.lineEnd !== citation.lineStart
+      ? `${citation.lineStart}–${citation.lineEnd}행`
+      : `${citation.lineStart}행`;
+  }
+  return '문서 위치 정보 없음';
+}
 
 function UserMessage({ content, createdAt }: Readonly<{ content: string; createdAt: string }>) {
   return <article>

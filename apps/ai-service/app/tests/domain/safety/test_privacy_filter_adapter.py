@@ -13,11 +13,15 @@ from pathlib import Path
 
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator
 from app.adapters.safety.privacy_filter_adapter import (
+    GATELM_KOELECTRA_PII_NER_MODEL,
+    GATELM_KOELECTRA_PII_NER_SOURCE,
+    DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_MODEL,
     KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_SOURCE,
     PrivacyFilterAdapter,
     _OpenAIPrivacyFilterOnnxClassifier,
+    _decode_koelectra_privacy_ner_spans,
     _decode_openai_privacy_filter_spans,
     aggregation_strategy_for_model,
     normalize_label,
@@ -28,7 +32,132 @@ from app.adapters.safety.privacy_filter_adapter import (
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
 
+class FakeBatchClassifier:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, text: str) -> list[object]:
+        return self.classify_many([text])[0]
+
+    def classify_many(self, texts: list[str]) -> list[list[object]]:
+        self.calls += 1
+        results: list[list[object]] = []
+        for text in texts:
+            marker = "alpha-value" if "alpha-value" in text else "beta-value"
+            start = text.index(marker)
+            results.append(
+                [
+                    {
+                        "entity_group": "private_url",
+                        "score": 0.99,
+                        "start": start,
+                        "end": start + len(marker),
+                    }
+                ]
+            )
+        return results
+
+
+class MalformedBatchClassifier:
+    def __call__(self, _text: str) -> list[object]:
+        return []
+
+    def classify_many(self, _texts: list[str]) -> list[list[object]]:
+        return []
+
+
+class MalformedSingleClassifier:
+    def __call__(self, _text: str) -> object:
+        return {"entity_group": "private_email"}
+
+
+class SequentialOnlyBatchClassifier(FakeBatchClassifier):
+    max_safe_batch_size = 1
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch_sizes: list[int] = []
+
+    def classify_many(self, texts: list[str]) -> list[list[object]]:
+        self.batch_sizes.append(len(texts))
+        return super().classify_many(texts)
+
+
 class PrivacyFilterAdapterTests(unittest.TestCase):
+    def test_adapter_reports_model_supported_detector_types(self) -> None:
+        openai_adapter = PrivacyFilterAdapter(classifier=lambda _text: [])
+        koelectra_adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [],
+            model_name=KOELECTRA_PRIVACY_NER_MODEL,
+        )
+
+        self.assertIn("private_url", openai_adapter.supported_detector_types)
+        self.assertNotIn("person_name", openai_adapter.supported_detector_types)
+        self.assertIn("resident_registration_number", koelectra_adapter.supported_detector_types)
+        self.assertNotIn("organization_name", koelectra_adapter.supported_detector_types)
+
+    def test_gatelm_koelectra_model_has_separate_identity_and_six_type_contract(self) -> None:
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        self.assertEqual(adapter.source, GATELM_KOELECTRA_PII_NER_SOURCE)
+        self.assertEqual(
+            public_model_id_for_model(adapter.model_name),
+            GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+        self.assertEqual(
+            adapter.supported_detector_types,
+            {
+                "email",
+                "organization_name",
+                "person_name",
+                "phone_number",
+                "postal_address",
+                "resident_registration_number",
+            },
+        )
+
+    def test_adapter_dynamic_batch_preserves_input_order_and_counts_one_invocation(self) -> None:
+        classifier = FakeBatchClassifier()
+        adapter = PrivacyFilterAdapter(classifier=classifier)
+        texts = ["Review private URL alpha-value.", "Review private URL beta-value."]
+
+        result = adapter.detect_many(texts, batch_size=4)
+
+        self.assertEqual(classifier.calls, 1)
+        self.assertEqual(result.model_invocation_count, 1)
+        self.assertEqual(len(result.detections), 2)
+        self.assertEqual(
+            [detections[0].detector_type for detections in result.detections],
+            ["private_url", "private_url"],
+        )
+
+    def test_adapter_rejects_malformed_batch_output(self) -> None:
+        adapter = PrivacyFilterAdapter(classifier=MalformedBatchClassifier())
+
+        with self.assertRaisesRegex(RuntimeError, "batch output is invalid"):
+            adapter.detect_many(["Review private URL alpha-value."], batch_size=4)
+
+    def test_adapter_rejects_malformed_single_output(self) -> None:
+        adapter = PrivacyFilterAdapter(classifier=MalformedSingleClassifier())
+
+        with self.assertRaisesRegex(RuntimeError, "output is invalid"):
+            adapter.detect("Review synthetic input.")
+
+    def test_adapter_respects_model_specific_safe_batch_limit(self) -> None:
+        classifier = SequentialOnlyBatchClassifier()
+        adapter = PrivacyFilterAdapter(classifier=classifier)
+
+        result = adapter.detect_many(
+            ["Review private URL alpha-value.", "Review private URL beta-value."],
+            batch_size=4,
+        )
+
+        self.assertEqual(classifier.batch_sizes, [1, 1])
+        self.assertEqual(result.model_invocation_count, 2)
+
     def test_adapter_normalizes_pipeline_labels_without_storing_word(self) -> None:
         raw_email = "alex@example.test"
         prompt = f"Contact {raw_email} for the synthetic demo."
@@ -374,6 +503,95 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(decoded[1]["start"], 7)
         self.assertEqual(decoded[1]["end"], 17)
 
+    def test_koelectra_onnx_decoder_merges_wordpiece_offsets_into_one_span(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-B", 2: "EMA-I"},
+            predicted_ids=[1, 2, 2, 2],
+            confidences=[0.96, 0.92, 0.88, 0.84],
+            offsets=[(8, 12), (12, 13), (13, 20), (20, 25)],
+        )
+
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]["entity_group"], "EMA")
+        self.assertEqual(decoded[0]["start"], 8)
+        self.assertEqual(decoded[0]["end"], 25)
+        self.assertAlmostEqual(float(decoded[0]["score"]), 0.9)
+
+    def test_koelectra_onnx_decoder_merges_resident_number_suffix_bio_span(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "RRN-B", 2: "RRN-I"},
+            predicted_ids=[1, 2, 2],
+            confidences=[0.94, 0.9, 0.86],
+            offsets=[(4, 10), (10, 11), (11, 18)],
+        )
+
+        self.assertEqual(
+            decoded,
+            [{"entity_group": "RRN", "score": 0.9, "start": 4, "end": 18}],
+        )
+
+    def test_koelectra_onnx_decoder_recovers_from_leading_inside_and_end_tokens(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-I", 2: "EMA-E", 3: "PHN-E"},
+            predicted_ids=[1, 1, 2, 3],
+            confidences=[0.9, 0.8, 0.7, 0.95],
+            offsets=[(0, 4), (4, 8), (8, 12), (14, 18)],
+        )
+
+        self.assertEqual(len(decoded), 2)
+        self.assertEqual(decoded[0]["entity_group"], "EMA")
+        self.assertEqual(decoded[0]["start"], 0)
+        self.assertEqual(decoded[0]["end"], 12)
+        self.assertEqual(decoded[1], {"entity_group": "PHN", "score": 0.95, "start": 14, "end": 18})
+
+    def test_koelectra_onnx_decoder_treats_single_and_unit_tokens_as_spans(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "S-EMA", 2: "PHN-U"},
+            predicted_ids=[1, 2],
+            confidences=[0.91, 0.87],
+            offsets=[(0, 5), (6, 10)],
+        )
+
+        self.assertEqual(
+            decoded,
+            [
+                {"entity_group": "EMA", "score": 0.91, "start": 0, "end": 5},
+                {"entity_group": "PHN", "score": 0.87, "start": 6, "end": 10},
+            ],
+        )
+
+    def test_koelectra_onnx_decoder_splits_when_entity_type_changes(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-B", 2: "EMA-I", 3: "PHN-I", 4: "PHN-E"},
+            predicted_ids=[1, 2, 3, 4],
+            confidences=[0.9, 0.8, 0.95, 0.85],
+            offsets=[(0, 4), (4, 8), (9, 12), (12, 16)],
+        )
+
+        self.assertEqual(len(decoded), 2)
+        self.assertEqual(decoded[0]["entity_group"], "EMA")
+        self.assertEqual(decoded[0]["start"], 0)
+        self.assertEqual(decoded[0]["end"], 8)
+        self.assertEqual(decoded[1]["entity_group"], "PHN")
+        self.assertEqual(decoded[1]["start"], 9)
+        self.assertEqual(decoded[1]["end"], 16)
+
+    def test_koelectra_onnx_decoder_ignores_special_offsets_without_bridging_spans(self) -> None:
+        decoded = _decode_koelectra_privacy_ner_spans(
+            id_to_label={1: "EMA-B", 2: "EMA-I"},
+            predicted_ids=[1, 2, 2, 2],
+            confidences=[0.99, 0.9, 0.99, 0.8],
+            offsets=[(0, 0), (0, 4), (0, 0), (4, 8)],
+        )
+
+        self.assertEqual(
+            decoded,
+            [
+                {"entity_group": "EMA", "score": 0.9, "start": 0, "end": 4},
+                {"entity_group": "EMA", "score": 0.8, "start": 4, "end": 8},
+            ],
+        )
+
     def test_openai_privacy_filter_onnx_session_uses_cpu_execution_provider(self) -> None:
         captured: dict[str, object] = {}
 
@@ -412,14 +630,20 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.source, KOELECTRA_PRIVACY_NER_SOURCE)
 
     def test_onnx_runtime_requires_onnx_dependencies(self) -> None:
-        with mock.patch.dict(sys.modules, {"optimum.onnxruntime": None}):
-            adapter = PrivacyFilterAdapter(
-                model_name=f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}",
-                runtime="onnx",
-            )
+        local_dir_names = [
+            DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME,
+            KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
+        ]
+        for local_dir_name in local_dir_names:
+            with self.subTest(local_dir_name=local_dir_name):
+                with mock.patch.dict(sys.modules, {"optimum.onnxruntime": None}):
+                    adapter = PrivacyFilterAdapter(
+                        model_name=f"C:/models/onnx/{local_dir_name}",
+                        runtime="onnx",
+                    )
 
-            with self.assertRaisesRegex(RuntimeError, "onnx dependencies"):
-                adapter._load_classifier()
+                    with self.assertRaisesRegex(RuntimeError, "onnx dependencies"):
+                        adapter._load_classifier()
 
 
 def remote_context() -> RemoteSafetyContext:

@@ -35,7 +35,7 @@ func TestChatCompletionsHandlerBlocksWhenAiSafetySidecarBlocks(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode sidecar request: %v", err)
 		}
-		if req.ContractVersion != "ai-safety-detector.v1" || req.Mode != "shadow" {
+		if req.ContractVersion != "ai-safety-detector.v1" || req.Mode != "enforce" {
 			t.Fatalf("unexpected sidecar request metadata: %+v", req)
 		}
 		if !strings.Contains(req.Input.PromptText, syntheticBlockedValue) {
@@ -49,8 +49,9 @@ func TestChatCompletionsHandlerBlocksWhenAiSafetySidecarBlocks(t *testing.T) {
 				"runtime": "cpu_only",
 			},
 			"outcome":               "blocked",
-			"mode":                  "shadow",
+			"mode":                  "enforce",
 			"redactedPrompt":        redactedPrompt,
+			"logSafePrompt":         redactedPrompt,
 			"redactedPromptPreview": redactedPrompt,
 			"detectorSummary": map[string]any{
 				"detectedCount":      1,
@@ -62,8 +63,11 @@ func TestChatCompletionsHandlerBlocksWhenAiSafetySidecarBlocks(t *testing.T) {
 					"source":       "privacy_filter_adapter",
 					"confidence":   0.92,
 					"action":       "block",
-					"mode":         "shadow",
+					"mode":         "enforce",
 				},
+			},
+			"executionSummary": map[string]any{
+				"executionMode": "hybrid", "modelInvocationCount": 1, "acceptedModelDetectionCount": 1,
 			},
 			"latencyMs": 3,
 		})
@@ -144,8 +148,9 @@ func TestChatCompletionsHandlerUsesAiSafetySidecarRedactedPrompt(t *testing.T) {
 				"runtime": "cpu_only",
 			},
 			"outcome":               "redacted",
-			"mode":                  "shadow",
+			"mode":                  "enforce",
 			"redactedPrompt":        redactedPrompt,
+			"logSafePrompt":         redactedPrompt,
 			"redactedPromptPreview": redactedPrompt,
 			"detectorSummary": map[string]any{
 				"detectedCount":      1,
@@ -156,8 +161,11 @@ func TestChatCompletionsHandlerUsesAiSafetySidecarRedactedPrompt(t *testing.T) {
 					"detectorType": "private_url",
 					"source":       "privacy_filter_adapter",
 					"action":       "redact",
-					"mode":         "shadow",
+					"mode":         "enforce",
 				},
+			},
+			"executionSummary": map[string]any{
+				"executionMode": "hybrid", "modelInvocationCount": 1, "acceptedModelDetectionCount": 1,
 			},
 			"latencyMs": 4,
 		})
@@ -228,15 +236,19 @@ func TestChatCompletionsHandlerContinuesWhenAiSafetySidecarPasses(t *testing.T) 
 				"runtime": "cpu_only",
 			},
 			"outcome":               "passed",
-			"mode":                  "shadow",
+			"mode":                  "enforce",
 			"redactedPrompt":        prompt,
+			"logSafePrompt":         prompt,
 			"redactedPromptPreview": prompt,
 			"detectorSummary": map[string]any{
 				"detectedCount":      0,
 				"detectorCategories": []string{},
 			},
 			"detections": []map[string]any{},
-			"latencyMs":  2,
+			"executionSummary": map[string]any{
+				"executionMode": "rules_only", "modelInvocationCount": 0, "acceptedModelDetectionCount": 0,
+			},
+			"latencyMs": 2,
 		})
 	}))
 	defer sidecar.Close()
@@ -284,15 +296,23 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarTimesOu
 		time.Sleep(50 * time.Millisecond)
 		writeTestJSON(t, w, http.StatusOK, map[string]any{
 			"contractVersion": "ai-safety-detector.v1",
-			"outcome":         "passed",
-			"mode":            "shadow",
-			"redactedPrompt":  "late sidecar result",
+			"model": map[string]any{
+				"modelId": "openai/privacy-filter",
+				"runtime": "cpu_only",
+			},
+			"outcome":        "passed",
+			"mode":           "enforce",
+			"redactedPrompt": "late sidecar result",
+			"logSafePrompt":  "late sidecar result",
 			"detectorSummary": map[string]any{
 				"detectedCount":      0,
 				"detectorCategories": []string{},
 			},
 			"detections": []map[string]any{},
-			"latencyMs":  50,
+			"executionSummary": map[string]any{
+				"executionMode": "rules_only", "modelInvocationCount": 0, "acceptedModelDetectionCount": 0,
+			},
+			"latencyMs": 50,
 		})
 	}))
 	defer sidecar.Close()

@@ -60,12 +60,12 @@
         }
       },
       "patch": {
-        "operationId": "renameTenantChatConversation",
+        "operationId": "updateTenantChatConversation",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RenameConversationRequest" }
+              "schema": { "$ref": "#/components/schemas/UpdateConversationRequest" }
             }
           }
         },
@@ -123,6 +123,7 @@
         },
         "responses": {
           "200": {
+            "description": "Strict accepted, zero or more delta, then one final/error/cancelled SSE sequence. accepted always contains userMessageId and the sanitized, committed userContent so the browser can replace untrusted optimistic text immediately. Success final is sent only after assistant ciphertext commit. Success may include the bounded effectiveModelKey stored with the assistant message. Fresh success includes bounded quotaState, budgetState, and cacheOutcome; encrypted-content replay may omit policy/cache state.",
             "description": "Strict accepted, optional server-owned sources, zero or more delta, optional validated citations, then one final/error/cancelled SSE sequence. Success final is sent only after assistant ciphertext commit. Success may include the bounded effectiveModelKey stored with the assistant message. Fresh success includes bounded quotaState and budgetState; encrypted-content replay may omit policy state.",
             "headers": {
               "Cache-Control": { "schema": { "type": "string", "const": "no-store" } },
@@ -235,12 +236,17 @@
           "knowledgeMode": { "enum": ["off", "tenant"], "default": "off" }
         }
       },
-      "RenameConversationRequest": {
+      "UpdateConversationRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "expectedVersion"],
+        "required": ["expectedVersion"],
+        "anyOf": [
+          { "required": ["title"] },
+          { "required": ["knowledgeMode"] }
+        ],
         "properties": {
           "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "knowledgeMode": { "enum": ["off", "tenant"] },
           "expectedVersion": { "type": "integer", "minimum": 1 }
         }
       },

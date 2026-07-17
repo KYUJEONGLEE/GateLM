@@ -35,6 +35,7 @@ The app images are pulled from a registry. Customers do not need to build source
 - `bash`
 - `curl`
 - Access to the image registry that hosts `gatelm/<service>:2.1.0`
+- At least 4 GiB of temporary free space when optional PII models are enabled
 
 Check Docker:
 
@@ -129,6 +130,39 @@ access, and their numeric owner must match `TENANT_CHAT_RUNTIME_UID:GID`.
 Private query keys are never mounted into `rag-worker` or Gateway; private
 worker keys are never mounted into `chat-api` or Gateway.
 
+PII model inference is disabled by default and is not required for a normal
+self-host install. To opt in:
+
+1. Obtain the approved release's presigned HTTPS bundle URL through your normal
+   artifact delivery process.
+2. Copy `secrets/pii-model-bundle-url.example` to
+   `secrets/pii-model-bundle-url` and restrict it to the installing user.
+3. Open the new file in an editor and put exactly one HTTPS URL on one line.
+4. Set the two feature flags and the secret file path shown below.
+
+```bash
+cp secrets/pii-model-bundle-url.example secrets/pii-model-bundle-url
+chmod 600 secrets/pii-model-bundle-url
+${EDITOR:-vi} secrets/pii-model-bundle-url
+```
+
+```text
+GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true
+AI_SERVICE_INSTALL_ML_DEPS=true
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
+AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE=./secrets/pii-model-bundle-url
+AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
+```
+
+Do not put the presigned URL itself in `.env`, a command argument, a support
+ticket, or shared logs. The install initializer reads it only from the mounted
+Compose secret. It verifies the pinned outer bundle hash, embedded manifest,
+and all runtime file hashes before atomically exposing the versioned model
+directory to AI Service. `AI_SERVICE_INSTALL_ML_DEPS=true` is mandatory for
+this opt-in because an image without the pinned ONNX dependencies cannot load
+the verified files.
+
 Demo seed is disabled for self-host/prod-like deployments. Keep demo UUID values only for non-prod local seed experiments:
 
 ```text
@@ -154,6 +188,8 @@ What it does:
 - warns if placeholder secrets remain
 - when RAG is enabled, validates Tenant Chat/RAG secret files and role-specific workload IDs
 - pulls images
+- downloads and verifies the pinned PII model release when the opt-in is enabled
+- starts the Compose stack
 - starts the base Compose stack and, only when RAG is enabled, adds `rag-worker`, `chat-api`, and `chat-web`
 
 Manual equivalent:
@@ -219,6 +255,19 @@ The smoke test checks:
 - Request Log lookup for that request
 
 The script does not print request body, response body, Authorization header, API key, app token, provider key, or raw model output.
+
+When optional PII models are enabled, run the separate model-runtime smoke:
+
+```bash
+bash scripts/pii-model-smoke.sh
+```
+
+This proves the pinned OpenAI primary is loaded with no additional model, the
+runtime ML allowlist is exactly `phone_number,secret`, and one sanitized batch
+request takes the hybrid inference path and masks its fixed synthetic value. It
+does not prove production-grade PII accuracy or Tenant Chat end-to-end behavior
+because the Self-host bundle does not include the Tenant Chat API/Web
+applications.
 
 ## 7. Open The Services
 

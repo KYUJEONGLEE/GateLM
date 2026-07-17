@@ -54,6 +54,34 @@ gatelm_require_file() {
   fi
 }
 
+gatelm_require_private_file() {
+  local file_path="$1"
+  local guidance="$2"
+  gatelm_require_file "${file_path}" "${guidance}"
+  if [[ -L "${file_path}" ]]; then
+    gatelm_fail "${guidance} The file must not be a symbolic link."
+  fi
+
+  local mode
+  if mode="$(stat -c '%a' "${file_path}" 2>/dev/null)"; then
+    :
+  elif mode="$(stat -f '%Lp' "${file_path}" 2>/dev/null)"; then
+    :
+  else
+    gatelm_fail "${guidance} File permissions could not be verified."
+  fi
+  if [[ ! "${mode}" =~ ^[0-7]{3,4}$ ]]; then
+    gatelm_fail "${guidance} File permissions are invalid."
+  fi
+
+  local owner_group_other="${mode: -3}"
+  local permissions=$((8#${owner_group_other}))
+  if (( (permissions & 077) != 0 )); then
+    gatelm_fail "${guidance} Group and other permissions must be removed with chmod 600."
+  fi
+  unset mode owner_group_other permissions
+}
+
 gatelm_load_env() {
   gatelm_require_file \
     "${SELFHOST_ENV_FILE}" \
@@ -100,6 +128,17 @@ gatelm_require_env_vars() {
   if (( ${#missing[@]} > 0 )); then
     gatelm_fail "Required .env values are missing: ${missing[*]}. Open deploy/selfhost/.env, fill them in, and run the script again."
   fi
+}
+
+gatelm_require_true_env() {
+  local name="$1"
+  local guidance="$2"
+  local value="${!name-}"
+  case "${value}" in
+    1|true|TRUE|yes|YES|on|ON) ;;
+    *) gatelm_fail "${guidance}" ;;
+  esac
+  unset value
 }
 
 gatelm_require_default_demo_ids() {

@@ -2512,7 +2512,6 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 		context.Background(),
 		reqCtx,
 		provider.ChatCompletionRequest{Model: "mock-balanced"},
-		"Write a short safe cached response.",
 	)
 
 	if err != nil {

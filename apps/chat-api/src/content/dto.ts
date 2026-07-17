@@ -45,12 +45,17 @@ export class CreateConversationDto {
   knowledgeMode?: 'off' | 'tenant';
 }
 
-export class RenameConversationDto {
+export class UpdateConversationDto {
+  @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
   @MinLength(1)
   @MaxLength(120)
-  title!: string;
+  title?: string;
+
+  @IsOptional()
+  @IsIn(['off', 'tenant'])
+  knowledgeMode?: 'off' | 'tenant';
 
   @IsInt()
   @Min(1)

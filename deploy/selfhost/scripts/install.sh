@@ -93,6 +93,45 @@ for marker in changeme demo devonly example placeholder replaceme redacted; do
 done
 unset observability_token observability_token_compact marker
 
+case "${GATEWAY_AI_SAFETY_SIDECAR_ENABLED:-false}" in
+  1|true|TRUE|yes|YES|on|ON)
+    case "${AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED:-false}" in
+      1|true|TRUE|yes|YES|on|ON) ;;
+      *)
+        gatelm_fail "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED must be true when the Gateway AI Safety sidecar is enabled."
+        ;;
+    esac
+    ;;
+esac
+
+case "${AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED:-false}" in
+  1|true|TRUE|yes|YES|on|ON)
+    gatelm_require_true_env \
+      AI_SERVICE_INSTALL_ML_DEPS \
+      "AI_SERVICE_INSTALL_ML_DEPS must be true when PII model preload is enabled. Rebuild or pull an AI Service image that includes the pinned ONNX dependencies."
+    gatelm_require_env_vars AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE
+    model_source_file="${AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE}"
+    if [[ "${model_source_file}" != /* ]]; then
+      model_source_file="${SELFHOST_DIR}/${model_source_file}"
+    fi
+    gatelm_require_private_file \
+      "${model_source_file}" \
+      "PII model source secret file was not found. Create it with mode 600 and put exactly one HTTPS artifact URL on one line."
+    model_source_count="$(grep -Evc '^[[:space:]]*(#|$)' "${model_source_file}" || true)"
+    if [[ "${model_source_count}" != "1" ]]; then
+      gatelm_fail "PII model source secret file must contain exactly one non-comment HTTPS URL."
+    fi
+    model_source="$(grep -Ev '^[[:space:]]*(#|$)' "${model_source_file}" | head -n 1 | tr -d '\r')"
+    case "${model_source}" in
+      https://*) ;;
+      *)
+        gatelm_fail "PII model source secret must use HTTPS. The URL value will not be printed."
+        ;;
+    esac
+    unset model_source model_source_count model_source_file
+    ;;
+esac
+
 gatelm_check_docker
 gatelm_validate_compose
 

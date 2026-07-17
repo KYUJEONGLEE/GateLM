@@ -257,6 +257,13 @@ services:
       GATEWAY_RATE_LIMIT_WINDOW_SECONDS: ${GATEWAY_RATE_LIMIT_WINDOW_SECONDS}
       GATEWAY_RATE_LIMIT_LIMIT: ${GATEWAY_RATE_LIMIT_LIMIT}
       GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX: ${GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX}
+      GATEWAY_AI_SAFETY_SIDECAR_ENABLED: ${GATEWAY_AI_SAFETY_SIDECAR_ENABLED:-false}
+      GATEWAY_AI_SAFETY_SIDECAR_URL: http://ai-service:8001/internal/ai-safety/v1/detect
+      GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS: ${GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS:-750}
+      GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID: ${GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID:-openai/privacy-filter}
+      GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET: ${GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET:-privacy-filter-default}
+      GATEWAY_AI_SAFETY_SIDECAR_LOCALE: ${GATEWAY_AI_SAFETY_SIDECAR_LOCALE:-ko-KR}
+      GATEWAY_AI_SAFETY_SIDECAR_MODE: ${GATEWAY_AI_SAFETY_SIDECAR_MODE:-enforce}
       GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP: ${GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP}
       GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY:-}
       GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION:-v1}
@@ -279,12 +286,33 @@ services:
         condition: service_healthy
       control-plane-api:
         condition: service_healthy
+      ai-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "grep -aq gateway-core /proc/1/cmdline"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - gatelm_internal
+
+  pii-model-init:
+    image: ${GATELM_IMAGE_REGISTRY}/ai-service:${GATELM_IMAGE_TAG}
+    restart: "no"
+    command: ["gatelm-pii-model-sync"]
+    environment:
+      AI_SERVICE_PII_MODEL_SYNC_ENABLED: ${AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED:-false}
+      AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE: /run/secrets/pii_model_bundle_url
+      AI_SERVICE_PII_MODEL_RUNTIME_ROOT: /models
+      AI_SERVICE_PII_MODEL_RELEASE_ID: tenant-chat-pii-models-20260715
+    read_only: true
+    tmpfs:
+      - /tmp
+    secrets:
+      - pii_model_bundle_url
+    volumes:
+      - pii_model_data:/models
     networks:
       - gatelm_internal
 
@@ -304,8 +332,16 @@ services:
       AI_SERVICE_ACCESS_LOG_ENABLED: ${AI_SERVICE_ACCESS_LOG_ENABLED}
       TRANSFORMERS_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
       HF_HUB_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
+      AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: ${AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME}
+      AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED: ${AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED}
+      AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE: ${AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE}
+      AI_SERVICE_ONNX_INTRA_OP_THREADS: ${AI_SERVICE_ONNX_INTRA_OP_THREADS}
+      AI_SERVICE_ONNX_INTER_OP_THREADS: ${AI_SERVICE_ONNX_INTER_OP_THREADS}
+      AI_SERVICE_ONNX_ALLOW_SPINNING: ${AI_SERVICE_ONNX_ALLOW_SPINNING}
+      AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES: "${AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES:-phone_number,secret}"
+      AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS: "${AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS:-}"
       AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: ${AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID}
-      AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS}
+      AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: "${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS:-}"
       DEPLOYMENT_MODE: self_host
       TENANT_CHAT_RAG_ENABLED: ${TENANT_CHAT_RAG_ENABLED:-false}
       AI_SERVICE_RAG_TEMP_DIR: /run/gatelm-rag-tmp
@@ -313,15 +349,18 @@ services:
       AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES: ${AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES:-536870912}
       AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS: ${AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS:-30}
     volumes:
-      - ../../apps/ai-service/.cache/huggingface/models:/app/.cache/huggingface/models:ro
+      - pii_model_data:/models:ro
     tmpfs:
       - /run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777
     mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}
     pids_limit: ${AI_SERVICE_PIDS_LIMIT:-128}
     ports:
       - "${SELFHOST_AI_SERVICE_PORT}:8001"
+    depends_on:
+      pii-model-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2).read()\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=2).read()\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -365,6 +404,11 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  pii_model_data:
+
+secrets:
+  pii_model_bundle_url:
+    file: ${AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE:-./secrets/pii-model-bundle-url.example}
 
 networks:
   gatelm_internal:

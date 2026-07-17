@@ -6,6 +6,7 @@ import { runProductionTenantChatSmoke } from './tenant-chat-production.mjs';
 const conversationId = '00000000-0000-4000-8000-000000000300';
 const turnId = '00000000-0000-4000-8000-000000000301';
 const messageId = '00000000-0000-4000-8000-000000000302';
+const userMessageId = '00000000-0000-4000-8000-000000000305';
 const session = Object.freeze({
   selectedTenant: {
     actorKind: 'employee',
@@ -38,6 +39,8 @@ test('runs an authenticated turn and removes the smoke conversation', async () =
     `DELETE /api/tenant-chat/conversations/${conversationId}`,
     'POST /api/tenant-chat/auth/logout',
   ]);
+  const turn = fake.calls.find((call) => call.method === 'POST' && call.path.endsWith('/turns'));
+  assert.equal(turn.body.usageIntent.maxOutputTokens, 16);
   assert.equal(fake.calls[6].headers.get('if-match'), '"2"');
 });
 
@@ -148,6 +151,8 @@ function sse(errorCode, cacheOutcome = 'off') {
   const accepted = {
     conversationId,
     replayed: false,
+    userContent: 'smoke prompt',
+    userMessageId,
     schemaVersion: 1,
     sequence: 1,
     turnId,

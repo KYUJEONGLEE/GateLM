@@ -59,7 +59,6 @@ export async function streamFromConversationApi(input: Readonly<{
       fetchImpl: fetch,
       path: input.path,
       serviceToken: env.serviceToken,
-      signal: input.request.signal,
     });
   } catch (error) {
     return conversationError(error);

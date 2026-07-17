@@ -62,6 +62,24 @@ type StreamTimeToFirstToken struct {
 	DurationSeconds float64
 }
 
+// AISafetySidecarCall contains aggregate-only sidecar telemetry. Every string
+// is normalized to a bounded value before it is emitted as a metric label.
+type AISafetySidecarCall struct {
+	Surface         string
+	Mode            string
+	Outcome         string
+	InferencePath   string
+	DurationSeconds float64
+}
+
+// AISafetySidecarFallback records a local-rule fallback without carrying the
+// upstream error or any request-derived value.
+type AISafetySidecarFallback struct {
+	Surface string
+	Mode    string
+	Reason  string
+}
+
 type RoutingDifficultyShadow struct {
 	Status          string
 	Category        string
@@ -240,6 +258,36 @@ func (r *Registry) StreamTimeToFirstToken(ttft StreamTimeToFirstToken) {
 	)
 }
 
+func (r *Registry) RecordAISafetySidecarCall(call AISafetySidecarCall) {
+	labels := []Label{
+		{Name: "surface", Value: normalizeAISafetySurface(call.Surface)},
+		{Name: "mode", Value: normalizeAISafetyMode(call.Mode)},
+		{Name: "outcome", Value: normalizeAISafetyOutcome(call.Outcome)},
+		{Name: "inference_path", Value: normalizeAISafetyInferencePath(call.InferencePath)},
+	}
+	r.AddCounter(AISafetySidecarCallsTotal, labels, 1)
+	r.ObserveHistogram(AISafetySidecarCallDurationSeconds, labels, call.DurationSeconds)
+}
+
+func (r *Registry) RecordAISafetySidecarFallback(fallback AISafetySidecarFallback) {
+	r.AddCounter(AISafetySidecarFallbackTotal, []Label{
+		{Name: "surface", Value: normalizeAISafetySurface(fallback.Surface)},
+		{Name: "mode", Value: normalizeAISafetyMode(fallback.Mode)},
+		{Name: "reason", Value: normalizeAISafetyFallbackReason(fallback.Reason)},
+	}, 1)
+}
+
+func (r *Registry) SetGatewayDependencyReady(dependency string, required bool, ready bool) {
+	value := 0.0
+	if ready {
+		value = 1
+	}
+	r.SetGauge(GatewayDependencyReady, []Label{
+		{Name: "dependency", Value: normalizeGatewayDependency(dependency)},
+		{Name: "required", Value: strconv.FormatBool(required)},
+	}, value)
+}
+
 func httpStatusLabel(status int) string {
 	if status <= 0 {
 		return "0"
@@ -287,5 +335,59 @@ func normalizeStreamOutcome(outcome string) string {
 		return trimmed
 	default:
 		return "interrupted"
+	}
+}
+
+func normalizeAISafetySurface(surface string) string {
+	switch strings.TrimSpace(surface) {
+	case "gateway_v1", "tenant_chat":
+		return strings.TrimSpace(surface)
+	default:
+		return "unknown"
+	}
+}
+
+func normalizeAISafetyMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "shadow", "enforce":
+		return strings.TrimSpace(mode)
+	default:
+		return "unknown"
+	}
+}
+
+func normalizeAISafetyOutcome(outcome string) string {
+	switch strings.TrimSpace(outcome) {
+	case "passed", "redacted", "blocked", "timeout", "transport_error", "http_error", "invalid_response", "cancelled":
+		return strings.TrimSpace(outcome)
+	default:
+		return "invalid_response"
+	}
+}
+
+func normalizeAISafetyInferencePath(path string) string {
+	switch strings.TrimSpace(path) {
+	case "rules_only", "hybrid":
+		return strings.TrimSpace(path)
+	default:
+		return "unknown"
+	}
+}
+
+func normalizeAISafetyFallbackReason(reason string) string {
+	switch strings.TrimSpace(reason) {
+	case "timeout", "transport_error", "http_error", "invalid_response":
+		return strings.TrimSpace(reason)
+	default:
+		return "invalid_response"
+	}
+}
+
+func normalizeGatewayDependency(dependency string) string {
+	switch strings.TrimSpace(dependency) {
+	case "postgres", "postgres_log", "redis", "mock_provider", "control_plane", "ai_safety_sidecar":
+		return strings.TrimSpace(dependency)
+	default:
+		return "unknown"
 	}
 }

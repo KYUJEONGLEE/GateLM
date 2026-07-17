@@ -11,6 +11,8 @@ export type TurnEvent = Readonly<Record<string, unknown> & {
   quotaState?: PolicyState;
   budgetState?: PolicyState;
   messageId?: string;
+  userMessageId?: string;
+  userContent?: string;
   effectiveModelKey?: string;
   cacheOutcome?: 'off' | 'hit' | 'miss';
   citations?: readonly Citation[];
@@ -26,7 +28,7 @@ export function assertExactOrigin(request: Request, expectedOrigin: string): voi
 export function assertDoubleSubmitCsrf(request: Request, cookieValue: string | undefined): void;
 export function parseIfMatch(value: unknown): number;
 export function createConversationBody(value: unknown): Readonly<{ idempotencyKey: string; title: string; knowledgeMode: 'off' | 'tenant' }>;
-export function renameConversationBody(value: unknown): Readonly<{ expectedVersion: number; title: string }>;
+export function updateConversationBody(value: unknown): Readonly<{ expectedVersion: number; title?: string; knowledgeMode?: 'off' | 'tenant' }>;
 export function createTurnBody(value: unknown): Readonly<{
   content: string;
   contextMode: 'conversation' | 'single_turn';

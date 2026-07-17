@@ -11,6 +11,7 @@ from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MOD
 from app.core.config import (
     DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID,
     DEFAULT_AI_SAFETY_DETECTOR_RUNTIME,
+    DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES,
     Settings,
     load_settings,
 )
@@ -55,6 +56,76 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             (KOELECTRA_PRIVACY_NER_MODEL, "custom/example-token-classifier"),
         )
 
+    def test_settings_defaults_to_selected_ml_detector_types(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(
+            settings.ai_safety_ml_allowed_detector_types,
+            DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES,
+        )
+
+    def test_settings_loads_bounded_ml_detector_type_allowlist(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES": (
+                    "secret, phone_number,secret"
+                )
+            },
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertEqual(
+            settings.ai_safety_ml_allowed_detector_types,
+            ("secret", "phone_number"),
+        )
+
+    def test_settings_rejects_empty_or_unknown_ml_detector_type_allowlist(self) -> None:
+        for configured_value in ("", "phone_number,unknown_detector"):
+            with self.subTest(configured_value=configured_value), patch.dict(
+                os.environ,
+                {"AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES": configured_value},
+                clear=True,
+            ):
+                with self.assertRaises(ValueError):
+                    load_settings()
+
+    def test_settings_loads_ml_detector_thresholds(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": (
+                    "organization_name=0.9,person_name=0.9,"
+                    "phone_number=0.99,postal_address=0.9"
+                )
+            },
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertEqual(
+            settings.ai_safety_ml_detector_thresholds,
+            (
+                ("organization_name", 0.9),
+                ("person_name", 0.9),
+                ("phone_number", 0.99),
+                ("postal_address", 0.9),
+            ),
+        )
+
+    def test_settings_rejects_invalid_ml_detector_thresholds(self) -> None:
+        values = ("unknown=0.9", "person_name=nan", "person_name=1.1", "person_name")
+        for configured_value in values:
+            with self.subTest(configured_value=configured_value), patch.dict(
+                os.environ,
+                {"AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": configured_value},
+                clear=True,
+            ):
+                with self.assertRaises(ValueError):
+                    load_settings()
+
     def test_settings_loads_ai_safety_detector_runtime(self) -> None:
         with patch.dict(
             os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx"}, clear=True
@@ -91,7 +162,10 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "access_log_enabled",
                 "ai_safety_detector_model_id",
                 "ai_safety_additional_detector_model_ids",
+                "ai_safety_ml_allowed_detector_types",
+                "ai_safety_ml_detector_thresholds",
                 "ai_safety_detector_runtime",
+                "ai_safety_preload_enabled",
                 "deployment_mode",
                 "rag_enabled",
                 "rag_service_token",
@@ -111,6 +185,15 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             },
         )
 
+    def test_settings_loads_ai_safety_preload_flag(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED": "true"},
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertTrue(settings.ai_safety_preload_enabled)
     def test_rag_chunk_defaults_match_profile_v1(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             settings = load_settings()
@@ -242,6 +325,7 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             run()
 
         uvicorn_run.assert_called_once()
+        self.assertNotIsInstance(uvicorn_run.call_args.args[0], str)
         self.assertEqual(uvicorn_run.call_args.kwargs["host"], "127.0.0.9")
         self.assertEqual(uvicorn_run.call_args.kwargs["port"], 8011)
         self.assertEqual(uvicorn_run.call_args.kwargs["log_level"], "debug")

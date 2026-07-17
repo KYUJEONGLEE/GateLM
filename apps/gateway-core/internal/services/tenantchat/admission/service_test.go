@@ -36,6 +36,10 @@ func (s *fakeAdmissionStore) Cancel(_ context.Context, _ tenantchat.RequestConte
 	return tenantchat.AdmissionCancellation{}, nil
 }
 
+func (s *fakeAdmissionStore) ValidateActive(_ context.Context, _ tenantchat.RequestContext) error {
+	return nil
+}
+
 func TestAdmitUsesSignedActorContextWithoutIdentityLookup(t *testing.T) {
 	requestContext := tenantchat.RequestContext{ExecutionScope: tenantchat.ExecutionScope{
 		TenantID: "00000000-0000-4000-8000-000000000100",
