@@ -325,6 +325,7 @@ func TestEmployeeWeeklyReservationIdentityCannotBeClearedIntegration(t *testing.
 	}
 	completionContext := fixture.completionContext(admission.AdmissionID)
 	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 1
 	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
 		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
 	}}
