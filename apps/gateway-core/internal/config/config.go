@@ -405,7 +405,7 @@ func LoadWithError() (Config, error) {
 			DialTimeout:           envDurationMillis("GATEWAY_PROVIDER_DIAL_TIMEOUT_MS", 5000),
 			DialKeepAlive:         envDurationMillis("GATEWAY_PROVIDER_DIAL_KEEP_ALIVE_MS", 30000),
 			TLSHandshakeTimeout:   envDurationMillis("GATEWAY_PROVIDER_TLS_HANDSHAKE_TIMEOUT_MS", 10000),
-			ResponseHeaderTimeout: envDurationMillis("GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS", int(providerTimeout.Milliseconds())),
+			ResponseHeaderTimeout: envDurationMillis("GATEWAY_PROVIDER_RESPONSE_HEADER_TIMEOUT_MS", 0),
 			ExpectContinueTimeout: envDurationMillis("GATEWAY_PROVIDER_EXPECT_CONTINUE_TIMEOUT_MS", 1000),
 		},
 		MaxRequestBodyBytes:     envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),

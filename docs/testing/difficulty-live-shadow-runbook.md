@@ -28,6 +28,8 @@ For a normal public Gateway or Tenant Chat `model: "auto"` model-path request, a
 
 Each Gateway process owns one encoder worker and four bounded waiting jobs shared by the public Gateway and Tenant Chat completion paths; Tenant Chat does not initialize or close a second runtime. Each request waits at most `GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS` (`100ms` default, `1..1000ms` allowed). Queue saturation, request cancellation, timeout, invalid embedding, inference failure or panic retains that request's rule difficulty. Startup bundle verification or smoke failure starts both paths in rule-difficulty fallback mode.
 
+Process startup allows up to `60s` for the one-time cold tokenizer/ONNX smoke. This does not change the per-request `100ms` default. Exceeding the startup bound marks the E5 runtime unavailable and starts the Gateway in rule-difficulty fallback mode.
+
 Runtime activation:
 
 ```dotenv
@@ -37,6 +39,8 @@ GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED=false
 ```
 
 Use [`../../infra/docker/gateway-core-e5-runtime.Dockerfile`](../../infra/docker/gateway-core-e5-runtime.Dockerfile). The default CGO-free image contains no E5 native runtime and remains rule-only. Enabling both runtime and historical request shadow is a configuration error.
+
+Tenant Chat local Compose selects the E5 runtime image by default, prepares the pinned `.tmp/gateway-e5-runtime-bundle` before `build` or `up`, enables authoritative runtime mode, and disables historical shadow. The standalone CGO-free image remains available for explicit rule-only execution and rollback.
 
 ## 3. Rollout Guardrails
 
@@ -81,5 +85,7 @@ Record source commit, image identity, artifact version, bundle/content hashes, t
 ## 6. AWS Production Image Build
 
 `deploy/aws-triage/scripts/deploy-main.sh` checks out the requested source commit, runs `prepare-gateway-e5-runtime-bundle.sh`, validates the resulting named build context, and only then builds `gateway-core`. The preparation step may access the pinned artifact sources; checksum, size, allowlist, extraction, or symlink validation failure aborts before application cutover.
+
+Every pull request whose base is `main` runs the same release-packaging build after the internal verification gate, using GitHub's default synthetic merge commit. The final required `CI gate` passes only when both verification and release packaging succeed. For `dev` delivery, release packaging is intentionally skipped and the final gate accepts only that `skipped` result. A pull-request run never authorizes production deployment: `deploy-production` still requires a successful `ci` `workflow_run` whose source event is `push` and whose head branch is `main`.
 
 Production Compose fixes runtime mode on, historical shadow off, and the timeout to `100ms` unless explicitly overridden. The E5 image smoke test runs as UID/GID `1000:1000` to cover the same arbitrary-user boundary used for production Tenant Chat secret mounts. A successful source commit alone is not deployment evidence; record the actual deployment run and post-cutover checks separately.

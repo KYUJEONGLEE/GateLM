@@ -52,6 +52,7 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
           label: "Policies"
         }
       ]}
+      fullWidth
       hideStreamingTab
       locale={locale}
       model={projectRuntime.policyModel}

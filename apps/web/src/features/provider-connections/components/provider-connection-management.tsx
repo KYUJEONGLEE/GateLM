@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronDown, KeyRound, PlugZap, Plus, Trash2 } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,6 +23,10 @@ import {
   getTenantChatProviderCreatedHref,
   type TenantChatProviderSetupContext
 } from "@/features/provider-connections/tenant-chat-setup-return";
+import {
+  hasDatedModelVersion,
+  hasExcludedGeminiVariant
+} from "@/features/provider-connections/provider-model-name";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
@@ -567,11 +572,11 @@ export function ProviderConnectionManagement({
         message:
           locale === "ko"
             ? applyToForm
-              ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
-              : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+              ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 모델: ${skippedModelCount}개.`
+              : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 모델: ${skippedModelCount}개.`
             : applyToForm
-              ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
-              : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
+              ? `${chatModels.length} chat models discovered. Select models to use. Excluded models: ${skippedModelCount}.`
+              : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded models: ${skippedModelCount}.`,
         status: "success"
       });
     }
@@ -824,8 +829,8 @@ export function ProviderConnectionManagement({
               <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar provider-card-model-discovery-note">
                 <span className="project-muted">
                   {locale === "ko"
-                    ? `제외된 비채팅 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
-                    : `${activeDiscovery.skippedModelCount} non-chat models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
+                    ? `제외된 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
+                    : `${activeDiscovery.skippedModelCount} models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
                 </span>
               </div>
               <div className="provider-discovery-model-list provider-model-selection-table">
@@ -1128,7 +1133,7 @@ export function ProviderConnectionManagement({
   }
 
   return (
-    <main className="console-content management-line-content">
+    <ManagementPage title={text.title}>
       {tenantChatSetupContext ? (
         <Alert className="mb-4" variant="neutral">
           <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -1147,12 +1152,6 @@ export function ProviderConnectionManagement({
           </AlertDescription>
         </Alert>
       ) : null}
-      <section className="dashboard-hero provider-page-header">
-        <div>
-          <h2>{text.title}</h2>
-        </div>
-      </section>
-
       {model.source === "fixture" ? (
         <Alert variant="warning">
           <AlertDescription>
@@ -1426,7 +1425,7 @@ export function ProviderConnectionManagement({
           </DialogContent>
         </Dialog>
       ) : null}
-    </main>
+    </ManagementPage>
   );
 }
 
@@ -1887,7 +1886,11 @@ function normalizeDiscoveredModelName(modelName: string) {
 function isChatCompletionModelName(modelName: string) {
   const normalizedModelName = modelName.toLowerCase();
 
-  if (nonChatModelNameTokens.some((token) => normalizedModelName.includes(token))) {
+  if (
+    hasDatedModelVersion(normalizedModelName) ||
+    hasExcludedGeminiVariant(normalizedModelName) ||
+    nonChatModelNameTokens.some((token) => normalizedModelName.includes(token))
+  ) {
     return false;
   }
 

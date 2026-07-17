@@ -94,7 +94,7 @@ Ensure-PinnedDownload `
     "c31e13e0840ca01f8064490a73ae2198979ae3ea48f606171616e2901fe6d3b0"
 Ensure-PinnedDownload `
     $onnxPackagePath `
-    "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1" `
+    "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg" `
     121484102 `
     "2ee0ed327f6cf2b860182bc4f2feb905c44a596cd120a05c510da6e4044a3e58"
 

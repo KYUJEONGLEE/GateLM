@@ -5,15 +5,12 @@ import {
   Bell,
   Building2,
   ChevronDown,
-  CircleHelp,
   FolderKanban,
   KeyRound,
   Globe2,
   LayoutDashboard,
   LogOut,
-  Maximize2,
   MessageSquareText,
-  Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
@@ -42,7 +39,6 @@ import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ConsoleTheme = "light" | "dark";
-type NotificationSeverity = "critical" | "info" | "warning";
 type CurrentUser = {
   avatarUrl?: string;
   displayName: string;
@@ -50,23 +46,6 @@ type CurrentUser = {
   id: string;
   role: string;
   tenantName?: string;
-};
-
-type AdminNotification = {
-  category: string;
-  createdAt: string;
-  id: string;
-  message: string;
-  read: boolean;
-  severity: NotificationSeverity;
-  title: string;
-};
-
-type AdminNotificationSeed = Pick<AdminNotification, "id" | "severity"> & {
-  content: Record<
-    Locale,
-    Pick<AdminNotification, "category" | "createdAt" | "message" | "title">
-  >;
 };
 
 const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
@@ -215,14 +194,11 @@ const shellText: Record<
     account: string;
     accountActions: string;
     expandNavigation: string;
-    help: string;
     language: string;
     landing: string;
     loggingOut: string;
     logout: string;
-    markAllAsRead: string;
     navigation: string;
-    notifications: string;
     openUserProfile: string;
     organization: string;
     role: string;
@@ -230,16 +206,10 @@ const shellText: Record<
     settings: string;
     light: string;
     dark: string;
-    presentationMode: string;
-    presentationModeOff: string;
-    presentationModeOn: string;
     theme: string;
     planned: string;
     tenant: string;
-    unread: string;
-    unreadNotification: string;
     userProfile: string;
-    viewAllNotifications: string;
   }
 > = {
   en: {
@@ -248,30 +218,21 @@ const shellText: Record<
     collapseNavigation: "Collapse navigation",
     expandNavigation: "Expand navigation",
     dark: "Dark",
-    help: "Help",
     language: "Language",
     landing: "Landing",
     light: "Light",
     loggingOut: "Logging out...",
     logout: "Logout",
-    markAllAsRead: "Mark all as read",
     navigation: "navigation",
-    notifications: "Notifications",
     openUserProfile: "Open user profile menu",
     organization: "Organization",
     planned: "planned",
-    presentationMode: "Expanded layout",
-    presentationModeOff: "Expand",
-    presentationModeOn: "Standard",
     role: "Role",
     sessionRequired: "Session required",
     settings: "Settings",
     tenant: "tenant",
     theme: "Theme",
-    unread: "unread",
-    unreadNotification: "Unread notification",
-    userProfile: "User profile",
-    viewAllNotifications: "View all notifications"
+    userProfile: "User profile"
   },
   ko: {
     account: "계정",
@@ -280,130 +241,25 @@ const shellText: Record<
     collapseNavigation: "내비게이션 닫기",
     expandNavigation: "내비게이션 열기",
     dark: "다크",
-    help: "도움말",
     language: "언어",
     light: "라이트",
     loggingOut: "로그아웃 중...",
     logout: "로그아웃",
-    markAllAsRead: "모두 읽음으로 표시",
     navigation: "내비게이션",
-    notifications: "알림",
     openUserProfile: "사용자 프로필 메뉴 열기",
     organization: "조직",
     planned: "예정",
-    presentationMode: "확장 보기",
-    presentationModeOff: "확장",
-    presentationModeOn: "기본",
     role: "역할",
     sessionRequired: "로그인 필요",
     settings: "설정",
     tenant: "테넌트",
     theme: "테마",
-    unread: "읽지 않음",
-    unreadNotification: "읽지 않은 알림",
-    userProfile: "사용자 프로필",
-    viewAllNotifications: "모든 알림 보기"
+    userProfile: "사용자 프로필"
   }
 };
 
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
-const presentationModeStorageKey = "gatelm_console_presentation_mode";
-const notificationReadStorageKey = "gatelm_console_header_notification_read_ids";
-
-// No notification API exists yet; these are preview notifications for the console header demo.
-const previewNotificationSeeds: AdminNotificationSeed[] = [
-  {
-    content: {
-      en: {
-        category: "Budget",
-        createdAt: "2m ago",
-        message: "Monthly budget usage is approaching the configured limit.",
-        title: "Budget warning"
-      },
-      ko: {
-        category: "예산",
-        createdAt: "2분 전",
-        message: "월간 예산 사용량이 설정된 한도에 가까워지고 있습니다.",
-        title: "예산 경고"
-      }
-    },
-    id: "budget-usage-preview",
-    severity: "warning"
-  },
-  {
-    content: {
-      en: {
-        category: "Provider",
-        createdAt: "5m ago",
-        message: "Recent gateway requests include provider-side 5xx errors.",
-        title: "Provider error"
-      },
-      ko: {
-        category: "프로바이더",
-        createdAt: "5분 전",
-        message: "최근 Gateway 요청에서 프로바이더 측 5xx 오류가 발생했습니다.",
-        title: "프로바이더 오류"
-      }
-    },
-    id: "provider-error-preview",
-    severity: "critical"
-  },
-  {
-    content: {
-      en: {
-        category: "Safety",
-        createdAt: "8m ago",
-        message: "Secret-like prompt content was blocked by policy.",
-        title: "Safety block detected"
-      },
-      ko: {
-        category: "안전",
-        createdAt: "8분 전",
-        message: "비밀정보로 추정되는 프롬프트 내용이 정책에 의해 차단되었습니다.",
-        title: "안전 정책 차단 감지"
-      }
-    },
-    id: "safety-block-preview",
-    severity: "warning"
-  },
-  {
-    content: {
-      en: {
-        category: "Rate Limit",
-        createdAt: "14m ago",
-        message: "A project is close to its current rate limit window.",
-        title: "Rate limit warning"
-      },
-      ko: {
-        category: "요청 제한",
-        createdAt: "14분 전",
-        message: "프로젝트 요청량이 현재 요청 제한에 가까워지고 있습니다.",
-        title: "요청 제한 경고"
-      }
-    },
-    id: "rate-limit-preview",
-    severity: "info"
-  },
-  {
-    content: {
-      en: {
-        category: "Cache",
-        createdAt: "22m ago",
-        message: "Cache hit rate is lower than expected for repeated traffic.",
-        title: "Cache opportunity"
-      },
-      ko: {
-        category: "캐시",
-        createdAt: "22분 전",
-        message: "반복 트래픽의 캐시 적중률이 예상보다 낮습니다.",
-        title: "캐시 개선 기회"
-      }
-    },
-    id: "cache-opportunity-preview",
-    severity: "info"
-  }
-];
 
 export function ConsoleShell({
   activeManagementItem,
@@ -426,21 +282,7 @@ export function ConsoleShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
-  const [isPresentationMode, setIsPresentationMode] = useState(false);
-
-  const notifications = useMemo(
-    () =>
-      previewNotificationSeeds.map((notification) => ({
-        ...notification.content[locale],
-        id: notification.id,
-        severity: notification.severity,
-        read: readNotificationIds.includes(notification.id)
-      })),
-    [locale, readNotificationIds]
-  );
-  const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
 
   useEffect(() => {
     setIsMobileNavigationOpen(false);
@@ -458,16 +300,6 @@ export function ConsoleShell({
     const initialTheme = readStoredTheme() ?? readDocumentTheme();
     setTheme(initialTheme);
     applyTheme(initialTheme);
-  }, []);
-
-  useEffect(() => {
-    const initialPresentationMode = readStoredPresentationMode();
-    setIsPresentationMode(initialPresentationMode);
-    applyPresentationMode(initialPresentationMode);
-  }, []);
-
-  useEffect(() => {
-    setReadNotificationIds(readStoredNotificationIds());
   }, []);
 
   function toggleSidebar() {
@@ -493,15 +325,6 @@ export function ConsoleShell({
     writeStoredTheme(nextTheme);
   }
 
-  function togglePresentationMode() {
-    setIsPresentationMode((current) => {
-      const next = !current;
-      applyPresentationMode(next);
-      writeStoredPresentationMode(next);
-      return next;
-    });
-  }
-
   async function logout() {
     if (isLoggingOut) {
       return;
@@ -513,12 +336,6 @@ export function ConsoleShell({
       method: "POST"
     }).catch(() => undefined);
     window.location.assign("/?view=landing");
-  }
-
-  function markAllNotificationsRead() {
-    const nextReadIds = previewNotificationSeeds.map((notification) => notification.id);
-    setReadNotificationIds(nextReadIds);
-    writeStoredNotificationIds(nextReadIds);
   }
 
   function isChildActive(child: ChildNavigationItem) {
@@ -720,18 +537,13 @@ export function ConsoleShell({
       <div className="console-main">
         <ConsoleTopbarActions
           currentUser={currentUser}
-          isPresentationMode={isPresentationMode}
           isLoggingOut={isLoggingOut}
           locale={locale}
-          notifications={notifications}
           onLogout={logout}
-          onMarkAllNotificationsRead={markAllNotificationsRead}
           onSelectTheme={selectTheme}
-          onTogglePresentationMode={togglePresentationMode}
           tenantLabel={tenantLabel}
           text={text}
           theme={theme}
-          unreadNotificationCount={unreadNotificationCount}
         />
         {children}
       </div>
@@ -741,113 +553,28 @@ export function ConsoleShell({
 
 function ConsoleTopbarActions({
   currentUser,
-  isPresentationMode,
   isLoggingOut,
   locale,
-  notifications,
   onLogout,
-  onMarkAllNotificationsRead,
   onSelectTheme,
-  onTogglePresentationMode,
   tenantLabel,
   text,
-  theme,
-  unreadNotificationCount
+  theme
 }: {
   currentUser: CurrentUser | null;
-  isPresentationMode: boolean;
   isLoggingOut: boolean;
   locale: Locale;
-  notifications: AdminNotification[];
   onLogout: () => Promise<void>;
-  onMarkAllNotificationsRead: () => void;
   onSelectTheme: (theme: ConsoleTheme) => void;
-  onTogglePresentationMode: () => void;
   tenantLabel: string;
   text: (typeof shellText)[Locale];
   theme: ConsoleTheme;
-  unreadNotificationCount: number;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel, text);
   const initials = getUserInitials(displayUser.displayName);
 
   return (
     <div className="console-topbar-actions" aria-label={text.accountActions}>
-      <button
-        aria-label={text.help}
-        className="console-topbar-icon-button"
-        title={text.help}
-        type="button"
-      >
-        <CircleHelp aria-hidden="true" size={18} strokeWidth={2.2} />
-      </button>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label={`${text.notifications}: ${unreadNotificationCount} ${text.unread}`}
-          className="console-topbar-icon-button console-notification-trigger"
-          title={text.notifications}
-        >
-          <Bell aria-hidden="true" size={18} strokeWidth={2.2} />
-          {unreadNotificationCount > 0 ? (
-            <span className="console-notification-badge">
-              {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
-            </span>
-          ) : null}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          aria-label={text.notifications}
-          className="console-notification-popover"
-          sideOffset={10}
-        >
-          <div className="console-notification-popover-header">
-            <div>
-              <strong>{text.notifications}</strong>
-              <span>
-                {unreadNotificationCount} {text.unread}
-              </span>
-            </div>
-            <button
-              disabled={unreadNotificationCount === 0}
-              onClick={onMarkAllNotificationsRead}
-              type="button"
-            >
-              {text.markAllAsRead}
-            </button>
-          </div>
-
-          <div className="console-notification-list">
-            {notifications.slice(0, 5).map((notification) => (
-              <article
-                className="console-notification-row"
-                data-read={notification.read}
-                data-severity={notification.severity}
-                key={notification.id}
-              >
-                <span className="console-notification-severity-dot" aria-hidden="true" />
-                <div>
-                  <div className="console-notification-row-title">
-                    <strong>{notification.title}</strong>
-                    {!notification.read ? <span aria-label={text.unreadNotification} /> : null}
-                  </div>
-                  <p>{notification.message}</p>
-                  <footer>
-                    <span>{notification.category}</span>
-                    <small>{notification.createdAt}</small>
-                  </footer>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          {/* No notifications route exists yet. Keep this disabled until a backend/page is added. */}
-          <button className="console-notification-view-all" disabled type="button">
-            {text.viewAllNotifications}
-          </button>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       <DropdownMenu>
         <DropdownMenuTrigger className="console-user-trigger" aria-label={text.openUserProfile}>
           <span className="console-user-avatar" aria-hidden="true">
@@ -930,25 +657,6 @@ function ConsoleTopbarActions({
                 </button>
               </div>
             </div>
-            <div className="console-user-settings-row">
-              <span>{text.presentationMode}</span>
-              <button
-                aria-pressed={isPresentationMode}
-                className="console-presentation-mode-button"
-                data-active={isPresentationMode}
-                onClick={onTogglePresentationMode}
-                type="button"
-              >
-                {isPresentationMode ? (
-                  <Minimize2 aria-hidden="true" size={15} strokeWidth={2.2} />
-                ) : (
-                  <Maximize2 aria-hidden="true" size={15} strokeWidth={2.2} />
-                )}
-                <span>
-                  {isPresentationMode ? text.presentationModeOn : text.presentationModeOff}
-                </span>
-              </button>
-            </div>
           </section>
 
           <div className="console-user-menu-actions">
@@ -994,36 +702,6 @@ function getUserInitials(displayName: string) {
 
 function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {
   return item === "alerts" || item === "analytics" || item === "live-logs" || item === "overview";
-}
-
-function readStoredNotificationIds(): string[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const storedValue = window.localStorage.getItem(notificationReadStorageKey);
-    if (!storedValue) {
-      return [];
-    }
-
-    const parsedValue = JSON.parse(storedValue);
-    if (!Array.isArray(parsedValue)) {
-      return [];
-    }
-
-    return parsedValue.filter((item): item is string => typeof item === "string");
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredNotificationIds(notificationIds: string[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(notificationReadStorageKey, JSON.stringify(notificationIds));
 }
 
 function readStoredSidebarCollapsed(): boolean | null {
@@ -1088,28 +766,4 @@ function writeStoredTheme(theme: ConsoleTheme) {
   }
 
   window.localStorage.setItem(themeStorageKey, theme);
-}
-
-function applyPresentationMode(isEnabled: boolean) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.documentElement.dataset.presentationMode = String(isEnabled);
-}
-
-function readStoredPresentationMode() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage.getItem(presentationModeStorageKey) === "true";
-}
-
-function writeStoredPresentationMode(isEnabled: boolean) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(presentationModeStorageKey, String(isEnabled));
 }

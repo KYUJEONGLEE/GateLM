@@ -6,6 +6,9 @@ const MODEL_KEY = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 const POLICY_STATES = Object.freeze(['normal', 'warning', 'economy', 'blocked']);
 const POLICY_RANK = Object.freeze({ normal: 0, warning: 1, economy: 2, blocked: 3 });
 
+// Keep the browser request aligned with the public Tenant Chat API contract.
+export const MAX_TENANT_CHAT_OUTPUT_TOKENS = 8192;
+
 export class ConversationContractError extends Error {
   constructor(message = '요청 형식이 올바르지 않습니다.') {
     super(message);
@@ -78,7 +81,7 @@ export function createTurnBody(value) {
   const contextMode = body.contextMode ?? 'conversation';
   if (!['conversation', 'single_turn'].includes(contextMode)) invalid();
   const intent = record(body.usageIntent, ['cacheStrategy', 'maxOutputTokens', 'requestedTier']);
-  if (!Number.isSafeInteger(intent.maxOutputTokens) || intent.maxOutputTokens < 1 || intent.maxOutputTokens > 8192) invalid();
+  if (!Number.isSafeInteger(intent.maxOutputTokens) || intent.maxOutputTokens < 1 || intent.maxOutputTokens > MAX_TENANT_CHAT_OUTPUT_TOKENS) invalid();
   if (!['auto', 'high_quality', 'standard', 'economy'].includes(intent.requestedTier)) invalid();
   if (!['off', 'exact'].includes(intent.cacheStrategy)) invalid();
   return Object.freeze({

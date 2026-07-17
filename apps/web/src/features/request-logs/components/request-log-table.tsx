@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Coins,
   Database,
-  Eye,
   RotateCw
 } from "lucide-react";
 import Link from "next/link";
@@ -30,7 +29,6 @@ import {
   formatLatency
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
-import { formatRequestLogTtft } from "../request-log-latency";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
 import {
   RequestLogFilterForm,
@@ -126,8 +124,6 @@ const requestLogText: Record<
       project: string;
       status: string;
       time: string;
-      totalLatency: string;
-      ttft: string;
       unavailable: string;
     };
     title: string;
@@ -182,8 +178,6 @@ const requestLogText: Record<
       project: "Project",
       status: "Status",
       time: "Time",
-      totalLatency: "Total",
-      ttft: "TTFT",
       unavailable: "Live Gateway request logs are not available right now."
     },
     title: "Live Logs"
@@ -237,8 +231,6 @@ const requestLogText: Record<
       project: "프로젝트",
       status: "상태",
       time: "요청 시각",
-      totalLatency: "전체",
-      ttft: "TTFT",
       unavailable: "현재 Gateway 요청 로그를 불러올 수 없습니다."
     },
     title: "실시간 로그"
@@ -294,8 +286,10 @@ export function RequestLogTable({
                   <span className="request-log-summary-icon">{item.icon}</span>
                   <div>
                     <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                    {item.detail ? <em>{item.detail}</em> : null}
+                    <span className="request-log-summary-value">
+                      <strong>{item.value}</strong>
+                      {item.detail ? <em>{item.detail}</em> : null}
+                    </span>
                   </div>
                 </article>
               ))}
@@ -394,52 +388,39 @@ export function RequestLogTable({
                 </Link>
               </div>
 
-              <div className="request-log-pagination">
-                <Link
-                  aria-disabled={currentPage <= 1}
-                  aria-label={text.previousPage}
-                  className="request-log-page-link"
-                  data-disabled={currentPage <= 1}
-                  href={requestLogPageHref(tenantId, filters, currentPage - 1)}
-                >
-                  <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.4} />
-                </Link>
-                <span>{pageSummary}</span>
-                <Link
-                  aria-disabled={currentPage >= pageCount}
-                  aria-label={text.nextPage}
-                  className="request-log-page-link"
-                  data-disabled={currentPage >= pageCount}
-                  href={requestLogPageHref(tenantId, filters, currentPage + 1)}
-                >
-                  <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
-                </Link>
-              </div>
             </RequestLogFilterForm>
 
             <div className="table-wrap">
               <table className="data-table request-table">
+                <colgroup>
+                  <col className="request-log-col-time" />
+                  <col className="request-log-col-name" />
+                  <col className="request-log-col-project" />
+                  <col className="request-log-col-model" />
+                  <col className="request-log-col-cost" />
+                  <col className="request-log-col-latency" />
+                  <col className="request-log-col-status" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>{text.table.time}</th>
                     <th>{text.table.name}</th>
                     <th>{text.table.project}</th>
                     <th>{text.table.model}</th>
-                    <th>{text.table.status}</th>
-                    <th>{text.table.latency}</th>
                     <th>{text.table.cost}</th>
-                    <th aria-label={text.table.actions} />
+                    <th>{text.table.latency}</th>
+                    <th>{text.table.status}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sourceState === "unavailable" ? (
                     <tr>
-                      <td colSpan={8}>{text.table.unavailable}</td>
+                      <td colSpan={7}>{text.table.unavailable}</td>
                     </tr>
                   ) : null}
                   {sourceState === "ready" && records.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{text.table.empty}</td>
+                      <td colSpan={7}>{text.table.empty}</td>
                     </tr>
                   ) : null}
                   {pageRecords.map((record) => {
@@ -452,14 +433,30 @@ export function RequestLogTable({
                       : undefined;
 
                     return (
-                      <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
+                      <tr
+                        data-request-log-row
+                        data-selected={isSelected ? "true" : undefined}
+                        key={record.requestId}
+                      >
                         <td className="request-log-time-cell">
-                          {formatShortTime(record.createdAt, timezone)}
+                          <Link
+                            className="request-log-row-link"
+                            data-request-log-anchor
+                            data-request-log-project-id={record.projectId}
+                            data-request-log-request-id={record.requestId}
+                            href={detailHref}
+                            scroll={false}
+                          >
+                            <span>{formatShortTime(record.createdAt, timezone)}</span>
+                            <span className="sr-only">{`${text.table.actions}: ${displayRequestId}`}</span>
+                          </Link>
                         </td>
                         <td>
                           {record.endUserId ? (
                             <span className="request-log-name-cell" title={record.endUserId}>
-                              <strong>{employee?.name || formatDisplayIdentifier(record.endUserId)}</strong>
+                              <span className="request-log-name-primary">
+                                {employee?.name || formatDisplayIdentifier(record.endUserId)}
+                              </span>
                               {employee?.department ? <small>{employee.department}</small> : null}
                             </span>
                           ) : (
@@ -481,40 +478,39 @@ export function RequestLogTable({
                             record={record}
                           />
                         </td>
+                        <td className="request-log-cost-cell">{formatMicroUsd(record.costMicroUsd)}</td>
+                        <td className="request-log-latency-cell">
+                          <span>{formatLatency(record.latencyMs)}</span>
+                        </td>
                         <td>
                           <StatusBadge label={formatHttpStatus(record)} status={record.status} />
-                        </td>
-                        <td>
-                          <dl className="request-log-latency-cell">
-                            <div>
-                              <dt>{text.table.totalLatency}</dt>
-                              <dd>{formatLatency(record.latencyMs)}</dd>
-                            </div>
-                            <div>
-                              <dt>{text.table.ttft}</dt>
-                              <dd>{formatRequestLogTtft(record.ttftMs)}</dd>
-                            </div>
-                          </dl>
-                        </td>
-                        <td>{formatMicroUsd(record.costMicroUsd)}</td>
-                        <td className="request-log-action-cell">
-                          <Link
-                            aria-label={`${text.table.actions}: ${displayRequestId}`}
-                            className="request-log-action-link"
-                            data-request-log-anchor
-                            data-request-log-project-id={record.projectId}
-                            data-request-log-request-id={record.requestId}
-                            href={detailHref}
-                            scroll={false}
-                          >
-                            <Eye aria-hidden="true" size={16} strokeWidth={2.3} />
-                          </Link>
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="request-log-pagination">
+              <Link
+                aria-disabled={currentPage <= 1}
+                aria-label={text.previousPage}
+                className="request-log-page-link"
+                data-disabled={currentPage <= 1}
+                href={requestLogPageHref(tenantId, filters, currentPage - 1)}
+              >
+                <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.4} />
+              </Link>
+              <span>{pageSummary}</span>
+              <Link
+                aria-disabled={currentPage >= pageCount}
+                aria-label={text.nextPage}
+                className="request-log-page-link"
+                data-disabled={currentPage >= pageCount}
+                href={requestLogPageHref(tenantId, filters, currentPage + 1)}
+              >
+                <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
+              </Link>
             </div>
             <div className="request-log-list-end" role="status">
               <span>{text.rangeEndLabel}</span>
@@ -615,10 +611,7 @@ function RequestRoutingCell({
           size={24}
         />
       ) : null}
-      <span className="request-log-provider-copy">
-        <strong>{modelName}</strong>
-        <small>{executionLabel}</small>
-      </span>
+      <strong>{modelName}</strong>
     </span>
   );
 }
@@ -669,35 +662,35 @@ function buildRequestLogSummaryItems(
   return [
     {
       detail: text.countUnit,
-      icon: <CheckCircle2 aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <CheckCircle2 aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.totalRequests,
       tone: "total",
       value: formatInteger(summary.totalRequests)
     },
     {
       detail: `${text.countUnit} (${formatPercent(successRate)})`,
-      icon: <CheckCircle2 aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <CheckCircle2 aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.successful,
       tone: "success",
       value: formatInteger(summary.successfulRequests)
     },
     {
       detail: `${text.countUnit} (${formatPercent(blockedRate)})`,
-      icon: <AlertTriangle aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <AlertTriangle aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.blocked,
       tone: "blocked",
       value: formatInteger(summary.blockedRequests)
     },
     {
       detail: `${text.countUnit} (${formatPercent(failedRate)})`,
-      icon: <Database aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <Database aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.failed,
       tone: "failed",
       value: formatInteger(summary.failedRequests)
     },
     {
       detail: "",
-      icon: <Coins aria-hidden="true" size={20} strokeWidth={2.3} />,
+      icon: <Coins aria-hidden="true" size={16} strokeWidth={1.9} />,
       label: text.totalCost,
       tone: "cost",
       value: formatMicroUsd(summary.totalCostMicroUsd)

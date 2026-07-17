@@ -124,7 +124,6 @@ func main() {
 	}
 
 	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
-		RequestTimeout:        cfg.ProviderTimeout,
 		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
 		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
 		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
@@ -398,7 +397,7 @@ func main() {
 
 const (
 	difficultyE5StartupSmokeInstruction = "explain one bounded workflow step."
-	difficultyE5StartupSmokeTimeout     = 30 * time.Second
+	difficultyE5StartupSmokeTimeout     = 60 * time.Second
 )
 
 const (

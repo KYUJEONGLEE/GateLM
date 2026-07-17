@@ -112,6 +112,19 @@ docker compose up -d
 
 Gateway의 `GATEWAY_RUNTIME_SNAPSHOT_MODE` 기본값은 `demo`다. `strict` 또는 `strict_snapshot`은 Control Plane base URL과 internal token이 필요하며, active RuntimeSnapshot을 가져오지 못하면 조용히 demo/static 경로로 대체하지 않는다.
 
+Tenant Chat 전체 로컬 stack은 E5 106D 하이브리드 난이도 runtime을 기본 Gateway profile로 사용한다. 최초 환경에서 pinned encoder와 native package cache가 없을 때만 다음 setup을 먼저 실행한다.
+
+```powershell
+corepack pnpm run v2.1:routing:setup-e5-encoder
+corepack pnpm run v2.1:routing:setup-gateway-e5-runtime-native
+```
+
+그다음 local wrapper로 stack을 시작한다. `build` 또는 `up`은 검증된 `.tmp/gateway-e5-runtime-bundle`을 다시 조립하고 E5 runtime image를 사용한다. E5 초기화나 request inference가 실패하면 해당 Gateway process 또는 요청은 기존 rule difficulty로 fallback한다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/tenant-chat-local-compose.ps1 up -d postgres redis mock-provider control-plane-api gateway-core chat-api chat-web
+```
+
 ## 6. Development Flow
 
 현재 기본 통합 흐름은 feature/fix/docs 브랜치에서 `dev` 대상 PR을 만들고, 검증된 `dev`를 별도 PR로 `main`에 승격하는 방식입니다.

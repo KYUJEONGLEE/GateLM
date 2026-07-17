@@ -36,7 +36,7 @@
       },
       "put": {
         "operationId": "activateTenantChatAdminRuntime",
-        "summary": "Publish the Tenant Chat 5 x 2 routing policy",
+        "summary": "Publish Tenant Chat routing, cache and safety policy",
         "requestBody": {
           "required": true,
           "content": {
@@ -74,14 +74,172 @@
     },
     "schemas": {
       "ActivateRuntimeRequest": {
+        "anyOf": [
+          { "$ref": "#/components/schemas/CurrentActivateRuntimeRequest" },
+          { "$ref": "#/components/schemas/CompatibilityActivateRuntimeRequest" }
+        ]
+      },
+      "CurrentActivateRuntimeRequest": {
         "type": "object",
         "additionalProperties": false,
-          "required": ["routingMode", "manualModelRef", "routes"],
+        "required": ["routingMode", "manualModelRef", "routes", "cachePolicy", "safetyPolicy"],
         "properties": {
           "routingMode": { "type": "string", "enum": ["auto", "manual"] },
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
           "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
-          "cacheEnabled": { "type": "boolean" }
+          "cachePolicy": { "$ref": "#/components/schemas/CachePolicy" },
+          "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" }
+        }
+      },
+      "CompatibilityActivateRuntimeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["routingMode", "manualModelRef", "routes", "cacheEnabled"],
+        "properties": {
+          "routingMode": { "type": "string", "enum": ["auto", "manual"] },
+          "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
+          "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
+          "cacheEnabled": {
+            "type": "boolean",
+            "description": "Compatibility toggle for legacy authoring clients. Current clients use cachePolicy and safetyPolicy."
+          }
+        }
+      },
+      "CachePolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enabled", "ttlSeconds", "maxEntriesPerUser"],
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "ttlSeconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "maxEntriesPerUser": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        }
+      },
+      "SafetyPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["detectorSet"],
+        "properties": {
+          "detectorSet": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/SafetyDetector" },
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "resident_registration_number" } }
+                },
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "api_key" } }
+                },
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "authorization_header" } }
+                },
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "jwt" } }
+                },
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "private_key" } }
+                },
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "email" } }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "phone_number" } }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "postal_address" } }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "person_name" } }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["detectorType"],
+                  "properties": { "detectorType": { "const": "organization_name" } }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              }
+            ]
+          }
+        }
+      },
+      "SafetyDetector": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["detectorType", "action"],
+        "properties": {
+          "detectorType": {
+            "type": "string",
+            "enum": ["email", "phone_number", "postal_address", "person_name", "organization_name", "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key"]
+          },
+          "action": { "type": "string", "enum": ["allow", "redact", "block"] }
+        },
+        "if": {
+          "type": "object",
+          "required": ["detectorType"],
+          "properties": {
+            "detectorType": {
+              "enum": ["resident_registration_number", "api_key", "authorization_header", "jwt", "private_key"]
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "action": { "type": "string", "enum": ["redact", "block"] }
+          }
         }
       },
       "ModelKey": {
@@ -199,7 +357,7 @@
       "ActiveSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes", "cacheEnabled"],
+        "required": ["snapshotId", "version", "digest", "policyVersion", "pricingVersion", "providerConnectionId", "modelKey", "publishedAt", "pricingStatus", "routingMode", "manualModelRef", "routes", "cachePolicy", "safetyPolicy", "cacheEnabled"],
         "properties": {
           "snapshotId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "version": { "type": "integer", "minimum": 1 },
@@ -211,6 +369,8 @@
           "routingMode": { "type": "string", "enum": ["auto", "manual"] },
           "manualModelRef": { "$ref": "#/components/schemas/ModelKey" },
           "routes": { "$ref": "#/components/schemas/RoutingMatrix" },
+          "cachePolicy": { "$ref": "#/components/schemas/CachePolicy" },
+          "safetyPolicy": { "$ref": "#/components/schemas/SafetyPolicy" },
           "cacheEnabled": { "type": "boolean" },
           "publishedAt": { "type": "string", "format": "date-time" },
           "pricingStatus": { "type": "string", "enum": ["current", "update_available", "unavailable"] }

@@ -23,6 +23,18 @@ function sha256(payload) {
   return createHash("sha256").update(payload).digest("hex");
 }
 
+function workflowJobBody(workflow, jobName) {
+  const jobMatch = new RegExp(`(?:^|\\r?\\n)  ${jobName}:\\r?\\n`).exec(workflow);
+  if (!jobMatch) {
+    throw new Error(`CI workflow omitted ${jobName}`);
+  }
+  const bodyStart = jobMatch.index + jobMatch[0].length;
+  const nextJobMatch = /(?:^|\r?\n)  [A-Za-z0-9_-]+:\r?\n/g;
+  nextJobMatch.lastIndex = bodyStart;
+  const nextJob = nextJobMatch.exec(workflow);
+  return workflow.slice(bodyStart, nextJob?.index ?? workflow.length);
+}
+
 const encoderManifestPayload = readFileSync(encoderManifestPath);
 const encoderManifest = JSON.parse(encoderManifestPayload);
 if (
@@ -124,6 +136,10 @@ const ciWorkflow = readFileSync(
   path.join(rootDir, ".github/workflows/ci.yml"),
   "utf8",
 );
+const productionDeployWorkflow = readFileSync(
+  path.join(rootDir, ".github/workflows/deploy-production.yml"),
+  "utf8",
+);
 const holdoutReference = readFileSync(
   path.join(
     rootDir,
@@ -220,7 +236,7 @@ for (const requiredText of [
 for (const requiredText of [
   "DownloadMissingNativePackages",
   "https://github.com/daulet/tokenizers/releases/download/v1.23.0/libtokenizers.linux-amd64.tar.gz",
-  "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.22.1",
+  "https://github.com/microsoft/onnxruntime/releases/download/v1.22.1/Microsoft.ML.OnnxRuntime.1.22.1.nupkg",
   expectedLock.tokenizerNativeArchiveSha256,
   expectedLock.onnxRuntimePackageSha256,
 ]) {
@@ -315,10 +331,9 @@ if (
 ) {
   throw new Error("production Gateway E5 bundle must be prepared before application image builds");
 }
-const releasePackagingMatch = /(?:^|\r?\n)[ \t]+release-packaging[ \t]*:/.exec(ciWorkflow);
-const releasePackagingIndex = releasePackagingMatch?.index ?? -1;
-const releasePackagingWorkflow =
-  releasePackagingIndex >= 0 ? ciWorkflow.slice(releasePackagingIndex) : "";
+const verificationGateWorkflow = workflowJobBody(ciWorkflow, "verification-gate");
+const releasePackagingWorkflow = workflowJobBody(ciWorkflow, "release-packaging");
+const finalCiGateWorkflow = workflowJobBody(ciWorkflow, "ci-gate");
 const ciPrepareMatch =
   /bash[ \t]+deploy\/aws-triage\/scripts\/prepare-gateway-e5-runtime-bundle\.sh[ \t]+(["']?)\$\{GITHUB_WORKSPACE\}\1/.exec(
     releasePackagingWorkflow,
@@ -330,12 +345,49 @@ const ciReleaseBuildMatch =
   );
 const ciReleaseBuildIndex = ciReleaseBuildMatch?.index ?? -1;
 if (
-  releasePackagingIndex < 0 ||
   ciPrepareInvocationIndex < 0 ||
   ciReleaseBuildIndex < 0 ||
   ciPrepareInvocationIndex > ciReleaseBuildIndex
 ) {
   throw new Error("CI release packaging must prepare the Gateway E5 bundle before image builds");
+}
+for (const requiredText of [
+  "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  "github.event_name == 'pull_request' && github.base_ref == 'main'",
+  "needs: [verification-gate]",
+]) {
+  if (!releasePackagingWorkflow.includes(requiredText)) {
+    throw new Error(`CI release packaging omitted pre-merge condition ${requiredText}`);
+  }
+}
+const checkoutStep =
+  /- name: Checkout synthetic merge or pushed commit\r?\n[\s\S]*?(?=\r?\n      - name:)/.exec(
+    releasePackagingWorkflow,
+  )?.[0] ?? "";
+if (!checkoutStep.includes("uses: actions/checkout@v7") || /^\s+ref:/m.test(checkoutStep)) {
+  throw new Error("main pull requests must package the default GitHub synthetic merge commit");
+}
+if (!verificationGateWorkflow.includes("name: verification gate")) {
+  throw new Error("CI verification jobs must be isolated behind verification-gate");
+}
+for (const requiredText of [
+  "name: CI gate",
+  "- verification-gate",
+  "- release-packaging",
+  'RELEASE_PACKAGING_RESULT" != "success"',
+  'RELEASE_PACKAGING_RESULT" != "skipped"',
+]) {
+  if (!finalCiGateWorkflow.includes(requiredText)) {
+    throw new Error(`final CI gate omitted ${requiredText}`);
+  }
+}
+for (const requiredText of [
+  "github.event.workflow_run.event == 'push'",
+  "github.event.workflow_run.head_branch == 'main'",
+]) {
+  if (!productionDeployWorkflow.includes(requiredText)) {
+    throw new Error(`production deploy must remain push-main-only: missing ${requiredText}`);
+  }
 }
 if (!verifyNativeScript.includes("--user 1000:1000")) {
   throw new Error("Gateway E5 image smoke must cover the production arbitrary UID boundary");

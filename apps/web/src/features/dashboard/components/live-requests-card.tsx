@@ -95,7 +95,6 @@ export function LiveRequestsCard({
   const abortRef = useRef<AbortController | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const detailReturnButtonRef = useRef<HTMLButtonElement | null>(null);
-  const detailOpenTimerRef = useRef<number | null>(null);
   const focusTriggerRef = useRef<HTMLElement | null>(null);
   const isFocusOpenRef = useRef(false);
   const skippedInitialFetchRef = useRef(false);
@@ -323,14 +322,6 @@ export function LiveRequestsCard({
     return () => window.removeEventListener("resize", updateOrigin);
   }, [isFocusOpen]);
 
-  useEffect(() => {
-    return () => {
-      if (detailOpenTimerRef.current !== null) {
-        window.clearTimeout(detailOpenTimerRef.current);
-      }
-    };
-  }, []);
-
   const viewAllLogsHref = useMemo(
     () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId, surface),
     [modelFilter, projectId, range, statusFilter, surface, tenantId]
@@ -362,11 +353,6 @@ export function LiveRequestsCard({
   }
 
   function closeFocusView() {
-    if (detailOpenTimerRef.current !== null) {
-      window.clearTimeout(detailOpenTimerRef.current);
-      detailOpenTimerRef.current = null;
-    }
-
     setSelectedRequest(null);
     setDetailFocusRequestId(undefined);
     isFocusOpenRef.current = false;
@@ -378,28 +364,13 @@ export function LiveRequestsCard({
 
   function openRequestDetail(row: LiveRequestRow) {
     setDetailFocusRequestId(row.requestId);
-
-    const selectRequest = () => {
-      setSelectedRequest({
-        projectId: row.projectId,
-        providerFamily: row.providerFamily,
-        providerId: row.providerId,
-        providerName: row.providerName,
-        requestId: row.requestId
-      });
-      detailOpenTimerRef.current = null;
-    };
-
-    if (isFocusOpen) {
-      selectRequest();
-      return;
-    }
-
-    openFocusView();
-    detailOpenTimerRef.current = window.setTimeout(() => {
-      detailReturnButtonRef.current?.focus({ preventScroll: true });
-      selectRequest();
-    }, motionDuration(380));
+    setSelectedRequest({
+      projectId: row.projectId,
+      providerFamily: row.providerFamily,
+      providerId: row.providerId,
+      providerName: row.providerName,
+      requestId: row.requestId
+    });
   }
 
   function closeRequestDetail() {
@@ -428,7 +399,7 @@ export function LiveRequestsCard({
           modelOptions={displayedModelOptions}
           onModelFilterChange={changeModelFilter}
           onOpenFocus={openFocusView}
-          onOpenRequest={openRequestDetail}
+          onOpenRequest={openFocusView}
           onStatusFilterChange={changeStatusFilter}
           rows={displayedRows.slice(0, COMPACT_LIVE_REQUEST_LIMIT)}
           statusFilter={statusFilter}
