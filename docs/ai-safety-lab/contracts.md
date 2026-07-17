@@ -28,7 +28,7 @@ MUST NOT:
 | First ML detector model | `openai/privacy-filter` |
 | Sidecar runtime | CPU-only local sidecar |
 | Sidecar output | `redactedPrompt`까지 반환 |
-| First ML adapter | `transformers.pipeline()` |
+| ONNX adapters | OpenAI direct ONNX Runtime + KoELECTRA Optimum ONNX pipeline |
 | Confidence threshold | 계약에 고정하지 않고 evaluation 기준값으로만 관리 |
 | Sidecar contract version | `ai-safety-detector.v1` |
 | Sidecar endpoint candidate | `POST /internal/ai-safety/v1/detect` |
@@ -52,7 +52,7 @@ prompt
 
 Request-side safety는 downstream routing, cache, provider call, streaming start보다 먼저 완료되어야 한다.
 
-초기 ML detector는 `shadow`로 시작한다. regex/rule detector가 초기 enforcement baseline이며, ML detector의 enforce 승격은 evaluation evidence와 별도 계약 판단 이후에만 한다.
+초기 ML detector는 `shadow`로 시작한다. regex/rule detector가 초기 enforcement baseline이다. Tenant Chat 연결은 별도 배포 설정으로 `enforce`를 명시하며, 이 경우에도 아래 evaluation evidence 한계는 그대로 유지한다.
 
 `openai/privacy-filter`는 첫 ML detector model이다. 이 모델도 초기에는 shadow로만 실행한다.
 
@@ -153,7 +153,6 @@ Initial `openai/privacy-filter` label mapping:
 |---|---|---|
 | `private_email` | `email` | `redact` |
 | `private_phone` | `phone_number` | `redact` |
-| `private_person` | `person_name` | `redact` |
 | `private_address` | `postal_address` | `redact` |
 | `account_number` | `account_number` | `block` |
 | `private_date` | `private_date` | `redact` |
@@ -164,11 +163,15 @@ Initial `openai/privacy-filter` label mapping:
 
 `secret` from `openai/privacy-filter` maps to `secret`. Existing regex/rule secret detectors remain the enforce baseline for critical block behavior.
 
-Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 
 | Model Label | GateLM Detector Type | Default Action Candidate |
 |---|---|---|
-| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+| `EMA-*` / `email` | `email` | `redact` |
+| `PHN-*` / `phone` / `telephone` | `phone_number` | `redact` |
+| `RRN-*` | `resident_registration_number` | `block` |
+
+2026-07-15 pinned bundle에서는 `person_name`과 `organization_name`이 두 모델의 accepted label map에 없으며 해당 결과는 local rule backstop이다.
 
 ## 9. Request-Level Action
 
@@ -252,6 +255,9 @@ Sidecar draft API:
 ```text
 contractVersion = ai-safety-detector.v1
 POST /internal/ai-safety/v1/detect
+
+contractVersion = ai-safety-detector-batch.v1
+POST /internal/ai-safety/v1/detect/batch
 ```
 
 Sidecar 원칙:
@@ -261,6 +267,8 @@ Sidecar 원칙:
 - Gateway는 sidecar의 `redactedPrompt`와 sanitized result만 사용한다.
 - sidecar는 raw prompt, raw span, raw detected value를 log/response/error에 남기지 않는다.
 - sidecar response는 `redactedPrompt`를 반환하여 Gateway가 runtime별 offset 차이를 해석하지 않게 한다.
+- single/batch success response는 실제 model 실행 여부를 나타내는 sanitized `executionSummary`를 반환한다.
+- batch는 1~64개 항목의 순서와 경계를 유지하며 partial/mismatch 응답 전체를 폐기하고 local P0 결과로 fallback한다. Tenant Chat 정상 mask-once turn은 새 user message 한 건만 보내고, 여러 항목은 bounded legacy migration 또는 untrusted provenance의 방어적 처리에만 사용한다.
 
 Sidecar API의 자세한 request/response shape는 `detector-sidecar-contract.md`에서 별도로 작성한다.
 

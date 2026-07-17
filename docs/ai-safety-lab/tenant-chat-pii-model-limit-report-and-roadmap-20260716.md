@@ -1,0 +1,587 @@
+# Tenant Chat PII 모델 한계 분석 및 발전 계획 — 2026-07-16
+
+## 1. 문서 상태
+
+| 항목 | 내용 |
+|---|---|
+| 문서 성격 | 특정 브랜치와 실행 환경에서 확인한 개발 근거 및 후속 작업 계획 |
+| 검증 대상 브랜치 | `feat/tenant-chat-pii-mask-once` |
+| 검증 대상 코드 | `f77b11bb`까지의 1~3단계 구현, Presidio 격리 screening, 주민등록번호 규칙 경계 보완 |
+| 검증일 | 2026-07-16 KST |
+| 대상 경로 | Tenant Chat 저장 전 sanitization과 AI Service ONNX PII 탐지 |
+| 데이터 범위 | 합성 문장과 aggregate 결과만 사용 |
+| 원문 저장 | 없음 |
+| 현재 결정 | 배포 기본값은 rules-only로 유지하고 주민등록번호 한글 조사 경계 누락은 규칙으로 보완. Presidio는 안전한 추가 품질 이득이 없어 미도입. OpenAI 품질 후보의 production enforce 전환과 KoELECTRA hot path 사용은 보류 |
+
+이 문서는 active Tenant Chat 계약을 변경하지 않는다. 현재 구현과 모델의 한계를 기록하는 evidence 문서이며, 아래 통과 기준 중 운영 기준값은 제품·보안 책임자의 별도 승인 정책으로 확정해야 한다.
+
+## 2. 결론 요약
+
+1. Gateway 규칙, AI Service 규칙, ONNX 모델, Tenant Chat 저장 전 마스킹 연결은 동작한다.
+2. 규칙 단독 대비 OpenAI 모델 추가 효과는 1,000건 합성 평가에서 통과율 `78.0% -> 78.5%`로 작았다.
+3. 같은 비교에서 false negative 사례는 6건 줄었지만 false positive 사례는 24건 늘었다.
+4. KoELECTRA BIO/BIOES span 병합 결함은 수정됐고 3단계 핵심 변경에서 AI Service 전체 회귀 274건이 통과하고 3건이 skip됐다. 후속 warmup 수정은 집중 테스트 19건을 통과했다.
+5. 수정 후 103건 4-way screening에서도 KoELECTRA는 전화번호·주민등록번호 추가 true positive가 0건이고, 고정 이메일 5건 중 2건에서 count 회귀가 남았다.
+6. 이름과 조직명은 두 모델이 탐지하지 않는다. 현재 결과는 규칙 backstop이다.
+7. 3단계 OpenAI-only preload 후 300건에서 실제 모델 개입 성공 요청 22건의 p50은 248ms, p95는 627ms였다.
+8. 같은 측정의 timeout은 2건, process peak RSS는 1,295.46MiB로 오늘 engineering gate를 통과하지 못했다.
+9. OpenAI 모델은 전화번호와 secret만 허용하면 rules-only 대비 exact pass가 5건 증가하고 false positive는 증가하지 않았다.
+10. 따라서 1~3단계 결과는 품질상 OpenAI-only 후보를 남기되 현재 배포 서비스의 production enforce 기본값으로 승격하지 않는 것이다.
+11. Presidio 패턴 인식기는 체크섬을 엄격히 적용하면 rules-only 대비 추가 이득이 0건이었다. 느슨한 설정의 +2건은 기존 주민등록번호 정규식의 한글 조사 경계 누락이므로 규칙 자체를 보완했다.
+
+## 3. 현재 완성된 흐름
+
+```text
+Tenant Chat의 새 사용자 메시지
+-> Gateway 필수 로컬 규칙 검사
+-> 로컬 규칙으로 block이면 즉시 차단
+-> 그 외 결과를 AI Service에 일시 전달
+-> AI Service의 빠른 규칙 검사
+-> 규칙으로 덮이지 않은 ML 후보 구간만 모델 검사
+-> 선택된 OpenAI ONNX 결과 정규화
+-> 규칙 결과와 모델 결과 병합
+-> allow/redact/block 적용
+-> passed/redacted 내용만 암호화 저장
+-> 이후 요청은 검증된 sanitized history를 재검사하지 않고 새 사용자 메시지만 검사
+-> sanitized history와 새 sanitized 메시지만 Provider에 전달
+```
+
+이 흐름의 장점은 규칙으로 충분한 요청은 모델을 건너뛰고, 이전 대화 원문을 매번 모델에 다시 전달하지 않는다는 점이다. 2단계 결과에 따라 OpenAI 모델도 전화번호와 secret만 기여하도록 제한하며 KoELECTRA는 추가 모델 설정에서 제외한다. 이 선택은 합성 screening 근거이므로 production-grade 정확도 주장과는 분리한다.
+
+## 4. 평가 범위와 해석 주의사항
+
+### 4.1 실행한 평가
+
+| 평가 | 입력 | 구성 | 결과 산출 여부 |
+|---|---:|---|---|
+| 규칙 기준선 | 1,000건 | 규칙 + no-op ML | 완료 |
+| OpenAI 모델 비교 | 1,000건 | 규칙 + OpenAI ONNX | 완료 |
+| 두 모델 축소 비교 | 30건 | 규칙 + OpenAI ONNX + KoELECTRA ONNX | 완료, adapter 2개 로드 확인 |
+| 두 모델 전체 비교 | 1,000건 | 규칙 + 두 ONNX 모델 | 900초 내 미완료, 보고서 미생성 |
+| 수정 후 4-way screening | 103건 | rules-only/OpenAI/KoELECTRA/both | 완료, 모델별 호출·기여 accounting 일치 |
+| 선택 후보 재평가 | 103건 | 규칙 + OpenAI, 전화번호·secret만 허용 | 완료, 85/103 통과, 신규 FP 0 |
+| 전체 그룹 지연 벤치마크 | 50건 | 안전·영문 PII·한글 PII·혼합 사례 | 완료 |
+| AI Service 회귀 | 258개 | unit/API/artifact 테스트 | 통과, 3개 skip |
+| Gateway 회귀 | 전체 Go package | `go test ./...` | 통과 |
+| Tenant Chat Web 회귀 | 20개 | Node test | 통과 |
+
+Chat API는 커밋 전 104개 테스트와 typecheck가 통과했다. 최종 재실행은 로컬 `node_modules`의 `jest-cli` 내부 링크 누락으로 테스트가 시작되기 전에 중단됐으며, 이 문서 작성 시점에 소스 회귀 실패로 판정하지 않았다.
+
+### 4.2 숫자를 운영 정확도로 해석하면 안 되는 이유
+
+- 1,000건 corpus는 합성 데이터다.
+- 이전 threshold 조정에서 같은 corpus를 참고했으므로 untouched holdout이 아니다.
+- 주요 pass rate는 outcome, detector type, detected count가 모두 맞는지를 보는 case-level exact match다.
+- 실제 개인정보 문자열의 시작과 끝을 평가하는 span-level 모델 정확도가 아니다.
+- 규칙과 모델을 합친 결과이므로 모델 단독 정확도로 사용할 수 없다.
+- 실제 고객 원문이나 고객 로그를 수집해 평가하지 않았다.
+- 이 결과는 개발 방향을 정하는 screening evidence이며 production promotion evidence가 아니다.
+
+로컬 상세 산출물은 원문 없이 아래 Git-ignored 경로에 생성했다.
+
+```text
+.tmp/pii-model-limit-20260716/rules-only/
+.tmp/pii-model-limit-20260716/hybrid/
+.tmp/pii-model-limit-20260716/hybrid-two-models-targeted/
+.tmp/pii-model-limit-20260716/latency-two-models-all-groups/
+```
+
+## 5. 정확도 결과
+
+### 5.1 규칙 단독과 OpenAI 모델 추가 비교
+
+| 지표 | 규칙 단독 | 규칙 + OpenAI | 변화 |
+|---|---:|---:|---:|
+| 전체 통과 | 780/1,000 | 785/1,000 | +5건 |
+| 통과율 | 78.0% | 78.5% | +0.5%p |
+| false positive 사례 | 38 | 62 | +24건, 악화 |
+| false negative 사례 | 180 | 174 | -6건, 개선 |
+| outcome mismatch | 168 | 148 | -20건 |
+| detected type mismatch | 125 | 120 | -5건 |
+| error | 0 | 0 | 변화 없음 |
+
+OpenAI 모델은 일부 누락을 줄였지만 전체 false positive를 더 크게 늘렸다. 현재 결과만 보면 사용자가 받는 불필요한 마스킹 증가를 감수할 만큼의 순효과가 입증되지 않았다.
+
+### 5.2 주요 유형별 변화
+
+| 유형 | 규칙 단독 | 규칙 + OpenAI | 판단 |
+|---|---|---|---|
+| 이메일 | precision 1.0, recall 1.0 | 동일 | 이 corpus에서는 규칙만으로 이미 탐지 |
+| 전화번호 | recall 0.7692 | recall 0.9231 | 6개 누락 중 4개 개선 |
+| 주민등록번호 | recall 0.7143 | 동일 | OpenAI 모델의 accepted label 범위 밖 |
+| 비공개 URL | precision 1.0, recall 0.1852 | precision 0.5676, recall 0.7778 | recall은 개선됐지만 false positive 16건 발생 |
+| secret | recall 0.5161 | recall 0.7419 | 누락 7건 개선 |
+| 이름 | precision 0.4839, recall 0.3409 | 동일 | 규칙 backstop 결과 |
+| 조직명 | precision 1.0, recall 0.2917 | 동일 | 규칙 backstop 결과 |
+| IP 주소 | recall 0.9091 | recall 0.2273 | 모델 비지원 유형인데 결과가 퇴행해 병합·정책 상호작용 감사 필요 |
+
+IP 주소 퇴행의 원인을 모델 자체로 단정할 수는 없다. OpenAI 모델이 직접 IP label을 제공하지 않으므로 규칙 신호 제거, overlap 처리, contextual action 적용 순서를 케이스 단위로 추적해야 한다.
+
+### 5.3 두 모델 축소 비교
+
+30건은 이메일 8건, 전화번호 8건, 주민등록번호 8건과 일부 중복·대조 사례로 구성한 탐색용 subset이다. 전체 품질을 대표하지 않는다.
+
+| 구성 | exact pass | false positive 사례 | false negative 사례 |
+|---|---:|---:|---:|
+| 규칙 단독 | 11/30 | 7 | 15 |
+| 규칙 + OpenAI | 12/30 | 7 | 14 |
+| 규칙 + OpenAI + KoELECTRA | 8/30 | 7 | 13 |
+
+| 유형 | 규칙 TP | OpenAI 포함 TP | 두 모델 TP |
+|---|---:|---:|---:|
+| 이메일 | 8/8 | 8/8 | 8/8 |
+| 전화번호 | 5/8 | 6/8 | 6/8 |
+| 주민등록번호 | 3/8 | 3/8 | 3/8 |
+
+KoELECTRA 추가 후 supported type의 true positive는 늘지 않았다. false negative 사례가 1건 줄어든 것은 이메일 결과가 실제 enforcement로 바뀐 영향이지만, 같은 이메일 하나를 여러 token detection으로 반환해 exact count는 실패했다.
+
+### 5.4 KoELECTRA span 집계 결함 수정
+
+OpenAI 단독에서 탐지 개수가 1이었던 이메일 5건이 두 모델 실행에서는 다음처럼 증가했다.
+
+| 사례 | 기대 개수 | OpenAI 단독 | 두 모델 |
+|---|---:|---:|---:|
+| 이메일 사례 1 | 1 | 1 | 4 |
+| 이메일 사례 2 | 1 | 1 | 15 |
+| 이메일 사례 3 | 1 | 1 | 16 |
+| 이메일 사례 4 | 1 | 1 | 10 |
+| 이메일 사례 5 | 1 | 1 | 2 |
+
+이 중 OpenAI 단독에서 통과했던 4건이 KoELECTRA 추가 후 detected count mismatch로 실패했다. 원인은 direct ONNX KoELECTRA classifier가 token별 suffix BIO label을 그대로 detection으로 내보낸 것이었다.
+
+`15a41ab4`에서 suffix·prefix BIO/BIOES 해석과 연속 WordPiece 병합을 구현했다. 이메일·전화번호·주민번호 경계 테스트를 포함한 adapter 집중 테스트 33건과 AI Service 전체 회귀가 통과했다.
+
+수정 후 같은 이메일 5건의 최종 detected count는 `1, 2, 2, 1, 1`이었다. token fragmentation은 제거됐지만 2건에서는 KoELECTRA가 주변 문장을 별도 이메일 구간으로 오탐했다. 이는 adapter 결함이 아니라 모델 품질 문제이므로 4-way 판정에서 No-Go 근거로 사용했다.
+
+### 5.5 수정 후 103건 4-way screening
+
+103건 subset은 원본 1,000건 corpus의 SHA-256과 case ID만 저장한다. `en-US` 52건, `ko-KR` 51건이며 기존 이메일 count 회귀 5건을 반드시 포함한다.
+
+| 구성 | exact pass | false positive 사례 | false negative 사례 | 모델 호출 | 모델 기여 |
+|---|---:|---:|---:|---:|---:|
+| rules-only | 80/103 | 4 | 21 | 0 | 0 |
+| rules + OpenAI 전체 허용 label | 86/103 | 8 | 14 | 77 | 55 |
+| rules + KoELECTRA | 69/103 | 10 | 20 | 33 | 25 |
+| rules + 두 모델 | 76/103 | 14 | 13 | 110 | 78 |
+
+OpenAI 전체 label은 통과 건수와 recall을 개선했지만 rules-only보다 false positive가 4건 증가했다. 유형별 순수 기여를 분리하면 아래 두 유형만 유지 조건을 통과했다.
+
+| OpenAI 유형 | 추가 TP | 손실 TP | 신규 FP | accepted 기여 | 판정 |
+|---|---:|---:|---:|---:|---|
+| 전화번호 | 2 | 0 | 0 | 9 | 유지 후보 |
+| secret | 3 | 0 | 0 | 8 | 유지 후보 |
+| private URL | 5 | 0 | 3 | 10 | 제외 |
+| 그 외 허용 label | 0 | 0 | 0 | 28 | 추가 TP가 없어 제외 |
+
+KoELECTRA는 전화번호·주민번호 추가 TP가 0건이었고, OpenAI 단독 통과 사례 11건을 combined에서 실패시켰으며, 고정 이메일 5건 중 2건의 count가 여전히 1이 아니었다. 따라서 모델 파일은 보존하되 hot path와 배포 추가 모델 설정에서는 제외한다.
+
+### 5.6 선택 후보 재평가
+
+OpenAI label을 `phone_number`, `secret`으로만 제한하고 같은 103건을 다시 실행했다.
+
+| 지표 | rules-only | 선택 후보 | 변화 |
+|---|---:|---:|---:|
+| exact pass | 80 | 85 | +5 |
+| false positive 사례 | 4 | 4 | 0 |
+| false negative 사례 | 21 | 16 | -5 |
+| exact pass 회귀 | - | 0 | 통과 |
+| 비지원 유형 회귀 | - | 0 | 통과 |
+| error | 0 | 0 | 통과 |
+| 모델 호출 / accepted 기여 | 0 / 0 | 20 / 17 | accounting 일치 |
+
+따라서 3단계 성능 검증 대상은 `rules + OpenAI ONNX`, ML 허용 유형은 전화번호와 secret으로 확정한다. 이 결론은 오늘 모델 선택용 screening 결과이며 untouched holdout이나 production 승격 증거가 아니다.
+
+### 5.7 Presidio 패턴 인식기 screening과 규칙 보완
+
+Presidio Analyzer `2.2.362`를 제품 가상환경과 분리해 설치하고 같은 103건 합성 subset에서 `rules-only`와 `rules + Presidio 패턴·체크섬 인식기`를 비교했다. spaCy나 별도 NER 모델은 사용하지 않았으며 이메일, 전화번호, 비공개 URL, 주민등록번호만 GateLM 유형으로 매핑했다.
+
+| 구성 | exact pass | false positive 사례 | false negative 사례 | p95 |
+|---|---:|---:|---:|---:|
+| 기존 rules-only | 80/103 | 4 | 21 | 0ms |
+| rules + Presidio, 주민번호 임계값 0.5 | 82/103 | 4 | 19 | 1ms |
+| rules + Presidio, 주민번호 체크섬 통과만 허용 | 80/103 | 4 | 21 | 1ms |
+
+느슨한 구성의 exact recovery 2건은 모두 숫자 뒤에 한글 조사가 바로 붙은 주민등록번호 사례였다. Presidio가 채택한 주민등록번호 결과는 8개 사례 9건이었지만, 평가 fixture가 체크섬 통과 결과가 아니어서 임계값을 1.0으로 높이면 accepted 기여가 0건이 됐다. 따라서 +2를 Presidio의 production 품질 증거로 사용할 수 없다.
+
+단독 supported-type 검사에서도 보수적 구성은 74/103만 정확히 일치했고 false positive 사례 13건, false negative 사례 29건이었다. 예약 테스트 도메인과 corpus의 detector-type 기대값이 Presidio의 URL·이메일 의미와 완전히 같지 않아 이 단독 수치는 모델 일반 정확도가 아니라 통합 위험을 찾는 자료로만 사용한다.
+
+원인은 기존 주민등록번호 규칙이 단어 경계 `\b`를 사용해 숫자와 한글 조사가 모두 단어 문자로 취급되는 경우를 놓친 것이었다. 이를 숫자 앞뒤에 다른 숫자가 없는지를 검사하는 경계로 바꾼 결과, 별도 dependency와 모델 호출 없이 rules-only가 `82/103`, false positive 4건, false negative 19건으로 개선됐다. AI Safety 탐지 서비스 unittest 21건도 모두 통과했다.
+
+결정은 다음과 같다.
+
+1. Presidio dependency와 runtime은 현재 제품에 추가하지 않는다.
+2. 한글 조사 인접 주민등록번호 누락은 기존 빠른 규칙에서 수정한다.
+3. Presidio는 실제 한국어 holdout과 GateLM detector taxonomy에 맞춘 평가셋이 생길 때 다시 비교한다.
+
+원문·탐지값·span을 저장하지 않은 로컬 evidence는 Git-ignored 경로에 있다.
+
+```text
+.tmp/presidio-screening-20260716/
+.tmp/presidio-screening-strict-20260716/
+.tmp/rrn-boundary-screening-20260716/
+```
+
+## 6. 지연시간과 메모리 결과
+
+### 6.1 모델 개입 요청
+
+평가 보고서에는 케이스별 model invocation flag가 없으므로 `latency > 10ms`인 케이스를 모델 개입 요청으로 추정했다. 따라서 아래 값은 탐색용이다.
+
+| 구성 | 추정 모델 개입 케이스 | p50 | p95 | 최대 |
+|---|---:|---:|---:|---:|
+| 규칙 + OpenAI, 1,000건 평가 | 344 | 195ms | 301ms | 866ms |
+| 규칙 + 두 모델, 30건 subset | 10 | 309ms | 414ms | 414ms |
+
+두 번째 모델 추가는 이 subset에서 p50을 약 114ms 증가시켰지만 supported type true positive는 늘리지 못했다.
+
+### 6.2 50건 전체 그룹 벤치마크
+
+| 지표 | 결과 |
+|---|---:|
+| 전체 p50 | 0ms |
+| 전체 p95 | 356ms |
+| 영문 PII 그룹 최대 | 3,686ms |
+| 혼합 경계 그룹 p95 | 356ms |
+| timeout | 0/50, request timeout 5,000ms 기준 |
+| Python benchmark process peak RSS | 1,465.31MiB |
+
+전체 p50이 0ms인 이유는 모델이 빠르기 때문이 아니라 안전 문장과 규칙 충분 문장이 과반을 차지해 모델을 호출하지 않았기 때문이다. 모델 지연 목표는 반드시 model invocation이 관측된 전용 corpus로 별도 측정해야 한다.
+
+### 6.3 시작 비용과 처리량
+
+- 두 모델을 실제 로드한 최신 단일 smoke 관찰에서 startup warmup은 `29,136.56ms`였다.
+- 같은 관찰의 RSS 증가는 `657.82MiB`였다.
+- OS file cache가 이미 따뜻한 이후 벤치마크에서도 첫 PII 모델 활성 요청은 최대 `3,686ms`였다.
+- KoELECTRA graph는 다중 padded batch에서 accepted detection 결과가 달라져 현재 `max_safe_batch_size=1`이다.
+- 두 모델을 사용한 1,000건 순차 evaluator는 900초 안에 끝나지 않았다.
+
+startup warmup과 RSS 값은 1회 관찰이며 repeated-cold p50/p95가 아니다. 900초 초과도 production 요청 1개의 지연과 동일하지 않지만, 현재 evaluator 처리량과 개발 반복 속도가 좋지 않다는 근거다.
+
+### 6.4 3단계 OpenAI-only 실측
+
+측정 revision은 `468d3fe1df0df3d330a1196989ef2c52b4a27283`이다. 모델 release 12개 파일을 manifest checksum으로 다시 검증한 aggregate evidence와 같은 revision을 benchmark와 cold evidence에 결합했다. 설정은 OpenAI ONNX 단독, ML 허용 유형 `phone_number,secret`, additional model 없음, preload 사용이다.
+
+첫 100건 진단에서는 runner의 warmup 10건이 모두 rules-only라 첫 모델 요청에 cold load가 섞이는 결함을 발견했다. 이를 `InProcessBenchmarkTarget.create()`가 service `warmup()`을 먼저 호출하도록 수정하고 회귀 테스트를 추가했다. 이 진단 수치는 최종 warm 근거에서 제외했다.
+
+| 항목 | ONNX intra-op 4 최종값 | 오늘 기준 | 판정 |
+|---|---:|---:|---|
+| 전체 측정 요청 | 300 | - | - |
+| 성공한 model-active 요청 | 22 | 최소 20 | 통과 |
+| model invocation | 22 | 관측 필수 | 통과 |
+| accepted model detection | 11 | 관측값 | - |
+| model-active warm p50 | 248ms | - | - |
+| model-active warm p95 | 627ms | 목표 250ms 이하 | 실패 |
+| 750ms timeout | 2건 | 0건 | 실패 |
+| 전체 target p95 | 237ms | 참고값 | - |
+| process peak RSS | 1,295.46MiB | 1GiB 이하 | 실패 |
+| raw-value exposure gate | pass | pass | 통과 |
+
+전체 p95 237ms는 rules-only 276건이 섞인 값이어서 모델 성능을 대표하지 않는다. production 판정에는 model-active p95 627ms를 사용한다.
+
+정확도 경로를 바꾸지 않는 비교로 intra-op thread를 4에서 1로 낮췄지만 model-active p50 634ms, p95 746ms, timeout 7건, peak RSS 1,278.78MiB로 악화됐다. 따라서 thread 1 설정은 채택하지 않고 4를 유지한다.
+
+fresh process cold 3회 결과는 모두 시작에 성공했고 cold p50 4,301ms, cold p95 5,027ms, startup failure rate 0%, preload 직후 peak RSS 435.996MiB였다. 반복 추론 후 RSS가 1,295.46MiB까지 증가했으므로 preload 직후 메모리만으로 capacity를 산정하면 안 된다.
+
+구현 검증은 AI Service 전체 274건 통과·3건 skip, benchmark 집중 19건 통과, self-host verifier 9건 통과, adapter 회귀 33건 통과다. Gateway optional dependency readiness 회귀 1건도 통과했다. 로컬 listener가 필요한 timeout fallback 3건은 sandbox 포트 제한과 권한 검토 timeout 때문에 이번 세션에서 재실행하지 못했으며, 실제 Docker Compose smoke와 배포 Tenant Chat E2E도 아직 근거가 없다.
+
+## 7. 확인된 한계
+
+### 7.1 모델 자체의 한계
+
+- 두 모델 모두 공개 checkpoint를 그대로 사용하며 GateLM fine-tuning이 없다.
+- OpenAI 모델 accepted label은 account number, email, phone, postal address, private date, private URL, secret으로 제한된다.
+- KoELECTRA accepted label은 email, phone, resident registration number로 제한된다.
+- 이름과 조직명 label은 두 모델 모두 현재 integration allowlist에 없다.
+- 한국어 대화체, 띄어쓰기 오류, 축약, 완곡 표현, 문맥 의존 표현에 대한 별도 검증 근거가 없다.
+
+### 7.2 GateLM 통합 구현의 한계
+
+- KoELECTRA span 병합은 수정됐지만 checkpoint 자체의 주변 문장 오탐이 남아 hot path에서 제외했다.
+- KoELECTRA는 정확도 보존 때문에 내부 batch를 1로 제한하며, 품질 기여 없이 비용만 추가했다.
+- 4-way runner는 프로필별 결과를 즉시 보존하지만 기존 단일 full evaluator의 중간 저장 방식까지 바꾸지는 않았다.
+- latency benchmark v3는 model invocation·accepted detection·model-active p50/p95를 분리하지만 동시성·지속 부하를 측정하지 않는다.
+- 선택된 OpenAI 허용목록은 설정→adapter→service 출력에 이중 적용되고 self-host 예제에도 고정됐다. 다만 실제 Compose runtime smoke는 Docker 실행 환경에서 아직 확인하지 못했다.
+
+### 7.3 평가 근거의 한계
+
+- untouched holdout이 없다.
+- span-level 정답이 없다.
+- 4-way 자동 비교는 추가됐지만 합성 103건 screening이며 untouched holdout이 아니다.
+- false redaction이 사용자 문장 의미를 얼마나 훼손하는지 평가하지 않는다.
+- cold start 3회 자료는 생겼지만 동시 요청과 sustained throughput 자료는 없다.
+- 실제 Tenant Chat private 경로의 enforce, Provider 억제, fallback, DB·Redis·로그 비저장 E2E evidence가 없다.
+
+### 7.4 운영 한계
+
+- 이번 CPU-only 환경에서 선택 후보의 model-active warm p95는 627ms이고 750ms timeout도 2건 발생했다.
+- 반복 추론 process peak RSS가 약 1.27GiB이므로 Chat API/Gateway process에 모델을 직접 포함하기 어렵다.
+- 750ms Gateway timeout은 목표 지연시간이 아니라 장애 시 fallback 경계다.
+- 모델을 늘릴수록 정확도 기여보다 latency와 메모리가 먼저 증가할 수 있다.
+
+## 8. 현재 권고 운영 자세
+
+품질 후보 자체를 삭제할 필요는 없지만, 현재 production enforce로 승격하면 안 된다.
+
+1. 규칙을 최소 guardrail과 빠른 1차 경로로 유지한다.
+2. 모델은 규칙이 덮지 못한 후보에만 호출하는 현재 candidate gate를 유지한다.
+3. KoELECTRA는 이번 screening에서 No-Go이므로 additional model 설정에서 제외한다.
+4. OpenAI 모델은 전화번호와 secret만 허용하되, 3단계 성능 gate 실패 상태이므로 production 기본값과 enforce 전환을 보류한다.
+5. 이름·조직명은 모델 탐지라고 표시하지 않고 규칙 결과로만 보고한다.
+6. sidecar 장애와 timeout은 원문을 저장하지 않고 bounded reason code와 aggregate counter로만 관측한다.
+7. 실제 고객 prompt를 모델 개선용 중앙 로그로 수집하지 않는다.
+8. 실제 서비스는 당분간 rules-only를 안전 기본값으로 유지하고, 새 runtime이나 더 작은 checkpoint가 같은 품질을 보존하면서 gate를 통과할 때 다시 승격 평가한다.
+
+## 9. 발전 원칙
+
+### 9.1 학습보다 먼저 연결 정확성을 고친다
+
+KoELECTRA adapter 결함과 checkpoint 품질 문제는 분리됐다. 현재 checkpoint는 추가 기여가 없고 오탐 회귀가 있으므로 즉시 fine-tuning하지 않고 hot path에서 제외한다. 이후 재검토 순서는 아래와 같다.
+
+```text
+adapter correctness
+-> 모델별 독립 ablation
+-> threshold/overlap 정책
+-> frozen holdout
+-> latency 최적화
+-> Tenant Chat E2E
+-> 그 후에도 부족할 때 fine-tuning
+```
+
+### 9.2 원문 로그 없이 평가 데이터를 만든다
+
+- synthetic template과 승인된 가상 값만 사용한다.
+- 한국어 대화체, 오타, 띄어쓰기, 기호 삽입, hard negative를 별도 생성한다.
+- 고객사가 원할 경우 고객사 환경 안에서만 별도 governed evaluation을 수행하고 중앙 수집을 기본값으로 두지 않는다.
+- threshold 조정용 development set과 한 번만 여는 frozen holdout을 분리한다.
+- report에는 aggregate와 case ID만 남기고 raw rendered prompt와 detected value를 남기지 않는다.
+
+## 10. 오늘 하루 집중 구현 계획
+
+가용 시간은 오늘 밤을 포함한 최대 20~24시간이며, 목표 작업량은 약 3인일로 본다. 다만 한 사람이 수행하므로 선행 작업이 끝나야 다음 작업을 할 수 있다. 따라서 기능을 넓히지 않고 **KoELECTRA 결함 수정, 모델 기여도 판정, 핵심 성능·E2E 근거 확보, 기존 배포 서비스 연결과 원복 검증**에만 집중한다.
+
+오늘의 완료 목표는 production 승격이 아니라 아래 세 선택지 중 하나를 근거로 확정하는 것이다.
+
+```text
+1. rules-only 유지
+2. rules + OpenAI만 유지
+3. rules + OpenAI + 수정된 KoELECTRA 유지
+```
+
+### 10.1 오늘 반드시 구현할 범위
+
+| 순서 | 경과 시간 | 작업 | 산출물 | 중단 기준 |
+|---:|---:|---|---|---|
+| 1 | 0~1시간 | 현재 실패 5건을 regression test로 먼저 고정 | KoELECTRA token fragmentation 재현 테스트 | 1시간 안에 재현되지 않으면 기존 report case로 fixture 고정 |
+| 2 | 1~5시간 | KoELECTRA BIO/BIOES span 병합과 중복 제거 | 이메일·전화·주민번호 decoder와 unit test | 4시간 안에 안정화되지 않으면 KoELECTRA를 배포 설정에서 제외하고 다음 단계 진행 |
+| 3 | 5~8시간 | IP 퇴행 최소 감사와 고정 subset 4-way ablation | rules/OpenAI/KoELECTRA/combined 비교표 | 원인 분석은 1시간, 두 모델 평가는 60분을 넘기지 않음 |
+| 4 | 8~10시간 | 유형별 모델 유지·제외 결정과 threshold 1회 조정 | 오늘 배포할 모델 조합 확정 | 반복 threshold 탐색 금지 |
+| 5 | 10~12시간 | model-active warm latency와 cold 3회 | p50/p95/max, peak RSS, startup 실패 aggregate | 정확도 결과가 달라지는 최적화는 폐기 |
+| 6 | 12~15시간 | 관련 회귀와 배포 후보 이미지 구성 | 동일 candidate tag의 서비스 이미지와 배포 manifest | 코드 실패가 남으면 배포 금지 |
+| 7 | 15~17시간 | DB backup, migration 호환성, 모델 번들 전달 경로 확인 | 이전 image tag·env snapshot·backup·bundle secret | rollback 재현이 안 되면 enforce 금지 |
+| 8 | 17~19시간 | 배포 서비스에 candidate image와 sidecar를 shadow로 연결 | `pii-model-init`, AI Service ready, Gateway sidecar 연결 | health/readiness 실패 시 이전 tag로 원복 |
+| 9 | 19~21시간 | deployed Tenant Chat synthetic E2E 후 enforce 전환 | mask-once, redact, block, fallback, Provider 억제 결과 | 하나라도 실패하면 sidecar disabled 또는 shadow 유지 |
+| 10 | 21~23시간 | enforce 상태 aggregate 관측과 rollback drill | timeout/5xx/latency와 즉시 rules-only 원복 증거 | gate 초과 시 즉시 원복 |
+| 11 | 23~24시간 | 보고서 갱신과 최종 커밋 정리 | 실제 배포 조합, 결과, 남은 위험 | 새 기능 추가 금지 |
+
+### 10.2 오늘 평가할 고정 subset
+
+새 300건 holdout을 오늘 만들지 않는다. 기존 1,000건 corpus에서 아래 조건으로 80~120건의 versioned screening subset을 고정한다.
+
+- 이메일, 전화번호, 주민등록번호의 규칙 성공·규칙 누락 사례
+- private URL과 secret의 OpenAI 개선·오탐 사례
+- 이름·조직명과 IP 주소의 비지원 유형 퇴행 사례
+- 한글과 영문을 모두 포함한다.
+- PII가 아닌 유사 숫자·URL·이름 형태의 hard negative를 포함한다.
+- selection case ID와 corpus checksum만 저장하고 rendered prompt는 보고서에 저장하지 않는다.
+
+이 subset은 오늘 모델 선택을 위한 screening 자료이며 untouched holdout이나 production evidence로 부르지 않는다.
+
+### 10.3 오늘의 KoELECTRA 유지 기준
+
+아래 조건을 모두 만족할 때만 KoELECTRA를 hot path에 남긴다.
+
+1. 현재 이메일 문제 5건의 detected count가 각각 `1`이 된다.
+2. OpenAI 단독 통과 사례가 KoELECTRA 추가 때문에 실패하지 않는다.
+3. 전화번호 또는 주민등록번호에서 OpenAI 단독보다 추가 true positive가 최소 1건 발생한다.
+4. OpenAI 단독 대비 새 false positive와 비지원 유형 퇴행이 발생하지 않는다.
+5. model-active warm p95 추가 비용이 50ms 이하다.
+
+하나라도 실패하면 모델 파일을 삭제하지는 않지만, 추가 모델 환경설정에서 제외하거나 shadow 전용 후보로 내린다.
+
+2단계 결과 KoELECTRA는 1번, 2번, 3번을 충족하지 못해 추가 모델 환경설정에서 제외했다. 5번 성능 비교는 품질 No-Go가 먼저 확정돼 수행 대상에서 제외한다.
+
+### 10.4 오늘의 OpenAI 모델 유지 기준
+
+OpenAI 모델은 전체 label을 한꺼번에 승인하지 않고 detector type별로 판단한다.
+
+- 전화번호와 secret처럼 false negative를 줄인 유형은 유지 후보로 둔다.
+- 이메일처럼 규칙만으로 이미 충분한 유형은 실제 추가 기여가 있는지 확인한다.
+- private URL처럼 recall과 false positive가 함께 증가한 유형은 threshold를 1회 조정한다.
+- 조정 후에도 hard-negative false positive가 rules-only보다 증가하면 해당 label을 hot path에서 제외한다.
+- 모델 비지원 유형의 규칙 결과를 약화시키면 병합 정책을 수정하기 전까지 enforce하지 않는다.
+
+2단계 결과 전화번호와 secret만 유지 조건을 통과했다. 이 두 유형으로 제한한 재평가에서 exact pass `+5`, false positive 변화 `0`, false negative `-5`, 비지원 유형 회귀 `0`을 확인했다.
+
+### 10.5 오늘 제안 성능 기준
+
+최종 production threshold가 아니라 오늘 구현의 engineering 기준이다.
+
+- preload 완료 전 `/readyz` 성공 금지
+- 첫 사용자 요청에서 model load 금지
+- model-active warm p95 `250ms 이하`를 목표로 하되 정확도를 바꾸지 않는다.
+- process peak RSS `1GiB 이하`를 우선 목표로 측정한다.
+- 750ms는 목표가 아니라 fallback 경계로 유지한다.
+- timeout 또는 sidecar 장애 시 local P0 결과보다 안전성이 낮아지면 안 된다.
+
+3단계 결과는 model-active warm p95 627ms, process peak RSS 1,295.46MiB, timeout 2건으로 세 성능 조건을 충족하지 못했다. preload와 cold start 3회 자체는 성공했지만 이 결과만으로 성능 실패를 상쇄할 수 없다.
+
+### 10.6 배포 전 필수 준비물
+
+기존 배포 서비스에 연결하려면 구현 완료 외에 아래 값과 권한이 준비돼 있어야 한다.
+
+1. 배포 서버 또는 배포 파이프라인 접근 권한
+2. 현재 운영 image tag와 오늘 사용할 immutable candidate tag
+3. 모든 app image를 올릴 container registry 경로
+4. 현재 `.env`의 안전한 backup과 이전 tag 기록
+5. PostgreSQL backup 실행·복구 권한
+6. 모델 번들을 전달할 승인된 HTTPS object URL과 Compose secret 파일
+7. synthetic 요청만 사용하는 배포 확인용 tenant/account
+8. Gateway·AI Service health/readiness와 sanitized aggregate를 확인할 권한
+
+모델 번들 URL은 `.env`, 명령행, 보고서, support log에 적지 않는다. `deploy/selfhost/secrets/pii-model-bundle-url` 같은 Compose secret 파일로만 전달한다.
+
+### 10.7 같은 밤 배포 순서
+
+```text
+1. 현재 image tag, env, DB를 backup
+2. 오늘 code revision으로 동일 candidate tag의 app image를 build/push
+3. 모델 조합에 따라 AI Service primary/additional model env 확정
+4. pii-model-init가 bundle과 manifest checksum을 검증
+5. AI Service preload 완료와 /readyz 성공 확인
+6. Gateway를 sidecar enabled + shadow로 시작
+7. synthetic probe로 연결, 지연, error, 원문 비저장 확인
+8. deployed Tenant Chat에서 redact/block/Provider 억제 확인
+9. 모든 gate 통과 시 GATEWAY_AI_SAFETY_SIDECAR_MODE=enforce로 전환
+10. synthetic probe를 다시 실행하고 aggregate를 관측
+11. 문제 발생 시 sidecar disabled로 즉시 rules-only 원복
+```
+
+Self-host 환경에서 필요한 주요 설정은 다음과 같다. 실제 값과 secret은 문서에 기록하지 않는다.
+
+```text
+GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true
+GATEWAY_AI_SAFETY_SIDECAR_MODE=shadow -> 검증 후 enforce
+GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS=750
+AI_SERVICE_INSTALL_ML_DEPS=true
+AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=<pinned primary model path>
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=<오늘 유지 결정된 경우만 설정>
+```
+
+### 10.8 배포 전환 gate
+
+shadow에서 enforce로 넘어가려면 아래 조건을 모두 만족해야 한다.
+
+- `pii-model-init` checksum 검증 성공
+- AI Service `/readyz` 성공 후 첫 요청에 model load가 발생하지 않음
+- Gateway health/readiness에서 sidecar 연결이 관측됨
+- synthetic model-active 요청 20건에서 5xx와 timeout 0건
+- synthetic model-active p95 500ms 이하이고 750ms 초과 0건
+- 알려진 이메일·전화번호·주민등록번호 결과가 로컬 평가와 동일함
+- redact 결과만 encrypted user content와 Provider prompt에 사용됨
+- block 요청에서 Provider 호출 0건
+- sidecar 장애 probe에서 local P0 fallback 성공
+- DB, Redis, structured log, metric label 원문 노출 0건
+
+이 gate는 production-grade 정확도 승격이 아니라 오늘 제한 배포의 최소 안전 조건이다.
+
+3단계 로컬 판정에서는 model-active p95와 timeout 조건이 실패했고, 실제 Gateway fallback 3건·Docker smoke·Tenant Chat E2E는 실행 근거가 없다. 따라서 shadow→enforce 전환 gate는 **실패/미완료**이며 배포 완료로 기록하지 않는다.
+
+### 10.9 즉시 rollback 순서
+
+문제가 생기면 정확도 분석보다 먼저 요청 경로를 안전하게 되돌린다.
+
+```text
+1차: GATEWAY_AI_SAFETY_SIDECAR_ENABLED=false로 변경하고 Gateway 재시작
+2차: 문제가 모델 결과에만 있으면 shadow로 내려 규칙 결과만 Provider에 적용
+3차: code regression이면 GATELM_IMAGE_TAG를 이전 tag로 되돌리고 stack 재시작
+4차: migration 문제면 배포 전 DB backup과 공식 restore 절차 사용
+```
+
+이번 migration은 기존 message에 기본 provenance를 추가하고 schema v1·v2를 함께 허용하는 additive 형태지만, 이전 image로 rollback 가능한지는 배포 전 smoke로 직접 확인한다. 추측만으로 DB rollback 가능을 선언하지 않는다.
+
+## 11. 오늘 범위에서 제외할 작업
+
+아래 항목은 오늘 시작하지 않는다. 하나라도 섞으면 핵심 결함 수정과 최종 모델 선택이 끝나지 않을 가능성이 높다.
+
+- 새 모델 다운로드 또는 세 번째 모델 연결
+- KoELECTRA 또는 OpenAI 모델 fine-tuning
+- 300건 이상 새 frozen holdout 제작
+- 고객 원문·로그 수집 기능
+- 이름·조직명 ML detector 신규 구현
+- Admin UI와 정책 편집 화면 확장
+- production promotion owner policy 확정
+- full concurrency/load test와 장시간 soak test
+- KoELECTRA 다중 batch 최적화
+- evaluator의 범용 리팩터링
+
+현재 배포 서비스의 enforce/rollback 검증은 오늘 필수 예정 범위였지만, 3단계 성능 gate가 먼저 실패해 실제 배포 전환은 수행하지 않았다. 성능 실패 상태에서 배포 사실만 만들기 위해 다음 gate를 건너뛰지 않는다.
+
+## 12. 오늘 이후로 미루는 발전 계획
+
+오늘 결과에서 모델 기여가 입증된 경우에만 다음 작업을 후속으로 남긴다.
+
+### 12.1 품질 근거 보강
+
+- development set과 분리된 최소 300건 frozen synthetic holdout
+- 10개 PII 유형, `ko-KR`·`en-US`, span-level 정답
+- confidence interval과 false-redaction 영향 평가
+- 실제 고객 로그 없이 synthetic·승인 데이터만 사용
+
+### 12.2 운영 근거 보강
+
+- 독립 process repeated-cold 5회 이상
+- model-active 동시 요청과 sustained throughput
+- production-like Tenant Chat private 경로 E2E evidence
+- artifact checksum, model revision, full Git revision binding
+
+### 12.3 필요할 때만 모델 학습
+
+오늘 adapter 수정 후에도 특정 유형의 recall이 부족하고 모델 추가가 규칙 확장보다 유리할 때만 학습한다.
+
+- 한국어 전화번호·주민등록번호 변형은 KoELECTRA 재학습 후보로 둔다.
+- 이름·조직명은 현재 label 범위 밖이므로 PER/ORG 모델을 별도로 검토한다.
+- 학습, development, frozen holdout을 분리한다.
+- 학습 후 ONNX export, QInt8, ablation, latency, memory, E2E를 다시 검증한다.
+
+### 12.4 오늘 바로 수정할 파일
+
+| 우선순위 | 작업 | 주요 대상 |
+|---:|---|---|
+| P0 | KoELECTRA BIO span aggregation | `apps/ai-service/app/adapters/safety/privacy_filter_adapter.py` |
+| P0 | token fragmentation regression test | `apps/ai-service/app/tests/domain/safety/test_privacy_filter_adapter.py` |
+| P0 | IP와 overlap 퇴행 test | `apps/ai-service/app/tests/services/test_ai_safety_detector_service.py` |
+| P0 | adapter invocation·contribution aggregate | `apps/ai-service/app/services/ai_safety_master_eval_runner.py` |
+| P1 | 고정 screening subset과 4-way 실행 | master corpus runner 및 별도 safe fixture |
+| P1 | model-active latency corpus | latency benchmark fixture/runner |
+| P1 | Tenant Chat 핵심 E2E | Gateway·Chat API·AI Service 통합 test harness |
+| P0 | 선택 모델 조합을 지원하는 배포 smoke | `deploy/selfhost/scripts/pii-model-smoke.sh` |
+| P0 | candidate image와 즉시 rollback 절차 | `deploy/selfhost/docker-compose.yml`, `.env`, upgrade runbook |
+
+## 13. 최종 판단
+
+1단계 adapter correctness, 2단계 모델별 기여도 분리, 3단계 제한 runtime과 성능 측정을 완료했다. 현재 선택은 다음과 같다.
+
+```text
+유지: Gateway/AI Service 규칙 backstop
+품질 후보로만 유지: OpenAI privacy-filter ONNX
+ML 허용 유형: phone_number, secret
+제외: KoELECTRA additional model
+production enforce: No-Go
+현재 안전 기본값: rules-only
+```
+
+선택 후보는 rules-only보다 exact pass가 5건 증가하고 false positive는 증가하지 않았지만, 이 수치는 합성 screening 결과다. 실제 OpenAI-only 성능은 model-active p95 627ms, timeout 2/300, peak RSS 1,295.46MiB로 오늘 기준을 통과하지 못했다. 모델을 연결할 수 있는 코드와 self-host 설정은 완성됐지만, 연결 가능과 운영 승인은 같은 뜻이 아니다.
+
+따라서 1~3단계 구현은 완료됐으나 기존 배포 서비스에 production enforce로 붙이는 단계는 완료되지 않았다. 다음 승격 시도는 더 작은 모델 또는 동일 모델의 실제 구조적 최적화로 품질 보존을 먼저 입증하고, model-active 성능·Gateway fallback·Docker smoke·Tenant Chat synthetic E2E를 모두 다시 통과해야 한다.

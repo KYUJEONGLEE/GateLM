@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import subprocess
@@ -30,6 +31,10 @@ from app.domain.ai_safety_benchmark.types import (
     RUNTIME_PROFILES,
     BenchmarkError,
 )
+from app.domain.ai_safety_promotion import (
+    EvidenceBindingError,
+    binding_from_verified_artifact_evidence,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -37,7 +42,7 @@ DEFAULT_CORPUS_PATH = (
     REPO_ROOT / "docs" / "ai-safety-lab" / "fixtures" / "resource-latency-benchmark-corpus.jsonl"
 )
 DEFAULT_OUT_DIR = REPO_ROOT / "reports" / "ai-safety-lab"
-DEFAULT_ENDPOINT_URL = f"http://127.0.0.1:8000{DEFAULT_ENDPOINT_PATH}"
+DEFAULT_ENDPOINT_URL = f"http://127.0.0.1:8001{DEFAULT_ENDPOINT_PATH}"
 TargetFactory = Callable[[argparse.Namespace], BenchmarkTarget]
 
 
@@ -140,6 +145,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional git sha override for reproducible tests.",
     )
+    provenance = parser.add_mutually_exclusive_group()
+    provenance.add_argument(
+        "--artifact-verification",
+        type=Path,
+        default=None,
+        help=(
+            "Successful aggregate artifact-verifier output. Required for production promotion "
+            "evidence unless an isolated test binding is supplied."
+        ),
+    )
+    provenance.add_argument(
+        "--evidence-binding",
+        type=Path,
+        default=None,
+        help=(
+            "Direct versioned binding for isolated tests/evidence work only. Checksum verification "
+            "is never inferred."
+        ),
+    )
     parser.add_argument(
         "--no-fail-on-gate",
         action="store_true",
@@ -196,13 +220,17 @@ def run(
             python_version=platform.python_version(),
             torch_version=optional_package_version("torch"),
             transformers_version=optional_package_version("transformers"),
+            evidence_binding=load_evidence_binding(
+                artifact_verification=args.artifact_verification,
+                evidence_binding=args.evidence_binding,
+            ),
         )
         json_path, markdown_path = write_reports(
             report,
             args.out,
             strict_security_scan=args.strict_security_scan,
         )
-    except (BenchmarkError, OSError, UnicodeError) as exc:
+    except (BenchmarkError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 2
 
@@ -259,6 +287,25 @@ def default_model_id() -> str:
     return value
 
 
+def load_evidence_binding(
+    *,
+    artifact_verification: Path | None,
+    evidence_binding: Path | None,
+) -> dict | None:
+    path = artifact_verification or evidence_binding
+    if path is None:
+        return None
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise BenchmarkError("provenance evidence must be a JSON object")
+    if artifact_verification is None:
+        return value
+    try:
+        return binding_from_verified_artifact_evidence(value)
+    except EvidenceBindingError as exc:
+        raise BenchmarkError("artifact verification evidence is invalid") from exc
+
+
 def default_run_id() -> str:
     return f"ai-safety-latency-{uuid.uuid4().hex[:12]}"
 
@@ -266,7 +313,7 @@ def default_run_id() -> str:
 def git_sha() -> str:
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+            ["git", "rev-parse", "HEAD"],
             cwd=REPO_ROOT,
             text=True,
             capture_output=True,

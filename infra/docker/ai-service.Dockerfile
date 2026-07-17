@@ -1,5 +1,5 @@
 ARG PYTHON_VERSION=3.12
-ARG AI_SERVICE_INSTALL_ML_DEPS=false
+ARG AI_SERVICE_INSTALL_ML_DEPS=true
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
@@ -22,7 +22,7 @@ COPY apps/ai-service/app ./app
 
 RUN pip install --no-cache-dir --requirement requirements-rag-extraction.lock \
   && if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
-    pip install --no-cache-dir ".[ml]"; \
+    pip install --no-cache-dir ".[onnx]"; \
   else \
     pip install --no-cache-dir --no-deps .; \
   fi \
@@ -45,7 +45,9 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN groupadd --system gatelm \
-  && useradd --system --gid gatelm --home-dir /nonexistent --shell /usr/sbin/nologin gatelm
+  && useradd --system --gid gatelm --home-dir /nonexistent --shell /usr/sbin/nologin gatelm \
+  && mkdir -p /models \
+  && chown gatelm:gatelm /models
 
 COPY --from=builder --chown=gatelm:gatelm /opt/venv /opt/venv
 

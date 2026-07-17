@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/pii-tenant-chat-model-e2e.schema.json",
+  "title": "Aggregate Tenant Chat PII model E2E evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "aggregateOnly",
+    "tenantChatPathVerified",
+    "modelInvocationObserved",
+    "enforceRedactionVerified",
+    "blockProviderSuppressionVerified",
+    "fallbackObserved",
+    "noRawPersistenceVerified",
+    "evidenceBinding"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "pii-tenant-chat-model-e2e.v1"},
+    "aggregateOnly": {"const": true},
+    "tenantChatPathVerified": {"const": true},
+    "modelInvocationObserved": {"const": true},
+    "enforceRedactionVerified": {"const": true},
+    "blockProviderSuppressionVerified": {"const": true},
+    "fallbackObserved": {"const": true},
+    "noRawPersistenceVerified": {"const": true},
+    "evidenceBinding": {"$ref": "pii-promotion-evidence-binding.schema.json"}
+  }
+}

@@ -245,14 +245,13 @@ Initial `openai/privacy-filter` label mapping:
 |---|---|---|
 | `private_email` | `email` | `redacted` |
 | `private_phone` | `phone_number` | `redacted` |
-| `private_person` | `person_name` | `redacted` |
 | `private_address` | `postal_address` | `redacted` |
 | `account_number` | `account_number` | `blocked` |
 | `private_date` | `private_date` | `redacted` |
 | `private_url` | `private_url` | `redacted` |
 | `secret` | `secret` | `blocked` |
 
-For `amoeba04/koelectra-small-v3-privacy-ner`, `ORG-B` and `ORG-I` normalize to the GateLM detector type `organization_name` and use the `redacted` action expectation.
+For the pinned `amoeba04/koelectra-small-v3-privacy-ner` bundle, accepted labels are email, phone number, and resident registration number. Person-name and organization-name evaluation rows are rule-backstop evidence, not model evidence.
 
 Because `openai/privacy-filter` starts in `shadow`, blocked action candidates from this model do not prove provider/cache bypass. Provider/cache bypass remains a regex/rule enforce or Gateway integration evidence claim.
 

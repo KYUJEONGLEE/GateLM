@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,10 @@ from app.domain.ai_safety_benchmark.types import (
     BenchmarkError,
     BenchmarkSample,
     ResourceSummary,
+)
+from app.domain.ai_safety_promotion.binding import (
+    EvidenceBindingError,
+    validate_evidence_binding,
 )
 
 
@@ -75,6 +80,7 @@ def build_report(
     python_version: str | None = None,
     torch_version: str | None = None,
     transformers_version: str | None = None,
+    evidence_binding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     generated = generated_at or datetime.now(tz=timezone.utc)
     selected_runtime_result = build_runtime_result(
@@ -91,7 +97,7 @@ def build_report(
     ]
     case_group_results = build_case_group_results(samples)
     decision_summary = build_decision_summary(selected_runtime_result)
-    return {
+    report = {
         "metadata": {
             "reportVersion": REPORT_VERSION,
             "runId": run_id,
@@ -117,6 +123,15 @@ def build_report(
         "decisionSummary": decision_summary,
         "fallbackRecommendation": build_fallback_recommendation(selected_runtime_result),
     }
+    if evidence_binding is not None:
+        try:
+            normalized_binding = validate_evidence_binding(evidence_binding)
+        except EvidenceBindingError as exc:
+            raise BenchmarkError("benchmark evidence binding is invalid") from exc
+        if git_sha != normalized_binding["gitRevision"]:
+            raise BenchmarkError("benchmark Git revision does not match evidence binding")
+        report["evidenceBinding"] = normalized_binding
+    return report
 
 
 def build_runtime_result(
@@ -131,37 +146,88 @@ def build_runtime_result(
         for sample in samples
         if sample.sidecar_latency_ms is not None and sample.sidecar_outcome == "success"
     ]
-    full_latencies = [sample.full_safety_latency_ms for sample in samples]
+    target_latencies = [sample.target_latency_ms for sample in samples]
+    model_active_samples = [
+        sample
+        for sample in samples
+        if sample.execution_mode == "hybrid"
+        and sample.model_invocation_count is not None
+        and sample.model_invocation_count > 0
+    ]
+    model_active_sidecar_latencies = [
+        sample.sidecar_latency_ms
+        for sample in model_active_samples
+        if sample.sidecar_latency_ms is not None and sample.sidecar_outcome == "success"
+    ]
     request_count = len(samples)
     timeout_count = count_matching(samples, "sidecar_outcome", "timeout")
-    fallback_count = count_matching(samples, "fallback_mode", "regex_only")
+    observed_fallback_count = sum(
+        1
+        for sample in samples
+        if sample.fallback_observation == "observed" and sample.fallback_mode == "regex_only"
+    )
+    unobserved_fallback_count = count_matching(
+        samples, "fallback_observation", "not_observed"
+    )
+    unobserved_sidecar_count = count_matching(
+        samples, "sidecar_observation", "not_observed"
+    )
     p95_sidecar = nearest_rank(sidecar_latencies, 0.95)
-    p95_full = nearest_rank(full_latencies, 0.95)
+    p95_target = nearest_rank(target_latencies, 0.95)
     sidecar_gate = sidecar_latency_gate(
         p95_sidecar_latency_ms=p95_sidecar,
         request_count=request_count,
         timeout_count=timeout_count,
-        fallback_count=fallback_count,
+        observed_fallback_count=observed_fallback_count,
+        unobserved_sidecar_count=unobserved_sidecar_count,
         timeout_ms=timeout_ms,
     )
-    full_gate = full_safety_gate(p95_full)
+    target_gate = target_latency_gate(p95_target)
+    evidence_gate = "pass" if unobserved_sidecar_count == 0 else "fail"
     return {
         "runtimeProfile": runtime_profile,
-        "status": runtime_status(sidecar_gate, full_gate),
+        "status": runtime_status(sidecar_gate, target_gate, evidence_gate),
         "requests": request_count,
         "successfulRequests": len(sidecar_latencies),
         "p50SidecarLatencyMs": nearest_rank(sidecar_latencies, 0.50),
         "p95SidecarLatencyMs": p95_sidecar,
-        "p50FullSafetyStageMs": nearest_rank(full_latencies, 0.50),
-        "p95FullSafetyStageMs": p95_full,
+        "p50TargetLatencyMs": nearest_rank(target_latencies, 0.50),
+        "p95TargetLatencyMs": p95_target,
+        "modelActiveRequestCount": len(model_active_samples),
+        "modelInvocationCount": sum(
+            sample.model_invocation_count or 0 for sample in samples
+        ),
+        "acceptedModelDetectionCount": sum(
+            sample.accepted_model_detection_count or 0 for sample in samples
+        ),
+        "p50ModelActiveSidecarLatencyMs": nearest_rank(
+            model_active_sidecar_latencies, 0.50
+        ),
+        "p95ModelActiveSidecarLatencyMs": nearest_rank(
+            model_active_sidecar_latencies, 0.95
+        ),
+        "executionModeCounts": dict(
+            sorted(Counter(sample.execution_mode or "unobserved" for sample in samples).items())
+        ),
         "timeoutCount": timeout_count,
-        "fallbackCount": fallback_count,
+        "observedFallbackCount": observed_fallback_count,
+        "unobservedFallbackCount": unobserved_fallback_count,
+        "unobservedSidecarCount": unobserved_sidecar_count,
         "timeoutRate": round_rate(timeout_count, request_count),
+        "targetKindCounts": dict(sorted(Counter(sample.target_kind for sample in samples).items())),
+        "targetOutcomeCounts": dict(sorted(Counter(sample.target_outcome for sample in samples).items())),
         "sidecarOutcomeCounts": dict(sorted(Counter(sample.sidecar_outcome for sample in samples).items())),
+        "sidecarObservationCounts": dict(
+            sorted(Counter(sample.sidecar_observation for sample in samples).items())
+        ),
         "fallbackModeCounts": dict(sorted(Counter(sample.fallback_mode for sample in samples).items())),
+        "fallbackObservationCounts": dict(
+            sorted(Counter(sample.fallback_observation for sample in samples).items())
+        ),
         "sanitizedErrorCounts": sanitized_error_counts(samples),
         "sidecarLatencyGate": sidecar_gate,
-        "fullSafetyStageGate": full_gate,
+        "targetLatencyGate": target_gate,
+        "evidenceCompletenessGate": evidence_gate,
         "resource": resource_summary.to_report(),
     }
 
@@ -174,16 +240,29 @@ def not_run_runtime_result(runtime_profile: str) -> dict[str, Any]:
         "successfulRequests": 0,
         "p50SidecarLatencyMs": None,
         "p95SidecarLatencyMs": None,
-        "p50FullSafetyStageMs": None,
-        "p95FullSafetyStageMs": None,
+        "p50TargetLatencyMs": None,
+        "p95TargetLatencyMs": None,
+        "modelActiveRequestCount": 0,
+        "modelInvocationCount": 0,
+        "acceptedModelDetectionCount": 0,
+        "p50ModelActiveSidecarLatencyMs": None,
+        "p95ModelActiveSidecarLatencyMs": None,
+        "executionModeCounts": {},
         "timeoutCount": 0,
-        "fallbackCount": 0,
+        "observedFallbackCount": 0,
+        "unobservedFallbackCount": 0,
+        "unobservedSidecarCount": 0,
         "timeoutRate": 0.0,
+        "targetKindCounts": {},
+        "targetOutcomeCounts": {},
         "sidecarOutcomeCounts": {},
+        "sidecarObservationCounts": {},
         "fallbackModeCounts": {},
+        "fallbackObservationCounts": {},
         "sanitizedErrorCounts": {},
         "sidecarLatencyGate": "not_run",
-        "fullSafetyStageGate": "not_run",
+        "targetLatencyGate": "not_run",
+        "evidenceCompletenessGate": "not_run",
         "resource": {
             "peakRssMb": None,
             "avgCpuPct": None,
@@ -197,7 +276,7 @@ def build_case_group_results(samples: list[BenchmarkSample]) -> list[dict[str, A
     results: list[dict[str, Any]] = []
     for case_group in CASE_GROUPS:
         group_samples = [sample for sample in samples if sample.case_group == case_group]
-        latencies = [sample.full_safety_latency_ms for sample in group_samples]
+        latencies = [sample.target_latency_ms for sample in group_samples]
         results.append(
             {
                 "caseGroup": case_group,
@@ -206,40 +285,59 @@ def build_case_group_results(samples: list[BenchmarkSample]) -> list[dict[str, A
                 "p95LatencyMs": nearest_rank(latencies, 0.95),
                 "maxLatencyMs": max(latencies) if latencies else None,
                 "timeoutCount": count_matching(group_samples, "sidecar_outcome", "timeout"),
-                "fallbackCount": count_matching(group_samples, "fallback_mode", "regex_only"),
+                "observedFallbackCount": sum(
+                    1
+                    for sample in group_samples
+                    if sample.fallback_observation == "observed"
+                    and sample.fallback_mode == "regex_only"
+                ),
+                "unobservedSidecarCount": count_matching(
+                    group_samples, "sidecar_observation", "not_observed"
+                ),
             }
         )
     return results
 
 
 def build_decision_summary(runtime_result: dict[str, Any]) -> dict[str, str]:
-    timeout_gate = "pass"
-    if runtime_result["timeoutCount"] != runtime_result["fallbackCount"]:
-        timeout_gate = "fail"
+    timeout_gate = "not_exercised"
+    if runtime_result["timeoutCount"] > 0:
+        timeout_gate = (
+            "pass"
+            if runtime_result["timeoutCount"] == runtime_result["observedFallbackCount"]
+            else "fail"
+        )
     return {
         "sidecarLatencyGate": runtime_result["sidecarLatencyGate"],
-        "fullSafetyStageGate": runtime_result["fullSafetyStageGate"],
+        "targetLatencyGate": runtime_result["targetLatencyGate"],
         "timeoutFallbackGate": timeout_gate,
+        "evidenceCompletenessGate": runtime_result["evidenceCompletenessGate"],
         "rawValueExposureGate": "pass",
     }
 
 
 def build_fallback_recommendation(runtime_result: dict[str, Any]) -> dict[str, str]:
     p95_sidecar = runtime_result["p95SidecarLatencyMs"]
-    p95_full = runtime_result["p95FullSafetyStageMs"]
+    p95_target = runtime_result["p95TargetLatencyMs"]
     sidecar_under = (
         "ml_sidecar_candidate"
-        if p95_sidecar is not None and p95_sidecar <= 300 and runtime_result["timeoutCount"] == 0
+        if p95_sidecar is not None
+        and p95_sidecar <= 300
+        and runtime_result["timeoutCount"] == 0
+        and runtime_result["unobservedSidecarCount"] == 0
         else "not_applicable"
     )
     sidecar_over = (
         "mark_shadow_unavailable_and_use_regex_only_fallback"
-        if p95_sidecar is None or p95_sidecar > 300 or runtime_result["timeoutCount"] > 0
+        if p95_sidecar is None
+        or p95_sidecar > 300
+        or runtime_result["timeoutCount"] > 0
+        or runtime_result["unobservedSidecarCount"] > 0
         else "not_applicable"
     )
-    full_over = (
+    target_over = (
         "do_not_promote_ml_sidecar_to_enforce_path"
-        if p95_full is None or p95_full > 1200
+        if p95_target is None or p95_target > 1200
         else "not_applicable"
     )
     posture = "evidence_only"
@@ -250,7 +348,7 @@ def build_fallback_recommendation(runtime_result: dict[str, Any]) -> dict[str, s
     return {
         "sidecarP95Under300Ms": sidecar_under,
         "sidecarP95Over300Ms": sidecar_over,
-        "fullSafetyP95Over1200Ms": full_over,
+        "targetP95Over1200Ms": target_over,
         "recommendedProductionPosture": posture,
     }
 
@@ -260,32 +358,33 @@ def sidecar_latency_gate(
     p95_sidecar_latency_ms: int | None,
     request_count: int,
     timeout_count: int,
-    fallback_count: int,
+    observed_fallback_count: int,
+    unobserved_sidecar_count: int,
     timeout_ms: int,
 ) -> str:
-    if request_count == 0 or p95_sidecar_latency_ms is None:
+    if request_count == 0 or p95_sidecar_latency_ms is None or unobserved_sidecar_count > 0:
         return "fail"
     if p95_sidecar_latency_ms <= timeout_ms and timeout_count == 0:
         return "pass"
-    if fallback_count == timeout_count:
+    if timeout_count > 0 and observed_fallback_count == timeout_count:
         return "warn"
     return "fail"
 
 
-def full_safety_gate(p95_full_safety_stage_ms: int | None) -> str:
-    if p95_full_safety_stage_ms is None:
+def target_latency_gate(p95_target_latency_ms: int | None) -> str:
+    if p95_target_latency_ms is None:
         return "fail"
-    if p95_full_safety_stage_ms <= 800:
+    if p95_target_latency_ms <= 800:
         return "pass"
-    if p95_full_safety_stage_ms <= 1200:
+    if p95_target_latency_ms <= 1200:
         return "warn"
     return "fail"
 
 
-def runtime_status(sidecar_gate: str, full_gate: str) -> str:
-    if "fail" in {sidecar_gate, full_gate}:
+def runtime_status(sidecar_gate: str, target_gate: str, evidence_gate: str) -> str:
+    if "fail" in {sidecar_gate, target_gate, evidence_gate}:
         return "fail"
-    if "warn" in {sidecar_gate, full_gate}:
+    if "warn" in {sidecar_gate, target_gate}:
         return "warn"
     return "pass"
 
@@ -312,6 +411,7 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         "# Resource / Latency Benchmark Report",
         "",
         "## Run Metadata",
+        f"- reportVersion: `{metadata['reportVersion']}`",
         f"- runId: `{metadata['runId']}`",
         f"- date: `{metadata['date']}`",
         f"- gitSha: `{metadata['gitSha']}`",
@@ -337,42 +437,76 @@ def render_markdown_report(report: dict[str, Any]) -> str:
             evidence=selected_runtime(runtime_results)["p95SidecarLatencyMs"],
         ),
         (
-            "| full safety stage <= 800~1200ms | {result} | p95FullSafetyStageMs={evidence} |"
+            "| measured target p95 <= 800~1200ms | {result} | p95TargetLatencyMs={evidence} |"
         ).format(
-            result=decision_summary["fullSafetyStageGate"],
-            evidence=selected_runtime(runtime_results)["p95FullSafetyStageMs"],
+            result=decision_summary["targetLatencyGate"],
+            evidence=selected_runtime(runtime_results)["p95TargetLatencyMs"],
         ),
         (
-            "| timeout fallback works | {result} | timeoutCount={timeoutCount}, "
-            "regexOnlyFallbackCount={fallbackCount} |"
+            "| timeout fallback observed | {result} | timeoutCount={timeoutCount}, "
+            "observedFallbackCount={fallbackCount} |"
         ).format(
             result=decision_summary["timeoutFallbackGate"],
             timeoutCount=selected_runtime(runtime_results)["timeoutCount"],
-            fallbackCount=selected_runtime(runtime_results)["fallbackCount"],
+            fallbackCount=selected_runtime(runtime_results)["observedFallbackCount"],
+        ),
+        (
+            "| sidecar evidence complete | {result} | unobservedSidecarCount={count} |"
+        ).format(
+            result=decision_summary["evidenceCompletenessGate"],
+            count=selected_runtime(runtime_results)["unobservedSidecarCount"],
         ),
         "| raw value exposure | pass | sanitized aggregate fields only |",
         "",
         "## Latency Summary",
-        "| Runtime | p50 sidecar | p95 sidecar | p50 full safety | p95 full safety | timeout rate |",
+        "| Runtime | p50 sidecar | p95 sidecar | p50 target | p95 target | timeout rate |",
         "|---|---:|---:|---:|---:|---:|",
     ]
     for runtime in runtime_results:
         lines.append(
             "| {runtimeProfile} | {p50SidecarLatencyMs} | {p95SidecarLatencyMs} | "
-            "{p50FullSafetyStageMs} | {p95FullSafetyStageMs} | {timeoutRate} |".format(**runtime)
+            "{p50TargetLatencyMs} | {p95TargetLatencyMs} | {timeoutRate} |".format(**runtime)
+        )
+    lines.extend(
+        [
+            "",
+            "## Model Execution Summary",
+            "| Runtime | rules-only | hybrid | unobserved | model-active requests | "
+            "model invocations | accepted detections | model-active p50 sidecar | "
+            "model-active p95 sidecar |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for runtime in runtime_results:
+        mode_counts = runtime["executionModeCounts"]
+        lines.append(
+            "| {runtime} | {rulesOnly} | {hybrid} | {unobserved} | {activeRequests} | "
+            "{invocations} | {accepted} | {p50} | {p95} |".format(
+                runtime=runtime["runtimeProfile"],
+                rulesOnly=mode_counts.get("rules_only", 0),
+                hybrid=mode_counts.get("hybrid", 0),
+                unobserved=mode_counts.get("unobserved", 0),
+                activeRequests=runtime["modelActiveRequestCount"],
+                invocations=runtime["modelInvocationCount"],
+                accepted=runtime["acceptedModelDetectionCount"],
+                p50=runtime["p50ModelActiveSidecarLatencyMs"],
+                p95=runtime["p95ModelActiveSidecarLatencyMs"],
+            )
         )
     lines.extend(
         [
             "",
             "## Case Group Summary",
-            "| Group | requests | p50 | p95 | max | timeoutCount | fallbackCount |",
-            "|---|---:|---:|---:|---:|---:|---:|",
+            "| Group | requests | p50 target | p95 target | max target | timeoutCount | "
+            "observedFallbackCount | unobservedSidecarCount |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for group in report["caseGroupResults"]:
         lines.append(
             "| {caseGroup} | {requests} | {p50LatencyMs} | {p95LatencyMs} | "
-            "{maxLatencyMs} | {timeoutCount} | {fallbackCount} |".format(**group)
+            "{maxLatencyMs} | {timeoutCount} | {observedFallbackCount} | "
+            "{unobservedSidecarCount} |".format(**group)
         )
     lines.extend(
         [
@@ -396,8 +530,10 @@ def render_markdown_report(report: dict[str, Any]) -> str:
             "## Fallback Recommendation",
             f"- If sidecar p95 <= 300ms: `{fallback['sidecarP95Under300Ms']}`",
             f"- If sidecar p95 > 300ms: `{fallback['sidecarP95Over300Ms']}`",
-            f"- If full safety p95 > 1200ms: `{fallback['fullSafetyP95Over1200Ms']}`",
+            f"- If measured target p95 > 1200ms: `{fallback['targetP95Over1200Ms']}`",
             f"- Recommended production posture: `{fallback['recommendedProductionPosture']}`",
+            "- Gateway target latency is never reported as sidecar latency.",
+            "- A Gateway result without explicit sidecar telemetry remains not observed.",
             "",
             "## Raw Value Safety Check",
             "- Report stores no source input text.",

@@ -25,9 +25,42 @@ docker compose --env-file .env logs --tail=100 control-plane-api
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.rag.yml logs --tail=100 rag-worker chat-api chat-web
 docker compose --env-file .env logs --tail=100 postgres
 docker compose --env-file .env logs --tail=100 redis
+docker compose --env-file .env logs --tail=100 pii-model-init
 ```
 
 Before sharing logs, remove secrets, Authorization headers, provider keys, API keys, app tokens, raw prompts, raw responses, and provider raw error bodies.
+
+## PII Model Initializer Failed
+
+PII models are optional and disabled by default. When enabled, common causes are:
+
+- the configured secret file does not exist
+- `AI_SERVICE_INSTALL_ML_DEPS` is false, so the AI Service image lacks ONNX runtime dependencies
+- the secret file contains zero or multiple non-comment lines
+- the source is not HTTPS or the presigned URL expired
+- the downloaded bundle does not match the release's fixed size or SHA-256
+- fewer than roughly 4 GiB of temporary disk space is available
+
+Check status and sanitized logs:
+
+```bash
+docker compose --env-file .env ps pii-model-init ai-service
+docker compose --env-file .env logs --tail=100 pii-model-init
+```
+
+The initializer never prints the bundle URL or its query. Do not paste the URL
+into diagnostic commands. Refresh it by editing the secret file, then recreate
+the initializer and dependent services:
+
+```bash
+${EDITOR:-vi} secrets/pii-model-bundle-url
+docker compose --env-file .env up --force-recreate pii-model-init
+docker compose --env-file .env up -d ai-service gateway-core
+bash scripts/pii-model-smoke.sh
+```
+
+A hash mismatch fails closed and does not activate a partial release. Do not
+change the pinned hash to make an unapproved bundle pass.
 
 ## `docker: command not found`
 

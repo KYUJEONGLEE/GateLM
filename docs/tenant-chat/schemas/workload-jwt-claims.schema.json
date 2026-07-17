@@ -36,7 +36,7 @@
     "exp": { "type": "integer", "minimum": 0 },
     "phase": {
       "type": "string",
-      "enum": ["admission", "completion", "cancel"]
+      "enum": ["admission", "sanitization", "completion", "cancel"]
     },
     "requestId": { "$ref": "#/$defs/opaqueId" },
     "turnId": { "$ref": "#/$defs/opaqueId" },
@@ -80,7 +80,7 @@
     {
       "if": {
         "properties": {
-          "phase": { "enum": ["completion", "cancel"] }
+          "phase": { "enum": ["sanitization", "completion", "cancel"] }
         },
         "required": ["phase"]
       },

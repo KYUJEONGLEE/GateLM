@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/pii-promotion-evidence.schema.json",
+  "title": "PII production promotion evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "aggregateOnly",
+    "decision",
+    "readyForProduction",
+    "gateCounts",
+    "checks",
+    "policy",
+    "contentSafety"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "pii-production-promotion-evidence.v1"},
+    "aggregateOnly": {"const": true},
+    "decision": {"enum": ["ready", "blocked"]},
+    "readyForProduction": {"type": "boolean"},
+    "gateCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "blocked"],
+      "properties": {
+        "passed": {"type": "integer", "minimum": 0},
+        "blocked": {"type": "integer", "minimum": 0}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "reasonCodes"],
+        "properties": {
+          "name": {
+            "enum": [
+              "owner_policy",
+              "artifact_integrity",
+              "quality",
+              "warm_runtime",
+              "cold_runtime",
+              "tenant_chat_e2e"
+            ]
+          },
+          "status": {"enum": ["passed", "blocked"]},
+          "reasonCodes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^[a-z0-9_]+$"}
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "thresholdsApplied", "repositoryDefaultThresholdsApplied"],
+      "properties": {
+        "source": {"enum": ["owner_supplied", "missing"]},
+        "thresholdsApplied": {"type": "boolean"},
+        "repositoryDefaultThresholdsApplied": {"const": false}
+      }
+    },
+    "contentSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rawContentIncluded",
+        "detectedValuesIncluded",
+        "requestIdentifiersIncluded",
+        "artifactDigestsIncluded",
+        "endpointLocationsIncluded"
+      ],
+      "properties": {
+        "rawContentIncluded": {"const": false},
+        "detectedValuesIncluded": {"const": false},
+        "requestIdentifiersIncluded": {"const": false},
+        "artifactDigestsIncluded": {"const": false},
+        "endpointLocationsIncluded": {"const": false}
+      }
+    }
+  }
+}

@@ -4,7 +4,13 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import type { AdmissionSeed, CompletionInput, UsageIntent } from './execution.types';
+import type {
+  AdmissionSeed,
+  CompletionInput,
+  ExecutionPhase,
+  SanitizationInput,
+  UsageIntent,
+} from './execution.types';
 import { WorkloadCredentialsService } from './workload-credentials';
 import { WorkloadSigner } from './workload-signer';
 
@@ -66,8 +72,19 @@ describe('WorkloadSigner', () => {
     )) as { vectors: Array<{ bindingObject: { phase: string }; expectedBindingDigest: string }> };
     const signer = createSigner(privateJwkFile, bindingFile);
     const input: CompletionInput = {
-      messages: [{ role: 'user', content: '<ephemeral>' }],
+      messages: [{
+        role: 'user',
+        content: '<ephemeral>',
+        safety: {
+          status: 'sanitized',
+          policyDigest: `sha256:${'C'.repeat(43)}`,
+        },
+      }],
       stream: true,
+    };
+    const sanitizationInput: SanitizationInput = {
+      messages: [{ role: 'user', content: 'Reply to synthetic.user@example.com.' }],
+      placeholderCounters: { EMAIL: 1 },
     };
     const usageIntent: UsageIntent = {
       estimatedInputTokens: 640,
@@ -76,11 +93,15 @@ describe('WorkloadSigner', () => {
       cacheStrategy: 'exact',
     };
     for (const vector of vectors.vectors) {
-      const phase = vector.bindingObject.phase as 'admission' | 'completion' | 'cancel';
+      const phase = vector.bindingObject.phase as ExecutionPhase;
       const result = await signer.authorize(
         seed,
         phase,
-        phase === 'completion' ? input : undefined,
+        phase === 'completion'
+          ? input
+          : phase === 'sanitization'
+            ? sanitizationInput
+            : undefined,
         phase === 'admission' ? undefined : 'admission_fixture_001',
         phase === 'completion' ? usageIntent : undefined,
       );

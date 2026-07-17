@@ -63,7 +63,7 @@ func (a *Authenticator) Authenticate(
 	}
 
 	payloadDigest := tenantchat.EmptyPayloadDigest
-	if expectedPhase == tenantchat.PhaseCompletion {
+	if expectedPhase == tenantchat.PhaseCompletion || expectedPhase == tenantchat.PhaseSanitization {
 		payloadDigest, err = tenantchat.ComputePayloadDigest(payload)
 		if err != nil {
 			return workloadauth.VerifiedToken{}, ErrInvalidRequest

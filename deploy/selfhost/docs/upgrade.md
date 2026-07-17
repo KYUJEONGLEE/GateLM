@@ -22,6 +22,12 @@ Use this order:
 
 Do not skip the backup step for production data.
 
+If optional PII models are enabled, read the target release notes for its model
+release id and obtain a fresh approved HTTPS bundle URL before restarting. Keep
+at least 4 GiB of temporary free space. Model release descriptors are pinned to
+the matching AI Service image and Self-host Compose bundle; do not override
+their hashes in `.env`.
+
 ## 1. Backup First
 
 Create a PostgreSQL backup before changing images:
@@ -81,6 +87,10 @@ If pull fails, check:
 
 ## 5. Restart The Stack
 
+If the target release uses a new PII model bundle, edit the existing secret file
+with a fresh presigned HTTPS URL. Never put that URL in `.env` or a command
+argument. The previous versioned model directory remains in `pii_model_data`
+for rollback until an operator deliberately removes it.
 Use the idempotent installer. It preserves the base non-RAG service set when
 the flag is false; when the flag is true it validates role-separated Tenant
 Chat/RAG secrets and includes `rag-worker`, `chat-api`, and `chat-web`:
@@ -111,6 +121,12 @@ Upgrade is complete only after the smoke test confirms:
 - health endpoints are reachable
 - Gateway request succeeds
 - Request Log contains the smoke request
+
+When PII models are enabled, also run:
+
+```bash
+bash scripts/pii-model-smoke.sh
+```
 
 ## Rollback
 

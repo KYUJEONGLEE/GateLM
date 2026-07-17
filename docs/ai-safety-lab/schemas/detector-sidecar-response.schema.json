@@ -26,7 +26,11 @@
       ]
     },
     "redactedPrompt": {
-      "description": "Prompt text after sidecar redaction. This must not include detected raw sensitive values.",
+      "description": "Provider-safe policy result. A value explicitly marked allow can remain here; this field must never be logged.",
+      "type": "string"
+    },
+    "logSafePrompt": {
+      "description": "Storage/preview-safe prompt with allow detections redacted as well. This value must be used for logs instead of redactedPrompt.",
       "type": "string"
     },
     "model": {
@@ -48,6 +52,9 @@
         "$ref": "#/$defs/detection"
       }
     },
+    "executionSummary": {
+      "$ref": "#/$defs/executionSummary"
+    },
     "latencyMs": {
       "type": "integer",
       "minimum": 0
@@ -62,8 +69,10 @@
         "outcome",
         "mode",
         "redactedPrompt",
+        "logSafePrompt",
         "detectorSummary",
         "detections",
+        "executionSummary",
         "latencyMs"
       ],
       "not": {
@@ -90,6 +99,11 @@
           },
           {
             "required": [
+              "logSafePrompt"
+            ]
+          },
+          {
+            "required": [
               "detectorSummary"
             ]
           },
@@ -97,12 +111,76 @@
             "required": [
               "detections"
             ]
+          },
+          {
+            "required": [
+              "executionSummary"
+            ]
           }
         ]
       }
     }
   ],
   "$defs": {
+    "executionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executionMode",
+        "modelInvocationCount",
+        "acceptedModelDetectionCount"
+      ],
+      "properties": {
+        "executionMode": {
+          "enum": [
+            "rules_only",
+            "hybrid"
+          ]
+        },
+        "modelInvocationCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acceptedModelDetectionCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "executionMode": {
+                "const": "rules_only"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "modelInvocationCount": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "executionMode": {
+                "const": "hybrid"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "modelInvocationCount": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
     "detectorSummary": {
       "type": "object",
       "additionalProperties": false,

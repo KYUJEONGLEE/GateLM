@@ -7,6 +7,7 @@ import type {
   CompletionInput,
   ExecutionContext,
   ExecutionPhase,
+  SanitizationInput,
   UsageIntent,
 } from './execution.types';
 import {
@@ -24,7 +25,7 @@ export class WorkloadSigner {
   async authorize(
     seed: AdmissionSeed,
     phase: ExecutionPhase,
-    input?: CompletionInput,
+    input?: CompletionInput | SanitizationInput,
     admissionId?: string,
     usageIntent?: UsageIntent,
   ): Promise<{ context: ExecutionContext; token: string; kid: string; jti: string }> {

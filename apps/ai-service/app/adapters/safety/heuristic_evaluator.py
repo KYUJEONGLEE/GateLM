@@ -503,7 +503,7 @@ def default_detectors() -> list[PromptDetector]:
         ),
         RegexDetector(
             "resident_registration_number",
-            re.compile(r"\b\d{6}[-\s]?[1-8]\d{6}\b"),
+            re.compile(r"(?<!\d)\d{6}[-\s]?[1-8]\d{6}(?!\d)"),
             20,
         ),
         RegexDetector(

@@ -3,13 +3,16 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/config"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 )
 
 func TestPostgresDriverURLRemovesPrismaSchemaQuery(t *testing.T) {
@@ -166,5 +169,52 @@ func TestReadyHandlerReturnsTimeoutWhenDependencyIgnoresContext(t *testing.T) {
 	}
 	if dep.Message != "check timed out or context canceled" {
 		t.Fatalf("unexpected postgres dependency message: %s", dep.Message)
+	}
+}
+
+func TestReadyHandlerRecordsOptionalDependencyAsDegradedWithoutFailingGateway(t *testing.T) {
+	registry := metrics.NewRegistry()
+	handler := ReadyHandler{
+		Timeout:         time.Second,
+		MetricsRegistry: registry,
+		Checks: map[string]ReadinessCheck{
+			"ai_safety_sidecar": {
+				Required:       false,
+				FailureMessage: "not ready",
+				Check: func(context.Context) error {
+					return errors.New("location and raw detail must stay internal")
+				},
+			},
+		},
+	}
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("optional sidecar must not fail Gateway readiness: %d", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), "location and raw detail") {
+		t.Fatal("readiness response must not expose dependency error detail")
+	}
+	output := registry.RenderPrometheus()
+	want := `gatelm_gateway_dependency_ready{dependency="ai_safety_sidecar",required="false"} 0`
+	if !strings.Contains(output, want) {
+		t.Fatalf("missing optional dependency gauge %q\n%s", want, output)
+	}
+}
+
+func TestHTTPReadinessCheckReplacesServiceEndpointPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/readyz" || r.URL.RawQuery != "" {
+			t.Fatalf("unexpected readiness request location: path=%q query=%q", r.URL.Path, r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	check := HTTPReadinessCheck(server.Client(), server.URL+"/internal/ai-safety/v1/detect?ignored=true")
+	if err := check(context.Background()); err != nil {
+		t.Fatalf("readiness check failed: %v", err)
 	}
 }

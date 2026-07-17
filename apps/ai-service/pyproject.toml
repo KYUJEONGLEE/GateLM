@@ -13,6 +13,14 @@ dependencies = [
 
 [project.scripts]
 gatelm-ai-service = "app.main:run"
+gatelm-ai-safety-promotion-gate = "app.services.ai_safety_promotion_gate:main"
+gatelm-ai-safety-repeated-cold = "app.services.ai_safety_repeated_cold_runner:main"
+gatelm-pii-model-sync = "app.model_artifacts.cli:run"
+gatelm-pii-ner-training-dataset = "app.services.pii_ner_training_dataset_cli:main"
+gatelm-pii-ner-train = "app.services.pii_ner_train_cli:main"
+gatelm-pii-ner-export = "app.services.pii_ner_export_cli:main"
+gatelm-pii-ner-candidate-eval = "app.services.pii_ner_candidate_eval_cli:main"
+gatelm-pii-ner-deployment-gate = "app.services.pii_ner_deployment_gate_cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -22,6 +30,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["app*"]
 exclude = ["app.tests*"]
+
+[tool.setuptools.package-data]
+"app.model_artifacts.releases" = ["*.json"]
 
 [project.optional-dependencies]
 test = [
@@ -36,8 +47,16 @@ ml = [
   "transformers>=4.41,<5",
 ]
 onnx = [
-  "optimum-onnx[onnxruntime]",
-  "transformers>=4.41,<5",
+  "numpy>=2.5,<2.6",
+  "onnxruntime>=1.27,<1.28",
+  "optimum-onnx[onnxruntime]>=0.1,<0.2",
+  "tokenizers>=0.22,<0.23",
+  "transformers>=4.57,<4.58",
+]
+training = [
+  "safetensors>=0.4,<1",
+  "torch>=2.3,<3",
+  "transformers>=4.57,<4.58",
 ]
 
 [tool.unittest]

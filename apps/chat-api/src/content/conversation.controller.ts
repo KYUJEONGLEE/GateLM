@@ -132,6 +132,8 @@ export class ConversationController {
         turnId: prepared.reserved.turnId,
         sequence,
         replayed: prepared.kind === 'replay' || prepared.reserved.replayed,
+        userMessageId: prepared.userMessage.id,
+        userContent: prepared.userMessage.content,
       });
       const initialCitations = prepared.kind === 'execute'
         ? prepared.citationSources

@@ -1495,6 +1495,8 @@ model TenantChatMessage {
   tag               Bytes
   contentKeyVersion Int       @map("content_key_version")
   schemaVersion     Int       @default(1) @map("schema_version")
+  safetyStatus      String    @default("legacy_unverified") @map("safety_status")
+  safetyPolicyDigest String?  @map("safety_policy_digest")
   citationCiphertext Bytes?   @map("citation_ciphertext")
   citationNonce      Bytes?   @map("citation_nonce")
   citationTag        Bytes?   @map("citation_tag")

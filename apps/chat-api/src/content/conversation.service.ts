@@ -34,6 +34,7 @@ import { ContentIntegrityError, ContentKeyUnavailable } from './content.errors';
 import {
   EncryptedChatStore,
   type ChatActor,
+  type CompletionHistoryMessage,
   type MessageView,
   type ReservedTurn,
 } from './encrypted-chat-store';
@@ -45,12 +46,14 @@ export type PreparedTurn =
       actor: ChatActor;
       reserved: ReservedTurn;
       message: MessageView;
+      userMessage: MessageView;
     }>
   | Readonly<{
       kind: 'local';
       actor: ChatActor;
       reserved: ReservedTurn;
       message: MessageView;
+      userMessage: MessageView;
     }>
   | Readonly<{
       kind: 'execute';
@@ -58,6 +61,7 @@ export type PreparedTurn =
       reserved: ReservedTurn;
       handle: AdmissionHandle;
       messages: readonly EphemeralMessage[];
+      userMessage: MessageView;
       usageIntent: UsageIntent;
       signal: AbortSignal;
       citationSources: readonly RagCitation[];
@@ -168,30 +172,18 @@ export class ConversationService {
       const turnInput = Object.freeze({ ...input, contextMode });
       const reserved = await this.store.reserveTurn(actor, conversationId, turnInput);
       if (reserved.state === 'completed') {
-        const message = await this.store.readCompletedReplay(actor, reserved);
-        if (!message) throw new TerminalReplayContentUnavailable();
-        return Object.freeze({ kind: 'replay' as const, actor, reserved, message });
+        const [message, userMessage] = await Promise.all([
+          this.store.readCompletedReplay(actor, reserved),
+          this.store.readSanitizedUser(actor, reserved),
+        ]);
+        if (!message || !userMessage) throw new TerminalReplayContentUnavailable();
+        return Object.freeze({ kind: 'replay' as const, actor, reserved, message, userMessage });
       }
       if (['failed', 'cancelled', 'deleted'].includes(reserved.state)) {
         throw new TurnStateConflict();
       }
       let ragMessage: EphemeralMessage | undefined;
       let citationSources: readonly RagCitation[] = Object.freeze([]);
-      if (reserved.knowledgeMode === 'tenant') {
-        const retrieved = await this.retrieval.retrieve(authorized, latestRagQuery(input.content));
-        const context = this.ragContext.build(retrieved);
-        if (context.sources.length === 0) {
-          const message = await this.store.persistRagNoEvidence(
-            actor,
-            reserved,
-            input.content,
-            RAG_NO_EVIDENCE_RESPONSE,
-          );
-          return Object.freeze({ kind: 'local' as const, actor, reserved, message });
-        }
-        ragMessage = context.message;
-        citationSources = context.citationSources;
-      }
       const attachment = this.activeTurns.reserve(
         reserved.turnId,
         this.maximumAttachmentsPerTurn,
@@ -203,14 +195,110 @@ export class ConversationService {
           turnId: reserved.turnId,
           idempotencyKey: reserved.idempotencyKey,
         });
-        await this.store.persistAdmittedUser(actor, reserved, input.content, handle);
-        const baseMessages = contextMode === 'single_turn'
-          ? Object.freeze([Object.freeze({ role: 'user' as const, content: input.content })])
-          : await this.store.completionHistory(actor, conversationId, reserved.turnId);
+        if (reserved.knowledgeMode === 'tenant') {
+          const querySanitization = await this.bridge.sanitize(handle, {
+            messages: Object.freeze([
+              Object.freeze({ role: 'user' as const, content: input.content }),
+            ]),
+          });
+          const safeQuery = sanitizedContentAt(querySanitization, 0);
+          const retrieved = await this.retrieval.retrieve(
+            authorized,
+            latestRagQuery(safeQuery.content),
+          );
+          const context = this.ragContext.build(retrieved);
+          if (context.sources.length === 0) {
+            const local = await this.store.persistRagNoEvidence(
+              actor,
+              reserved,
+              safeQuery.content,
+              safeQuery.policyDigest,
+              RAG_NO_EVIDENCE_RESPONSE,
+            );
+            this.activeTurns.releaseReservation(reserved.turnId, attachment);
+            await this.bridge.cancel(handle).catch(() => undefined);
+            return Object.freeze({
+              kind: 'local' as const,
+              actor,
+              reserved,
+              message: local.message,
+              userMessage: local.userMessage,
+            });
+          }
+          ragMessage = context.message;
+          citationSources = context.citationSources;
+        }
+        const existingCurrent = reserved.state === 'pending_admission'
+          ? null
+          : await this.store.readCurrentUserSafety(actor, reserved);
+        if (reserved.state !== 'pending_admission' && !existingCurrent) {
+          throw new ContentIntegrityError();
+        }
+        const history = contextMode === 'single_turn'
+          ? Object.freeze({
+              messages: Object.freeze([]),
+              placeholderCounters: Object.freeze({}),
+            })
+          : await this.store.completionHistory(
+              actor,
+              conversationId,
+              Buffer.byteLength(existingCurrent?.content ?? input.content, 'utf8'),
+            );
+        const legacyUsers = history.messages.filter((message) =>
+          message.role === 'user' && message.safetyStatus === 'legacy_unverified');
+        const currentNeedsSanitization = existingCurrent?.safetyStatus !== 'sanitized';
+        const sanitizationMessages = Object.freeze([
+          ...legacyUsers.map((message) => Object.freeze({ role: 'user' as const, content: message.content })),
+          ...(currentNeedsSanitization
+            ? [Object.freeze({
+                role: 'user' as const,
+                content: existingCurrent?.content ?? input.content,
+              })]
+            : []),
+        ]);
+        const sanitization = sanitizationMessages.length > 0
+          ? await this.bridge.sanitize(handle, {
+              messages: sanitizationMessages,
+              ...(Object.keys(history.placeholderCounters).length > 0
+                ? { placeholderCounters: history.placeholderCounters }
+                : {}),
+            })
+          : undefined;
+        const sanitizedLegacy = new Map<string, SanitizedContent>();
+        for (let index = 0; index < legacyUsers.length; index += 1) {
+          const content = sanitization?.messages[index]?.content;
+          if (!content || !sanitization) throw new ContentIntegrityError();
+          sanitizedLegacy.set(legacyUsers[index]!.id, Object.freeze({
+            content,
+            policyDigest: sanitization.policyDigest,
+          }));
+        }
+        const sanitizedCurrent = currentNeedsSanitization
+          ? sanitizedContentAt(sanitization, legacyUsers.length)
+          : trustedCurrent(existingCurrent);
+        const persisted = await this.store.persistAdmittedUser(
+          actor,
+          reserved,
+          sanitizedCurrent.content,
+          sanitizedCurrent.policyDigest,
+          handle,
+          legacyUsers.map((message) => Object.freeze({
+            messageId: message.id,
+            content: sanitizedLegacy.get(message.id)!.content,
+          })),
+          sanitization?.policyDigest ?? sanitizedCurrent.policyDigest,
+        );
+        const baseMessages = completionMessages(
+          history.messages,
+          sanitizedLegacy,
+          Object.freeze({
+            content: persisted.message.content,
+            policyDigest: sanitizedCurrent.policyDigest,
+          }),
+        );
         const messages = ragMessage
           ? Object.freeze([ragMessage, ...baseMessages])
-          : baseMessages;
-        const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
+          : baseMessages;        const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
         if (signal.aborted) throw new TurnStateConflict();
         return Object.freeze({
           kind: 'execute' as const,
@@ -218,21 +306,29 @@ export class ConversationService {
           reserved,
           handle,
           messages,
+          userMessage: persisted.message,
           usageIntent: internalUsageIntent(
             input.usageIntent,
             messages,
             reserved.knowledgeMode === 'tenant',
-          ),
-          signal,
+          ),          signal,
           citationSources,
         });
       } catch (error) {
         const lastAttachment = this.activeTurns.releaseReservation(reserved.turnId, attachment);
         if (handle && lastAttachment) {
-          await Promise.allSettled([
-            this.bridge.cancel(handle),
-            this.store.cancelTurn(actor, conversationId, reserved.turnId),
-          ]);
+          if (isSafetyBlocked(error)) {
+            await this.store.markTerminalFailure(
+              actor,
+              reserved.turnId,
+              'CHAT_SAFETY_BLOCKED',
+            ).catch(() => undefined);
+          } else if (!reserved.replayed) {
+            await Promise.allSettled([
+              this.bridge.cancel(handle),
+              this.store.cancelTurn(actor, conversationId, reserved.turnId),
+            ]);
+          }
         }
         throw error;
       }
@@ -491,11 +587,96 @@ function internalUsageIntent(
   });
 }
 
+function completionMessages(
+  history: readonly CompletionHistoryMessage[],
+  sanitizedLegacy: ReadonlyMap<string, SanitizedContent>,
+  current: SanitizedContent,
+): readonly EphemeralMessage[] {
+  const messages = history.map((message): EphemeralMessage => {
+    if (message.role === 'assistant' && message.safetyStatus === 'provider_generated') {
+      return Object.freeze({
+        role: 'assistant' as const,
+        content: message.content,
+        safety: Object.freeze({ status: 'provider_generated' as const }),
+      });
+    }
+    if (message.role === 'user' && message.safetyStatus === 'sanitized' && message.safetyPolicyDigest) {
+      return Object.freeze({
+        role: 'user' as const,
+        content: message.content,
+        safety: Object.freeze({
+          status: 'sanitized' as const,
+          policyDigest: message.safetyPolicyDigest,
+        }),
+      });
+    }
+    if (message.role === 'user' && message.safetyStatus === 'legacy_unverified') {
+      const sanitized = sanitizedLegacy.get(message.id);
+      if (!sanitized) throw new ContentIntegrityError();
+      return Object.freeze({
+        role: 'user' as const,
+        content: sanitized.content,
+        safety: Object.freeze({
+          status: 'sanitized' as const,
+          policyDigest: sanitized.policyDigest,
+        }),
+      });
+    }
+    throw new ContentIntegrityError();
+  });
+  messages.push(Object.freeze({
+    role: 'user' as const,
+    content: current.content,
+    safety: Object.freeze({
+      status: 'sanitized' as const,
+      policyDigest: current.policyDigest,
+    }),
+  }));
+  return Object.freeze(messages);
+}
+
+type SanitizedContent = Readonly<{
+  content: string;
+  policyDigest: string;
+}>;
+
+function sanitizedContentAt(
+  result: Readonly<{
+    messages: readonly Readonly<{ content: string }>[];
+    policyDigest: string;
+  }> | undefined,
+  index: number,
+): SanitizedContent {
+  const content = result?.messages[index]?.content;
+  if (!content || !result) throw new ContentIntegrityError();
+  return Object.freeze({ content, policyDigest: result.policyDigest });
+}
+
+function trustedCurrent(
+  message: CompletionHistoryMessage | null,
+): SanitizedContent {
+  if (
+    !message ||
+    message.role !== 'user' ||
+    message.safetyStatus !== 'sanitized' ||
+    !message.safetyPolicyDigest
+  ) {
+    throw new ContentIntegrityError();
+  }
+  return Object.freeze({
+    content: message.content,
+    policyDigest: message.safetyPolicyDigest,
+  });
+}
+
+function isSafetyBlocked(error: unknown): boolean {
+  return error instanceof PrivateGatewayError && error.code === 'CHAT_SAFETY_BLOCKED';
+}
+
 function latestRagQuery(content: string): string {
   const query = content.trim();
   if (query.length === 0) throw new RagRetrievalError('RAG_QUERY_INVALID', 400);
-  return query;
-}
+  return query;}
 
 function isStorageError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError ||
