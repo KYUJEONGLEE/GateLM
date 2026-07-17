@@ -19,7 +19,7 @@
 | `TenantMembership` | User와 Tenant를 연결하고 `tenant_admin` 또는 `employee` 역할 및 active 상태를 가진다. |
 | `Employee` | Tenant의 직원/인사 레코드. employee membership에는 active Employee가 필요하다. |
 | canonical actor | `(tenantId, userId)`. 인증, 대화 소유권, 개인 quota의 안정적인 key다. |
-| `employeeId` | employee entitlement와 관리자 조회를 위한 보조 식별자. 인증 principal이나 quota ledger primary key가 아니다. |
+| `employeeId` | employee entitlement와 관리자 조회를 위한 보조 식별자. 인증 principal은 아니며, user monthly quota와 별도로 Tenant Chat 직원 주간 token ledger의 key가 된다. |
 | tenant admin | active User + active Tenant + active tenant_admin membership. dummy Employee row를 만들지 않는다. admin이 실제 직원이기도 하면 Employee가 연결될 수 있다. |
 | signing key set | 현재 서명 key와 교체 중인 이전 key를 함께 관리하는 작은 versioned 집합. 과거 문서의 `keyring`과 같은 뜻이다. |
 | workload JWT | end-user 로그인 token이 아니라 Chat API가 Gateway에 자신과 요청 결정을 증명하는 service-to-service token이다. `auth.*` browser domain이 아니다. |
@@ -30,7 +30,8 @@
 - `tenant_admin`: User, Tenant, TenantMembership이 모두 active면 Chat을 사용할 수 있다. Employee는 선택 사항이다.
 - `employee`: User, Tenant, TenantMembership, linked Employee가 모두 active여야 한다.
 - tenant admin도 employee와 동일하게 `(tenantId,userId,periodStart)` 개인 quota와 request/token rate를 적용받는다. Employee가 없다는 이유로 무제한이 되지 않는다.
-- tenant 기본 user quota는 admin/employee에 동일하게 적용한다. tenant admin은 userId별 override를 설정할 수 있지만 변경은 audit하고 새 RuntimeSnapshot부터 적용하며 tenant budget hard stop을 우회할 수 없다.
+- tenant 기본 user quota는 admin/employee에 동일하게 적용한다. 현재 RuntimeSnapshot에는 userId별 override가 없으며, 이 계약도 user override를 제공하지 않는다.
+- employee actor에는 RuntimeSnapshot의 `employeeWeeklyTokenLimits`에 있는 경우에만 `(tenantId,employeeId,weekStart)` 주간 token ledger를 추가 적용한다. 목록에 없으면 제한 없음이고, `0`은 다음 새 Provider 호출을 즉시 차단한다. 활성 직원 주간 한도는 공통 `defaultMonthlyTokenLimit`보다 클 수 없으며, tenant admin처럼 employee actor가 아닌 요청에는 적용하지 않는다.
 - Chat API가 모든 새 browser/API 요청에서 session/device state는 자체 session DB에서, identity entitlement는 Control Plane private API의 authoritative read로 확인한다.
 - Gateway는 Employee DB를 다시 조회하거나 browser actor header를 해석하지 않는다. 유효한 workload JWT의 Chat API 결정을 신뢰하고 tenant snapshot/status, JWT scope/binding/replay만 검증한다.
 - 정지·logout·device revoke·password reset은 다음 Chat API 요청부터 거부한다. 이미 Provider로 전달된 in-flight 요청은 best-effort cancel하고, 완료되면 기존 safety/persistence 규칙을 적용한다.
@@ -152,7 +153,7 @@ Hard ordering rules:
 - admission 성공 뒤에도 sanitization 성공 전에는 user ciphertext를 저장하지 않는다.
 - sanitization이 `CHAT_SAFETY_BLOCKED`이면 Gateway가 admission을 consume하고 slot을 release하며 content-free `safety_blocked` terminal event를 exactly once 기록한다. Chat API는 user ciphertext와 Provider completion을 만들지 않는다.
 - `sanitization` 성공 응답의 ordered content만 user ciphertext로 저장한다. 원래 user input을 별도 보존하거나 dual-write하지 않는다.
-- exact cache hit은 request rate만 소비하고 token quota 및 cost budget debit은 0이다.
+- exact cache hit은 request rate만 소비하고 token quota 및 cost budget debit은 0이다. quota/budget만 변경되어 새 RuntimeSnapshot이 발행돼도 cache 호환 material이 유지되면 기존 exact cache entry를 재사용한다. 따라서 `0` 한도는 cache hit이 아닌 다음 새 Provider 호출을 즉시 차단한다.
 - provider call은 quota/budget reservation이 성공한 뒤에만 시작한다.
 - assistant partial delta는 영구 저장하지 않는다.
 - raw content, body binding digest, JWT/JTI는 structured log나 metric label에 남기지 않는다.
@@ -231,8 +232,15 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 
 - 관리자 wire는 [`openapi/admin-runtime.openapi.json`](./openapi/admin-runtime.openapi.json)을 따른다.
 - Web Console의 단일 authoring surface 이름은 `채팅 앱`이며 built-in Tenant Chat에만 적용한다. 과거 `회사 정책`과 `Tenant Chat` 메뉴는 이 화면으로 redirect하고 Project/Application routing 의미를 변경하지 않는다.
-- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태, active 5×2 routing metadata와 편집 가능한 exact cache/safety detector 설정만 반환한다. cache key set, safety digest, credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
-- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`의 현재 authoring wire는 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`, `cachePolicy`, `safetyPolicy`를 받는다. 각 routing cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+- `GET /admin/v1/tenants/{tenantId}/tenant-chat/runtime`은 tenant-level ACTIVE Provider 연결, 설정된 Chat 모델의 opaque `modelRef`, 가격 상태, active 5×2 routing metadata와 편집 가능한 exact cache/safety detector 및 공통 월간 token quota 설정을 반환한다. cache key set, safety digest, credential, base URL, secret reference, Provider raw error와 `publishedBy`는 반환하지 않는다.
+- `PUT /admin/v1/tenants/{tenantId}/tenant-chat/runtime`의 현재 authoring wire는 `routingMode`, `manualModelRef`, 정확히 다섯 category × `simple|complex`의 `routes`, `cachePolicy`, `safetyPolicy`, `quota`를 받는다. `quota.defaultMonthlyTokenLimit`은 `0`을 포함한 정확한 hard stop이고 Control Plane은 threshold를 `80/90/100`으로 발행한다. 각 routing cell은 우선순위가 보존되는 1~4개의 `modelRefs`를 가지며 Control Plane은 모든 ref를 tenant scope, `projectId=null`, ACTIVE Provider 및 persisted `providerConfig.models`에 다시 resolve한다.
+
+직원 주간 token quota 관리 API는 다음과 같다.
+
+- `GET /admin/v1/tenants/{tenantId}/employees/weekly-token-quotas`
+- `PATCH /admin/v1/tenants/{tenantId}/employees/{employeeId}/weekly-token-quota` with `{ enabled, limitTokens, expectedVersion? }`
+
+이 정책은 `(tenantId, employeeId)` 원본·감사 레코드와 `(tenantId, employeeId, mondayStart)` 주간 원장을 함께 갱신하고, 같은 transaction에서 새 RuntimeSnapshot을 발행한다. 정책을 낮춰도 이번 주 누적 사용량은 초기화하지 않는다. 활성 직원의 `limitTokens`는 현재 공통 `defaultMonthlyTokenLimit`을 초과할 수 없고, 공통 월간 한도를 낮출 때에도 기존 활성 직원 한도가 더 크면 발행을 거부한다.
 - `cachePolicy`는 exact cache의 enabled, positive integer TTL, positive integer per-user entry limit만 편집한다. `safetyPolicy.detectorSet`은 1~10개의 unique detector와 `allow|redact|block` action을 받으며 주민등록번호/API key/Authorization header/JWT/private key detector는 모두 포함되어야 하고 `allow`를 거부한다. 이 관리자 wire는 raw prompt, raw response, raw detected value 또는 secret 원문을 받거나 반환하지 않는다.
 - compatibility client는 `cachePolicy` 대신 boolean `cacheEnabled`만 보낼 수 있다. 이 경우 기존 TTL, 사용자별 엔트리 상한과 key-set ID를 보존하고 `exact/enabled` 또는 `off/disabled`만 전환한다. cache 입력을 모두 생략하면 기존 snapshot 정책을 보존하며 최초 활성화에서만 TTL 300초, 사용자당 100개와 operator-configured key-set ID의 Exact Cache를 기본 활성화한다. key-set ID는 관리자 응답에 노출하지 않는다.
 - `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 안전 처리된 메시지에서 기존 deterministic rule classifier로 category를 계산한다. Model-path difficulty는 활성화된 경우 일반 Gateway와 동일한 process-global 106D runtime을 사용하며 `ready` 결과가 `simple|complex` cell 선택에 권위를 가진다. Runtime 비활성화·초기화 실패·queue 포화·timeout·invalid result·inference 실패·panic과 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
@@ -264,7 +272,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 - 현재 runtime/API/schema/UI 지원 전략은 `off|exact`다.
 - Semantic Cache는 닫힌 non-goal이 아니라 follow-up capability지만, backend API와 Gateway adapter가 없으므로 현재 DTO, published RuntimeSnapshot, Admin UI에 선택지를 노출하지 않는다.
 - cache adapter/interface, versioned policy discriminator, capabilities response는 후속 contract revision에서 `semantic` 전략을 추가할 수 있어야 한다.
-- exact cache는 tenant+user scoped, encrypted이며 실제 private completion에 전달된 message 배열을 fingerprint한다. `contextMode=single_turn`은 current user message만 fingerprint하므로 context 유지 여부와 cache hit을 독립적으로 검증할 수 있다.
+- exact cache는 tenant+user scoped, encrypted이며 실제 private completion에 전달된 message 배열을 fingerprint한다. fingerprint는 cache policy, 전체 safety policy, 고정된 routing decision/modelRef, usage intent와 sanitized input을 포함하고 quota/budget·가격·rate/concurrency의 usage-only 정책은 포함하지 않는다. `contextMode=single_turn`은 current user message만 fingerprint하므로 context 유지 여부와 cache hit을 독립적으로 검증할 수 있다.
 - exact cache outer key는 tenant+user namespace만 포함하고 keyed fingerprint는 Redis hash field로만 사용한다. value는 AES-256-GCM으로 암호화하며 confirmed primary 성공만 저장한다.
 - Semantic Cache를 구현할 때 tenant isolation, embedding/version, safety/policy/snapshot binding, content retention, invalidation, false-hit evaluation과 Admin API/UI를 별도 contract revision으로 고정한다.
 
@@ -294,7 +302,8 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 
 | Scope | Warning | Economy | Hard stop |
 |---|---:|---:|---:|
-| user monthly confirmed tokens | soft allocation의 80% | soft allocation의 100% | soft allocation의 120% |
+| user monthly confirmed tokens | allocation의 80% | allocation의 90% | allocation의 100% |
+| employee weekly tokens | 적용 시 별도 warning/economy 단계 없음 | 적용 시 별도 warning/economy 단계 없음 | 주간 `limitTokens` 100%; `0`은 즉시 차단 |
 | tenant monthly confirmed cost | budget의 80% | budget의 90% | budget의 100% |
 
 - tenant admin은 absolute limits와 threshold를 설정할 수 있다.
@@ -304,9 +313,9 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 
 ### 8.3 Reservation과 settlement
 
-1. exact cache miss에서 user token과 tenant cost의 current confirmed+reserved 상태를 확인한다.
+1. exact cache miss에서 user token, 적용된 employee weekly token, tenant cost의 current confirmed+reserved 상태를 확인한다.
 2. selected route의 bounded input estimate + max output 및 pinned 가격으로 conservative reservation을 한 transaction에서 만든다. `pricingStatus=unavailable`이면 token reservation은 유지하고 monetary reservation만 0이다.
-3. hard stop을 넘으면 reservation 없이 차단한다.
+3. hard stop 또는 적용된 employee weekly token limit을 넘으면 reservation 없이 차단한다.
 4. Provider call 직전 weighted token-rate를 소비한다.
 5. fallback이 필요하면 실제 호출 전에 추가 exposure를 atomic top-up한다. top-up이 실패하면 fallback을 호출하지 않는다.
 6. Provider가 확인한 input/output token과 pinned price만 confirmed ledger로 이동한다.
@@ -331,6 +340,7 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 |---|---|---|
 | `TenantChatRequestAdmission` | `(tenantId,userId,idempotencyKey)` | content-free rate/concurrency admission |
 | `TenantChatUserTokenPeriod` | `(tenantId,userId,periodStart)` | confirmed/reserved token balance |
+| `TenantChatEmployeeWeeklyTokenPeriod` | `(tenantId,employeeId,periodStart)` | RuntimeSnapshot에 명시된 employee actor의 confirmed/reserved/unconfirmed weekly token balance |
 | `TenantChatTenantCostPeriod` | `(tenantId,periodStart,currency)` | confirmed/reserved tenant cost balance |
 | `TenantChatUsageReservation` | `requestId` and `(tenantId,userId,idempotencyKey)` | request reserve/top-up/settle state machine and immutable `off|miss` cache provenance |
 | `TenantChatProviderAttempt` | `(requestId,attemptNo)` | primary/fallback billable attempt |
@@ -343,6 +353,8 @@ MVP UI는 위 상태만 보여주고 세부 threshold 편집은 admin advanced s
 Correctness source는 period/reservation/ledger transaction이다. `TenantChatInvocationLog`와 Dashboard projector는 재생 가능한 read model이며 projection lag가 quota 판단을 바꾸지 않는다. 기존 `p0_llm_invocation_logs`에 tenant-chat sentinel Project/Application을 넣지 않는다.
 
 ### 9.2 Event
+
+최신 terminal usage v3와 content-free terminal v2 event에는 선택적 `ttftMs`를 추가한다. 값은 private completion 시작부터 browser 전달에 성공한 첫 non-empty `tenant_chat.delta`까지 한 번만 측정한다. fallback은 최초 시작점을 유지하고 exact cache hit은 `0`을 기록한다. delta 없이 끝난 요청과 이전 event는 필드를 보내지 않으며 invocation log/API에서는 `null`과 `—`로 표현한다. replay/attach가 별도 TTFT event를 만들지 않고, `latencyMs`와 총 처리 시간의 기존 의미도 유지한다.
 
 Ledger transition outbox의 최신 writer는 paired [usage settlement schema v3](./schemas/usage-settlement-event-v3.schema.json)를 따르고 reservation에 고정된 필수 `cacheOutcome=off|miss`를 모든 transition에 전달한다. Exact Cache hit는 usage reservation을 만들지 않으므로 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)의 `cacheOutcome=hit`을 사용한다. projector는 v1/v2를 계속 읽으며 해당 필드가 없으면 backfill된 reservation provenance를 사용한다.
 
@@ -375,6 +387,7 @@ Idempotency rules:
 | 403 | `CHAT_EMPLOYEE_DISABLED` | employee actor의 linked Employee inactive/missing |
 | 403 | `CHAT_SAFETY_BLOCKED` | executable safety policy가 content를 차단; detected value는 비노출 |
 | 403 | `CHAT_QUOTA_HARD_LIMIT` | user hard stop; cache miss provider call 불가 |
+| 403 | `CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT` | employee 주간 token limit 도달; 안전한 관리자 문의 메시지를 반환 |
 | 403 | `CHAT_BUDGET_HARD_LIMIT` | tenant hard stop; 금액은 직원에게 비노출 |
 | 409 | `CHAT_POLICY_ACK_REQUIRED` | employee notice acknowledgement 필요 |
 | 409 | `CHAT_IDEMPOTENCY_CONFLICT` | 같은 key와 다른 binding |
@@ -437,6 +450,8 @@ Idempotency rules:
 - p50/p95/p99 total/provider latency
 - snapshotVersion/pricingVersion별 safe provenance
 - projection freshness/lag
+
+Projection freshness는 마지막 invocation의 경과 시간이 아니라 미처리 outbox 유무를 뜻한다. 미처리 outbox가 없으면 tenant가 유휴 상태여도 `fresh`이며, `lagSeconds`는 마지막 projected invocation의 경과 시간을 관측용으로만 전달한다. 미처리 outbox가 있으면 `partial`로 표시한다.
 
 Paired [Dashboard schema](./schemas/dashboard-aggregate.schema.json)는 content-free aggregate만 허용한다.
 메인 Dashboard 비용 추이와 legacy union reader는 additive [cost series schema](./schemas/cost-series.schema.json)를 사용하며 confirmed cost만 포함한다.

@@ -182,6 +182,7 @@ type PreparedExecution struct {
 	tokenRate      providerTokenLimiter
 	preCall        preCallAccounting
 	metrics        *metrics.Registry
+	startedAt      time.Time
 }
 
 type ReplayExecution struct {
@@ -272,6 +273,7 @@ func (s *Service) Prepare(
 	if s == nil || s.snapshots == nil || s.usage == nil || s.providers == nil {
 		return nil, tenantchat.ErrUsageGuardUnavailable
 	}
+	startedAt := time.Now()
 	if err := tenantchat.ValidateCompletionInput(request.Input); err != nil {
 		return nil, err
 	}
@@ -328,16 +330,19 @@ func (s *Service) Prepare(
 		}
 		if hit {
 			s.recordCacheOperation("lookup", "hit", "success")
+			cacheContext := request.Context
+			cacheTTFTMs := int64(0)
+			cacheContext.TTFTMs = &cacheTTFTMs
 			settleCtx, settleCancel := detachedAccountingContext(ctx)
 			replayed, settleErr := s.ledgerless.FinalizeLedgerless(
-				settleCtx, request.Context, snapshot, "cache_hit", "", "hit",
+				settleCtx, cacheContext, snapshot, "cache_hit", "", "hit",
 			)
 			settleCancel()
 			if settleErr != nil {
 				return nil, tenantchat.ErrUsageGuardUnavailable
 			}
 			return &CacheExecution{
-				requestContext: request.Context, entry: entry, replayed: replayed, metrics: s.metrics,
+				requestContext: cacheContext, entry: entry, replayed: replayed, metrics: s.metrics,
 			}, nil
 		}
 		s.recordCacheOperation("lookup", "miss", "success")
@@ -446,6 +451,7 @@ func (s *Service) Prepare(
 		tokenRate:      s.tokenRate,
 		preCall:        s.preCall,
 		metrics:        s.metrics,
+		startedAt:      startedAt,
 	}, nil
 }
 
@@ -712,8 +718,20 @@ func (e *PreparedExecution) relayAttempt(ctx context.Context, emit EventEmitter)
 			result.clientWrite = true
 			return result
 		}
+		e.recordTTFT()
 		result.deltaCount++
 	}
+}
+
+func (e *PreparedExecution) recordTTFT() {
+	if e == nil || e.requestContext.TTFTMs != nil {
+		return
+	}
+	ttftMs := time.Since(e.startedAt).Milliseconds()
+	if ttftMs < 0 {
+		ttftMs = 0
+	}
+	e.requestContext.TTFTMs = &ttftMs
 }
 
 func (e *PreparedExecution) openFallback(
@@ -956,6 +974,8 @@ func completionErrorFor(err error) *tenantchat.CompletionError {
 		return &tenantchat.CompletionError{Code: "CHAT_PROVIDER_TIMEOUT", Message: "Tenant chat provider timed out."}
 	case errors.Is(err, tenantchat.ErrQuotaHardLimit):
 		return &tenantchat.CompletionError{Code: "CHAT_QUOTA_HARD_LIMIT", Message: "Tenant chat user quota was reached."}
+	case errors.Is(err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit):
+		return &tenantchat.CompletionError{Code: "CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT", Message: "이번 주 사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요."}
 	case errors.Is(err, tenantchat.ErrBudgetHardLimit):
 		return &tenantchat.CompletionError{Code: "CHAT_BUDGET_HARD_LIMIT", Message: "Tenant chat tenant budget was reached."}
 	case errors.Is(err, tenantchat.ErrRateLimited):

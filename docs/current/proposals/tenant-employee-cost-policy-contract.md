@@ -1,4 +1,6 @@
-# Tenant Employee Cost Policy Contract
+# Superseded: Tenant Employee Cost Policy Contract
+
+> Superseded on 2026-07-17 by the Tenant Chat employee weekly token quota contract in [`docs/tenant-chat/contracts.md`](../../tenant-chat/contracts.md). The historical cost-policy tables and audit evidence remain preserved, but Tenant Chat no longer uses this cross-surface cost ledger for enforcement. Project/API-key compatibility policy is unchanged.
 
 | Field | Value |
 |---|---|

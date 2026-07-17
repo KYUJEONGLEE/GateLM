@@ -524,6 +524,32 @@ function validateQuotaPolicy(policies: TenantChatRuntimePolicies): void {
       'quota thresholds must satisfy warning < economy < hard stop',
     );
   }
+  const employeeLimits = quota.employeeWeeklyTokenLimits;
+  if (employeeLimits === undefined) {
+    return;
+  }
+  if (employeeLimits.length > 10_000) {
+    throw new TenantChatRuntimeContractError(
+      'policies.quota.employeeWeeklyTokenLimits cannot contain more than 10000 entries',
+    );
+  }
+  const employeeIds = new Set<string>();
+  for (const [index, limit] of employeeLimits.entries()) {
+    const prefix = `policies.quota.employeeWeeklyTokenLimits[${index}]`;
+    assertOpaqueId(limit.employeeId, `${prefix}.employeeId`);
+    assertNonnegativeInteger(limit.limitTokens, `${prefix}.limitTokens`);
+    if (limit.limitTokens > quota.defaultMonthlyTokenLimit) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.limitTokens cannot exceed policies.quota.defaultMonthlyTokenLimit`,
+      );
+    }
+    if (employeeIds.has(limit.employeeId)) {
+      throw new TenantChatRuntimeContractError(
+        `${prefix}.employeeId is duplicated`,
+      );
+    }
+    employeeIds.add(limit.employeeId);
+  }
 }
 
 function validateBudgetPolicy(policies: TenantChatRuntimePolicies): void {

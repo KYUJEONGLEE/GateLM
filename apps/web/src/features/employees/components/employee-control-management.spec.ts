@@ -6,10 +6,6 @@ import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 
 const employeeManagementSourceUrl = new URL("./employee-control-management.tsx", import.meta.url);
 const employeeStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
-const analyticsChartsSourceUrl = new URL(
-  "../../analytics/components/analytics-charts.tsx",
-  import.meta.url
-);
 const employeePageSourceUrl = new URL(
   "../../../app/(console)/tenants/[tenantId]/employees/page.tsx",
   import.meta.url
@@ -86,56 +82,59 @@ test("employee list actions use the shared primary action scale", async () => {
   );
 });
 
-test("employee ranking and detail controls use unified cost policies", async () => {
-  const [source, chartSource] = await Promise.all([
+test("employee ranking and detail controls use Tenant Chat cost observation and weekly token limits", async () => {
+  const [source, styles] = await Promise.all([
     readFile(employeeManagementSourceUrl, "utf8"),
-    readFile(analyticsChartsSourceUrl, "utf8")
+    readFile(employeeStylesSourceUrl, "utf8")
   ]);
 
   expect(source).toContain("AnalyticsRankedBarChart");
   expect(source).toContain('kind="micro-usd"');
   expect(source).toContain('orientation="vertical"');
   expect(source).toContain("outlierMultiplier={1.5}");
-  expect(source).toContain("평균의 1.5배 이상");
-  expect(source).toContain('useState<EmployeeCostChartPeriod>("daily")');
-  expect(source).toContain('employeeCostChartPeriod === "daily"');
   expect(source).toContain("employeeUsage.dailyRank <= 3");
   expect(source).toContain("employeeUsage.weeklyRank <= 3");
   expect(source).toContain('renderEmployeeSortHeader("weeklyCost", usageText.weeklyTokens)');
   expect(source).toContain("?.weeklyCostMicroUsd ?? -1");
   expect(source).toContain("row.dailyCostMicroUsd ?? 0");
-  expect(source).toContain("row.monthlyCostMicroUsd ?? 0");
-  expect(source).not.toContain("return rows.slice(0, 10);");
-  expect(chartSource).toMatch(
-    /const outlierThreshold = useMemo\([\s\S]*?activeRows\.reduce[\s\S]*?\[activeRows, outlierMultiplier\]/
-  );
-  expect(source).toContain('["daily", "weekly", "monthly"]');
-  expect(source).toContain('action: "updateCostPolicy"');
-  expect(source).toContain("expectedVersion: policy.version");
-  expect(source).toContain("daily: toEmployeeCostLimit(draft.daily)");
-  expect(source).toContain("weekly: toEmployeeCostLimit(draft.weekly)");
-  expect(source).toContain("parseEmployeeCostPolicy(");
-  expect(source).toContain("text.limitConflict");
+  expect(source).toContain('action: "updateWeeklyTokenQuota"');
+  expect(source).toContain("sourceQuota && sourceQuota.version > 0");
+  expect(source).toContain("expectedVersion: sourceQuota.version");
+  expect(source).toContain("limitTokens,");
+  expect(source).toContain("EmployeeWeeklyTokenQuotaEditor");
+  expect(source).toContain("EMPLOYEE_WEEKLY_TOKEN_LIMIT_DEFAULT");
+  expect(source).toContain("EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000");
+  expect(source).toContain('type="range"');
+  expect(source).toContain("formatWeeklyTokenLimitInput");
+  expect(source).toContain("parseWeeklyTokenLimitInput");
+  expect(source).toContain("WeeklyTokenQuotaInfo");
+  expect(source).toContain("TooltipProvider");
+  expect(source).toContain("employee-weekly-token-slider-current");
+  expect(source).toContain("tenantMonthlyTokenLimit");
+  expect(source).toContain("monthlyLimitExceeded");
+  expect(source).toContain("defaultEmployeeWeeklyTokenLimit");
+  expect(source).toContain('locale === "ko" ? "적용" : "Apply"');
+  expect(source).toContain("employeeCostRange");
+  expect(source).toContain("Provider-confirmed Tenant Chat cost only");
   expect(source).toContain("if (response.status === 409)");
   expect(source).toContain("disabled={pending}");
-  expect(source).toContain("decimals={6}");
-  expect(source).toContain("enabled && current[card.periodKey].limitUsd <= 0");
-  expect(source).toContain("!draft.enabled && draft.limitUsd <= 0 ? 0");
-  expect(source).toContain("Routing remains monitor-only after the ledger is connected.");
   expect(source).not.toContain("function costLimitUsd(");
-  expect(source).toContain("costPolicyItem.enforcementReady");
-  expect(source).toContain("text.exposureState");
   expect(source).toContain("usage.periodTimezone");
-  expect(source).toContain('draft.enforcementMode === "restrict_high_cost"');
-  expect(source).not.toContain('policy?.version === 0 ? "restrict_high_cost"');
   expect(source).not.toContain("AnalyticsEmployeeTokenBarChart");
+  expect(styles).toContain(".employee-weekly-token-footer {");
+  expect(styles).toContain(".employee-weekly-token-slider-current {");
+  expect(styles).toContain(".employee-weekly-token-switch:is([data-checked], [aria-checked=\"true\"])");
 });
 
-test("employee monthly graph loads unified month-to-date cost", async () => {
-  const pageSource = await readFile(employeePageSourceUrl, "utf8");
+test("employee cost graph requests Tenant Chat ranges", async () => {
+  const [pageSource, source] = await Promise.all([
+    readFile(employeePageSourceUrl, "utf8"),
+    readFile(employeeManagementSourceUrl, "utf8")
+  ]);
 
   expect(pageSource).toContain("getAllEmployeeUsage({");
   expect(pageSource).toContain('metric: "cost"');
-  expect(pageSource).toContain("monthlyUsage: monthlyEmployeeUsage.ok");
-  expect(pageSource).toContain("Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1)");
+  expect(pageSource).toContain('source: "tenant_chat"');
+  expect(source).toContain("&range=${employeeCostRange}");
+  expect(source).toContain('["24h", "7d", "30d"]');
 });

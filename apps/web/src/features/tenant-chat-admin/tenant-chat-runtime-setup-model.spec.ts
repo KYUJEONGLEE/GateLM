@@ -115,6 +115,13 @@ test("active snapshot wins on reload", () => {
           { action: "redact", detectorType: "email" },
           { action: "block", detectorType: "api_key" }
         ]
+      },
+      quota: {
+        defaultMonthlyTokenLimit: 1_000_000,
+        economyPercent: 90,
+        hardStopPercent: 100,
+        timezone: "Asia/Seoul",
+        warningPercent: 80
       }
     },
     readiness: "ready"
@@ -274,22 +281,28 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
-test("Chat App policy navigation exposes routing, cache, security, and tenant-admin Knowledge Base panels", async () => {
+test("Chat App policy navigation exposes routing, cache, security, usage limits, and tenant-admin Knowledge Base panels", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const runtimeEditorSourceUrl = new URL("../policies/components/runtime-policy-editor.tsx", import.meta.url);
-  const [rawSource, runtimeEditorSource] = await Promise.all([
+  const pageSourceUrl = new URL("../../app/(console)/tenants/[tenantId]/chat-app/page.tsx", import.meta.url);
+  const [rawSource, runtimeEditorSource, pageSource] = await Promise.all([
     readFile(componentSourceUrl, "utf8"),
-    readFile(runtimeEditorSourceUrl, "utf8")
+    readFile(runtimeEditorSourceUrl, "utf8"),
+    readFile(pageSourceUrl, "utf8")
   ]);
   const source = rawSource.replaceAll("\r\n", "\n");
 
   expect(source).toContain('const chatAppPolicySections: ChatAppPolicySection[] = [');
-  expect(source).toContain('"routing",\n  "cache",\n  "security",\n  "knowledge"');
+  expect(source).toContain('"routing",\n  "cache",\n  "security",\n  "quota",\n  "knowledge"');
+  expect(source).toContain('section === "quota"');
+  expect(pageSource).toContain('value === "quota"');
   expect(source).toContain('securityTab: "보안"');
   expect(source).toContain('knowledgeTab: "지식 베이스"');
   expect(source).toContain('section !== "knowledge" || canManageKnowledgeBase');
   expect(source).toContain("<KnowledgeBaseManagement");
-  expect(source).toContain('activePolicySection === "cache" || activePolicySection === "security"');
+  expect(source).toContain(
+    'activePolicySection === "cache" ||\n        activePolicySection === "security" ||\n        activePolicySection === "quota"'
+  );
   expect(source).toContain("<CachePolicyControls");
   expect(source).toContain("<SafetyDetectorPolicyControls");
   expect(source).not.toContain("ChatAppPolicySummary");
@@ -452,6 +465,23 @@ test("Chat App cache and security tabs publish the Tenant Chat snapshot policy",
   expect(source).not.toContain("ChatAppPolicySummary");
 });
 
+test("Chat App monthly quota uses the same direct-input and positioned-slider pattern", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
+  const [source, styles] = await Promise.all([
+    readFile(componentSourceUrl, "utf8"),
+    readFile(stylesUrl, "utf8")
+  ]);
+
+  expect(source).toContain("MONTHLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000");
+  expect(source).toContain("MonthlyTokenQuotaInfo");
+  expect(source).toContain("tenant-monthly-token-slider-current");
+  expect(source).toContain("parseMonthlyTokenLimitInput");
+  expect(source).toContain("localizeTenantChatPolicyError");
+  expect(styles).toContain(".tenant-monthly-token-card {");
+  expect(styles).toContain(".tenant-monthly-token-slider-current {");
+});
+
 function setupWithRoutes(): TenantChatAdminRuntimeSetup {
   return {
     ...setup,
@@ -481,6 +511,13 @@ function setupWithRoutes(): TenantChatAdminRuntimeSetup {
           { action: "redact", detectorType: "email" },
           { action: "block", detectorType: "api_key" }
         ]
+      },
+      quota: {
+        defaultMonthlyTokenLimit: 1_000_000,
+        economyPercent: 90,
+        hardStopPercent: 100,
+        timezone: "Asia/Seoul",
+        warningPercent: 80
       }
     }
   };

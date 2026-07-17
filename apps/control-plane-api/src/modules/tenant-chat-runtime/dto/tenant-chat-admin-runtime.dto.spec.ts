@@ -74,6 +74,31 @@ describe('ActivateTenantChatRuntimeDto', () => {
     });
   });
 
+  it('accepts a non-negative global monthly token limit', async () => {
+    await expect(
+      pipe.transform(
+        {
+          quota: {
+            defaultMonthlyTokenLimit: 0,
+            timezone: 'Asia/Seoul',
+            warningPercent: 80,
+            economyPercent: 90,
+            hardStopPercent: 100,
+          },
+        },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).resolves.toMatchObject({
+      quota: {
+        defaultMonthlyTokenLimit: 0,
+        timezone: 'Asia/Seoul',
+        warningPercent: 80,
+        economyPercent: 90,
+        hardStopPercent: 100,
+      },
+    });
+  });
+
   it('rejects duplicate safety detectors and invalid cache values', async () => {
     await expect(
       pipe.transform(

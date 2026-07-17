@@ -50,6 +50,13 @@ export type TenantChatAdminCachePolicy = {
 export type TenantChatAdminSafetyPolicy = {
   detectorSet: TenantChatSafetyDetector[];
 };
+export type TenantChatAdminQuotaPolicy = {
+  defaultMonthlyTokenLimit: number;
+  timezone: string;
+  warningPercent: number;
+  economyPercent: number;
+  hardStopPercent: number;
+};
 export type TenantChatRoutingCell = { modelRefs: string[] };
 export type TenantChatRoutingMatrix = Record<
   TenantChatRoutingCategory,
@@ -80,6 +87,7 @@ export type TenantChatAdminActiveSnapshot = {
   routingMode: TenantChatRoutingMode;
   cachePolicy: TenantChatAdminCachePolicy;
   safetyPolicy: TenantChatAdminSafetyPolicy;
+  quota: TenantChatAdminQuotaPolicy;
 };
 
 export type TenantChatAdminRuntimeSetup = {
@@ -98,6 +106,7 @@ export type TenantChatRuntimeActivationValues =
   | (TenantChatRuntimeRoutingActivationValues & {
       cachePolicy: TenantChatAdminCachePolicy;
       safetyPolicy: TenantChatAdminSafetyPolicy;
+      quota: TenantChatAdminQuotaPolicy;
     })
   | (TenantChatRuntimeRoutingActivationValues & {
       cacheEnabled: boolean;

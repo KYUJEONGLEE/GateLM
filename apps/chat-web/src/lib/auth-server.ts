@@ -30,7 +30,7 @@ export function chatCall<T>(path: string, input: {
 }
 
 export function setIssuedCookies(response: NextResponse, issued: IssuedSession): void {
-  const secure = serverEnv().production;
+  const secure = serverEnv().secureCookies;
   response.cookies.set(COOKIE.access, issued.accessToken, {
     httpOnly: true, maxAge: 5 * 60, path: '/', sameSite: 'lax', secure,
   });
@@ -42,11 +42,21 @@ export function setIssuedCookies(response: NextResponse, issued: IssuedSession):
 }
 
 export function clearAuthCookies(response: NextResponse): void {
-  const secure = serverEnv().production;
+  const secure = serverEnv().secureCookies;
   response.cookies.set(COOKIE.access, '', { httpOnly: true, maxAge: 0, path: '/', sameSite: 'lax', secure });
   response.cookies.set(COOKIE.refresh, '', { httpOnly: true, maxAge: 0, path: '/api/tenant-chat/auth', sameSite: 'strict', secure });
 }
 
 export function clearShortCookie(response: NextResponse, name: string, path = '/'): void {
-  response.cookies.set(name, '', { httpOnly: true, maxAge: 0, path, sameSite: 'lax', secure: serverEnv().production });
+  response.cookies.set(name, '', { httpOnly: true, maxAge: 0, path, sameSite: 'lax', secure: serverEnv().secureCookies });
+}
+
+export function setDeviceCookie(response: NextResponse, deviceId: string): void {
+  response.cookies.set(COOKIE.device, deviceId, {
+    httpOnly: true,
+    maxAge: 365 * 24 * 60 * 60,
+    path: '/',
+    sameSite: 'strict',
+    secure: serverEnv().secureCookies,
+  });
 }

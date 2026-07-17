@@ -21,6 +21,7 @@
     "snapshotVersion": { "type": "integer", "minimum": 1 },
     "pricingVersion": { "type": "integer", "minimum": 1 },
     "cacheOutcome": { "type": "string", "enum": ["off", "miss"] },
+    "ttftMs": { "type": "integer", "minimum": 0 },
     "quota": { "$ref": "#/$defs/quota" },
     "budget": { "$ref": "#/$defs/budget" },
     "attempts": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/attempt" } },
@@ -35,7 +36,8 @@
           "quota": { "properties": { "reservedTokensDelta": { "type": "integer", "minimum": 1 }, "confirmedInputTokensDelta": { "const": 0 }, "confirmedOutputTokensDelta": { "const": 0 }, "confirmedTotalTokensDelta": { "const": 0 }, "unconfirmedTokensDelta": { "const": 0 } } },
           "budget": { "properties": { "reservedCostMicroUsdDelta": { "type": "integer", "minimum": 0 }, "confirmedCostMicroUsdDelta": { "const": 0 }, "unconfirmedExposureMicroUsdDelta": { "const": 0 } } },
           "attempts": { "maxItems": 0 }
-        }
+        },
+        "not": { "required": ["ttftMs"] }
       }
     },
     {

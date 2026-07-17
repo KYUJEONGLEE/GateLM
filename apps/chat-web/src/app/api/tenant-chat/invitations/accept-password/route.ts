@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { chatCall, clearShortCookie, COOKIE, setIssuedCookies } from '@/lib/auth-server';
+import { chatCall, clearShortCookie, COOKIE, setDeviceCookie, setIssuedCookies } from '@/lib/auth-server';
 import type { IssuedSession } from '@/lib/auth-types';
 import { secureJson } from '@/lib/route-security';
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const response = NextResponse.json(issued.session, { headers: { 'cache-control': 'no-store' } });
     setIssuedCookies(response, issued);
     clearShortCookie(response, COOKIE.invitation);
-    response.cookies.set(COOKIE.device, deviceId, { httpOnly: true, maxAge: 365 * 24 * 60 * 60, path: '/', sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
+    setDeviceCookie(response, deviceId);
     return response;
   } catch (error) { return jsonError(error); }
 }

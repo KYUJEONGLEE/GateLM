@@ -42,8 +42,13 @@ import type {
   TenantChatRuntimePolicies,
   TenantChatRuntimeRoute,
   TenantChatRuntimeSnapshotDocument,
+  TenantChatEmployeeWeeklyTokenLimit,
 } from './tenant-chat-runtime.types';
 import type { TenantChatModelPricingEntry } from './tenant-chat-model-pricing.catalog';
+import type {
+  EmployeeWeeklyTokenQuotaResponseDto,
+  EmployeeWeeklyTokenQuotasResponseDto,
+} from './dto/employee-weekly-token-quota.dto';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -110,6 +115,37 @@ interface NormalizedAdminRouting {
   routes: TenantChatRoutingMatrix;
   targets: AdminModelTarget[];
 }
+
+type UpdateEmployeeWeeklyTokenQuotaInput = {
+  tenantId: string;
+  employeeId: string;
+  enabled: boolean;
+  limitTokens: number;
+  expectedVersion?: number;
+  updatedBy: string;
+};
+
+type EmployeeWeeklyPolicyRow = {
+  employee_id: string;
+  enabled: boolean;
+  limit_tokens: bigint;
+  timezone: string;
+  version: number;
+};
+
+type EmployeeWeeklyQuotaRow = EmployeeWeeklyPolicyRow & {
+  employee_name: string | null;
+  employee_email: string;
+  period_start: Date | null;
+  period_end: Date | null;
+  period_timezone: string | null;
+  period_limit_tokens: bigint | null;
+  reserved_tokens: bigint | null;
+  confirmed_total_tokens: bigint | null;
+  unconfirmed_tokens: bigint | null;
+  period_state: string | null;
+  snapshot_version: bigint | null;
+};
 
 @Injectable()
 export class TenantChatRuntimeService {
@@ -231,6 +267,267 @@ export class TenantChatRuntimeService {
     }
 
     throw new ConflictException('Tenant Chat runtime publish did not converge.');
+  }
+
+  async listEmployeeWeeklyTokenQuotas(
+    tenantId: string,
+  ): Promise<EmployeeWeeklyTokenQuotasResponseDto> {
+    this.assertDatabaseTenantId(tenantId);
+    await this.assertActiveTenant(tenantId);
+    const rows = await this.prisma.$queryRaw<EmployeeWeeklyQuotaRow[]>(Prisma.sql`
+      SELECT
+        employee.id::text AS employee_id,
+        coalesce(policy.enabled, false) AS enabled,
+        coalesce(policy.limit_tokens, 0)::bigint AS limit_tokens,
+        coalesce(policy.timezone, 'Asia/Seoul') AS timezone,
+        coalesce(policy.version, 0)::integer AS version,
+        employee.name AS employee_name,
+        employee.email AS employee_email,
+        period.period_start,
+        period.period_end,
+        period.period_timezone,
+        period.limit_tokens AS period_limit_tokens,
+        period.reserved_tokens,
+        period.confirmed_total_tokens,
+        period.unconfirmed_tokens,
+        period.state AS period_state,
+        snapshot.version AS snapshot_version
+      FROM employees employee
+      LEFT JOIN tenant_chat_employee_weekly_token_policies policy
+        ON policy.tenant_id = employee."tenantId" AND policy.employee_id = employee.id
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM tenant_chat_employee_weekly_token_periods candidate
+        WHERE candidate.tenant_id = employee."tenantId"
+          AND candidate.employee_id = employee.id
+          AND candidate.period_start <= now()
+          AND candidate.period_end > now()
+        ORDER BY candidate.period_start DESC
+        LIMIT 1
+      ) period ON true
+      LEFT JOIN tenant_chat_active_runtime_snapshots active
+        ON active.tenant_id = employee."tenantId"
+      LEFT JOIN tenant_chat_runtime_snapshots snapshot
+        ON snapshot.snapshot_id = active.snapshot_id AND snapshot.tenant_id = active.tenant_id
+      WHERE employee."tenantId" = ${tenantId}::uuid
+        AND employee."deletedAt" IS NULL
+      ORDER BY lower(employee.email), employee.id
+    `);
+    const data = rows.map((row) => this.toEmployeeWeeklyTokenQuotaResponse(tenantId, row));
+    return {
+      data,
+      pagination: { hasMore: false, limit: Math.max(1, data.length), nextCursor: null },
+    };
+  }
+
+  async updateEmployeeWeeklyTokenQuota(
+    input: UpdateEmployeeWeeklyTokenQuotaInput,
+  ): Promise<EmployeeWeeklyTokenQuotaResponseDto> {
+    this.assertDatabaseTenantId(input.tenantId);
+    this.assertDatabaseTenantId(input.employeeId);
+    this.assertDatabaseTenantId(input.updatedBy);
+    if (!Number.isSafeInteger(input.limitTokens) || input.limitTokens < 0) {
+      throw new BadRequestException('Weekly token limit must be a non-negative safe integer.');
+    }
+    if (
+      input.expectedVersion !== undefined &&
+      (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1)
+    ) {
+      throw new BadRequestException('expectedVersion must be a positive safe integer.');
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await this.prisma.$transaction(
+          async (tx) => this.updateEmployeeWeeklyTokenQuotaInTransaction(tx, input),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        const result = await this.listEmployeeWeeklyTokenQuotas(input.tenantId);
+        const quota = result.data.find((item) => item.employeeId === input.employeeId);
+        if (!quota) {
+          throw new NotFoundException('Active employee not found.');
+        }
+        return quota;
+      } catch (error) {
+        if (attempt < 2 && this.isRetryablePublishConflict(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new ConflictException('Employee weekly token quota did not converge.');
+  }
+
+  private async updateEmployeeWeeklyTokenQuotaInTransaction(
+    tx: Prisma.TransactionClient,
+    input: UpdateEmployeeWeeklyTokenQuotaInput,
+  ): Promise<void> {
+    const employee = await tx.employee.findFirst({
+      where: { id: input.employeeId, tenantId: input.tenantId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!employee) {
+      throw new NotFoundException('Active employee not found.');
+    }
+    const activePointer = await tx.tenantChatActiveRuntimeSnapshot.findUnique({
+      where: { tenantId: input.tenantId },
+      include: { snapshot: { select: { snapshotBody: true } } },
+    });
+    if (!activePointer) {
+      throw new ConflictException('Activate Tenant Chat before configuring employee token quotas.');
+    }
+    const activeSnapshot = this.toSnapshotDocument(activePointer.snapshot.snapshotBody);
+    validateTenantChatRuntimeSnapshot(activeSnapshot);
+    if (
+      input.enabled &&
+      input.limitTokens > activeSnapshot.policies.quota.defaultMonthlyTokenLimit
+    ) {
+      throw new BadRequestException(
+        'Employee weekly token limit cannot exceed the shared monthly token limit.',
+      );
+    }
+
+    const previousRows = await tx.$queryRaw<EmployeeWeeklyPolicyRow[]>(Prisma.sql`
+      SELECT employee_id::text, enabled, limit_tokens, timezone, version
+      FROM tenant_chat_employee_weekly_token_policies
+      WHERE tenant_id = ${input.tenantId}::uuid AND employee_id = ${input.employeeId}::uuid
+      FOR UPDATE
+    `);
+    const previous = previousRows[0] ?? null;
+    if (
+      input.expectedVersion !== undefined &&
+      input.expectedVersion !== (previous?.version ?? 0)
+    ) {
+      throw new ConflictException('Employee weekly token quota was updated by another administrator.');
+    }
+    const nextVersion = (previous?.version ?? 0) + 1;
+    const timezone = activeSnapshot.policies.quota.timezone || 'Asia/Seoul';
+    const previousDocument = previous
+      ? this.employeeWeeklyPolicyDocument(previous)
+      : {};
+    const nextDocument = {
+      enabled: input.enabled,
+      limitTokens: input.limitTokens,
+      timezone,
+      version: nextVersion,
+    };
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO tenant_chat_employee_weekly_token_policies (
+        tenant_id, employee_id, enabled, limit_tokens, timezone, version, updated_by
+      ) VALUES (
+        ${input.tenantId}::uuid, ${input.employeeId}::uuid, ${input.enabled},
+        ${BigInt(input.limitTokens)}, ${timezone}, ${nextVersion}, ${input.updatedBy}::uuid
+      )
+      ON CONFLICT (tenant_id, employee_id) DO UPDATE SET
+        enabled = EXCLUDED.enabled,
+        limit_tokens = EXCLUDED.limit_tokens,
+        timezone = EXCLUDED.timezone,
+        version = EXCLUDED.version,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = now()
+    `);
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO tenant_chat_employee_weekly_token_policy_audits (
+        tenant_id, employee_id, actor_id, policy_version, action, previous_policy, next_policy
+      ) VALUES (
+        ${input.tenantId}::uuid, ${input.employeeId}::uuid, ${input.updatedBy}::uuid,
+        ${nextVersion},
+        ${previous ? (input.enabled ? 'policy_updated' : 'policy_disabled') : 'policy_created'},
+        ${JSON.stringify(previousDocument)}::jsonb,
+        ${JSON.stringify(nextDocument)}::jsonb
+      )
+    `);
+
+    if (input.enabled) {
+      const bounds = employeeWeeklyTokenPeriodBounds(new Date(), timezone);
+      await tx.$executeRaw(Prisma.sql`
+        WITH accumulated AS (
+          SELECT
+            coalesce(sum(reservation.reserved_tokens), 0)::bigint AS reserved_tokens,
+            coalesce(sum(reservation.confirmed_input_tokens), 0)::bigint AS confirmed_input_tokens,
+            coalesce(sum(reservation.confirmed_output_tokens), 0)::bigint AS confirmed_output_tokens,
+            coalesce(sum(reservation.unconfirmed_tokens), 0)::bigint AS unconfirmed_tokens
+          FROM tenant_chat_usage_reservations reservation
+          JOIN tenant_chat_request_admissions admission
+            ON admission.tenant_id = reservation.tenant_id
+           AND admission.user_id = reservation.user_id
+           AND admission.request_id = reservation.request_id
+          WHERE reservation.tenant_id = ${input.tenantId}::uuid
+            AND admission.employee_id = ${input.employeeId}::uuid
+            AND reservation.reserved_at >= ${bounds.from}
+            AND reservation.reserved_at < ${bounds.to}
+        )
+        INSERT INTO tenant_chat_employee_weekly_token_periods (
+          tenant_id, employee_id, period_start, period_end, period_timezone,
+          limit_tokens, reserved_tokens, confirmed_input_tokens, confirmed_output_tokens,
+          confirmed_total_tokens, unconfirmed_tokens, state, policy_version
+        )
+        SELECT
+          ${input.tenantId}::uuid, ${input.employeeId}::uuid, ${bounds.from}, ${bounds.to}, ${timezone},
+          ${BigInt(input.limitTokens)}, accumulated.reserved_tokens,
+          accumulated.confirmed_input_tokens, accumulated.confirmed_output_tokens,
+          accumulated.confirmed_input_tokens + accumulated.confirmed_output_tokens,
+          accumulated.unconfirmed_tokens,
+          CASE WHEN ${BigInt(input.limitTokens)} = 0
+             OR accumulated.reserved_tokens + accumulated.confirmed_input_tokens
+                + accumulated.confirmed_output_tokens + accumulated.unconfirmed_tokens >= ${BigInt(input.limitTokens)}
+            THEN 'blocked' ELSE 'normal' END,
+          ${nextVersion}
+        FROM accumulated
+        ON CONFLICT (tenant_id, employee_id, period_start) DO UPDATE SET
+          limit_tokens = EXCLUDED.limit_tokens,
+          policy_version = EXCLUDED.policy_version,
+          state = CASE WHEN EXCLUDED.limit_tokens = 0
+             OR tenant_chat_employee_weekly_token_periods.reserved_tokens
+                + tenant_chat_employee_weekly_token_periods.confirmed_total_tokens
+                + tenant_chat_employee_weekly_token_periods.unconfirmed_tokens >= EXCLUDED.limit_tokens
+            THEN 'blocked' ELSE 'normal' END,
+          version = tenant_chat_employee_weekly_token_periods.version + 1,
+          updated_at = now()
+      `);
+    }
+
+    const enabledRows = await tx.$queryRaw<EmployeeWeeklyPolicyRow[]>(Prisma.sql`
+      SELECT employee_id::text, enabled, limit_tokens, timezone, version
+      FROM tenant_chat_employee_weekly_token_policies
+      WHERE tenant_id = ${input.tenantId}::uuid AND enabled = true
+      ORDER BY employee_id
+    `);
+    const employeeWeeklyTokenLimits: TenantChatEmployeeWeeklyTokenLimit[] = enabledRows.map((row) => ({
+      employeeId: row.employee_id,
+      limitTokens: Number(row.limit_tokens),
+    }));
+    const policies: TenantChatRuntimePolicies = {
+      ...activeSnapshot.policies,
+      quota: {
+        ...activeSnapshot.policies.quota,
+        warningPercent: 80,
+        economyPercent: 90,
+        hardStopPercent: 100,
+        employeeWeeklyTokenLimits,
+      },
+    };
+    const [latestSnapshot, latestPolicy] = await Promise.all([
+      tx.tenantChatRuntimeSnapshot.findFirst({
+        where: { tenantId: input.tenantId }, orderBy: { version: 'desc' }, select: { version: true },
+      }),
+      tx.tenantChatRuntimeConfig.findFirst({
+        where: { tenantId: input.tenantId }, orderBy: { version: 'desc' }, select: { version: true },
+      }),
+    ]);
+    const snapshot: TenantChatRuntimeSnapshotDocument = {
+      ...activeSnapshot,
+      snapshotId: `tenant_chat_snapshot_${randomUUID().replaceAll('-', '')}`,
+      version: this.nextVersion(latestSnapshot?.version),
+      digest: PLACEHOLDER_DIGEST,
+      policyVersion: this.nextVersion(latestPolicy?.version),
+      policies,
+      publishedAt: new Date().toISOString(),
+      publishedBy: input.updatedBy,
+    };
+    snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+    validateTenantChatRuntimeSnapshot(snapshot);
+    await this.publishInTransaction(tx, snapshot);
   }
 
   private async publishInTransaction(
@@ -628,6 +925,14 @@ export class TenantChatRuntimeService {
       cacheEnabled:
         snapshot.policies.cache.enabled &&
         snapshot.policies.cache.strategy === 'exact',
+      quota: {
+        defaultMonthlyTokenLimit:
+          snapshot.policies.quota.defaultMonthlyTokenLimit,
+        timezone: snapshot.policies.quota.timezone,
+        warningPercent: snapshot.policies.quota.warningPercent,
+        economyPercent: snapshot.policies.quota.economyPercent,
+        hardStopPercent: snapshot.policies.quota.hardStopPercent,
+      },
     };
   }
 
@@ -774,6 +1079,34 @@ export class TenantChatRuntimeService {
         })()
       : previousSafety;
 
+    const previousQuota = activeSnapshot?.policies.quota;
+    const quota = input.quota
+      ? {
+          period: 'calendar_month' as const,
+          // The global quota is intentionally published as a fixed three-stage
+          // policy. The entered token count is the actual stop point.
+          timezone: input.quota.timezone,
+          defaultMonthlyTokenLimit: input.quota.defaultMonthlyTokenLimit,
+          warningPercent: 80,
+          economyPercent: 90,
+          hardStopPercent: 100,
+          employeeWeeklyTokenLimits:
+            previousQuota?.employeeWeeklyTokenLimits ?? [],
+        }
+      : {
+          period: previousQuota?.period ?? ('calendar_month' as const),
+          timezone: previousQuota?.timezone ?? 'Asia/Seoul',
+          defaultMonthlyTokenLimit:
+            previousQuota?.defaultMonthlyTokenLimit ?? 1_000_000,
+          warningPercent: 80,
+          economyPercent: 90,
+          hardStopPercent: 100,
+          employeeWeeklyTokenLimits:
+            previousQuota?.employeeWeeklyTokenLimits ?? [],
+        };
+
+    this.assertEmployeeWeeklyLimitsFitMonthlyTokenLimit(quota);
+
     return {
       rateLimit: activeSnapshot?.policies.rateLimit ?? {
         requests: 60,
@@ -783,14 +1116,7 @@ export class TenantChatRuntimeService {
         maxActiveAdmissionsPerUser: 2,
         admissionTtlSeconds: 30,
       },
-      quota: activeSnapshot?.policies.quota ?? {
-        period: 'calendar_month',
-        timezone: 'Asia/Seoul',
-        defaultMonthlyTokenLimit: 1_000_000,
-        warningPercent: 80,
-        economyPercent: 100,
-        hardStopPercent: 120,
-      },
+      quota,
       budget: activeSnapshot?.policies.budget ?? {
         period: 'calendar_month',
         timezone: 'Asia/Seoul',
@@ -834,6 +1160,20 @@ export class TenantChatRuntimeService {
         finalEventRequired: true,
       },
     };
+  }
+
+  private assertEmployeeWeeklyLimitsFitMonthlyTokenLimit(
+    quota: TenantChatRuntimePolicies['quota'],
+  ): void {
+    if (
+      quota.employeeWeeklyTokenLimits?.some(
+        (limit) => limit.limitTokens > quota.defaultMonthlyTokenLimit,
+      )
+    ) {
+      throw new BadRequestException(
+        'Employee weekly token limit cannot exceed the shared monthly token limit.',
+      );
+    }
   }
 
   private composePricingRoutes(
@@ -1398,6 +1738,62 @@ export class TenantChatRuntimeService {
     );
   }
 
+  private async assertActiveTenant(tenantId: string): Promise<void> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { status: true },
+    });
+    if (!tenant || tenant.status !== ResourceStatus.ACTIVE) {
+      throw new NotFoundException('Active tenant not found.');
+    }
+  }
+
+  private toEmployeeWeeklyTokenQuotaResponse(
+    tenantId: string,
+    row: EmployeeWeeklyQuotaRow,
+  ): EmployeeWeeklyTokenQuotaResponseDto {
+    const limitTokens = Number(row.limit_tokens);
+    const currentWeek = row.period_start && row.period_end && row.period_timezone &&
+      row.period_limit_tokens !== null && row.reserved_tokens !== null &&
+      row.confirmed_total_tokens !== null && row.unconfirmed_tokens !== null && row.period_state
+      ? (() => {
+          const periodLimit = Number(row.period_limit_tokens);
+          const exposure = Number(row.reserved_tokens) + Number(row.confirmed_total_tokens) + Number(row.unconfirmed_tokens);
+          return {
+            periodStart: row.period_start.toISOString(),
+            periodEnd: row.period_end.toISOString(),
+            periodTimezone: row.period_timezone,
+            limitTokens: periodLimit,
+            reservedTokens: Number(row.reserved_tokens),
+            confirmedTotalTokens: Number(row.confirmed_total_tokens),
+            unconfirmedTokens: Number(row.unconfirmed_tokens),
+            remainingTokens: Math.max(0, periodLimit - exposure),
+            state: row.period_state === 'blocked' ? ('blocked' as const) : ('normal' as const),
+          };
+        })()
+      : null;
+    return {
+      tenantId,
+      employeeId: row.employee_id,
+      enabled: row.enabled,
+      limitTokens,
+      timezone: row.timezone,
+      version: row.version,
+      snapshotVersion:
+        row.snapshot_version === null ? null : Number(row.snapshot_version),
+      currentWeek,
+    };
+  }
+
+  private employeeWeeklyPolicyDocument(row: EmployeeWeeklyPolicyRow) {
+    return {
+      enabled: row.enabled,
+      limitTokens: Number(row.limit_tokens),
+      timezone: row.timezone,
+      version: row.version,
+    };
+  }
+
   private assertDatabaseTenantId(tenantId: string): void {
     if (!UUID_PATTERN.test(tenantId)) {
       throw new BadRequestException(
@@ -1405,4 +1801,61 @@ export class TenantChatRuntimeService {
       );
     }
   }
+}
+
+function employeeWeeklyTokenPeriodBounds(now: Date, timezone: string) {
+  const local = zonedDateParts(now, timezone);
+  const localDate = new Date(Date.UTC(local.year, local.month - 1, local.day));
+  const mondayOffset = (localDate.getUTCDay() + 6) % 7;
+  localDate.setUTCDate(localDate.getUTCDate() - mondayOffset);
+  const followingMonday = new Date(localDate);
+  followingMonday.setUTCDate(followingMonday.getUTCDate() + 7);
+  return {
+    from: localMidnightAsUtc(localDate, timezone),
+    to: localMidnightAsUtc(followingMonday, timezone),
+  };
+}
+
+function localMidnightAsUtc(localDate: Date, timezone: string): Date {
+  const target = Date.UTC(
+    localDate.getUTCFullYear(),
+    localDate.getUTCMonth(),
+    localDate.getUTCDate(),
+  );
+  let candidate = target;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const actual = zonedDateParts(new Date(candidate), timezone);
+    const actualAsUtc = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second,
+    );
+    const next = candidate + target - actualAsUtc;
+    if (next === candidate) break;
+    candidate = next;
+  }
+  return new Date(candidate);
+}
+
+function zonedDateParts(value: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    month: '2-digit',
+    second: '2-digit',
+    timeZone: timezone,
+    year: 'numeric',
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(value)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  return parts as Record<'day' | 'hour' | 'minute' | 'month' | 'second' | 'year', number>;
 }

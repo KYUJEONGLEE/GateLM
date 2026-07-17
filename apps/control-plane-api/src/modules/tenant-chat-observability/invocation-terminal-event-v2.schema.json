@@ -11,7 +11,7 @@
     "snapshotVersion": { "type": "integer", "minimum": 1 }, "pricingVersion": { "type": "integer", "minimum": 1 },
     "terminalOutcome": { "type": "string", "enum": ["rate_limited", "concurrency_limited", "safety_blocked", "quota_blocked", "budget_blocked", "policy_ack_required", "runtime_unavailable", "no_eligible_route", "provider_failed", "provider_timeout", "cancelled", "cache_hit"] },
     "errorCode": { "type": "string", "enum": ["CHAT_RATE_LIMITED", "CHAT_CONCURRENCY_LIMITED", "CHAT_SAFETY_BLOCKED", "CHAT_POLICY_ACK_REQUIRED", "CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT", "CHAT_RUNTIME_UNAVAILABLE", "CHAT_NO_ELIGIBLE_ROUTE", "CHAT_PROVIDER_FAILED", "CHAT_PROVIDER_TIMEOUT"] },
-    "quotaState": { "$ref": "#/$defs/policyState" }, "budgetState": { "$ref": "#/$defs/policyState" }, "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] }, "latencyMs": { "type": "integer", "minimum": 0 }
+    "quotaState": { "$ref": "#/$defs/policyState" }, "budgetState": { "$ref": "#/$defs/policyState" }, "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] }, "latencyMs": { "type": "integer", "minimum": 0 }, "ttftMs": { "type": "integer", "minimum": 0 }
   },
   "$defs": {
     "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" }, "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },

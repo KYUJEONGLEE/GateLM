@@ -79,6 +79,7 @@ function readPolicySection(value: string | string[] | undefined): ChatAppPolicyS
   return value === "routing" ||
     value === "cache" ||
     value === "security" ||
+    value === "quota" ||
     value === "knowledge"
     ? value
     : "routing";

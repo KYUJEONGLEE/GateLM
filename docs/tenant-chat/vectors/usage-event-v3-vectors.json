@@ -37,6 +37,7 @@
       "snapshotVersion": 13,
       "pricingVersion": 6,
       "cacheOutcome": "miss",
+      "ttftMs": 184,
       "quota": { "state": "normal", "reservedTokensDelta": 0, "confirmedInputTokensDelta": 120, "confirmedOutputTokensDelta": 60, "confirmedTotalTokensDelta": 180, "unconfirmedTokensDelta": -512 },
       "budget": { "state": "normal", "reservedCostMicroUsdDelta": 0, "confirmedCostMicroUsdDelta": 30, "unconfirmedExposureMicroUsdDelta": -80 },
       "attempts": [

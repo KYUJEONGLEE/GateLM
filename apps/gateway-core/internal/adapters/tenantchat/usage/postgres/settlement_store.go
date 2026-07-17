@@ -520,5 +520,12 @@ func settlementEventPayload(
 		},
 		"attempts": settlementAttemptsPayload(attempts), "terminalOutcome": terminalOutcome,
 	}
+	appendTTFT(payload, requestContext)
 	return json.Marshal(payload)
+}
+
+func appendTTFT(payload map[string]any, requestContext tenantchat.RequestContext) {
+	if requestContext.TTFTMs != nil && *requestContext.TTFTMs >= 0 {
+		payload["ttftMs"] = *requestContext.TTFTMs
+	}
 }

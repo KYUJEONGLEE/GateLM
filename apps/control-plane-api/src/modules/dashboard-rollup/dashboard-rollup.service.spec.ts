@@ -276,6 +276,42 @@ describe('DashboardRollupService', () => {
     expect(employeeUsageSql).toContain('"deletedAt" IS NULL');
   });
 
+  it('rolls up persisted Tenant Chat TTFT rather than a synthetic null value', async () => {
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw };
+    const service = createService();
+    const internals = service as unknown as {
+      rebuildTenantChatHour: (
+        client: typeof tx,
+        bucket: {
+          tenant_id: string;
+          surface: 'tenant_chat';
+          grain: 'hour';
+          bucket_start: Date;
+        },
+        bucketEnd: Date,
+      ) => Promise<void>;
+    };
+
+    await internals.rebuildTenantChatHour(
+      tx,
+      {
+        tenant_id: tenantA,
+        surface: 'tenant_chat',
+        grain: 'hour',
+        bucket_start: new Date('2026-07-14T12:00:00Z'),
+      },
+      new Date('2026-07-14T13:00:00Z'),
+    );
+
+    for (const [query] of executeRaw.mock.calls.slice(0, 2)) {
+      const sql = rawQuery(query).sql;
+      expect(sql).toContain('true AS stream');
+      expect(sql).toContain('ttft_ms,');
+      expect(sql).not.toContain('NULL::bigint AS ttft_ms');
+    }
+  });
+
   it('rolls up only projected confirmed Tenant Chat employee usage', async () => {
     const executeRaw = jest.fn().mockResolvedValue(1);
     const tx = { $executeRaw: executeRaw };

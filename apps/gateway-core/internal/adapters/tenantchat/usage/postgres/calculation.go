@@ -146,6 +146,18 @@ func calendarMonth(now time.Time, timezone string) (time.Time, time.Time, error)
 	return start.UTC(), start.AddDate(0, 1, 0).UTC(), nil
 }
 
+func calendarWeek(now time.Time, timezone string) (time.Time, time.Time, error) {
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	local := now.In(location)
+	// Go's weekday begins at Sunday. Convert it to a Monday-zero offset.
+	mondayOffset := (int(local.Weekday()) + 6) % 7
+	start := time.Date(local.Year(), local.Month(), local.Day()-mondayOffset, 0, 0, 0, 0, location)
+	return start.UTC(), start.AddDate(0, 0, 7).UTC(), nil
+}
+
 func thresholds(limit int64, warningPercent, economyPercent, hardStopPercent int) (int64, int64, int64) {
 	if limit == 0 {
 		return 0, 0, 0

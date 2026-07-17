@@ -342,7 +342,7 @@ export function LiveRequestsView({
                 </td>
                 <td>
                   <span className="dashboard-live-latency">
-                    {formatResponseTimeSeconds(row.latencyMs)}
+                    {formatResponseTimeSeconds(row.ttftMs)}
                   </span>
                 </td>
                 <td>
