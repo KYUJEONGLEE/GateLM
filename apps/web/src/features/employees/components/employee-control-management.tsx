@@ -2294,6 +2294,7 @@ export function EmployeeControlManagement({
         <div className="employee-list-toolbar employee-list-actions">
           <div className="employee-selection-actions">
             <Button
+              className="compact-action-button"
               disabled={pendingAction !== null || selectedInvitationEmployeeCount === 0}
               onClick={() => void sendInvitesForSelectedEmployees()}
               size="sm"
@@ -2304,6 +2305,7 @@ export function EmployeeControlManagement({
               {pendingAction === "inviteSelected" ? "..." : text.inviteSelected}
             </Button>
             <Button
+              className="compact-action-button"
               disabled={pendingAction !== null || selectedPendingInvitationEmployeeCount === 0}
               onClick={() => void deleteInvitationsForSelectedEmployees()}
               size="sm"
@@ -2314,6 +2316,7 @@ export function EmployeeControlManagement({
               {pendingAction === "deleteInvitations" ? "..." : text.invitationDeleteSelected}
             </Button>
             <Button
+              className="compact-action-button"
               disabled={pendingAction !== null || selectedEmployeeCount === 0}
               onClick={() => void deleteSelectedEmployees()}
               size="sm"

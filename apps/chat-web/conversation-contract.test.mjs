@@ -206,7 +206,7 @@ test('SSE parser accepts only safe citation metadata and keeps event order', asy
     applyCount += 1;
   };
   await consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }),
+    accepted(),
     frame('chat.turn.sources', 2, { citations: [citation] }),
     frame('chat.turn.delta', 3, { delta: 'Answer [S1] [S999]' }),
     frame('chat.turn.citations', 4, { citations: [citation] }),
@@ -217,14 +217,14 @@ test('SSE parser accepts only safe citation metadata and keeps event order', asy
 
   current = [];
   await consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: true }),
+    accepted({ replayed: true }),
     frame('chat.turn.sources', 2, { citations: [citation] }),
     frame('chat.turn.delta', 3, { delta: 'Replay [S1]' }),
     frame('chat.turn.final', 4, { messageId, terminalOutcome: 'succeeded', replayed: true }),
   ]), { conversationId, onSources: applyCitations, onCitations: applyCitations });
   assert.deepEqual(current, [citation]);
   await assert.rejects(() => consumeTurnSse(stream([
-    frame('chat.turn.accepted', 1, { replayed: false }),
+    accepted(),
     frame('chat.turn.sources', 2, { citations: [{ ...citation, ciphertext: 'not-safe' }] }),
   ]), { conversationId }));
 });

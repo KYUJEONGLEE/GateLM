@@ -252,6 +252,9 @@ function exactObject(value: unknown, expected: string[]): value is Record<string
 function toStoredPayload(
   encrypted: EncryptedPayload,
 ): EncryptedRagDocumentPrivateMetadata {
+  if (encrypted.schemaVersion !== METADATA_SCHEMA_VERSION) {
+    throw new ContentIntegrityError();
+  }
   return Object.freeze({
     ciphertext: encrypted.ciphertext,
     nonce: encrypted.nonce,

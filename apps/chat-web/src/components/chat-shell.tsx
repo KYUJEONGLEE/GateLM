@@ -19,6 +19,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -26,6 +27,7 @@ import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
 import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
+import { getModelBrand } from '@/lib/model-brand.mjs';
 import {
   consumeTurnSse,
   isBlockedCode,
@@ -546,12 +548,12 @@ export function ChatShell() {
                           ? <p>답변을 작성하고 있습니다…</p>
                           : null}
                       {message.notice && <div className="message-warning" role="alert"><AlertTriangle size={19} aria-hidden /><div><strong>요청을 처리할 수 없습니다.</strong><p>{message.notice.message}</p></div></div>}
-                      {message.content && (message.cacheOutcome === 'hit' || message.effectiveModelKey) && <div className="message-assistant-actions">
+                      {message.content && <div className="message-assistant-actions">
                         <MessageCopyButton content={message.content} label="모델 답변" />
                         {message.cacheOutcome === 'hit'
                           ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
                           : message.effectiveModelKey
-                            ? <div className="message-meta" aria-label={`응답 ${modelResponseMetaText(message, userMessagesByTurnId)}`}>{modelResponseMetaText(message, userMessagesByTurnId)}</div>
+                            ? <ModelResponseMeta message={message} userMessagesByTurnId={userMessagesByTurnId} />
                             : null}
                       </div>}
                     </article>
@@ -565,7 +567,7 @@ export function ChatShell() {
           <div className={`composer${streaming ? ' is-streaming' : ''}`}>
             <label className="sr-only" htmlFor="chat-composer">메시지 입력</label>
             <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={policyState === 'blocked'} placeholder={policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
-            {streaming ? <Button type="button" className="stop-button" aria-label="답변 생성 중지" onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden />{stopping ? '중지 중' : '중지'}</Button>
+            {streaming ? <Button type="button" className="stop-button" aria-label={stopping ? '답변 생성 중지 중' : '답변 생성 중지'} onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden /></Button>
               : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim() || policyState === 'blocked'}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
           </div>
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
@@ -667,6 +669,24 @@ function MessageCopyButton({ content, label }: Readonly<{ content: string; label
       {copyState === 'copied' ? `${label}을 클립보드에 복사했습니다.` : copyState === 'failed' ? `${label}을 복사하지 못했습니다.` : ''}
     </span>
   </>;
+}
+
+function ModelResponseMeta({
+  message,
+  userMessagesByTurnId,
+}: Readonly<{
+  message: DisplayMessage;
+  userMessagesByTurnId: ReadonlyMap<string, DisplayMessage>;
+}>) {
+  const metaText = modelResponseMetaText(message, userMessagesByTurnId);
+  const brand = getModelBrand(message.effectiveModelKey);
+
+  return <div className="message-meta message-model-meta" aria-label={`응답 ${metaText}`}>
+    {brand && <span className="message-model-logo" data-brand={brand.key} aria-hidden="true">
+      <Image alt="" height={16} src={brand.logoSrc} width={16} />
+    </span>}
+    <span>{metaText}</span>
+  </div>;
 }
 
 function replaceCitations(message: DisplayMessage, citations: readonly Citation[]): DisplayMessage {

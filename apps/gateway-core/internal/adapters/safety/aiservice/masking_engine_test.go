@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -524,9 +525,9 @@ func TestMaskingEngineApplyBatchShadowDoesNotEnforceModelBlock(t *testing.T) {
 }
 
 func TestMaskingEngineApplyBatchTimeoutFallsBackAllItems(t *testing.T) {
-	var calls int
+	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls++
+		calls.Add(1)
 		time.Sleep(40 * time.Millisecond)
 		w.WriteHeader(http.StatusGatewayTimeout)
 	}))
@@ -542,8 +543,8 @@ func TestMaskingEngineApplyBatchTimeoutFallsBackAllItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply timed out batch: %v", err)
 	}
-	if calls != 1 || results[0].RedactedPrompt != prompts[0] || results[1].RedactedPrompt != prompts[1] {
-		t.Fatalf("timeout must use one call and all-local fallback: calls=%d results=%+v", calls, results)
+	if calls.Load() != 1 || results[0].RedactedPrompt != prompts[0] || results[1].RedactedPrompt != prompts[1] {
+		t.Fatalf("timeout must use one call and all-local fallback: calls=%d results=%+v", calls.Load(), results)
 	}
 }
 

@@ -225,7 +225,7 @@ export function ProjectManagement({
                 {(["usage", "latest"] as const).map((mode) => (
                   <button
                     aria-pressed={sortMode === mode}
-                    className="project-sort-button"
+                    className="compact-action-button project-sort-button"
                     data-active={sortMode === mode}
                     key={mode}
                     onClick={() => setSortMode(mode)}
