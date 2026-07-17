@@ -328,6 +328,8 @@ jobs:
           fi
           pnpm --filter @gatelm/control-plane-api exec prisma generate \
             --schema prisma/schema.prisma
+          pnpm --filter @gatelm/tenant-content-crypto build
+          pnpm --filter @gatelm/rag-config build
           pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
             prisma/rag-foundation.integration.spec.ts
           pnpm --filter @gatelm/control-plane-api exec jest --runInBand \
