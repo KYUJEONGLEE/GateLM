@@ -307,7 +307,8 @@ export class ConversationService {
         );
         const messages = ragMessage
           ? Object.freeze([ragMessage, ...baseMessages])
-          : baseMessages;        const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
+          : baseMessages;
+        const signal = this.activeTurns.activate(reserved.turnId, attachment, handle);
         if (signal.aborted) throw new TurnStateConflict();
         return Object.freeze({
           kind: 'execute' as const,
@@ -316,11 +317,8 @@ export class ConversationService {
           handle,
           messages,
           userMessage: persisted.message,
-          usageIntent: internalUsageIntent(
-            input.usageIntent,
-            messages,
-            reserved.knowledgeMode === 'tenant',
-          ),          signal,
+          usageIntent: internalUsageIntent(input.usageIntent, messages),
+          signal,
           citationSources,
         });
       } catch (error) {
@@ -584,11 +582,11 @@ const RAG_NO_EVIDENCE_RESPONSE = '등록된 문서에서 관련 근거를 찾지
 function internalUsageIntent(
   input: ClientUsageIntent,
   messages: readonly EphemeralMessage[],
-  ragEnabled = false,
 ): UsageIntent {
+  // RAG retrieval has already produced the final message list here, so the
+  // existing exact-cache fingerprint can safely bind its current context.
   return Object.freeze({
     ...input,
-    ...(ragEnabled ? { cacheStrategy: 'off' as const } : {}),
     estimatedInputTokens: Math.max(
       1,
       messages.reduce((total, message) => total + Buffer.byteLength(message.content, 'utf8'), 0),

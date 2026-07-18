@@ -99,6 +99,7 @@ const onboardingText: Record<
     issueApiKeyPending: string;
     next: string;
     noTeams: string;
+    projectSettings: string;
     projectSavedPolicyIncomplete: string;
     previous: string;
     retryPolicySetup: string;
@@ -121,6 +122,7 @@ const onboardingText: Record<
     issueApiKeyPending: "Issue a live API Key. The plaintext appears once.",
     next: "Next",
     noTeams: "No active teams available.",
+    projectSettings: "Project settings",
     projectSavedPolicyIncomplete: "Project saved / policy setup incomplete.",
     previous: "Previous",
     retryPolicySetup: "Retry policy setup",
@@ -142,6 +144,7 @@ const onboardingText: Record<
     issueApiKeyPending: "실제 API Key를 발급하고 원문을 한 번만 표시합니다.",
     next: "다음",
     noTeams: "No active teams available.",
+    projectSettings: "Project 설정",
     projectSavedPolicyIncomplete: "프로젝트 저장 완료 / 정책 설정 미완료.",
     previous: "이전",
     retryPolicySetup: "정책 설정 다시 시도",
@@ -621,7 +624,6 @@ export function AdminOnboardingFlow({
                 },
                 selectedTeamIds,
                 teamCreateError: teamCreateState.error,
-                tenantId: model.tenantId,
                 text,
                 updateDraft
               })}
@@ -690,7 +692,6 @@ function renderStepContent({
   providerConnectionsModel,
   selectedTeamIds,
   teamCreateError,
-  tenantId,
   text,
   updateDraft
 }: {
@@ -709,13 +710,15 @@ function renderStepContent({
   providerConnectionsModel: ProviderConnectionsModel;
   selectedTeamIds: Set<string>;
   teamCreateError: string;
-  tenantId: string;
   text: (typeof onboardingText)[Locale];
   updateDraft: (field: keyof OnboardingDraft, value: string) => void;
 }) {
   if (activeStepId === "project") {
     return (
       <div className="onboarding-stack">
+        <div className="onboarding-project-heading">
+          <h3>{text.projectSettings}</h3>
+        </div>
         <OnboardingField
           field="projectName"
           label="Project name"
@@ -787,7 +790,6 @@ function renderStepContent({
         locale={locale}
         project={projectSetupState.project}
         selectedModelKey={draft.selectedModelKey}
-        tenantId={projectSetupState.project?.tenantId ?? tenantId}
       />
     </div>
   );
@@ -821,7 +823,6 @@ function OnboardingTeamPicker({
     <fieldset className="onboarding-team-field">
       <legend>
         {text.team}
-        <span aria-hidden="true" className="required-field-marker">*</span>
       </legend>
       {teamCreateError ? (
         <Alert variant="destructive">

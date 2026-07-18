@@ -548,6 +548,17 @@ func TestRoutingV2WithoutTierAllowsRolloutOffIntegration(t *testing.T) {
 	if reservation.Route.ModelKey != "standard_model" || reservation.Route.Tier != "" {
 		t.Fatalf("unexpected Routing v2 reservation route: %+v", reservation.Route)
 	}
+	var routingDifficulty *string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT routing_difficulty
+		FROM tenant_chat_usage_reservations
+		WHERE request_id = $1
+	`, completionContext.RequestID).Scan(&routingDifficulty); err != nil {
+		t.Fatalf("read compatibility routing difficulty: %v", err)
+	}
+	if routingDifficulty != nil {
+		t.Fatalf("expected missing compatibility routing difficulty to persist as NULL, got %q", *routingDifficulty)
+	}
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
 }
 

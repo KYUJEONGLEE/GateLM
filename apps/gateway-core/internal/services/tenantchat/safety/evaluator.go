@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gatelm/apps/gateway-core/internal/domain/masking"
@@ -78,7 +79,11 @@ func (e *Evaluator) Evaluate(
 	}
 	for resultIndex, masked := range maskedResults {
 		if masked.Action == masking.ActionBlocked && requestIndexes[resultIndex] == currentUserMessageIndex {
-			return tenantchat.SafetyEvaluation{Blocked: true}, nil
+			summary, summaryErr := safetySummary([]masking.Result{masked}, snapshot.Policies.Safety.PolicyDigest)
+			if summaryErr != nil {
+				return tenantchat.SafetyEvaluation{Blocked: true}, nil
+			}
+			return tenantchat.SafetyEvaluation{Blocked: true, Summary: &summary}, nil
 		}
 		result.Messages[requestIndexes[resultIndex]].Content = masked.RedactedPrompt
 	}
@@ -116,12 +121,17 @@ func (e *Evaluator) Sanitize(
 	if err != nil || len(maskedResults) != len(input.Messages) {
 		return tenantchat.SanitizationEvaluation{}, ErrUnavailable
 	}
+	summary, err := safetySummary(maskedResults, snapshot.Policies.Safety.PolicyDigest)
+	if err != nil {
+		return tenantchat.SanitizationEvaluation{}, ErrUnavailable
+	}
 	messages := make([]tenantchat.SanitizedMessage, 0, len(maskedResults))
 	for index, masked := range maskedResults {
 		if masked.Action == masking.ActionBlocked {
 			return tenantchat.SanitizationEvaluation{
 				PolicyDigest: snapshot.Policies.Safety.PolicyDigest,
 				Blocked:      true,
+				Summary:      summary,
 			}, nil
 		}
 		if strings.TrimSpace(masked.LogSafePrompt) == "" {
@@ -135,7 +145,53 @@ func (e *Evaluator) Sanitize(
 	return tenantchat.SanitizationEvaluation{
 		Messages:     messages,
 		PolicyDigest: snapshot.Policies.Safety.PolicyDigest,
+		Summary:      summary,
 	}, nil
+}
+
+func safetySummary(results []masking.Result, policyDigest string) (tenantchat.SafetySummary, error) {
+	action := string(masking.ActionNone)
+	detectedCount := 0
+	detectedTypes := make(map[string]struct{})
+	for _, result := range results {
+		if result.DetectedCount < 0 || detectedCount > tenantchat.MaxSafetyDetectedCount-result.DetectedCount {
+			return tenantchat.SafetySummary{}, ErrUnavailable
+		}
+		detectedCount += result.DetectedCount
+		switch result.Action {
+		case masking.ActionBlocked:
+			action = string(masking.ActionBlocked)
+		case masking.ActionRedacted:
+			if action != string(masking.ActionBlocked) {
+				action = string(masking.ActionRedacted)
+			}
+		case masking.ActionNone:
+		default:
+			return tenantchat.SafetySummary{}, ErrUnavailable
+		}
+		for _, detectorType := range result.DetectedTypes {
+			normalized := strings.ToLower(strings.TrimSpace(detectorType))
+			if normalized == "" {
+				return tenantchat.SafetySummary{}, ErrUnavailable
+			}
+			detectedTypes[normalized] = struct{}{}
+		}
+	}
+	types := make([]string, 0, len(detectedTypes))
+	for detectorType := range detectedTypes {
+		types = append(types, detectorType)
+	}
+	sort.Strings(types)
+	summary := tenantchat.SafetySummary{
+		MaskingAction:        action,
+		MaskingDetectedTypes: types,
+		MaskingDetectedCount: detectedCount,
+		SafetyPolicyDigest:   policyDigest,
+	}
+	if err := tenantchat.ValidateSafetySummary(summary); err != nil {
+		return tenantchat.SafetySummary{}, ErrUnavailable
+	}
+	return summary, nil
 }
 
 func (e *Evaluator) applyRequests(

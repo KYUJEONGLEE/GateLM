@@ -282,16 +282,6 @@ export function CostOverTimeCard({
         <div className="dashboard-cost-over-time-title">
           <h2>{text.title}</h2>
           <p>{bucketContext}</p>
-          <div className="dashboard-cost-over-time-metrics" aria-label={text.title}>
-            <div data-kind="total">
-              <span>{text.total}</span>
-              <strong>{formatUsd(totalSpendUsd)}</strong>
-            </div>
-            <div data-kind="average">
-              <span>{text.average}</span>
-              <strong>{formatUsd(renderedSummary?.averageSpendUsd ?? 0)}</strong>
-            </div>
-          </div>
         </div>
         <div className="dashboard-cost-over-time-header-side">
           {rangeOptions.length > 0 ? (
@@ -316,6 +306,16 @@ export function CostOverTimeCard({
               </span>
             </div>
           ) : null}
+        </div>
+        <div className="dashboard-cost-over-time-metrics" aria-label={text.title}>
+          <div data-kind="total">
+            <span>{text.total}</span>
+            <strong>{formatUsd(totalSpendUsd)}</strong>
+          </div>
+          <div data-kind="average">
+            <span>{text.average}</span>
+            <strong>{formatUsd(renderedSummary?.averageSpendUsd ?? 0)}</strong>
+          </div>
         </div>
       </div>
       {displayedStatus === "loading" && !displayedSummary ? (

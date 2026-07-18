@@ -66,6 +66,7 @@ type UsageReservation struct {
 	LedgerVersion        int64
 	CacheOutcome         string
 	Route                SelectedRoute
+	Safety               *SafetySummary
 	Replayed             bool
 }
 

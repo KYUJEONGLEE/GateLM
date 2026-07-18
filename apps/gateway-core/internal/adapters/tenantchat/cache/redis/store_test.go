@@ -60,7 +60,10 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 		}, Quota: tenantruntime.QuotaPolicy{DefaultMonthlyTokenLimit: 1_000_000}},
 	}
 	input := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "synthetic private prompt"}}, Stream: true}
-	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
+	entry := tenantchat.ExactCacheEntry{
+		ResponseText: "synthetic private response", EffectiveProviderID: "provider_001",
+		EffectiveModelKey: "model_001", EffectiveRouteTier: "standard", SourceCostMicroUSD: 125,
+	}
 	if err := store.Put(context.Background(), requestContext, snapshot, input, entry); err != nil {
 		t.Fatalf("put exact cache: %v", err)
 	}
@@ -117,7 +120,7 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	if err != nil || differentRoutingDecisionField == differentModelField {
 		t.Fatalf("routing decision must be bound into exact-cache fingerprint: field=%q err=%v", differentRoutingDecisionField, err)
 	}
-	if client.key != "tenant-chat:exact-cache:v1:tenant_001:user_001" || strings.Contains(client.key, client.field) {
+	if client.key != "tenant-chat:exact-cache:v2:tenant_001:user_001" || strings.Contains(client.key, client.field) {
 		t.Fatalf("unexpected cache namespace: %q", client.key)
 	}
 	if strings.Contains(string(client.value), input.Messages[0].Content) || strings.Contains(string(client.value), entry.ResponseText) {
@@ -138,7 +141,7 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	}
 }
 
-func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.T) {
+func TestStoreHitsRAGResponseOnlyForSameTenantUserAndCurrentContext(t *testing.T) {
 	client := &fakeCacheClient{}
 	store := NewStore(client, &KeySets{byID: map[string]KeySet{
 		"keys_001": {ID: "keys_001", FingerprintKey: bytesOf(1), EncryptionKey: bytesOf(2)},
@@ -151,7 +154,7 @@ func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.
 		}},
 	}
 	initialInput := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{
-		{Role: "system", Content: "synthetic system context"},
+		{Role: "system", Purpose: "rag_context", Content: "synthetic current RAG context"},
 		{Role: "user", Content: "repeat this exact question"},
 	}, Stream: true}
 	requestContext := tenantchat.RequestContext{
@@ -163,13 +166,20 @@ func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.
 			MaxOutputTokens:      32, RequestedTier: "standard", CacheStrategy: "exact",
 		},
 	}
-	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
+	entry := tenantchat.ExactCacheEntry{
+		ResponseText: "synthetic private response", EffectiveProviderID: "provider_001",
+		EffectiveModelKey: "model_001", EffectiveRouteTier: "standard", SourceCostMicroUSD: 125,
+	}
 	if err := store.Put(context.Background(), requestContext, snapshot, initialInput, entry); err != nil {
 		t.Fatalf("put initial exact cache: %v", err)
 	}
+	got, hit, err := store.Get(context.Background(), requestContext, snapshot, initialInput)
+	if err != nil || !hit || got != entry {
+		t.Fatalf("same tenant user with the same effective input may reuse across conversations: hit=%t err=%v entry=%+v", hit, err, got)
+	}
 
 	repeatedInput := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{
-		{Role: "system", Content: "synthetic system context"},
+		{Role: "system", Purpose: "rag_context", Content: "synthetic current RAG context"},
 		{Role: "user", Content: "repeat this exact question"},
 		{Role: "assistant", Content: "synthetic private response"},
 		{Role: "user", Content: "repeat this exact question"},
@@ -179,9 +189,20 @@ func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.
 		EstimatedInputTokens: estimatedInputBytes(repeatedInput.Messages),
 		MaxOutputTokens:      32, RequestedTier: "standard", CacheStrategy: "exact",
 	}
-	got, hit, err := store.Get(context.Background(), repeatedContext, snapshot, repeatedInput)
+	got, hit, err = store.Get(context.Background(), repeatedContext, snapshot, repeatedInput)
 	if err != nil || !hit || got != entry {
 		t.Fatalf("get repeated-turn exact cache: hit=%t err=%v entry=%+v", hit, err, got)
+	}
+
+	differentUser := repeatedContext
+	differentUser.ExecutionScope.Actor.UserID = "user_002"
+	if _, hit, err := store.Get(context.Background(), differentUser, snapshot, repeatedInput); err != nil || hit {
+		t.Fatalf("different user must not share RAG response cache: hit=%t err=%v", hit, err)
+	}
+	differentTenant := repeatedContext
+	differentTenant.ExecutionScope.TenantID = "tenant_002"
+	if _, hit, err := store.Get(context.Background(), differentTenant, snapshot, repeatedInput); err != nil || hit {
+		t.Fatalf("different tenant must not share RAG response cache: hit=%t err=%v", hit, err)
 	}
 
 	differentInput := repeatedInput
@@ -193,9 +214,9 @@ func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.
 
 	differentContext := repeatedInput
 	differentContext.Messages = append([]tenantchat.EphemeralMessage(nil), repeatedInput.Messages...)
-	differentContext.Messages[0].Content = "synthetic system contexx"
+	differentContext.Messages[0].Content = "synthetic changed RAG context"
 	if _, hit, err := store.Get(context.Background(), repeatedContext, snapshot, differentContext); err != nil || hit {
-		t.Fatalf("different earlier context must miss: hit=%t err=%v", hit, err)
+		t.Fatalf("changed RAG context must miss: hit=%t err=%v", hit, err)
 	}
 }
 

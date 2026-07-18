@@ -1,4 +1,6 @@
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
+import type { TenantChatDashboard } from "@/lib/control-plane/tenant-chat-observability-client";
+import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 
 export type AnalyticsSecurityTypeRow = {
   id: string;
@@ -7,9 +9,22 @@ export type AnalyticsSecurityTypeRow = {
 };
 
 export type AnalyticsSecurityEvidence = {
+  blockedRequestCount?: number;
   detectedTypeRows: AnalyticsSecurityTypeRow[];
+  detectorEvidenceMode?: "complete" | "mixed" | "partial" | "sampled" | "unavailable";
+  maskedRequestCount?: number;
   protectedRequestCount: number;
   sampledDetailCount: number;
+  sources?: AnalyticsSecuritySourceEvidence[];
+};
+
+export type AnalyticsSecuritySourceEvidence = {
+  blockedRequestCount: number;
+  detectorEvidenceMode: "complete" | "partial" | "sampled" | "unavailable";
+  id: "project_application" | "tenant_chat";
+  maskedRequestCount: number;
+  protectedRequestCount: number;
+  totalRequestCount: number;
 };
 
 type SafetyDetail = Pick<
@@ -52,6 +67,106 @@ export function buildAnalyticsSecurityEvidence(
     protectedRequestCount,
     sampledDetailCount
   };
+}
+
+export function mergeAnalyticsSecurityEvidence(input: {
+  projectApplicationEvidence?: AnalyticsSecurityEvidence;
+  projectApplicationOverview?: DashboardOverview;
+  tenantChatDashboard?: TenantChatDashboard | null;
+}): AnalyticsSecurityEvidence | undefined {
+  const { projectApplicationEvidence, projectApplicationOverview, tenantChatDashboard } = input;
+  if (!projectApplicationEvidence && !projectApplicationOverview && !tenantChatDashboard) {
+    return undefined;
+  }
+
+  const projectMasked = Math.max(
+    countRecord(projectApplicationOverview?.maskingActionCounts, ["redacted", "masked"]),
+    countOutcomes(projectApplicationOverview?.breakdowns?.bySafetyOutcome, ["redacted", "masked"])
+  );
+  const projectBlocked = Math.max(
+    countRecord(projectApplicationOverview?.maskingActionCounts, ["blocked"]),
+    countOutcomes(projectApplicationOverview?.breakdowns?.bySafetyOutcome, ["blocked"])
+  );
+  const tenantMasked = tenantChatDashboard?.security?.redactedRequests ?? 0;
+  const tenantBlocked = tenantChatDashboard?.security?.blockedRequests ?? 0;
+  const detectorCounts = new Map<string, number>();
+
+  for (const row of projectApplicationEvidence?.detectedTypeRows ?? []) {
+    detectorCounts.set(row.id, (detectorCounts.get(row.id) ?? 0) + row.value);
+  }
+  for (const row of tenantChatDashboard?.security?.byDetectorType ?? []) {
+    const detectorType = normalizeDetectorType(row.detectorType);
+    if (detectorType) {
+      detectorCounts.set(
+        detectorType,
+        (detectorCounts.get(detectorType) ?? 0) + row.requestCount
+      );
+    }
+  }
+
+  const maskedRequestCount = projectMasked + tenantMasked;
+  const blockedRequestCount = projectBlocked + tenantBlocked;
+  const sources: AnalyticsSecuritySourceEvidence[] = [];
+  if (projectApplicationEvidence || projectApplicationOverview) {
+    sources.push({
+      blockedRequestCount: projectBlocked,
+      detectorEvidenceMode: projectApplicationEvidence ? "sampled" : "unavailable",
+      id: "project_application",
+      maskedRequestCount: projectMasked,
+      protectedRequestCount: projectMasked + projectBlocked,
+      totalRequestCount: projectApplicationOverview?.totalRequests ?? 0
+    });
+  }
+  if (tenantChatDashboard !== undefined) {
+    sources.push({
+      blockedRequestCount: tenantBlocked,
+      detectorEvidenceMode: tenantChatDashboard?.security?.coverage.state ?? "unavailable",
+      id: "tenant_chat",
+      maskedRequestCount: tenantMasked,
+      protectedRequestCount: tenantMasked + tenantBlocked,
+      totalRequestCount: tenantChatDashboard?.requests?.total ?? 0
+    });
+  }
+  return {
+    blockedRequestCount,
+    detectedTypeRows: Array.from(detectorCounts, ([id, value]) => ({
+      id,
+      label: id,
+      value
+    })).sort((left, right) => right.value - left.value || left.id.localeCompare(right.id)),
+    detectorEvidenceMode: detectorEvidenceMode(
+      Boolean(projectApplicationEvidence),
+      tenantChatDashboard?.security?.coverage.state
+    ),
+    maskedRequestCount,
+    protectedRequestCount: maskedRequestCount + blockedRequestCount,
+    sampledDetailCount: projectApplicationEvidence?.sampledDetailCount ?? 0,
+    sources
+  };
+}
+
+function detectorEvidenceMode(
+  hasProjectSample: boolean,
+  tenantCoverage: TenantChatDashboard["security"]["coverage"]["state"] | undefined
+): AnalyticsSecurityEvidence["detectorEvidenceMode"] {
+  if (!tenantCoverage) return hasProjectSample ? "sampled" : "unavailable";
+  if (hasProjectSample) return tenantCoverage === "unavailable" ? "sampled" : "mixed";
+  return tenantCoverage;
+}
+
+function countRecord(record: Record<string, number> | undefined, needles: string[]) {
+  return Object.entries(record ?? {}).reduce((total, [key, value]) =>
+    needles.some((needle) => key.toLowerCase().includes(needle)) ? total + value : total, 0);
+}
+
+function countOutcomes(
+  rows: Array<{ outcome: string; requestCount: number }> | undefined,
+  needles: string[]
+) {
+  return (rows ?? []).reduce((total, row) =>
+    needles.some((needle) => row.outcome.toLowerCase().includes(needle))
+      ? total + row.requestCount
+      : total, 0);
 }
 
 function normalizeDetectorType(value: string) {

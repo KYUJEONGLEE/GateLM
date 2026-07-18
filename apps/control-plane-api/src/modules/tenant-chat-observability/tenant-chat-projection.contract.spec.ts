@@ -38,6 +38,38 @@ describe('Tenant Chat projection event contract', () => {
     );
   });
 
+  it('accepts bounded cache provenance for policy-impact projection', () => {
+    const payload = {
+      ...terminalEvent(),
+      schemaVersion: 2,
+      terminalOutcome: 'cache_hit',
+      cacheOutcome: 'hit',
+      effectiveProviderId: 'provider_001',
+      effectiveModelKey: 'model_001',
+      effectiveRouteTier: 'high_quality',
+      routingDifficulty: 'complex',
+      savedCostMicroUsd: 425,
+    };
+    delete (payload as { errorCode?: string }).errorCode;
+
+    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+  });
+
+  it('accepts only simple or complex as routing difficulty', () => {
+    const payload = {
+      ...usageSettledEvent(),
+      schemaVersion: 3,
+      cacheOutcome: 'off',
+      routingDifficulty: 'complex',
+    };
+    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+
+    payload.routingDifficulty = 'high_quality';
+    expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
+      'projection event schema validation failed',
+    );
+  });
+
   it('enforces the usage event conditional attempt rules', () => {
     const payload = usageSettledEvent();
     payload.attempts = [];
@@ -68,6 +100,26 @@ describe('Tenant Chat projection event contract', () => {
     expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
 
     delete payload.cacheOutcome;
+    expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
+      'projection event schema validation failed',
+    );
+  });
+
+  it('accepts only a complete content-free safety summary bundle', () => {
+    const payload = terminalEvent() as ReturnType<typeof terminalEvent> & {
+      maskingAction?: string;
+      maskingDetectedTypes?: string[];
+      maskingDetectedCount?: number;
+      safetyPolicyDigest?: string;
+    };
+    payload.schemaVersion = 2;
+    payload.maskingAction = 'redacted';
+    payload.maskingDetectedTypes = ['email', 'phone_number'];
+    payload.maskingDetectedCount = 2;
+    payload.safetyPolicyDigest = `sha256:${'A'.repeat(43)}`;
+    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+
+    delete payload.maskingDetectedTypes;
     expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
       'projection event schema validation failed',
     );

@@ -74,6 +74,7 @@ AI_SERVICE_ONNX_INTRA_OP_THREADS=4
 AI_SERVICE_ONNX_INTER_OP_THREADS=1
 AI_SERVICE_ONNX_ALLOW_SPINNING=false
 AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret
+AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY=false
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/releases/tenant-chat-pii-models-20260715/openai--privacy-filter
 AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 ```
@@ -81,6 +82,10 @@ AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 The primary model is loaded through the local ONNX Runtime pipeline and its detections are merged through the same sanitized GateLM policy path. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
 The pinned 2026-07-15 delivery bundle still contains the KoELECTRA artifact and the importer verifies all manifest-listed files, but a blank additional-model setting prevents that adapter from loading or warming up. If the allowlisted KoELECTRA path is explicitly enabled for an isolated evaluation, its accepted labels remain email, phone number, and resident registration number only. Person-name and organization-name detections remain rule backstops, and the supplied evaluation does not justify production-grade accuracy claims.
+
+`AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY` defaults to `false`. For an isolated evaluation with a separately supplied model that supports `person_name`, set the ML allowlist to include `person_name` and enable this flag. Existing name-rule matches then seed model windows but do not become final masking signals; only accepted model `person_name` detections are masked. All non-name deterministic rules stay enabled. Startup fails when the flag is enabled without `person_name` model support. This flag does not install, activate, or deploy a model by itself.
+
+For the Gateway path, also set `GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=true`. This removes only the Gateway's local `person_name` rules so the original name reaches the AI Service; all other local PII rules remain active. Gateway startup fails unless the sidecar is enabled in `enforce` mode with a non-empty URL and matching model ID. Keep both flags `false` outside the isolated evaluation profile.
 
 Import only manifest-listed model artifacts from the delivery archive and verify every file hash:
 

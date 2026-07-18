@@ -44,7 +44,8 @@ func BenchmarkServiceDeterministicPrivateExecution(b *testing.B) {
 			Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
 		}
 		cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{
-			ResponseText: "synthetic cached response", EffectiveModelKey: "model-cached",
+			ResponseText: "synthetic cached response", EffectiveProviderID: "provider-cached",
+			EffectiveModelKey: "model-cached", EffectiveRouteTier: "standard", SourceCostMicroUSD: 100,
 		}, hit: true}
 		b.ReportAllocs()
 		b.RunParallel(func(parallel *testing.PB) {

@@ -74,6 +74,10 @@ function safetyResultLabel(
   action: Exclude<LiveRequestRow["safetyAction"], "NONE">,
   locale: Locale
 ) {
+  if (action === "UNAVAILABLE") {
+    return locale === "ko" ? "마스킹 관측 불가" : "Masking unavailable";
+  }
+
   if (locale === "ko") {
     return action === "BLOCKED" ? "개인정보 차단" : "개인정보 마스킹";
   }

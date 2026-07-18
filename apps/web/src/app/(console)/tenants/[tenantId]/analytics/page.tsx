@@ -5,7 +5,6 @@ import {
   Gauge,
   Shield,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles
 } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -18,8 +17,20 @@ import {
   AnalyticsSecurityPanel,
   AnalyticsUsagePanel
 } from "@/features/analytics/components/analytics-panels";
+import {
+  AnalyticsFilterFrame,
+  AnalyticsFilterSelect,
+  AnalyticsPanelTransition
+} from "@/features/analytics/components/analytics-filter-select";
 import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
+import { buildAnalyticsCacheEvidence } from "@/features/analytics/analytics-cache-merge";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
+import { mergeAnalyticsSecurityEvidence } from "@/features/analytics/analytics-security-evidence";
+import { resolveAnalyticsSurfaceScope } from "@/features/analytics/analytics-surface-scope";
+import {
+  buildAnalyticsUsageEvidence,
+  tenantChatBucketForAnalyticsRange
+} from "@/features/analytics/analytics-usage-merge";
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
@@ -31,31 +42,37 @@ import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getEmployeeSecurity } from "@/lib/control-plane/employee-security-client";
 import { getAllEmployeeUsage } from "@/lib/control-plane/employee-usage-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import {
+  getTenantChatCostSeries,
+  getTenantChatDashboard
+} from "@/lib/control-plane/tenant-chat-observability-client";
+import {
+  mergeCostOverTime,
+  selectDashboardSurfaceOverview,
+  toTenantChatCostOverTime,
+  toTenantChatDashboardOverview
+} from "@/lib/dashboard/unified-dashboard";
+import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import { getLiveAnalyticsSecurityEvidence } from "@/lib/gateway/live-analytics-security";
 import {
   getAnalyticsPerformanceRange,
   getLiveAnalyticsPerformance,
-  type LiveAnalyticsPerformance,
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
+import { getLiveAnalyticsReliability } from "@/lib/gateway/live-analytics-reliability";
 import { getLiveAnalyticsV5Evidence } from "@/lib/gateway/live-analytics-v5";
 import {
-  getLiveDashboardOverview,
-  type LiveDashboardOverview
+  getLiveDashboardOverview
 } from "@/lib/gateway/live-dashboard-overview";
-import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type AnalyticsPageProps = {
   params: Promise<{ tenantId: string }>;
   searchParams?: Promise<{
-    model?: string;
     employeeId?: string;
     projectId?: string;
-    provider?: string;
     range?: string;
     tab?: string;
   }>;
@@ -65,9 +82,7 @@ type AnalyticsTab = "impact" | "usage" | "cost" | "performance" | "reliability" 
 
 type AnalyticsFilterState = {
   employeeId: string;
-  model: string;
   projectId: string;
-  provider: string;
   range: LiveAnalyticsRange;
 };
 
@@ -85,17 +100,12 @@ const rangeValues: LiveAnalyticsRange[] = ["15m", "1h", "1d", "1w"];
 
 const pageText = {
   en: {
-    allModels: "All models",
     allEmployees: "All employees",
     allProjects: "All projects",
-    allProviders: "All Providers",
-    apply: "Apply",
     filterAria: "Analytics filters",
     employee: "Employee",
-    model: "Model",
     project: "Project",
     projectUnavailable: "Selected project unavailable",
-    provider: "Provider",
     range: "Time range",
     rangeLabels: { "15m": "15 minutes", "1h": "1 hour", "1d": "24 hours", "1w": "7 days" },
     subtitle: "Cost, policy, and operational performance",
@@ -108,20 +118,16 @@ const pageText = {
       security: "Security",
       usage: "Usage"
     },
-    title: "Analytics"
+    title: "Analytics",
+    updating: "Updating analytics..."
   },
   ko: {
-    allModels: "전체 모델",
     allEmployees: "전체 직원",
     allProjects: "전체 프로젝트",
-    allProviders: "전체 Provider",
-    apply: "적용",
     filterAria: "분석 필터",
     employee: "직원",
-    model: "모델",
     project: "프로젝트",
     projectUnavailable: "선택한 프로젝트를 사용할 수 없음",
-    provider: "Provider",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
     subtitle: "비용, 정책, 운영 성능 분석",
@@ -134,7 +140,8 @@ const pageText = {
       security: "보안",
       usage: "사용량"
     },
-    title: "Analytics"
+    title: "Analytics",
+    updating: "분석 데이터 업데이트 중..."
   }
 } satisfies Record<Locale, unknown>;
 
@@ -170,22 +177,34 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     projectId: effectiveProjectId ?? requestedFilters.projectId
   };
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
+  const analyticsSurfaceScope = resolveAnalyticsSurfaceScope({
+    projectId: filters.projectId,
+    projectScoped
+  });
+  const shouldIncludeTenantChat = analyticsSurfaceScope === "all";
+  const shouldLoadTenantChatDashboard =
+    shouldIncludeTenantChat &&
+    (activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security");
+  const shouldLoadTenantChatSeries =
+    shouldLoadTenantChatDashboard && (activeTab === "usage" || activeTab === "cost");
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
   const needsReliabilityEvidence = activeTab === "reliability";
   const needsSecurityEvidence = activeTab === "security";
-  const needsEmployeeUsage = !projectScoped && (activeTab === "usage" || activeTab === "cost");
+  const needsEmployeeUsage = !projectScoped && activeTab !== "security";
   const needsEmployeeSecurity = !projectScoped && activeTab === "security";
   const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
   const [
-    overview,
+    projectApplicationOverview,
+    tenantChatDashboard,
+    tenantChatSeries,
     performance,
-    costTrend,
+    projectApplicationCostTrend,
     v5Evidence,
-    reliabilityRecords,
-    securityEvidence,
+    reliability,
+    projectApplicationSecurityEvidence,
     employeeUsageResult,
     employeeSecurityResult
   ] = await Promise.all([
@@ -193,11 +212,25 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       projectId: filters.projectId || undefined,
       range: filters.range
     }),
+    shouldLoadTenantChatDashboard
+      ? getTenantChatDashboard(
+          effectiveTenantId,
+          reliabilityRange.from,
+          reliabilityRange.to
+        )
+      : Promise.resolve(undefined),
+    shouldLoadTenantChatSeries
+      ? getTenantChatCostSeries(
+          effectiveTenantId,
+          reliabilityRange.from,
+          reliabilityRange.to,
+          tenantChatBucketForAnalyticsRange(filters.range)
+        )
+      : Promise.resolve(undefined),
     needsPerformance
       ? getLiveAnalyticsPerformance(effectiveTenantId, {
-          model: activeTab === "performance" ? filters.model || undefined : undefined,
+          includeTenantChat: activeTab === "performance" && shouldIncludeTenantChat,
           projectId: filters.projectId || undefined,
-          provider: activeTab === "performance" ? filters.provider || undefined : undefined,
           range: filters.range
         })
       : Promise.resolve(undefined),
@@ -214,12 +247,11 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })
       : Promise.resolve(undefined),
     needsReliabilityEvidence
-      ? getLiveGatewayRequestLogs({
-          from: reliabilityRange.from,
-          limit: 100,
+      ? getLiveAnalyticsReliability(effectiveTenantId, {
+          incidentLimit: 4,
           projectId: filters.projectId || undefined,
-          tenantId: effectiveTenantId,
-          to: reliabilityRange.to
+          range: filters.range,
+          surface: analyticsSurfaceScope
         })
       : Promise.resolve(undefined),
     needsSecurityEvidence
@@ -248,17 +280,86 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       : Promise.resolve(undefined)
   ]);
 
+  const tenantChatOverview = tenantChatDashboard
+    ? toTenantChatDashboardOverview(effectiveTenantId, tenantChatDashboard)
+    : undefined;
+  const tenantChatCostTrend = tenantChatSeries
+    ? toTenantChatCostOverTime(tenantChatSeries)
+    : undefined;
+  const costTrend = projectApplicationCostTrend && tenantChatCostTrend
+    ? mergeCostOverTime(projectApplicationCostTrend, tenantChatCostTrend)
+    : projectApplicationCostTrend ?? tenantChatCostTrend;
+  const selectedOverview =
+    activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security"
+    ? selectDashboardSurfaceOverview(
+        shouldIncludeTenantChat ? "all" : "project_application",
+        projectApplicationOverview,
+        tenantChatOverview,
+        { tenantChatNotConfigured: tenantChatDashboard === null }
+      )
+    : projectApplicationOverview;
+  const overview = activeTab === "usage" && usageSeriesIsPartial({
+    performanceAvailable: Boolean(performance),
+    projectApplicationAvailable: Boolean(projectApplicationOverview),
+    tenantChatAvailable: Boolean(tenantChatOverview),
+    tenantChatSeriesAvailable: Boolean(tenantChatSeries)
+  })
+    ? markAnalyticsUsagePartial(selectedOverview)
+    : activeTab === "cost" && costSeriesIsPartial({
+        projectApplicationAvailable: Boolean(projectApplicationOverview),
+        projectApplicationSeriesAvailable: Boolean(projectApplicationCostTrend),
+        tenantChatAvailable: Boolean(tenantChatOverview),
+        tenantChatSeriesAvailable: Boolean(tenantChatCostTrend)
+      })
+      ? markAnalyticsCostPartial(selectedOverview)
+    : selectedOverview;
+  const usageEvidence = activeTab === "usage"
+    ? buildAnalyticsUsageEvidence({
+        locale,
+        projectApplicationOverview,
+        projectRequestVolume: projectApplicationOverview
+          ? performance?.latencyDistribution
+          : undefined,
+        range: filters.range,
+        tenantChatOverview,
+        tenantChatSeries: tenantChatOverview ? tenantChatSeries : undefined
+      })
+    : undefined;
+  const cacheEvidence = activeTab === "cache"
+    ? buildAnalyticsCacheEvidence({
+        projectApplicationOverview,
+        tenantChatOverview: shouldIncludeTenantChat ? tenantChatOverview : undefined
+      })
+    : undefined;
+  const securityEvidence = activeTab === "security"
+    ? mergeAnalyticsSecurityEvidence({
+        projectApplicationEvidence: projectApplicationSecurityEvidence,
+        projectApplicationOverview,
+        tenantChatDashboard: shouldIncludeTenantChat ? tenantChatDashboard : undefined
+      })
+    : undefined;
   const text = pageText[locale];
-  const projects = getVisibleProjectsForConsoleAuth(
+  const visibleProjects = getVisibleProjectsForConsoleAuth(
     projectsModel.projects,
     auth,
     effectiveTenantId
-  ).filter((project) => project.status !== "ARCHIVED");
-  const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
-  const model = buildAnalyticsReadModel(overview);
-  const providerOptions = buildProviderOptions(overview, performance, filters.provider);
-  const modelOptions = buildModelOptions(overview, performance, filters.model);
-  const showProviderModelFilters = activeTab === "performance";
+  );
+  const projects = visibleProjects.filter((project) => project.status !== "ARCHIVED");
+  const projectNameById = new Map(
+    visibleProjects.map((project) => [project.id, project.name])
+  );
+  const model = buildAnalyticsReadModel(
+    activeTab === "impact" && !v5Evidence ? undefined : overview,
+    usageEvidence,
+    {
+    cacheEvidence,
+    policyImpact: activeTab === "impact" ? v5Evidence?.policyImpact : undefined,
+    tenantChatCostMicroUsd:
+      activeTab === "cost" && tenantChatDashboard
+        ? tenantChatDashboard.usage.confirmedCostMicroUsd
+        : undefined
+    }
+  );
   const employeeUsage = employeeUsageResult?.ok ? employeeUsageResult.data : undefined;
   const employeeSecurity = employeeSecurityResult?.ok ? employeeSecurityResult.data : undefined;
   const employeeOptions = activeTab === "security"
@@ -269,68 +370,53 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   )
     ? filters.employeeId
     : "";
-  const showEmployeeFilter = activeTab === "usage" || activeTab === "cost" || activeTab === "security";
 
   return (
     <main className="console-content analytics-v3-page analytics-v4-page analytics-v5-page">
+      <AnalyticsFilterFrame
+        filterState={{
+          employeeId: selectedEmployeeId,
+          projectId: filters.projectId,
+          range: filters.range,
+          tab: activeTab
+        }}
+        loadingLabel={text.updating}
+      >
       <header className="analytics-v3-command-header">
         <div className="analytics-v3-title-block">
           <h1>{text.title}</h1>
           <p>{text.subtitle}</p>
         </div>
 
-        <form
-          action={`/tenants/${effectiveTenantId}/analytics`}
+        <div
           aria-label={text.filterAria}
           className="analytics-v3-filter-bar"
+          role="group"
         >
-          <input name="tab" type="hidden" value={activeTab} />
-          {showEmployeeFilter ? (
-            <label className="analytics-v3-employee-filter">
-              <span>{text.employee}</span>
-              <select defaultValue={selectedEmployeeId} name="employeeId">
-                <option value="">{text.allEmployees}</option>
-                {employeeOptions.map((employee) => (
-                  <option key={employee.employeeId} value={employee.employeeId}>
-                    {employee.name?.trim() || employee.email}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {showProviderModelFilters ? (
-            <>
-              <label>
-                <span>{text.provider}</span>
-                <select defaultValue={filters.provider} name="provider">
-                  <option value="">{text.allProviders}</option>
-                  {providerOptions.map((provider) => (
-                    <option key={provider} value={provider}>{provider}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>{text.model}</span>
-                <select defaultValue={filters.model} name="model">
-                  <option value="">{text.allModels}</option>
-                  {modelOptions.map((modelName) => (
-                    <option key={modelName} value={modelName}>{formatModelDisplayName(modelName)}</option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : null}
+          <label className="analytics-v3-employee-filter">
+            <span>{text.employee}</span>
+            <AnalyticsFilterSelect defaultValue={selectedEmployeeId} name="employeeId">
+              <option value="">{text.allEmployees}</option>
+              {employeeOptions.map((employee) => (
+                <option key={employee.employeeId} value={employee.employeeId}>
+                  {employee.name?.trim() || employee.email}
+                </option>
+              ))}
+            </AnalyticsFilterSelect>
+            <i aria-hidden="true" className="analytics-v3-select-caret" />
+          </label>
           <label>
             <span>{text.range}</span>
-            <select defaultValue={filters.range} name="range">
+            <AnalyticsFilterSelect defaultValue={filters.range} name="range">
               {rangeValues.map((range) => (
                 <option key={range} value={range}>{text.rangeLabels[range]}</option>
               ))}
-            </select>
+            </AnalyticsFilterSelect>
+            <i aria-hidden="true" className="analytics-v3-select-caret" />
           </label>
           <label className="analytics-v3-project-filter">
             <span>{text.project}</span>
-            <select defaultValue={filters.projectId} name="projectId">
+            <AnalyticsFilterSelect defaultValue={filters.projectId} name="projectId">
               {projectScoped ? null : <option value="">{text.allProjects}</option>}
               {filters.projectId && !projects.some((project) => project.id === filters.projectId) ? (
                 <option disabled value={filters.projectId}>{text.projectUnavailable}</option>
@@ -338,13 +424,10 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
-            </select>
+            </AnalyticsFilterSelect>
+            <i aria-hidden="true" className="analytics-v3-select-caret" />
           </label>
-          <button aria-label={text.apply} title={text.apply} type="submit">
-            <SlidersHorizontal aria-hidden="true" size={19} />
-            <span>{text.apply}</span>
-          </button>
-        </form>
+        </div>
       </header>
 
       <nav aria-label="Analytics sections" className="analytics-v3-tabs">
@@ -365,6 +448,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })}
       </nav>
 
+      <AnalyticsPanelTransition>
       {activeTab === "impact" ? (
         <AnalyticsV5Overview
           evidence={v5Evidence}
@@ -378,7 +462,6 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           employeeUsage={employeeUsage}
           locale={locale}
           model={model}
-          performance={performance}
           projectNameById={projectNameById}
           selectedEmployeeId={selectedEmployeeId}
         />
@@ -405,7 +488,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           locale={locale}
           model={model}
           projectNameById={projectNameById}
-          records={reliabilityRecords}
+          reliability={reliability}
           range={filters.range}
           tenantId={effectiveTenantId}
         />
@@ -420,6 +503,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       ) : (
         <AnalyticsCachePanel locale={locale} model={model} />
       )}
+      </AnalyticsPanelTransition>
+      </AnalyticsFilterFrame>
     </main>
   );
 }
@@ -429,9 +514,7 @@ function buildFilters(
 ): AnalyticsFilterState {
   return {
     employeeId: normalizeText(searchParams?.employeeId),
-    model: normalizeText(searchParams?.model),
     projectId: normalizeText(searchParams?.projectId),
-    provider: normalizeText(searchParams?.provider),
     range: normalizeRange(searchParams?.range)
   };
 }
@@ -457,34 +540,6 @@ function normalizeText(value: string | undefined) {
   return value?.trim() ?? "";
 }
 
-function buildProviderOptions(
-  overview: LiveDashboardOverview | undefined,
-  performance: LiveAnalyticsPerformance | undefined,
-  activeProvider: string
-) {
-  return uniqueSorted([
-    activeProvider,
-    ...(overview?.breakdowns?.byProviderModel?.map((row) => row.provider) ?? []),
-    ...(performance?.providerModelPerformance.map((row) => row.provider) ?? [])
-  ]);
-}
-
-function buildModelOptions(
-  overview: LiveDashboardOverview | undefined,
-  performance: LiveAnalyticsPerformance | undefined,
-  activeModel: string
-) {
-  return uniqueSorted([
-    activeModel,
-    ...(overview?.breakdowns?.byProviderModel?.map((row) => row.model) ?? []),
-    ...(performance?.providerModelPerformance.map((row) => row.model) ?? [])
-  ]);
-}
-
-function uniqueSorted(values: string[]) {
-  return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
-}
-
 function tabHref(
   tenantId: string,
   tab: AnalyticsTab,
@@ -493,10 +548,6 @@ function tabHref(
   const query = new URLSearchParams({ range: filters.range, tab });
   appendQuery(query, "projectId", filters.projectId);
   appendQuery(query, "employeeId", filters.employeeId);
-  if (tab === "performance") {
-    appendQuery(query, "provider", filters.provider);
-    appendQuery(query, "model", filters.model);
-  }
   return `/tenants/${tenantId}/analytics?${query.toString()}`;
 }
 
@@ -504,4 +555,82 @@ function appendQuery(query: URLSearchParams, key: string, value: string) {
   if (value) {
     query.set(key, value);
   }
+}
+
+function usageSeriesIsPartial(input: {
+  performanceAvailable: boolean;
+  projectApplicationAvailable: boolean;
+  tenantChatAvailable: boolean;
+  tenantChatSeriesAvailable: boolean;
+}) {
+  return (
+    (input.projectApplicationAvailable && !input.performanceAvailable) ||
+    (input.tenantChatAvailable && !input.tenantChatSeriesAvailable)
+  );
+}
+
+function costSeriesIsPartial(input: {
+  projectApplicationAvailable: boolean;
+  projectApplicationSeriesAvailable: boolean;
+  tenantChatAvailable: boolean;
+  tenantChatSeriesAvailable: boolean;
+}) {
+  return (
+    (input.projectApplicationAvailable && !input.projectApplicationSeriesAvailable) ||
+    (input.tenantChatAvailable && !input.tenantChatSeriesAvailable)
+  );
+}
+
+function markAnalyticsUsagePartial(
+  overview: DashboardOverview | undefined
+): DashboardOverview | undefined {
+  if (!overview) {
+    return undefined;
+  }
+
+  const current = overview.queryBudget;
+  if (current?.status === "unavailable" || current?.status === "too_broad") {
+    return overview;
+  }
+
+  const guidance = [current?.guidance, "One or more usage time series are unavailable."]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ");
+
+  return {
+    ...overview,
+    queryBudget: {
+      guidance,
+      maxBreakdownItems: current?.maxBreakdownItems ?? 50,
+      maxRangeHours: current?.maxRangeHours ?? 24,
+      status: "partial"
+    }
+  };
+}
+
+function markAnalyticsCostPartial(
+  overview: DashboardOverview | undefined
+): DashboardOverview | undefined {
+  if (!overview) {
+    return undefined;
+  }
+
+  const current = overview.queryBudget;
+  if (current?.status === "unavailable" || current?.status === "too_broad") {
+    return overview;
+  }
+
+  const guidance = [current?.guidance, "One or more cost time series are unavailable."]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ");
+
+  return {
+    ...overview,
+    queryBudget: {
+      guidance,
+      maxBreakdownItems: current?.maxBreakdownItems ?? 50,
+      maxRangeHours: current?.maxRangeHours ?? 24,
+      status: "partial"
+    }
+  };
 }

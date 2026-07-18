@@ -23,7 +23,7 @@ Review date: 2026-07-17
 - Embedding: only the private Gateway endpoint owns the OpenAI credential. It fixes the model/profile/dimension, validates batch responses, rejects non-finite/wrong-size vectors, and records safe per-purpose usage without caching embeddings.
 - Encryption and activation: chunk text is encrypted with tenant AES-256-GCM and AAD binding tenant, Knowledge Base, document, index, chunk, purpose, and key version. Vector writes and the BUILDING-to-ACTIVE/READY switch occur in the completion transaction; the database partial unique index allows at most one ACTIVE index per document.
 - Retrieval: the Chat API derives `tenantId` from authenticated execution. Parameterized exact-cosine SQL constrains chunk, document, index, and Knowledge Base tenant IDs and requires `ENABLED`, `READY`, and `ACTIVE` before decryption.
-- RAG generation: context is a bounded JSON envelope marked as untrusted source data. It is inserted into the actual provider messages, `cacheStrategy=off` is signed server-side, and the final message list—including RAG context—is used for the conservative input-token reservation before provider streaming.
+- RAG generation: context is a bounded JSON envelope marked as untrusted source data. It is inserted into the actual Provider messages, the existing `cacheStrategy=off|exact` is signed server-side, and the final message list—including current RAG context—is used for conservative input-token reservation and same-user Exact Response Cache fingerprinting before Provider streaming.
 - Citation and persistence: request-local `S1` IDs map to server-owned metadata. Fabricated IDs are ignored. Assistant text and the validated citation snapshot are encrypted with separate AAD and persisted atomically; raw chunks are not stored in conversation messages.
 - Deletion: the API atomically changes the document to `DELETING`, creates/reuses a DELETE job, and invalidates INGEST work. Retrieval excludes it immediately. The worker deletes S3 first, then hard-deletes document/index/chunk/vector rows while retaining a detached successful job record.
 
@@ -63,7 +63,7 @@ The default suite used only mocks/fakes/local test doubles for external services
 - Tenant Chat only; ordinary chat remains the default per conversation.
 - Tenant-admin TXT/UTF-8 and text-layer PDF upload, list/status, processing UI, and asynchronous hard delete.
 - Private S3 SSE-KMS originals, durable PostgreSQL jobs, encrypted private metadata/chunks/citations, and plaintext `vector(1536)` for search.
-- Stateless authenticated AI extraction, fixed private Gateway embedding, exact tenant-scoped cosine retrieval, bounded context, cache bypass, no-evidence response, SSE citations, and citation reload.
+- Stateless authenticated AI extraction, fixed private Gateway embedding, exact tenant-scoped cosine retrieval, bounded context, post-retrieval same-user Exact Response Cache, no-evidence response, SSE citations, and citation reload.
 
 ## Explicitly unsupported
 

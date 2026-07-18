@@ -8,9 +8,11 @@ import {
 import { getAlignedLiveTimeRange } from "@/lib/gateway/time-series-range";
 
 export type LiveAnalyticsRange = "15m" | "1h" | "1d" | "1w";
+export type AnalyticsSurface = "project_application" | "tenant_chat";
 
 export type LiveAnalyticsPerformanceFilters = {
   from?: string;
+  includeTenantChat?: boolean;
   model?: string;
   projectId?: string;
   provider?: string;
@@ -24,7 +26,13 @@ export type AnalyticsPerformanceSummary = {
   p95LatencyMs: number | null;
   p99LatencyMs: number | null;
   throughputPerMinute: number | null;
+  systemErrorRequests: number;
   totalRequests: number;
+};
+
+export type AnalyticsSurfaceSummary = AnalyticsPerformanceSummary & {
+  lastEventAt: string | null;
+  surface: AnalyticsSurface;
 };
 
 export type AnalyticsProviderModelPerformance = {
@@ -37,6 +45,7 @@ export type AnalyticsProviderModelPerformance = {
   p99LatencyMs: number | null;
   provider: string;
   requests: number;
+  surface: AnalyticsSurface;
   totalCostMicroUsd: number;
   totalCostUsd: string;
 };
@@ -45,6 +54,7 @@ export type AnalyticsProviderLatency = {
   p95LatencyMs: number | null;
   provider: string;
   requests: number;
+  surface: AnalyticsSurface;
 };
 
 export type AnalyticsLatencyDistributionPoint = {
@@ -54,16 +64,18 @@ export type AnalyticsLatencyDistributionPoint = {
   p95LatencyMs: number | null;
   p99LatencyMs: number | null;
   requests: number;
+  surface: AnalyticsSurface;
 };
 
 export type AnalyticsSlowRequest = {
   latencyMs: number;
   model: string;
-  projectId: string;
+  projectId: string | null;
   provider: string;
   requestId: string;
   status: string;
-  statusCode: number;
+  statusCode: number | null;
+  surface: AnalyticsSurface;
   timestamp: string;
 };
 
@@ -77,6 +89,7 @@ export type LiveAnalyticsPerformance = {
   };
   expectedBucketCount?: number;
   filters: {
+    includeTenantChat: boolean;
     model: string | null;
     projectId: string | null;
     provider: string | null;
@@ -91,6 +104,7 @@ export type LiveAnalyticsPerformance = {
   };
   slowestRequests: AnalyticsSlowRequest[];
   summary: AnalyticsPerformanceSummary;
+  surfaceSummaries: AnalyticsSurfaceSummary[];
 };
 
 type GatewayAnalyticsPerformanceResponse = {
@@ -115,6 +129,9 @@ export async function getLiveAnalyticsPerformance(
   appendOptionalQuery(query, "projectId", filters.projectId);
   appendOptionalQuery(query, "provider", filters.provider);
   appendOptionalQuery(query, "model", filters.model);
+  if (filters.includeTenantChat) {
+    query.set("includeTenantChat", "true");
+  }
 
   const response = await fetch(`${config.baseUrl}/api/analytics/performance?${query.toString()}`, {
     headers: getGatewayObservabilityHeaders(`request_web_analytics_${Date.now()}`),
@@ -142,6 +159,18 @@ function normalizeAnalyticsPerformance(
   routeTenantId: string,
   fallbackRange: { from: string; to: string }
 ): LiveAnalyticsPerformance {
+  const summary = normalizeAnalyticsPerformanceSummary(data.summary);
+  const surfaceSummaries = data.surfaceSummaries?.length
+    ? data.surfaceSummaries.map((item) => ({
+        ...normalizeAnalyticsPerformanceSummary(item),
+        lastEventAt: item.lastEventAt ?? null,
+        surface: normalizeSurface(item.surface)
+      }))
+    : [{
+        ...summary,
+        lastEventAt: data.dataFreshness?.lastLogCreatedAt ?? null,
+        surface: "project_application" as const
+      }];
   return {
     bucketInterval: typeof data.bucketInterval === "string" ? data.bucketInterval : undefined,
     dataFreshness: {
@@ -152,6 +181,7 @@ function normalizeAnalyticsPerformance(
     },
     expectedBucketCount: normalizePositiveInteger(data.expectedBucketCount),
     filters: {
+      includeTenantChat: data.filters?.includeTenantChat === true,
       model: data.filters?.model ?? null,
       projectId: data.filters?.projectId ?? null,
       provider: data.filters?.provider ?? null,
@@ -163,12 +193,14 @@ function normalizeAnalyticsPerformance(
       p50LatencyMs: normalizeNullableNumber(point.p50LatencyMs),
       p95LatencyMs: normalizeNullableNumber(point.p95LatencyMs),
       p99LatencyMs: normalizeNullableNumber(point.p99LatencyMs),
-      requests: normalizeNumber(point.requests)
+      requests: normalizeNumber(point.requests),
+      surface: normalizeSurface(point.surface)
     })),
     p95LatencyByProvider: (data.p95LatencyByProvider ?? []).map((row) => ({
       p95LatencyMs: normalizeNullableNumber(row.p95LatencyMs),
       provider: row.provider,
-      requests: normalizeNumber(row.requests)
+      requests: normalizeNumber(row.requests),
+      surface: normalizeSurface(row.surface)
     })),
     providerModelPerformance: (data.providerModelPerformance ?? []).map((row) => ({
       avgLatencyMs: normalizeNullableNumber(row.avgLatencyMs),
@@ -180,6 +212,7 @@ function normalizeAnalyticsPerformance(
       p99LatencyMs: normalizeNullableNumber(row.p99LatencyMs),
       provider: row.provider,
       requests: normalizeNumber(row.requests),
+      surface: normalizeSurface(row.surface),
       totalCostMicroUsd: normalizeNumber(row.totalCostMicroUsd),
       totalCostUsd: row.totalCostUsd || formatMicroUsd(row.totalCostMicroUsd)
     })),
@@ -190,22 +223,35 @@ function normalizeAnalyticsPerformance(
     slowestRequests: (data.slowestRequests ?? []).map((row) => ({
       latencyMs: normalizeNumber(row.latencyMs),
       model: row.model,
-      projectId: row.projectId,
+      projectId: row.projectId ?? null,
       provider: row.provider,
       requestId: row.requestId,
       status: row.status,
-      statusCode: normalizeNumber(row.statusCode),
+      statusCode: normalizeNullableNumber(row.statusCode),
+      surface: normalizeSurface(row.surface),
       timestamp: row.timestamp
     })),
-    summary: {
-      avgLatencyMs: normalizeNullableNumber(data.summary?.avgLatencyMs),
-      errorRate: normalizeNullableNumber(data.summary?.errorRate),
-      p95LatencyMs: normalizeNullableNumber(data.summary?.p95LatencyMs),
-      p99LatencyMs: normalizeNullableNumber(data.summary?.p99LatencyMs),
-      throughputPerMinute: normalizeNullableNumber(data.summary?.throughputPerMinute),
-      totalRequests: normalizeNumber(data.summary?.totalRequests)
-    }
+    summary,
+    surfaceSummaries
   };
+}
+
+function normalizeAnalyticsPerformanceSummary(
+  summary: Partial<AnalyticsPerformanceSummary> | undefined
+): AnalyticsPerformanceSummary {
+  return {
+    avgLatencyMs: normalizeNullableNumber(summary?.avgLatencyMs),
+    errorRate: normalizeNullableNumber(summary?.errorRate),
+    p95LatencyMs: normalizeNullableNumber(summary?.p95LatencyMs),
+    p99LatencyMs: normalizeNullableNumber(summary?.p99LatencyMs),
+    systemErrorRequests: normalizeNumber(summary?.systemErrorRequests),
+    throughputPerMinute: normalizeNullableNumber(summary?.throughputPerMinute),
+    totalRequests: normalizeNumber(summary?.totalRequests)
+  };
+}
+
+function normalizeSurface(value: string | undefined): AnalyticsSurface {
+  return value === "tenant_chat" ? "tenant_chat" : "project_application";
 }
 
 function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {

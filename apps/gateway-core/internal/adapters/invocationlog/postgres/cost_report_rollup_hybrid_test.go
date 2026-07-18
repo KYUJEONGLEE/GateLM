@@ -245,6 +245,7 @@ func TestTryGetCostReportFromRollupsMergesCompletedAndRawBuckets(t *testing.T) {
 			{
 				contains: "from dashboard_rollup_dimensions",
 				rows: &fakeRows{values: [][]any{{
+					time.Date(2026, 7, 14, 9, 0, 0, 0, time.UTC),
 					"openai", "gpt-4.1-mini",
 					int64(10), int64(100), int64(200), int64(300), int64(100), int64(10),
 				}}},
@@ -268,10 +269,18 @@ func TestTryGetCostReportFromRollupsMergesCompletedAndRawBuckets(t *testing.T) {
 			},
 			{
 				contains: "cost_report_raw_models",
-				rows: &fakeRows{values: [][]any{{
-					"openai", "gpt-4.1-mini",
-					int64(5), int64(50), int64(100), int64(150), int64(50), int64(5),
-				}}},
+				rows: &fakeRows{values: [][]any{
+					{
+						time.Date(2026, 7, 14, 8, 0, 0, 0, time.UTC),
+						"openai", "gpt-4.1-mini",
+						int64(2), int64(20), int64(40), int64(60), int64(20), int64(2),
+					},
+					{
+						time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC),
+						"openai", "gpt-4.1-mini",
+						int64(3), int64(30), int64(60), int64(90), int64(30), int64(3),
+					},
+				}},
 			},
 		},
 	}
@@ -308,6 +317,12 @@ func TestTryGetCostReportFromRollupsMergesCompletedAndRawBuckets(t *testing.T) {
 	}
 	if len(report.Breakdowns.ByModel) != 1 || report.Breakdowns.ByModel[0].RequestCount != 15 || report.Breakdowns.ByModel[0].SavedCostMicroUSD != 15 {
 		t.Fatalf("unexpected merged model breakdown: %+v", report.Breakdowns.ByModel)
+	}
+	if len(report.ModelBuckets) != 3 ||
+		report.ModelBuckets[0].RequestCount != 2 ||
+		report.ModelBuckets[1].RequestCount != 10 ||
+		report.ModelBuckets[2].RequestCount != 3 {
+		t.Fatalf("unexpected merged model buckets: %+v", report.ModelBuckets)
 	}
 	if len(db.queries) != 5 {
 		t.Fatalf("expected coverage plus four aggregate queries, got %d", len(db.queries))

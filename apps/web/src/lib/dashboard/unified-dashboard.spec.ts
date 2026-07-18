@@ -10,7 +10,15 @@ import {
 } from "./unified-dashboard";
 
 test("maps Tenant Chat aggregate to the shared dashboard model", () => {
-  const overview = toTenantChatDashboardOverview(tenantId, tenantChatDashboard());
+  const dashboard = tenantChatDashboard();
+  dashboard.security = {
+    protectedRequests: 3,
+    redactedRequests: 2,
+    blockedRequests: 1,
+    byDetectorType: [{ detectorType: "email", requestCount: 2 }],
+    coverage: { state: "complete", observedFrom: dashboard.from }
+  };
+  const overview = toTenantChatDashboardOverview(tenantId, dashboard);
 
   expect(overview.surface).toBe("tenant_chat");
   expect(overview.totalRequests).toBe(10);
@@ -18,6 +26,22 @@ test("maps Tenant Chat aggregate to the shared dashboard model", () => {
   expect(overview.cacheEligibleRequests).toBe(8);
   expect(overview.p95LatencyMs).toBe(250);
   expect(overview.gatewayTtft).toBeUndefined();
+  expect(overview.maskingActionCounts).toEqual({ redacted: 2, blocked: 1 });
+});
+
+test("maps a legacy Tenant Chat aggregate without security evidence", () => {
+  const dashboard = tenantChatDashboard();
+  dashboard.requests.safetyBlocked = 1;
+  delete (dashboard as Partial<TenantChatDashboard>).security;
+
+  const overview = toTenantChatDashboardOverview(tenantId, dashboard);
+
+  expect(overview.blockedRequests).toBe(1);
+  expect(overview.maskingActionCounts).toEqual({ redacted: 0, blocked: 1 });
+  expect(overview.breakdowns?.bySafetyOutcome).toEqual([
+    { outcome: "redacted", requestCount: 0 },
+    { outcome: "blocked", requestCount: 1 }
+  ]);
 });
 
 test("merges additive values while keeping latency provenance by surface", () => {
@@ -204,6 +228,13 @@ function tenantChatDashboard(): TenantChatDashboard {
         fallbackSuccessCount: 1,
         confirmedCostMicroUsd: 300
       }
-    ]
+    ],
+    security: {
+      protectedRequests: 0,
+      redactedRequests: 0,
+      blockedRequests: 0,
+      byDetectorType: [],
+      coverage: { state: "complete", observedFrom: "2026-07-12T12:00:00Z" }
+    }
   };
 }

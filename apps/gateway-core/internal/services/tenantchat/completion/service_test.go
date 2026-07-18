@@ -412,7 +412,8 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	}
 	usage := &fakeUsageAccounting{}
 	cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{
-		ResponseText: "cached synthetic response", EffectiveModelKey: "model-cached",
+		ResponseText: "cached synthetic response", EffectiveProviderID: "provider-cached",
+		EffectiveModelKey: "model-cached", EffectiveRouteTier: "high_quality", SourceCostMicroUSD: 450,
 	}, hit: true}
 	providers := &fakeProviderExecutor{}
 	service := New(
@@ -504,7 +505,7 @@ func TestServiceBypassesStaleExactCacheEntryWhenPolicyIsOff(t *testing.T) {
 	}
 }
 
-func TestServiceStoresExactCacheMissThenHitsWithoutSecondProviderCall(t *testing.T) {
+func TestServiceStoresRAGExactCacheMissThenHitsWithoutSecondProviderCall(t *testing.T) {
 	snapshot := completionSnapshot()
 	snapshot.Policies.Cache = tenantruntime.CachePolicy{
 		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
@@ -533,6 +534,10 @@ func TestServiceStoresExactCacheMissThenHitsWithoutSecondProviderCall(t *testing
 	)
 	request := completionRequest()
 	request.Context.UsageIntent.CacheStrategy = "exact"
+	request.Input.Messages = []tenantchat.EphemeralMessage{
+		{Role: "system", Purpose: "rag_context", Content: "synthetic current RAG context"},
+		{Role: "user", Content: "How do I request leave?"},
+	}
 
 	first, err := service.Prepare(context.Background(), request)
 	if err != nil {
@@ -1388,7 +1393,7 @@ func (f *fakeUsageAccounting) transactionCalls() int {
 	return f.reserveCalls + f.recordCalls + f.dispatchCalls + f.settleCalls + f.releasedCalls + f.ledgerlessCalls + f.preCallCalls
 }
 
-func (f *fakeUsageAccounting) FinalizeLedgerless(_ context.Context, requestContext tenantchat.RequestContext, _ tenantruntime.Snapshot, _ string, _ string, _ string) (bool, error) {
+func (f *fakeUsageAccounting) FinalizeLedgerless(_ context.Context, requestContext tenantchat.RequestContext, _ tenantruntime.Snapshot, _ string, _ string, _ string, _ tenantchat.LedgerlessObservability) (bool, error) {
 	f.ledgerlessCalls++
 	f.lastSettlementContext = requestContext
 	return false, f.err

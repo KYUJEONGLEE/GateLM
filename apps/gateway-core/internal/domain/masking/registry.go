@@ -49,6 +49,18 @@ func NewP0Registry() Registry {
 	)
 }
 
+func NewP0RegistryWithoutPersonName() Registry {
+	registry := NewP0Registry()
+	filtered := NewRegistry()
+	for _, detector := range registry.detectors {
+		if DetectorType(detector.Type()) == DetectorPersonName {
+			continue
+		}
+		filtered.Register(detector)
+	}
+	return filtered
+}
+
 func (r *Registry) Register(detector Detector) {
 	if detector == nil {
 		return

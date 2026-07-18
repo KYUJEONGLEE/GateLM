@@ -11,10 +11,28 @@
     "snapshotVersion": { "type": "integer", "minimum": 1 }, "pricingVersion": { "type": "integer", "minimum": 1 },
     "terminalOutcome": { "type": "string", "enum": ["rate_limited", "concurrency_limited", "safety_blocked", "quota_blocked", "budget_blocked", "policy_ack_required", "runtime_unavailable", "no_eligible_route", "provider_failed", "provider_timeout", "cancelled", "cache_hit"] },
     "errorCode": { "type": "string", "enum": ["CHAT_RATE_LIMITED", "CHAT_CONCURRENCY_LIMITED", "CHAT_SAFETY_BLOCKED", "CHAT_POLICY_ACK_REQUIRED", "CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT", "CHAT_RUNTIME_UNAVAILABLE", "CHAT_NO_ELIGIBLE_ROUTE", "CHAT_PROVIDER_FAILED", "CHAT_PROVIDER_TIMEOUT"] },
-    "quotaState": { "$ref": "#/$defs/policyState" }, "budgetState": { "$ref": "#/$defs/policyState" }, "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] }, "latencyMs": { "type": "integer", "minimum": 0 }, "ttftMs": { "type": "integer", "minimum": 0 }
+    "quotaState": { "$ref": "#/$defs/policyState" }, "budgetState": { "$ref": "#/$defs/policyState" }, "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] }, "latencyMs": { "type": "integer", "minimum": 0 }, "ttftMs": { "type": "integer", "minimum": 0 },
+    "routingDifficulty": { "$ref": "#/$defs/routingDifficulty" },
+    "effectiveProviderId": { "$ref": "#/$defs/opaqueId" }, "effectiveModelKey": { "$ref": "#/$defs/opaqueId" }, "effectiveRouteTier": { "type": "string", "enum": ["high_quality", "standard", "economy"] },
+    "savedCostMicroUsd": { "type": "integer", "minimum": 0 },
+    "maskingAction": { "$ref": "#/$defs/maskingAction" },
+    "maskingDetectedTypes": { "$ref": "#/$defs/maskingDetectedTypes" },
+    "maskingDetectedCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+    "safetyPolicyDigest": { "$ref": "#/$defs/policyDigest" }
+  },
+  "dependentRequired": {
+    "maskingAction": ["maskingDetectedTypes", "maskingDetectedCount", "safetyPolicyDigest"],
+    "maskingDetectedTypes": ["maskingAction", "maskingDetectedCount", "safetyPolicyDigest"],
+    "maskingDetectedCount": ["maskingAction", "maskingDetectedTypes", "safetyPolicyDigest"],
+    "safetyPolicyDigest": ["maskingAction", "maskingDetectedTypes", "maskingDetectedCount"]
   },
   "$defs": {
-    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" }, "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+    "maskingAction": { "type": "string", "enum": ["none", "redacted", "blocked"] },
+    "maskingDetectedTypes": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" } },
+    "policyDigest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
+    "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
+    "routingDifficulty": { "type": "string", "enum": ["simple", "complex"] },
     "executionScope": { "type": "object", "additionalProperties": false, "required": ["kind", "tenantId", "userId", "actorKind"], "properties": { "kind": { "const": "tenant_chat" }, "tenantId": { "$ref": "#/$defs/opaqueId" }, "userId": { "$ref": "#/$defs/opaqueId" }, "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] }, "employeeId": { "$ref": "#/$defs/opaqueId" } }, "allOf": [{ "if": { "properties": { "actorKind": { "const": "employee" } }, "required": ["actorKind"] }, "then": { "required": ["employeeId"] } }] }
   }
 }

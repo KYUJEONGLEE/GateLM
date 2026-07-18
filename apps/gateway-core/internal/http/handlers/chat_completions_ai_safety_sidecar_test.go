@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,12 @@ import (
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 )
+
+type handlerFailingFallbackMaskingEngine struct{}
+
+func (handlerFailingFallbackMaskingEngine) Apply(context.Context, maskdomain.ApplyRequest) (maskdomain.Result, error) {
+	return maskdomain.Result{}, errors.New("synthetic fallback masking failure")
+}
 
 func TestChatCompletionsHandlerBlocksWhenAiSafetySidecarBlocks(t *testing.T) {
 	syntheticBlockedValue := "ACCT-SYNTHETIC-0001"
@@ -401,5 +409,44 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarReturns
 	}
 	if strings.Contains(rr.Body.String(), "sidecar model load failed") {
 		t.Fatalf("gateway response must not expose sidecar error body: %s", rr.Body.String())
+	}
+}
+
+func TestChatCompletionsHandlerFailsClosedBeforeProviderWhenSidecarAndFallbackFail(t *testing.T) {
+	sidecarCalls := 0
+	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		sidecarCalls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer sidecar.Close()
+
+	chatCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		MaskingEngine: aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
+			Local:         maskdomain.NewP0EngineWithoutPersonName(),
+			FallbackLocal: handlerFailingFallbackMaskingEngine{},
+			EndpointURL:   sidecar.URL,
+			HTTPClient:    sidecar.Client(),
+			Timeout:       time.Second,
+		}),
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Safe synthetic request.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if sidecarCalls != 1 || chatCalls != 0 {
+		t.Fatalf("fallback failure must stop before provider: sidecar=%d provider=%d", sidecarCalls, chatCalls)
+	}
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected fail-closed 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	assertGatewayErrorCode(t, rr, "internal_error")
+	if strings.Contains(rr.Body.String(), "synthetic fallback masking failure") {
+		t.Fatalf("gateway response must not expose fallback error details: %s", rr.Body.String())
 	}
 }

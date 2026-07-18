@@ -171,6 +171,25 @@ test("provider usage keeps the existing cost breakdown wired to the redesigned d
   expect(providerUsageSource).not.toContain("row.requestCount");
 });
 
+test("dashboard keeps cost range controls and stacked mobile panels inside the layout flow", async () => {
+  const [costSource, styles] = await Promise.all([
+    readFile(costSourceUrl, "utf8"),
+    readFile(dashboardStylesSourceUrl, "utf8")
+  ]);
+  const normalizedSource = costSource.replace(/\r\n/g, "\n");
+  const titleEnd = normalizedSource.indexOf('</div>\n        <div className="dashboard-cost-over-time-header-side">');
+  const metricsStart = normalizedSource.indexOf('className="dashboard-cost-over-time-metrics"');
+
+  expect(titleEnd).toBeGreaterThan(0);
+  expect(metricsStart).toBeGreaterThan(titleEnd);
+  expect(styles).toMatch(
+    /\.dashboard-cost-over-time-header \{[^}]*grid-template-areas:\s*"title side"\s*"metrics metrics";/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-secondary-grid \{[^}]*grid-template-columns: 1fr;[^}]*height: auto;[^}]*max-height: none;[^}]*overflow: visible;/
+  );
+});
+
 test("dashboard charts merge changed data without replaying unchanged series", async () => {
   const source = await readFile(chartSourceUrl, "utf8");
 

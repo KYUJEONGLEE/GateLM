@@ -26,13 +26,17 @@ import {
 } from "@/features/analytics/components/analytics-charts";
 import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import type { AnalyticsSecurityEvidence } from "@/features/analytics/analytics-security-evidence";
+import { TENANT_CHAT_USAGE_SOURCE_ID } from "@/features/analytics/analytics-usage-merge";
 import type { EmployeeSecurityResponse } from "@/lib/control-plane/employee-security-types";
 import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { LiveAnalyticsPerformance } from "@/lib/gateway/live-analytics-performance";
+import type {
+  AnalyticsReliabilityIncident,
+  LiveAnalyticsReliability
+} from "@/lib/gateway/live-analytics-reliability";
 import type { LiveRequestRow, LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -49,8 +53,8 @@ type PerformancePanelProps = AnalyticsPanelProps & {
 };
 
 type ReliabilityPanelProps = AnalyticsPanelProps & {
-  records: InvocationLogRecord[] | undefined;
   projectNameById: Map<string, string>;
+  reliability: LiveAnalyticsReliability | undefined;
   range: string;
   tenantId: string;
 };
@@ -241,24 +245,22 @@ export function AnalyticsUsagePanel({
   employeeUsage,
   locale,
   model,
-  performance,
   projectNameById,
   selectedEmployeeId
 }: AnalyticsPanelProps & {
   employeeUsage: EmployeeUsageResponse | undefined;
-  performance: LiveAnalyticsPerformance | undefined;
   projectNameById: Map<string, string>;
   selectedEmployeeId: string;
 }) {
   const text = locale === "ko"
     ? {
         active: "사용 모델",
+        sources: "사용 경로별 요청",
+        sourcesSub: "프로젝트와 Tenant Chat의 전체 요청 비중",
         employeeSources: "직원별 사용 경로",
         employeeSourcesSub: "Tenant 전체의 Project/Application과 Tenant Chat 토큰 구성",
         employeeTokens: "직원별 토큰",
         employeeTokensSub: "Tenant 전체의 실제 확정 토큰 사용량",
-        projects: "프로젝트별 요청",
-        projectsSub: "요청량 상위 프로젝트",
         model: "모델 트래픽",
         modelSub: "실제 라우팅된 모델별 요청량",
         requests: "전체 요청",
@@ -267,17 +269,17 @@ export function AnalyticsUsagePanel({
         tokenMix: "토큰 구성",
         tokenMixSub: "입력과 출력 토큰의 실제 비중",
         trend: "요청 추이",
-        trendSub: "선택 기간의 Gateway 요청량",
+        trendSub: "선택 기간의 Project/Application 및 Tenant Chat 요청량",
         title: "사용량"
       }
     : {
         active: "Active models",
+        sources: "Requests by source",
+        sourcesSub: "Share of all requests from projects and Tenant Chat",
         employeeSources: "Usage source by employee",
         employeeSourcesSub: "Tenant-wide Project/Application and Tenant Chat token composition",
         employeeTokens: "Tokens by employee",
         employeeTokensSub: "Tenant-wide observed confirmed token usage",
-        projects: "Requests by project",
-        projectsSub: "Projects generating the most traffic",
         model: "Model traffic",
         modelSub: "Actual routed requests by model",
         requests: "Total requests",
@@ -286,10 +288,10 @@ export function AnalyticsUsagePanel({
         tokenMix: "Token composition",
         tokenMixSub: "Observed prompt and completion token share",
         trend: "Request volume",
-        trendSub: "Gateway requests over the selected range",
+        trendSub: "Project/Application and Tenant Chat requests over the selected range",
         title: "Usage"
       };
-  const projectRows = model.usage.projectMix.slice(0, 4);
+  const sourceRows = model.usage.sourceMix;
   const tokenCompositionTotal = model.usage.tokenMix.reduce((sum, row) => sum + row.value, 0);
   const employeeRows = selectEmployeeRows(employeeUsage?.data ?? [], selectedEmployeeId);
   const employeeTokenRows = employeeRows.map((row) => ({
@@ -310,17 +312,22 @@ export function AnalyticsUsagePanel({
             meta: `${formatDecimal(model.usage.tokensPerRequest)} ${text.tokensPerRequest}`,
             value: formatCompact(model.usage.totalTokens)
           },
-          { label: text.active, value: formatInteger(model.usage.activeModels) }
+          {
+            label: text.active,
+            value: locale === "ko"
+              ? `${formatInteger(model.usage.activeModels)}건`
+              : formatInteger(model.usage.activeModels)
+          }
         ]}
       />
 
       <div className="analytics-v3-workspace">
         <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.trendSub} title={text.trend}>
           <ChartOrEmpty
-            hasData={Boolean(performance?.latencyDistribution?.some((point) => point.requests > 0))}
+            hasData={model.usage.requestVolume.some((point) => point.requests > 0)}
             locale={locale}
           >
-            <AnalyticsRequestVolumeChart ariaLabel={text.trend} points={performance?.latencyDistribution ?? []} />
+            <AnalyticsRequestVolumeChart ariaLabel={text.trend} points={model.usage.requestVolume} />
           </ChartOrEmpty>
         </AnalysisSurface>
         <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.modelSub} title={text.model}>
@@ -366,19 +373,23 @@ export function AnalyticsUsagePanel({
       />
 
       <EvidenceTable
-        columns={locale === "ko" ? ["프로젝트", "요청", "전체 비중", "상태"] : ["Project", "Requests", "Share", "State"]}
+        columns={locale === "ko" ? ["사용 경로", "요청", "전체 비중", "상태"] : ["Source", "Requests", "Share", "State"]}
         emptyLocale={locale}
-        rows={projectRows.map((row) => ({
+        rows={sourceRows.map((row) => ({
           cells: [
-            <strong key="project">{projectNameById.get(row.id) ?? formatDisplayIdentifier(row.label)}</strong>,
+            <strong key="source">
+              {row.id === TENANT_CHAT_USAGE_SOURCE_ID
+                ? row.label
+                : projectNameById.get(row.id) ?? formatDisplayIdentifier(row.label)}
+            </strong>,
             formatInteger(row.value),
             formatPercent(safeRatio(row.value, model.usage.totalRequests)),
-            <EvidenceState key="state" label={locale === "ko" ? "활성" : "Active"} tone="success" />
+            <EvidenceState key="state" label={locale === "ko" ? "집계됨" : "Included"} tone="success" />
           ],
           key: row.id
         }))}
-        subtitle={text.projectsSub}
-        title={text.projects}
+        subtitle={text.sourcesSub}
+        title={text.sources}
       />
     </PanelShell>
   );
@@ -406,8 +417,8 @@ export function AnalyticsCostPanel({
         employeeSourcesSub: "Tenant 전체의 Project/Application과 Tenant Chat 비용 구성",
         byModel: "비용 기여 모델",
         byModelSub: "실제 Provider 비용이 높은 모델",
-        byProject: "프로젝트 비용 근거",
-        byProjectSub: "비용이 귀속된 프로젝트 상위 4개",
+        byProject: "비용 귀속 근거",
+        byProjectSub: "상위 4개 프로젝트와 Tenant Chat 비용",
         costPerRequest: "요청당 비용",
         saved: "절감 비용",
         spend: "총 사용 비용",
@@ -423,8 +434,8 @@ export function AnalyticsCostPanel({
         employeeSourcesSub: "Tenant-wide Project/Application and Tenant Chat cost composition",
         byModel: "Cost contributors",
         byModelSub: "Models contributing the most Provider spend",
-        byProject: "Project cost evidence",
-        byProjectSub: "Top four projects with attributed spend",
+        byProject: "Cost attribution evidence",
+        byProjectSub: "Top four projects plus Tenant Chat spend",
         costPerRequest: "Cost per request",
         saved: "Recorded savings",
         spend: "Total spend",
@@ -432,7 +443,12 @@ export function AnalyticsCostPanel({
         trend: "Spend trend",
         trendSub: "Actual Provider spend over the selected range"
       };
-  const projectRows = model.cost.costByProject.slice(0, 4);
+  const attributionRows = [
+    ...model.cost.costAttributions
+      .filter((row) => row.kind === "project")
+      .slice(0, 4),
+    ...model.cost.costAttributions.filter((row) => row.kind === "surface")
+  ];
   const employeeRows = selectEmployeeRows(employeeUsage?.data ?? [], selectedEmployeeId);
   const employeeCostRows = employeeRows.map((row) => ({
     id: row.employeeId,
@@ -502,14 +518,24 @@ export function AnalyticsCostPanel({
       </div>
 
       <EvidenceTable
-        columns={locale === "ko" ? ["프로젝트", "비용", "전체 비용 비중", "상태"] : ["Project", "Spend", "Cost share", "State"]}
+        columns={locale === "ko" ? ["귀속 대상", "비용", "전체 비용 비중", "유형"] : ["Attribution", "Spend", "Cost share", "Type"]}
         emptyLocale={locale}
-        rows={projectRows.map((row) => ({
+        rows={attributionRows.map((row) => ({
           cells: [
-            <strong key="project">{projectNameById.get(row.id) ?? formatDisplayIdentifier(row.label)}</strong>,
+            <strong key="attribution">
+              {row.kind === "project"
+                ? projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.label)
+                : row.label}
+            </strong>,
             formatMicroUsd(row.value),
             formatPercent(safeRatio(row.value, model.cost.totalCostMicroUsd)),
-            <EvidenceState key="state" label={locale === "ko" ? "집계됨" : "Attributed"} tone="neutral" />
+            <EvidenceState
+              key="type"
+              label={row.kind === "project"
+                ? locale === "ko" ? "프로젝트" : "Project"
+                : "Tenant Chat"}
+              tone="neutral"
+            />
           ],
           key: row.id
         }))}
@@ -531,50 +557,91 @@ export function AnalyticsPerformancePanel({
   const text = locale === "ko"
     ? {
         error: "오류율",
-        latency: "지연 시간 추이",
-        latencySub: "p50, p95, p99 응답 시간",
-        p95: "p95 지연",
-        provider: "Provider tail latency",
-        providerSub: "Provider별 p95 지연 비교",
+        latency: "Surface별 지연 시간 추이",
+        latencySub: "Project/Application과 Tenant Chat의 p50, p95, p99 응답 시간",
+        percentile: "지연 시간 백분위 선택",
+        p95: "Surface별 p95 지연",
+        provider: "Provider별 전체 응답 지연",
+        providerSub: "Surface와 Provider별 end-to-end p95 비교",
         slow: "느린 요청 근거",
-        slowSub: "지연 시간이 가장 긴 최근 요청 4개",
+        slowSub: "선택 기간에서 지연 시간이 가장 긴 요청 4개",
         throughput: "분당 처리량",
         title: "성능",
         viewLogs: "전체 로그"
       }
     : {
         error: "Error rate",
-        latency: "Latency trend",
-        latencySub: "p50, p95, and p99 response time",
-        p95: "p95 latency",
-        provider: "Provider tail latency",
-        providerSub: "Compare p95 latency by Provider",
+        latency: "Latency trend by surface",
+        latencySub: "p50, p95, and p99 response time for Project/Application and Tenant Chat",
+        percentile: "Select latency percentile",
+        p95: "p95 latency by surface",
+        provider: "End-to-end latency by Provider",
+        providerSub: "Compare end-to-end p95 by surface and Provider",
         slow: "Slow request evidence",
-        slowSub: "Four recent requests with the highest latency",
+        slowSub: "Four requests with the highest latency in the selected range",
         throughput: "Throughput per minute",
         title: "Performance",
         viewLogs: "View all logs"
       };
+  const surfaceSummaries = performance?.surfaceSummaries ?? [];
+  const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null);
+  const latencyPoints = performance?.latencyDistribution ?? [];
+  const latencySurfaces = surfaceSummaries.map((summary) => ({
+    label: analyticsSurfaceLabel(summary.surface, locale),
+    surface: summary.surface
+  }));
   const providerRows = (performance?.p95LatencyByProvider ?? [])
     .filter((row) => row.p95LatencyMs !== null)
-    .map((row) => ({ id: row.provider, label: row.provider, value: row.p95LatencyMs ?? 0 }));
+    .map((row) => ({
+      id: `${row.surface}:${row.provider}`,
+      label: `${analyticsSurfaceLabel(row.surface, locale)} · ${row.provider}`,
+      value: row.p95LatencyMs ?? 0
+    }));
 
   return (
-    <PanelShell locale={locale} model={model} title={text.title}>
+    <PanelShell
+      dataAsOf={performance?.dataFreshness.lastLogCreatedAt ?? undefined}
+      dataState={performance ? "live" : "unavailable"}
+      locale={locale}
+      model={model}
+      title={text.title}
+    >
       <ExecutiveBand
         accent="performance"
         icon={Gauge}
-        lead={{ label: text.p95, value: formatMs(performance?.summary.p95LatencyMs ?? null) }}
+        lead={{
+          label: text.p95,
+          value: headlineSurfaceSummaries.length
+            ? headlineSurfaceSummaries
+                .map((row) => row.surface === "tenant_chat"
+                  ? formatMs(row.p95LatencyMs)
+                  : `${analyticsSurfaceShortLabel(row.surface, locale)} ${formatMs(row.p95LatencyMs)}`)
+                .join(" · ")
+            : "—"
+        }}
         metrics={[
           { label: text.throughput, value: formatThroughput(performance?.summary.throughputPerMinute ?? null) },
-          { label: text.error, value: formatPercent(performance?.summary.errorRate ?? 0) }
+          { label: text.error, value: formatNullablePercent(performance?.summary.errorRate) }
         ]}
       />
 
       <div className="analytics-v3-workspace">
         <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.latencySub} title={text.latency}>
-          <ChartOrEmpty hasData={Boolean(performance?.latencyDistribution?.some(hasLatencyPoint))} locale={locale}>
-            <AnalyticsLatencyTrendChart ariaLabel={text.latency} points={performance?.latencyDistribution ?? []} />
+          <div className="analytics-v3-surface-latency-summary">
+            {surfaceSummaries.map((summary) => (
+              <div key={summary.surface}>
+                <strong>{analyticsSurfaceLabel(summary.surface, locale)}</strong>
+                <span>p95 {formatMs(summary.p95LatencyMs)}</span>
+              </div>
+            ))}
+          </div>
+          <ChartOrEmpty hasData={latencyPoints.some(hasLatencyPoint)} locale={locale}>
+            <AnalyticsLatencyTrendChart
+              ariaLabel={text.latency}
+              percentileLabel={text.percentile}
+              points={latencyPoints}
+              surfaces={latencySurfaces}
+            />
           </ChartOrEmpty>
         </AnalysisSurface>
         <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.providerSub} title={text.provider}>
@@ -586,15 +653,20 @@ export function AnalyticsPerformancePanel({
 
       <EvidenceTable
         action={<Link href={`/tenants/${tenantId}/request-logs?range=${range}`}>{text.viewLogs}</Link>}
-        columns={locale === "ko" ? ["요청", "모델", "프로젝트", "지연", "상태"] : ["Request", "Model", "Project", "Latency", "State"]}
+        columns={locale === "ko"
+          ? ["요청", "Surface", "모델", "귀속", "지연", "상태"]
+          : ["Request", "Surface", "Model", "Attribution", "Latency", "State"]}
         emptyLocale={locale}
         rows={(performance?.slowestRequests ?? []).slice(0, 4).map((row) => ({
           cells: [
             <Link href={`/tenants/${tenantId}/request-logs?requestId=${encodeURIComponent(row.requestId)}`} key="request">
               {shortRequestId(row.requestId)}
             </Link>,
+            analyticsSurfaceLabel(row.surface, locale),
             formatModelDisplayName(row.model),
-            projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
+            row.projectId
+              ? projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId)
+              : analyticsSurfaceLabel(row.surface, locale),
             formatMs(row.latencyMs),
             <StatusBadge code={row.statusCode} key="status" status={row.status} />
           ],
@@ -611,16 +683,16 @@ export function AnalyticsReliabilityPanel({
   locale,
   model,
   projectNameById,
-  records,
+  reliability,
   range,
   tenantId
 }: ReliabilityPanelProps) {
   const text = locale === "ko"
     ? {
         continuity: "서비스 연속성",
-        continuitySub: "직접 성공, Fallback 복구, 실패와 취소 경로",
+        continuitySub: "Fallback 없는 성공, 복구, 실패, 취소와 정책 제외 경로",
         error: "시스템 오류율",
-        fallback: "Fallback 복구",
+        fallback: "Fallback 복구율",
         incident: "최근 안정성 근거",
         incidentSub: "Fallback 복구·실패·취소가 발생한 최근 요청",
         outcome: "최종 요청 상태",
@@ -631,9 +703,9 @@ export function AnalyticsReliabilityPanel({
       }
     : {
         continuity: "Service continuity",
-        continuitySub: "Direct success, fallback recovery, failure, and cancellation paths",
+        continuitySub: "Success without fallback, recovery, failure, cancellation, and policy-excluded paths",
         error: "System error rate",
-        fallback: "Fallback recoveries",
+        fallback: "Fallback recovery rate",
         incident: "Recent reliability evidence",
         incidentSub: "Recent requests with fallback recovery, failure, or cancellation",
         outcome: "Terminal outcomes",
@@ -642,31 +714,60 @@ export function AnalyticsReliabilityPanel({
         title: "Reliability",
         viewLogs: "View all logs"
       };
-  const reliabilityRecords = (records ?? [])
-    .filter(isReliabilityEvidence)
-    .slice(0, 4);
+  const terminalOutcomes: AnalyticsValueRow[] = (reliability?.terminalOutcomes ?? []).map((row) => ({
+    id: row.outcome,
+    label: row.outcome.replaceAll("_", " ").toUpperCase(),
+    value: row.requestCount
+  }));
+  const continuityPaths: AnalyticsValueRow[] = reliability ? [
+    {
+      id: "success_without_fallback",
+      label: "SUCCESS WITHOUT FALLBACK",
+      value: reliability.continuity.successWithoutFallbackCount
+    },
+    {
+      id: "fallback_recovered",
+      label: "FALLBACK RECOVERED",
+      value: reliability.continuity.fallbackRecoveredCount
+    },
+    { id: "failed", label: "FAILED", value: reliability.continuity.failedCount },
+    { id: "cancelled", label: "CANCELLED", value: reliability.continuity.cancelledCount },
+    {
+      id: "excluded_policy",
+      label: "POLICY EXCLUDED",
+      value: reliability.continuity.excludedPolicyCount
+    },
+    { id: "unknown", label: "UNKNOWN", value: reliability.continuity.unknownCount }
+  ] : [];
+  const reliabilityRecords = reliability?.recentIncidents ?? [];
 
   return (
-    <PanelShell locale={locale} model={model} title={text.title}>
+    <PanelShell
+      dataAsOf={reliabilityDataAsOf(reliability)}
+      dataState={reliabilityDataState(reliability)}
+      locale={locale}
+      model={model}
+      title={text.title}
+    >
       <ExecutiveBand
         accent="reliability"
         icon={ShieldCheck}
-        lead={{ label: text.success, value: formatPercent(model.reliability.successRate) }}
+        lead={{ label: text.success, value: formatNullablePercent(reliability?.rates.successRate) }}
         metrics={[
-          { label: text.error, value: formatPercent(model.reliability.systemErrorRate) },
-          { label: text.fallback, value: formatInteger(model.reliability.fallbackSuccesses) }
+          { label: text.error, value: formatNullablePercent(reliability?.rates.systemErrorRate) },
+          { label: text.fallback, value: formatNullablePercent(reliability?.rates.fallbackRecoveryRate) }
         ]}
       />
 
       <div className="analytics-v3-workspace">
         <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.outcomeSub} title={text.outcome}>
-          <ChartOrEmpty hasData={hasRows(model.reliability.terminalOutcomes)} locale={locale}>
-            <AnalyticsCompositionChart ariaLabel={text.outcome} rows={model.reliability.terminalOutcomes} />
+          <ChartOrEmpty hasData={hasRows(terminalOutcomes)} locale={locale}>
+            <AnalyticsCompositionChart ariaLabel={text.outcome} rows={terminalOutcomes} />
           </ChartOrEmpty>
         </AnalysisSurface>
         <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.continuitySub} title={text.continuity}>
-          <ChartOrEmpty hasData={hasRows(model.reliability.continuityPaths)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.continuity} rows={model.reliability.continuityPaths} />
+          <ChartOrEmpty hasData={hasRows(continuityPaths)} locale={locale} compact>
+            <AnalyticsRankedBarChart ariaLabel={text.continuity} rows={continuityPaths} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
@@ -680,10 +781,12 @@ export function AnalyticsReliabilityPanel({
             <Link href={`/tenants/${tenantId}/request-logs?requestId=${encodeURIComponent(row.requestId)}`} key="request">
               {shortRequestId(row.requestId)}
             </Link>,
-            projectNameById.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
-            formatModelDisplayName(row.modelRef ?? row.requestedModel ?? "-"),
-            <ReliabilityBadge key="continuity" record={row} />,
-            <StatusBadge code={row.httpStatus} key="status" status={row.terminalStatus ?? row.status} />
+            row.surface === "tenant_chat"
+              ? "Tenant Chat"
+              : projectNameById.get(row.projectId ?? "") ?? formatDisplayIdentifier(row.projectId ?? ""),
+            formatModelDisplayName(row.model),
+            <ReliabilityBadge incident={row} key="continuity" />,
+            <StatusBadge code={row.httpStatus} key="status" status={row.canonicalStatus} />
           ],
           key: row.requestId
         }))}
@@ -717,9 +820,17 @@ export function AnalyticsSecurityPanel({
         detectedTypesSub: "최근 보호 요청 Detail에서 확인한 유형별 요청 수",
         masked: "마스킹 요청",
         protected: "보호 처리 요청",
+        complete: "Tenant Chat projection 전체 집계",
+        mixed: "Project/Application 최근 Detail {sampled}건 + Tenant Chat projection 집계",
+        partial: "Tenant Chat projection 부분 집계",
         sampled: "최근 Detail {sampled}/{total}건 기반",
+        source: "사용 경로별 보안 근거",
+        sourceSub: "전체 프로젝트 범위에는 Tenant Chat을 별도 사용 경로로 포함합니다",
+        totalRequests: "전체 요청",
+        unavailable: "탐지 유형 근거를 사용할 수 없음",
         treatment: "보안 처리 결과",
         treatmentSub: "선택 기간의 마스킹과 차단 처리량",
+        unobserved: "처리 없음/미관측",
         title: "보안"
       }
     : {
@@ -733,26 +844,57 @@ export function AnalyticsSecurityPanel({
         detectedTypesSub: "Requests by type observed in recent protected request details",
         masked: "Masked requests",
         protected: "Protected requests",
+        complete: "Complete Tenant Chat projection aggregate",
+        mixed: "{sampled} recent Project/Application details plus the Tenant Chat projection aggregate",
+        partial: "Partial Tenant Chat projection aggregate",
         sampled: "Based on {sampled}/{total} recent details",
+        source: "Security evidence by usage surface",
+        sourceSub: "The all-projects scope includes Tenant Chat as a separate usage surface",
+        totalRequests: "Total requests",
+        unavailable: "Detector-type evidence is unavailable",
         treatment: "Security outcomes",
         treatmentSub: "Masked and blocked requests in the selected range",
+        unobserved: "NO ACTION / UNOBSERVED",
         title: "Security"
       };
-  const maskedRequests = valueById(model.impact.outcomes, "pii_masked");
-  const blockedRequests = valueById(model.impact.outcomes, "blocked");
+  const maskedRequests = evidence?.maskedRequestCount ?? valueById(model.impact.outcomes, "pii_masked");
+  const blockedRequests = evidence?.blockedRequestCount ?? valueById(model.impact.outcomes, "blocked");
   const protectedRequests = maskedRequests + blockedRequests;
+  const securitySources = evidence?.sources ?? [];
+  const totalRequests = securitySources.length > 0
+    ? securitySources.reduce(
+        (total, source) => total + source.totalRequestCount,
+        0
+      )
+    : model.totalRequests;
+  const formatRequestCount = (value: number) => locale === "ko"
+    ? `${formatInteger(value)}건`
+    : formatInteger(value);
   const treatmentRows: AnalyticsValueRow[] = [
     { id: "pii_masked", label: locale === "ko" ? "마스킹" : "MASKED", value: maskedRequests },
-    { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests }
+    { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests },
+    {
+      id: "unobserved",
+      label: text.unobserved,
+      value: Math.max(0, totalRequests - protectedRequests)
+    }
   ];
   const detectedTypeRows = (evidence?.detectedTypeRows ?? []).map((row) => ({
     ...row,
     label: safetyDetectorLabel(row.label, locale)
   }));
   const evidenceSubtitle = evidence
-    ? text.sampled
-        .replace("{sampled}", formatInteger(evidence.sampledDetailCount))
-        .replace("{total}", formatInteger(evidence.protectedRequestCount))
+    ? evidence.detectorEvidenceMode === "complete"
+      ? text.complete
+      : evidence.detectorEvidenceMode === "mixed"
+        ? text.mixed.replace("{sampled}", formatInteger(evidence.sampledDetailCount))
+        : evidence.detectorEvidenceMode === "partial"
+          ? text.partial
+          : evidence.detectorEvidenceMode === "unavailable"
+            ? text.unavailable
+            : text.sampled
+                .replace("{sampled}", formatInteger(evidence.sampledDetailCount))
+                .replace("{total}", formatInteger(evidence.protectedRequestCount))
     : text.detectedTypesEmpty;
   const employeeRows = selectEmployeeRows(employeeSecurity?.data ?? [], selectedEmployeeId);
   const employeeRequestRows = employeeRows.map((row) => ({
@@ -766,16 +908,21 @@ export function AnalyticsSecurityPanel({
       <ExecutiveBand
         accent="security"
         icon={Shield}
-        lead={{ label: text.protected, value: formatInteger(protectedRequests) }}
+        lead={{
+          label: text.protected,
+          meta: `${formatRequestCount(totalRequests)} ${text.totalRequests}`,
+          value: formatRequestCount(protectedRequests)
+        }}
         metrics={[
-          { label: text.masked, value: formatInteger(maskedRequests) },
-          { label: text.blocked, value: formatInteger(blockedRequests) }
+          { label: text.masked, value: formatRequestCount(maskedRequests) },
+          { label: text.blocked, value: formatRequestCount(blockedRequests) }
         ]}
       />
 
       <div className="analytics-v3-workspace analytics-v3-security-workspace">
         <AnalysisSurface
           className="analytics-v3-main-canvas"
+          metric={`${formatInteger(totalRequests)} ${text.totalRequests}`}
           subtitle={`${text.detectedTypesSub} · ${evidenceSubtitle}`}
           title={text.detectedTypes}
         >
@@ -798,6 +945,26 @@ export function AnalyticsSecurityPanel({
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
+
+      <EvidenceTable
+        columns={locale === "ko"
+          ? ["사용 경로", "전체 요청", "보호 처리", "마스킹", "차단", "탐지 근거"]
+          : ["Usage surface", "Total requests", "Protected", "Masked", "Blocked", "Detector evidence"]}
+        emptyLocale={locale}
+        rows={(evidence?.sources ?? []).map((source) => ({
+          cells: [
+            <strong key="surface">{analyticsSurfaceLabel(source.id, locale)}</strong>,
+            formatInteger(source.totalRequestCount),
+            formatInteger(source.protectedRequestCount),
+            formatInteger(source.maskedRequestCount),
+            formatInteger(source.blockedRequestCount),
+            securityEvidenceModeLabel(source.detectorEvidenceMode, locale)
+          ],
+          key: source.id
+        }))}
+        subtitle={text.sourceSub}
+        title={text.source}
+      />
 
       <div className="analytics-v3-employee-workspace">
         <AnalysisSurface subtitle={text.employeeProtectionSub} title={text.employeeProtection}>
@@ -836,33 +1003,41 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
   const text = locale === "ko"
     ? {
         eligible: "캐시 대상 요청",
+        bypass: "캐시 OFF/BYPASS",
         hit: "캐시 적중",
         hitRate: "캐시 적중률",
         outcome: "캐시 처리 경로",
-        outcomeSub: "Hit, Miss, Bypass가 Provider 호출에 미친 결과",
+        outcomeSub: "Project/Application과 Tenant Chat의 Exact Cache 결과",
         evidence: "캐시 운영 근거",
-        evidenceSub: "각 캐시 결과가 다음 처리 단계에 미친 영향",
+        evidenceSub: "사용 경로별 Exact Cache 적중과 대상 요청",
         saved: "절감 비용",
+        savedScope: "Project/Application 기록",
         throughput: "캐시 효율",
-        throughputSub: "대상 요청과 실제 적중 수 비교",
+        throughputSub: "두 사용 경로의 대상 요청과 실제 적중 수",
+        totalRequests: "전체 요청",
         title: "캐시"
       }
     : {
         eligible: "Cache eligible",
+        bypass: "Cache OFF/BYPASS",
         hit: "Cache hits",
         hitRate: "Cache hit rate",
         outcome: "Cache decision path",
-        outcomeSub: "How hit, miss, and bypass affected Provider calls",
+        outcomeSub: "Exact Cache outcomes across Project/Application and Tenant Chat",
         evidence: "Cache operating evidence",
-        evidenceSub: "How each cache outcome changed the next processing step",
+        evidenceSub: "Exact Cache hits and eligible requests by usage surface",
         saved: "Recorded savings",
+        savedScope: "Project/Application records",
         throughput: "Cache efficiency",
-        throughputSub: "Eligible requests compared with actual hits",
+        throughputSub: "Eligible requests and actual hits across both usage surfaces",
+        totalRequests: "Total requests",
         title: "Cache"
       };
+  const totalRequests = model.cache.eligibleRequests + model.cache.bypassRequests;
   const efficiencyRows: AnalyticsValueRow[] = [
     { id: "eligible", label: text.eligible, value: model.cache.eligibleRequests },
-    { id: "hit", label: text.hit, value: model.cache.hitRequests }
+    { id: "hit", label: text.hit, value: model.cache.hitRequests },
+    { id: "bypass", label: text.bypass, value: model.cache.bypassRequests }
   ];
 
   return (
@@ -870,19 +1045,38 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
       <ExecutiveBand
         accent="cache"
         icon={Database}
-        lead={{ label: text.hitRate, value: formatPercent(model.cache.hitRate) }}
+        lead={{
+          label: text.hitRate,
+          meta: `${formatInteger(totalRequests)} ${text.totalRequests} · ${formatInteger(model.cache.bypassRequests)} ${text.bypass}`,
+          value: formatPercent(model.cache.hitRate)
+        }}
         metrics={[
           {
             label: text.hit,
-            meta: `${formatInteger(model.cache.eligibleRequests)} ${text.eligible}`,
-            value: formatInteger(model.cache.hitRequests)
+            meta: locale === "ko"
+              ? `${formatInteger(model.cache.eligibleRequests)}건 ${text.eligible}`
+              : `${formatInteger(model.cache.eligibleRequests)} ${text.eligible}`,
+            value: locale === "ko"
+              ? `${formatInteger(model.cache.hitRequests)}건`
+              : formatInteger(model.cache.hitRequests)
           },
-          { label: text.saved, value: formatMicroUsd(model.cache.savedCostMicroUsd) }
+          {
+            label: text.saved,
+            meta: text.savedScope,
+            value: model.cache.savedCostMicroUsd === null
+              ? "—"
+              : formatMicroUsd(model.cache.savedCostMicroUsd)
+          }
         ]}
       />
 
       <div className="analytics-v3-workspace analytics-v3-cache-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.outcomeSub} title={text.outcome}>
+        <AnalysisSurface
+          className="analytics-v3-main-canvas"
+          metric={`${formatInteger(totalRequests)} ${text.totalRequests}`}
+          subtitle={text.outcomeSub}
+          title={text.outcome}
+        >
           <ChartOrEmpty hasData={hasRows(model.cache.outcomes)} locale={locale}>
             <AnalyticsCompositionChart ariaLabel={text.outcome} rows={model.cache.outcomes} />
           </ChartOrEmpty>
@@ -895,20 +1089,19 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
       </div>
 
       <EvidenceTable
-        columns={locale === "ko" ? ["결과", "요청", "전체 비중", "다음 처리"] : ["Outcome", "Requests", "Share", "Next step"]}
+        columns={locale === "ko"
+          ? ["사용 경로", "전체 요청", "적중", "대상 요청", "OFF/BYPASS", "적중률", "절감 비용"]
+          : ["Usage surface", "Total requests", "Hits", "Eligible", "OFF/BYPASS", "Hit rate", "Savings"]}
         emptyLocale={locale}
-        rows={model.cache.outcomes.filter((row) => row.value > 0).map((row) => ({
+        rows={model.cache.sources.map((row) => ({
           cells: [
-            <strong key="outcome">{row.label}</strong>,
-            formatInteger(row.value),
-            formatPercent(safeRatio(row.value, model.totalRequests)),
-            <EvidenceState
-              key="state"
-              label={row.id === "hit"
-                ? locale === "ko" ? "캐시 응답" : "Cache served"
-                : locale === "ko" ? "파이프라인 계속" : "Pipeline continued"}
-              tone={row.id === "hit" ? "success" : "neutral"}
-            />
+            <strong key="surface">{row.label}</strong>,
+            formatInteger(row.totalRequests),
+            formatInteger(row.hitRequests),
+            formatInteger(row.eligibleRequests),
+            formatInteger(Math.max(0, row.totalRequests - row.eligibleRequests)),
+            formatPercent(row.hitRate),
+            row.savedCostMicroUsd === null ? "—" : formatMicroUsd(row.savedCostMicroUsd)
           ],
           key: row.id
         }))}
@@ -921,18 +1114,26 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
 
 function PanelShell({
   children,
+  dataAsOf,
+  dataState,
   locale,
   model,
   title
-}: AnalyticsPanelProps & { children: ReactNode; title: string }) {
+}: AnalyticsPanelProps & {
+  children: ReactNode;
+  dataAsOf?: string | null;
+  dataState?: AnalyticsReadModel["dataState"];
+  title: string;
+}) {
+  const resolvedDataState = dataState ?? model.dataState;
   return (
     <section className="analytics-v3-panel">
       <header className="analytics-v3-panel-topline">
         <h2>{title}</h2>
-        <div className="analytics-v3-data-state" data-state={model.dataState}>
+        <div className="analytics-v3-data-state" data-state={resolvedDataState}>
           <i />
-          <strong>{stateText[locale][model.dataState]}</strong>
-          <span>{formatDateTime(model.dataAsOf)}</span>
+          <strong>{stateText[locale][resolvedDataState]}</strong>
+          <span>{formatDateTime(dataAsOf === undefined ? model.dataAsOf : dataAsOf)}</span>
         </div>
       </header>
       {children}
@@ -1117,31 +1318,50 @@ function EvidenceState({ label, tone }: { label: string; tone: "neutral" | "succ
   return <span className="analytics-v3-evidence-state" data-tone={tone}>{label}</span>;
 }
 
-function StatusBadge({ code, status }: { code: number; status: string }) {
-  const tone = code >= 500 || status === "failed" ? "error" : code >= 400 ? "warning" : "success";
-  return <span className="analytics-v3-status" data-tone={tone}>{code || status}</span>;
+function StatusBadge({ code, status }: { code: number | null; status: string }) {
+  const normalizedCode = code ?? 0;
+  const tone = normalizedCode >= 500 || isSystemFailureStatus(status)
+    ? "error"
+    : normalizedCode >= 400 || status === "cancelled"
+      ? "warning"
+      : "success";
+  return <span className="analytics-v3-status" data-tone={tone}>{code ?? status}</span>;
 }
 
-function ReliabilityBadge({ record }: { record: InvocationLogRecord }) {
-  const fallbackOutcome = record.domainOutcomes?.fallback?.outcome?.toLowerCase();
-  const status = record.terminalStatus ?? record.status;
-
-  if (fallbackOutcome === "success") {
+function ReliabilityBadge({ incident }: { incident: AnalyticsReliabilityIncident }) {
+  if (incident.fallbackOutcome === "success" && incident.canonicalStatus === "success") {
     return <span className="analytics-v3-status" data-tone="success">FALLBACK RECOVERED</span>;
   }
-  if (fallbackOutcome === "failed") {
+  if (incident.fallbackOutcome === "failed") {
     return <span className="analytics-v3-status" data-tone="error">FALLBACK FAILED</span>;
   }
-  if (status === "cancelled") {
+  if (incident.fallbackOutcome === "unknown") {
+    return <span className="analytics-v3-status" data-tone="warning">FALLBACK UNKNOWN</span>;
+  }
+  if (incident.canonicalStatus === "cancelled") {
     return <span className="analytics-v3-status" data-tone="warning">CANCELLED</span>;
   }
   return <span className="analytics-v3-status" data-tone="error">FAILED</span>;
 }
 
-function isReliabilityEvidence(record: InvocationLogRecord) {
-  const fallbackOutcome = record.domainOutcomes?.fallback?.outcome?.toLowerCase();
-  const status = record.terminalStatus ?? record.status;
-  return status === "failed" || status === "cancelled" || fallbackOutcome === "success" || fallbackOutcome === "failed";
+function reliabilityDataState(reliability: LiveAnalyticsReliability | undefined): AnalyticsReadModel["dataState"] {
+  if (!reliability) return "unavailable";
+  if (reliability.freshness.queryStatus === "partial") return "partial";
+  if (reliability.freshness.queryStatus === "stale") return "stale";
+  if (reliability.freshness.queryStatus === "unavailable") return "unavailable";
+  return "live";
+}
+
+function reliabilityDataAsOf(reliability: LiveAnalyticsReliability | undefined) {
+  if (!reliability) return null;
+  const sourceEvents = reliability.freshness.sources
+    .flatMap((source) => source.lastEventAt ? [source.lastEventAt] : [])
+    .sort();
+  return sourceEvents[0] ?? reliability.generatedAt;
+}
+
+function formatNullablePercent(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : formatPercent(value);
 }
 
 function hasRows(rows: AnalyticsValueRow[]) {
@@ -1187,11 +1407,37 @@ function formatDecimal(value: number) {
 }
 
 function formatMs(value: number | null) {
-  return `${formatInteger(Math.round(value ?? 0))} ms`;
+  return value === null ? "—" : `${formatInteger(Math.round(value))} ms`;
 }
 
 function formatThroughput(value: number | null) {
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value ?? 0)}/min`;
+  return value === null
+    ? "—"
+    : `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value)}/min`;
+}
+
+function analyticsSurfaceLabel(surface: string, locale: Locale) {
+  if (surface === "tenant_chat") {
+    return "Tenant Chat";
+  }
+  return locale === "ko" ? "프로젝트/Application" : "Project/Application";
+}
+
+function analyticsSurfaceShortLabel(surface: string, locale: Locale) {
+  if (surface === "tenant_chat") {
+    return "Chat";
+  }
+  return locale === "ko" ? "프로젝트" : "Project";
+}
+
+function isSystemFailureStatus(status: string) {
+  return [
+    "failed",
+    "provider_failed",
+    "provider_timeout",
+    "runtime_unavailable",
+    "no_eligible_route"
+  ].includes(status);
 }
 
 function shortRequestId(value: string) {
@@ -1233,6 +1479,26 @@ function safetyDetectorLabel(value: string, locale: Locale) {
     .filter(Boolean)
     .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
     .join(" ");
+}
+
+function securityEvidenceModeLabel(
+  mode: "complete" | "partial" | "sampled" | "unavailable",
+  locale: Locale
+) {
+  const labels = locale === "ko"
+    ? {
+        complete: "전체 집계",
+        partial: "부분 집계",
+        sampled: "최근 Detail 표본",
+        unavailable: "사용 불가"
+      }
+    : {
+        complete: "Complete aggregate",
+        partial: "Partial aggregate",
+        sampled: "Recent detail sample",
+        unavailable: "Unavailable"
+      };
+  return labels[mode];
 }
 
 function liveRequestOutcome(row: LiveRequestRow) {

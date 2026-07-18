@@ -114,12 +114,13 @@ func (s *ReservationStore) RecordUsageReceipt(
 func lockReceiptReservation(ctx context.Context, tx pgx.Tx, requestID string) (receiptReservation, error) {
 	var result receiptReservation
 	var employeeID *string
+	var routingDifficulty *string
 	err := tx.QueryRow(ctx, `
 		SELECT reservation.reservation_id::text, reservation.tenant_id::text,
 		       reservation.user_id::text, reservation.request_id, reservation.turn_id,
 		       reservation.idempotency_key, reservation.snapshot_version,
 		       reservation.snapshot_digest, reservation.pricing_version,
-		       reservation.cache_outcome,
+		       reservation.cache_outcome, reservation.routing_difficulty,
 		       reservation.user_period_start, reservation.tenant_period_start,
 		       reservation.reserved_tokens, reservation.reserved_cost_micro_usd,
 		       reservation.ledger_version, reservation.state,
@@ -140,6 +141,7 @@ func lockReceiptReservation(ctx context.Context, tx pgx.Tx, requestID string) (r
 		&result.Pending.Request.TurnID, &result.Pending.Request.IdempotencyKey,
 		&result.Pending.Request.Snapshot.Version, &result.Pending.Request.Snapshot.Digest,
 		&result.Pending.Reservation.PricingVersion, &result.Pending.Reservation.CacheOutcome,
+		&routingDifficulty,
 		&result.Pending.Reservation.UserPeriodStart,
 		&result.Pending.Reservation.TenantPeriodStart, &result.Pending.Reservation.ReservedTokens,
 		&result.Pending.Reservation.ReservedCostMicroUSD, &result.Pending.Reservation.LedgerVersion,
@@ -161,6 +163,7 @@ func lockReceiptReservation(ctx context.Context, tx pgx.Tx, requestID string) (r
 		Type: "tenant", ID: result.Pending.Request.ExecutionScope.TenantID,
 	}
 	result.Pending.Request.Snapshot.PricingVersion = result.Pending.Reservation.PricingVersion
+	restoreRoutingDifficulty(&result.Pending.Request, routingDifficulty)
 	if employeeID != nil {
 		result.Pending.Request.ExecutionScope.Actor.EmployeeID = *employeeID
 	}
@@ -467,6 +470,9 @@ func lateReceiptEventPayload(
 		},
 		"attempts":        settlementAttemptsPayload(attempts),
 		"terminalOutcome": terminalOutcomeForAttempt(attempts), "lateUsage": true,
+	}
+	if err := addRoutingDifficultyPayload(payload, reservation.Pending.Request); err != nil {
+		return nil, err
 	}
 	return json.Marshal(payload)
 }

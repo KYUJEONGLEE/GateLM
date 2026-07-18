@@ -1,6 +1,7 @@
 "use client";
 
-import { Building2, Calendar, Layers3 } from "lucide-react";
+import { Building2, Calendar, Layers3, RotateCcw } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState, useTransition } from "react";
 import type {
@@ -23,6 +24,8 @@ type DashboardFilterFormProps = {
   filters: DashboardFilterState;
   locale: Locale;
   projects: ProjectRecord[];
+  refreshHref: string;
+  refreshLabel: string;
   rangeOptions: DashboardRangeOption[];
 };
 
@@ -34,6 +37,8 @@ export function DashboardFilterForm({
   filters,
   locale,
   projects,
+  refreshHref,
+  refreshLabel,
   rangeOptions
 }: DashboardFilterFormProps) {
   const router = useRouter();
@@ -121,9 +126,18 @@ export function DashboardFilterForm({
       <input name="budgetScopeType" type="hidden" value={filters.budgetScopeType} />
       <input name="budgetScopeId" type="hidden" value={filters.budgetScopeId} />
       <input name="resolvedBy" type="hidden" value={filters.resolvedBy} />
-      <button className="secondary-button" disabled={isPending} type="submit">
-        {applyLabel}
-      </button>
+      <div className="dashboard-summary-actions">
+        <button
+          className="secondary-button dashboard-summary-apply-button"
+          disabled={isPending}
+          type="submit"
+        >
+          {applyLabel}
+        </button>
+        <Link aria-label={refreshLabel} className="dashboard-refresh-link" href={refreshHref}>
+          <RotateCcw aria-hidden="true" size={18} strokeWidth={2.3} />
+        </Link>
+      </div>
     </form>
   );
 }

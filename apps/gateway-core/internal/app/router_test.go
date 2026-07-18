@@ -16,6 +16,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
@@ -23,6 +24,46 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+type routerTestInjectedMaskingEngine struct{}
+
+func (*routerTestInjectedMaskingEngine) Apply(context.Context, maskdomain.ApplyRequest) (maskdomain.Result, error) {
+	return maskdomain.Result{}, nil
+}
+
+func TestResolveRouterMaskingEnginePreservesConfiguredEngineInPersonNameModelOnlyMode(t *testing.T) {
+	configured := &routerTestInjectedMaskingEngine{}
+
+	resolved := resolveRouterMaskingEngine(configured, true)
+
+	if resolved != configured {
+		t.Fatal("person-name model-only mode replaced the configured masking engine")
+	}
+}
+
+func TestResolveRouterFallbackMaskingEngineOnlyEnablesFullRulesForPersonNameModelOnlyMode(t *testing.T) {
+	if resolveRouterFallbackMaskingEngine(nil, false) != nil {
+		t.Fatal("default mode must not add a duplicate fallback engine")
+	}
+	configured := &routerTestInjectedMaskingEngine{}
+	if resolveRouterFallbackMaskingEngine(configured, true) != nil {
+		t.Fatal("configured engine must keep ownership of its fallback behavior")
+	}
+	fallback := resolveRouterFallbackMaskingEngine(nil, true)
+	if fallback == nil {
+		t.Fatal("person-name model-only mode must configure a full-rule fallback engine")
+	}
+	result, err := fallback.Apply(context.Background(), maskdomain.ApplyRequest{
+		Prompt: "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+	})
+	if err != nil {
+		t.Fatalf("apply full-rule fallback: %v", err)
+	}
+	if result.Action != maskdomain.ActionRedacted ||
+		len(result.DetectedTypes) != 1 || result.DetectedTypes[0] != "person_name" {
+		t.Fatalf("fallback engine did not restore person-name rules: %+v", result)
+	}
+}
 
 func TestPublicRouterDoesNotExposePrivateRAGEmbeddings(t *testing.T) {
 	router := NewRouter(config.Config{}, provider.NewRegistry("mock"), nil)
@@ -667,10 +708,14 @@ type routerTestInvocationLogReader struct {
 	detailFilter         invocationlog.RequestDetailFilter
 	dashboardFilter      invocationlog.DashboardOverviewFilter
 	analyticsFilter      invocationlog.AnalyticsPerformanceFilter
+	policyImpactFilter   invocationlog.AnalyticsPolicyImpactFilter
+	reliabilityFilter    invocationlog.AnalyticsReliabilityFilter
 	items                []invocationlog.RequestLogListItem
 	detail               invocationlog.RequestDetail
 	overview             invocationlog.DashboardOverviewFields
 	analyticsPerformance invocationlog.AnalyticsPerformanceFields
+	policyImpact         invocationlog.AnalyticsPolicyImpactFields
+	analyticsReliability invocationlog.AnalyticsReliabilityFields
 }
 
 func (r *routerTestInvocationLogReader) ListProjectLogs(_ context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -695,6 +740,16 @@ func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invoc
 func (r *routerTestInvocationLogReader) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
 	r.analyticsFilter = filter
 	return r.analyticsPerformance, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsPolicyImpact(_ context.Context, filter invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
+	r.policyImpactFilter = filter
+	return r.policyImpact, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsReliability(_ context.Context, filter invocationlog.AnalyticsReliabilityFilter) (invocationlog.AnalyticsReliabilityFields, error) {
+	r.reliabilityFilter = filter
+	return r.analyticsReliability, nil
 }
 
 type routerTestAPIKeyAuthenticator struct {

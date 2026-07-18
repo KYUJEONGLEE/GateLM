@@ -409,7 +409,7 @@ func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.Co
 	if err != nil {
 		return invocationlog.CostReportFields{}, err
 	}
-	modelBreakdown, err := r.queryCostReportModelBreakdown(ctx, normalizedFilter)
+	modelBreakdown, modelBuckets, err := r.queryCostReportModelBreakdown(ctx, normalizedFilter)
 	if err != nil {
 		return invocationlog.CostReportFields{}, err
 	}
@@ -437,6 +437,7 @@ func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.Co
 		ExpectedBucketCount: bucketConfig.ExpectedBucketCount,
 		Totals:              totals,
 		Buckets:             buckets,
+		ModelBuckets:        modelBuckets,
 		Breakdowns: invocationlog.CostReportBreakdowns{
 			ByProject:     projectBreakdown,
 			ByApplication: applicationBreakdown,
@@ -464,8 +465,7 @@ func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invoca
 		return invocationlog.AnalyticsPerformanceFields{}, err
 	}
 
-	var summary invocationlog.AnalyticsPerformanceSummary
-	var lastLogCreatedAt *time.Time
+	var surfaceSummaries []invocationlog.AnalyticsSurfaceSummary
 	var providerModelPerformance []invocationlog.AnalyticsProviderModelPerformance
 	var p95LatencyByProvider []invocationlog.AnalyticsProviderLatency
 	var latencyDistribution []invocationlog.AnalyticsLatencyDistributionBucket
@@ -474,7 +474,7 @@ func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invoca
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
 		var err error
-		summary, lastLogCreatedAt, err = r.queryAnalyticsPerformanceSummary(groupCtx, normalizedFilter)
+		surfaceSummaries, err = r.queryAnalyticsPerformanceSummaries(groupCtx, normalizedFilter)
 		return err
 	})
 	group.Go(func() error {
@@ -501,10 +501,12 @@ func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invoca
 		return invocationlog.AnalyticsPerformanceFields{}, err
 	}
 
+	summary, lastLogCreatedAt := aggregateAnalyticsPerformanceSummaries(normalizedFilter, surfaceSummaries)
 	generatedAt := time.Now().UTC()
 	bucketConfig := invocationlog.TimeSeriesBucketConfigForRange(normalizedFilter.From, normalizedFilter.To)
 	return invocationlog.AnalyticsPerformanceFields{
 		Summary:                  summary,
+		SurfaceSummaries:         surfaceSummaries,
 		ProviderModelPerformance: providerModelPerformance,
 		P95LatencyByProvider:     p95LatencyByProvider,
 		LatencyDistribution:      latencyDistribution,
@@ -512,7 +514,7 @@ func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invoca
 		BucketInterval:           bucketConfig.IntervalLabel,
 		ExpectedBucketCount:      bucketConfig.ExpectedBucketCount,
 		DataFreshness: invocationlog.DashboardDataFreshness{
-			Source:           "postgresql_request_log",
+			Source:           analyticsPerformanceDataSource(normalizedFilter),
 			RecordCount:      summary.TotalRequests,
 			LastLogCreatedAt: lastLogCreatedAt,
 			GeneratedAt:      generatedAt,
@@ -522,40 +524,46 @@ func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invoca
 	}, nil
 }
 
-func (r *QueryReader) queryAnalyticsPerformanceSummary(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceSummary, *time.Time, error) {
+func (r *QueryReader) queryAnalyticsPerformanceSummaries(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsSurfaceSummary, error) {
 	query, args := buildAnalyticsPerformanceSummaryQuery(filter)
-	var totalRequests int64
-	var avgLatencyMs sql.NullFloat64
-	var p95LatencyMs sql.NullFloat64
-	var p99LatencyMs sql.NullFloat64
-	var errorRate sql.NullFloat64
-	var lastLogCreatedAt sql.NullTime
-	if err := r.db.QueryRow(ctx, query, args...).Scan(
-		&totalRequests,
-		&avgLatencyMs,
-		&p95LatencyMs,
-		&p99LatencyMs,
-		&errorRate,
-		&lastLogCreatedAt,
-	); err != nil {
-		return invocationlog.AnalyticsPerformanceSummary{}, nil, err
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
 
-	var throughputPerMinute *float64
-	rangeMinutes := filter.To.Sub(filter.From).Minutes()
-	if totalRequests > 0 && rangeMinutes > 0 {
-		throughput := float64(totalRequests) / rangeMinutes
-		throughputPerMinute = &throughput
+	items := []invocationlog.AnalyticsSurfaceSummary{}
+	for rows.Next() {
+		var item invocationlog.AnalyticsSurfaceSummary
+		var avgLatencyMs sql.NullFloat64
+		var p95LatencyMs sql.NullFloat64
+		var p99LatencyMs sql.NullFloat64
+		var errorRate sql.NullFloat64
+		var lastEventAt sql.NullTime
+		if err := rows.Scan(
+			&item.Surface,
+			&item.Summary.TotalRequests,
+			&avgLatencyMs,
+			&p95LatencyMs,
+			&p99LatencyMs,
+			&item.Summary.SystemErrorRequests,
+			&errorRate,
+			&lastEventAt,
+		); err != nil {
+			return nil, err
+		}
+		item.Summary.AvgLatencyMs = nullableFloat64Pointer(avgLatencyMs)
+		item.Summary.P95LatencyMs = nullableFloat64Pointer(p95LatencyMs)
+		item.Summary.P99LatencyMs = nullableFloat64Pointer(p99LatencyMs)
+		item.Summary.ErrorRate = nullableFloat64Pointer(errorRate)
+		item.Summary.ThroughputPerMinute = analyticsThroughput(item.Summary.TotalRequests, filter)
+		item.LastEventAt = nullableTimePointer(lastEventAt)
+		items = append(items, item)
 	}
-
-	return invocationlog.AnalyticsPerformanceSummary{
-		AvgLatencyMs:        nullableFloat64Pointer(avgLatencyMs),
-		P95LatencyMs:        nullableFloat64Pointer(p95LatencyMs),
-		P99LatencyMs:        nullableFloat64Pointer(p99LatencyMs),
-		ThroughputPerMinute: throughputPerMinute,
-		ErrorRate:           nullableFloat64Pointer(errorRate),
-		TotalRequests:       totalRequests,
-	}, nullableTimePointer(lastLogCreatedAt), nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return fillAnalyticsPerformanceSurfaceSummaries(filter, items), nil
 }
 
 func (r *QueryReader) queryAnalyticsProviderModelPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsProviderModelPerformance, error) {
@@ -575,6 +583,7 @@ func (r *QueryReader) queryAnalyticsProviderModelPerformance(ctx context.Context
 		var errorRate sql.NullFloat64
 		var cacheHitRate sql.NullFloat64
 		if err := rows.Scan(
+			&item.Surface,
 			&item.Provider,
 			&item.Model,
 			&item.Requests,
@@ -617,7 +626,7 @@ func (r *QueryReader) queryAnalyticsP95LatencyByProvider(ctx context.Context, fi
 	for rows.Next() {
 		var item invocationlog.AnalyticsProviderLatency
 		var p95LatencyMs sql.NullFloat64
-		if err := rows.Scan(&item.Provider, &p95LatencyMs, &item.Requests); err != nil {
+		if err := rows.Scan(&item.Surface, &item.Provider, &p95LatencyMs, &item.Requests); err != nil {
 			return nil, err
 		}
 		item.P95LatencyMs = nullableFloat64Pointer(p95LatencyMs)
@@ -643,7 +652,7 @@ func (r *QueryReader) queryAnalyticsLatencyDistribution(ctx context.Context, fil
 		var p50LatencyMs sql.NullFloat64
 		var p95LatencyMs sql.NullFloat64
 		var p99LatencyMs sql.NullFloat64
-		if err := rows.Scan(&item.Bucket, &item.Requests, &p50LatencyMs, &p95LatencyMs, &p99LatencyMs); err != nil {
+		if err := rows.Scan(&item.Surface, &item.Bucket, &item.Requests, &p50LatencyMs, &p95LatencyMs, &p99LatencyMs); err != nil {
 			return nil, err
 		}
 		item.Bucket = item.Bucket.UTC()
@@ -669,17 +678,26 @@ func (r *QueryReader) queryAnalyticsSlowestRequests(ctx context.Context, filter 
 	items := []invocationlog.AnalyticsSlowRequest{}
 	for rows.Next() {
 		var item invocationlog.AnalyticsSlowRequest
+		var projectID sql.NullString
+		var httpStatus sql.NullInt64
 		if err := rows.Scan(
+			&item.Surface,
 			&item.RequestID,
-			&item.ProjectID,
+			&projectID,
 			&item.Provider,
 			&item.Model,
 			&item.LatencyMs,
-			&item.HTTPStatus,
+			&httpStatus,
 			&item.TerminalStatus,
 			&item.CreatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if projectID.Valid {
+			item.ProjectID = projectID.String
+		}
+		if httpStatus.Valid {
+			item.HTTPStatus = int(httpStatus.Int64)
 		}
 		item.CreatedAt = item.CreatedAt.UTC()
 		items = append(items, item)
@@ -788,28 +806,48 @@ func (r *QueryReader) queryCostReportApplicationBreakdown(ctx context.Context, f
 	return items, nil
 }
 
-func (r *QueryReader) queryCostReportModelBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportModelBreakdown, error) {
+func (r *QueryReader) queryCostReportModelBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportModelBreakdown, []invocationlog.CostReportModelBucket, error) {
 	query, args := buildCostReportModelBreakdownQuery(filter)
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
-	items := []invocationlog.CostReportModelBreakdown{}
+	models := map[string]invocationlog.CostReportModelBreakdown{}
+	buckets := map[string]invocationlog.CostReportModelBucket{}
 	for rows.Next() {
+		var periodStart time.Time
 		var item invocationlog.CostReportModelBreakdown
-		if err := rows.Scan(&item.Provider, &item.Model, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
-			return nil, err
+		if err := rows.Scan(&periodStart, &item.Provider, &item.Model, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
+			return nil, nil, err
 		}
-		item.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.CostMicroUSD)
-		item.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.SavedCostMicroUSD)
-		items = append(items, item)
+		modelKey := item.Provider + "\x00" + item.Model
+		total := models[modelKey]
+		total.Provider = item.Provider
+		total.Model = item.Model
+		total.RequestCount += item.RequestCount
+		total.PromptTokens += item.PromptTokens
+		total.CompletionTokens += item.CompletionTokens
+		total.TotalTokens += item.TotalTokens
+		total.CostMicroUSD += item.CostMicroUSD
+		total.SavedCostMicroUSD += item.SavedCostMicroUSD
+		models[modelKey] = total
+
+		periodStart = costReportOutputBucketStart(filter, periodStart)
+		bucketKey := periodStart.Format(time.RFC3339Nano) + "\x00" + modelKey
+		bucket := buckets[bucketKey]
+		bucket.PeriodStart = periodStart
+		bucket.Provider = item.Provider
+		bucket.Model = item.Model
+		bucket.RequestCount += item.RequestCount
+		buckets[bucketKey] = bucket
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return items, nil
+	modelItems := finalizedCostReportModels(models)
+	return modelItems, finalizedCostReportModelBuckets(filter, buckets, modelItems), nil
 }
 
 func (r *QueryReader) queryCostReportBudgetScopeBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportBudgetScopeBreakdown, error) {
@@ -899,6 +937,7 @@ func buildCostReportModelBreakdownQuery(filter invocationlog.CostReportFilter) (
 	query := fmt.Sprintf(`
 with filtered as (
   select
+	%s as period_start,
     nullif(provider, '') as provider_key,
     nullif(model, '') as model_key,
     prompt_tokens,
@@ -908,21 +947,28 @@ with filtered as (
     saved_cost_micro_usd
   from p0_llm_invocation_logs
   where %s
+), top_models as (
+  select provider_key, model_key
+  from filtered
+  where provider_key is not null and model_key is not null
+  group by 1, 2
+  order by coalesce(sum(cost_micro_usd), 0) desc, provider_key, model_key
+  limit 100
 )
 select
-  provider_key,
-  model_key,
+	f.period_start,
+  f.provider_key,
+  f.model_key,
   count(*)::bigint as request_count,
-  coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
-  coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
-  coalesce(sum(total_tokens), 0)::bigint as total_tokens,
-  coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
-  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
-from filtered
-where provider_key is not null and model_key is not null
-group by 1, 2
-order by cost_micro_usd desc, provider_key, model_key
-limit 100`, whereSQL)
+  coalesce(sum(f.prompt_tokens), 0)::bigint as prompt_tokens,
+  coalesce(sum(f.completion_tokens), 0)::bigint as completion_tokens,
+  coalesce(sum(f.total_tokens), 0)::bigint as total_tokens,
+  coalesce(sum(f.cost_micro_usd), 0)::bigint as cost_micro_usd,
+  coalesce(sum(f.saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
+from filtered f
+join top_models t on t.provider_key = f.provider_key and t.model_key = f.model_key
+group by 1, 2, 3
+order by 1, cost_micro_usd desc, f.provider_key, f.model_key`, costReportBucketExpression(filter), whereSQL)
 	return query, args
 }
 
@@ -1093,80 +1139,88 @@ func firstExpectedBucketStart(to time.Time, config invocationlog.TimeSeriesBucke
 }
 
 func buildAnalyticsPerformanceSummaryQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
-	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	filteredCTE, args := buildAnalyticsPerformanceFilteredCTE(filter)
 	query := fmt.Sprintf(`
 %s
 select
+	 surface,
   count(*)::bigint as total_requests,
-  (avg(latency_ms) filter (where %s))::double precision as avg_latency_ms,
-  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
-  (percentile_disc(0.99) within group (order by latency_ms) filter (where %s))::double precision as p99_latency_ms,
-  (count(*) filter (where %s))::double precision / nullif(count(*), 0)::double precision as error_rate,
-  max(created_at) as last_log_created_at
-from filtered`, analyticsPerformanceFilteredCTE(whereSQL), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsErrorSQL())
+	(avg(latency_ms) filter (where latency_eligible))::double precision as avg_latency_ms,
+	(percentile_disc(0.95) within group (order by latency_ms) filter (where latency_eligible))::double precision as p95_latency_ms,
+	(percentile_disc(0.99) within group (order by latency_ms) filter (where latency_eligible))::double precision as p99_latency_ms,
+	count(*) filter (where is_system_error)::bigint as system_error_requests,
+	(count(*) filter (where is_system_error))::double precision / nullif(count(*), 0)::double precision as error_rate,
+	max(created_at) as last_event_at
+from filtered
+group by surface
+order by surface`, filteredCTE)
 	return query, args
 }
 
 func buildAnalyticsProviderModelPerformanceQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
-	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	filteredCTE, args := buildAnalyticsPerformanceFilteredCTE(filter)
 	query := fmt.Sprintf(`
 %s
 select
+	 surface,
   provider_key,
   model_key,
   count(*)::bigint as request_count,
-  (avg(latency_ms) filter (where %s))::double precision as avg_latency_ms,
-  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
-  (percentile_disc(0.99) within group (order by latency_ms) filter (where %s))::double precision as p99_latency_ms,
-  (count(*) filter (where %s))::double precision / nullif(count(*), 0)::double precision as error_rate,
+	(avg(latency_ms) filter (where latency_eligible))::double precision as avg_latency_ms,
+	(percentile_disc(0.95) within group (order by latency_ms) filter (where latency_eligible))::double precision as p95_latency_ms,
+	(percentile_disc(0.99) within group (order by latency_ms) filter (where latency_eligible))::double precision as p99_latency_ms,
+	(count(*) filter (where is_system_error))::double precision / nullif(count(*), 0)::double precision as error_rate,
   coalesce(sum(cost_micro_usd), 0)::bigint as total_cost_micro_usd,
   (count(*) filter (where cache_status = 'hit'))::double precision / nullif(count(*), 0)::double precision as cache_hit_rate
 from filtered
 where provider_key is not null and provider_key <> '' and model_key is not null and model_key <> ''
-group by 1, 2
-order by request_count desc, provider_key, model_key
-limit 100`, analyticsPerformanceFilteredCTE(whereSQL), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsErrorSQL())
+group by 1, 2, 3
+order by request_count desc, surface, provider_key, model_key
+limit 100`, filteredCTE)
 	return query, args
 }
 
 func buildAnalyticsP95LatencyByProviderQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
-	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	filteredCTE, args := buildAnalyticsPerformanceFilteredCTE(filter)
 	query := fmt.Sprintf(`
 %s
 select
+	 surface,
   provider_key,
-  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
+	(percentile_disc(0.95) within group (order by latency_ms) filter (where latency_eligible))::double precision as p95_latency_ms,
   count(*)::bigint as request_count
 from filtered
 where provider_key is not null and provider_key <> ''
-group by 1
-order by p95_latency_ms desc nulls last, request_count desc, provider_key
-limit 20`, analyticsPerformanceFilteredCTE(whereSQL), analyticsLatencyEligibleSQL())
+group by 1, 2
+order by p95_latency_ms desc nulls last, request_count desc, surface, provider_key
+limit 20`, filteredCTE)
 	return query, args
 }
 
 func buildAnalyticsLatencyDistributionQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
-	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	filteredCTE, args := buildAnalyticsPerformanceFilteredCTE(filter)
 	bucketExpression := analyticsPerformanceBucketExpression(filter.From, filter.To)
 	query := fmt.Sprintf(`
 %s
 select
+	 surface,
   %s as bucket,
   count(*)::bigint as request_count,
-  (percentile_disc(0.50) within group (order by latency_ms) filter (where %s))::double precision as p50_latency_ms,
-  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
-  (percentile_disc(0.99) within group (order by latency_ms) filter (where %s))::double precision as p99_latency_ms
+	(percentile_disc(0.50) within group (order by latency_ms) filter (where latency_eligible))::double precision as p50_latency_ms,
+	(percentile_disc(0.95) within group (order by latency_ms) filter (where latency_eligible))::double precision as p95_latency_ms,
+	(percentile_disc(0.99) within group (order by latency_ms) filter (where latency_eligible))::double precision as p99_latency_ms
 from filtered
-group by 1
-order by 1`, analyticsPerformanceFilteredCTE(whereSQL), bucketExpression, analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL())
+group by 1, 2
+order by 2, 1`, filteredCTE, bucketExpression)
 	return query, args
 }
 
 func buildAnalyticsSlowestRequestsQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
-	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	filteredCTE, args := buildAnalyticsPerformanceFilteredCTE(filter)
 	query := fmt.Sprintf(`
 %s
 select
+	 surface,
   request_id,
   project_id,
   coalesce(provider_key, 'unknown') as provider_key,
@@ -1176,61 +1230,92 @@ select
   terminal_status,
   created_at
 from filtered
-where latency_ms is not null
+where latency_eligible
 order by latency_ms desc, created_at desc, request_id desc
-limit 10`, analyticsPerformanceFilteredCTE(whereSQL))
+limit 10`, filteredCTE)
 	return query, args
 }
 
-func buildAnalyticsPerformanceWhere(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+func buildAnalyticsPerformanceFilteredCTE(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
 	args := []any{filter.From.UTC(), filter.To.UTC()}
-	where := []string{
+	projectApplicationWhere := []string{
 		"created_at >= $1",
 		"created_at < $2",
 	}
-	addOptionalUUIDWhere := func(expression string, value string) {
-		addUUIDWhere(&where, &args, expression, value)
-	}
-	addOptionalWhere := func(expression string, value string) {
-		if strings.TrimSpace(value) == "" {
-			return
-		}
-		args = append(args, value)
-		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
+	tenantChatWhere := []string{
+		"completed_at >= $1",
+		"completed_at < $2",
+		"surface = 'tenant_chat'",
+		"execution_scope_kind = 'tenant_chat'",
 	}
 
-	addOptionalUUIDWhere("tenant_id", filter.TenantID)
-	addOptionalUUIDWhere("project_id", filter.ProjectID)
-	addOptionalWhere("provider", filter.Provider)
-	addOptionalWhere("model", filter.Model)
+	tenantID := strings.TrimSpace(filter.TenantID)
+	if !isPostgresUUID(tenantID) {
+		projectApplicationWhere = append(projectApplicationWhere, "1 = 0")
+		tenantChatWhere = append(tenantChatWhere, "1 = 0")
+	} else {
+		args = append(args, tenantID)
+		placeholder := fmt.Sprintf("$%d", len(args))
+		projectApplicationWhere = append(projectApplicationWhere, "tenant_id = "+placeholder)
+		tenantChatWhere = append(tenantChatWhere, "tenant_id = "+placeholder)
+	}
 
-	return strings.Join(where, " and "), args
-}
+	includeTenantChat := analyticsPerformanceIncludesTenantChat(filter)
+	if strings.TrimSpace(filter.ProjectID) != "" {
+		addUUIDWhere(&projectApplicationWhere, &args, "project_id", filter.ProjectID)
+	}
+	if provider := strings.TrimSpace(filter.Provider); provider != "" {
+		args = append(args, provider)
+		placeholder := fmt.Sprintf("$%d", len(args))
+		projectApplicationWhere = append(projectApplicationWhere, "provider = "+placeholder)
+		tenantChatWhere = append(tenantChatWhere, "effective_provider_id::text = "+placeholder)
+	}
+	if model := strings.TrimSpace(filter.Model); model != "" {
+		args = append(args, model)
+		placeholder := fmt.Sprintf("$%d", len(args))
+		projectApplicationWhere = append(projectApplicationWhere, "model = "+placeholder)
+		tenantChatWhere = append(tenantChatWhere, "effective_model_key = "+placeholder)
+	}
 
-func analyticsPerformanceFilteredCTE(whereSQL string) string {
-	return fmt.Sprintf(`with filtered as (
+	branches := []string{fmt.Sprintf(`
   select
+	'%s'::text as surface,
     request_id,
     project_id::text as project_id,
     nullif(provider, '') as provider_key,
     nullif(model, '') as model_key,
     %s as terminal_status,
     http_status,
-    latency_ms,
+	latency_ms::bigint as latency_ms,
     cost_micro_usd,
     coalesce(nullif(cache_status, ''), 'bypass') as cache_status,
+	(http_status >= 500 or %s = 'failed') as is_system_error,
+	(%s in ('success', 'failed') and latency_ms is not null) as latency_eligible,
     created_at
   from p0_llm_invocation_logs
-  where %s
-)`, terminalStatusSQL, whereSQL)
-}
+	where %s`, invocationlog.AnalyticsSurfaceProjectApplication, terminalStatusSQL, terminalStatusSQL, terminalStatusSQL, strings.Join(projectApplicationWhere, " and "))}
 
-func analyticsLatencyEligibleSQL() string {
-	return "terminal_status in ('success', 'failed') and latency_ms is not null"
-}
+	if includeTenantChat {
+		branches = append(branches, fmt.Sprintf(`
+  select
+	'%s'::text as surface,
+	request_id,
+	null::text as project_id,
+	nullif(effective_provider_id::text, '') as provider_key,
+	nullif(effective_model_key, '') as model_key,
+	terminal_outcome as terminal_status,
+	null::integer as http_status,
+	latency_ms::bigint as latency_ms,
+	confirmed_cost_micro_usd as cost_micro_usd,
+	coalesce(nullif(cache_outcome, ''), 'off') as cache_status,
+	terminal_outcome in ('failed', 'provider_failed', 'provider_timeout', 'runtime_unavailable', 'no_eligible_route') as is_system_error,
+	latency_ms is not null as latency_eligible,
+	completed_at as created_at
+  from tenant_chat_invocation_logs
+	where %s`, invocationlog.AnalyticsSurfaceTenantChat, strings.Join(tenantChatWhere, " and ")))
+	}
 
-func analyticsErrorSQL() string {
-	return "http_status >= 500 or terminal_status = 'failed'"
+	return "with filtered as (" + strings.Join(branches, "\nunion all\n") + "\n)", args
 }
 
 func analyticsPerformanceBucketExpression(from time.Time, to time.Time) string {
@@ -1243,27 +1328,114 @@ func fillAnalyticsLatencyDistributionBuckets(filter invocationlog.AnalyticsPerfo
 		return buckets
 	}
 
-	bucketByStart := make(map[time.Time]invocationlog.AnalyticsLatencyDistributionBucket, len(buckets))
+	type surfaceBucketKey struct {
+		surface string
+		start   time.Time
+	}
+	bucketByStart := make(map[surfaceBucketKey]invocationlog.AnalyticsLatencyDistributionBucket, len(buckets))
 	for _, bucket := range buckets {
 		start := invocationlog.AlignTimeSeriesBucketStart(bucket.Bucket, config)
 		bucket.Bucket = start
-		bucketByStart[start] = bucket
+		bucketByStart[surfaceBucketKey{surface: bucket.Surface, start: start}] = bucket
 	}
 
-	filled := make([]invocationlog.AnalyticsLatencyDistributionBucket, 0, config.ExpectedBucketCount)
+	surfaces := []string{invocationlog.AnalyticsSurfaceProjectApplication}
+	if analyticsPerformanceIncludesTenantChat(filter) {
+		surfaces = append(surfaces, invocationlog.AnalyticsSurfaceTenantChat)
+	}
+	filled := make([]invocationlog.AnalyticsLatencyDistributionBucket, 0, config.ExpectedBucketCount*len(surfaces))
 	start := firstExpectedBucketStart(filter.To, config)
-	for index := 0; index < config.ExpectedBucketCount; index++ {
-		bucketStart := start.Add(time.Duration(index) * config.Interval)
-		if bucket, ok := bucketByStart[bucketStart]; ok {
-			filled = append(filled, bucket)
-			continue
+	for _, surface := range surfaces {
+		for index := 0; index < config.ExpectedBucketCount; index++ {
+			bucketStart := start.Add(time.Duration(index) * config.Interval)
+			if bucket, ok := bucketByStart[surfaceBucketKey{surface: surface, start: bucketStart}]; ok {
+				filled = append(filled, bucket)
+				continue
+			}
+			filled = append(filled, invocationlog.AnalyticsLatencyDistributionBucket{
+				Surface: surface,
+				Bucket:  bucketStart,
+			})
 		}
-		filled = append(filled, invocationlog.AnalyticsLatencyDistributionBucket{
-			Bucket: bucketStart,
-		})
 	}
 
 	return filled
+}
+
+func fillAnalyticsPerformanceSurfaceSummaries(filter invocationlog.AnalyticsPerformanceFilter, items []invocationlog.AnalyticsSurfaceSummary) []invocationlog.AnalyticsSurfaceSummary {
+	bySurface := make(map[string]invocationlog.AnalyticsSurfaceSummary, len(items))
+	for _, item := range items {
+		bySurface[item.Surface] = item
+	}
+
+	surfaces := []string{invocationlog.AnalyticsSurfaceProjectApplication}
+	if analyticsPerformanceIncludesTenantChat(filter) {
+		surfaces = append(surfaces, invocationlog.AnalyticsSurfaceTenantChat)
+	}
+	filled := make([]invocationlog.AnalyticsSurfaceSummary, 0, len(surfaces))
+	for _, surface := range surfaces {
+		if item, ok := bySurface[surface]; ok {
+			filled = append(filled, item)
+			continue
+		}
+		filled = append(filled, invocationlog.AnalyticsSurfaceSummary{Surface: surface})
+	}
+	return filled
+}
+
+func aggregateAnalyticsPerformanceSummaries(
+	filter invocationlog.AnalyticsPerformanceFilter,
+	items []invocationlog.AnalyticsSurfaceSummary,
+) (invocationlog.AnalyticsPerformanceSummary, *time.Time) {
+	summary := invocationlog.AnalyticsPerformanceSummary{}
+	var conservativeLastEventAt *time.Time
+	for _, item := range items {
+		summary.TotalRequests += item.Summary.TotalRequests
+		summary.SystemErrorRequests += item.Summary.SystemErrorRequests
+		if item.LastEventAt != nil && (conservativeLastEventAt == nil || item.LastEventAt.Before(*conservativeLastEventAt)) {
+			value := item.LastEventAt.UTC()
+			conservativeLastEventAt = &value
+		}
+	}
+	summary.ThroughputPerMinute = analyticsThroughput(summary.TotalRequests, filter)
+	if summary.TotalRequests > 0 {
+		errorRate := float64(summary.SystemErrorRequests) / float64(summary.TotalRequests)
+		summary.ErrorRate = &errorRate
+	}
+
+	if !analyticsPerformanceIncludesTenantChat(filter) {
+		for _, item := range items {
+			if item.Surface != invocationlog.AnalyticsSurfaceProjectApplication {
+				continue
+			}
+			summary.AvgLatencyMs = item.Summary.AvgLatencyMs
+			summary.P95LatencyMs = item.Summary.P95LatencyMs
+			summary.P99LatencyMs = item.Summary.P99LatencyMs
+			break
+		}
+	}
+
+	return summary, conservativeLastEventAt
+}
+
+func analyticsThroughput(totalRequests int64, filter invocationlog.AnalyticsPerformanceFilter) *float64 {
+	rangeMinutes := filter.To.Sub(filter.From).Minutes()
+	if totalRequests <= 0 || rangeMinutes <= 0 {
+		return nil
+	}
+	throughput := float64(totalRequests) / rangeMinutes
+	return &throughput
+}
+
+func analyticsPerformanceDataSource(filter invocationlog.AnalyticsPerformanceFilter) string {
+	if !analyticsPerformanceIncludesTenantChat(filter) {
+		return "postgresql_request_log"
+	}
+	return "postgresql_unified_raw"
+}
+
+func analyticsPerformanceIncludesTenantChat(filter invocationlog.AnalyticsPerformanceFilter) bool {
+	return strings.TrimSpace(filter.ProjectID) == "" || filter.IncludeTenantChat
 }
 
 func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {

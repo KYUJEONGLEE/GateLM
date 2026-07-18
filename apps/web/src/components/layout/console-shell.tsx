@@ -36,7 +36,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ConsoleTheme = "light" | "dark";
@@ -256,6 +255,7 @@ const shellText: Record<
 
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
+const userMenuTriggerId = "gatelm-console-user-menu-trigger";
 
 export function ConsoleShell({
   activeManagementItem,
@@ -268,7 +268,6 @@ export function ConsoleShell({
 }: ConsoleShellProps) {
   const pathname = usePathname();
   const text = shellText[locale];
-  const tenantLabel = formatTenantDisplayName(tenantId);
   const navigationState = useMemo(() => getConsoleNavigationState(pathname), [pathname]);
   const resolvedActiveSection = activeSection ?? navigationState.activeSection;
   const resolvedActiveManagementItem =
@@ -556,7 +555,6 @@ export function ConsoleShell({
           locale={locale}
           onLogout={logout}
           onSelectTheme={selectTheme}
-          tenantLabel={tenantLabel}
           text={text}
           theme={theme}
         />
@@ -572,7 +570,6 @@ function ConsoleTopbarActions({
   locale,
   onLogout,
   onSelectTheme,
-  tenantLabel,
   text,
   theme
 }: {
@@ -581,17 +578,20 @@ function ConsoleTopbarActions({
   locale: Locale;
   onLogout: () => Promise<void>;
   onSelectTheme: (theme: ConsoleTheme) => void;
-  tenantLabel: string;
   text: (typeof shellText)[Locale];
   theme: ConsoleTheme;
 }) {
-  const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel, text);
+  const displayUser = currentUser ?? buildPendingCurrentUser(text);
   const displayRole = displayUser.role === "Tenant Admin" ? text.tenantAdmin : displayUser.role;
 
   return (
     <div className="console-topbar-actions" aria-label={text.accountActions}>
       <DropdownMenu>
-        <DropdownMenuTrigger className="console-user-trigger" aria-label={text.openUserProfile}>
+        <DropdownMenuTrigger
+          id={userMenuTriggerId}
+          className="console-user-trigger"
+          aria-label={text.openUserProfile}
+        >
           <span className="console-user-avatar" aria-hidden="true">
             {displayUser.avatarUrl ? (
               <span
@@ -638,15 +638,11 @@ function ConsoleTopbarActions({
             </div>
             <div>
               <dt>{text.organization}</dt>
-              <dd>{displayUser.tenantName ?? tenantLabel}</dd>
+              <dd>{displayUser.tenantName ?? text.organization}</dd>
             </div>
           </dl>
 
           <section className="console-user-settings" aria-label={text.settings}>
-            <header>
-              <SettingsIcon aria-hidden="true" size={14} strokeWidth={2.2} />
-              <strong>{text.settings}</strong>
-            </header>
             <div className="console-user-settings-row">
               <span className="console-language-icon" title={text.language}>
                 <Globe2 aria-hidden="true" size={18} strokeWidth={2.2} />
@@ -694,14 +690,13 @@ function ConsoleTopbarActions({
 }
 
 function buildPendingCurrentUser(
-  tenantLabel: string,
   text: (typeof shellText)[Locale]
 ): CurrentUser {
   return {
     displayName: text.account,
     id: "session-loading",
     role: text.sessionRequired,
-    tenantName: tenantLabel
+    tenantName: text.organization
   };
 }
 

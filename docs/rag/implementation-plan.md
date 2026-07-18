@@ -68,7 +68,7 @@ The conversation create contract exposes only this mode and persists it server-s
 
 - If mode is `off`, no retrieval or embedding call is made.
 - If mode is `tenant` but the tenant feature is disabled, the turn fails with stable `CHAT_RAG_DISABLED`; it never silently switches to ordinary chat.
-- If mode is `tenant` and there are no chunks at or above the approved relevance threshold, the turn proceeds without context and without citations while cache remains off.
+- If mode is `tenant` and there are no chunks at or above the approved relevance threshold, Chat API returns the deterministic no-evidence response without Gateway cache lookup, Provider completion, context, or citations.
 - A query embedding, vector database, key lookup, decryption, Gateway, or AI Service availability failure returns stable `CHAT_RAG_UNAVAILABLE`; it never silently downgrades to ordinary chat.
 
 ### Approved chunking and retrieval profiles
@@ -181,7 +181,7 @@ The Control Plane worker is a separate process built from the Control Plane code
 - The reusable HTTP/provider portion should later move behind a provider-neutral embedding interface. Semantic Cache and RAG then consume separate adapters/configuration without sharing cache policy or indices.
 - Tenant Chat private Gateway routes already cover admission, cancellation, completion, and usage receipt with workload authentication.
 - Tenant Chat completion performs validation, runtime snapshot lookup, safety, routing, exact-cache lookup when enabled, budget reservation, provider streaming, settlement, and usage outbox handling.
-- `UsageIntent.cacheStrategy` already supports `off`; RAG turns must force `off` server-side. No client-controlled bypass flag is required.
+- `UsageIntent.cacheStrategy` already supports `off|exact`; RAG turns preserve that existing client selection after current retrieval and context construction. No additional client-controlled cache field is required.
 - Semantic Cache belongs to the public Gateway handler and is not on the private Tenant Chat completion path. The RAG private route must remain unable to call it.
 - Chat API calculates `EstimatedInputTokens` from the exact message list before calling Gateway; Gateway later settles from provider-confirmed usage. Retrieval context must be added before the estimate.
 - Embedding usage does not currently enter the Tenant Chat budget ledger. For MVP it is approved platform operating cost: it never consumes employee/tenant chat budget, but safe usage metadata is persisted separately for operational cost measurement.
@@ -297,7 +297,7 @@ sequenceDiagram
         DB-->>ChatAPI: Same-tenant encrypted chunks only
         ChatAPI->>ChatAPI: Decrypt, select <= 6 chunks/6,000 tokens, allocate sourceIds
         ChatAPI->>ChatAPI: Add marked RAG context before token estimate
-        ChatAPI->>GW: Completion with cacheStrategy=off
+        ChatAPI->>GW: Completion with selected cacheStrategy=off|exact
     end
     GW->>GW: Safety, routing excluding marked RAG context, budget reserve
     GW->>Provider: Final messages including RAG context
@@ -313,7 +313,7 @@ sequenceDiagram
 
 No-hit and failure behavior:
 
-- No result at cosine similarity 0.30 or above is a valid no-hit: send no RAG context, return an empty citation list, and continue with cache disabled because the conversation requested RAG.
+- No result at cosine similarity 0.30 or above is a valid no-hit: send no RAG context, return an empty citation list and the deterministic local response, and do not call Gateway cache or Provider completion.
 - Query embedding, vector database, key lookup, or decryption failure in `tenant` mode is a stable `CHAT_RAG_UNAVAILABLE` failure. Do not silently use ordinary chat because that changes the user's selected behavior.
 - An unknown or hallucinated source marker is discarded and never becomes a citation.
 - Cancellation follows the existing turn lifecycle and must cancel any admitted execution when retrieval fails before completion starts.
@@ -472,7 +472,7 @@ Every route uses `AdminAuthGuard`, the route tenant, and authenticated admin ID.
 - Tests use fakes or `httptest`; default test suites never contact OpenAI. Custom endpoints require explicit `DEPLOYMENT_MODE=local|test`; an unclassified environment, staging, production, and self-host release register only the actual OpenAI adapter and fail startup on fake/mock configuration.
 - Compose forwards the fixed Gateway RAG profile, credential reference, endpoint, and enablement flag so a production-like fake endpoint fails even while disabled. Dedicated caller signing/JWKS/HMAC/identity secret generation and mounts remain M6/M7; enabling RAG before those files are mounted intentionally fails Gateway startup instead of silently serving a disabled route.
 
-M4 contract review keeps `UsageIntent.cacheStrategy=off` as the only RAG completion cache-bypass mechanism. The private embedding route has no cache, and the private completion route is structurally disconnected from public Semantic Cache. Therefore the proposed duplicate client fields `cacheMode: BYPASS` and `semanticCache: disabled` are not added; M7 forces the existing signed server-owned field for every RAG turn.
+M4 contract review keeps the existing signed `UsageIntent.cacheStrategy=off|exact` as the only RAG completion cache control. The private embedding route has no cache, and the private completion route is structurally disconnected from public Semantic Cache. Therefore duplicate client fields such as `cacheMode` or `semanticCache` are not added. Chat API performs current retrieval first and then preserves the existing strategy for Gateway Exact Response Cache evaluation.
 
 ### Tenant Chat private completion contract
 
@@ -481,7 +481,7 @@ M4 contract review keeps `UsageIntent.cacheStrategy=off` as the only RAG complet
 - Private ephemeral messages may carry `purpose: "rag_context"`; it is generated only by Chat API.
 - Gateway workload signature covers that marker and its content.
 - Safety sees the complete final input. Routing excludes RAG context. Provider adaptation includes it as reference context.
-- `UsageIntent.cacheStrategy` is forced to `off` by Chat API for every `tenant` turn.
+- `UsageIntent.cacheStrategy=off|exact` is preserved by Chat API after current retrieval and RAG context construction for every `tenant` turn.
 
 ### Browser SSE citation extension
 
@@ -624,10 +624,11 @@ The new `RagChunkAadV1` is detailed in ADR-003. Existing chat ciphertext and AAD
 
 ## 12. Cache, token, and budget handling
 
-- `knowledgeMode=tenant` always sets `cacheStrategy=off`, including no-hit turns.
-- Gateway exact response cache lookup/write is skipped.
+- `knowledgeMode=tenant` always performs query embedding and current tenant retrieval before any response-cache lookup.
+- When `cacheStrategy=exact` and Runtime Snapshot cache policy enables Exact Cache, Gateway fingerprints the complete final Provider input, including current RAG context and conversation history, inside the existing `tenantId + userId` namespace. A hit skips only Provider completion.
+- When `cacheStrategy=off`, Gateway skips Exact Cache exactly as it does for non-RAG Tenant Chat.
 - Public Semantic Cache is outside the private Tenant Chat route and stays outside it.
-- There is no vector-result cache, query embedding cache, decrypted-context cache, or final response cache in MVP.
+- There is no vector-result cache, query embedding cache, or decrypted-context cache. The existing encrypted Exact Response Cache is the only RAG response cache.
 - Retrieval context includes at most six chunks with cosine similarity at least 0.30 and is bounded to 6,000 tokens before it is appended.
 - Chat API computes `EstimatedInputTokens` only after the marked RAG context is included in the final messages.
 - Gateway uses that estimate for reservation, applies provider limits to the final input, and settles with provider-confirmed usage exactly as the current Tenant Chat flow does.
@@ -880,7 +881,7 @@ go test ./...
 Pop-Location
 ```
 
-Integration tests use two tenants and prove SQL isolation, READY/ACTIVE/ENABLED filtering, mode default `off`, `CHAT_RAG_DISABLED`, `CHAT_RAG_UNAVAILABLE` without ordinary-chat fallback, no-hit below 0.30, top six, 6,000-token context, forced cache-off, final-input token estimate, admission cancellation, key versions, platform-only embedding usage, and context exclusion from routing classification.
+Integration tests use two tenants and prove SQL isolation, READY/ACTIVE/ENABLED filtering, mode default `off`, `CHAT_RAG_DISABLED`, `CHAT_RAG_UNAVAILABLE` without ordinary-chat fallback, no-hit below 0.30, top six, 6,000-token context, preserved `off|exact`, same-user exact-cache reuse, cross-user/cross-tenant isolation, context-change miss, final-input token estimate, admission cancellation, key versions, platform-only embedding usage, and context exclusion from routing classification.
 
 ### M8 — Citation protocol and Tenant Chat UI
 
@@ -929,7 +930,7 @@ corepack pnpm --filter @gatelm/web build
 corepack pnpm run verify:v2-final
 ```
 
-Acceptance includes admin/non-admin authorization, two-tenant isolation, upload limits, eventual status, idempotent hard delete, environment-separated private S3/KMS, IAM-role-only access, static-key rejection, pgvector version/digest and migration on a production-like clone, per-environment AI Service tokens, worker health/lag, no-secret logs, citation replay/tombstones, cache-off, platform embedding usage, budget accuracy, backup/restore, and rollback. Staging/production startup must fail on every fake/mock/local endpoint setting and must exercise the actual S3, KMS, Gateway embedding, and AI Service boundaries in a controlled deployment smoke test.
+Acceptance includes admin/non-admin authorization, two-tenant isolation, upload limits, eventual status, idempotent hard delete, environment-separated private S3/KMS, IAM-role-only access, static-key rejection, pgvector version/digest and migration on a production-like clone, per-environment AI Service tokens, worker health/lag, no-secret logs, citation replay/tombstones, post-retrieval same-user Exact Response Cache with explicit cache-off regression, platform embedding usage, budget accuracy, backup/restore, and rollback. Staging/production startup must fail on every fake/mock/local endpoint setting and must exercise the actual S3, KMS, Gateway embedding, and AI Service boundaries in a controlled deployment smoke test.
 
 ## 14. MVP non-goals
 
