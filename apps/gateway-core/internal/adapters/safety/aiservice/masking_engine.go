@@ -47,34 +47,42 @@ type sidecarCallError struct {
 func (e *sidecarCallError) Error() string { return "ai safety sidecar call failed" }
 func (e *sidecarCallError) Unwrap() error { return e.cause }
 
+// ErrFallbackMaskingUnavailable keeps raw input out of error details while the
+// caller fails closed before any provider invocation.
+var ErrFallbackMaskingUnavailable = errors.New("ai safety fallback masking unavailable")
+
 type LocalMaskingEngine interface {
 	Apply(ctx context.Context, req maskdomain.ApplyRequest) (maskdomain.Result, error)
 }
 
 type MaskingEngineConfig struct {
-	Local       LocalMaskingEngine
-	EndpointURL string
-	HTTPClient  *http.Client
-	Timeout     time.Duration
-	ModelID     string
-	DetectorSet string
-	Locale      string
-	Mode        string
-	Surface     string
-	Metrics     *metrics.Registry
+	Local         LocalMaskingEngine
+	// FallbackLocal receives the original request when the sidecar cannot
+	// produce a valid result. A fallback error is returned to the caller.
+	FallbackLocal LocalMaskingEngine
+	EndpointURL   string
+	HTTPClient    *http.Client
+	Timeout       time.Duration
+	ModelID       string
+	DetectorSet   string
+	Locale        string
+	Mode          string
+	Surface       string
+	Metrics       *metrics.Registry
 }
 
 type MaskingEngine struct {
-	local       LocalMaskingEngine
-	endpointURL string
-	httpClient  *http.Client
-	timeout     time.Duration
-	modelID     string
-	detectorSet string
-	locale      string
-	mode        string
-	surface     string
-	metrics     *metrics.Registry
+	local         LocalMaskingEngine
+	fallbackLocal LocalMaskingEngine
+	endpointURL   string
+	httpClient    *http.Client
+	timeout       time.Duration
+	modelID       string
+	detectorSet   string
+	locale        string
+	mode          string
+	surface       string
+	metrics       *metrics.Registry
 }
 
 func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
@@ -99,16 +107,17 @@ func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
 		detectorSet = DefaultDetectorSet
 	}
 	return MaskingEngine{
-		local:       local,
-		endpointURL: strings.TrimSpace(config.EndpointURL),
-		httpClient:  httpClient,
-		timeout:     timeout,
-		modelID:     modelID,
-		detectorSet: detectorSet,
-		locale:      strings.TrimSpace(config.Locale),
-		mode:        maskingMode(config.Mode),
-		surface:     config.Surface,
-		metrics:     config.Metrics,
+		local:         local,
+		fallbackLocal: config.FallbackLocal,
+		endpointURL:   strings.TrimSpace(config.EndpointURL),
+		httpClient:    httpClient,
+		timeout:       timeout,
+		modelID:       modelID,
+		detectorSet:   detectorSet,
+		locale:        strings.TrimSpace(config.Locale),
+		mode:          maskingMode(config.Mode),
+		surface:       config.Surface,
+		metrics:       config.Metrics,
 	}
 }
 
@@ -117,8 +126,11 @@ func (e MaskingEngine) Apply(ctx context.Context, req maskdomain.ApplyRequest) (
 	if err != nil {
 		return maskdomain.Result{}, err
 	}
-	if localResult.Action == maskdomain.ActionBlocked || e.endpointURL == "" {
+	if localResult.Action == maskdomain.ActionBlocked {
 		return localResult, nil
+	}
+	if e.endpointURL == "" {
+		return e.applyFallback(ctx, req, localResult)
 	}
 
 	sidecarRequest := req
@@ -134,7 +146,7 @@ func (e MaskingEngine) Apply(ctx context.Context, req maskdomain.ApplyRequest) (
 			return maskdomain.Result{}, contextError(ctx, err)
 		}
 		e.recordSidecarFallback(reason)
-		return localResult, nil
+		return e.applyFallback(ctx, req, localResult)
 	}
 	e.recordSidecarCall(startedAt, sidecarResult.Outcome, sidecarResult.ExecutionSummary.ExecutionMode)
 	if e.mode == ModeShadow {
@@ -162,13 +174,16 @@ func (e MaskingEngine) ApplyBatch(
 			hasLocalBlock = true
 		}
 	}
-	if hasLocalBlock || e.endpointURL == "" || len(requests) > maxBatchItems {
+	if hasLocalBlock {
 		return localResults, nil
+	}
+	if e.endpointURL == "" || len(requests) > maxBatchItems {
+		return e.applyFallbackBatch(ctx, requests, localResults)
 	}
 	policies := detectorPolicies(requests[0].DetectorPolicies)
 	for _, request := range requests[1:] {
 		if !slices.Equal(policies, detectorPolicies(request.DetectorPolicies)) {
-			return localResults, nil
+			return e.applyFallbackBatch(ctx, requests, localResults)
 		}
 	}
 
@@ -207,7 +222,7 @@ func (e MaskingEngine) ApplyBatch(
 			return nil, contextError(ctx, err)
 		}
 		e.recordSidecarFallback(reason)
-		return localResults, nil
+		return e.applyFallbackBatch(ctx, requests, localResults)
 	}
 	e.recordSidecarCall(
 		startedAt,
@@ -231,6 +246,46 @@ func (e MaskingEngine) ApplyBatch(
 		merged[originalIndex].ExecutionSummary = summary
 	}
 	return merged, nil
+}
+
+func (e MaskingEngine) applyFallback(
+	ctx context.Context,
+	req maskdomain.ApplyRequest,
+	localResult maskdomain.Result,
+) (maskdomain.Result, error) {
+	if e.fallbackLocal == nil {
+		return localResult, nil
+	}
+	fallbackResult, err := e.fallbackLocal.Apply(ctx, req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return maskdomain.Result{}, ctx.Err()
+		}
+		return maskdomain.Result{}, ErrFallbackMaskingUnavailable
+	}
+	return fallbackResult, nil
+}
+
+func (e MaskingEngine) applyFallbackBatch(
+	ctx context.Context,
+	requests []maskdomain.ApplyRequest,
+	localResults []maskdomain.Result,
+) ([]maskdomain.Result, error) {
+	if e.fallbackLocal == nil {
+		return localResults, nil
+	}
+	fallbackResults := make([]maskdomain.Result, len(requests))
+	for index, request := range requests {
+		fallbackResult, err := e.fallbackLocal.Apply(ctx, request)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, ErrFallbackMaskingUnavailable
+		}
+		fallbackResults[index] = fallbackResult
+	}
+	return fallbackResults, nil
 }
 
 func (e MaskingEngine) detect(ctx context.Context, req maskdomain.ApplyRequest) (detectResponse, error) {
