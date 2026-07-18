@@ -176,8 +176,9 @@ test("dashboard keeps cost range controls and stacked mobile panels inside the l
     readFile(costSourceUrl, "utf8"),
     readFile(dashboardStylesSourceUrl, "utf8")
   ]);
-  const titleEnd = costSource.indexOf('</div>\n        <div className="dashboard-cost-over-time-header-side">');
-  const metricsStart = costSource.indexOf('className="dashboard-cost-over-time-metrics"');
+  const normalizedSource = costSource.replace(/\r\n/g, "\n");
+  const titleEnd = normalizedSource.indexOf('</div>\n        <div className="dashboard-cost-over-time-header-side">');
+  const metricsStart = normalizedSource.indexOf('className="dashboard-cost-over-time-metrics"');
 
   expect(titleEnd).toBeGreaterThan(0);
   expect(metricsStart).toBeGreaterThan(titleEnd);
