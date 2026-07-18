@@ -14,6 +14,7 @@
     "errorCode": { "type": "string", "enum": ["CHAT_RATE_LIMITED", "CHAT_CONCURRENCY_LIMITED", "CHAT_SAFETY_BLOCKED", "CHAT_POLICY_ACK_REQUIRED", "CHAT_QUOTA_HARD_LIMIT", "CHAT_BUDGET_HARD_LIMIT", "CHAT_RUNTIME_UNAVAILABLE", "CHAT_NO_ELIGIBLE_ROUTE", "CHAT_PROVIDER_FAILED", "CHAT_PROVIDER_TIMEOUT"] },
     "quotaState": { "$ref": "#/$defs/policyState" }, "budgetState": { "$ref": "#/$defs/policyState" },
     "cacheOutcome": { "type": "string", "enum": ["off", "hit", "miss"] }, "latencyMs": { "type": "integer", "minimum": 0 },
+    "routingDifficulty": { "$ref": "#/$defs/routingDifficulty" },
     "effectiveProviderId": { "$ref": "#/$defs/opaqueId" }, "effectiveModelKey": { "$ref": "#/$defs/opaqueId" }, "effectiveRouteTier": { "type": "string", "enum": ["high_quality", "standard", "economy"] },
     "savedCostMicroUsd": { "type": "integer", "minimum": 0 },
     "maskingAction": { "$ref": "#/$defs/maskingAction" },
@@ -33,6 +34,7 @@
     "maskingDetectedTypes": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" } },
     "policyDigest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
     "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
+    "routingDifficulty": { "type": "string", "enum": ["simple", "complex"] },
     "executionScope": {
       "type": "object", "additionalProperties": false, "required": ["kind", "tenantId", "userId", "actorKind"],
       "properties": { "kind": { "const": "tenant_chat" }, "tenantId": { "$ref": "#/$defs/opaqueId" }, "userId": { "$ref": "#/$defs/opaqueId" }, "actorKind": { "type": "string", "enum": ["tenant_admin", "employee"] }, "employeeId": { "$ref": "#/$defs/opaqueId" } },

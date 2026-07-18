@@ -44,9 +44,11 @@ test("merges Tenant Chat aggregate evidence without treating general policy bloc
     projectApplicationOverview: {
       maskingActionCounts: { redacted: 4, blocked: 2 },
       blockedRequests: 99,
-      breakdowns: { bySafetyOutcome: [] }
+      breakdowns: { bySafetyOutcome: [] },
+      totalRequests: 20
     } as never,
     tenantChatDashboard: {
+      requests: { total: 12 },
       security: {
         protectedRequests: 4,
         redactedRequests: 3,
@@ -69,6 +71,24 @@ test("merges Tenant Chat aggregate evidence without treating general policy bloc
     detectedTypeRows: [
       { id: "email", label: "email", value: 3 },
       { id: "api_key", label: "api_key", value: 1 }
+    ],
+    sources: [
+      {
+        id: "project_application",
+        protectedRequestCount: 6,
+        maskedRequestCount: 4,
+        blockedRequestCount: 2,
+        detectorEvidenceMode: "sampled",
+        totalRequestCount: 20
+      },
+      {
+        id: "tenant_chat",
+        protectedRequestCount: 4,
+        maskedRequestCount: 3,
+        blockedRequestCount: 1,
+        detectorEvidenceMode: "complete",
+        totalRequestCount: 12
+      }
     ]
   });
 });
@@ -84,6 +104,37 @@ test("treats a legacy Tenant Chat aggregate without security evidence as unavail
     detectorEvidenceMode: "unavailable",
     maskedRequestCount: 0,
     protectedRequestCount: 0,
-    sampledDetailCount: 0
+    sampledDetailCount: 0,
+    sources: [
+      {
+        id: "tenant_chat",
+        protectedRequestCount: 0,
+        maskedRequestCount: 0,
+        blockedRequestCount: 0,
+        detectorEvidenceMode: "unavailable",
+        totalRequestCount: 0
+      }
+    ]
   });
+});
+
+test("keeps Tenant Chat absent from project-scoped security evidence", () => {
+  const evidence = mergeAnalyticsSecurityEvidence({
+    projectApplicationOverview: {
+      maskingActionCounts: { redacted: 2, blocked: 1 },
+      breakdowns: { bySafetyOutcome: [] },
+      totalRequests: 5
+    } as never
+  });
+
+  expect(evidence?.sources).toEqual([
+    {
+      id: "project_application",
+      protectedRequestCount: 3,
+      maskedRequestCount: 2,
+      blockedRequestCount: 1,
+      detectorEvidenceMode: "unavailable",
+      totalRequestCount: 5
+    }
+  ]);
 });

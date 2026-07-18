@@ -634,6 +634,9 @@ func terminalUsageEventPayload(
 		},
 		"attempts": settlementAttemptsPayload(attempts), "terminalOutcome": terminalOutcome,
 	}
+	if err := addRoutingDifficultyPayload(payload, requestContext); err != nil {
+		return nil, err
+	}
 	if err := addSafetySummaryPayload(payload, requestContext.Safety); err != nil {
 		return nil, err
 	}

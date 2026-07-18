@@ -278,8 +278,10 @@ test("uses the unified policy-impact aggregate for Tenant Chat and App traffic",
       ],
       protectedRequests: 80,
       routingRoles: [
+        { requestCount: 700, role: "simple", scheme: "difficulty", surface: "project_application" },
         { requestCount: 500, role: "complex", scheme: "difficulty", surface: "project_application" },
-        { requestCount: 200, role: "high_quality", scheme: "route_tier", surface: "tenant_chat" }
+        { requestCount: 600, role: "simple", scheme: "difficulty", surface: "tenant_chat" },
+        { requestCount: 200, role: "complex", scheme: "difficulty", surface: "tenant_chat" }
       ],
       savedCostMicroUsd: null,
       totalCostMicroUsd: 9000,
@@ -299,9 +301,9 @@ test("uses the unified policy-impact aggregate for Tenant Chat and App traffic",
     savedCostComplete: false,
     savedCostMicroUsd: 2500
   });
-  expect(model.impact.routingDifficulties.map((row) => row.id)).toEqual([
-    "project_application:complex",
-    "tenant_chat:high_quality"
+  expect(model.impact.routingDifficulties).toEqual([
+    { id: "simple", label: "SIMPLE", value: 1300 },
+    { id: "complex", label: "COMPLEX", value: 700 }
   ]);
   expect(model.usage.projectMix).toContainEqual({
     id: "surface:tenant_chat",

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { AnalyticsV5Evidence } from "@/features/analytics/analytics-v5-evidence";
-import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
+import type { AnalyticsReadModel } from "@/features/analytics/analytics-read-model";
 import {
   AnalyticsV5ModelShareChart,
   AnalyticsV5ModelTrafficChart,
@@ -57,7 +57,6 @@ export function AnalyticsV5Overview({
         modelTrend: "모델별 요청 흐름",
         modelTrendSub: "라우팅 정책 적용 후 시간대별 요청 추이",
         routing: "난이도별 라우팅",
-        policyEvents: "정책 결과",
         requests: "전체 요청",
         requestsSub: "Gateway가 기록한 전체 트래픽",
         saved: "절감",
@@ -75,7 +74,6 @@ export function AnalyticsV5Overview({
         modelTrend: "Requests by model",
         modelTrendSub: "Traffic over time after routing policy",
         routing: "Routing policy result",
-        policyEvents: "Policy outcomes",
         requests: "Total requests",
         requestsSub: "All traffic recorded by the Gateway",
         saved: "saved",
@@ -91,7 +89,6 @@ export function AnalyticsV5Overview({
       : projectNameById.get(row.id) ?? formatDisplayIdentifier(row.id),
     requestCount: row.value
   }));
-  const policyRows = model.impact.outcomes.filter((row) => row.value > 0);
   const routingDifficultyRows = model.impact.routingDifficulties;
   const routedRequests = model.impact.highPerformanceEligibleRequests;
   const highPerformanceRequests = model.impact.highPerformanceRequests;
@@ -131,13 +128,6 @@ export function AnalyticsV5Overview({
           </div>
           <small>{text.complexSub}</small>
         </article>
-      </section>
-
-      <section aria-label={text.policyEvents} className="analytics-v5-policy-strip">
-        <strong>{text.policyEvents}</strong>
-        {policyRows.length ? policyRows.map((row) => (
-          <PolicyOutcome key={row.id} row={row} />
-        )) : <span className="analytics-v5-policy-empty">{text.empty}</span>}
       </section>
 
       <div className="analytics-v5-primary-grid">
@@ -200,15 +190,6 @@ function AnalyticsV5Surface({
       </header>
       {children}
     </section>
-  );
-}
-
-function PolicyOutcome({ row }: { row: AnalyticsValueRow }) {
-  return (
-    <span className="analytics-v5-policy-outcome" data-kind={row.id}>
-      {row.label}
-      <b>{formatInteger(row.value)}</b>
-    </span>
   );
 }
 

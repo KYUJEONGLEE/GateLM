@@ -88,7 +88,7 @@ select
   count(*) filter (where saved_cost_micro_usd is null)::bigint,
   count(*) filter (where avoided_provider_call)::bigint,
   count(*) filter (where protected_request)::bigint,
-  count(*) filter (where routing_role in ('complex', 'high_quality'))::bigint,
+  count(*) filter (where routing_role = 'complex')::bigint,
   count(*) filter (where routing_role is not null)::bigint,
   count(*) filter (where masking_action is not null)::bigint,
   count(*) filter (where masking_action is null)::bigint,
@@ -371,11 +371,10 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
     completed_at as occurred_at,
     nullif(effective_provider_id::text, '') as provider_key,
     nullif(effective_model_key, '') as model_key,
-    'route_tier'::text as routing_scheme,
-    case effective_route_tier
-      when 'high_quality' then 'high_quality'
-      when 'standard' then 'standard'
-      when 'economy' then 'economy'
+    'difficulty'::text as routing_scheme,
+    case routing_difficulty
+      when 'simple' then 'simple'
+      when 'complex' then 'complex'
       else null
     end as routing_role,
     confirmed_cost_micro_usd::bigint as cost_micro_usd,

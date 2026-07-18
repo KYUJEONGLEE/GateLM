@@ -49,6 +49,7 @@ export interface TenantChatProjectionEvent {
   effectiveProviderId?: string;
   effectiveModelKey?: string;
   effectiveRouteTier?: 'high_quality' | 'standard' | 'economy';
+  routingDifficulty?: 'simple' | 'complex';
   savedCostMicroUsd?: number;
   maskingAction?: 'none' | 'redacted' | 'blocked';
   maskingDetectedTypes?: string[];

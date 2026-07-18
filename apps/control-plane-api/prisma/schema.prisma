@@ -1224,6 +1224,7 @@ model TenantChatUsageReservation {
   snapshotDigest              String    @map("snapshot_digest")
   pricingVersion              BigInt    @map("pricing_version")
   cacheOutcome                String    @map("cache_outcome")
+  routingDifficulty           String?   @map("routing_difficulty")
   state                       String    @default("reserved")
   reservedTokens              BigInt    @default(0) @map("reserved_tokens")
   reservedCostMicroUsd        BigInt    @default(0) @map("reserved_cost_micro_usd")
@@ -1351,6 +1352,7 @@ model TenantChatInvocationLog {
   effectiveProviderId   String?  @map("effective_provider_id")
   effectiveModelKey     String?  @map("effective_model_key")
   effectiveRouteTier    String?  @map("effective_route_tier")
+  routingDifficulty     String?  @map("routing_difficulty")
   attemptCount          Int      @default(0) @map("attempt_count") @db.SmallInt
   confirmedInputTokens  BigInt   @default(0) @map("confirmed_input_tokens")
   confirmedOutputTokens BigInt   @default(0) @map("confirmed_output_tokens")
@@ -1380,6 +1382,7 @@ model TenantChatInvocationLog {
   @@index([tenantId, terminalOutcome, completedAt(sort: Desc)], map: "tenant_chat_log_tenant_outcome_completed_idx")
   @@index([userId, completedAt(sort: Desc)], map: "tenant_chat_log_user_idx")
   @@index([updatedAt, requestId], map: "tenant_chat_log_rollup_discovery_idx")
+  @@index([tenantId, completedAt(sort: Desc), routingDifficulty], map: "tenant_chat_log_routing_difficulty_idx")
   @@map("tenant_chat_invocation_logs")
 }
 

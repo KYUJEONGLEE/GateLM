@@ -221,6 +221,7 @@ export class TenantChatProjectionService
         confirmedTotalTokens: true,
         confirmedCostMicroUsd: true,
         savedCostMicroUsd: true,
+        routingDifficulty: true,
         maskingAction: true,
         maskingDetectedTypes: true,
         maskingDetectedCount: true,
@@ -243,6 +244,7 @@ export class TenantChatProjectionService
           pricingVersion: true,
           requestId: true,
           reservationId: true,
+          routingDifficulty: true,
           reservedAt: true,
           snapshotDigest: true,
           snapshotVersion: true,
@@ -379,6 +381,19 @@ export class TenantChatProjectionService
         effectiveProviderId,
         effectiveModelKey,
       );
+    if (
+      event.routingDifficulty !== undefined &&
+      reservation?.routingDifficulty !== null &&
+      reservation?.routingDifficulty !== undefined &&
+      event.routingDifficulty !== reservation.routingDifficulty
+    ) {
+      throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+    }
+    const routingDifficulty =
+      event.routingDifficulty ??
+      reservation?.routingDifficulty ??
+      existing?.routingDifficulty ??
+      null;
     const occurredAt = new Date(event.occurredAt);
     const startedAt =
       admission.createdAt ??
@@ -455,6 +470,7 @@ export class TenantChatProjectionService
         effectiveProviderId,
         effectiveModelKey,
         effectiveRouteTier,
+        routingDifficulty,
         attemptCount: attempts.length,
         confirmedInputTokens: projectedConfirmedInputTokens,
         confirmedOutputTokens: projectedConfirmedOutputTokens,
@@ -480,6 +496,7 @@ export class TenantChatProjectionService
         effectiveProviderId,
         effectiveModelKey,
         effectiveRouteTier,
+        routingDifficulty,
         attemptCount: attempts.length,
         confirmedInputTokens: projectedConfirmedInputTokens,
         confirmedOutputTokens: projectedConfirmedOutputTokens,

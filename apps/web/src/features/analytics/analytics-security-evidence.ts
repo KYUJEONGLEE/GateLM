@@ -15,6 +15,16 @@ export type AnalyticsSecurityEvidence = {
   maskedRequestCount?: number;
   protectedRequestCount: number;
   sampledDetailCount: number;
+  sources?: AnalyticsSecuritySourceEvidence[];
+};
+
+export type AnalyticsSecuritySourceEvidence = {
+  blockedRequestCount: number;
+  detectorEvidenceMode: "complete" | "partial" | "sampled" | "unavailable";
+  id: "project_application" | "tenant_chat";
+  maskedRequestCount: number;
+  protectedRequestCount: number;
+  totalRequestCount: number;
 };
 
 type SafetyDetail = Pick<
@@ -96,6 +106,27 @@ export function mergeAnalyticsSecurityEvidence(input: {
 
   const maskedRequestCount = projectMasked + tenantMasked;
   const blockedRequestCount = projectBlocked + tenantBlocked;
+  const sources: AnalyticsSecuritySourceEvidence[] = [];
+  if (projectApplicationEvidence || projectApplicationOverview) {
+    sources.push({
+      blockedRequestCount: projectBlocked,
+      detectorEvidenceMode: projectApplicationEvidence ? "sampled" : "unavailable",
+      id: "project_application",
+      maskedRequestCount: projectMasked,
+      protectedRequestCount: projectMasked + projectBlocked,
+      totalRequestCount: projectApplicationOverview?.totalRequests ?? 0
+    });
+  }
+  if (tenantChatDashboard !== undefined) {
+    sources.push({
+      blockedRequestCount: tenantBlocked,
+      detectorEvidenceMode: tenantChatDashboard?.security?.coverage.state ?? "unavailable",
+      id: "tenant_chat",
+      maskedRequestCount: tenantMasked,
+      protectedRequestCount: tenantMasked + tenantBlocked,
+      totalRequestCount: tenantChatDashboard?.requests?.total ?? 0
+    });
+  }
   return {
     blockedRequestCount,
     detectedTypeRows: Array.from(detectorCounts, ([id, value]) => ({
@@ -109,7 +140,8 @@ export function mergeAnalyticsSecurityEvidence(input: {
     ),
     maskedRequestCount,
     protectedRequestCount: maskedRequestCount + blockedRequestCount,
-    sampledDetailCount: projectApplicationEvidence?.sampledDetailCount ?? 0
+    sampledDetailCount: projectApplicationEvidence?.sampledDetailCount ?? 0,
+    sources
   };
 }
 

@@ -5,7 +5,6 @@ import {
   Gauge,
   Shield,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles
 } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -18,10 +17,16 @@ import {
   AnalyticsSecurityPanel,
   AnalyticsUsagePanel
 } from "@/features/analytics/components/analytics-panels";
+import {
+  AnalyticsFilterFrame,
+  AnalyticsFilterSelect,
+  AnalyticsPanelTransition
+} from "@/features/analytics/components/analytics-filter-select";
 import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
 import { buildAnalyticsCacheEvidence } from "@/features/analytics/analytics-cache-merge";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
 import { mergeAnalyticsSecurityEvidence } from "@/features/analytics/analytics-security-evidence";
+import { resolveAnalyticsSurfaceScope } from "@/features/analytics/analytics-surface-scope";
 import {
   buildAnalyticsUsageEvidence,
   tenantChatBucketForAnalyticsRange
@@ -101,7 +106,6 @@ const pageText = {
     allModels: "All models",
     allProjects: "All projects",
     allProviders: "All Providers",
-    apply: "Apply",
     filterAria: "Analytics filters",
     model: "Model",
     project: "Project",
@@ -118,13 +122,13 @@ const pageText = {
       security: "Security",
       usage: "Usage"
     },
-    title: "Analytics"
+    title: "Analytics",
+    updating: "Updating analytics..."
   },
   ko: {
     allModels: "전체 모델",
     allProjects: "전체 프로젝트",
     allProviders: "전체 Provider",
-    apply: "적용",
     filterAria: "분석 필터",
     model: "모델",
     project: "프로젝트",
@@ -141,7 +145,8 @@ const pageText = {
       security: "보안",
       usage: "사용량"
     },
-    title: "Analytics"
+    title: "Analytics",
+    updating: "분석 데이터 업데이트 중..."
   }
 } satisfies Record<Locale, unknown>;
 
@@ -177,12 +182,16 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     projectId: effectiveProjectId ?? requestedFilters.projectId
   };
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
-  const shouldIncludeTenantChat =
-    (activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security") &&
-    !projectScoped &&
-    !filters.projectId;
+  const analyticsSurfaceScope = resolveAnalyticsSurfaceScope({
+    projectId: filters.projectId,
+    projectScoped
+  });
+  const shouldIncludeTenantChat = analyticsSurfaceScope === "all";
+  const shouldLoadTenantChatDashboard =
+    shouldIncludeTenantChat &&
+    (activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security");
   const shouldLoadTenantChatSeries =
-    shouldIncludeTenantChat && (activeTab === "usage" || activeTab === "cost");
+    shouldLoadTenantChatDashboard && (activeTab === "usage" || activeTab === "cost");
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
@@ -204,7 +213,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       projectId: filters.projectId || undefined,
       range: filters.range
     }),
-    shouldIncludeTenantChat
+    shouldLoadTenantChatDashboard
       ? getTenantChatDashboard(
           effectiveTenantId,
           reliabilityRange.from,
@@ -221,7 +230,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       : Promise.resolve(undefined),
     needsPerformance
       ? getLiveAnalyticsPerformance(effectiveTenantId, {
-          includeTenantChat: activeTab === "performance" && !projectScoped,
+          includeTenantChat: activeTab === "performance" && shouldIncludeTenantChat,
           model: activeTab === "performance" ? filters.model || undefined : undefined,
           projectId: filters.projectId || undefined,
           provider: activeTab === "performance" ? filters.provider || undefined : undefined,
@@ -244,7 +253,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       ? getLiveAnalyticsReliability(effectiveTenantId, {
           incidentLimit: 4,
           projectId: filters.projectId || undefined,
-          range: filters.range
+          range: filters.range,
+          surface: analyticsSurfaceScope
         })
       : Promise.resolve(undefined),
     needsSecurityEvidence
@@ -351,62 +361,68 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
 
   return (
     <main className="console-content analytics-v3-page analytics-v4-page analytics-v5-page">
+      <AnalyticsFilterFrame
+        filterState={{
+          model: filters.model,
+          projectId: filters.projectId,
+          provider: filters.provider,
+          range: filters.range,
+          tab: activeTab
+        }}
+        loadingLabel={text.updating}
+      >
       <header className="analytics-v3-command-header">
         <div className="analytics-v3-title-block">
           <h1>{text.title}</h1>
           <p>{text.subtitle}</p>
         </div>
 
-        <form
-          action={`/tenants/${effectiveTenantId}/analytics`}
+        <div
           aria-label={text.filterAria}
           className="analytics-v3-filter-bar"
+          role="group"
         >
-          <input name="tab" type="hidden" value={activeTab} />
           <label>
             <span>{text.range}</span>
-            <select defaultValue={filters.range} name="range">
+            <AnalyticsFilterSelect defaultValue={filters.range} name="range">
               {rangeValues.map((range) => (
                 <option key={range} value={range}>{text.rangeLabels[range]}</option>
               ))}
-            </select>
+            </AnalyticsFilterSelect>
           </label>
           <label className="analytics-v3-project-filter">
             <span>{text.project}</span>
-            <select defaultValue={filters.projectId} name="projectId">
+            <AnalyticsFilterSelect defaultValue={filters.projectId} name="projectId">
               {projectScoped ? null : <option value="">{text.allProjects}</option>}
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
-            </select>
+            </AnalyticsFilterSelect>
+            <i aria-hidden="true" className="analytics-v3-select-caret" />
           </label>
           {showProviderModelFilters ? (
             <>
               <label>
                 <span>{text.provider}</span>
-                <select defaultValue={filters.provider} name="provider">
+                <AnalyticsFilterSelect defaultValue={filters.provider} name="provider">
                   <option value="">{text.allProviders}</option>
                   {providerOptions.map((provider) => (
                     <option key={provider} value={provider}>{provider}</option>
                   ))}
-                </select>
+                </AnalyticsFilterSelect>
               </label>
               <label>
                 <span>{text.model}</span>
-                <select defaultValue={filters.model} name="model">
+                <AnalyticsFilterSelect defaultValue={filters.model} name="model">
                   <option value="">{text.allModels}</option>
                   {modelOptions.map((modelName) => (
                     <option key={modelName} value={modelName}>{formatModelDisplayName(modelName)}</option>
                   ))}
-                </select>
+                </AnalyticsFilterSelect>
               </label>
             </>
           ) : null}
-          <button aria-label={text.apply} title={text.apply} type="submit">
-            <SlidersHorizontal aria-hidden="true" size={19} />
-            <span>{text.apply}</span>
-          </button>
-        </form>
+        </div>
       </header>
 
       <nav aria-label="Analytics sections" className="analytics-v3-tabs">
@@ -427,6 +443,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })}
       </nav>
 
+      <AnalyticsPanelTransition>
       {activeTab === "impact" ? (
         <AnalyticsV5Overview
           evidence={v5Evidence}
@@ -475,6 +492,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       ) : (
         <AnalyticsCachePanel locale={locale} model={model} />
       )}
+      </AnalyticsPanelTransition>
+      </AnalyticsFilterFrame>
     </main>
   );
 }

@@ -208,8 +208,8 @@ function normalizeCoverageStatus(value: string | undefined): "complete" | "parti
   return value === "complete" || value === "partial" || value === "unavailable" ? value : null;
 }
 
-function normalizeRoutingScheme(value: string | undefined): "difficulty" | "route_tier" | null {
-  return value === "difficulty" || value === "route_tier" ? value : null;
+function normalizeRoutingScheme(value: string | undefined): "difficulty" | null {
+  return value === "difficulty" ? value : null;
 }
 
 function normalizeNonNegativeNumber(value: number | string | undefined) {

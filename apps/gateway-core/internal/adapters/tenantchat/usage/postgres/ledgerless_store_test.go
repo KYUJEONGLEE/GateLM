@@ -23,6 +23,7 @@ func TestLedgerlessTerminalPayloadCarriesBoundedCacheObservability(t *testing.T)
 				Actor:    tenantchat.Actor{UserID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", ActorKind: "tenant_admin"},
 			},
 			Snapshot: tenantchat.SnapshotReference{Version: 3},
+			Routing:  &tenantchat.RoutingDecision{Difficulty: "complex"},
 		},
 		tenantruntime.Snapshot{Pricing: tenantruntime.Pricing{Version: 7}},
 		"cache_hit", "", "hit", observability,
@@ -39,6 +40,7 @@ func TestLedgerlessTerminalPayloadCarriesBoundedCacheObservability(t *testing.T)
 	if decoded["effectiveProviderId"] != "provider_001" ||
 		decoded["effectiveModelKey"] != "model_001" ||
 		decoded["effectiveRouteTier"] != "high_quality" ||
+		decoded["routingDifficulty"] != "complex" ||
 		decoded["savedCostMicroUsd"] != float64(425) ||
 		decoded["latencyMs"] != float64(1500) {
 		t.Fatalf("unexpected cache observability: %+v", decoded)

@@ -38,7 +38,7 @@ export type AnalyticsV5PolicyImpactEvidence = {
   routingRoles: Array<{
     requestCount: number;
     role: string;
-    scheme: "difficulty" | "route_tier";
+    scheme: "difficulty";
     surface: "project_application" | "tenant_chat";
   }>;
   savedCostMicroUsd: number | null;

@@ -118,3 +118,18 @@ func addSafetySummaryPayload(payload map[string]any, summary *tenantchat.SafetyS
 	payload["safetyPolicyDigest"] = summary.SafetyPolicyDigest
 	return nil
 }
+
+func addRoutingDifficultyPayload(
+	payload map[string]any,
+	requestContext tenantchat.RequestContext,
+) error {
+	if requestContext.Routing == nil {
+		return nil
+	}
+	difficulty := requestContext.Routing.Difficulty
+	if difficulty != "simple" && difficulty != "complex" {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
+	payload["routingDifficulty"] = difficulty
+	return nil
+}

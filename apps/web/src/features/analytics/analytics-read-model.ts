@@ -316,13 +316,22 @@ function applyPolicyImpactEvidence(
     label: row.surface === "tenant_chat" ? "Tenant Chat" : row.projectId ?? "Unknown project",
     value: row.requestCount
   })).sort((left, right) => right.value - left.value);
-  const routingDifficulties = evidence.routingRoles.map((row) => ({
-    id: `${row.surface}:${row.role}`,
-    label: row.surface === "tenant_chat"
-      ? `TENANT CHAT · ${row.role.replaceAll("_", " ").toUpperCase()}`
-      : `APP · ${row.role.toUpperCase()}`,
-    value: row.requestCount
-  }));
+  const routingDifficultyTotals = new Map([
+    ["simple", 0],
+    ["complex", 0]
+  ]);
+  evidence.routingRoles.forEach((row) => {
+    if (row.scheme !== "difficulty" || (row.role !== "simple" && row.role !== "complex")) {
+      return;
+    }
+    routingDifficultyTotals.set(
+      row.role,
+      (routingDifficultyTotals.get(row.role) ?? 0) + Math.max(0, row.requestCount)
+    );
+  });
+  const routingDifficulties = ["simple", "complex"]
+    .map((id) => ({ id, label: id.toUpperCase(), value: routingDifficultyTotals.get(id) ?? 0 }))
+    .filter((row) => row.value > 0);
 
   return {
     ...readModel,

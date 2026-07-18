@@ -712,6 +712,8 @@ export function AnalyticsSecurityPanel({
         mixed: "Project/Application 최근 Detail {sampled}건 + Tenant Chat projection 집계",
         partial: "Tenant Chat projection 부분 집계",
         sampled: "최근 Detail {sampled}/{total}건 기반",
+        source: "사용 경로별 보안 근거",
+        sourceSub: "전체 프로젝트 범위에는 Tenant Chat을 별도 사용 경로로 포함합니다",
         unavailable: "탐지 유형 근거를 사용할 수 없음",
         treatment: "보안 처리 결과",
         treatmentSub: "선택 기간의 마스킹과 차단 처리량",
@@ -728,6 +730,8 @@ export function AnalyticsSecurityPanel({
         mixed: "{sampled} recent Project/Application details plus the Tenant Chat projection aggregate",
         partial: "Partial Tenant Chat projection aggregate",
         sampled: "Based on {sampled}/{total} recent details",
+        source: "Security evidence by usage surface",
+        sourceSub: "The all-projects scope includes Tenant Chat as a separate usage surface",
         unavailable: "Detector-type evidence is unavailable",
         treatment: "Security outcomes",
         treatmentSub: "Masked and blocked requests in the selected range",
@@ -795,6 +799,26 @@ export function AnalyticsSecurityPanel({
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
+
+      <EvidenceTable
+        columns={locale === "ko"
+          ? ["사용 경로", "전체 요청", "보호 처리", "마스킹", "차단", "탐지 근거"]
+          : ["Usage surface", "Total requests", "Protected", "Masked", "Blocked", "Detector evidence"]}
+        emptyLocale={locale}
+        rows={(evidence?.sources ?? []).map((source) => ({
+          cells: [
+            <strong key="surface">{analyticsSurfaceLabel(source.id, locale)}</strong>,
+            formatInteger(source.totalRequestCount),
+            formatInteger(source.protectedRequestCount),
+            formatInteger(source.maskedRequestCount),
+            formatInteger(source.blockedRequestCount),
+            securityEvidenceModeLabel(source.detectorEvidenceMode, locale)
+          ],
+          key: source.id
+        }))}
+        subtitle={text.sourceSub}
+        title={text.source}
+      />
     </PanelShell>
   );
 }
@@ -1245,6 +1269,26 @@ function safetyDetectorLabel(value: string, locale: Locale) {
     .filter(Boolean)
     .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
     .join(" ");
+}
+
+function securityEvidenceModeLabel(
+  mode: "complete" | "partial" | "sampled" | "unavailable",
+  locale: Locale
+) {
+  const labels = locale === "ko"
+    ? {
+        complete: "전체 집계",
+        partial: "부분 집계",
+        sampled: "최근 Detail 표본",
+        unavailable: "사용 불가"
+      }
+    : {
+        complete: "Complete aggregate",
+        partial: "Partial aggregate",
+        sampled: "Recent detail sample",
+        unavailable: "Unavailable"
+      };
+  return labels[mode];
 }
 
 function liveRequestOutcome(row: LiveRequestRow) {

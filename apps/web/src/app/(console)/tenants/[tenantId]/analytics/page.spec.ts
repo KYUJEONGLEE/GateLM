@@ -7,6 +7,10 @@ const panelsSourceUrl = new URL(
   "../../../../../features/analytics/components/analytics-panels.tsx",
   import.meta.url
 );
+const filterSelectSourceUrl = new URL(
+  "../../../../../features/analytics/components/analytics-filter-select.tsx",
+  import.meta.url
+);
 
 test("analytics fails closed before loading tenant observability data", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
@@ -29,14 +33,42 @@ test("analytics forces project admins onto an assigned project", async () => {
   expect(pageSource).toContain("projectScoped ? null");
 });
 
-test("usage, cost, cache, and security include Tenant Chat only at tenant scope", async () => {
+test("analytics filters update only the panel with transition state and client caching", async () => {
+  const [pageSource, filterSelectSource] = await Promise.all([
+    readFile(pageSourceUrl, "utf8"),
+    readFile(filterSelectSourceUrl, "utf8")
+  ]);
+
+  expect(pageSource).toContain("<AnalyticsFilterSelect");
+  expect(pageSource).toContain("<AnalyticsFilterFrame");
+  expect(pageSource).toContain("<AnalyticsPanelTransition>");
+  expect(pageSource).toContain('className="analytics-v3-select-caret"');
+  expect(pageSource).not.toContain("SlidersHorizontal");
+  expect(pageSource).not.toContain('type="submit"');
+  expect(filterSelectSource).toContain("startTransition(() =>");
+  expect(filterSelectSource).toContain("router.replace(");
+  expect(filterSelectSource).toContain("new Map<string, ReactNode>()");
+  expect(filterSelectSource).toContain("maxCachedPanels = 8");
+  expect(filterSelectSource).toContain("visiblePanel");
+  expect(filterSelectSource).not.toContain("requestSubmit()");
+});
+
+test("all analytics tabs share one project-aware Tenant Chat scope", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("resolveAnalyticsSurfaceScope({");
+  expect(pageSource).toContain('const shouldIncludeTenantChat = analyticsSurfaceScope === "all"');
+  expect(pageSource).toContain("projectId: filters.projectId");
+  expect(pageSource).toContain("projectScoped");
+});
+
+test("usage, cost, cache, and security load Tenant Chat only for the shared all-projects scope", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
   expect(pageSource).toContain(
     '(activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security")'
   );
-  expect(pageSource).toContain("!projectScoped &&");
-  expect(pageSource).toContain("!filters.projectId");
+  expect(pageSource).toContain("shouldLoadTenantChatDashboard");
   expect(pageSource).toContain("getTenantChatDashboard(");
   expect(pageSource).toContain("shouldLoadTenantChatSeries");
   expect(pageSource).toContain("getTenantChatCostSeries(");
@@ -55,7 +87,9 @@ test("performance delegates tenant-level surface union to the Gateway contract",
 
   expect(pageSource).toContain('const needsPerformance = activeTab === "usage" || activeTab === "performance"');
   expect(pageSource).toContain("getLiveAnalyticsPerformance(effectiveTenantId");
-  expect(pageSource).toContain('includeTenantChat: activeTab === "performance" && !projectScoped');
+  expect(pageSource).toContain(
+    'includeTenantChat: activeTab === "performance" && shouldIncludeTenantChat'
+  );
   expect(pageSource).toContain("projectId: filters.projectId || undefined");
   expect(pageSource).toContain('provider: activeTab === "performance" ? filters.provider || undefined : undefined');
   expect(pageSource).toContain('model: activeTab === "performance" ? filters.model || undefined : undefined');
@@ -90,6 +124,7 @@ test("reliability uses the unified tenant aggregate instead of reconstructing fr
 
   expect(pageSource).toContain("getLiveAnalyticsReliability(effectiveTenantId");
   expect(pageSource).toContain("incidentLimit: 4");
+  expect(pageSource).toContain("surface: analyticsSurfaceScope");
   expect(pageSource).toContain("reliability={reliability}");
   expect(pageSource).not.toContain("getLiveGatewayRequestLogs({");
 });

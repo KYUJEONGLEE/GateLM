@@ -47,11 +47,27 @@ describe('Tenant Chat projection event contract', () => {
       effectiveProviderId: 'provider_001',
       effectiveModelKey: 'model_001',
       effectiveRouteTier: 'high_quality',
+      routingDifficulty: 'complex',
       savedCostMicroUsd: 425,
     };
     delete (payload as { errorCode?: string }).errorCode;
 
     expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+  });
+
+  it('accepts only simple or complex as routing difficulty', () => {
+    const payload = {
+      ...usageSettledEvent(),
+      schemaVersion: 3,
+      cacheOutcome: 'off',
+      routingDifficulty: 'complex',
+    };
+    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+
+    payload.routingDifficulty = 'high_quality';
+    expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
+      'projection event schema validation failed',
+    );
   });
 
   it('enforces the usage event conditional attempt rules', () => {

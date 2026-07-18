@@ -17,12 +17,7 @@ import type { Locale } from "@/lib/i18n/locale";
 const palette = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#94a3b8"];
 const routingDifficultyColors: Record<string, string> = {
   complex: "#3b82f6",
-  "project_application:complex": "#3b82f6",
-  "project_application:simple": "#10b981",
   simple: "#10b981",
-  "tenant_chat:economy": "#f59e0b",
-  "tenant_chat:high_quality": "#8b5cf6",
-  "tenant_chat:standard": "#06b6d4",
   other: "#94a3b8"
 };
 const MODEL_LEGEND_MAX_LENGTH = 22;

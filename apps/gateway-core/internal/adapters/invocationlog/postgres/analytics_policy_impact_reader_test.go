@@ -44,7 +44,7 @@ func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap
 			contains: "select surface, routing_scheme, routing_role",
 			rows: &fakeRows{values: [][]any{
 				{invocationlog.AnalyticsSurfaceProjectApplication, "difficulty", "complex", int64(500)},
-				{invocationlog.AnalyticsSurfaceTenantChat, "route_tier", "high_quality", int64(200)},
+				{invocationlog.AnalyticsSurfaceTenantChat, "difficulty", "complex", int64(200)},
 			}},
 		},
 		{
@@ -93,6 +93,11 @@ func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap
 	joined := strings.Join(db.queries, "\n")
 	if !strings.Contains(joined, "from tenant_chat_invocation_logs") || strings.Contains(joined, "limit 1000") {
 		t.Fatalf("expected Tenant Chat aggregate without request row cap: %s", joined)
+	}
+	if !strings.Contains(joined, "case routing_difficulty") ||
+		strings.Contains(joined, "case effective_route_tier") ||
+		strings.Contains(joined, "routing_role in ('complex', 'high_quality')") {
+		t.Fatalf("policy impact routing must use only simple/complex difficulty: %s", joined)
 	}
 }
 

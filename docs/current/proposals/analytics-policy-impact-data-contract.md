@@ -15,16 +15,16 @@ Tenant-wide scope includes both surfaces. A request with `projectId` is Project/
 
 ## 2. Metric Meaning
 
-High-performance requests use a surface-specific, server-persisted role:
+High-performance requests use one server-persisted difficulty definition across both surfaces:
 
 | Surface | Eligible roles | High-performance role |
 |---|---|---|
 | `project_application` | `simple`, `complex` | `complex` |
-| `tenant_chat` | `economy`, `standard`, `high_quality` | `high_quality` |
+| `tenant_chat` | `simple`, `complex` | `complex` |
 
-The combined numerator is `Project/Application complex + Tenant Chat high_quality`. The combined denominator contains only requests with one of the eligible roles above. Provider name, model name, price, latency, and catalog metadata are not used to infer the role.
+The combined numerator is every persisted `complex` request. The combined denominator is every persisted `simple` or `complex` request. Therefore the high-performance request rate is `complex / (simple + complex)`. Provider name, model name, route tier, price, latency, and catalog metadata are not used to infer difficulty.
 
-The routing chart preserves the two schemes. It does not translate Tenant Chat tiers into `simple | complex`.
+The routing chart has exactly two roles, `simple` and `complex`, aggregated across the included surfaces. It never translates legacy Tenant Chat tiers into difficulty.
 
 Model traffic means the final server-recorded execution model:
 
@@ -96,19 +96,20 @@ The Web may group only presentation-equivalent outcomes. It must not collapse qu
 
 `tenant_chat_invocation_logs` adds nullable bounded fields:
 
-- `effective_route_tier`: `high_quality | standard | economy`
+- `routing_difficulty`: `simple | complex`
 - `saved_cost_micro_usd`: non-negative micro-USD
 - `masking_action`: `none | redacted | blocked`
 
 Backfill rules are deliberately narrow:
 
-- route tier may be derived only by matching the persisted final provider/model to the request's immutable RuntimeSnapshot;
+- routing difficulty is copied only from the Gateway's server-side routing decision and is also fixed on the usage reservation for recovery paths;
+- historical difficulty remains `NULL` unless the original `simple | complex` classification was persisted; provider/model and legacy route tier are never used to reconstruct it;
 - non-cache-hit savings are deterministically `0`;
 - historical cache-hit savings remain `NULL` when the source cost was not persisted;
 - `safety_blocked` deterministically maps to `masking_action=blocked`;
 - historical redaction is never inferred from message content or reconstructed from encrypted text.
 
-The v2 content-free terminal event accepts optional provider/model/tier, saved-cost, and masking fields. They contain no prompt, response, detected value, user identifier, credential, or raw error.
+The v2 content-free terminal event and v3 usage event accept optional `routingDifficulty`. The terminal event also accepts provider/model/tier, saved-cost, and masking fields for compatibility. They contain no prompt, response, detected value, user identifier, credential, or raw error.
 
 ## 6. Exact Cache Provenance
 
@@ -145,7 +146,7 @@ The Web marks the policy-impact page partial when any included metric is not com
 
 1. Tenant-wide policy impact includes Project/Application and Tenant Chat; project scope excludes Tenant Chat.
 2. More than 1,000 source requests produce complete model bucket counts.
-3. App `complex` and Tenant Chat `high_quality` form the high-performance numerator without cross-scheme coercion.
+3. App and Tenant Chat `complex` form the numerator; all persisted `simple + complex` requests form the denominator.
 4. Final successful fallback and cache-hit source model provenance are represented.
 5. Tenant Chat historical unknown savings or masking is surfaced as partial, never zero-filled.
 6. Usage attribution contains a Tenant Chat surface row and no sentinel project.

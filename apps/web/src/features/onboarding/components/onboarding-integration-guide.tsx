@@ -1,11 +1,9 @@
 "use client";
 
-import { Check, Copy, ScrollText, Settings2 } from "lucide-react";
-import Link from "next/link";
+import { Check, Copy } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type OnboardingIntegrationGuideProps = {
@@ -14,7 +12,6 @@ type OnboardingIntegrationGuideProps = {
   locale: Locale;
   project: ProjectRecord | null;
   selectedModelKey: string;
-  tenantId: string;
 };
 
 const projectApiKeyPlaceholder = "<PROJECT_API_KEY>";
@@ -25,18 +22,9 @@ const integrationText: Record<
     after: string;
     apiKeySave: string;
     apiKeySaveDescription: string;
-    appInfo: string;
     before: string;
-    budget: string;
-    createdAt: string;
     endpoint: string;
     header: string;
-    model: string;
-    nextChecks: string;
-    nextChecksDescription: string;
-    projectPolicySettings: string;
-    reviewLatestRequest: string;
-    status: string;
     subtitle: string;
     test: string;
     title: string;
@@ -46,19 +34,9 @@ const integrationText: Record<
     after: "After",
     apiKeySave: "Save API Key",
     apiKeySaveDescription: "Create the Project API Key and store the one-time value before changing the application.",
-    appInfo: "Project",
     before: "Before",
-    budget: "Budget",
-    createdAt: "Created",
     endpoint: "Change endpoint",
     header: "Add auth header",
-    model: "Model",
-    nextChecks: "Next checks",
-    nextChecksDescription:
-      "Use the latest Gateway log to confirm the test request, then tune the project policy.",
-    projectPolicySettings: "Project Policy settings",
-    reviewLatestRequest: "Review latest request",
-    status: "Status",
     subtitle: "Connect existing LLM calls through the GateLM Gateway endpoint.",
     test: "Test request",
     title: "Integration guide"
@@ -67,19 +45,9 @@ const integrationText: Record<
     after: "변경 후",
     apiKeySave: "API Key 저장",
     apiKeySaveDescription: "애플리케이션 연동 전에 Project API Key를 발급하고 1회 표시 값을 저장하세요.",
-    appInfo: "Project",
     before: "변경 전",
-    budget: "예산",
-    createdAt: "생성",
     endpoint: "Endpoint 변경",
     header: "인증 헤더 추가",
-    model: "모델",
-    nextChecks: "다음 확인",
-    nextChecksDescription:
-      "최신 Gateway 로그에서 테스트 요청을 확인하고, 이어서 Project 정책을 조정하세요.",
-    projectPolicySettings: "Project Policy 설정",
-    reviewLatestRequest: "방금 보낸 요청 확인",
-    status: "상태",
     subtitle: "기존 LLM 호출 endpoint를 GateLM Gateway로 바꿔 연결하세요.",
     test: "요청 테스트",
     title: "연동 가이드"
@@ -91,8 +59,7 @@ export function OnboardingIntegrationGuide({
   gatewayBaseUrl,
   locale,
   project,
-  selectedModelKey,
-  tenantId
+  selectedModelKey
 }: OnboardingIntegrationGuideProps) {
   const text = integrationText[locale];
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
@@ -102,10 +69,6 @@ export function OnboardingIntegrationGuide({
     locale === "ko"
       ? "Provider를 등록한 후 모델을 선택하면 테스트 요청을 사용할 수 있습니다."
       : "Register a Provider and select a model to enable the test request.";
-  const latestRequestHref = getLatestRequestHref(tenantId, project);
-  const projectPolicyHref = project?.id
-    ? `/tenants/${tenantId}/projects/${project.id}/policies`
-    : `/tenants/${tenantId}/projects`;
 
   async function copyValue(target: string, value: string) {
     if (!navigator.clipboard) {
@@ -212,55 +175,6 @@ export function OnboardingIntegrationGuide({
             )}
           </GuideStep>
         </section>
-
-        <aside className="integration-guide-side">
-          <section className="integration-side-panel">
-            <div className="integration-side-heading">
-              <h4>{text.appInfo}</h4>
-            </div>
-            <dl className="integration-meta-list">
-              <div>
-                <dt>Name</dt>
-                <dd>{project?.name ?? "Project"}</dd>
-              </div>
-              <div>
-                <dt>{text.status}</dt>
-                <dd>
-                  <span className="integration-status-dot">{project?.status ?? "ACTIVE"}</span>
-                </dd>
-              </div>
-              <div>
-                <dt>{text.budget}</dt>
-                <dd>${project?.totalBudgetUsd ?? 0} fixed</dd>
-              </div>
-              <div>
-                <dt>{text.model}</dt>
-                <dd>{hasSelectedModel ? "auto (routing policy)" : providerSetupRequired}</dd>
-              </div>
-              <div>
-                <dt>{text.createdAt}</dt>
-                <dd>{project?.createdAt ? formatDateTime(project.createdAt) : "-"}</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="integration-side-panel integration-next-panel">
-            <div className="integration-side-heading">
-              <h4>{text.nextChecks}</h4>
-              <p>{text.nextChecksDescription}</p>
-            </div>
-            <div className="integration-next-actions">
-              <Link className="primary-button" href={latestRequestHref}>
-                <ScrollText aria-hidden="true" />
-                {text.reviewLatestRequest}
-              </Link>
-              <Link className="secondary-button" href={projectPolicyHref}>
-                <Settings2 aria-hidden="true" />
-                {text.projectPolicySettings}
-              </Link>
-            </div>
-          </section>
-        </aside>
       </div>
     </div>
   );
@@ -315,20 +229,4 @@ function getGatewayRequest(gatewayEndpoint: string) {
     `  -H "Content-Type: application/json" \\`,
     `  -d '{"model":"auto","messages":[{"role":"user","content":"<USER_MESSAGE>"}]}'`
   ].join("\n");
-}
-
-function getLatestRequestHref(tenantId: string, project: ProjectRecord | null) {
-  const query = new URLSearchParams({
-    latest: "project"
-  });
-
-  if (project?.id) {
-    query.set("projectId", project.id);
-  }
-
-  if (project?.runtimeApplicationId) {
-    query.set("applicationId", project.runtimeApplicationId);
-  }
-
-  return `/tenants/${tenantId}/request-logs?${query.toString()}`;
 }

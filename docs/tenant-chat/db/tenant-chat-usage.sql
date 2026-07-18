@@ -183,6 +183,7 @@ CREATE TABLE tenant_chat_usage_reservations (
   snapshot_digest text NOT NULL,
   pricing_version bigint NOT NULL,
   cache_outcome text NOT NULL,
+  routing_difficulty text NULL,
   state text NOT NULL DEFAULT 'reserved',
   reserved_tokens bigint NOT NULL DEFAULT 0,
   reserved_cost_micro_usd bigint NOT NULL DEFAULT 0,
@@ -210,6 +211,9 @@ CREATE TABLE tenant_chat_usage_reservations (
     REFERENCES tenant_chat_tenant_cost_periods (tenant_id, period_start, currency) ON DELETE RESTRICT,
   CONSTRAINT tenant_chat_reservation_state_check CHECK (state IN ('reserved', 'settled', 'released', 'unconfirmed')),
   CONSTRAINT tenant_chat_reservation_cache_outcome_check CHECK (cache_outcome IN ('off', 'miss')),
+  CONSTRAINT tenant_chat_reservation_routing_difficulty_check CHECK (
+    routing_difficulty IS NULL OR routing_difficulty IN ('simple', 'complex')
+  ),
   CONSTRAINT tenant_chat_reservation_currency_check CHECK (currency = 'USD'),
   CONSTRAINT tenant_chat_reservation_balances_check CHECK (
     reserved_tokens >= 0
@@ -392,6 +396,7 @@ CREATE TABLE tenant_chat_invocation_logs (
   effective_provider_id text NULL,
   effective_model_key text NULL,
   effective_route_tier text NULL,
+  routing_difficulty text NULL,
   attempt_count smallint NOT NULL DEFAULT 0,
   confirmed_input_tokens bigint NOT NULL DEFAULT 0,
   confirmed_output_tokens bigint NOT NULL DEFAULT 0,
@@ -442,6 +447,9 @@ CREATE TABLE tenant_chat_invocation_logs (
   CONSTRAINT tenant_chat_log_effective_route_tier_check CHECK (
     effective_route_tier IS NULL OR effective_route_tier IN ('high_quality', 'standard', 'economy')
   ),
+  CONSTRAINT tenant_chat_log_routing_difficulty_check CHECK (
+    routing_difficulty IS NULL OR routing_difficulty IN ('simple', 'complex')
+  ),
   CONSTRAINT tenant_chat_log_safety_summary_check CHECK (
     (
       masking_detected_types IS NULL
@@ -483,6 +491,8 @@ CREATE INDEX tenant_chat_log_employee_idx
   ON tenant_chat_invocation_logs (employee_id) WHERE employee_id IS NOT NULL;
 CREATE INDEX tenant_chat_log_policy_impact_idx
   ON tenant_chat_invocation_logs (tenant_id, completed_at DESC, effective_route_tier);
+CREATE INDEX tenant_chat_log_routing_difficulty_idx
+  ON tenant_chat_invocation_logs (tenant_id, completed_at DESC, routing_difficulty);
 
 -- No DROP/DOWN statement belongs in the implementation migration. Runtime roles
 -- receive only the table privileges required by the ownership matrix; DDL stays
