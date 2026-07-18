@@ -58,6 +58,7 @@ def create_ai_safety_detector_service(settings: Settings) -> AiSafetyDetectorSer
         ml_min_confidence_by_detector_type=dict(
             settings.ai_safety_ml_detector_thresholds
         ),
+        person_name_model_only=settings.ai_safety_person_name_model_only,
     )
 
 

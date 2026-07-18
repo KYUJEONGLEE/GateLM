@@ -270,21 +270,22 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		}
 	}
 
-	maskingEngine := routerOptions.MaskingEngine
-	if maskingEngine == nil {
-		maskingEngine = maskdomain.NewP0Engine()
-	}
+	maskingEngine := resolveRouterMaskingEngine(
+		routerOptions.MaskingEngine,
+		cfg.AISafetySidecar.PersonNameModelOnly,
+	)
 	if cfg.AISafetySidecar.Enabled {
 		maskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
-			Local:       maskingEngine,
-			EndpointURL: cfg.AISafetySidecar.EndpointURL,
-			Timeout:     cfg.AISafetySidecar.Timeout,
-			ModelID:     cfg.AISafetySidecar.ModelID,
-			DetectorSet: cfg.AISafetySidecar.DetectorSet,
-			Locale:      cfg.AISafetySidecar.Locale,
-			Mode:        cfg.AISafetySidecar.Mode,
-			Surface:     "gateway_v1",
-			Metrics:     metricsRegistry,
+			Local:         maskingEngine,
+			FallbackLocal: resolveRouterFallbackMaskingEngine(routerOptions.MaskingEngine, cfg.AISafetySidecar.PersonNameModelOnly),
+			EndpointURL:   cfg.AISafetySidecar.EndpointURL,
+			Timeout:       cfg.AISafetySidecar.Timeout,
+			ModelID:       cfg.AISafetySidecar.ModelID,
+			DetectorSet:   cfg.AISafetySidecar.DetectorSet,
+			Locale:        cfg.AISafetySidecar.Locale,
+			Mode:          cfg.AISafetySidecar.Mode,
+			Surface:       "gateway_v1",
+			Metrics:       metricsRegistry,
 		})
 	}
 	observabilityToken := cfg.ObservabilityInternalToken
@@ -387,6 +388,29 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	}))
 
 	return mux
+}
+
+func resolveRouterMaskingEngine(
+	configured handlers.MaskingEngine,
+	personNameModelOnly bool,
+) handlers.MaskingEngine {
+	if configured != nil {
+		return configured
+	}
+	if personNameModelOnly {
+		return maskdomain.NewP0EngineWithoutPersonName()
+	}
+	return maskdomain.NewP0Engine()
+}
+
+func resolveRouterFallbackMaskingEngine(
+	configured handlers.MaskingEngine,
+	personNameModelOnly bool,
+) aiservice.LocalMaskingEngine {
+	if configured != nil || !personNameModelOnly {
+		return nil
+	}
+	return maskdomain.NewP0Engine()
 }
 
 func semanticCacheHitPolicyWithThresholdOverrides(policy cachekey.SemanticCacheHitPolicy, defaultThreshold float64, categoryThresholds map[string]float64) cachekey.SemanticCacheHitPolicy {

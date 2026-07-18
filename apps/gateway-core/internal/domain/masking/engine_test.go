@@ -746,6 +746,27 @@ func TestP0EngineBlockWinsOverRedact(t *testing.T) {
 	}
 }
 
+func TestP0EngineWithoutPersonNameLeavesNameForModelAndMasksOtherPII(t *testing.T) {
+	engine := NewP0EngineWithoutPersonName()
+	rawName := "홍길동"
+	rawEmail := "user@example.invalid"
+	prompt := "고객 " + rawName + "에게 이메일 " + rawEmail + "로 안내했다."
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if !strings.Contains(result.RedactedPrompt, rawName) {
+		t.Fatalf("person name must remain for model evaluation, got %q", result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, rawEmail) {
+		t.Fatal("non-name PII must still be redacted")
+	}
+	if !reflect.DeepEqual(result.DetectedTypes, []string{"email"}) {
+		t.Fatalf("expected only email from local rules, got %#v", result.DetectedTypes)
+	}
+}
+
 func TestEffectiveDetectionsPrefersBlockingOverlap(t *testing.T) {
 	selected := effectiveDetections([]Detection{
 		{

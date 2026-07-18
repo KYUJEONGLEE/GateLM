@@ -11,6 +11,7 @@ import (
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
 	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	"gatelm/apps/gateway-core/internal/config"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 
@@ -438,6 +439,59 @@ func TestBuildOpenAIStaticCatalogModelsAddsManualExtraModels(t *testing.T) {
 	}
 	if !models[2].Capabilities.StreamingSupported || !models[2].Capabilities.SupportsJSONMode {
 		t.Fatalf("extra OpenAI model capabilities were not set: %#v", models[2].Capabilities)
+	}
+}
+
+func TestTenantChatLocalMaskingEnginePersonNameModelOnlyExcludesOnlyPersonRule(t *testing.T) {
+	ctx := context.Background()
+	modelOnlyResult, err := tenantChatLocalMaskingEngine(true).Apply(ctx, maskdomain.ApplyRequest{
+		Prompt: "고객 문의를 확인해 주세요.",
+	})
+	if err != nil {
+		t.Fatalf("apply person-name model-only engine: %v", err)
+	}
+	if modelOnlyResult.Action != maskdomain.ActionNone || len(modelOnlyResult.DetectedTypes) != 0 {
+		t.Fatalf("person-name rule remained enabled: %#v", modelOnlyResult)
+	}
+
+	emailResult, err := tenantChatLocalMaskingEngine(true).Apply(ctx, maskdomain.ApplyRequest{
+		Prompt: "synthetic.person@example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("apply deterministic email rule: %v", err)
+	}
+	if emailResult.Action != maskdomain.ActionRedacted || len(emailResult.DetectedTypes) != 1 || emailResult.DetectedTypes[0] != "email" {
+		t.Fatalf("non-person rule changed: %#v", emailResult)
+	}
+
+	defaultResult, err := tenantChatLocalMaskingEngine(false).Apply(ctx, maskdomain.ApplyRequest{
+		Prompt: "고객 문의를 확인해 주세요.",
+	})
+	if err != nil {
+		t.Fatalf("apply default tenant chat engine: %v", err)
+	}
+	if defaultResult.Action != maskdomain.ActionRedacted || len(defaultResult.DetectedTypes) != 1 || defaultResult.DetectedTypes[0] != "person_name" {
+		t.Fatalf("default person-name rule changed: %#v", defaultResult)
+	}
+}
+
+func TestTenantChatFallbackMaskingEngineOnlyEnablesFullRulesForPersonNameModelOnlyMode(t *testing.T) {
+	if tenantChatFallbackMaskingEngine(false) != nil {
+		t.Fatal("default mode must not add a duplicate Tenant Chat fallback engine")
+	}
+	fallback := tenantChatFallbackMaskingEngine(true)
+	if fallback == nil {
+		t.Fatal("person-name model-only mode must configure a full-rule Tenant Chat fallback engine")
+	}
+	result, err := fallback.Apply(context.Background(), maskdomain.ApplyRequest{
+		Prompt: "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+	})
+	if err != nil {
+		t.Fatalf("apply Tenant Chat full-rule fallback: %v", err)
+	}
+	if result.Action != maskdomain.ActionRedacted ||
+		len(result.DetectedTypes) != 1 || result.DetectedTypes[0] != "person_name" {
+		t.Fatalf("Tenant Chat fallback did not restore person-name rules: %+v", result)
 	}
 }
 

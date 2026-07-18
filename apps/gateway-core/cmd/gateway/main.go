@@ -332,18 +332,21 @@ func main() {
 			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
 		)
-		var tenantChatMaskingEngine tenantsafety.MaskingEngine = maskdomain.NewP0Engine()
+		var tenantChatMaskingEngine tenantsafety.MaskingEngine = tenantChatLocalMaskingEngine(
+			cfg.AISafetySidecar.PersonNameModelOnly,
+		)
 		if cfg.AISafetySidecar.Enabled {
 			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
-				Local:       tenantChatMaskingEngine,
-				EndpointURL: cfg.AISafetySidecar.EndpointURL,
-				Timeout:     cfg.AISafetySidecar.Timeout,
-				ModelID:     cfg.AISafetySidecar.ModelID,
-				DetectorSet: cfg.AISafetySidecar.DetectorSet,
-				Locale:      cfg.AISafetySidecar.Locale,
-				Mode:        cfg.AISafetySidecar.Mode,
-				Surface:     "tenant_chat",
-				Metrics:     metricsRegistry,
+				Local:         tenantChatMaskingEngine,
+				FallbackLocal: tenantChatFallbackMaskingEngine(cfg.AISafetySidecar.PersonNameModelOnly),
+				EndpointURL:   cfg.AISafetySidecar.EndpointURL,
+				Timeout:       cfg.AISafetySidecar.Timeout,
+				ModelID:       cfg.AISafetySidecar.ModelID,
+				DetectorSet:   cfg.AISafetySidecar.DetectorSet,
+				Locale:        cfg.AISafetySidecar.Locale,
+				Mode:          cfg.AISafetySidecar.Mode,
+				Surface:       "tenant_chat",
+				Metrics:       metricsRegistry,
 			})
 		}
 		tenantChatSafety := tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)
@@ -970,6 +973,20 @@ func openAIModelDisplayName(modelName string) string {
 		return "OpenAI Model"
 	}
 	return "OpenAI " + modelName
+}
+
+func tenantChatLocalMaskingEngine(personNameModelOnly bool) maskdomain.Engine {
+	if personNameModelOnly {
+		return maskdomain.NewP0EngineWithoutPersonName()
+	}
+	return maskdomain.NewP0Engine()
+}
+
+func tenantChatFallbackMaskingEngine(personNameModelOnly bool) aiservice.LocalMaskingEngine {
+	if !personNameModelOnly {
+		return nil
+	}
+	return maskdomain.NewP0Engine()
 }
 
 func staticModelRef(providerID string, modelID string) string {
