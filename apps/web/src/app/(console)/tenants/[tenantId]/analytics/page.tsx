@@ -42,6 +42,7 @@ import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getEmployeeSecurity } from "@/lib/control-plane/employee-security-client";
 import { getAllEmployeeUsage } from "@/lib/control-plane/employee-usage-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getTenantChatAdminRuntimeSetup } from "@/lib/control-plane/tenant-chat-runtime-client";
 import {
   getTenantChatCostSeries,
   getTenantChatDashboard
@@ -202,6 +203,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     (activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security");
   const shouldLoadTenantChatSeries =
     shouldLoadTenantChatDashboard && (activeTab === "usage" || activeTab === "cost");
+  const shouldLoadTenantChatRuntimePolicy =
+    shouldIncludeTenantChat && (activeTab === "cache" || activeTab === "security");
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
@@ -221,7 +224,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     reliability,
     projectApplicationSecurityEvidence,
     employeeUsageResult,
-    employeeSecurityResult
+    employeeSecurityResult,
+    tenantChatRuntimeResult
   ] = await Promise.all([
     getLiveDashboardOverview(effectiveTenantId, {
       projectId: filters.projectId || undefined,
@@ -294,6 +298,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           tenantId: effectiveTenantId,
           to: reliabilityRange.to
         })
+      : Promise.resolve(undefined),
+    shouldLoadTenantChatRuntimePolicy
+      ? getTenantChatAdminRuntimeSetup(effectiveTenantId)
       : Promise.resolve(undefined)
   ]);
 
@@ -390,6 +397,11 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const showProviderModelFilters = activeTab === "performance";
   const employeeUsage = employeeUsageResult?.ok ? employeeUsageResult.data : undefined;
   const employeeSecurity = employeeSecurityResult?.ok ? employeeSecurityResult.data : undefined;
+  const tenantChatRuntimeSnapshot = !shouldLoadTenantChatRuntimePolicy
+    ? undefined
+    : tenantChatRuntimeResult?.ok
+      ? tenantChatRuntimeResult.data.activeSnapshot
+      : null;
   const employeeOptions = activeTab === "security"
     ? employeeSecurity?.data ?? []
     : employeeUsage?.data ?? [];
@@ -552,9 +564,14 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           locale={locale}
           model={model}
           selectedEmployeeId={selectedEmployeeId}
+          tenantChatRuntimeSnapshot={tenantChatRuntimeSnapshot}
         />
       ) : (
-        <AnalyticsCachePanel locale={locale} model={model} />
+        <AnalyticsCachePanel
+          locale={locale}
+          model={model}
+          tenantChatRuntimeSnapshot={tenantChatRuntimeSnapshot}
+        />
       )}
       </AnalyticsPanelTransition>
       </AnalyticsFilterFrame>
