@@ -312,7 +312,12 @@ export function AnalyticsUsagePanel({
             meta: `${formatDecimal(model.usage.tokensPerRequest)} ${text.tokensPerRequest}`,
             value: formatCompact(model.usage.totalTokens)
           },
-          { label: text.active, value: formatInteger(model.usage.activeModels) }
+          {
+            label: text.active,
+            value: locale === "ko"
+              ? `${formatInteger(model.usage.activeModels)}건`
+              : formatInteger(model.usage.activeModels)
+          }
         ]}
       />
 
@@ -554,6 +559,7 @@ export function AnalyticsPerformancePanel({
         error: "오류율",
         latency: "Surface별 지연 시간 추이",
         latencySub: "Project/Application과 Tenant Chat의 p50, p95, p99 응답 시간",
+        percentile: "지연 시간 백분위 선택",
         p95: "Surface별 p95 지연",
         provider: "Provider별 전체 응답 지연",
         providerSub: "Surface와 Provider별 end-to-end p95 비교",
@@ -567,6 +573,7 @@ export function AnalyticsPerformancePanel({
         error: "Error rate",
         latency: "Latency trend by surface",
         latencySub: "p50, p95, and p99 response time for Project/Application and Tenant Chat",
+        percentile: "Select latency percentile",
         p95: "p95 latency by surface",
         provider: "End-to-end latency by Provider",
         providerSub: "Compare end-to-end p95 by surface and Provider",
@@ -578,6 +585,11 @@ export function AnalyticsPerformancePanel({
       };
   const surfaceSummaries = performance?.surfaceSummaries ?? [];
   const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null);
+  const latencyPoints = performance?.latencyDistribution ?? [];
+  const latencySurfaces = surfaceSummaries.map((summary) => ({
+    label: analyticsSurfaceLabel(summary.surface, locale),
+    surface: summary.surface
+  }));
   const providerRows = (performance?.p95LatencyByProvider ?? [])
     .filter((row) => row.p95LatencyMs !== null)
     .map((row) => ({
@@ -601,7 +613,9 @@ export function AnalyticsPerformancePanel({
           label: text.p95,
           value: headlineSurfaceSummaries.length
             ? headlineSurfaceSummaries
-                .map((row) => `${analyticsSurfaceShortLabel(row.surface, locale)} ${formatMs(row.p95LatencyMs)}`)
+                .map((row) => row.surface === "tenant_chat"
+                  ? formatMs(row.p95LatencyMs)
+                  : `${analyticsSurfaceShortLabel(row.surface, locale)} ${formatMs(row.p95LatencyMs)}`)
                 .join(" · ")
             : "—"
         }}
@@ -613,28 +627,21 @@ export function AnalyticsPerformancePanel({
 
       <div className="analytics-v3-workspace">
         <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.latencySub} title={text.latency}>
-          <ChartOrEmpty hasData={surfaceSummaries.length > 0} locale={locale}>
-            <div className="analytics-v3-surface-latency-grid">
-              {surfaceSummaries.map((summary) => {
-                const points = (performance?.latencyDistribution ?? []).filter(
-                  (point) => point.surface === summary.surface
-                );
-                return (
-                  <section className="analytics-v3-surface-latency" key={summary.surface}>
-                    <header>
-                      <strong>{analyticsSurfaceLabel(summary.surface, locale)}</strong>
-                      <span>p95 {formatMs(summary.p95LatencyMs)}</span>
-                    </header>
-                    <ChartOrEmpty hasData={points.some(hasLatencyPoint)} locale={locale} compact>
-                      <AnalyticsLatencyTrendChart
-                        ariaLabel={`${text.latency} · ${analyticsSurfaceLabel(summary.surface, locale)}`}
-                        points={points}
-                      />
-                    </ChartOrEmpty>
-                  </section>
-                );
-              })}
-            </div>
+          <div className="analytics-v3-surface-latency-summary">
+            {surfaceSummaries.map((summary) => (
+              <div key={summary.surface}>
+                <strong>{analyticsSurfaceLabel(summary.surface, locale)}</strong>
+                <span>p95 {formatMs(summary.p95LatencyMs)}</span>
+              </div>
+            ))}
+          </div>
+          <ChartOrEmpty hasData={latencyPoints.some(hasLatencyPoint)} locale={locale}>
+            <AnalyticsLatencyTrendChart
+              ariaLabel={text.latency}
+              percentileLabel={text.percentile}
+              points={latencyPoints}
+              surfaces={latencySurfaces}
+            />
           </ChartOrEmpty>
         </AnalysisSurface>
         <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.providerSub} title={text.provider}>
@@ -860,6 +867,9 @@ export function AnalyticsSecurityPanel({
         0
       )
     : model.totalRequests;
+  const formatRequestCount = (value: number) => locale === "ko"
+    ? `${formatInteger(value)}건`
+    : formatInteger(value);
   const treatmentRows: AnalyticsValueRow[] = [
     { id: "pii_masked", label: locale === "ko" ? "마스킹" : "MASKED", value: maskedRequests },
     { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests },
@@ -900,12 +910,12 @@ export function AnalyticsSecurityPanel({
         icon={Shield}
         lead={{
           label: text.protected,
-          meta: `${formatInteger(totalRequests)} ${text.totalRequests}`,
-          value: formatInteger(protectedRequests)
+          meta: `${formatRequestCount(totalRequests)} ${text.totalRequests}`,
+          value: formatRequestCount(protectedRequests)
         }}
         metrics={[
-          { label: text.masked, value: formatInteger(maskedRequests) },
-          { label: text.blocked, value: formatInteger(blockedRequests) }
+          { label: text.masked, value: formatRequestCount(maskedRequests) },
+          { label: text.blocked, value: formatRequestCount(blockedRequests) }
         ]}
       />
 
@@ -1043,8 +1053,12 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
         metrics={[
           {
             label: text.hit,
-            meta: `${formatInteger(model.cache.eligibleRequests)} ${text.eligible}`,
-            value: formatInteger(model.cache.hitRequests)
+            meta: locale === "ko"
+              ? `${formatInteger(model.cache.eligibleRequests)}건 ${text.eligible}`
+              : `${formatInteger(model.cache.eligibleRequests)} ${text.eligible}`,
+            value: locale === "ko"
+              ? `${formatInteger(model.cache.hitRequests)}건`
+              : formatInteger(model.cache.hitRequests)
           },
           {
             label: text.saved,

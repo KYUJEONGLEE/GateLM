@@ -189,10 +189,6 @@
 
 .analytics-v5-response-metric > div > em {
   margin-bottom: 1px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: calc(22px + var(--global-font-lift));
 }
 
 .analytics-v5-primary-grid,
