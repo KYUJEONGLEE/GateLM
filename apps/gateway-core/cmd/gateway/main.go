@@ -332,7 +332,9 @@ func main() {
 			tenantChatRuntime,
 			postgresadmission.NewStore(postgresPool),
 		)
-		var tenantChatMaskingEngine tenantsafety.MaskingEngine = maskdomain.NewP0Engine()
+		var tenantChatMaskingEngine tenantsafety.MaskingEngine = tenantChatLocalMaskingEngine(
+			cfg.AISafetySidecar.PersonNameModelOnly,
+		)
 		if cfg.AISafetySidecar.Enabled {
 			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 				Local:       tenantChatMaskingEngine,
@@ -970,6 +972,13 @@ func openAIModelDisplayName(modelName string) string {
 		return "OpenAI Model"
 	}
 	return "OpenAI " + modelName
+}
+
+func tenantChatLocalMaskingEngine(personNameModelOnly bool) maskdomain.Engine {
+	if personNameModelOnly {
+		return maskdomain.NewP0EngineWithoutPersonName()
+	}
+	return maskdomain.NewP0Engine()
 }
 
 func staticModelRef(providerID string, modelID string) string {
