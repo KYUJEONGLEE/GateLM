@@ -20,6 +20,23 @@ func (failingFallbackMaskingEngine) Apply(context.Context, maskdomain.ApplyReque
 	return maskdomain.Result{}, errors.New("synthetic fallback masking failure")
 }
 
+type recordingFallbackMaskingEngine struct {
+	calls  int
+	cancel context.CancelFunc
+}
+
+func (e *recordingFallbackMaskingEngine) Apply(_ context.Context, req maskdomain.ApplyRequest) (maskdomain.Result, error) {
+	e.calls++
+	if e.calls == 1 && e.cancel != nil {
+		e.cancel()
+	}
+	return maskdomain.Result{
+		Action:         maskdomain.ActionNone,
+		RedactedPrompt: req.Prompt,
+		LogSafePrompt:  req.Prompt,
+	}, nil
+}
+
 func TestMaskingEngineForwardsDetectorPolicyOverrides(t *testing.T) {
 	var received detectRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -263,6 +280,25 @@ func TestMaskingEngineFailsClosedWhenFallbackEngineFails(t *testing.T) {
 
 	if !errors.Is(err, ErrFallbackMaskingUnavailable) {
 		t.Fatalf("fallback failure must return fail-closed error, got %v", err)
+	}
+}
+
+func TestMaskingEngineDoesNotStartFallbackForCancelledContext(t *testing.T) {
+	fallback := &recordingFallbackMaskingEngine{}
+	engine := NewMaskingEngine(MaskingEngineConfig{
+		Local:         maskdomain.NewP0EngineWithoutPersonName(),
+		FallbackLocal: fallback,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := engine.Apply(ctx, maskdomain.ApplyRequest{Prompt: "Safe synthetic prompt."})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled fallback must return context cancellation, got %v", err)
+	}
+	if fallback.calls != 0 {
+		t.Fatalf("cancelled request must not start fallback, got %d calls", fallback.calls)
 	}
 }
 
@@ -678,6 +714,28 @@ func TestMaskingEngineApplyBatchFailsClosedWhenFallbackEngineFails(t *testing.T)
 
 	if !errors.Is(err, ErrFallbackMaskingUnavailable) {
 		t.Fatalf("batch fallback failure must return fail-closed error, got %v", err)
+	}
+}
+
+func TestMaskingEngineApplyBatchStopsFallbackAfterContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	fallback := &recordingFallbackMaskingEngine{cancel: cancel}
+	engine := NewMaskingEngine(MaskingEngineConfig{
+		Local:         maskdomain.NewP0EngineWithoutPersonName(),
+		FallbackLocal: fallback,
+	})
+
+	_, err := engine.ApplyBatch(ctx, []maskdomain.ApplyRequest{
+		{Prompt: "First safe synthetic item."},
+		{Prompt: "Second safe synthetic item."},
+		{Prompt: "Third safe synthetic item."},
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled batch fallback must return context cancellation, got %v", err)
+	}
+	if fallback.calls != 1 {
+		t.Fatalf("batch fallback must stop after cancellation, got %d calls", fallback.calls)
 	}
 }
 

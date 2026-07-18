@@ -56,7 +56,7 @@ type LocalMaskingEngine interface {
 }
 
 type MaskingEngineConfig struct {
-	Local         LocalMaskingEngine
+	Local LocalMaskingEngine
 	// FallbackLocal receives the original request when the sidecar cannot
 	// produce a valid result. A fallback error is returned to the caller.
 	FallbackLocal LocalMaskingEngine
@@ -256,6 +256,9 @@ func (e MaskingEngine) applyFallback(
 	if e.fallbackLocal == nil {
 		return localResult, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return maskdomain.Result{}, err
+	}
 	fallbackResult, err := e.fallbackLocal.Apply(ctx, req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -274,8 +277,14 @@ func (e MaskingEngine) applyFallbackBatch(
 	if e.fallbackLocal == nil {
 		return localResults, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	fallbackResults := make([]maskdomain.Result, len(requests))
 	for index, request := range requests {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		fallbackResult, err := e.fallbackLocal.Apply(ctx, request)
 		if err != nil {
 			if ctx.Err() != nil {
