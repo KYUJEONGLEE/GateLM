@@ -12,7 +12,7 @@ import {
   type ReactNode
 } from "react";
 
-type AnalyticsFilterName = "employeeId" | "model" | "projectId" | "provider" | "range";
+type AnalyticsFilterName = "employeeId" | "projectId" | "range";
 
 type AnalyticsFilterState = Record<AnalyticsFilterName, string> & {
   tab: string;
@@ -143,9 +143,7 @@ function analyticsFilterCacheKey(filterState: AnalyticsFilterState) {
     filterState.tab,
     filterState.range,
     filterState.projectId,
-    filterState.employeeId,
-    filterState.provider,
-    filterState.model
+    filterState.employeeId
   ].map(encodeURIComponent).join("|");
 }
 
@@ -156,13 +154,7 @@ function analyticsFilterSearchParams(filterState: AnalyticsFilterState) {
   });
 
   appendFilterQuery(query, "projectId", filterState.projectId);
-  if (filterState.tab === "usage" || filterState.tab === "cost" || filterState.tab === "security") {
-    appendFilterQuery(query, "employeeId", filterState.employeeId);
-  }
-  if (filterState.tab === "performance") {
-    appendFilterQuery(query, "provider", filterState.provider);
-    appendFilterQuery(query, "model", filterState.model);
-  }
+  appendFilterQuery(query, "employeeId", filterState.employeeId);
 
   return query;
 }

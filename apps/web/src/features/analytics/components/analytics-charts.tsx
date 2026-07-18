@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import type { AnalyticsRequestVolumePoint } from "@/features/analytics/analytics-usage-merge";
 import {
@@ -11,12 +11,21 @@ import {
   useAnalyticsChartTheme
 } from "@/features/analytics/components/analytics-echart";
 import type { CostOverTimePoint } from "@/lib/gateway/cost-over-time-types";
-import type { AnalyticsLatencyDistributionPoint } from "@/lib/gateway/live-analytics-performance";
+import type {
+  AnalyticsLatencyDistributionPoint,
+  AnalyticsSurface
+} from "@/lib/gateway/live-analytics-performance";
 import { formatMicroUsdCurrency } from "@/lib/formatting/formatters";
 
 export type AnalyticsValueKind = "count" | "micro-usd" | "milliseconds" | "tokens";
 
 const palette = ["#0f8f66", "#2563eb", "#d97706", "#dc4c4c", "#64748b"];
+const latencyPercentiles = ["p50", "p95", "p99"] as const;
+const latencySurfaceColors: Record<AnalyticsSurface, string> = {
+  project_application: "#2563eb",
+  tenant_chat: "#0f8f66"
+};
+type LatencyPercentile = (typeof latencyPercentiles)[number];
 const outcomeColors: Record<string, string> = {
   blocked: "#dc4c4c",
   bypass: "#64748b",
@@ -505,19 +514,50 @@ export function AnalyticsCostTrendChart({
 
 export function AnalyticsLatencyTrendChart({
   ariaLabel,
-  points
+  percentileLabel,
+  points,
+  surfaces
 }: {
   ariaLabel: string;
+  percentileLabel: string;
   points: AnalyticsLatencyDistributionPoint[];
+  surfaces: Array<{ label: string; surface: AnalyticsSurface }>;
 }) {
   const theme = useAnalyticsChartTheme();
+  const [percentile, setPercentile] = useState<LatencyPercentile>("p95");
+  const chartData = useMemo(() => {
+    const bucketsByTimestamp = new Map<string, { bucket: string; label: string }>();
+    const pointsBySurfaceAndBucket = new Map<string, AnalyticsLatencyDistributionPoint>();
+
+    for (const point of points) {
+      bucketsByTimestamp.set(point.bucket, { bucket: point.bucket, label: point.label });
+      pointsBySurfaceAndBucket.set(`${point.surface}:${point.bucket}`, point);
+    }
+
+    const buckets = [...bucketsByTimestamp.values()].sort((left, right) =>
+      left.bucket.localeCompare(right.bucket)
+    );
+    const percentileField = `${percentile}LatencyMs` as const;
+
+    return {
+      labels: buckets.map((bucket) => bucket.label),
+      series: surfaces.map(({ label, surface }) =>
+        latencySeries(
+          label,
+          buckets.map((bucket) =>
+            pointsBySurfaceAndBucket.get(`${surface}:${bucket.bucket}`)?.[percentileField] ?? null
+          ),
+          latencySurfaceColors[surface]
+        )
+      )
+    };
+  }, [percentile, points, surfaces]);
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 360,
-      color: ["#0f8f66", "#2563eb", "#dc4c4c"],
       grid: { bottom: 34, left: 66, right: 24, top: 48 },
       legend: {
-        data: ["p50", "p95", "p99"],
+        data: surfaces.map((surface) => surface.label),
         icon: "circle",
         itemHeight: 8,
         itemWidth: 8,
@@ -531,7 +571,7 @@ export function AnalyticsLatencyTrendChart({
         axisLine: { lineStyle: { color: theme.border } },
         axisTick: { show: false },
         boundaryGap: false,
-        data: points.map((point) => point.label),
+        data: chartData.labels,
         type: "category"
       },
       yAxis: {
@@ -546,16 +586,32 @@ export function AnalyticsLatencyTrendChart({
         splitLine: { lineStyle: { color: theme.grid } },
         type: "value"
       },
-      series: [
-        latencySeries("p50", points.map((point) => point.p50LatencyMs)),
-        latencySeries("p95", points.map((point) => point.p95LatencyMs)),
-        latencySeries("p99", points.map((point) => point.p99LatencyMs))
-      ]
+      series: chartData.series
     }),
-    [points, theme]
+    [chartData, surfaces, theme]
   );
 
-  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-main-chart" option={option} />;
+  return (
+    <div className="analytics-v3-latency-trend">
+      <div aria-label={percentileLabel} className="analytics-v3-percentile-toggle" role="group">
+        {latencyPercentiles.map((value) => (
+          <button
+            aria-pressed={percentile === value}
+            key={value}
+            onClick={() => setPercentile(value)}
+            type="button"
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+      <AnalyticsEChart
+        ariaLabel={`${ariaLabel} · ${percentile}`}
+        className="analytics-v3-main-chart"
+        option={option}
+      />
+    </div>
+  );
 }
 
 export function AnalyticsRequestVolumeChart({
@@ -607,11 +663,12 @@ export function AnalyticsRequestVolumeChart({
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-main-chart" option={option} />;
 }
 
-function latencySeries(name: string, data: Array<number | null>) {
+function latencySeries(name: string, data: Array<number | null>, color: string) {
   return {
     data,
     emphasis: { focus: "series" },
-    lineStyle: { width: 3 },
+    itemStyle: { color },
+    lineStyle: { color, width: 3 },
     name,
     showSymbol: data.length <= 12,
     smooth: 0.14,
