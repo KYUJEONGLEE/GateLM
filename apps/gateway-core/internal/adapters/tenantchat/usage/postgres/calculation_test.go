@@ -260,3 +260,46 @@ func TestReservationCacheOutcomeRequiresBothSnapshotAndRequestEligibility(t *tes
 		t.Fatalf("cache-ineligible request must reserve as off, got %q", outcome)
 	}
 }
+func TestRestoreRoutingDifficultyPreservesExistingDecision(t *testing.T) {
+	difficulty := "complex"
+	existing := &tenantchat.RoutingDecision{
+		ModelRef:               "model-ref-existing",
+		CandidateModelRefs:     []string{"model-ref-existing", "model-ref-fallback"},
+		Category:               "reasoning",
+		Difficulty:             "simple",
+		RoutingDecisionKeyHash: "decision-hash",
+		RoutingPolicyHash:      "policy-hash",
+	}
+	requestContext := tenantchat.RequestContext{Routing: existing}
+
+	restoreRoutingDifficulty(&requestContext, &difficulty)
+
+	if requestContext.Routing != existing {
+		t.Fatal("routing restore replaced the existing decision")
+	}
+	if requestContext.Routing.Difficulty != difficulty {
+		t.Fatalf("want restored difficulty %q, got %q", difficulty, requestContext.Routing.Difficulty)
+	}
+	if requestContext.Routing.ModelRef != "model-ref-existing" ||
+		requestContext.Routing.Category != "reasoning" ||
+		requestContext.Routing.RoutingDecisionKeyHash != "decision-hash" ||
+		requestContext.Routing.RoutingPolicyHash != "policy-hash" ||
+		len(requestContext.Routing.CandidateModelRefs) != 2 {
+		t.Fatalf("routing restore discarded existing fields: %+v", requestContext.Routing)
+	}
+}
+
+func TestRestoreRoutingDifficultyHandlesMissingValues(t *testing.T) {
+	difficulty := "simple"
+	requestContext := tenantchat.RequestContext{}
+
+	restoreRoutingDifficulty(&requestContext, nil)
+	if requestContext.Routing != nil {
+		t.Fatalf("missing difficulty unexpectedly initialized routing: %+v", requestContext.Routing)
+	}
+
+	restoreRoutingDifficulty(&requestContext, &difficulty)
+	if requestContext.Routing == nil || requestContext.Routing.Difficulty != difficulty {
+		t.Fatalf("missing routing was not initialized with difficulty %q: %+v", difficulty, requestContext.Routing)
+	}
+}

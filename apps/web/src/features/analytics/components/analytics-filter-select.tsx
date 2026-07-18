@@ -106,7 +106,9 @@ export function AnalyticsPanelTransition({ children }: { children: ReactNode }) 
   const navigation = useAnalyticsFilterNavigation();
   const panelCache = useRef(new Map<string, ReactNode>());
 
-  rememberPanel(panelCache.current, navigation.cacheKey, children);
+  useEffect(() => {
+    rememberPanel(panelCache.current, navigation.cacheKey, children);
+  }, [children, navigation.cacheKey]);
 
   const cachedTarget = panelCache.current.get(navigation.targetCacheKey);
   const visiblePanel = navigation.isPending && cachedTarget ? cachedTarget : children;

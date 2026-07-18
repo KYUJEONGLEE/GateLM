@@ -37,6 +37,8 @@ chat_url="${GATELM_DEPLOY_CHAT_URL:-https://chat.gatelm.co.kr}"
 public_url="${public_url%/}"
 chat_url="${chat_url%/}"
 minimum_free_kb="${GATELM_DEPLOY_MINIMUM_FREE_KB:-5242880}"
+policy_impact_backfill_max_rows="${GATELM_TENANT_CHAT_POLICY_IMPACT_MAX_AUTO_BACKFILL_ROWS:-10000}"
+allow_large_policy_impact_backfill="${GATELM_ALLOW_LARGE_TENANT_CHAT_POLICY_IMPACT_BACKFILL:-false}"
 tenant_chat_secret_dir="${deploy_dir}/.secrets/tenant-chat"
 rag_secret_dir="${deploy_dir}/.secrets/rag"
 gateway_e5_bundle_script="${deploy_dir}/scripts/prepare-gateway-e5-runtime-bundle.sh"
@@ -93,6 +95,10 @@ rag_secret_files=(
   deploy_fail "GATELM_DEPLOY_CHAT_URL must be an HTTPS origin."
 [[ "${minimum_free_kb}" =~ ^[0-9]+$ ]] || \
   deploy_fail "GATELM_DEPLOY_MINIMUM_FREE_KB must be an integer."
+[[ "${policy_impact_backfill_max_rows}" =~ ^[0-9]+$ ]] || \
+  deploy_fail "GATELM_TENANT_CHAT_POLICY_IMPACT_MAX_AUTO_BACKFILL_ROWS must be an integer."
+[[ "${allow_large_policy_impact_backfill}" == "true" || "${allow_large_policy_impact_backfill}" == "false" ]] || \
+  deploy_fail "GATELM_ALLOW_LARGE_TENANT_CHAT_POLICY_IMPACT_BACKFILL must be true or false."
 
 for command_name in awk chmod cp curl date df diff dirname docker find flock git install mkdir mv node rm sha256sum sort stat tar tee unzip; do
   need_command "${command_name}"
@@ -166,6 +172,48 @@ exec > >(tee -a "${log_file}") 2>&1
 
 compose() {
   docker compose --env-file "${env_file}" "${compose_args[@]}" "$@"
+}
+
+postgres_scalar() {
+  local sql="$1"
+  compose exec -T postgres sh -c \
+    'psql -X -v ON_ERROR_STOP=1 -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' \
+    sh "${sql}"
+}
+
+preflight_tenant_chat_policy_impact_backfill() {
+  local migration_name="20260718120000_tenant_chat_policy_impact_observability"
+  local relation_exists migration_history_exists migration_applied row_count
+
+  relation_exists="$(postgres_scalar \
+    "SELECT to_regclass('public.tenant_chat_invocation_logs') IS NOT NULL;")" || \
+    deploy_fail "Could not inspect the Tenant Chat invocation log before migrations."
+  [[ "${relation_exists}" == "t" ]] || return 0
+
+  migration_history_exists="$(postgres_scalar \
+    "SELECT to_regclass('public._prisma_migrations') IS NOT NULL;")" || \
+    deploy_fail "Could not inspect Prisma migration history."
+  [[ "${migration_history_exists}" == "t" ]] || \
+    deploy_fail "Tenant Chat invocation logs exist without Prisma migration history; refusing automatic migration."
+
+  migration_applied="$(postgres_scalar \
+    "SELECT EXISTS (SELECT 1 FROM _prisma_migrations WHERE migration_name = '${migration_name}' AND finished_at IS NOT NULL AND rolled_back_at IS NULL);")" || \
+    deploy_fail "Could not inspect the policy-impact migration state."
+  [[ "${migration_applied}" == "t" ]] && return 0
+
+  row_count="$(postgres_scalar \
+    "SET statement_timeout = '10s'; SELECT count(*) FROM tenant_chat_invocation_logs;")" || \
+    deploy_fail "Could not bound Tenant Chat invocation-log rows within 10 seconds; schedule the policy-impact migration for a maintenance window."
+  [[ "${row_count}" =~ ^[0-9]+$ ]] || \
+    deploy_fail "Tenant Chat invocation-log preflight returned an invalid row count."
+
+  deploy_log "Policy-impact migration preflight found ${row_count} Tenant Chat invocation-log rows."
+  if (( row_count > policy_impact_backfill_max_rows )); then
+    if [[ "${allow_large_policy_impact_backfill}" != "true" ]]; then
+      deploy_fail "Policy-impact backfill exceeds the automatic limit (${row_count} > ${policy_impact_backfill_max_rows}); use a reviewed maintenance window instead of normal cutover."
+    fi
+    deploy_warn "Large policy-impact backfill explicitly approved for this maintenance deployment (${row_count} rows)."
+  fi
 }
 
 wait_for_service() {
@@ -528,6 +576,7 @@ for service in postgres redis mock-provider; do
 done
 deploy_log "Waiting for PostgreSQL to accept connections."
 wait_for_postgres || deploy_fail "PostgreSQL is not ready for migrations."
+preflight_tenant_chat_policy_impact_backfill
 
 deploy_log "Applying Prisma migrations."
 compose run --rm --no-deps control-plane-api \

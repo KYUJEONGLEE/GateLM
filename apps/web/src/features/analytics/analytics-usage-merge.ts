@@ -10,6 +10,8 @@ import type { Locale } from "@/lib/i18n/locale";
 
 export const TENANT_CHAT_USAGE_SOURCE_ID = "surface:tenant_chat";
 
+const analyticsBucketLabelFormatters = new Map<string, Intl.DateTimeFormat>();
+
 export type AnalyticsRequestVolumePoint = {
   bucket: string;
   label: string;
@@ -116,18 +118,27 @@ function formatBucketLabel(value: string, range: LiveAnalyticsRange, locale: Loc
     return value;
   }
 
-  const language = locale === "ko" ? "ko-KR" : "en-US";
-  if (range === "1w") {
-    return new Intl.DateTimeFormat(language, {
-      day: "numeric",
-      month: "numeric",
-      timeZone: "UTC"
-    }).format(date);
+  return analyticsBucketLabelFormatter(range, locale).format(date);
+}
+
+function analyticsBucketLabelFormatter(range: LiveAnalyticsRange, locale: Locale) {
+  const key = `${locale}:${range}`;
+  const cached = analyticsBucketLabelFormatters.get(key);
+  if (cached) {
+    return cached;
   }
 
-  return new Intl.DateTimeFormat(language, {
-    hour: "2-digit",
-    minute: range === "1d" ? undefined : "2-digit",
-    timeZone: "UTC"
-  }).format(date);
+  const language = locale === "ko" ? "ko-KR" : "en-US";
+  const formatter = new Intl.DateTimeFormat(
+    language,
+    range === "1w"
+      ? { day: "numeric", month: "numeric", timeZone: "UTC" }
+      : {
+          hour: "2-digit",
+          minute: range === "1d" ? undefined : "2-digit",
+          timeZone: "UTC"
+        }
+  );
+  analyticsBucketLabelFormatters.set(key, formatter);
+  return formatter;
 }

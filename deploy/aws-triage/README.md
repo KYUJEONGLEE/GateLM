@@ -861,6 +861,14 @@ containers running. A failed post-cutover health check restores the previous
 application image tags and recreates the previous containers. Temporary rollback
 tags are removed only after a successful deployment or successful rollback.
 
+Before Prisma migrations, the deploy script checks whether the pending Tenant Chat
+policy-impact migration would backfill an existing invocation-log table. Automatic
+cutover accepts at most 10,000 rows by default and fails closed if the exact count
+cannot finish within 10 seconds. `GATELM_TENANT_CHAT_POLICY_IMPACT_MAX_AUTO_BACKFILL_ROWS`
+may lower or raise that reviewed limit. A larger table requires a maintenance-window
+run with `GATELM_ALLOW_LARGE_TENANT_CHAT_POLICY_IMPACT_BACKFILL=true`; routine GitHub
+Actions deployment does not set this override.
+
 Database migrations are forward-only. Application rollback does not reverse a
 schema migration; use the PostgreSQL dump and Tenant Chat secret directory from
 the same deployment backup for a deliberate paired restore. Never restore either
