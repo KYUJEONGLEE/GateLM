@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from time import perf_counter
 
@@ -232,6 +232,7 @@ class BatchWorkItem:
     item_index: int
     prompt_text: str
     rule_signals: list[SafetySignal]
+    model_candidate_signals: list[SafetySignal]
     model_detections: list[Detection]
 
 
@@ -354,6 +355,7 @@ class AiSafetyDetectorService:
         detector_runtime: str = "onnx",
         ml_allowed_detector_types: tuple[str, ...] | None = None,
         ml_min_confidence_by_detector_type: Mapping[str, float] | None = None,
+        person_name_model_only: bool = False,
     ) -> None:
         allowed_detector_types = (
             frozenset(ml_allowed_detector_types)
@@ -381,6 +383,10 @@ class AiSafetyDetectorService:
                     "AI safety model does not support every configured ML detector type."
                 )
         self._ml_allowed_detector_types = allowed_detector_types or supported_detector_types
+        if person_name_model_only:
+            if "person_name" not in self._ml_allowed_detector_types:
+                raise ValueError("Person-name model-only mode requires person_name ML support.")
+        self._person_name_model_only = person_name_model_only
         self.adapter = self.adapters[0]
         self.model_id = public_model_id_for_model(self.adapter.model_name)
         self.detectors = detectors
@@ -489,19 +495,35 @@ class AiSafetyDetectorService:
         inputs: list[tuple[int, str]],
         detector_config: dict[str, SafetyDetector],
     ) -> tuple[list[BatchWorkItem], int]:
-        work_items = [
-            BatchWorkItem(
-                item_index=item_index,
-                prompt_text=prompt_text,
-                rule_signals=_fast_rule_signals(
-                    prompt_text,
-                    detector_config,
-                    self.fast_rule_detectors,
-                ),
-                model_detections=[],
+        work_items: list[BatchWorkItem] = []
+        for item_index, prompt_text in inputs:
+            detected_rule_signals = _fast_rule_signals(
+                prompt_text,
+                detector_config,
+                self.fast_rule_detectors,
             )
-            for item_index, prompt_text in inputs
-        ]
+            model_candidate_signals: list[SafetySignal] = []
+            rule_signals = detected_rule_signals
+            if self._person_name_model_only:
+                model_candidate_signals = [
+                    signal
+                    for signal in detected_rule_signals
+                    if signal.detector_type == "person_name"
+                ]
+                rule_signals = [
+                    signal
+                    for signal in detected_rule_signals
+                    if signal.detector_type != "person_name"
+                ]
+            work_items.append(
+                BatchWorkItem(
+                    item_index=item_index,
+                    prompt_text=prompt_text,
+                    rule_signals=rule_signals,
+                    model_candidate_signals=model_candidate_signals,
+                    model_detections=[],
+                )
+            )
         model_invocation_count = 0
         model_plans: list[tuple[PrivacyFilterAdapter, list[tuple[int, MlWindow]]]] = []
         total_model_candidates = 0
@@ -516,6 +538,14 @@ class AiSafetyDetectorService:
             window_refs: list[tuple[int, MlWindow]] = []
             for work_index, work_item in enumerate(work_items):
                 candidates = _ml_context_candidates(work_item.prompt_text, supported_types)
+                candidates.extend(
+                    _ml_candidates_from_rule_signals(
+                        work_item.prompt_text,
+                        work_item.model_candidate_signals,
+                        supported_types,
+                        existing_candidates=candidates,
+                    )
+                )
                 uncovered_candidates = _uncovered_ml_candidates(
                     work_item.prompt_text, work_item.rule_signals, candidates
                 )
@@ -832,6 +862,33 @@ def _ml_candidate_spans(
     candidates: list[MlCandidate],
 ) -> list[tuple[int, int]]:
     return [(candidate.start, candidate.end) for candidate in candidates]
+
+
+def _ml_candidates_from_rule_signals(
+    prompt_text: str,
+    signals: list[SafetySignal],
+    supported_types: Collection[str],
+    *,
+    existing_candidates: list[MlCandidate],
+) -> list[MlCandidate]:
+    return [
+        MlCandidate(
+            start=signal.start,
+            end=signal.end,
+            detector_types=frozenset({signal.detector_type}),
+        )
+        for signal in signals
+        if signal.detector_type in supported_types
+        and not any(
+            _ml_candidate_covered_by_rule_signal(
+                prompt_text,
+                candidate.start,
+                candidate.end,
+                signal,
+            )
+            for candidate in existing_candidates
+        )
+    ]
 
 
 def _ml_context_candidates(

@@ -35,6 +35,10 @@ func NewP0Engine() Engine {
 	return NewEngine(NewP0Registry(), DefaultSecurityPolicyVersionID)
 }
 
+func NewP0EngineWithoutPersonName() Engine {
+	return NewEngine(NewP0RegistryWithoutPersonName(), DefaultSecurityPolicyVersionID)
+}
+
 func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 	securityPolicyVersionID := strings.TrimSpace(req.SecurityPolicyVersionID)
 	if securityPolicyVersionID == "" {

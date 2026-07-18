@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL, PrivacyFilterAdapter
+from app.adapters.safety.privacy_filter_adapter import (
+    GATELM_KOELECTRA_PII_NER_MODEL,
+    KOELECTRA_PRIVACY_NER_MODEL,
+    PrivacyFilterAdapter,
+)
 from app.schemas.safety import (
     AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
     AI_SAFETY_DETECTOR_CONTRACT_VERSION,
@@ -102,6 +106,93 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
                 model_id="openai/privacy-filter",
                 ml_allowed_detector_types=("person_name",),
             )
+
+    def test_person_name_model_only_requires_person_name_model_support(self) -> None:
+        with self.assertRaisesRegex(ValueError, "requires person_name"):
+            AiSafetyDetectorService(
+                adapter=PrivacyFilterAdapter(
+                    classifier=lambda _text: [],
+                    allowed_detector_types=frozenset({"phone_number"}),
+                ),
+                ml_allowed_detector_types=("phone_number",),
+                person_name_model_only=True,
+            )
+
+    def test_person_name_model_only_rejects_rule_false_positive(self) -> None:
+        prompt = "고객 문의"
+        rule_response = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=lambda _text: [],
+                model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                allowed_detector_types=frozenset({"person_name"}),
+            ),
+            ml_allowed_detector_types=("person_name",),
+        ).detect(detect_request(prompt))
+        classifier_inputs: list[str] = []
+        model_only_response = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=lambda text: classifier_inputs.append(text) or [],
+                model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                allowed_detector_types=frozenset({"person_name"}),
+            ),
+            ml_allowed_detector_types=("person_name",),
+            person_name_model_only=True,
+        ).detect(detect_request(prompt))
+
+        self.assertEqual(rule_response.detector_summary.detector_categories, ["person_name"])
+        self.assertEqual(len(classifier_inputs), 1)
+        self.assertEqual(model_only_response.outcome, "passed")
+        self.assertEqual(model_only_response.detector_summary.detector_categories, [])
+
+    def test_person_name_model_only_keeps_other_rules_and_accepts_model_name(self) -> None:
+        prompt = "고객 김민수의 이메일은 person-model-only@example.test 입니다."
+        name_start = prompt.index("김민수")
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=lambda _text: [
+                    {
+                        "entity_group": "PER",
+                        "score": 0.99,
+                        "start": name_start,
+                        "end": name_start + len("김민수"),
+                    }
+                ],
+                model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                allowed_detector_types=frozenset({"person_name"}),
+            ),
+            ml_allowed_detector_types=("person_name",),
+            person_name_model_only=True,
+        )
+
+        response = service.detect(detect_request(prompt))
+
+        self.assertEqual(response.outcome, "redacted")
+        self.assertEqual(
+            response.detector_summary.detector_categories,
+            ["email", "person_name"],
+        )
+        self.assertEqual(response.execution_summary.accepted_model_detection_count, 1)
+        self.assertNotIn("김민수", response.redacted_prompt)
+        self.assertNotIn("person-model-only@example.test", response.redacted_prompt)
+
+    def test_person_name_model_only_handles_full_batch_without_duplicate_candidates(self) -> None:
+        classifier = RecordingBatchClassifier()
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=classifier,
+                model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                allowed_detector_types=frozenset({"person_name"}),
+            ),
+            ml_allowed_detector_types=("person_name",),
+            person_name_model_only=True,
+        )
+
+        response = service.detect_batch(
+            batch_request(*("고객 김민수의 문의" for _ in range(64)))
+        )
+
+        self.assertEqual(len(response.results), 64)
+        self.assertTrue(all(item.outcome == "passed" for item in response.results))
 
     def test_ml_allowlist_discards_disallowed_output_from_injected_adapter(self) -> None:
         prompt = "secret reference synthetic marker"

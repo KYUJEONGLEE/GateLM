@@ -271,7 +271,9 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	}
 
 	maskingEngine := routerOptions.MaskingEngine
-	if maskingEngine == nil {
+	if cfg.AISafetySidecar.PersonNameModelOnly {
+		maskingEngine = maskdomain.NewP0EngineWithoutPersonName()
+	} else if maskingEngine == nil {
 		maskingEngine = maskdomain.NewP0Engine()
 	}
 	if cfg.AISafetySidecar.Enabled {

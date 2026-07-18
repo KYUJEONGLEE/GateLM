@@ -42,6 +42,7 @@ var aiSafetySidecarEnvKeys = []string{
 	"GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET",
 	"GATEWAY_AI_SAFETY_SIDECAR_LOCALE",
 	"GATEWAY_AI_SAFETY_SIDECAR_MODE",
+	"GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY",
 }
 
 var runtimeSnapshotCacheEnvKeys = []string{
@@ -198,6 +199,9 @@ func TestAISafetySidecarConfigDefaults(t *testing.T) {
 	if cfg.AISafetySidecar.Mode != "enforce" {
 		t.Fatalf("unexpected sidecar mode: %q", cfg.AISafetySidecar.Mode)
 	}
+	if cfg.AISafetySidecar.PersonNameModelOnly {
+		t.Fatal("person-name model-only evaluation should be disabled by default")
+	}
 	if !cfg.RuntimeSnapshotCache.Enabled {
 		t.Fatal("runtime snapshot cache should be enabled by default")
 	}
@@ -256,6 +260,50 @@ func TestAISafetySidecarConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if cfg.AISafetySidecar.Mode != "shadow" {
 		t.Fatalf("unexpected sidecar mode: %q", cfg.AISafetySidecar.Mode)
+	}
+}
+
+func TestAISafetyPersonNameModelOnlyLoadsSafeEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	t.Setenv("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY", "true")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.AISafetySidecar.PersonNameModelOnly {
+		t.Fatal("person-name model-only evaluation should be enabled")
+	}
+}
+
+func TestAISafetyPersonNameModelOnlyRejectsUnsafeSidecarConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		key         string
+		value       string
+		wantErrPart string
+	}{
+		{name: "disabled sidecar", key: "GATEWAY_AI_SAFETY_SIDECAR_ENABLED", value: "false", wantErrPart: "SIDECAR_ENABLED=true"},
+		{name: "shadow mode", key: "GATEWAY_AI_SAFETY_SIDECAR_MODE", value: "shadow", wantErrPart: "SIDECAR_MODE=enforce"},
+		{name: "blank endpoint", key: "GATEWAY_AI_SAFETY_SIDECAR_URL", value: " ", wantErrPart: "SIDECAR_URL"},
+		{name: "blank model", key: "GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", value: " ", wantErrPart: "SIDECAR_MODEL_ID"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetSemanticCacheEnv(t)
+			resetAISafetySidecarEnv(t)
+			resetRuntimeSnapshotCacheEnv(t)
+			resetProviderCatalogCacheEnv(t)
+			t.Setenv("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY", "true")
+			t.Setenv(tc.key, tc.value)
+
+			_, err := LoadWithError()
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrPart) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErrPart, err)
+			}
+		})
 	}
 }
 
