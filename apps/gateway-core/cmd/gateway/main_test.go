@@ -475,6 +475,26 @@ func TestTenantChatLocalMaskingEnginePersonNameModelOnlyExcludesOnlyPersonRule(t
 	}
 }
 
+func TestTenantChatFallbackMaskingEngineOnlyEnablesFullRulesForPersonNameModelOnlyMode(t *testing.T) {
+	if tenantChatFallbackMaskingEngine(false) != nil {
+		t.Fatal("default mode must not add a duplicate Tenant Chat fallback engine")
+	}
+	fallback := tenantChatFallbackMaskingEngine(true)
+	if fallback == nil {
+		t.Fatal("person-name model-only mode must configure a full-rule Tenant Chat fallback engine")
+	}
+	result, err := fallback.Apply(context.Background(), maskdomain.ApplyRequest{
+		Prompt: "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+	})
+	if err != nil {
+		t.Fatalf("apply Tenant Chat full-rule fallback: %v", err)
+	}
+	if result.Action != maskdomain.ActionRedacted ||
+		len(result.DetectedTypes) != 1 || result.DetectedTypes[0] != "person_name" {
+		t.Fatalf("Tenant Chat fallback did not restore person-name rules: %+v", result)
+	}
+}
+
 func TestBuildStaticProviderCatalogUsesExplicitMockBootstrapOnly(t *testing.T) {
 	catalog := buildStaticProviderCatalog(config.Config{
 		ProviderCatalogID:      "catalog-test",

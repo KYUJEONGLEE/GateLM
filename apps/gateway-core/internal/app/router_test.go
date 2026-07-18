@@ -41,6 +41,30 @@ func TestResolveRouterMaskingEnginePreservesConfiguredEngineInPersonNameModelOnl
 	}
 }
 
+func TestResolveRouterFallbackMaskingEngineOnlyEnablesFullRulesForPersonNameModelOnlyMode(t *testing.T) {
+	if resolveRouterFallbackMaskingEngine(nil, false) != nil {
+		t.Fatal("default mode must not add a duplicate fallback engine")
+	}
+	configured := &routerTestInjectedMaskingEngine{}
+	if resolveRouterFallbackMaskingEngine(configured, true) != nil {
+		t.Fatal("configured engine must keep ownership of its fallback behavior")
+	}
+	fallback := resolveRouterFallbackMaskingEngine(nil, true)
+	if fallback == nil {
+		t.Fatal("person-name model-only mode must configure a full-rule fallback engine")
+	}
+	result, err := fallback.Apply(context.Background(), maskdomain.ApplyRequest{
+		Prompt: "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+	})
+	if err != nil {
+		t.Fatalf("apply full-rule fallback: %v", err)
+	}
+	if result.Action != maskdomain.ActionRedacted ||
+		len(result.DetectedTypes) != 1 || result.DetectedTypes[0] != "person_name" {
+		t.Fatalf("fallback engine did not restore person-name rules: %+v", result)
+	}
+}
+
 func TestPublicRouterDoesNotExposePrivateRAGEmbeddings(t *testing.T) {
 	router := NewRouter(config.Config{}, provider.NewRegistry("mock"), nil)
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/rag/embeddings", strings.NewReader(`{"purpose":"RAG_QUERY","profileVersion":1,"inputs":["synthetic"]}`))

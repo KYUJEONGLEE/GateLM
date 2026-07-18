@@ -276,15 +276,16 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	)
 	if cfg.AISafetySidecar.Enabled {
 		maskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
-			Local:       maskingEngine,
-			EndpointURL: cfg.AISafetySidecar.EndpointURL,
-			Timeout:     cfg.AISafetySidecar.Timeout,
-			ModelID:     cfg.AISafetySidecar.ModelID,
-			DetectorSet: cfg.AISafetySidecar.DetectorSet,
-			Locale:      cfg.AISafetySidecar.Locale,
-			Mode:        cfg.AISafetySidecar.Mode,
-			Surface:     "gateway_v1",
-			Metrics:     metricsRegistry,
+			Local:         maskingEngine,
+			FallbackLocal: resolveRouterFallbackMaskingEngine(routerOptions.MaskingEngine, cfg.AISafetySidecar.PersonNameModelOnly),
+			EndpointURL:   cfg.AISafetySidecar.EndpointURL,
+			Timeout:       cfg.AISafetySidecar.Timeout,
+			ModelID:       cfg.AISafetySidecar.ModelID,
+			DetectorSet:   cfg.AISafetySidecar.DetectorSet,
+			Locale:        cfg.AISafetySidecar.Locale,
+			Mode:          cfg.AISafetySidecar.Mode,
+			Surface:       "gateway_v1",
+			Metrics:       metricsRegistry,
 		})
 	}
 	observabilityToken := cfg.ObservabilityInternalToken
@@ -398,6 +399,16 @@ func resolveRouterMaskingEngine(
 	}
 	if personNameModelOnly {
 		return maskdomain.NewP0EngineWithoutPersonName()
+	}
+	return maskdomain.NewP0Engine()
+}
+
+func resolveRouterFallbackMaskingEngine(
+	configured handlers.MaskingEngine,
+	personNameModelOnly bool,
+) aiservice.LocalMaskingEngine {
+	if configured != nil || !personNameModelOnly {
+		return nil
 	}
 	return maskdomain.NewP0Engine()
 }
