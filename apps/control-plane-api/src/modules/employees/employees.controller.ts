@@ -32,6 +32,11 @@ import {
   EmployeeUsageResponseDto,
   ListEmployeeUsageQueryDto,
 } from './dto/employee-usage.dto';
+import {
+  EmployeeSecurityResponseDto,
+  ListEmployeeSecurityQueryDto,
+} from './dto/employee-security.dto';
+import { EmployeeSecurityService } from './employee-security.service';
 import { EmployeeUsageService } from './employee-usage.service';
 import { EmployeesService } from './employees.service';
 
@@ -41,7 +46,16 @@ export class EmployeesController {
   constructor(
     private readonly employeesService: EmployeesService,
     private readonly employeeUsageService: EmployeeUsageService,
+    private readonly employeeSecurityService: EmployeeSecurityService,
   ) {}
+
+  @Get('tenants/:tenantId/employees/security')
+  async listEmployeeSecurity(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Query() query: ListEmployeeSecurityQueryDto,
+  ): Promise<EmployeeSecurityResponseDto> {
+    return this.employeeSecurityService.listEmployeeSecurity(tenantId, query);
+  }
 
   @Get('tenants/:tenantId/employees/usage')
   async listEmployeeUsage(

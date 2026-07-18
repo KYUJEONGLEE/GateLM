@@ -266,6 +266,124 @@ export function AnalyticsEmployeeTokenBarChart({
   );
 }
 
+export type AnalyticsEmployeeStackedRow = {
+  id: string;
+  label: string;
+  primary: number;
+  secondary: number;
+};
+
+export function AnalyticsEmployeeStackedChart({
+  ariaLabel,
+  kind = "count",
+  primaryLabel,
+  rows,
+  secondaryLabel
+}: {
+  ariaLabel: string;
+  kind?: AnalyticsValueKind;
+  primaryLabel: string;
+  rows: AnalyticsEmployeeStackedRow[];
+  secondaryLabel: string;
+}) {
+  const theme = useAnalyticsChartTheme();
+  const visibleRows = useMemo(
+    () =>
+      [...rows]
+        .filter((row) => row.primary > 0 || row.secondary > 0)
+        .sort(
+          (left, right) =>
+            right.primary + right.secondary - (left.primary + left.secondary) ||
+            left.label.localeCompare(right.label)
+        )
+        .slice(0, 10),
+    [rows]
+  );
+  const option = useMemo<AnalyticsEChartOption>(
+    () => ({
+      animationDuration: 360,
+      color: ["#2563eb", "#0f8f66"],
+      grid: { bottom: 34, left: 132, right: 56, top: 50 },
+      legend: {
+        data: [primaryLabel, secondaryLabel],
+        icon: "circle",
+        itemHeight: 8,
+        itemWidth: 8,
+        right: 4,
+        textStyle: { color: theme.label, fontSize: 13, fontWeight: 800 },
+        top: 0
+      },
+      tooltip: analyticsTooltip(tooltipUnit(kind), theme),
+      xAxis: {
+        axisLabel: {
+          color: theme.axis,
+          fontSize: 13,
+          fontWeight: 700,
+          formatter: (value: number) => formatValue(value, kind, true)
+        },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
+        splitLine: { lineStyle: { color: theme.grid } },
+        type: "value"
+      },
+      yAxis: {
+        axisLabel: {
+          color: theme.label,
+          fontSize: 13,
+          fontWeight: 800,
+          formatter: (value: string) => value.length > 13 ? `${value.slice(0, 13)}…` : value
+        },
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        data: visibleRows.map((row) => row.label),
+        inverse: true,
+        type: "category"
+      },
+      series: [
+        {
+          barMaxWidth: 30,
+          data: visibleRows.map((row) => row.primary),
+          emphasis: { focus: "series" },
+          itemStyle: { borderRadius: [4, 0, 0, 4] },
+          name: primaryLabel,
+          stack: "employee",
+          type: "bar"
+        },
+        {
+          barMaxWidth: 30,
+          data: visibleRows.map((row) => row.secondary),
+          emphasis: { focus: "series" },
+          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          label: {
+            color: theme.label,
+            fontSize: 13,
+            fontWeight: 800,
+            formatter: ({ dataIndex }: { dataIndex: number }) => {
+              const row = visibleRows[dataIndex];
+              return row ? formatValue(row.primary + row.secondary, kind, false) : "";
+            },
+            position: "right",
+            show: true
+          },
+          name: secondaryLabel,
+          stack: "employee",
+          type: "bar"
+        }
+      ]
+    }),
+    [kind, primaryLabel, secondaryLabel, theme, visibleRows]
+  );
+
+  return (
+    <AnalyticsEChart
+      ariaLabel={ariaLabel}
+      className="analytics-v3-employee-stacked-chart"
+      option={option}
+    />
+  );
+}
+
 export function AnalyticsCompositionChart({
   ariaLabel,
   rows
