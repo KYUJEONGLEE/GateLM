@@ -881,6 +881,136 @@ before registering credentials. If Gateway returns a sanitized runtime config
 error, confirm the selected project/application is active and has a published
 RuntimeSnapshot before debugging provider credentials.
 
+## Four-host production clone
+
+`docker-compose.prod-clone.yml` preserves the single-host production service
+settings while moving only network endpoints across the existing isolated VPC:
+
+| Host | Private IP | Clone services |
+| --- | --- | --- |
+| Edge | `10.77.1.10` | Web, Chat Web, Caddy |
+| Gateway | `10.77.1.20` | Gateway public `8080`, private `8081` |
+| Data | `10.77.1.30` | PostgreSQL, Redis, Control Plane `3001`, Chat API `3003`, optional RAG Worker |
+| AI | `10.77.1.40` | AI Service `8001`, Mock Provider `8090` |
+
+The clone has its own Compose project and explicit volumes:
+
+- `gatelm-prod-clone-postgres-data`
+- `gatelm-prod-clone-redis-data`
+- `gatelm-prod-clone-caddy-data`
+- `gatelm-prod-clone-caddy-config`
+
+The four names are explicit overlay values, not implicit Compose names. Keep the
+13d baseline immutable and use a new `gatelm-prod-clone-*` volume name for every
+fresh current-production or final-cutover restore. The restore attestation is
+bound to that exact volume name, so switching only the environment value cannot
+silently attach an unverified database.
+
+Never run `down -v` for the clone. The existing `gatelm-perf-distributed`
+project and its volumes are independent and must be retained for rollback and
+benchmark comparison.
+
+Use two protected environment files on every role host. Copy the exact
+production `.env` to `.env.prod-clone.base`, copy `prod-clone.env.example` to
+`.env.prod-clone`, and set mode `600` on both. The overlay pins the application
+and database source SHA. `benchmark` and `rehearsal` phases fail closed unless
+Mock latency is exactly 100 ms, Provider env bridges are empty, SMTP points to a
+closed local port, and the internal-CA Caddyfile is selected. Stored production
+Provider credentials remain encrypted in the cloned database; use only a
+reviewed Mock-only test application for load generation.
+
+The clone intentionally replaces only the production Compose bootstrap Mock
+with `scripts/dev/fast-noop-mock-provider.mjs` from the exact pinned source SHA.
+This test-only dependency keeps the required 100 ms delay while adding OpenAI
+SSE and per-request call statistics. It does not change Gateway application
+code or enable a live Provider, and it lets smoke and load evidence prove the
+Provider call count rather than infer it from an HTTP 200.
+
+The source checkout referenced by `GATELM_PROD_CLONE_BUILD_CONTEXT` is separate
+from the deployment-control checkout and must be clean at the declared full SHA.
+This keeps the original `13d2964f` topology baseline separate from later code
+changes such as `16430bea`. The base clone Compose intentionally omits the three
+later auth-cache variables. For a current-production clone, set
+`GATELM_PROD_CLONE_AUTH_CACHE_CONFIG=true`; the scripts then add
+`docker-compose.prod-clone.auth-cache.yml`. A current-production clone also uses
+the current deployed SHA and a fresh dump instead.
+
+Restore a verified custom-format dump on the Data host before opening clone
+ports. The restore Compose file publishes no host ports and refuses to reuse an
+existing volume:
+
+```bash
+bash scripts/prod-clone-restore-db.sh \
+  --dump /home/ubuntu/prod-clone-transfer/postgres.dump \
+  --sha256-file /home/ubuntu/prod-clone-transfer/postgres.dump.sha256
+```
+
+An empty Redis volume is acceptable for the isolated benchmark/rehearsal only.
+In the exact `13d2964f` code, durable Tenant Chat turn, admission, reservation,
+and RAG idempotency records live in PostgreSQL. Redis exact-cache entries,
+fixed-window/token-bucket counters, Tenant Chat token counters, and workload JTI
+guards all expire; employee daily usage also has an expiry and a database seed
+path. A cold Redis still resets live rate-limit windows and removes already
+consumed JTI guards. The longest 13d workload-token guard is 70 seconds
+(60-second maximum lifetime plus clock skew). Before a real cutover, recheck the
+source Redis key count and either migrate its state or stop token issuance and
+drain for at least 70 seconds. Do not infer final-cutover safety from the earlier
+zero-key observation.
+
+Start in dependency order. Stop the conflicting legacy performance containers
+first, but do not delete their volumes:
+
+```text
+AI -> Data -> Gateway -> Edge -> database verification -> private smoke
+```
+
+```bash
+bash scripts/prod-clone-up.sh --role ai --build
+bash scripts/prod-clone-up.sh --role data --build
+bash scripts/prod-clone-bootstrap-benchmark.sh
+bash scripts/prod-clone-up.sh --role gateway --build
+bash scripts/prod-clone-verify-gateway.sh --role gateway --request-id request_prod_clone_smoke_<unique-id>
+# Run on Data with the same request ID.
+bash scripts/prod-clone-verify-gateway.sh --role data --request-id request_prod_clone_smoke_<unique-id>
+# Repeat both commands with a new request ID and --stream to verify SSE through [DONE].
+bash scripts/prod-clone-up.sh --role edge --build
+bash scripts/prod-clone-verify-iam.sh
+bash scripts/prod-clone-verify-db.sh
+bash scripts/prod-clone-smoke.sh
+```
+
+Gateway smoke resets the isolated Mock call statistics before each request so
+it can prove an exact call count. Never run that verifier concurrently with a
+formal k6 load run; load evidence owns the Mock statistics for the full run.
+
+Do not start the separate `rag` profile until `rag_jobs_active` has been reviewed.
+Starting it resumes `PENDING`, expired `RUNNING`, and `RETRY_WAIT` jobs against
+the production S3 bucket. The Data instance profile alone receives the matching
+S3 and KMS permissions; the other role profiles receive SSM only. After the
+active-job count is confirmed as zero, start the worker and verify the actual
+container credential path, not only the host profile:
+
+```bash
+bash scripts/prod-clone-up.sh --role rag --build
+bash scripts/prod-clone-verify-iam.sh --runtime
+bash scripts/prod-clone-verify-db.sh
+```
+
+Both IAM checks create only an empty KMS-encrypted smoke object and delete it
+before returning success. The online database verification also decrypts every
+stored Provider Credential inside the Control Plane container and reports only
+the success count; it never prints or sends plaintext credentials.
+
+During rehearsal, `EdgeIngressCidr` must remain operator-only and
+`Caddyfile.prod-clone.rehearsal` uses an internal certificate. Test with the
+private IP or `curl --resolve`; do not change Route 53 or the production EIP.
+At cutover, take a final dump after a write freeze, restore it to a newly
+verified clone volume, switch the overlay to `production`, select the production
+Caddyfile, open Edge `80/443`, and run authenticated Chat/RAG/Gateway smoke tests.
+Reassociate the existing EIP only after all private checks pass. Rollback is EIP
+reassociation to the original EC2 instance; keep the original instance and all
+Docker volumes intact.
+
 ## Stop Or Remove
 
 Stop containers without deleting volumes:

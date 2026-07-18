@@ -1,17 +1,23 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: GateLM isolated four-host distributed performance environment.
+Description: GateLM isolated four-host distributed performance and production-clone environment.
 
 Parameters:
   OperatorCidr:
     Type: String
     AllowedPattern: "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$"
     Description: Current trusted operator IPv4 address in /32 form for SSH only.
+  EdgeIngressCidr:
+    Type: String
+    Default: 127.0.0.1/32
+    AllowedPattern: "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:[0-9]|[12][0-9]|3[0-2])$"
+    Description: HTTP and HTTPS source CIDR. Keep operator-only for rehearsal; use 0.0.0.0/0 only at production cutover.
   SshKeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Existing EC2 key pair that matches the operator PEM file.
   UbuntuAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Type: AWS::EC2::Image::Id
+    Default: ami-0344289fbfd3bb8f0
+    Description: Pinned AMI already used by all four hosts; update only through a reviewed replacement plan.
   LoadGeneratorInstanceType:
     Type: String
     Default: c7i.xlarge
@@ -24,6 +30,16 @@ Parameters:
   MockInstanceType:
     Type: String
     Default: c7i.large
+  RagS3BucketName:
+    Type: String
+    Default: gatelm-rag-production-431772290654-ap-northeast-2
+    AllowedPattern: "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    Description: Existing production RAG bucket reused by the isolated clone.
+  RagKmsKeyArn:
+    Type: String
+    Default: arn:aws:kms:ap-northeast-2:431772290654:key/d4fa8d01-d97d-471a-9504-b518e5930251
+    AllowedPattern: "^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]{36}$"
+    Description: Existing production RAG KMS key used through S3 only.
 
 Resources:
   PerfVpc:
@@ -101,6 +117,81 @@ Resources:
       RouteTableId: !Ref PerfRouteTable
       SubnetId: !Ref PerfSubnet
 
+  PerfNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  PerfNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref PerfNodeRole]
+
+  PerfDataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: GateLMProductionCloneRagObjectStorage
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListProductionRagBucket
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:aws:s3:::${RagS3BucketName}
+              - Sid: ManageProductionRagObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:aws:s3:::${RagS3BucketName}/*
+              - Sid: UseProductionRagKmsThroughS3
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:GenerateDataKey
+                Resource: !Ref RagKmsKeyArn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+                    kms:CallerAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: CloneRole
+          Value: data
+
+  PerfDataInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref PerfDataRole]
+
   LoadGeneratorSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -113,10 +204,62 @@ Resources:
           ToPort: 22
           CidrIp: !Ref OperatorCidr
           Description: SSH from current trusted operator IPv4 only
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref EdgeIngressCidr
+          Description: Rehearsal or public HTTP to the production-clone Edge only
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref EdgeIngressCidr
+          Description: Rehearsal or public HTTPS to the production-clone Edge only
       SecurityGroupEgress:
-        - IpProtocol: -1
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
-          Description: Package install, image pull, and private test traffic
+          Description: Package and certificate HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Package SSM and certificate HTTPS traffic
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS fallback
+        - IpProtocol: udp
+          FromPort: 123
+          ToPort: 123
+          CidrIp: 169.254.169.123/32
+          Description: Amazon Time Sync Service
+        - IpProtocol: tcp
+          FromPort: 18080
+          ToPort: 18080
+          CidrIp: 10.77.1.20/32
+          Description: Existing performance Gateway load traffic
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.77.1.20/32
+          Description: Edge to production-clone Gateway
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          CidrIp: 10.77.1.30/32
+          Description: Edge to Control Plane
+        - IpProtocol: tcp
+          FromPort: 3003
+          ToPort: 3003
+          CidrIp: 10.77.1.30/32
+          Description: Edge Chat Web to private Chat API
       Tags:
         - Key: Name
           Value: gatelm-perf-distributed-loadgen
@@ -142,10 +285,62 @@ Resources:
           ToPort: 18080
           SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
           Description: k6 load traffic from dedicated load generator
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: Public data plane from Edge only
       SecurityGroupEgress:
-        - IpProtocol: -1
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
-          Description: Image pull and explicitly permitted private dependencies
+          Description: Package HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Provider package and SSM HTTPS traffic
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS fallback
+        - IpProtocol: udp
+          FromPort: 123
+          ToPort: 123
+          CidrIp: 169.254.169.123/32
+          Description: Amazon Time Sync Service
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          CidrIp: 10.77.1.30/32
+          Description: Gateway to Control Plane
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.77.1.30/32
+          Description: Gateway to PostgreSQL
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: 10.77.1.30/32
+          Description: Gateway to Redis
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          CidrIp: 10.77.1.40/32
+          Description: Gateway to AI Service
+        - IpProtocol: tcp
+          FromPort: 8090
+          ToPort: 8090
+          CidrIp: 10.77.1.40/32
+          Description: Gateway to isolated Mock Provider
       Tags:
         - Key: Name
           Value: gatelm-perf-distributed-gateway
@@ -181,10 +376,62 @@ Resources:
           ToPort: 3001
           SourceSecurityGroupId: !Ref GatewaySecurityGroup
           Description: Control Plane from Gateway only
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: Control Plane from Edge Web only
+        - IpProtocol: tcp
+          FromPort: 3003
+          ToPort: 3003
+          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: Private Chat API from Edge Chat Web only
       SecurityGroupEgress:
-        - IpProtocol: -1
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
-          Description: Image pull and local role traffic
+          Description: Package HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: AWS OAuth package and SSM HTTPS traffic
+        - IpProtocol: tcp
+          FromPort: 465
+          ToPort: 465
+          CidrIp: 0.0.0.0/0
+          Description: Production SMTP over TLS when enabled
+        - IpProtocol: tcp
+          FromPort: 587
+          ToPort: 587
+          CidrIp: 0.0.0.0/0
+          Description: Production SMTP submission when enabled
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS fallback
+        - IpProtocol: udp
+          FromPort: 123
+          ToPort: 123
+          CidrIp: 169.254.169.123/32
+          Description: Amazon Time Sync Service
+        - IpProtocol: tcp
+          FromPort: 8081
+          ToPort: 8081
+          CidrIp: 10.77.1.20/32
+          Description: Chat API and RAG Worker to private Gateway
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          CidrIp: 10.77.1.40/32
+          Description: RAG Worker to AI Service
       Tags:
         - Key: Name
           Value: gatelm-perf-distributed-data
@@ -213,6 +460,16 @@ Resources:
       SourceSecurityGroupId: !Ref DataSecurityGroup
       Description: Control Plane to co-located Redis
 
+  GatewayPrivateDataIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref GatewaySecurityGroup
+      IpProtocol: tcp
+      FromPort: 8081
+      ToPort: 8081
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Private Tenant Chat and RAG traffic from Data only
+
   MockSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -230,10 +487,42 @@ Resources:
           ToPort: 8090
           SourceSecurityGroupId: !Ref GatewaySecurityGroup
           Description: Mock Provider requests from Gateway only
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: AI Safety requests from Gateway only
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          SourceSecurityGroupId: !Ref DataSecurityGroup
+          Description: RAG extraction requests from Data only
       SecurityGroupEgress:
-        - IpProtocol: -1
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
-          Description: Package install and pinned image pull
+          Description: Package HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Package model and SSM HTTPS traffic
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS fallback
+        - IpProtocol: udp
+          FromPort: 123
+          ToPort: 123
+          CidrIp: 169.254.169.123/32
+          Description: Amazon Time Sync Service
       Tags:
         - Key: Name
           Value: gatelm-perf-distributed-mock
@@ -251,6 +540,7 @@ Resources:
       DisableApiTermination: true
       EbsOptimized: true
       ImageId: !Ref UbuntuAmiId
+      IamInstanceProfile: !Ref PerfNodeInstanceProfile
       InstanceInitiatedShutdownBehavior: stop
       InstanceType: !Ref LoadGeneratorInstanceType
       KeyName: !Ref SshKeyName
@@ -292,6 +582,8 @@ Resources:
           Value: perf-distributed
         - Key: Role
           Value: loadgen
+        - Key: CloneRole
+          Value: edge
         - Key: DoNotDelete
           Value: "true"
 
@@ -304,6 +596,7 @@ Resources:
       DisableApiTermination: true
       EbsOptimized: true
       ImageId: !Ref UbuntuAmiId
+      IamInstanceProfile: !Ref PerfNodeInstanceProfile
       InstanceInitiatedShutdownBehavior: stop
       InstanceType: !Ref GatewayInstanceType
       KeyName: !Ref SshKeyName
@@ -345,6 +638,8 @@ Resources:
           Value: perf-distributed
         - Key: Role
           Value: gateway
+        - Key: CloneRole
+          Value: gateway
         - Key: DoNotDelete
           Value: "true"
 
@@ -357,6 +652,7 @@ Resources:
       DisableApiTermination: true
       EbsOptimized: true
       ImageId: !Ref UbuntuAmiId
+      IamInstanceProfile: !Ref PerfDataInstanceProfile
       InstanceInitiatedShutdownBehavior: stop
       InstanceType: !Ref DataInstanceType
       KeyName: !Ref SshKeyName
@@ -398,6 +694,8 @@ Resources:
           Value: perf-distributed
         - Key: Role
           Value: data
+        - Key: CloneRole
+          Value: data
         - Key: DoNotDelete
           Value: "true"
 
@@ -410,6 +708,7 @@ Resources:
       DisableApiTermination: true
       EbsOptimized: true
       ImageId: !Ref UbuntuAmiId
+      IamInstanceProfile: !Ref PerfNodeInstanceProfile
       InstanceInitiatedShutdownBehavior: stop
       InstanceType: !Ref MockInstanceType
       KeyName: !Ref SshKeyName
@@ -451,6 +750,8 @@ Resources:
           Value: perf-distributed
         - Key: Role
           Value: mock
+        - Key: CloneRole
+          Value: ai
         - Key: DoNotDelete
           Value: "true"
 
@@ -491,3 +792,7 @@ Outputs:
     Value: !Ref DataSecurityGroup
   MockSecurityGroupId:
     Value: !Ref MockSecurityGroup
+  PerfNodeInstanceProfileName:
+    Value: !Ref PerfNodeInstanceProfile
+  PerfDataInstanceProfileName:
+    Value: !Ref PerfDataInstanceProfile
