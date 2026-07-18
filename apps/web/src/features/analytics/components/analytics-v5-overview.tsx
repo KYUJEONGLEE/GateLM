@@ -47,7 +47,6 @@ export function AnalyticsV5Overview({
   const text = locale === "ko"
     ? {
         projects: "프로젝트별 사용량",
-        projectsSub: "프로젝트에 귀속된 요청과 비용",
         complex: "고성능 요청",
         cost: "전체 AI 비용",
         costSub: "선택 기간의 실제 Provider 비용",
@@ -64,7 +63,6 @@ export function AnalyticsV5Overview({
       }
     : {
         projects: "Usage by source",
-        projectsSub: "Project/Application and Tenant Chat requests",
         complex: "High-performance requests",
         cost: "Total AI spend",
         costSub: "Observed Provider spend for the selected range",
@@ -124,7 +122,7 @@ export function AnalyticsV5Overview({
           <span>{text.complex}</span>
           <div>
             <strong>{formatPercent(safeRatio(highPerformanceRequests, routedRequests))}</strong>
-            <em>{formatInteger(highPerformanceRequests)}</em>
+            <em>{formatRequestCount(highPerformanceRequests, locale)}</em>
           </div>
           <small>{text.complexSub}</small>
         </article>
@@ -159,7 +157,7 @@ export function AnalyticsV5Overview({
           ) : <AnalyticsV5Empty label={text.empty} />}
         </AnalyticsV5Surface>
 
-        <AnalyticsV5Surface subtitle={text.projectsSub} title={text.projects}>
+        <AnalyticsV5Surface title={text.projects}>
           {projectRows.length ? (
             <AnalyticsV5ProjectUsageChart
               ariaLabel={text.projects}
@@ -209,4 +207,9 @@ function formatMicroUsd(value: number) {
 
 function safeRatio(numerator: number, denominator: number) {
   return denominator > 0 ? numerator / denominator : 0;
+}
+
+function formatRequestCount(value: number, locale: Locale) {
+  const formattedValue = formatInteger(value);
+  return locale === "ko" ? `${formattedValue}건` : `${formattedValue} requests`;
 }

@@ -6,6 +6,7 @@ import {
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
+import { getControlPlaneTenantName } from "@/lib/control-plane/tenants-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ConsoleTenantLayoutProps = {
@@ -30,9 +31,15 @@ export default async function ConsoleTenantLayout({
     notFound();
   }
 
+  const tenantName =
+    auth.currentUser?.tenantName ?? await getControlPlaneTenantName(effectiveTenantId);
+  const currentUser = auth.currentUser && tenantName
+    ? { ...auth.currentUser, tenantName }
+    : auth.currentUser;
+
   return (
     <ConsoleShell
-      currentUser={auth.currentUser}
+      currentUser={currentUser}
       locale={locale}
       tenantId={effectiveTenantId}
     >

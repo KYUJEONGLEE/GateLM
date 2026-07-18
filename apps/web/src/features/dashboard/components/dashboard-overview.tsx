@@ -461,13 +461,6 @@ export function DashboardOverviewView({
         <div>
           <h1>{text.title}</h1>
         </div>
-        <Link
-          aria-label={text.refreshDashboard}
-          className="dashboard-refresh-link"
-          href={dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })}
-        >
-          <RotateCcw aria-hidden="true" size={18} strokeWidth={2.3} />
-        </Link>
       </section>
 
       <section className="dashboard-summary-bar" aria-label={text.dashboardFilters}>
@@ -479,6 +472,8 @@ export function DashboardOverviewView({
           filters={filters}
           locale={locale}
           projects={projects}
+          refreshHref={dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })}
+          refreshLabel={text.refreshDashboard}
           rangeOptions={dashboardRanges.map((range) => ({
             label: rangeLabel(range, locale),
             value: range

@@ -7,6 +7,10 @@ const panelsSourceUrl = new URL(
   "../../../../../features/analytics/components/analytics-panels.tsx",
   import.meta.url
 );
+const chartsSourceUrl = new URL(
+  "../../../../../features/analytics/components/analytics-charts.tsx",
+  import.meta.url
+);
 const filterSelectSourceUrl = new URL(
   "../../../../../features/analytics/components/analytics-filter-select.tsx",
   import.meta.url
@@ -42,7 +46,7 @@ test("analytics filters update only the panel with transition state and client c
   expect(pageSource).toContain("<AnalyticsFilterSelect");
   expect(pageSource).toContain("<AnalyticsFilterFrame");
   expect(pageSource).toContain("<AnalyticsPanelTransition>");
-  expect(pageSource).toContain('className="analytics-v3-select-caret"');
+  expect(pageSource.match(/className="analytics-v3-select-caret"/g)).toHaveLength(3);
   expect(pageSource).not.toContain("SlidersHorizontal");
   expect(pageSource).not.toContain('type="submit"');
   expect(filterSelectSource).toContain("startTransition(() =>");
@@ -91,8 +95,8 @@ test("performance delegates tenant-level surface union to the Gateway contract",
     'includeTenantChat: activeTab === "performance" && shouldIncludeTenantChat'
   );
   expect(pageSource).toContain("projectId: filters.projectId || undefined");
-  expect(pageSource).toContain('provider: activeTab === "performance" ? filters.provider || undefined : undefined');
-  expect(pageSource).toContain('model: activeTab === "performance" ? filters.model || undefined : undefined');
+  expect(pageSource).not.toContain('provider: activeTab === "performance"');
+  expect(pageSource).not.toContain('model: activeTab === "performance"');
   expect(pageSource).toContain("performance={performance}");
 });
 
@@ -110,13 +114,42 @@ test("performance keeps both requested surfaces visible when one has no requests
   expect(panelsSource).not.toContain("surfaceSummaries ?? []).filter((row) => row.totalRequests > 0)");
 });
 
-test("performance headline omits surfaces without a p95 value", async () => {
+test("performance overlays both surfaces and defaults the percentile selector to p95", async () => {
+  const [panelsSource, chartsSource] = await Promise.all([
+    readFile(panelsSourceUrl, "utf8"),
+    readFile(chartsSourceUrl, "utf8")
+  ]);
+
+  expect(panelsSource).toContain("points={latencyPoints}");
+  expect(panelsSource).toContain("surfaces={latencySurfaces}");
+  expect(panelsSource).not.toContain("point.surface === summary.surface");
+  expect(chartsSource).toContain('useState<LatencyPercentile>("p95")');
+  expect(chartsSource).toContain("aria-pressed={percentile === value}");
+  expect(chartsSource).toContain("latencySurfaceColors[surface]");
+});
+
+test("usage appends the Korean count unit to active models", async () => {
+  const panelsSource = await readFile(panelsSourceUrl, "utf8");
+
+  expect(panelsSource).toContain('`${formatInteger(model.usage.activeModels)}건`');
+});
+
+test("cache appends the Korean count unit to hits and eligible requests", async () => {
+  const panelsSource = await readFile(panelsSourceUrl, "utf8");
+
+  expect(panelsSource).toContain('`${formatInteger(model.cache.hitRequests)}건`');
+  expect(panelsSource).toContain('`${formatInteger(model.cache.eligibleRequests)}건 ${text.eligible}`');
+});
+
+test("performance headline omits surfaces without a p95 value and hides the Chat prefix", async () => {
   const panelsSource = await readFile(panelsSourceUrl, "utf8");
 
   expect(panelsSource).toContain(
     "const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null)"
   );
   expect(panelsSource).toContain("value: headlineSurfaceSummaries.length");
+  expect(panelsSource).toContain('row.surface === "tenant_chat"');
+  expect(panelsSource).toContain("? formatMs(row.p95LatencyMs)");
 });
 
 test("policy impact delegates Project/Application and Tenant Chat union to the Gateway contract", async () => {
@@ -138,15 +171,19 @@ test("reliability uses the unified tenant aggregate instead of reconstructing fr
   expect(pageSource).not.toContain("getLiveGatewayRequestLogs({");
 });
 
-test("performance places provider filters before the shared range and project filters", async () => {
+test("all analytics tabs share employee, range, and project filters in that order", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
-  const providerFilterIndex = pageSource.indexOf("<span>{text.provider}</span>");
+  const employeeFilterIndex = pageSource.indexOf("<span>{text.employee}</span>");
   const rangeFilterIndex = pageSource.indexOf("<span>{text.range}</span>");
   const projectFilterIndex = pageSource.indexOf("<span>{text.project}</span>");
 
-  expect(providerFilterIndex).toBeGreaterThan(-1);
-  expect(rangeFilterIndex).toBeGreaterThan(providerFilterIndex);
+  expect(employeeFilterIndex).toBeGreaterThan(-1);
+  expect(rangeFilterIndex).toBeGreaterThan(employeeFilterIndex);
   expect(projectFilterIndex).toBeGreaterThan(rangeFilterIndex);
+  expect(pageSource).not.toContain("showEmployeeFilter");
+  expect(pageSource).not.toContain("showProviderModelFilters");
+  expect(pageSource).not.toContain("<span>{text.provider}</span>");
+  expect(pageSource).not.toContain("<span>{text.model}</span>");
   expect(pageSource).not.toContain("analytics-v3-filter-row-secondary");
 });
 
@@ -158,11 +195,11 @@ test("analytics preserves an unavailable selected project in the filter", async 
   expect(pageSource).toContain('projectUnavailable: "선택한 프로젝트를 사용할 수 없음"');
 });
 
-test("usage cost and security load tenant-scoped employee evidence", async () => {
+test("the shared employee selector loads tenant-scoped options for every analytics tab", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
-  expect(pageSource).toContain('activeTab === "usage" || activeTab === "cost"');
-  expect(pageSource).toContain('activeTab === "security"');
+  expect(pageSource).toContain('const needsEmployeeUsage = !projectScoped && activeTab !== "security"');
+  expect(pageSource).toContain('const needsEmployeeSecurity = !projectScoped && activeTab === "security"');
   expect(pageSource).toContain("getAllEmployeeUsage({");
   expect(pageSource).toContain("getEmployeeSecurity({");
   expect(pageSource).toContain('name="employeeId"');
