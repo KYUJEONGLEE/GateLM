@@ -85,9 +85,28 @@ func (s *Store) findMatchingCredential(ctx context.Context, plaintext string, qu
 	if err != nil {
 		return credentialCandidate{}, fmt.Errorf("query gateway credential candidates: %w", err)
 	}
-	defer rows.Close()
+	candidates, err := readCredentialCandidates(rows)
+	if err != nil {
+		return credentialCandidate{}, err
+	}
 
 	var matched credentialCandidate
+	for _, candidate := range candidates {
+		if credentialSecretMatches(candidate.hashAlgorithm, candidate.secretHash, plaintext) {
+			matched = candidate
+		}
+	}
+	if matched.id == "" {
+		return credentialCandidate{}, invalidErr
+	}
+
+	return matched, nil
+}
+
+func readCredentialCandidates(rows pgx.Rows) ([]credentialCandidate, error) {
+	defer rows.Close()
+
+	candidates := make([]credentialCandidate, 0, 1)
 	for rows.Next() {
 		var candidate credentialCandidate
 		if err := rows.Scan(
@@ -98,21 +117,14 @@ func (s *Store) findMatchingCredential(ctx context.Context, plaintext string, qu
 			&candidate.secretHash,
 			&candidate.hashAlgorithm,
 		); err != nil {
-			return credentialCandidate{}, fmt.Errorf("scan gateway credential candidate: %w", err)
+			return nil, fmt.Errorf("scan gateway credential candidate: %w", err)
 		}
-
-		if credentialSecretMatches(candidate.hashAlgorithm, candidate.secretHash, plaintext) {
-			matched = candidate
-		}
+		candidates = append(candidates, candidate)
 	}
 	if err := rows.Err(); err != nil {
-		return credentialCandidate{}, fmt.Errorf("read gateway credential candidates: %w", err)
+		return nil, fmt.Errorf("read gateway credential candidates: %w", err)
 	}
-	if matched.id == "" {
-		return credentialCandidate{}, invalidErr
-	}
-
-	return matched, nil
+	return candidates, nil
 }
 
 type credentialLookup struct {
