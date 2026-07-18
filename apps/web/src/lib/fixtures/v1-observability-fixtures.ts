@@ -152,6 +152,7 @@ export type InvocationLogRecord = {
     policyAllowedTypes?: string[];
     mandatoryProtectedTypes?: string[];
     maskingAction: string | null;
+    observationState?: "observed" | "unavailable";
   };
   promptCapture?: PromptCapture;
   httpStatus: number;

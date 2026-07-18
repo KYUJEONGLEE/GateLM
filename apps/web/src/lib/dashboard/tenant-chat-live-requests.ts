@@ -6,6 +6,7 @@ import {
   type ProviderDisplayDirectory
 } from "@/lib/control-plane/provider-display";
 import { getTenantChatInvocations } from "@/lib/control-plane/tenant-chat-observability-client";
+import { resolveTenantChatMaskingObservation } from "@/lib/control-plane/tenant-chat-masking-observation";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import type {
   LiveRequestsPayload,
@@ -40,6 +41,7 @@ export async function getTenantChatLiveRequests(
   const rows = invocations
     .map((invocation) => {
       const status = normalizeStatus(invocation.terminalOutcome);
+      const maskingObservation = resolveTenantChatMaskingObservation(invocation);
       const providerId = invocation.providerId?.trim() || null;
       const providerDisplay = resolveProviderDisplay(
         providerDirectory,
@@ -68,10 +70,7 @@ export async function getTenantChatLiveRequests(
         requestedModel: invocation.modelKey ?? "auto",
         requestId: invocation.requestId,
         routingReason: "tenant_chat",
-        safetyAction:
-          invocation.terminalOutcome === "safety_blocked"
-            ? "BLOCKED" as const
-            : "NONE" as const,
+        safetyAction: maskingObservation.liveAction,
         surface: "tenant_chat" as const,
         status: status.value,
         statusCode: status.code,

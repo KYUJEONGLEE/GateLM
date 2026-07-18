@@ -1,4 +1,5 @@
 import type { TenantChatInvocation } from "@/lib/control-plane/tenant-chat-observability-client";
+import { resolveTenantChatMaskingObservation } from "@/lib/control-plane/tenant-chat-masking-observation";
 import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 
 export function shouldIncludeTenantChatRequestLogs(input: {
@@ -17,7 +18,8 @@ export function toTenantChatRequestLog(
   const status = normalizeStatus(invocation.terminalOutcome);
   const cacheStatus = normalizeCacheStatus(invocation.cacheOutcome);
   const safetyBlocked = invocation.terminalOutcome === "safety_blocked";
-  const maskingAction = invocation.maskingAction ?? (safetyBlocked ? "blocked" : "none");
+  const maskingObservation = resolveTenantChatMaskingObservation(invocation);
+  const maskingAction = maskingObservation.action ?? "none";
   const providerCalled = invocation.attemptCount > 0;
   const modelKey = invocation.modelKey?.trim() || null;
   const providerId = invocation.providerId?.trim() || null;
@@ -92,17 +94,19 @@ export function toTenantChatRequestLog(
     providerLatencyMs: null,
     status,
     terminalStatus: status,
-    domainOutcomes: buildDomainOutcomes(invocation, status, cacheStatus, providerCalled),
+    domainOutcomes: buildDomainOutcomes(
+      invocation,
+      status,
+      cacheStatus,
+      providerCalled,
+      maskingObservation.safetyOutcome
+    ),
     safetySummary: {
-      outcome:
-        safetyBlocked || maskingAction === "blocked"
-          ? "blocked"
-          : maskingAction === "redacted"
-            ? "redacted"
-            : "passed",
+      outcome: maskingObservation.safetyOutcome,
       detectedCount: invocation.maskingDetectedCount,
       detectorCategories: invocation.maskingDetectedTypes,
-      maskingAction
+      maskingAction: maskingObservation.action,
+      observationState: maskingObservation.observationState
     },
     httpStatus: httpStatus(status),
     errorCode: status === "success" ? null : terminalErrorCode(invocation.terminalOutcome),
@@ -156,10 +160,9 @@ function buildDomainOutcomes(
   invocation: TenantChatInvocation,
   status: LiveInvocationLogRecord["status"],
   cacheStatus: string,
-  providerCalled: boolean
+  providerCalled: boolean,
+  safetyOutcome: "passed" | "redacted" | "blocked" | "not_checked"
 ) {
-  const safetyBlocked = invocation.terminalOutcome === "safety_blocked";
-  const maskingAction = invocation.maskingAction;
   return {
     auth: { outcome: "passed" },
     runtime: { outcome: "snapshot_active" },
@@ -167,14 +170,7 @@ function buildDomainOutcomes(
       outcome: status === "rate_limited" ? invocation.terminalOutcome : "allowed"
     },
     budget: { outcome: invocation.budgetState || "allowed" },
-    safety: {
-      outcome:
-        safetyBlocked || maskingAction === "blocked"
-          ? "blocked"
-          : maskingAction === "redacted"
-            ? "redacted"
-            : "passed"
-    },
+    safety: { outcome: safetyOutcome },
     routing: { outcome: cacheStatus === "hit" ? "skipped" : providerCalled ? "selected" : "not_called" },
     cache: { outcome: cacheStatus === "bypass" ? "bypassed" : cacheStatus },
     provider: {
