@@ -29,7 +29,6 @@ import type { AnalyticsSecurityEvidence } from "@/features/analytics/analytics-s
 import { TENANT_CHAT_USAGE_SOURCE_ID } from "@/features/analytics/analytics-usage-merge";
 import type { EmployeeSecurityResponse } from "@/lib/control-plane/employee-security-types";
 import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
-import type { TenantChatAdminActiveSnapshot } from "@/lib/control-plane/tenant-chat-runtime-types";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
@@ -63,11 +62,6 @@ type ReliabilityPanelProps = AnalyticsPanelProps & {
 type ExecutiveMetric = {
   label: string;
   meta?: string;
-  value: string;
-};
-
-type RuntimePolicyMetric = {
-  label: string;
   value: string;
 };
 
@@ -800,13 +794,11 @@ export function AnalyticsSecurityPanel({
   evidence,
   locale,
   model,
-  selectedEmployeeId,
-  tenantChatRuntimeSnapshot
+  selectedEmployeeId
 }: AnalyticsPanelProps & {
   employeeSecurity: EmployeeSecurityResponse | undefined;
   evidence: AnalyticsSecurityEvidence | undefined;
   selectedEmployeeId: string;
-  tenantChatRuntimeSnapshot?: TenantChatAdminActiveSnapshot | null;
 }) {
   const text = locale === "ko"
     ? {
@@ -829,14 +821,6 @@ export function AnalyticsSecurityPanel({
         unavailable: "탐지 유형 근거를 사용할 수 없음",
         treatment: "보안 처리 결과",
         treatmentSub: "선택 기간의 마스킹과 차단 처리량",
-        runtimePolicy: "현재 Tenant Chat 보안 정책",
-        runtimeApplied: "적용 중",
-        runtimeUnavailable: "설정 없음",
-        runtimeDetectors: "활성 탐지기",
-        runtimeRedact: "마스킹 규칙",
-        runtimeBlock: "차단 규칙",
-        runtimeVersion: "정책 버전",
-        runtimeNote: "현재 Runtime 설정과 선택 기간의 관측 결과를 분리해 표시합니다. 과거 요청에 탐지 근거가 없으면 아래 결과는 데이터 없음으로 유지됩니다.",
         title: "보안"
       }
     : {
@@ -859,14 +843,6 @@ export function AnalyticsSecurityPanel({
         unavailable: "Detector-type evidence is unavailable",
         treatment: "Security outcomes",
         treatmentSub: "Masked and blocked requests in the selected range",
-        runtimePolicy: "Current Tenant Chat security policy",
-        runtimeApplied: "Applied",
-        runtimeUnavailable: "Not configured",
-        runtimeDetectors: "Active detectors",
-        runtimeRedact: "Redaction rules",
-        runtimeBlock: "Blocking rules",
-        runtimeVersion: "Policy version",
-        runtimeNote: "The current Runtime configuration is shown separately from observed results. Results remain unavailable when older requests contain no detector evidence.",
         title: "Security"
       };
   const maskedRequests = evidence?.maskedRequestCount ?? valueById(model.impact.outcomes, "pii_masked");
@@ -902,40 +878,6 @@ export function AnalyticsSecurityPanel({
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
-      {tenantChatRuntimeSnapshot !== undefined ? (
-        <RuntimePolicyBand
-          accent="security"
-          enabled={tenantChatRuntimeSnapshot !== null}
-          icon={ShieldCheck}
-          meta={tenantChatRuntimeSnapshot
-            ? `${text.runtimeVersion} ${tenantChatRuntimeSnapshot.policyVersion} · ${formatDateTime(tenantChatRuntimeSnapshot.publishedAt)}`
-            : undefined}
-          metrics={tenantChatRuntimeSnapshot
-            ? [
-                {
-                  label: text.runtimeDetectors,
-                  value: formatInteger(tenantChatRuntimeSnapshot.safetyPolicy.detectorSet.length)
-                },
-                {
-                  label: text.runtimeRedact,
-                  value: formatInteger(tenantChatRuntimeSnapshot.safetyPolicy.detectorSet.filter(
-                    (detector) => detector.action === "redact"
-                  ).length)
-                },
-                {
-                  label: text.runtimeBlock,
-                  value: formatInteger(tenantChatRuntimeSnapshot.safetyPolicy.detectorSet.filter(
-                    (detector) => detector.action === "block"
-                  ).length)
-                }
-              ]
-            : []}
-          note={text.runtimeNote}
-          status={tenantChatRuntimeSnapshot ? text.runtimeApplied : text.runtimeUnavailable}
-          title={text.runtimePolicy}
-        />
-      ) : null}
-
       <ExecutiveBand
         accent="security"
         icon={Shield}
@@ -1025,13 +967,7 @@ export function AnalyticsSecurityPanel({
   );
 }
 
-export function AnalyticsCachePanel({
-  locale,
-  model,
-  tenantChatRuntimeSnapshot
-}: AnalyticsPanelProps & {
-  tenantChatRuntimeSnapshot?: TenantChatAdminActiveSnapshot | null;
-}) {
+export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
   const text = locale === "ko"
     ? {
         eligible: "캐시 대상 요청",
@@ -1045,14 +981,6 @@ export function AnalyticsCachePanel({
         savedScope: "Project/Application 기록",
         throughput: "캐시 효율",
         throughputSub: "두 사용 경로의 대상 요청과 실제 적중 수",
-        runtimePolicy: "현재 Tenant Chat Exact Cache 정책",
-        runtimeEnabled: "활성",
-        runtimeDisabled: "비활성",
-        runtimeUnavailable: "설정 없음",
-        runtimeTtl: "TTL",
-        runtimeEntries: "사용자별 최대 항목",
-        runtimeVersion: "정책 버전",
-        runtimeNote: "현재 Runtime 설정과 선택 기간의 관측 결과를 분리해 표시합니다. 기존 요청의 OFF 기록은 바뀌지 않으며, 정책 적용 후 요청부터 적중·미적중이 집계됩니다.",
         title: "캐시"
       }
     : {
@@ -1067,14 +995,6 @@ export function AnalyticsCachePanel({
         savedScope: "Project/Application records",
         throughput: "Cache efficiency",
         throughputSub: "Eligible requests and actual hits across both usage surfaces",
-        runtimePolicy: "Current Tenant Chat Exact Cache policy",
-        runtimeEnabled: "Enabled",
-        runtimeDisabled: "Disabled",
-        runtimeUnavailable: "Not configured",
-        runtimeTtl: "TTL",
-        runtimeEntries: "Max entries per user",
-        runtimeVersion: "Policy version",
-        runtimeNote: "The current Runtime configuration is shown separately from observed results. Existing OFF records are unchanged; hit and miss outcomes accumulate on requests evaluated after activation.",
         title: "Cache"
       };
   const efficiencyRows: AnalyticsValueRow[] = [
@@ -1084,36 +1004,6 @@ export function AnalyticsCachePanel({
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
-      {tenantChatRuntimeSnapshot !== undefined ? (
-        <RuntimePolicyBand
-          accent="cache"
-          enabled={Boolean(tenantChatRuntimeSnapshot?.cachePolicy.enabled)}
-          icon={Database}
-          meta={tenantChatRuntimeSnapshot
-            ? `${text.runtimeVersion} ${tenantChatRuntimeSnapshot.policyVersion} · ${formatDateTime(tenantChatRuntimeSnapshot.publishedAt)}`
-            : undefined}
-          metrics={tenantChatRuntimeSnapshot
-            ? [
-                {
-                  label: text.runtimeTtl,
-                  value: formatPolicyDuration(tenantChatRuntimeSnapshot.cachePolicy.ttlSeconds, locale)
-                },
-                {
-                  label: text.runtimeEntries,
-                  value: formatInteger(tenantChatRuntimeSnapshot.cachePolicy.maxEntriesPerUser)
-                }
-              ]
-            : []}
-          note={text.runtimeNote}
-          status={tenantChatRuntimeSnapshot
-            ? tenantChatRuntimeSnapshot.cachePolicy.enabled
-              ? text.runtimeEnabled
-              : text.runtimeDisabled
-            : text.runtimeUnavailable}
-          title={text.runtimePolicy}
-        />
-      ) : null}
-
       <ExecutiveBand
         accent="cache"
         icon={Database}
@@ -1194,54 +1084,6 @@ function PanelShell({
         </div>
       </header>
       {children}
-    </section>
-  );
-}
-
-function RuntimePolicyBand({
-  accent,
-  enabled,
-  icon: Icon,
-  meta,
-  metrics,
-  note,
-  status,
-  title
-}: {
-  accent: "cache" | "security";
-  enabled: boolean;
-  icon: typeof Activity;
-  meta?: string;
-  metrics: RuntimePolicyMetric[];
-  note: string;
-  status: string;
-  title: string;
-}) {
-  return (
-    <section
-      className="analytics-v3-runtime-policy"
-      data-accent={accent}
-      data-enabled={enabled}
-    >
-      <div className="analytics-v3-runtime-policy-summary">
-        <Icon aria-hidden="true" size={24} />
-        <div>
-          <span>{title}</span>
-          <strong>{status}</strong>
-          {meta ? <small>{meta}</small> : null}
-        </div>
-      </div>
-      {metrics.length ? (
-        <div className="analytics-v3-runtime-policy-metrics">
-          {metrics.map((metric) => (
-            <article key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-            </article>
-          ))}
-        </div>
-      ) : null}
-      <p>{note}</p>
     </section>
   );
 }
@@ -1488,18 +1330,6 @@ function employeeLabel(row: { email: string; name: string | null }) {
 
 function hasLatencyPoint(point: LiveAnalyticsPerformance["latencyDistribution"][number]) {
   return point.p50LatencyMs !== null || point.p95LatencyMs !== null || point.p99LatencyMs !== null;
-}
-
-function formatPolicyDuration(seconds: number, locale: Locale) {
-  if (seconds % 3_600 === 0) {
-    const hours = seconds / 3_600;
-    return locale === "ko" ? `${formatInteger(hours)}시간` : `${formatInteger(hours)}h`;
-  }
-  if (seconds % 60 === 0) {
-    const minutes = seconds / 60;
-    return locale === "ko" ? `${formatInteger(minutes)}분` : `${formatInteger(minutes)}m`;
-  }
-  return locale === "ko" ? `${formatInteger(seconds)}초` : `${formatInteger(seconds)}s`;
 }
 
 function formatMicroUsd(value: number) {

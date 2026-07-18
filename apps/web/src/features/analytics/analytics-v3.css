@@ -282,95 +282,6 @@
   box-shadow: none;
 }
 
-.analytics-v3-runtime-policy {
-  --analytics-runtime-accent: var(--analytics-emerald);
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.2fr);
-  align-items: center;
-  gap: 18px 32px;
-  padding: 22px 28px;
-  border: 1px solid color-mix(in srgb, var(--analytics-runtime-accent) 24%, var(--border));
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--analytics-runtime-accent) 5%, var(--surface));
-}
-
-.analytics-v3-runtime-policy[data-accent="security"] {
-  --analytics-runtime-accent: #7c3aed;
-}
-
-.analytics-v3-runtime-policy[data-enabled="false"] {
-  --analytics-runtime-accent: var(--text-muted);
-}
-
-.analytics-v3-runtime-policy-summary {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 14px;
-}
-
-.analytics-v3-runtime-policy-summary > svg {
-  flex: 0 0 auto;
-  color: var(--analytics-runtime-accent);
-}
-
-.analytics-v3-runtime-policy-summary > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.analytics-v3-runtime-policy-summary span,
-.analytics-v3-runtime-policy-metrics span {
-  color: var(--text-muted);
-  font-size: calc(13px + var(--global-font-lift));
-  font-weight: var(--font-weight-semibold);
-}
-
-.analytics-v3-runtime-policy-summary strong {
-  color: var(--analytics-runtime-accent);
-  font-size: calc(24px + var(--global-font-lift));
-  line-height: 1.15;
-}
-
-.analytics-v3-runtime-policy-summary small {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: calc(12px + var(--global-font-lift));
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.analytics-v3-runtime-policy-metrics {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.analytics-v3-runtime-policy-metrics article {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
-}
-
-.analytics-v3-runtime-policy-metrics strong {
-  color: var(--foreground);
-  font-size: calc(20px + var(--global-font-lift));
-}
-
-.analytics-v3-runtime-policy > p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: calc(13px + var(--global-font-lift));
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.5;
-}
-
 .analytics-v3-executive-band {
   position: relative;
   display: grid;
@@ -1044,15 +955,6 @@
 
   .analytics-v3-data-state span {
     max-width: 160px;
-  }
-
-  .analytics-v3-runtime-policy {
-    grid-template-columns: 1fr;
-    padding: 20px;
-  }
-
-  .analytics-v3-runtime-policy > p {
-    grid-column: auto;
   }
 
   .analytics-v3-executive-band {
