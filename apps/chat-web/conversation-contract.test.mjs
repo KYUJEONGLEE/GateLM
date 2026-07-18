@@ -290,6 +290,15 @@ test('ChatShell keeps the in-memory user prompt and shows a non-error masking no
   assert.match(source, /개인정보 보호를 위해 일부 정보를 마스킹한 뒤 AI 모델에 전달했습니다\./);
 });
 
+test('ChatShell restores the composer and shows pre-admission safety blocks as an alert', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  const error = safeChatError({ code: 'CHAT_SAFETY_BLOCKED' });
+
+  assert.equal(error.message, '안전 정책에 따라 이 요청에는 답변할 수 없습니다.');
+  assert.match(source, /if \(!admitted\) \{\s*setError\(detail\);[\s\S]*?setComposer\(content\);/);
+  assert.match(source, /className="chat-error" role="alert"/);
+});
+
 test('employee weekly quota uses the same blocked state with its weekly guidance', () => {
   const error = safeChatError({ code: 'CHAT_EMPLOYEE_WEEKLY_TOKEN_QUOTA_HARD_LIMIT' });
 

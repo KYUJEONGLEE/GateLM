@@ -469,6 +469,7 @@ export function ChatShell() {
       } else {
         const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
         if (!admitted) {
+          setError(detail);
           setMessages((current) => current.filter((message) =>
             message.id !== draftId && message.id !== optimisticUserId));
           setComposer(content);
