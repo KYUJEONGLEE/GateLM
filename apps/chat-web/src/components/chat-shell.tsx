@@ -468,7 +468,8 @@ export function ChatShell() {
         setStatus('답변 생성을 중지했습니다.');
       } else {
         const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
-        if (!admitted) {
+        const rejectedByPolicy = detail.code === 'CHAT_SAFETY_BLOCKED' || isBlockedCode(detail.code);
+        if (!admitted && !rejectedByPolicy) {
           setError(detail);
           setMessages((current) => current.filter((message) =>
             message.id !== draftId && message.id !== optimisticUserId));

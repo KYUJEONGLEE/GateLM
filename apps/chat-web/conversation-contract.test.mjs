@@ -290,13 +290,15 @@ test('ChatShell keeps the in-memory user prompt and shows a non-error masking no
   assert.match(source, /개인정보 보호를 위해 일부 정보를 마스킹한 뒤 AI 모델에 전달했습니다\./);
 });
 
-test('ChatShell restores the composer and shows pre-admission safety blocks as an alert', () => {
+test('ChatShell keeps pre-admission policy rejections as an in-conversation GateLM warning', () => {
   const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
   const error = safeChatError({ code: 'CHAT_SAFETY_BLOCKED' });
 
   assert.equal(error.message, '안전 정책에 따라 이 요청에는 답변할 수 없습니다.');
-  assert.match(source, /if \(!admitted\) \{\s*setError\(detail\);[\s\S]*?setComposer\(content\);/);
-  assert.match(source, /className="chat-error" role="alert"/);
+  assert.match(source, /const rejectedByPolicy = detail\.code === 'CHAT_SAFETY_BLOCKED' \|\| isBlockedCode\(detail\.code\);/);
+  assert.match(source, /if \(!admitted && !rejectedByPolicy\) \{[\s\S]*?setComposer\(content\);[\s\S]*?\} else \{\s*setMessages\(\(current\) => current\.map/);
+  assert.match(source, /message\.id === draftId \? \{ \.\.\.message, notice: detail \} : message/);
+  assert.match(source, /className="message-warning" role="alert"/);
 });
 
 test('employee weekly quota uses the same blocked state with its weekly guidance', () => {
