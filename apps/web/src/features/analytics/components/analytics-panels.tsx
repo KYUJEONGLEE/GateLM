@@ -18,12 +18,16 @@ import type { CSSProperties, ReactNode } from "react";
 import {
   AnalyticsCompositionChart,
   AnalyticsCostTrendChart,
+  AnalyticsEmployeeStackedChart,
+  AnalyticsEmployeeTokenBarChart,
   AnalyticsLatencyTrendChart,
   AnalyticsRankedBarChart,
   AnalyticsRequestVolumeChart
 } from "@/features/analytics/components/analytics-charts";
 import type { AnalyticsReadModel, AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import type { AnalyticsSecurityEvidence } from "@/features/analytics/analytics-security-evidence";
+import type { EmployeeSecurityResponse } from "@/lib/control-plane/employee-security-types";
+import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
@@ -234,17 +238,25 @@ export function AnalyticsImpactPanel({
 }
 
 export function AnalyticsUsagePanel({
+  employeeUsage,
   locale,
   model,
   performance,
-  projectNameById
+  projectNameById,
+  selectedEmployeeId
 }: AnalyticsPanelProps & {
+  employeeUsage: EmployeeUsageResponse | undefined;
   performance: LiveAnalyticsPerformance | undefined;
   projectNameById: Map<string, string>;
+  selectedEmployeeId: string;
 }) {
   const text = locale === "ko"
     ? {
         active: "사용 모델",
+        employeeSources: "직원별 사용 경로",
+        employeeSourcesSub: "Tenant 전체의 Project/Application과 Tenant Chat 토큰 구성",
+        employeeTokens: "직원별 토큰",
+        employeeTokensSub: "Tenant 전체의 실제 확정 토큰 사용량",
         projects: "프로젝트별 요청",
         projectsSub: "요청량 상위 프로젝트",
         model: "모델 트래픽",
@@ -260,6 +272,10 @@ export function AnalyticsUsagePanel({
       }
     : {
         active: "Active models",
+        employeeSources: "Usage source by employee",
+        employeeSourcesSub: "Tenant-wide Project/Application and Tenant Chat token composition",
+        employeeTokens: "Tokens by employee",
+        employeeTokensSub: "Tenant-wide observed confirmed token usage",
         projects: "Requests by project",
         projectsSub: "Projects generating the most traffic",
         model: "Model traffic",
@@ -275,6 +291,12 @@ export function AnalyticsUsagePanel({
       };
   const projectRows = model.usage.projectMix.slice(0, 4);
   const tokenCompositionTotal = model.usage.tokenMix.reduce((sum, row) => sum + row.value, 0);
+  const employeeRows = selectEmployeeRows(employeeUsage?.data ?? [], selectedEmployeeId);
+  const employeeTokenRows = employeeRows.map((row) => ({
+    id: row.employeeId,
+    label: employeeLabel(row),
+    value: row.total.totalTokens
+  }));
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
@@ -308,6 +330,33 @@ export function AnalyticsUsagePanel({
         </AnalysisSurface>
       </div>
 
+      <div className="analytics-v3-employee-workspace">
+        <AnalysisSurface subtitle={text.employeeTokensSub} title={text.employeeTokens}>
+          <ChartOrEmpty hasData={hasRows(employeeTokenRows)} locale={locale}>
+            <AnalyticsEmployeeTokenBarChart
+              ariaLabel={text.employeeTokens}
+              rows={employeeTokenRows}
+            />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+        <AnalysisSurface subtitle={text.employeeSourcesSub} title={text.employeeSources}>
+          <ChartOrEmpty hasData={employeeRows.some((row) => row.total.totalTokens > 0)} locale={locale}>
+            <AnalyticsEmployeeStackedChart
+              ariaLabel={text.employeeSources}
+              kind="tokens"
+              primaryLabel="Project/Application"
+              rows={employeeRows.map((row) => ({
+                id: row.employeeId,
+                label: employeeLabel(row),
+                primary: row.sources.projectApplication.totalTokens,
+                secondary: row.sources.tenantChat.totalTokens
+              }))}
+              secondaryLabel="Tenant Chat"
+            />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+      </div>
+
       <DecisionPath
         locale={locale}
         rows={model.usage.tokenMix}
@@ -337,16 +386,24 @@ export function AnalyticsUsagePanel({
 
 export function AnalyticsCostPanel({
   costTrend,
+  employeeUsage,
   locale,
   model,
-  projectNameById
+  projectNameById,
+  selectedEmployeeId
 }: AnalyticsPanelProps & {
   costTrend: CostOverTimeSummary | undefined;
+  employeeUsage: EmployeeUsageResponse | undefined;
   projectNameById: Map<string, string>;
+  selectedEmployeeId: string;
 }) {
   const text = locale === "ko"
     ? {
         avoided: "잠재 비용 대비",
+        employeeCost: "직원별 사용 비용",
+        employeeCostSub: "Tenant 전체의 실제 확정 비용 기준",
+        employeeSources: "직원별 비용 경로",
+        employeeSourcesSub: "Tenant 전체의 Project/Application과 Tenant Chat 비용 구성",
         byModel: "비용 기여 모델",
         byModelSub: "실제 Provider 비용이 높은 모델",
         byProject: "프로젝트 비용 근거",
@@ -360,6 +417,10 @@ export function AnalyticsCostPanel({
       }
     : {
         avoided: "of addressable spend",
+        employeeCost: "Spend by employee",
+        employeeCostSub: "Tenant-wide observed confirmed spend",
+        employeeSources: "Cost source by employee",
+        employeeSourcesSub: "Tenant-wide Project/Application and Tenant Chat cost composition",
         byModel: "Cost contributors",
         byModelSub: "Models contributing the most Provider spend",
         byProject: "Project cost evidence",
@@ -372,6 +433,12 @@ export function AnalyticsCostPanel({
         trendSub: "Actual Provider spend over the selected range"
       };
   const projectRows = model.cost.costByProject.slice(0, 4);
+  const employeeRows = selectEmployeeRows(employeeUsage?.data ?? [], selectedEmployeeId);
+  const employeeCostRows = employeeRows.map((row) => ({
+    id: row.employeeId,
+    label: employeeLabel(row),
+    value: row.total.costMicroUsd
+  }));
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
@@ -401,6 +468,35 @@ export function AnalyticsCostPanel({
         <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.byModelSub} title={text.byModel}>
           <ChartOrEmpty hasData={hasRows(model.cost.costByModel)} locale={locale} compact>
             <AnalyticsRankedBarChart ariaLabel={text.byModel} kind="micro-usd" rows={model.cost.costByModel} />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+      </div>
+
+      <div className="analytics-v3-employee-workspace">
+        <AnalysisSurface subtitle={text.employeeCostSub} title={text.employeeCost}>
+          <ChartOrEmpty hasData={hasRows(employeeCostRows)} locale={locale}>
+            <AnalyticsRankedBarChart
+              ariaLabel={text.employeeCost}
+              kind="micro-usd"
+              maxRows={10}
+              rows={employeeCostRows}
+            />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+        <AnalysisSurface subtitle={text.employeeSourcesSub} title={text.employeeSources}>
+          <ChartOrEmpty hasData={employeeRows.some((row) => row.total.costMicroUsd > 0)} locale={locale}>
+            <AnalyticsEmployeeStackedChart
+              ariaLabel={text.employeeSources}
+              kind="micro-usd"
+              primaryLabel="Project/Application"
+              rows={employeeRows.map((row) => ({
+                id: row.employeeId,
+                label: employeeLabel(row),
+                primary: row.sources.projectApplication.costMicroUsd,
+                secondary: row.sources.tenantChat.costMicroUsd
+              }))}
+              secondaryLabel="Tenant Chat"
+            />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
@@ -599,15 +695,23 @@ export function AnalyticsReliabilityPanel({
 }
 
 export function AnalyticsSecurityPanel({
+  employeeSecurity,
   evidence,
   locale,
-  model
+  model,
+  selectedEmployeeId
 }: AnalyticsPanelProps & {
+  employeeSecurity: EmployeeSecurityResponse | undefined;
   evidence: AnalyticsSecurityEvidence | undefined;
+  selectedEmployeeId: string;
 }) {
   const text = locale === "ko"
     ? {
         blocked: "차단 요청",
+        employeeProtection: "직원별 보호 처리",
+        employeeProtectionSub: "실제 마스킹과 차단 요청 집계",
+        employeeRequests: "직원별 전체 요청",
+        employeeRequestsSub: "보안 처리 비율의 기준이 되는 실제 귀속 요청",
         detectedTypes: "탐지 유형별 요청",
         detectedTypesEmpty: "최근 보호 요청에 유형별 탐지 근거가 없습니다",
         detectedTypesSub: "최근 보호 요청 Detail에서 확인한 유형별 요청 수",
@@ -620,6 +724,10 @@ export function AnalyticsSecurityPanel({
       }
     : {
         blocked: "Blocked requests",
+        employeeProtection: "Protection by employee",
+        employeeProtectionSub: "Observed masked and blocked requests",
+        employeeRequests: "All requests by employee",
+        employeeRequestsSub: "Observed attributed requests used as the security-rate denominator",
         detectedTypes: "Requests by detected type",
         detectedTypesEmpty: "No detector-type evidence is available for recent protected requests",
         detectedTypesSub: "Requests by type observed in recent protected request details",
@@ -646,6 +754,12 @@ export function AnalyticsSecurityPanel({
         .replace("{sampled}", formatInteger(evidence.sampledDetailCount))
         .replace("{total}", formatInteger(evidence.protectedRequestCount))
     : text.detectedTypesEmpty;
+  const employeeRows = selectEmployeeRows(employeeSecurity?.data ?? [], selectedEmployeeId);
+  const employeeRequestRows = employeeRows.map((row) => ({
+    id: row.employeeId,
+    label: employeeLabel(row),
+    value: row.total.requestCount
+  }));
 
   return (
     <PanelShell locale={locale} model={model} title={text.title}>
@@ -681,6 +795,36 @@ export function AnalyticsSecurityPanel({
         >
           <ChartOrEmpty compact hasData={hasRows(treatmentRows)} locale={locale}>
             <AnalyticsCompositionChart ariaLabel={text.treatment} rows={treatmentRows} />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+      </div>
+
+      <div className="analytics-v3-employee-workspace">
+        <AnalysisSurface subtitle={text.employeeProtectionSub} title={text.employeeProtection}>
+          <ChartOrEmpty
+            hasData={employeeRows.some((row) => row.total.protectedRequestCount > 0)}
+            locale={locale}
+          >
+            <AnalyticsEmployeeStackedChart
+              ariaLabel={text.employeeProtection}
+              primaryLabel={text.masked}
+              rows={employeeRows.map((row) => ({
+                id: row.employeeId,
+                label: employeeLabel(row),
+                primary: row.total.maskedRequestCount,
+                secondary: row.total.blockedRequestCount
+              }))}
+              secondaryLabel={text.blocked}
+            />
+          </ChartOrEmpty>
+        </AnalysisSurface>
+        <AnalysisSurface subtitle={text.employeeRequestsSub} title={text.employeeRequests}>
+          <ChartOrEmpty hasData={hasRows(employeeRequestRows)} locale={locale}>
+            <AnalyticsRankedBarChart
+              ariaLabel={text.employeeRequests}
+              maxRows={10}
+              rows={employeeRequestRows}
+            />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
@@ -1002,6 +1146,19 @@ function isReliabilityEvidence(record: InvocationLogRecord) {
 
 function hasRows(rows: AnalyticsValueRow[]) {
   return rows.some((row) => row.value > 0);
+}
+
+function selectEmployeeRows<T extends { employeeId: string }>(
+  rows: T[],
+  selectedEmployeeId: string
+) {
+  return selectedEmployeeId
+    ? rows.filter((row) => row.employeeId === selectedEmployeeId)
+    : rows.slice(0, 10);
+}
+
+function employeeLabel(row: { email: string; name: string | null }) {
+  return row.name?.trim() || row.email;
 }
 
 function hasLatencyPoint(point: LiveAnalyticsPerformance["latencyDistribution"][number]) {

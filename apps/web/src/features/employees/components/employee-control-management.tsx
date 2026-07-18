@@ -1511,6 +1511,19 @@ export function EmployeeControlManagement({
   );
   const [employeeCostChartLoading, setEmployeeCostChartLoading] = useState(false);
   const [employeeCostChartError, setEmployeeCostChartError] = useState<string | null>(null);
+  const employeeCostChartActiveRows = employeeCostChartRows.filter((row) => row.value > 0);
+  const employeeCostChartVisibleTotal = employeeCostChartActiveRows.reduce(
+    (total, row) => total + row.value,
+    0
+  );
+  const employeeCostChartAverage =
+    employeeCostChartActiveRows.length > 0
+      ? employeeCostChartVisibleTotal / employeeCostChartActiveRows.length
+      : 0;
+  const employeeCostChartTopEmployee = employeeCostChartActiveRows[0] ?? null;
+  const employeeCostChartOutlierCount = employeeCostChartActiveRows.filter(
+    (row) => row.value >= employeeCostChartAverage * 1.5
+  ).length;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2336,31 +2349,85 @@ export function EmployeeControlManagement({
             <span>USD</span>
           </div>
         </div>
-        {employeeCostChartError ? (
-          <p className="employee-usage-ranking-empty">{employeeCostChartError}</p>
-        ) : employeeCostChartLoading ? (
-          <p className="employee-usage-ranking-empty">
-            {locale === "ko" ? "사용 비용을 불러오는 중입니다." : "Loading cost usage."}
-          </p>
-        ) : employeeCostChartRows.some((row) => row.value > 0) ? (
-          <AnalyticsRankedBarChart
-            ariaLabel={
-              locale === "ko" ? "기간별 직원 사용 비용" : "Employee cost usage by period"
-            }
-            className="employee-cost-ranking-chart"
-            kind="micro-usd"
-            maxRows={10}
-            orientation="vertical"
-            outlierMultiplier={1.5}
-            rows={employeeCostChartRows}
-          />
-        ) : (
-          <p className="employee-usage-ranking-empty">
-            {locale === "ko"
-              ? "선택한 기간에 확정된 Tenant Chat 사용 비용이 없습니다."
-              : "No confirmed Tenant Chat cost was recorded during the selected period."}
-          </p>
-        )}
+        <div className="employee-cost-overview-layout">
+          <div className="employee-cost-chart-panel">
+            {employeeCostChartError ? (
+              <p className="employee-usage-ranking-empty">{employeeCostChartError}</p>
+            ) : employeeCostChartLoading ? (
+              <p className="employee-usage-ranking-empty">
+                {locale === "ko" ? "사용 비용을 불러오는 중입니다." : "Loading cost usage."}
+              </p>
+            ) : employeeCostChartRows.some((row) => row.value > 0) ? (
+              <AnalyticsRankedBarChart
+                ariaLabel={
+                  locale === "ko" ? "기간별 직원 사용 비용" : "Employee cost usage by period"
+                }
+                className="employee-cost-ranking-chart"
+                kind="micro-usd"
+                maxRows={10}
+                orientation="vertical"
+                outlierMultiplier={1.5}
+                rows={employeeCostChartRows}
+              />
+            ) : (
+              <p className="employee-usage-ranking-empty">
+                {locale === "ko"
+                  ? "선택한 기간에 확정된 Tenant Chat 사용 비용이 없습니다."
+                  : "No confirmed Tenant Chat cost was recorded during the selected period."}
+              </p>
+            )}
+          </div>
+          <aside
+            aria-label={locale === "ko" ? "직원 비용 인사이트" : "Employee cost insights"}
+            className="employee-cost-insights"
+          >
+            <div className="employee-cost-insights-heading">
+              <div>
+                <span>{locale === "ko" ? "비용 인사이트" : "Cost insights"}</span>
+                <strong>{locale === "ko" ? "현재 기간 요약" : "Current period"}</strong>
+              </div>
+              <span className="employee-cost-insights-status">
+                {locale === "ko" ? "확정 비용" : "Confirmed"}
+              </span>
+            </div>
+            <dl className="employee-cost-insights-metrics">
+              <div className="employee-cost-insights-primary">
+                <dt>{locale === "ko" ? "기간 총 비용" : "Total cost"}</dt>
+                <dd>{formatMicroUsd(employeeCostChartVisibleTotal, locale)}</dd>
+              </div>
+              <div>
+                <dt>{locale === "ko" ? "사용 직원 평균" : "Average per employee"}</dt>
+                <dd>{formatMicroUsd(employeeCostChartAverage, locale)}</dd>
+              </div>
+              <div>
+                <dt>{locale === "ko" ? "비용 발생 직원" : "Active employees"}</dt>
+                <dd>
+                  {employeeCostChartActiveRows.length}
+                  {locale === "ko" ? "명" : ""}
+                </dd>
+              </div>
+            </dl>
+            <div className="employee-cost-insights-highlight">
+              <span>{locale === "ko" ? "최고 사용 직원" : "Top employee"}</span>
+              <div>
+                <strong>{employeeCostChartTopEmployee?.label ?? "-"}</strong>
+                <b>
+                  {employeeCostChartTopEmployee
+                    ? formatMicroUsd(employeeCostChartTopEmployee.value, locale)
+                    : "-"}
+                </b>
+              </div>
+            </div>
+            <div className="employee-cost-insights-note">
+              <i aria-hidden="true" />
+              <span>
+                {locale === "ko"
+                  ? `평균의 1.5배 이상 사용한 직원 ${employeeCostChartOutlierCount}명`
+                  : `${employeeCostChartOutlierCount} employees used at least 1.5× the average`}
+              </span>
+            </div>
+          </aside>
+        </div>
       </section>
       <section className="employee-list-section">
         <div className="employee-list-toolbar employee-list-actions">

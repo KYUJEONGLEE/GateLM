@@ -42,3 +42,15 @@ test("analytics preserves an unavailable selected project in the filter", async 
   expect(pageSource).toContain("<option disabled value={filters.projectId}>{text.projectUnavailable}</option>");
   expect(pageSource).toContain('projectUnavailable: "선택한 프로젝트를 사용할 수 없음"');
 });
+
+test("usage cost and security load tenant-scoped employee evidence", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain('activeTab === "usage" || activeTab === "cost"');
+  expect(pageSource).toContain('activeTab === "security"');
+  expect(pageSource).toContain("getAllEmployeeUsage({");
+  expect(pageSource).toContain("getEmployeeSecurity({");
+  expect(pageSource).toContain('name="employeeId"');
+  expect(pageSource).toContain('appendQuery(query, "employeeId", filters.employeeId)');
+  expect(pageSource).not.toContain("departmentId");
+});

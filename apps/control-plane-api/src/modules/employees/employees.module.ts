@@ -9,6 +9,7 @@ import { SmtpEmailSender } from '@/modules/auth/smtp-email-sender';
 
 import { EmployeesController } from './employees.controller';
 import { EmployeeUsageService } from './employee-usage.service';
+import { EmployeeSecurityService } from './employee-security.service';
 import { EmployeesService } from './employees.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { EmployeesService } from './employees.service';
   providers: [
     EmployeesService,
     EmployeeUsageService,
+    EmployeeSecurityService,
     AdminAuthGuard,
     {
       provide: EMAIL_SENDER,
