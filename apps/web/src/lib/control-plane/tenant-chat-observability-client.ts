@@ -22,6 +22,9 @@ export type TenantChatInvocation = {
   confirmedOutputTokens: number;
   confirmedTotalTokens: number;
   confirmedCostMicroUsd: number;
+  maskingAction: "none" | "redacted" | "blocked" | null;
+  maskingDetectedTypes: string[];
+  maskingDetectedCount: number;
   quotaState: string;
   budgetState: string;
   cacheOutcome: string;
@@ -92,6 +95,19 @@ export type TenantChatDashboard = {
     fallbackSuccessCount: number;
     confirmedCostMicroUsd: number;
   }>;
+  security: {
+    protectedRequests: number;
+    redactedRequests: number;
+    blockedRequests: number;
+    byDetectorType: Array<{
+      detectorType: string;
+      requestCount: number;
+    }>;
+    coverage: {
+      state: "complete" | "partial" | "unavailable";
+      observedFrom: string | null;
+    };
+  };
 };
 
 export type TenantChatCostSeries = {

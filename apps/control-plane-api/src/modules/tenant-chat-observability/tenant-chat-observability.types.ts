@@ -46,6 +46,14 @@ export interface TenantChatProjectionEvent {
   quotaState?: string;
   budgetState?: string;
   cacheOutcome?: 'off' | 'hit' | 'miss';
+  effectiveProviderId?: string;
+  effectiveModelKey?: string;
+  effectiveRouteTier?: 'high_quality' | 'standard' | 'economy';
+  savedCostMicroUsd?: number;
+  maskingAction?: 'none' | 'redacted' | 'blocked';
+  maskingDetectedTypes?: string[];
+  maskingDetectedCount?: number;
+  safetyPolicyDigest?: string;
   latencyMs?: number;
   lateUsage?: boolean;
   quota?: {
@@ -82,6 +90,9 @@ export interface TenantChatInvocationResponse {
   confirmedOutputTokens: number;
   confirmedTotalTokens: number;
   confirmedCostMicroUsd: number;
+  maskingAction: 'none' | 'redacted' | 'blocked' | null;
+  maskingDetectedTypes: string[];
+  maskingDetectedCount: number;
   quotaState: string;
   budgetState: string;
   cacheOutcome: string;

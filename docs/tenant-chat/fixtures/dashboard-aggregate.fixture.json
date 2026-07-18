@@ -76,5 +76,24 @@
       "fallbackSuccessCount": 20,
       "confirmedCostMicroUsd": 7600000
     }
-  ]
+  ],
+  "security": {
+    "protectedRequests": 26,
+    "redactedRequests": 18,
+    "blockedRequests": 8,
+    "byDetectorType": [
+      {
+        "detectorType": "email",
+        "requestCount": 12
+      },
+      {
+        "detectorType": "api_key",
+        "requestCount": 8
+      }
+    ],
+    "coverage": {
+      "state": "complete",
+      "observedFrom": "2026-07-01T00:00:00Z"
+    }
+  }
 }

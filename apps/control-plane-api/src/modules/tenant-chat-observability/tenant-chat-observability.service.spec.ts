@@ -125,6 +125,57 @@ describe('TenantChatObservabilityService', () => {
     );
     expect(sql).toContain("ELSE '[]'::jsonb");
   });
+
+  it('returns tenant-scoped content-free security aggregates and coverage', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{
+        security_redacted: 2n,
+        security_blocked: 1n,
+        projected_at: new Date('2026-07-12T13:00:00Z'),
+      }])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{
+        snapshot_version: 1n,
+        pricing_version: 1n,
+        request_count: 3n,
+        confirmed_cost_micro_usd: 0n,
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { detector_type: 'email', request_count: 2n },
+      ])
+      .mockResolvedValueOnce([
+        { observed_from: new Date('2026-07-12T12:00:00Z') },
+      ]);
+    prisma.tenantChatInvocationLog.groupBy.mockResolvedValue([]);
+    prisma.tenantChatInvocationOutbox.count.mockResolvedValue(0);
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getDashboard(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+    });
+
+    expect(result.data.security).toEqual({
+      protectedRequests: 3,
+      redactedRequests: 2,
+      blockedRequests: 1,
+      byDetectorType: [{ detectorType: 'email', requestCount: 2 }],
+      coverage: {
+        state: 'complete',
+        observedFrom: '2026-07-12T12:00:00.000Z',
+      },
+    });
+    const detectorQuery = prisma.$queryRaw.mock.calls[5]?.[0] as {
+      sql?: string;
+    };
+    expect(detectorQuery.sql).toContain('logs.tenant_id =');
+    expect(detectorQuery.sql).toContain("logs.surface = 'tenant_chat'");
+  });
 });
 
 function createPrisma() {

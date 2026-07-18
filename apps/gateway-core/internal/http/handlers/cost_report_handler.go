@@ -24,16 +24,17 @@ type costReportResponse struct {
 }
 
 type costReportDataResponse struct {
-	GeneratedAt         time.Time                      `json:"generatedAt"`
-	Period              string                         `json:"period"`
-	BucketInterval      string                         `json:"bucketInterval"`
-	ExpectedBucketCount int                            `json:"expectedBucketCount"`
-	Range               dashboardRangeResponse         `json:"range"`
-	Filter              costReportFilterResponse       `json:"filters"`
-	Totals              costReportTotalsResponse       `json:"totals"`
-	Buckets             []costReportBucketResponse     `json:"buckets"`
-	Breakdowns          costReportBreakdownResponse    `json:"breakdowns"`
-	DataFreshness       dashboardDataFreshnessResponse `json:"dataFreshness"`
+	GeneratedAt         time.Time                       `json:"generatedAt"`
+	Period              string                          `json:"period"`
+	BucketInterval      string                          `json:"bucketInterval"`
+	ExpectedBucketCount int                             `json:"expectedBucketCount"`
+	Range               dashboardRangeResponse          `json:"range"`
+	Filter              costReportFilterResponse        `json:"filters"`
+	Totals              costReportTotalsResponse        `json:"totals"`
+	Buckets             []costReportBucketResponse      `json:"buckets"`
+	ModelBuckets        []costReportModelBucketResponse `json:"modelBuckets"`
+	Breakdowns          costReportBreakdownResponse     `json:"breakdowns"`
+	DataFreshness       dashboardDataFreshnessResponse  `json:"dataFreshness"`
 }
 
 type costReportFilterResponse struct {
@@ -69,6 +70,14 @@ type costReportBucketResponse struct {
 	CostUSD           string    `json:"costUsd"`
 	SavedCostMicroUSD int64     `json:"savedCostMicroUsd"`
 	SavedCostUSD      string    `json:"savedCostUsd"`
+}
+
+type costReportModelBucketResponse struct {
+	PeriodStart  time.Time `json:"periodStart"`
+	PeriodEnd    time.Time `json:"periodEnd"`
+	Provider     string    `json:"provider"`
+	Model        string    `json:"model"`
+	RequestCount int64     `json:"requestCount"`
 }
 
 type costReportBreakdownResponse struct {
@@ -192,9 +201,10 @@ func costReportData(filter invocationlog.CostReportFilter, report invocationlog.
 			BudgetScopeID:   stringPointerOrNil(filter.BudgetScope.ID),
 			ResolvedBy:      stringPointerOrNil(filter.BudgetScope.ResolvedBy),
 		},
-		Totals:     costReportTotals(report.Totals),
-		Buckets:    costReportBuckets(report.Buckets),
-		Breakdowns: costReportBreakdowns(report.Breakdowns),
+		Totals:       costReportTotals(report.Totals),
+		Buckets:      costReportBuckets(report.Buckets),
+		ModelBuckets: costReportModelBuckets(report.ModelBuckets),
+		Breakdowns:   costReportBreakdowns(report.Breakdowns),
 		DataFreshness: dashboardDataFreshnessResponse{
 			Source:           report.DataFreshness.Source,
 			RecordCount:      report.DataFreshness.RecordCount,
@@ -202,6 +212,20 @@ func costReportData(filter invocationlog.CostReportFilter, report invocationlog.
 			GeneratedAt:      report.DataFreshness.GeneratedAt,
 		},
 	}
+}
+
+func costReportModelBuckets(items []invocationlog.CostReportModelBucket) []costReportModelBucketResponse {
+	responses := make([]costReportModelBucketResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, costReportModelBucketResponse{
+			PeriodStart:  item.PeriodStart,
+			PeriodEnd:    item.PeriodEnd,
+			Provider:     item.Provider,
+			Model:        item.Model,
+			RequestCount: item.RequestCount,
+		})
+	}
+	return responses
 }
 
 func costReportTotals(totals invocationlog.CostReportTotals) costReportTotalsResponse {

@@ -66,6 +66,7 @@ type RequestContext struct {
 	BindingDigest  string            `json:"bindingDigest"`
 	UsageIntent    *UsageIntent      `json:"usageIntent,omitempty"`
 	Routing        *RoutingDecision  `json:"-"`
+	Safety         *SafetySummary    `json:"-"`
 }
 
 type EphemeralMessage struct {

@@ -112,14 +112,14 @@ func (s *ReservationStore) consumeAndReserve(
 		return replay, nil
 	}
 
-	admissionState, admissionExpiry, err := lockAdmission(ctx, tx, requestContext)
+	admission, err := lockAdmission(ctx, tx, requestContext)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tenantchat.UsageReservation{}, tenantchat.ErrAdmissionExpired
 		}
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
-	if admissionState != "active" || !admissionExpiry.After(now) {
+	if admission.State != "active" || !admission.ExpiresAt.After(now) {
 		return tenantchat.UsageReservation{}, tenantchat.ErrAdmissionExpired
 	}
 
@@ -251,7 +251,7 @@ func (s *ReservationStore) consumeAndReserve(
 		ReservationID: reservationID, RequestID: requestContext.RequestID, State: "reserved",
 		ReservedTokens: reservedTokens, ReservedCostMicroUSD: reservedCost,
 		QuotaState: quotaState, BudgetState: budgetState, LedgerVersion: 1,
-		CacheOutcome: cacheOutcome, Route: route,
+		CacheOutcome: cacheOutcome, Route: route, Safety: tenantchat.CloneSafetySummary(admission.Safety),
 	}, nil
 }
 
@@ -336,15 +336,25 @@ func employeeCostPricing(
 
 func findReservationReplay(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) (tenantchat.UsageReservation, bool, error) {
 	var result tenantchat.UsageReservation
-	err := tx.QueryRow(ctx, `
-		SELECT reservation_id::text, request_id, state, reserved_tokens,
-		       reserved_cost_micro_usd, ledger_version, cache_outcome
-		FROM tenant_chat_usage_reservations
-		WHERE tenant_id = $1::uuid AND user_id = $2::uuid AND idempotency_key = $3
+	row := tx.QueryRow(ctx, `
+		SELECT reservation.reservation_id::text, reservation.request_id, reservation.state,
+		       reservation.reserved_tokens, reservation.reserved_cost_micro_usd,
+		       reservation.ledger_version, reservation.cache_outcome,
+		       admission.masking_action, admission.masking_detected_types::text,
+		       admission.masking_detected_count, admission.safety_policy_digest
+		FROM tenant_chat_usage_reservations reservation
+		JOIN tenant_chat_request_admissions admission
+		  ON admission.request_id = reservation.request_id
+		WHERE reservation.tenant_id = $1::uuid AND reservation.user_id = $2::uuid
+		  AND reservation.idempotency_key = $3
 		FOR UPDATE
-	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID, requestContext.IdempotencyKey).Scan(
+	`, requestContext.ExecutionScope.TenantID, requestContext.ExecutionScope.Actor.UserID, requestContext.IdempotencyKey)
+	var action, detectedTypesJSON, policyDigest *string
+	var detectedCount *int
+	err := row.Scan(
 		&result.ReservationID, &result.RequestID, &result.State, &result.ReservedTokens,
 		&result.ReservedCostMicroUSD, &result.LedgerVersion, &result.CacheOutcome,
+		&action, &detectedTypesJSON, &detectedCount, &policyDigest,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tenantchat.UsageReservation{}, false, nil
@@ -355,15 +365,21 @@ func findReservationReplay(ctx context.Context, tx pgx.Tx, requestContext tenant
 	if result.RequestID != requestContext.RequestID {
 		return tenantchat.UsageReservation{}, false, tenantchat.ErrIdempotencyConflict
 	}
+	result.Safety, err = safetySummaryFromColumns(action, detectedTypesJSON, detectedCount, policyDigest)
+	if err != nil {
+		return tenantchat.UsageReservation{}, false, err
+	}
 	result.Replayed = true
 	return result, true, nil
 }
 
-func lockAdmission(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) (string, time.Time, error) {
-	var state string
-	var expiresAt time.Time
+func lockAdmission(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) (admissionRecord, error) {
+	var result admissionRecord
+	var action, detectedTypesJSON, policyDigest *string
+	var detectedCount *int
 	err := tx.QueryRow(ctx, `
-		SELECT state, expires_at
+		SELECT state, expires_at, created_at, masking_action, masking_detected_types::text,
+		       masking_detected_count, safety_policy_digest
 		FROM tenant_chat_request_admissions
 		WHERE admission_id = $1::uuid AND tenant_id = $2::uuid AND user_id = $3::uuid
 		  AND request_id = $4 AND turn_id = $5 AND idempotency_key = $6
@@ -373,6 +389,10 @@ func lockAdmission(ctx context.Context, tx pgx.Tx, requestContext tenantchat.Req
 		requestContext.ExecutionScope.Actor.UserID, requestContext.RequestID,
 		requestContext.TurnID, requestContext.IdempotencyKey,
 		requestContext.Snapshot.Version,
-	).Scan(&state, &expiresAt)
-	return state, expiresAt, err
+	).Scan(&result.State, &result.ExpiresAt, &result.CreatedAt, &action, &detectedTypesJSON, &detectedCount, &policyDigest)
+	if err != nil {
+		return admissionRecord{}, err
+	}
+	result.Safety, err = safetySummaryFromColumns(action, detectedTypesJSON, detectedCount, policyDigest)
+	return result, err
 }

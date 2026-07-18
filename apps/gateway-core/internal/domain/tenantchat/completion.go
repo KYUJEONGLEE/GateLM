@@ -32,17 +32,30 @@ type CompletionError struct {
 type SafetyEvaluation struct {
 	Input   CompletionInput
 	Blocked bool
+	Summary *SafetySummary
 }
 
 type SanitizationEvaluation struct {
 	Messages     []SanitizedMessage
 	PolicyDigest string
 	Blocked      bool
+	Summary      SafetySummary
 }
 
 type ExactCacheEntry struct {
-	ResponseText      string `json:"responseText"`
-	EffectiveModelKey string `json:"effectiveModelKey"`
+	ResponseText        string `json:"responseText"`
+	EffectiveProviderID string `json:"effectiveProviderId"`
+	EffectiveModelKey   string `json:"effectiveModelKey"`
+	EffectiveRouteTier  string `json:"effectiveRouteTier"`
+	SourceCostMicroUSD  int64  `json:"sourceCostMicroUsd"`
+}
+
+type LedgerlessObservability struct {
+	EffectiveProviderID string
+	EffectiveModelKey   string
+	EffectiveRouteTier  string
+	SavedCostMicroUSD   int64
+	MaskingAction       string
 }
 
 type ProviderTokenRateDecision struct {

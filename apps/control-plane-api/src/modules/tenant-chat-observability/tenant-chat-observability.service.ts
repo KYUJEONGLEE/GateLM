@@ -134,6 +134,8 @@ export class TenantChatObservabilityService {
       unconfirmedAggregate,
       provenance,
       breakdowns,
+      securityDetectorTypes,
+      securityCoverage,
       pendingOutbox,
       activeSnapshot,
     ] =
@@ -153,6 +155,10 @@ export class TenantChatObservabilityService {
             count(*) FILTER (WHERE terminal_outcome = 'rate_limited')::bigint AS rate_limited,
             count(*) FILTER (WHERE terminal_outcome = 'concurrency_limited')::bigint AS concurrency_limited,
             count(*) FILTER (WHERE terminal_outcome = 'safety_blocked')::bigint AS safety_blocked,
+            count(*) FILTER (WHERE masking_action = 'redacted')::bigint AS security_redacted,
+            count(*) FILTER (
+              WHERE masking_action = 'blocked' OR terminal_outcome = 'safety_blocked'
+            )::bigint AS security_blocked,
             count(*) FILTER (WHERE terminal_outcome = 'quota_blocked')::bigint AS quota_blocked,
             count(*) FILTER (WHERE terminal_outcome = 'budget_blocked')::bigint AS budget_blocked,
             coalesce(sum(attempt_count), 0)::bigint AS provider_attempts,
@@ -308,6 +314,32 @@ export class TenantChatObservabilityService {
           ORDER BY confirmed_cost_micro_usd DESC, grouped.provider_id, grouped.model_key
           LIMIT 100
         `),
+        this.prisma.$queryRaw<
+          Array<{ detector_type: string; request_count: bigint }>
+        >(Prisma.sql`
+          SELECT detected.detector_type, count(DISTINCT logs.request_id)::bigint AS request_count
+          FROM tenant_chat_invocation_logs logs
+          CROSS JOIN LATERAL jsonb_array_elements_text(logs.masking_detected_types) detected(detector_type)
+          WHERE logs.tenant_id = ${tenantId}::uuid
+            AND logs.surface = 'tenant_chat'
+            AND logs.execution_scope_kind = 'tenant_chat'
+            AND logs.completed_at >= ${from}
+            AND logs.completed_at < ${to}
+            AND logs.safety_policy_digest IS NOT NULL
+            AND jsonb_typeof(logs.masking_detected_types) = 'array'
+          GROUP BY detected.detector_type
+          ORDER BY request_count DESC, detected.detector_type
+          LIMIT 32
+        `),
+        this.prisma.$queryRaw<Array<{ observed_from: Date | null }>>(Prisma.sql`
+          SELECT min(completed_at) AS observed_from
+          FROM tenant_chat_invocation_logs
+          WHERE tenant_id = ${tenantId}::uuid
+            AND surface = 'tenant_chat'
+            AND execution_scope_kind = 'tenant_chat'
+            AND completed_at < ${to}
+            AND safety_policy_digest IS NOT NULL
+        `),
         this.prisma.tenantChatInvocationOutbox.count({
           where: { tenantId, publishedAt: null },
         }),
@@ -324,6 +356,9 @@ export class TenantChatObservabilityService {
     const attemptRow = attemptAggregate[0] ?? {};
     const unconfirmedRow = unconfirmedAggregate[0] ?? {};
     const projectedAt = row.projected_at instanceof Date ? row.projected_at : null;
+    const securityObservedFrom = securityCoverage[0]?.observed_from ?? null;
+    const securityRedacted = numberFrom(row.security_redacted);
+    const securityBlocked = numberFrom(row.security_blocked);
     const cacheHits = numberFrom(row.cache_hits);
     const cacheMisses = numberFrom(row.cache_misses);
     const cacheOff = numberFrom(row.cache_off);
@@ -417,6 +452,23 @@ export class TenantChatObservabilityService {
           fallbackSuccessCount: Number(item.fallback_success_count),
           confirmedCostMicroUsd: Number(item.confirmed_cost_micro_usd),
         })),
+        security: {
+          protectedRequests: securityRedacted + securityBlocked,
+          redactedRequests: securityRedacted,
+          blockedRequests: securityBlocked,
+          byDetectorType: securityDetectorTypes.map((item) => ({
+            detectorType: item.detector_type,
+            requestCount: Number(item.request_count),
+          })),
+          coverage: {
+            state: !securityObservedFrom
+              ? ('unavailable' as const)
+              : securityObservedFrom.getTime() > from.getTime() || pendingOutbox > 0
+                ? ('partial' as const)
+                : ('complete' as const),
+            observedFrom: securityObservedFrom?.toISOString() ?? null,
+          },
+        },
       },
     };
   }
@@ -442,6 +494,14 @@ function toInvocationResponse(
     confirmedOutputTokens: Number(row.confirmedOutputTokens),
     confirmedTotalTokens: Number(row.confirmedTotalTokens),
     confirmedCostMicroUsd: Number(row.confirmedCostMicroUsd),
+    maskingAction:
+      row.maskingAction === 'none' ||
+      row.maskingAction === 'redacted' ||
+      row.maskingAction === 'blocked'
+        ? row.maskingAction
+        : null,
+    maskingDetectedTypes: jsonStringArray(row.maskingDetectedTypes),
+    maskingDetectedCount: row.maskingDetectedCount ?? 0,
     quotaState: row.quotaState,
     budgetState: row.budgetState,
     cacheOutcome: row.cacheOutcome,
@@ -456,6 +516,12 @@ function toInvocationResponse(
 
 function numberFrom(value: bigint | Date | null | undefined): number {
   return typeof value === 'bigint' ? Number(value) : 0;
+}
+
+function jsonStringArray(value: Prisma.JsonValue | null): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 function costSeriesInterval(bucket: TenantChatCostSeriesQueryDto['bucket']): string {

@@ -134,6 +134,7 @@ type ledgerlessAccounting interface {
 		terminalOutcome string,
 		errorCode string,
 		cacheOutcome string,
+		observability tenantchat.LedgerlessObservability,
 	) (bool, error)
 }
 
@@ -298,6 +299,7 @@ func (s *Service) Prepare(
 			settleCtx, settleCancel := detachedAccountingContext(ctx)
 			_, settleErr := s.ledgerless.FinalizeLedgerless(
 				settleCtx, request.Context, snapshot, "safety_blocked", "CHAT_SAFETY_BLOCKED", "off",
+				tenantchat.LedgerlessObservability{MaskingAction: "blocked"},
 			)
 			settleCancel()
 			if settleErr != nil {
@@ -331,6 +333,12 @@ func (s *Service) Prepare(
 			settleCtx, settleCancel := detachedAccountingContext(ctx)
 			replayed, settleErr := s.ledgerless.FinalizeLedgerless(
 				settleCtx, request.Context, snapshot, "cache_hit", "", "hit",
+				tenantchat.LedgerlessObservability{
+					EffectiveProviderID: entry.EffectiveProviderID,
+					EffectiveModelKey:   entry.EffectiveModelKey,
+					EffectiveRouteTier:  entry.EffectiveRouteTier,
+					SavedCostMicroUSD:   entry.SourceCostMicroUSD,
+				},
 			)
 			settleCancel()
 			if settleErr != nil {
@@ -347,6 +355,7 @@ func (s *Service) Prepare(
 	if err != nil {
 		return nil, err
 	}
+	request.Context.Safety = tenantchat.CloneSafetySummary(reservation.Safety)
 	if reservation.Replayed {
 		if reservation.State == "reserved" {
 			if session := s.activeSession(request.Context); session != nil {
@@ -583,7 +592,7 @@ attemptLoop:
 			if err != nil {
 				return e.emitAccountingFailure(emit, err)
 			}
-			e.storeConfirmedPrimaryCache(ctx)
+			e.storeConfirmedPrimaryCache(ctx, settlement)
 			return e.emitEvent(emit, e.finalEvent(settlement, "succeeded", nil, false))
 		}
 
@@ -988,7 +997,7 @@ func (e *PreparedExecution) closeCurrentStream() {
 	}
 }
 
-func (e *PreparedExecution) storeConfirmedPrimaryCache(ctx context.Context) {
+func (e *PreparedExecution) storeConfirmedPrimaryCache(ctx context.Context, settlement tenantchat.UsageSettlement) {
 	if e == nil || e.cache == nil || e.attemptNo != 1 || !e.cacheEligible {
 		e.cacheResponse = nil
 		return
@@ -1002,7 +1011,9 @@ func (e *PreparedExecution) storeConfirmedPrimaryCache(ctx context.Context) {
 	cacheCtx, cancel := detachedAccountingContext(ctx)
 	defer cancel()
 	err := e.cache.Put(cacheCtx, e.requestContext, e.snapshot, e.input, tenantchat.ExactCacheEntry{
-		ResponseText: response, EffectiveModelKey: e.route.ModelKey,
+		ResponseText: response, EffectiveProviderID: e.route.ProviderID,
+		EffectiveModelKey: e.route.ModelKey, EffectiveRouteTier: e.route.Tier,
+		SourceCostMicroUSD: settlement.ConfirmedCostMicroUSD,
 	})
 	if err != nil {
 		e.recordCacheOperation("write", "error", "error")

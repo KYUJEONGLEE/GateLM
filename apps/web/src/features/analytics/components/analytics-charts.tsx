@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
+import type { AnalyticsRequestVolumePoint } from "@/features/analytics/analytics-usage-merge";
 import {
   AnalyticsEChart,
   type AnalyticsEChartOption,
@@ -444,7 +445,7 @@ export function AnalyticsRequestVolumeChart({
   points
 }: {
   ariaLabel: string;
-  points: AnalyticsLatencyDistributionPoint[];
+  points: AnalyticsRequestVolumePoint[];
 }) {
   const theme = useAnalyticsChartTheme();
   const option = useMemo<AnalyticsEChartOption>(

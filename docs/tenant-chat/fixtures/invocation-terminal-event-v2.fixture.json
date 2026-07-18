@@ -16,5 +16,9 @@
   "quotaState": "normal",
   "budgetState": "normal",
   "cacheOutcome": "off",
+  "maskingAction": "blocked",
+  "maskingDetectedTypes": ["email"],
+  "maskingDetectedCount": 1,
+  "safetyPolicyDigest": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "latencyMs": 3
 }

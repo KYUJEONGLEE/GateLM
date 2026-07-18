@@ -60,7 +60,10 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 		}},
 	}
 	input := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "synthetic private prompt"}}, Stream: true}
-	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
+	entry := tenantchat.ExactCacheEntry{
+		ResponseText: "synthetic private response", EffectiveProviderID: "provider_001",
+		EffectiveModelKey: "model_001", EffectiveRouteTier: "standard", SourceCostMicroUSD: 125,
+	}
 	if err := store.Put(context.Background(), requestContext, snapshot, input, entry); err != nil {
 		t.Fatalf("put exact cache: %v", err)
 	}
@@ -85,7 +88,7 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	if err != nil || differentModelField == originalField {
 		t.Fatalf("routed model must be bound into exact-cache fingerprint: field=%q err=%v", differentModelField, err)
 	}
-	if client.key != "tenant-chat:exact-cache:v1:tenant_001:user_001" || strings.Contains(client.key, client.field) {
+	if client.key != "tenant-chat:exact-cache:v2:tenant_001:user_001" || strings.Contains(client.key, client.field) {
 		t.Fatalf("unexpected cache namespace: %q", client.key)
 	}
 	if strings.Contains(string(client.value), input.Messages[0].Content) || strings.Contains(string(client.value), entry.ResponseText) {
@@ -131,7 +134,10 @@ func TestStoreHitsWhenLatestTurnImmediatelyRepeatsInSameConversation(t *testing.
 			MaxOutputTokens:      32, RequestedTier: "standard", CacheStrategy: "exact",
 		},
 	}
-	entry := tenantchat.ExactCacheEntry{ResponseText: "synthetic private response", EffectiveModelKey: "model_001"}
+	entry := tenantchat.ExactCacheEntry{
+		ResponseText: "synthetic private response", EffectiveProviderID: "provider_001",
+		EffectiveModelKey: "model_001", EffectiveRouteTier: "standard", SourceCostMicroUSD: 125,
+	}
 	if err := store.Put(context.Background(), requestContext, snapshot, initialInput, entry); err != nil {
 		t.Fatalf("put initial exact cache: %v", err)
 	}

@@ -76,6 +76,16 @@ export function toTenantChatDashboardOverview(
     requestCount: row.requestCount,
     p95ProviderLatencyMs: dashboard.latency.providerP95Ms
   }));
+  const security = dashboard.security ?? {
+    protectedRequests: dashboard.requests.safetyBlocked,
+    redactedRequests: 0,
+    blockedRequests: dashboard.requests.safetyBlocked,
+    byDetectorType: [],
+    coverage: {
+      state: "unavailable",
+      observedFrom: null
+    }
+  } satisfies TenantChatDashboard["security"];
 
   return {
     surface: "tenant_chat",
@@ -128,7 +138,10 @@ export function toTenantChatDashboardOverview(
       tenantChatAverageMs: dashboard.latency.averageMs,
       tenantChatP95Ms: dashboard.latency.p95Ms
     },
-    maskingActionCounts: {},
+    maskingActionCounts: {
+      redacted: security.redactedRequests,
+      blocked: security.blockedRequests
+    },
     routingSummaries: [],
     statusCounts,
     costByModel,
@@ -176,7 +189,8 @@ export function toTenantChatDashboardOverview(
       ],
       byProviderModel,
       bySafetyOutcome: [
-        { outcome: "blocked", requestCount: dashboard.requests.safetyBlocked }
+        { outcome: "redacted", requestCount: security.redactedRequests },
+        { outcome: "blocked", requestCount: security.blockedRequests }
       ],
       byCacheOutcome: [
         { outcome: "hit", requestCount: dashboard.requests.cacheHits },
@@ -260,6 +274,10 @@ export function mergeDashboardOverviews(
       tenantChat.routingSummaries,
       (row) => `${row.category}\u0000${row.difficulty}\u0000${row.routingReason}`,
       "requestCount"
+    ),
+    maskingActionCounts: mergeCountRecords(
+      projectApplication.maskingActionCounts,
+      tenantChat.maskingActionCounts
     ),
     statusCounts: mergeCountRecords(
       projectApplication.statusCounts,

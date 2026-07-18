@@ -30,6 +30,13 @@ test("sidebar omits inactive alerts and consistently names API Key management", 
   expect(apiKeyManagementSource).toContain('title: "API Key 관리"');
 });
 
+test("user menu trigger keeps a stable id across server and client renders", () => {
+  expect(shellSource).toContain(
+    'const userMenuTriggerId = "gatelm-console-user-menu-trigger";'
+  );
+  expect(shellSource).toMatch(/<DropdownMenuTrigger[\s\S]*?id=\{userMenuTriggerId\}/);
+});
+
 test("Chat App and legacy Tenant Chat routes activate one management item", () => {
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/chat-app")).toEqual({
     activeManagementItem: "chat-app",

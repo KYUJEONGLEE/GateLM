@@ -21,7 +21,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const defaultKeyPrefix = "tenant-chat:exact-cache:v1"
+const defaultKeyPrefix = "tenant-chat:exact-cache:v2"
 
 var ErrCacheUnavailable = errors.New("tenant chat exact cache unavailable")
 
@@ -75,7 +75,7 @@ func (s *Store) Get(
 		return tenantchat.ExactCacheEntry{}, false, ErrCacheUnavailable
 	}
 	var encoded envelope
-	if err := json.Unmarshal(raw, &encoded); err != nil || encoded.Version != 1 || encoded.KeySetID != keySet.ID {
+	if err := json.Unmarshal(raw, &encoded); err != nil || encoded.Version != 2 || encoded.KeySetID != keySet.ID {
 		return tenantchat.ExactCacheEntry{}, false, ErrCacheUnavailable
 	}
 	if !time.Unix(encoded.ExpiresAt, 0).After(s.now().UTC()) {
@@ -98,7 +98,7 @@ func (s *Store) Get(
 		return tenantchat.ExactCacheEntry{}, false, ErrCacheUnavailable
 	}
 	var entry tenantchat.ExactCacheEntry
-	if err := json.Unmarshal(plaintext, &entry); err != nil || entry.ResponseText == "" || entry.EffectiveModelKey == "" {
+	if err := json.Unmarshal(plaintext, &entry); err != nil || !validEntry(entry) {
 		return tenantchat.ExactCacheEntry{}, false, ErrCacheUnavailable
 	}
 	return entry, true, nil
@@ -111,7 +111,7 @@ func (s *Store) Put(
 	input tenantchat.CompletionInput,
 	entry tenantchat.ExactCacheEntry,
 ) error {
-	if entry.ResponseText == "" || entry.EffectiveModelKey == "" {
+	if !validEntry(entry) {
 		return ErrCacheUnavailable
 	}
 	keySet, namespace, fingerprint, err := s.resolve(requestContext, snapshot, input)
@@ -131,7 +131,7 @@ func (s *Store) Put(
 		return ErrCacheUnavailable
 	}
 	encoded := envelope{
-		Version: 1, KeySetID: keySet.ID,
+		Version: 2, KeySetID: keySet.ID,
 		ExpiresAt: s.now().UTC().Add(time.Duration(snapshot.Policies.Cache.TTLSeconds) * time.Second).Unix(),
 		Nonce:     base64.RawURLEncoding.EncodeToString(nonce),
 		Ciphertext: base64.RawURLEncoding.EncodeToString(aead.Seal(
@@ -187,6 +187,15 @@ func (s *Store) resolve(
 	fingerprint := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	namespace := strings.Join([]string{s.keyPrefix, tenantID, userID}, ":")
 	return keySet, namespace, fingerprint, nil
+}
+
+func validEntry(entry tenantchat.ExactCacheEntry) bool {
+	if entry.ResponseText == "" || entry.EffectiveProviderID == "" || entry.EffectiveModelKey == "" || entry.SourceCostMicroUSD < 0 {
+		return false
+	}
+	return entry.EffectiveRouteTier == "high_quality" ||
+		entry.EffectiveRouteTier == "standard" ||
+		entry.EffectiveRouteTier == "economy"
 }
 
 func routingModelRef(requestContext tenantchat.RequestContext) string {

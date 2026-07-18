@@ -634,6 +634,9 @@ func terminalUsageEventPayload(
 		},
 		"attempts": settlementAttemptsPayload(attempts), "terminalOutcome": terminalOutcome,
 	}
+	if err := addSafetySummaryPayload(payload, requestContext.Safety); err != nil {
+		return nil, err
+	}
 	return json.Marshal(payload)
 }
 

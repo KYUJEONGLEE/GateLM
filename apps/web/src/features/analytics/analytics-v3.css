@@ -72,8 +72,9 @@
 }
 
 .analytics-v3-filter-bar select {
+  appearance: none;
   min-height: 42px;
-  padding: 0 34px 0 12px;
+  padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   background: var(--surface);
@@ -117,6 +118,7 @@
   align-items: center;
   gap: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid var(--border);
 }
 
@@ -407,6 +409,45 @@
 .analytics-v3-main-chart {
   height: 330px;
   margin-top: 14px;
+}
+
+.analytics-v3-surface-latency-grid {
+  display: grid;
+  min-width: 0;
+  margin-top: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.analytics-v3-surface-latency {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.analytics-v3-surface-latency > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analytics-v3-surface-latency > header strong {
+  color: var(--foreground);
+  font-size: calc(14px + var(--global-font-lift));
+}
+
+.analytics-v3-surface-latency > header span {
+  color: var(--text-muted);
+  font-size: calc(13px + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+}
+
+.analytics-v3-surface-latency .analytics-v3-main-chart {
+  height: 260px;
+  margin-top: 8px;
 }
 
 .analytics-v3-ranked-chart {
@@ -785,6 +826,10 @@
   }
 
   .analytics-v3-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-v3-surface-latency-grid {
     grid-template-columns: 1fr;
   }
 

@@ -25,7 +25,17 @@
     "budget": { "$ref": "#/$defs/budget" },
     "attempts": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/attempt" } },
     "terminalOutcome": { "type": "string", "enum": ["succeeded", "failed", "cancelled", "cache_hit", "rate_limited", "quota_blocked", "budget_blocked"] },
-    "lateUsage": { "type": "boolean" }
+    "lateUsage": { "type": "boolean" },
+    "maskingAction": { "$ref": "#/$defs/maskingAction" },
+    "maskingDetectedTypes": { "$ref": "#/$defs/maskingDetectedTypes" },
+    "maskingDetectedCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+    "safetyPolicyDigest": { "$ref": "#/$defs/policyDigest" }
+  },
+  "dependentRequired": {
+    "maskingAction": ["maskingDetectedTypes", "maskingDetectedCount", "safetyPolicyDigest"],
+    "maskingDetectedTypes": ["maskingAction", "maskingDetectedCount", "safetyPolicyDigest"],
+    "maskingDetectedCount": ["maskingAction", "maskingDetectedTypes", "safetyPolicyDigest"],
+    "safetyPolicyDigest": ["maskingAction", "maskingDetectedTypes", "maskingDetectedCount"]
   },
   "allOf": [
     {
@@ -62,6 +72,9 @@
   "$defs": {
     "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
     "modelKey": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$" },
+    "maskingAction": { "type": "string", "enum": ["none", "redacted", "blocked"] },
+    "maskingDetectedTypes": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" } },
+    "policyDigest": { "type": "string", "pattern": "^sha256:[A-Za-z0-9_-]{43}$" },
     "policyState": { "type": "string", "enum": ["normal", "warning", "economy", "blocked"] },
     "executionScope": {
       "type": "object",

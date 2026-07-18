@@ -219,8 +219,8 @@ func TestEvaluatorSeedsPlaceholderCountersFromTrustedHistory(t *testing.T) {
 
 func TestEvaluatorSanitizationReturnsLogSafeContent(t *testing.T) {
 	evaluator := NewEvaluatorWithEngine(fixedMaskingEngine{result: masking.Result{
-		Action: masking.ActionRedacted, RedactedPrompt: "provider-safe",
-		LogSafePrompt: "storage-safe",
+		Action: masking.ActionRedacted, DetectedTypes: []string{"phone_number", "email", "email"},
+		DetectedCount: 3, RedactedPrompt: "provider-safe", LogSafePrompt: "storage-safe",
 	}})
 	snapshot := tenantruntime.Snapshot{Policies: tenantruntime.Policies{Safety: tenantruntime.SafetyPolicy{
 		Enabled: true, PolicyDigest: validPolicyDigest,
@@ -237,6 +237,12 @@ func TestEvaluatorSanitizationReturnsLogSafeContent(t *testing.T) {
 	if result.Blocked || result.PolicyDigest != validPolicyDigest || len(result.Messages) != 1 ||
 		result.Messages[0].ItemIndex != 0 || result.Messages[0].Content != "storage-safe" {
 		t.Fatalf("sanitization must return only log-safe content: %+v", result)
+	}
+	if result.Summary.MaskingAction != "redacted" ||
+		result.Summary.SafetyPolicyDigest != validPolicyDigest ||
+		result.Summary.MaskingDetectedCount != 3 ||
+		strings.Join(result.Summary.MaskingDetectedTypes, ",") != "email,phone_number" {
+		t.Fatalf("sanitization must return a content-free safety summary: %+v", result.Summary)
 	}
 }
 

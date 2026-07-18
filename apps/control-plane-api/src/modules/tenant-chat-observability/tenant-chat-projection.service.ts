@@ -23,6 +23,8 @@ import { validateTenantChatProjectionEvent } from './tenant-chat-projection.cont
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BINDING_DIGEST_PATTERN = /^hmac-sha256:[A-Za-z0-9_-]{43}$/;
+const SAFETY_POLICY_DIGEST_PATTERN = /^sha256:[A-Za-z0-9_-]{43}$/;
+const SAFETY_DETECTOR_TYPE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 const FORBIDDEN_KEYS = new Set([
   'authorization',
   'body',
@@ -218,6 +220,11 @@ export class TenantChatProjectionService
         confirmedOutputTokens: true,
         confirmedTotalTokens: true,
         confirmedCostMicroUsd: true,
+        savedCostMicroUsd: true,
+        maskingAction: true,
+        maskingDetectedTypes: true,
+        maskingDetectedCount: true,
+        safetyPolicyDigest: true,
         completedAt: true,
       },
     });
@@ -252,7 +259,11 @@ export class TenantChatProjectionService
           createdAt: true,
           employeeId: true,
           idempotencyKey: true,
+          maskingAction: true,
+          maskingDetectedTypes: true,
+          maskingDetectedCount: true,
           requestId: true,
+          safetyPolicyDigest: true,
           snapshotVersion: true,
           tenantId: true,
           turnId: true,
@@ -269,6 +280,7 @@ export class TenantChatProjectionService
         select: {
           digest: true,
           pricingVersion: true,
+          snapshotBody: true,
           tenantId: true,
           version: true,
         },
@@ -356,6 +368,17 @@ export class TenantChatProjectionService
 
     const attempts = event.attempts ?? [];
     const effectiveAttempt = selectEffectiveAttempt(attempts);
+    const effectiveProviderId =
+      event.effectiveProviderId ?? effectiveAttempt?.providerId;
+    const effectiveModelKey =
+      event.effectiveModelKey ?? effectiveAttempt?.modelKey;
+    const effectiveRouteTier =
+      event.effectiveRouteTier ??
+      routeTierFromSnapshot(
+        runtimeSnapshot.snapshotBody,
+        effectiveProviderId,
+        effectiveModelKey,
+      );
     const occurredAt = new Date(event.occurredAt);
     const startedAt =
       admission.createdAt ??
@@ -369,6 +392,32 @@ export class TenantChatProjectionService
       quota?.confirmedTotalTokensDelta ??
       confirmedInputTokens + confirmedOutputTokens;
     const confirmedCostMicroUsd = budget?.confirmedCostMicroUsdDelta ?? 0;
+    const savedCostMicroUsd =
+      event.savedCostMicroUsd !== undefined
+        ? BigInt(event.savedCostMicroUsd)
+        : event.cacheOutcome === 'hit'
+          ? existing?.savedCostMicroUsd ?? null
+          : 0n;
+    const eventSafety = safetySummaryFromEvent(event);
+    const admissionSafety = safetySummaryFromProjectionSource(admission);
+    if (
+      eventSafety &&
+      admissionSafety &&
+      !sameProjectedSafetySummary(eventSafety, admissionSafety) &&
+      !(
+        event.terminalOutcome === 'safety_blocked' &&
+        eventSafety.maskingAction === 'blocked' &&
+        sameProjectedSafetyEvidence(eventSafety, admissionSafety)
+      )
+    ) {
+      throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+    }
+    const safety = eventSafety ?? admissionSafety;
+    const maskingAction =
+      safety?.maskingAction ??
+      (event.terminalOutcome === 'safety_blocked'
+        ? 'blocked'
+        : existing?.maskingAction ?? null);
     const isLateUsageDelta =
       event.schemaVersion >= 2 &&
       event.eventType === 'usage_settled' &&
@@ -403,13 +452,19 @@ export class TenantChatProjectionService
         snapshotDigest,
         pricingVersion: BigInt(pricingVersion),
         terminalOutcome: event.terminalOutcome ?? 'failed',
-        effectiveProviderId: effectiveAttempt?.providerId,
-        effectiveModelKey: effectiveAttempt?.modelKey,
+        effectiveProviderId,
+        effectiveModelKey,
+        effectiveRouteTier,
         attemptCount: attempts.length,
         confirmedInputTokens: projectedConfirmedInputTokens,
         confirmedOutputTokens: projectedConfirmedOutputTokens,
         confirmedTotalTokens: projectedConfirmedTotalTokens,
         confirmedCostMicroUsd: projectedConfirmedCostMicroUsd,
+        savedCostMicroUsd,
+        maskingAction,
+        maskingDetectedTypes: safety?.maskingDetectedTypes,
+        maskingDetectedCount: safety?.maskingDetectedCount,
+        safetyPolicyDigest: safety?.safetyPolicyDigest,
         quotaState: quota?.state ?? event.quotaState ?? 'normal',
         budgetState: budget?.state ?? event.budgetState ?? 'normal',
         cacheOutcome: event.cacheOutcome ?? reservation?.cacheOutcome ?? 'off',
@@ -422,13 +477,19 @@ export class TenantChatProjectionService
       },
       update: {
         terminalOutcome: event.terminalOutcome ?? 'failed',
-        effectiveProviderId: effectiveAttempt?.providerId,
-        effectiveModelKey: effectiveAttempt?.modelKey,
+        effectiveProviderId,
+        effectiveModelKey,
+        effectiveRouteTier,
         attemptCount: attempts.length,
         confirmedInputTokens: projectedConfirmedInputTokens,
         confirmedOutputTokens: projectedConfirmedOutputTokens,
         confirmedTotalTokens: projectedConfirmedTotalTokens,
         confirmedCostMicroUsd: projectedConfirmedCostMicroUsd,
+        savedCostMicroUsd,
+        maskingAction,
+        maskingDetectedTypes: safety?.maskingDetectedTypes,
+        maskingDetectedCount: safety?.maskingDetectedCount,
+        safetyPolicyDigest: safety?.safetyPolicyDigest,
         quotaState: quota?.state ?? event.quotaState ?? 'normal',
         budgetState: budget?.state ?? event.budgetState ?? 'normal',
         cacheOutcome: event.cacheOutcome ?? reservation?.cacheOutcome ?? 'off',
@@ -552,6 +613,105 @@ function parseProjectionEvent(payload: Prisma.JsonValue): TenantChatProjectionEv
   };
 }
 
+type ProjectedSafetySummary = {
+  maskingAction: 'none' | 'redacted' | 'blocked';
+  maskingDetectedTypes: string[];
+  maskingDetectedCount: number;
+  safetyPolicyDigest: string;
+};
+
+function safetySummaryFromEvent(
+  event: TenantChatProjectionEvent,
+): ProjectedSafetySummary | undefined {
+  return buildProjectedSafetySummary({
+    maskingAction: event.maskingAction,
+    maskingDetectedTypes: event.maskingDetectedTypes,
+    maskingDetectedCount: event.maskingDetectedCount,
+    safetyPolicyDigest: event.safetyPolicyDigest,
+  });
+}
+
+function safetySummaryFromProjectionSource(source: {
+  maskingAction: string | null;
+  maskingDetectedTypes: Prisma.JsonValue | null;
+  maskingDetectedCount: number | null;
+  safetyPolicyDigest: string | null;
+}): ProjectedSafetySummary | undefined {
+  return buildProjectedSafetySummary(source);
+}
+
+function buildProjectedSafetySummary(source: {
+  maskingAction?: string | null;
+  maskingDetectedTypes?: unknown;
+  maskingDetectedCount?: number | null;
+  safetyPolicyDigest?: string | null;
+}): ProjectedSafetySummary | undefined {
+  const values = [
+    source.maskingAction,
+    source.maskingDetectedTypes,
+    source.maskingDetectedCount,
+    source.safetyPolicyDigest,
+  ];
+  if (values.every((value) => value === undefined || value === null)) {
+    return undefined;
+  }
+  if (
+    (source.maskingAction !== 'none' &&
+      source.maskingAction !== 'redacted' &&
+      source.maskingAction !== 'blocked') ||
+    !Array.isArray(source.maskingDetectedTypes) ||
+    source.maskingDetectedTypes.length > 32 ||
+    !Number.isSafeInteger(source.maskingDetectedCount) ||
+    (source.maskingDetectedCount ?? -1) < 0 ||
+    (source.maskingDetectedCount ?? 1_000_001) > 1_000_000 ||
+    typeof source.safetyPolicyDigest !== 'string' ||
+    !SAFETY_POLICY_DIGEST_PATTERN.test(source.safetyPolicyDigest)
+  ) {
+    throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+  }
+  const detectedTypes = source.maskingDetectedTypes;
+  if (
+    detectedTypes.some(
+      (value, index) =>
+        typeof value !== 'string' ||
+        !SAFETY_DETECTOR_TYPE_PATTERN.test(value) ||
+        (index > 0 && detectedTypes[index - 1] >= value),
+    )
+  ) {
+    throw new ProjectionError('PROJECTION_SOURCE_MISMATCH');
+  }
+  return {
+    maskingAction: source.maskingAction,
+    maskingDetectedTypes: detectedTypes as string[],
+    maskingDetectedCount: source.maskingDetectedCount as number,
+    safetyPolicyDigest: source.safetyPolicyDigest,
+  };
+}
+
+function sameProjectedSafetySummary(
+  left: ProjectedSafetySummary,
+  right: ProjectedSafetySummary,
+): boolean {
+  return (
+    left.maskingAction === right.maskingAction &&
+    sameProjectedSafetyEvidence(left, right)
+  );
+}
+
+function sameProjectedSafetyEvidence(
+  left: ProjectedSafetySummary,
+  right: ProjectedSafetySummary,
+): boolean {
+  return (
+    left.maskingDetectedCount === right.maskingDetectedCount &&
+    left.safetyPolicyDigest === right.safetyPolicyDigest &&
+    left.maskingDetectedTypes.length === right.maskingDetectedTypes.length &&
+    left.maskingDetectedTypes.every(
+      (detectorType, index) => detectorType === right.maskingDetectedTypes[index],
+    )
+  );
+}
+
 function assertEnvelopeMatches(
   row: TenantChatInvocationOutbox,
   event: TenantChatProjectionEvent,
@@ -591,6 +751,36 @@ function selectEffectiveAttempt(
     [...attempts].reverse().find((attempt) => attempt.outcome === 'succeeded') ??
     attempts[attempts.length - 1]
   );
+}
+
+function routeTierFromSnapshot(
+  snapshotBody: Prisma.JsonValue,
+  providerId: string | undefined,
+  modelKey: string | undefined,
+): 'high_quality' | 'standard' | 'economy' | undefined {
+  if (!providerId || !modelKey || !isRecord(snapshotBody)) {
+    return undefined;
+  }
+  const policies = snapshotBody.policies;
+  const routing = isRecord(policies) ? policies.routing : undefined;
+  const routes = isRecord(routing) ? routing.routes : undefined;
+  if (!Array.isArray(routes)) {
+    return undefined;
+  }
+  const route = routes.find(
+    (candidate) =>
+      isRecord(candidate) &&
+      candidate.providerId === providerId &&
+      candidate.modelKey === modelKey,
+  );
+  if (!isRecord(route)) {
+    return undefined;
+  }
+  return route.tier === 'high_quality' ||
+    route.tier === 'standard' ||
+    route.tier === 'economy'
+    ? route.tier
+    : undefined;
 }
 
 function rejectForbiddenData(value: Prisma.JsonValue): void {

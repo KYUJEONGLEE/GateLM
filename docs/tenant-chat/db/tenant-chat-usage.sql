@@ -13,6 +13,10 @@ CREATE TABLE tenant_chat_request_admissions (
   idempotency_key text NOT NULL,
   binding_digest text NOT NULL,
   snapshot_version bigint NOT NULL,
+  masking_action text NULL,
+  masking_detected_types jsonb NULL,
+  masking_detected_count integer NULL,
+  safety_policy_digest text NULL,
   state text NOT NULL DEFAULT 'active',
   expires_at timestamptz NOT NULL,
   consumed_at timestamptz NULL,
@@ -28,6 +32,20 @@ CREATE TABLE tenant_chat_request_admissions (
   ),
   CONSTRAINT tenant_chat_admission_state_check CHECK (state IN ('active', 'consumed', 'cancelled', 'expired')),
   CONSTRAINT tenant_chat_admission_snapshot_version_check CHECK (snapshot_version > 0),
+  CONSTRAINT tenant_chat_admission_safety_summary_check CHECK (
+    (
+      masking_action IS NULL
+      AND masking_detected_types IS NULL
+      AND masking_detected_count IS NULL
+      AND safety_policy_digest IS NULL
+    ) OR (
+      masking_action IN ('none', 'redacted', 'blocked')
+      AND jsonb_typeof(masking_detected_types) = 'array'
+      AND jsonb_array_length(masking_detected_types) <= 32
+      AND masking_detected_count BETWEEN 0 AND 1000000
+      AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
+    )
+  ),
   CONSTRAINT tenant_chat_admission_expiry_check CHECK (expires_at > created_at),
   CONSTRAINT tenant_chat_admission_id_length_check CHECK (
     char_length(request_id) BETWEEN 1 AND 128
@@ -373,11 +391,17 @@ CREATE TABLE tenant_chat_invocation_logs (
   terminal_outcome text NOT NULL,
   effective_provider_id text NULL,
   effective_model_key text NULL,
+  effective_route_tier text NULL,
   attempt_count smallint NOT NULL DEFAULT 0,
   confirmed_input_tokens bigint NOT NULL DEFAULT 0,
   confirmed_output_tokens bigint NOT NULL DEFAULT 0,
   confirmed_total_tokens bigint NOT NULL DEFAULT 0,
   confirmed_cost_micro_usd bigint NOT NULL DEFAULT 0,
+  saved_cost_micro_usd bigint NULL,
+  masking_action text NULL,
+  masking_detected_types jsonb NULL,
+  masking_detected_count integer NULL,
+  safety_policy_digest text NULL,
   quota_state text NOT NULL,
   budget_state text NOT NULL,
   cache_outcome text NOT NULL,
@@ -415,6 +439,23 @@ CREATE TABLE tenant_chat_invocation_logs (
     AND budget_state IN ('normal', 'warning', 'economy', 'blocked')
   ),
   CONSTRAINT tenant_chat_log_cache_check CHECK (cache_outcome IN ('off', 'hit', 'miss')),
+  CONSTRAINT tenant_chat_log_effective_route_tier_check CHECK (
+    effective_route_tier IS NULL OR effective_route_tier IN ('high_quality', 'standard', 'economy')
+  ),
+  CONSTRAINT tenant_chat_log_safety_summary_check CHECK (
+    (
+      masking_detected_types IS NULL
+      AND masking_detected_count IS NULL
+      AND safety_policy_digest IS NULL
+      AND (masking_action IS NULL OR masking_action IN ('none', 'redacted', 'blocked'))
+    ) OR (
+      masking_action IN ('none', 'redacted', 'blocked')
+      AND jsonb_typeof(masking_detected_types) = 'array'
+      AND jsonb_array_length(masking_detected_types) <= 32
+      AND masking_detected_count BETWEEN 0 AND 1000000
+      AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
+    )
+  ),
   CONSTRAINT tenant_chat_log_amounts_check CHECK (
     snapshot_version > 0
     AND pricing_version > 0
@@ -423,6 +464,7 @@ CREATE TABLE tenant_chat_invocation_logs (
     AND confirmed_output_tokens >= 0
     AND confirmed_total_tokens = confirmed_input_tokens + confirmed_output_tokens
     AND confirmed_cost_micro_usd >= 0
+    AND (saved_cost_micro_usd IS NULL OR saved_cost_micro_usd >= 0)
     AND latency_ms >= 0
     AND projected_event_version > 0
     AND completed_at >= started_at
@@ -439,6 +481,8 @@ CREATE INDEX tenant_chat_log_user_idx
   ON tenant_chat_invocation_logs (user_id, completed_at DESC);
 CREATE INDEX tenant_chat_log_employee_idx
   ON tenant_chat_invocation_logs (employee_id) WHERE employee_id IS NOT NULL;
+CREATE INDEX tenant_chat_log_policy_impact_idx
+  ON tenant_chat_invocation_logs (tenant_id, completed_at DESC, effective_route_tier);
 
 -- No DROP/DOWN statement belongs in the implementation migration. Runtime roles
 -- receive only the table privileges required by the ownership matrix; DDL stays

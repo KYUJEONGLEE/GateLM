@@ -48,16 +48,15 @@ export function AnalyticsV5Overview({
     ? {
         projects: "프로젝트별 사용량",
         projectsSub: "프로젝트에 귀속된 요청과 비용",
-        complex: "복합 요청",
+        complex: "고성능 요청",
         cost: "전체 AI 비용",
         costSub: "선택 기간의 실제 Provider 비용",
         empty: "선택한 기간에 표시할 데이터가 없습니다",
-        complexSub: "난이도 분류가 complex로 판정한 요청 비중",
+        complexSub: "App complex 분류 및 Tenant Chat high-quality 경로 요청 비중",
         modelShare: "모델 트래픽 비중",
         modelTrend: "모델별 요청 흐름",
         modelTrendSub: "라우팅 정책 적용 후 시간대별 요청 추이",
         routing: "난이도별 라우팅",
-        routingSub: "simple과 complex 분류의 실제 요청 비중",
         policyEvents: "정책 결과",
         requests: "전체 요청",
         requestsSub: "Gateway가 기록한 전체 트래픽",
@@ -65,18 +64,17 @@ export function AnalyticsV5Overview({
         title: "정책 효과"
       }
     : {
-        projects: "Usage by project",
-        projectsSub: "Requests and cost attributed to projects",
-        complex: "Complex requests",
+        projects: "Usage by source",
+        projectsSub: "Project/Application and Tenant Chat requests",
+        complex: "High-performance requests",
         cost: "Total AI spend",
         costSub: "Observed Provider spend for the selected range",
         empty: "No data for the selected range",
-        complexSub: "Share of requests classified as complex",
+        complexSub: "App complex classification and Tenant Chat high-quality route usage",
         modelShare: "Model traffic share",
         modelTrend: "Requests by model",
         modelTrendSub: "Traffic over time after routing policy",
-        routing: "Routing by difficulty",
-        routingSub: "Observed simple and complex classification share",
+        routing: "Routing policy result",
         policyEvents: "Policy outcomes",
         requests: "Total requests",
         requestsSub: "All traffic recorded by the Gateway",
@@ -88,13 +86,15 @@ export function AnalyticsV5Overview({
   const projectRows = model.usage.projectMix.slice(0, 5).map((row) => ({
     costMicroUsd: projectCostById.get(row.id) ?? 0,
     id: row.id,
-    label: projectNameById.get(row.id) ?? formatDisplayIdentifier(row.id),
+    label: row.id === "surface:tenant_chat"
+      ? "Tenant Chat"
+      : projectNameById.get(row.id) ?? formatDisplayIdentifier(row.id),
     requestCount: row.value
   }));
   const policyRows = model.impact.outcomes.filter((row) => row.value > 0);
   const routingDifficultyRows = model.impact.routingDifficulties;
-  const routedRequests = routingDifficultyRows.reduce((sum, row) => sum + row.value, 0);
-  const complexRequests = valueById(routingDifficultyRows, "complex");
+  const routedRequests = model.impact.highPerformanceEligibleRequests;
+  const highPerformanceRequests = model.impact.highPerformanceRequests;
 
   return (
     <section className="analytics-v5-overview">
@@ -112,7 +112,9 @@ export function AnalyticsV5Overview({
           <span>{text.cost}</span>
           <div>
             <strong>{formatMicroUsd(model.cost.totalCostMicroUsd)}</strong>
-            <em>{formatPercent(model.impact.spendAvoidanceRate)} {text.saved}</em>
+            <em>{model.impact.savedCostComplete
+              ? `${formatPercent(model.impact.spendAvoidanceRate)} ${text.saved}`
+              : `— ${text.saved}`}</em>
           </div>
           <small>{text.costSub}</small>
         </article>
@@ -124,8 +126,8 @@ export function AnalyticsV5Overview({
         <article className="analytics-v5-metric analytics-v5-response-metric">
           <span>{text.complex}</span>
           <div>
-            <strong>{formatPercent(safeRatio(complexRequests, routedRequests))}</strong>
-            <em>{formatInteger(complexRequests)}</em>
+            <strong>{formatPercent(safeRatio(highPerformanceRequests, routedRequests))}</strong>
+            <em>{formatInteger(highPerformanceRequests)}</em>
           </div>
           <small>{text.complexSub}</small>
         </article>
@@ -157,7 +159,7 @@ export function AnalyticsV5Overview({
       </div>
 
       <div className="analytics-v5-secondary-grid">
-        <AnalyticsV5Surface subtitle={text.routingSub} title={text.routing}>
+        <AnalyticsV5Surface title={text.routing}>
           {routingDifficultyRows.length ? (
             <AnalyticsV5RoutingDifficultyChart
               ariaLabel={text.routing}
@@ -226,8 +228,4 @@ function formatMicroUsd(value: number) {
 
 function safeRatio(numerator: number, denominator: number) {
   return denominator > 0 ? numerator / denominator : 0;
-}
-
-function valueById(rows: AnalyticsValueRow[], id: string) {
-  return rows.find((row) => row.id === id)?.value ?? 0;
 }

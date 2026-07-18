@@ -17,7 +17,12 @@ import type { Locale } from "@/lib/i18n/locale";
 const palette = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#94a3b8"];
 const routingDifficultyColors: Record<string, string> = {
   complex: "#3b82f6",
+  "project_application:complex": "#3b82f6",
+  "project_application:simple": "#10b981",
   simple: "#10b981",
+  "tenant_chat:economy": "#f59e0b",
+  "tenant_chat:high_quality": "#8b5cf6",
+  "tenant_chat:standard": "#06b6d4",
   other: "#94a3b8"
 };
 const MODEL_LEGEND_MAX_LENGTH = 22;
@@ -204,7 +209,7 @@ export function AnalyticsV5RoutingDifficultyChart({
         axisLabel: { color: theme.label, fontSize: 16, fontWeight: 800 },
         axisLine: { show: false },
         axisTick: { show: false },
-        data: visibleRows.map((row) => routingDifficultyLabel(row.id, locale)),
+        data: visibleRows.map((row) => row.label),
         inverse: true,
         type: "category"
       },
@@ -327,13 +332,6 @@ function formatBucket(value: string, range: LiveAnalyticsRange, locale: Locale) 
     hour: "2-digit",
     minute: range === "1d" ? undefined : "2-digit"
   }).format(date);
-}
-
-function routingDifficultyLabel(id: string, locale: Locale) {
-  const labels = locale === "ko"
-    ? { complex: "복합", simple: "단순", other: "기타" }
-    : { complex: "Complex", simple: "Simple", other: "Other" };
-  return labels[id as keyof typeof labels] ?? id;
 }
 
 function routingValueLabel(params: { data?: { share?: number }; value?: number }) {

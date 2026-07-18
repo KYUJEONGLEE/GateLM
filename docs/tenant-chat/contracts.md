@@ -346,6 +346,8 @@ Correctness source는 period/reservation/ledger transaction이다. `TenantChatIn
 
 Ledger transition outbox의 최신 writer는 paired [usage settlement schema v3](./schemas/usage-settlement-event-v3.schema.json)를 따르고 reservation에 고정된 필수 `cacheOutcome=off|miss`를 모든 transition에 전달한다. Exact Cache hit는 usage reservation을 만들지 않으므로 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)의 `cacheOutcome=hit`을 사용한다. projector는 v1/v2를 계속 읽으며 해당 필드가 없으면 backfill된 reservation provenance를 사용한다.
 
+Analytics policy-impact projection is additive to that ledger contract. `TenantChatInvocationLog` persists nullable `effectiveRouteTier=high_quality|standard|economy`, non-negative `savedCostMicroUsd`, and bounded safety summary fields. The projector derives a provider-call route tier only by matching the final effective provider/model against the immutable RuntimeSnapshot. Exact-cache payload v2 carries encrypted source provider/model/tier and source confirmed cost; a cache-hit v2 terminal event may project those bounded values without content. Historical cache hits with no source-cost evidence remain `NULL`, and historical masking is never reconstructed from content. Tenant-wide Analytics may combine the resulting aggregate with Project/Application data, while any project-scoped query excludes Tenant Chat.
+
 Idempotency rules:
 
 - `turnId`는 Chat API가 logical user turn마다 한 번 생성한다.
@@ -437,6 +439,11 @@ Idempotency rules:
 - p50/p95/p99 total/provider latency
 - snapshotVersion/pricingVersion별 safe provenance
 - projection freshness/lag
+- content-free safety summary가 관측된 요청의 masking action `none|redacted|blocked`, detector type별 요청 수, redacted/blocked 보호 처리량
+
+Gateway는 sanitization 직후 admission에 `maskingAction`, 정규화·중복 제거된 `maskingDetectedTypes`, 총 `maskingDetectedCount`, pinned `safetyPolicyDigest`를 원문·탐지값·span 없이 기록한다. 네 field는 terminal event와 `TenantChatInvocationLog`에서 함께 존재하거나 모두 없어야 한다. 기존 event/log에 이 묶음이 없으면 `passed`로 추정하지 않고 security coverage를 `partial` 또는 `unavailable`로 표시한다. `terminalOutcome=safety_blocked`는 과거 호환 집계에서 blocked로 셀 수 있지만 detector type을 임의 생성하지 않는다.
+
+배포는 reader-first로 수행한다. Control Plane migration과 additive event reader/projector를 먼저 배포하고, 다음으로 Gateway writer를 활성화한 뒤, 마지막으로 Dashboard/Web consumer를 노출한다. 이 순서를 지키는 동안 legacy event는 계속 projection되며 safety summary가 없는 구간만 coverage로 명시한다.
 
 Paired [Dashboard schema](./schemas/dashboard-aggregate.schema.json)는 content-free aggregate만 허용한다.
 메인 Dashboard 비용 추이와 legacy union reader는 additive [cost series schema](./schemas/cost-series.schema.json)를 사용하며 confirmed cost만 포함한다.

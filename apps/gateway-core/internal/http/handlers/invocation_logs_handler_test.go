@@ -884,9 +884,24 @@ func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T)
 				P99LatencyMs:        &p99Latency,
 				ThroughputPerMinute: &throughput,
 				ErrorRate:           &errorRate,
+				SystemErrorRequests: 3885,
 				TotalRequests:       129512,
 			},
+			SurfaceSummaries: []invocationlog.AnalyticsSurfaceSummary{{
+				Surface: invocationlog.AnalyticsSurfaceProjectApplication,
+				Summary: invocationlog.AnalyticsPerformanceSummary{
+					AvgLatencyMs:        &avgLatency,
+					P95LatencyMs:        &p95Latency,
+					P99LatencyMs:        &p99Latency,
+					ThroughputPerMinute: &throughput,
+					ErrorRate:           &errorRate,
+					SystemErrorRequests: 3885,
+					TotalRequests:       129512,
+				},
+				LastEventAt: &lastLogCreatedAt,
+			}},
 			ProviderModelPerformance: []invocationlog.AnalyticsProviderModelPerformance{{
+				Surface:           invocationlog.AnalyticsSurfaceProjectApplication,
 				Provider:          "OpenAI",
 				Model:             "gpt-4o-mini",
 				Requests:          129512,
@@ -900,11 +915,13 @@ func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T)
 				CacheHitRate:      &cacheHitRate,
 			}},
 			P95LatencyByProvider: []invocationlog.AnalyticsProviderLatency{{
+				Surface:      invocationlog.AnalyticsSurfaceProjectApplication,
 				Provider:     "OpenAI",
 				P95LatencyMs: &p95Latency,
 				Requests:     129512,
 			}},
 			LatencyDistribution: []invocationlog.AnalyticsLatencyDistributionBucket{{
+				Surface:      invocationlog.AnalyticsSurfaceProjectApplication,
 				Bucket:       time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC),
 				P50LatencyMs: &avgLatency,
 				P95LatencyMs: &p95Latency,
@@ -912,6 +929,7 @@ func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T)
 				Requests:     100,
 			}},
 			SlowestRequests: []invocationlog.AnalyticsSlowRequest{{
+				Surface:        invocationlog.AnalyticsSurfaceProjectApplication,
 				RequestID:      "request_slow_001",
 				ProjectID:      "project_demo",
 				Provider:       "OpenAI",
@@ -935,7 +953,7 @@ func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T)
 		Reader:   reader,
 		TenantID: "tenant_demo",
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?projectId=project_demo&provider=OpenAI&model=gpt-4o-mini&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?projectId=project_demo&provider=OpenAI&model=gpt-4o-mini&includeTenantChat=true&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -943,26 +961,32 @@ func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if reader.filter.TenantID != "tenant_demo" || reader.filter.ProjectID != "project_demo" || reader.filter.Provider != "OpenAI" || reader.filter.Model != "gpt-4o-mini" {
+	if reader.filter.TenantID != "tenant_demo" || reader.filter.ProjectID != "project_demo" || reader.filter.Provider != "OpenAI" || reader.filter.Model != "gpt-4o-mini" || !reader.filter.IncludeTenantChat {
 		t.Fatalf("unexpected analytics filter: %+v", reader.filter)
 	}
 	var response analyticsPerformanceResponse
 	if err := json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Data.Summary.TotalRequests != 129512 || response.Data.Summary.P95LatencyMs == nil || *response.Data.Summary.P95LatencyMs != p95Latency {
+	if response.Data.Summary.TotalRequests != 129512 || response.Data.Summary.SystemErrorRequests != 3885 || response.Data.Summary.P95LatencyMs == nil || *response.Data.Summary.P95LatencyMs != p95Latency {
 		t.Fatalf("unexpected summary: %+v", response.Data.Summary)
 	}
-	if len(response.Data.ProviderModelPerformance) != 1 || response.Data.ProviderModelPerformance[0].Provider != "OpenAI" || response.Data.ProviderModelPerformance[0].TotalCostUSD != "401.120000" {
+	if len(response.Data.SurfaceSummaries) != 1 || response.Data.SurfaceSummaries[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || response.Data.SurfaceSummaries[0].P95LatencyMs == nil || *response.Data.SurfaceSummaries[0].P95LatencyMs != p95Latency {
+		t.Fatalf("unexpected surface summaries: %+v", response.Data.SurfaceSummaries)
+	}
+	if len(response.Data.ProviderModelPerformance) != 1 || response.Data.ProviderModelPerformance[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || response.Data.ProviderModelPerformance[0].Provider != "OpenAI" || response.Data.ProviderModelPerformance[0].TotalCostUSD != "401.120000" {
 		t.Fatalf("unexpected provider/model performance: %+v", response.Data.ProviderModelPerformance)
 	}
-	if len(response.Data.LatencyDistribution) != 1 || response.Data.LatencyDistribution[0].Label != "00:00" {
+	if len(response.Data.LatencyDistribution) != 1 || response.Data.LatencyDistribution[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || response.Data.LatencyDistribution[0].Label != "00:00" {
 		t.Fatalf("unexpected latency distribution: %+v", response.Data.LatencyDistribution)
 	}
 	if response.Data.BucketInterval != "1h" || response.Data.ExpectedBucketCount != 24 {
 		t.Fatalf("unexpected bucket metadata: interval=%s count=%d", response.Data.BucketInterval, response.Data.ExpectedBucketCount)
 	}
-	if len(response.Data.SlowestRequests) != 1 || response.Data.SlowestRequests[0].RequestID != "request_slow_001" {
+	if !response.Data.Filter.IncludeTenantChat {
+		t.Fatalf("expected includeTenantChat filter echo, got %+v", response.Data.Filter)
+	}
+	if len(response.Data.SlowestRequests) != 1 || response.Data.SlowestRequests[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || response.Data.SlowestRequests[0].RequestID != "request_slow_001" || response.Data.SlowestRequests[0].ProjectID == nil || response.Data.SlowestRequests[0].StatusCode == nil {
 		t.Fatalf("unexpected slowest requests: %+v", response.Data.SlowestRequests)
 	}
 	for _, forbidden := range []string{
@@ -978,6 +1002,71 @@ func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T)
 		if strings.Contains(rr.Body.String(), forbidden) {
 			t.Fatalf("response must not include forbidden field %q: %s", forbidden, rr.Body.String())
 		}
+	}
+}
+
+func TestAnalyticsPerformanceHandlerRejectsInvalidIncludeTenantChat(t *testing.T) {
+	handler := AnalyticsPerformanceHandler{
+		Reader:   &recordingAnalyticsPerformanceReader{},
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?includeTenantChat=yes&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "includeTenantChat must be true or false") {
+		t.Fatalf("expected invalid includeTenantChat rejection, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestAnalyticsPerformanceHandlerReturnsTenantChatNullableAttribution(t *testing.T) {
+	completedAt := time.Date(2026, 6, 25, 0, 59, 0, 0, time.UTC)
+	reader := &recordingAnalyticsPerformanceReader{
+		performance: invocationlog.AnalyticsPerformanceFields{
+			SurfaceSummaries: []invocationlog.AnalyticsSurfaceSummary{{
+				Surface:     invocationlog.AnalyticsSurfaceTenantChat,
+				Summary:     invocationlog.AnalyticsPerformanceSummary{TotalRequests: 1},
+				LastEventAt: &completedAt,
+			}},
+			SlowestRequests: []invocationlog.AnalyticsSlowRequest{{
+				Surface:        invocationlog.AnalyticsSurfaceTenantChat,
+				RequestID:      "request_tenant_chat_001",
+				Provider:       "OpenAI",
+				Model:          "gpt-4o-mini",
+				LatencyMs:      1500,
+				TerminalStatus: "provider_timeout",
+				CreatedAt:      completedAt,
+			}},
+		},
+	}
+	handler := AnalyticsPerformanceHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.ProjectID != "" {
+		t.Fatalf("expected unscoped analytics filter, got %+v", reader.filter)
+	}
+	var response analyticsPerformanceResponse
+	if err := json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Data.SurfaceSummaries) != 1 || response.Data.SurfaceSummaries[0].Surface != invocationlog.AnalyticsSurfaceTenantChat {
+		t.Fatalf("unexpected tenant chat surface summary: %+v", response.Data.SurfaceSummaries)
+	}
+	if len(response.Data.SlowestRequests) != 1 || response.Data.SlowestRequests[0].Surface != invocationlog.AnalyticsSurfaceTenantChat || response.Data.SlowestRequests[0].ProjectID != nil || response.Data.SlowestRequests[0].StatusCode != nil {
+		t.Fatalf("expected nullable tenant chat attribution, got %+v", response.Data.SlowestRequests)
+	}
+	if !strings.Contains(rr.Body.String(), `"projectId":null`) || !strings.Contains(rr.Body.String(), `"statusCode":null`) {
+		t.Fatalf("expected explicit nullable attribution fields, got %s", rr.Body.String())
 	}
 }
 

@@ -19,10 +19,13 @@ func (s *ReservationStore) FinalizeLedgerless(
 	terminalOutcome string,
 	errorCode string,
 	cacheOutcome string,
+	observability tenantchat.LedgerlessObservability,
 ) (replayed bool, err error) {
 	started := time.Now()
 	defer s.observeTransaction("finalize_ledgerless", started)
-	if s == nil || s.pool == nil || !validLedgerlessOutcome(terminalOutcome, errorCode, cacheOutcome) {
+	if s == nil || s.pool == nil ||
+		!validLedgerlessOutcome(terminalOutcome, errorCode, cacheOutcome) ||
+		!validLedgerlessObservability(terminalOutcome, observability) {
 		return false, tenantchat.ErrUsageGuardUnavailable
 	}
 	tx, err := s.pool.Begin(ctx)
@@ -35,14 +38,14 @@ func (s *ReservationStore) FinalizeLedgerless(
 		}
 	}()
 	now := s.now().UTC()
-	state, expiresAt, err := lockAdmission(ctx, tx, requestContext)
+	admission, err := lockAdmission(ctx, tx, requestContext)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, tenantchat.ErrAdmissionExpired
 		}
 		return false, tenantchat.ErrUsageGuardUnavailable
 	}
-	if state == "consumed" {
+	if admission.State == "consumed" {
 		var count int
 		err = tx.QueryRow(ctx, `
 			SELECT count(*) FROM tenant_chat_invocation_outbox
@@ -61,15 +64,20 @@ func (s *ReservationStore) FinalizeLedgerless(
 		}
 		return true, nil
 	}
-	if state != "active" || !expiresAt.After(now) {
+	if admission.State != "active" || !admission.ExpiresAt.After(now) {
 		return false, tenantchat.ErrAdmissionExpired
+	}
+	requestContext.Safety = tenantchat.CloneSafetySummary(admission.Safety)
+	if requestContext.Safety != nil && observability.MaskingAction != "" {
+		requestContext.Safety.MaskingAction = observability.MaskingAction
 	}
 	eventID, err := newUUID()
 	if err != nil {
 		return false, tenantchat.ErrUsageGuardUnavailable
 	}
 	payload, err := ledgerlessTerminalPayload(
-		eventID, requestContext, snapshot, terminalOutcome, errorCode, cacheOutcome, now,
+		eventID, requestContext, snapshot, terminalOutcome, errorCode, cacheOutcome, observability,
+		ledgerlessLatencyMs(admission.CreatedAt, now), now,
 	)
 	if err != nil {
 		return false, tenantchat.ErrUsageGuardUnavailable
@@ -117,6 +125,8 @@ func ledgerlessTerminalPayload(
 	terminalOutcome string,
 	errorCode string,
 	cacheOutcome string,
+	observability tenantchat.LedgerlessObservability,
+	latencyMs int64,
 	now time.Time,
 ) ([]byte, error) {
 	actor := requestContext.ExecutionScope.Actor
@@ -134,12 +144,57 @@ func ledgerlessTerminalPayload(
 		"idempotencyKey": requestContext.IdempotencyKey, "executionScope": executionScope,
 		"snapshotVersion": requestContext.Snapshot.Version, "pricingVersion": snapshot.Pricing.Version,
 		"terminalOutcome": terminalOutcome, "quotaState": "normal", "budgetState": "normal",
-		"cacheOutcome": cacheOutcome, "latencyMs": 0,
+		"cacheOutcome": cacheOutcome, "latencyMs": latencyMs,
 	}
 	if errorCode != "" {
 		payload["errorCode"] = errorCode
 	}
+	if observability.EffectiveProviderID != "" {
+		payload["effectiveProviderId"] = observability.EffectiveProviderID
+	}
+	if observability.EffectiveModelKey != "" {
+		payload["effectiveModelKey"] = observability.EffectiveModelKey
+	}
+	if observability.EffectiveRouteTier != "" {
+		payload["effectiveRouteTier"] = observability.EffectiveRouteTier
+	}
+	if terminalOutcome == "cache_hit" {
+		payload["savedCostMicroUsd"] = observability.SavedCostMicroUSD
+	}
+	if err := addSafetySummaryPayload(payload, requestContext.Safety); err != nil {
+		return nil, err
+	}
 	return json.Marshal(payload)
+}
+
+func ledgerlessLatencyMs(startedAt time.Time, completedAt time.Time) int64 {
+	latencyMs := completedAt.Sub(startedAt).Milliseconds()
+	if latencyMs < 0 {
+		return 0
+	}
+	return latencyMs
+}
+
+func validLedgerlessObservability(terminalOutcome string, value tenantchat.LedgerlessObservability) bool {
+	if value.SavedCostMicroUSD < 0 {
+		return false
+	}
+	if value.MaskingAction != "" && value.MaskingAction != "none" &&
+		value.MaskingAction != "redacted" && value.MaskingAction != "blocked" {
+		return false
+	}
+	if terminalOutcome == "safety_blocked" {
+		return value.MaskingAction == "blocked"
+	}
+	if terminalOutcome != "cache_hit" {
+		return true
+	}
+	if value.EffectiveProviderID == "" || value.EffectiveModelKey == "" {
+		return false
+	}
+	return value.EffectiveRouteTier == "high_quality" ||
+		value.EffectiveRouteTier == "standard" ||
+		value.EffectiveRouteTier == "economy"
 }
 
 func validLedgerlessOutcome(terminalOutcome string, errorCode string, cacheOutcome string) bool {

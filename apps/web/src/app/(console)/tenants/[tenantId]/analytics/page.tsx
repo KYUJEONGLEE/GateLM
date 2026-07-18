@@ -19,7 +19,13 @@ import {
   AnalyticsUsagePanel
 } from "@/features/analytics/components/analytics-panels";
 import { AnalyticsV5Overview } from "@/features/analytics/components/analytics-v5-overview";
+import { buildAnalyticsCacheEvidence } from "@/features/analytics/analytics-cache-merge";
 import { buildAnalyticsReadModel } from "@/features/analytics/analytics-read-model";
+import { mergeAnalyticsSecurityEvidence } from "@/features/analytics/analytics-security-evidence";
+import {
+  buildAnalyticsUsageEvidence,
+  tenantChatBucketForAnalyticsRange
+} from "@/features/analytics/analytics-usage-merge";
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
@@ -29,6 +35,17 @@ import {
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import {
+  getTenantChatCostSeries,
+  getTenantChatDashboard
+} from "@/lib/control-plane/tenant-chat-observability-client";
+import {
+  mergeCostOverTime,
+  selectDashboardSurfaceOverview,
+  toTenantChatCostOverTime,
+  toTenantChatDashboardOverview
+} from "@/lib/dashboard/unified-dashboard";
+import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import { getLiveAnalyticsSecurityEvidence } from "@/lib/gateway/live-analytics-security";
@@ -38,12 +55,12 @@ import {
   type LiveAnalyticsPerformance,
   type LiveAnalyticsRange
 } from "@/lib/gateway/live-analytics-performance";
+import { getLiveAnalyticsReliability } from "@/lib/gateway/live-analytics-reliability";
 import { getLiveAnalyticsV5Evidence } from "@/lib/gateway/live-analytics-v5";
 import {
   getLiveDashboardOverview,
   type LiveDashboardOverview
 } from "@/lib/gateway/live-dashboard-overview";
-import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -159,6 +176,13 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     ...requestedFilters,
     projectId: effectiveProjectId ?? requestedFilters.projectId
   };
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
+  const shouldIncludeTenantChat =
+    (activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security") &&
+    !projectScoped &&
+    !filters.projectId;
+  const shouldLoadTenantChatSeries =
+    shouldIncludeTenantChat && (activeTab === "usage" || activeTab === "cost");
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
@@ -166,13 +190,38 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const needsSecurityEvidence = activeTab === "security";
   const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
-  const [overview, performance, costTrend, v5Evidence, reliabilityRecords, securityEvidence] = await Promise.all([
+  const [
+    projectApplicationOverview,
+    tenantChatDashboard,
+    tenantChatSeries,
+    performance,
+    projectApplicationCostTrend,
+    v5Evidence,
+    reliability,
+    projectApplicationSecurityEvidence
+  ] = await Promise.all([
     getLiveDashboardOverview(effectiveTenantId, {
       projectId: filters.projectId || undefined,
       range: filters.range
     }),
+    shouldIncludeTenantChat
+      ? getTenantChatDashboard(
+          effectiveTenantId,
+          reliabilityRange.from,
+          reliabilityRange.to
+        )
+      : Promise.resolve(undefined),
+    shouldLoadTenantChatSeries
+      ? getTenantChatCostSeries(
+          effectiveTenantId,
+          reliabilityRange.from,
+          reliabilityRange.to,
+          tenantChatBucketForAnalyticsRange(filters.range)
+        )
+      : Promise.resolve(undefined),
     needsPerformance
       ? getLiveAnalyticsPerformance(effectiveTenantId, {
+          includeTenantChat: activeTab === "performance" && !projectScoped,
           model: activeTab === "performance" ? filters.model || undefined : undefined,
           projectId: filters.projectId || undefined,
           provider: activeTab === "performance" ? filters.provider || undefined : undefined,
@@ -192,12 +241,10 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         })
       : Promise.resolve(undefined),
     needsReliabilityEvidence
-      ? getLiveGatewayRequestLogs({
-          from: reliabilityRange.from,
-          limit: 100,
+      ? getLiveAnalyticsReliability(effectiveTenantId, {
+          incidentLimit: 4,
           projectId: filters.projectId || undefined,
-          tenantId: effectiveTenantId,
-          to: reliabilityRange.to
+          range: filters.range
         })
       : Promise.resolve(undefined),
     needsSecurityEvidence
@@ -210,17 +257,96 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       : Promise.resolve(undefined)
   ]);
 
+  const tenantChatOverview = tenantChatDashboard
+    ? toTenantChatDashboardOverview(effectiveTenantId, tenantChatDashboard)
+    : undefined;
+  const tenantChatCostTrend = tenantChatSeries
+    ? toTenantChatCostOverTime(tenantChatSeries)
+    : undefined;
+  const costTrend = projectApplicationCostTrend && tenantChatCostTrend
+    ? mergeCostOverTime(projectApplicationCostTrend, tenantChatCostTrend)
+    : projectApplicationCostTrend ?? tenantChatCostTrend;
+  const selectedOverview =
+    activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security"
+    ? selectDashboardSurfaceOverview(
+        shouldIncludeTenantChat ? "all" : "project_application",
+        projectApplicationOverview,
+        tenantChatOverview,
+        { tenantChatNotConfigured: tenantChatDashboard === null }
+      )
+    : projectApplicationOverview;
+  const overview = activeTab === "usage" && usageSeriesIsPartial({
+    performanceAvailable: Boolean(performance),
+    projectApplicationAvailable: Boolean(projectApplicationOverview),
+    tenantChatAvailable: Boolean(tenantChatOverview),
+    tenantChatSeriesAvailable: Boolean(tenantChatSeries)
+  })
+    ? markAnalyticsUsagePartial(selectedOverview)
+    : activeTab === "cost" && costSeriesIsPartial({
+        projectApplicationAvailable: Boolean(projectApplicationOverview),
+        projectApplicationSeriesAvailable: Boolean(projectApplicationCostTrend),
+        tenantChatAvailable: Boolean(tenantChatOverview),
+        tenantChatSeriesAvailable: Boolean(tenantChatCostTrend)
+      })
+      ? markAnalyticsCostPartial(selectedOverview)
+    : selectedOverview;
+  const usageEvidence = activeTab === "usage"
+    ? buildAnalyticsUsageEvidence({
+        locale,
+        projectApplicationOverview,
+        projectRequestVolume: projectApplicationOverview
+          ? performance?.latencyDistribution
+          : undefined,
+        range: filters.range,
+        tenantChatOverview,
+        tenantChatSeries: tenantChatOverview ? tenantChatSeries : undefined
+      })
+    : undefined;
+  const cacheEvidence = activeTab === "cache"
+    ? buildAnalyticsCacheEvidence({
+        projectApplicationOverview,
+        tenantChatOverview: shouldIncludeTenantChat ? tenantChatOverview : undefined
+      })
+    : undefined;
+  const securityEvidence = activeTab === "security"
+    ? mergeAnalyticsSecurityEvidence({
+        projectApplicationEvidence: projectApplicationSecurityEvidence,
+        projectApplicationOverview,
+        tenantChatDashboard: shouldIncludeTenantChat ? tenantChatDashboard : undefined
+      })
+    : undefined;
   const text = pageText[locale];
-  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
-  const projects = getVisibleProjectsForConsoleAuth(
+  const visibleProjects = getVisibleProjectsForConsoleAuth(
     projectsModel.projects,
     auth,
     effectiveTenantId
-  ).filter((project) => project.status !== "ARCHIVED");
-  const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
-  const model = buildAnalyticsReadModel(overview);
-  const providerOptions = buildProviderOptions(overview, performance, filters.provider);
-  const modelOptions = buildModelOptions(overview, performance, filters.model);
+  );
+  const projects = visibleProjects.filter((project) => project.status !== "ARCHIVED");
+  const projectNameById = new Map(
+    visibleProjects.map((project) => [project.id, project.name])
+  );
+  const model = buildAnalyticsReadModel(
+    activeTab === "impact" && !v5Evidence ? undefined : overview,
+    usageEvidence,
+    {
+    cacheEvidence,
+    policyImpact: activeTab === "impact" ? v5Evidence?.policyImpact : undefined,
+    tenantChatCostMicroUsd:
+      activeTab === "cost" && tenantChatDashboard
+        ? tenantChatDashboard.usage.confirmedCostMicroUsd
+        : undefined
+    }
+  );
+  const providerOptions = buildProviderOptions(
+    projectApplicationOverview,
+    performance,
+    filters.provider
+  );
+  const modelOptions = buildModelOptions(
+    projectApplicationOverview,
+    performance,
+    filters.model
+  );
   const showProviderModelFilters = activeTab === "performance";
 
   return (
@@ -313,7 +439,6 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         <AnalyticsUsagePanel
           locale={locale}
           model={model}
-          performance={performance}
           projectNameById={projectNameById}
         />
       ) : activeTab === "cost" ? (
@@ -337,7 +462,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           locale={locale}
           model={model}
           projectNameById={projectNameById}
-          records={reliabilityRecords}
+          reliability={reliability}
           range={filters.range}
           tenantId={effectiveTenantId}
         />
@@ -432,4 +557,82 @@ function appendQuery(query: URLSearchParams, key: string, value: string) {
   if (value) {
     query.set(key, value);
   }
+}
+
+function usageSeriesIsPartial(input: {
+  performanceAvailable: boolean;
+  projectApplicationAvailable: boolean;
+  tenantChatAvailable: boolean;
+  tenantChatSeriesAvailable: boolean;
+}) {
+  return (
+    (input.projectApplicationAvailable && !input.performanceAvailable) ||
+    (input.tenantChatAvailable && !input.tenantChatSeriesAvailable)
+  );
+}
+
+function costSeriesIsPartial(input: {
+  projectApplicationAvailable: boolean;
+  projectApplicationSeriesAvailable: boolean;
+  tenantChatAvailable: boolean;
+  tenantChatSeriesAvailable: boolean;
+}) {
+  return (
+    (input.projectApplicationAvailable && !input.projectApplicationSeriesAvailable) ||
+    (input.tenantChatAvailable && !input.tenantChatSeriesAvailable)
+  );
+}
+
+function markAnalyticsUsagePartial(
+  overview: DashboardOverview | undefined
+): DashboardOverview | undefined {
+  if (!overview) {
+    return undefined;
+  }
+
+  const current = overview.queryBudget;
+  if (current?.status === "unavailable" || current?.status === "too_broad") {
+    return overview;
+  }
+
+  const guidance = [current?.guidance, "One or more usage time series are unavailable."]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ");
+
+  return {
+    ...overview,
+    queryBudget: {
+      guidance,
+      maxBreakdownItems: current?.maxBreakdownItems ?? 50,
+      maxRangeHours: current?.maxRangeHours ?? 24,
+      status: "partial"
+    }
+  };
+}
+
+function markAnalyticsCostPartial(
+  overview: DashboardOverview | undefined
+): DashboardOverview | undefined {
+  if (!overview) {
+    return undefined;
+  }
+
+  const current = overview.queryBudget;
+  if (current?.status === "unavailable" || current?.status === "too_broad") {
+    return overview;
+  }
+
+  const guidance = [current?.guidance, "One or more cost time series are unavailable."]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ");
+
+  return {
+    ...overview,
+    queryBudget: {
+      guidance,
+      maxBreakdownItems: current?.maxBreakdownItems ?? 50,
+      maxRangeHours: current?.maxRangeHours ?? 24,
+      status: "partial"
+    }
+  };
 }
