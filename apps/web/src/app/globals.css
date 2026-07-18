@@ -3051,6 +3051,11 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   color: var(--warning-text);
 }
 
+.dashboard-live-mini-badge[data-kind="safety"][data-value="UNAVAILABLE"] {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
 .dashboard-live-muted-value {
   color: var(--text-muted);
 }

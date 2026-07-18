@@ -34,6 +34,10 @@ import {
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { formatRequestLogTtft } from "../request-log-latency";
+import {
+  buildRequestLogSafetyDetail,
+  maskingUnavailableLabel
+} from "../request-log-safety-detail";
 
 type RequestLogDetailProps = {
   locale: Locale;
@@ -173,6 +177,8 @@ export function RequestLogDetailPanel({
   const text = requestDetailText[locale];
   const domainOutcomes = record.domainOutcomes;
   const runtimeSnapshot = record.metadata?.runtime?.runtimeSnapshot;
+  const safetyDetail = buildRequestLogSafetyDetail(record);
+  const maskingUnavailable = maskingUnavailableLabel(locale);
   const hasErrorDetail = Boolean(
     record.errorCode || record.errorStage || record.errorMessage
   );
@@ -234,30 +240,25 @@ export function RequestLogDetailPanel({
               [detailLabel(locale, "Budget", "예산"), localizedOutcome(domainOutcomes?.budget?.outcome, locale, text.none)],
               [
                 detailLabel(locale, "Safety", "안전 정책"),
-                localizedOutcome(record.safetySummary?.outcome ??
-                  domainOutcomes?.safety?.outcome ??
-                  record.maskingAction, locale, text.none)
+                localizedOutcome(safetyDetail.outcome, locale, text.none)
               ],
               [
                 detailLabel(locale, "Masking action", "마스킹 처리"),
-                localizedOutcome(record.safetySummary?.maskingAction ?? record.maskingAction, locale, text.none)
+                safetyDetail.maskingAction === null
+                  ? maskingUnavailable
+                  : localizedOutcome(safetyDetail.maskingAction, locale, text.none)
               ],
               [
                 detailLabel(locale, "Detected count", "탐지 건수"),
-                String(
-                  record.safetySummary?.detectedCount ??
-                    record.maskingDetectedCount
-                )
+                safetyDetail.detectedCount === null
+                  ? maskingUnavailable
+                  : String(safetyDetail.detectedCount)
               ],
               [
                 detailLabel(locale, "Detected types", "탐지 유형"),
-                localizedCodeList(
-                  record.safetySummary?.detectorCategories?.length
-                    ? record.safetySummary.detectorCategories
-                    : record.maskingDetectedTypes,
-                  locale,
-                  text.none
-                )
+                safetyDetail.detectedTypes === null
+                  ? maskingUnavailable
+                  : localizedCodeList(safetyDetail.detectedTypes, locale, text.none)
               ],
               [
                 detailLabel(locale, "Policy allowed types", "정책 허용 유형"),
