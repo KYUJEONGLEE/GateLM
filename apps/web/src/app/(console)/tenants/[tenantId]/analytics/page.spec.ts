@@ -52,6 +52,9 @@ test("analytics filters update only the panel with transition state and client c
   expect(filterSelectSource).toContain("startTransition(() =>");
   expect(filterSelectSource).toContain("router.replace(");
   expect(filterSelectSource).toContain("new Map<string, ReactNode>()");
+  expect(filterSelectSource).toContain(
+    "useEffect(() => {\n    rememberPanel(panelCache.current, navigation.cacheKey, children);"
+  );
   expect(filterSelectSource).toContain("maxCachedPanels = 8");
   expect(filterSelectSource).toContain("visiblePanel");
   expect(filterSelectSource).not.toContain("requestSubmit()");

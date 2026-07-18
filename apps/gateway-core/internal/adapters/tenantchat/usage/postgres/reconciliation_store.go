@@ -206,7 +206,10 @@ func restoreRoutingDifficulty(requestContext *tenantchat.RequestContext, difficu
 	if difficulty == nil {
 		return
 	}
-	requestContext.Routing = &tenantchat.RoutingDecision{Difficulty: *difficulty}
+	if requestContext.Routing == nil {
+		requestContext.Routing = &tenantchat.RoutingDecision{}
+	}
+	requestContext.Routing.Difficulty = *difficulty
 }
 
 func readReconciliationExposure(
