@@ -24,7 +24,7 @@ function TooltipContent({
 }: TooltipPrimitive.Popup.Props & Pick<TooltipPrimitive.Positioner.Props, "sideOffset">) {
   return (
     <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Positioner sideOffset={sideOffset} className="z-50">
+      <TooltipPrimitive.Positioner sideOffset={sideOffset} className="z-[60]">
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(

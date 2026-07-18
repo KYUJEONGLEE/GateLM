@@ -1,7 +1,7 @@
 {
   "snapshotId": "tenant_chat_snapshot_fixture_001",
   "version": 12,
-  "digest": "sha256:bkdxdG94ChFSQxch7b_LGnstjbozBj4ngd3uWIRdD7c",
+  "digest": "sha256:6HVo2OWlvT8xUW9oMggJ9ffN3QdsL03jH07n_tP0EOM",
   "tenantId": "tenant_fixture_001",
   "policyVersion": 8,
   "employeeNoticeVersion": 3,
@@ -43,8 +43,9 @@
       "timezone": "Asia/Seoul",
       "defaultMonthlyTokenLimit": 1000000,
       "warningPercent": 80,
-      "economyPercent": 100,
-      "hardStopPercent": 120
+      "economyPercent": 90,
+      "hardStopPercent": 100,
+      "employeeWeeklyTokenLimits": []
     },
     "budget": {
       "period": "calendar_month",

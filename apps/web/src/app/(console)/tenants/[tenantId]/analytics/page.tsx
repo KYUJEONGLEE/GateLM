@@ -39,6 +39,8 @@ import {
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
+import { getEmployeeSecurity } from "@/lib/control-plane/employee-security-client";
+import { getAllEmployeeUsage } from "@/lib/control-plane/employee-usage-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import {
   getTenantChatCostSeries,
@@ -73,6 +75,7 @@ type AnalyticsPageProps = {
   params: Promise<{ tenantId: string }>;
   searchParams?: Promise<{
     model?: string;
+    employeeId?: string;
     projectId?: string;
     provider?: string;
     range?: string;
@@ -83,6 +86,7 @@ type AnalyticsPageProps = {
 type AnalyticsTab = "impact" | "usage" | "cost" | "performance" | "reliability" | "security" | "cache";
 
 type AnalyticsFilterState = {
+  employeeId: string;
   model: string;
   projectId: string;
   provider: string;
@@ -104,11 +108,14 @@ const rangeValues: LiveAnalyticsRange[] = ["15m", "1h", "1d", "1w"];
 const pageText = {
   en: {
     allModels: "All models",
+    allEmployees: "All employees",
     allProjects: "All projects",
     allProviders: "All Providers",
     filterAria: "Analytics filters",
+    employee: "Employee",
     model: "Model",
     project: "Project",
+    projectUnavailable: "Selected project unavailable",
     provider: "Provider",
     range: "Time range",
     rangeLabels: { "15m": "15 minutes", "1h": "1 hour", "1d": "24 hours", "1w": "7 days" },
@@ -127,11 +134,14 @@ const pageText = {
   },
   ko: {
     allModels: "전체 모델",
+    allEmployees: "전체 직원",
     allProjects: "전체 프로젝트",
     allProviders: "전체 Provider",
     filterAria: "분석 필터",
+    employee: "직원",
     model: "모델",
     project: "프로젝트",
+    projectUnavailable: "선택한 프로젝트를 사용할 수 없음",
     provider: "Provider",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
@@ -197,6 +207,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const needsV5Evidence = activeTab === "impact";
   const needsReliabilityEvidence = activeTab === "reliability";
   const needsSecurityEvidence = activeTab === "security";
+  const needsEmployeeUsage = !projectScoped && (activeTab === "usage" || activeTab === "cost");
+  const needsEmployeeSecurity = !projectScoped && activeTab === "security";
   const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
   const [
@@ -207,7 +219,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     projectApplicationCostTrend,
     v5Evidence,
     reliability,
-    projectApplicationSecurityEvidence
+    projectApplicationSecurityEvidence,
+    employeeUsageResult,
+    employeeSecurityResult
   ] = await Promise.all([
     getLiveDashboardOverview(effectiveTenantId, {
       projectId: filters.projectId || undefined,
@@ -261,6 +275,22 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       ? getLiveAnalyticsSecurityEvidence({
           from: reliabilityRange.from,
           projectId: filters.projectId || undefined,
+          tenantId: effectiveTenantId,
+          to: reliabilityRange.to
+        })
+      : Promise.resolve(undefined),
+    needsEmployeeUsage
+      ? getAllEmployeeUsage({
+          from: reliabilityRange.from,
+          metric: activeTab === "cost" ? "cost" : "tokens",
+          order: "desc",
+          tenantId: effectiveTenantId,
+          to: reliabilityRange.to
+        })
+      : Promise.resolve(undefined),
+    needsEmployeeSecurity
+      ? getEmployeeSecurity({
+          from: reliabilityRange.from,
           tenantId: effectiveTenantId,
           to: reliabilityRange.to
         })
@@ -358,11 +388,23 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     filters.model
   );
   const showProviderModelFilters = activeTab === "performance";
+  const employeeUsage = employeeUsageResult?.ok ? employeeUsageResult.data : undefined;
+  const employeeSecurity = employeeSecurityResult?.ok ? employeeSecurityResult.data : undefined;
+  const employeeOptions = activeTab === "security"
+    ? employeeSecurity?.data ?? []
+    : employeeUsage?.data ?? [];
+  const selectedEmployeeId = employeeOptions.some(
+    (employee) => employee.employeeId === filters.employeeId
+  )
+    ? filters.employeeId
+    : "";
+  const showEmployeeFilter = activeTab === "usage" || activeTab === "cost" || activeTab === "security";
 
   return (
     <main className="console-content analytics-v3-page analytics-v4-page analytics-v5-page">
       <AnalyticsFilterFrame
         filterState={{
+          employeeId: selectedEmployeeId,
           model: filters.model,
           projectId: filters.projectId,
           provider: filters.provider,
@@ -382,24 +424,19 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           className="analytics-v3-filter-bar"
           role="group"
         >
-          <label>
-            <span>{text.range}</span>
-            <AnalyticsFilterSelect defaultValue={filters.range} name="range">
-              {rangeValues.map((range) => (
-                <option key={range} value={range}>{text.rangeLabels[range]}</option>
-              ))}
-            </AnalyticsFilterSelect>
-          </label>
-          <label className="analytics-v3-project-filter">
-            <span>{text.project}</span>
-            <AnalyticsFilterSelect defaultValue={filters.projectId} name="projectId">
-              {projectScoped ? null : <option value="">{text.allProjects}</option>}
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </AnalyticsFilterSelect>
-            <i aria-hidden="true" className="analytics-v3-select-caret" />
-          </label>
+          {showEmployeeFilter ? (
+            <label className="analytics-v3-employee-filter">
+              <span>{text.employee}</span>
+              <AnalyticsFilterSelect defaultValue={selectedEmployeeId} name="employeeId">
+                <option value="">{text.allEmployees}</option>
+                {employeeOptions.map((employee) => (
+                  <option key={employee.employeeId} value={employee.employeeId}>
+                    {employee.name?.trim() || employee.email}
+                  </option>
+                ))}
+              </AnalyticsFilterSelect>
+            </label>
+          ) : null}
           {showProviderModelFilters ? (
             <>
               <label>
@@ -422,6 +459,27 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               </label>
             </>
           ) : null}
+          <label>
+            <span>{text.range}</span>
+            <AnalyticsFilterSelect defaultValue={filters.range} name="range">
+              {rangeValues.map((range) => (
+                <option key={range} value={range}>{text.rangeLabels[range]}</option>
+              ))}
+            </AnalyticsFilterSelect>
+          </label>
+          <label className="analytics-v3-project-filter">
+            <span>{text.project}</span>
+            <AnalyticsFilterSelect defaultValue={filters.projectId} name="projectId">
+              {projectScoped ? null : <option value="">{text.allProjects}</option>}
+              {filters.projectId && !projects.some((project) => project.id === filters.projectId) ? (
+                <option disabled value={filters.projectId}>{text.projectUnavailable}</option>
+              ) : null}
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </AnalyticsFilterSelect>
+            <i aria-hidden="true" className="analytics-v3-select-caret" />
+          </label>
         </div>
       </header>
 
@@ -454,16 +512,20 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         />
       ) : activeTab === "usage" ? (
         <AnalyticsUsagePanel
+          employeeUsage={employeeUsage}
           locale={locale}
           model={model}
           projectNameById={projectNameById}
+          selectedEmployeeId={selectedEmployeeId}
         />
       ) : activeTab === "cost" ? (
         <AnalyticsCostPanel
           costTrend={costTrend}
+          employeeUsage={employeeUsage}
           locale={locale}
           model={model}
           projectNameById={projectNameById}
+          selectedEmployeeId={selectedEmployeeId}
         />
       ) : activeTab === "performance" ? (
         <AnalyticsPerformancePanel
@@ -485,9 +547,11 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         />
       ) : activeTab === "security" ? (
         <AnalyticsSecurityPanel
+          employeeSecurity={employeeSecurity}
           evidence={securityEvidence}
           locale={locale}
           model={model}
+          selectedEmployeeId={selectedEmployeeId}
         />
       ) : (
         <AnalyticsCachePanel locale={locale} model={model} />
@@ -502,6 +566,7 @@ function buildFilters(
   searchParams: Awaited<AnalyticsPageProps["searchParams"]>
 ): AnalyticsFilterState {
   return {
+    employeeId: normalizeText(searchParams?.employeeId),
     model: normalizeText(searchParams?.model),
     projectId: normalizeText(searchParams?.projectId),
     provider: normalizeText(searchParams?.provider),
@@ -565,6 +630,7 @@ function tabHref(
 ) {
   const query = new URLSearchParams({ range: filters.range, tab });
   appendQuery(query, "projectId", filters.projectId);
+  appendQuery(query, "employeeId", filters.employeeId);
   if (tab === "performance") {
     appendQuery(query, "provider", filters.provider);
     appendQuery(query, "model", filters.model);

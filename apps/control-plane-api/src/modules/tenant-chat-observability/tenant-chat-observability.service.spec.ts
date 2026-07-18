@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import type { TenantChatInvocationLog } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -176,6 +177,84 @@ describe('TenantChatObservabilityService', () => {
     expect(detectorQuery.sql).toContain('logs.tenant_id =');
     expect(detectorQuery.sql).toContain("logs.surface = 'tenant_chat'");
   });
+
+  it('returns observed TTFT and preserves an unobserved value as null', async () => {
+    const prisma = createPrisma();
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    prisma.tenantChatInvocationLog.findFirst.mockResolvedValue(
+      invocationLog({ ttftMs: 84n }),
+    );
+    await expect(
+      service.getInvocation(tenantId, 'request_projection_001'),
+    ).resolves.toMatchObject({ latencyMs: 350, ttftMs: 84 });
+
+    prisma.tenantChatInvocationLog.findFirst.mockResolvedValue(
+      invocationLog({ ttftMs: null }),
+    );
+    await expect(
+      service.getInvocation(tenantId, 'request_projection_001'),
+    ).resolves.toMatchObject({ latencyMs: 350, ttftMs: null });
+  });
+
+  it('keeps an idle, caught-up projection fresh even when its latest invocation is old', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ projected_at: new Date(Date.now() - 120_000) }])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    prisma.tenantChatInvocationLog.groupBy.mockResolvedValue([]);
+    prisma.tenantChatInvocationOutbox.count.mockResolvedValue(0);
+    prisma.tenantChatActiveRuntimeSnapshot.findUnique.mockResolvedValue({
+      snapshot: { version: 1n, pricingVersion: 1n },
+    });
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getDashboard(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+    });
+
+    expect(result.data.freshness.lagSeconds).toBeGreaterThan(30);
+    expect(result.data.freshness.state).toBe('fresh');
+  });
+
+  it('marks a projection partial while outbox work remains', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ projected_at: new Date() }])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    prisma.tenantChatInvocationLog.groupBy.mockResolvedValue([]);
+    prisma.tenantChatInvocationOutbox.count.mockResolvedValue(1);
+    prisma.tenantChatActiveRuntimeSnapshot.findUnique.mockResolvedValue({
+      snapshot: { version: 1n, pricingVersion: 1n },
+    });
+    const service = new TenantChatObservabilityService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.getDashboard(tenantId, {
+      from: '2026-07-12T12:00:00Z',
+      to: '2026-07-12T13:00:00Z',
+    });
+
+    expect(result.data.freshness.state).toBe('partial');
+  });
 });
 
 function createPrisma() {
@@ -193,4 +272,41 @@ function createPrisma() {
       findUnique: jest.fn(),
     },
   };
+}
+
+function invocationLog(
+  overrides: Partial<TenantChatInvocationLog> = {},
+): TenantChatInvocationLog {
+  return {
+    requestId: 'request_projection_001',
+    tenantId,
+    userId: '00000000-0000-4000-8000-000000000101',
+    employeeId: null,
+    actorKind: 'tenant_admin',
+    turnId: 'turn_projection_001',
+    surface: 'tenant_chat',
+    executionScopeKind: 'tenant_chat',
+    terminalOutcome: 'succeeded',
+    effectiveProviderId: 'provider_fixture_001',
+    effectiveModelKey: 'model_fixture_001',
+    attemptCount: 1,
+    confirmedInputTokens: 100n,
+    confirmedOutputTokens: 20n,
+    confirmedTotalTokens: 120n,
+    confirmedCostMicroUsd: 50n,
+    quotaState: 'normal',
+    budgetState: 'normal',
+    cacheOutcome: 'miss',
+    latencyMs: 350n,
+    ttftMs: 84n,
+    snapshotVersion: 1n,
+    pricingVersion: 1n,
+    snapshotDigest: `sha256:${'a'.repeat(43)}`,
+    startedAt: new Date('2026-07-18T00:00:00Z'),
+    completedAt: new Date('2026-07-18T00:00:00.350Z'),
+    projectedEventVersion: 1n,
+    createdAt: new Date('2026-07-18T00:00:00Z'),
+    updatedAt: new Date('2026-07-18T00:00:00.350Z'),
+    ...overrides,
+  } as TenantChatInvocationLog;
 }

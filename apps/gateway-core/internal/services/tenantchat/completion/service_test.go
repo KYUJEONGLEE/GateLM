@@ -77,6 +77,9 @@ func TestServiceRelaysPrimaryStreamAndSettlesConfirmedUsage(t *testing.T) {
 	if usage.confirmedUsage.InputTokens != 12 || usage.confirmedUsage.OutputTokens != 5 {
 		t.Fatalf("unexpected confirmed usage: %+v", usage.confirmedUsage)
 	}
+	if usage.lastSettlementContext.TTFTMs == nil || *usage.lastSettlementContext.TTFTMs < 0 {
+		t.Fatalf("first delivered delta must persist a non-negative TTFT: %+v", usage.lastSettlementContext)
+	}
 }
 
 func TestServiceAppliesRoutingV2BeforeUsageReservation(t *testing.T) {
@@ -437,6 +440,39 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	if got := usage.transactionCalls(); got != 1 {
 		t.Fatalf("cache-hit transaction budget exceeded: got %d want 1", got)
 	}
+	if usage.lastSettlementContext.TTFTMs == nil || *usage.lastSettlementContext.TTFTMs != 0 {
+		t.Fatalf("cache hit must persist zero TTFT: %+v", usage.lastSettlementContext)
+	}
+}
+
+func TestServiceLeavesTTFTUnsetWhenNoDeltaReachesTheClient(t *testing.T) {
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+		RequestID:     "request_completion_001",
+		State:         "reserved",
+		Route: tenantchat.SelectedRoute{
+			RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard",
+		},
+	}}
+	providers := &fakeProviderExecutor{stream: &fakeStream{
+		terminalErr: provider.NewError(
+			provider.ErrorKindError,
+			provider.ErrorCodeProviderError,
+			errors.New("synthetic failure before delta"),
+		),
+	}}
+	service := New(&fakeSnapshotResolver{snapshot: completionSnapshot()}, usage, providers)
+
+	execution, err := service.Prepare(context.Background(), completionRequest())
+	if err != nil {
+		t.Fatalf("prepare completion: %v", err)
+	}
+	if err := execution.Relay(context.Background(), func(tenantchat.CompletionEvent) error { return nil }); err != nil {
+		t.Fatalf("relay completion: %v", err)
+	}
+	if usage.lastSettlementContext.TTFTMs != nil {
+		t.Fatalf("terminal without a delivered delta must leave TTFT unset: %+v", usage.lastSettlementContext)
+	}
 }
 
 func TestServiceBypassesStaleExactCacheEntryWhenPolicyIsOff(t *testing.T) {
@@ -752,6 +788,9 @@ func TestServiceFallsBackBeforeDeltaAndSettlesAllConfirmedAttempts(t *testing.T)
 	if len(events) != 2 || events[0].Delta != "fallback answer" || events[1].TerminalOutcome != "succeeded" ||
 		events[1].EffectiveModelKey == nil || *events[1].EffectiveModelKey != "model-economy" {
 		t.Fatalf("unexpected fallback events: %+v", events)
+	}
+	if usage.lastSettlementContext.TTFTMs == nil || *usage.lastSettlementContext.TTFTMs < 0 {
+		t.Fatalf("fallback's first delivered delta must persist one TTFT: %+v", usage.lastSettlementContext)
 	}
 }
 
@@ -1322,15 +1361,16 @@ func (f *fakeSnapshotResolver) Resolve(context.Context, tenantchat.RequestContex
 }
 
 type fakeUsageAccounting struct {
-	reservation        tenantchat.UsageReservation
-	reservations       []tenantchat.UsageReservation
-	settlement         tenantchat.UsageSettlement
-	err                error
-	fallbackErr        error
-	fallbackContextErr error
-	dispatchErr        error
-	restrictions       []bool
-	lastContext        tenantchat.RequestContext
+	reservation           tenantchat.UsageReservation
+	reservations          []tenantchat.UsageReservation
+	settlement            tenantchat.UsageSettlement
+	err                   error
+	fallbackErr           error
+	fallbackContextErr    error
+	dispatchErr           error
+	restrictions          []bool
+	lastContext           tenantchat.RequestContext
+	lastSettlementContext tenantchat.RequestContext
 
 	reserveCalls      int
 	startAttemptCalls int
@@ -1349,8 +1389,9 @@ func (f *fakeUsageAccounting) transactionCalls() int {
 	return f.reserveCalls + f.recordCalls + f.dispatchCalls + f.settleCalls + f.releasedCalls + f.ledgerlessCalls + f.preCallCalls
 }
 
-func (f *fakeUsageAccounting) FinalizeLedgerless(context.Context, tenantchat.RequestContext, tenantruntime.Snapshot, string, string, string, tenantchat.LedgerlessObservability) (bool, error) {
+func (f *fakeUsageAccounting) FinalizeLedgerless(_ context.Context, requestContext tenantchat.RequestContext, _ tenantruntime.Snapshot, _ string, _ string, _ string, _ tenantchat.LedgerlessObservability) (bool, error) {
 	f.ledgerlessCalls++
+	f.lastSettlementContext = requestContext
 	return false, f.err
 }
 
@@ -1404,8 +1445,9 @@ func (f *fakeUsageAccounting) MarkDispatched(
 	return f.dispatchErr
 }
 
-func (f *fakeUsageAccounting) FinalizeConfirmed(_ context.Context, _ tenantchat.RequestContext, _ string, _ int, usage tenantchat.ConfirmedUsage, _ string) (tenantchat.UsageSettlement, error) {
+func (f *fakeUsageAccounting) FinalizeConfirmed(_ context.Context, requestContext tenantchat.RequestContext, _ string, _ int, usage tenantchat.ConfirmedUsage, _ string) (tenantchat.UsageSettlement, error) {
 	f.settleCalls++
+	f.lastSettlementContext = requestContext
 	f.confirmedUsage = usage
 	return f.settlement, f.err
 }
@@ -1420,16 +1462,18 @@ func (f *fakeUsageAccounting) FinalizeReleased(context.Context, tenantchat.Reque
 	return f.settlement, f.err
 }
 
-func (f *fakeUsageAccounting) FinalizeUnconfirmed(_ context.Context, _ tenantchat.RequestContext, _ string, _ int, outcome string) (tenantchat.UsageSettlement, error) {
+func (f *fakeUsageAccounting) FinalizeUnconfirmed(_ context.Context, requestContext tenantchat.RequestContext, _ string, _ int, outcome string) (tenantchat.UsageSettlement, error) {
 	f.settleCalls++
 	f.unconfirmedCalls++
+	f.lastSettlementContext = requestContext
 	f.lastOutcome = outcome
 	return f.settlement, f.err
 }
 
-func (f *fakeUsageAccounting) MarkPending(_ context.Context, _ tenantchat.RequestContext, _ string, _ int, outcome string) (tenantchat.UsageSettlement, error) {
+func (f *fakeUsageAccounting) MarkPending(_ context.Context, requestContext tenantchat.RequestContext, _ string, _ int, outcome string) (tenantchat.UsageSettlement, error) {
 	f.settleCalls++
 	f.unconfirmedCalls++
+	f.lastSettlementContext = requestContext
 	f.lastOutcome = outcome
 	return f.settlement, f.err
 }

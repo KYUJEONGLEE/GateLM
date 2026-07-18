@@ -31,6 +31,7 @@ import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import { getModelBrand } from '@/lib/model-brand.mjs';
 import {
+  acceptedUserContentWasMasked,
   consumeTurnSse,
   isBlockedCode,
   MAX_TENANT_CHAT_OUTPUT_TOKENS,
@@ -113,6 +114,12 @@ export function ChatShell() {
   }, []);
 
   useEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    resizeComposer(textarea);
+  }, [composer]);
+
+  useEffect(() => {
     let active = true;
     async function initialize() {
       try {
@@ -121,13 +128,18 @@ export function ChatShell() {
           router.replace('/tenants');
           return;
         }
-        const page = await api<ConversationPage>('/api/tenant-chat/conversations?limit=20');
         if (!active) return;
         setSession(value);
-        setConversations(page.items);
-        setConversationCursor(page.nextCursor);
-        setSelectedId(page.items[0]?.id ?? null);
-        setStatus(page.items.length ? '최근 대화를 불러왔습니다.' : '메시지를 입력해 새 대화를 시작하세요.');
+        try {
+          const page = await api<ConversationPage>('/api/tenant-chat/conversations?limit=20');
+          if (!active) return;
+          setConversations(page.items);
+          setConversationCursor(page.nextCursor);
+          setSelectedId(page.items[0]?.id ?? null);
+          setStatus(page.items.length ? '최근 대화를 불러왔습니다.' : '메시지를 입력해 새 대화를 시작하세요.');
+        } catch (reason) {
+          if (active) reportError(reason);
+        }
       } catch {
         router.replace('/login');
       } finally {
@@ -136,7 +148,7 @@ export function ChatShell() {
     }
     void initialize();
     return () => { active = false; };
-  }, [router]);
+  }, [reportError, router]);
 
   useEffect(() => () => {
     if (knowledgeModeToastTimerRef.current !== null) window.clearTimeout(knowledgeModeToastTimerRef.current);
@@ -356,7 +368,10 @@ export function ChatShell() {
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
-    if (streaming || creatingConversation || policyState === 'blocked' || !composer.trim()) return;
+    // The Gateway remains the policy decision point. Keep the composer available
+    // after a quota block so an exact cache hit can still be served without a
+    // new Provider call or any token deduction.
+    if (streaming || creatingConversation || !composer.trim()) return;
     const content = composer;
     const responseStartedAt = performance.now();
     let conversationId = selectedId;
@@ -406,7 +421,7 @@ export function ChatShell() {
                 ...message,
                 id: accepted.userMessageId ?? message.id,
                 turnId: accepted.turnId,
-                content: accepted.userContent ?? message.content,
+                maskingApplied: acceptedUserContentWasMasked(message.content, accepted.userContent),
               }
             : message));
         },
@@ -453,7 +468,9 @@ export function ChatShell() {
         setStatus('답변 생성을 중지했습니다.');
       } else {
         const detail = caught instanceof ChatApiError ? caught.detail : safeChatError({ code: 'CHAT_INTERNAL_ERROR' });
-        if (!admitted) {
+        const rejectedByPolicy = detail.code === 'CHAT_SAFETY_BLOCKED' || isBlockedCode(detail.code);
+        if (!admitted && !rejectedByPolicy) {
+          setError(detail);
           setMessages((current) => current.filter((message) =>
             message.id !== draftId && message.id !== optimisticUserId));
           setComposer(content);
@@ -596,7 +613,7 @@ export function ChatShell() {
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
               : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
                 {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
-                  {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} /> : <>
+                  {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} maskingApplied={message.maskingApplied} /> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
                     <article>
                       <span className="message-author">GateLM</span>
@@ -609,7 +626,7 @@ export function ChatShell() {
                       {message.content && <div className="message-assistant-actions">
                         <MessageCopyButton content={message.content} label="모델 답변" />
                         {message.cacheOutcome === 'hit'
-                          ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음">캐시 응답 · 모델 호출 없음</div>
+                          ? <div className="message-meta" aria-label="캐시 응답, 모델 호출 없음, 0초 소요">캐시 응답 · 모델 호출 없음 · 0s 소요</div>
                           : message.effectiveModelKey
                             ? <ModelResponseMeta message={message} userMessagesByTurnId={userMessagesByTurnId} />
                             : null}
@@ -629,9 +646,9 @@ export function ChatShell() {
           </div>}
           <div className={`composer${streaming ? ' is-streaming' : ''}`}>
             <label className="sr-only" htmlFor="chat-composer">메시지 입력</label>
-            <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} disabled={policyState === 'blocked'} placeholder={policyState === 'blocked' ? '조직 관리자에게 사용 한도를 문의해 주세요' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
+            <textarea ref={composerRef} id="chat-composer" rows={1} maxLength={20000} value={composer} placeholder={policyState === 'blocked' ? '캐시된 동일 질문은 답변을 다시 볼 수 있습니다' : selected ? '메시지를 입력하세요' : '무엇이든 물어보세요'} onChange={(event) => setComposer(event.target.value)} onKeyDown={composerKeyDown} />
             {streaming ? <Button type="button" className="stop-button" aria-label={stopping ? '답변 생성 중지 중' : '답변 생성 중지'} onClick={stopStreaming} disabled={stopping}><Square size={16} fill="currentColor" aria-hidden /></Button>
-              : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim() || policyState === 'blocked'}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
+              : <Button type="submit" className="send-button" aria-label="메시지 보내기" disabled={creatingConversation || !composer.trim()}>{creatingConversation ? <LoaderCircle className="spin" size={18} aria-hidden /> : <Send size={18} aria-hidden />}</Button>}
           </div>
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
         </form>
@@ -654,6 +671,7 @@ type MessagePage = Readonly<{ items: readonly Message[]; nextCursor: string | nu
 type DisplayMessage = Message & Readonly<{
   cacheOutcome?: 'off' | 'hit' | 'miss';
   localId?: string;
+  maskingApplied?: boolean;
   notice?: SafeChatError;
   responseDurationMs?: number;
 }>;
@@ -687,10 +705,21 @@ function citationLocation(citation: Citation): string {
   return '문서 위치 정보 없음';
 }
 
-function UserMessage({ content, createdAt }: Readonly<{ content: string; createdAt: string }>) {
+function UserMessage({ content, createdAt, maskingApplied }: Readonly<{
+  content: string;
+  createdAt: string;
+  maskingApplied?: boolean;
+}>) {
   return <article>
     <span className="sr-only">내 메시지</span>
     <p>{content}</p>
+    {maskingApplied && <div className="message-privacy-notice" role="status">
+      <ShieldCheck size={16} aria-hidden />
+      <span className="message-privacy-notice-copy">
+        <span>개인정보 보호를 위해 일부 정보를 마스킹한 뒤</span>{' '}
+        <span>AI 모델에 전달했습니다.</span>
+      </span>
+    </div>}
     <div className="message-user-actions">
       <MessageTime createdAt={createdAt} />
       <MessageCopyButton content={content} label="내 메시지" />
@@ -792,6 +821,18 @@ function sameCitation(left: Citation, right: Citation): boolean {
     left.lineEnd === right.lineEnd && left.ordinal === right.ordinal && left.availability === right.availability;
 }
 
+function resizeComposer(textarea: HTMLTextAreaElement) {
+  textarea.style.height = 'auto';
+  const maxHeight = Number.parseFloat(window.getComputedStyle(textarea).maxHeight);
+  const nextHeight = Number.isFinite(maxHeight)
+    ? Math.min(textarea.scrollHeight, maxHeight)
+    : textarea.scrollHeight;
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = Number.isFinite(maxHeight) && textarea.scrollHeight > maxHeight
+    ? 'auto'
+    : 'hidden';
+}
+
 function idempotencyKey(): string {
   return crypto.randomUUID().replaceAll('-', '');
 }
@@ -820,6 +861,6 @@ function persistedResponseDurationMs(
 function policyText(state: PolicyState): Readonly<{ label: string; description: string }> {
   if (state === 'warning') return { label: '사용량 주의', description: '조직 사용량이 기준에 가까워지고 있습니다.' };
   if (state === 'economy') return { label: '절약 모드', description: '비용을 아끼도록 경제적인 실행 경로를 사용합니다.' };
-  if (state === 'blocked') return { label: '사용 한도 도달', description: '새 요청이 차단되었습니다. 조직 관리자에게 문의해 주세요.' };
+  if (state === 'blocked') return { label: '사용 한도 도달', description: '새로운 답변 생성 요청이 차단되었습니다. 캐시된 동일 질문은 다시 볼 수 있습니다.' };
   return { label: '정상 모드', description: '조직 정책과 사용 한도 안에서 실행 중입니다.' };
 }

@@ -39,10 +39,21 @@ type envelope struct {
 }
 
 type fingerprintMaterial struct {
-	SnapshotDigest string                     `json:"snapshotDigest"`
-	ModelRef       string                     `json:"modelRef,omitempty"`
-	UsageIntent    *tenantchat.UsageIntent    `json:"usageIntent"`
-	Input          tenantchat.CompletionInput `json:"input"`
+	CacheCompatibility cacheCompatibility         `json:"cacheCompatibility"`
+	ModelRef           string                     `json:"modelRef,omitempty"`
+	UsageIntent        *tenantchat.UsageIntent    `json:"usageIntent"`
+	Input              tenantchat.CompletionInput `json:"input"`
+}
+
+// cacheCompatibility binds a cache entry to only the policy that can change
+// the safety or meaning of a replayed response. Usage policy is intentionally
+// excluded: a quota/budget change must block the next Provider call, not an
+// already cached exact response.
+type cacheCompatibility struct {
+	Cache                  tenantruntime.CachePolicy  `json:"cache"`
+	Safety                 tenantruntime.SafetyPolicy `json:"safety"`
+	RoutingPolicyHash      string                     `json:"routingPolicyHash,omitempty"`
+	RoutingDecisionKeyHash string                     `json:"routingDecisionKeyHash,omitempty"`
 }
 
 type Store struct {
@@ -174,10 +185,15 @@ func (s *Store) resolve(
 	fingerprintUsageIntent := *requestContext.UsageIntent
 	fingerprintUsageIntent.EstimatedInputTokens = estimatedInputBytes(fingerprintInput.Messages)
 	material, err := json.Marshal(fingerprintMaterial{
-		SnapshotDigest: snapshot.Digest,
-		ModelRef:       routingModelRef(requestContext),
-		UsageIntent:    &fingerprintUsageIntent,
-		Input:          fingerprintInput,
+		CacheCompatibility: cacheCompatibility{
+			Cache:                  snapshot.Policies.Cache,
+			Safety:                 snapshot.Policies.Safety,
+			RoutingPolicyHash:      routingPolicyHash(requestContext),
+			RoutingDecisionKeyHash: routingDecisionKeyHash(requestContext),
+		},
+		ModelRef:    routingModelRef(requestContext),
+		UsageIntent: &fingerprintUsageIntent,
+		Input:       fingerprintInput,
 	})
 	if err != nil {
 		return KeySet{}, "", "", ErrCacheUnavailable
@@ -203,6 +219,20 @@ func routingModelRef(requestContext tenantchat.RequestContext) string {
 		return ""
 	}
 	return strings.TrimSpace(requestContext.Routing.ModelRef)
+}
+
+func routingPolicyHash(requestContext tenantchat.RequestContext) string {
+	if requestContext.Routing == nil {
+		return ""
+	}
+	return strings.TrimSpace(requestContext.Routing.RoutingPolicyHash)
+}
+
+func routingDecisionKeyHash(requestContext tenantchat.RequestContext) string {
+	if requestContext.Routing == nil {
+		return ""
+	}
+	return strings.TrimSpace(requestContext.Routing.RoutingDecisionKeyHash)
 }
 
 // A repeated latest user turn should address the cache entry created before its

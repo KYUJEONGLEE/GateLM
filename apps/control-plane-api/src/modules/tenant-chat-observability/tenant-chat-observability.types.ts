@@ -56,6 +56,7 @@ export interface TenantChatProjectionEvent {
   maskingDetectedCount?: number;
   safetyPolicyDigest?: string;
   latencyMs?: number;
+  ttftMs?: number;
   lateUsage?: boolean;
   quota?: {
     state: string;
@@ -98,6 +99,7 @@ export interface TenantChatInvocationResponse {
   budgetState: string;
   cacheOutcome: string;
   latencyMs: number;
+  ttftMs: number | null;
   snapshotVersion: number;
   pricingVersion: number;
   startedAt: string;

@@ -408,6 +408,20 @@
   grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.75fr);
 }
 
+.analytics-v3-employee-workspace {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.analytics-v3-employee-workspace > :not(:first-child) {
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-subtle) 52%, var(--surface));
+}
+
 .analytics-v3-cache-workspace .analytics-v3-composition-chart {
   height: 250px;
 }
@@ -504,6 +518,12 @@
 }
 
 .analytics-v3-ranked-chart {
+  height: 330px;
+  margin-top: 14px;
+}
+
+.analytics-v3-employee-token-chart,
+.analytics-v3-employee-stacked-chart {
   height: 330px;
   margin-top: 14px;
 }
@@ -884,6 +904,15 @@
 
   .analytics-v3-surface-latency-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analytics-v3-employee-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-v3-employee-workspace > :not(:first-child) {
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 
   .analytics-v3-driver-rail {

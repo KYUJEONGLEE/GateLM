@@ -61,7 +61,7 @@ function invitationErrorRedirect(request: NextRequest, cleanUrl: URL, error: 'in
 function ensureCsrf(request: NextRequest, response: NextResponse) {
   if (!request.cookies.has(CSRF_COOKIE)) {
     response.cookies.set(CSRF_COOKIE, crypto.randomUUID(), {
-      httpOnly: false, maxAge: 24 * 60 * 60, path: '/', sameSite: 'strict', secure: process.env.NODE_ENV === 'production',
+      httpOnly: false, maxAge: 24 * 60 * 60, path: '/', sameSite: 'strict', secure: chatWebUsesHttps(),
     });
   }
 }
@@ -72,7 +72,15 @@ function secureResponse(response: NextResponse, contentSecurityPolicy: string) {
 }
 
 function shortCookie(maxAge: number) {
-  return { httpOnly: true, maxAge, path: '/', sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production' };
+  return { httpOnly: true, maxAge, path: '/', sameSite: 'lax' as const, secure: chatWebUsesHttps() };
+}
+
+function chatWebUsesHttps() {
+  try {
+    return new URL(required('GATELM_CHAT_WEB_ORIGIN')).protocol === 'https:';
+  } catch {
+    return true;
+  }
 }
 
 function required(name: string) {

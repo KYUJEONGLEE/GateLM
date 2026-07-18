@@ -112,8 +112,10 @@ async function verifyReadback(prisma: PrismaService, requestId: string): Promise
     surface: string;
     terminal_outcome: string;
     confirmed_total_tokens: bigint;
+    latency_ms: bigint;
+    ttft_ms: bigint | null;
   }>>(Prisma.sql`
-    SELECT request_id, surface, terminal_outcome, confirmed_total_tokens
+    SELECT request_id, surface, terminal_outcome, confirmed_total_tokens, latency_ms, ttft_ms
     FROM tenant_chat_invocation_logs
     WHERE tenant_id = ${DEMO_TENANT_ID}::uuid
       AND request_id = ${requestId}
@@ -122,12 +124,22 @@ async function verifyReadback(prisma: PrismaService, requestId: string): Promise
   `);
   const row = rows[0];
   if (!row || rows.length !== 1) throw new Error('Tenant Chat Dashboard readback is not available.');
+  if (
+    row.terminal_outcome !== 'succeeded' ||
+    row.ttft_ms === null ||
+    row.ttft_ms < 0n ||
+    row.ttft_ms > row.latency_ms
+  ) {
+    throw new Error('Tenant Chat Dashboard TTFT readback is invalid.');
+  }
   process.stdout.write(`${JSON.stringify({
     status: 'projected',
     requestId: row.request_id,
     surface: row.surface,
     terminalOutcome: row.terminal_outcome,
     totalTokens: Number(row.confirmed_total_tokens),
+    latencyMs: Number(row.latency_ms),
+    ttftMs: Number(row.ttft_ms),
   })}\n`);
 }
 
@@ -169,7 +181,8 @@ function smokeSnapshot(): TenantChatRuntimeSnapshotDocument {
       concurrency: { maxActiveAdmissionsPerUser: 2, admissionTtlSeconds: 30 },
       quota: {
         period: 'calendar_month', timezone: 'Asia/Seoul', defaultMonthlyTokenLimit: 1_000_000,
-        warningPercent: 80, economyPercent: 100, hardStopPercent: 120,
+        warningPercent: 80, economyPercent: 90, hardStopPercent: 100,
+        employeeWeeklyTokenLimits: [],
       },
       budget: {
         period: 'calendar_month', timezone: 'Asia/Seoul', currency: 'USD',

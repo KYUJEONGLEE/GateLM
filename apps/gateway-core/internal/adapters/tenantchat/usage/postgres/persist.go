@@ -20,6 +20,7 @@ func persistReservation(
 	_ tenantchat.SelectedRoute,
 	userPeriod tokenPeriod,
 	tenantPeriod costPeriod,
+	employeeWeeklyPeriod *tokenPeriod,
 	reservationID string,
 	eventID string,
 	reservedTokens int64,
@@ -50,17 +51,17 @@ func persistReservation(
 	_, err = tx.Exec(ctx, `
 		INSERT INTO tenant_chat_usage_reservations (
 		  reservation_id, tenant_id, user_id, request_id, turn_id, idempotency_key,
-		  user_period_start, tenant_period_start, currency,
+		  user_period_start, employee_id, employee_weekly_period_start, tenant_period_start, currency,
 		  snapshot_version, snapshot_digest, pricing_version, cache_outcome, routing_difficulty, state,
 		  reserved_tokens, reserved_cost_micro_usd, ledger_version, reserved_at, created_at, updated_at
 		) VALUES (
 		  $1::uuid, $2::uuid, $3::uuid, $4, $5, $6,
-		  $7, $8, 'USD', $9, $10, $11, $12, $13, 'reserved',
-		  $14, $15, 1, $16, $16, $16
+		  $7, $8::uuid, $9, $10, 'USD', $11, $12, $13, $14, $15, 'reserved',
+		  $16, $17, 1, $18, $18, $18
 		)
 	`, reservationID, requestContext.ExecutionScope.TenantID, actor.UserID,
 		requestContext.RequestID, requestContext.TurnID, requestContext.IdempotencyKey,
-		userPeriod.Start, tenantPeriod.Start, requestContext.Snapshot.Version,
+		userPeriod.Start, employeeWeeklyEmployeeID(requestContext, employeeWeeklyPeriod), employeeWeeklyPeriodStart(employeeWeeklyPeriod), tenantPeriod.Start, requestContext.Snapshot.Version,
 		requestContext.Snapshot.Digest, snapshot.Pricing.Version, cacheOutcome,
 		routingDifficultyValue(requestContext), reservedTokens, reservedCost, now)
 	if err != nil {
@@ -102,6 +103,22 @@ func persistReservation(
 		return errors.New("consume tenant chat admission")
 	}
 	return nil
+}
+
+func employeeWeeklyEmployeeID(requestContext tenantchat.RequestContext, period *tokenPeriod) *string {
+	if period == nil || requestContext.ExecutionScope.Actor.ActorKind != "employee" || requestContext.ExecutionScope.Actor.EmployeeID == "" {
+		return nil
+	}
+	value := requestContext.ExecutionScope.Actor.EmployeeID
+	return &value
+}
+
+func employeeWeeklyPeriodStart(period *tokenPeriod) *time.Time {
+	if period == nil {
+		return nil
+	}
+	value := period.Start
+	return &value
 }
 
 func reservationEventPayload(

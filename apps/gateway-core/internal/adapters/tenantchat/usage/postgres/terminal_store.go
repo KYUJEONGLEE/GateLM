@@ -640,6 +640,7 @@ func terminalUsageEventPayload(
 	if err := addSafetySummaryPayload(payload, requestContext.Safety); err != nil {
 		return nil, err
 	}
+	appendTTFT(payload, requestContext)
 	return json.Marshal(payload)
 }
 

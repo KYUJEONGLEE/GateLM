@@ -115,6 +115,13 @@ test("active snapshot wins on reload", () => {
           { action: "redact", detectorType: "email" },
           { action: "block", detectorType: "api_key" }
         ]
+      },
+      quota: {
+        defaultMonthlyTokenLimit: 1_000_000,
+        economyPercent: 90,
+        hardStopPercent: 100,
+        timezone: "Asia/Seoul",
+        warningPercent: 80
       }
     },
     readiness: "ready"
@@ -274,22 +281,28 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("ProviderFamilyIcon");
 });
 
-test("Chat App policy navigation exposes routing, cache, security, and tenant-admin Knowledge Base panels", async () => {
+test("Chat App policy navigation exposes routing, cache, security, usage limits, and tenant-admin Knowledge Base panels", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const runtimeEditorSourceUrl = new URL("../policies/components/runtime-policy-editor.tsx", import.meta.url);
-  const [rawSource, runtimeEditorSource] = await Promise.all([
+  const pageSourceUrl = new URL("../../app/(console)/tenants/[tenantId]/chat-app/page.tsx", import.meta.url);
+  const [rawSource, runtimeEditorSource, pageSource] = await Promise.all([
     readFile(componentSourceUrl, "utf8"),
-    readFile(runtimeEditorSourceUrl, "utf8")
+    readFile(runtimeEditorSourceUrl, "utf8"),
+    readFile(pageSourceUrl, "utf8")
   ]);
   const source = rawSource.replaceAll("\r\n", "\n");
 
   expect(source).toContain('const chatAppPolicySections: ChatAppPolicySection[] = [');
-  expect(source).toContain('"routing",\n  "cache",\n  "security",\n  "knowledge"');
+  expect(source).toContain('"routing",\n  "cache",\n  "security",\n  "quota",\n  "knowledge"');
+  expect(source).toContain('section === "quota"');
+  expect(pageSource).toContain('value === "quota"');
   expect(source).toContain('securityTab: "보안"');
   expect(source).toContain('knowledgeTab: "지식 베이스"');
   expect(source).toContain('section !== "knowledge" || canManageKnowledgeBase');
   expect(source).toContain("<KnowledgeBaseManagement");
-  expect(source).toContain('activePolicySection === "cache" || activePolicySection === "security"');
+  expect(source).toContain(
+    'activePolicySection === "cache" ||\n        activePolicySection === "security" ||\n        activePolicySection === "quota"'
+  );
   expect(source).toContain("<CachePolicyControls");
   expect(source).toContain("<SafetyDetectorPolicyControls");
   expect(source).not.toContain("ChatAppPolicySummary");
@@ -313,6 +326,7 @@ test("Chat App cache policy reuses the shared existing policy card", async () =>
   expect(sharedCardSource).toContain('className="policy-cache-card"');
   expect(sharedCardSource).toContain('className="policy-cache-card-summary"');
   expect(sharedCardSource).toContain('className="policy-cache-card-icon"');
+  expect(sharedCardSource).toContain('<label className="policy-experimental-card-copy" htmlFor={id}>');
   expect(styles).toMatch(/\.tenant-chat-app-content \.policy-cache-card-copy strong \{[^}]*font-size: calc\(var\(--font-size-base\) \+ var\(--global-font-lift\)\);[^}]*font-weight: var\(--font-weight-bold\);/);
 });
 
@@ -427,15 +441,45 @@ test("Chat App routing publish recovers from a Control Plane network failure", a
 test("Chat App cache and security tabs publish the Tenant Chat snapshot policy", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const source = await readFile(componentSourceUrl, "utf8");
+  const publishPayload = source.match(
+    /body: JSON\.stringify\(\{([\s\S]*?)\}\),\r?\n {8}headers:/
+  )?.[1];
 
   expect(source).toContain("<CachePolicyControls");
   expect(source).toContain("<SafetyDetectorPolicyControls");
+  expect(source).toContain("showAllActionOptions");
   expect(source).toContain("showSemanticCache={false}");
+  expect(source).toContain("experimentalSemanticCache={{");
+  expect(source).toContain("experimentalModelMasking={{");
+  expect(source).not.toContain("현재 UI 미리보기입니다.");
+  expect(source).not.toContain("정책 발행과 실제 실행에는 반영되지 않습니다.");
+  expect(source).toContain("setSemanticCachePreviewEnabled(false)");
+  expect(source).toContain("setAiModelMaskingPreviewEnabled(false)");
   expect(source).toContain("allowPlaceholderEditing={false}");
   expect(source).toContain("return { enabled: true, maxEntriesPerUser: 100, ttlSeconds: 300 };");
   expect(source).toContain("cachePolicy,");
   expect(source).toContain("safetyPolicy: toTenantChatSafetyPolicy(detectors)");
+  expect(publishPayload).toBeTruthy();
+  expect(publishPayload).not.toContain("semanticCachePreviewEnabled");
+  expect(publishPayload).not.toContain("aiModelMaskingPreviewEnabled");
   expect(source).not.toContain("ChatAppPolicySummary");
+});
+
+test("Chat App monthly quota uses the same direct-input and positioned-slider pattern", async () => {
+  const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const stylesUrl = new URL("../../app/globals.css", import.meta.url);
+  const [source, styles] = await Promise.all([
+    readFile(componentSourceUrl, "utf8"),
+    readFile(stylesUrl, "utf8")
+  ]);
+
+  expect(source).toContain("MONTHLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000");
+  expect(source).toContain("MonthlyTokenQuotaInfo");
+  expect(source).toContain("tenant-monthly-token-slider-current");
+  expect(source).toContain("parseMonthlyTokenLimitInput");
+  expect(source).toContain("localizeTenantChatPolicyError");
+  expect(styles).toContain(".tenant-monthly-token-card {");
+  expect(styles).toContain(".tenant-monthly-token-slider-current {");
 });
 
 function setupWithRoutes(): TenantChatAdminRuntimeSetup {
@@ -467,6 +511,13 @@ function setupWithRoutes(): TenantChatAdminRuntimeSetup {
           { action: "redact", detectorType: "email" },
           { action: "block", detectorType: "api_key" }
         ]
+      },
+      quota: {
+        defaultMonthlyTokenLimit: 1_000_000,
+        economyPercent: 90,
+        hardStopPercent: 100,
+        timezone: "Asia/Seoul",
+        warningPercent: 80
       }
     }
   };

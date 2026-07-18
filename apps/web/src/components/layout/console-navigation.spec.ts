@@ -37,6 +37,18 @@ test("user menu trigger keeps a stable id across server and client renders", () 
   expect(shellSource).toMatch(/<DropdownMenuTrigger[\s\S]*?id=\{userMenuTriggerId\}/);
 });
 
+test("profile avatars use a person silhouette when no image is available", () => {
+  expect(shellSource.match(/console-user-avatar-placeholder/g)).toHaveLength(2);
+  expect(shellSource).toContain("<UserRound");
+  expect(shellSource).not.toContain("getUserInitials");
+});
+
+test("profile role localizes Tenant Admin for the Korean console", () => {
+  expect(shellSource).toContain('tenantAdmin: "Tenant Admin"');
+  expect(shellSource).toContain('tenantAdmin: "관리자"');
+  expect(shellSource).toContain('displayUser.role === "Tenant Admin" ? text.tenantAdmin');
+});
+
 test("Chat App and legacy Tenant Chat routes activate one management item", () => {
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/chat-app")).toEqual({
     activeManagementItem: "chat-app",

@@ -125,6 +125,48 @@ describe('Tenant Chat projection event contract', () => {
     );
   });
 
+  it('accepts TTFT only on terminal v3 usage and v2 invocation events', () => {
+    const usage = usageSettledEvent() as ReturnType<typeof usageSettledEvent> & {
+      cacheOutcome?: string;
+      ttftMs?: number;
+    };
+    usage.schemaVersion = 3;
+    usage.cacheOutcome = 'miss';
+    usage.ttftMs = 184;
+    expect(() => validateTenantChatProjectionEvent(usage)).not.toThrow();
+
+    const terminal = terminalEvent() as ReturnType<typeof terminalEvent> & {
+      ttftMs?: number;
+    };
+    terminal.schemaVersion = 2;
+    terminal.ttftMs = 0;
+    expect(() => validateTenantChatProjectionEvent(terminal)).not.toThrow();
+
+    const reservation = {
+      ...usage,
+      eventType: 'usage_reserved',
+      attempts: [],
+      quota: {
+        ...usage.quota,
+        reservedTokensDelta: 10,
+        confirmedInputTokensDelta: 0,
+        confirmedOutputTokensDelta: 0,
+        confirmedTotalTokensDelta: 0,
+        unconfirmedTokensDelta: 0,
+      },
+      budget: {
+        ...usage.budget,
+        reservedCostMicroUsdDelta: 0,
+        confirmedCostMicroUsdDelta: 0,
+        unconfirmedExposureMicroUsdDelta: 0,
+      },
+    };
+    delete (reservation as { terminalOutcome?: string }).terminalOutcome;
+    expect(() => validateTenantChatProjectionEvent(reservation)).toThrow(
+      'projection event schema validation failed',
+    );
+  });
+
   it.each([1, 2, 3])(
     'accepts a v%d reservation with zero monetary cost',
     (schemaVersion) => {

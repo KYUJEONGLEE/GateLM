@@ -3,7 +3,11 @@
 import { ChevronDown, FlaskConical } from "lucide-react";
 import { useState } from "react";
 
-import { ExactCacheToggleCard } from "@/features/policies/components/exact-cache-toggle-card";
+import {
+  ExactCacheToggleCard,
+  ExperimentalFeatureToggleCard,
+  type ExperimentalFeatureToggleCardProps
+} from "@/features/policies/components/exact-cache-toggle-card";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
 import type {
@@ -50,11 +54,13 @@ export function CachePolicyPanel({
 
 export function CachePolicyControls({
   enabled,
+  experimentalSemanticCache,
   onEnabledChange,
   showSemanticCache = true,
   text
 }: {
   enabled: boolean;
+  experimentalSemanticCache?: Omit<ExperimentalFeatureToggleCardProps, "icon">;
   onEnabledChange: (enabled: boolean) => void;
   showSemanticCache?: boolean;
   text: CachePolicyControlsText;
@@ -76,6 +82,12 @@ export function CachePolicyControls({
             onEnabledChange={onEnabledChange}
             title={text.cacheEnabled}
           />
+          {experimentalSemanticCache ? (
+            <ExperimentalFeatureToggleCard
+              {...experimentalSemanticCache}
+              icon={<FlaskConical size={19} />}
+            />
+          ) : null}
           {showSemanticCache ? (
             <>
               <button

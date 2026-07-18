@@ -88,7 +88,7 @@ export function toTenantChatRequestLog(
     costMicroUsd: invocation.confirmedCostMicroUsd,
     savedCostMicroUsd: 0,
     latencyMs: invocation.latencyMs,
-    ttftMs: null,
+    ttftMs: invocation.ttftMs,
     providerLatencyMs: null,
     status,
     terminalStatus: status,

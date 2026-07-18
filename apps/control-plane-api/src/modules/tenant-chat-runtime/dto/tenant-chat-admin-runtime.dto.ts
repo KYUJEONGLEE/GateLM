@@ -115,6 +115,36 @@ class TenantChatAdminSafetyPolicyDto {
   detectorSet!: TenantChatAdminSafetyDetectorDto[];
 }
 
+class TenantChatAdminQuotaPolicyDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
+  defaultMonthlyTokenLimit!: number;
+
+  @IsString()
+  @MaxLength(64)
+  timezone!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  warningPercent!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  @Max(99)
+  economyPercent!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(3)
+  @Max(100)
+  hardStopPercent!: number;
+}
+
 export class ActivateTenantChatRuntimeDto {
   // Legacy single-model activation remains accepted while old admin clients
   // are redirected to the Chat App authoring surface.
@@ -158,4 +188,9 @@ export class ActivateTenantChatRuntimeDto {
   @IsOptional()
   @IsBoolean()
   cacheEnabled?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TenantChatAdminQuotaPolicyDto)
+  quota?: TenantChatAdminQuotaPolicyDto;
 }

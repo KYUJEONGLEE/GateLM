@@ -118,6 +118,70 @@ func TestCalendarMonthUsesIANAZoneBoundaries(t *testing.T) {
 	}
 }
 
+func TestCalendarWeekUsesMondayBoundaryInSeoul(t *testing.T) {
+
+	start, end, err := calendarWeek(time.Date(2026, 7, 19, 16, 0, 0, 0, time.UTC), "Asia/Seoul")
+	if err != nil {
+		t.Fatalf("calculate calendar week: %v", err)
+	}
+	if start != time.Date(2026, 7, 19, 15, 0, 0, 0, time.UTC) ||
+		end != time.Date(2026, 7, 26, 15, 0, 0, 0, time.UTC) {
+		t.Fatalf("unexpected Seoul Monday week: start=%s end=%s", start, end)
+	}
+
+	previousStart, previousEnd, err := calendarWeek(time.Date(2026, 7, 19, 14, 59, 59, 0, time.UTC), "Asia/Seoul")
+	if err != nil {
+		t.Fatalf("calculate previous calendar week: %v", err)
+	}
+	if previousStart != time.Date(2026, 7, 12, 15, 0, 0, 0, time.UTC) ||
+		previousEnd != start {
+		t.Fatalf("unexpected boundary before Seoul Monday: start=%s end=%s", previousStart, previousEnd)
+	}
+}
+
+func TestExactMonthlyQuotaThresholdsUseEightyNinetyAndOneHundred(t *testing.T) {
+	warning, economy, hardStop := thresholds(100, 80, 90, 100)
+	if warning != 80 || economy != 90 || hardStop != 100 {
+		t.Fatalf("unexpected exact quota thresholds: warning=%d economy=%d hardStop=%d", warning, economy, hardStop)
+	}
+}
+
+func TestTokenPeriodForQuotaPolicyBlocksExistingPeriodAtZero(t *testing.T) {
+	configured := tokenPeriodForQuotaPolicy(tokenPeriod{
+		Reserved: 30, Confirmed: 40, Unconfirmed: 20,
+		Limit: 1_000_000, Warning: 800_000, Economy: 900_000, HardStop: 1_000_000,
+		State: "normal",
+	}, tenantruntime.QuotaPolicy{
+		DefaultMonthlyTokenLimit: 0,
+		WarningPercent:           80,
+		EconomyPercent:           90,
+		HardStopPercent:          100,
+	})
+	if configured.Limit != 0 || configured.Warning != 0 || configured.Economy != 0 || configured.HardStop != 0 {
+		t.Fatalf("zero quota must clear all thresholds: %+v", configured)
+	}
+	if configured.State != "blocked" {
+		t.Fatalf("zero quota must block an existing period immediately, got %q", configured.State)
+	}
+	if configured.Reserved != 30 || configured.Confirmed != 40 || configured.Unconfirmed != 20 {
+		t.Fatalf("policy sync must preserve accumulated usage: %+v", configured)
+	}
+}
+
+func TestTokenPeriodForQuotaPolicyUsesExistingExposureAfterLoweringLimit(t *testing.T) {
+	configured := tokenPeriodForQuotaPolicy(tokenPeriod{
+		Reserved: 100, Confirmed: 200, Unconfirmed: 50,
+	}, tenantruntime.QuotaPolicy{
+		DefaultMonthlyTokenLimit: 300,
+		WarningPercent:           80,
+		EconomyPercent:           90,
+		HardStopPercent:          100,
+	})
+	if configured.State != "blocked" {
+		t.Fatalf("lowered quota must evaluate existing exposure, got %q", configured.State)
+	}
+}
+
 func TestEconomyStateExcludesHighQualityRoute(t *testing.T) {
 	snapshot := tenantruntime.Snapshot{
 		Pricing: tenantruntime.Pricing{Version: 1, Routes: []tenantruntime.PriceRoute{

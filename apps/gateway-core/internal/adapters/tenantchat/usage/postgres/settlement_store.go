@@ -526,5 +526,12 @@ func settlementEventPayload(
 	if err := addSafetySummaryPayload(payload, requestContext.Safety); err != nil {
 		return nil, err
 	}
+	appendTTFT(payload, requestContext)
 	return json.Marshal(payload)
+}
+
+func appendTTFT(payload map[string]any, requestContext tenantchat.RequestContext) {
+	if requestContext.TTFTMs != nil && *requestContext.TTFTMs >= 0 {
+		payload["ttftMs"] = *requestContext.TTFTMs
+	}
 }

@@ -56,12 +56,17 @@ async function main(): Promise<void> {
       ...(entitlement.employeeId ? { employeeId: entitlement.employeeId } : {}),
     }, config.getOrThrow<string>('TENANT_CHAT_ACCESS_JWT_SECRET'));
     const bridge = app.get(ExecutionBridgeService);
+    let deltaCount = 0;
     const handle = await bridge.authorizeAndAdmit(accessToken);
     const result = await bridge.complete(
       handle,
       { messages: [{ role: 'user', content: 'GateLM synthetic private bridge smoke.' }], stream: true },
       { estimatedInputTokens: 16, maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'off' },
+      { onDelta: () => { deltaCount += 1; } },
     );
+    if (deltaCount < 1 || result.assistantContent.length < 1) {
+      throw new Error('Tenant Chat provider stream did not deliver display content.');
+    }
     process.stdout.write(`${JSON.stringify({
       status: 'ok',
       requestId: handle.requestId,
@@ -69,6 +74,8 @@ async function main(): Promise<void> {
       terminalOutcome: result.final.terminalOutcome,
       usageQuality: result.final.usage.usageQuality,
       surface: 'tenant_chat',
+      deltaCount,
+      assistantCharacters: result.assistantContent.length,
     })}\n`);
   } finally {
     await app.close();

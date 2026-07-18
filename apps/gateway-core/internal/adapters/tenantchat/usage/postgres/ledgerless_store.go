@@ -167,6 +167,9 @@ func ledgerlessTerminalPayload(
 	if err := addSafetySummaryPayload(payload, requestContext.Safety); err != nil {
 		return nil, err
 	}
+	if requestContext.TTFTMs != nil && *requestContext.TTFTMs >= 0 {
+		payload["ttftMs"] = *requestContext.TTFTMs
+	}
 	return json.Marshal(payload)
 }
 
