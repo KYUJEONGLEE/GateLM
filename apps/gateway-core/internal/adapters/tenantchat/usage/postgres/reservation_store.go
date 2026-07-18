@@ -382,7 +382,9 @@ func findReservationReplay(ctx context.Context, tx pgx.Tx, requestContext tenant
 		       admission.masking_detected_count, admission.safety_policy_digest
 		FROM tenant_chat_usage_reservations reservation
 		JOIN tenant_chat_request_admissions admission
-		  ON admission.request_id = reservation.request_id
+		  ON admission.tenant_id = reservation.tenant_id
+		 AND admission.user_id = reservation.user_id
+		 AND admission.request_id = reservation.request_id
 		WHERE reservation.tenant_id = $1::uuid AND reservation.user_id = $2::uuid
 		  AND reservation.idempotency_key = $3
 		FOR UPDATE

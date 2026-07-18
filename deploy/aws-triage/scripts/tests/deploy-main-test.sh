@@ -140,6 +140,14 @@ unexpected_secret_references="$(
 
 grep -Fq 'wait_for_postgres || deploy_fail' "${DEPLOY_SCRIPT}" || \
   fail "PostgreSQL readiness must be verified before migrations"
+grep -Fq 'preflight_tenant_chat_policy_impact_backfill' "${DEPLOY_SCRIPT}" || \
+  fail "Large Tenant Chat policy-impact backfills must be checked before Prisma migrations"
+grep -Fq 'GATELM_TENANT_CHAT_POLICY_IMPACT_MAX_AUTO_BACKFILL_ROWS' "${DEPLOY_SCRIPT}" || \
+  fail "Policy-impact automatic backfill limit must be configurable"
+grep -Fq 'GATELM_ALLOW_LARGE_TENANT_CHAT_POLICY_IMPACT_BACKFILL' "${DEPLOY_SCRIPT}" || \
+  fail "Large policy-impact backfills must require an explicit maintenance override"
+grep -Fq "SET statement_timeout = '10s'; SELECT count(*) FROM tenant_chat_invocation_logs;" "${DEPLOY_SCRIPT}" || \
+  fail "Policy-impact row counting must fail closed on an unbounded preflight"
 grep -Fq 'validate_tenant_chat_secrets' "${DEPLOY_SCRIPT}" || \
   fail "Tenant Chat secret files must be validated before the image build"
 grep -Fq 'validate-tenant-chat-cache-keyset.mjs' "${DEPLOY_SCRIPT}" || \

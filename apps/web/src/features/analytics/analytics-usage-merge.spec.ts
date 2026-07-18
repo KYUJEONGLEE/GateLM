@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { expect, test } from "@playwright/test";
 
 import type { TenantChatCostSeries } from "@/lib/control-plane/tenant-chat-observability-client";
@@ -10,6 +12,8 @@ import {
   TENANT_CHAT_USAGE_SOURCE_ID,
   tenantChatBucketForAnalyticsRange
 } from "./analytics-usage-merge";
+
+const analyticsUsageMergeSourceUrl = new URL("./analytics-usage-merge.ts", import.meta.url);
 
 test("adds Tenant Chat requests to aligned Project/Application volume buckets", () => {
   const projectPoints: AnalyticsLatencyDistributionPoint[] = [
@@ -85,6 +89,17 @@ test("uses the same Tenant Chat bucket widths as the analytics ranges", () => {
   expect(tenantChatBucketForAnalyticsRange("1h")).toBe("5m");
   expect(tenantChatBucketForAnalyticsRange("1d")).toBe("1h");
   expect(tenantChatBucketForAnalyticsRange("1w")).toBe("1d");
+});
+
+test("reuses bounded locale and range formatters", async () => {
+  const source = await readFile(analyticsUsageMergeSourceUrl, "utf8");
+
+  expect(source).toContain(
+    "const analyticsBucketLabelFormatters = new Map<string, Intl.DateTimeFormat>()"
+  );
+  expect(source).toContain("analyticsBucketLabelFormatters.get(key)");
+  expect(source).toContain("analyticsBucketLabelFormatters.set(key, formatter)");
+  expect(source.match(/new Intl\.DateTimeFormat/g)).toHaveLength(1);
 });
 
 function usageOverview(

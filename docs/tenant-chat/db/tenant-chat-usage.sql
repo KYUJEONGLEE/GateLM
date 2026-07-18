@@ -41,7 +41,11 @@ CREATE TABLE tenant_chat_request_admissions (
     ) OR (
       masking_action IN ('none', 'redacted', 'blocked')
       AND jsonb_typeof(masking_detected_types) = 'array'
-      AND jsonb_array_length(masking_detected_types) <= 32
+      AND CASE
+        WHEN jsonb_typeof(masking_detected_types) = 'array'
+          THEN jsonb_array_length(masking_detected_types) <= 32
+        ELSE false
+      END
       AND masking_detected_count BETWEEN 0 AND 1000000
       AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
     )
@@ -459,7 +463,11 @@ CREATE TABLE tenant_chat_invocation_logs (
     ) OR (
       masking_action IN ('none', 'redacted', 'blocked')
       AND jsonb_typeof(masking_detected_types) = 'array'
-      AND jsonb_array_length(masking_detected_types) <= 32
+      AND CASE
+        WHEN jsonb_typeof(masking_detected_types) = 'array'
+          THEN jsonb_array_length(masking_detected_types) <= 32
+        ELSE false
+      END
       AND masking_detected_count BETWEEN 0 AND 1000000
       AND safety_policy_digest ~ '^sha256:[A-Za-z0-9_-]{43}$'
     )
