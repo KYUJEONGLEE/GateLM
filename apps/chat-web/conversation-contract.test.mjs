@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  acceptedUserContentWasMasked,
   consumeTurnSse,
   conversationPage,
   createConversationBody,
@@ -65,6 +66,14 @@ test('conversation knowledge mode defaults off and accepts only an explicit tena
   const base = { idempotencyKey: '1234567890abcdef', title: '새 대화' };
   assert.equal(createConversationBody(base).knowledgeMode, 'off');
   assert.equal(createConversationBody({ ...base, knowledgeMode: 'tenant' }).knowledgeMode, 'tenant');
+});
+
+test('accepted user content marks only provider-bound content changes as masked', () => {
+  const original = '연락처는 synthetic.user@example.com입니다.';
+
+  assert.equal(acceptedUserContentWasMasked(original, original), false);
+  assert.equal(acceptedUserContentWasMasked(original, '연락처는 [EMAIL_1]입니다.'), true);
+  assert.throws(() => acceptedUserContentWasMasked(original, undefined));
 });
 
 test('conversation update accepts only a versioned title and/or knowledge mode change', () => {
@@ -270,6 +279,29 @@ test('ChatShell labels exact cache hits as model-free zero-second responses', ()
   assert.match(source, /캐시 응답 · 모델 호출 없음 · 0s 소요/);
   assert.match(source, /aria-label="캐시 응답, 모델 호출 없음, 0초 소요"/);
   assert.match(source, /const metaText = modelResponseMetaText\(message, userMessagesByTurnId\);/);
+});
+
+test('ChatShell keeps the in-memory user prompt and shows a non-error masking notice', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('./src/app/globals.css', import.meta.url), 'utf8');
+
+  assert.match(source, /maskingApplied:\s*acceptedUserContentWasMasked\(message\.content, accepted\.userContent\)/);
+  assert.doesNotMatch(source, /content:\s*accepted\.userContent/);
+  assert.match(source, /className="message-privacy-notice" role="status"/);
+  assert.match(source, /개인정보 보호를 위해 일부 정보를 마스킹한 뒤<\/span>\{' '\}\s*<span>AI 모델에 전달했습니다\./);
+  assert.match(styles, /\.message-privacy-notice \{[^}]*font-size: 15px;[^}]*line-height: 1\.55;/);
+  assert.match(styles, /\.message-privacy-notice-copy \{[^}]*word-break: keep-all;[^}]*overflow-wrap: anywhere;[^}]*line-break: strict;/);
+});
+
+test('ChatShell keeps pre-admission policy rejections as an in-conversation GateLM warning', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  const error = safeChatError({ code: 'CHAT_SAFETY_BLOCKED' });
+
+  assert.equal(error.message, '안전 정책에 따라 이 요청은 차단되었습니다.');
+  assert.match(source, /const rejectedByPolicy = detail\.code === 'CHAT_SAFETY_BLOCKED' \|\| isBlockedCode\(detail\.code\);/);
+  assert.match(source, /if \(!admitted && !rejectedByPolicy\) \{[\s\S]*?setComposer\(content\);[\s\S]*?\} else \{\s*setMessages\(\(current\) => current\.map/);
+  assert.match(source, /message\.id === draftId \? \{ \.\.\.message, notice: detail \} : message/);
+  assert.match(source, /className="message-warning" role="alert"/);
 });
 
 test('employee weekly quota uses the same blocked state with its weekly guidance', () => {

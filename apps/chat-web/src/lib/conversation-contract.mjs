@@ -158,6 +158,13 @@ export function safeChatError(value) {
   return Object.freeze({ code, message: safeMessage(code), ...(retryAfterSeconds ? { retryAfterSeconds } : {}) });
 }
 
+export function acceptedUserContentWasMasked(originalContent, acceptedUserContent) {
+  if (typeof originalContent !== 'string' || typeof acceptedUserContent !== 'string') {
+    throw new Error('Accepted user content is unavailable.');
+  }
+  return originalContent !== acceptedUserContent;
+}
+
 export async function consumeTurnSse(stream, options) {
   if (!stream) throw new Error('응답 스트림을 열 수 없습니다.');
   const reader = stream.getReader();
@@ -331,7 +338,7 @@ function safeMessage(code) {
   if (isBlockedCode(code)) return '사용 한도에 도달했습니다. 조직 관리자에게 문의해 주세요.';
   if (code === 'CHAT_RAG_DISABLED') return '이 조직에서는 사내 지식 채팅을 사용할 수 없습니다.';
   if (code === 'CHAT_RAG_UNAVAILABLE') return '사내 지식 검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.';
-  if (code === 'CHAT_SAFETY_BLOCKED') return '안전 정책에 따라 이 요청에는 답변할 수 없습니다.';
+  if (code === 'CHAT_SAFETY_BLOCKED') return '안전 정책에 따라 이 요청은 차단되었습니다.';
   if (code === 'CHAT_RATE_LIMITED') return '요청이 많습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'CHAT_CONCURRENCY_LIMITED') return '진행 중인 요청이 많습니다. 잠시 후 다시 시도해 주세요.';
   if (['CHAT_PROVIDER_FAILED', 'CHAT_PROVIDER_TIMEOUT', 'CHAT_NO_ELIGIBLE_ROUTE'].includes(code)) return '답변 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.';
