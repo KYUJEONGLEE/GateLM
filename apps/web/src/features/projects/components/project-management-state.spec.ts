@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   compareProjectCreatedAtDescending,
   getProjectCreateActionLocation,
+  getProjectEmptyStateVariant,
   getProjectSettingsHref,
   isProjectVisibleInList
 } from "./project-management-state";
@@ -17,6 +18,11 @@ test("keeps the Tenant Admin create action in the populated toolbar", () => {
 test("does not expose the create action to Project Admins", () => {
   expect(getProjectCreateActionLocation(0, false)).toBeNull();
   expect(getProjectCreateActionLocation(1, false)).toBeNull();
+});
+
+test("shows setup guidance to Tenant Admins and assignment guidance to Project Admins", () => {
+  expect(getProjectEmptyStateVariant(true)).toBe("create-guide");
+  expect(getProjectEmptyStateVariant(false)).toBe("assignment-guide");
 });
 
 test("keeps DRAFT projects in the main list and excludes only ARCHIVED projects", () => {
