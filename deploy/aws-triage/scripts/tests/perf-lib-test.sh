@@ -5,8 +5,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PERF_SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PERF_COMPOSE_PATH="${PERF_SCRIPTS_DIR}/../docker-compose.perf.yml"
 # shellcheck source=deploy/aws-triage/scripts/perf-lib.sh
 source "${PERF_SCRIPTS_DIR}/perf-lib.sh"
+
+grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS: ${GATELM_PERF_AUTH_CACHE_TTL_MS:-5000}' "${PERF_COMPOSE_PATH}"
 
 for ip in 10.0.0.1 10.255.255.254 172.16.0.1 172.31.255.254 192.168.1.10; do
   perf_is_private_ipv4 "${ip}" || {
