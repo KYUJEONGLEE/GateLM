@@ -31,11 +31,15 @@ export default async function ConsoleTenantLayout({
     notFound();
   }
 
-  const tenantName =
-    auth.currentUser?.tenantName ?? await getControlPlaneTenantName(effectiveTenantId);
-  const currentUser = auth.currentUser && tenantName
-    ? { ...auth.currentUser, tenantName }
-    : auth.currentUser;
+  let currentUser = auth.currentUser;
+
+  if (currentUser && !currentUser.tenantName) {
+    const tenantName = await getControlPlaneTenantName(effectiveTenantId);
+
+    if (tenantName) {
+      currentUser = { ...currentUser, tenantName };
+    }
+  }
 
   return (
     <ConsoleShell

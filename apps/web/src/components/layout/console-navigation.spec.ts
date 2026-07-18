@@ -7,6 +7,10 @@ const tenantLayoutSource = readFileSync(
   new URL("../../app/(console)/tenants/[tenantId]/layout.tsx", import.meta.url),
   "utf8"
 );
+const tenantsClientSource = readFileSync(
+  new URL("../../lib/control-plane/tenants-client.ts", import.meta.url),
+  "utf8"
+);
 const apiKeyManagementSource = readFileSync(
   new URL("../../features/api-keys/components/api-key-management.tsx", import.meta.url),
   "utf8"
@@ -55,9 +59,20 @@ test("profile role localizes Tenant Admin for the Korean console", () => {
 
 test("profile shows the resolved organization name without exposing a tenant id fallback", () => {
   expect(tenantLayoutSource).toContain("getControlPlaneTenantName(effectiveTenantId)");
-  expect(tenantLayoutSource).toContain("{ ...auth.currentUser, tenantName }");
+  expect(tenantLayoutSource).toContain("if (currentUser && !currentUser.tenantName)");
+  expect(tenantLayoutSource).toContain("{ ...currentUser, tenantName }");
   expect(shellSource).toContain("<dd>{displayUser.tenantName ?? text.organization}</dd>");
   expect(shellSource).not.toContain("<dd>{displayUser.tenantName ?? tenantLabel}</dd>");
+});
+
+test("profile tenant name fallback caches successful reads and tolerates malformed list records", () => {
+  expect(tenantsClientSource).toContain("const tenantNameCache = new Map");
+  expect(tenantsClientSource).toContain("const tenantNameLoads = new Map");
+  expect(tenantsClientSource).toContain("if (name) {");
+  expect(tenantsClientSource).toContain("cacheTenantName(tenantId, name)");
+  expect(tenantsClientSource).toContain("TENANT_NAME_CACHE_MAX_ENTRIES");
+  expect(tenantsClientSource).toContain(".filter((tenant): tenant is { id: string; name: string }");
+  expect(tenantsClientSource).not.toContain("data.some((tenant) => tenant === null)");
 });
 
 test("profile menu hides only the settings heading and keeps its controls", () => {
