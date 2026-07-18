@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,6 +112,92 @@ func TestStoreBoundsEntriesAndSeparatesCredentialKinds(t *testing.T) {
 	}
 }
 
+func TestStoreCoalescesConcurrentAPIKeyCacheMisses(t *testing.T) {
+	const callers = 64
+	delegate := newBlockingCredentialStore()
+	store := NewStore(delegate, Config{
+		Enabled:    true,
+		TTL:        time.Second,
+		MaxEntries: 2,
+		KeySecret:  []byte("cache-test-key-material"),
+	})
+
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	var callersDone sync.WaitGroup
+	callersDone.Add(callers)
+	for range callers {
+		go func() {
+			defer callersDone.Done()
+			<-start
+			identity, err := store.AuthenticateAPIKey(context.Background(), "gsk_live_concurrent_1234")
+			if err == nil && identity.APIKeyID != "api-key-id" {
+				err = errors.New("unexpected API key identity")
+			}
+			errs <- err
+		}()
+	}
+
+	close(start)
+	<-delegate.started
+	time.Sleep(50 * time.Millisecond)
+	close(delegate.release)
+	callersDone.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent authentication failed: %v", err)
+		}
+	}
+	if calls := delegate.apiCalls.Load(); calls != 1 {
+		t.Fatalf("expected one coalesced API key lookup, got %d", calls)
+	}
+}
+
+func TestStoreCoalescesConcurrentAppTokenCacheMisses(t *testing.T) {
+	const callers = 64
+	delegate := newBlockingCredentialStore()
+	store := NewStore(delegate, Config{
+		Enabled:    true,
+		TTL:        time.Second,
+		MaxEntries: 2,
+		KeySecret:  []byte("cache-test-key-material"),
+	})
+
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	var callersDone sync.WaitGroup
+	callersDone.Add(callers)
+	for range callers {
+		go func() {
+			defer callersDone.Done()
+			<-start
+			identity, err := store.ValidateAppToken(context.Background(), "gat_app_concurrent_1234")
+			if err == nil && identity.AppTokenID != "app-token-id" {
+				err = errors.New("unexpected app token identity")
+			}
+			errs <- err
+		}()
+	}
+
+	close(start)
+	<-delegate.started
+	time.Sleep(50 * time.Millisecond)
+	close(delegate.release)
+	callersDone.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent validation failed: %v", err)
+		}
+	}
+	if calls := delegate.appCalls.Load(); calls != 1 {
+		t.Fatalf("expected one coalesced app token lookup, got %d", calls)
+	}
+}
+
 const sha256HexLength = 64
 
 type fakeCredentialStore struct {
@@ -119,6 +207,43 @@ type fakeCredentialStore struct {
 	appErr      error
 	apiCalls    int
 	appCalls    int
+}
+
+type blockingCredentialStore struct {
+	started   chan struct{}
+	release   chan struct{}
+	startOnce sync.Once
+	apiCalls  atomic.Int64
+	appCalls  atomic.Int64
+}
+
+func newBlockingCredentialStore() *blockingCredentialStore {
+	return &blockingCredentialStore{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (s *blockingCredentialStore) AuthenticateAPIKey(ctx context.Context, _ string) (auth.APIKeyIdentity, error) {
+	s.apiCalls.Add(1)
+	s.startOnce.Do(func() { close(s.started) })
+	select {
+	case <-ctx.Done():
+		return auth.APIKeyIdentity{}, ctx.Err()
+	case <-s.release:
+		return auth.APIKeyIdentity{APIKeyID: "api-key-id"}, nil
+	}
+}
+
+func (s *blockingCredentialStore) ValidateAppToken(ctx context.Context, _ string) (auth.AppTokenIdentity, error) {
+	s.appCalls.Add(1)
+	s.startOnce.Do(func() { close(s.started) })
+	select {
+	case <-ctx.Done():
+		return auth.AppTokenIdentity{}, ctx.Err()
+	case <-s.release:
+		return auth.AppTokenIdentity{AppTokenID: "app-token-id"}, nil
+	}
 }
 
 func (s *fakeCredentialStore) AuthenticateAPIKey(context.Context, string) (auth.APIKeyIdentity, error) {

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
+
+	"golang.org/x/sync/singleflight"
 )
 
 type CredentialStore interface {
@@ -28,12 +30,14 @@ type Config struct {
 }
 
 type Store struct {
-	delegate  CredentialStore
-	enabled   bool
-	secret    []byte
-	now       func() time.Time
-	apiKeys   *lruCache[auth.APIKeyIdentity]
-	appTokens *lruCache[auth.AppTokenIdentity]
+	delegate          CredentialStore
+	enabled           bool
+	secret            []byte
+	now               func() time.Time
+	apiKeys           *lruCache[auth.APIKeyIdentity]
+	appTokens         *lruCache[auth.AppTokenIdentity]
+	apiKeyRefreshes   singleflight.Group
+	appTokenRefreshes singleflight.Group
 }
 
 func NewStore(delegate CredentialStore, cfg Config) *Store {
@@ -67,12 +71,31 @@ func (s *Store) AuthenticateAPIKey(ctx context.Context, bearerToken string) (aut
 	if identity, ok := s.apiKeys.get(key, s.now()); ok {
 		return identity, nil
 	}
-	identity, err := s.delegate.AuthenticateAPIKey(ctx, bearerToken)
-	if err != nil {
-		return auth.APIKeyIdentity{}, err
+
+	result := s.apiKeyRefreshes.DoChan(key, func() (any, error) {
+		if identity, ok := s.apiKeys.get(key, s.now()); ok {
+			return identity, nil
+		}
+		identity, err := s.delegate.AuthenticateAPIKey(ctx, bearerToken)
+		if err != nil {
+			return nil, err
+		}
+		s.apiKeys.put(key, identity, s.now())
+		return identity, nil
+	})
+	select {
+	case <-ctx.Done():
+		return auth.APIKeyIdentity{}, ctx.Err()
+	case outcome := <-result:
+		if outcome.Err != nil {
+			return auth.APIKeyIdentity{}, outcome.Err
+		}
+		identity, ok := outcome.Val.(auth.APIKeyIdentity)
+		if !ok {
+			return auth.APIKeyIdentity{}, errors.New("coalesced API key refresh returned an unexpected identity type")
+		}
+		return identity, nil
 	}
-	s.apiKeys.put(key, identity, s.now())
-	return identity, nil
 }
 
 func (s *Store) ValidateAppToken(ctx context.Context, appToken string) (auth.AppTokenIdentity, error) {
@@ -90,12 +113,31 @@ func (s *Store) ValidateAppToken(ctx context.Context, appToken string) (auth.App
 	if identity, ok := s.appTokens.get(key, s.now()); ok {
 		return identity, nil
 	}
-	identity, err := s.delegate.ValidateAppToken(ctx, appToken)
-	if err != nil {
-		return auth.AppTokenIdentity{}, err
+
+	result := s.appTokenRefreshes.DoChan(key, func() (any, error) {
+		if identity, ok := s.appTokens.get(key, s.now()); ok {
+			return identity, nil
+		}
+		identity, err := s.delegate.ValidateAppToken(ctx, appToken)
+		if err != nil {
+			return nil, err
+		}
+		s.appTokens.put(key, identity, s.now())
+		return identity, nil
+	})
+	select {
+	case <-ctx.Done():
+		return auth.AppTokenIdentity{}, ctx.Err()
+	case outcome := <-result:
+		if outcome.Err != nil {
+			return auth.AppTokenIdentity{}, outcome.Err
+		}
+		identity, ok := outcome.Val.(auth.AppTokenIdentity)
+		if !ok {
+			return auth.AppTokenIdentity{}, errors.New("coalesced app token refresh returned an unexpected identity type")
+		}
+		return identity, nil
 	}
-	s.appTokens.put(key, identity, s.now())
-	return identity, nil
 }
 
 func (s *Store) cacheKey(kind string, plaintext string) string {
