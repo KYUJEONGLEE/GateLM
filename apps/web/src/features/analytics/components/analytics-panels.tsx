@@ -853,10 +853,13 @@ export function AnalyticsSecurityPanel({
   const maskedRequests = evidence?.maskedRequestCount ?? valueById(model.impact.outcomes, "pii_masked");
   const blockedRequests = evidence?.blockedRequestCount ?? valueById(model.impact.outcomes, "blocked");
   const protectedRequests = maskedRequests + blockedRequests;
-  const totalRequests = evidence?.sources?.reduce(
-    (total, source) => total + source.totalRequestCount,
-    0
-  ) ?? model.totalRequests;
+  const securitySources = evidence?.sources ?? [];
+  const totalRequests = securitySources.length > 0
+    ? securitySources.reduce(
+        (total, source) => total + source.totalRequestCount,
+        0
+      )
+    : model.totalRequests;
   const treatmentRows: AnalyticsValueRow[] = [
     { id: "pii_masked", label: locale === "ko" ? "마스킹" : "MASKED", value: maskedRequests },
     { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests },
