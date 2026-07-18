@@ -505,7 +505,7 @@ func TestServiceBypassesStaleExactCacheEntryWhenPolicyIsOff(t *testing.T) {
 	}
 }
 
-func TestServiceStoresExactCacheMissThenHitsWithoutSecondProviderCall(t *testing.T) {
+func TestServiceStoresRAGExactCacheMissThenHitsWithoutSecondProviderCall(t *testing.T) {
 	snapshot := completionSnapshot()
 	snapshot.Policies.Cache = tenantruntime.CachePolicy{
 		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
@@ -534,6 +534,10 @@ func TestServiceStoresExactCacheMissThenHitsWithoutSecondProviderCall(t *testing
 	)
 	request := completionRequest()
 	request.Context.UsageIntent.CacheStrategy = "exact"
+	request.Input.Messages = []tenantchat.EphemeralMessage{
+		{Role: "system", Purpose: "rag_context", Content: "synthetic current RAG context"},
+		{Role: "user", Content: "How do I request leave?"},
+	}
 
 	first, err := service.Prepare(context.Background(), request)
 	if err != nil {

@@ -79,7 +79,7 @@ Owns the online RAG path:
 - request a query embedding from Gateway;
 - run exact tenant-scoped vector SQL;
 - decrypt eligible chunks and build bounded untrusted reference context;
-- force response cache off and calculate usage intent from final messages;
+- calculate usage intent from final messages and preserve the existing `off|exact` response-cache selection after current retrieval;
 - allocate/validate citation source IDs;
 - persist authoritative citation records/tombstones and orchestrate browser SSE.
 

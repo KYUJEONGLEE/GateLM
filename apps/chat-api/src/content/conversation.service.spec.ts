@@ -128,14 +128,27 @@ describe('ConversationService turn fan-out', () => {
     expect(store.markTerminalFailure).not.toHaveBeenCalled();
   });
 
-  it('omits model history metadata when an exact cache hit supplies the assistant', async () => {
+  it('omits model history metadata and validates current RAG citations on an exact cache hit', async () => {
     const registry = new ActiveTurnRegistry();
-    const prepared = execution(registry, 'first');
+    const prepared = Object.freeze({
+      ...execution(registry, 'first'),
+      citationSources: Object.freeze([{
+        sourceId: 'S1' as const,
+        documentId: '00000000-0000-4000-8000-000000000501',
+        displayName: 'Leave policy',
+        pageStart: 1,
+        pageEnd: 1,
+        lineStart: null,
+        lineEnd: null,
+        ordinal: 0,
+        availability: 'available' as const,
+      }]),
+    });
     const message = Object.freeze({
       id: '00000000-0000-4000-8000-000000000400',
       turnId: '00000000-0000-4000-8000-000000000301',
       role: 'assistant' as const,
-      content: 'cached delta',
+      content: 'cached delta [S1] [S999]',
       sequence: 2,
       createdAt: '2026-07-14T00:00:00.000Z',
     });
@@ -146,7 +159,7 @@ describe('ConversationService turn fan-out', () => {
       cancelTurn: jest.fn().mockResolvedValue({ cancelled: true }),
     };
     const bridge = {
-      complete: jest.fn().mockResolvedValue(completion('cached delta', 'hit')),
+      complete: jest.fn().mockResolvedValue(completion('cached delta [S1] [S999]', 'hit')),
     };
     const service = serviceWith({ store, bridge, registry });
 
@@ -160,8 +173,9 @@ describe('ConversationService turn fan-out', () => {
     expect(store.persistAssistant).toHaveBeenCalledWith(
       prepared.actor,
       prepared.reserved,
-      'cached delta',
+      'cached delta [S1] [S999]',
       null,
+      [prepared.citationSources[0]],
     );
     expect(message).not.toHaveProperty('effectiveModelKey');
   });
@@ -560,68 +574,71 @@ describe('ConversationService turn fan-out', () => {
     registry.release(reserved.turnId, handle);
   });
 
-  it('adds sanitized user content and the built RAG context to provider messages', async () => {
-    const registry = new ActiveTurnRegistry();
-    const reserved = { ...reservedTurn('pending_admission'), knowledgeMode: 'tenant' as const };
-    const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
-    const policyDigest = `sha256:${'A'.repeat(43)}`;
-    const userMessage = { ...assistantMessage(), role: 'user' as const, content: 'leave policy?' };
-    const ragMessage = Object.freeze({
-      role: 'system' as const,
-      purpose: 'rag_context' as const,
-      content: 'safe RAG context',
-    });
-    const store = {
-      reserveTurn: jest.fn().mockResolvedValue(reserved),
-      persistAdmittedUser: jest.fn().mockResolvedValue({ message: userMessage, replayed: false }),
-      completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
-    };
-    const retrieval = { retrieve: jest.fn().mockResolvedValue([{ chunkId: 'chunk' }]) };
-    const ragContext = {
-      build: jest.fn().mockReturnValue({
-        message: ragMessage,
-        sources: [{ id: 'S1' }],
-        citationSources: [],
-      }),
-    };
-    const bridge = {
-      admitAuthorized: jest.fn().mockResolvedValue(handle),
-      sanitize: jest.fn().mockResolvedValue({
-        messages: [{ itemIndex: 0, content: 'leave policy?' }],
-        policyDigest,
-      }),
-    };
-    const service = serviceWith({
-      store, bridge, registry, retrieval, ragContext,
-      sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
-    });
+  it.each(['exact', 'off'] as const)(
+    'adds sanitized RAG context and preserves the requested %s cache strategy',
+    async (cacheStrategy) => {
+      const registry = new ActiveTurnRegistry();
+      const reserved = { ...reservedTurn('pending_admission'), knowledgeMode: 'tenant' as const };
+      const handle = Object.freeze({ admissionId: 'admission' } as AdmissionHandle);
+      const policyDigest = `sha256:${'A'.repeat(43)}`;
+      const userMessage = { ...assistantMessage(), role: 'user' as const, content: 'leave policy?' };
+      const ragMessage = Object.freeze({
+        role: 'system' as const,
+        purpose: 'rag_context' as const,
+        content: 'safe RAG context',
+      });
+      const store = {
+        reserveTurn: jest.fn().mockResolvedValue(reserved),
+        persistAdmittedUser: jest.fn().mockResolvedValue({ message: userMessage, replayed: false }),
+        completionHistory: jest.fn().mockResolvedValue({ messages: [], placeholderCounters: {} }),
+      };
+      const retrieval = { retrieve: jest.fn().mockResolvedValue([{ chunkId: 'chunk' }]) };
+      const ragContext = {
+        build: jest.fn().mockReturnValue({
+          message: ragMessage,
+          sources: [{ id: 'S1' }],
+          citationSources: [],
+        }),
+      };
+      const bridge = {
+        admitAuthorized: jest.fn().mockResolvedValue(handle),
+        sanitize: jest.fn().mockResolvedValue({
+          messages: [{ itemIndex: 0, content: 'leave policy?' }],
+          policyDigest,
+        }),
+      };
+      const service = serviceWith({
+        store, bridge, registry, retrieval, ragContext,
+        sessions: { authorizeExecution: jest.fn().mockResolvedValue(authorized()) },
+      });
 
-    const prepared = await service.prepareTurn('access', reserved.conversationId, {
-      idempotencyKey: reserved.idempotencyKey,
-      content: 'leave policy?',
-      usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy: 'exact' },
-    });
+      const prepared = await service.prepareTurn('access', reserved.conversationId, {
+        idempotencyKey: reserved.idempotencyKey,
+        content: 'leave policy?',
+        usageIntent: { maxOutputTokens: 64, requestedTier: 'standard', cacheStrategy },
+      });
 
-    expect(prepared).toMatchObject({
-      kind: 'execute',
-      messages: [
-        ragMessage,
-        {
-          role: 'user',
-          content: 'leave policy?',
-          safety: { status: 'sanitized', policyDigest },
-        },
-      ],
-    });
-    if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
-    expect(prepared.usageIntent).toEqual(expect.objectContaining({
-      estimatedInputTokens: Buffer.byteLength('safe RAG contextleave policy?', 'utf8'),
-      cacheStrategy: 'off',
-    }));
-    expect(retrieval.retrieve).toHaveBeenCalledWith(authorized(), 'leave policy?');
-    expect(bridge.sanitize).toHaveBeenCalledTimes(2);
-    registry.release(reserved.turnId, handle);
-  });
+      expect(prepared).toMatchObject({
+        kind: 'execute',
+        messages: [
+          ragMessage,
+          {
+            role: 'user',
+            content: 'leave policy?',
+            safety: { status: 'sanitized', policyDigest },
+          },
+        ],
+      });
+      if (prepared.kind !== 'execute') throw new Error('Expected an executable turn.');
+      expect(prepared.usageIntent).toEqual(expect.objectContaining({
+        estimatedInputTokens: Buffer.byteLength('safe RAG contextleave policy?', 'utf8'),
+        cacheStrategy,
+      }));
+      expect(retrieval.retrieve).toHaveBeenCalledWith(authorized(), 'leave policy?');
+      expect(bridge.sanitize).toHaveBeenCalledTimes(2);
+      registry.release(reserved.turnId, handle);
+    },
+  );
 
   it('sanitizes the RAG query before retrieval and stores only the safe no-evidence turn', async () => {
     const registry = new ActiveTurnRegistry();
