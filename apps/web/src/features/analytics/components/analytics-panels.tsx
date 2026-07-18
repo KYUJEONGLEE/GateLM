@@ -819,9 +819,11 @@ export function AnalyticsSecurityPanel({
         sampled: "최근 Detail {sampled}/{total}건 기반",
         source: "사용 경로별 보안 근거",
         sourceSub: "전체 프로젝트 범위에는 Tenant Chat을 별도 사용 경로로 포함합니다",
+        totalRequests: "전체 요청",
         unavailable: "탐지 유형 근거를 사용할 수 없음",
         treatment: "보안 처리 결과",
         treatmentSub: "선택 기간의 마스킹과 차단 처리량",
+        unobserved: "처리 없음/미관측",
         title: "보안"
       }
     : {
@@ -841,17 +843,28 @@ export function AnalyticsSecurityPanel({
         sampled: "Based on {sampled}/{total} recent details",
         source: "Security evidence by usage surface",
         sourceSub: "The all-projects scope includes Tenant Chat as a separate usage surface",
+        totalRequests: "Total requests",
         unavailable: "Detector-type evidence is unavailable",
         treatment: "Security outcomes",
         treatmentSub: "Masked and blocked requests in the selected range",
+        unobserved: "NO ACTION / UNOBSERVED",
         title: "Security"
       };
   const maskedRequests = evidence?.maskedRequestCount ?? valueById(model.impact.outcomes, "pii_masked");
   const blockedRequests = evidence?.blockedRequestCount ?? valueById(model.impact.outcomes, "blocked");
   const protectedRequests = maskedRequests + blockedRequests;
+  const totalRequests = evidence?.sources?.reduce(
+    (total, source) => total + source.totalRequestCount,
+    0
+  ) ?? model.totalRequests;
   const treatmentRows: AnalyticsValueRow[] = [
     { id: "pii_masked", label: locale === "ko" ? "마스킹" : "MASKED", value: maskedRequests },
-    { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests }
+    { id: "blocked", label: locale === "ko" ? "차단" : "BLOCKED", value: blockedRequests },
+    {
+      id: "unobserved",
+      label: text.unobserved,
+      value: Math.max(0, totalRequests - protectedRequests)
+    }
   ];
   const detectedTypeRows = (evidence?.detectedTypeRows ?? []).map((row) => ({
     ...row,
@@ -882,7 +895,11 @@ export function AnalyticsSecurityPanel({
       <ExecutiveBand
         accent="security"
         icon={Shield}
-        lead={{ label: text.protected, value: formatInteger(protectedRequests) }}
+        lead={{
+          label: text.protected,
+          meta: `${formatInteger(totalRequests)} ${text.totalRequests}`,
+          value: formatInteger(protectedRequests)
+        }}
         metrics={[
           { label: text.masked, value: formatInteger(maskedRequests) },
           { label: text.blocked, value: formatInteger(blockedRequests) }
@@ -892,6 +909,7 @@ export function AnalyticsSecurityPanel({
       <div className="analytics-v3-workspace analytics-v3-security-workspace">
         <AnalysisSurface
           className="analytics-v3-main-canvas"
+          metric={`${formatInteger(totalRequests)} ${text.totalRequests}`}
           subtitle={`${text.detectedTypesSub} · ${evidenceSubtitle}`}
           title={text.detectedTypes}
         >
@@ -972,6 +990,7 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
   const text = locale === "ko"
     ? {
         eligible: "캐시 대상 요청",
+        bypass: "캐시 OFF/BYPASS",
         hit: "캐시 적중",
         hitRate: "캐시 적중률",
         outcome: "캐시 처리 경로",
@@ -982,10 +1001,12 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
         savedScope: "Project/Application 기록",
         throughput: "캐시 효율",
         throughputSub: "두 사용 경로의 대상 요청과 실제 적중 수",
+        totalRequests: "전체 요청",
         title: "캐시"
       }
     : {
         eligible: "Cache eligible",
+        bypass: "Cache OFF/BYPASS",
         hit: "Cache hits",
         hitRate: "Cache hit rate",
         outcome: "Cache decision path",
@@ -996,11 +1017,14 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
         savedScope: "Project/Application records",
         throughput: "Cache efficiency",
         throughputSub: "Eligible requests and actual hits across both usage surfaces",
+        totalRequests: "Total requests",
         title: "Cache"
       };
+  const totalRequests = model.cache.eligibleRequests + model.cache.bypassRequests;
   const efficiencyRows: AnalyticsValueRow[] = [
     { id: "eligible", label: text.eligible, value: model.cache.eligibleRequests },
-    { id: "hit", label: text.hit, value: model.cache.hitRequests }
+    { id: "hit", label: text.hit, value: model.cache.hitRequests },
+    { id: "bypass", label: text.bypass, value: model.cache.bypassRequests }
   ];
 
   return (
@@ -1008,7 +1032,11 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
       <ExecutiveBand
         accent="cache"
         icon={Database}
-        lead={{ label: text.hitRate, value: formatPercent(model.cache.hitRate) }}
+        lead={{
+          label: text.hitRate,
+          meta: `${formatInteger(totalRequests)} ${text.totalRequests} · ${formatInteger(model.cache.bypassRequests)} ${text.bypass}`,
+          value: formatPercent(model.cache.hitRate)
+        }}
         metrics={[
           {
             label: text.hit,
@@ -1026,7 +1054,12 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
       />
 
       <div className="analytics-v3-workspace analytics-v3-cache-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.outcomeSub} title={text.outcome}>
+        <AnalysisSurface
+          className="analytics-v3-main-canvas"
+          metric={`${formatInteger(totalRequests)} ${text.totalRequests}`}
+          subtitle={text.outcomeSub}
+          title={text.outcome}
+        >
           <ChartOrEmpty hasData={hasRows(model.cache.outcomes)} locale={locale}>
             <AnalyticsCompositionChart ariaLabel={text.outcome} rows={model.cache.outcomes} />
           </ChartOrEmpty>
@@ -1040,14 +1073,16 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
 
       <EvidenceTable
         columns={locale === "ko"
-          ? ["사용 경로", "적중", "대상 요청", "적중률", "절감 비용"]
-          : ["Usage surface", "Hits", "Eligible", "Hit rate", "Savings"]}
+          ? ["사용 경로", "전체 요청", "적중", "대상 요청", "OFF/BYPASS", "적중률", "절감 비용"]
+          : ["Usage surface", "Total requests", "Hits", "Eligible", "OFF/BYPASS", "Hit rate", "Savings"]}
         emptyLocale={locale}
         rows={model.cache.sources.map((row) => ({
           cells: [
             <strong key="surface">{row.label}</strong>,
+            formatInteger(row.totalRequests),
             formatInteger(row.hitRequests),
             formatInteger(row.eligibleRequests),
+            formatInteger(Math.max(0, row.totalRequests - row.eligibleRequests)),
             formatPercent(row.hitRate),
             row.savedCostMicroUsd === null ? "—" : formatMicroUsd(row.savedCostMicroUsd)
           ],
