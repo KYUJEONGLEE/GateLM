@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Save, Trash2 } from "lucide-react";
+import { FolderKanban, FolderPlus, Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -20,6 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 import {
   compareProjectCreatedAtDescending,
   getProjectCreateActionLocation,
+  getProjectEmptyStateVariant,
   getProjectSettingsHref,
   isProjectVisibleInList
 } from "./project-management-state";
@@ -59,7 +60,14 @@ const projectText: Record<
   {
     createProject: string;
     description: string;
-    empty: string;
+    emptyAdminDescription: string;
+    emptyAdminTitle: string;
+    emptyAssignmentDescription: string;
+    emptyAssignmentTitle: string;
+    emptyGuideSteps: readonly {
+      description: string;
+      title: string;
+    }[];
     budgetAlert: string;
     budgetWarning: string;
     costReportFallback: string;
@@ -86,7 +94,24 @@ const projectText: Record<
   en: {
     createProject: "Create Project",
     description: "Description",
-    empty: "No projects found.",
+    emptyAdminDescription: "Manage budgets, employees, models, and operating policies within one project scope.",
+    emptyAdminTitle: "Create your first project",
+    emptyAssignmentDescription: "Ask a Tenant admin to create a project or assign you to an existing one.",
+    emptyAssignmentTitle: "No projects assigned",
+    emptyGuideSteps: [
+      {
+        description: "Name the project and set its monthly budget.",
+        title: "Define the scope"
+      },
+      {
+        description: "Add employees and select the provider models they can use.",
+        title: "Connect access"
+      },
+      {
+        description: "Review routing, limits, cache, and safety before launch.",
+        title: "Apply policies"
+      }
+    ],
     budgetAlert: "Budget exceeded",
     budgetWarning: "Budget warning",
     costReportFallback: "Monthly usage is unavailable.",
@@ -112,7 +137,24 @@ const projectText: Record<
   ko: {
     createProject: "프로젝트 생성",
     description: "설명",
-    empty: "프로젝트가 없습니다.",
+    emptyAdminDescription: "프로젝트에서 예산, 직원, 모델, 운영 정책을 하나의 범위로 관리할 수 있습니다.",
+    emptyAdminTitle: "첫 프로젝트를 만들어 운영 범위를 설정하세요",
+    emptyAssignmentDescription: "Tenant 관리자에게 프로젝트 생성 또는 기존 프로젝트 배정을 요청하세요.",
+    emptyAssignmentTitle: "배정된 프로젝트가 없습니다",
+    emptyGuideSteps: [
+      {
+        description: "프로젝트 이름과 월 예산을 정합니다.",
+        title: "운영 범위 정의"
+      },
+      {
+        description: "직원을 추가하고 사용할 Provider 모델을 선택합니다.",
+        title: "사용자와 모델 연결"
+      },
+      {
+        description: "라우팅, 요청 제한, 캐시, 안전 정책을 검토합니다.",
+        title: "정책 적용"
+      }
+    ],
     budgetAlert: "예산 초과",
     budgetWarning: "예산 경고",
     costReportFallback: "월간 사용량을 불러올 수 없습니다.",
@@ -182,6 +224,8 @@ export function ProjectManagement({
     projects.length,
     canCreateProject
   );
+  const emptyStateVariant = getProjectEmptyStateVariant(canCreateProject);
+  const EmptyStateIcon = emptyStateVariant === "create-guide" ? FolderPlus : FolderKanban;
   const createProjectAction = createProjectActionLocation ? (
     <Link
       className="primary-button project-create-button"
@@ -213,10 +257,49 @@ export function ProjectManagement({
 
       <section className="console-panel project-list-panel">
         {projects.length === 0 ? (
-          <div className="project-empty-state">
-            <p className="project-empty">{text.empty}</p>
-            {createProjectActionLocation === "empty" ? createProjectAction : null}
-          </div>
+          <section
+            aria-labelledby="project-empty-guide-title"
+            className="management-empty-guide"
+            data-variant={emptyStateVariant}
+          >
+            <div className="management-empty-guide-intro">
+              <span className="management-empty-guide-icon" aria-hidden="true">
+                <EmptyStateIcon />
+              </span>
+              <div>
+                <h3 id="project-empty-guide-title">
+                  {emptyStateVariant === "create-guide"
+                    ? text.emptyAdminTitle
+                    : text.emptyAssignmentTitle}
+                </h3>
+                <p>
+                  {emptyStateVariant === "create-guide"
+                    ? text.emptyAdminDescription
+                    : text.emptyAssignmentDescription}
+                </p>
+              </div>
+            </div>
+
+            {emptyStateVariant === "create-guide" ? (
+              <ol className="management-empty-guide-steps">
+                {text.emptyGuideSteps.map((step, index) => (
+                  <li key={step.title}>
+                    <span className="management-empty-guide-step-number" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <strong>{step.title}</strong>
+                      <p>{step.description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+
+            {createProjectActionLocation === "empty" ? (
+              <div className="management-empty-guide-action">{createProjectAction}</div>
+            ) : null}
+          </section>
         ) : (
           <div className="project-card-list">
             <div className="project-sort-control" aria-label={text.sortLabel}>
