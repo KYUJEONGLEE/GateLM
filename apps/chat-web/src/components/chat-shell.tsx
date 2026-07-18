@@ -715,7 +715,10 @@ function UserMessage({ content, createdAt, maskingApplied }: Readonly<{
     <p>{content}</p>
     {maskingApplied && <div className="message-privacy-notice" role="status">
       <ShieldCheck size={16} aria-hidden />
-      <span>개인정보 보호를 위해 일부 정보를 마스킹한 뒤 AI 모델에 전달했습니다.</span>
+      <span className="message-privacy-notice-copy">
+        <span>개인정보 보호를 위해 일부 정보를 마스킹한 뒤</span>{' '}
+        <span>AI 모델에 전달했습니다.</span>
+      </span>
     </div>}
     <div className="message-user-actions">
       <MessageTime createdAt={createdAt} />

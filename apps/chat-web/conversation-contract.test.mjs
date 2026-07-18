@@ -283,11 +283,14 @@ test('ChatShell labels exact cache hits as model-free zero-second responses', ()
 
 test('ChatShell keeps the in-memory user prompt and shows a non-error masking notice', () => {
   const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('./src/app/globals.css', import.meta.url), 'utf8');
 
   assert.match(source, /maskingApplied:\s*acceptedUserContentWasMasked\(message\.content, accepted\.userContent\)/);
   assert.doesNotMatch(source, /content:\s*accepted\.userContent/);
   assert.match(source, /className="message-privacy-notice" role="status"/);
-  assert.match(source, /개인정보 보호를 위해 일부 정보를 마스킹한 뒤 AI 모델에 전달했습니다\./);
+  assert.match(source, /개인정보 보호를 위해 일부 정보를 마스킹한 뒤<\/span>\{' '\}\s*<span>AI 모델에 전달했습니다\./);
+  assert.match(styles, /\.message-privacy-notice \{[^}]*font-size: 15px;[^}]*line-height: 1\.55;/);
+  assert.match(styles, /\.message-privacy-notice-copy \{[^}]*word-break: keep-all;[^}]*overflow-wrap: anywhere;[^}]*line-break: strict;/);
 });
 
 test('ChatShell keeps pre-admission policy rejections as an in-conversation GateLM warning', () => {
