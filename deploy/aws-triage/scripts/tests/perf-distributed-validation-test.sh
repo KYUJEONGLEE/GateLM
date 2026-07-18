@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PERF_SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DIST_LIB_PATH="${PERF_SCRIPTS_DIR}/perf-distributed-lib.sh"
+DIST_COMPOSE_PATH="${PERF_SCRIPTS_DIR}/../docker-compose.perf.distributed.yml"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
@@ -95,6 +96,7 @@ verify_attestations() {
 valid_env="${tmp_dir}/valid.env"
 write_valid_env "${valid_env}"
 validate_env "${valid_env}" >/dev/null
+grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS: "5000"' "${DIST_COMPOSE_PATH}"
 
 attestation_dir="${tmp_dir}/attestations"
 mkdir "${attestation_dir}"
