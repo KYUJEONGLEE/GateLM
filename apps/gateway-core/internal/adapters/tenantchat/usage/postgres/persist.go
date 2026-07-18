@@ -177,7 +177,7 @@ func usageDeltaEventPayload(
 }
 
 func routingDifficultyValue(requestContext tenantchat.RequestContext) any {
-	if requestContext.Routing == nil {
+	if requestContext.Routing == nil || requestContext.Routing.Difficulty == "" {
 		return nil
 	}
 	return requestContext.Routing.Difficulty

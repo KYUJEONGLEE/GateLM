@@ -60,3 +60,25 @@ func TestLedgerlessLatencyUsesAdmissionLifetimeAndClampsClockSkew(t *testing.T) 
 		t.Fatalf("expected clock skew to clamp to 0ms, got %d", latencyMs)
 	}
 }
+
+func TestRoutingDifficultyCompatibilityOmission(t *testing.T) {
+	requestContext := tenantchat.RequestContext{
+		Routing: &tenantchat.RoutingDecision{ModelRef: "tc_standard"},
+	}
+	if value := routingDifficultyValue(requestContext); value != nil {
+		t.Fatalf("expected missing routing difficulty to persist as NULL, got %v", value)
+	}
+
+	payload := map[string]any{}
+	if err := addRoutingDifficultyPayload(payload, requestContext); err != nil {
+		t.Fatalf("omit missing routing difficulty from event: %v", err)
+	}
+	if _, exists := payload["routingDifficulty"]; exists {
+		t.Fatalf("missing routing difficulty must not be emitted: %+v", payload)
+	}
+
+	requestContext.Routing.Difficulty = "unsupported"
+	if err := addRoutingDifficultyPayload(payload, requestContext); err == nil {
+		t.Fatal("unsupported non-empty routing difficulty must fail closed")
+	}
+}

@@ -127,6 +127,9 @@ func addRoutingDifficultyPayload(
 		return nil
 	}
 	difficulty := requestContext.Routing.Difficulty
+	if difficulty == "" {
+		return nil
+	}
 	if difficulty != "simple" && difficulty != "complex" {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
