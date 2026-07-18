@@ -44,6 +44,7 @@ export function cancelResult(value: unknown): Readonly<{ cancelled: boolean }>;
 export function strongestPolicyState(quotaState?: PolicyState, budgetState?: PolicyState): PolicyState;
 export function isBlockedCode(code: string): boolean;
 export function safeChatError(value: unknown): SafeChatError;
+export function acceptedUserContentWasMasked(originalContent: string, acceptedUserContent: unknown): boolean;
 export function consumeTurnSse(
   stream: ReadableStream<Uint8Array> | null,
   options: Readonly<{

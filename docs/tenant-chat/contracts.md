@@ -609,11 +609,11 @@ AI Service의 `POST /internal/v1/rag/extract`는 Control Plane Worker 전용 raw
 4. admission 성공 뒤 conversation이면 completed prior context를 bounded decrypt해 placeholder counter와 legacy migration 대상을 구성하고, single_turn이면 prior history 없이 current user만 준비한다. current user와 bounded legacy_unverified user만 sanitization phase로 보낸다.
 5. block이면 admission terminal 처리 뒤 user ciphertext 없이 종료한다. passed/redacted이면 반환 content와 safety provenance를 schema v2 user ciphertext로 commit한다.
 6. user commit 뒤 context mode에 맞는 completed history와 current sanitized user로 complete를 호출한다. 이미 처리된 v2 history는 PII model에 다시 보내지 않는다.
-7. private Gateway SSE를 strict consume한다. chat.turn.accepted는 committed user message UUID와 sanitized stored content를 포함하고 browser는 optimistic raw text를 즉시 교체한다.
+7. private Gateway SSE를 strict consume한다. chat.turn.accepted는 committed user message UUID와 sanitized stored content를 포함한다. browser는 이를 in-memory optimistic 원문과 비교해 마스킹 안내 여부만 결정하고, 현재 화면의 원문을 서버 기준값으로 덮어쓰거나 browser storage에 보존하지 않는다.
 8. successful assistant 전체를 schema v2 provider_generated provenance로 암호화해 commit한 뒤에만 chat.turn.final을 보낸다.
 
 - Chat API-facing event ID는 `<turnId>:<sequence>`이고 sequence는 1부터 증가한다. event/frame/assistant aggregate와 response backpressure는 bounded다. 같은 turn의 HTTP attachment는 기본 4개이며 `TENANT_CHAT_MAX_ATTACHMENTS_PER_TURN`으로 1~16개 범위에서 제한하고, 초과 요청은 stream header 전 `429 CHAT_CONCURRENCY_LIMITED`로 거절한다.
-- chat.turn.accepted.userMessageId는 UUID v4이고 userContent는 1~20,000자의 sanitized committed value다. 원래 untrusted input은 accepted/replay/history/durable log에 다시 내보내지 않는다.
+- chat.turn.accepted.userMessageId는 UUID v4이고 userContent는 1~20,000자의 sanitized committed value다. 원래 untrusted input은 accepted/replay/history/durable log에 다시 내보내지 않는다. browser가 이미 보유한 원문은 해당 in-memory optimistic message의 현재 렌더링에만 사용할 수 있으며 reload 또는 history 재조회에서는 복원하지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 bounded `quotaState`와 `budgetState`를 전달한다. encrypted assistant만으로 재생하는 completed turn은 두 상태를 복원할 Chat API-owned 근거가 없으므로 생략할 수 있으며, browser는 이를 새 정책 상태로 추정하지 않는다.
 - successful assistant history와 `chat.turn.final`은 Gateway가 확정한 bounded `effectiveModelKey`를 선택적으로 포함한다. Chat API는 이를 assistant message와 함께 저장하며 legacy row 또는 Gateway가 모델을 확정하지 못한 경우 생략한다. Provider connection, fallback attempt, credential과 비용 상세는 직원 응답에 포함하지 않는다.
 - fresh successful `chat.turn.final`은 Gateway가 확정한 `cacheOutcome`을 선택적으로 포함한다. exact cache hit에서는 assistant history의 모델 표시를 생략하고 browser는 모델 호출이 없었다고 표시한다.
