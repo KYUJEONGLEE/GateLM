@@ -38,6 +38,45 @@ test("maps an exact cache hit without a provider attempt or cost", () => {
   expect(record.costMicroUsd).toBe(0);
   expect(record.ttftMs).toBe(0);
   expect(record.domainOutcomes?.provider.outcome).toBe("not_called");
+  expect(record.domainOutcomes?.safety.outcome).toBe("passed");
+  expect(record.safetySummary).toMatchObject({
+    maskingAction: "none",
+    observationState: "observed",
+    outcome: "passed"
+  });
+});
+
+test("preserves a redacted masking result and detector summary", () => {
+  const record = toTenantChatRequestLog(invocation({
+    maskingAction: "redacted",
+    maskingDetectedCount: 2,
+    maskingDetectedTypes: ["email", "phone_number"]
+  }));
+
+  expect(record.maskingAction).toBe("redacted");
+  expect(record.domainOutcomes?.safety.outcome).toBe("redacted");
+  expect(record.safetySummary).toEqual({
+    detectedCount: 2,
+    detectorCategories: ["email", "phone_number"],
+    maskingAction: "redacted",
+    observationState: "observed",
+    outcome: "redacted"
+  });
+});
+
+test("does not infer passed when historical masking evidence is unavailable", () => {
+  const record = toTenantChatRequestLog(invocation({
+    maskingAction: null,
+    maskingDetectedCount: 0,
+    maskingDetectedTypes: []
+  }));
+
+  expect(record.domainOutcomes?.safety.outcome).toBe("not_checked");
+  expect(record.safetySummary).toMatchObject({
+    maskingAction: null,
+    observationState: "unavailable",
+    outcome: "not_checked"
+  });
 });
 
 test("maps a safety block without exposing the detected value", () => {
@@ -60,6 +99,25 @@ test("maps a safety block without exposing the detected value", () => {
   expect(record.providerCalled).toBe(false);
   expect(record.errorStage).toBe("safety");
   expect(record.ttftMs).toBeNull();
+  expect(record.safetySummary?.observationState).toBe("observed");
+});
+
+test("classifies a historical safety block without inventing detector evidence", () => {
+  const record = toTenantChatRequestLog(invocation({
+    attemptCount: 0,
+    maskingAction: null,
+    maskingDetectedCount: 0,
+    maskingDetectedTypes: [],
+    terminalOutcome: "safety_blocked"
+  }));
+
+  expect(record.maskingAction).toBe("blocked");
+  expect(record.domainOutcomes?.safety.outcome).toBe("blocked");
+  expect(record.safetySummary).toMatchObject({
+    maskingAction: "blocked",
+    observationState: "unavailable",
+    outcome: "blocked"
+  });
 });
 
 function invocation(overrides: Partial<TenantChatInvocation> = {}): TenantChatInvocation {

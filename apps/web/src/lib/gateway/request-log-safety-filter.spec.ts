@@ -31,6 +31,14 @@ test("handles request logs with no safety domain outcome", () => {
   expect(matchesRequestLogSafetyOutcome(record, "passed")).toBe(true);
 });
 
+test("keeps unavailable Tenant Chat safety evidence in not-checked filtering", () => {
+  const record = safetyRecord("not_checked", "none");
+
+  expect(requestLogSafetyOutcome(record)).toBe("not_checked");
+  expect(matchesRequestLogSafetyOutcome(record, "not_checked")).toBe(true);
+  expect(matchesRequestLogSafetyOutcome(record, "passed")).toBe(false);
+});
+
 test("rejects unsupported safety filter values", () => {
   expect(normalizeRequestLogSafetyOutcomeFilter("filtered")).toBe("");
   expect(normalizeRequestLogSafetyOutcomeFilter("not_checked")).toBe("not_checked");

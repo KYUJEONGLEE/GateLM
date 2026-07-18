@@ -158,6 +158,28 @@ func TestStoreAuthenticatesScryptCredentialCandidate(t *testing.T) {
 	}
 }
 
+func TestReadCredentialCandidatesClosesRowsBeforeReturning(t *testing.T) {
+	rows := newFakeRows([]credentialCandidate{{
+		id:            "00000000-0000-4000-8000-000000000400",
+		tenantID:      "00000000-0000-4000-8000-000000000100",
+		projectID:     "00000000-0000-4000-8000-000000000200",
+		applicationID: "00000000-0000-4000-8000-000000000300",
+		secretHash:    "redacted-hash",
+		hashAlgorithm: credentialHashAlgorithmScrypt,
+	}})
+
+	candidates, err := readCredentialCandidates(rows)
+	if err != nil {
+		t.Fatalf("read credential candidates: %v", err)
+	}
+	if !rows.closed {
+		t.Fatal("credential rows must be closed before secret verification starts")
+	}
+	if len(candidates) != 1 || candidates[0].id == "" {
+		t.Fatalf("unexpected credential candidates: %+v", candidates)
+	}
+}
+
 func TestStoreRejectsMalformedCredentialWithoutQuery(t *testing.T) {
 	queryer := &fakeQueryer{}
 

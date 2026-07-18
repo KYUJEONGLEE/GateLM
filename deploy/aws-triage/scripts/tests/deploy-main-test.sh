@@ -218,6 +218,22 @@ do
   grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
     fail "Gateway E5 production Compose setting is missing: ${required_setting}"
 done
+for required_setting in \
+  'GATEWAY_AUTH_CACHE_ENABLED: ${GATEWAY_AUTH_CACHE_ENABLED:-true}' \
+  'GATEWAY_AUTH_CACHE_TTL_MS: ${GATEWAY_AUTH_CACHE_TTL_MS:-5000}' \
+  'GATEWAY_AUTH_CACHE_MAX_ENTRIES: ${GATEWAY_AUTH_CACHE_MAX_ENTRIES:-4096}'
+do
+  grep -Fq "${required_setting}" "${COMPOSE_FILE}" || \
+    fail "Gateway auth cache production Compose setting is missing: ${required_setting}"
+done
+for required_setting in \
+  'GATEWAY_AUTH_CACHE_ENABLED=true' \
+  'GATEWAY_AUTH_CACHE_TTL_MS=5000' \
+  'GATEWAY_AUTH_CACHE_MAX_ENTRIES=4096'
+do
+  grep -Fq "${required_setting}" "${ENV_EXAMPLE}" || \
+    fail "Gateway auth cache example setting is missing: ${required_setting}"
+done
 for pinned_material in \
   '614241f622f53c4eeff9890bdc4f31cfecc418b3' \
   'onnx/model.onnx' \

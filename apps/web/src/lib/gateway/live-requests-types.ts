@@ -1,6 +1,11 @@
 export type LiveRequestCacheStatus = "HIT" | "MISS" | "BYPASS" | "NONE";
 
-export type LiveRequestSafetyAction = "MASKED" | "BLOCKED" | "REDACTED" | "NONE";
+export type LiveRequestSafetyAction =
+  | "MASKED"
+  | "BLOCKED"
+  | "REDACTED"
+  | "UNAVAILABLE"
+  | "NONE";
 
 export type LiveRequestStatusFilter = "" | "success" | "failed" | "blocked" | "rate_limited";
 
