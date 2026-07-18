@@ -297,7 +297,7 @@ test('ChatShell keeps pre-admission policy rejections as an in-conversation Gate
   const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
   const error = safeChatError({ code: 'CHAT_SAFETY_BLOCKED' });
 
-  assert.equal(error.message, '안전 정책에 따라 이 요청에는 답변할 수 없습니다.');
+  assert.equal(error.message, '안전 정책에 따라 이 요청은 차단되었습니다.');
   assert.match(source, /const rejectedByPolicy = detail\.code === 'CHAT_SAFETY_BLOCKED' \|\| isBlockedCode\(detail\.code\);/);
   assert.match(source, /if \(!admitted && !rejectedByPolicy\) \{[\s\S]*?setComposer\(content\);[\s\S]*?\} else \{\s*setMessages\(\(current\) => current\.map/);
   assert.match(source, /message\.id === draftId \? \{ \.\.\.message, notice: detail \} : message/);
