@@ -1,0 +1,12 @@
+{"kind":"deck","id":"pr/dojfaj","name":"Deck"}
+{"kind":"layout","layoutId":"20a6a280-56ed-41fa-b823-b9a53e8cfbef","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"4c4f66f8-ac56-488a-a1e7-613a754595a1","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/wrguvq","slide":1,"title":"정보 가이드","textShapes":4}
+{"kind":"shape","id":"sh/9sn61onm","slide":1,"name":"mint-outline-frame","bbox":[47,43,1186,634]}
+{"kind":"textbox","id":"sh/8repsjm1","slide":1,"name":"eyebrow","text":"정보 가이드","textPreview":"정보 가이드","textChars":6,"textLines":1,"bbox":[88,82,230,30]}
+{"kind":"textbox","id":"sh/z2lovu5k","slide":1,"name":"title-line-1","text":"비즈니스와","textPreview":"비즈니스와","textChars":5,"textLines":1,"bbox":[88,146,580,92]}
+{"kind":"textbox","id":"sh/e1cnmp4z","slide":1,"name":"title-line-2","text":"직장에서의 기술","textPreview":"직장에서의 기술","textChars":8,"textLines":1,"bbox":[88,232,690,96]}
+{"kind":"shape","id":"sh/14n6x4na","slide":1,"name":"subtitle-accent","bbox":[88,600,28,3]}
+{"kind":"textbox","id":"sh/03u5ozmp","slide":1,"name":"subtitle","text":"기술이 비즈니스와 직장을 변화시키는 방법 살펴보기","textPreview":"기술이 비즈니스와 직장을 변화시키는 방법 살펴보기","textChars":27,"textLines":1,"bbox":[132,582,610,42]}
+{"kind":"image","id":"im/nm9gnuhc","slide":1,"name":"","alt":"Warm white editorial background with abstract polished chrome sculptures and a subtle mint glow on the right edge","bbox":[0,0,1280,720]}
+{"kind":"notes","id":"nt/wrguvq","slide":1,"text":""}

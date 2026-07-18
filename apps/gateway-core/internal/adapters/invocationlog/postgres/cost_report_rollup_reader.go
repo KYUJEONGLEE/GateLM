@@ -25,6 +25,7 @@ type costReportAggregate struct {
 	Projects     map[string]invocationlog.CostReportProjectBreakdown
 	Applications map[string]invocationlog.CostReportApplicationBreakdown
 	Models       map[string]invocationlog.CostReportModelBreakdown
+	ModelBuckets map[string]invocationlog.CostReportModelBucket
 	BudgetScopes map[string]invocationlog.CostReportBudgetScopeBreakdown
 	LastSourceAt *time.Time
 }
@@ -35,6 +36,7 @@ func newCostReportAggregate() costReportAggregate {
 		Projects:     map[string]invocationlog.CostReportProjectBreakdown{},
 		Applications: map[string]invocationlog.CostReportApplicationBreakdown{},
 		Models:       map[string]invocationlog.CostReportModelBreakdown{},
+		ModelBuckets: map[string]invocationlog.CostReportModelBucket{},
 		BudgetScopes: map[string]invocationlog.CostReportBudgetScopeBreakdown{},
 	}
 }
@@ -92,6 +94,7 @@ func (aggregate *costReportAggregate) addScopedRow(
 }
 
 func (aggregate *costReportAggregate) addModelRow(
+	periodStart time.Time,
 	provider string,
 	model string,
 	metrics costReportMetrics,
@@ -115,6 +118,15 @@ func (aggregate *costReportAggregate) addModelRow(
 	item.CostMicroUSD += metrics.CostMicroUSD
 	item.SavedCostMicroUSD += metrics.SavedCostMicroUSD
 	aggregate.Models[key] = item
+
+	periodStart = periodStart.UTC()
+	bucketKey := periodStart.Format(time.RFC3339Nano) + "\x00" + key
+	bucket := aggregate.ModelBuckets[bucketKey]
+	bucket.PeriodStart = periodStart
+	bucket.Provider = provider
+	bucket.Model = model
+	bucket.RequestCount += metrics.RequestCount
+	aggregate.ModelBuckets[bucketKey] = bucket
 }
 
 func addCostReportMetricsToBucket(item *invocationlog.CostReportBucket, metrics costReportMetrics) {
@@ -217,10 +229,12 @@ func (r *QueryReader) addCostReportRollupRows(
 	}
 	defer modelRows.Close()
 	for modelRows.Next() {
+		var sourceBucketStart time.Time
 		var provider string
 		var model string
 		var metrics costReportMetrics
 		if err := modelRows.Scan(
+			&sourceBucketStart,
 			&provider,
 			&model,
 			&metrics.RequestCount,
@@ -232,7 +246,7 @@ func (r *QueryReader) addCostReportRollupRows(
 		); err != nil {
 			return err
 		}
-		aggregate.addModelRow(provider, model, metrics)
+		aggregate.addModelRow(costReportOutputBucketStart(filter, sourceBucketStart), provider, model, metrics)
 	}
 	return modelRows.Err()
 }
@@ -304,10 +318,12 @@ func (r *QueryReader) addCostReportRawRangeRows(
 	}
 	defer modelRows.Close()
 	for modelRows.Next() {
+		var periodStart time.Time
 		var provider string
 		var model string
 		var metrics costReportMetrics
 		if err := modelRows.Scan(
+			&periodStart,
 			&provider,
 			&model,
 			&metrics.RequestCount,
@@ -319,7 +335,7 @@ func (r *QueryReader) addCostReportRawRangeRows(
 		); err != nil {
 			return err
 		}
-		aggregate.addModelRow(provider, model, metrics)
+		aggregate.addModelRow(costReportOutputBucketStart(filter, periodStart), provider, model, metrics)
 	}
 	return modelRows.Err()
 }
@@ -354,6 +370,7 @@ func buildCostReportRollupModelQuery(
 ) (string, []any) {
 	where, args := buildCostReportRollupWhere(filter, segments)
 	return `select
+  bucket_start,
   dimension_value as provider,
   dimension_value_2 as model,
   request_count,
@@ -446,6 +463,7 @@ func buildCostReportRawRangeModelQuery(
 	where, args := buildCostReportRawRangeWhere(filter, ranges)
 	return fmt.Sprintf(`with cost_report_raw_models as (
   select
+	%s as period_start,
     nullif(provider, '') as provider,
     nullif(model, '') as model,
     prompt_tokens,
@@ -457,6 +475,7 @@ func buildCostReportRawRangeModelQuery(
   where %s
 )
 select
+	period_start,
   provider,
   model,
   count(*)::bigint as request_count,
@@ -467,7 +486,7 @@ select
   coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
 from cost_report_raw_models
 where provider is not null and model is not null
-group by 1, 2`, where), args
+group by 1, 2, 3`, costReportBucketExpression(filter), where), args
 }
 
 func buildCostReportRawRangeWhere(

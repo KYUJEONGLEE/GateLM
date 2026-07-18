@@ -325,6 +325,22 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
 	}))
+	var analyticsPolicyImpactReader handlers.AnalyticsPolicyImpactReader
+	if reader, ok := routerOptions.InvocationLogReader.(handlers.AnalyticsPolicyImpactReader); ok {
+		analyticsPolicyImpactReader = reader
+	}
+	mux.Handle("GET /api/analytics/policy-impact", observabilityAuth(handlers.AnalyticsPolicyImpactHandler{
+		Reader:   analyticsPolicyImpactReader,
+		TenantID: cfg.DemoTenantID,
+	}))
+	var analyticsReliabilityReader handlers.AnalyticsReliabilityReader
+	if reader, ok := routerOptions.InvocationLogReader.(handlers.AnalyticsReliabilityReader); ok {
+		analyticsReliabilityReader = reader
+	}
+	mux.Handle("GET /api/analytics/reliability", observabilityAuth(handlers.AnalyticsReliabilityHandler{
+		Reader:   analyticsReliabilityReader,
+		TenantID: cfg.DemoTenantID,
+	}))
 	mux.Handle("GET /api/reports/costs", observabilityAuth(handlers.CostReportHandler{
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,

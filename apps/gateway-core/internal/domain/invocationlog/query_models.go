@@ -69,12 +69,13 @@ type CostReportFilter struct {
 }
 
 type AnalyticsPerformanceFilter struct {
-	TenantID  string
-	ProjectID string
-	Provider  string
-	Model     string
-	From      time.Time
-	To        time.Time
+	TenantID          string
+	ProjectID         string
+	Provider          string
+	Model             string
+	IncludeTenantChat bool
+	From              time.Time
+	To                time.Time
 }
 
 type LlmInvocationLog struct {
@@ -359,6 +360,14 @@ type CostReportBucket struct {
 	SavedCostUSD      string
 }
 
+type CostReportModelBucket struct {
+	PeriodStart  time.Time
+	PeriodEnd    time.Time
+	Provider     string
+	Model        string
+	RequestCount int64
+}
+
 type TimeSeriesBucketConfig struct {
 	Interval            time.Duration
 	IntervalLabel       string
@@ -428,6 +437,7 @@ type CostReportFields struct {
 	ExpectedBucketCount int
 	Totals              CostReportTotals
 	Buckets             []CostReportBucket
+	ModelBuckets        []CostReportModelBucket
 	Breakdowns          CostReportBreakdowns
 	DataFreshness       DashboardDataFreshness
 }
@@ -438,10 +448,23 @@ type AnalyticsPerformanceSummary struct {
 	P99LatencyMs        *float64
 	ThroughputPerMinute *float64
 	ErrorRate           *float64
+	SystemErrorRequests int64
 	TotalRequests       int64
 }
 
+const (
+	AnalyticsSurfaceProjectApplication = "project_application"
+	AnalyticsSurfaceTenantChat         = "tenant_chat"
+)
+
+type AnalyticsSurfaceSummary struct {
+	Surface     string
+	Summary     AnalyticsPerformanceSummary
+	LastEventAt *time.Time
+}
+
 type AnalyticsProviderModelPerformance struct {
+	Surface           string
 	Provider          string
 	Model             string
 	Requests          int64
@@ -456,12 +479,14 @@ type AnalyticsProviderModelPerformance struct {
 }
 
 type AnalyticsProviderLatency struct {
+	Surface      string
 	Provider     string
 	P95LatencyMs *float64
 	Requests     int64
 }
 
 type AnalyticsLatencyDistributionBucket struct {
+	Surface      string
 	Bucket       time.Time
 	P50LatencyMs *float64
 	P95LatencyMs *float64
@@ -470,6 +495,7 @@ type AnalyticsLatencyDistributionBucket struct {
 }
 
 type AnalyticsSlowRequest struct {
+	Surface        string
 	RequestID      string
 	ProjectID      string
 	Provider       string
@@ -482,6 +508,7 @@ type AnalyticsSlowRequest struct {
 
 type AnalyticsPerformanceFields struct {
 	Summary                  AnalyticsPerformanceSummary
+	SurfaceSummaries         []AnalyticsSurfaceSummary
 	ProviderModelPerformance []AnalyticsProviderModelPerformance
 	P95LatencyByProvider     []AnalyticsProviderLatency
 	LatencyDistribution      []AnalyticsLatencyDistributionBucket

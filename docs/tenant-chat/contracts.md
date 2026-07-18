@@ -243,7 +243,7 @@ Default lifetime은 30초, absolute maximum은 60초다. clock skew allowance는
 이 정책은 `(tenantId, employeeId)` 원본·감사 레코드와 `(tenantId, employeeId, mondayStart)` 주간 원장을 함께 갱신하고, 같은 transaction에서 새 RuntimeSnapshot을 발행한다. 정책을 낮춰도 이번 주 누적 사용량은 초기화하지 않는다. 활성 직원의 `limitTokens`는 현재 공통 `defaultMonthlyTokenLimit`을 초과할 수 없고, 공통 월간 한도를 낮출 때에도 기존 활성 직원 한도가 더 크면 발행을 거부한다.
 - `cachePolicy`는 exact cache의 enabled, positive integer TTL, positive integer per-user entry limit만 편집한다. `safetyPolicy.detectorSet`은 1~10개의 unique detector와 `allow|redact|block` action을 받으며 주민등록번호/API key/Authorization header/JWT/private key detector는 모두 포함되어야 하고 `allow`를 거부한다. 이 관리자 wire는 raw prompt, raw response, raw detected value 또는 secret 원문을 받거나 반환하지 않는다.
 - compatibility client는 `cachePolicy` 대신 boolean `cacheEnabled`만 보낼 수 있다. 이 경우 기존 TTL, 사용자별 엔트리 상한과 key-set ID를 보존하고 `exact/enabled` 또는 `off/disabled`만 전환한다. cache 입력을 모두 생략하면 기존 snapshot 정책을 보존하며 최초 활성화에서만 TTL 300초, 사용자당 100개와 operator-configured key-set ID의 Exact Cache를 기본 활성화한다. key-set ID는 관리자 응답에 노출하지 않는다.
-- `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 안전 처리된 메시지에서 기존 deterministic rule classifier로 category를 계산한다. Model-path difficulty는 활성화된 경우 일반 Gateway와 동일한 process-global 106D runtime을 사용하며 `ready` 결과가 `simple|complex` cell 선택에 권위를 가진다. Runtime 비활성화·초기화 실패·queue 포화·timeout·invalid result·inference 실패·panic과 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 active 경로에 포함하지 않는다.
+- `routingMode=manual`은 `manualModelRef` 하나를 사용하지만 5×2 matrix를 삭제하지 않는다. `routingMode=auto`는 안전 처리된 메시지에서 기존 deterministic rule classifier로 category를 계산한다. Model-path difficulty는 활성화된 경우 일반 Gateway와 동일한 process-global 106D runtime을 사용하며 `ready` 결과가 `simple|complex` cell 선택에 권위를 가진다. Runtime 비활성화·초기화 실패·queue 포화·timeout·invalid result·inference 실패·panic과 non-model-path에서는 기존 rule difficulty를 요청 단위로 유지한다. manual 경로는 semantic runtime을 호출하지 않으며 offline shadow Routing AI service는 이 active 경로에 포함하지 않는다. 선택된 `simple|complex`는 content-free `routingDifficulty`로 usage reservation과 terminal projection에 보존하며 route tier나 provider/model에서 역추론하지 않는다.
 - compatibility 기간 동안 Control Plane은 과거 `providerConnectionId`+`modelKey` PUT을 동일 ref로 채운 manual 5×2 policy로 변환해 받을 수 있다. 이 legacy shape는 새 authoring wire가 아니며 RuntimeSnapshot의 명시적 Routing v2 bridge를 우회하지 않는다.
 - Provider family는 persisted `providerConfig.providerFamily`에서만 판정한다. client 입력이나 base URL 추론으로 가격을 선택하지 않는다.
 - 가격은 현재 유효한 shared `model_pricing_rules`를 먼저 사용하고, Tenant Chat bundled catalog를 fallback으로 사용한다. 둘 다 없거나 안전한 정수 micro-USD 단가로 표현할 수 없으면 모델을 비활성화하지 않고 `pricingStatus=unavailable`, `pricingSource=unavailable`, monetary rate 0으로 pin한다.
@@ -358,6 +358,8 @@ Correctness source는 period/reservation/ledger transaction이다. `TenantChatIn
 
 Ledger transition outbox의 최신 writer는 paired [usage settlement schema v3](./schemas/usage-settlement-event-v3.schema.json)를 따르고 reservation에 고정된 필수 `cacheOutcome=off|miss`를 모든 transition에 전달한다. Exact Cache hit는 usage reservation을 만들지 않으므로 [content-free terminal event schema](./schemas/invocation-terminal-event.schema.json)의 `cacheOutcome=hit`을 사용한다. projector는 v1/v2를 계속 읽으며 해당 필드가 없으면 backfill된 reservation provenance를 사용한다.
 
+Analytics policy-impact projection is additive to that ledger contract. `TenantChatInvocationLog` persists nullable `routingDifficulty=simple|complex`, legacy-compatible `effectiveRouteTier=high_quality|standard|economy`, non-negative `savedCostMicroUsd`, and bounded safety summary fields. Policy-impact routing uses only `routingDifficulty`; the legacy tier is not converted into difficulty. Exact-cache payload v2 carries encrypted source provider/model/tier and source confirmed cost; a cache-hit v2 terminal event may project those bounded values without content. Historical routing difficulty remains `NULL` unless the original classification was persisted, historical cache hits with no source-cost evidence remain `NULL`, and historical masking is never reconstructed from content. Tenant-wide Analytics may combine the resulting aggregate with Project/Application data, while any project-scoped query excludes Tenant Chat.
+
 Idempotency rules:
 
 - `turnId`는 Chat API가 logical user turn마다 한 번 생성한다.
@@ -450,6 +452,11 @@ Idempotency rules:
 - p50/p95/p99 total/provider latency
 - snapshotVersion/pricingVersion별 safe provenance
 - projection freshness/lag
+- content-free safety summary가 관측된 요청의 masking action `none|redacted|blocked`, detector type별 요청 수, redacted/blocked 보호 처리량
+
+Gateway는 sanitization 직후 admission에 `maskingAction`, 정규화·중복 제거된 `maskingDetectedTypes`, 총 `maskingDetectedCount`, pinned `safetyPolicyDigest`를 원문·탐지값·span 없이 기록한다. 네 field는 terminal event와 `TenantChatInvocationLog`에서 함께 존재하거나 모두 없어야 한다. 기존 event/log에 이 묶음이 없으면 `passed`로 추정하지 않고 security coverage를 `partial` 또는 `unavailable`로 표시한다. `terminalOutcome=safety_blocked`는 과거 호환 집계에서 blocked로 셀 수 있지만 detector type을 임의 생성하지 않는다.
+
+배포는 reader-first로 수행한다. Control Plane migration과 additive event reader/projector를 먼저 배포하고, 다음으로 Gateway writer를 활성화한 뒤, 마지막으로 Dashboard/Web consumer를 노출한다. 이 순서를 지키는 동안 legacy event는 계속 projection되며 safety summary가 없는 구간만 coverage로 명시한다.
 
 Projection freshness는 마지막 invocation의 경과 시간이 아니라 미처리 outbox 유무를 뜻한다. 미처리 outbox가 없으면 tenant가 유휴 상태여도 `fresh`이며, `lagSeconds`는 마지막 projected invocation의 경과 시간을 관측용으로만 전달한다. 미처리 outbox가 있으면 `partial`로 표시한다.
 

@@ -602,23 +602,24 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 	to := from.Add(24 * time.Hour)
 	lastLogCreatedAt := from.Add(23 * time.Hour)
 	db := &fakeQueryer{
-		rowByQuery: []fakeQueryRow{{
-			contains: "total_requests",
-			row: fakeRow{
-				values: []any{
+		rowsByQuery: []fakeQueryRows{
+			{
+				contains: "system_error_requests",
+				rows: &fakeRows{values: [][]any{{
+					invocationlog.AnalyticsSurfaceProjectApplication,
 					int64(3),
 					sql.NullFloat64{Float64: 100, Valid: true},
 					sql.NullFloat64{Float64: 300, Valid: true},
 					sql.NullFloat64{Float64: 300, Valid: true},
+					int64(1),
 					sql.NullFloat64{Float64: 1.0 / 3.0, Valid: true},
 					sql.NullTime{Time: lastLogCreatedAt, Valid: true},
-				},
+				}}},
 			},
-		}},
-		rowsByQuery: []fakeQueryRows{
 			{
 				contains: "total_cost_micro_usd",
 				rows: &fakeRows{values: [][]any{{
+					invocationlog.AnalyticsSurfaceProjectApplication,
 					"OpenAI",
 					"gpt-4o-mini",
 					int64(2),
@@ -633,6 +634,7 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 			{
 				contains: "order by p95_latency_ms",
 				rows: &fakeRows{values: [][]any{{
+					invocationlog.AnalyticsSurfaceProjectApplication,
 					"OpenAI",
 					sql.NullFloat64{Float64: 300, Valid: true},
 					int64(2),
@@ -641,6 +643,7 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 			{
 				contains: " as bucket",
 				rows: &fakeRows{values: [][]any{{
+					invocationlog.AnalyticsSurfaceProjectApplication,
 					from,
 					int64(2),
 					sql.NullFloat64{Float64: 80, Valid: true},
@@ -651,12 +654,13 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 			{
 				contains: "order by latency_ms desc",
 				rows: &fakeRows{values: [][]any{{
+					invocationlog.AnalyticsSurfaceProjectApplication,
 					"request_slow_001",
-					"project_demo",
+					sql.NullString{String: "project_demo", Valid: true},
 					"OpenAI",
 					"gpt-4o-mini",
 					int64(300),
-					500,
+					sql.NullInt64{Int64: 500, Valid: true},
 					invocationlog.StatusFailed,
 					lastLogCreatedAt,
 				}}},
@@ -679,19 +683,22 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 	if performance.Summary.TotalRequests != 3 || performance.Summary.P95LatencyMs == nil || *performance.Summary.P95LatencyMs != 300 {
 		t.Fatalf("unexpected analytics summary: %+v", performance.Summary)
 	}
+	if performance.Summary.SystemErrorRequests != 1 || len(performance.SurfaceSummaries) != 1 || performance.SurfaceSummaries[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication {
+		t.Fatalf("unexpected surface summaries: %+v", performance.SurfaceSummaries)
+	}
 	if performance.Summary.ThroughputPerMinute == nil || !floatEquals(*performance.Summary.ThroughputPerMinute, 3.0/1440.0) {
 		t.Fatalf("unexpected throughput: %+v", performance.Summary.ThroughputPerMinute)
 	}
-	if len(performance.ProviderModelPerformance) != 1 || performance.ProviderModelPerformance[0].TotalCostUSD != "1.200000" {
+	if len(performance.ProviderModelPerformance) != 1 || performance.ProviderModelPerformance[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || performance.ProviderModelPerformance[0].TotalCostUSD != "1.200000" {
 		t.Fatalf("unexpected provider/model performance: %+v", performance.ProviderModelPerformance)
 	}
 	if performance.ProviderModelPerformance[0].CostPerRequestUSD == nil || !floatEquals(*performance.ProviderModelPerformance[0].CostPerRequestUSD, 0.6) {
 		t.Fatalf("unexpected cost per request: %+v", performance.ProviderModelPerformance[0].CostPerRequestUSD)
 	}
-	if len(performance.P95LatencyByProvider) != 1 || performance.P95LatencyByProvider[0].Provider != "OpenAI" {
+	if len(performance.P95LatencyByProvider) != 1 || performance.P95LatencyByProvider[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || performance.P95LatencyByProvider[0].Provider != "OpenAI" {
 		t.Fatalf("unexpected provider latency: %+v", performance.P95LatencyByProvider)
 	}
-	if len(performance.LatencyDistribution) != 24 || !performance.LatencyDistribution[0].Bucket.Equal(from) {
+	if len(performance.LatencyDistribution) != 24 || performance.LatencyDistribution[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || !performance.LatencyDistribution[0].Bucket.Equal(from) {
 		t.Fatalf("unexpected latency distribution: %+v", performance.LatencyDistribution)
 	}
 	if performance.BucketInterval != "1h" || performance.ExpectedBucketCount != 24 {
@@ -703,7 +710,7 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 	if performance.LatencyDistribution[1].Requests != 0 || performance.LatencyDistribution[1].P95LatencyMs != nil {
 		t.Fatalf("expected empty latency bucket to keep null latency, got %+v", performance.LatencyDistribution[1])
 	}
-	if len(performance.SlowestRequests) != 1 || performance.SlowestRequests[0].RequestID != "request_slow_001" || performance.SlowestRequests[0].TerminalStatus != invocationlog.StatusFailed {
+	if len(performance.SlowestRequests) != 1 || performance.SlowestRequests[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || performance.SlowestRequests[0].RequestID != "request_slow_001" || performance.SlowestRequests[0].TerminalStatus != invocationlog.StatusFailed {
 		t.Fatalf("unexpected slowest requests: %+v", performance.SlowestRequests)
 	}
 	if performance.DataFreshness.RecordCount != 3 || performance.DataFreshness.LastLogCreatedAt == nil || !performance.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) {
@@ -728,6 +735,7 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 		}
 	}
 	for _, forbidden := range []string{
+		"tenant_chat_invocation_logs",
 		"raw_prompt",
 		"raw_response",
 		"provider_api_key",
@@ -739,6 +747,138 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 	} {
 		if strings.Contains(strings.ToLower(joinedQueries), strings.ToLower(forbidden)) {
 			t.Fatalf("analytics query must not select forbidden field %q: %s", forbidden, joinedQueries)
+		}
+	}
+}
+
+func TestQueryReaderGetAnalyticsPerformanceCombinesSurfacesWithoutMixingLatencyPercentiles(t *testing.T) {
+	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+	projectLastEventAt := from.Add(23 * time.Hour)
+	tenantChatLastEventAt := from.Add(22 * time.Hour)
+	db := &fakeQueryer{
+		rowsByQuery: []fakeQueryRows{
+			{
+				contains: "system_error_requests",
+				rows: &fakeRows{values: [][]any{
+					{
+						invocationlog.AnalyticsSurfaceProjectApplication,
+						int64(3),
+						sql.NullFloat64{Float64: 100, Valid: true},
+						sql.NullFloat64{Float64: 300, Valid: true},
+						sql.NullFloat64{Float64: 400, Valid: true},
+						int64(1),
+						sql.NullFloat64{Float64: 1.0 / 3.0, Valid: true},
+						sql.NullTime{Time: projectLastEventAt, Valid: true},
+					},
+					{
+						invocationlog.AnalyticsSurfaceTenantChat,
+						int64(2),
+						sql.NullFloat64{Float64: 700, Valid: true},
+						sql.NullFloat64{Float64: 1000, Valid: true},
+						sql.NullFloat64{Float64: 1200, Valid: true},
+						int64(1),
+						sql.NullFloat64{Float64: 0.5, Valid: true},
+						sql.NullTime{Time: tenantChatLastEventAt, Valid: true},
+					},
+				}},
+			},
+			{contains: "total_cost_micro_usd", rows: &fakeRows{}},
+			{contains: "order by p95_latency_ms", rows: &fakeRows{}},
+			{
+				contains: " as bucket",
+				rows: &fakeRows{values: [][]any{
+					{
+						invocationlog.AnalyticsSurfaceProjectApplication,
+						from,
+						int64(3),
+						sql.NullFloat64{Float64: 90, Valid: true},
+						sql.NullFloat64{Float64: 300, Valid: true},
+						sql.NullFloat64{Float64: 400, Valid: true},
+					},
+					{
+						invocationlog.AnalyticsSurfaceTenantChat,
+						from,
+						int64(2),
+						sql.NullFloat64{Float64: 650, Valid: true},
+						sql.NullFloat64{Float64: 1000, Valid: true},
+						sql.NullFloat64{Float64: 1200, Valid: true},
+					},
+				}},
+			},
+			{
+				contains: "order by latency_ms desc",
+				rows: &fakeRows{values: [][]any{{
+					invocationlog.AnalyticsSurfaceTenantChat,
+					"request_tenant_chat_slow_001",
+					sql.NullString{},
+					"OpenAI",
+					"gpt-4o-mini",
+					int64(1500),
+					sql.NullInt64{},
+					"provider_timeout",
+					tenantChatLastEventAt,
+				}}},
+			},
+		},
+	}
+
+	reader := NewQueryReader(db)
+	performance, err := reader.GetAnalyticsPerformance(context.Background(), invocationlog.AnalyticsPerformanceFilter{
+		TenantID:          testTenantID,
+		ProjectID:         testProjectID,
+		IncludeTenantChat: true,
+		From:              from,
+		To:                to,
+	})
+	if err != nil {
+		t.Fatalf("expected unified analytics performance to succeed, got %v", err)
+	}
+	if performance.Summary.TotalRequests != 5 || performance.Summary.SystemErrorRequests != 2 || performance.Summary.ErrorRate == nil || !floatEquals(*performance.Summary.ErrorRate, 0.4) {
+		t.Fatalf("unexpected unified additive summary: %+v", performance.Summary)
+	}
+	if performance.Summary.AvgLatencyMs != nil || performance.Summary.P95LatencyMs != nil || performance.Summary.P99LatencyMs != nil {
+		t.Fatalf("unified summary must not combine surface latency percentiles: %+v", performance.Summary)
+	}
+	if performance.Summary.ThroughputPerMinute == nil || !floatEquals(*performance.Summary.ThroughputPerMinute, 5.0/1440.0) {
+		t.Fatalf("unexpected unified throughput: %+v", performance.Summary.ThroughputPerMinute)
+	}
+	if len(performance.SurfaceSummaries) != 2 || performance.SurfaceSummaries[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || performance.SurfaceSummaries[1].Surface != invocationlog.AnalyticsSurfaceTenantChat {
+		t.Fatalf("expected both surface summaries, got %+v", performance.SurfaceSummaries)
+	}
+	if performance.SurfaceSummaries[0].Summary.P95LatencyMs == nil || *performance.SurfaceSummaries[0].Summary.P95LatencyMs != 300 || performance.SurfaceSummaries[1].Summary.P95LatencyMs == nil || *performance.SurfaceSummaries[1].Summary.P95LatencyMs != 1000 {
+		t.Fatalf("expected independent surface percentiles, got %+v", performance.SurfaceSummaries)
+	}
+	if len(performance.LatencyDistribution) != 48 || performance.LatencyDistribution[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || performance.LatencyDistribution[24].Surface != invocationlog.AnalyticsSurfaceTenantChat {
+		t.Fatalf("expected complete independent surface distributions, got %+v", performance.LatencyDistribution)
+	}
+	if len(performance.SlowestRequests) != 1 || performance.SlowestRequests[0].Surface != invocationlog.AnalyticsSurfaceTenantChat || performance.SlowestRequests[0].ProjectID != "" || performance.SlowestRequests[0].HTTPStatus != 0 {
+		t.Fatalf("expected tenant chat attribution without project or HTTP status, got %+v", performance.SlowestRequests)
+	}
+	if performance.DataFreshness.Source != "postgresql_unified_raw" || performance.DataFreshness.RecordCount != 5 || performance.DataFreshness.LastLogCreatedAt == nil || !performance.DataFreshness.LastLogCreatedAt.Equal(tenantChatLastEventAt) {
+		t.Fatalf("unexpected unified freshness: %+v", performance.DataFreshness)
+	}
+
+	joinedQueries := strings.Join(db.queries, "\n")
+	for _, expected := range []string{
+		"from p0_llm_invocation_logs",
+		"from tenant_chat_invocation_logs",
+		"project_id = $4",
+		"union all",
+		"completed_at as created_at",
+		"surface = 'tenant_chat'",
+		"execution_scope_kind = 'tenant_chat'",
+		"confirmed_cost_micro_usd",
+		"effective_provider_id",
+		"effective_model_key",
+	} {
+		if !strings.Contains(joinedQueries, expected) {
+			t.Fatalf("expected unified analytics query to contain %q, got %s", expected, joinedQueries)
+		}
+	}
+	for _, forbidden := range []string{"user_id", "employee_id", "raw_prompt", "raw_response", "content"} {
+		if strings.Contains(strings.ToLower(joinedQueries), strings.ToLower(forbidden)) {
+			t.Fatalf("unified analytics query must not select forbidden identity or content field %q: %s", forbidden, joinedQueries)
 		}
 	}
 }
@@ -785,7 +925,17 @@ func TestQueryReaderGetCostReportFillsExpectedTimeSeriesBuckets(t *testing.T) {
 					}}},
 					{},
 					{},
-					{},
+					{values: [][]any{{
+						firstBucket,
+						"openai",
+						"gpt-4.1-mini",
+						int64(2),
+						int64(10),
+						int64(20),
+						int64(30),
+						int64(2500),
+						int64(100),
+					}}},
 					{},
 				},
 			}
@@ -813,8 +963,18 @@ func TestQueryReaderGetCostReportFillsExpectedTimeSeriesBuckets(t *testing.T) {
 			if report.Buckets[1].RequestCount != 0 || report.Buckets[1].CostMicroUSD != 0 || report.Buckets[1].CostUSD != "0.000000" {
 				t.Fatalf("expected empty cost bucket to be zero-filled, got %+v", report.Buckets[1])
 			}
+			if len(report.ModelBuckets) != 1 ||
+				report.ModelBuckets[0].Provider != "openai" ||
+				report.ModelBuckets[0].Model != "gpt-4.1-mini" ||
+				report.ModelBuckets[0].RequestCount != 2 ||
+				!report.ModelBuckets[0].PeriodStart.Equal(firstBucket) {
+				t.Fatalf("expected executed-model bucket, got %+v", report.ModelBuckets)
+			}
 			if !strings.Contains(db.queries[0], tc.expectedUnitSQL) {
 				t.Fatalf("expected cost bucket query to contain %q, got %s", tc.expectedUnitSQL, db.queries[0])
+			}
+			if !strings.Contains(db.queries[3], tc.expectedUnitSQL) || strings.Contains(db.queries[3], "limit 1000") {
+				t.Fatalf("expected uncapped model bucket query to contain %q, got %s", tc.expectedUnitSQL, db.queries[3])
 			}
 		})
 	}
@@ -840,20 +1000,8 @@ func TestQueryReaderGetAnalyticsPerformanceFillsExpectedLatencyBuckets(t *testin
 			to := time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)
 			from := to.Add(-tc.duration)
 			db := &fakeQueryer{
-				rowByQuery: []fakeQueryRow{{
-					contains: "total_requests",
-					row: fakeRow{
-						values: []any{
-							int64(0),
-							sql.NullFloat64{},
-							sql.NullFloat64{},
-							sql.NullFloat64{},
-							sql.NullFloat64{},
-							sql.NullTime{},
-						},
-					},
-				}},
 				rowsByQuery: []fakeQueryRows{
+					{contains: "system_error_requests", rows: &fakeRows{}},
 					{contains: "total_cost_micro_usd", rows: &fakeRows{}},
 					{contains: "order by p95_latency_ms", rows: &fakeRows{}},
 					{contains: " as bucket", rows: &fakeRows{}},
@@ -874,13 +1022,21 @@ func TestQueryReaderGetAnalyticsPerformanceFillsExpectedLatencyBuckets(t *testin
 			if performance.BucketInterval != tc.expectedInterval || performance.ExpectedBucketCount != tc.expectedCount {
 				t.Fatalf("unexpected analytics bucket metadata: interval=%s count=%d", performance.BucketInterval, performance.ExpectedBucketCount)
 			}
-			if len(performance.LatencyDistribution) != tc.expectedCount {
-				t.Fatalf("expected %d latency buckets, got %d: %+v", tc.expectedCount, len(performance.LatencyDistribution), performance.LatencyDistribution)
+			if len(performance.SurfaceSummaries) != 2 || performance.SurfaceSummaries[0].Surface != invocationlog.AnalyticsSurfaceProjectApplication || performance.SurfaceSummaries[1].Surface != invocationlog.AnalyticsSurfaceTenantChat {
+				t.Fatalf("expected zero-request summaries for both requested surfaces, got %+v", performance.SurfaceSummaries)
 			}
+			if len(performance.LatencyDistribution) != tc.expectedCount*2 {
+				t.Fatalf("expected %d latency buckets across two surfaces, got %d: %+v", tc.expectedCount*2, len(performance.LatencyDistribution), performance.LatencyDistribution)
+			}
+			surfaceCounts := map[string]int{}
 			for _, bucket := range performance.LatencyDistribution {
+				surfaceCounts[bucket.Surface]++
 				if bucket.Requests != 0 || bucket.P50LatencyMs != nil || bucket.P95LatencyMs != nil || bucket.P99LatencyMs != nil {
 					t.Fatalf("expected empty latency bucket to keep null latency values, got %+v", bucket)
 				}
+			}
+			if surfaceCounts[invocationlog.AnalyticsSurfaceProjectApplication] != tc.expectedCount || surfaceCounts[invocationlog.AnalyticsSurfaceTenantChat] != tc.expectedCount {
+				t.Fatalf("expected a complete series per surface, got %#v", surfaceCounts)
 			}
 			if !anyQueryContains(db.queries, tc.expectedUnitSQL) {
 				t.Fatalf("expected latency bucket query to contain %q, got queries %#v", tc.expectedUnitSQL, db.queries)

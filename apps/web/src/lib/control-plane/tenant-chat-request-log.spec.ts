@@ -45,6 +45,9 @@ test("maps a safety block without exposing the detected value", () => {
     attemptCount: 0,
     cacheOutcome: "off",
     modelKey: null,
+    maskingAction: "blocked",
+    maskingDetectedCount: 1,
+    maskingDetectedTypes: ["api_key"],
     providerId: null,
     terminalOutcome: "safety_blocked",
     ttftMs: null
@@ -52,7 +55,7 @@ test("maps a safety block without exposing the detected value", () => {
 
   expect(record.status).toBe("blocked");
   expect(record.maskingAction).toBe("blocked");
-  expect(record.maskingDetectedTypes).toEqual(["sensitive_information"]);
+  expect(record.maskingDetectedTypes).toEqual(["api_key"]);
   expect(record.redactedPromptPreview).toBeNull();
   expect(record.providerCalled).toBe(false);
   expect(record.errorStage).toBe("safety");
@@ -77,6 +80,9 @@ function invocation(overrides: Partial<TenantChatInvocation> = {}): TenantChatIn
     confirmedOutputTokens: 20,
     confirmedTotalTokens: 30,
     confirmedCostMicroUsd: 12,
+    maskingAction: "none",
+    maskingDetectedTypes: [],
+    maskingDetectedCount: 0,
     quotaState: "normal",
     budgetState: "normal",
     cacheOutcome: "miss",

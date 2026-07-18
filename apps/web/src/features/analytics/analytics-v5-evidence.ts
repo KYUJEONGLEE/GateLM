@@ -1,11 +1,56 @@
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performance";
-import type { LiveInvocationLogRecord } from "@/lib/gateway/live-observability-contract";
 
-type AnalyticsV5InvocationRecord = Pick<
-  LiveInvocationLogRecord,
-  "createdAt" | "modelRef" | "requestedModel"
->;
+export type AnalyticsV5ModelBucket = {
+  model: string;
+  periodStart: string;
+  provider: string;
+  requestCount: number;
+  surface?: "project_application" | "tenant_chat";
+};
+
+export type AnalyticsV5PolicyImpactEvidence = {
+  avoidedProviderCallRequests: number;
+  coverage: Array<{
+    knownRequestCount: number;
+    metric: string;
+    status: "complete" | "partial" | "unavailable";
+    surface: "project_application" | "tenant_chat";
+    unknownRequestCount: number;
+  }>;
+  dataAsOf: string | null;
+  dataState: "live" | "partial" | "unavailable";
+  highPerformanceEligibleRequests: number;
+  highPerformanceRequests: number;
+  knownSavedCostMicroUsd: number;
+  modelMix: Array<{
+    model: string;
+    provider: string;
+    requestCount: number;
+    surface: "project_application" | "tenant_chat";
+  }>;
+  policyOutcomes: Array<{
+    outcome: string;
+    requestCount: number;
+    surface: "project_application" | "tenant_chat";
+  }>;
+  protectedRequests: number;
+  routingRoles: Array<{
+    requestCount: number;
+    role: string;
+    scheme: "difficulty";
+    surface: "project_application" | "tenant_chat";
+  }>;
+  savedCostMicroUsd: number | null;
+  totalCostMicroUsd: number;
+  totalRequests: number;
+  usageSources: Array<{
+    costMicroUsd: number;
+    projectId: string | null;
+    requestCount: number;
+    surface: "project_application" | "tenant_chat";
+  }>;
+};
 
 export type AnalyticsV5ModelSeries = {
   id: string;
@@ -19,6 +64,7 @@ export type AnalyticsV5Evidence = {
     bucketStarts: string[];
     series: AnalyticsV5ModelSeries[];
   };
+  policyImpact?: AnalyticsV5PolicyImpactEvidence;
 };
 
 const bucketCountByRange: Record<LiveAnalyticsRange, number> = {
@@ -31,23 +77,24 @@ const bucketCountByRange: Record<LiveAnalyticsRange, number> = {
 const MAX_MODEL_SERIES = 5;
 
 export function buildAnalyticsV5Evidence(
-  records: AnalyticsV5InvocationRecord[],
-  input: { from: string; range: LiveAnalyticsRange; to: string }
+  records: AnalyticsV5ModelBucket[],
+  input: { from: string; range: LiveAnalyticsRange; to: string },
+  policyImpact?: AnalyticsV5PolicyImpactEvidence
 ): AnalyticsV5Evidence {
   const fromMs = Date.parse(input.from);
   const toMs = Date.parse(input.to);
   const bucketCount = bucketCountByRange[input.range];
   const intervalMs = Math.max(1, (toMs - fromMs) / bucketCount);
   const usableRecords = records.filter((record) => {
-    const createdAt = Date.parse(record.createdAt);
-    return Number.isFinite(createdAt) && createdAt >= fromMs && createdAt < toMs;
+    const periodStart = Date.parse(record.periodStart);
+    return record.requestCount > 0 && Number.isFinite(periodStart) && periodStart >= fromMs && periodStart < toMs;
   });
   const modelTotals = new Map<string, number>();
 
   usableRecords.forEach((record) => {
     const model = normalizedModel(record);
     if (model) {
-      modelTotals.set(model, (modelTotals.get(model) ?? 0) + 1);
+      modelTotals.set(model, (modelTotals.get(model) ?? 0) + record.requestCount);
     }
   });
 
@@ -66,12 +113,12 @@ export function buildAnalyticsV5Evidence(
       return;
     }
 
-    const createdAt = Date.parse(record.createdAt);
-    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor((createdAt - fromMs) / intervalMs)));
+    const periodStart = Date.parse(record.periodStart);
+    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor((periodStart - fromMs) / intervalMs)));
     const seriesName = visibleModelNames.includes(model) ? model : includesOther ? "Other" : model;
     const values = valuesBySeries.get(seriesName);
     if (values) {
-      values[bucketIndex] += 1;
+      values[bucketIndex] += record.requestCount;
     }
   });
 
@@ -85,11 +132,12 @@ export function buildAnalyticsV5Evidence(
         total: valuesBySeries.get(model)?.reduce((sum, value) => sum + value, 0) ?? 0,
         values: valuesBySeries.get(model) ?? []
       }))
-    }
+    },
+    ...(policyImpact ? { policyImpact } : {})
   };
 }
 
-function normalizedModel(record: AnalyticsV5InvocationRecord) {
-  const model = record.modelRef?.trim() || record.requestedModel?.trim();
+function normalizedModel(record: AnalyticsV5ModelBucket) {
+  const model = record.model.trim();
   return model ? formatModelDisplayName(model) : null;
 }

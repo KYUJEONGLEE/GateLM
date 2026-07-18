@@ -87,6 +87,7 @@ func buildCostReportFromAggregate(
 	}
 	totals.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.CostMicroUSD)
 	totals.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.SavedCostMicroUSD)
+	models := finalizedCostReportModels(aggregate.Models)
 
 	generatedAt = generatedAt.UTC()
 	aggregatedAt := generatedAt
@@ -100,10 +101,11 @@ func buildCostReportFromAggregate(
 		ExpectedBucketCount: bucketConfig.ExpectedBucketCount,
 		Totals:              totals,
 		Buckets:             buckets,
+		ModelBuckets:        finalizedCostReportModelBuckets(filter, aggregate.ModelBuckets, models),
 		Breakdowns: invocationlog.CostReportBreakdowns{
 			ByProject:     finalizedCostReportProjects(aggregate.Projects),
 			ByApplication: finalizedCostReportApplications(aggregate.Applications),
-			ByModel:       finalizedCostReportModels(aggregate.Models),
+			ByModel:       models,
 			ByBudgetScope: finalizedCostReportBudgetScopes(aggregate.BudgetScopes),
 		},
 		DataFreshness: invocationlog.DashboardDataFreshness{
@@ -115,6 +117,42 @@ func buildCostReportFromAggregate(
 			IsStale:          false,
 		},
 	}
+}
+
+func finalizedCostReportModelBuckets(
+	filter invocationlog.CostReportFilter,
+	items map[string]invocationlog.CostReportModelBucket,
+	models []invocationlog.CostReportModelBreakdown,
+) []invocationlog.CostReportModelBucket {
+	allowed := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		allowed[model.Provider+"\x00"+model.Model] = struct{}{}
+	}
+
+	config := costReportBucketConfig(filter)
+	result := make([]invocationlog.CostReportModelBucket, 0, len(items))
+	for _, item := range items {
+		if _, ok := allowed[item.Provider+"\x00"+item.Model]; !ok {
+			continue
+		}
+		item.PeriodStart = item.PeriodStart.UTC()
+		if config.Interval > 0 {
+			item.PeriodEnd = item.PeriodStart.Add(config.Interval)
+		} else {
+			item.PeriodEnd = costReportBucketEnd(item.PeriodStart, filter.Period)
+		}
+		result = append(result, item)
+	}
+	sort.Slice(result, func(i int, j int) bool {
+		if !result[i].PeriodStart.Equal(result[j].PeriodStart) {
+			return result[i].PeriodStart.Before(result[j].PeriodStart)
+		}
+		if result[i].Provider != result[j].Provider {
+			return result[i].Provider < result[j].Provider
+		}
+		return result[i].Model < result[j].Model
+	})
+	return result
 }
 
 func finalizedCostReportProjects(

@@ -17,6 +17,7 @@ export function toTenantChatRequestLog(
   const status = normalizeStatus(invocation.terminalOutcome);
   const cacheStatus = normalizeCacheStatus(invocation.cacheOutcome);
   const safetyBlocked = invocation.terminalOutcome === "safety_blocked";
+  const maskingAction = invocation.maskingAction ?? (safetyBlocked ? "blocked" : "none");
   const providerCalled = invocation.attemptCount > 0;
   const modelKey = invocation.modelKey?.trim() || null;
   const providerId = invocation.providerId?.trim() || null;
@@ -64,9 +65,9 @@ export function toTenantChatRequestLog(
     cacheDecisionReason: cacheDecisionReason(cacheStatus),
     cacheKeyHash: null,
     cacheHitRequestId: null,
-    maskingAction: safetyBlocked ? "blocked" : "none",
-    maskingDetectedTypes: safetyBlocked ? ["sensitive_information"] : [],
-    maskingDetectedCount: safetyBlocked ? 1 : 0,
+    maskingAction,
+    maskingDetectedTypes: invocation.maskingDetectedTypes,
+    maskingDetectedCount: invocation.maskingDetectedCount,
     providerCalled,
     rateLimitDecision: {
       allowed: status !== "rate_limited",
@@ -93,10 +94,15 @@ export function toTenantChatRequestLog(
     terminalStatus: status,
     domainOutcomes: buildDomainOutcomes(invocation, status, cacheStatus, providerCalled),
     safetySummary: {
-      outcome: safetyBlocked ? "blocked" : "passed",
-      detectedCount: safetyBlocked ? 1 : 0,
-      detectorCategories: safetyBlocked ? ["sensitive_information"] : [],
-      maskingAction: safetyBlocked ? "blocked" : null
+      outcome:
+        safetyBlocked || maskingAction === "blocked"
+          ? "blocked"
+          : maskingAction === "redacted"
+            ? "redacted"
+            : "passed",
+      detectedCount: invocation.maskingDetectedCount,
+      detectorCategories: invocation.maskingDetectedTypes,
+      maskingAction
     },
     httpStatus: httpStatus(status),
     errorCode: status === "success" ? null : terminalErrorCode(invocation.terminalOutcome),
@@ -153,6 +159,7 @@ function buildDomainOutcomes(
   providerCalled: boolean
 ) {
   const safetyBlocked = invocation.terminalOutcome === "safety_blocked";
+  const maskingAction = invocation.maskingAction;
   return {
     auth: { outcome: "passed" },
     runtime: { outcome: "snapshot_active" },
@@ -160,7 +167,14 @@ function buildDomainOutcomes(
       outcome: status === "rate_limited" ? invocation.terminalOutcome : "allowed"
     },
     budget: { outcome: invocation.budgetState || "allowed" },
-    safety: { outcome: safetyBlocked ? "blocked" : "passed" },
+    safety: {
+      outcome:
+        safetyBlocked || maskingAction === "blocked"
+          ? "blocked"
+          : maskingAction === "redacted"
+            ? "redacted"
+            : "passed"
+    },
     routing: { outcome: cacheStatus === "hit" ? "skipped" : providerCalled ? "selected" : "not_called" },
     cache: { outcome: cacheStatus === "bypass" ? "bypassed" : cacheStatus },
     provider: {

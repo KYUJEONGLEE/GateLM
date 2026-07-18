@@ -256,6 +256,7 @@ const shellText: Record<
 
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
+const userMenuTriggerId = "gatelm-console-user-menu-trigger";
 
 export function ConsoleShell({
   activeManagementItem,
@@ -591,7 +592,11 @@ function ConsoleTopbarActions({
   return (
     <div className="console-topbar-actions" aria-label={text.accountActions}>
       <DropdownMenu>
-        <DropdownMenuTrigger className="console-user-trigger" aria-label={text.openUserProfile}>
+        <DropdownMenuTrigger
+          id={userMenuTriggerId}
+          className="console-user-trigger"
+          aria-label={text.openUserProfile}
+        >
           <span className="console-user-avatar" aria-hidden="true">
             {displayUser.avatarUrl ? (
               <span

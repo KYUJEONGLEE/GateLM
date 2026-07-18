@@ -637,6 +637,25 @@ func (s *readinessObservabilityStore) GetAnalyticsPerformance(ctx context.Contex
 	}, nil
 }
 
+func (s *readinessObservabilityStore) GetAnalyticsReliability(ctx context.Context, filter invocationlog.AnalyticsReliabilityFilter) (invocationlog.AnalyticsReliabilityFields, error) {
+	generatedAt := time.Now().UTC()
+	return invocationlog.AnalyticsReliabilityFields{
+		Scope: invocationlog.AnalyticsReliabilityScope{
+			TenantID: filter.TenantID,
+			Surface:  filter.Surface,
+			From:     filter.From,
+			To:       filter.To,
+		},
+		GeneratedAt: generatedAt,
+		Freshness: invocationlog.AnalyticsReliabilityFreshness{
+			QueryStatus: invocationlog.AnalyticsReliabilityStatusOK,
+			Complete:    true,
+			Sources:     []invocationlog.AnalyticsReliabilitySourceFreshness{},
+		},
+		RecentIncidents: []invocationlog.AnalyticsReliabilityIncident{},
+	}, nil
+}
+
 func (s *readinessObservabilityStore) terminalLogs() []invocationlog.TerminalLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()

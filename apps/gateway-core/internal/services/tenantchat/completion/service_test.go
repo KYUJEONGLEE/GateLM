@@ -412,7 +412,8 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	}
 	usage := &fakeUsageAccounting{}
 	cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{
-		ResponseText: "cached synthetic response", EffectiveModelKey: "model-cached",
+		ResponseText: "cached synthetic response", EffectiveProviderID: "provider-cached",
+		EffectiveModelKey: "model-cached", EffectiveRouteTier: "high_quality", SourceCostMicroUSD: 450,
 	}, hit: true}
 	providers := &fakeProviderExecutor{}
 	service := New(
@@ -1388,7 +1389,7 @@ func (f *fakeUsageAccounting) transactionCalls() int {
 	return f.reserveCalls + f.recordCalls + f.dispatchCalls + f.settleCalls + f.releasedCalls + f.ledgerlessCalls + f.preCallCalls
 }
 
-func (f *fakeUsageAccounting) FinalizeLedgerless(_ context.Context, requestContext tenantchat.RequestContext, _ tenantruntime.Snapshot, _ string, _ string, _ string) (bool, error) {
+func (f *fakeUsageAccounting) FinalizeLedgerless(_ context.Context, requestContext tenantchat.RequestContext, _ tenantruntime.Snapshot, _ string, _ string, _ string, _ tenantchat.LedgerlessObservability) (bool, error) {
 	f.ledgerlessCalls++
 	f.lastSettlementContext = requestContext
 	return false, f.err

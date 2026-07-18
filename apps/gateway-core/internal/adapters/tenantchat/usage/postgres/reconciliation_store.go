@@ -148,6 +148,7 @@ func (s *ReservationStore) promoteDispatchedAttemptToPending(
 func lockNextPendingReservation(ctx context.Context, tx pgx.Tx, cutoff time.Time) (pendingReservation, error) {
 	var result pendingReservation
 	var employeeID *string
+	var routingDifficulty *string
 	err := tx.QueryRow(ctx, `
 		SELECT reservation.reservation_id::text, reservation.tenant_id::text,
 		       reservation.user_id::text, reservation.request_id, reservation.turn_id,
@@ -156,6 +157,7 @@ func lockNextPendingReservation(ctx context.Context, tx pgx.Tx, cutoff time.Time
 		       reservation.user_period_start, reservation.tenant_period_start,
 		       reservation.reserved_tokens, reservation.reserved_cost_micro_usd,
 		       reservation.ledger_version, reservation.cache_outcome,
+		       reservation.routing_difficulty,
 		       admission.actor_kind, admission.employee_id::text
 		FROM tenant_chat_usage_reservations AS reservation
 		JOIN tenant_chat_request_admissions AS admission
@@ -176,6 +178,7 @@ func lockNextPendingReservation(ctx context.Context, tx pgx.Tx, cutoff time.Time
 		&result.Reservation.UserPeriodStart, &result.Reservation.TenantPeriodStart,
 		&result.Reservation.ReservedTokens, &result.Reservation.ReservedCostMicroUSD,
 		&result.Reservation.LedgerVersion, &result.Reservation.CacheOutcome,
+		&routingDifficulty,
 		&result.Request.ExecutionScope.Actor.ActorKind, &employeeID,
 	)
 	if err != nil {
@@ -191,11 +194,19 @@ func lockNextPendingReservation(ctx context.Context, tx pgx.Tx, cutoff time.Time
 		Type: "tenant", ID: result.Request.ExecutionScope.TenantID,
 	}
 	result.Request.Snapshot.PricingVersion = result.Reservation.PricingVersion
+	restoreRoutingDifficulty(&result.Request, routingDifficulty)
 	if employeeID != nil {
 		result.Request.ExecutionScope.Actor.EmployeeID = *employeeID
 	}
 	result.Reservation.State = "reserved"
 	return result, nil
+}
+
+func restoreRoutingDifficulty(requestContext *tenantchat.RequestContext, difficulty *string) {
+	if difficulty == nil {
+		return
+	}
+	requestContext.Routing = &tenantchat.RoutingDecision{Difficulty: *difficulty}
 }
 
 func readReconciliationExposure(

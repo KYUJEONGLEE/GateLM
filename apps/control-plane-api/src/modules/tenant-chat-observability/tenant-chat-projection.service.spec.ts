@@ -26,6 +26,7 @@ describe('TenantChatProjectionService', () => {
           confirmedTotalTokens: 30n,
           confirmedCostMicroUsd: 50n,
           cacheOutcome: 'off',
+          routingDifficulty: 'complex',
         }),
       }),
     );
@@ -40,6 +41,7 @@ describe('TenantChatProjectionService', () => {
     const row = settledRow();
     row.payload.schemaVersion = 3;
     Object.assign(row.payload, { cacheOutcome: 'miss' });
+    Object.assign(row.payload, { routingDifficulty: 'complex' });
     const harness = createHarness(row);
 
     await harness.service.runOnce();
@@ -52,6 +54,60 @@ describe('TenantChatProjectionService', () => {
     expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ cacheOutcome: 'miss' }),
+      }),
+    );
+  });
+
+  it('rejects routing difficulty that conflicts with the fixed reservation', async () => {
+    const row = settledRow();
+    row.payload.schemaVersion = 3;
+    Object.assign(row.payload, {
+      cacheOutcome: 'miss',
+      routingDifficulty: 'simple',
+    });
+    const harness = createHarness(row);
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).not.toHaveBeenCalled();
+    expect(harness.tx.tenantChatInvocationOutbox.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastErrorCode: 'PROJECTION_SOURCE_MISMATCH',
+        }),
+      }),
+    );
+  });
+
+  it('projects the content-free safety summary from a v3 terminal usage event', async () => {
+    const row = settledRow();
+    row.payload.schemaVersion = 3;
+    Object.assign(row.payload, {
+      cacheOutcome: 'miss',
+      maskingAction: 'redacted',
+      maskingDetectedTypes: ['email', 'phone_number'],
+      maskingDetectedCount: 2,
+      safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+    });
+    const harness = createHarness(row);
+    harness.tx.tenantChatRequestAdmission.findUnique.mockResolvedValue({
+      ...admissionSource(),
+      maskingAction: 'redacted',
+      maskingDetectedTypes: ['email', 'phone_number'],
+      maskingDetectedCount: 2,
+      safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+    });
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          maskingAction: 'redacted',
+          maskingDetectedTypes: ['email', 'phone_number'],
+          maskingDetectedCount: 2,
+          safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+        }),
       }),
     );
   });
@@ -400,6 +456,7 @@ function reservationSource() {
     pricingVersion: 5n,
     requestId: 'request_projection_001',
     reservationId: 'reservation_projection_001',
+    routingDifficulty: 'complex',
     reservedAt: new Date('2026-07-12T12:00:01Z'),
     snapshotDigest: `sha256:${'a'.repeat(43)}`,
     snapshotVersion: 12n,
@@ -416,7 +473,11 @@ function admissionSource() {
     createdAt: new Date('2026-07-12T12:00:00Z'),
     employeeId,
     idempotencyKey: 'idempotency_projection_001',
+    maskingAction: null,
+    maskingDetectedTypes: null,
+    maskingDetectedCount: null,
     requestId: 'request_projection_001',
+    safetyPolicyDigest: null,
     snapshotVersion: 12n,
     tenantId,
     turnId: 'turn_projection_001',

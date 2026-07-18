@@ -30,6 +30,13 @@ test("sidebar omits inactive alerts and consistently names API Key management", 
   expect(apiKeyManagementSource).toContain('title: "API Key 관리"');
 });
 
+test("user menu trigger keeps a stable id across server and client renders", () => {
+  expect(shellSource).toContain(
+    'const userMenuTriggerId = "gatelm-console-user-menu-trigger";'
+  );
+  expect(shellSource).toMatch(/<DropdownMenuTrigger[\s\S]*?id=\{userMenuTriggerId\}/);
+});
+
 test("profile avatars use a person silhouette when no image is available", () => {
   expect(shellSource.match(/console-user-avatar-placeholder/g)).toHaveLength(2);
   expect(shellSource).toContain("<UserRound");

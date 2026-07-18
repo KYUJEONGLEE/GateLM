@@ -25,6 +25,7 @@
   "snapshotVersion": 13,
   "pricingVersion": 6,
   "cacheOutcome": "miss",
+  "routingDifficulty": "simple",
   "quota": {
     "state": "normal",
     "reservedTokensDelta": 512,

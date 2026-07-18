@@ -29,6 +29,11 @@ type safetyEvaluator interface {
 }
 
 type ledgerlessAccounting interface {
+	RecordSafetySummary(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+		summary tenantchat.SafetySummary,
+	) (bool, error)
 	FinalizeLedgerless(
 		ctx context.Context,
 		requestContext tenantchat.RequestContext,
@@ -36,6 +41,7 @@ type ledgerlessAccounting interface {
 		terminalOutcome string,
 		errorCode string,
 		cacheOutcome string,
+		observability tenantchat.LedgerlessObservability,
 	) (bool, error)
 }
 
@@ -84,6 +90,17 @@ func (s *Service) Sanitize(
 	if err != nil {
 		return tenantchat.SanitizationResponse{}, tenantchat.ErrRuntimeUnavailable
 	}
+	if evaluation.PolicyDigest != snapshot.Policies.Safety.PolicyDigest ||
+		evaluation.Summary.SafetyPolicyDigest != snapshot.Policies.Safety.PolicyDigest ||
+		tenantchat.ValidateSafetySummary(evaluation.Summary) != nil {
+		return tenantchat.SanitizationResponse{}, tenantchat.ErrRuntimeUnavailable
+	}
+	recordCtx, recordCancel := context.WithTimeout(context.WithoutCancel(ctx), accountingTimeout)
+	_, recordErr := s.ledgerless.RecordSafetySummary(recordCtx, request.Context, evaluation.Summary)
+	recordCancel()
+	if recordErr != nil {
+		return tenantchat.SanitizationResponse{}, tenantchat.ErrUsageGuardUnavailable
+	}
 	if evaluation.Blocked {
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), accountingTimeout)
 		_, settleErr := s.ledgerless.FinalizeLedgerless(
@@ -93,6 +110,7 @@ func (s *Service) Sanitize(
 			"safety_blocked",
 			"CHAT_SAFETY_BLOCKED",
 			"off",
+			tenantchat.LedgerlessObservability{MaskingAction: "blocked"},
 		)
 		cancel()
 		if settleErr != nil {
@@ -100,8 +118,7 @@ func (s *Service) Sanitize(
 		}
 		return tenantchat.SanitizationResponse{}, tenantchat.ErrSafetyBlocked
 	}
-	if evaluation.PolicyDigest != snapshot.Policies.Safety.PolicyDigest ||
-		len(evaluation.Messages) != len(request.Input.Messages) {
+	if len(evaluation.Messages) != len(request.Input.Messages) {
 		return tenantchat.SanitizationResponse{}, tenantchat.ErrRuntimeUnavailable
 	}
 	messages := make([]tenantchat.SanitizedMessage, len(evaluation.Messages))

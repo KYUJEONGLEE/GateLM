@@ -204,7 +204,7 @@ export function AnalyticsV5RoutingDifficultyChart({
         axisLabel: { color: theme.label, fontSize: 16, fontWeight: 800 },
         axisLine: { show: false },
         axisTick: { show: false },
-        data: visibleRows.map((row) => routingDifficultyLabel(row.id, locale)),
+        data: visibleRows.map((row) => row.label),
         inverse: true,
         type: "category"
       },
@@ -327,13 +327,6 @@ function formatBucket(value: string, range: LiveAnalyticsRange, locale: Locale) 
     hour: "2-digit",
     minute: range === "1d" ? undefined : "2-digit"
   }).format(date);
-}
-
-function routingDifficultyLabel(id: string, locale: Locale) {
-  const labels = locale === "ko"
-    ? { complex: "복합", simple: "단순", other: "기타" }
-    : { complex: "Complex", simple: "Simple", other: "Other" };
-  return labels[id as keyof typeof labels] ?? id;
 }
 
 function routingValueLabel(params: { data?: { share?: number }; value?: number }) {

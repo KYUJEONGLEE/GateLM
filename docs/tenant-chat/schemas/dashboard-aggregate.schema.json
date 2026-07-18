@@ -14,7 +14,8 @@
     "policyStates",
     "latency",
     "provenance",
-    "breakdowns"
+    "breakdowns",
+    "security"
   ],
   "properties": {
     "surface": { "const": "tenant_chat" },
@@ -149,6 +150,38 @@
           "billableAttemptCount": { "$ref": "#/$defs/count" },
           "fallbackSuccessCount": { "$ref": "#/$defs/count" },
           "confirmedCostMicroUsd": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protectedRequests", "redactedRequests", "blockedRequests", "byDetectorType", "coverage"],
+      "properties": {
+        "protectedRequests": { "$ref": "#/$defs/count" },
+        "redactedRequests": { "$ref": "#/$defs/count" },
+        "blockedRequests": { "$ref": "#/$defs/count" },
+        "byDetectorType": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["detectorType", "requestCount"],
+            "properties": {
+              "detectorType": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" },
+              "requestCount": { "$ref": "#/$defs/count" }
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "observedFrom"],
+          "properties": {
+            "state": { "type": "string", "enum": ["complete", "partial", "unavailable"] },
+            "observedFrom": { "type": ["string", "null"], "format": "date-time" }
+          }
         }
       }
     }

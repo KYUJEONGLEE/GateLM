@@ -667,10 +667,14 @@ type routerTestInvocationLogReader struct {
 	detailFilter         invocationlog.RequestDetailFilter
 	dashboardFilter      invocationlog.DashboardOverviewFilter
 	analyticsFilter      invocationlog.AnalyticsPerformanceFilter
+	policyImpactFilter   invocationlog.AnalyticsPolicyImpactFilter
+	reliabilityFilter    invocationlog.AnalyticsReliabilityFilter
 	items                []invocationlog.RequestLogListItem
 	detail               invocationlog.RequestDetail
 	overview             invocationlog.DashboardOverviewFields
 	analyticsPerformance invocationlog.AnalyticsPerformanceFields
+	policyImpact         invocationlog.AnalyticsPolicyImpactFields
+	analyticsReliability invocationlog.AnalyticsReliabilityFields
 }
 
 func (r *routerTestInvocationLogReader) ListProjectLogs(_ context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -695,6 +699,16 @@ func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invoc
 func (r *routerTestInvocationLogReader) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
 	r.analyticsFilter = filter
 	return r.analyticsPerformance, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsPolicyImpact(_ context.Context, filter invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
+	r.policyImpactFilter = filter
+	return r.policyImpact, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsReliability(_ context.Context, filter invocationlog.AnalyticsReliabilityFilter) (invocationlog.AnalyticsReliabilityFields, error) {
+	r.reliabilityFilter = filter
+	return r.analyticsReliability, nil
 }
 
 type routerTestAPIKeyAuthenticator struct {

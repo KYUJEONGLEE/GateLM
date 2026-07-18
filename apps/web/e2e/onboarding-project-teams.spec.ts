@@ -323,6 +323,15 @@ test("create project can select existing teams and create a team inline before a
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await prepareAuthenticatedConsole(context, request);
   await page.goto("/tenants/tenant_demo_acme/onboarding");
+  const projectStepMainBox = await page.locator(".onboarding-main").boundingBox();
+  expect(projectStepMainBox).not.toBeNull();
+  const projectStepTitle = page.getByRole("heading", {
+    name: /Project settings|Project 설정/
+  });
+  await expect(projectStepTitle).toBeVisible();
+  const projectStepTitleFontSize = await projectStepTitle.evaluate(
+    (element) => window.getComputedStyle(element).fontSize
+  );
 
   await page.getByRole("textbox", { name: "Project name" }).fill("Team enabled project");
   const teamGroup = page.getByRole("group", { name: "Team" });
@@ -362,6 +371,9 @@ test("create project can select existing teams and create a team inline before a
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   expect(projectCreateCallCount).toBe(0);
   await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
+  const providerStepMainBox = await page.locator(".onboarding-main").boundingBox();
+  expect(providerStepMainBox).not.toBeNull();
+  expect(providerStepMainBox?.width).toBeCloseTo(projectStepMainBox?.width ?? 0, 0);
   const providerPreviousButton = page.getByRole("button", { name: /Previous|이전/ });
   await expect(providerPreviousButton).toBeEnabled();
   await providerPreviousButton.click();
@@ -370,11 +382,14 @@ test("create project can select existing teams and create a team inline before a
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
   await expect(providerPreviousButton).toBeEnabled();
-  await expect(
-    page.getByRole("heading", {
-      name: /Register Provider model key \(optional\)|Provider 모델 Key 등록 \(선택\)/
-    })
-  ).toBeVisible();
+  const providerStepTitle = page.getByRole("heading", {
+    name: /Register Provider model key \(optional\)|Provider 모델 Key 등록 \(선택\)/
+  });
+  await expect(providerStepTitle).toBeVisible();
+  await expect(providerStepTitle).toHaveCSS("font-size", projectStepTitleFontSize);
+  const providerStepTitleFontSize = await providerStepTitle.evaluate(
+    (element) => window.getComputedStyle(element).fontSize
+  );
   await page.getByRole("button", { name: "Choose OpenAI" }).click();
   await page.getByLabel("Provider API Key").fill("test-key-not-a-secret");
   await page.getByRole("button", { name: "Add selected model key" }).click();
@@ -382,7 +397,22 @@ test("create project can select existing teams and create a team inline before a
 
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   await expect(page.locator(".onboarding-step").nth(2)).toHaveAttribute("data-active", "true");
-  await expect(page.getByRole("heading", { name: /Integration guide|연동 가이드/ })).toBeVisible();
+  const integrationStepTitle = page.getByRole("heading", {
+    name: /Integration guide|연동 가이드/
+  });
+  await expect(integrationStepTitle).toBeVisible();
+  await expect(integrationStepTitle).toHaveCSS("font-size", providerStepTitleFontSize);
+  const integrationStepMainBox = await page.locator(".onboarding-main").boundingBox();
+  expect(integrationStepMainBox).not.toBeNull();
+  expect(integrationStepMainBox?.width).toBeCloseTo(projectStepMainBox?.width ?? 0, 0);
+  await expect(page.locator(".integration-guide-side")).toHaveCount(0);
+  const integrationGuideLayout = page.locator(".integration-guide-layout");
+  const integrationGuideSteps = page.locator(".integration-guide-steps");
+  const integrationGuideLayoutBox = await integrationGuideLayout.boundingBox();
+  const integrationGuideStepsBox = await integrationGuideSteps.boundingBox();
+  expect(integrationGuideLayoutBox).not.toBeNull();
+  expect(integrationGuideStepsBox).not.toBeNull();
+  expect(integrationGuideStepsBox?.width).toBeCloseTo(integrationGuideLayoutBox?.width ?? 0, 0);
   await expect(page.getByText(["App", "Token"].join(" "))).toHaveCount(0);
   await expect(page.getByText(issuedPlaintext)).toHaveCount(0);
   const integrationPreviousButton = page.getByRole("button", { name: /Previous|이전/ });
@@ -410,17 +440,8 @@ test("create project can select existing teams and create a team inline before a
   await expect(page.getByText(/Plaintext hidden|원문은 숨겨졌습니다/)).toBeVisible();
   await expect(saveToProjectsButton).toBeEnabled();
 
-  const latestRequestLink = page.getByRole("link", { name: "Review latest request" });
-  const projectPolicyLink = page.getByRole("link", { name: "Project Policy settings" });
-
-  await expect(latestRequestLink).toHaveAttribute(
-    "href",
-    `/tenants/${draftTenantId}/request-logs?latest=project&projectId=project_onboarding_team_demo&applicationId=app_onboarding_team_demo`
-  );
-  await expect(projectPolicyLink).toHaveAttribute(
-    "href",
-    `/tenants/${draftTenantId}/projects/project_onboarding_team_demo/policies`
-  );
+  await expect(page.getByRole("link", { name: "Review latest request" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Project Policy settings" })).toHaveCount(0);
   expect(projectCreateCallCount).toBe(0);
   expect(apiKeyAction).toBe("issueForOnboardingDraftProject");
   expect(draftProjectValues).toMatchObject({

@@ -50,9 +50,21 @@ func (f *fakeSafety) Sanitize(
 type fakeLedgerless struct {
 	err             error
 	calls           int
+	recordCalls     int
+	recordedSummary tenantchat.SafetySummary
 	terminalOutcome string
 	errorCode       string
 	cacheOutcome    string
+}
+
+func (f *fakeLedgerless) RecordSafetySummary(
+	_ context.Context,
+	_ tenantchat.RequestContext,
+	summary tenantchat.SafetySummary,
+) (bool, error) {
+	f.recordCalls++
+	f.recordedSummary = summary
+	return false, f.err
 }
 
 func (f *fakeLedgerless) FinalizeLedgerless(
@@ -62,6 +74,7 @@ func (f *fakeLedgerless) FinalizeLedgerless(
 	terminalOutcome string,
 	errorCode string,
 	cacheOutcome string,
+	_ tenantchat.LedgerlessObservability,
 ) (bool, error) {
 	f.calls++
 	f.terminalOutcome = terminalOutcome
@@ -76,6 +89,7 @@ func TestSanitizeReturnsStorageSafeMessagesWithoutConsumingAdmission(t *testing.
 	safety := &fakeSafety{evaluation: tenantchat.SanitizationEvaluation{
 		Messages:     []tenantchat.SanitizedMessage{{ItemIndex: 0, Content: "safe [EMAIL_1]"}},
 		PolicyDigest: testPolicyDigest,
+		Summary:      testSafetySummary("redacted"),
 	}}
 	ledger := &fakeLedgerless{}
 	service := New(&fakeSnapshots{snapshot: snapshot}, admissions, safety, ledger)
@@ -84,8 +98,8 @@ func TestSanitizeReturnsStorageSafeMessagesWithoutConsumingAdmission(t *testing.
 	if err != nil {
 		t.Fatalf("sanitize allowed input: %v", err)
 	}
-	if admissions.calls != 1 || safety.calls != 1 || ledger.calls != 0 {
-		t.Fatalf("unexpected allowed call flow: admissions=%d safety=%d ledger=%d", admissions.calls, safety.calls, ledger.calls)
+	if admissions.calls != 1 || safety.calls != 1 || ledger.calls != 0 || ledger.recordCalls != 1 {
+		t.Fatalf("unexpected allowed call flow: admissions=%d safety=%d ledger=%d records=%d", admissions.calls, safety.calls, ledger.calls, ledger.recordCalls)
 	}
 	if response.PolicyDigest != testPolicyDigest || len(response.Messages) != 1 ||
 		response.Messages[0].Content != "safe [EMAIL_1]" {
@@ -98,7 +112,9 @@ func TestSanitizeBlockFinalizesLedgerlessBeforeReturningSafetyBlock(t *testing.T
 	service := New(
 		&fakeSnapshots{snapshot: sanitizationSnapshot()},
 		&fakeAdmissions{},
-		&fakeSafety{evaluation: tenantchat.SanitizationEvaluation{Blocked: true, PolicyDigest: testPolicyDigest}},
+		&fakeSafety{evaluation: tenantchat.SanitizationEvaluation{
+			Blocked: true, PolicyDigest: testPolicyDigest, Summary: testSafetySummary("blocked"),
+		}},
 		ledger,
 	)
 
@@ -106,9 +122,16 @@ func TestSanitizeBlockFinalizesLedgerlessBeforeReturningSafetyBlock(t *testing.T
 	if !errors.Is(err, tenantchat.ErrSafetyBlocked) {
 		t.Fatalf("expected safety block, got %v", err)
 	}
-	if ledger.calls != 1 || ledger.terminalOutcome != "safety_blocked" ||
+	if ledger.recordCalls != 1 || ledger.calls != 1 || ledger.terminalOutcome != "safety_blocked" ||
 		ledger.errorCode != "CHAT_SAFETY_BLOCKED" || ledger.cacheOutcome != "off" {
 		t.Fatalf("unexpected blocked ledger settlement: %+v", ledger)
+	}
+}
+
+func testSafetySummary(action string) tenantchat.SafetySummary {
+	return tenantchat.SafetySummary{
+		MaskingAction: action, MaskingDetectedTypes: []string{"email"},
+		MaskingDetectedCount: 1, SafetyPolicyDigest: testPolicyDigest,
 	}
 }
 
