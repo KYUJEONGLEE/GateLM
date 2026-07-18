@@ -270,12 +270,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		}
 	}
 
-	maskingEngine := routerOptions.MaskingEngine
-	if cfg.AISafetySidecar.PersonNameModelOnly {
-		maskingEngine = maskdomain.NewP0EngineWithoutPersonName()
-	} else if maskingEngine == nil {
-		maskingEngine = maskdomain.NewP0Engine()
-	}
+	maskingEngine := resolveRouterMaskingEngine(
+		routerOptions.MaskingEngine,
+		cfg.AISafetySidecar.PersonNameModelOnly,
+	)
 	if cfg.AISafetySidecar.Enabled {
 		maskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
 			Local:       maskingEngine,
@@ -389,6 +387,19 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	}))
 
 	return mux
+}
+
+func resolveRouterMaskingEngine(
+	configured handlers.MaskingEngine,
+	personNameModelOnly bool,
+) handlers.MaskingEngine {
+	if configured != nil {
+		return configured
+	}
+	if personNameModelOnly {
+		return maskdomain.NewP0EngineWithoutPersonName()
+	}
+	return maskdomain.NewP0Engine()
 }
 
 func semanticCacheHitPolicyWithThresholdOverrides(policy cachekey.SemanticCacheHitPolicy, defaultThreshold float64, categoryThresholds map[string]float64) cachekey.SemanticCacheHitPolicy {

@@ -880,7 +880,8 @@ def _ml_candidates_from_rule_signals(
         for signal in signals
         if signal.detector_type in supported_types
         and not any(
-            _ml_candidate_covered_by_rule_signal(
+            signal.detector_type in candidate.detector_types
+            and _ml_candidate_covered_by_rule_signal(
                 prompt_text,
                 candidate.start,
                 candidate.end,

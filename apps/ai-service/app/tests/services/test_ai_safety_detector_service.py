@@ -7,6 +7,7 @@ from app.adapters.safety.privacy_filter_adapter import (
     KOELECTRA_PRIVACY_NER_MODEL,
     PrivacyFilterAdapter,
 )
+from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import (
     AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
     AI_SAFETY_DETECTOR_CONTRACT_VERSION,
@@ -22,6 +23,8 @@ from app.services.ai_safety_detector import (
     ML_MAX_CANDIDATES_PER_REQUEST,
     ML_WINDOW_MAX_CHARS,
     AiSafetyDetectorService,
+    MlCandidate,
+    _ml_candidates_from_rule_signals,
 )
 
 
@@ -193,6 +196,40 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
 
         self.assertEqual(len(response.results), 64)
         self.assertTrue(all(item.outcome == "passed" for item in response.results))
+
+    def test_person_name_rule_candidate_deduplicates_only_same_detector_type(self) -> None:
+        prompt = "김민수"
+        signal = SafetySignal(
+            detector_type="person_name",
+            start=0,
+            end=len(prompt),
+            action="redact",
+            placeholder="[PERSON_NAME_REDACTED]",
+            priority=1,
+        )
+
+        different_type_candidates = _ml_candidates_from_rule_signals(
+            prompt,
+            [signal],
+            {"email", "person_name"},
+            existing_candidates=[
+                MlCandidate(0, len(prompt), frozenset({"email"})),
+            ],
+        )
+        same_type_candidates = _ml_candidates_from_rule_signals(
+            prompt,
+            [signal],
+            {"email", "person_name"},
+            existing_candidates=[
+                MlCandidate(0, len(prompt), frozenset({"person_name"})),
+            ],
+        )
+
+        self.assertEqual(
+            different_type_candidates,
+            [MlCandidate(0, len(prompt), frozenset({"person_name"}))],
+        )
+        self.assertEqual(same_type_candidates, [])
 
     def test_ml_allowlist_discards_disallowed_output_from_injected_adapter(self) -> None:
         prompt = "secret reference synthetic marker"

@@ -16,6 +16,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
@@ -23,6 +24,22 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+type routerTestInjectedMaskingEngine struct{}
+
+func (*routerTestInjectedMaskingEngine) Apply(context.Context, maskdomain.ApplyRequest) (maskdomain.Result, error) {
+	return maskdomain.Result{}, nil
+}
+
+func TestResolveRouterMaskingEnginePreservesConfiguredEngineInPersonNameModelOnlyMode(t *testing.T) {
+	configured := &routerTestInjectedMaskingEngine{}
+
+	resolved := resolveRouterMaskingEngine(configured, true)
+
+	if resolved != configured {
+		t.Fatal("person-name model-only mode replaced the configured masking engine")
+	}
+}
 
 func TestPublicRouterDoesNotExposePrivateRAGEmbeddings(t *testing.T) {
 	router := NewRouter(config.Config{}, provider.NewRegistry("mock"), nil)
