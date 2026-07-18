@@ -60,6 +60,7 @@ class Settings:
         DEFAULT_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES
     )
     ai_safety_ml_detector_thresholds: tuple[tuple[str, float], ...] = ()
+    ai_safety_person_name_model_only: bool = False
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
     ai_safety_preload_enabled: bool = False
     deployment_mode: str = "local"
@@ -98,6 +99,10 @@ def load_settings() -> Settings:
         ),
         ai_safety_ml_allowed_detector_types=_env_ml_allowed_detector_types(),
         ai_safety_ml_detector_thresholds=_env_ml_detector_thresholds(),
+        ai_safety_person_name_model_only=_env_strict_bool(
+            "AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY",
+            False,
+        ),
         ai_safety_detector_runtime=_env_ai_safety_detector_runtime(),
         ai_safety_preload_enabled=_env_bool(
             "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED",

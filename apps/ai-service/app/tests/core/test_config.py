@@ -155,6 +155,7 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
         self.assertEqual(
             {field.name for field in fields(Settings)},
             {
+                "ai_safety_person_name_model_only",
                 "host",
                 "port",
                 "log_level",
@@ -194,6 +195,26 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             settings = load_settings()
 
         self.assertTrue(settings.ai_safety_preload_enabled)
+
+    def test_settings_loads_person_name_model_only_flag(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY": "true"},
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertTrue(settings.ai_safety_person_name_model_only)
+
+    def test_settings_rejects_invalid_person_name_model_only_flag(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY": "enabled"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "must be true or false"):
+                load_settings()
+
     def test_rag_chunk_defaults_match_profile_v1(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             settings = load_settings()
