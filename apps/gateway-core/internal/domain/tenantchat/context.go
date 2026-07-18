@@ -66,6 +66,10 @@ type RequestContext struct {
 	BindingDigest  string            `json:"bindingDigest"`
 	UsageIntent    *UsageIntent      `json:"usageIntent,omitempty"`
 	Routing        *RoutingDecision  `json:"-"`
+	// TTFTMs is internal execution state. It is observed only after a
+	// successful non-empty completion delta and never participates in the
+	// workload request/JWT contract.
+	TTFTMs *int64 `json:"-"`
 }
 
 type EphemeralMessage struct {

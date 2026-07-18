@@ -948,8 +948,8 @@ export class DashboardRollupService
           confirmed_cost_micro_usd,
           latency_ms,
           cache_outcome,
-          false AS stream,
-          NULL::bigint AS ttft_ms,
+          true AS stream,
+          ttft_ms,
           updated_at AS source_max_at
         FROM tenant_chat_invocation_logs
         WHERE tenant_id = ${bucket.tenant_id}::uuid
@@ -1123,8 +1123,8 @@ export class DashboardRollupService
           budget_state,
           snapshot_version::text AS snapshot_version,
           pricing_version::text AS pricing_version,
-          false AS stream,
-          NULL::bigint AS ttft_ms,
+          true AS stream,
+          ttft_ms,
           updated_at AS source_max_at
         FROM tenant_chat_invocation_logs
         WHERE tenant_id = ${bucket.tenant_id}::uuid

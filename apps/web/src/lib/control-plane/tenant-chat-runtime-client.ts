@@ -172,9 +172,23 @@ function isActiveSnapshot(value: unknown) {
     isRoutingMatrix(record.routes) &&
     isCachePolicy(record.cachePolicy) &&
     isSafetyPolicy(record.safetyPolicy) &&
+    isQuotaPolicy(record.quota) &&
     (record.pricingStatus === "current" ||
       record.pricingStatus === "update_available" ||
       record.pricingStatus === "unavailable")
+  );
+}
+
+function isQuotaPolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isSafeInteger(record.defaultMonthlyTokenLimit) &&
+    Number(record.defaultMonthlyTokenLimit) >= 0 &&
+    typeof record.timezone === "string" &&
+    typeof record.warningPercent === "number" &&
+    typeof record.economyPercent === "number" &&
+    typeof record.hardStopPercent === "number"
   );
 }
 

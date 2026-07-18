@@ -22,3 +22,35 @@ test("analytics forces project admins onto an assigned project", async () => {
   expect(pageSource).toContain("getVisibleProjectsForConsoleAuth(");
   expect(pageSource).toContain("projectScoped ? null");
 });
+
+test("performance places provider filters before the shared range and project filters", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+  const providerFilterIndex = pageSource.indexOf("<span>{text.provider}</span>");
+  const rangeFilterIndex = pageSource.indexOf("<span>{text.range}</span>");
+  const projectFilterIndex = pageSource.indexOf("<span>{text.project}</span>");
+
+  expect(providerFilterIndex).toBeGreaterThan(-1);
+  expect(rangeFilterIndex).toBeGreaterThan(providerFilterIndex);
+  expect(projectFilterIndex).toBeGreaterThan(rangeFilterIndex);
+  expect(pageSource).not.toContain("analytics-v3-filter-row-secondary");
+});
+
+test("analytics preserves an unavailable selected project in the filter", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("filters.projectId && !projects.some((project) => project.id === filters.projectId)");
+  expect(pageSource).toContain("<option disabled value={filters.projectId}>{text.projectUnavailable}</option>");
+  expect(pageSource).toContain('projectUnavailable: "선택한 프로젝트를 사용할 수 없음"');
+});
+
+test("usage cost and security load tenant-scoped employee evidence", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain('activeTab === "usage" || activeTab === "cost"');
+  expect(pageSource).toContain('activeTab === "security"');
+  expect(pageSource).toContain("getAllEmployeeUsage({");
+  expect(pageSource).toContain("getEmployeeSecurity({");
+  expect(pageSource).toContain('name="employeeId"');
+  expect(pageSource).toContain('appendQuery(query, "employeeId", filters.employeeId)');
+  expect(pageSource).not.toContain("departmentId");
+});

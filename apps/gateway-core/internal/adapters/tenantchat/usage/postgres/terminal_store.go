@@ -634,6 +634,7 @@ func terminalUsageEventPayload(
 		},
 		"attempts": settlementAttemptsPayload(attempts), "terminalOutcome": terminalOutcome,
 	}
+	appendTTFT(payload, requestContext)
 	return json.Marshal(payload)
 }
 

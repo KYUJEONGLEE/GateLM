@@ -87,14 +87,14 @@ test("overview removes the redundant data freshness timestamp from the main head
   expect(source).not.toContain("formatDashboardDataAsOf");
 });
 
-test("live requests show the executed model, end-to-end latency, and readable cost only", async () => {
+test("live requests show the executed model, TTFT, and readable cost only", async () => {
   const source = await readFile(liveRequestViewSourceUrl, "utf8");
 
-  expect(source).toContain("formatResponseTimeSeconds(row.latencyMs)");
+  expect(source).toContain("formatResponseTimeSeconds(row.ttftMs)");
   expect(source).toContain("formatLiveRequestCostUsd(row.costUsd)");
   expect(source).toContain('className="dashboard-live-col-cost"');
   expect(source.match(/colSpan=\{9\}/g)).toHaveLength(2);
-  expect(source).not.toContain("row.ttftMs");
+  expect(source).toContain("row.ttftMs");
   expect(source).not.toContain("row.category");
   expect(source).not.toContain("row.difficulty");
   expect(source).not.toContain("row.routingReason");
@@ -154,6 +154,7 @@ test("tenant chat live requests preserve provider identity for provider icons", 
   expect(source).toContain("providerFamily: providerDisplay?.family ?? null");
   expect(source).toContain("providerName: providerDisplay?.name ?? null");
   expect(source).toContain("latencyMs: invocation.latencyMs");
+  expect(source).toContain("ttftMs: invocation.ttftMs");
   expect(source).toContain("costUsd: invocation.confirmedCostMicroUsd / 1_000_000");
 });
 

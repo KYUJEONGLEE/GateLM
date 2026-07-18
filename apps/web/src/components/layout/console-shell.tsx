@@ -16,6 +16,7 @@ import {
   Plug,
   ScrollText,
   Settings as SettingsIcon,
+  UserRound,
   Users
 } from "lucide-react";
 import Link from "next/link";
@@ -201,6 +202,7 @@ const shellText: Record<
     theme: string;
     planned: string;
     tenant: string;
+    tenantAdmin: string;
     userProfile: string;
   }
 > = {
@@ -223,6 +225,7 @@ const shellText: Record<
     sessionRequired: "Session required",
     settings: "Settings",
     tenant: "tenant",
+    tenantAdmin: "Tenant Admin",
     theme: "Theme",
     userProfile: "User profile"
   },
@@ -245,6 +248,7 @@ const shellText: Record<
     sessionRequired: "로그인 필요",
     settings: "설정",
     tenant: "테넌트",
+    tenantAdmin: "관리자",
     theme: "테마",
     userProfile: "사용자 프로필"
   }
@@ -272,6 +276,7 @@ export function ConsoleShell({
   const resolvedActiveMonitoringItem =
     activeMonitoringItem ?? navigationState.activeMonitoringItem;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isResponsiveCompact, setIsResponsiveCompact] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
@@ -289,6 +294,15 @@ export function ConsoleShell({
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1101px) and (max-width: 1280px)");
+    const syncResponsiveCompactState = () => setIsResponsiveCompact(mediaQuery.matches);
+
+    syncResponsiveCompactState();
+    mediaQuery.addEventListener("change", syncResponsiveCompactState);
+    return () => mediaQuery.removeEventListener("change", syncResponsiveCompactState);
+  }, []);
+
+  useEffect(() => {
     const initialTheme = readStoredTheme() ?? readDocumentTheme();
     setTheme(initialTheme);
     applyTheme(initialTheme);
@@ -297,6 +311,12 @@ export function ConsoleShell({
   function toggleSidebar() {
     if (isMobileViewport()) {
       setIsMobileNavigationOpen((current) => !current);
+      return;
+    }
+
+    // At split-window widths the rail deliberately stays compact so every
+    // primary destination remains available without squeezing page content.
+    if (isResponsiveCompact) {
       return;
     }
 
@@ -370,7 +390,7 @@ export function ConsoleShell({
           data-active={isChildActive(child)}
           data-tooltip={childLabel}
           href={child.path(tenantId)}
-          intentPrefetch={!isSidebarCollapsed}
+          intentPrefetch={!sidebarCollapsed}
           key={child.item}
           onClick={closeMobileNavigation}
           title={childLabel}
@@ -383,11 +403,14 @@ export function ConsoleShell({
     });
   }
 
+  const sidebarCollapsed = isSidebarCollapsed || isResponsiveCompact;
+
   return (
     <div
       className="console-shell"
       data-mobile-nav-open={isMobileNavigationOpen}
-      data-sidebar-collapsed={isSidebarCollapsed}
+      data-responsive-compact={isResponsiveCompact}
+      data-sidebar-collapsed={sidebarCollapsed}
     >
       <header className="console-mobile-topbar">
         <button
@@ -416,7 +439,7 @@ export function ConsoleShell({
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
           <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
-            <GateLMLogo compact={isSidebarCollapsed} />
+          <GateLMLogo compact={sidebarCollapsed} />
           </Link>
         </div>
 
@@ -441,18 +464,18 @@ export function ConsoleShell({
                       <span>{label}</span>
                       {item.section === "monitoring" ? (
                         <button
-                          aria-expanded={!isSidebarCollapsed}
+                          aria-expanded={!sidebarCollapsed}
                           aria-label={
-                            isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
                           }
                           className="console-sidebar-toggle console-nav-sidebar-toggle"
                           onClick={toggleSidebar}
                           title={
-                            isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
                           }
                           type="button"
                         >
-                          {isSidebarCollapsed ? (
+                          {sidebarCollapsed ? (
                             <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
                           ) : (
                             <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
@@ -505,7 +528,7 @@ export function ConsoleShell({
             );
           })}
         </nav>
-        <div className="console-mobile-subnavs" aria-hidden={isSidebarCollapsed}>
+        <div className="console-mobile-subnavs" aria-hidden={sidebarCollapsed}>
           {navigationItems.map((item) => {
             const label = item.labels[locale];
 
@@ -563,7 +586,7 @@ function ConsoleTopbarActions({
   theme: ConsoleTheme;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel, text);
-  const initials = getUserInitials(displayUser.displayName);
+  const displayRole = displayUser.role === "Tenant Admin" ? text.tenantAdmin : displayUser.role;
 
   return (
     <div className="console-topbar-actions" aria-label={text.accountActions}>
@@ -576,12 +599,12 @@ function ConsoleTopbarActions({
                 style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
               />
             ) : (
-              <span>{initials}</span>
+              <UserRound className="console-user-avatar-placeholder" strokeWidth={2} />
             )}
           </span>
           <span className="console-user-copy">
             <strong>{displayUser.displayName}</strong>
-            <small>{displayUser.role}</small>
+            <small>{displayRole}</small>
           </span>
           <ChevronDown aria-hidden="true" size={14} strokeWidth={2.4} />
         </DropdownMenuTrigger>
@@ -599,7 +622,7 @@ function ConsoleTopbarActions({
                   style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
                 />
               ) : (
-                <span>{initials}</span>
+                <UserRound className="console-user-avatar-placeholder" strokeWidth={2} />
               )}
             </span>
             <div>
@@ -611,7 +634,7 @@ function ConsoleTopbarActions({
           <dl className="console-user-meta">
             <div>
               <dt>{text.role}</dt>
-              <dd>{displayUser.role}</dd>
+              <dd>{displayRole}</dd>
             </div>
             <div>
               <dt>{text.organization}</dt>
@@ -680,16 +703,6 @@ function buildPendingCurrentUser(
     role: text.sessionRequired,
     tenantName: tenantLabel
   };
-}
-
-function getUserInitials(displayName: string) {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length >= 2) {
-    return `${parts[0]?.charAt(0) ?? ""}${parts[1]?.charAt(0) ?? ""}`.toUpperCase();
-  }
-
-  return (parts[0]?.charAt(0) || "A").toUpperCase();
 }
 
 function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {

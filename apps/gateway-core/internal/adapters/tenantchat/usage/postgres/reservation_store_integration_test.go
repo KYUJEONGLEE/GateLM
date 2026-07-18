@@ -78,6 +78,8 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 		t.Fatalf("replay reservation: result=%+v err=%v", replayed, err)
 	}
 
+	ttftMs := int64(84)
+	completionContext.TTFTMs = &ttftMs
 	settlement, err := store.FinalizeConfirmed(
 		context.Background(), completionContext, reservation.ReservationID, 1,
 		tenantchat.ConfirmedUsage{InputTokens: 150, OutputTokens: 50}, "succeeded",
@@ -123,7 +125,396 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 			remainingReservedTokens, confirmedTokens, remainingReservedCost, confirmedCost, reservationState, settlementLedgerCount,
 		)
 	}
+	var settlementPayload []byte
+	if err := pool.QueryRow(context.Background(), `
+		SELECT payload
+		FROM tenant_chat_invocation_outbox
+		WHERE aggregate_id = $1 AND event_type = 'usage_settled'
+		ORDER BY event_version DESC
+		LIMIT 1
+	`, completionContext.RequestID).Scan(&settlementPayload); err != nil {
+		t.Fatalf("read settlement outbox event: %v", err)
+	}
+	var settlementEvent map[string]any
+	if err := json.Unmarshal(settlementPayload, &settlementEvent); err != nil {
+		t.Fatalf("decode settlement outbox event: %v", err)
+	}
+	if settlementEvent["eventType"] != "usage_settled" || settlementEvent["ttftMs"] != float64(ttftMs) {
+		t.Fatalf("settlement outbox must preserve TTFT: event=%v", settlementEvent)
+	}
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
+}
+
+func TestConsumeAndReserveAppliesNewMonthlyZeroQuotaToExistingPeriodIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	fixture.configureEmployeeLedgerRollout(t, pool, "off")
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admissionStore := admissionpostgres.NewStore(pool)
+	firstAdmission, err := admissionStore.Create(context.Background(), fixture.admissionContext(), tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create first admission: %v", err)
+	}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	if _, err := store.BeginExecution(
+		context.Background(), fixture.completionContext(firstAdmission.AdmissionID), fixture.snapshot(10_000, 1_000_000),
+	); err != nil {
+		t.Fatalf("create initial monthly token period: %v", err)
+	}
+
+	secondAdmissionContext := fixture.admissionContext()
+	secondAdmissionContext.RequestID = "monthly_zero_request_002"
+	secondAdmissionContext.TurnID = "monthly_zero_turn_002"
+	secondAdmissionContext.IdempotencyKey = "monthly_zero_attempt_002"
+	secondAdmission, err := admissionStore.Create(context.Background(), secondAdmissionContext, tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create second admission: %v", err)
+	}
+	secondCompletionContext := fixture.completionContext(secondAdmission.AdmissionID)
+	secondCompletionContext.RequestID = secondAdmissionContext.RequestID
+	secondCompletionContext.TurnID = secondAdmissionContext.TurnID
+	secondCompletionContext.IdempotencyKey = secondAdmissionContext.IdempotencyKey
+	if _, err := store.BeginExecution(
+		context.Background(), secondCompletionContext, fixture.snapshot(0, 1_000_000),
+	); !errors.Is(err, tenantchat.ErrQuotaHardLimit) {
+		t.Fatalf("zero monthly quota must block the next provider request, got %v", err)
+	}
+
+	var limit, warning, economy, hardStop int64
+	var state string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT limit_tokens, warning_threshold_tokens, economy_threshold_tokens, hard_stop_tokens, state
+		FROM tenant_chat_user_token_periods
+		WHERE tenant_id = $1::uuid AND user_id = $2::uuid
+	`, fixture.tenantID, fixture.userID).Scan(&limit, &warning, &economy, &hardStop, &state); err != nil {
+		t.Fatalf("read synchronized monthly period: %v", err)
+	}
+	if limit != 0 || warning != 0 || economy != 0 || hardStop != 0 || state != "blocked" {
+		t.Fatalf("existing monthly period was not synchronized to the zero policy: limit=%d warning=%d economy=%d hardStop=%d state=%s", limit, warning, economy, hardStop, state)
+	}
+}
+
+func TestEmployeeWeeklyZeroQuotaBlocksAndPersistsPolicyIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), fixture.admissionContext(),
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create employee zero-quota admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 2
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 0,
+	}}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+
+	if _, err := store.BeginExecution(
+		context.Background(), completionContext, snapshot,
+	); !errors.Is(err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit) {
+		t.Fatalf("zero employee weekly quota must block the provider request, got %v", err)
+	}
+
+	var limit, reserved, confirmed, unconfirmed, policyVersion int64
+	var state string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT limit_tokens, reserved_tokens, confirmed_total_tokens,
+		       unconfirmed_tokens, state, policy_version
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(
+		&limit, &reserved, &confirmed, &unconfirmed, &state, &policyVersion,
+	); err != nil {
+		t.Fatalf("read zero employee weekly token period: %v", err)
+	}
+	if limit != 0 || reserved != 0 || confirmed != 0 || unconfirmed != 0 || state != "blocked" || policyVersion != 2 {
+		t.Fatalf(
+			"zero employee weekly token period mismatch: limit=%d reserved=%d confirmed=%d unconfirmed=%d state=%s policy=%d",
+			limit, reserved, confirmed, unconfirmed, state, policyVersion,
+		)
+	}
+}
+
+func TestEmployeeWeeklyQuotaLoweringPreservesUsageAndBlocksIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admissionStore := admissionpostgres.NewStore(pool)
+	firstAdmission, err := admissionStore.Create(
+		context.Background(), fixture.admissionContext(),
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create initial employee weekly admission: %v", err)
+	}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	initialSnapshot := fixture.snapshot(10_000, 1_000_000)
+	initialSnapshot.PolicyVersion = 1
+	initialSnapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
+	}}
+	if _, err := store.BeginExecution(
+		context.Background(), fixture.completionContext(firstAdmission.AdmissionID), initialSnapshot,
+	); err != nil {
+		t.Fatalf("reserve initial employee weekly usage: %v", err)
+	}
+
+	secondAdmissionContext := fixture.admissionContext()
+	secondAdmissionContext.RequestID = "employee_weekly_lower_request_002"
+	secondAdmissionContext.TurnID = "employee_weekly_lower_turn_002"
+	secondAdmissionContext.IdempotencyKey = "employee_weekly_lower_attempt_002"
+	secondAdmission, err := admissionStore.Create(
+		context.Background(), secondAdmissionContext,
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create lowered employee weekly admission: %v", err)
+	}
+	secondCompletionContext := fixture.completionContext(secondAdmission.AdmissionID)
+	secondCompletionContext.RequestID = secondAdmissionContext.RequestID
+	secondCompletionContext.TurnID = secondAdmissionContext.TurnID
+	secondCompletionContext.IdempotencyKey = secondAdmissionContext.IdempotencyKey
+	loweredSnapshot := fixture.snapshot(10_000, 1_000_000)
+	loweredSnapshot.PolicyVersion = 2
+	loweredSnapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 150,
+	}}
+	if _, err := store.BeginExecution(
+		context.Background(), secondCompletionContext, loweredSnapshot,
+	); !errors.Is(err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit) {
+		t.Fatalf("lowered employee weekly quota must block without resetting usage, got %v", err)
+	}
+
+	var limit, reserved, confirmed, unconfirmed, policyVersion int64
+	var state string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT limit_tokens, reserved_tokens, confirmed_total_tokens,
+		       unconfirmed_tokens, state, policy_version
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(
+		&limit, &reserved, &confirmed, &unconfirmed, &state, &policyVersion,
+	); err != nil {
+		t.Fatalf("read lowered employee weekly token period: %v", err)
+	}
+	if limit != 150 || reserved != 200 || confirmed != 0 || unconfirmed != 0 || state != "blocked" || policyVersion != 2 {
+		t.Fatalf(
+			"lowered employee weekly token period mismatch: limit=%d reserved=%d confirmed=%d unconfirmed=%d state=%s policy=%d",
+			limit, reserved, confirmed, unconfirmed, state, policyVersion,
+		)
+	}
+}
+
+func TestEmployeeWeeklyReservationIdentityCannotBeClearedIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), fixture.admissionContext(),
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create employee weekly identity admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 1
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
+	}}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	if _, err := store.BeginExecution(context.Background(), completionContext, snapshot); err != nil {
+		t.Fatalf("reserve employee weekly identity fixture: %v", err)
+	}
+
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE tenant_chat_usage_reservations
+		SET employee_id = NULL, employee_weekly_period_start = NULL
+		WHERE tenant_id = $1::uuid AND request_id = $2
+	`, fixture.tenantID, completionContext.RequestID); err == nil {
+		t.Fatal("employee weekly reservation identity must not be removable")
+	}
+
+	var employeeID string
+	var periodStart time.Time
+	if err := pool.QueryRow(context.Background(), `
+		SELECT employee_id::text, employee_weekly_period_start
+		FROM tenant_chat_usage_reservations
+		WHERE tenant_id = $1::uuid AND request_id = $2
+	`, fixture.tenantID, completionContext.RequestID).Scan(&employeeID, &periodStart); err != nil {
+		t.Fatalf("read preserved employee weekly reservation identity: %v", err)
+	}
+	if employeeID != fixture.employeeID || periodStart.IsZero() {
+		t.Fatalf("employee weekly reservation identity changed: employee=%s period=%s", employeeID, periodStart)
+	}
+}
+
+func TestEmployeeWeeklyFallbackSettlementIsAppliedExactlyOnceIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admissionContext := fixture.admissionContext()
+	admissionContext.RequestID = "employee_weekly_fallback_request_001"
+	admissionContext.TurnID = "employee_weekly_fallback_turn_001"
+	admissionContext.IdempotencyKey = "employee_weekly_fallback_attempt_001"
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), admissionContext,
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create employee weekly fallback admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.RequestID = admissionContext.RequestID
+	completionContext.TurnID = admissionContext.TurnID
+	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 3
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
+	}}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve employee weekly primary exposure: %v", err)
+	}
+	fallbackRoute, err := selectRoute(snapshot, "economy", "normal", "normal")
+	if err != nil {
+		t.Fatalf("select employee weekly fallback route: %v", err)
+	}
+	restricted, err := store.BeginFallback(
+		context.Background(), completionContext, snapshot, reservation.ReservationID,
+		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
+		fallbackRoute, 2,
+	)
+	if err != nil || restricted {
+		t.Fatalf("begin employee weekly fallback: restricted=%t err=%v", restricted, err)
+	}
+	settlement, err := store.FinalizeConfirmed(
+		context.Background(), completionContext, reservation.ReservationID, 2,
+		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 20}, "succeeded",
+	)
+	if err != nil {
+		t.Fatalf("settle employee weekly fallback: %v", err)
+	}
+	if settlement.ConfirmedInputTokens != 200 || settlement.ConfirmedOutputTokens != 30 {
+		t.Fatalf("employee weekly fallback settlement mismatch: %+v", settlement)
+	}
+	replayed, err := store.FinalizeConfirmed(
+		context.Background(), completionContext, reservation.ReservationID, 2,
+		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 20}, "succeeded",
+	)
+	if err != nil || !replayed.Replayed {
+		t.Fatalf("replay employee weekly fallback settlement: result=%+v err=%v", replayed, err)
+	}
+
+	var reserved, confirmed, unconfirmed, policyVersion int64
+	var state string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reserved_tokens, confirmed_total_tokens, unconfirmed_tokens, state, policy_version
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(
+		&reserved, &confirmed, &unconfirmed, &state, &policyVersion,
+	); err != nil {
+		t.Fatalf("read settled employee weekly token period: %v", err)
+	}
+	if reserved != 0 || confirmed != 230 || unconfirmed != 0 || state != "normal" || policyVersion != 3 {
+		t.Fatalf(
+			"employee weekly settlement applied more than once: reserved=%d confirmed=%d unconfirmed=%d state=%s policy=%d",
+			reserved, confirmed, unconfirmed, state, policyVersion,
+		)
+	}
+}
+
+func TestEmployeeWeeklyPendingAndLateUsageAreReconciledExactlyOnceIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	admissionContext := fixture.admissionContext()
+	admissionContext.RequestID = "employee_weekly_late_request_001"
+	admissionContext.TurnID = "employee_weekly_late_turn_001"
+	admissionContext.IdempotencyKey = "employee_weekly_late_attempt_001"
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), admissionContext,
+		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
+	)
+	if err != nil {
+		t.Fatalf("create employee weekly late-usage admission: %v", err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.RequestID = admissionContext.RequestID
+	completionContext.TurnID = admissionContext.TurnID
+	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 4
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
+	}}
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve employee weekly pending exposure: %v", err)
+	}
+	if _, err := store.MarkPending(
+		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
+	); err != nil {
+		t.Fatalf("mark employee weekly usage pending: %v", err)
+	}
+	processed, err := store.ReconcileNextPending(context.Background(), now.Add(15*time.Minute))
+	if err != nil || !processed {
+		t.Fatalf("reconcile employee weekly pending usage: processed=%t err=%v", processed, err)
+	}
+
+	var reserved, confirmed, unconfirmed int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reserved_tokens, confirmed_total_tokens, unconfirmed_tokens
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(&reserved, &confirmed, &unconfirmed); err != nil {
+		t.Fatalf("read reconciled employee weekly token period: %v", err)
+	}
+	if reserved != 0 || confirmed != 0 || unconfirmed != 200 {
+		t.Fatalf(
+			"employee weekly pending reconciliation mismatch: reserved=%d confirmed=%d unconfirmed=%d",
+			reserved, confirmed, unconfirmed,
+		)
+	}
+
+	store.now = func() time.Time { return now.AddDate(0, 0, 8) }
+	receipt := tenantchat.UsageReceipt{
+		RequestID: completionContext.RequestID, AttemptNo: 1, ProviderID: "provider",
+		InputTokens: 80, OutputTokens: 20,
+	}
+	result, err := store.RecordUsageReceipt(context.Background(), receipt)
+	if err != nil || result.State != "settled" || result.Replayed {
+		t.Fatalf("record employee weekly late usage: result=%+v err=%v", result, err)
+	}
+	replayed, err := store.RecordUsageReceipt(context.Background(), receipt)
+	if err != nil || !replayed.Replayed {
+		t.Fatalf("replay employee weekly late usage: result=%+v err=%v", replayed, err)
+	}
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reserved_tokens, confirmed_total_tokens, unconfirmed_tokens
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(&reserved, &confirmed, &unconfirmed); err != nil {
+		t.Fatalf("read late-settled employee weekly token period: %v", err)
+	}
+	if reserved != 0 || confirmed != 100 || unconfirmed != 0 {
+		t.Fatalf(
+			"employee weekly late usage applied more than once: reserved=%d confirmed=%d unconfirmed=%d",
+			reserved, confirmed, unconfirmed,
+		)
+	}
 }
 
 func TestRoutingV2WithoutTierAllowsRolloutOffIntegration(t *testing.T) {
@@ -158,492 +549,6 @@ func TestRoutingV2WithoutTierAllowsRolloutOffIntegration(t *testing.T) {
 		t.Fatalf("unexpected Routing v2 reservation route: %+v", reservation.Route)
 	}
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
-}
-
-func TestShadowDisabledEmployeePolicyDualWritesReserveAndSettlementIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "employee_shadow_request_001"
-	admissionContext.TurnID = "employee_shadow_turn_001"
-	admissionContext.IdempotencyKey = "employee_shadow_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create shadow admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-
-	reservation, err := store.BeginExecution(
-		context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000),
-	)
-	if err != nil {
-		t.Fatalf("reserve shadow employee exposure: %v", err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 125, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "reserved", PolicyVersion: 7,
-		Reserved: 125, Confirmed: 0, Unconfirmed: 0, LedgerVersion: 1, UsagePending: true,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 0, Unconfirmed: 0, UsageQuality: "not_available",
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{{
-		Version: 1, EventType: "reserve", ReservedDelta: 125,
-	}})
-
-	replayed, err := store.BeginExecution(
-		context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000),
-	)
-	if err != nil || !replayed.Replayed || replayed.ReservationID != reservation.ReservationID {
-		t.Fatalf("replay shadow reservation: result=%+v err=%v", replayed, err)
-	}
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{{
-		Version: 1, EventType: "reserve", ReservedDelta: 125,
-	}})
-
-	settlement, err := store.FinalizeConfirmed(
-		context.Background(), completionContext, reservation.ReservationID, 1,
-		tenantchat.ConfirmedUsage{InputTokens: 150, OutputTokens: 50}, "succeeded",
-	)
-	if err != nil {
-		t.Fatalf("settle shadow employee exposure: %v", err)
-	}
-	if settlement.ConfirmedCostMicroUSD != 88 {
-		t.Fatalf("unexpected native shadow settlement: %+v", settlement)
-	}
-	replayedSettlement, err := store.FinalizeConfirmed(
-		context.Background(), completionContext, reservation.ReservationID, 1,
-		tenantchat.ConfirmedUsage{InputTokens: 150, OutputTokens: 50}, "succeeded",
-	)
-	if err != nil || !replayedSettlement.Replayed {
-		t.Fatalf("replay shadow employee settlement: result=%+v err=%v", replayedSettlement, err)
-	}
-	if _, err := store.FinalizeConfirmed(
-		context.Background(), completionContext, reservation.ReservationID, 1,
-		tenantchat.ConfirmedUsage{InputTokens: 150, OutputTokens: 51}, "succeeded",
-	); !errors.Is(err, tenantchat.ErrIdempotencyConflict) {
-		t.Fatalf("conflicting confirmed replay must be rejected, got %v", err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 88, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "settled", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 88, Unconfirmed: 0, LedgerVersion: 2,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 88, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "succeeded", InputTokens: 150, OutputTokens: 50,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "settle", ReservedDelta: -125, ConfirmedDelta: 88},
-	})
-}
-
-func TestEnforcedEmployeePolicyReselectsLowerInitialRouteBeforeWritingIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	fixture.configureEnforcedEmployeePolicy(t, pool, now)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "employee_initial_restrict_request_001"
-	admissionContext.TurnID = "employee_initial_restrict_turn_001"
-	admissionContext.IdempotencyKey = "employee_initial_restrict_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create initial restriction admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	completionContext.UsageIntent.RequestedTier = "high_quality"
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	snapshot := fixture.snapshot(10_000, 1_000_000)
-	reservation, err := store.BeginExecution(
-		context.Background(), completionContext, snapshot,
-	)
-	if err != nil {
-		t.Fatalf("reserve reselected lower route: %v", err)
-	}
-	if reservation.Route.RouteID != "standard_route" || reservation.Route.Tier != "standard" ||
-		reservation.ReservedCostMicroUSD != 125 {
-		t.Fatalf("high-quality route was not reselected before native reserve: %+v", reservation)
-	}
-
-	var policyVersion int64
-	var pricingRuleID string
-	var outcome string
-	var dailyState string
-	var weeklyState string
-	var reserved int64
-	if err := pool.QueryRow(context.Background(), `
-		SELECT pinned_policy_version, pricing_rule_id, enforcement_outcome,
-		       daily_state, weekly_state, reserved_cost_micro_usd
-		FROM tenant_employee_cost_reservations
-		WHERE surface = 'tenant_chat' AND request_id = $1
-	`, completionContext.RequestID).Scan(
-		&policyVersion, &pricingRuleID, &outcome, &dailyState, &weeklyState, &reserved,
-	); err != nil {
-		t.Fatalf("read initial restricted employee reservation: %v", err)
-	}
-	if policyVersion != 8 || pricingRuleID != "standard_route" || outcome != "restricted_to_lower_cost" ||
-		dailyState != "normal" || weeklyState != "normal" || reserved != 125 {
-		t.Fatalf(
-			"initial restricted employee evidence mismatch: policy=%d pricing=%s outcome=%s daily=%s weekly=%s reserved=%d",
-			policyVersion, pricingRuleID, outcome, dailyState, weeklyState, reserved,
-		)
-	}
-	var nativeAttempts int
-	var nativeHighAttempts int
-	var commonAttempts int
-	var commonHighAttempts int
-	if err := pool.QueryRow(context.Background(), `
-		SELECT
-		  (SELECT count(*) FROM tenant_chat_provider_attempts WHERE request_id = $1),
-		  (SELECT count(*) FROM tenant_chat_provider_attempts WHERE request_id = $1 AND model_key = 'high_quality_model'),
-		  (SELECT count(*) FROM tenant_employee_cost_provider_attempts WHERE surface = 'tenant_chat' AND request_id = $1),
-		  (SELECT count(*) FROM tenant_employee_cost_provider_attempts WHERE surface = 'tenant_chat' AND request_id = $1 AND model_key = 'high_quality_model')
-	`, completionContext.RequestID).Scan(
-		&nativeAttempts, &nativeHighAttempts, &commonAttempts, &commonHighAttempts,
-	); err != nil {
-		t.Fatalf("read initial restricted attempts: %v", err)
-	}
-	if nativeAttempts != 1 || commonAttempts != 1 || nativeHighAttempts != 0 || commonHighAttempts != 0 {
-		t.Fatalf(
-			"restricted high route left accounting rows: native=%d nativeHigh=%d common=%d commonHigh=%d",
-			nativeAttempts, nativeHighAttempts, commonAttempts, commonHighAttempts,
-		)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 125, Unconfirmed: 0, State: "normal", PolicyVersion: 8,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 0, Unconfirmed: 0, UsageQuality: "not_available",
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{{
-		Version: 1, EventType: "reserve", ReservedDelta: 125,
-	}})
-}
-
-func TestFallbackSettlementIncludesEveryBillableAttemptIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionStore := admissionpostgres.NewStore(pool)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "fallback_request_001"
-	admissionContext.TurnID = "fallback_turn_001"
-	admissionContext.IdempotencyKey = "fallback_attempt_001"
-	admission, err := admissionStore.Create(context.Background(), admissionContext, tenantchat.AdmissionLimits{
-		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
-	})
-	if err != nil {
-		t.Fatalf("create fallback admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	snapshot := fixture.snapshot(10_000, 1_000_000)
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
-	if err != nil {
-		t.Fatalf("reserve primary exposure: %v", err)
-	}
-	fallbackRoute, err := selectRoute(snapshot, "economy", "normal", "normal")
-	if err != nil {
-		t.Fatalf("select fallback route: %v", err)
-	}
-	restricted, err := store.BeginFallback(
-		context.Background(), completionContext, snapshot, reservation.ReservationID,
-		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
-		fallbackRoute, 2,
-	)
-	if err != nil || restricted {
-		t.Fatalf("record primary, top up, and start fallback: %v", err)
-	}
-	restricted, err = store.BeginFallback(
-		context.Background(), completionContext, snapshot, reservation.ReservationID,
-		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
-		fallbackRoute, 2,
-	)
-	if err != nil || restricted {
-		t.Fatalf("replay primary, top up, and start fallback: restricted=%t err=%v", restricted, err)
-	}
-	highRoute, err := selectRoute(snapshot, "high_quality", "normal", "normal")
-	if err != nil {
-		t.Fatalf("select conflicting fallback route: %v", err)
-	}
-	if _, err := store.BeginFallback(
-		context.Background(), completionContext, snapshot, reservation.ReservationID,
-		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
-		highRoute, 2,
-	); !errors.Is(err, tenantchat.ErrIdempotencyConflict) {
-		t.Fatalf("conflicting fallback replay must be rejected, got %v", err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 175, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "top_up", ReservedDelta: 50},
-	})
-	commonReplay := replayCommonEmployeeReserve(
-		t, pool, fixture, completionContext, reservation.ReservationID, reservation.Route, now,
-	)
-	if !commonReplay.Replayed || commonReplay.State != employeecost.ReservationStateReserved ||
-		commonReplay.LedgerVersion != 2 {
-		t.Fatalf("replay common reserve after fallback top-up: %+v", commonReplay)
-	}
-	settlement, err := store.FinalizeConfirmed(
-		context.Background(), completionContext, reservation.ReservationID, 2,
-		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 20}, "succeeded",
-	)
-	if err != nil {
-		t.Fatalf("settle fallback: %v", err)
-	}
-	if settlement.ConfirmedInputTokens != 200 || settlement.ConfirmedOutputTokens != 30 ||
-		settlement.ConfirmedCostMicroUSD != 53 || settlement.LedgerVersion != 3 || len(settlement.Attempts) != 2 {
-		t.Fatalf("all-attempt settlement mismatch: %+v", settlement)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 53, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "settled", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 53, Unconfirmed: 0, LedgerVersion: 3,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 35, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "failed_post_delta", InputTokens: 100, OutputTokens: 10,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 2, employeeAttemptExpectation{
-		Kind: "fallback", ProviderID: "provider", ModelKey: "economy_model",
-		Reserved: 50, Confirmed: 18, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "succeeded", InputTokens: 100, OutputTokens: 20,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "top_up", ReservedDelta: 50},
-		{Version: 3, EventType: "settle", ReservedDelta: -175, ConfirmedDelta: 53},
-	})
-	commonReplay = replayCommonEmployeeReserve(
-		t, pool, fixture, completionContext, reservation.ReservationID, reservation.Route, now,
-	)
-	if !commonReplay.Replayed || commonReplay.State != employeecost.ReservationStateSettled ||
-		commonReplay.LedgerVersion != 3 {
-		t.Fatalf("replay common reserve after terminal settlement: %+v", commonReplay)
-	}
-}
-
-func TestZeroUsageDispatchedFallbackChainCanReleaseIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "zero_usage_fallback_release_request_001"
-	admissionContext.TurnID = "zero_usage_fallback_release_turn_001"
-	admissionContext.IdempotencyKey = "zero_usage_fallback_release_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create zero-usage fallback admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	snapshot := fixture.snapshot(10_000, 1_000_000)
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
-	if err != nil {
-		t.Fatalf("reserve zero-usage primary exposure: %v", err)
-	}
-	fallbackRoute, err := selectRoute(snapshot, "economy", "normal", "normal")
-	if err != nil {
-		t.Fatalf("select zero-usage fallback route: %v", err)
-	}
-	restricted, err := store.BeginFallback(
-		context.Background(), completionContext, snapshot, reservation.ReservationID,
-		1, tenantchat.ConfirmedUsage{}, "failed_post_delta", fallbackRoute, 2,
-	)
-	if err != nil || restricted {
-		t.Fatalf("begin zero-usage fallback: restricted=%t err=%v", restricted, err)
-	}
-	settlement, err := store.FinalizePreCall(
-		context.Background(), completionContext, reservation.ReservationID, 2, "failed",
-	)
-	if err != nil || settlement.State != "released" || settlement.LedgerVersion != 3 {
-		t.Fatalf("release zero-usage fallback chain: settlement=%+v err=%v", settlement, err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "released", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 0, Unconfirmed: 0, LedgerVersion: 3,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, UsageQuality: "confirmed", Outcome: "failed_post_delta",
-		DispatchState: "started",
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 2, employeeAttemptExpectation{
-		Kind: "fallback", ProviderID: "provider", ModelKey: "economy_model",
-		Reserved: 50, UsageQuality: "confirmed", Outcome: "failed_pre_delta",
-		DispatchState: "not_started",
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "top_up", ReservedDelta: 50},
-		{Version: 3, EventType: "release", ReservedDelta: -175},
-	})
-}
-
-func TestEnforcedEmployeePolicySkipsRestrictedFallbackWithoutAccountingResidueIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	fixture.configureEnforcedEmployeePolicy(t, pool, now)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "employee_fallback_restrict_request_001"
-	admissionContext.TurnID = "employee_fallback_restrict_turn_001"
-	admissionContext.IdempotencyKey = "employee_fallback_restrict_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create fallback restriction admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	snapshot := fixture.snapshot(10_000, 1_000_000)
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
-	if err != nil {
-		t.Fatalf("reserve lower primary before restricted fallback: %v", err)
-	}
-	highRoute, err := selectRoute(snapshot, "high_quality", "normal", "normal")
-	if err != nil {
-		t.Fatalf("select high-quality fallback route: %v", err)
-	}
-	restricted, err := store.BeginFallback(
-		context.Background(), completionContext, snapshot, reservation.ReservationID,
-		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
-		highRoute, 2,
-	)
-	if err != nil || !restricted {
-		t.Fatalf("high-quality fallback must be restricted without error: restricted=%t err=%v", restricted, err)
-	}
-
-	var nativeReserved int64
-	var nativeVersion int64
-	var nativePrimaryConfirmed int64
-	var nativePrimaryOutcome string
-	var nativeHighAttempts int
-	var commonReserved int64
-	var commonVersion int64
-	var commonPrimaryConfirmed int64
-	var commonPrimaryQuality string
-	var commonHighAttempts int
-	if err := pool.QueryRow(context.Background(), `
-		SELECT
-		  native_reservation.reserved_cost_micro_usd,
-		  native_reservation.ledger_version,
-		  native_primary.confirmed_cost_micro_usd,
-		  COALESCE(native_primary.outcome, ''),
-		  (SELECT count(*) FROM tenant_chat_provider_attempts WHERE request_id = $1 AND model_key = 'high_quality_model'),
-		  employee_reservation.reserved_cost_micro_usd,
-		  employee_reservation.ledger_version,
-		  employee_primary.confirmed_cost_micro_usd,
-		  employee_primary.usage_quality,
-		  (SELECT count(*) FROM tenant_employee_cost_provider_attempts WHERE surface = 'tenant_chat' AND request_id = $1 AND model_key = 'high_quality_model')
-		FROM tenant_chat_usage_reservations AS native_reservation
-		JOIN tenant_chat_provider_attempts AS native_primary
-		  ON native_primary.request_id = native_reservation.request_id AND native_primary.attempt_no = 1
-		JOIN tenant_employee_cost_reservations AS employee_reservation
-		  ON employee_reservation.surface = 'tenant_chat' AND employee_reservation.request_id = native_reservation.request_id
-		JOIN tenant_employee_cost_provider_attempts AS employee_primary
-		  ON employee_primary.surface = employee_reservation.surface
-		 AND employee_primary.request_id = employee_reservation.request_id
-		 AND employee_primary.attempt_no = 1
-		WHERE native_reservation.request_id = $1
-	`, completionContext.RequestID).Scan(
-		&nativeReserved, &nativeVersion, &nativePrimaryConfirmed, &nativePrimaryOutcome, &nativeHighAttempts,
-		&commonReserved, &commonVersion, &commonPrimaryConfirmed, &commonPrimaryQuality, &commonHighAttempts,
-	); err != nil {
-		t.Fatalf("read restricted fallback residue: %v", err)
-	}
-	if nativeReserved != 125 || nativeVersion != 1 || nativePrimaryConfirmed != 0 || nativePrimaryOutcome != "" || nativeHighAttempts != 0 ||
-		commonReserved != 125 || commonVersion != 1 || commonPrimaryConfirmed != 0 || commonPrimaryQuality != "not_available" || commonHighAttempts != 0 {
-		t.Fatalf(
-			"restricted fallback changed accounting: native=(%d,%d,%d,%s,%d) common=(%d,%d,%d,%s,%d)",
-			nativeReserved, nativeVersion, nativePrimaryConfirmed, nativePrimaryOutcome, nativeHighAttempts,
-			commonReserved, commonVersion, commonPrimaryConfirmed, commonPrimaryQuality, commonHighAttempts,
-		)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 125, Unconfirmed: 0, State: "normal", PolicyVersion: 8,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{{
-		Version: 1, EventType: "reserve", ReservedDelta: 125,
-	}})
-
-	lowerRoute, err := selectRoute(snapshot, "economy", "normal", "normal")
-	if err != nil {
-		t.Fatalf("select lower fallback route: %v", err)
-	}
-	restricted, err = store.BeginFallback(
-		context.Background(), completionContext, snapshot, reservation.ReservationID,
-		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10}, "failed_post_delta",
-		lowerRoute, 2,
-	)
-	if err != nil || restricted {
-		t.Fatalf("lower fallback must remain eligible: restricted=%t err=%v", restricted, err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 175, Unconfirmed: 0, State: "warning", PolicyVersion: 8,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 35, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "failed_post_delta", InputTokens: 100, OutputTokens: 10,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 2, employeeAttemptExpectation{
-		Kind: "fallback", ProviderID: "provider", ModelKey: "economy_model",
-		Reserved: 50, Confirmed: 0, Unconfirmed: 0, UsageQuality: "not_available",
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "top_up", ReservedDelta: 50},
-	})
 }
 
 func TestFinalizeReleasedReturnsReservedExposureIntegration(t *testing.T) {
@@ -801,659 +706,6 @@ func TestFinalizeUnconfirmedMovesExposureToIncidentHoldIntegration(t *testing.T)
 		t.Fatalf(
 			"unconfirmed records mismatch: state=%s reservedTokens=%d unconfirmedTokens=%d reservedCost=%d unconfirmedCost=%d quality=%s outcome=%s",
 			reservationState, reservedTokens, unconfirmedTokens, reservedCost, unconfirmedCost, usageQuality, outcome,
-		)
-	}
-}
-
-func TestProviderIntentCrashIsPromotedAndReconciledIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "dispatched_crash_request_001"
-	admissionContext.TurnID = "dispatched_crash_turn_001"
-	admissionContext.IdempotencyKey = "dispatched_crash_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create dispatched crash admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	snapshot := fixture.snapshot(10_000, 1_000_000)
-	streamDuration, err := snapshot.Policies.Streaming.Duration()
-	if err != nil {
-		t.Fatalf("resolve provider intent duration: %v", err)
-	}
-	intentExpiresAt := now.Add(streamDuration)
-	reservation, err := store.BeginExecution(
-		context.Background(), completionContext, snapshot,
-	)
-	if err != nil {
-		t.Fatalf("reserve dispatched crash exposure: %v", err)
-	}
-	var nativePendingAt time.Time
-	var commonPendingAt time.Time
-	var commonDispatchState string
-	if err := pool.QueryRow(context.Background(), `
-		SELECT native.usage_pending_at, common.usage_pending_at, attempt.dispatch_state
-		FROM tenant_chat_usage_reservations AS native
-		JOIN tenant_employee_cost_reservations AS common
-		  ON common.surface = 'tenant_chat' AND common.request_id = native.request_id
-		JOIN tenant_employee_cost_provider_attempts AS attempt
-		  ON attempt.surface = common.surface AND attempt.request_id = common.request_id
-		 AND attempt.attempt_no = 1
-		WHERE native.reservation_id = $1::uuid
-	`, reservation.ReservationID).Scan(
-		&nativePendingAt, &commonPendingAt, &commonDispatchState,
-	); err != nil {
-		t.Fatalf("read provider intent watchdog markers: %v", err)
-	}
-	if !nativePendingAt.Equal(intentExpiresAt) || !commonPendingAt.Equal(intentExpiresAt) || commonDispatchState != "not_started" {
-		t.Fatalf(
-			"provider intent watchdog mismatch: native=%s common=%s dispatch=%s want=%s/not_started",
-			nativePendingAt, commonPendingAt, commonDispatchState, intentExpiresAt,
-		)
-	}
-	if processed, err := store.ReconcileNextPending(context.Background(), now); err != nil || processed {
-		t.Fatalf("active provider intent must not reconcile early: processed=%t err=%v", processed, err)
-	}
-
-	store.now = func() time.Time { return intentExpiresAt.Add(15 * time.Minute) }
-	processed, err := store.ReconcileNextPending(context.Background(), intentExpiresAt)
-	if err != nil || !processed {
-		t.Fatalf("reconcile crashed dispatch: processed=%t err=%v", processed, err)
-	}
-	terminal, err := store.ReadTerminal(
-		context.Background(), completionContext, reservation.ReservationID,
-	)
-	if err != nil || terminal.State != "unconfirmed" || terminal.LedgerVersion != 2 ||
-		terminal.UnconfirmedTokens != 200 || terminal.UnconfirmedExposureMicroUSD != 125 {
-		t.Fatalf("read reconciled crash terminal: terminal=%+v err=%v", terminal, err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 0, Unconfirmed: 125, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "unconfirmed", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 0, Unconfirmed: 125, LedgerVersion: 2,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Unconfirmed: 125, UsageQuality: "pending_unconfirmed",
-		Outcome: "timed_out", DispatchState: "started", UsagePending: true,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "unconfirmed", ReservedDelta: -125, UnconfirmedDelta: 125},
-	})
-}
-
-func TestPendingReceiptBeforeDeadlineSettlesNativeAndEmployeeLedgersIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "pending_receipt_request_001"
-	admissionContext.TurnID = "pending_receipt_turn_001"
-	admissionContext.IdempotencyKey = "pending_receipt_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create pre-deadline receipt admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(
-		context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000),
-	)
-	if err != nil {
-		t.Fatalf("begin pre-deadline receipt execution: %v", err)
-	}
-	if _, err := store.MarkPending(
-		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
-	); err != nil {
-		t.Fatalf("mark pre-deadline receipt pending: %v", err)
-	}
-
-	store.now = func() time.Time { return now.Add(5 * time.Minute) }
-	receipt := tenantchat.UsageReceipt{
-		RequestID: completionContext.RequestID, AttemptNo: 1, ProviderID: "provider",
-		InputTokens: 80, OutputTokens: 20, CacheReadInputTokens: 0,
-	}
-	result, err := store.RecordUsageReceipt(context.Background(), receipt)
-	if err != nil || result.State != "settled" || result.Replayed {
-		t.Fatalf("settle pending receipt before deadline: result=%+v err=%v", result, err)
-	}
-	replayed, err := store.RecordUsageReceipt(context.Background(), receipt)
-	if err != nil || replayed.State != "settled" || !replayed.Replayed {
-		t.Fatalf("replay pre-deadline receipt: result=%+v err=%v", replayed, err)
-	}
-
-	var nativeState string
-	var nativeLedgerVersion int64
-	var nativeReservedTokens int64
-	var nativeConfirmedTokens int64
-	var nativeUnconfirmedTokens int64
-	var nativeReservedCost int64
-	var nativeConfirmedCost int64
-	var nativeUnconfirmedCost int64
-	var nativePending bool
-	var attemptQuality string
-	var attemptOutcome string
-	var attemptInput int64
-	var attemptOutput int64
-	var attemptCost int64
-	if err := pool.QueryRow(context.Background(), `
-		SELECT reservation.state, reservation.ledger_version,
-		       token_period.reserved_tokens, token_period.confirmed_total_tokens,
-		       token_period.unconfirmed_tokens,
-		       cost_period.reserved_cost_micro_usd, cost_period.confirmed_cost_micro_usd,
-		       cost_period.unconfirmed_exposure_micro_usd,
-		       reservation.usage_pending_at IS NOT NULL,
-		       attempt.usage_quality, attempt.outcome,
-		       attempt.confirmed_input_tokens, attempt.confirmed_output_tokens,
-		       attempt.confirmed_cost_micro_usd
-		FROM tenant_chat_usage_reservations AS reservation
-		JOIN tenant_chat_user_token_periods AS token_period
-		  ON token_period.tenant_id = reservation.tenant_id
-		 AND token_period.user_id = reservation.user_id
-		 AND token_period.period_start = reservation.user_period_start
-		JOIN tenant_chat_tenant_cost_periods AS cost_period
-		  ON cost_period.tenant_id = reservation.tenant_id
-		 AND cost_period.period_start = reservation.tenant_period_start
-		 AND cost_period.currency = reservation.currency
-		JOIN tenant_chat_provider_attempts AS attempt
-		  ON attempt.request_id = reservation.request_id
-		 AND attempt.reservation_id = reservation.reservation_id
-		 AND attempt.attempt_no = 1
-		WHERE reservation.reservation_id = $1::uuid
-	`, reservation.ReservationID).Scan(
-		&nativeState, &nativeLedgerVersion,
-		&nativeReservedTokens, &nativeConfirmedTokens, &nativeUnconfirmedTokens,
-		&nativeReservedCost, &nativeConfirmedCost, &nativeUnconfirmedCost,
-		&nativePending, &attemptQuality, &attemptOutcome,
-		&attemptInput, &attemptOutput, &attemptCost,
-	); err != nil {
-		t.Fatalf("read pre-deadline native settlement: %v", err)
-	}
-	if nativeState != "settled" || nativeLedgerVersion != 2 || nativeReservedTokens != 0 ||
-		nativeConfirmedTokens != 100 || nativeUnconfirmedTokens != 0 || nativeReservedCost != 0 ||
-		nativeConfirmedCost != 40 || nativeUnconfirmedCost != 0 || nativePending ||
-		attemptQuality != "confirmed" || attemptOutcome != "timed_out" ||
-		attemptInput != 80 || attemptOutput != 20 || attemptCost != 40 {
-		t.Fatalf(
-			"pre-deadline native settlement mismatch: state=%s ledger=%d tokens=(%d,%d,%d) cost=(%d,%d,%d) pending=%t attempt=(%s,%s,%d,%d,%d)",
-			nativeState, nativeLedgerVersion,
-			nativeReservedTokens, nativeConfirmedTokens, nativeUnconfirmedTokens,
-			nativeReservedCost, nativeConfirmedCost, nativeUnconfirmedCost, nativePending,
-			attemptQuality, attemptOutcome, attemptInput, attemptOutput, attemptCost,
-		)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 40, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "settled", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 40, Unconfirmed: 0, LedgerVersion: 2,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 40, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "timed_out", DispatchState: "started", InputTokens: 80, OutputTokens: 20,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "settle", ReservedDelta: -125, ConfirmedDelta: 40},
-	})
-}
-
-func TestPendingDeadlineAndLateReceiptExactlyOnceIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "pending_late_request_001"
-	admissionContext.TurnID = "pending_late_turn_001"
-	admissionContext.IdempotencyKey = "pending_late_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create pending admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000))
-	if err != nil {
-		t.Fatalf("begin pending execution: %v", err)
-	}
-	settlement, err := store.MarkPending(
-		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
-	)
-	if err != nil || settlement.State != "pending_unconfirmed" {
-		t.Fatalf("mark pending: settlement=%+v err=%v", settlement, err)
-	}
-	replayedPending, err := store.MarkPending(
-		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
-	)
-	if err != nil || !replayedPending.Replayed {
-		t.Fatalf("replay pending attempt: result=%+v err=%v", replayedPending, err)
-	}
-	if _, err := store.MarkPending(
-		context.Background(), completionContext, reservation.ReservationID, 1, "failed_post_delta",
-	); !errors.Is(err, tenantchat.ErrIdempotencyConflict) {
-		t.Fatalf("conflicting pending replay must be rejected, got %v", err)
-	}
-	var state string
-	var pendingAt time.Time
-	var reservedTokens int64
-	if err := pool.QueryRow(context.Background(), `
-		SELECT state, usage_pending_at, reserved_tokens
-		FROM tenant_chat_usage_reservations WHERE reservation_id = $1::uuid
-	`, reservation.ReservationID).Scan(&state, &pendingAt, &reservedTokens); err != nil {
-		t.Fatalf("read pending reservation: %v", err)
-	}
-	if state != "reserved" || !pendingAt.Equal(now) || reservedTokens != 200 {
-		t.Fatalf("pending exposure changed early: state=%s pending=%s reserved=%d", state, pendingAt, reservedTokens)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 125, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "reserved", PolicyVersion: 7,
-		Reserved: 125, Confirmed: 0, Unconfirmed: 0, LedgerVersion: 1, UsagePending: true,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 0, Unconfirmed: 0, UsageQuality: "pending_unconfirmed",
-		Outcome: "timed_out", DispatchState: "started", InputTokens: 0, OutputTokens: 0,
-		UsagePending: true,
-	})
-	processed, err := store.ReconcileNextPending(context.Background(), now.Add(15*time.Minute))
-	if err != nil || !processed {
-		t.Fatalf("reconcile exact deadline: processed=%t err=%v", processed, err)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 0, Unconfirmed: 125, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "unconfirmed", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 0, Unconfirmed: 125, LedgerVersion: 2,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 0, Unconfirmed: 125, UsageQuality: "pending_unconfirmed",
-		Outcome: "timed_out", DispatchState: "started", InputTokens: 0, OutputTokens: 0,
-		UsagePending: true,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "unconfirmed", ReservedDelta: -125, UnconfirmedDelta: 125},
-	})
-	store.now = func() time.Time { return now.AddDate(0, 0, 8) }
-	late := tenantchat.UsageReceipt{
-		RequestID: completionContext.RequestID, AttemptNo: 1, ProviderID: "provider",
-		InputTokens: 80, OutputTokens: 20, CacheReadInputTokens: 0,
-	}
-	result, err := store.RecordUsageReceipt(context.Background(), late)
-	if err != nil || result.State != "settled" || result.Replayed {
-		t.Fatalf("record late receipt: result=%+v err=%v", result, err)
-	}
-	replayed, err := store.RecordUsageReceipt(context.Background(), late)
-	if err != nil || !replayed.Replayed || replayed.State != "settled" {
-		t.Fatalf("replay late receipt: result=%+v err=%v", replayed, err)
-	}
-	conflict := late
-	conflict.OutputTokens++
-	if _, err := store.RecordUsageReceipt(context.Background(), conflict); !errors.Is(err, tenantchat.ErrIdempotencyConflict) {
-		t.Fatalf("conflicting late receipt must be rejected, got %v", err)
-	}
-	var unconfirmedTokens int64
-	var confirmedTokens int64
-	var payload []byte
-	if err := pool.QueryRow(context.Background(), `
-		SELECT token_period.unconfirmed_tokens, token_period.confirmed_total_tokens, outbox.payload
-		FROM tenant_chat_usage_reservations AS reservation
-		JOIN tenant_chat_user_token_periods AS token_period
-		  ON token_period.tenant_id = reservation.tenant_id
-		 AND token_period.user_id = reservation.user_id
-		 AND token_period.period_start = reservation.user_period_start
-		JOIN tenant_chat_invocation_outbox AS outbox
-		  ON outbox.aggregate_id = reservation.request_id AND outbox.event_version = 3
-		WHERE reservation.reservation_id = $1::uuid
-	`, reservation.ReservationID).Scan(&unconfirmedTokens, &confirmedTokens, &payload); err != nil {
-		t.Fatalf("read late settlement: %v", err)
-	}
-	var event map[string]any
-	if err := json.Unmarshal(payload, &event); err != nil {
-		t.Fatalf("decode late event: %v", err)
-	}
-	if unconfirmedTokens != 0 || confirmedTokens != 100 || event["schemaVersion"] != float64(3) ||
-		event["cacheOutcome"] != "off" || event["lateUsage"] != true {
-		t.Fatalf("unexpected late transition: unconfirmed=%d confirmed=%d event=%v", unconfirmedTokens, confirmedTokens, event)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 40, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "settled", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 40, Unconfirmed: 0, LedgerVersion: 3,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 125, Confirmed: 40, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "timed_out", DispatchState: "started", InputTokens: 80, OutputTokens: 20,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve", ReservedDelta: 125},
-		{Version: 2, EventType: "unconfirmed", ReservedDelta: -125, UnconfirmedDelta: 125},
-		{Version: 3, EventType: "late_correction", ConfirmedDelta: 40, UnconfirmedDelta: -125},
-	})
-}
-
-func TestZeroCostPendingReconciliationAndLateReceiptPreserveEmployeeLedgerVersionsIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "zero_cost_pending_request_001"
-	admissionContext.TurnID = "zero_cost_pending_turn_001"
-	admissionContext.IdempotencyKey = "zero_cost_pending_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create zero-cost pending admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	snapshot := fixture.snapshot(10_000, 1_000_000)
-	standardFound := false
-	for index := range snapshot.Pricing.Routes {
-		if snapshot.Pricing.Routes[index].RouteID == "standard_route" {
-			snapshot.Pricing.Routes[index].InputMicroUSDPerMillionTokens = 0
-			snapshot.Pricing.Routes[index].OutputMicroUSDPerMillionTokens = 0
-			standardFound = true
-		}
-	}
-	if !standardFound {
-		t.Fatal("standard route is missing from zero-cost snapshot")
-	}
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
-	if err != nil {
-		t.Fatalf("begin zero-cost pending execution: %v", err)
-	}
-	if reservation.ReservedCostMicroUSD != 0 || reservation.LedgerVersion != 1 {
-		t.Fatalf("unexpected zero-cost reservation: %+v", reservation)
-	}
-	if _, err := store.MarkPending(
-		context.Background(), completionContext, reservation.ReservationID, 1, "timed_out",
-	); err != nil {
-		t.Fatalf("mark zero-cost attempt pending: %v", err)
-	}
-	processed, err := store.ReconcileNextPending(context.Background(), now.Add(15*time.Minute))
-	if err != nil || !processed {
-		t.Fatalf("reconcile zero-cost pending attempt: processed=%t err=%v", processed, err)
-	}
-
-	var nativeState string
-	var nativeVersion int64
-	var nativeUnconfirmedTokens int64
-	var nativeUnconfirmedCost int64
-	if err := pool.QueryRow(context.Background(), `
-		SELECT state, ledger_version, unconfirmed_tokens, unconfirmed_exposure_micro_usd
-		FROM tenant_chat_usage_reservations
-		WHERE reservation_id = $1::uuid
-	`, reservation.ReservationID).Scan(
-		&nativeState, &nativeVersion, &nativeUnconfirmedTokens, &nativeUnconfirmedCost,
-	); err != nil {
-		t.Fatalf("read reconciled zero-cost native reservation: %v", err)
-	}
-	if nativeState != "unconfirmed" || nativeVersion != 2 ||
-		nativeUnconfirmedTokens != 200 || nativeUnconfirmedCost != 0 {
-		t.Fatalf(
-			"zero-cost native reconciliation mismatch: state=%s version=%d unconfirmedTokens=%d unconfirmedCost=%d",
-			nativeState, nativeVersion, nativeUnconfirmedTokens, nativeUnconfirmedCost,
-		)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "unconfirmed", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 0, Unconfirmed: 0, LedgerVersion: 2,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 0, Confirmed: 0, Unconfirmed: 0, UsageQuality: "pending_unconfirmed",
-		Outcome: "timed_out", DispatchState: "started", UsagePending: true,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve"},
-		{Version: 2, EventType: "unconfirmed"},
-	})
-
-	store.now = func() time.Time { return now.AddDate(0, 0, 8) }
-	receipt := tenantchat.UsageReceipt{
-		RequestID: completionContext.RequestID, AttemptNo: 1, ProviderID: "provider",
-		InputTokens: 80, OutputTokens: 20, CacheReadInputTokens: 0,
-	}
-	result, err := store.RecordUsageReceipt(context.Background(), receipt)
-	if err != nil || result.State != "settled" || result.Replayed {
-		t.Fatalf("settle zero-cost late receipt: result=%+v err=%v", result, err)
-	}
-	if err := pool.QueryRow(context.Background(), `
-		SELECT state, ledger_version, unconfirmed_tokens, unconfirmed_exposure_micro_usd
-		FROM tenant_chat_usage_reservations
-		WHERE reservation_id = $1::uuid
-	`, reservation.ReservationID).Scan(
-		&nativeState, &nativeVersion, &nativeUnconfirmedTokens, &nativeUnconfirmedCost,
-	); err != nil {
-		t.Fatalf("read settled zero-cost native reservation: %v", err)
-	}
-	if nativeState != "settled" || nativeVersion != 3 ||
-		nativeUnconfirmedTokens != 0 || nativeUnconfirmedCost != 0 {
-		t.Fatalf(
-			"zero-cost native late settlement mismatch: state=%s version=%d unconfirmedTokens=%d unconfirmedCost=%d",
-			nativeState, nativeVersion, nativeUnconfirmedTokens, nativeUnconfirmedCost,
-		)
-	}
-	assertEmployeePeriods(t, pool, fixture, employeePeriodExpectation{
-		Confirmed: 0, Reserved: 0, Unconfirmed: 0, State: "not_configured", PolicyVersion: 7,
-	})
-	assertEmployeeReservation(t, pool, completionContext.RequestID, employeeReservationExpectation{
-		EmployeeID: fixture.employeeID, State: "settled", PolicyVersion: 7,
-		Reserved: 0, Confirmed: 0, Unconfirmed: 0, LedgerVersion: 3,
-	})
-	assertEmployeeAttempt(t, pool, completionContext.RequestID, 1, employeeAttemptExpectation{
-		Kind: "primary", ProviderID: "provider", ModelKey: "standard_model",
-		Reserved: 0, Confirmed: 0, Unconfirmed: 0, UsageQuality: "confirmed",
-		Outcome: "timed_out", DispatchState: "started", InputTokens: 80, OutputTokens: 20,
-	})
-	assertEmployeeLedger(t, pool, completionContext.RequestID, []employeeLedgerExpectation{
-		{Version: 1, EventType: "reserve"},
-		{Version: 2, EventType: "unconfirmed"},
-		{Version: 3, EventType: "late_correction"},
-	})
-}
-
-func TestEmployeeLedgerFailureRollsBackNativeReservationIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "employee_rollback_request_001"
-	admissionContext.TurnID = "employee_rollback_turn_001"
-	admissionContext.IdempotencyKey = "employee_rollback_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create rollback admission: %v", err)
-	}
-	fixture.seedConflictingEmployeeReservation(t, pool, admissionContext.RequestID, now)
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-
-	if _, err := store.BeginExecution(
-		context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000),
-	); err == nil {
-		t.Fatalf("common identity conflict must fail the whole usage guard transaction, got %v", err)
-	}
-
-	var admissionState string
-	var admissionUnconsumed bool
-	var slotHeld bool
-	if err := pool.QueryRow(context.Background(), `
-		SELECT state, consumed_at IS NULL, slot_released_at IS NULL
-		FROM tenant_chat_request_admissions
-		WHERE admission_id = $1::uuid
-	`, admission.AdmissionID).Scan(&admissionState, &admissionUnconsumed, &slotHeld); err != nil {
-		t.Fatalf("read rolled-back admission: %v", err)
-	}
-	if admissionState != "active" || !admissionUnconsumed || !slotHeld {
-		t.Fatalf("admission consume escaped rollback: state=%s unconsumed=%t slotHeld=%t", admissionState, admissionUnconsumed, slotHeld)
-	}
-
-	var tokenPeriods int
-	var tenantCostPeriods int
-	var nativeReservations int
-	var nativeAttempts int
-	var nativeLedger int
-	var nativeOutbox int
-	if err := pool.QueryRow(context.Background(), `
-		SELECT
-		  (SELECT count(*) FROM tenant_chat_user_token_periods WHERE tenant_id = $1::uuid AND user_id = $2::uuid),
-		  (SELECT count(*) FROM tenant_chat_tenant_cost_periods WHERE tenant_id = $1::uuid),
-		  (SELECT count(*) FROM tenant_chat_usage_reservations WHERE request_id = $3),
-		  (SELECT count(*) FROM tenant_chat_provider_attempts WHERE request_id = $3),
-		  (SELECT count(*) FROM tenant_chat_usage_ledger_entries WHERE request_id = $3),
-		  (SELECT count(*) FROM tenant_chat_invocation_outbox WHERE aggregate_id = $3)
-	`, fixture.tenantID, fixture.userID, completionContext.RequestID).Scan(
-		&tokenPeriods, &tenantCostPeriods, &nativeReservations, &nativeAttempts, &nativeLedger, &nativeOutbox,
-	); err != nil {
-		t.Fatalf("read rolled-back native rows: %v", err)
-	}
-	if tokenPeriods != 0 || tenantCostPeriods != 0 || nativeReservations != 0 || nativeAttempts != 0 || nativeLedger != 0 || nativeOutbox != 0 {
-		t.Fatalf(
-			"native accounting escaped rollback: tokenPeriods=%d tenantCostPeriods=%d reservations=%d attempts=%d ledger=%d outbox=%d",
-			tokenPeriods, tenantCostPeriods, nativeReservations, nativeAttempts, nativeLedger, nativeOutbox,
-		)
-	}
-
-	var targetPeriods int
-	var targetReservations int
-	var conflictingReservations int
-	if err := pool.QueryRow(context.Background(), `
-		SELECT
-		  (SELECT count(*) FROM tenant_employee_cost_periods WHERE tenant_id = $1::uuid AND employee_id = $2::uuid),
-		  (SELECT count(*) FROM tenant_employee_cost_reservations WHERE tenant_id = $1::uuid AND employee_id = $2::uuid),
-		  (SELECT count(*) FROM tenant_employee_cost_reservations WHERE surface = 'tenant_chat' AND request_id = $3)
-	`, fixture.tenantID, fixture.employeeID, completionContext.RequestID).Scan(
-		&targetPeriods, &targetReservations, &conflictingReservations,
-	); err != nil {
-		t.Fatalf("read rolled-back common rows: %v", err)
-	}
-	if targetPeriods != 0 || targetReservations != 0 || conflictingReservations != 1 {
-		t.Fatalf(
-			"common accounting rollback mismatch: targetPeriods=%d targetReservations=%d conflictSeed=%d",
-			targetPeriods, targetReservations, conflictingReservations,
-		)
-	}
-}
-
-func TestMarkDispatchedFailsClosedWhenEmployeeAttemptIsMissingIntegration(t *testing.T) {
-	pool, fixture := setupUsageIntegration(t)
-	fixture.configureShadowDisabledEmployeePolicy(t, pool)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	admissionContext := fixture.admissionContext()
-	admissionContext.RequestID = "employee_dispatch_missing_request_001"
-	admissionContext.TurnID = "employee_dispatch_missing_turn_001"
-	admissionContext.IdempotencyKey = "employee_dispatch_missing_attempt_001"
-	admission, err := admissionpostgres.NewStore(pool).Create(
-		context.Background(), admissionContext,
-		tenantchat.AdmissionLimits{RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second},
-	)
-	if err != nil {
-		t.Fatalf("create missing employee attempt admission: %v", err)
-	}
-	completionContext := fixture.completionContext(admission.AdmissionID)
-	completionContext.RequestID = admissionContext.RequestID
-	completionContext.TurnID = admissionContext.TurnID
-	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
-	store := NewReservationStore(pool)
-	store.now = func() time.Time { return now }
-	reservation, err := store.BeginExecution(
-		context.Background(), completionContext, fixture.snapshot(10_000, 1_000_000),
-	)
-	if err != nil {
-		t.Fatalf("begin missing employee attempt execution: %v", err)
-	}
-	if tag, err := pool.Exec(context.Background(), `
-		DELETE FROM tenant_employee_cost_provider_attempts
-		WHERE surface = 'tenant_chat' AND request_id = $1 AND attempt_no = 1
-	`, completionContext.RequestID); err != nil || tag.RowsAffected() != 1 {
-		t.Fatalf("remove employee attempt fixture: affected=%d err=%v", tag.RowsAffected(), err)
-	}
-
-	if err := store.MarkDispatched(
-		context.Background(), completionContext, reservation.ReservationID, 1,
-	); !errors.Is(err, tenantchat.ErrUsageGuardUnavailable) {
-		t.Fatalf("missing employee attempt must fail dispatch closed, got %v", err)
-	}
-
-	var nativeState string
-	var nativeVersion int64
-	var employeeState string
-	var employeeVersion int64
-	var employeeAttempts int
-	if err := pool.QueryRow(context.Background(), `
-		SELECT native.state, native.ledger_version,
-		       employee.state, employee.ledger_version,
-		       (SELECT count(*) FROM tenant_employee_cost_provider_attempts
-		        WHERE surface = 'tenant_chat' AND request_id = $1)
-		FROM tenant_chat_usage_reservations AS native
-		JOIN tenant_employee_cost_reservations AS employee
-		  ON employee.surface = 'tenant_chat' AND employee.request_id = native.request_id
-		WHERE native.request_id = $1
-	`, completionContext.RequestID).Scan(
-		&nativeState, &nativeVersion, &employeeState, &employeeVersion, &employeeAttempts,
-	); err != nil {
-		t.Fatalf("read failed-closed dispatch records: %v", err)
-	}
-	if nativeState != "reserved" || nativeVersion != 1 || employeeState != "reserved" ||
-		employeeVersion != 1 || employeeAttempts != 0 {
-		t.Fatalf(
-			"failed-closed dispatch changed accounting: native=(%s,%d) employee=(%s,%d) attempts=%d",
-			nativeState, nativeVersion, employeeState, employeeVersion, employeeAttempts,
 		)
 	}
 }
@@ -2083,6 +1335,7 @@ func setupUsageIntegration(t *testing.T) (*pgxpool.Pool, usageFixture) {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_usage_ledger_entries WHERE tenant_id = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_provider_attempts WHERE tenant_id = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_usage_reservations WHERE tenant_id = $1::uuid`, fixture.tenantID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_employee_weekly_token_periods WHERE tenant_id = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_user_token_periods WHERE tenant_id = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_tenant_cost_periods WHERE tenant_id = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_request_admissions WHERE tenant_id = $1::uuid`, fixture.tenantID)

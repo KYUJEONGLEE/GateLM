@@ -151,6 +151,36 @@ describe('Tenant Chat runtime contract', () => {
       'policies.quota.timezone is not an IANA timezone',
     );
   });
+
+  it('accepts an employee weekly token limit including immediate block and rejects duplicate employees', () => {
+    const snapshot = contractSnapshotFixture();
+    snapshot.policies.quota.employeeWeeklyTokenLimits = [
+      { employeeId: 'employee_fixture_001', limitTokens: 0 },
+    ];
+    snapshot.pricing.digest = computeTenantChatPricingDigest(snapshot.pricing);
+    snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+    expect(() => validateTenantChatRuntimeSnapshot(snapshot)).not.toThrow();
+
+    snapshot.policies.quota.employeeWeeklyTokenLimits = [
+      { employeeId: 'employee_fixture_001', limitTokens: 1 },
+      { employeeId: 'employee_fixture_001', limitTokens: 2 },
+    ];
+    snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+    expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
+      'employeeId is duplicated',
+    );
+
+    snapshot.policies.quota.employeeWeeklyTokenLimits = [
+      {
+        employeeId: 'employee_fixture_001',
+        limitTokens: snapshot.policies.quota.defaultMonthlyTokenLimit + 1,
+      },
+    ];
+    snapshot.digest = computeTenantChatSnapshotDigest(snapshot);
+    expect(() => validateTenantChatRuntimeSnapshot(snapshot)).toThrow(
+      'limitTokens cannot exceed policies.quota.defaultMonthlyTokenLimit',
+    );
+  });
 });
 
 function setValueAtPath(target: unknown, path: string, value: unknown): void {

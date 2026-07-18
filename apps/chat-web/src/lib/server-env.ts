@@ -18,10 +18,11 @@ export function serverEnv() {
   if (serviceToken.length < 32 || /placeholder|replace-me/i.test(serviceToken)) {
     throw new Error('TENANT_CHAT_WEB_SERVICE_TOKEN must be a strong non-placeholder value.');
   }
+  const chatWebOrigin = origin('GATELM_CHAT_WEB_ORIGIN');
   return {
     chatApiBaseUrl: origin('TENANT_CHAT_API_BASE_URL'),
-    chatWebOrigin: origin('GATELM_CHAT_WEB_ORIGIN'),
-    production: process.env.NODE_ENV === 'production',
+    chatWebOrigin,
+    secureCookies: new URL(chatWebOrigin).protocol === 'https:',
     serviceToken,
   };
 }

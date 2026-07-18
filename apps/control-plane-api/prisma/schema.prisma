@@ -75,6 +75,9 @@ model Tenant {
   tenantChatActiveRuntimeSnapshot TenantChatActiveRuntimeSnapshot?
   tenantChatRequestAdmissions     TenantChatRequestAdmission[]
   tenantChatUserTokenPeriods      TenantChatUserTokenPeriod[]
+  tenantChatEmployeeWeeklyTokenPolicies TenantChatEmployeeWeeklyTokenPolicy[]
+  tenantChatEmployeeWeeklyTokenPolicyAudits TenantChatEmployeeWeeklyTokenPolicyAudit[]
+  tenantChatEmployeeWeeklyTokenPeriods TenantChatEmployeeWeeklyTokenPeriod[]
   tenantChatTenantCostPeriods     TenantChatTenantCostPeriod[]
   tenantChatProviderAttempts      TenantChatProviderAttempt[]
   tenantChatUsageLedgerEntries    TenantChatUsageLedgerEntry[]
@@ -404,6 +407,9 @@ model Employee {
   costPolicyAudits            TenantEmployeeCostPolicyAudit[]
   costPeriods                 TenantEmployeeCostPeriod[]
   costReservations            TenantEmployeeCostReservation[]
+  weeklyTokenPolicy           TenantChatEmployeeWeeklyTokenPolicy?
+  weeklyTokenPolicyAudits     TenantChatEmployeeWeeklyTokenPolicyAudit[]
+  weeklyTokenPeriods          TenantChatEmployeeWeeklyTokenPeriod[]
 
   @@unique([id, tenantId], map: "employees_identity_tenant_key")
   @@index([tenantId, status])
@@ -1180,6 +1186,74 @@ model TenantChatUserTokenPeriod {
   @@map("tenant_chat_user_token_periods")
 }
 
+model TenantChatEmployeeWeeklyTokenPolicy {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  employeeId   String   @map("employee_id") @db.Uuid
+  enabled      Boolean  @default(false)
+  limitTokens  BigInt   @default(0) @map("limit_tokens")
+  timezone     String   @default("Asia/Seoul")
+  version      Int      @default(1)
+  updatedBy    String   @map("updated_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  employee Employee @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction)
+  audits TenantChatEmployeeWeeklyTokenPolicyAudit[]
+
+  @@id([tenantId, employeeId])
+  @@unique([employeeId, tenantId], map: "tenant_chat_employee_weekly_policy_employee_tenant_key")
+  @@index([tenantId, enabled], map: "tenant_chat_employee_weekly_policy_enabled_idx")
+  @@map("tenant_chat_employee_weekly_token_policies")
+}
+
+model TenantChatEmployeeWeeklyTokenPolicyAudit {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  employeeId    String   @map("employee_id") @db.Uuid
+  actorId       String   @map("actor_id") @db.Uuid
+  policyVersion Int      @map("policy_version")
+  action        String   @default("policy_updated")
+  previousPolicy Json    @default("{}") @map("previous_policy")
+  nextPolicy     Json    @map("next_policy")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  employee Employee @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction)
+  policy TenantChatEmployeeWeeklyTokenPolicy @relation(fields: [tenantId, employeeId], references: [tenantId, employeeId], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, employeeId, policyVersion], map: "tenant_chat_employee_weekly_policy_audit_version_key")
+  @@index([tenantId, employeeId, createdAt], map: "tenant_chat_employee_weekly_policy_audit_idx")
+  @@map("tenant_chat_employee_weekly_token_policy_audits")
+}
+
+model TenantChatEmployeeWeeklyTokenPeriod {
+  tenantId               String   @map("tenant_id") @db.Uuid
+  employeeId             String   @map("employee_id") @db.Uuid
+  periodStart            DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd              DateTime @map("period_end") @db.Timestamptz(6)
+  periodTimezone         String   @map("period_timezone")
+  limitTokens            BigInt   @map("limit_tokens")
+  reservedTokens         BigInt   @default(0) @map("reserved_tokens")
+  confirmedInputTokens   BigInt   @default(0) @map("confirmed_input_tokens")
+  confirmedOutputTokens  BigInt   @default(0) @map("confirmed_output_tokens")
+  confirmedTotalTokens   BigInt   @default(0) @map("confirmed_total_tokens")
+  unconfirmedTokens      BigInt   @default(0) @map("unconfirmed_tokens")
+  state                  String   @default("normal")
+  policyVersion          Int      @map("policy_version")
+  version                BigInt   @default(1)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  employee Employee @relation(fields: [employeeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: NoAction)
+  reservations TenantChatUsageReservation[] @relation("TenantChatReservationEmployeeWeeklyPeriod")
+
+  @@id([tenantId, employeeId, periodStart])
+  @@index([tenantId, employeeId, periodEnd], map: "tenant_chat_employee_weekly_period_current_idx")
+  @@map("tenant_chat_employee_weekly_token_periods")
+}
+
 model TenantChatTenantCostPeriod {
   tenantId                    String   @map("tenant_id") @db.Uuid
   periodStart                 DateTime @map("period_start") @db.Timestamptz(6)
@@ -1214,6 +1288,8 @@ model TenantChatUsageReservation {
   turnId                      String    @map("turn_id")
   idempotencyKey              String    @map("idempotency_key")
   userPeriodStart             DateTime  @map("user_period_start") @db.Timestamptz(6)
+  employeeId                  String?   @map("employee_id") @db.Uuid
+  employeeWeeklyPeriodStart   DateTime? @map("employee_weekly_period_start") @db.Timestamptz(6)
   tenantPeriodStart           DateTime  @map("tenant_period_start") @db.Timestamptz(6)
   currency                    String    @default("USD") @db.Char(3)
   snapshotVersion             BigInt    @map("snapshot_version")
@@ -1236,6 +1312,7 @@ model TenantChatUsageReservation {
   updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   userPeriod       TenantChatUserTokenPeriod    @relation("TenantChatReservationUserPeriod", fields: [tenantId, userId, userPeriodStart], references: [tenantId, userId, periodStart], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_reservation_user_period_fkey")
+  employeeWeeklyPeriod TenantChatEmployeeWeeklyTokenPeriod? @relation("TenantChatReservationEmployeeWeeklyPeriod", fields: [tenantId, employeeId, employeeWeeklyPeriodStart], references: [tenantId, employeeId, periodStart], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_reservation_employee_weekly_period_fkey")
   tenantCostPeriod TenantChatTenantCostPeriod   @relation("TenantChatReservationCostPeriod", fields: [tenantId, tenantPeriodStart, currency], references: [tenantId, periodStart, currency], onDelete: Restrict, onUpdate: NoAction, map: "tenant_chat_reservation_cost_period_fkey")
   providerAttempts TenantChatProviderAttempt[]
   ledgerEntries    TenantChatUsageLedgerEntry[]
@@ -1244,6 +1321,7 @@ model TenantChatUsageReservation {
   @@unique([tenantId, userId, idempotencyKey], map: "tenant_chat_reservation_idempotency_key")
   @@index([tenantId, state, createdAt], map: "tenant_chat_reservation_tenant_state_created_idx")
   @@index([tenantId, userId, userPeriodStart], map: "tenant_chat_reservation_user_period_idx")
+  @@index([tenantId, employeeId, employeeWeeklyPeriodStart], map: "tenant_chat_reservation_employee_weekly_period_idx")
   @@index([tenantId, tenantPeriodStart, currency], map: "tenant_chat_reservation_cost_period_idx")
   @@map("tenant_chat_usage_reservations")
 }
@@ -1355,6 +1433,7 @@ model TenantChatInvocationLog {
   budgetState           String   @map("budget_state")
   cacheOutcome          String   @map("cache_outcome")
   latencyMs             BigInt   @map("latency_ms")
+  ttftMs                BigInt?  @map("ttft_ms")
   startedAt             DateTime @map("started_at") @db.Timestamptz(6)
   completedAt           DateTime @map("completed_at") @db.Timestamptz(6)
   projectedEventVersion BigInt   @map("projected_event_version")
