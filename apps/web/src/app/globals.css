@@ -2059,22 +2059,33 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 }
 
 .dashboard-cost-over-time-header {
-  display: flex;
+  display: grid;
+  grid-template-areas:
+    "title side"
+    "metrics metrics";
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
+  align-content: space-between;
   gap: var(--space-5);
   min-height: 164px;
   min-width: 0;
 }
 
+.dashboard-cost-over-time-title {
+  grid-area: title;
+  min-width: 0;
+}
+
 .dashboard-cost-over-time-header-side {
   display: flex;
+  grid-area: side;
   align-items: flex-end;
-  align-self: stretch;
+  justify-self: end;
   flex: 0 0 auto;
   flex-direction: column;
-  justify-content: space-between;
+  gap: var(--space-4);
   min-width: 0;
+  max-width: 100%;
 }
 
 .dashboard-cost-over-time-header h2 {
@@ -2137,9 +2148,9 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 
 .dashboard-cost-over-time-metrics {
   display: flex;
+  grid-area: metrics;
   align-items: stretch;
   gap: 0;
-  margin-top: 34px;
   min-width: 0;
 }
 
@@ -4927,6 +4938,113 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 
 .management-line-content > .console-panel.project-list-panel > * {
   grid-column: 1;
+}
+
+.management-empty-guide {
+  display: grid;
+  width: min(100%, 1120px);
+  gap: 34px;
+  padding: 24px 0 12px;
+}
+
+.management-empty-guide-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.management-empty-guide-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 24%, var(--border));
+  border-radius: 12px;
+  color: var(--accent-strong);
+}
+
+.management-empty-guide-icon svg {
+  width: 25px;
+  height: 25px;
+  stroke-width: 1.8;
+}
+
+.management-empty-guide-intro h3 {
+  margin: 1px 0 8px;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-2xl) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.management-empty-guide-intro p,
+.management-empty-guide-steps p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
+  line-height: var(--line-height-relaxed);
+}
+
+.management-empty-guide-intro p {
+  max-width: 700px;
+}
+
+.management-empty-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  list-style: none;
+}
+
+.management-empty-guide-steps li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+  padding: 22px 24px 22px 0;
+}
+
+.management-empty-guide-steps li + li {
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
+}
+
+.management-empty-guide-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 32%, var(--border));
+  border-radius: 50%;
+  color: var(--accent-strong);
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+}
+
+.management-empty-guide-steps strong {
+  display: block;
+  margin: 1px 0 6px;
+  color: var(--foreground);
+  font-size: calc(var(--font-size-base) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-snug);
+}
+
+.management-empty-guide-steps p {
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+}
+
+.management-empty-guide-action {
+  display: flex;
+  align-items: center;
 }
 
 .project-sort-control {
@@ -13271,6 +13389,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .dashboard-secondary-grid {
     grid-template-columns: 1fr;
     height: auto;
+    max-height: none;
     overflow: visible;
   }
 
@@ -13540,8 +13659,13 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .dashboard-cost-over-time-header {
+    grid-template-areas:
+      "title"
+      "metrics"
+      "side";
+    grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
-    flex-direction: column;
+    gap: 24px;
     min-height: 0;
   }
 
@@ -13563,7 +13687,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .dashboard-cost-over-time-metrics {
-    margin-top: 24px;
+    margin-top: 0;
   }
 
   .dashboard-cost-over-time-metrics > div {
@@ -13919,6 +14043,40 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
   .project-card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .management-empty-guide {
+    gap: 26px;
+    padding-top: 14px;
+  }
+
+  .management-empty-guide-intro {
+    gap: 14px;
+  }
+
+  .management-empty-guide-icon {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+  }
+
+  .management-empty-guide-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .management-empty-guide-steps li,
+  .management-empty-guide-steps li + li {
+    padding: 18px 0;
+    border-left: 0;
+  }
+
+  .management-empty-guide-steps li + li {
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .management-empty-guide-action > a,
+  .management-empty-guide-action > button {
+    width: 100%;
   }
 
   .project-create-form button,

@@ -1,4 +1,5 @@
 export type ProjectCreateActionLocation = "empty" | "toolbar" | null;
+export type ProjectEmptyStateVariant = "assignment-guide" | "create-guide";
 
 type ProjectSettingsTarget = {
   id: string;
@@ -42,4 +43,10 @@ export function getProjectCreateActionLocation(
   }
 
   return projectCount === 0 ? "empty" : "toolbar";
+}
+
+export function getProjectEmptyStateVariant(
+  canCreateProject: boolean
+): ProjectEmptyStateVariant {
+  return canCreateProject ? "create-guide" : "assignment-guide";
 }

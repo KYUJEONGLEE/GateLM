@@ -19,6 +19,7 @@ import {
   getProviderFamilyFromKey,
   ProviderFamilyIcon
 } from "@/features/provider-connections/components/provider-family-icon";
+import { getProviderEmptyStateGuide } from "@/features/provider-connections/provider-empty-state";
 import {
   getTenantChatProviderCreatedHref,
   type TenantChatProviderSetupContext
@@ -238,6 +239,7 @@ export function ProviderConnectionManagement({
 }: ProviderConnectionManagementProps) {
   const router = useRouter();
   const text = providerText[locale];
+  const emptyStateGuide = getProviderEmptyStateGuide(locale);
   const [providers, setProviders] = useState<ProviderConnectionRecord[]>(model.providers);
   const [formValues, setFormValues] = useState<ProviderConnectionFormValues>(() =>
     tenantChatSetupContext
@@ -1171,18 +1173,59 @@ export function ProviderConnectionManagement({
       ) : null}
 
       <section className="console-panel provider-line-panel">
-        <div className="panel-heading provider-panel-heading">
-          <Button
-            disabled={pendingAction || discoveringProvider !== null || model.providerPresets.items.length === 0}
-            onClick={openCreateModal}
-            type="button"
-          >
-            <Plus aria-hidden="true" />
-            {text.registerAction}
-          </Button>
-        </div>
+        {providers.length > 0 ? (
+          <div className="panel-heading provider-panel-heading">
+            <Button
+              disabled={pendingAction || discoveringProvider !== null || model.providerPresets.items.length === 0}
+              onClick={openCreateModal}
+              type="button"
+            >
+              <Plus aria-hidden="true" />
+              {text.registerAction}
+            </Button>
+          </div>
+        ) : null}
         {providers.length === 0 ? (
-          <p className="project-empty">{text.empty}</p>
+          <section
+            aria-labelledby="provider-empty-guide-title"
+            className="management-empty-guide"
+            data-variant="create-guide"
+          >
+            <div className="management-empty-guide-intro">
+              <span className="management-empty-guide-icon" aria-hidden="true">
+                <PlugZap />
+              </span>
+              <div>
+                <h3 id="provider-empty-guide-title">{emptyStateGuide.title}</h3>
+                <p>{emptyStateGuide.description}</p>
+              </div>
+            </div>
+
+            <ol className="management-empty-guide-steps">
+              {emptyStateGuide.steps.map((step, index) => (
+                <li key={step.title}>
+                  <span className="management-empty-guide-step-number" aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p>{step.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+
+            <div className="management-empty-guide-action">
+              <Button
+                disabled={pendingAction || discoveringProvider !== null || model.providerPresets.items.length === 0}
+                onClick={openCreateModal}
+                type="button"
+              >
+                <Plus aria-hidden="true" />
+                {text.registerAction}
+              </Button>
+            </div>
+          </section>
         ) : (
           <div className="provider-card-list">
             {providers.map((provider) => {
