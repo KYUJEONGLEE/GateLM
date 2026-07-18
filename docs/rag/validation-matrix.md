@@ -32,7 +32,8 @@ The `rag-db-foundation` CI job runs this test after both the baseline migrated d
 - `apps/control-plane-api/src/modules/rag-documents/storage/s3-rag-object-store.spec.ts`: private S3 behavior, SSE-KMS settings, opaque object keys, and safe error paths.
 - `apps/ai-service/app/tests/domain/rag_extraction/`: malformed, encrypted, oversized, and effectively scanned PDF failures; UTF-8 validation; deterministic chunking; prompt-injection text treated as data; no OCR fallback.
 - `apps/chat-api/src/rag/rag-citations.spec.ts`: server source-map-only citations, deduplication, fabricated source-ID rejection, and model-supplied filename/page rejection.
-- `apps/chat-api/src/content/conversation.service.spec.ts`: RAG cache bypass, delimiter-safe context construction, prompt-injection resistance, no-evidence behavior, final-prompt budget reservation, and non-RAG conversation regression.
+- `apps/chat-api/src/content/conversation.service.spec.ts`: RAG `off|exact` preservation, current-source citation validation on cache hit, delimiter-safe context construction, prompt-injection resistance, no-evidence behavior, final-prompt budget reservation, and non-RAG conversation regression.
+- `apps/gateway-core/internal/adapters/tenantchat/cache/redis/store_test.go` and `internal/services/tenantchat/completion/service_test.go`: same-tenant/same-user RAG response reuse, cross-tenant/cross-user isolation, changed-context miss, encrypted value storage, and a miss followed by a hit with only one Provider call.
 
 ## Sensitive-data observability
 
