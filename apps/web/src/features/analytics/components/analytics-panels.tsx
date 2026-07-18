@@ -577,6 +577,7 @@ export function AnalyticsPerformancePanel({
         viewLogs: "View all logs"
       };
   const surfaceSummaries = performance?.surfaceSummaries ?? [];
+  const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null);
   const providerRows = (performance?.p95LatencyByProvider ?? [])
     .filter((row) => row.p95LatencyMs !== null)
     .map((row) => ({
@@ -598,8 +599,8 @@ export function AnalyticsPerformancePanel({
         icon={Gauge}
         lead={{
           label: text.p95,
-          value: surfaceSummaries.length
-            ? surfaceSummaries
+          value: headlineSurfaceSummaries.length
+            ? headlineSurfaceSummaries
                 .map((row) => `${analyticsSurfaceShortLabel(row.surface, locale)} ${formatMs(row.p95LatencyMs)}`)
                 .join(" · ")
             : "—"

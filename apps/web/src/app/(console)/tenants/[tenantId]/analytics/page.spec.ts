@@ -110,6 +110,15 @@ test("performance keeps both requested surfaces visible when one has no requests
   expect(panelsSource).not.toContain("surfaceSummaries ?? []).filter((row) => row.totalRequests > 0)");
 });
 
+test("performance headline omits surfaces without a p95 value", async () => {
+  const panelsSource = await readFile(panelsSourceUrl, "utf8");
+
+  expect(panelsSource).toContain(
+    "const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null)"
+  );
+  expect(panelsSource).toContain("value: headlineSurfaceSummaries.length");
+});
+
 test("policy impact delegates Project/Application and Tenant Chat union to the Gateway contract", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
