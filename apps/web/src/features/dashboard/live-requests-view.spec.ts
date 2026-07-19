@@ -53,16 +53,16 @@ test("uses a cache result only when there is no PII result", () => {
   });
 });
 
-test("prioritizes unavailable masking evidence over a cache result", () => {
+test("uses cache results before unavailable masking evidence", () => {
   expect(
     primaryPolicyResult({
       cacheStatus: "HIT",
       safetyAction: "UNAVAILABLE"
     })
   ).toEqual({
-    kind: "safety",
-    label: "Masking unavailable",
-    value: "UNAVAILABLE"
+    kind: "cache",
+    label: "CACHE HIT",
+    value: "HIT"
   });
 
   expect(
@@ -74,8 +74,35 @@ test("prioritizes unavailable masking evidence over a cache result", () => {
       "ko"
     )
   ).toEqual({
+    kind: "cache",
+    label: "캐시 미스",
+    value: "MISS"
+  });
+
+  expect(
+    primaryPolicyResult(
+      {
+        cacheStatus: "BYPASS",
+        safetyAction: "UNAVAILABLE"
+      },
+      "ko"
+    )
+  ).toEqual({
+    kind: "cache",
+    label: "캐시 우회",
+    value: "BYPASS"
+  });
+});
+
+test("shows unavailable masking evidence when there is no cache result", () => {
+  expect(
+    primaryPolicyResult({
+      cacheStatus: "NONE",
+      safetyAction: "UNAVAILABLE"
+    })
+  ).toEqual({
     kind: "safety",
-    label: "마스킹 관측 불가",
+    label: "Masking unavailable",
     value: "UNAVAILABLE"
   });
 });

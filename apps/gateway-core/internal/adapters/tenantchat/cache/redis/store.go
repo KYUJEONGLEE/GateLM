@@ -209,7 +209,8 @@ func validEntry(entry tenantchat.ExactCacheEntry) bool {
 	if entry.ResponseText == "" || entry.EffectiveProviderID == "" || entry.EffectiveModelKey == "" || entry.SourceCostMicroUSD < 0 {
 		return false
 	}
-	return entry.EffectiveRouteTier == "high_quality" ||
+	return entry.EffectiveRouteTier == "" ||
+		entry.EffectiveRouteTier == "high_quality" ||
 		entry.EffectiveRouteTier == "standard" ||
 		entry.EffectiveRouteTier == "economy"
 }
