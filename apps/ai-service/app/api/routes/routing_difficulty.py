@@ -3,19 +3,20 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from starlette.concurrency import run_in_threadpool
-
 from app.api.dependencies import (
     RoutingDifficultyConcurrencyGate,
+    get_routing_difficulty_batcher,
     get_routing_difficulty_concurrency_gate,
-    get_routing_difficulty_service,
 )
 from app.api.routing_difficulty_auth import require_routing_difficulty_service_auth
 from app.schemas.routing_difficulty import (
     RoutingDifficultyClassifyRequest,
     RoutingDifficultyClassifyResponse,
 )
-from app.services.routing_difficulty import RoutingDifficultyService
+from app.services.routing_difficulty_batcher import (
+    RoutingDifficultyBatcher,
+    RoutingDifficultyBatcherBusy,
+)
 
 
 router = APIRouter()
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 )
 async def classify_routing_difficulty(
     payload: RoutingDifficultyClassifyRequest,
-    service: RoutingDifficultyService = Depends(get_routing_difficulty_service),
+    batcher: RoutingDifficultyBatcher = Depends(get_routing_difficulty_batcher),
     concurrency_gate: RoutingDifficultyConcurrencyGate = Depends(
         get_routing_difficulty_concurrency_gate
     ),
@@ -41,11 +42,15 @@ async def classify_routing_difficulty(
             detail={"code": "routing_difficulty_busy"},
         )
     try:
-        prediction = await run_in_threadpool(
-            service.classify,
+        prediction = await batcher.classify(
             payload.instruction_text,
             payload.rule_vector,
         )
+    except RoutingDifficultyBatcherBusy:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "routing_difficulty_busy"},
+        ) from None
     except Exception as exc:
         logger.error(
             "Routing difficulty inference failed with sanitized internal error. "

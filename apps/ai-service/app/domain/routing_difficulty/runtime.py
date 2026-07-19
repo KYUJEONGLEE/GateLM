@@ -174,10 +174,26 @@ class RoutingDifficultyRuntime:
         instruction_text: str,
         rule_vector: Sequence[float],
     ) -> RoutingDifficultyPrediction:
-        if not isinstance(instruction_text, str) or not instruction_text.strip():
+        return self.classify_many([instruction_text], [rule_vector])[0]
+
+    def classify_many(
+        self,
+        instruction_texts: Sequence[str],
+        rule_vectors: Sequence[Sequence[float]],
+    ) -> list[RoutingDifficultyPrediction]:
+        if (
+            isinstance(instruction_texts, (str, bytes))
+            or not instruction_texts
+            or len(instruction_texts) != len(rule_vectors)
+        ):
+            raise RoutingDifficultyRuntimeError("difficulty batch shape is invalid")
+        if any(
+            not isinstance(instruction_text, str) or not instruction_text.strip()
+            for instruction_text in instruction_texts
+        ):
             raise RoutingDifficultyRuntimeError("instruction is not applicable")
         encoded = self._tokenizer(
-            [INPUT_PREFIX + instruction_text],
+            [INPUT_PREFIX + instruction_text for instruction_text in instruction_texts],
             add_special_tokens=True,
             padding=True,
             truncation=True,
@@ -198,7 +214,7 @@ class RoutingDifficultyRuntime:
             input_ids.ndim != 2
             or input_ids.shape != attention_mask.shape
             or token_type_ids.shape != input_ids.shape
-            or input_ids.shape[0] != 1
+            or input_ids.shape[0] != len(instruction_texts)
             or input_ids.shape[1] > MAXIMUM_TOKEN_LENGTH
         ):
             raise RoutingDifficultyRuntimeError("tokenizer output is incompatible")
@@ -211,8 +227,13 @@ class RoutingDifficultyRuntime:
             for name in self._input_names
         }
         hidden = self._session.run(["last_hidden_state"], inputs)[0]
-        pooled = _masked_mean(hidden, attention_mask)[0]
-        return self._material.classify(pooled, rule_vector)
+        pooled = _masked_mean(hidden, attention_mask)
+        if pooled.shape != (len(instruction_texts), NATIVE_DIMENSION):
+            raise RoutingDifficultyRuntimeError("encoder batch output is incompatible")
+        return [
+            self._material.classify(pooled[index], rule_vectors[index])
+            for index in range(len(instruction_texts))
+        ]
 
     def warmup(self) -> None:
         rule_vector = [0.0] * RULE_VECTOR_DIMENSION

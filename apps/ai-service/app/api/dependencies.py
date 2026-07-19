@@ -10,6 +10,7 @@ from app.domain.routing_difficulty.runtime import RoutingDifficultyRuntime
 from app.services.ai_safety_detector import AiSafetyDetectorService
 from app.services.rag_extraction import RagExtractionService
 from app.services.routing_difficulty import RoutingDifficultyService
+from app.services.routing_difficulty_batcher import RoutingDifficultyBatcher
 from app.services.safety_evaluator import RemoteSafetyEvaluationService
 
 
@@ -134,6 +135,38 @@ def get_routing_difficulty_service(
     service.warmup()
     request.app.state.routing_difficulty_service = service
     return service
+
+
+def create_routing_difficulty_batcher(
+    settings: Settings,
+    service: RoutingDifficultyService,
+) -> RoutingDifficultyBatcher:
+    return RoutingDifficultyBatcher(
+        service,
+        maximum_batch_size=settings.routing_difficulty_batch_size,
+        maximum_wait_ms=settings.routing_difficulty_batch_max_wait_ms,
+        queue_capacity=settings.routing_difficulty_max_concurrent,
+        worker_count=(
+            settings.routing_difficulty_max_concurrent
+            if settings.routing_difficulty_batch_size == 1
+            else 1
+        ),
+    )
+
+
+def get_routing_difficulty_batcher(
+    request: Request,
+) -> RoutingDifficultyBatcher:
+    batcher = getattr(request.app.state, "routing_difficulty_batcher", None)
+    if isinstance(batcher, RoutingDifficultyBatcher):
+        return batcher
+    settings = get_settings(request)
+    batcher = create_routing_difficulty_batcher(
+        settings,
+        get_routing_difficulty_service(request),
+    )
+    request.app.state.routing_difficulty_batcher = batcher
+    return batcher
 
 
 def get_routing_difficulty_concurrency_gate(

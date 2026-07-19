@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from app.api.dependencies import (
     RoutingDifficultyConcurrencyGate,
     create_ai_safety_detector_service,
+    create_routing_difficulty_batcher,
     create_routing_difficulty_service,
 )
 from app.api.routes import ai_safety, health, rag_extraction, routing_difficulty, safety
@@ -44,6 +45,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         routing_difficulty_service.warmup()
         app.state.routing_difficulty_service = routing_difficulty_service
+        routing_difficulty_batcher = create_routing_difficulty_batcher(
+            resolved_settings,
+            routing_difficulty_service,
+        )
+        app.state.routing_difficulty_batcher = routing_difficulty_batcher
+        app.add_event_handler("shutdown", routing_difficulty_batcher.close)
         app.state.routing_difficulty_concurrency_gate = (
             RoutingDifficultyConcurrencyGate(
                 resolved_settings.routing_difficulty_max_concurrent

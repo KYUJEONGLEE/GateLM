@@ -90,6 +90,8 @@ class Settings:
         "difficulty-candidate-b-106d.model-path-5000.shadow.v1.json"
     )
     routing_difficulty_max_concurrent: int = 16
+    routing_difficulty_batch_size: int = 1
+    routing_difficulty_batch_max_wait_ms: float = 0.0
     routing_difficulty_onnx_intra_op_threads: int = 1
     routing_difficulty_onnx_inter_op_threads: int = 1
 
@@ -200,6 +202,14 @@ def load_settings() -> Settings:
             "AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT",
             16,
         ),
+        routing_difficulty_batch_size=_env_strict_int(
+            "AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE",
+            1,
+        ),
+        routing_difficulty_batch_max_wait_ms=_env_strict_float(
+            "AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS",
+            0.0,
+        ),
         routing_difficulty_onnx_intra_op_threads=_env_strict_int(
             "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS",
             1,
@@ -266,6 +276,18 @@ def _validate_routing_difficulty_settings(settings: Settings) -> None:
     if not 1 <= settings.routing_difficulty_max_concurrent <= 64:
         raise ValueError(
             "AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT must be between 1 and 64"
+        )
+    if not 1 <= settings.routing_difficulty_batch_size <= 64:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE must be between 1 and 64"
+        )
+    if settings.routing_difficulty_batch_size > settings.routing_difficulty_max_concurrent:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE must not exceed MAX_CONCURRENT"
+        )
+    if not 0 <= settings.routing_difficulty_batch_max_wait_ms <= 50:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS must be between 0 and 50"
         )
     if not 1 <= settings.routing_difficulty_onnx_intra_op_threads <= 32:
         raise ValueError(

@@ -189,6 +189,8 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "routing_difficulty_encoder_manifest",
                 "routing_difficulty_model_artifact",
                 "routing_difficulty_max_concurrent",
+                "routing_difficulty_batch_size",
+                "routing_difficulty_batch_max_wait_ms",
                 "routing_difficulty_onnx_intra_op_threads",
                 "routing_difficulty_onnx_inter_op_threads",
             },

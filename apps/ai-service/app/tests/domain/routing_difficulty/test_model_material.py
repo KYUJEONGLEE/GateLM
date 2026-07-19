@@ -41,6 +41,84 @@ class RoutingDifficultyModelMaterialTests(unittest.TestCase):
             delta=1e-6,
         )
 
+    def test_runtime_runs_multi_item_batch_once_and_maps_rows(self) -> None:
+        import numpy as np
+
+        from app.domain.routing_difficulty.runtime import (
+            RoutingDifficultyPrediction,
+            RoutingDifficultyRuntime,
+        )
+
+        runtime = object.__new__(RoutingDifficultyRuntime)
+        runtime._tokenizer = _FakeTokenizer(np)  # type: ignore[attr-defined]
+        runtime._session = _FakeSession(np)  # type: ignore[attr-defined]
+        runtime._material = _FakeMaterial()  # type: ignore[attr-defined]
+        runtime._input_names = {  # type: ignore[attr-defined]
+            "input_ids",
+            "attention_mask",
+            "token_type_ids",
+        }
+        runtime._np = np  # type: ignore[attr-defined]
+        vectors = [[0.0] * 42, [1.0] * 42]
+
+        predictions = runtime.classify_many(
+            ["first safe instruction", "second safe instruction"],
+            vectors,
+        )
+
+        self.assertEqual(runtime._session.run_count, 1)  # type: ignore[attr-defined]
+        self.assertEqual(
+            predictions,
+            [
+                RoutingDifficultyPrediction("simple", 0.25),
+                RoutingDifficultyPrediction("complex", 0.75),
+            ],
+        )
+
+
+class _FakeTokenizer:
+    def __init__(self, np: object) -> None:
+        self._np = np
+
+    def __call__(self, texts: list[str], **_kwargs: object) -> dict[str, object]:
+        np = self._np
+        input_ids = np.asarray(  # type: ignore[attr-defined]
+            [[index + 1, index + 2] for index in range(len(texts))],
+            dtype=np.int64,  # type: ignore[attr-defined]
+        )
+        return {
+            "input_ids": input_ids,
+            "attention_mask": np.ones_like(input_ids),  # type: ignore[attr-defined]
+            "token_type_ids": np.zeros_like(input_ids),  # type: ignore[attr-defined]
+        }
+
+
+class _FakeSession:
+    def __init__(self, np: object) -> None:
+        self._np = np
+        self.run_count = 0
+
+    def run(self, _outputs: object, inputs: dict[str, object]) -> list[object]:
+        self.run_count += 1
+        np = self._np
+        input_ids = inputs["input_ids"]
+        batch, sequence = input_ids.shape  # type: ignore[union-attr]
+        hidden = np.zeros((batch, sequence, 384), dtype=np.float32)  # type: ignore[attr-defined]
+        for index in range(batch):
+            hidden[index, :, 0] = float(index)
+        return [hidden]
+
+
+class _FakeMaterial:
+    def classify(self, pooled: object, rule_vector: object) -> object:
+        from app.domain.routing_difficulty.runtime import RoutingDifficultyPrediction
+
+        index = int(list(rule_vector)[0])  # type: ignore[arg-type]
+        return RoutingDifficultyPrediction(
+            "simple" if index == 0 else "complex",
+            0.25 if index == 0 else 0.75,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
