@@ -11,6 +11,7 @@ from app.adapters.safety import PrivacyFilterAdapter
 from app.adapters.safety.heuristic_evaluator import PromptDetector, default_detectors
 from app.adapters.safety.privacy_filter_adapter import public_model_id_for_model, source_for_model
 from app.domain.safety.detections import (
+    DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_ACTION,
     DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_TYPE,
     Detection,
     safety_signals_from_detections,
@@ -364,6 +365,19 @@ class AiSafetyDetectorService:
         )
         if allowed_detector_types is not None and not allowed_detector_types:
             raise ValueError("AI safety ML detector type allowlist must not be empty.")
+        resolved_ml_thresholds = dict(DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_TYPE)
+        configured_ml_thresholds = dict(ml_min_confidence_by_detector_type or {})
+        resolved_ml_thresholds.update(configured_ml_thresholds)
+        resolved_ml_action_thresholds = dict(
+            DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_ACTION
+        )
+        for (detector_type, action), threshold in tuple(
+            resolved_ml_action_thresholds.items()
+        ):
+            if detector_type in configured_ml_thresholds:
+                resolved_ml_action_thresholds[(detector_type, action)] = (
+                    configured_ml_thresholds[detector_type]
+                )
         self.adapters = _resolve_adapters(
             adapter=adapter,
             adapters=adapters,
@@ -371,7 +385,7 @@ class AiSafetyDetectorService:
             additional_model_ids=additional_model_ids,
             detector_runtime=detector_runtime,
             allowed_detector_types=allowed_detector_types,
-            min_confidence_by_detector_type=ml_min_confidence_by_detector_type,
+            min_confidence_by_detector_type=resolved_ml_thresholds,
         )
         supported_detector_types = frozenset().union(
             *(adapter.supported_detector_types for adapter in self.adapters)
@@ -383,6 +397,8 @@ class AiSafetyDetectorService:
                     "AI safety model does not support every configured ML detector type."
                 )
         self._ml_allowed_detector_types = allowed_detector_types or supported_detector_types
+        self._ml_min_confidence_by_detector_type = resolved_ml_thresholds
+        self._ml_min_confidence_by_detector_action = resolved_ml_action_thresholds
         if person_name_model_only:
             if "person_name" not in self._ml_allowed_detector_types:
                 raise ValueError("Person-name model-only mode requires person_name ML support.")
@@ -599,6 +615,8 @@ class AiSafetyDetectorService:
         ml_signals = safety_signals_from_detections(
             work_item.model_detections,
             detector_config,
+            min_confidence_by_type=self._ml_min_confidence_by_detector_type,
+            min_confidence_by_type_action=self._ml_min_confidence_by_detector_action,
         )
         rule_signals = _rule_signals_not_covered_by_ml(work_item.rule_signals, ml_signals)
         signals = effective_signals(

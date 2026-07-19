@@ -47,6 +47,7 @@ production_load_env_file() {
 production_load_env() {
   production_load_env_file "${PRODUCTION_DISTRIBUTED_BASE_ENV_FILE}"
   production_load_env_file "${PRODUCTION_DISTRIBUTED_ENV_FILE}"
+  export GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP="${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP:-172.31.32.156}"
   PRODUCTION_DISTRIBUTED_DB_ATTESTATION="${PRODUCTION_DISTRIBUTED_STATE_DIR}/db-restore-${GATELM_PRODUCTION_DISTRIBUTED_POSTGRES_VOLUME_NAME:-missing}.env"
 }
 
@@ -71,6 +72,7 @@ production_validate_env() {
     GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP \
+    GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT \
     GATELM_PRODUCTION_DISTRIBUTED_POSTGRES_VOLUME_NAME \
     GATELM_PRODUCTION_DISTRIBUTED_REDIS_VOLUME_NAME \
@@ -109,6 +111,7 @@ production_validate_env() {
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP}" == "10.78.2.20" ]] || production_fail "Unexpected Gateway IP."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" == "10.78.2.30" ]] || production_fail "Unexpected Data IP."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" == "10.78.2.40" ]] || production_fail "Unexpected AI IP."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" == "172.31.32.156" ]] || production_fail "Unexpected PII IP."
 
   [[ "${GATEWAY_AUTH_CACHE_ENABLED:-true}" == "true" ]] || production_fail "Production auth cache must be enabled."
   [[ "${GATEWAY_AUTH_CACHE_TTL_MS:-5000}" == "5000" ]] || production_fail "Production auth cache TTL must be 5000ms."
@@ -283,6 +286,12 @@ production_assert_tcp() {
   local label="$1" host="$2" port="$3"
   timeout 5 bash -c "</dev/tcp/${host}/${port}" 2>/dev/null || \
     production_fail "${label} is not reachable at ${host}:${port}."
+}
+
+production_assert_http_ready() {
+  local label="$1" url="$2"
+  curl --fail --silent --show-error --noproxy '*' --connect-timeout 3 --max-time 5 "${url}" >/dev/null || \
+    production_fail "${label} is not ready at ${url}."
 }
 
 production_assert_db_attestation() {
