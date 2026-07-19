@@ -38,6 +38,7 @@ jobs:
       AWS_GATEWAY_INSTANCE_ID: ${{ vars.AWS_GATEWAY_INSTANCE_ID }}
       AWS_DATA_INSTANCE_ID: ${{ vars.AWS_DATA_INSTANCE_ID }}
       AWS_AI_INSTANCE_ID: ${{ vars.AWS_AI_INSTANCE_ID }}
+      AWS_PII_INSTANCE_ID: ${{ vars.AWS_PII_INSTANCE_ID }}
       GATELM_PUBLIC_URL: ${{ vars.GATELM_PUBLIC_URL }}
       GATELM_CHAT_URL: ${{ vars.GATELM_CHAT_URL }}
 
@@ -64,6 +65,7 @@ jobs:
           : "${AWS_GATEWAY_INSTANCE_ID:?AWS_GATEWAY_INSTANCE_ID production variable is required}"
           : "${AWS_DATA_INSTANCE_ID:?AWS_DATA_INSTANCE_ID production variable is required}"
           : "${AWS_AI_INSTANCE_ID:?AWS_AI_INSTANCE_ID production variable is required}"
+          : "${AWS_PII_INSTANCE_ID:?AWS_PII_INSTANCE_ID production variable is required}"
           : "${GATELM_PUBLIC_URL:?GATELM_PUBLIC_URL production variable is required}"
           : "${GATELM_CHAT_URL:?GATELM_CHAT_URL production variable is required}"
           git fetch --no-tags origin main
@@ -156,6 +158,7 @@ jobs:
             "$AWS_GATEWAY_INSTANCE_ID" \
             "$AWS_DATA_INSTANCE_ID" \
             "$AWS_AI_INSTANCE_ID" \
+            "$AWS_PII_INSTANCE_ID" \
             "$DEPLOY_SHA" \
             "$GATELM_PUBLIC_URL" \
             "$GATELM_CHAT_URL"
@@ -194,6 +197,7 @@ jobs:
             "$AWS_GATEWAY_INSTANCE_ID" \
             "$AWS_DATA_INSTANCE_ID" \
             "$AWS_AI_INSTANCE_ID" \
+            "$AWS_PII_INSTANCE_ID" \
             "$DEPLOY_SHA" \
             "$GATELM_PUBLIC_URL" \
             "$GATELM_CHAT_URL" \

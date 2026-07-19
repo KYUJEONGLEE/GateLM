@@ -102,7 +102,7 @@ if (!trustJson.includes(":environment:${GitHubEnvironment}")) {
 
 const policies = resources.GitHubDeployRole.Properties.Policies ?? [];
 const policyJson = JSON.stringify(policies);
-for (const instanceParameter of ["EdgeInstanceId", "GatewayInstanceId", "DataInstanceId", "AiInstanceId"]) {
+for (const instanceParameter of ["EdgeInstanceId", "GatewayInstanceId", "DataInstanceId", "AiInstanceId", "PiiInstanceId"]) {
   if (!policyJson.includes(`\${${instanceParameter}}`)) {
     throw new Error(`SSM SendCommand is missing the ${instanceParameter} restriction`);
   }
@@ -121,7 +121,7 @@ grep -Fq "send-ssm-deploy-distributed.sh" "${WORKFLOW_FILE}" || \
   fail "Production deployment must use the distributed SSM sender"
 grep -Fq "Roll back distributed application roles after failed smoke" "${WORKFLOW_FILE}" || \
   fail "A failed public or authenticated smoke must roll back distributed application roles"
-for role_variable in AWS_EDGE_INSTANCE_ID AWS_GATEWAY_INSTANCE_ID AWS_DATA_INSTANCE_ID AWS_AI_INSTANCE_ID; do
+for role_variable in AWS_EDGE_INSTANCE_ID AWS_GATEWAY_INSTANCE_ID AWS_DATA_INSTANCE_ID AWS_AI_INSTANCE_ID AWS_PII_INSTANCE_ID; do
   grep -Fq "${role_variable}" "${WORKFLOW_FILE}" || \
     fail "Distributed production instance variable is missing: ${role_variable}"
 done
@@ -499,6 +499,7 @@ bash "${DISTRIBUTED_SSM_SCRIPT}" \
   i-0123456789abcde02 \
   i-0123456789abcde03 \
   i-0123456789abcde04 \
+  i-0123456789abcde05 \
   0000000000000000000000000000000000000000 \
   https://gatelm.co.kr \
   https://chat.gatelm.co.kr >/dev/null
@@ -509,8 +510,8 @@ const lines = fs.readFileSync(process.argv[2], "utf8").split(/\r?\n/);
 const parameters = lines
   .filter((line) => line.startsWith('{"commands":'))
   .map((line) => JSON.parse(line));
-if (parameters.length !== 4) {
-  throw new Error(`Expected four distributed SSM commands, observed ${parameters.length}`);
+if (parameters.length !== 5) {
+  throw new Error(`Expected five distributed SSM commands, observed ${parameters.length}`);
 }
 for (const parameter of parameters) {
   const command = parameter.commands?.[0];
@@ -525,7 +526,7 @@ for (const parameter of parameters) {
   }
 }
 const comments = lines.filter((line) => line.startsWith("GateLM distributed deploy "));
-const expectedRoles = ["ai", "data", "gateway", "edge"];
+const expectedRoles = ["pii", "ai", "data", "gateway", "edge"];
 if (comments.length !== expectedRoles.length || comments.some((line, index) => !line.endsWith(` ${expectedRoles[index]}`))) {
   throw new Error(`Unexpected distributed deploy order: ${comments.join(", ")}`);
 }

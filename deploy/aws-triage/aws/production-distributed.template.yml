@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: GateLM four-host distributed production foundation without traffic cutover.
+Description: GateLM five-host distributed production foundation with a private dedicated PII service.
 
 Parameters:
   SshKeyName:
@@ -21,6 +21,14 @@ Parameters:
   AiInstanceType:
     Type: String
     Default: c7i.large
+  PiiInstanceType:
+    Type: String
+    Default: c7i.xlarge
+    Description: Four-vCPU compute-optimized host for the dedicated PII ONNX runtime.
+  ProductionPiiArtifactBucketName:
+    Type: String
+    AllowedPattern: "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]"
+    Description: Dedicated private bucket for immutable production PII model artifacts.
   ProductionRagBucketName:
     Type: String
     Description: Existing private production RAG bucket used by the Data host.
@@ -306,6 +314,30 @@ Resources:
         - Key: Environment
           Value: production-distributed
 
+  PiiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM private dedicated PII inference service.
+      GroupName: gatelm-production-distributed-pii
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: PII detection calls from Gateway only
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Private S3 artifact and image dependency access through NAT
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-pii
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
   DataPostgresSelfIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -414,6 +446,82 @@ Resources:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles: [!Ref DataRole]
+
+  PiiArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref ProductionPiiArtifactBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: gatelm-production-pii-artifacts
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: DataClass
+          Value: model-artifact
+
+  PiiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: SSM and immutable PII model artifact read access for the GateLM PII host.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: GateLMProductionPiiArtifactRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadPiiArtifactBucketLocation
+                Effect: Allow
+                Action: s3:GetBucketLocation
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionPiiArtifactBucketName}
+              - Sid: ListPinnedPiiArtifacts
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionPiiArtifactBucketName}
+                Condition:
+                  StringLike:
+                    s3:prefix: pii/v36/*
+              - Sid: ReadPinnedPiiArtifacts
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionPiiArtifactBucketName}/pii/v36/*
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Purpose
+          Value: ProductionPii
+
+  PiiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref PiiRole]
 
   EdgeInstance:
     Type: AWS::EC2::Instance
@@ -634,6 +742,64 @@ Resources:
         - Key: DoNotDelete
           Value: "true"
 
+  PiiInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref PiiInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref PiiInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref PiiSecurityGroup]
+          PrivateIpAddress: 10.78.2.50
+          SubnetId: !Ref PrivateSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 40
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --update
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v36/releases/171bbde0
+          printf '%s\n' pii > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-pii
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: pii
+        - Key: DoNotDelete
+          Value: "true"
+
   EdgeEip:
     Type: AWS::EC2::EIP
     DeletionPolicy: Retain
@@ -682,6 +848,12 @@ Outputs:
     Value: !Ref AiInstance
   AiPrivateIp:
     Value: !GetAtt AiInstance.PrivateIp
+  PiiInstanceId:
+    Value: !Ref PiiInstance
+  PiiPrivateIp:
+    Value: !GetAtt PiiInstance.PrivateIp
+  PiiArtifactBucketName:
+    Value: !Ref PiiArtifactBucket
   NodeInstanceProfileName:
     Value: !Ref NodeInstanceProfile
   DataInstanceProfileName:

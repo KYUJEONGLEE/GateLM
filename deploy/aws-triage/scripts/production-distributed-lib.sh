@@ -12,6 +12,8 @@ source "${PRODUCTION_DISTRIBUTED_SCRIPT_DIR}/perf-lib.sh"
 PRODUCTION_DISTRIBUTED_BASE_ENV_FILE="${GATELM_PRODUCTION_DISTRIBUTED_BASE_ENV_FILE:-${AWS_TRIAGE_DIR}/.env.production-distributed.base}"
 PRODUCTION_DISTRIBUTED_ENV_FILE="${GATELM_PRODUCTION_DISTRIBUTED_ENV_FILE:-${AWS_TRIAGE_DIR}/.env.production-distributed}"
 PRODUCTION_DISTRIBUTED_COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.production.distributed.yml"
+PRODUCTION_DISTRIBUTED_PII_COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.production.pii.yml"
+PRODUCTION_DISTRIBUTED_PII_MANIFEST="${AWS_TRIAGE_DIR}/pii-v36-model-manifest.sha256"
 PRODUCTION_DISTRIBUTED_PROJECT_NAME="gatelm-production-distributed"
 PRODUCTION_DISTRIBUTED_STATE_DIR="${GATELM_PRODUCTION_DISTRIBUTED_STATE_DIR:-${AWS_TRIAGE_DIR}/.production-distributed-state}"
 PRODUCTION_DISTRIBUTED_DB_ATTESTATION=""
@@ -47,7 +49,7 @@ production_load_env_file() {
 production_load_env() {
   production_load_env_file "${PRODUCTION_DISTRIBUTED_BASE_ENV_FILE}"
   production_load_env_file "${PRODUCTION_DISTRIBUTED_ENV_FILE}"
-  export GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP="${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP:-172.31.32.156}"
+  export GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP="${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP:-10.78.2.50}"
   PRODUCTION_DISTRIBUTED_DB_ATTESTATION="${PRODUCTION_DISTRIBUTED_STATE_DIR}/db-restore-${GATELM_PRODUCTION_DISTRIBUTED_POSTGRES_VOLUME_NAME:-missing}.env"
 }
 
@@ -73,6 +75,9 @@ production_validate_env() {
     GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP \
+    GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR \
+    GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI \
+    GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256 \
     GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT \
     GATELM_PRODUCTION_DISTRIBUTED_POSTGRES_VOLUME_NAME \
     GATELM_PRODUCTION_DISTRIBUTED_REDIS_VOLUME_NAME \
@@ -92,6 +97,7 @@ production_validate_env() {
   for name in \
     GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT \
     GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT \
+    GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR \
     GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT; do
     value="${!name}"
     [[ "${value}" == /* ]] || production_fail "${name} must be absolute."
@@ -111,7 +117,13 @@ production_validate_env() {
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP}" == "10.78.2.20" ]] || production_fail "Unexpected Gateway IP."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" == "10.78.2.30" ]] || production_fail "Unexpected Data IP."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" == "10.78.2.40" ]] || production_fail "Unexpected AI IP."
-  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" == "172.31.32.156" ]] || production_fail "Unexpected PII IP."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" == "10.78.2.50" ]] || production_fail "Unexpected PII IP."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}" == "/opt/gatelm/pii-v36/releases/171bbde0/model" ]] || \
+    production_fail "Unexpected pinned PII model directory."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI}" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/pii/v36/[A-Za-z0-9._/-]+\.tar\.gz$ ]] || \
+    production_fail "PII artifact URI must be a private s3:// bucket path under pii/v36/."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256}" =~ ^[a-f0-9]{64}$ ]] || \
+    production_fail "PII artifact SHA-256 must be lowercase hexadecimal."
 
   [[ "${GATEWAY_AUTH_CACHE_ENABLED:-true}" == "true" ]] || production_fail "Production auth cache must be enabled."
   [[ "${GATEWAY_AUTH_CACHE_TTL_MS:-5000}" == "5000" ]] || production_fail "Production auth cache TTL must be 5000ms."
@@ -153,6 +165,7 @@ production_expected_ip() {
     gateway) printf '%s\n' "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP}" ;;
     data) printf '%s\n' "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" ;;
     ai) printf '%s\n' "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" ;;
+    pii) printf '%s\n' "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" ;;
     *) production_fail "Unknown production role: $1" ;;
   esac
 }
@@ -208,7 +221,7 @@ production_role_secret_files() {
         rag/workload-binding-hmac-keys.json \
         rag/workload-identities.json
       ;;
-    edge|ai) ;;
+    edge|ai|pii) ;;
     *) production_fail "Unknown production role: $1" ;;
   esac
 }
@@ -230,6 +243,7 @@ production_role_services() {
     data) printf '%s\n' "postgres redis control-plane-api chat-api rag-worker" ;;
     gateway) printf '%s\n' "gateway-core" ;;
     ai) printf '%s\n' "ai-service mock-provider" ;;
+    pii) printf '%s\n' "pii-service" ;;
     edge) printf '%s\n' "web chat-web caddy" ;;
     *) production_fail "Unknown production role: $1" ;;
   esac
@@ -240,6 +254,7 @@ production_role_build_services() {
     data) printf '%s\n' "control-plane-api chat-api" ;;
     gateway) printf '%s\n' "gateway-core" ;;
     ai) printf '%s\n' "ai-service" ;;
+    pii) printf '%s\n' "pii-service" ;;
     edge) printf '%s\n' "web chat-web" ;;
     *) production_fail "Unknown production role: $1" ;;
   esac
@@ -249,8 +264,12 @@ production_compose() {
   local role="$1"
   shift
   local profile_args=()
+  local compose_file="${PRODUCTION_DISTRIBUTED_COMPOSE_FILE}"
   if [[ "${role}" == "data" ]]; then
     profile_args=(--profile data --profile rag)
+  elif [[ "${role}" == "pii" ]]; then
+    profile_args=(--profile pii)
+    compose_file="${PRODUCTION_DISTRIBUTED_PII_COMPOSE_FILE}"
   else
     profile_args=(--profile "${role}")
   fi
@@ -259,9 +278,25 @@ production_compose() {
     --project-directory "${AWS_TRIAGE_DIR}" \
     --env-file "${PRODUCTION_DISTRIBUTED_BASE_ENV_FILE}" \
     --env-file "${PRODUCTION_DISTRIBUTED_ENV_FILE}" \
-    -f "${PRODUCTION_DISTRIBUTED_COMPOSE_FILE}" \
+    -f "${compose_file}" \
     "${profile_args[@]}" \
     "$@"
+}
+
+production_assert_pii_model_artifact() {
+  local model_dir="${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}"
+  local expected_files observed_files
+  [[ -f "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" && ! -L "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" ]] || \
+    production_fail "PII model manifest is missing or unsafe."
+  [[ -d "${model_dir}" && ! -L "${model_dir}" ]] || \
+    production_fail "PII model directory is missing or unsafe: ${model_dir}"
+  (
+    cd "${model_dir}"
+    sha256sum --check "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" >/dev/null
+  ) || production_fail "PII model artifact verification failed."
+  expected_files="$(awk 'NF == 2 {print $2}' "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" | sort)"
+  observed_files="$(find "${model_dir}" -maxdepth 1 -type f -printf '%f\n' | sort)"
+  [[ "${observed_files}" == "${expected_files}" ]] || production_fail "PII model directory contains missing or unexpected files."
 }
 
 production_wait_for_service() {

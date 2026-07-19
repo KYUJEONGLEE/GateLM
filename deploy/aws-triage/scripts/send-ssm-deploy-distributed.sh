@@ -19,10 +19,11 @@ edge_instance_id="${1:-}"
 gateway_instance_id="${2:-}"
 data_instance_id="${3:-}"
 ai_instance_id="${4:-}"
-deploy_sha="${5:-}"
-public_url="${6:-}"
-chat_url="${7:-}"
-operation="${8:-deploy}"
+pii_instance_id="${5:-}"
+deploy_sha="${6:-}"
+public_url="${7:-}"
+chat_url="${8:-}"
+operation="${9:-deploy}"
 aws_region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 poll_interval_seconds="${GATELM_SSM_POLL_INTERVAL_SECONDS:-15}"
 max_polls="${GATELM_SSM_MAX_POLLS:-480}"
@@ -32,10 +33,11 @@ declare -A instance_ids=(
   [gateway]="${gateway_instance_id}"
   [data]="${data_instance_id}"
   [ai]="${ai_instance_id}"
+  [pii]="${pii_instance_id}"
 )
-deploy_order=(ai data gateway edge)
+deploy_order=(pii ai data gateway edge)
 
-for role in edge gateway data ai; do
+for role in edge gateway data ai pii; do
   [[ "${instance_ids[${role}]}" =~ ^i-[0-9a-f]{8,17}$ ]] || ssm_fail "Invalid ${role} EC2 instance id."
 done
 [[ "${deploy_sha}" =~ ^[0-9a-f]{40}$ ]] || ssm_fail "Invalid deployment SHA."
@@ -47,13 +49,13 @@ done
 [[ "${max_polls}" =~ ^[1-9][0-9]*$ ]] || ssm_fail "Invalid poll count."
 
 unique_count="$(printf '%s\n' "${instance_ids[@]}" | sort -u | wc -l | tr -d '[:space:]')"
-[[ "${unique_count}" == "4" ]] || ssm_fail "Edge, Gateway, Data, and AI must use four distinct instances."
+[[ "${unique_count}" == "5" ]] || ssm_fail "Edge, Gateway, Data, AI, and PII must use five distinct instances."
 
 for command_name in aws base64 jq sort tr wc; do
   need_command "${command_name}"
 done
 
-for role in edge gateway data ai; do
+for role in edge gateway data ai pii; do
   ping_status="$(aws ssm describe-instance-information \
     --region "${aws_region}" \
     --filters "Key=InstanceIds,Values=${instance_ids[${role}]}" \
@@ -158,7 +160,7 @@ rollback_completed_roles() {
 }
 
 if [[ "${operation}" == "rollback" ]]; then
-  completed_roles=(ai data gateway edge)
+  completed_roles=(pii ai data gateway edge)
   rollback_completed_roles || ssm_fail "Distributed rollback was incomplete."
   ssm_log "Distributed rollback completed for ${deploy_sha}. Database migrations were not reversed."
   exit 0

@@ -11,7 +11,7 @@ build_images=false
 while (( $# > 0 )); do
   case "$1" in
     --role)
-      [[ $# -ge 2 ]] || production_fail "--role requires edge, gateway, data, or ai."
+      [[ $# -ge 2 ]] || production_fail "--role requires edge, gateway, data, ai, or pii."
       role="$2"
       shift 2
       ;;
@@ -22,7 +22,7 @@ while (( $# > 0 )); do
     *) production_fail "Unknown option: $1" ;;
   esac
 done
-case "${role}" in edge|gateway|data|ai) ;; *) production_fail "A valid --role is required." ;; esac
+case "${role}" in edge|gateway|data|ai|pii) ;; *) production_fail "A valid --role is required." ;; esac
 
 bash "${SCRIPT_DIR}/production-distributed-preflight.sh" --role "${role}"
 production_load_env
