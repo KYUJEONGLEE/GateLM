@@ -199,6 +199,47 @@ test("dashboard keeps cost range controls and stacked mobile panels inside the l
   );
 });
 
+test("dashboard keeps its compact default scale and enlarges operational labels only in expanded mode", async () => {
+  const styles = await readFile(dashboardStylesSourceUrl, "utf8");
+  const readabilityStyles = styles.slice(
+    styles.indexOf("/* Dashboard concept scale: compact, high-signal cards aligned with the operational mockup. */")
+  );
+
+  expect(readabilityStyles).toMatch(
+    /\.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(16px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(26px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-range-tabs a \{[^}]*min-height: 46px;[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-metrics span \{[^}]*font-size: calc\(24px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-provider-icon \{[^}]*width: 38px;[^}]*height: 38px;/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-row strong,[\s\S]*?font-size: calc\(22px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-live-requests-table td,[\s\S]*?font-size: calc\(19px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-live-provider-icon \{[^}]*width: 36px;[^}]*height: 36px;/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-live-provider-model strong \{[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /@media \(min-width: 1101px\) and \(max-width: 1280px\) \{\s*html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-grid \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-header \{\s*grid-template-areas:\s*"title"\s*"side"\s*"metrics";/
+  );
+});
+
 test("dashboard charts merge changed data without replaying unchanged series", async () => {
   const source = await readFile(chartSourceUrl, "utf8");
 
