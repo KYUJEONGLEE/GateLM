@@ -79,9 +79,24 @@ class Settings:
     rag_max_concurrent_extractions: int = 2
     rag_pdf_memory_limit_bytes: int = 512 * 1024 * 1024
     rag_pdf_cpu_limit_seconds: int = 30
+    routing_difficulty_enabled: bool = False
+    routing_difficulty_service_token: str = field(default="", repr=False)
+    routing_difficulty_artifact_root: str = "/opt/gatelm/difficulty-e5"
+    routing_difficulty_encoder_manifest: str = (
+        "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json"
+    )
+    routing_difficulty_model_artifact: str = (
+        "/opt/gatelm/difficulty-e5/"
+        "difficulty-candidate-b-106d.model-path-5000.shadow.v1.json"
+    )
+    routing_difficulty_max_concurrent: int = 16
+    routing_difficulty_onnx_intra_op_threads: int = 1
+    routing_difficulty_onnx_inter_op_threads: int = 1
 
     def __post_init__(self) -> None:
         _validate_rag_settings(self)
+        _validate_routing_difficulty_settings(self)
+
 
 def load_settings() -> Settings:
     return Settings(
@@ -156,7 +171,43 @@ def load_settings() -> Settings:
         ),
         rag_pdf_cpu_limit_seconds=_env_strict_int(
             "AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS",
-            30,        ),
+            30,
+        ),
+        routing_difficulty_enabled=_env_strict_bool(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ENABLED",
+            False,
+        ),
+        routing_difficulty_service_token=_env_string(
+            "AI_SERVICE_ROUTING_DIFFICULTY_SERVICE_TOKEN",
+            "",
+        ).strip(),
+        routing_difficulty_artifact_root=_env_string(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ARTIFACT_ROOT",
+            "/opt/gatelm/difficulty-e5",
+        ).strip(),
+        routing_difficulty_encoder_manifest=_env_string(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ENCODER_MANIFEST",
+            "/opt/gatelm/difficulty-e5/difficulty-e5-encoder-manifest.v2.json",
+        ).strip(),
+        routing_difficulty_model_artifact=_env_string(
+            "AI_SERVICE_ROUTING_DIFFICULTY_MODEL_ARTIFACT",
+            (
+                "/opt/gatelm/difficulty-e5/"
+                "difficulty-candidate-b-106d.model-path-5000.shadow.v1.json"
+            ),
+        ).strip(),
+        routing_difficulty_max_concurrent=_env_strict_int(
+            "AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT",
+            16,
+        ),
+        routing_difficulty_onnx_intra_op_threads=_env_strict_int(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS",
+            1,
+        ),
+        routing_difficulty_onnx_inter_op_threads=_env_strict_int(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS",
+            1,
+        ),
     )
 
 
@@ -208,6 +259,52 @@ def _validate_rag_settings(settings: Settings) -> None:
             raise ValueError(
                 "AI_SERVICE_RAG_SERVICE_TOKEN must be a non-placeholder value of at least "
                 "32 characters in production-like environments"
+            )
+
+
+def _validate_routing_difficulty_settings(settings: Settings) -> None:
+    if not 1 <= settings.routing_difficulty_max_concurrent <= 64:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT must be between 1 and 64"
+        )
+    if not 1 <= settings.routing_difficulty_onnx_intra_op_threads <= 32:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS must be between 1 and 32"
+        )
+    if not 1 <= settings.routing_difficulty_onnx_inter_op_threads <= 8:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS must be between 1 and 8"
+        )
+    if not settings.routing_difficulty_enabled:
+        return
+    if not settings.routing_difficulty_service_token:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_DIFFICULTY_SERVICE_TOKEN is required when remote difficulty is enabled"
+        )
+    for key, raw_path in (
+        (
+            "AI_SERVICE_ROUTING_DIFFICULTY_ARTIFACT_ROOT",
+            settings.routing_difficulty_artifact_root,
+        ),
+        (
+            "AI_SERVICE_ROUTING_DIFFICULTY_ENCODER_MANIFEST",
+            settings.routing_difficulty_encoder_manifest,
+        ),
+        (
+            "AI_SERVICE_ROUTING_DIFFICULTY_MODEL_ARTIFACT",
+            settings.routing_difficulty_model_artifact,
+        ),
+    ):
+        if not raw_path or not Path(raw_path).is_absolute():
+            raise ValueError(f"{key} must be an absolute path when enabled")
+    if settings.deployment_mode in PRODUCTION_LIKE_DEPLOYMENT_MODES:
+        normalized_token = settings.routing_difficulty_service_token.lower()
+        if len(settings.routing_difficulty_service_token) < 32 or any(
+            marker in normalized_token
+            for marker in RAG_SERVICE_TOKEN_PLACEHOLDER_MARKERS
+        ):
+            raise ValueError(
+                "AI_SERVICE_ROUTING_DIFFICULTY_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments"
             )
 
 

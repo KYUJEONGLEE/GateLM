@@ -53,6 +53,10 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		Comparison:      "rule_simple_shadow_complex",
 		DurationSeconds: 0.012,
 	})
+	registry.RoutingDifficultyRemote(RoutingDifficultyRemote{
+		Status:          "ready",
+		DurationSeconds: 0.018,
+	})
 	registry.RecordAISafetySidecarCall(AISafetySidecarCall{
 		Surface:         "tenant_chat",
 		Mode:            "enforce",
@@ -88,6 +92,8 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_stream_time_to_first_token_seconds_count{model="mock-balanced",provider="mock"} 1`)
 	assertMetricsContains(t, first, `gatelm_routing_difficulty_shadow_total{category="general",comparison="rule_simple_shadow_complex",status="ready"} 1`)
 	assertMetricsContains(t, first, `gatelm_routing_difficulty_shadow_duration_seconds_count{status="ready"} 1`)
+	assertMetricsContains(t, first, `gatelm_routing_difficulty_remote_total{status="ready"} 1`)
+	assertMetricsContains(t, first, `gatelm_routing_difficulty_remote_duration_seconds_sum{status="ready"} 0.018`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_calls_total{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 1`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_call_duration_seconds_sum{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 0.125`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_fallback_total{mode="enforce",reason="timeout",surface="tenant_chat"} 1`)
@@ -122,6 +128,8 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		StreamTimeToFirstTokenSeconds,
 		RoutingDifficultyShadowTotal,
 		RoutingDifficultyShadowDurationSeconds,
+		RoutingDifficultyRemoteTotal,
+		RoutingDifficultyRemoteDurationSeconds,
 		TenantChatCompletionTotal,
 		TenantChatUsageReconciliationTotal,
 		TenantChatAccountingTransactionSeconds,

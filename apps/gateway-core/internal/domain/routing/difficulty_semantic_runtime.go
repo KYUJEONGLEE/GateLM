@@ -19,6 +19,14 @@ type difficultySemanticRuntimeJob struct {
 	result   chan DifficultySemanticShadowResult
 }
 
+// DifficultySemanticClassifier is the hot-path boundary shared by the
+// process-local E5 runtime and contract-gated experimental remote runtimes.
+// Any non-ready result keeps the existing rule-based difficulty authoritative.
+type DifficultySemanticClassifier interface {
+	Classify(context.Context, PromptFeatures, string) DifficultySemanticShadowResult
+	Close(context.Context) error
+}
+
 // DifficultySemanticRuntime serializes access to the native encoder while
 // bounding how long an auto-routing request can wait. A non-ready result is a
 // fail-safe signal to retain the rule-based difficulty for that request.

@@ -87,6 +87,21 @@ type RoutingDifficultyShadow struct {
 	DurationSeconds float64
 }
 
+type RoutingDifficultyRemote struct {
+	Status          string
+	DurationSeconds float64
+}
+
+func (r *Registry) RoutingDifficultyRemote(observation RoutingDifficultyRemote) {
+	status := normalizeDifficultyShadowStatus(observation.Status)
+	r.AddCounter(RoutingDifficultyRemoteTotal, []Label{
+		{Name: "status", Value: status},
+	}, 1)
+	r.ObserveHistogram(RoutingDifficultyRemoteDurationSeconds, []Label{
+		{Name: "status", Value: status},
+	}, observation.DurationSeconds)
+}
+
 func (r *Registry) RoutingDifficultyShadow(observation RoutingDifficultyShadow) {
 	status := normalizeDifficultyShadowStatus(observation.Status)
 	r.AddCounter(RoutingDifficultyShadowTotal, []Label{

@@ -183,6 +183,14 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "rag_max_concurrent_extractions",
                 "rag_pdf_memory_limit_bytes",
                 "rag_pdf_cpu_limit_seconds",
+                "routing_difficulty_enabled",
+                "routing_difficulty_service_token",
+                "routing_difficulty_artifact_root",
+                "routing_difficulty_encoder_manifest",
+                "routing_difficulty_model_artifact",
+                "routing_difficulty_max_concurrent",
+                "routing_difficulty_onnx_intra_op_threads",
+                "routing_difficulty_onnx_inter_op_threads",
             },
         )
 

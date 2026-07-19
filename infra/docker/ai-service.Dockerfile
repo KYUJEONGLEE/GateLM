@@ -19,6 +19,8 @@ ENV TIKTOKEN_CACHE_DIR=/opt/venv/tiktoken-cache
 COPY apps/ai-service/pyproject.toml ./pyproject.toml
 COPY apps/ai-service/requirements-rag-extraction.lock ./requirements-rag-extraction.lock
 COPY apps/ai-service/app ./app
+COPY scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json /build/difficulty-e5/difficulty-e5-encoder-manifest.v2.json
+COPY scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-b-106d.model-path-5000.shadow.v1.json /build/difficulty-e5/difficulty-candidate-b-106d.model-path-5000.shadow.v1.json
 
 RUN pip install --no-cache-dir --requirement requirements-rag-extraction.lock \
   && if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
@@ -47,9 +49,11 @@ WORKDIR /app
 RUN groupadd --system gatelm \
   && useradd --system --gid gatelm --home-dir /nonexistent --shell /usr/sbin/nologin gatelm \
   && mkdir -p /models \
-  && chown gatelm:gatelm /models
+  && mkdir -p /opt/gatelm/difficulty-e5 \
+  && chown gatelm:gatelm /models /opt/gatelm/difficulty-e5
 
 COPY --from=builder --chown=gatelm:gatelm /opt/venv /opt/venv
+COPY --from=builder --chown=gatelm:gatelm /build/difficulty-e5 /opt/gatelm/difficulty-e5
 
 USER gatelm
 
