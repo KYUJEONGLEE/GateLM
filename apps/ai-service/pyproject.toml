@@ -59,6 +59,12 @@ routing = [
   "tokenizers>=0.22,<0.23",
   "transformers>=4.57,<4.58",
 ]
+pii = [
+  "numpy>=2.5,<2.6",
+  "onnxruntime>=1.27,<1.28",
+  "tokenizers>=0.22,<0.23",
+  "transformers>=4.57,<4.58",
+]
 training = [
   "safetensors>=0.4,<1",
   "torch>=2.3,<3",
