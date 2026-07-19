@@ -147,9 +147,12 @@ def create_routing_difficulty_batcher(
         maximum_wait_ms=settings.routing_difficulty_batch_max_wait_ms,
         queue_capacity=settings.routing_difficulty_max_concurrent,
         worker_count=(
-            settings.routing_difficulty_max_concurrent
-            if settings.routing_difficulty_batch_size == 1
-            else 1
+            settings.routing_difficulty_worker_count
+            or (
+                settings.routing_difficulty_max_concurrent
+                if settings.routing_difficulty_batch_size == 1
+                else 1
+            )
         ),
     )
 
