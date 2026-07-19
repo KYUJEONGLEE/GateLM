@@ -5,7 +5,7 @@
 	encode zstd gzip
 
 	handle /v1/* {
-		reverse_proxy {$GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:10.78.2.20}:8080
+		reverse_proxy {$GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_UPSTREAM_HOST:10.78.2.20}:8080
 	}
 
 	handle /admin/v1/* {

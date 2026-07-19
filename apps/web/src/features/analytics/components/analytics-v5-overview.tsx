@@ -49,15 +49,11 @@ export function AnalyticsV5Overview({
         projects: "프로젝트별 사용량",
         complex: "고성능 요청",
         cost: "전체 AI 비용",
-        costSub: "선택 기간의 실제 Provider 비용",
         empty: "선택한 기간에 표시할 데이터가 없습니다",
-        complexSub: "App complex 분류 및 Tenant Chat high-quality 경로 요청 비중",
         modelShare: "모델 트래픽 비중",
         modelTrend: "모델별 요청 흐름",
-        modelTrendSub: "라우팅 정책 적용 후 시간대별 요청 추이",
         routing: "난이도별 라우팅",
         requests: "전체 요청",
-        requestsSub: "Gateway가 기록한 전체 트래픽",
         saved: "절감",
         title: "정책 효과"
       }
@@ -65,15 +61,11 @@ export function AnalyticsV5Overview({
         projects: "Usage by source",
         complex: "High-performance requests",
         cost: "Total AI spend",
-        costSub: "Observed Provider spend for the selected range",
         empty: "No data for the selected range",
-        complexSub: "App complex classification and Tenant Chat high-quality route usage",
         modelShare: "Model traffic share",
         modelTrend: "Requests by model",
-        modelTrendSub: "Traffic over time after routing policy",
         routing: "Routing policy result",
         requests: "Total requests",
-        requestsSub: "All traffic recorded by the Gateway",
         saved: "saved",
         title: "Policy impact"
       };
@@ -111,12 +103,10 @@ export function AnalyticsV5Overview({
               ? `${formatPercent(model.impact.spendAvoidanceRate)} ${text.saved}`
               : `— ${text.saved}`}</em>
           </div>
-          <small>{text.costSub}</small>
         </article>
         <article className="analytics-v5-metric">
           <span>{text.requests}</span>
           <strong>{formatInteger(model.totalRequests)}</strong>
-          <small>{text.requestsSub}</small>
         </article>
         <article className="analytics-v5-metric analytics-v5-response-metric">
           <span>{text.complex}</span>
@@ -124,12 +114,11 @@ export function AnalyticsV5Overview({
             <strong>{formatPercent(safeRatio(highPerformanceRequests, routedRequests))}</strong>
             <em>{formatRequestCount(highPerformanceRequests, locale)}</em>
           </div>
-          <small>{text.complexSub}</small>
         </article>
       </section>
 
       <div className="analytics-v5-primary-grid">
-        <AnalyticsV5Surface subtitle={text.modelTrendSub} title={text.modelTrend}>
+        <AnalyticsV5Surface title={text.modelTrend}>
           {evidence?.modelTraffic?.series?.some((series) => series.total > 0) ? (
             <AnalyticsV5ModelTrafficChart
               ariaLabel={text.modelTrend}

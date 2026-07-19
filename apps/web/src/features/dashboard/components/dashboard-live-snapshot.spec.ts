@@ -159,16 +159,22 @@ test("tenant chat live requests preserve provider identity for provider icons", 
 });
 
 test("provider usage keeps the existing cost breakdown wired to the redesigned donut", async () => {
-  const [overviewSource, providerUsageSource] = await Promise.all([
+  const [overviewSource, providerUsageSource, styles] = await Promise.all([
     readFile(overviewSourceUrl, "utf8"),
-    readFile(providerUsageSourceUrl, "utf8")
+    readFile(providerUsageSourceUrl, "utf8"),
+    readFile(dashboardStylesSourceUrl, "utf8")
   ]);
 
   expect(overviewSource).toContain("overview.costByModel.map");
   expect(overviewSource).toContain("costMicroUsd: row.costMicroUsd");
   expect(providerUsageSource).toContain("value: row.costMicroUsd");
   expect(providerUsageSource).toContain("formatMicroUsdSummary(totalCostMicroUsd)");
+  expect(providerUsageSource).toContain("maximumFractionDigits: 3");
   expect(providerUsageSource).not.toContain("row.requestCount");
+  expect(providerUsageSource).not.toContain("<em>{formatMicroUsd(row.costMicroUsd)}</em>");
+  expect(styles).toMatch(
+    /\.dashboard-provider-usage-body \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: minmax\(180px, 0\.9fr\) auto;/
+  );
 });
 
 test("dashboard keeps cost range controls and stacked mobile panels inside the layout flow", async () => {
@@ -187,6 +193,50 @@ test("dashboard keeps cost range controls and stacked mobile panels inside the l
   );
   expect(styles).toMatch(
     /\.dashboard-secondary-grid \{[^}]*grid-template-columns: 1fr;[^}]*height: auto;[^}]*max-height: none;[^}]*overflow: visible;/
+  );
+  expect(styles).toMatch(
+    /html\[data-theme="dark"\] \.dashboard-cost-over-time-metrics > div\[data-kind="total"\] strong,[\s\S]*?color: var\(--foreground\);/
+  );
+});
+
+test("dashboard keeps its compact default scale and enlarges operational labels only in expanded mode", async () => {
+  const styles = await readFile(dashboardStylesSourceUrl, "utf8");
+  const readabilityStyles = styles.slice(
+    styles.indexOf("/* Dashboard concept scale: compact, high-signal cards aligned with the operational mockup. */")
+  );
+
+  expect(readabilityStyles).toMatch(
+    /\.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(16px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(26px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-range-tabs a \{[^}]*min-height: 46px;[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-metrics span \{[^}]*font-size: calc\(24px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-provider-icon \{[^}]*width: 38px;[^}]*height: 38px;/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-row strong,[\s\S]*?font-size: calc\(22px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-live-requests-table td,[\s\S]*?font-size: calc\(19px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-live-provider-icon \{[^}]*width: 36px;[^}]*height: 36px;/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-live-provider-model strong \{[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /@media \(min-width: 1101px\) and \(max-width: 1280px\) \{\s*html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-grid \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-header \{\s*grid-template-areas:\s*"title"\s*"side"\s*"metrics";/
   );
 });
 

@@ -290,7 +290,7 @@ function formatDashboardMicroUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
+    maximumFractionDigits: 3,
     minimumFractionDigits: 2,
     style: "currency"
   }).format(Number.isFinite(dollars) ? dollars : 0);

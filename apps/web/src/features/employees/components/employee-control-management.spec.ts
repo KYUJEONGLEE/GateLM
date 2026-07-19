@@ -115,11 +115,13 @@ test("employee ranking and detail controls use Tenant Chat cost observation and 
   expect(source).toContain("defaultEmployeeWeeklyTokenLimit");
   expect(source).toContain('locale === "ko" ? "적용" : "Apply"');
   expect(source).toContain("employeeCostRange");
-  expect(source).toContain("Provider-confirmed Tenant Chat cost only");
+  expect(source).not.toContain("Provider-confirmed Tenant Chat cost only");
+  expect(source).not.toContain("employee-cost-insights-status");
+  expect(source).toContain('locale === "ko" ? "직원" : "Employees"');
   expect(source).toContain("if (response.status === 409)");
   expect(source).toContain("disabled={pending}");
   expect(source).not.toContain("function costLimitUsd(");
-  expect(source).toContain("usage.periodTimezone");
+  expect(source).not.toContain("usage.periodTimezone");
   expect(source).not.toContain("AnalyticsEmployeeTokenBarChart");
   expect(styles).toContain(".employee-weekly-token-footer {");
   expect(styles).toContain(".employee-weekly-token-slider-current {");
@@ -137,4 +139,14 @@ test("employee cost graph requests Tenant Chat ranges", async () => {
   expect(pageSource).toContain('source: "tenant_chat"');
   expect(source).toContain("&range=${employeeCostRange}");
   expect(source).toContain('["24h", "7d", "30d"]');
+});
+
+test("employee monetary values round to at most three decimal places", async () => {
+  const source = await readFile(employeeManagementSourceUrl, "utf8");
+
+  expect(source).toContain("return formatUsd(usd, locale ===");
+  expect(source).toContain('return formatUsd(value, "en-US")');
+  expect(source).toContain("maximumFractionDigits: 3");
+  expect(source).toContain("minimumFractionDigits: 2");
+  expect(source).toContain("microUsdMaximumFractionDigits={3}");
 });

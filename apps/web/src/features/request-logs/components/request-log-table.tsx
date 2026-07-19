@@ -98,7 +98,6 @@ const requestLogText: Record<
     nextPage: string;
     pageSummary: string;
     previousPage: string;
-    rangeEndLabel: string;
     refreshLabel: string;
     safetyLabel: string;
     safetyOptions: Record<RequestLogSafetyOutcomeFilter, string>;
@@ -147,7 +146,6 @@ const requestLogText: Record<
     nextPage: "Next",
     pageSummary: "Showing {start}-{end} of {total}",
     previousPage: "Previous",
-    rangeEndLabel: "End of logs in this range",
     refreshLabel: "Refresh",
     safetyLabel: "Safety",
     safetyOptions: {
@@ -200,7 +198,6 @@ const requestLogText: Record<
     nextPage: "다음",
     pageSummary: "{total}개 중 {start}-{end}개 표시",
     previousPage: "이전",
-    rangeEndLabel: "현재 범위의 마지막 로그",
     refreshLabel: "새로고침",
     safetyLabel: "마스킹 / 필터링",
     safetyOptions: {
@@ -512,9 +509,6 @@ export function RequestLogTable({
                 <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
               </Link>
             </div>
-            <div className="request-log-list-end" role="status">
-              <span>{text.rangeEndLabel}</span>
-            </div>
           </div>
           {detailPanel}
         </section>
@@ -715,8 +709,8 @@ function formatMicroUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
-    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+    minimumFractionDigits: 3,
     style: "currency"
   }).format(dollars);
 }

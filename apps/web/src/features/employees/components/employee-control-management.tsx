@@ -51,7 +51,7 @@ import {
   getRateLimitRefillTokensPerSecond,
   getRateLimitWindowSeconds
 } from "@/lib/control-plane/runtime-policy-types";
-import { formatMicroUsdCurrency, nullableText } from "@/lib/formatting/formatters";
+import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 import type {
@@ -2326,12 +2326,6 @@ export function EmployeeControlManagement({
         <div className="employee-usage-ranking-heading">
           <div>
             <h3>{locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}</h3>
-            <p>
-              {locale === "ko"
-                ? "Tenant Chat의 Provider 확정 비용만 표시하는 읽기 전용 지표입니다."
-                : "A read-only view of Provider-confirmed Tenant Chat cost only."}
-              {usage.periodTimezone ? ` · ${usage.periodTimezone}` : ""}
-            </p>
           </div>
           <div className="employee-cost-range-actions" role="group">
             {(["24h", "7d", "30d"] as const).map((range) => (
@@ -2365,6 +2359,7 @@ export function EmployeeControlManagement({
                 className="employee-cost-ranking-chart"
                 kind="micro-usd"
                 maxRows={10}
+                microUsdMaximumFractionDigits={3}
                 orientation="vertical"
                 outlierMultiplier={1.5}
                 rows={employeeCostChartRows}
@@ -2386,9 +2381,6 @@ export function EmployeeControlManagement({
                 <span>{locale === "ko" ? "비용 인사이트" : "Cost insights"}</span>
                 <strong>{locale === "ko" ? "현재 기간 요약" : "Current period"}</strong>
               </div>
-              <span className="employee-cost-insights-status">
-                {locale === "ko" ? "확정 비용" : "Confirmed"}
-              </span>
             </div>
             <dl className="employee-cost-insights-metrics">
               <div className="employee-cost-insights-primary">
@@ -2400,7 +2392,7 @@ export function EmployeeControlManagement({
                 <dd>{formatMicroUsd(employeeCostChartAverage, locale)}</dd>
               </div>
               <div>
-                <dt>{locale === "ko" ? "비용 발생 직원" : "Active employees"}</dt>
+                <dt>{locale === "ko" ? "직원" : "Employees"}</dt>
                 <dd>
                   {employeeCostChartActiveRows.length}
                   {locale === "ko" ? "명" : ""}
@@ -3661,16 +3653,23 @@ function formatTokenLimit(
 }
 
 function formatMicroUsd(value: number | null, locale: Locale) {
-  return value === null
-    ? "-"
-    : formatMicroUsdCurrency(value, locale === "ko" ? "ko-KR" : "en-US");
+  if (value === null) {
+    return "-";
+  }
+
+  const usd = (Number.isFinite(value) ? Math.max(0, value) : 0) / 1_000_000;
+  return formatUsd(usd, locale === "ko" ? "ko-KR" : "en-US");
 }
 
 function formatBudgetUsd(value: number) {
-  return new Intl.NumberFormat("en-US", {
+  return formatUsd(value, "en-US");
+}
+
+function formatUsd(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
     currency: "USD",
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+    minimumFractionDigits: 2,
     style: "currency"
   }).format(value);
 }

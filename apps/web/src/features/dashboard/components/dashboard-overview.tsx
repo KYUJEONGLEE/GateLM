@@ -95,11 +95,8 @@ const dashboardText: Record<
     keyMetrics: string;
     kpi: {
       averageLatency: string;
-      averageLatencyDetail: string;
       monthCost: string;
-      monthCostDetail: string;
       totalCost: string;
-      totalCostDetail: string;
       totalRequests: string;
     };
     overviewWorkspace: string;
@@ -198,11 +195,8 @@ const dashboardText: Record<
     keyMetrics: "Dashboard key metrics",
     kpi: {
       averageLatency: "Average latency",
-      averageLatencyDetail: "Average response time for the selected range",
       monthCost: "Month-to-date cost",
-      monthCostDetail: "Live accumulated cost for this month",
       totalCost: "Total cost",
-      totalCostDetail: "Provider cost for the selected range",
       totalRequests: "Total requests"
     },
     overviewWorkspace: "Dashboard overview workspace",
@@ -270,11 +264,8 @@ const dashboardText: Record<
     keyMetrics: "대시보드 핵심 지표",
     kpi: {
       averageLatency: "평균 지연 시간",
-      averageLatencyDetail: "선택 기간의 평균 응답 시간",
       monthCost: "이번 달 누적 비용",
-      monthCostDetail: "이번 달 실시간 누적 비용",
-      totalCost: "총비용",
-      totalCostDetail: "선택 기간의 실제 Provider 비용",
+      totalCost: "총 비용",
       totalRequests: "총 요청"
     },
     overviewWorkspace: "대시보드 개요 영역",
@@ -336,28 +327,24 @@ export function DashboardOverviewView({
   const monthToDate = monthToDateOverview ?? overview;
   const kpiCards = [
     {
-      detail: `${rangeLabel(filters.range, locale)} · ${text.kpi.totalCostDetail}`,
       icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.totalCost,
       tone: "blue",
       value: formatMicroUsd(overview.totalCostMicroUsd)
     },
     {
-      detail: rangeLabel(filters.range, locale),
       icon: <Activity aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.totalRequests,
       tone: "green",
       value: formatInteger(overview.totalRequests)
     },
     {
-      detail: text.kpi.averageLatencyDetail,
       icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.averageLatency,
       tone: "violet",
       value: formatLatency(overview.averageLatencyMs)
     },
     {
-      detail: text.kpi.monthCostDetail,
       icon: <WalletCards aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.monthCost,
       tone: "orange",
@@ -490,7 +477,6 @@ export function DashboardOverviewView({
                 <div className="dashboard-kpi-copy">
                   <span className="dashboard-kpi-label">{card.label}</span>
                   <strong>{card.value}</strong>
-                  <p>{card.detail}</p>
                 </div>
               </article>
             ))}
@@ -584,7 +570,7 @@ function formatMicroUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
+    maximumFractionDigits: 3,
     minimumFractionDigits: 2,
     style: "currency"
   }).format(dollars);
