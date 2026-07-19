@@ -82,6 +82,20 @@ Gateway local, remote, historical shadow는 동시에 켤 수 없다. 롤백은 
 
 실험용 AI Service 이미지는 `routing` ML extra만 설치한다. 이 extra는 실제 추론 경로가 import하는 NumPy, ONNX Runtime, tokenizer, Transformers만 포함하며 학습·export용 PyTorch/CUDA 의존성은 포함하지 않는다. 기존 `onnx` extra와 기본 self-host 빌드 의미는 변경하지 않는다.
 
+## CPU Tuning Outcome
+
+2026-07-19 격리 성능환경에서 batch size와 추론 worker 수를 분리해 비교했다. 구현은 bounded queue와 dedicated worker를 사용하며 다음 실험 변수만 추가한다.
+
+- `AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE`
+- `AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS`
+- `AI_SERVICE_ROUTING_DIFFICULTY_WORKER_COUNT`
+
+동적 micro-batch는 채택하지 않는다. 승인된 holdout 100건을 batch 1 기준과 비교했을 때 batch 2부터 판정 2건이 바뀌었고 그중 1건은 `complex -> simple`이었다. 처리량 증가는 2.08%뿐이므로 정확성 회귀를 정당화하지 못한다. 현재 artifact의 authoritative 실행 단위는 계속 batch 1이다.
+
+단일 2 vCPU AI 호스트의 두-Gateway 150 RPS E2E에서는 worker 4가 가장 나았다. 기존 원격 기준선 대비 AI CPU 평균은 `182.24% -> 102.02%`, remote `ready` 비율은 `31.04% -> 87.29%`, routing 평균은 `84.217ms -> 44.384ms`로 개선됐다. 그러나 timeout, busy, inference failure가 합계 12.71% 남았고 HTTP p95도 `206.336ms`여서 local E5 기준선을 통과하지 못했다.
+
+worker 8은 같은 AI CPU 수준에서 `ready`가 44.55%로 다시 악화됐다. 같은 호스트에서 Uvicorn process를 2개로 늘려 ONNX Session을 분리한 실험도 메모리만 약 1.55GiB로 증가하고 `ready`는 48.25%에 그쳤다. 따라서 현재 추천 실험값은 single process, batch 1, worker 4지만 active 배포 또는 150 RPS 용량 보장으로 승격하지 않는다. 전체 근거는 [`remote-e5-cpu-optimization-report.md`](../testing/remote-e5-cpu-optimization-report.md)에 기록한다.
+
 ## Comparison Gates
 
 계약 변경 검토 전 다음을 모두 충족해야 한다.
