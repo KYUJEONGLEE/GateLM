@@ -2,18 +2,18 @@
 
 | Field | Value |
 |---|---|
-| Status | Canonical offline component + authoritative optional Gateway difficulty runtime |
+| Status | Canonical offline component + authoritative private AI Service difficulty runtime |
 | Model | `intfloat/multilingual-e5-small` |
 | Source revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
-| Runtime | Canonical Python ORT CPU + optional Go/Linux amd64 native ORT CPU, dynamic QInt8 |
+| Runtime | Authoritative Python ORT CPU + compatibility Go/Linux amd64 native ORT CPU, dynamic QInt8 |
 | Canonical output | L2-normalized `float32[1,64]`; one request per encoder invocation |
 | Execution shape | `difficulty-e5-single-request-execution.2026-07-15.v1` (`batchSize=1`) |
 | Manifest | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v2.json) |
 | Gateway runtime lock | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json) |
 | PCA artifact | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.v2.npz`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.v2.npz) |
-| Last reviewed | 2026-07-15 |
+| Last reviewed | 2026-07-20 |
 
-이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Optional Gateway image는 같은 경로를 process-local startup smoke와 request runtime에서 사용한다. 현재 명시적으로 승격된 106D artifact만 model-path difficulty를 제품 routing decision에 연결하며, 다른 artifact나 encoder component의 존재는 자동 promotion을 뜻하지 않는다.
+이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Private AI Service는 같은 경로를 startup warmup과 request runtime에서 사용하고 Gateway는 exact 42D vector와 bounded instruction만 전달한다. 현재 명시적으로 승격된 106D artifact만 model-path difficulty를 제품 routing decision에 연결하며, 다른 artifact나 encoder component의 존재는 자동 promotion을 뜻하지 않는다.
 
 ## 1. Canonical Pipeline
 
@@ -80,15 +80,16 @@ Committed NPZ는 `mean`의 exact shape `[384]`과 `components`의 exact shape `[
 
 2026-07-16 model-path 전용 5,000건을 train 3,000 / calibration 1,000 / test 1,000으로 family-disjoint하게 고정했다. Train과 calibration에서 semantic heads, 42D/106D/118D Logistic Regression, Platt/Isotonic과 threshold를 비교한 결과 Candidate B `42D rule + 64D PCA`, L2/liblinear `C=10`, Platt, global threshold `0.096`을 freeze했다. Frozen 뒤 test 1,000건을 한 번만 열었고 joint routing accuracy `62.6%`(95% CI `59.1–65.9%`), difficulty accuracy `97.8%`를 기록했다. 상세 aggregate evidence는 [`../../reports/routing-difficulty-model/20260716-model-path-5000/REPORT.md`](../../reports/routing-difficulty-model/20260716-model-path-5000/REPORT.md)에 있다.
 
-Gateway artifact는 `difficulty-candidate-b-106d.model-path-5000.shadow.v1.json`이고 content hash는 `sha256:4c2c4f516206530d3b3f9c393b0633b7694a2e0aa5e20400d65faf088a184f5d`다. Deployment artifact 생성은 original frozen selection manifest와 PCA/head/LR/calibrator hash가 모두 일치하는 selection-only replay만 허용하며 test outcome을 다시 열지 않는다. Semantic-head artifact는 학습 provenance에 남지만 선택된 106D vector에는 포함되지 않으므로 Gateway hot path는 semantic-head probability를 계산하지 않는다. Artifact는 current decision boundary를 pin하므로 historical baseline waiver를 사용하지 않는다. 2026-07-16 explicit owner directive에 따라 이 exact artifact를 optional E5 Gateway profile의 authoritative model-path difficulty runtime으로 승격한다. Category와 non-model-path sentinel/hard-rule difficulty는 계속 rule-based다.
+Runtime artifact는 `difficulty-candidate-b-106d.model-path-5000.shadow.v1.json`이고 content hash는 `sha256:4c2c4f516206530d3b3f9c393b0633b7694a2e0aa5e20400d65faf088a184f5d`다. Deployment artifact 생성은 original frozen selection manifest와 PCA/head/LR/calibrator hash가 모두 일치하는 selection-only replay만 허용하며 test outcome을 다시 열지 않는다. Semantic-head artifact는 학습 provenance에 남지만 선택된 106D vector에는 포함되지 않으므로 hot path는 semantic-head probability를 계산하지 않는다. Artifact는 current decision boundary를 pin하므로 historical baseline waiver를 사용하지 않는다. 2026-07-20 운영 결정에 따라 이 exact artifact를 private AI Service의 authoritative model-path difficulty runtime으로 승격한다. Category와 non-model-path sentinel/hard-rule difficulty는 계속 Gateway rule-based다.
 
 ## 3. Artifact And Distribution Contract
 
 PCA NPZ와 작은 manifest는 source control에 포함한다. Tokenizer와 ONNX model처럼 큰 runtime artifact는 Git에 포함하지 않는다. 개발 환경에서는 `.tmp/difficulty-semantic-encoder-artifacts`의 로컬 artifact cache에 exact pinned revision과 hash로 준비한다.
 
-Optional Gateway E5 runtime 배포 환경은 다음 규칙을 지켜야 한다.
+Authoritative AI Service와 optional Gateway compatibility runtime 배포 환경은 다음 규칙을 지켜야 한다.
 
 - [`../../infra/docker/gateway-core-e5-runtime.Dockerfile`](../../infra/docker/gateway-core-e5-runtime.Dockerfile)은 검증된 local bundle을 `difficulty_e5` named build context로만 받는다. 기본 [`../../infra/docker/gateway-core.Dockerfile`](../../infra/docker/gateway-core.Dockerfile)은 계속 CGO-free이며 E5를 포함하지 않는다.
+- [`../../infra/docker/ai-service.Dockerfile`](../../infra/docker/ai-service.Dockerfile)은 CPU-only `routing` extra와 checked-in manifest/model artifact만 포함하고, 검증된 large tokenizer/ONNX directory는 AI 호스트에서 read-only로 mount한다.
 - Optional image build 단계에서 manifest에 나열된 tokenizer 파일, dynamic-QInt8 ONNX model, encoder manifest, Linux amd64 runtime lock과 ONNX Runtime shared library를 포함한다.
 - Rust tokenizer static library는 image build에만 사용하고 최종 runtime image에는 넣지 않는다. 최종 image에는 request inference에 필요한 model/tokenizer와 ONNX Runtime shared library만 둔다.
 - Container/runtime 시작 이후 Hugging Face 또는 다른 network source에서 artifact를 다운로드하면 안 된다.
@@ -125,18 +126,18 @@ corepack pnpm run verify:v2.1-gateway-e5-runtime
 
 ## 6. Runtime Boundary
 
-Gateway에는 build tag `difficulty_e5_onnx && linux && cgo`로 제한된 local tokenizer/ONNX adapter가 존재한다. `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true`일 때 artifact를 검증하고 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → final 106D score를 한 번 smoke 실행한 뒤 authoritative difficulty runtime을 만든다. Cold native initialization을 포함한 process-start smoke timeout은 `60s`다. 초기화·smoke 실패와 지원하지 않는 기본 CGO-free build는 semantic runtime을 `unavailable`로 내리고 Gateway는 rule difficulty fallback mode로 시작한다. E5 runtime은 readiness 필수 dependency가 아니다.
+AI Service는 `AI_SERVICE_ROUTING_DIFFICULTY_ENABLED=true`일 때 manifest, tokenizer/ONNX files와 106D artifact의 exact size·SHA-256을 검증한다. 고정된 비민감 instruction으로 tokenizer → QInt8 encoder → attention-mask mean pooling → PCA 64D → final 106D score를 warmup한 뒤에만 `/readyz`가 성공한다. Authoritative execution은 single Uvicorn process, batch size 1, batch wait 0ms, worker 4, bounded queue 16, ONNX intra/inter-op 1/1이다.
 
-Package-level evaluator는 masking 이후 실제 `PromptFeatures.instructionText`만 받으며 동시 ONNX 실행을 1개로 제한한다. 빈 instruction은 tokenizer 전 `not_applicable`, queue 포화는 `busy`, timeout·runtime 실패·panic은 안전한 상태 코드로 반환하고 raw text, token, embedding, head output, 개별 score 또는 native error detail을 노출하지 않는다. 일반 Gateway와 Tenant Chat private completion은 process-global runtime 하나를 공유한다. 두 router 모두 manual과 auto-disabled 경로를 먼저 종료하고, 정상 auto 요청만 공유 worker 1개와 bounded 대기 job 4개의 synchronous dispatcher에 전달한다. Default timeout은 `100ms`, 허용 범위는 `1..1000ms`다.
+Gateway는 masking 이후 실제 `PromptFeatures.instructionText`와 exact `difficulty-feature-vector.v1`만 dedicated service-token으로 인증된 private endpoint에 전달한다. 빈 instruction은 전송 전 `not_applicable`, AI queue 포화는 `busy`, timeout·transport/runtime 실패는 bounded 상태 코드로 처리하며 raw text, token, vector, embedding, head output, 개별 score 또는 native error detail을 log·metric·DB·event에 노출하지 않는다. 일반 Gateway와 Tenant Chat private completion은 같은 remote classifier를 사용한다. 두 router 모두 manual과 auto-disabled 경로를 먼저 종료하고 정상 auto 요청만 전송한다. Default timeout은 `250ms`, 허용 범위는 `1..1000ms`다.
 
-Semantic result가 `ready`이면 106D `simple | complex`가 일반 Gateway policy와 Chat App 5×2 policy의 routing matrix cell, ordered modelRef candidate와 decision key의 권위 difficulty가 된다. Non-model-path `not_applicable`과 `unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`는 해당 요청에서 기존 rule difficulty를 유지한다. Category는 항상 rule classifier 결과다. Runtime과 historical non-authoritative shadow는 동시에 활성화할 수 없다.
+Semantic result가 `ready`이면 106D `simple | complex`가 일반 Gateway policy와 Chat App 5×2 policy의 routing matrix cell, ordered modelRef candidate와 decision key의 권위 difficulty가 된다. Non-model-path `not_applicable`과 `unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`는 해당 요청에서 기존 rule difficulty를 유지한다. Category는 항상 rule classifier 결과다. Local runtime, remote runtime과 historical non-authoritative shadow는 동시에 활성화할 수 없다.
 
-Selected 106D checked-in Go bundle은 pooled 384D 이후 `42D rule + PCA 64D`를 고정 배열로 정확히 조립하고 final difficulty head, Platt calibration과 threshold `0.096`을 적용한다. Runtime promotion은 artifact version, content hash와 model selection을 변경하지 않았고 frozen test 1,000건을 다시 열지 않았다. Rollback은 `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=false`로 재시작하여 process 전체를 rule difficulty mode로 되돌린다.
+Selected 106D artifact는 pooled 384D 이후 `42D rule + PCA 64D`를 정확히 조립하고 final difficulty head, Platt calibration과 threshold `0.096`을 적용한다. Runtime promotion은 artifact version, content hash와 model selection을 변경하지 않았고 frozen test 1,000건을 다시 열지 않았다. Rollback은 이전 main SHA의 local E5 image로 재배포하거나 remote flags를 끄고 rule difficulty mode로 전환한다.
 
-## 7. Default Local And Production Build Paths
+## 7. Local And Production Build Paths
 
 Tenant Chat local Compose는 Linux amd64 E5 runtime Dockerfile을 기본 `gateway-core` build로 사용하고 `.tmp/gateway-e5-runtime-bundle`을 `difficulty_e5` named build context로 전달한다. Local profile은 `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true`, timeout `100ms`, historical shadow `false`를 고정한다. 이는 일반 [`../../infra/docker/gateway-core.Dockerfile`](../../infra/docker/gateway-core.Dockerfile)의 CGO-free·rule-only 기본값을 바꾸지 않는다.
 
-AWS production Compose는 기본 CGO-free Gateway image 대신 optional E5 runtime Dockerfile을 사용한다. [`../../deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh`](../../deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh)는 target commit checkout 이후 image build 전에 pinned Hugging Face revision, tokenizer release와 ONNX Runtime package를 내려받고 byte size·SHA-256·exact file allowlist를 검증해 `.tmp/gateway-e5-runtime-bundle`을 만든다. 검증 실패는 image build와 cutover 전에 deployment를 중단한다.
+AWS production Compose는 Gateway에 기본 CGO-free image를 사용하고 E5 model/runtime을 포함하지 않는다. [`../../deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh`](../../deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh)는 AI 호스트에서 target commit checkout 이후 image build 전에 pinned Hugging Face revision, tokenizer release와 ONNX Runtime package를 내려받고 byte size·SHA-256·exact file allowlist를 검증해 `.tmp/gateway-e5-runtime-bundle`을 만든다. 기존 경로 이름은 compatibility를 위해 유지한다. 검증 실패는 AI image build와 cutover 전에 deployment를 중단한다.
 
-Compose는 이 디렉터리를 `difficulty_e5` named build context로 전달한다. Image build가 끝난 뒤 container startup과 request runtime은 network download를 수행하지 않는다. Runtime artifact는 production Compose가 주입하는 Tenant Chat secret owner UID/GID에서도 읽을 수 있도록 read-only permission으로 패키징한다.
+Production Compose는 검증된 model directory만 AI Service container에 read-only mount하고 CPU-only `routing` dependency extra를 사용한다. Model file은 공개 artifact이므로 AI container UID가 읽을 수 있는 `0755` directory/`0644` file mode로 제한하며 쓰기 권한은 주지 않는다. Image build가 끝난 뒤 container startup과 request runtime은 network download를 수행하지 않는다. Gateway는 private `8001` endpoint만 사용하므로 새 public port를 열지 않는다.

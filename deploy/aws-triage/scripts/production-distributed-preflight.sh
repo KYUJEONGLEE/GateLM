@@ -39,7 +39,8 @@ case "${role}" in
   gateway)
     production_require_active_env gateway \
       POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
-      GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN GATEWAY_OBSERVABILITY_INTERNAL_TOKEN
+      GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN GATEWAY_OBSERVABILITY_INTERNAL_TOKEN \
+      GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN
     ;;
   data)
     production_require_active_env data \
@@ -51,7 +52,9 @@ case "${role}" in
       TENANT_CHAT_WEB_SERVICE_TOKEN TENANT_CHAT_WORKLOAD_ACTIVE_KID
     ;;
   ai)
-    production_require_active_env ai AI_SERVICE_RAG_SERVICE_TOKEN
+    production_require_active_env ai \
+      AI_SERVICE_RAG_SERVICE_TOKEN GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN
+    command -v sha256sum >/dev/null 2>&1 || production_fail "sha256sum is required on the AI host."
     ;;
   pii) ;;
 esac
@@ -86,6 +89,7 @@ if [[ "${check_dependencies}" == "true" ]]; then
       production_assert_tcp "PostgreSQL" "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" 5432
       production_assert_tcp "Redis" "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" 6379
       production_assert_tcp "AI Service" "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" 8001
+      production_assert_http_ready "AI Service routing runtime" "http://${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}:8001/readyz"
       production_assert_tcp "Mock Provider" "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" 8090
       production_assert_tcp "PII v3.6 Service" "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" 8001
       production_assert_http_ready "PII v3.6 Service" "http://${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}:8001/readyz"

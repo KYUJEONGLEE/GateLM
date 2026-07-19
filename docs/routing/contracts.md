@@ -20,7 +20,7 @@ Tenant Chat의 별도 tier와 Provider Catalog의 `routing.costTier` metadata는
 
 ## 2. Classification Pipeline
 
-라우팅 분류는 외부 LLM을 호출하지 않는 deterministic local 두 단계다. Category는 기존 rule-based classifier를 유지하고, difficulty의 active target contract는 단일 전역 regularized Logistic Regression과 전역 calibrator를 사용한다. 내부 구현 구조와 artifact 승격 경계는 [`classification-pipeline.md`](classification-pipeline.md)가, exact encoder는 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가, 아직 승격되지 않은 offline 학습·codegen 준비 경계는 [`difficulty-logistic-training.md`](difficulty-logistic-training.md)가 정의한다.
+라우팅 분류는 외부 LLM이나 Provider를 호출하지 않는 deterministic 두 단계다. Category는 Gateway의 rule-based classifier가 유지하고, difficulty model path는 private AI Service의 고정 E5/ONNX runtime과 단일 전역 regularized Logistic Regression·전역 calibrator를 사용한다. 내부 구현 구조와 artifact 승격 경계는 [`classification-pipeline.md`](classification-pipeline.md)가, exact encoder는 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가, offline 학습·codegen 준비 경계는 [`difficulty-logistic-training.md`](difficulty-logistic-training.md)가 정의한다.
 
 ```text
 Prompt
@@ -90,20 +90,24 @@ Score, raw probability, logit, calibrator material과 threshold는 package-priva
 
 ### 2.1 Authoritative 106D difficulty runtime
 
-Optional Linux amd64 E5 runtime profile은 masking 이후 정상적으로 확정된 `model: "auto"` 요청의 model path에서 106D difficulty를 권위값으로 사용한다. 고정 입력은 `42D rule vector + 64D PCA projection`이며 Logistic Regression L2/liblinear `C=10`, Platt calibrator와 전역 `difficulty-threshold.model-path-5000.2026-07-16.v1 = 0.096`을 사용한다. `ComplexityScore >= 0.096`이면 `complex`, 미만이면 `simple`이다. Category는 기존 rule classifier가 계속 확정한다. Semantic result가 `ready`이면 그 `simple | complex` 값을 routing matrix lookup, `modelRef`, candidate 순서와 decision key에 사용한다. Manual modelRef, auto disabled와 route 실패 요청에는 semantic runtime을 실행하지 않는다. Empty/sentinel/hard-rule 경로처럼 model path가 아닌 요청은 rule difficulty를 그대로 사용한다.
+Private AI Service E5 runtime은 masking 이후 정상적으로 확정된 `model: "auto"` 요청의 model path에서 106D difficulty를 권위값으로 사용한다. 고정 입력은 `42D rule vector + 64D PCA projection`이며 Logistic Regression L2/liblinear `C=10`, Platt calibrator와 전역 `difficulty-threshold.model-path-5000.2026-07-16.v1 = 0.096`을 사용한다. `ComplexityScore >= 0.096`이면 `complex`, 미만이면 `simple`이다. Category는 Gateway의 기존 rule classifier가 계속 확정한다. Remote result가 `ready`이면 그 `simple | complex` 값을 routing matrix lookup, `modelRef`, candidate 순서와 decision key에 사용한다. Manual modelRef, auto disabled와 route 실패 요청에는 remote runtime을 실행하지 않는다. Empty/sentinel/hard-rule 경로처럼 model path가 아닌 요청은 rule difficulty를 그대로 사용한다.
 
-Runtime은 동시 encoder worker 1개와 bounded waiting job 4개를 사용한다. 각 요청의 기본 timeout은 `100ms`, 허용 범위는 `1..1000ms`다. Queue가 가득 찬 `busy`, request cancellation, `timeout`, invalid embedding, inference failure와 recovered panic은 해당 요청의 rule difficulty로 즉시 fail-safe fallback한다. 초기화 또는 startup smoke 실패도 Gateway를 중단하지 않고 process 전체를 rule difficulty fallback mode로 시작한다. 이미 시작된 native call은 worker 안에서 끝나지만 timeout된 요청을 다시 깨우거나 provider path를 지연시키지 않으며, 취소된 queued job은 평가 전에 버린다.
+Gateway는 private address의 `POST /internal/routing/difficulty/v1/classify`만 호출하며 `X-GateLM-AI-Service-Token` 전용 service token으로 인증한다. 요청은 contract/model/vector version, masking 이후의 bounded instruction text 최대 4,096자와 정확히 42개의 finite rule vector만 포함한다. 응답은 고정 contract/model identity, `ready`, `simple | complex`만 허용한다. AI Service와 Gateway는 instruction text, vector, embedding, token, score, raw probability, logit 또는 request identity를 response 이외의 log·metric·DB·event에 남기지 않는다. Production-like 환경에서는 HTTPS 또는 private service address만 허용하고 token은 32자 이상의 non-placeholder secret이어야 한다.
 
-Hot-path 활성화는 process-local `GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED=true`를 사용한다. `GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS`는 bounded request timeout을 설정한다. Runtime과 historical request shadow를 동시에 활성화하면 configuration error로 시작을 거부한다. Checked-in artifact는 current `semantic-empty / combined score-8` boundary와 일치하며 historical baseline waiver를 요구하거나 허용하지 않는다. 기본 CGO-free Gateway image는 E5를 포함하지 않고 runtime을 disabled로 유지한다. 권위 runtime image는 [`../../infra/docker/gateway-core-e5-runtime.Dockerfile`](../../infra/docker/gateway-core-e5-runtime.Dockerfile)이다.
+AI Service의 authoritative execution shape는 single Uvicorn process, encoder batch size `1`, batch wait `0ms`, bounded queue `16`, worker `4`, ONNX intra/inter-op thread `1/1`이다. Gateway의 기본 remote timeout은 `250ms`, 허용 범위는 `1..1000ms`, Gateway별 최대 동시 호출은 `64`다. Queue가 가득 찬 `busy`, request cancellation, `timeout`, unavailable, invalid response와 inference failure는 해당 요청의 rule difficulty로 즉시 fail-safe fallback하며 Provider 실행 자체를 실패시키지 않는다. AI Service startup warmup 또는 `/readyz`가 실패하면 배포 health check를 통과하지 못한다.
+
+운영 hot path는 `GATEWAY_DIFFICULTY_REMOTE_ENABLED=true`와 `AI_SERVICE_ROUTING_DIFFICULTY_ENABLED=true`를 함께 사용한다. Gateway local E5 runtime, remote runtime, historical request shadow는 동시에 활성화할 수 없으며 configuration error로 시작을 거부한다. Production Gateway는 기본 CGO-free [`../../infra/docker/gateway-core.Dockerfile`](../../infra/docker/gateway-core.Dockerfile)을 사용해 E5 model/runtime을 포함하지 않는다. 기존 local E5 image와 flag는 이전 배포 SHA rollback과 비교 테스트용 compatibility surface로만 유지한다. Checked-in artifact와 AI-host model bundle은 시작 전 고정 hash로 검증한다.
 
 ### 2.2 Historical request-shadow observability
 
 기존 `GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED`와 exact-pair allowlist 경로는 non-authoritative 비교용 compatibility surface로만 유지한다. Hot-path runtime이 enabled이면 사용할 수 없다. Shadow 결과는 routing matrix, modelRef, cache 또는 provider 호출에 영향을 주지 않는다.
 
-Request별 log, event, response 또는 DB record를 추가하지 않는다. 허용되는 제품 관측은 다음 두 aggregate metric뿐이다.
+Request별 log, event, response 또는 DB record를 추가하지 않는다. 허용되는 제품 관측은 다음 aggregate metric뿐이다.
 
 - `gatelm_routing_difficulty_shadow_total{status,category,comparison}`
 - `gatelm_routing_difficulty_shadow_duration_seconds{status}`
+- `gatelm_routing_difficulty_remote_total{status}`
+- `gatelm_routing_difficulty_remote_duration_seconds{status}`
 
 `status`는 `ready | not_applicable | unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`, `category`는 active 5 category, `comparison`은 `match | rule_simple_shadow_complex | rule_complex_shadow_simple | not_compared`로 고정한다. Raw/redacted prompt 본문, instruction/payload text, token, embedding, vector, weight, raw probability, logit, 개별 `ComplexityScore`, artifact hash, request/trace ID, modelRef, provider/model과 error detail은 metric 또는 다른 외부 surface에 넣지 않는다.
 

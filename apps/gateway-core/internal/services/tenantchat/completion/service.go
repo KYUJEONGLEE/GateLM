@@ -155,7 +155,7 @@ type Service struct {
 	safety            safetyEvaluator
 	cache             exactCache
 	tokenRate         providerTokenLimiter
-	difficultyRuntime *routing.DifficultySemanticRuntime
+	difficultyRuntime routing.DifficultySemanticClassifier
 	ledgerless        ledgerlessAccounting
 	preCall           preCallAccounting
 	metrics           *metrics.Registry
@@ -244,7 +244,7 @@ func WithProviderTokenLimiter(limiter providerTokenLimiter) Option {
 	return func(service *Service) { service.tokenRate = limiter }
 }
 
-func WithDifficultySemanticRuntime(runtime *routing.DifficultySemanticRuntime) Option {
+func WithDifficultySemanticRuntime(runtime routing.DifficultySemanticClassifier) Option {
 	return func(service *Service) { service.difficultyRuntime = runtime }
 }
 
@@ -468,7 +468,7 @@ func decideTenantChatRoute(
 	ctx context.Context,
 	snapshot tenantruntime.Snapshot,
 	input tenantchat.CompletionInput,
-	difficultyRuntime *routing.DifficultySemanticRuntime,
+	difficultyRuntime routing.DifficultySemanticClassifier,
 ) (tenantchat.RoutingDecision, error) {
 	policy := snapshot.Policies.Routing.Policy
 	if policy == nil {

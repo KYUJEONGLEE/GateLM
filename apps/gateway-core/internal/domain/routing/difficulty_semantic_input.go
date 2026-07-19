@@ -1,5 +1,14 @@
 package routing
 
+// DifficultyRemoteInferenceInput is an ephemeral, request-local transfer
+// object for authoritative remote E5 inference. InstructionText is
+// sensitive request material and must not be persisted or logged. RuleVector
+// contains only the stable 42D difficulty-feature-vector.v1 values.
+type DifficultyRemoteInferenceInput struct {
+	InstructionText string
+	RuleVector      [DifficultyFeatureVectorDimensionV1]float64
+}
+
 // difficultyEmbeddingInput returns the bounded, normalized instruction text
 // reserved for a future package-internal semantic encoder.
 func difficultyEmbeddingInput(features PromptFeatures) (string, bool) {
@@ -15,4 +24,24 @@ func difficultyEmbeddingInput(features PromptFeatures) (string, bool) {
 // reports, logs, metrics, or model lock manifests.
 func DifficultySemanticInputForOffline(features PromptFeatures) (string, bool) {
 	return difficultyEmbeddingInput(features)
+}
+
+// BuildDifficultyRemoteInput builds the exact instruction and rule vector
+// consumed by the private remote E5 classifier.
+func BuildDifficultyRemoteInput(
+	features PromptFeatures,
+	category string,
+) (DifficultyRemoteInferenceInput, bool) {
+	difficultyFeatures := ExtractDifficultyFeatures(features, category)
+	if !UsesDifficultyModelPath(difficultyFeatures) {
+		return DifficultyRemoteInferenceInput{}, false
+	}
+	instructionText, ok := difficultyEmbeddingInput(features)
+	if !ok {
+		return DifficultyRemoteInferenceInput{}, false
+	}
+	return DifficultyRemoteInferenceInput{
+		InstructionText: instructionText,
+		RuleVector:      vectorizeDifficultyFeaturesV1Fixed(difficultyFeatures),
+	}, true
 }

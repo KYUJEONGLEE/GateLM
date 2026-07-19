@@ -3,8 +3,13 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
-from app.api.dependencies import create_ai_safety_detector_service
-from app.api.routes import ai_safety, health, rag_extraction, safety
+from app.api.dependencies import (
+    RoutingDifficultyConcurrencyGate,
+    create_ai_safety_detector_service,
+    create_routing_difficulty_batcher,
+    create_routing_difficulty_service,
+)
+from app.api.routes import ai_safety, health, rag_extraction, routing_difficulty, safety
 from app.core.config import Settings, load_settings
 from app.core.errors import (
     RemoteSafetyHTTPError,
@@ -34,10 +39,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if resolved_settings.ai_safety_preload_enabled:
         detector_service.warmup()
     app.state.ai_safety_detector_service = detector_service
+    if resolved_settings.routing_difficulty_enabled:
+        routing_difficulty_service = create_routing_difficulty_service(
+            resolved_settings
+        )
+        routing_difficulty_service.warmup()
+        app.state.routing_difficulty_service = routing_difficulty_service
+        routing_difficulty_batcher = create_routing_difficulty_batcher(
+            resolved_settings,
+            routing_difficulty_service,
+        )
+        app.state.routing_difficulty_batcher = routing_difficulty_batcher
+        app.add_event_handler("shutdown", routing_difficulty_batcher.close)
+        app.state.routing_difficulty_concurrency_gate = (
+            RoutingDifficultyConcurrencyGate(
+                resolved_settings.routing_difficulty_max_concurrent
+            )
+        )
     app.include_router(health.router)
     app.include_router(safety.router)
     app.include_router(ai_safety.router)
     app.include_router(rag_extraction.router)
+    app.include_router(routing_difficulty.router)
     app.add_exception_handler(RemoteSafetyHTTPError, remote_safety_http_error_handler)
     app.add_exception_handler(RagExtractionError, rag_extraction_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)

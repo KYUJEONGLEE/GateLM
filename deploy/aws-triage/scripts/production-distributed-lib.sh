@@ -50,6 +50,7 @@ production_load_env() {
   production_load_env_file "${PRODUCTION_DISTRIBUTED_BASE_ENV_FILE}"
   production_load_env_file "${PRODUCTION_DISTRIBUTED_ENV_FILE}"
   export GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP="${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP:-10.78.2.50}"
+  export GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME="${GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME:-/gatelm/production/routing-difficulty-service-token}"
   PRODUCTION_DISTRIBUTED_DB_ATTESTATION="${PRODUCTION_DISTRIBUTED_STATE_DIR}/db-restore-${GATELM_PRODUCTION_DISTRIBUTED_POSTGRES_VOLUME_NAME:-missing}.env"
 }
 
@@ -70,6 +71,7 @@ production_validate_env() {
     GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG \
     GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT \
     GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT \
+    GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME \
     GATELM_PRODUCTION_DISTRIBUTED_EDGE_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP \
     GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP \
@@ -124,6 +126,8 @@ production_validate_env() {
     production_fail "PII artifact URI must be a private s3:// bucket path under pii/v36/."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256}" =~ ^[a-f0-9]{64}$ ]] || \
     production_fail "PII artifact SHA-256 must be lowercase hexadecimal."
+  [[ "${GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME}" =~ ^/[A-Za-z0-9_./-]+$ ]] || \
+    production_fail "Routing difficulty service token parameter name is invalid."
 
   [[ "${GATEWAY_AUTH_CACHE_ENABLED:-true}" == "true" ]] || production_fail "Production auth cache must be enabled."
   [[ "${GATEWAY_AUTH_CACHE_TTL_MS:-5000}" == "5000" ]] || production_fail "Production auth cache TTL must be 5000ms."
@@ -182,6 +186,19 @@ production_assert_role_host() {
   [[ "${marker}" == "${role}" ]] || production_fail "Role marker ${marker:-empty} does not match ${role}."
 }
 
+production_assert_e5_runtime_bundle() {
+  local bundle_root="${GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT}"
+  local checksum_file="${bundle_root}/difficulty-e5-gateway-image.linux-amd64.v2.sha256"
+  [[ -d "${bundle_root}" && ! -L "${bundle_root}" ]] || \
+    production_fail "E5 runtime bundle is missing or unsafe: ${bundle_root}"
+  [[ -f "${checksum_file}" && ! -L "${checksum_file}" ]] || \
+    production_fail "E5 runtime bundle checksum manifest is missing or unsafe."
+  (
+    cd "${bundle_root}"
+    sha256sum --check "${checksum_file}" >/dev/null
+  ) || production_fail "E5 runtime bundle integrity verification failed."
+}
+
 production_assert_build_source() {
   local role="$1"
   local actual_sha status
@@ -192,9 +209,8 @@ production_assert_build_source() {
     production_fail "Build source ${actual_sha} does not match ${GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA}."
   status="$(git -c safe.directory="${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT}" -C "${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT}" status --porcelain --untracked-files=all)"
   [[ -z "${status}" ]] || production_fail "Build source contains tracked or untracked changes."
-  if [[ "${role}" == "gateway" ]]; then
-    [[ -d "${GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT}" ]] || \
-      production_fail "E5 runtime bundle is missing: ${GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT}"
+  if [[ "${role}" == "ai" ]]; then
+    production_assert_e5_runtime_bundle
   fi
 }
 

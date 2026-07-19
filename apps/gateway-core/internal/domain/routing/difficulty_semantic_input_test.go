@@ -48,3 +48,22 @@ func TestDifficultySemanticInputForOfflineMatchesPackagePrivateBoundary(t *testi
 		t.Fatalf("offline semantic input leaked or changed payload boundary: %q", offlineInput)
 	}
 }
+
+func TestBuildDifficultyRemoteInputUsesInstructionAndExact42DVector(t *testing.T) {
+	t.Parallel()
+
+	features := ExtractPromptFeatures("Explain OAuth briefly.\n```\nraw payload must stay excluded\n```")
+	input, ok := BuildDifficultyRemoteInput(features, CategoryGeneral)
+	if !ok {
+		t.Fatal("expected remote input to be applicable")
+	}
+	if input.InstructionText != "explain oauth briefly." {
+		t.Fatalf("instruction=%q, want instruction-only normalized text", input.InstructionText)
+	}
+	if len(input.RuleVector) != DifficultyFeatureVectorDimensionV1 {
+		t.Fatalf("vector=%d, want %d", len(input.RuleVector), DifficultyFeatureVectorDimensionV1)
+	}
+	if input.RuleVector[difficultyFeatureIndexCategoryGeneral] != 1 {
+		t.Fatal("general category one-hot feature is missing")
+	}
+}

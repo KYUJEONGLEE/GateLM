@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -158,6 +159,7 @@ type Config struct {
 	ResponseCaptureMaxChars                int
 	SemanticCache                          SemanticCacheConfig
 	DifficultyE5Runtime                    DifficultyE5RuntimeConfig
+	DifficultyRemote                       DifficultyRemoteConfig
 	DifficultyE5Shadow                     DifficultyE5ShadowConfig
 	TenantChatPrivate                      TenantChatPrivateConfig
 	RAGEmbedding                           RAGEmbeddingConfig
@@ -169,6 +171,14 @@ type DifficultyE5RuntimeConfig struct {
 	EncoderManifestPath string
 	RuntimeLockPath     string
 	Timeout             time.Duration
+}
+
+type DifficultyRemoteConfig struct {
+	Enabled           bool
+	EndpointURL       string
+	ServiceToken      string
+	Timeout           time.Duration
+	MaximumConcurrent int
 }
 
 type DifficultyE5ShadowConfig struct {
@@ -331,6 +341,7 @@ func LoadWithError() (Config, error) {
 		err = ragEmbeddingErr
 	}
 	difficultyE5RuntimeEnabled := envBool("GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED", false)
+	difficultyRemoteEnabled := envBool("GATEWAY_DIFFICULTY_REMOTE_ENABLED", false)
 	difficultyE5RuntimeTimeout, difficultyE5RuntimeTimeoutErr := envDurationMillisInRange(
 		"GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS",
 		100,
@@ -341,8 +352,26 @@ func LoadWithError() (Config, error) {
 		return Config{}, difficultyE5RuntimeTimeoutErr
 	}
 	difficultyE5ShadowEnabled := envBool("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", false)
-	if difficultyE5RuntimeEnabled && difficultyE5ShadowEnabled {
-		return Config{}, errors.New("difficulty E5 runtime and shadow cannot be enabled together")
+	if enabledCount(difficultyE5RuntimeEnabled, difficultyRemoteEnabled, difficultyE5ShadowEnabled) > 1 {
+		return Config{}, errors.New("local difficulty E5 runtime, remote difficulty runtime, and shadow cannot be enabled together")
+	}
+	difficultyRemoteTimeout, difficultyRemoteTimeoutErr := envDurationMillisInRange(
+		"GATEWAY_DIFFICULTY_REMOTE_TIMEOUT_MS",
+		250,
+		1,
+		1000,
+	)
+	if difficultyRemoteTimeoutErr != nil {
+		return Config{}, difficultyRemoteTimeoutErr
+	}
+	difficultyRemoteMaximumConcurrent, difficultyRemoteMaximumConcurrentErr := ragEnvIntInRange(
+		"GATEWAY_DIFFICULTY_REMOTE_MAX_CONCURRENT",
+		64,
+		1,
+		1024,
+	)
+	if difficultyRemoteMaximumConcurrentErr != nil {
+		return Config{}, difficultyRemoteMaximumConcurrentErr
 	}
 	difficultyE5ShadowScopes := []DifficultyE5ShadowScope(nil)
 	if difficultyE5ShadowEnabled {
@@ -501,6 +530,13 @@ func LoadWithError() (Config, error) {
 			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")),
 			Timeout:             difficultyE5RuntimeTimeout,
 		},
+		DifficultyRemote: DifficultyRemoteConfig{
+			Enabled:           difficultyRemoteEnabled,
+			EndpointURL:       strings.TrimSpace(envString("GATEWAY_DIFFICULTY_REMOTE_URL", "")),
+			ServiceToken:      strings.TrimSpace(envString("GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN", "")),
+			Timeout:           difficultyRemoteTimeout,
+			MaximumConcurrent: difficultyRemoteMaximumConcurrent,
+		},
 		DifficultyE5Shadow: DifficultyE5ShadowConfig{
 			Enabled:             difficultyE5ShadowEnabled,
 			AllowedScopes:       difficultyE5ShadowScopes,
@@ -543,6 +579,9 @@ func LoadWithError() (Config, error) {
 		return cfg, err
 	}
 	if err := validateAISafetySidecarConfig(cfg.AISafetySidecar); err != nil {
+		return cfg, err
+	}
+	if err := validateDifficultyRemoteConfig(cfg); err != nil {
 		return cfg, err
 	}
 	if err := validateTenantChatPrivateConfig(cfg); err != nil {
@@ -694,6 +733,49 @@ func parseDifficultyE5ShadowScopes(raw string) []DifficultyE5ShadowScope {
 		return nil
 	}
 	return result
+}
+
+func enabledCount(values ...bool) int {
+	count := 0
+	for _, value := range values {
+		if value {
+			count++
+		}
+	}
+	return count
+}
+
+func validateDifficultyRemoteConfig(cfg Config) error {
+	remote := cfg.DifficultyRemote
+	if !remote.Enabled {
+		return nil
+	}
+	parsed, err := url.Parse(strings.TrimSpace(remote.EndpointURL))
+	if err != nil || parsed.Hostname() == "" ||
+		(parsed.Scheme != "http" && parsed.Scheme != "https") ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return errors.New("GATEWAY_DIFFICULTY_REMOTE_URL must be a valid http(s) URL without credentials, query, or fragment")
+	}
+	if strings.TrimSpace(remote.ServiceToken) == "" {
+		return errors.New("GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN is required when remote difficulty is enabled")
+	}
+	productionLike := productionLikeEnv() || observabilityProductionLikeMode(cfg.DeploymentMode)
+	if productionLike && IsWeakObservabilityInternalToken(remote.ServiceToken) {
+		return errors.New("GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments")
+	}
+	if productionLike && parsed.Scheme == "http" && !privateOrLocalServiceHostname(parsed.Hostname()) {
+		return errors.New("GATEWAY_DIFFICULTY_REMOTE_URL must use HTTPS or a private service address in production-like environments")
+	}
+	return nil
+}
+
+func privateOrLocalServiceHostname(hostname string) bool {
+	hostname = strings.TrimSpace(strings.ToLower(hostname))
+	if hostname == "localhost" || (!strings.Contains(hostname, ".") && hostname != "") {
+		return true
+	}
+	ip := net.ParseIP(hostname)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
 }
 
 func validatePostgresPoolConfig(name string, cfg PostgresPoolConfig) error {

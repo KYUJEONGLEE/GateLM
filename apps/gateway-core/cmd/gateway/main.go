@@ -35,6 +35,7 @@ import (
 	ragworkloadauth "gatelm/apps/gateway-core/internal/adapters/rag/workloadauth"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	routingaiservice "gatelm/apps/gateway-core/internal/adapters/routing/aiservice"
 	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
@@ -96,6 +97,18 @@ func main() {
 	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneInternalToken) == "" {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
 	}
+	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
+		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
+		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
+		IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
+		DialTimeout:           cfg.ProviderTransport.DialTimeout,
+		DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
+		TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: cfg.ProviderTransport.ResponseHeaderTimeout,
+		ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
+	})
+	defer providerHTTPClient.CloseIdleConnections()
 	metricsRegistry := metrics.NewRegistry()
 	difficultyE5InitCtx, difficultyE5InitCancel := context.WithTimeout(context.Background(), difficultyE5StartupSmokeTimeout)
 	difficultyE5Runtime, difficultyE5RuntimeStatus := initializeDifficultyE5Runtime(
@@ -116,7 +129,25 @@ func main() {
 			})
 		}),
 	)
+	difficultyRemote, difficultyRemoteStatus := initializeDifficultyRemote(
+		difficultyE5InitCtx,
+		cfg.DifficultyRemote,
+		providerHTTPClient,
+		func(observation routingaiservice.Observation) {
+			metricsRegistry.RoutingDifficultyRemote(metrics.RoutingDifficultyRemote{
+				Status:          observation.Status,
+				DurationSeconds: observation.Duration.Seconds(),
+			})
+		},
+	)
 	difficultyE5InitCancel()
+	var difficultyClassifier routingdomain.DifficultySemanticClassifier
+	if difficultyE5Runtime != nil {
+		difficultyClassifier = difficultyE5Runtime
+	}
+	if difficultyRemote != nil {
+		difficultyClassifier = difficultyRemote
+	}
 	if difficultyE5RuntimeStatus == DifficultyE5HotPathRuntimeUnavailable {
 		log.Printf("gateway-core difficulty E5 hot-path runtime unavailable; auto routing falls back to rule difficulty")
 	}
@@ -129,19 +160,12 @@ func main() {
 	if difficultyE5ShadowRunner != nil {
 		log.Printf("gateway-core difficulty E5 shadow initialized; product routing unchanged")
 	}
-
-	providerHTTPClient := providerhttpclient.New(providerhttpclient.Config{
-		MaxIdleConns:          cfg.ProviderTransport.MaxIdleConns,
-		MaxIdleConnsPerHost:   cfg.ProviderTransport.MaxIdleConnsPerHost,
-		MaxConnsPerHost:       cfg.ProviderTransport.MaxConnsPerHost,
-		IdleConnTimeout:       cfg.ProviderTransport.IdleConnTimeout,
-		DialTimeout:           cfg.ProviderTransport.DialTimeout,
-		DialKeepAlive:         cfg.ProviderTransport.DialKeepAlive,
-		TLSHandshakeTimeout:   cfg.ProviderTransport.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: cfg.ProviderTransport.ResponseHeaderTimeout,
-		ExpectContinueTimeout: cfg.ProviderTransport.ExpectContinueTimeout,
-	})
-	defer providerHTTPClient.CloseIdleConnections()
+	if difficultyRemoteStatus == DifficultyRemoteRuntimeUnavailable {
+		log.Printf("gateway-core remote difficulty runtime unavailable; auto routing falls back to rule difficulty")
+	}
+	if difficultyRemote != nil {
+		log.Printf("gateway-core remote difficulty runtime initialized; AI Service E5 is authoritative for eligible auto routes")
+	}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
@@ -264,8 +288,8 @@ func main() {
 	if difficultyE5ShadowRunner != nil {
 		routerOptions = append(routerOptions, app.WithDifficultySemanticShadow(difficultyE5ShadowRunner))
 	}
-	if difficultyE5Runtime != nil {
-		routerOptions = append(routerOptions, app.WithDifficultySemanticRuntime(difficultyE5Runtime))
+	if difficultyClassifier != nil {
+		routerOptions = append(routerOptions, app.WithDifficultySemanticRuntime(difficultyClassifier))
 	}
 	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
 		gatewayCredentials := cachedauth.NewStore(postgresauth.NewStore(postgresPool), cachedauth.Config{
@@ -355,7 +379,7 @@ func main() {
 			tenantChatUsage,
 			postgrestenantprovider.NewExecutor(postgresPool, providers, credentialResolver),
 			completionservice.WithSafetyEvaluator(tenantChatSafety),
-			completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime),
+			completionservice.WithDifficultySemanticRuntime(difficultyClassifier),
 			completionservice.WithExactCache(redistenantcache.NewStore(redisClient, tenantChatCacheKeySets)),
 			completionservice.WithProviderTokenLimiter(redistenantratelimit.NewLimiter(redisClient)),
 			completionservice.WithMetrics(metricsRegistry),
@@ -494,10 +518,10 @@ func main() {
 		}
 		shadowCloseCancel()
 	}
-	if difficultyE5Runtime != nil {
+	if difficultyClassifier != nil {
 		runtimeCloseCtx, runtimeCloseCancel := context.WithTimeout(context.Background(), time.Second)
-		if err := difficultyE5Runtime.Close(runtimeCloseCtx); err != nil {
-			log.Printf("gateway-core difficulty E5 hot-path runtime shutdown incomplete")
+		if err := difficultyClassifier.Close(runtimeCloseCtx); err != nil {
+			log.Printf("gateway-core difficulty classifier shutdown incomplete")
 		}
 		runtimeCloseCancel()
 	}
@@ -527,6 +551,12 @@ const (
 	DifficultyE5HotPathRuntimeUnavailable = "unavailable"
 )
 
+const (
+	DifficultyRemoteRuntimeDisabled    = "disabled"
+	DifficultyRemoteRuntimeReady       = "ready"
+	DifficultyRemoteRuntimeUnavailable = "unavailable"
+)
+
 type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
 type difficultyE5ModelCompatibility func() bool
 
@@ -552,6 +582,36 @@ func initializeDifficultyE5Runtime(
 		return nil, DifficultyE5HotPathRuntimeUnavailable
 	}
 	return routingdomain.NewDifficultySemanticRuntime(evaluator, cfg.Timeout), DifficultyE5HotPathRuntimeReady
+}
+
+func initializeDifficultyRemote(
+	ctx context.Context,
+	cfg config.DifficultyRemoteConfig,
+	httpClient *http.Client,
+	observer routingaiservice.Observer,
+) (routingdomain.DifficultySemanticClassifier, string) {
+	if !cfg.Enabled {
+		return nil, DifficultyRemoteRuntimeDisabled
+	}
+	classifier, err := routingaiservice.NewClassifier(routingaiservice.Config{
+		EndpointURL:       cfg.EndpointURL,
+		ServiceToken:      cfg.ServiceToken,
+		HTTPClient:        httpClient,
+		Timeout:           cfg.Timeout,
+		MaximumConcurrent: cfg.MaximumConcurrent,
+		Observer:          observer,
+	})
+	if err != nil {
+		return nil, DifficultyRemoteRuntimeUnavailable
+	}
+	features := routingdomain.ExtractPromptFeatures(difficultyE5StartupSmokeInstruction)
+	category := routingdomain.NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category
+	result := classifier.Classify(ctx, features, category)
+	if result.Status != routingdomain.DifficultySemanticShadowReady {
+		_ = classifier.Close(context.Background())
+		return nil, DifficultyRemoteRuntimeUnavailable
+	}
+	return classifier, DifficultyRemoteRuntimeReady
 }
 
 func initializeDifficultyE5ShadowRunner(

@@ -59,7 +59,7 @@ type RouteCandidateStatus struct {
 type SimpleRouter struct {
 	config            SimpleRouterConfig
 	promptClassifier  RuleBasedPromptClassifier
-	difficultyRuntime *DifficultySemanticRuntime
+	difficultyRuntime DifficultySemanticClassifier
 	difficultyShadow  *DifficultySemanticShadowRunner
 }
 
@@ -71,7 +71,7 @@ func WithDifficultySemanticShadow(runner *DifficultySemanticShadowRunner) Simple
 	}
 }
 
-func WithDifficultySemanticRuntime(runtime *DifficultySemanticRuntime) SimpleRouterOption {
+func WithDifficultySemanticRuntime(runtime DifficultySemanticClassifier) SimpleRouterOption {
 	return func(router *SimpleRouter) {
 		router.difficultyRuntime = runtime
 	}

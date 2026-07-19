@@ -42,7 +42,7 @@ type RouterOptions struct {
 	MaskingEngine                 handlers.MaskingEngine
 	ProviderCatalogs              providercatalog.Resolver
 	Credentials                   credentials.Resolver
-	DifficultyRuntime             *routingdomain.DifficultySemanticRuntime
+	DifficultyRuntime             routingdomain.DifficultySemanticClassifier
 	DifficultyShadow              *routingdomain.DifficultySemanticShadowRunner
 }
 
@@ -110,7 +110,7 @@ func WithDifficultySemanticShadow(runner *routingdomain.DifficultySemanticShadow
 	}
 }
 
-func WithDifficultySemanticRuntime(runtime *routingdomain.DifficultySemanticRuntime) RouterOption {
+func WithDifficultySemanticRuntime(runtime routingdomain.DifficultySemanticClassifier) RouterOption {
 	return func(options *RouterOptions) {
 		options.DifficultyRuntime = runtime
 	}

@@ -1,0 +1,52 @@
+services:
+  gateway-core:
+    environment:
+      GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "false"
+      GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"
+      GATEWAY_DIFFICULTY_REMOTE_ENABLED: "true"
+      GATEWAY_DIFFICULTY_REMOTE_URL: http://${GATELM_PERF_MOCK_PRIVATE_IP:?AI private IP is required}:8002/internal/routing/difficulty/v1/classify
+      GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN: ${GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN:?remote difficulty service token is required}
+      GATEWAY_DIFFICULTY_REMOTE_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_REMOTE_TIMEOUT_MS:-100}
+      GATEWAY_DIFFICULTY_REMOTE_MAX_CONCURRENT: ${GATEWAY_DIFFICULTY_REMOTE_MAX_CONCURRENT:-64}
+
+  ai-service-routing:
+    profiles: [ai]
+    image: gatelm/ai-service:perf-remote-e5
+    build:
+      context: ../..
+      dockerfile: infra/docker/ai-service.Dockerfile
+      args:
+        AI_SERVICE_INSTALL_ML_DEPS: "true"
+        AI_SERVICE_ML_EXTRA: routing
+    restart: "no"
+    init: true
+    environment:
+      DEPLOYMENT_MODE: perf
+      AI_SERVICE_HOST: 0.0.0.0
+      AI_SERVICE_PORT: "8002"
+      AI_SERVICE_LOG_LEVEL: INFO
+      AI_SERVICE_ACCESS_LOG_ENABLED: "false"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_OFFLINE: "1"
+      TENANT_CHAT_RAG_ENABLED: "false"
+      AI_SERVICE_ROUTING_DIFFICULTY_ENABLED: "true"
+      AI_SERVICE_ROUTING_DIFFICULTY_SERVICE_TOKEN: ${GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN:?remote difficulty service token is required}
+      AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT: ${AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT:-16}
+      AI_SERVICE_ROUTING_DIFFICULTY_WORKER_COUNT: ${AI_SERVICE_ROUTING_DIFFICULTY_WORKER_COUNT:-0}
+      AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE: ${AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE:-1}
+      AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS: ${AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS:-0}
+      AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS: ${AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS:-1}
+      AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS: ${AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS:-1}
+    volumes:
+      - ${GATELM_PERF_AI_E5_MODEL_DIR:?AI E5 model directory is required}:/opt/gatelm/difficulty-e5/multilingual-e5-small/614241f622f53c4eeff9890bdc4f31cfecc418b3:ro
+    ports:
+      - "${GATELM_PERF_MOCK_PRIVATE_IP:?AI private IP is required}:8002:8002"
+    mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-3g}
+    pids_limit: ${AI_SERVICE_PIDS_LIMIT:-256}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/readyz', timeout=2).read()\""]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 90s
+    networks: [role_internal]
