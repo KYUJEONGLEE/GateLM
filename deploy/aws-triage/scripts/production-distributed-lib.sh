@@ -285,16 +285,17 @@ production_compose() {
 
 production_assert_pii_model_artifact() {
   local model_dir="${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}"
-  local expected_files observed_files
+  local normalized_manifest expected_files observed_files
   [[ -f "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" && ! -L "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" ]] || \
     production_fail "PII model manifest is missing or unsafe."
   [[ -d "${model_dir}" && ! -L "${model_dir}" ]] || \
     production_fail "PII model directory is missing or unsafe: ${model_dir}"
+  normalized_manifest="$(tr -d '\r' < "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}")"
   (
     cd "${model_dir}"
-    tr -d '\r' < "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" | sha256sum --check - >/dev/null
+    printf '%s\n' "${normalized_manifest}" | sha256sum --check - >/dev/null
   ) || production_fail "PII model artifact verification failed."
-  expected_files="$(tr -d '\r' < "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" | awk 'NF == 2 {print $2}' | sort)"
+  expected_files="$(printf '%s\n' "${normalized_manifest}" | awk 'NF == 2 {print $2}' | sort)"
   observed_files="$(find "${model_dir}" -maxdepth 1 -type f -printf '%f\n' | sort)"
   [[ "${observed_files}" == "${expected_files}" ]] || production_fail "PII model directory contains missing or unexpected files."
 }
