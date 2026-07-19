@@ -138,3 +138,12 @@ test("employee cost graph requests Tenant Chat ranges", async () => {
   expect(source).toContain("&range=${employeeCostRange}");
   expect(source).toContain('["24h", "7d", "30d"]');
 });
+
+test("employee monetary values round to at most three decimal places", async () => {
+  const source = await readFile(employeeManagementSourceUrl, "utf8");
+
+  expect(source).toContain("return formatUsd(usd, locale ===");
+  expect(source).toContain('return formatUsd(value, "en-US")');
+  expect(source).toContain("maximumFractionDigits: 3");
+  expect(source).toContain("microUsdMaximumFractionDigits={3}");
+});

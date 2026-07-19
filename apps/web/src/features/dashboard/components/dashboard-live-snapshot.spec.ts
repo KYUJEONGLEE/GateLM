@@ -159,16 +159,22 @@ test("tenant chat live requests preserve provider identity for provider icons", 
 });
 
 test("provider usage keeps the existing cost breakdown wired to the redesigned donut", async () => {
-  const [overviewSource, providerUsageSource] = await Promise.all([
+  const [overviewSource, providerUsageSource, styles] = await Promise.all([
     readFile(overviewSourceUrl, "utf8"),
-    readFile(providerUsageSourceUrl, "utf8")
+    readFile(providerUsageSourceUrl, "utf8"),
+    readFile(dashboardStylesSourceUrl, "utf8")
   ]);
 
   expect(overviewSource).toContain("overview.costByModel.map");
   expect(overviewSource).toContain("costMicroUsd: row.costMicroUsd");
   expect(providerUsageSource).toContain("value: row.costMicroUsd");
   expect(providerUsageSource).toContain("formatMicroUsdSummary(totalCostMicroUsd)");
+  expect(providerUsageSource).toContain("maximumFractionDigits: 3");
   expect(providerUsageSource).not.toContain("row.requestCount");
+  expect(providerUsageSource).not.toContain("<em>{formatMicroUsd(row.costMicroUsd)}</em>");
+  expect(styles).toMatch(
+    /\.dashboard-provider-usage-body \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: minmax\(180px, 0\.9fr\) auto;/
+  );
 });
 
 test("dashboard keeps cost range controls and stacked mobile panels inside the layout flow", async () => {
@@ -187,6 +193,9 @@ test("dashboard keeps cost range controls and stacked mobile panels inside the l
   );
   expect(styles).toMatch(
     /\.dashboard-secondary-grid \{[^}]*grid-template-columns: 1fr;[^}]*height: auto;[^}]*max-height: none;[^}]*overflow: visible;/
+  );
+  expect(styles).toMatch(
+    /html\[data-theme="dark"\] \.dashboard-cost-over-time-metrics > div\[data-kind="total"\] strong,[\s\S]*?color: var\(--foreground\);/
   );
 });
 

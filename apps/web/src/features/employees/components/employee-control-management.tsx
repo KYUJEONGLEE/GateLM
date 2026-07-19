@@ -51,7 +51,7 @@ import {
   getRateLimitRefillTokensPerSecond,
   getRateLimitWindowSeconds
 } from "@/lib/control-plane/runtime-policy-types";
-import { formatMicroUsdCurrency, nullableText } from "@/lib/formatting/formatters";
+import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { parseCompactStepperInput } from "./employee-policy-unit-stepper";
 import type {
@@ -2365,6 +2365,7 @@ export function EmployeeControlManagement({
                 className="employee-cost-ranking-chart"
                 kind="micro-usd"
                 maxRows={10}
+                microUsdMaximumFractionDigits={3}
                 orientation="vertical"
                 outlierMultiplier={1.5}
                 rows={employeeCostChartRows}
@@ -3661,15 +3662,22 @@ function formatTokenLimit(
 }
 
 function formatMicroUsd(value: number | null, locale: Locale) {
-  return value === null
-    ? "-"
-    : formatMicroUsdCurrency(value, locale === "ko" ? "ko-KR" : "en-US");
+  if (value === null) {
+    return "-";
+  }
+
+  const usd = (Number.isFinite(value) ? Math.max(0, value) : 0) / 1_000_000;
+  return formatUsd(usd, locale === "ko" ? "ko-KR" : "en-US");
 }
 
 function formatBudgetUsd(value: number) {
-  return new Intl.NumberFormat("en-US", {
+  return formatUsd(value, "en-US");
+}
+
+function formatUsd(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
     currency: "USD",
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 3,
     minimumFractionDigits: 0,
     style: "currency"
   }).format(value);

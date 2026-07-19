@@ -51,6 +51,7 @@ export function AnalyticsRankedBarChart({
   className = "analytics-v3-ranked-chart",
   kind = "count",
   maxRows = 5,
+  microUsdMaximumFractionDigits,
   orientation = "horizontal",
   outlierMultiplier,
   presentation = false,
@@ -60,6 +61,7 @@ export function AnalyticsRankedBarChart({
   className?: string;
   kind?: AnalyticsValueKind;
   maxRows?: number;
+  microUsdMaximumFractionDigits?: number;
   orientation?: "horizontal" | "vertical";
   outlierMultiplier?: number;
   presentation?: boolean;
@@ -111,7 +113,8 @@ export function AnalyticsRankedBarChart({
               color: theme.axis,
               fontSize: presentation ? 17 : 13,
               fontWeight: 700,
-              formatter: (value: number) => formatValue(value, kind, true)
+              formatter: (value: number) =>
+                formatValue(value, kind, true, microUsdMaximumFractionDigits)
             },
             axisLine: { lineStyle: { color: theme.border } },
             axisTick: { show: false },
@@ -125,7 +128,8 @@ export function AnalyticsRankedBarChart({
               color: theme.axis,
               fontSize: presentation ? 17 : 13,
               fontWeight: 700,
-              formatter: (value: number) => formatValue(value, kind, true)
+              formatter: (value: number) =>
+                formatValue(value, kind, true, microUsdMaximumFractionDigits)
             },
             axisLine: { show: false },
             axisTick: { show: false },
@@ -167,7 +171,8 @@ export function AnalyticsRankedBarChart({
             color: theme.label,
             fontSize: presentation ? 20 : 14,
             fontWeight: 900,
-            formatter: ({ value }: { value: number }) => formatValue(value, kind, false),
+            formatter: ({ value }: { value: number }) =>
+              formatValue(value, kind, false, microUsdMaximumFractionDigits),
             position: isVertical ? "top" : "right",
             show: true
           },
@@ -175,7 +180,15 @@ export function AnalyticsRankedBarChart({
         }
       ]
     }),
-    [isVertical, kind, outlierThreshold, presentation, theme, visibleRows]
+    [
+      isVertical,
+      kind,
+      microUsdMaximumFractionDigits,
+      outlierThreshold,
+      presentation,
+      theme,
+      visibleRows
+    ]
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;
@@ -677,8 +690,22 @@ function latencySeries(name: string, data: Array<number | null>, color: string) 
   };
 }
 
-function formatValue(value: number, kind: AnalyticsValueKind, compact: boolean) {
+function formatValue(
+  value: number,
+  kind: AnalyticsValueKind,
+  compact: boolean,
+  microUsdMaximumFractionDigits?: number
+) {
   if (kind === "micro-usd") {
+    if (microUsdMaximumFractionDigits !== undefined) {
+      const usd = (Number.isFinite(value) ? Math.max(0, value) : 0) / 1_000_000;
+      return new Intl.NumberFormat("en-US", {
+        currency: "USD",
+        maximumFractionDigits: microUsdMaximumFractionDigits,
+        minimumFractionDigits: 0,
+        style: "currency"
+      }).format(usd);
+    }
     return formatMicroUsdCurrency(value);
   }
   if (kind === "milliseconds") {

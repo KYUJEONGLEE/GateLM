@@ -6,6 +6,14 @@
 @import "../features/analytics/analytics-v5.css";
 
 @font-face {
+  font-family: "Pretendard Variable";
+  src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Space Grotesk";
   src: url("/fonts/space-grotesk-700.woff2") format("woff2");
   font-style: normal;
@@ -247,8 +255,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", "Malgun Gothic", sans-serif;
 }
 
 a {
@@ -2191,6 +2199,19 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   color: #0f274f;
 }
 
+html[data-theme="dark"] .dashboard-cost-over-time-metrics span {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .dashboard-cost-over-time-metrics > div + div {
+  border-left-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="total"] strong,
+html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="average"] strong {
+  color: var(--foreground);
+}
+
 .dashboard-cost-over-time-legend {
   display: flex;
   align-items: center;
@@ -2529,10 +2550,11 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 
 .dashboard-provider-usage-body {
   display: grid;
-  grid-template-columns: minmax(150px, 0.88fr) minmax(130px, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(180px, 0.9fr) auto;
+  align-items: stretch;
   align-self: stretch;
-  gap: var(--space-4);
+  gap: var(--space-2);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -2599,7 +2621,7 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 
 .dashboard-provider-usage-row {
   display: grid;
-  grid-template-columns: 9px minmax(0, 1fr) minmax(48px, auto);
+  grid-template-columns: 9px 24px minmax(0, 1fr) minmax(48px, auto);
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -2619,6 +2641,30 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 10%, transparent);
 }
 
+.dashboard-provider-usage-provider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--foreground);
+  font-size: calc(10px + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+}
+
+.dashboard-provider-usage-provider-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+html[data-theme="dark"] .dashboard-provider-usage-provider-icon[data-family="openai"] img {
+  filter: brightness(0) invert(1);
+}
+
 .dashboard-provider-usage-row strong {
   min-width: 0;
   color: var(--foreground);
@@ -2630,24 +2676,16 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   white-space: nowrap;
 }
 
-.dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot),
-.dashboard-provider-usage-row em {
+.dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot):not(.dashboard-provider-usage-provider-icon) {
   color: var(--text-muted);
   font-size: calc(12px + var(--global-font-lift));
-  font-style: normal;
   font-weight: var(--font-weight-semibold);
   text-align: right;
   white-space: nowrap;
 }
 
-.dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot) {
+.dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot):not(.dashboard-provider-usage-provider-icon) {
   color: var(--foreground);
-}
-
-.dashboard-provider-usage-row em {
-  grid-column: 2 / -1;
-  justify-self: end;
-  font-size: calc(11px + var(--global-font-lift));
 }
 
 .dashboard-provider-usage-empty {
@@ -2686,7 +2724,9 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   .console-shell[data-sidebar-collapsed="false"] .dashboard-overview-workspace .dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
+@media (max-width: 1500px) {
   .dashboard-provider-usage-header {
     align-items: stretch;
     flex-direction: column;
@@ -2698,8 +2738,6 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
 
   .dashboard-provider-usage-body {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(180px, 0.9fr) auto;
-    gap: var(--space-2);
   }
 
   .dashboard-provider-usage-chart .dashboard-pie-chart {
@@ -3126,7 +3164,7 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 .dashboard-kpi-label {
   min-width: 0;
   color: var(--foreground);
-  font-size: calc(13px + var(--global-font-lift));
+  font-size: calc(16px + var(--global-font-lift));
   font-weight: var(--font-weight-semibold);
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -8492,27 +8530,6 @@ html[data-theme="dark"] .provider-card-icon[data-family="openai"] img {
   order: 1;
 }
 
-.request-log-list-end {
-  order: 2;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 18px 0 82px;
-  color: var(--text-muted);
-  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.request-log-list-end::before,
-.request-log-list-end::after {
-  content: "";
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--border);
-}
-
 .request-log-filter-bar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) auto;
@@ -8835,6 +8852,7 @@ html[data-theme="dark"] .request-log-screen {
   margin: 0;
   color: var(--request-log-text);
   font-size: calc(var(--font-size-3xl) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
 }
 
@@ -9130,25 +9148,31 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-col-time {
-  width: 5.278%;
+  width: 12%;
 }
 
 .request-log-col-name,
-.request-log-col-project,
-.request-log-col-model,
+.request-log-col-project {
+  width: 14.667%;
+}
+
+.request-log-col-model {
+  width: 19%;
+}
+
 .request-log-col-cost {
-  width: 15.787%;
+  width: 10.334%;
 }
 
 .request-log-col-latency,
 .request-log-col-status {
-  width: 15.787%;
+  width: 14.666%;
 }
 
 .request-log-screen .request-table th:first-child,
 .request-log-screen .request-table td:first-child {
-  width: 5.278%;
-  min-width: 0;
+  width: 12%;
+  min-width: 84px;
   max-width: none;
   padding-right: 6px;
   padding-left: 6px;
@@ -9415,20 +9439,6 @@ html[data-theme="dark"] .request-log-screen {
 .request-log-muted-value {
   color: var(--request-log-muted);
   font-weight: var(--font-weight-semibold);
-}
-
-.request-log-screen .request-log-list-end {
-  order: 4;
-  justify-content: space-between;
-  margin: 0;
-  padding: 0 0 26px;
-  color: var(--request-log-muted);
-  text-transform: none;
-}
-
-.request-log-screen .request-log-list-end::before,
-.request-log-screen .request-log-list-end::after {
-  display: none;
 }
 
 .request-log-screen .request-log-pagination {
@@ -9738,7 +9748,7 @@ html[data-theme="dark"] .request-log-screen {
 .request-log-screen .request-table :is(th, td),
 .request-log-screen .request-table :is(th, td) * {
   font-size: inherit;
-  font-weight: var(--font-weight-regular);
+  font-weight: var(--font-weight-semibold);
 }
 
 .request-log-screen .request-table :is(th, td):first-child {
@@ -13765,12 +13775,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .dashboard-provider-usage-row {
-    grid-template-columns: 10px minmax(0, 1fr) minmax(48px, auto);
-  }
-
-  .dashboard-provider-usage-row em {
-    grid-column: 2 / -1;
-    justify-self: end;
+    grid-template-columns: 10px 24px minmax(0, 1fr) minmax(48px, auto);
   }
 
   .dashboard-ai-panel {
@@ -21920,9 +21925,8 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   min-height: 142px;
 }
 
-.dashboard-overview-content .dashboard-kpi-label,
-.dashboard-overview-content .dashboard-kpi-card p {
-  font-size: calc(13px + var(--global-font-lift));
+.dashboard-overview-content .dashboard-kpi-label {
+  font-size: calc(16px + var(--global-font-lift));
 }
 
 .dashboard-overview-content .dashboard-kpi-card strong {
@@ -21939,8 +21943,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
 .dashboard-overview-content .dashboard-cost-over-time-legend,
 .dashboard-overview-content .dashboard-provider-usage-header select,
 .dashboard-overview-content .dashboard-provider-usage-row strong,
-.dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot),
-.dashboard-overview-content .dashboard-provider-usage-row em {
+.dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot):not(.dashboard-provider-usage-provider-icon) {
   font-size: calc(12px + var(--global-font-lift));
 }
 
@@ -21976,14 +21979,16 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
     font-size: calc(30px + var(--global-font-lift));
   }
 
-  .dashboard-overview-content .dashboard-kpi-label,
+  .dashboard-overview-content .dashboard-kpi-label {
+    font-size: calc(15px + var(--global-font-lift));
+  }
+
   .dashboard-overview-content .dashboard-kpi-card p,
   .dashboard-overview-content .dashboard-cost-over-time-header p,
   .dashboard-overview-content .dashboard-cost-over-time-legend,
   .dashboard-overview-content .dashboard-provider-usage-header select,
   .dashboard-overview-content .dashboard-provider-usage-row strong,
-  .dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot),
-  .dashboard-overview-content .dashboard-provider-usage-row em {
+  .dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot):not(.dashboard-provider-usage-provider-icon) {
     font-size: calc(12px + var(--global-font-lift));
   }
 }
@@ -21998,8 +22003,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
     min-height: 176px;
   }
 
-  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-kpi-label,
-  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-kpi-card p {
+  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-kpi-label {
     font-size: calc(22px + var(--global-font-lift));
   }
 
@@ -22018,8 +22022,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-cost-over-time-legend,
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-header select,
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-row strong,
-  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot),
-  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-row em {
+  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-row span:not(.dashboard-provider-usage-dot):not(.dashboard-provider-usage-provider-icon) {
     font-size: calc(20px + var(--global-font-lift));
   }
 
