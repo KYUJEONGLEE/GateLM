@@ -6,7 +6,10 @@ import {
   type ProviderDisplayDirectory
 } from "@/lib/control-plane/provider-display";
 import { getTenantChatInvocations } from "@/lib/control-plane/tenant-chat-observability-client";
-import { resolveTenantChatMaskingObservation } from "@/lib/control-plane/tenant-chat-masking-observation";
+import {
+  resolveTenantChatCacheStatus,
+  resolveTenantChatMaskingObservation
+} from "@/lib/control-plane/tenant-chat-masking-observation";
 import { getDashboardLiveRange, type LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 import type {
   LiveRequestsPayload,
@@ -48,12 +51,7 @@ export async function getTenantChatLiveRequests(
         providerId
       );
       return {
-        cacheStatus:
-          invocation.cacheOutcome === "hit"
-            ? "HIT" as const
-            : invocation.cacheOutcome === "miss"
-              ? "MISS" as const
-              : "NONE" as const,
+        cacheStatus: resolveTenantChatCacheStatus(invocation.cacheOutcome),
         category: "general" as const,
         costUsd: invocation.confirmedCostMicroUsd / 1_000_000,
         difficulty: "simple" as const,

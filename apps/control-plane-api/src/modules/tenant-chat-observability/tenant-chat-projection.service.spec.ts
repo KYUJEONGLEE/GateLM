@@ -112,6 +112,39 @@ describe('TenantChatProjectionService', () => {
     );
   });
 
+  it('projects an explicit no-masking observation from a v3 terminal usage event', async () => {
+    const row = settledRow();
+    row.payload.schemaVersion = 3;
+    Object.assign(row.payload, {
+      cacheOutcome: 'miss',
+      maskingAction: 'none',
+      maskingDetectedTypes: [],
+      maskingDetectedCount: 0,
+      safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+    });
+    const harness = createHarness(row);
+    harness.tx.tenantChatRequestAdmission.findUnique.mockResolvedValue({
+      ...admissionSource(),
+      maskingAction: 'none',
+      maskingDetectedTypes: [],
+      maskingDetectedCount: 0,
+      safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+    });
+
+    await harness.service.runOnce();
+
+    expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          maskingAction: 'none',
+          maskingDetectedTypes: [],
+          maskingDetectedCount: 0,
+          safetyPolicyDigest: `sha256:${'A'.repeat(43)}`,
+        }),
+      }),
+    );
+  });
+
   it('does not add rollup writes while the dashboard rollup flag is disabled', async () => {
     const harness = createHarness(settledRow());
 

@@ -198,7 +198,8 @@ func validLedgerlessObservability(terminalOutcome string, value tenantchat.Ledge
 	if value.EffectiveProviderID == "" || value.EffectiveModelKey == "" {
 		return false
 	}
-	return value.EffectiveRouteTier == "high_quality" ||
+	return value.EffectiveRouteTier == "" ||
+		value.EffectiveRouteTier == "high_quality" ||
 		value.EffectiveRouteTier == "standard" ||
 		value.EffectiveRouteTier == "economy"
 }
