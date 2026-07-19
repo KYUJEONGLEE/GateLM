@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Temporary encrypted transfer bucket for the GateLM production migration.
+
+Parameters:
+  SourceProductionRoleArn:
+    Type: String
+    Description: IAM role ARN attached to the existing single-host production instance.
+  DistributedNodeRoleArn:
+    Type: String
+    Description: IAM role ARN attached to the distributed Edge, Gateway, and AI instances.
+  DistributedDataRoleArn:
+    Type: String
+    Description: IAM role ARN attached to the distributed Data instance.
+
+Resources:
+  MigrationKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Temporary GateLM production migration transfer key.
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableAccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: "*"
+          - Sid: AllowMigrationRolesThroughS3
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref SourceProductionRoleArn
+                - !Ref DistributedNodeRoleArn
+                - !Ref DistributedDataRoleArn
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-migration
+        - Key: Temporary
+          Value: "true"
+
+  MigrationKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/gatelm-production-migration-transfer
+      TargetKeyId: !Ref MigrationKey
+
+  MigrationBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt MigrationKey.Arn
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireMigrationArtifacts
+            Status: Enabled
+            ExpirationInDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-migration
+        - Key: Temporary
+          Value: "true"
+
+  MigrationBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MigrationBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt MigrationBucket.Arn
+              - !Sub ${MigrationBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowExistingProductionTransfer
+            Effect: Allow
+            Principal:
+              AWS: !Ref SourceProductionRoleArn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub ${MigrationBucket.Arn}/gatelm-migration/*
+          - Sid: AllowDistributedNodesToRead
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref DistributedNodeRoleArn
+                - !Ref DistributedDataRoleArn
+            Action: s3:GetObject
+            Resource: !Sub ${MigrationBucket.Arn}/gatelm-migration/*
+          - Sid: AllowDataCleanup
+            Effect: Allow
+            Principal:
+              AWS: !Ref DistributedDataRoleArn
+            Action: s3:DeleteObject
+            Resource: !Sub ${MigrationBucket.Arn}/gatelm-migration/*
+
+Outputs:
+  BucketName:
+    Value: !Ref MigrationBucket
+  KmsKeyArn:
+    Value: !GetAtt MigrationKey.Arn

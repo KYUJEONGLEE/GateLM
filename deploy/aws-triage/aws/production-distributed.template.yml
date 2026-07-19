@@ -289,6 +289,11 @@ Resources:
           ToPort: 8001
           SourceSecurityGroupId: !Ref DataSecurityGroup
           Description: RAG extraction calls from Data worker
+        - IpProtocol: tcp
+          FromPort: 8090
+          ToPort: 8090
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: Existing production Mock Provider from Gateway
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
