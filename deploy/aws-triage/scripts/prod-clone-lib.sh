@@ -226,10 +226,16 @@ clone_assert_build_source() {
   [[ -d "${GATELM_PROD_CLONE_BUILD_CONTEXT}/.git" || -f "${GATELM_PROD_CLONE_BUILD_CONTEXT}/.git" ]] || \
     clone_fail "Build context is not a Git checkout: ${GATELM_PROD_CLONE_BUILD_CONTEXT}"
   local actual_sha status
-  actual_sha="$(git -C "${GATELM_PROD_CLONE_BUILD_CONTEXT}" rev-parse HEAD)"
+  actual_sha="$(git \
+    -c "safe.directory=${GATELM_PROD_CLONE_BUILD_CONTEXT}" \
+    -C "${GATELM_PROD_CLONE_BUILD_CONTEXT}" \
+    rev-parse HEAD)"
   [[ "${actual_sha}" == "${GATELM_PROD_CLONE_SOURCE_SHA}" ]] || \
     clone_fail "Build source ${actual_sha} does not match ${GATELM_PROD_CLONE_SOURCE_SHA}."
-  status="$(git -C "${GATELM_PROD_CLONE_BUILD_CONTEXT}" status --porcelain --untracked-files=all)"
+  status="$(git \
+    -c "safe.directory=${GATELM_PROD_CLONE_BUILD_CONTEXT}" \
+    -C "${GATELM_PROD_CLONE_BUILD_CONTEXT}" \
+    status --porcelain --untracked-files=all)"
   [[ -z "${status}" ]] || clone_fail "Build source contains tracked or untracked changes."
   if [[ "${role}" == "gateway1" || "${role}" == "gateway2" ]]; then
     [[ -d "${GATELM_PROD_CLONE_E5_BUNDLE_CONTEXT}" ]] || \
