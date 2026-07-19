@@ -1,10 +1,18 @@
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
 * { box-sizing: border-box; }
 html, body { min-height: 100%; margin: 0; }
 html:has(.chat-shell), body:has(.chat-shell) { height: 100%; min-height: 0; overflow: hidden; overscroll-behavior: none; }
 body {
   background: var(--g-bg);
   color: var(--g-text);
-  font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", Inter, system-ui, sans-serif;
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", "Malgun Gothic", sans-serif;
   font-size: 16px;
   line-height: 1.58;
   text-rendering: optimizeLegibility;

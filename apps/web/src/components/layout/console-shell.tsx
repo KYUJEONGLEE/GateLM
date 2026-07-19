@@ -39,6 +39,7 @@ import {
 import type { Locale } from "@/lib/i18n/locale";
 
 type ConsoleTheme = "light" | "dark";
+type ConsoleDisplayMode = "default" | "expanded";
 type CurrentUser = {
   avatarUrl?: string;
   displayName: string;
@@ -196,6 +197,9 @@ const shellText: Record<
     role: string;
     sessionRequired: string;
     settings: string;
+    display: string;
+    defaultDisplay: string;
+    expandedDisplay: string;
     light: string;
     dark: string;
     theme: string;
@@ -211,6 +215,9 @@ const shellText: Record<
     collapseNavigation: "Collapse navigation",
     expandNavigation: "Expand navigation",
     dark: "Dark",
+    defaultDisplay: "Default",
+    display: "Display",
+    expandedDisplay: "Expanded",
     language: "Language",
     landing: "Landing",
     light: "Light",
@@ -235,6 +242,9 @@ const shellText: Record<
     collapseNavigation: "내비게이션 닫기",
     expandNavigation: "내비게이션 열기",
     dark: "다크",
+    defaultDisplay: "기본",
+    display: "화면",
+    expandedDisplay: "확장",
     language: "언어",
     light: "라이트",
     loggingOut: "로그아웃 중...",
@@ -254,6 +264,7 @@ const shellText: Record<
 };
 
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
+const displayModeStorageKey = "gatelm_console_display_mode";
 const themeStorageKey = "gatelm_console_theme";
 const userMenuTriggerId = "gatelm-console-user-menu-trigger";
 
@@ -278,6 +289,7 @@ export function ConsoleShell({
   const [isResponsiveCompact, setIsResponsiveCompact] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [displayMode, setDisplayMode] = useState<ConsoleDisplayMode>("default");
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
   useEffect(() => {
@@ -307,6 +319,12 @@ export function ConsoleShell({
     applyTheme(initialTheme);
   }, []);
 
+  useEffect(() => {
+    const initialDisplayMode = readStoredDisplayMode() ?? readDocumentDisplayMode();
+    setDisplayMode(initialDisplayMode);
+    applyDisplayMode(initialDisplayMode);
+  }, []);
+
   function toggleSidebar() {
     if (isMobileViewport()) {
       setIsMobileNavigationOpen((current) => !current);
@@ -334,6 +352,12 @@ export function ConsoleShell({
     setTheme(nextTheme);
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
+  }
+
+  function selectDisplayMode(nextDisplayMode: ConsoleDisplayMode) {
+    setDisplayMode(nextDisplayMode);
+    applyDisplayMode(nextDisplayMode);
+    writeStoredDisplayMode(nextDisplayMode);
   }
 
   async function logout() {
@@ -551,9 +575,11 @@ export function ConsoleShell({
       <div className="console-main">
         <ConsoleTopbarActions
           currentUser={currentUser}
+          displayMode={displayMode}
           isLoggingOut={isLoggingOut}
           locale={locale}
           onLogout={logout}
+          onSelectDisplayMode={selectDisplayMode}
           onSelectTheme={selectTheme}
           text={text}
           theme={theme}
@@ -566,17 +592,21 @@ export function ConsoleShell({
 
 function ConsoleTopbarActions({
   currentUser,
+  displayMode,
   isLoggingOut,
   locale,
   onLogout,
+  onSelectDisplayMode,
   onSelectTheme,
   text,
   theme
 }: {
   currentUser: CurrentUser | null;
+  displayMode: ConsoleDisplayMode;
   isLoggingOut: boolean;
   locale: Locale;
   onLogout: () => Promise<void>;
+  onSelectDisplayMode: (displayMode: ConsoleDisplayMode) => void;
   onSelectTheme: (theme: ConsoleTheme) => void;
   text: (typeof shellText)[Locale];
   theme: ConsoleTheme;
@@ -668,6 +698,32 @@ function ConsoleTopbarActions({
                 </button>
               </div>
             </div>
+            <div className="console-user-settings-row">
+              <span>{text.display}</span>
+              <div
+                aria-label={text.display}
+                className="theme-segmented-control"
+                data-density="compact"
+                role="group"
+              >
+                <button
+                  aria-pressed={displayMode === "default"}
+                  data-active={displayMode === "default"}
+                  onClick={() => onSelectDisplayMode("default")}
+                  type="button"
+                >
+                  {text.defaultDisplay}
+                </button>
+                <button
+                  aria-pressed={displayMode === "expanded"}
+                  data-active={displayMode === "expanded"}
+                  onClick={() => onSelectDisplayMode("expanded")}
+                  type="button"
+                >
+                  {text.expandedDisplay}
+                </button>
+              </div>
+            </div>
           </section>
 
           <div className="console-user-menu-actions">
@@ -704,12 +760,32 @@ function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item 
   return item === "alerts" || item === "analytics" || item === "live-logs" || item === "overview";
 }
 
-function readStoredSidebarCollapsed(): boolean | null {
+function readLocalStorage(key: string): string | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  const storedValue = window.localStorage.getItem(sidebarCollapsedStorageKey);
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorage(key: string, value: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage can be blocked by browser privacy settings. The UI state still applies in memory.
+  }
+}
+
+function readStoredSidebarCollapsed(): boolean | null {
+  const storedValue = readLocalStorage(sidebarCollapsedStorageKey);
 
   if (storedValue === "true") {
     return true;
@@ -723,11 +799,7 @@ function readStoredSidebarCollapsed(): boolean | null {
 }
 
 function writeStoredSidebarCollapsed(isCollapsed: boolean) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+  writeLocalStorage(sidebarCollapsedStorageKey, String(isCollapsed));
 }
 
 function isMobileViewport() {
@@ -742,6 +814,35 @@ function readDocumentTheme(): ConsoleTheme {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
+function readDocumentDisplayMode(): ConsoleDisplayMode {
+  if (typeof document === "undefined") {
+    return "default";
+  }
+
+  return document.documentElement.dataset.presentationMode === "true"
+    ? "expanded"
+    : "default";
+}
+
+function applyDisplayMode(displayMode: ConsoleDisplayMode) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.presentationMode =
+    displayMode === "expanded" ? "true" : "false";
+}
+
+function readStoredDisplayMode(): ConsoleDisplayMode | null {
+  const storedValue = readLocalStorage(displayModeStorageKey);
+
+  return storedValue === "default" || storedValue === "expanded" ? storedValue : null;
+}
+
+function writeStoredDisplayMode(displayMode: ConsoleDisplayMode) {
+  writeLocalStorage(displayModeStorageKey, displayMode);
+}
+
 function applyTheme(theme: ConsoleTheme) {
   if (typeof document === "undefined") {
     return;
@@ -751,19 +852,11 @@ function applyTheme(theme: ConsoleTheme) {
 }
 
 function readStoredTheme(): ConsoleTheme | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const storedValue = window.localStorage.getItem(themeStorageKey);
+  const storedValue = readLocalStorage(themeStorageKey);
 
   return storedValue === "dark" || storedValue === "light" ? storedValue : null;
 }
 
 function writeStoredTheme(theme: ConsoleTheme) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(themeStorageKey, theme);
+  writeLocalStorage(themeStorageKey, theme);
 }

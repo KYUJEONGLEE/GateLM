@@ -51,6 +51,7 @@ export function AnalyticsRankedBarChart({
   className = "analytics-v3-ranked-chart",
   kind = "count",
   maxRows = 5,
+  microUsdMaximumFractionDigits,
   orientation = "horizontal",
   outlierMultiplier,
   presentation = false,
@@ -60,6 +61,7 @@ export function AnalyticsRankedBarChart({
   className?: string;
   kind?: AnalyticsValueKind;
   maxRows?: number;
+  microUsdMaximumFractionDigits?: number;
   orientation?: "horizontal" | "vertical";
   outlierMultiplier?: number;
   presentation?: boolean;
@@ -81,7 +83,7 @@ export function AnalyticsRankedBarChart({
     () => ({
       animationDuration: 360,
       grid: isVertical
-        ? { bottom: presentation ? 92 : 74, left: 76, right: 24, top: 48 }
+        ? { bottom: presentation ? 100 : 92, left: 76, right: 24, top: 48 }
         : {
             bottom: presentation ? 28 : 24,
             left: presentation ? 178 : 132,
@@ -96,9 +98,10 @@ export function AnalyticsRankedBarChart({
               fontSize: presentation ? 17 : 14,
               fontWeight: 800,
               formatter: (value: string) =>
-                value.length > 9 ? `${value.slice(0, 9)}…` : value,
+                value.length > 8 ? `${value.slice(0, 8)}…` : value,
               interval: 0,
               overflow: "truncate",
+              rotate: visibleRows.length >= 3 ? 32 : 0,
               width: 96
             },
             axisLine: { lineStyle: { color: theme.border } },
@@ -111,7 +114,9 @@ export function AnalyticsRankedBarChart({
               color: theme.axis,
               fontSize: presentation ? 17 : 13,
               fontWeight: 700,
-              formatter: (value: number) => formatValue(value, kind, true)
+              hideOverlap: true,
+              formatter: (value: number) =>
+                formatValue(value, kind, true, microUsdMaximumFractionDigits)
             },
             axisLine: { lineStyle: { color: theme.border } },
             axisTick: { show: false },
@@ -125,7 +130,8 @@ export function AnalyticsRankedBarChart({
               color: theme.axis,
               fontSize: presentation ? 17 : 13,
               fontWeight: 700,
-              formatter: (value: number) => formatValue(value, kind, true)
+              formatter: (value: number) =>
+                formatValue(value, kind, true, microUsdMaximumFractionDigits)
             },
             axisLine: { show: false },
             axisTick: { show: false },
@@ -167,7 +173,8 @@ export function AnalyticsRankedBarChart({
             color: theme.label,
             fontSize: presentation ? 20 : 14,
             fontWeight: 900,
-            formatter: ({ value }: { value: number }) => formatValue(value, kind, false),
+            formatter: ({ value }: { value: number }) =>
+              formatValue(value, kind, false, microUsdMaximumFractionDigits),
             position: isVertical ? "top" : "right",
             show: true
           },
@@ -175,7 +182,15 @@ export function AnalyticsRankedBarChart({
         }
       ]
     }),
-    [isVertical, kind, outlierThreshold, presentation, theme, visibleRows]
+    [
+      isVertical,
+      kind,
+      microUsdMaximumFractionDigits,
+      outlierThreshold,
+      presentation,
+      theme,
+      visibleRows
+    ]
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className={className} option={option} />;
@@ -286,17 +301,20 @@ export type AnalyticsEmployeeStackedRow = {
 export function AnalyticsEmployeeStackedChart({
   ariaLabel,
   kind = "count",
+  orientation = "horizontal",
   primaryLabel,
   rows,
   secondaryLabel
 }: {
   ariaLabel: string;
   kind?: AnalyticsValueKind;
+  orientation?: "horizontal" | "vertical";
   primaryLabel: string;
   rows: AnalyticsEmployeeStackedRow[];
   secondaryLabel: string;
 }) {
   const theme = useAnalyticsChartTheme();
+  const isVertical = orientation === "vertical";
   const visibleRows = useMemo(
     () =>
       [...rows]
@@ -313,7 +331,9 @@ export function AnalyticsEmployeeStackedChart({
     () => ({
       animationDuration: 360,
       color: ["#2563eb", "#0f8f66"],
-      grid: { bottom: 34, left: 132, right: 56, top: 50 },
+      grid: isVertical
+        ? { bottom: 74, left: 76, right: 24, top: 50 }
+        : { bottom: 34, left: 132, right: 56, top: 50 },
       legend: {
         data: [primaryLabel, secondaryLabel],
         icon: "circle",
@@ -324,38 +344,68 @@ export function AnalyticsEmployeeStackedChart({
         top: 0
       },
       tooltip: analyticsTooltip(tooltipUnit(kind), theme),
-      xAxis: {
-        axisLabel: {
-          color: theme.axis,
-          fontSize: 13,
-          fontWeight: 700,
-          formatter: (value: number) => formatValue(value, kind, true)
-        },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
-        splitLine: { lineStyle: { color: theme.grid } },
-        type: "value"
-      },
-      yAxis: {
-        axisLabel: {
-          color: theme.label,
-          fontSize: 13,
-          fontWeight: 800,
-          formatter: (value: string) => value.length > 13 ? `${value.slice(0, 13)}…` : value
-        },
-        axisLine: { lineStyle: { color: theme.border } },
-        axisTick: { show: false },
-        data: visibleRows.map((row) => row.label),
-        inverse: true,
-        type: "category"
-      },
+      xAxis: isVertical
+        ? {
+            axisLabel: {
+              color: theme.label,
+              fontSize: 13,
+              fontWeight: 800,
+              formatter: (value: string) => value.length > 9 ? `${value.slice(0, 9)}…` : value,
+              interval: 0,
+              overflow: "truncate",
+              width: 96
+            },
+            axisLine: { lineStyle: { color: theme.border } },
+            axisTick: { show: false },
+            data: visibleRows.map((row) => row.label),
+            type: "category"
+          }
+        : {
+            axisLabel: {
+              color: theme.axis,
+              fontSize: 13,
+              fontWeight: 700,
+              formatter: (value: number) => formatValue(value, kind, true)
+            },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
+            splitLine: { lineStyle: { color: theme.grid } },
+            type: "value"
+          },
+      yAxis: isVertical
+        ? {
+            axisLabel: {
+              color: theme.axis,
+              fontSize: 13,
+              fontWeight: 700,
+              formatter: (value: number) => formatValue(value, kind, true)
+            },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            minInterval: kind === "count" || kind === "tokens" ? 1 : undefined,
+            splitLine: { lineStyle: { color: theme.grid } },
+            type: "value"
+          }
+        : {
+            axisLabel: {
+              color: theme.label,
+              fontSize: 13,
+              fontWeight: 800,
+              formatter: (value: string) => value.length > 13 ? `${value.slice(0, 13)}…` : value
+            },
+            axisLine: { lineStyle: { color: theme.border } },
+            axisTick: { show: false },
+            data: visibleRows.map((row) => row.label),
+            inverse: true,
+            type: "category"
+          },
       series: [
         {
           barMaxWidth: 30,
           data: visibleRows.map((row) => row.primary),
           emphasis: { focus: "series" },
-          itemStyle: { borderRadius: [4, 0, 0, 4] },
+          itemStyle: { borderRadius: isVertical ? 0 : [4, 0, 0, 4] },
           name: primaryLabel,
           stack: "employee",
           type: "bar"
@@ -364,7 +414,7 @@ export function AnalyticsEmployeeStackedChart({
           barMaxWidth: 30,
           data: visibleRows.map((row) => row.secondary),
           emphasis: { focus: "series" },
-          itemStyle: { borderRadius: [0, 4, 4, 0] },
+          itemStyle: { borderRadius: isVertical ? [4, 4, 0, 0] : [0, 4, 4, 0] },
           label: {
             color: theme.label,
             fontSize: 13,
@@ -373,7 +423,7 @@ export function AnalyticsEmployeeStackedChart({
               const row = visibleRows[dataIndex];
               return row ? formatValue(row.primary + row.secondary, kind, false) : "";
             },
-            position: "right",
+            position: isVertical ? "top" : "right",
             show: true
           },
           name: secondaryLabel,
@@ -382,7 +432,7 @@ export function AnalyticsEmployeeStackedChart({
         }
       ]
     }),
-    [kind, primaryLabel, secondaryLabel, theme, visibleRows]
+    [isVertical, kind, primaryLabel, secondaryLabel, theme, visibleRows]
   );
 
   return (
@@ -677,8 +727,22 @@ function latencySeries(name: string, data: Array<number | null>, color: string) 
   };
 }
 
-function formatValue(value: number, kind: AnalyticsValueKind, compact: boolean) {
+function formatValue(
+  value: number,
+  kind: AnalyticsValueKind,
+  compact: boolean,
+  microUsdMaximumFractionDigits?: number
+) {
   if (kind === "micro-usd") {
+    if (microUsdMaximumFractionDigits !== undefined) {
+      const usd = (Number.isFinite(value) ? Math.max(0, value) : 0) / 1_000_000;
+      return new Intl.NumberFormat("en-US", {
+        currency: "USD",
+        maximumFractionDigits: microUsdMaximumFractionDigits,
+        minimumFractionDigits: 0,
+        style: "currency"
+      }).format(usd);
+    }
     return formatMicroUsdCurrency(value);
   }
   if (kind === "milliseconds") {

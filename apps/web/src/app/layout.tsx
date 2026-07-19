@@ -10,8 +10,9 @@ export const metadata: Metadata = {
 const preferenceInitScript = `
 try {
   var theme = window.localStorage.getItem("gatelm_console_theme");
+  var displayMode = window.localStorage.getItem("gatelm_console_display_mode");
   document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
-  document.documentElement.dataset.presentationMode = "false";
+  document.documentElement.dataset.presentationMode = displayMode === "expanded" ? "true" : "false";
 } catch (error) {
   document.documentElement.dataset.theme = "light";
   document.documentElement.dataset.presentationMode = "false";

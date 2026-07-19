@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DashboardPieEChart } from "@/features/dashboard/components/dashboard-echarts";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { formatPercent } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -20,6 +21,7 @@ type ProviderModelUsageLegendRow = {
   color: string;
   costMicroUsd: number;
   label: string;
+  provider: ProviderModelUsageProvider;
 };
 
 const usageColors = ["#3b82f6", "#2dd4bf", "#34d399", "#f59e0b", "#8b5cf6"];
@@ -27,25 +29,25 @@ const MAX_DIRECT_USAGE_ROWS = 4;
 const providerModelUsageText = {
   en: {
     allProviders: "All Providers",
-    aria: "Provider Usage",
-    chartAria: "Provider cost usage donut chart",
+    aria: "Usage by Model",
+    chartAria: "Model cost usage donut chart",
     details: "View details",
     empty: "No provider cost for selected project",
     filterAria: "Filter provider cost usage by provider",
     others: "Others",
     totalCost: "Total cost",
-    title: "Provider Usage"
+    title: "Usage by Model"
   },
   ko: {
     allProviders: "전체 Provider",
-    aria: "Provider 사용량",
-    chartAria: "Provider 비용 사용량 도넛 차트",
+    aria: "모델 별 사용량",
+    chartAria: "모델별 비용 사용량 도넛 차트",
     details: "자세히 보기",
     empty: "선택한 프로젝트에 Provider 비용이 없습니다",
     filterAria: "Provider별 비용 사용량 필터링",
     others: "기타",
     totalCost: "총 비용",
-    title: "Provider 사용량"
+    title: "모델 별 사용량"
   }
 } as const;
 
@@ -127,9 +129,13 @@ export function ProviderModelUsageCard({
             {legendRows.map((row) => (
               <div className="dashboard-provider-usage-row" key={row.label}>
                 <span className="dashboard-provider-usage-dot" style={{ backgroundColor: row.color }} />
+                <ProviderFamilyIcon
+                  className="dashboard-provider-usage-provider-icon"
+                  family={providerIconFamily(row.provider)}
+                  size={18}
+                />
                 <strong>{row.label}</strong>
                 <span>{formatPercent(row.costMicroUsd / totalCostMicroUsd)}</span>
-                <em>{formatMicroUsd(row.costMicroUsd)}</em>
               </div>
             ))}
           </div>
@@ -155,19 +161,28 @@ function buildLegendRows(
   const displayRows = groupByProvider
     ? Array.from(
         rows.reduce((groups, row) => {
-          const current = groups.get(row.providerLabel) ?? 0;
-          groups.set(row.providerLabel, current + row.costMicroUsd);
+          const current = groups.get(row.providerLabel);
+          groups.set(row.providerLabel, {
+            costMicroUsd: (current?.costMicroUsd ?? 0) + row.costMicroUsd,
+            label: row.providerLabel,
+            provider: row.provider
+          });
           return groups;
-        }, new Map<string, number>())
-      ).map(([label, costMicroUsd]) => ({ label, costMicroUsd }))
-    : rows.map((row) => ({ label: row.model, costMicroUsd: row.costMicroUsd }));
+        }, new Map<string, Omit<ProviderModelUsageLegendRow, "color">>())
+      ).map(([, row]) => row)
+    : rows.map((row) => ({
+        costMicroUsd: row.costMicroUsd,
+        label: row.model,
+        provider: row.provider
+      }));
   const sortedRows = displayRows
     .filter((row) => row.costMicroUsd > 0)
     .sort((first, second) => second.costMicroUsd - first.costMicroUsd);
   const topRows = sortedRows.slice(0, MAX_DIRECT_USAGE_ROWS).map((row, index) => ({
     color: usageColors[index] ?? usageColors[0],
     costMicroUsd: row.costMicroUsd,
-    label: row.label
+    label: row.label,
+    provider: row.provider
   }));
   const otherCostMicroUsd = sortedRows
     .slice(MAX_DIRECT_USAGE_ROWS)
@@ -177,11 +192,24 @@ function buildLegendRows(
     topRows.push({
       color: usageColors[4] ?? usageColors[0],
       costMicroUsd: otherCostMicroUsd,
-      label: othersLabel
+      label: othersLabel,
+      provider: "unknown"
     });
   }
 
   return topRows;
+}
+
+function providerIconFamily(provider: ProviderModelUsageProvider) {
+  if (provider === "anthropic") {
+    return "claude";
+  }
+
+  if (provider === "google") {
+    return "gemini";
+  }
+
+  return provider;
 }
 
 function formatMicroUsd(value: number) {
@@ -189,7 +217,7 @@ function formatMicroUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
+    maximumFractionDigits: 3,
     minimumFractionDigits: 2,
     style: "currency"
   }).format(Number.isFinite(dollars) ? dollars : 0);

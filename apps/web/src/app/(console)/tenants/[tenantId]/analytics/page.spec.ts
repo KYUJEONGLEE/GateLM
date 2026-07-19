@@ -52,8 +52,8 @@ test("analytics filters update only the panel with transition state and client c
   expect(filterSelectSource).toContain("startTransition(() =>");
   expect(filterSelectSource).toContain("router.replace(");
   expect(filterSelectSource).toContain("new Map<string, ReactNode>()");
-  expect(filterSelectSource).toContain(
-    "useEffect(() => {\n    rememberPanel(panelCache.current, navigation.cacheKey, children);"
+  expect(filterSelectSource).toMatch(
+    /useEffect\(\(\) => \{\s+rememberPanel\(panelCache\.current, navigation\.cacheKey, children\);/
   );
   expect(filterSelectSource).toContain("maxCachedPanels = 8");
   expect(filterSelectSource).toContain("visiblePanel");
@@ -101,6 +101,7 @@ test("performance delegates tenant-level surface union to the Gateway contract",
   expect(pageSource).not.toContain('provider: activeTab === "performance"');
   expect(pageSource).not.toContain('model: activeTab === "performance"');
   expect(pageSource).toContain("performance={performance}");
+  expect(pageSource).toContain("providerDirectory={providerDirectory}");
 });
 
 test("performance keeps an unavailable error rate distinct from zero percent", async () => {
@@ -125,6 +126,7 @@ test("performance overlays both surfaces and defaults the percentile selector to
 
   expect(panelsSource).toContain("points={latencyPoints}");
   expect(panelsSource).toContain("surfaces={latencySurfaces}");
+  expect(panelsSource).not.toContain("analytics-v3-surface-latency-summary");
   expect(panelsSource).not.toContain("point.surface === summary.surface");
   expect(chartsSource).toContain('useState<LatencyPercentile>("p95")');
   expect(chartsSource).toContain("aria-pressed={percentile === value}");
@@ -137,22 +139,37 @@ test("usage appends the Korean count unit to active models", async () => {
   expect(panelsSource).toContain('`${formatInteger(model.usage.activeModels)}건`');
 });
 
-test("cache appends the Korean count unit to hits and eligible requests", async () => {
+test("cache keeps the Korean count unit while omitting metric descriptions", async () => {
   const panelsSource = await readFile(panelsSourceUrl, "utf8");
 
   expect(panelsSource).toContain('`${formatInteger(model.cache.hitRequests)}건`');
-  expect(panelsSource).toContain('`${formatInteger(model.cache.eligibleRequests)}건 ${text.eligible}`');
+  expect(panelsSource).not.toContain('`${formatInteger(model.cache.eligibleRequests)}건 ${text.eligible}`');
 });
 
-test("performance headline omits surfaces without a p95 value and hides the Chat prefix", async () => {
+test("performance shows the overall p95 and compares model and Provider labels without a surface prefix", async () => {
   const panelsSource = await readFile(panelsSourceUrl, "utf8");
 
-  expect(panelsSource).toContain(
-    "const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null)"
-  );
-  expect(panelsSource).toContain("value: headlineSurfaceSummaries.length");
-  expect(panelsSource).toContain('row.surface === "tenant_chat"');
-  expect(panelsSource).toContain("? formatMs(row.p95LatencyMs)");
+  expect(panelsSource).toContain("value: formatMs(overallP95)");
+  expect(panelsSource).toContain("row.p95LatencyMs == null ? [] : [row.p95LatencyMs]");
+  expect(panelsSource).toContain('return value === null ? "—"');
+  expect(panelsSource).toContain("performance?.providerModelPerformance ?? []");
+  expect(panelsSource).toContain("performance?.p95LatencyByProvider ?? []");
+  expect(panelsSource).toContain("formatModelDisplayName(row.model)");
+  expect(panelsSource).toContain("providerDisplayLabel(providerDirectory, row.provider)");
+  expect(panelsSource).not.toContain("headlineSurfaceSummaries");
+});
+
+test("Korean analytics copy removes the page subtitle and uses vertical ranked charts", async () => {
+  const [pageSource, panelsSource] = await Promise.all([
+    readFile(pageSourceUrl, "utf8"),
+    readFile(panelsSourceUrl, "utf8")
+  ]);
+
+  expect(pageSource).toContain('title: "분석"');
+  expect(pageSource).toContain('subtitle: ""');
+  expect(panelsSource).toContain('orientation="vertical"');
+  expect(panelsSource).not.toContain('orientation="horizontal"');
+  expect(panelsSource).toContain('provider: "모델별 전체 응답 지연"');
 });
 
 test("policy impact delegates Project/Application and Tenant Chat union to the Gateway contract", async () => {

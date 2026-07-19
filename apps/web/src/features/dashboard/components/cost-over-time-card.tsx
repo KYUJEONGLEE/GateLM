@@ -374,7 +374,7 @@ function formatUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: normalized > 0 && normalized < 1 ? 6 : 2,
+    maximumFractionDigits: 3,
     minimumFractionDigits: 2,
     style: "currency"
   }).format(normalized);

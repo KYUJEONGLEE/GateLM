@@ -190,9 +190,16 @@ export function AnalyticsV5RoutingDifficultyChart({
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 420,
-      grid: { bottom: 24, containLabel: false, left: 112, right: 88, top: 18 },
+      grid: { bottom: 74, containLabel: false, left: 76, right: 24, top: 48 },
       tooltip: analyticsTooltip(locale === "ko" ? "건" : " requests", theme),
       xAxis: {
+        axisLabel: { color: theme.label, fontSize: 16, fontWeight: 800, interval: 0 },
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        data: visibleRows.map((row) => row.label),
+        type: "category"
+      },
+      yAxis: {
         axisLabel: { color: theme.axis, fontSize: 14, fontWeight: 700, formatter: compactAxisNumber },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -200,20 +207,12 @@ export function AnalyticsV5RoutingDifficultyChart({
         splitLine: { lineStyle: { color: theme.grid } },
         type: "value"
       },
-      yAxis: {
-        axisLabel: { color: theme.label, fontSize: 16, fontWeight: 800 },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        data: visibleRows.map((row) => row.label),
-        inverse: true,
-        type: "category"
-      },
       series: [
         {
-          barMaxWidth: 30,
+          barMaxWidth: 54,
           data: visibleRows.map((row) => ({
             itemStyle: {
-              borderRadius: [0, 5, 5, 0],
+              borderRadius: [5, 5, 0, 0],
               color: routingDifficultyColors[row.id] ?? routingDifficultyColors.other
             },
             share: safeRatio(row.value, total),
@@ -225,7 +224,7 @@ export function AnalyticsV5RoutingDifficultyChart({
             fontSize: 15,
             fontWeight: 800,
             formatter: routingValueLabel,
-            position: "right",
+            position: "top",
             show: true
           },
           type: "bar"
@@ -259,9 +258,24 @@ export function AnalyticsV5ProjectUsageChart({
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 420,
-      grid: { bottom: 24, containLabel: false, left: 172, right: 154, top: 18 },
+      grid: { bottom: 74, containLabel: false, left: 76, right: 24, top: 48 },
       tooltip: analyticsTooltip(locale === "ko" ? "건" : " requests", theme),
       xAxis: {
+        axisLabel: {
+          color: theme.label,
+          fontSize: 14,
+          fontWeight: 800,
+          formatter: (value: string) => value.length > 10 ? `${value.slice(0, 10)}…` : value,
+          interval: 0,
+          overflow: "truncate",
+          width: 110
+        },
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        data: rows.map((row) => row.label),
+        type: "category"
+      },
+      yAxis: {
         axisLabel: { color: theme.axis, fontSize: 14, fontWeight: 700, formatter: compactAxisNumber },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -269,26 +283,12 @@ export function AnalyticsV5ProjectUsageChart({
         splitLine: { lineStyle: { color: theme.grid } },
         type: "value"
       },
-      yAxis: {
-        axisLabel: {
-          color: theme.label,
-          fontSize: 16,
-          fontWeight: 800,
-          overflow: "truncate",
-          width: 148
-        },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        data: rows.map((row) => row.label),
-        inverse: true,
-        type: "category"
-      },
       series: [
         {
-          barMaxWidth: 30,
+          barMaxWidth: 54,
           data: rows.map((row) => ({
             costMicroUsd: row.costMicroUsd,
-            itemStyle: { borderRadius: [0, 5, 5, 0], color: "#10b981" },
+            itemStyle: { borderRadius: [5, 5, 0, 0], color: "#10b981" },
             value: row.requestCount
           })),
           emphasis: { focus: "self" },
@@ -297,7 +297,7 @@ export function AnalyticsV5ProjectUsageChart({
             fontSize: 15,
             fontWeight: 800,
             formatter: projectUsageValueLabel,
-            position: "right",
+            position: "top",
             show: true
           },
           type: "bar"

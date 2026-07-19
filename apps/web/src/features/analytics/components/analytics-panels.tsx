@@ -29,6 +29,10 @@ import type { AnalyticsSecurityEvidence } from "@/features/analytics/analytics-s
 import { TENANT_CHAT_USAGE_SOURCE_ID } from "@/features/analytics/analytics-usage-merge";
 import type { EmployeeSecurityResponse } from "@/lib/control-plane/employee-security-types";
 import type { EmployeeUsageResponse } from "@/lib/control-plane/employee-usage-types";
+import {
+  resolveProviderDisplay,
+  type ProviderDisplayDirectory
+} from "@/lib/control-plane/provider-display";
 import { formatDisplayIdentifier, formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { formatDateTime, formatInteger, formatPercent } from "@/lib/formatting/formatters";
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
@@ -48,6 +52,7 @@ type AnalyticsPanelProps = {
 type PerformancePanelProps = AnalyticsPanelProps & {
   performance: LiveAnalyticsPerformance | undefined;
   projectNameById: Map<string, string>;
+  providerDirectory: ProviderDisplayDirectory;
   range: string;
   tenantId: string;
 };
@@ -322,7 +327,7 @@ export function AnalyticsUsagePanel({
       />
 
       <div className="analytics-v3-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.trendSub} title={text.trend}>
+        <AnalysisSurface className="analytics-v3-main-canvas" title={text.trend}>
           <ChartOrEmpty
             hasData={model.usage.requestVolume.some((point) => point.requests > 0)}
             locale={locale}
@@ -330,15 +335,15 @@ export function AnalyticsUsagePanel({
             <AnalyticsRequestVolumeChart ariaLabel={text.trend} points={model.usage.requestVolume} />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.modelSub} title={text.model}>
+        <AnalysisSurface className="analytics-v3-driver-rail" title={text.model}>
           <ChartOrEmpty hasData={hasRows(model.usage.requestsByModel)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.model} rows={model.usage.requestsByModel} />
+            <AnalyticsRankedBarChart ariaLabel={text.model} orientation="vertical" rows={model.usage.requestsByModel} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
 
       <div className="analytics-v3-employee-workspace">
-        <AnalysisSurface subtitle={text.employeeTokensSub} title={text.employeeTokens}>
+        <AnalysisSurface title={text.employeeTokens}>
           <ChartOrEmpty hasData={hasRows(employeeTokenRows)} locale={locale}>
             <AnalyticsEmployeeTokenBarChart
               ariaLabel={text.employeeTokens}
@@ -346,7 +351,7 @@ export function AnalyticsUsagePanel({
             />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface subtitle={text.employeeSourcesSub} title={text.employeeSources}>
+        <AnalysisSurface title={text.employeeSources}>
           <ChartOrEmpty hasData={employeeRows.some((row) => row.total.totalTokens > 0)} locale={locale}>
             <AnalyticsEmployeeStackedChart
               ariaLabel={text.employeeSources}
@@ -367,7 +372,6 @@ export function AnalyticsUsagePanel({
       <DecisionPath
         locale={locale}
         rows={model.usage.tokenMix}
-        subtitle={text.tokenMixSub}
         title={text.tokenMix}
         total={tokenCompositionTotal}
       />
@@ -388,7 +392,6 @@ export function AnalyticsUsagePanel({
           ],
           key: row.id
         }))}
-        subtitle={text.sourcesSub}
         title={text.sources}
       />
     </PanelShell>
@@ -473,7 +476,7 @@ export function AnalyticsCostPanel({
       />
 
       <div className="analytics-v3-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.trendSub} title={text.trend}>
+        <AnalysisSurface className="analytics-v3-main-canvas" title={text.trend}>
           <ChartOrEmpty
             hasData={Boolean(costTrend?.points.some((point) => point.spendUsd > 0))}
             locale={locale}
@@ -481,29 +484,31 @@ export function AnalyticsCostPanel({
             <AnalyticsCostTrendChart ariaLabel={text.trend} points={costTrend?.points ?? []} />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.byModelSub} title={text.byModel}>
+        <AnalysisSurface className="analytics-v3-driver-rail" title={text.byModel}>
           <ChartOrEmpty hasData={hasRows(model.cost.costByModel)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.byModel} kind="micro-usd" rows={model.cost.costByModel} />
+            <AnalyticsRankedBarChart ariaLabel={text.byModel} kind="micro-usd" orientation="vertical" rows={model.cost.costByModel} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
 
       <div className="analytics-v3-employee-workspace">
-        <AnalysisSurface subtitle={text.employeeCostSub} title={text.employeeCost}>
+        <AnalysisSurface title={text.employeeCost}>
           <ChartOrEmpty hasData={hasRows(employeeCostRows)} locale={locale}>
             <AnalyticsRankedBarChart
               ariaLabel={text.employeeCost}
               kind="micro-usd"
               maxRows={10}
+              orientation="vertical"
               rows={employeeCostRows}
             />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface subtitle={text.employeeSourcesSub} title={text.employeeSources}>
+        <AnalysisSurface title={text.employeeSources}>
           <ChartOrEmpty hasData={employeeRows.some((row) => row.total.costMicroUsd > 0)} locale={locale}>
             <AnalyticsEmployeeStackedChart
               ariaLabel={text.employeeSources}
               kind="micro-usd"
+              orientation="vertical"
               primaryLabel="Project/Application"
               rows={employeeRows.map((row) => ({
                 id: row.employeeId,
@@ -539,7 +544,6 @@ export function AnalyticsCostPanel({
           ],
           key: row.id
         }))}
-        subtitle={text.byProjectSub}
         title={text.byProject}
       />
     </PanelShell>
@@ -551,18 +555,17 @@ export function AnalyticsPerformancePanel({
   model,
   performance,
   projectNameById,
+  providerDirectory,
   range,
   tenantId
 }: PerformancePanelProps) {
   const text = locale === "ko"
     ? {
         error: "오류율",
-        latency: "Surface별 지연 시간 추이",
-        latencySub: "Project/Application과 Tenant Chat의 p50, p95, p99 응답 시간",
+        latency: "응답 지연 추이",
         percentile: "지연 시간 백분위 선택",
-        p95: "Surface별 p95 지연",
-        provider: "Provider별 전체 응답 지연",
-        providerSub: "Surface와 Provider별 end-to-end p95 비교",
+        p95: "전체 p95 지연",
+        provider: "모델별 전체 응답 지연",
         slow: "느린 요청 근거",
         slowSub: "선택 기간에서 지연 시간이 가장 긴 요청 4개",
         throughput: "분당 처리량",
@@ -571,12 +574,10 @@ export function AnalyticsPerformancePanel({
       }
     : {
         error: "Error rate",
-        latency: "Latency trend by surface",
-        latencySub: "p50, p95, and p99 response time for Project/Application and Tenant Chat",
+        latency: "Response latency trend",
         percentile: "Select latency percentile",
-        p95: "p95 latency by surface",
-        provider: "End-to-end latency by Provider",
-        providerSub: "Compare end-to-end p95 by surface and Provider",
+        p95: "Overall p95 latency",
+        provider: "End-to-end latency by model",
         slow: "Slow request evidence",
         slowSub: "Four requests with the highest latency in the selected range",
         throughput: "Throughput per minute",
@@ -584,19 +585,31 @@ export function AnalyticsPerformancePanel({
         viewLogs: "View all logs"
       };
   const surfaceSummaries = performance?.surfaceSummaries ?? [];
-  const headlineSurfaceSummaries = surfaceSummaries.filter((row) => row.p95LatencyMs !== null);
   const latencyPoints = performance?.latencyDistribution ?? [];
   const latencySurfaces = surfaceSummaries.map((summary) => ({
     label: analyticsSurfaceLabel(summary.surface, locale),
     surface: summary.surface
   }));
-  const providerRows = (performance?.p95LatencyByProvider ?? [])
+  const modelLatencyRows = (performance?.providerModelPerformance ?? [])
     .filter((row) => row.p95LatencyMs !== null)
     .map((row) => ({
-      id: `${row.surface}:${row.provider}`,
-      label: `${analyticsSurfaceLabel(row.surface, locale)} · ${row.provider}`,
+      id: `${row.surface}:${row.provider}:${row.model}`,
+      label: `${providerDisplayLabel(providerDirectory, row.provider)} · ${formatModelDisplayName(row.model)}`,
       value: row.p95LatencyMs ?? 0
     }));
+  const providerRows = modelLatencyRows.length > 0
+    ? modelLatencyRows
+    : (performance?.p95LatencyByProvider ?? [])
+        .filter((row) => row.p95LatencyMs !== null)
+        .map((row) => ({
+          id: `${row.surface}:${row.provider}`,
+          label: providerDisplayLabel(providerDirectory, row.provider),
+          value: row.p95LatencyMs ?? 0
+        }));
+  const availableSurfaceP95 = surfaceSummaries
+    .flatMap((row) => row.p95LatencyMs == null ? [] : [row.p95LatencyMs]);
+  const overallP95 = performance?.summary.p95LatencyMs
+    ?? (availableSurfaceP95.length > 0 ? Math.max(...availableSurfaceP95) : null);
 
   return (
     <PanelShell
@@ -611,13 +624,7 @@ export function AnalyticsPerformancePanel({
         icon={Gauge}
         lead={{
           label: text.p95,
-          value: headlineSurfaceSummaries.length
-            ? headlineSurfaceSummaries
-                .map((row) => row.surface === "tenant_chat"
-                  ? formatMs(row.p95LatencyMs)
-                  : `${analyticsSurfaceShortLabel(row.surface, locale)} ${formatMs(row.p95LatencyMs)}`)
-                .join(" · ")
-            : "—"
+          value: formatMs(overallP95)
         }}
         metrics={[
           { label: text.throughput, value: formatThroughput(performance?.summary.throughputPerMinute ?? null) },
@@ -626,15 +633,7 @@ export function AnalyticsPerformancePanel({
       />
 
       <div className="analytics-v3-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.latencySub} title={text.latency}>
-          <div className="analytics-v3-surface-latency-summary">
-            {surfaceSummaries.map((summary) => (
-              <div key={summary.surface}>
-                <strong>{analyticsSurfaceLabel(summary.surface, locale)}</strong>
-                <span>p95 {formatMs(summary.p95LatencyMs)}</span>
-              </div>
-            ))}
-          </div>
+        <AnalysisSurface className="analytics-v3-main-canvas" title={text.latency}>
           <ChartOrEmpty hasData={latencyPoints.some(hasLatencyPoint)} locale={locale}>
             <AnalyticsLatencyTrendChart
               ariaLabel={text.latency}
@@ -644,9 +643,9 @@ export function AnalyticsPerformancePanel({
             />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.providerSub} title={text.provider}>
+        <AnalysisSurface className="analytics-v3-driver-rail" title={text.provider}>
           <ChartOrEmpty hasData={hasRows(providerRows)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.provider} kind="milliseconds" rows={providerRows} />
+            <AnalyticsRankedBarChart ariaLabel={text.provider} kind="milliseconds" orientation="vertical" rows={providerRows} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
@@ -654,8 +653,8 @@ export function AnalyticsPerformancePanel({
       <EvidenceTable
         action={<Link href={`/tenants/${tenantId}/request-logs?range=${range}`}>{text.viewLogs}</Link>}
         columns={locale === "ko"
-          ? ["요청", "Surface", "모델", "귀속", "지연", "상태"]
-          : ["Request", "Surface", "Model", "Attribution", "Latency", "State"]}
+          ? ["요청", "사용 경로", "모델", "귀속", "지연", "상태"]
+          : ["Request", "Usage path", "Model", "Attribution", "Latency", "State"]}
         emptyLocale={locale}
         rows={(performance?.slowestRequests ?? []).slice(0, 4).map((row) => ({
           cells: [
@@ -672,7 +671,6 @@ export function AnalyticsPerformancePanel({
           ],
           key: row.requestId
         }))}
-        subtitle={text.slowSub}
         title={text.slow}
       />
     </PanelShell>
@@ -760,14 +758,14 @@ export function AnalyticsReliabilityPanel({
       />
 
       <div className="analytics-v3-workspace">
-        <AnalysisSurface className="analytics-v3-main-canvas" subtitle={text.outcomeSub} title={text.outcome}>
+        <AnalysisSurface className="analytics-v3-main-canvas" title={text.outcome}>
           <ChartOrEmpty hasData={hasRows(terminalOutcomes)} locale={locale}>
             <AnalyticsCompositionChart ariaLabel={text.outcome} rows={terminalOutcomes} />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.continuitySub} title={text.continuity}>
+        <AnalysisSurface className="analytics-v3-driver-rail" title={text.continuity}>
           <ChartOrEmpty hasData={hasRows(continuityPaths)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.continuity} rows={continuityPaths} />
+            <AnalyticsRankedBarChart ariaLabel={text.continuity} orientation="vertical" rows={continuityPaths} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
@@ -790,7 +788,6 @@ export function AnalyticsReliabilityPanel({
           ],
           key: row.requestId
         }))}
-        subtitle={text.incidentSub}
         title={text.incident}
       />
     </PanelShell>
@@ -883,19 +880,6 @@ export function AnalyticsSecurityPanel({
     ...row,
     label: safetyDetectorLabel(row.label, locale)
   }));
-  const evidenceSubtitle = evidence
-    ? evidence.detectorEvidenceMode === "complete"
-      ? text.complete
-      : evidence.detectorEvidenceMode === "mixed"
-        ? text.mixed.replace("{sampled}", formatInteger(evidence.sampledDetailCount))
-        : evidence.detectorEvidenceMode === "partial"
-          ? text.partial
-          : evidence.detectorEvidenceMode === "unavailable"
-            ? text.unavailable
-            : text.sampled
-                .replace("{sampled}", formatInteger(evidence.sampledDetailCount))
-                .replace("{total}", formatInteger(evidence.protectedRequestCount))
-    : text.detectedTypesEmpty;
   const employeeRows = selectEmployeeRows(employeeSecurity?.data ?? [], selectedEmployeeId);
   const employeeRequestRows = employeeRows.map((row) => ({
     id: row.employeeId,
@@ -923,7 +907,6 @@ export function AnalyticsSecurityPanel({
         <AnalysisSurface
           className="analytics-v3-main-canvas"
           metric={`${formatInteger(totalRequests)} ${text.totalRequests}`}
-          subtitle={`${text.detectedTypesSub} · ${evidenceSubtitle}`}
           title={text.detectedTypes}
         >
           <ChartOrEmpty hasData={hasRows(detectedTypeRows)} locale={locale}>
@@ -937,7 +920,6 @@ export function AnalyticsSecurityPanel({
         </AnalysisSurface>
         <AnalysisSurface
           className="analytics-v3-driver-rail"
-          subtitle={text.treatmentSub}
           title={text.treatment}
         >
           <ChartOrEmpty compact hasData={hasRows(treatmentRows)} locale={locale}>
@@ -962,12 +944,11 @@ export function AnalyticsSecurityPanel({
           ],
           key: source.id
         }))}
-        subtitle={text.sourceSub}
         title={text.source}
       />
 
       <div className="analytics-v3-employee-workspace">
-        <AnalysisSurface subtitle={text.employeeProtectionSub} title={text.employeeProtection}>
+        <AnalysisSurface title={text.employeeProtection}>
           <ChartOrEmpty
             hasData={employeeRows.some((row) => row.total.protectedRequestCount > 0)}
             locale={locale}
@@ -985,7 +966,7 @@ export function AnalyticsSecurityPanel({
             />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface subtitle={text.employeeRequestsSub} title={text.employeeRequests}>
+        <AnalysisSurface title={text.employeeRequests}>
           <ChartOrEmpty hasData={hasRows(employeeRequestRows)} locale={locale}>
             <AnalyticsRankedBarChart
               ariaLabel={text.employeeRequests}
@@ -1047,22 +1028,17 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
         icon={Database}
         lead={{
           label: text.hitRate,
-          meta: `${formatInteger(totalRequests)} ${text.totalRequests} · ${formatInteger(model.cache.bypassRequests)} ${text.bypass}`,
-          value: formatPercent(model.cache.hitRate)
+        value: formatPercent(model.cache.hitRate)
         }}
         metrics={[
           {
             label: text.hit,
-            meta: locale === "ko"
-              ? `${formatInteger(model.cache.eligibleRequests)}건 ${text.eligible}`
-              : `${formatInteger(model.cache.eligibleRequests)} ${text.eligible}`,
             value: locale === "ko"
               ? `${formatInteger(model.cache.hitRequests)}건`
               : formatInteger(model.cache.hitRequests)
           },
           {
             label: text.saved,
-            meta: text.savedScope,
             value: model.cache.savedCostMicroUsd === null
               ? "—"
               : formatMicroUsd(model.cache.savedCostMicroUsd)
@@ -1074,16 +1050,15 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
         <AnalysisSurface
           className="analytics-v3-main-canvas"
           metric={`${formatInteger(totalRequests)} ${text.totalRequests}`}
-          subtitle={text.outcomeSub}
           title={text.outcome}
         >
           <ChartOrEmpty hasData={hasRows(model.cache.outcomes)} locale={locale}>
             <AnalyticsCompositionChart ariaLabel={text.outcome} rows={model.cache.outcomes} />
           </ChartOrEmpty>
         </AnalysisSurface>
-        <AnalysisSurface className="analytics-v3-driver-rail" subtitle={text.throughputSub} title={text.throughput}>
+        <AnalysisSurface className="analytics-v3-driver-rail" title={text.throughput}>
           <ChartOrEmpty hasData={hasRows(efficiencyRows)} locale={locale} compact>
-            <AnalyticsRankedBarChart ariaLabel={text.throughput} rows={efficiencyRows} />
+            <AnalyticsRankedBarChart ariaLabel={text.throughput} orientation="vertical" rows={efficiencyRows} />
           </ChartOrEmpty>
         </AnalysisSurface>
       </div>
@@ -1105,7 +1080,6 @@ export function AnalyticsCachePanel({ locale, model }: AnalyticsPanelProps) {
           ],
           key: row.id
         }))}
-        subtitle={text.evidenceSub}
         title={text.evidence}
       />
     </PanelShell>
@@ -1183,7 +1157,7 @@ function AnalysisSurface({
   children: ReactNode;
   className?: string;
   metric?: string;
-  subtitle: string;
+  subtitle?: string;
   title: string;
 }) {
   return (
@@ -1191,7 +1165,7 @@ function AnalysisSurface({
       <div className="analytics-v3-section-heading">
         <div>
           <h3>{title}</h3>
-          <p>{subtitle}</p>
+          {subtitle ? <p>{subtitle}</p> : null}
         </div>
         {metric ? <strong>{metric}</strong> : null}
       </div>
@@ -1209,7 +1183,7 @@ function DecisionPath({
 }: {
   locale: Locale;
   rows: AnalyticsValueRow[];
-  subtitle: string;
+  subtitle?: string;
   title: string;
   total: number;
 }) {
@@ -1220,7 +1194,7 @@ function DecisionPath({
       <div className="analytics-v3-section-heading">
         <div>
           <h3>{title}</h3>
-          <p>{subtitle}</p>
+          {subtitle ? <p>{subtitle}</p> : null}
         </div>
         <strong>{formatInteger(total)}</strong>
       </div>
@@ -1258,7 +1232,7 @@ function EvidenceTable({
   columns: string[];
   emptyLocale: Locale;
   rows: EvidenceRow[];
-  subtitle: string;
+  subtitle?: string;
   title: string;
 }) {
   return (
@@ -1266,7 +1240,7 @@ function EvidenceTable({
       <div className="analytics-v3-section-heading">
         <div>
           <h3>{title}</h3>
-          <p>{subtitle}</p>
+          {subtitle ? <p>{subtitle}</p> : null}
         </div>
         {action ? <div className="analytics-v3-table-action">{action}</div> : null}
       </div>
@@ -1381,6 +1355,14 @@ function employeeLabel(row: { email: string; name: string | null }) {
   return row.name?.trim() || row.email;
 }
 
+function providerDisplayLabel(
+  directory: ProviderDisplayDirectory,
+  providerId: string
+) {
+  return resolveProviderDisplay(directory, providerId)?.name
+    ?? formatDisplayIdentifier(providerId);
+}
+
 function hasLatencyPoint(point: LiveAnalyticsPerformance["latencyDistribution"][number]) {
   return point.p50LatencyMs !== null || point.p95LatencyMs !== null || point.p99LatencyMs !== null;
 }
@@ -1421,13 +1403,6 @@ function analyticsSurfaceLabel(surface: string, locale: Locale) {
     return "Tenant Chat";
   }
   return locale === "ko" ? "프로젝트/Application" : "Project/Application";
-}
-
-function analyticsSurfaceShortLabel(surface: string, locale: Locale) {
-  if (surface === "tenant_chat") {
-    return "Chat";
-  }
-  return locale === "ko" ? "프로젝트" : "Project";
 }
 
 function isSystemFailureStatus(status: string) {
