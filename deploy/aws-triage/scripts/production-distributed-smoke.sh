@@ -41,6 +41,6 @@ status="$(curl -k --silent --show-error --output /dev/null --write-out '%{http_c
 
 production_assert_tcp "Control Plane" "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" 3001
 production_assert_tcp "Chat API" "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" 3003
-production_assert_tcp "Gateway" "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP}" 8080
+production_assert_tcp "Gateway" "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_UPSTREAM_HOST}" 8080
 
 production_log "Private Caddy routes, Web, Chat, unauthenticated boundaries, and allowed Edge connectivity passed."
