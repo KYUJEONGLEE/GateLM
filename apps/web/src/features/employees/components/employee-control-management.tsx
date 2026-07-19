@@ -3669,7 +3669,7 @@ function formatUsd(value: number, locale: string) {
   return new Intl.NumberFormat(locale, {
     currency: "USD",
     maximumFractionDigits: 3,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     style: "currency"
   }).format(value);
 }

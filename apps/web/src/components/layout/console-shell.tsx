@@ -760,12 +760,32 @@ function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item 
   return item === "alerts" || item === "analytics" || item === "live-logs" || item === "overview";
 }
 
-function readStoredSidebarCollapsed(): boolean | null {
+function readLocalStorage(key: string): string | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  const storedValue = window.localStorage.getItem(sidebarCollapsedStorageKey);
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorage(key: string, value: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage can be blocked by browser privacy settings. The UI state still applies in memory.
+  }
+}
+
+function readStoredSidebarCollapsed(): boolean | null {
+  const storedValue = readLocalStorage(sidebarCollapsedStorageKey);
 
   if (storedValue === "true") {
     return true;
@@ -779,11 +799,7 @@ function readStoredSidebarCollapsed(): boolean | null {
 }
 
 function writeStoredSidebarCollapsed(isCollapsed: boolean) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+  writeLocalStorage(sidebarCollapsedStorageKey, String(isCollapsed));
 }
 
 function isMobileViewport() {
@@ -818,21 +834,13 @@ function applyDisplayMode(displayMode: ConsoleDisplayMode) {
 }
 
 function readStoredDisplayMode(): ConsoleDisplayMode | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const storedValue = window.localStorage.getItem(displayModeStorageKey);
+  const storedValue = readLocalStorage(displayModeStorageKey);
 
   return storedValue === "default" || storedValue === "expanded" ? storedValue : null;
 }
 
 function writeStoredDisplayMode(displayMode: ConsoleDisplayMode) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(displayModeStorageKey, displayMode);
+  writeLocalStorage(displayModeStorageKey, displayMode);
 }
 
 function applyTheme(theme: ConsoleTheme) {
@@ -844,19 +852,11 @@ function applyTheme(theme: ConsoleTheme) {
 }
 
 function readStoredTheme(): ConsoleTheme | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const storedValue = window.localStorage.getItem(themeStorageKey);
+  const storedValue = readLocalStorage(themeStorageKey);
 
   return storedValue === "dark" || storedValue === "light" ? storedValue : null;
 }
 
 function writeStoredTheme(theme: ConsoleTheme) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(themeStorageKey, theme);
+  writeLocalStorage(themeStorageKey, theme);
 }

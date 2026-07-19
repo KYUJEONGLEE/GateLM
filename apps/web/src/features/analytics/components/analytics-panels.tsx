@@ -607,7 +607,7 @@ export function AnalyticsPerformancePanel({
           value: row.p95LatencyMs ?? 0
         }));
   const availableSurfaceP95 = surfaceSummaries
-    .flatMap((row) => row.p95LatencyMs === null ? [] : [row.p95LatencyMs]);
+    .flatMap((row) => row.p95LatencyMs == null ? [] : [row.p95LatencyMs]);
   const overallP95 = performance?.summary.p95LatencyMs
     ?? (availableSurfaceP95.length > 0 ? Math.max(...availableSurfaceP95) : null);
 

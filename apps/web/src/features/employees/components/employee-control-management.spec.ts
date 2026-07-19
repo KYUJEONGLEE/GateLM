@@ -147,5 +147,6 @@ test("employee monetary values round to at most three decimal places", async () 
   expect(source).toContain("return formatUsd(usd, locale ===");
   expect(source).toContain('return formatUsd(value, "en-US")');
   expect(source).toContain("maximumFractionDigits: 3");
+  expect(source).toContain("minimumFractionDigits: 2");
   expect(source).toContain("microUsdMaximumFractionDigits={3}");
 });

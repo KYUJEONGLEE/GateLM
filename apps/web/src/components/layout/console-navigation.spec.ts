@@ -95,6 +95,10 @@ test("profile menu persists default and expanded display modes without a hydrati
   );
   expect(shellSource).toContain("readStoredDisplayMode() ?? readDocumentDisplayMode()");
   expect(shellSource).toContain("writeStoredDisplayMode(nextDisplayMode)");
+  expect(shellSource).toContain("function readLocalStorage(key: string)");
+  expect(shellSource).toContain("return window.localStorage.getItem(key)");
+  expect(shellSource).toContain("window.localStorage.setItem(key, value)");
+  expect(shellSource).toContain("} catch {");
   expect(shellSource).toContain('displayMode === "expanded" ? "true" : "false"');
   expect(rootLayoutSource).toContain(
     'window.localStorage.getItem("gatelm_console_display_mode")'

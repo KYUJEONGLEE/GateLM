@@ -150,6 +150,8 @@ test("performance shows the overall p95 and compares model and Provider labels w
   const panelsSource = await readFile(panelsSourceUrl, "utf8");
 
   expect(panelsSource).toContain("value: formatMs(overallP95)");
+  expect(panelsSource).toContain("row.p95LatencyMs == null ? [] : [row.p95LatencyMs]");
+  expect(panelsSource).toContain('return value === null ? "—"');
   expect(panelsSource).toContain("performance?.providerModelPerformance ?? []");
   expect(panelsSource).toContain("performance?.p95LatencyByProvider ?? []");
   expect(panelsSource).toContain("formatModelDisplayName(row.model)");
