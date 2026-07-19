@@ -214,6 +214,7 @@ def load_settings() -> Settings:
         routing_difficulty_batch_max_wait_ms=_env_strict_float(
             "AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS",
             0.0,
+            allow_zero=True,
         ),
         routing_difficulty_onnx_intra_op_threads=_env_strict_int(
             "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS",
@@ -402,7 +403,12 @@ def _env_strict_int(key: str, fallback: int, *, allow_zero: bool = False) -> int
     return parsed
 
 
-def _env_strict_float(key: str, fallback: float) -> float:
+def _env_strict_float(
+    key: str,
+    fallback: float,
+    *,
+    allow_zero: bool = False,
+) -> float:
     value = os.environ.get(key)
     if value is None or value == "":
         return fallback
@@ -410,8 +416,9 @@ def _env_strict_float(key: str, fallback: float) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise ValueError(f"{key} must be numeric") from exc
-    if parsed <= 0:
-        raise ValueError(f"{key} must be positive")
+    if parsed < 0 or (parsed == 0 and not allow_zero):
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise ValueError(f"{key} must be {qualifier}")
     return parsed
 
 

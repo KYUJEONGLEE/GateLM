@@ -113,6 +113,24 @@ class RoutingDifficultyConfigTests(unittest.TestCase):
         ), self.assertRaisesRegex(ValueError, "BATCH_MAX_WAIT_MS"):
             load_settings()
 
+    def test_remote_routing_zero_batch_wait_dispatches_immediately(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS": "0"},
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertEqual(settings.routing_difficulty_batch_max_wait_ms, 0.0)
+
+    def test_remote_routing_negative_batch_wait_is_rejected(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS": "-0.1"},
+            clear=True,
+        ), self.assertRaisesRegex(ValueError, "must be non-negative"):
+            load_settings()
+
 
 if __name__ == "__main__":
     unittest.main()
