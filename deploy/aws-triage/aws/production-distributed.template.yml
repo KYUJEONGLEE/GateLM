@@ -1,0 +1,688 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GateLM four-host distributed production foundation without traffic cutover.
+
+Parameters:
+  SshKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: gatelm-triage-key
+    Description: Existing break-glass key pair. No inbound SSH rule is created.
+  UbuntuAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+  EdgeInstanceType:
+    Type: String
+    Default: c7i.large
+  GatewayInstanceType:
+    Type: String
+    Default: c7i.xlarge
+  DataInstanceType:
+    Type: String
+    Default: m7i.large
+  AiInstanceType:
+    Type: String
+    Default: c7i.large
+  ProductionRagBucketName:
+    Type: String
+    Description: Existing private production RAG bucket used by the Data host.
+  ProductionRagKmsKeyArn:
+    Type: String
+    Description: Existing production RAG KMS key ARN used through S3.
+
+Resources:
+  ProductionVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.78.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-vpc
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-igw
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref ProductionVpc
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.78.1.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref ProductionVpc
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-public
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Network
+          Value: public
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.78.2.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref ProductionVpc
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-private
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Network
+          Value: private
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref ProductionVpc
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-public-routes
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  NatEip:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-nat
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-nat
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref ProductionVpc
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-private-routes
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+
+  EdgeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM public Edge. Only HTTP and HTTPS are exposed.
+      GroupName: gatelm-production-distributed-edge
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Public HTTP for Caddy redirect and certificate flow
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Public HTTPS
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Image pull, certificate issuance, and private service traffic
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-edge
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  GatewaySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM private Gateway data plane.
+      GroupName: gatelm-production-distributed-gateway
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
+          Description: Public Gateway API through Edge only
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Provider APIs, image pull, and private dependencies
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  DataSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM private Control Plane, Chat API, PostgreSQL, Redis, and RAG worker.
+      GroupName: gatelm-production-distributed-data
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
+          Description: Control Plane from Edge Web
+        - IpProtocol: tcp
+          FromPort: 3003
+          ToPort: 3003
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
+          Description: Tenant Chat API from Edge
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: RuntimeSnapshot and observability from Gateway
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: PostgreSQL from Gateway
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: Redis from Gateway
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: S3, KMS, image pull, and private service traffic
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-data
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  AiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM private AI Service.
+      GroupName: gatelm-production-distributed-ai
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: AI Safety calls from Gateway
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          SourceSecurityGroupId: !Ref DataSecurityGroup
+          Description: RAG extraction calls from Data worker
+        - IpProtocol: tcp
+          FromPort: 8090
+          ToPort: 8090
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: Existing production Mock Provider from Gateway
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Image and model artifact pull through NAT
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-ai
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  DataPostgresSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DataSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Co-located Control Plane, Chat API, and RAG worker to PostgreSQL
+
+  DataRedisSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DataSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Co-located Control Plane to Redis
+
+  GatewayPrivateIngressFromData:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref GatewaySecurityGroup
+      IpProtocol: tcp
+      FromPort: 8081
+      ToPort: 8081
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Tenant Chat and RAG embedding workload calls from Data
+
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: SSM management for GateLM production Edge, Gateway, and AI hosts.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Purpose
+          Value: ProductionNode
+
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref NodeRole]
+
+  DataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: SSM and production RAG object storage for the GateLM Data host.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: GateLMProductionRagObjectStorage
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListProductionRagBucket
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionRagBucketName}
+              - Sid: ManageProductionRagObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionRagBucketName}/*
+              - Sid: UseProductionRagKmsThroughS3
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:GenerateDataKey
+                Resource: !Ref ProductionRagKmsKeyArn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+                    kms:CallerAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Purpose
+          Value: ProductionData
+
+  DataInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref DataRole]
+
+  EdgeInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PublicSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref EdgeInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref EdgeSecurityGroup]
+          PrivateIpAddress: 10.78.1.10
+          SubnetId: !Ref PublicSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 30
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' edge > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-edge
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: edge
+        - Key: DoNotDelete
+          Value: "true"
+
+  GatewayInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref GatewayInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref GatewaySecurityGroup]
+          PrivateIpAddress: 10.78.2.20
+          SubnetId: !Ref PrivateSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 40
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' gateway > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: gateway
+        - Key: DoNotDelete
+          Value: "true"
+
+  DataInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref DataInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref DataInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref DataSecurityGroup]
+          PrivateIpAddress: 10.78.2.30
+          SubnetId: !Ref PrivateSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 80
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --update
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' data > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-data
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: data
+        - Key: DoNotDelete
+          Value: "true"
+
+  AiInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref AiInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref AiSecurityGroup]
+          PrivateIpAddress: 10.78.2.40
+          SubnetId: !Ref PrivateSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 40
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' ai > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-ai
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: ai
+        - Key: DoNotDelete
+          Value: "true"
+
+  EdgeEip:
+    Type: AWS::EC2::EIP
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-edge
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: DoNotDelete
+          Value: "true"
+
+  EdgeEipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt EdgeEip.AllocationId
+      InstanceId: !Ref EdgeInstance
+
+Outputs:
+  VpcId:
+    Value: !Ref ProductionVpc
+  PublicSubnetId:
+    Value: !Ref PublicSubnet
+  PrivateSubnetId:
+    Value: !Ref PrivateSubnet
+  EdgeInstanceId:
+    Value: !Ref EdgeInstance
+  EdgePrivateIp:
+    Value: !GetAtt EdgeInstance.PrivateIp
+  EdgePublicIp:
+    Value: !Ref EdgeEip
+  GatewayInstanceId:
+    Value: !Ref GatewayInstance
+  GatewayPrivateIp:
+    Value: !GetAtt GatewayInstance.PrivateIp
+  DataInstanceId:
+    Value: !Ref DataInstance
+  DataPrivateIp:
+    Value: !GetAtt DataInstance.PrivateIp
+  AiInstanceId:
+    Value: !Ref AiInstance
+  AiPrivateIp:
+    Value: !GetAtt AiInstance.PrivateIp
+  NodeInstanceProfileName:
+    Value: !Ref NodeInstanceProfile
+  DataInstanceProfileName:
+    Value: !Ref DataInstanceProfile
