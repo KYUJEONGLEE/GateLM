@@ -292,9 +292,9 @@ production_assert_pii_model_artifact() {
     production_fail "PII model directory is missing or unsafe: ${model_dir}"
   (
     cd "${model_dir}"
-    sha256sum --check "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" >/dev/null
+    tr -d '\r' < "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" | sha256sum --check - >/dev/null
   ) || production_fail "PII model artifact verification failed."
-  expected_files="$(awk 'NF == 2 {print $2}' "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" | sort)"
+  expected_files="$(tr -d '\r' < "${PRODUCTION_DISTRIBUTED_PII_MANIFEST}" | awk 'NF == 2 {print $2}' | sort)"
   observed_files="$(find "${model_dir}" -maxdepth 1 -type f -printf '%f\n' | sort)"
   [[ "${observed_files}" == "${expected_files}" ]] || production_fail "PII model directory contains missing or unexpected files."
 }

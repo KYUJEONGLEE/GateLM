@@ -92,6 +92,23 @@ grep -Fq 'deployment is idempotent' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'Database migrations, if any, were not reversed.' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'production_compose "${role}" up -d "${infrastructure_services[@]}"' "${UP_PATH}"
 
+(
+  # The deployment host may receive a CRLF manifest from a Windows checkout.
+  # Verify that both the hashes and the exact file allowlist remain enforced.
+  test_root="$(mktemp -d)"
+  trap 'rm -rf "${test_root}"' EXIT
+  mkdir -p "${test_root}/model"
+  printf '%s' 'pinned-model-config' > "${test_root}/model/config.json"
+  model_hash="$(sha256sum "${test_root}/model/config.json" | awk '{print $1}')"
+  printf '%s  config.json\r\n' "${model_hash}" > "${test_root}/manifest.sha256"
+
+  # shellcheck source=deploy/aws-triage/scripts/production-distributed-lib.sh
+  source "${LIB_PATH}"
+  GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR="${test_root}/model"
+  PRODUCTION_DISTRIBUTED_PII_MANIFEST="${test_root}/manifest.sha256"
+  production_assert_pii_model_artifact
+)
+
 if grep -Eq 'PROD_CLONE|prod-clone|10\.77|mock-provider-upstream|MOCK_SHAPER' \
   "${COMPOSE_PATH}" "${PII_COMPOSE_PATH}" "${ENV_PATH}" "${LIB_PATH}" "${PREFLIGHT_PATH}" "${UP_PATH}" "${SMOKE_PATH}" \
   "${DEPLOY_ROLE_PATH}" "${SEND_DEPLOY_PATH}" "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}"; then
