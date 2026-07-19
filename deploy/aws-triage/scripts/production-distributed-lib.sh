@@ -84,8 +84,6 @@ production_validate_env() {
     production_fail "GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA must be a full lowercase Git SHA."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_DB_SOURCE_SHA}" =~ ^[a-f0-9]{40}$ ]] || \
     production_fail "GATELM_PRODUCTION_DISTRIBUTED_DB_SOURCE_SHA must be a full lowercase Git SHA."
-  [[ "${GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA}" == "${GATELM_PRODUCTION_DISTRIBUTED_DB_SOURCE_SHA}" ]] || \
-    production_fail "Application and restored database source SHAs must match during migration."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$ ]] || \
     production_fail "GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG is not a safe image tag."
 
@@ -118,6 +116,8 @@ production_validate_env() {
 
   case "${GATELM_PRODUCTION_DISTRIBUTED_PHASE}" in
     rehearsal)
+      [[ "${GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA}" == "${GATELM_PRODUCTION_DISTRIBUTED_DB_SOURCE_SHA}" ]] || \
+        production_fail "Application and restored database source SHAs must match during migration rehearsal."
       [[ "${GATELM_PRODUCTION_DISTRIBUTED_LIVE_REQUESTS_ALLOWED}" == "false" ]] || \
         production_fail "Rehearsal must block authenticated live requests."
       [[ "$(basename "${GATELM_PRODUCTION_DISTRIBUTED_CADDYFILE}")" == "Caddyfile.production-distributed.rehearsal" ]] || \

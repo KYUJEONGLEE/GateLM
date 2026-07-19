@@ -35,7 +35,17 @@ if [[ "${build_images}" == "true" ]]; then
 fi
 
 production_log "Starting ${role}: ${services[*]}"
-production_compose "${role}" up -d --force-recreate "${services[@]}"
+if [[ "${role}" == "data" ]]; then
+  infrastructure_services=(postgres redis)
+  application_services=(control-plane-api chat-api rag-worker)
+  production_compose "${role}" up -d "${infrastructure_services[@]}"
+  for service in "${infrastructure_services[@]}"; do
+    production_wait_for_service "${role}" "${service}"
+  done
+  production_compose "${role}" up -d --force-recreate "${application_services[@]}"
+else
+  production_compose "${role}" up -d --force-recreate "${services[@]}"
+fi
 for service in "${services[@]}"; do
   production_wait_for_service "${role}" "${service}"
 done
