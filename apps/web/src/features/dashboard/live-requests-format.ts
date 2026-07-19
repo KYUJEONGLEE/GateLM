@@ -19,7 +19,7 @@ export function primaryPolicyResult(
   row: Pick<LiveRequestRow, "cacheStatus" | "safetyAction">,
   locale: Locale = "en"
 ): PrimaryPolicyResult | null {
-  if (row.safetyAction !== "NONE") {
+  if (row.safetyAction !== "NONE" && row.safetyAction !== "UNAVAILABLE") {
     return {
       kind: "safety",
       label: safetyResultLabel(row.safetyAction, locale),
@@ -32,6 +32,14 @@ export function primaryPolicyResult(
       kind: "cache",
       label: cacheResultLabel(row.cacheStatus, locale),
       value: row.cacheStatus
+    };
+  }
+
+  if (row.safetyAction === "UNAVAILABLE") {
+    return {
+      kind: "safety",
+      label: safetyResultLabel(row.safetyAction, locale),
+      value: row.safetyAction
     };
   }
 

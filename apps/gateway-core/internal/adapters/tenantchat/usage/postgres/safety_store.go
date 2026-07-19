@@ -113,7 +113,7 @@ func addSafetySummaryPayload(payload map[string]any, summary *tenantchat.SafetyS
 		return err
 	}
 	payload["maskingAction"] = summary.MaskingAction
-	payload["maskingDetectedTypes"] = append([]string(nil), summary.MaskingDetectedTypes...)
+	payload["maskingDetectedTypes"] = append([]string{}, summary.MaskingDetectedTypes...)
 	payload["maskingDetectedCount"] = summary.MaskingDetectedCount
 	payload["safetyPolicyDigest"] = summary.SafetyPolicyDigest
 	return nil
