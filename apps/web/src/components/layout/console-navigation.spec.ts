@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { getConsoleNavigationState } from "./console-navigation";
 
 const shellSource = readFileSync(new URL("./console-shell.tsx", import.meta.url), "utf8");
+const rootLayoutSource = readFileSync(
+  new URL("../../app/layout.tsx", import.meta.url),
+  "utf8"
+);
 const tenantLayoutSource = readFileSync(
   new URL("../../app/(console)/tenants/[tenantId]/layout.tsx", import.meta.url),
   "utf8"
@@ -80,7 +84,24 @@ test("profile menu hides only the settings heading and keeps its controls", () =
   expect(shellSource).toContain("<LanguageSwitcher");
   expect(shellSource).toContain('data-active={theme === "light"}');
   expect(shellSource).toContain('data-active={theme === "dark"}');
+  expect(shellSource).toContain('data-active={displayMode === "default"}');
+  expect(shellSource).toContain('data-active={displayMode === "expanded"}');
   expect(shellSource).not.toMatch(/<header>[\s\S]*?<strong>\{text\.settings\}<\/strong>[\s\S]*?<\/header>/);
+});
+
+test("profile menu persists default and expanded display modes without a hydration flash", () => {
+  expect(shellSource).toContain(
+    'const displayModeStorageKey = "gatelm_console_display_mode";'
+  );
+  expect(shellSource).toContain("readStoredDisplayMode() ?? readDocumentDisplayMode()");
+  expect(shellSource).toContain("writeStoredDisplayMode(nextDisplayMode)");
+  expect(shellSource).toContain('displayMode === "expanded" ? "true" : "false"');
+  expect(rootLayoutSource).toContain(
+    'window.localStorage.getItem("gatelm_console_display_mode")'
+  );
+  expect(rootLayoutSource).toContain(
+    'displayMode === "expanded" ? "true" : "false"'
+  );
 });
 
 test("Chat App and legacy Tenant Chat routes activate one management item", () => {
