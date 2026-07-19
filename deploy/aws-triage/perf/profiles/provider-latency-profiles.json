@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "gatelm.prod-clone.mock-latency-profiles.v1",
+  "profiles": {
+    "control_100ms": {
+      "kind": "fixed",
+      "workload": "nonstream",
+      "description": "Synthetic fixed-delay control for repeatable topology comparisons.",
+      "source": {
+        "type": "synthetic",
+        "sampleCount": 0
+      },
+      "valuesMs": [100],
+      "summary": {
+        "count": 1,
+        "averageMs": 100,
+        "minMs": 100,
+        "p50Ms": 100,
+        "p90Ms": 100,
+        "p95Ms": 100,
+        "p99Ms": 100,
+        "maxMs": 100
+      }
+    },
+    "historical_openai_nonstream": {
+      "kind": "cyclic",
+      "workload": "nonstream",
+      "description": "Latency-only replay of 50 successful historical OpenAI non-streaming observations from the controlled production clone.",
+      "source": {
+        "type": "production_clone_observation",
+        "applicationSha": "13d2964fe76e074e4e61f03ece588794fe0cc5e4",
+        "dataset": "production-clone p0_llm_invocation_logs",
+        "selection": "provider=openai-main, stream=false, status=success, provider_latency_ms present",
+        "sampleCount": 50,
+        "extractedAtUtc": "2026-07-19",
+        "privacy": "Only provider latency values are retained; request identifiers and request content are excluded.",
+        "ordering": "Values are deterministically ordered from an MD5 ordering of request_id, but no identifier or hash is retained."
+      },
+      "valuesMs": [
+        1807,
+        3776,
+        2277,
+        1996,
+        826,
+        1611,
+        1517,
+        1727,
+        2375,
+        1392,
+        1262,
+        2030,
+        1364,
+        1443,
+        683,
+        1753,
+        2515,
+        7849,
+        1876,
+        2259,
+        2129,
+        3180,
+        2733,
+        2421,
+        2257,
+        1237,
+        904,
+        4099,
+        2117,
+        3382,
+        1947,
+        1606,
+        1860,
+        3283,
+        1197,
+        1316,
+        1789,
+        1711,
+        2202,
+        684,
+        4621,
+        2078,
+        1264,
+        1475,
+        3188,
+        2241,
+        3264,
+        2754,
+        1423,
+        3664
+      ],
+      "summary": {
+        "count": 50,
+        "averageMs": 2207.28,
+        "minMs": 683,
+        "p50Ms": 1947,
+        "p90Ms": 3382,
+        "p95Ms": 4099,
+        "p99Ms": 7849,
+        "maxMs": 7849
+      }
+    }
+  }
+}

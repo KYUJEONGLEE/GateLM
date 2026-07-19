@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AWS_TRIAGE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+NODE_BIN="${NODE_BIN:-node}"
 LIB_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-lib.sh"
 COMPOSE_PATH="${AWS_TRIAGE_DIR}/docker-compose.prod-clone.yml"
 SMOKE_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-smoke.sh"
@@ -66,7 +67,16 @@ if validate_env "${bad_latency}" >"${tmp_dir}/latency.out" 2>&1; then
   printf '%s\n' "expected non-100ms Mock latency to fail" >&2
   exit 1
 fi
-grep -Fq 'require exactly 100ms Mock latency' "${tmp_dir}/latency.out"
+grep -Fq 'requires exactly 100ms Mock latency' "${tmp_dir}/latency.out"
+
+bad_profile="${tmp_dir}/bad-profile.env"
+cp "${overlay_env}" "${bad_profile}"
+sed -i 's/GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE=control_100ms/GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE=uncontrolled/' "${bad_profile}"
+if validate_env "${bad_profile}" >"${tmp_dir}/profile.out" 2>&1; then
+  printf '%s\n' "expected an unknown Mock latency profile to fail" >&2
+  exit 1
+fi
+grep -Fq 'Unsupported production-clone Mock latency profile' "${tmp_dir}/profile.out"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   for role in data rag gateway ai edge; do
@@ -89,8 +99,13 @@ grep -Fq 'name: ${GATELM_PROD_CLONE_POSTGRES_VOLUME_NAME:-gatelm-prod-clone-post
 grep -Fq 'name: ${GATELM_PROD_CLONE_REDIS_VOLUME_NAME:-gatelm-prod-clone-redis-data}' "${COMPOSE_PATH}"
 grep -Fq 'profiles: [data, rag]' "${COMPOSE_PATH}"
 grep -Fq 'profiles: [rag]' "${COMPOSE_PATH}"
+grep -Fq 'mock-provider-upstream:' "${COMPOSE_PATH}"
+grep -Fq 'ai-service mock-provider-upstream mock-provider' "${LIB_PATH}"
 grep -Fq 'scripts/dev/fast-noop-mock-provider.mjs' "${COMPOSE_PATH}"
-grep -Fq 'FAST_NOOP_MOCK_DEFAULT_LATENCY_MS: ${MOCK_PROVIDER_DEFAULT_LATENCY_MS}' "${COMPOSE_PATH}"
+grep -Fq 'FAST_NOOP_MOCK_DEFAULT_LATENCY_MS: "0"' "${COMPOSE_PATH}"
+grep -Fq 'prod-clone-mock-latency-shaper.mjs' "${COMPOSE_PATH}"
+grep -Fq 'PROD_CLONE_MOCK_SHAPER_PROFILE: ${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}' "${COMPOSE_PATH}"
+grep -Fq 'provider-latency-profiles.json' "${COMPOSE_PATH}"
 if grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS' "${COMPOSE_PATH}"; then
   printf '%s\n' "13d2964f base Compose must not contain the later auth-cache config" >&2
   exit 1
@@ -102,6 +117,7 @@ if grep -Eq 'clone_assert_tcp .* (8081|8001)' "${SMOKE_PATH}"; then
   exit 1
 fi
 grep -Fq 'providerCalled") is not True' "${GATEWAY_VERIFY_PATH}"
+grep -Fq 'Mock Provider latency profile ${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE} attested.' "${GATEWAY_VERIFY_PATH}"
 grep -Fq 'Gateway SSE stream did not contain JSON data and [DONE].' "${GATEWAY_VERIFY_PATH}"
 grep -Fq 'Gateway SSE stream did not confirm Mock provider execution.' "${GATEWAY_VERIFY_PATH}"
 grep -Fq 'Mock Provider did not record exactly one call for the request.' "${GATEWAY_VERIFY_PATH}"
@@ -114,5 +130,6 @@ grep -Fq 'prod-clone-runtime-iam-smoke/' "${IAM_VERIFY_PATH}"
 grep -Fq "require('@aws-sdk/client-s3')" "${IAM_VERIFY_PATH}"
 grep -Fq 'RAG Worker container S3 Put/Get/Delete and KMS-through-S3 access passed' "${IAM_VERIFY_PATH}"
 grep -Fq 'drain for at least 70 seconds' "${AWS_TRIAGE_DIR}/README.md"
+"${NODE_BIN}" "${AWS_TRIAGE_DIR}/scripts/tests/prod-clone-mock-latency-shaper.test.mjs"
 
 printf '%s\n' "production-clone validation tests passed"

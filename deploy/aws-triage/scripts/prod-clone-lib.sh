@@ -83,6 +83,7 @@ clone_validate_env() {
     GATELM_PROD_CLONE_ALLOW_LIVE_PROVIDER \
     GATELM_PROD_CLONE_ALLOW_SMTP \
     GATELM_PROD_CLONE_AUTH_CACHE_CONFIG \
+    GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE \
     GATELM_PROD_CLONE_CADDYFILE \
     POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
 
@@ -138,8 +139,12 @@ clone_validate_env() {
         clone_fail "Non-production clone phases require GATELM_DEMO_PROVIDER_MODE=mock."
       [[ "${GATEWAY_DEFAULT_PROVIDER:-}" == "mock" ]] || \
         clone_fail "Non-production clone phases require GATEWAY_DEFAULT_PROVIDER=mock."
+      case "${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}" in
+        control_100ms|historical_openai_nonstream) ;;
+        *) clone_fail "Unsupported production-clone Mock latency profile." ;;
+      esac
       [[ "${MOCK_PROVIDER_DEFAULT_LATENCY_MS:-}" == "100" ]] || \
-        clone_fail "Formal clone benchmarks require exactly 100ms Mock latency."
+        clone_fail "The formal control baseline requires exactly 100ms Mock latency."
       [[ -z "${OPENAI_API_KEY:-}" ]] || clone_fail "OPENAI_API_KEY must be empty in a private clone."
       [[ -z "${CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP:-}" ]] || \
         clone_fail "Control Plane Provider env mapping must be empty in a private clone."
@@ -261,7 +266,7 @@ clone_role_services() {
     data) printf '%s\n' "postgres redis control-plane-api chat-api" ;;
     rag) printf '%s\n' "rag-worker" ;;
     gateway) printf '%s\n' "gateway-core" ;;
-    ai) printf '%s\n' "ai-service mock-provider" ;;
+    ai) printf '%s\n' "ai-service mock-provider-upstream mock-provider" ;;
     edge) printf '%s\n' "web chat-web caddy" ;;
     *) clone_fail "Unknown clone role: $1" ;;
   esac

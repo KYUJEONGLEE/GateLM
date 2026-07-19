@@ -36,7 +36,24 @@ case "${role}" in
     response_path="$(mktemp)"
     headers_path="$(mktemp)"
     stats_path="$(mktemp)"
-    trap 'rm -f "${response_path}" "${headers_path}" "${stats_path}"' EXIT
+    profile_path="$(mktemp)"
+    trap 'rm -f "${response_path}" "${headers_path}" "${stats_path}" "${profile_path}"' EXIT
+    profile_status="$(curl --silent --show-error --output "${profile_path}" --write-out '%{http_code}' \
+      --max-time 5 "http://${GATELM_PROD_CLONE_AI_PRIVATE_IP}:8090/__mock/profile")"
+    [[ "${profile_status}" == "200" ]] || clone_fail "Mock Provider latency profile returned HTTP ${profile_status}."
+    python3 - "${profile_path}" "${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    profile = (json.load(handle).get("data") or {})
+
+if profile.get("profile") != sys.argv[2]:
+    raise SystemExit("Mock Provider latency profile does not match the protected clone environment.")
+if profile.get("workload") != "nonstream" or int(profile.get("sampleCount") or 0) <= 0:
+    raise SystemExit("Mock Provider latency profile attestation is incomplete.")
+PY
+    clone_log "Mock Provider latency profile ${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE} attested."
     reset_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
       --max-time 5 --request POST \
       "http://${GATELM_PROD_CLONE_AI_PRIVATE_IP}:8090/__mock/reset")"

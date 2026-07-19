@@ -914,17 +914,54 @@ Use two protected environment files on every role host. Copy the exact
 production `.env` to `.env.prod-clone.base`, copy `prod-clone.env.example` to
 `.env.prod-clone`, and set mode `600` on both. The overlay pins the application
 and database source SHA. `benchmark` and `rehearsal` phases fail closed unless
-Mock latency is exactly 100 ms, Provider env bridges are empty, SMTP points to a
-closed local port, and the internal-CA Caddyfile is selected. Stored production
-Provider credentials remain encrypted in the cloned database; use only a
-reviewed Mock-only test application for load generation.
+the Mock latency profile is allowlisted, the fixed control remains exactly 100
+ms, Provider env bridges are empty, SMTP points to a closed local port, and the
+internal-CA Caddyfile is selected. Stored production Provider credentials remain
+encrypted in the cloned database; use only a reviewed Mock-only test application
+for load generation.
 
-The clone intentionally replaces only the production Compose bootstrap Mock
-with `scripts/dev/fast-noop-mock-provider.mjs` from the exact pinned source SHA.
-This test-only dependency keeps the required 100 ms delay while adding OpenAI
-SSE and per-request call statistics. It does not change Gateway application
-code or enable a live Provider, and it lets smoke and load evidence prove the
-Provider call count rather than infer it from an HTTP 200.
+The clone runs `scripts/dev/fast-noop-mock-provider.mjs` from the exact pinned
+source SHA as an unmodified internal upstream. A deployment-control latency
+shaper is the only component in front of it. The shaper changes response delay,
+but preserves the upstream OpenAI-compatible response, SSE behavior, and
+per-request call statistics. It does not change Gateway application code or
+enable a live Provider, and it lets smoke and load evidence prove the Provider
+call count rather than infer it from an HTTP 200.
+
+### Production-clone Mock latency profiles
+
+Every topology is measured with the same two non-streaming profiles:
+
+| Profile | Delay | Valid claim |
+| --- | --- | --- |
+| `control_100ms` | fixed 100 ms | repeatable synthetic comparison of one versus multiple Gateways |
+| `historical_openai_nonstream` | cyclic replay of 50 latency-only observations | sensitivity of the same topology to the observed non-streaming Provider latency distribution |
+
+The historical profile was derived from successful `openai-main`, non-streaming
+rows in the controlled `13d2964f` clone. It retains only millisecond values:
+average `2207.28`, p50 `1947`, p90 `3382`, p95 `4099`, and maximum `7849` ms.
+The order is deterministic and `/__mock/reset` returns the cursor to the first
+value, so one- and two-Gateway runs receive the same repeating sequence. The
+profile is latency replay, not production traffic replay: it does not reproduce
+prompt mix, token generation, Provider throttling, Internet variance, streaming
+TTFT, or chunk pacing.
+
+Select one profile in `.env.prod-clone`, recreate both AI Mock services, reset
+statistics immediately before the run, and attest the active profile without
+printing request data:
+
+```bash
+GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE=control_100ms
+# or: GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE=historical_openai_nonstream
+
+bash scripts/prod-clone-up.sh --role ai
+curl -fsS http://10.77.1.40:8090/__mock/profile
+curl -fsS -X POST http://10.77.1.40:8090/__mock/reset
+```
+
+Use `control_100ms` first for every topology, then repeat the same RPS points
+with `historical_openai_nonstream`. Do not combine the two profiles into one
+capacity number, and do not describe either result as live-Provider capacity.
 
 The source checkout referenced by `GATELM_PROD_CLONE_BUILD_CONTEXT` is separate
 from the deployment-control checkout and must be clean at the declared full SHA.
