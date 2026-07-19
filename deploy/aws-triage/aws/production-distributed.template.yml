@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: GateLM five-host distributed production foundation with a private dedicated PII service.
+Description: GateLM distributed production foundation with dual private Gateway targets and dedicated AI and PII services.
 
 Parameters:
   SshKeyName:
@@ -242,6 +242,32 @@ Resources:
         - Key: Environment
           Value: production-distributed
 
+  GatewayLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM internal Network Load Balancer for public and private Gateway traffic.
+      GroupName: gatelm-production-distributed-gateway-nlb
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
+          Description: Public Gateway API from Edge only
+        - IpProtocol: tcp
+          FromPort: 8081
+          ToPort: 8081
+          SourceSecurityGroupId: !Ref DataSecurityGroup
+          Description: Tenant Chat and RAG workload traffic from Data only
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway-nlb
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
   DataSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -374,10 +400,142 @@ Resources:
       SourceSecurityGroupId: !Ref DataSecurityGroup
       Description: Tenant Chat and RAG embedding workload calls from Data
 
+  GatewayPublicIngressFromLoadBalancer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref GatewaySecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref GatewayLoadBalancerSecurityGroup
+      Description: Public Gateway API and health checks from the internal NLB
+
+  GatewayPrivateIngressFromLoadBalancer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref GatewaySecurityGroup
+      IpProtocol: tcp
+      FromPort: 8081
+      ToPort: 8081
+      SourceSecurityGroupId: !Ref GatewayLoadBalancerSecurityGroup
+      Description: Private Tenant Chat traffic and health checks from the internal NLB
+
+  GatewayLoadBalancerPublicEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref GatewayLoadBalancerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      DestinationSecurityGroupId: !Ref GatewaySecurityGroup
+      Description: Public Gateway target and health-check traffic
+
+  GatewayLoadBalancerPrivateEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref GatewayLoadBalancerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8081
+      ToPort: 8081
+      DestinationSecurityGroupId: !Ref GatewaySecurityGroup
+      Description: Private Gateway target and health-check traffic
+
+  GatewayBootstrapKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: Encrypts short-lived GateLM Gateway bootstrap bundles in S3.
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableIamPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: "*"
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: DataClass
+          Value: ephemeral-secret-bootstrap
+
+  GatewayBootstrapBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt GatewayBootstrapKmsKey.Arn
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireGatewayBootstrapBundles
+            Status: Enabled
+            ExpirationInDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway-bootstrap
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: DataClass
+          Value: ephemeral-secret-bootstrap
+
+  GatewayBootstrapBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref GatewayBootstrapBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt GatewayBootstrapBucket.Arn
+              - !Sub ${GatewayBootstrapBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: RequireKmsEncryptionHeader
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub ${GatewayBootstrapBucket.Arn}/gateway-bootstrap/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+          - Sid: RequireBootstrapKmsKey
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub ${GatewayBootstrapBucket.Arn}/gateway-bootstrap/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt GatewayBootstrapKmsKey.Arn
+
   NodeRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: SSM management for GateLM production Edge, Gateway, and AI hosts.
+      Description: SSM management for GateLM production Edge and AI hosts.
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -408,6 +566,71 @@ Resources:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles: [!Ref NodeRole]
+
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: SSM, routing token, and ephemeral bootstrap access for GateLM Gateway hosts.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: GateLMRoutingDifficultyTokenRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadRoutingDifficultyServiceToken
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RoutingDifficultyServiceTokenParameterName}
+        - PolicyName: GateLMGatewayBootstrapBundleAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListGatewayBootstrapPrefix
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt GatewayBootstrapBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix: gateway-bootstrap/*
+              - Sid: ManageGatewayBootstrapBundles
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub ${GatewayBootstrapBucket.Arn}/gateway-bootstrap/*
+              - Sid: UseGatewayBootstrapKmsKeyThroughS3
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                Resource: !GetAtt GatewayBootstrapKmsKey.Arn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+                    kms:CallerAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Purpose
+          Value: ProductionGateway
+
+  GatewayInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref GatewayRole]
 
   DataRole:
     Type: AWS::IAM::Role
@@ -600,7 +823,7 @@ Resources:
       AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
       DisableApiTermination: true
       EbsOptimized: true
-      IamInstanceProfile: !Ref NodeInstanceProfile
+      IamInstanceProfile: !Ref GatewayInstanceProfile
       ImageId: !Ref UbuntuAmiId
       InstanceInitiatedShutdownBehavior: stop
       InstanceType: !Ref GatewayInstanceType
@@ -643,6 +866,65 @@ Resources:
           Value: production-distributed
         - Key: Role
           Value: gateway
+        - Key: DoNotDelete
+          Value: "true"
+
+  GatewaySecondaryInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref GatewayInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref GatewayInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref GatewaySecurityGroup]
+          PrivateIpAddress: 10.78.2.21
+          SubnetId: !Ref PrivateSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 40
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --update
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' gateway > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway-secondary
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: gateway
+        - Key: GatewayReplica
+          Value: secondary
         - Key: DoNotDelete
           Value: "true"
 
@@ -831,6 +1113,114 @@ Resources:
           Values: [!Ref PiiInstance]
       WaitForSuccessTimeoutSeconds: 300
 
+  GatewayPublicTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 8080
+      Protocol: TCP
+      TargetType: instance
+      VpcId: !Ref ProductionVpc
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /healthz
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 6
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: 200
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: preserve_client_ip.enabled
+          Value: "true"
+      Targets:
+        - Id: !Ref GatewayInstance
+        - Id: !Ref GatewaySecondaryInstance
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway-public
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  GatewayPrivateTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 8081
+      Protocol: TCP
+      TargetType: instance
+      VpcId: !Ref ProductionVpc
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: TCP
+      HealthCheckTimeoutSeconds: 6
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: preserve_client_ip.enabled
+          Value: "true"
+        - Key: stickiness.enabled
+          Value: "true"
+        - Key: stickiness.type
+          Value: source_ip
+      Targets:
+        - Id: !Ref GatewayInstance
+        - Id: !Ref GatewaySecondaryInstance
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway-private
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  GatewayLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn:
+      - GatewayLoadBalancerPublicEgress
+      - GatewayLoadBalancerPrivateEgress
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internal
+      SecurityGroups: [!Ref GatewayLoadBalancerSecurityGroup]
+      SubnetMappings:
+        - SubnetId: !Ref PrivateSubnet
+          PrivateIPv4Address: 10.78.2.10
+      Type: network
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-gateway
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  GatewayPublicListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref GatewayPublicTargetGroup
+      LoadBalancerArn: !Ref GatewayLoadBalancer
+      Port: 8080
+      Protocol: TCP
+
+  GatewayPrivateListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref GatewayPrivateTargetGroup
+      LoadBalancerArn: !Ref GatewayLoadBalancer
+      Port: 8081
+      Protocol: TCP
+
   EdgeEip:
     Type: AWS::EC2::EIP
     DeletionPolicy: Retain
@@ -871,6 +1261,26 @@ Outputs:
     Value: !Ref GatewayInstance
   GatewayPrivateIp:
     Value: !GetAtt GatewayInstance.PrivateIp
+  GatewaySecondaryInstanceId:
+    Value: !Ref GatewaySecondaryInstance
+  GatewaySecondaryPrivateIp:
+    Value: !GetAtt GatewaySecondaryInstance.PrivateIp
+  GatewayLoadBalancerArn:
+    Value: !Ref GatewayLoadBalancer
+  GatewayLoadBalancerDnsName:
+    Value: !GetAtt GatewayLoadBalancer.DNSName
+  GatewayLoadBalancerPrivateIp:
+    Value: 10.78.2.10
+  GatewayPublicTargetGroupArn:
+    Value: !Ref GatewayPublicTargetGroup
+  GatewayPrivateTargetGroupArn:
+    Value: !Ref GatewayPrivateTargetGroup
+  GatewayBootstrapBucketName:
+    Value: !Ref GatewayBootstrapBucket
+  GatewayBootstrapKmsKeyArn:
+    Value: !GetAtt GatewayBootstrapKmsKey.Arn
+  GatewayInstanceProfileName:
+    Value: !Ref GatewayInstanceProfile
   DataInstanceId:
     Value: !Ref DataInstance
   DataPrivateIp:
