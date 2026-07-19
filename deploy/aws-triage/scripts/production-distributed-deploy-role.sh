@@ -22,6 +22,7 @@ need_command() {
 
 role=""
 target_sha=""
+gateway_upstream_host="10.78.2.20"
 mode="deploy"
 while (( $# > 0 )); do
   case "$1" in
@@ -33,6 +34,11 @@ while (( $# > 0 )); do
     --sha)
       [[ $# -ge 2 ]] || deploy_fail "--sha requires a full Git SHA."
       target_sha="$2"
+      shift 2
+      ;;
+    --gateway-upstream-host)
+      [[ $# -ge 2 ]] || deploy_fail "--gateway-upstream-host requires 10.78.2.20 or 10.78.2.10."
+      gateway_upstream_host="$2"
       shift 2
       ;;
     --rollback)
@@ -49,12 +55,15 @@ done
 
 case "${role}" in edge|gateway|data|ai|pii) ;; *) deploy_fail "A valid --role is required." ;; esac
 [[ "${target_sha}" =~ ^[0-9a-f]{40}$ ]] || deploy_fail "A full lowercase Git SHA is required."
+[[ "${gateway_upstream_host}" == "10.78.2.20" || "${gateway_upstream_host}" == "10.78.2.10" ]] || \
+  deploy_fail "Gateway upstream host must be the primary Gateway or the internal NLB."
 
 repo_dir="${GATELM_PRODUCTION_DISTRIBUTED_REPO_DIR:-/home/ubuntu/GateLM}"
 orchestration_dir="${GATELM_PRODUCTION_DISTRIBUTED_ORCHESTRATION_DIR:-/home/ubuntu/gatelm-production-orchestration}"
 env_file="${orchestration_dir}/.env.production-distributed"
 state_root="${orchestration_dir}/.production-distributed-state/deployments"
-state_dir="${state_root}/${target_sha}-${role}"
+gateway_upstream_state_key="${gateway_upstream_host//./-}"
+state_dir="${state_root}/${target_sha}-${role}-upstream-${gateway_upstream_state_key}"
 lock_file="/tmp/gatelm-production-distributed-${role}.lock"
 cutover_started=false
 deployment_succeeded=false
@@ -101,7 +110,7 @@ set_env_value() {
   mv "${temp}" "${env_file}"
 }
 
-upsert_secret_env_value() {
+upsert_env_value() {
   local key="$1" value="$2" temp found
   temp="$(mktemp "${env_file}.XXXXXX")"
   found="$(awk -F= -v key="${key}" '$1 == key {count += 1} END {print count + 0}' "${env_file}")"
@@ -284,6 +293,7 @@ run_git checkout --detach "${target_sha}" >/dev/null
 sync_artifacts
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA "${target_sha}"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG "${target_sha:0:12}"
+upsert_env_value GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_UPSTREAM_HOST "${gateway_upstream_host}"
 
 if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
   # shellcheck source=/dev/null
@@ -296,7 +306,7 @@ if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
     --output text)"
   [[ "${routing_difficulty_token}" =~ ^[a-f0-9]{64}$ ]] || \
     deploy_fail "Routing difficulty service token SecureString is missing or malformed."
-  upsert_secret_env_value GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN "${routing_difficulty_token}"
+  upsert_env_value GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN "${routing_difficulty_token}"
   unset routing_difficulty_token
 fi
 
