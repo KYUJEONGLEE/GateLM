@@ -2326,12 +2326,6 @@ export function EmployeeControlManagement({
         <div className="employee-usage-ranking-heading">
           <div>
             <h3>{locale === "ko" ? "직원별 사용 비용" : "Employee cost usage"}</h3>
-            <p>
-              {locale === "ko"
-                ? "Tenant Chat의 Provider 확정 비용만 표시하는 읽기 전용 지표입니다."
-                : "A read-only view of Provider-confirmed Tenant Chat cost only."}
-              {usage.periodTimezone ? ` · ${usage.periodTimezone}` : ""}
-            </p>
           </div>
           <div className="employee-cost-range-actions" role="group">
             {(["24h", "7d", "30d"] as const).map((range) => (
@@ -2387,9 +2381,6 @@ export function EmployeeControlManagement({
                 <span>{locale === "ko" ? "비용 인사이트" : "Cost insights"}</span>
                 <strong>{locale === "ko" ? "현재 기간 요약" : "Current period"}</strong>
               </div>
-              <span className="employee-cost-insights-status">
-                {locale === "ko" ? "확정 비용" : "Confirmed"}
-              </span>
             </div>
             <dl className="employee-cost-insights-metrics">
               <div className="employee-cost-insights-primary">
@@ -2401,7 +2392,7 @@ export function EmployeeControlManagement({
                 <dd>{formatMicroUsd(employeeCostChartAverage, locale)}</dd>
               </div>
               <div>
-                <dt>{locale === "ko" ? "비용 발생 직원" : "Active employees"}</dt>
+                <dt>{locale === "ko" ? "직원" : "Employees"}</dt>
                 <dd>
                   {employeeCostChartActiveRows.length}
                   {locale === "ko" ? "명" : ""}

@@ -17735,14 +17735,6 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   font-size: calc(var(--font-size-base) + var(--global-font-lift));
 }
 
-.employee-cost-insights-status {
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  color: var(--success) !important;
-  white-space: nowrap;
-}
-
 .employee-cost-insights-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -42,6 +42,9 @@ import { hasConsoleTenantAccess } from "@/lib/auth/console-tenant-access";
 import { getEmployeeSecurity } from "@/lib/control-plane/employee-security-client";
 import { getAllEmployeeUsage } from "@/lib/control-plane/employee-usage-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { resolveControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import { listTenantProviderConnections } from "@/lib/control-plane/provider-connections-client";
+import { buildProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import {
   getTenantChatCostSeries,
   getTenantChatDashboard
@@ -130,7 +133,7 @@ const pageText = {
     projectUnavailable: "선택한 프로젝트를 사용할 수 없음",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
-    subtitle: "비용, 정책, 운영 성능 분석",
+    subtitle: "",
     tabs: {
       cache: "캐시",
       cost: "비용",
@@ -140,7 +143,7 @@ const pageText = {
       security: "보안",
       usage: "사용량"
     },
-    title: "Analytics",
+    title: "분석",
     updating: "분석 데이터 업데이트 중..."
   }
 } satisfies Record<Locale, unknown>;
@@ -206,7 +209,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     reliability,
     projectApplicationSecurityEvidence,
     employeeUsageResult,
-    employeeSecurityResult
+    employeeSecurityResult,
+    providerConnectionsResult
   ] = await Promise.all([
     getLiveDashboardOverview(effectiveTenantId, {
       projectId: filters.projectId || undefined,
@@ -277,6 +281,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           tenantId: effectiveTenantId,
           to: reliabilityRange.to
         })
+      : Promise.resolve(undefined),
+    activeTab === "performance"
+      ? listTenantProviderConnections(resolveControlPlaneTenantId(effectiveTenantId))
       : Promise.resolve(undefined)
   ]);
 
@@ -362,6 +369,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   );
   const employeeUsage = employeeUsageResult?.ok ? employeeUsageResult.data : undefined;
   const employeeSecurity = employeeSecurityResult?.ok ? employeeSecurityResult.data : undefined;
+  const providerDirectory = buildProviderDisplayDirectory(
+    providerConnectionsResult?.ok ? providerConnectionsResult.data : []
+  );
   const employeeOptions = activeTab === "security"
     ? employeeSecurity?.data ?? []
     : employeeUsage?.data ?? [];
@@ -385,7 +395,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
       <header className="analytics-v3-command-header">
         <div className="analytics-v3-title-block">
           <h1>{text.title}</h1>
-          <p>{text.subtitle}</p>
+          {text.subtitle ? <p>{text.subtitle}</p> : null}
         </div>
 
         <div
@@ -480,6 +490,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           model={model}
           performance={performance}
           projectNameById={projectNameById}
+          providerDirectory={providerDirectory}
           range={filters.range}
           tenantId={effectiveTenantId}
         />

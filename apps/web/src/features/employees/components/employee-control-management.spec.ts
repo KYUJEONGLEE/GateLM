@@ -115,11 +115,13 @@ test("employee ranking and detail controls use Tenant Chat cost observation and 
   expect(source).toContain("defaultEmployeeWeeklyTokenLimit");
   expect(source).toContain('locale === "ko" ? "적용" : "Apply"');
   expect(source).toContain("employeeCostRange");
-  expect(source).toContain("Provider-confirmed Tenant Chat cost only");
+  expect(source).not.toContain("Provider-confirmed Tenant Chat cost only");
+  expect(source).not.toContain("employee-cost-insights-status");
+  expect(source).toContain('locale === "ko" ? "직원" : "Employees"');
   expect(source).toContain("if (response.status === 409)");
   expect(source).toContain("disabled={pending}");
   expect(source).not.toContain("function costLimitUsd(");
-  expect(source).toContain("usage.periodTimezone");
+  expect(source).not.toContain("usage.periodTimezone");
   expect(source).not.toContain("AnalyticsEmployeeTokenBarChart");
   expect(styles).toContain(".employee-weekly-token-footer {");
   expect(styles).toContain(".employee-weekly-token-slider-current {");
