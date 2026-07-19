@@ -59,9 +59,12 @@ lock_file="/tmp/gatelm-production-distributed-${role}.lock"
 cutover_started=false
 deployment_succeeded=false
 
-for command_name in awk bash chmod chown cp curl date df docker flock git install mkdir mktemp mv rm stat tar timeout tr; do
+for command_name in awk bash chmod chown cp curl date df docker find flock git install mkdir mktemp mv rm sha256sum stat tar timeout tr; do
   need_command "${command_name}"
 done
+if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
+  need_command aws
+fi
 docker compose version >/dev/null 2>&1 || deploy_fail "Docker Compose v2 is required."
 docker info >/dev/null 2>&1 || deploy_fail "Docker daemon is not reachable."
 
@@ -93,6 +96,22 @@ set_env_value() {
   }
   awk -F= -v key="${key}" -v value="${value}" \
     '$1 == key {print key "=" value; next} {print}' "${env_file}" > "${temp}"
+  chown --reference="${env_file}" "${temp}"
+  chmod --reference="${env_file}" "${temp}"
+  mv "${temp}" "${env_file}"
+}
+
+upsert_secret_env_value() {
+  local key="$1" value="$2" temp found
+  temp="$(mktemp "${env_file}.XXXXXX")"
+  found="$(awk -F= -v key="${key}" '$1 == key {count += 1} END {print count + 0}' "${env_file}")"
+  [[ "${found}" == "0" || "${found}" == "1" ]] || {
+    rm -f "${temp}"
+    deploy_fail "Expected at most one ${key} entry in the production overlay."
+  }
+  awk -F= -v key="${key}" -v value="${value}" \
+    'BEGIN {updated = 0} $1 == key {print key "=" value; updated = 1; next} {print} END {if (!updated) print key "=" value}' \
+    "${env_file}" > "${temp}"
   chown --reference="${env_file}" "${temp}"
   chmod --reference="${env_file}" "${temp}"
   mv "${temp}" "${env_file}"
@@ -266,9 +285,29 @@ sync_artifacts
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA "${target_sha}"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG "${target_sha:0:12}"
 
-if [[ "${role}" == "gateway" ]]; then
-  deploy_log "Preparing the pinned Gateway E5 runtime bundle."
+if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
+  # shellcheck source=/dev/null
+  source "${orchestration_dir}/scripts/production-distributed-lib.sh"
+  production_load_env
+  routing_difficulty_token="$(aws ssm get-parameter \
+    --name "${GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME}" \
+    --with-decryption \
+    --query Parameter.Value \
+    --output text)"
+  [[ "${routing_difficulty_token}" =~ ^[a-f0-9]{64}$ ]] || \
+    deploy_fail "Routing difficulty service token SecureString is missing or malformed."
+  upsert_secret_env_value GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN "${routing_difficulty_token}"
+  unset routing_difficulty_token
+fi
+
+if [[ "${role}" == "ai" ]]; then
+  deploy_log "Preparing the pinned AI Service E5 runtime bundle."
   bash "${repo_dir}/deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh" "${repo_dir}"
+  routing_model_dir="${repo_dir}/.tmp/gateway-e5-runtime-bundle/multilingual-e5-small/614241f622f53c4eeff9890bdc4f31cfecc418b3"
+  [[ -d "${routing_model_dir}" && ! -L "${routing_model_dir}" ]] || \
+    deploy_fail "Prepared AI Service E5 model directory is missing or unsafe."
+  find "${routing_model_dir}" -type d -exec chmod 0755 {} +
+  find "${routing_model_dir}" -type f -exec chmod 0644 {} +
 fi
 if [[ "${role}" == "pii" ]]; then
   deploy_log "Preparing the pinned PII model bundle."

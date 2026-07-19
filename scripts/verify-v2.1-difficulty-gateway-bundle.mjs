@@ -244,7 +244,7 @@ for (const requiredText of [
     throw new Error(`Gateway E5 bundle preparation omitted ${requiredText}`);
   }
 }
-if (!gatewayMain.includes("completionservice.WithDifficultySemanticRuntime(difficultyE5Runtime)")) {
+if (!gatewayMain.includes("completionservice.WithDifficultySemanticRuntime(difficultyClassifier)")) {
   throw new Error("Tenant Chat completion must share the process-global Gateway difficulty runtime");
 }
 if (!tenantChatCompletionService.includes("routing.WithDifficultySemanticRuntime(difficultyRuntime)")) {

@@ -34,6 +34,8 @@ const (
 	StreamTimeToFirstTokenSeconds          = "gatelm_stream_time_to_first_token_seconds"
 	RoutingDifficultyShadowTotal           = "gatelm_routing_difficulty_shadow_total"
 	RoutingDifficultyShadowDurationSeconds = "gatelm_routing_difficulty_shadow_duration_seconds"
+	RoutingDifficultyRemoteTotal           = "gatelm_routing_difficulty_remote_total"
+	RoutingDifficultyRemoteDurationSeconds = "gatelm_routing_difficulty_remote_duration_seconds"
 	TenantChatCompletionTotal              = "gatelm_tenant_chat_completion_total"
 	TenantChatUsageReconciliationTotal     = "gatelm_tenant_chat_usage_reconciliation_total"
 	TenantChatAccountingTransactionSeconds = "gatelm_tenant_chat_accounting_transaction_seconds"
@@ -102,6 +104,8 @@ var metricSpecs = map[string]metricSpec{
 	StreamTimeToFirstTokenSeconds:          {"histogram", "Gateway streaming time to first visible content token in seconds."},
 	RoutingDifficultyShadowTotal:           {"counter", "Total bounded difficulty shadow comparisons by safe outcome."},
 	RoutingDifficultyShadowDurationSeconds: {"histogram", "Difficulty shadow evaluation duration in seconds by safe status."},
+	RoutingDifficultyRemoteTotal:           {"counter", "Remote difficulty classifications by bounded outcome."},
+	RoutingDifficultyRemoteDurationSeconds: {"histogram", "Remote difficulty classification duration in seconds by bounded outcome."},
 	TenantChatCompletionTotal:              {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
 	TenantChatUsageReconciliationTotal:     {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
 	TenantChatAccountingTransactionSeconds: {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},

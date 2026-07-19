@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Response, status
 
 from app.api.dependencies import get_ai_safety_detector_service
 from app.core.config import Settings
+from app.services.routing_difficulty import RoutingDifficultyService
 
 
 router = APIRouter()
@@ -31,10 +32,15 @@ def readyz(request: Request, response: Response) -> dict[str, object]:
         not detector_dependency["required"]
         or detector_dependency["status"] == "loaded"
     )
-    if not detector_ready:
+    routing_dependency = _routing_difficulty_dependency(request, settings)
+    routing_ready = (
+        not routing_dependency["required"]
+        or routing_dependency["status"] == "loaded"
+    )
+    if not detector_ready or not routing_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {
-        "status": "ready" if detector_ready else "not_ready",
+        "status": "ready" if detector_ready and routing_ready else "not_ready",
         "service": "ai-service",
         "dependencies": {
             "remoteSafety": {
@@ -43,6 +49,7 @@ def readyz(request: Request, response: Response) -> dict[str, object]:
                 "mode": settings.remote_safety_mode,
             },
             "aiSafetyDetector": detector_dependency,
+            "routingDifficulty": routing_dependency,
         },
     }
 
@@ -72,3 +79,19 @@ def _primary_runtime(model_states: list[dict[str, str]], settings: Settings) -> 
         if runtime:
             return runtime
     return settings.ai_safety_detector_runtime
+
+
+def _routing_difficulty_dependency(
+    request: Request,
+    settings: Settings,
+) -> dict[str, object]:
+    if not settings.routing_difficulty_enabled:
+        return {
+            "status": "disabled",
+            "required": False,
+        }
+    service = getattr(request.app.state, "routing_difficulty_service", None)
+    return {
+        "status": "loaded" if isinstance(service, RoutingDifficultyService) else "configured",
+        "required": True,
+    }

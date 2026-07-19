@@ -20,7 +20,8 @@ Parameters:
     Default: m7i.large
   AiInstanceType:
     Type: String
-    Default: c7i.large
+    Default: c7i.xlarge
+    Description: Four-vCPU compute-optimized host for RAG and authoritative E5 routing inference.
   PiiInstanceType:
     Type: String
     Default: c7i.xlarge
@@ -35,6 +36,11 @@ Parameters:
   ProductionRagKmsKeyArn:
     Type: String
     Description: Existing production RAG KMS key ARN used through S3.
+  RoutingDifficultyServiceTokenParameterName:
+    Type: String
+    Default: /gatelm/production/routing-difficulty-service-token
+    AllowedPattern: "/[A-Za-z0-9_./-]+"
+    Description: SecureString parameter read by Gateway and AI hosts during deployment.
 
 Resources:
   ProductionVpc:
@@ -381,6 +387,15 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: GateLMRoutingDifficultyTokenRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadRoutingDifficultyServiceToken
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RoutingDifficultyServiceTokenParameterName}
       Tags:
         - Key: Project
           Value: GateLM

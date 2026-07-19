@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from fastapi import Request
 
 from app.core.config import Settings, load_settings
+from app.domain.routing_difficulty.runtime import RoutingDifficultyRuntime
 from app.services.ai_safety_detector import AiSafetyDetectorService
 from app.services.rag_extraction import RagExtractionService
+from app.services.routing_difficulty import RoutingDifficultyService
+from app.services.routing_difficulty_batcher import RoutingDifficultyBatcher
 from app.services.safety_evaluator import RemoteSafetyEvaluationService
 
 
@@ -19,6 +23,25 @@ class RagExtractionConcurrencyGate:
 
     async def __aexit__(self, *_: object) -> None:
         self._semaphore.release()
+
+
+class RoutingDifficultyConcurrencyGate:
+    def __init__(self, maximum_concurrency: int) -> None:
+        self._maximum_concurrency = maximum_concurrency
+        self._active = 0
+        self._lock = asyncio.Lock()
+
+    async def try_acquire(self) -> bool:
+        async with self._lock:
+            if self._active >= self._maximum_concurrency:
+                return False
+            self._active += 1
+            return True
+
+    async def release(self) -> None:
+        async with self._lock:
+            if self._active > 0:
+                self._active -= 1
 
 
 def get_settings(request: Request) -> Settings:
@@ -81,4 +104,82 @@ def get_rag_extraction_concurrency_gate(
         get_settings(request).rag_max_concurrent_extractions
     )
     request.app.state.rag_extraction_concurrency_gate = gate
+    return gate
+
+
+def create_routing_difficulty_service(
+    settings: Settings,
+) -> RoutingDifficultyService:
+    runtime = RoutingDifficultyRuntime(
+        artifact_root=Path(settings.routing_difficulty_artifact_root),
+        encoder_manifest_path=Path(
+            settings.routing_difficulty_encoder_manifest
+        ),
+        model_artifact_path=Path(settings.routing_difficulty_model_artifact),
+        intra_op_threads=settings.routing_difficulty_onnx_intra_op_threads,
+        inter_op_threads=settings.routing_difficulty_onnx_inter_op_threads,
+    )
+    return RoutingDifficultyService(runtime)
+
+
+def get_routing_difficulty_service(
+    request: Request,
+) -> RoutingDifficultyService:
+    service = getattr(request.app.state, "routing_difficulty_service", None)
+    if isinstance(service, RoutingDifficultyService):
+        return service
+    settings = get_settings(request)
+    if not settings.routing_difficulty_enabled:
+        raise RuntimeError("routing difficulty service is disabled")
+    service = create_routing_difficulty_service(settings)
+    service.warmup()
+    request.app.state.routing_difficulty_service = service
+    return service
+
+
+def create_routing_difficulty_batcher(
+    settings: Settings,
+    service: RoutingDifficultyService,
+) -> RoutingDifficultyBatcher:
+    return RoutingDifficultyBatcher(
+        service,
+        maximum_batch_size=settings.routing_difficulty_batch_size,
+        maximum_wait_ms=settings.routing_difficulty_batch_max_wait_ms,
+        queue_capacity=settings.routing_difficulty_max_concurrent,
+        worker_count=(
+            settings.routing_difficulty_worker_count
+            or (
+                settings.routing_difficulty_max_concurrent
+                if settings.routing_difficulty_batch_size == 1
+                else 1
+            )
+        ),
+    )
+
+
+def get_routing_difficulty_batcher(
+    request: Request,
+) -> RoutingDifficultyBatcher:
+    batcher = getattr(request.app.state, "routing_difficulty_batcher", None)
+    if isinstance(batcher, RoutingDifficultyBatcher):
+        return batcher
+    settings = get_settings(request)
+    batcher = create_routing_difficulty_batcher(
+        settings,
+        get_routing_difficulty_service(request),
+    )
+    request.app.state.routing_difficulty_batcher = batcher
+    return batcher
+
+
+def get_routing_difficulty_concurrency_gate(
+    request: Request,
+) -> RoutingDifficultyConcurrencyGate:
+    gate = getattr(request.app.state, "routing_difficulty_concurrency_gate", None)
+    if isinstance(gate, RoutingDifficultyConcurrencyGate):
+        return gate
+    gate = RoutingDifficultyConcurrencyGate(
+        get_settings(request).routing_difficulty_max_concurrent
+    )
+    request.app.state.routing_difficulty_concurrency_gate = gate
     return gate
