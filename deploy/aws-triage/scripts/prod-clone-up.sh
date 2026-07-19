@@ -26,6 +26,7 @@ case "${role}" in edge|gateway1|gateway2|data|rag|ai) ;; *) clone_fail "A valid 
 
 bash "${SCRIPT_DIR}/prod-clone-preflight.sh" --role "${role}"
 clone_load_env
+clone_assert_role_host "${role}"
 
 read -r -a services <<< "$(clone_role_services "${role}")"
 profile="$(clone_role_profile "${role}")"
