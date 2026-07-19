@@ -62,7 +62,7 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	input := tenantchat.CompletionInput{Messages: []tenantchat.EphemeralMessage{{Role: "user", Content: "synthetic private prompt"}}, Stream: true}
 	entry := tenantchat.ExactCacheEntry{
 		ResponseText: "synthetic private response", EffectiveProviderID: "provider_001",
-		EffectiveModelKey: "model_001", EffectiveRouteTier: "standard", SourceCostMicroUSD: 125,
+		EffectiveModelKey: "model_001", SourceCostMicroUSD: 125,
 	}
 	if err := store.Put(context.Background(), requestContext, snapshot, input, entry); err != nil {
 		t.Fatalf("put exact cache: %v", err)
@@ -133,6 +133,13 @@ func TestStoreEncryptsExactCacheWithinTenantUserNamespace(t *testing.T) {
 	got, hit, err := store.Get(context.Background(), requestContext, snapshot, input)
 	if err != nil || !hit || got != entry {
 		t.Fatalf("get exact cache: hit=%t err=%v entry=%+v", hit, err, got)
+	}
+	unknownTier := entry
+	unknownTier.EffectiveRouteTier = "premium"
+	missingProvider := entry
+	missingProvider.EffectiveProviderID = ""
+	if validEntry(unknownTier) || validEntry(missingProvider) {
+		t.Fatal("cache entry compatibility accepted an unknown tier or missing provider")
 	}
 
 	client.value[len(client.value)-2] ^= 1

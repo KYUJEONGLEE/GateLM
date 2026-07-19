@@ -150,20 +150,23 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
     def test_person_name_model_only_keeps_other_rules_and_accepts_model_name(self) -> None:
         prompt = "고객 김민수의 이메일은 person-model-only@example.test 입니다."
         name_start = prompt.index("김민수")
+        thresholds = {"person_name": 0.9}
         service = AiSafetyDetectorService(
             adapter=PrivacyFilterAdapter(
                 classifier=lambda _text: [
                     {
                         "entity_group": "PER",
-                        "score": 0.99,
+                        "score": 0.95,
                         "start": name_start,
                         "end": name_start + len("김민수"),
                     }
                 ],
                 model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                min_confidence_by_detector_type=thresholds,
                 allowed_detector_types=frozenset({"person_name"}),
             ),
             ml_allowed_detector_types=("person_name",),
+            ml_min_confidence_by_detector_type=thresholds,
             person_name_model_only=True,
         )
 

@@ -26,7 +26,7 @@ mode="deploy"
 while (( $# > 0 )); do
   case "$1" in
     --role)
-      [[ $# -ge 2 ]] || deploy_fail "--role requires edge, gateway, data, or ai."
+      [[ $# -ge 2 ]] || deploy_fail "--role requires edge, gateway, data, ai, or pii."
       role="$2"
       shift 2
       ;;
@@ -47,7 +47,7 @@ while (( $# > 0 )); do
   esac
 done
 
-case "${role}" in edge|gateway|data|ai) ;; *) deploy_fail "A valid --role is required." ;; esac
+case "${role}" in edge|gateway|data|ai|pii) ;; *) deploy_fail "A valid --role is required." ;; esac
 [[ "${target_sha}" =~ ^[0-9a-f]{40}$ ]] || deploy_fail "A full lowercase Git SHA is required."
 
 repo_dir="${GATELM_PRODUCTION_DISTRIBUTED_REPO_DIR:-/home/ubuntu/GateLM}"
@@ -59,9 +59,12 @@ lock_file="/tmp/gatelm-production-distributed-${role}.lock"
 cutover_started=false
 deployment_succeeded=false
 
-for command_name in awk bash chmod chown cp date df docker flock git install mkdir mktemp mv rm stat tar tr; do
+for command_name in awk bash chmod chown cp curl date df docker find flock git install mkdir mktemp mv rm sha256sum stat tar timeout tr; do
   need_command "${command_name}"
 done
+if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
+  need_command aws
+fi
 docker compose version >/dev/null 2>&1 || deploy_fail "Docker Compose v2 is required."
 docker info >/dev/null 2>&1 || deploy_fail "Docker daemon is not reachable."
 
@@ -98,12 +101,31 @@ set_env_value() {
   mv "${temp}" "${env_file}"
 }
 
+upsert_secret_env_value() {
+  local key="$1" value="$2" temp found
+  temp="$(mktemp "${env_file}.XXXXXX")"
+  found="$(awk -F= -v key="${key}" '$1 == key {count += 1} END {print count + 0}' "${env_file}")"
+  [[ "${found}" == "0" || "${found}" == "1" ]] || {
+    rm -f "${temp}"
+    deploy_fail "Expected at most one ${key} entry in the production overlay."
+  }
+  awk -F= -v key="${key}" -v value="${value}" \
+    'BEGIN {updated = 0} $1 == key {print key "=" value; updated = 1; next} {print} END {if (!updated) print key "=" value}' \
+    "${env_file}" > "${temp}"
+  chown --reference="${env_file}" "${temp}"
+  chmod --reference="${env_file}" "${temp}"
+  mv "${temp}" "${env_file}"
+}
+
 artifact_paths=(
   docker-compose.production.distributed.yml
+  docker-compose.production.pii.yml
   Caddyfile.production-distributed.production
   Caddyfile.production-distributed.rehearsal
   scripts/perf-lib.sh
   scripts/prepare-gateway-e5-runtime-bundle.sh
+  scripts/prepare-production-pii-model.sh
+  pii-v36-model-manifest.sha256
   scripts/production-distributed-lib.sh
   scripts/production-distributed-preflight.sh
   scripts/production-distributed-up.sh
@@ -130,6 +152,14 @@ sync_artifacts() {
     [[ "${path}" == scripts/* ]] && mode=0755
     install -D -m "${mode}" "${source}" "${destination}"
   done
+}
+
+run_preflight() {
+  local args=(--role "${role}")
+  if [[ "${role}" == "gateway" ]]; then
+    args+=(--check-dependencies)
+  fi
+  bash "${orchestration_dir}/scripts/production-distributed-preflight.sh" "${args[@]}"
 }
 
 restore_state() {
@@ -182,7 +212,7 @@ if [[ "${mode}" == "check" ]]; then
     deploy_fail "Current repository SHA does not match ${target_sha}."
   grep -Fqx "GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA=${target_sha}" "${env_file}" || \
     deploy_fail "Current production overlay does not match ${target_sha}."
-  bash "${orchestration_dir}/scripts/production-distributed-preflight.sh" --role "${role}"
+  run_preflight
   verify_role_containers
   deploy_log "Read-only role check passed for ${role} at ${target_sha}."
   exit 0
@@ -255,12 +285,36 @@ sync_artifacts
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA "${target_sha}"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG "${target_sha:0:12}"
 
-if [[ "${role}" == "gateway" ]]; then
-  deploy_log "Preparing the pinned Gateway E5 runtime bundle."
-  bash "${repo_dir}/deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh" "${repo_dir}"
+if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
+  # shellcheck source=/dev/null
+  source "${orchestration_dir}/scripts/production-distributed-lib.sh"
+  production_load_env
+  routing_difficulty_token="$(aws ssm get-parameter \
+    --name "${GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME}" \
+    --with-decryption \
+    --query Parameter.Value \
+    --output text)"
+  [[ "${routing_difficulty_token}" =~ ^[a-f0-9]{64}$ ]] || \
+    deploy_fail "Routing difficulty service token SecureString is missing or malformed."
+  upsert_secret_env_value GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN "${routing_difficulty_token}"
+  unset routing_difficulty_token
 fi
 
-bash "${orchestration_dir}/scripts/production-distributed-preflight.sh" --role "${role}"
+if [[ "${role}" == "ai" ]]; then
+  deploy_log "Preparing the pinned AI Service E5 runtime bundle."
+  bash "${repo_dir}/deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh" "${repo_dir}"
+  routing_model_dir="${repo_dir}/.tmp/gateway-e5-runtime-bundle/multilingual-e5-small/614241f622f53c4eeff9890bdc4f31cfecc418b3"
+  [[ -d "${routing_model_dir}" && ! -L "${routing_model_dir}" ]] || \
+    deploy_fail "Prepared AI Service E5 model directory is missing or unsafe."
+  find "${routing_model_dir}" -type d -exec chmod 0755 {} +
+  find "${routing_model_dir}" -type f -exec chmod 0644 {} +
+fi
+if [[ "${role}" == "pii" ]]; then
+  deploy_log "Preparing the pinned PII model bundle."
+  bash "${orchestration_dir}/scripts/prepare-production-pii-model.sh"
+fi
+
+run_preflight
 # shellcheck source=/dev/null
 source "${orchestration_dir}/scripts/production-distributed-lib.sh"
 production_load_env
