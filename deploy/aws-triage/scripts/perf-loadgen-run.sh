@@ -228,12 +228,15 @@ perf_need_command "curl" "Install curl."
 perf_need_command "git" "Install git."
 [[ -f "${K6_SCRIPT_PATH}" ]] || perf_fail "k6 script not found: ${K6_SCRIPT_PATH}"
 
-loadgen_git_sha="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+loadgen_git_sha="$(git \
+  -c "safe.directory=${REPO_ROOT}" \
+  -C "${REPO_ROOT}" \
+  rev-parse HEAD)"
 [[ "${loadgen_git_sha}" =~ ^[a-f0-9]{40}$ ]] || \
   perf_fail "Could not resolve a full load-generator Git SHA."
-git -C "${REPO_ROOT}" diff --quiet || \
+git -c "safe.directory=${REPO_ROOT}" -C "${REPO_ROOT}" diff --quiet || \
   perf_fail "Tracked working-tree changes prevent exact load-generator Git SHA evidence."
-git -C "${REPO_ROOT}" diff --cached --quiet || \
+git -c "safe.directory=${REPO_ROOT}" -C "${REPO_ROOT}" diff --cached --quiet || \
   perf_fail "Staged changes prevent exact load-generator Git SHA evidence."
 
 if [[ "${LOADGEN_EXECUTION_MODE}" == "local_validation" ]]; then

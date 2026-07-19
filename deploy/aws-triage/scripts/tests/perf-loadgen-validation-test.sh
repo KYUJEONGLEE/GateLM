@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PERF_SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUNNER_PATH="${PERF_SCRIPTS_DIR}/perf-loadgen-run.sh"
 
+grep -Fq 'safe.directory=${REPO_ROOT}' "${RUNNER_PATH}"
+
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
