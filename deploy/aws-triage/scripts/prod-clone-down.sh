@@ -10,19 +10,21 @@ role=""
 while (( $# > 0 )); do
   case "$1" in
     --role)
-      [[ $# -ge 2 ]] || clone_fail "--role requires edge, gateway, data, rag, or ai."
+      [[ $# -ge 2 ]] || clone_fail "--role requires edge, gateway1, gateway2, data, rag, or ai."
       role="$2"
       shift 2
       ;;
     *) clone_fail "Unknown option: $1" ;;
   esac
 done
-case "${role}" in edge|gateway|data|rag|ai) ;; *) clone_fail "A valid --role is required." ;; esac
+case "${role}" in edge|gateway1|gateway2|data|rag|ai) ;; *) clone_fail "A valid --role is required." ;; esac
 
 perf_check_docker
 clone_load_env
 clone_validate_env
+clone_assert_role_host "${role}"
 read -r -a services <<< "$(clone_role_services "${role}")"
-clone_compose --profile "${role}" stop "${services[@]}"
-clone_compose --profile "${role}" rm -f "${services[@]}"
+profile="$(clone_role_profile "${role}")"
+clone_compose --profile "${profile}" stop "${services[@]}"
+clone_compose --profile "${profile}" rm -f "${services[@]}"
 clone_log "Stopped ${role} without deleting production-clone volumes."

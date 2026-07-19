@@ -22,7 +22,7 @@ output_path="${GATELM_LOADGEN_ENV_FILE:-${AWS_TRIAGE_DIR}/.env.loadgen}"
 
 clone_load_env
 clone_validate_env
-clone_assert_role_host edge
+clone_assert_role_host loadgen
 clone_require_env GATELM_DEMO_API_KEY GATELM_DEMO_APP_TOKEN
 
 gateway_count="${GATELM_PROD_CLONE_GATEWAY_COUNT:-1}"
@@ -38,8 +38,19 @@ fi
 umask 077
 temporary_path="$(mktemp "${AWS_TRIAGE_DIR}/.env.loadgen.tmp.XXXXXX")"
 trap 'rm -f "${temporary_path}"' EXIT
+metrics_urls="http://${GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP}:8080"
+expected_upstreams="${GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP}:8080"
+if [[ "${gateway_count}" == "2" ]]; then
+  metrics_urls+=",http://${GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP}:8080"
+  expected_upstreams+=",${GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP}:8080"
+fi
 printf '%s\n' \
-  "GATELM_LOADGEN_GATEWAY_BASE_URL=http://${GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP}:8080" \
+  "GATELM_LOADGEN_GATEWAY_BASE_URL=https://${GATELM_PUBLIC_DOMAIN}" \
+  "GATELM_LOADGEN_EDGE_PRIVATE_IP=${GATELM_PROD_CLONE_EDGE_PRIVATE_IP}" \
+  "GATELM_LOADGEN_GATEWAY_METRICS_BASE_URLS=${metrics_urls}" \
+  "GATELM_LOADGEN_GATEWAY_COUNT=${gateway_count}" \
+  "GATELM_LOADGEN_EXPECTED_UPSTREAMS=${expected_upstreams}" \
+  "GATELM_LOADGEN_TLS_INSECURE=true" \
   "GATELM_PERF_TOPOLOGY_ID=prod_clone_${GATELM_PROD_CLONE_IMAGE_TAG}_gateway_${gateway_count}_${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}" \
   "GATELM_DEMO_API_KEY=${GATELM_DEMO_API_KEY}" \
   "GATELM_DEMO_APP_TOKEN=${GATELM_DEMO_APP_TOKEN}" \
@@ -49,4 +60,4 @@ mv -f "${temporary_path}" "${output_path}"
 trap - EXIT
 
 clone_log "Created restricted load-generator environment for gateway_count=${gateway_count}, profile=${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}."
-clone_log "Only the private Gateway URL, topology ID, and isolated synthetic credentials were written."
+clone_log "Only the isolated Edge target, Gateway metrics endpoints, topology ID, and synthetic credentials were written."

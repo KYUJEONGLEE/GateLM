@@ -1,5 +1,6 @@
 import http from "k6/http";
 import { check } from "k6";
+import { Counter } from "k6/metrics";
 
 const allowedGatewayBaseUrls = new Set([
   "http://127.0.0.1:18080",
@@ -18,6 +19,17 @@ const allowedRemoteBaseUrl = normalizeBaseUrl(
 );
 const apiKey = requiredEnv("GATELM_DEMO_API_KEY");
 const appToken = requiredEnv("GATELM_DEMO_APP_TOKEN");
+const edgePrivateIp = String(__ENV.GATELM_LOADGEN_EDGE_PRIVATE_IP || "").trim();
+const tlsInsecure = String(__ENV.GATELM_LOADGEN_TLS_INSECURE || "false") === "true";
+const gatewayCount = positiveIntEnv("GATELM_LOADGEN_GATEWAY_COUNT", 1);
+const expectedUpstreams = String(__ENV.GATELM_LOADGEN_EXPECTED_UPSTREAMS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const trackGatewayUpstreams = expectedUpstreams.length > 0;
+const gatewayOneResponses = new Counter("gatelm_gateway_1_responses");
+const gatewayTwoResponses = new Counter("gatelm_gateway_2_responses");
+const gatewayUnknownResponses = new Counter("gatelm_gateway_unknown_responses");
 const targetRps = positiveIntEnv("GATELM_K6_TARGET_RPS", 1);
 const duration = durationEnv("GATELM_K6_DURATION", "2m");
 const preAllocatedVUs = positiveIntEnv(
@@ -52,7 +64,24 @@ if (maxVUs < preAllocatedVUs) {
   );
 }
 
+if (![1, 2].includes(gatewayCount)) {
+  throw new Error("Gateway count must be one or two replicas.");
+}
+if (trackGatewayUpstreams && expectedUpstreams.length !== gatewayCount) {
+  throw new Error("Gateway count and expected upstream list must describe one or two replicas.");
+}
+if (edgePrivateIp && !isPrivateIpv4(edgePrivateIp)) {
+  throw new Error("GATELM_LOADGEN_EDGE_PRIVATE_IP must be an RFC1918 IPv4 address.");
+}
+if (gatewayBaseUrl.startsWith("https://") && !edgePrivateIp) {
+  throw new Error("An HTTPS production-clone target requires a private Edge address mapping.");
+}
+
 export const options = {
+  hosts: edgePrivateIp
+    ? { [new URL(gatewayBaseUrl).hostname]: edgePrivateIp }
+    : {},
+  insecureSkipTLSVerify: tlsInsecure,
   scenarios: {
     cache_miss_load: {
       executor: "constant-arrival-rate",
@@ -108,6 +137,8 @@ export default function (data) {
     "load",
   );
   const metadata = safeJson(response.body).gate_lm || {};
+  const upstream = headerValue(response, "X-GateLM-Perf-Upstream");
+  recordUpstream(upstream);
 
   check(response, {
     "load request returns 200": (value) => value.status === 200,
@@ -115,6 +146,8 @@ export default function (data) {
     "load request uses Mock modelRef": () => isMockModelRef(metadata.modelRef),
     "load request is a cache miss": (value) =>
       headerValue(value, "X-GateLM-Cache-Status") === "miss",
+    "load request identifies an expected Gateway replica": () =>
+      !trackGatewayUpstreams || expectedUpstreams.includes(upstream),
   });
 }
 
@@ -150,6 +183,11 @@ function buildEvidenceSummary(data) {
       p99: metricValue(data, "http_req_duration", "p(99)"),
       max: metricValue(data, "http_req_duration", "max"),
     },
+    gatewayResponses: {
+      replica1: metricValue(data, "gatelm_gateway_1_responses", "count"),
+      replica2: metricValue(data, "gatelm_gateway_2_responses", "count"),
+      unknown: metricValue(data, "gatelm_gateway_unknown_responses", "count"),
+    },
   };
 }
 
@@ -163,6 +201,7 @@ function renderEvidenceSummary(summary) {
     `  failed checks: ${summary.checksFailed}`,
     `  HTTP failure rate: ${summary.httpRequestFailedRate}`,
     `  HTTP duration p95/p99: ${summary.httpRequestDurationMs.p95}ms / ${summary.httpRequestDurationMs.p99}ms`,
+    `  Gateway responses replica1/replica2/unknown: ${summary.gatewayResponses.replica1} / ${summary.gatewayResponses.replica2} / ${summary.gatewayResponses.unknown}`,
     "",
   ].join("\n");
 }
@@ -183,6 +222,9 @@ function renderEvidenceEnv(summary) {
     `GATELM_EVIDENCE_HTTP_DURATION_P95_MS=${summary.httpRequestDurationMs.p95}`,
     `GATELM_EVIDENCE_HTTP_DURATION_P99_MS=${summary.httpRequestDurationMs.p99}`,
     `GATELM_EVIDENCE_HTTP_DURATION_MAX_MS=${summary.httpRequestDurationMs.max}`,
+    `GATELM_EVIDENCE_GATEWAY_1_RESPONSES=${summary.gatewayResponses.replica1}`,
+    `GATELM_EVIDENCE_GATEWAY_2_RESPONSES=${summary.gatewayResponses.replica2}`,
+    `GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES=${summary.gatewayResponses.unknown}`,
     "",
   ].join("\n");
 }
@@ -237,6 +279,19 @@ function headerValue(response, name) {
     }
   }
   return "";
+}
+
+function recordUpstream(value) {
+  if (!trackGatewayUpstreams) {
+    return;
+  }
+  if (value === expectedUpstreams[0]) {
+    gatewayOneResponses.add(1);
+  } else if (gatewayCount === 2 && value === expectedUpstreams[1]) {
+    gatewayTwoResponses.add(1);
+  } else {
+    gatewayUnknownResponses.add(1);
+  }
 }
 
 function requiredEnv(name) {

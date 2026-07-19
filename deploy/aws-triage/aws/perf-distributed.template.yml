@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: GateLM isolated four-host distributed performance and production-clone environment.
+Description: GateLM production-parity performance topology with a dedicated load generator, four service roles, and an optional second Gateway.
 
 Parameters:
   OperatorCidr:
@@ -20,10 +20,17 @@ Parameters:
     Description: Pinned AMI already used by all four hosts; update only through a reviewed replacement plan.
   LoadGeneratorInstanceType:
     Type: String
-    Default: c7i.xlarge
+    Default: c7i.large
+  EdgeInstanceType:
+    Type: String
+    Default: c7i.large
   GatewayInstanceType:
     Type: String
     Default: c7i.xlarge
+  GatewayReplicaCount:
+    Type: Number
+    Default: 1
+    AllowedValues: [1, 2]
   DataInstanceType:
     Type: String
     Default: m7i.large
@@ -40,6 +47,9 @@ Parameters:
     Default: arn:aws:kms:ap-northeast-2:431772290654:key/d4fa8d01-d97d-471a-9504-b518e5930251
     AllowedPattern: "^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]{36}$"
     Description: Existing production RAG KMS key used through S3 only.
+
+Conditions:
+  CreateGateway2: !Equals [!Ref GatewayReplicaCount, 2]
 
 Resources:
   PerfVpc:
@@ -204,16 +214,6 @@ Resources:
           ToPort: 22
           CidrIp: !Ref OperatorCidr
           Description: SSH from current trusted operator IPv4 only
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: !Ref EdgeIngressCidr
-          Description: Rehearsal or public HTTP to the production-clone Edge only
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: !Ref EdgeIngressCidr
-          Description: Rehearsal or public HTTPS to the production-clone Edge only
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
@@ -241,28 +241,119 @@ Resources:
           CidrIp: 169.254.169.123/32
           Description: Amazon Time Sync Service
         - IpProtocol: tcp
-          FromPort: 18080
-          ToPort: 18080
-          CidrIp: 10.77.1.20/32
-          Description: Existing performance Gateway load traffic
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.77.1.50/32
+          Description: Load generator to isolated Edge HTTP
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.77.1.50/32
+          Description: Load generator to isolated Edge HTTPS
         - IpProtocol: tcp
           FromPort: 8080
           ToPort: 8080
           CidrIp: 10.77.1.20/32
-          Description: Edge to production-clone Gateway
+          Description: Gateway 1 metrics and direct diagnostics
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.77.1.21/32
+          Description: Gateway 2 metrics and direct diagnostics
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-loadgen
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+
+  EdgeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM isolated production-parity Edge and internal Gateway load balancer.
+      GroupName: gatelm-perf-distributed-edge
+      VpcId: !Ref PerfVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref OperatorCidr
+          Description: SSH from current trusted operator IPv4 only
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref EdgeIngressCidr
+          Description: Rehearsal HTTP from the explicitly allowed source
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref EdgeIngressCidr
+          Description: Rehearsal HTTPS from the explicitly allowed source
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: HTTP load from the dedicated load generator
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: HTTPS load from the dedicated load generator
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Package and certificate HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Package SSM and certificate HTTPS traffic
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.77.0.2/32
+          Description: VPC DNS fallback
+        - IpProtocol: udp
+          FromPort: 123
+          ToPort: 123
+          CidrIp: 169.254.169.123/32
+          Description: Amazon Time Sync Service
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8081
+          CidrIp: 10.77.1.20/32
+          Description: Edge to Gateway 1 public and private listeners
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8081
+          CidrIp: 10.77.1.21/32
+          Description: Edge to Gateway 2 public and private listeners
         - IpProtocol: tcp
           FromPort: 3001
           ToPort: 3001
           CidrIp: 10.77.1.30/32
-          Description: Edge to Control Plane
+          Description: Edge Web to Control Plane
         - IpProtocol: tcp
           FromPort: 3003
           ToPort: 3003
           CidrIp: 10.77.1.30/32
           Description: Edge Chat Web to private Chat API
+        - IpProtocol: tcp
+          FromPort: 8082
+          ToPort: 8082
+          CidrIp: 10.77.1.50/32
+          Description: Edge Web to the local public Gateway load-balancer listener
       Tags:
         - Key: Name
-          Value: gatelm-perf-distributed-loadgen
+          Value: gatelm-perf-distributed-edge
         - Key: Project
           Value: GateLM
         - Key: Environment
@@ -284,12 +375,22 @@ Resources:
           FromPort: 18080
           ToPort: 18080
           SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
-          Description: k6 load traffic from dedicated load generator
+          Description: Legacy direct performance listener during topology migration
         - IpProtocol: tcp
           FromPort: 8080
           ToPort: 8080
           SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          Description: Metrics and direct diagnostics from the dedicated load generator
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
           Description: Public data plane from Edge only
+        - IpProtocol: tcp
+          FromPort: 8081
+          ToPort: 8081
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
+          Description: Private Tenant Chat and RAG data plane from Edge load balancer
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
@@ -379,12 +480,12 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3001
           ToPort: 3001
-          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
           Description: Control Plane from Edge Web only
         - IpProtocol: tcp
           FromPort: 3003
           ToPort: 3003
-          SourceSecurityGroupId: !Ref LoadGeneratorSecurityGroup
+          SourceSecurityGroupId: !Ref EdgeSecurityGroup
           Description: Private Chat API from Edge Chat Web only
       SecurityGroupEgress:
         - IpProtocol: tcp
@@ -425,8 +526,8 @@ Resources:
         - IpProtocol: tcp
           FromPort: 8081
           ToPort: 8081
-          CidrIp: 10.77.1.20/32
-          Description: Chat API and RAG Worker to private Gateway
+          CidrIp: 10.77.1.50/32
+          Description: Chat API and RAG Worker to the Edge private Gateway load balancer
         - IpProtocol: tcp
           FromPort: 8001
           ToPort: 8001
@@ -468,7 +569,27 @@ Resources:
       FromPort: 8081
       ToPort: 8081
       SourceSecurityGroupId: !Ref DataSecurityGroup
-      Description: Private Tenant Chat and RAG traffic from Data only
+      Description: Direct private Tenant Chat diagnostic path from Data
+
+  EdgePrivateGatewayDataIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EdgeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8081
+      ToPort: 8081
+      SourceSecurityGroupId: !Ref DataSecurityGroup
+      Description: Tenant Chat and RAG traffic from Data to the private Gateway load balancer
+
+  EdgeInternalGatewaySelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EdgeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8082
+      ToPort: 8082
+      SourceSecurityGroupId: !Ref EdgeSecurityGroup
+      Description: Edge Web containers to the internal public Gateway load balancer
 
   MockSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -583,6 +704,62 @@ Resources:
         - Key: Role
           Value: loadgen
         - Key: CloneRole
+          Value: loadgen
+        - Key: DoNotDelete
+          Value: "true"
+
+  EdgeInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PerfSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref UbuntuAmiId
+      IamInstanceProfile: !Ref PerfNodeInstanceProfile
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref EdgeInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref EdgeSecurityGroup]
+          PrivateIpAddress: 10.77.1.50
+          SubnetId: !Ref PerfSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 24
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' edge > /etc/gatelm-perf-role
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-edge
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: Role
+          Value: edge
+        - Key: CloneRole
           Value: edge
         - Key: DoNotDelete
           Value: "true"
@@ -640,6 +817,63 @@ Resources:
           Value: gateway
         - Key: CloneRole
           Value: gateway
+        - Key: DoNotDelete
+          Value: "true"
+
+  Gateway2Instance:
+    Type: AWS::EC2::Instance
+    Condition: CreateGateway2
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PerfSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      ImageId: !Ref UbuntuAmiId
+      IamInstanceProfile: !Ref PerfNodeInstanceProfile
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref GatewayInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref GatewaySecurityGroup]
+          PrivateIpAddress: 10.77.1.21
+          SubnetId: !Ref PerfSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 30
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          printf '%s\n' gateway2 > /etc/gatelm-perf-role
+      Tags:
+        - Key: Name
+          Value: gatelm-perf-distributed-gateway-2
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: perf-distributed
+        - Key: Role
+          Value: gateway
+        - Key: CloneRole
+          Value: gateway2
         - Key: DoNotDelete
           Value: "true"
 
@@ -766,12 +1000,27 @@ Outputs:
     Value: !GetAtt LoadGeneratorInstance.PrivateIp
   LoadGeneratorPublicIp:
     Value: !GetAtt LoadGeneratorInstance.PublicIp
+  EdgeInstanceId:
+    Value: !Ref EdgeInstance
+  EdgePrivateIp:
+    Value: !GetAtt EdgeInstance.PrivateIp
+  EdgePublicIp:
+    Value: !GetAtt EdgeInstance.PublicIp
   GatewayInstanceId:
     Value: !Ref GatewayInstance
   GatewayPrivateIp:
     Value: !GetAtt GatewayInstance.PrivateIp
   GatewayPublicIp:
     Value: !GetAtt GatewayInstance.PublicIp
+  Gateway2InstanceId:
+    Condition: CreateGateway2
+    Value: !Ref Gateway2Instance
+  Gateway2PrivateIp:
+    Condition: CreateGateway2
+    Value: !GetAtt Gateway2Instance.PrivateIp
+  Gateway2PublicIp:
+    Condition: CreateGateway2
+    Value: !GetAtt Gateway2Instance.PublicIp
   DataInstanceId:
     Value: !Ref DataInstance
   DataPrivateIp:
@@ -786,6 +1035,8 @@ Outputs:
     Value: !GetAtt MockInstance.PublicIp
   LoadGeneratorSecurityGroupId:
     Value: !Ref LoadGeneratorSecurityGroup
+  EdgeSecurityGroupId:
+    Value: !Ref EdgeSecurityGroup
   GatewaySecurityGroupId:
     Value: !Ref GatewaySecurityGroup
   DataSecurityGroupId:

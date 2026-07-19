@@ -35,6 +35,9 @@ perf_evidence_read_k6_summary() {
   GATELM_EVIDENCE_HTTP_DURATION_P95_MS=""
   GATELM_EVIDENCE_HTTP_DURATION_P99_MS=""
   GATELM_EVIDENCE_HTTP_DURATION_MAX_MS=""
+  GATELM_EVIDENCE_GATEWAY_1_RESPONSES=""
+  GATELM_EVIDENCE_GATEWAY_2_RESPONSES=""
+  GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES=""
 
   while IFS='=' read -r key value || [[ -n "${key}${value}" ]]; do
     [[ -z "${key}${value}" ]] && continue
@@ -58,6 +61,9 @@ perf_evidence_read_k6_summary() {
       GATELM_EVIDENCE_HTTP_DURATION_P95_MS) GATELM_EVIDENCE_HTTP_DURATION_P95_MS="${value}" ;;
       GATELM_EVIDENCE_HTTP_DURATION_P99_MS) GATELM_EVIDENCE_HTTP_DURATION_P99_MS="${value}" ;;
       GATELM_EVIDENCE_HTTP_DURATION_MAX_MS) GATELM_EVIDENCE_HTTP_DURATION_MAX_MS="${value}" ;;
+      GATELM_EVIDENCE_GATEWAY_1_RESPONSES) GATELM_EVIDENCE_GATEWAY_1_RESPONSES="${value}" ;;
+      GATELM_EVIDENCE_GATEWAY_2_RESPONSES) GATELM_EVIDENCE_GATEWAY_2_RESPONSES="${value}" ;;
+      GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES) GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES="${value}" ;;
       *) perf_fail "Unexpected key in k6 evidence summary: ${key}" ;;
     esac
   done < "${summary_path}"
@@ -92,7 +98,10 @@ perf_evidence_read_k6_summary() {
     "${GATELM_EVIDENCE_LOAD_ITERATIONS}" \
     "${GATELM_EVIDENCE_DROPPED_ITERATIONS}" \
     "${GATELM_EVIDENCE_CHECKS_PASSED}" \
-    "${GATELM_EVIDENCE_CHECKS_FAILED}"; do
+    "${GATELM_EVIDENCE_CHECKS_FAILED}" \
+    "${GATELM_EVIDENCE_GATEWAY_1_RESPONSES}" \
+    "${GATELM_EVIDENCE_GATEWAY_2_RESPONSES}" \
+    "${GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES}"; do
     perf_evidence_is_nonnegative_integer "${value}" || \
       perf_fail "k6 evidence contains a non-integer count."
   done

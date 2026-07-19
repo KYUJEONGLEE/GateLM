@@ -7,13 +7,16 @@
 	encode zstd gzip
 
 	handle /v1/* {
-		reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080 {
+		reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080 {$GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP:10.77.1.21}:8080 {
+			lb_policy round_robin
 			header_down X-GateLM-Perf-Upstream {http.reverse_proxy.upstream.hostport}
 		}
 	}
 
 	handle /readyz {
-		reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080
+		reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080 {$GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP:10.77.1.21}:8080 {
+			lb_policy round_robin
+		}
 	}
 
 	handle /admin/v1/* {
@@ -26,13 +29,15 @@
 }
 
 :8081 {
-	reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8081 {
+	reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8081 {$GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP:10.77.1.21}:8081 {
+		lb_policy round_robin
 		header_down X-GateLM-Perf-Upstream {http.reverse_proxy.upstream.hostport}
 	}
 }
 
 :8082 {
-	reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080 {
+	reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080 {$GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP:10.77.1.21}:8080 {
+		lb_policy round_robin
 		header_down X-GateLM-Perf-Upstream {http.reverse_proxy.upstream.hostport}
 	}
 }

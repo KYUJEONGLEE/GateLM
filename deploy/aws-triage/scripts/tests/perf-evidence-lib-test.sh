@@ -32,10 +32,14 @@ printf '%s\n' \
   'GATELM_EVIDENCE_HTTP_DURATION_P95_MS=123.5' \
   'GATELM_EVIDENCE_HTTP_DURATION_P99_MS=180' \
   'GATELM_EVIDENCE_HTTP_DURATION_MAX_MS=220.25' \
+  'GATELM_EVIDENCE_GATEWAY_1_RESPONSES=120' \
+  'GATELM_EVIDENCE_GATEWAY_2_RESPONSES=0' \
+  'GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES=0' \
   > "${summary_path}"
 
 perf_evidence_read_k6_summary "${summary_path}" "run_test_1"
 [[ "${GATELM_EVIDENCE_LOAD_ITERATIONS}" == "120" ]]
+[[ "${GATELM_EVIDENCE_GATEWAY_1_RESPONSES}" == "120" ]]
 perf_evidence_read_k6_summary "${summary_path}" ""
 [[ "${GATELM_EVIDENCE_RUN_ID}" == "run_test_1" ]]
 

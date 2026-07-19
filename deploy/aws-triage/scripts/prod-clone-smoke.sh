@@ -41,6 +41,6 @@ status="$(curl -k --silent --show-error --output /dev/null --write-out '%{http_c
 
 clone_assert_tcp "Control Plane" "${GATELM_PROD_CLONE_DATA_PRIVATE_IP}" 3001
 clone_assert_tcp "Chat API" "${GATELM_PROD_CLONE_DATA_PRIVATE_IP}" 3003
-clone_assert_tcp "Gateway" "${GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP}" 8080
+clone_assert_tcp "Gateway load balancer" "${GATELM_PROD_CLONE_GATEWAY_LB_PRIVATE_IP}" 8082
 
 clone_log "Private Caddy routes, Web, Chat, unauthenticated 401 boundaries, and allowed Edge connectivity passed."

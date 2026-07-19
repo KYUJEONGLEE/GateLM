@@ -11,6 +11,8 @@ SMOKE_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-smoke.sh"
 GATEWAY_VERIFY_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-verify-gateway.sh"
 IAM_VERIFY_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-verify-iam.sh"
 LOADGEN_EXPORT_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-export-loadgen-env.sh"
+CADDY_ONE_PATH="${AWS_TRIAGE_DIR}/Caddyfile.prod-clone.rehearsal"
+CADDY_TWO_PATH="${AWS_TRIAGE_DIR}/Caddyfile.prod-clone.rehearsal.gateway-2"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
@@ -34,14 +36,29 @@ validate_env() {
 
 validate_env "${overlay_env}" >/dev/null
 
-mismatched_sha="${tmp_dir}/mismatched-sha.env"
-cp "${overlay_env}" "${mismatched_sha}"
-sed -i 's/GATELM_PROD_CLONE_DB_SOURCE_SHA=13d2964fe76e074e4e61f03ece588794fe0cc5e4/GATELM_PROD_CLONE_DB_SOURCE_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "${mismatched_sha}"
-if validate_env "${mismatched_sha}" >"${tmp_dir}/mismatch.out" 2>&1; then
-  printf '%s\n' "expected application/database SHA mismatch to fail" >&2
+invalid_sha="${tmp_dir}/invalid-sha.env"
+cp "${overlay_env}" "${invalid_sha}"
+sed -i 's/GATELM_PROD_CLONE_DB_SOURCE_SHA=9936521039a6ace9d3ed32508c1fc92e89da61e2/GATELM_PROD_CLONE_DB_SOURCE_SHA=not-a-sha/' "${invalid_sha}"
+if validate_env "${invalid_sha}" >"${tmp_dir}/invalid-sha.out" 2>&1; then
+  printf '%s\n' "expected an invalid database source SHA to fail" >&2
   exit 1
 fi
-grep -Fq 'Application and database source SHAs must match' "${tmp_dir}/mismatch.out"
+grep -Fq 'GATELM_PROD_CLONE_DB_SOURCE_SHA must be a full lowercase Git SHA' "${tmp_dir}/invalid-sha.out"
+
+auth_cache_disabled="${tmp_dir}/auth-cache-disabled.env"
+cp "${overlay_env}" "${auth_cache_disabled}"
+sed -i 's/GATELM_PROD_CLONE_AUTH_CACHE_CONFIG=true/GATELM_PROD_CLONE_AUTH_CACHE_CONFIG=false/' "${auth_cache_disabled}"
+if validate_env "${auth_cache_disabled}" >"${tmp_dir}/auth-cache.out" 2>&1; then
+  printf '%s\n' "expected disabled auth cache parity configuration to fail" >&2
+  exit 1
+fi
+grep -Fq 'Production-parity evidence requires the deployed auth cache configuration' "${tmp_dir}/auth-cache.out"
+
+gateway_two="${tmp_dir}/gateway-two.env"
+cp "${overlay_env}" "${gateway_two}"
+sed -i 's/GATELM_PROD_CLONE_GATEWAY_COUNT=1/GATELM_PROD_CLONE_GATEWAY_COUNT=2/' "${gateway_two}"
+sed -i 's#GATELM_PROD_CLONE_CADDYFILE=./Caddyfile.prod-clone.rehearsal#GATELM_PROD_CLONE_CADDYFILE=./Caddyfile.prod-clone.rehearsal.gateway-2#' "${gateway_two}"
+validate_env "${gateway_two}" >/dev/null
 
 live_provider="${tmp_dir}/live-provider.env"
 cp "${overlay_env}" "${live_provider}"
@@ -107,10 +124,9 @@ grep -Fq 'FAST_NOOP_MOCK_DEFAULT_LATENCY_MS: "0"' "${COMPOSE_PATH}"
 grep -Fq 'prod-clone-mock-latency-shaper.mjs' "${COMPOSE_PATH}"
 grep -Fq 'PROD_CLONE_MOCK_SHAPER_PROFILE: ${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}' "${COMPOSE_PATH}"
 grep -Fq 'provider-latency-profiles.json' "${COMPOSE_PATH}"
-if grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS' "${COMPOSE_PATH}"; then
-  printf '%s\n' "13d2964f base Compose must not contain the later auth-cache config" >&2
-  exit 1
-fi
+grep -Fq 'GATEWAY_AUTH_CACHE_ENABLED: ${GATEWAY_AUTH_CACHE_ENABLED:-true}' "${COMPOSE_PATH}"
+grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS: ${GATEWAY_AUTH_CACHE_TTL_MS:-5000}' "${COMPOSE_PATH}"
+grep -Fq 'GATEWAY_AUTH_CACHE_MAX_ENTRIES: ${GATEWAY_AUTH_CACHE_MAX_ENTRIES:-4096}' "${COMPOSE_PATH}"
 grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS: ${GATEWAY_AUTH_CACHE_TTL_MS:-5000}' "${AWS_TRIAGE_DIR}/docker-compose.prod-clone.auth-cache.yml"
 grep -Fq 'clone_assert_tcp "Chat API" "${GATELM_PROD_CLONE_DATA_PRIVATE_IP}" 3003' "${SMOKE_PATH}"
 if grep -Eq 'clone_assert_tcp .* (8081|8001)' "${SMOKE_PATH}"; then
@@ -130,9 +146,14 @@ grep -Fq 'service.providerCatalogMatchesRef' "${AWS_TRIAGE_DIR}/scripts/prod-clo
 grep -Fq 'prod-clone-runtime-iam-smoke/' "${IAM_VERIFY_PATH}"
 grep -Fq "require('@aws-sdk/client-s3')" "${IAM_VERIFY_PATH}"
 grep -Fq 'RAG Worker container S3 Put/Get/Delete and KMS-through-S3 access passed' "${IAM_VERIFY_PATH}"
-grep -Fq 'GATELM_LOADGEN_GATEWAY_BASE_URL=http://${GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP}:8080' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'GATELM_LOADGEN_GATEWAY_BASE_URL=https://${GATELM_PUBLIC_DOMAIN}' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'GATELM_LOADGEN_GATEWAY_METRICS_BASE_URLS=${metrics_urls}' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'GATELM_LOADGEN_EXPECTED_UPSTREAMS=${expected_upstreams}' "${LOADGEN_EXPORT_PATH}"
 grep -Fq 'GATELM_PERF_TOPOLOGY_ID=prod_clone_${GATELM_PROD_CLONE_IMAGE_TAG}_gateway_${gateway_count}_${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}' "${LOADGEN_EXPORT_PATH}"
-grep -Fq 'Only the private Gateway URL, topology ID, and isolated synthetic credentials were written.' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'Only the isolated Edge target, Gateway metrics endpoints, topology ID, and synthetic credentials were written.' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'reverse_proxy {$GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP:10.77.1.20}:8080' "${CADDY_ONE_PATH}"
+grep -Fq '{$GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP:10.77.1.21}:8080' "${CADDY_TWO_PATH}"
+grep -Fq 'lb_policy round_robin' "${CADDY_TWO_PATH}"
 grep -Fq 'drain for at least 70 seconds' "${AWS_TRIAGE_DIR}/README.md"
 "${NODE_BIN}" "${AWS_TRIAGE_DIR}/scripts/tests/prod-clone-mock-latency-shaper.test.mjs"
 

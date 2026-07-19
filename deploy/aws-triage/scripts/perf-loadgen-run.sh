@@ -41,7 +41,7 @@ loadgen_validate_env_file_keys() {
       perf_fail ".env.loadgen contains a malformed line."
     key="$(perf_trim "${line%%=*}")"
     case "${key}" in
-      GATELM_LOADGEN_GATEWAY_BASE_URL|GATELM_PERF_TOPOLOGY_ID|GATELM_DEMO_API_KEY|GATELM_DEMO_APP_TOKEN) ;;
+      GATELM_LOADGEN_GATEWAY_BASE_URL|GATELM_LOADGEN_EDGE_PRIVATE_IP|GATELM_LOADGEN_GATEWAY_METRICS_BASE_URLS|GATELM_LOADGEN_GATEWAY_COUNT|GATELM_LOADGEN_EXPECTED_UPSTREAMS|GATELM_LOADGEN_TLS_INSECURE|GATELM_PERF_TOPOLOGY_ID|GATELM_DEMO_API_KEY|GATELM_DEMO_APP_TOKEN) ;;
       *) perf_fail ".env.loadgen contains a forbidden key: ${key}" ;;
     esac
   done < "${LOADGEN_ENV_FILE}"
@@ -108,6 +108,27 @@ perf_require_env_vars \
   GATELM_DEMO_API_KEY \
   GATELM_DEMO_APP_TOKEN
 
+loadgen_validate_metrics_urls() {
+  local raw_urls="$1"
+  local expected_count="$2"
+  local metrics_url host port
+  local -a parsed_urls=()
+
+  IFS=',' read -r -a parsed_urls <<< "${raw_urls}"
+  (( ${#parsed_urls[@]} == expected_count )) || \
+    perf_fail "Gateway metrics endpoint count must match GATELM_LOADGEN_GATEWAY_COUNT."
+  for metrics_url in "${parsed_urls[@]}"; do
+    [[ "${metrics_url}" =~ ^http://([0-9]{1,3}(\.[0-9]{1,3}){3})(:([0-9]{1,5}))?$ ]] || \
+      perf_fail "Gateway metrics endpoints must be exact private HTTP IPv4 URLs."
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[4]}"
+    perf_is_private_ipv4 "${host}" || \
+      perf_fail "Gateway metrics endpoints must use RFC1918 IPv4 addresses."
+    loadgen_validate_port "${port}" || \
+      perf_fail "Gateway metrics endpoint contains an invalid port."
+  done
+}
+
 for value in "${GATELM_DEMO_API_KEY}" "${GATELM_DEMO_APP_TOKEN}"; do
   [[ "${value}" != *"replace-me"* ]] || \
     perf_fail ".env.loadgen still contains placeholder credentials."
@@ -160,7 +181,26 @@ case "${LOADGEN_EXECUTION_MODE}" in
     [[ -z "${GATELM_LOADGEN_DOCKER_NETWORK:-}" ]] || \
       perf_fail "GATELM_LOADGEN_DOCKER_NETWORK is reserved for local_validation mode."
     loadgen_validate_dedicated_base_url "${gateway_base_url}"
-    metrics_base_url="${gateway_base_url}"
+    perf_require_env_vars \
+      GATELM_LOADGEN_EDGE_PRIVATE_IP \
+      GATELM_LOADGEN_GATEWAY_METRICS_BASE_URLS \
+      GATELM_LOADGEN_GATEWAY_COUNT \
+      GATELM_LOADGEN_EXPECTED_UPSTREAMS \
+      GATELM_LOADGEN_TLS_INSECURE
+    perf_is_private_ipv4 "${GATELM_LOADGEN_EDGE_PRIVATE_IP}" || \
+      perf_fail "GATELM_LOADGEN_EDGE_PRIVATE_IP must be an RFC1918 IPv4 address."
+    [[ "${GATELM_LOADGEN_GATEWAY_COUNT}" == "1" || \
+       "${GATELM_LOADGEN_GATEWAY_COUNT}" == "2" ]] || \
+      perf_fail "GATELM_LOADGEN_GATEWAY_COUNT must be 1 or 2."
+    [[ "${GATELM_LOADGEN_TLS_INSECURE}" == "true" ]] || \
+      perf_fail "The isolated production-clone Edge requires GATELM_LOADGEN_TLS_INSECURE=true."
+    loadgen_validate_metrics_urls \
+      "${GATELM_LOADGEN_GATEWAY_METRICS_BASE_URLS}" \
+      "${GATELM_LOADGEN_GATEWAY_COUNT}"
+    IFS=',' read -r -a metrics_base_urls <<< "${GATELM_LOADGEN_GATEWAY_METRICS_BASE_URLS}"
+    IFS=',' read -r -a expected_upstreams <<< "${GATELM_LOADGEN_EXPECTED_UPSTREAMS}"
+    (( ${#expected_upstreams[@]} == GATELM_LOADGEN_GATEWAY_COUNT )) || \
+      perf_fail "Expected Gateway upstream count must match GATELM_LOADGEN_GATEWAY_COUNT."
     ;;
   local_validation)
     [[ "${gateway_base_url}" == "http://gateway-core:8080" ]] || \
@@ -172,6 +212,11 @@ case "${LOADGEN_EXECUTION_MODE}" in
     [[ "${metrics_base_url}" == "http://127.0.0.1:18080" ]] || \
       perf_fail "local_validation metrics must use the isolated loopback Gateway endpoint."
     network_args=(--network "${local_network}")
+    metrics_base_urls=("${metrics_base_url}")
+    GATELM_LOADGEN_EDGE_PRIVATE_IP=""
+    GATELM_LOADGEN_GATEWAY_COUNT=1
+    GATELM_LOADGEN_EXPECTED_UPSTREAMS=""
+    GATELM_LOADGEN_TLS_INSECURE=false
     ;;
   *)
     perf_fail "GATELM_LOADGEN_EXECUTION_MODE must be dedicated or local_validation."
@@ -226,7 +271,30 @@ trap cleanup_loadgen EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-curl -fsS --max-time 5 "${metrics_base_url}/metrics" > "${metrics_before_path}"
+capture_gateway_metrics() {
+  local phase="$1"
+  local aggregate_path="$2"
+  local index=0
+  local metrics_url replica_path replica_tmp_path
+
+  : > "${aggregate_path}"
+  for metrics_url in "${metrics_base_urls[@]}"; do
+    index=$((index + 1))
+    replica_path="${bundle_dir}/gateway-${index}.metrics-${phase}.prom"
+    replica_tmp_path="${bundle_dir}/.gateway-${index}.metrics-${phase}.tmp"
+    curl -fsS --max-time 5 "${metrics_url}/metrics" > "${replica_tmp_path}" || {
+      rm -f "${replica_tmp_path}"
+      return 1
+    }
+    mv "${replica_tmp_path}" "${replica_path}"
+    printf '# GateLM replica %s source %s\n' "${index}" "${metrics_url}" >> "${aggregate_path}"
+    cat "${replica_path}" >> "${aggregate_path}"
+    printf '\n' >> "${aggregate_path}"
+  done
+}
+
+capture_gateway_metrics before "${metrics_before_path}" || \
+  perf_fail "Could not capture the initial Gateway metrics snapshots."
 
 perf_log "Starting ${K6_TARGET_RPS} RPS cache-miss load for ${K6_DURATION} (run id ${run_id})."
 perf_log "Execution mode: ${LOADGEN_EXECUTION_MODE}."
@@ -243,6 +311,10 @@ docker run --rm \
   --volume "${REPO_ROOT}:/workspace:ro" \
   --volume "${bundle_dir}:/reports:rw" \
   --env "GATEWAY_BASE_URL=${gateway_base_url}" \
+  --env "GATELM_LOADGEN_EDGE_PRIVATE_IP=${GATELM_LOADGEN_EDGE_PRIVATE_IP}" \
+  --env "GATELM_LOADGEN_GATEWAY_COUNT=${GATELM_LOADGEN_GATEWAY_COUNT}" \
+  --env "GATELM_LOADGEN_EXPECTED_UPSTREAMS=${GATELM_LOADGEN_EXPECTED_UPSTREAMS}" \
+  --env "GATELM_LOADGEN_TLS_INSECURE=${GATELM_LOADGEN_TLS_INSECURE}" \
   --env GATELM_DEMO_API_KEY \
   --env GATELM_DEMO_APP_TOKEN \
   --env "GATELM_K6_TARGET_RPS=${K6_TARGET_RPS}" \
@@ -271,7 +343,7 @@ perf_evidence_read_k6_summary "${k6_summary_env_path}" "${run_id}"
 
 queue_depth=-1
 for ((elapsed = 0; elapsed <= LOG_DRAIN_TIMEOUT_SECONDS; elapsed++)); do
-  if curl -fsS --max-time 5 "${metrics_base_url}/metrics" > "${metrics_after_tmp_path}"; then
+  if capture_gateway_metrics after "${metrics_after_tmp_path}"; then
     mv "${metrics_after_tmp_path}" "${metrics_after_path}"
     queue_depth="$(perf_evidence_metric_integer \
       "${metrics_after_path}" \
@@ -314,6 +386,17 @@ preliminary_failures=()
 (( GATELM_EVIDENCE_LOAD_ITERATIONS > 0 )) || preliminary_failures+=("k6_no_completed_requests")
 (( GATELM_EVIDENCE_DROPPED_ITERATIONS == 0 )) || preliminary_failures+=("k6_dropped_iterations")
 (( GATELM_EVIDENCE_CHECKS_FAILED == 0 )) || preliminary_failures+=("k6_failed_checks")
+if [[ "${LOADGEN_EXECUTION_MODE}" == "dedicated" ]]; then
+  (( GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES == 0 )) || preliminary_failures+=("gateway_unknown_upstream")
+  (( GATELM_EVIDENCE_GATEWAY_1_RESPONSES > 0 )) || preliminary_failures+=("gateway_1_no_responses")
+  if (( GATELM_LOADGEN_GATEWAY_COUNT == 1 )); then
+    (( GATELM_EVIDENCE_GATEWAY_2_RESPONSES == 0 )) || preliminary_failures+=("unexpected_gateway_2_responses")
+  else
+    (( GATELM_EVIDENCE_GATEWAY_2_RESPONSES > 0 )) || preliminary_failures+=("gateway_2_no_responses")
+  fi
+  (( GATELM_EVIDENCE_GATEWAY_1_RESPONSES + GATELM_EVIDENCE_GATEWAY_2_RESPONSES + GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES == GATELM_EVIDENCE_LOAD_ITERATIONS )) || \
+    preliminary_failures+=("gateway_response_count_mismatch")
+fi
 [[ "${GATELM_EVIDENCE_HTTP_FAILED_RATE}" =~ ^0([.]0+)?([eE][+-]?[0-9]+)?$ ]] || \
   preliminary_failures+=("k6_http_failures")
 (( queue_depth == 0 )) || preliminary_failures+=("async_queue_not_drained")
@@ -351,6 +434,7 @@ printf '%s\n' \
   "  \"dedicatedTopologyDeclared\": ${topology_declared}," \
   '  "capacityClaimEligible": false,' \
   "  \"load\": {\"targetRps\": ${K6_TARGET_RPS}, \"duration\": \"${K6_DURATION}\", \"completedRequests\": ${GATELM_EVIDENCE_LOAD_ITERATIONS}, \"droppedIterations\": ${GATELM_EVIDENCE_DROPPED_ITERATIONS}, \"failedChecks\": ${GATELM_EVIDENCE_CHECKS_FAILED}, \"httpFailureRate\": ${GATELM_EVIDENCE_HTTP_FAILED_RATE}, \"httpDurationP95Ms\": ${GATELM_EVIDENCE_HTTP_DURATION_P95_MS}, \"httpDurationP99Ms\": ${GATELM_EVIDENCE_HTTP_DURATION_P99_MS}}," \
+  "  \"gatewayRouting\": {\"declaredReplicaCount\": ${GATELM_LOADGEN_GATEWAY_COUNT}, \"replica1Responses\": ${GATELM_EVIDENCE_GATEWAY_1_RESPONSES}, \"replica2Responses\": ${GATELM_EVIDENCE_GATEWAY_2_RESPONSES}, \"unknownResponses\": ${GATELM_EVIDENCE_GATEWAY_UNKNOWN_RESPONSES}}," \
   "  \"asyncLogging\": {\"finalQueueDepth\": ${queue_depth}, \"enqueueQueueFullDelta\": ${enqueue_queue_full_delta}, \"enqueueClosedDelta\": ${enqueue_closed_delta}, \"droppedQueueFullDelta\": ${dropped_queue_full_delta}, \"droppedClosedDelta\": ${dropped_closed_delta}, \"persistErrorDelta\": ${persist_error_delta}, \"persistPanicDelta\": ${persist_panic_delta}}," \
   "  \"failedChecks\": [${failures_json}]" \
   '}' \

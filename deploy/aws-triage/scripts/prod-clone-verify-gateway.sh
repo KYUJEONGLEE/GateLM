@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/prod-clone-lib.sh"
 
 [[ "${1:-}" == "--role" && "${3:-}" == "--request-id" && ( $# -eq 4 || $# -eq 5 ) ]] || \
-  clone_fail "Usage: bash scripts/prod-clone-verify-gateway.sh --role <gateway|data> --request-id <safe-request-id> [--stream]"
+  clone_fail "Usage: bash scripts/prod-clone-verify-gateway.sh --role <gateway1|gateway2|data> --request-id <safe-request-id> [--stream]"
 role="$2"
 request_id="$4"
 stream=false
@@ -15,7 +15,7 @@ if (( $# == 5 )); then
   [[ "$5" == "--stream" ]] || clone_fail "Unknown option: $5"
   stream=true
 fi
-case "${role}" in gateway|data) ;; *) clone_fail "Unknown Gateway verification role: ${role}" ;; esac
+case "${role}" in gateway1|gateway2|data) ;; *) clone_fail "Unknown Gateway verification role: ${role}" ;; esac
 [[ "${request_id}" =~ ^request_prod_clone_smoke_[A-Za-z0-9_-]{12,120}$ ]] || \
   clone_fail "Request ID must use the request_prod_clone_smoke_ prefix and safe characters only."
 
@@ -27,11 +27,11 @@ clone_assert_role_host "${role}"
   clone_fail "Synthetic Mock Gateway verification is allowed only in benchmark phase."
 
 case "${role}" in
-  gateway)
+  gateway1|gateway2)
     perf_need_command "curl" "Install curl."
     perf_need_command "python3" "Install python3."
     clone_require_env GATELM_DEMO_API_KEY GATELM_DEMO_APP_TOKEN
-    clone_wait_for_service gateway gateway-core
+    clone_wait_for_service "${role}" gateway-core
 
     response_path="$(mktemp)"
     headers_path="$(mktemp)"
@@ -71,7 +71,7 @@ PY
       -H 'X-GateLM-Feature-Id: prod_clone_smoke' \
       -H "X-GateLM-Request-Id: ${request_id}" \
       --data "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"GateLM synthetic production clone smoke ${request_id}.\"}],\"temperature\":0,\"max_tokens\":16,\"stream\":${stream_value}}" \
-      "http://${GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP}:8080/v1/chat/completions")"
+      "http://${GATELM_PROD_CLONE_GATEWAY_BIND_PRIVATE_IP}:8080/v1/chat/completions")"
     [[ "${status_code}" == "200" ]] || \
       clone_fail "Authenticated synthetic Gateway request returned HTTP ${status_code}."
     grep -Eiq '^X-GateLM-Cache-Status:[[:space:]]*miss[[:space:]]*$' "${headers_path}" || \

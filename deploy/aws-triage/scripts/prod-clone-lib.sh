@@ -70,8 +70,12 @@ clone_validate_env() {
     GATELM_PROD_CLONE_IMAGE_TAG \
     GATELM_PROD_CLONE_BUILD_CONTEXT \
     GATELM_PROD_CLONE_E5_BUNDLE_CONTEXT \
+    GATELM_PROD_CLONE_LOADGEN_PRIVATE_IP \
     GATELM_PROD_CLONE_EDGE_PRIVATE_IP \
-    GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP \
+    GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP \
+    GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP \
+    GATELM_PROD_CLONE_GATEWAY_BIND_PRIVATE_IP \
+    GATELM_PROD_CLONE_GATEWAY_LB_PRIVATE_IP \
     GATELM_PROD_CLONE_DATA_PRIVATE_IP \
     GATELM_PROD_CLONE_AI_PRIVATE_IP \
     GATELM_PROD_CLONE_SECRET_ROOT \
@@ -83,6 +87,7 @@ clone_validate_env() {
     GATELM_PROD_CLONE_ALLOW_LIVE_PROVIDER \
     GATELM_PROD_CLONE_ALLOW_SMTP \
     GATELM_PROD_CLONE_AUTH_CACHE_CONFIG \
+    GATELM_PROD_CLONE_GATEWAY_COUNT \
     GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE \
     GATELM_PROD_CLONE_CADDYFILE \
     POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
@@ -91,8 +96,6 @@ clone_validate_env() {
     clone_fail "GATELM_PROD_CLONE_SOURCE_SHA must be a full lowercase Git SHA."
   [[ "${GATELM_PROD_CLONE_DB_SOURCE_SHA}" =~ ^[a-f0-9]{40}$ ]] || \
     clone_fail "GATELM_PROD_CLONE_DB_SOURCE_SHA must be a full lowercase Git SHA."
-  [[ "${GATELM_PROD_CLONE_SOURCE_SHA}" == "${GATELM_PROD_CLONE_DB_SOURCE_SHA}" ]] || \
-    clone_fail "Application and database source SHAs must match for controlled clone evidence."
   [[ "${GATELM_PROD_CLONE_IMAGE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$ ]] || \
     clone_fail "GATELM_PROD_CLONE_IMAGE_TAG is not a safe image tag."
   [[ "${GATELM_PROD_CLONE_BUILD_CONTEXT}" == /* ]] || \
@@ -110,17 +113,21 @@ clone_validate_env() {
     [[ "${value}" =~ ^gatelm-prod-clone-[a-z0-9][a-z0-9_.-]{0,100}$ ]] || \
       clone_fail "${name} must stay inside the gatelm-prod-clone-* namespace."
   done
-  [[ "${GATELM_PROD_CLONE_AUTH_CACHE_CONFIG}" == "true" || "${GATELM_PROD_CLONE_AUTH_CACHE_CONFIG}" == "false" ]] || \
-    clone_fail "GATELM_PROD_CLONE_AUTH_CACHE_CONFIG must be true or false."
-  if [[ "${GATELM_PROD_CLONE_SOURCE_SHA}" == "13d2964fe76e074e4e61f03ece588794fe0cc5e4" ]]; then
-    [[ "${GATELM_PROD_CLONE_AUTH_CACHE_CONFIG}" == "false" ]] || \
-      clone_fail "The 13d2964f topology baseline must not include the later auth-cache configuration."
-  fi
+  [[ "${GATELM_PROD_CLONE_AUTH_CACHE_CONFIG}" == "true" ]] || \
+    clone_fail "Production-parity evidence requires the deployed auth cache configuration."
+  case "${GATELM_PROD_CLONE_GATEWAY_COUNT}" in
+    1|2) ;;
+    *) clone_fail "GATELM_PROD_CLONE_GATEWAY_COUNT must be 1 or 2." ;;
+  esac
+  [[ "${GATELM_PROD_CLONE_GATEWAY_LB_PRIVATE_IP}" == "${GATELM_PROD_CLONE_EDGE_PRIVATE_IP}" ]] || \
+    clone_fail "The production-clone Gateway load balancer must be the isolated Edge host."
 
   local -A seen_ips=()
   for name in \
+    GATELM_PROD_CLONE_LOADGEN_PRIVATE_IP \
     GATELM_PROD_CLONE_EDGE_PRIVATE_IP \
-    GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP \
+    GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP \
+    GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP \
     GATELM_PROD_CLONE_DATA_PRIVATE_IP \
     GATELM_PROD_CLONE_AI_PRIVATE_IP; do
     value="${!name}"
@@ -152,8 +159,13 @@ clone_validate_env() {
         clone_fail "Gateway Provider env mapping must be empty in a private clone."
       [[ "${SMTP_HOST:-}" == "127.0.0.1" && "${SMTP_PORT:-}" == "1" ]] || \
         clone_fail "Private clone SMTP must point to the closed local port 127.0.0.1:1."
-      [[ "$(basename "${GATELM_PROD_CLONE_CADDYFILE}")" == "Caddyfile.prod-clone.rehearsal" ]] || \
-        clone_fail "Private clone phases must use the internal-TLS rehearsal Caddyfile."
+      if [[ "${GATELM_PROD_CLONE_GATEWAY_COUNT}" == "1" ]]; then
+        [[ "$(basename "${GATELM_PROD_CLONE_CADDYFILE}")" == "Caddyfile.prod-clone.rehearsal" ]] || \
+          clone_fail "The one-Gateway baseline must use Caddyfile.prod-clone.rehearsal."
+      else
+        [[ "$(basename "${GATELM_PROD_CLONE_CADDYFILE}")" == "Caddyfile.prod-clone.rehearsal.gateway-2" ]] || \
+          clone_fail "The two-Gateway comparison must use Caddyfile.prod-clone.rehearsal.gateway-2."
+      fi
       ;;
     production)
       [[ "${GATELM_PROD_CLONE_ALLOW_LIVE_PROVIDER}" == "true" ]] || \
@@ -169,8 +181,10 @@ clone_validate_env() {
 
 clone_expected_ip() {
   case "$1" in
+    loadgen) printf '%s\n' "${GATELM_PROD_CLONE_LOADGEN_PRIVATE_IP}" ;;
     edge) printf '%s\n' "${GATELM_PROD_CLONE_EDGE_PRIVATE_IP}" ;;
-    gateway) printf '%s\n' "${GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP}" ;;
+    gateway1) printf '%s\n' "${GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP}" ;;
+    gateway2) printf '%s\n' "${GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP}" ;;
     data|rag) printf '%s\n' "${GATELM_PROD_CLONE_DATA_PRIVATE_IP}" ;;
     ai) printf '%s\n' "${GATELM_PROD_CLONE_AI_PRIVATE_IP}" ;;
     *) clone_fail "Unknown clone role: $1" ;;
@@ -179,8 +193,10 @@ clone_expected_ip() {
 
 clone_expected_perf_marker() {
   case "$1" in
-    edge) printf '%s\n' loadgen ;;
-    gateway) printf '%s\n' gateway ;;
+    loadgen) printf '%s\n' loadgen ;;
+    edge) printf '%s\n' edge ;;
+    gateway1) printf '%s\n' gateway ;;
+    gateway2) printf '%s\n' gateway2 ;;
     data|rag) printf '%s\n' data ;;
     ai) printf '%s\n' mock ;;
     *) clone_fail "Unknown clone role: $1" ;;
@@ -199,6 +215,10 @@ clone_assert_role_host() {
   marker="$(tr -d '[:space:]' < /etc/gatelm-perf-role)"
   [[ "${marker}" == "${expected_marker}" ]] || \
     clone_fail "Role marker ${marker:-empty} does not match ${expected_marker}."
+  case "${role}" in
+    gateway1) export GATELM_PROD_CLONE_GATEWAY_BIND_PRIVATE_IP="${GATELM_PROD_CLONE_GATEWAY_1_PRIVATE_IP}" ;;
+    gateway2) export GATELM_PROD_CLONE_GATEWAY_BIND_PRIVATE_IP="${GATELM_PROD_CLONE_GATEWAY_2_PRIVATE_IP}" ;;
+  esac
 }
 
 clone_assert_build_source() {
@@ -211,7 +231,7 @@ clone_assert_build_source() {
     clone_fail "Build source ${actual_sha} does not match ${GATELM_PROD_CLONE_SOURCE_SHA}."
   status="$(git -C "${GATELM_PROD_CLONE_BUILD_CONTEXT}" status --porcelain --untracked-files=all)"
   [[ -z "${status}" ]] || clone_fail "Build source contains tracked or untracked changes."
-  if [[ "${role}" == "gateway" ]]; then
+  if [[ "${role}" == "gateway1" || "${role}" == "gateway2" ]]; then
     [[ -d "${GATELM_PROD_CLONE_E5_BUNDLE_CONTEXT}" ]] || \
       clone_fail "E5 runtime bundle is missing: ${GATELM_PROD_CLONE_E5_BUNDLE_CONTEXT}"
   fi
@@ -234,7 +254,7 @@ clone_role_secret_files() {
         rag/worker-signing.jwk.json \
         rag/worker-binding-hmac-keys.json
       ;;
-    gateway)
+    gateway1|gateway2)
       printf '%s\n' \
         tenant-chat/jwks.json \
         tenant-chat/binding-hmac-keys.json \
@@ -265,9 +285,17 @@ clone_role_services() {
   case "$1" in
     data) printf '%s\n' "postgres redis control-plane-api chat-api" ;;
     rag) printf '%s\n' "rag-worker" ;;
-    gateway) printf '%s\n' "gateway-core" ;;
+    gateway1|gateway2) printf '%s\n' "gateway-core" ;;
     ai) printf '%s\n' "ai-service mock-provider-upstream mock-provider" ;;
     edge) printf '%s\n' "web chat-web caddy" ;;
+    *) clone_fail "Unknown clone role: $1" ;;
+  esac
+}
+
+clone_role_profile() {
+  case "$1" in
+    gateway1|gateway2) printf '%s\n' gateway ;;
+    data|rag|ai|edge) printf '%s\n' "$1" ;;
     *) clone_fail "Unknown clone role: $1" ;;
   esac
 }
@@ -300,14 +328,15 @@ clone_wait_for_service() {
   local role="$1"
   local service="$2"
   local attempts="${3:-90}"
-  local container_id status attempt
+  local container_id status attempt profile
+  profile="$(clone_role_profile "${role}")"
   for ((attempt = 1; attempt <= attempts; attempt++)); do
-    container_id="$(clone_compose --profile "${role}" ps -q "${service}" 2>/dev/null || true)"
+    container_id="$(clone_compose --profile "${profile}" ps -q "${service}" 2>/dev/null || true)"
     if [[ -n "${container_id}" ]]; then
       status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${container_id}" 2>/dev/null || true)"
       [[ "${status}" == "healthy" || "${status}" == "running" ]] && return 0
       if [[ "${status}" == "unhealthy" || "${status}" == "exited" || "${status}" == "dead" ]]; then
-        clone_compose --profile "${role}" logs --tail=100 "${service}" >&2 || true
+        clone_compose --profile "${profile}" logs --tail=100 "${service}" >&2 || true
         clone_fail "${service} entered state ${status}."
       fi
     fi
