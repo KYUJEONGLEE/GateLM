@@ -963,6 +963,39 @@ Use `control_100ms` first for every topology, then repeat the same RPS points
 with `historical_openai_nonstream`. Do not combine the two profiles into one
 capacity number, and do not describe either result as live-Provider capacity.
 
+On the Edge/load-generator host, export a restricted `.env.loadgen` from the
+protected clone environment. The exporter records both the Gateway count and
+the selected latency profile in its topology ID, refuses an implicit overwrite,
+and never writes Provider, database, SMTP, or encryption secrets:
+
+```bash
+cd /home/ubuntu/GateLM-prod-clone-control/deploy/aws-triage
+GATELM_PROD_CLONE_GATEWAY_COUNT=1 \
+  bash scripts/prod-clone-export-loadgen-env.sh
+```
+
+Run the existing pinned k6 harness from the exact application source checkout,
+while pointing it at the restricted environment file. This preserves the clean
+`13d2964f` source attestation and uses the same cache-miss, non-streaming request
+shape for every profile and topology:
+
+```bash
+cd /home/ubuntu/GateLM-prod-clone-source-13d2964f
+GATELM_LOADGEN_ENV_FILE=/home/ubuntu/GateLM-prod-clone-control/deploy/aws-triage/.env.loadgen \
+GATELM_K6_TARGET_RPS=10 \
+GATELM_K6_DURATION=30s \
+GATELM_K6_PRE_ALLOCATED_VUS=20 \
+GATELM_K6_MAX_VUS=40 \
+  bash deploy/aws-triage/scripts/perf-loadgen-run.sh
+```
+
+Treat `10 RPS / 30s` as harness validation, not a capacity point. Before each
+formal point, attest and reset the Mock profile, reset only the isolated clone's
+transient Redis state, and record the k6 bundle, Mock call count, Request Log
+count, Gateway metrics, and host utilization. Increase RPS only after the prior
+point has zero failed checks, zero dropped iterations, and complete target-side
+reconciliation.
+
 The source checkout referenced by `GATELM_PROD_CLONE_BUILD_CONTEXT` is separate
 from the deployment-control checkout and must be clean at the declared full SHA.
 This keeps the original `13d2964f` topology baseline separate from later code

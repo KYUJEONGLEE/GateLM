@@ -10,6 +10,7 @@ COMPOSE_PATH="${AWS_TRIAGE_DIR}/docker-compose.prod-clone.yml"
 SMOKE_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-smoke.sh"
 GATEWAY_VERIFY_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-verify-gateway.sh"
 IAM_VERIFY_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-verify-iam.sh"
+LOADGEN_EXPORT_PATH="${AWS_TRIAGE_DIR}/scripts/prod-clone-export-loadgen-env.sh"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
@@ -129,6 +130,9 @@ grep -Fq 'service.providerCatalogMatchesRef' "${AWS_TRIAGE_DIR}/scripts/prod-clo
 grep -Fq 'prod-clone-runtime-iam-smoke/' "${IAM_VERIFY_PATH}"
 grep -Fq "require('@aws-sdk/client-s3')" "${IAM_VERIFY_PATH}"
 grep -Fq 'RAG Worker container S3 Put/Get/Delete and KMS-through-S3 access passed' "${IAM_VERIFY_PATH}"
+grep -Fq 'GATELM_LOADGEN_GATEWAY_BASE_URL=http://${GATELM_PROD_CLONE_GATEWAY_PRIVATE_IP}:8080' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'GATELM_PERF_TOPOLOGY_ID=prod_clone_${GATELM_PROD_CLONE_IMAGE_TAG}_gateway_${gateway_count}_${GATELM_PROD_CLONE_MOCK_LATENCY_PROFILE}' "${LOADGEN_EXPORT_PATH}"
+grep -Fq 'Only the private Gateway URL, topology ID, and isolated synthetic credentials were written.' "${LOADGEN_EXPORT_PATH}"
 grep -Fq 'drain for at least 70 seconds' "${AWS_TRIAGE_DIR}/README.md"
 "${NODE_BIN}" "${AWS_TRIAGE_DIR}/scripts/tests/prod-clone-mock-latency-shaper.test.mjs"
 
