@@ -80,6 +80,8 @@ Response identity:
 
 Gateway local, remote, historical shadow는 동시에 켤 수 없다. 롤백은 remote flag를 끄고 기존 local flag를 다시 켜는 것이다. AI Service 장애가 Provider 호출 실패로 확대되지 않도록 Gateway는 per-request rule fallback을 유지한다.
 
+실험용 AI Service 이미지는 `routing` ML extra만 설치한다. 이 extra는 실제 추론 경로가 import하는 NumPy, ONNX Runtime, tokenizer, Transformers만 포함하며 학습·export용 PyTorch/CUDA 의존성은 포함하지 않는다. 기존 `onnx` extra와 기본 self-host 빌드 의미는 변경하지 않는다.
+
 ## Comparison Gates
 
 계약 변경 검토 전 다음을 모두 충족해야 한다.

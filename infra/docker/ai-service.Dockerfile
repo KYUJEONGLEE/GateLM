@@ -1,9 +1,11 @@
 ARG PYTHON_VERSION=3.12
 ARG AI_SERVICE_INSTALL_ML_DEPS=true
+ARG AI_SERVICE_ML_EXTRA=onnx
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
 ARG AI_SERVICE_INSTALL_ML_DEPS
+ARG AI_SERVICE_ML_EXTRA
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -24,7 +26,8 @@ COPY scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-
 
 RUN pip install --no-cache-dir --requirement requirements-rag-extraction.lock \
   && if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
-    pip install --no-cache-dir ".[onnx]"; \
+    case "$AI_SERVICE_ML_EXTRA" in onnx|routing) ;; *) echo "unsupported AI Service ML extra" >&2; exit 1 ;; esac; \
+    pip install --no-cache-dir ".[${AI_SERVICE_ML_EXTRA}]"; \
   else \
     pip install --no-cache-dir --no-deps .; \
   fi \

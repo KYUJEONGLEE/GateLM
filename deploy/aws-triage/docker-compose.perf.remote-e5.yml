@@ -17,6 +17,7 @@ services:
       dockerfile: infra/docker/ai-service.Dockerfile
       args:
         AI_SERVICE_INSTALL_ML_DEPS: "true"
+        AI_SERVICE_ML_EXTRA: routing
     restart: "no"
     init: true
     environment:
