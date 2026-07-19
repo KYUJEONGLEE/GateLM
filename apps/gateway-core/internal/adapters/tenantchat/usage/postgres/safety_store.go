@@ -112,8 +112,12 @@ func addSafetySummaryPayload(payload map[string]any, summary *tenantchat.SafetyS
 	if err := tenantchat.ValidateSafetySummary(*summary); err != nil {
 		return err
 	}
+	detectedTypes := summary.MaskingDetectedTypes
+	if detectedTypes == nil {
+		detectedTypes = []string{}
+	}
 	payload["maskingAction"] = summary.MaskingAction
-	payload["maskingDetectedTypes"] = append([]string{}, summary.MaskingDetectedTypes...)
+	payload["maskingDetectedTypes"] = detectedTypes
 	payload["maskingDetectedCount"] = summary.MaskingDetectedCount
 	payload["safetyPolicyDigest"] = summary.SafetyPolicyDigest
 	return nil
