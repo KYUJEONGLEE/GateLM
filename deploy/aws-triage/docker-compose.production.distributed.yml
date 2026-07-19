@@ -1,0 +1,593 @@
+name: gatelm-production-distributed
+
+services:
+  postgres:
+    profiles: [data, rag]
+    image: pgvector/pgvector:0.8.5-pg16-trixie@sha256:073acab878025cadf03fe6fed01babaaa285b8d09ddc9c43882cf02d409546d7
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [role_internal]
+
+  redis:
+    profiles: [data]
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [role_internal]
+
+  control-plane-api:
+    profiles: [data]
+    image: gatelm/control-plane-api:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/control-plane-api.Dockerfile
+    restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
+    environment:
+      CONTROL_PLANE_PORT: "3001"
+      CONTROL_PLANE_ADMIN_AUTH_MODE: ${CONTROL_PLANE_ADMIN_AUTH_MODE}
+      TENANT_CHAT_CACHE_KEY_SET_ID: ${TENANT_CHAT_CACHE_KEY_SET_ID:?TENANT_CHAT_CACHE_KEY_SET_ID is required}
+      CONTROL_PLANE_WEB_ORIGIN: ${GATELM_PUBLIC_BASE_URL}
+      CONTROL_PLANE_AUTH_COOKIE_SECURE: ${CONTROL_PLANE_AUTH_COOKIE_SECURE:-false}
+      CONTROL_PLANE_AUTH_STATE_SECRET: ${CONTROL_PLANE_AUTH_STATE_SECRET:?CONTROL_PLANE_AUTH_STATE_SECRET is required}
+      CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: ${CONTROL_PLANE_INTERNAL_SERVICE_TOKEN:?CONTROL_PLANE_INTERNAL_SERVICE_TOKEN is required}
+      TENANT_CHAT_PROJECTOR_ENABLED: ${TENANT_CHAT_PROJECTOR_ENABLED:-false}
+      TENANT_CHAT_PROJECTOR_INTERVAL_MS: ${TENANT_CHAT_PROJECTOR_INTERVAL_MS:-1000}
+      TENANT_CHAT_PROJECTOR_BATCH_SIZE: ${TENANT_CHAT_PROJECTOR_BATCH_SIZE:-50}
+      TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS: ${TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS:-5}
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_OBJECT_STORE_DRIVER: ${RAG_OBJECT_STORE_DRIVER:?RAG_OBJECT_STORE_DRIVER is required}
+      RAG_MAX_UPLOAD_BYTES: "${RAG_MAX_UPLOAD_BYTES:-20971520}"
+      RAG_S3_REGION: ${RAG_S3_REGION:?RAG_S3_REGION is required}
+      RAG_S3_BUCKET: ${RAG_S3_BUCKET:?RAG_S3_BUCKET is required}
+      RAG_S3_KMS_KEY_ID: ${RAG_S3_KMS_KEY_ID:?RAG_S3_KMS_KEY_ID is required}
+      RAG_CONTENT_WRAPPING_KEYS_FILE: /run/secrets/rag/content-wrapping-keys.json
+      DASHBOARD_ROLLUP_ENABLED: ${DASHBOARD_ROLLUP_ENABLED:-false}
+      DASHBOARD_ROLLUP_INTERVAL_MS: ${DASHBOARD_ROLLUP_INTERVAL_MS:-1000}
+      DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE: ${DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE:-500}
+      DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE: ${DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE:-8}
+      DASHBOARD_ROLLUP_DISCOVERY_LAG_MS: ${DASHBOARD_ROLLUP_DISCOVERY_LAG_MS:-60000}
+      DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS: ${DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS:-60000}
+      DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS: ${DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS:-900000}
+      AUTH_EMAIL_TRANSPORT: ${AUTH_EMAIL_TRANSPORT:-smtp}
+      CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: ${CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY:-false}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_TLS_MODE: ${SMTP_TLS_MODE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      TENANT_CHAT_GOOGLE_REDIRECT_URI: ${TENANT_CHAT_GOOGLE_REDIRECT_URI:-}
+      TENANT_CHAT_WEB_ORIGIN: ${GATELM_CHAT_WEB_ORIGIN}
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY:-}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION:-v1}
+      CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP: ${CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP:-}
+      GATELM_DEMO_PROVIDER_MODE: ${GATELM_DEMO_PROVIDER_MODE:-mock}
+      GATELM_DEMO_API_KEY: ${GATELM_DEMO_API_KEY:-}
+      GATELM_DEMO_APP_TOKEN: ${GATELM_DEMO_APP_TOKEN:-}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:3001:3001"
+    secrets:
+      - source: rag_content_wrapping_keys
+        target: /run/secrets/rag/content-wrapping-keys.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [role_internal]
+
+  chat-api:
+    profiles: [data]
+    image: gatelm/chat-api:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/chat-api.Dockerfile
+    restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
+    environment:
+      CHAT_API_PORT: "3003"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:5432/${POSTGRES_DB}?schema=public&connection_limit=${TENANT_CHAT_DB_POOL_LIMIT:-12}&pool_timeout=5
+      TENANT_CHAT_ACCESS_JWT_SECRET: ${TENANT_CHAT_ACCESS_JWT_SECRET:?TENANT_CHAT_ACCESS_JWT_SECRET is required}
+      TENANT_CHAT_INTENT_SECRET: ${TENANT_CHAT_INTENT_SECRET:?TENANT_CHAT_INTENT_SECRET is required}
+      TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}
+      TENANT_CHAT_CONTROL_PLANE_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:3001
+      TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: ${TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN:?TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN is required}
+      TENANT_CHAT_GATEWAY_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:-10.78.2.20}:8081
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_QUERY_EMBEDDING_ACTIVE_KID: ${RAG_QUERY_EMBEDDING_ACTIVE_KID:?RAG_QUERY_EMBEDDING_ACTIVE_KID is required}
+      RAG_QUERY_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/query-signing.jwk.json
+      RAG_QUERY_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/query-binding-hmac-keys.json
+      TENANT_CHAT_WORKLOAD_ACTIVE_KID: ${TENANT_CHAT_WORKLOAD_ACTIVE_KID:?TENANT_CHAT_WORKLOAD_ACTIVE_KID is required}
+      TENANT_CHAT_WORKLOAD_SIGNING_JWK_FILE: /run/secrets/tenant-chat/signing.jwk.json
+      TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+      TENANT_CHAT_CONTENT_KEYS_FILE: /run/secrets/tenant-chat/content-keys.json
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:3003:3003"
+    secrets:
+      - source: tenant_chat_workload_signing_jwk
+        target: /run/secrets/tenant-chat/signing.jwk.json
+      - source: tenant_chat_binding_hmac_keys
+        target: /run/secrets/tenant-chat/binding-hmac-keys.json
+      - source: tenant_chat_content_keys
+        target: /run/secrets/tenant-chat/content-keys.json
+      - source: rag_query_embedding_signing_jwk
+        target: /run/secrets/rag/query-signing.jwk.json
+      - source: rag_query_embedding_binding_hmac_keys
+        target: /run/secrets/rag/query-binding-hmac-keys.json
+    depends_on:
+      control-plane-api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3003/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [role_internal]
+
+  rag-worker:
+    profiles: [rag]
+    image: gatelm/control-plane-api:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
+    command: ["node", "dist/src/rag-worker.js"]
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_MODE: aws_triage
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:5432/${POSTGRES_DB}?schema=public
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_OBJECT_STORE_DRIVER: ${RAG_OBJECT_STORE_DRIVER:?RAG_OBJECT_STORE_DRIVER is required}
+      RAG_S3_REGION: ${RAG_S3_REGION:?RAG_S3_REGION is required}
+      RAG_S3_BUCKET: ${RAG_S3_BUCKET:?RAG_S3_BUCKET is required}
+      RAG_S3_KMS_KEY_ID: ${RAG_S3_KMS_KEY_ID:?RAG_S3_KMS_KEY_ID is required}
+      RAG_CONTENT_WRAPPING_KEYS_FILE: /run/secrets/rag/content-wrapping-keys.json
+      RAG_WORKER_POLL_INTERVAL_MS: ${RAG_WORKER_POLL_INTERVAL_MS:-1000}
+      RAG_WORKER_LEASE_DURATION_MS: ${RAG_WORKER_LEASE_DURATION_MS:-120000}
+      RAG_WORKER_RETRY_BASE_MS: ${RAG_WORKER_RETRY_BASE_MS:-1000}
+      RAG_WORKER_RETRY_CAP_MS: ${RAG_WORKER_RETRY_CAP_MS:-300000}
+      RAG_WORKER_EMBEDDING_BATCH_SIZE: ${RAG_WORKER_EMBEDDING_BATCH_SIZE:-64}
+      RAG_WORKER_AI_SERVICE_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8001
+      RAG_WORKER_AI_SERVICE_TOKEN: ${AI_SERVICE_RAG_SERVICE_TOKEN:?AI_SERVICE_RAG_SERVICE_TOKEN is required}
+      RAG_WORKER_GATEWAY_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:-10.78.2.20}:8081
+      RAG_WORKER_EMBEDDING_ACTIVE_KID: ${RAG_WORKER_EMBEDDING_ACTIVE_KID:?RAG_WORKER_EMBEDDING_ACTIVE_KID is required}
+      RAG_WORKER_EMBEDDING_SIGNING_JWK_FILE: /run/secrets/rag/worker-signing.jwk.json
+      RAG_WORKER_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/worker-binding-hmac-keys.json
+    secrets:
+      - source: rag_content_wrapping_keys
+        target: /run/secrets/rag/content-wrapping-keys.json
+      - source: rag_worker_embedding_signing_jwk
+        target: /run/secrets/rag/worker-signing.jwk.json
+      - source: rag_worker_embedding_binding_hmac_keys
+        target: /run/secrets/rag/worker-binding-hmac-keys.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq 'dist/src/rag-worker.js' /proc/1/cmdline"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [role_internal]
+
+  gateway-core:
+    profiles: [gateway]
+    image: gatelm/gateway-core:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile
+      additional_contexts:
+        difficulty_e5: ${GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT:-../../.tmp/gateway-e5-runtime-bundle}
+    restart: unless-stopped
+    user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
+    environment:
+      DEPLOYMENT_MODE: aws_triage
+      GATEWAY_PORT: "8080"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:6379
+      GATEWAY_CONTROL_PLANE_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:3001
+      GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN: ${GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN:?GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN is required}
+      GATEWAY_OBSERVABILITY_INTERNAL_TOKEN: ${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN:?GATEWAY_OBSERVABILITY_INTERNAL_TOKEN is required}
+      GATEWAY_OBSERVABILITY_AUTH_REQUIRED: "true"
+      GATEWAY_CONTROL_PLANE_TIMEOUT_MS: ${GATEWAY_CONTROL_PLANE_TIMEOUT_MS}
+      GATEWAY_RUNTIME_SNAPSHOT_MODE: ${GATEWAY_RUNTIME_SNAPSHOT_MODE}
+      GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "true"
+      GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100}
+      GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"
+      GATEWAY_PROVIDER_TIMEOUT_MS: ${GATEWAY_PROVIDER_TIMEOUT_MS:-60000}
+      MOCK_PROVIDER_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8090
+      GATEWAY_DEFAULT_PROVIDER: ${GATEWAY_DEFAULT_PROVIDER}
+      GATEWAY_DEFAULT_MODEL: ${GATEWAY_DEFAULT_MODEL}
+      GATEWAY_LOW_COST_MODEL: ${GATEWAY_LOW_COST_MODEL}
+      GATEWAY_HIGH_QUALITY_MODEL: ${GATEWAY_HIGH_QUALITY_MODEL}
+      GATEWAY_EXACT_CACHE_KEY_SECRET: ${GATEWAY_EXACT_CACHE_KEY_SECRET}
+      GATEWAY_AUTH_CACHE_ENABLED: ${GATEWAY_AUTH_CACHE_ENABLED:-true}
+      GATEWAY_AUTH_CACHE_TTL_MS: ${GATEWAY_AUTH_CACHE_TTL_MS:-5000}
+      GATEWAY_AUTH_CACHE_MAX_ENTRIES: ${GATEWAY_AUTH_CACHE_MAX_ENTRIES:-4096}
+      GATEWAY_MAX_REQUEST_BODY_BYTES: ${GATEWAY_MAX_REQUEST_BODY_BYTES}
+      GATEWAY_RATE_LIMIT_ENABLED: ${GATEWAY_RATE_LIMIT_ENABLED}
+      GATEWAY_RATE_LIMIT_BACKEND: ${GATEWAY_RATE_LIMIT_BACKEND}
+      GATEWAY_RATE_LIMIT_ALGORITHM: ${GATEWAY_RATE_LIMIT_ALGORITHM}
+      GATEWAY_RATE_LIMIT_WINDOW_SECONDS: ${GATEWAY_RATE_LIMIT_WINDOW_SECONDS}
+      GATEWAY_RATE_LIMIT_LIMIT: ${GATEWAY_RATE_LIMIT_LIMIT}
+      GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX: ${GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX}
+      GATEWAY_AI_SAFETY_SIDECAR_ENABLED: "true"
+      GATEWAY_AI_SAFETY_SIDECAR_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP:-10.78.2.50}:8001/internal/ai-safety/v1/detect
+      GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS: "100"
+      GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID: gatelm/koelectra-small-v3-pii-ner
+      GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET: gatelm-koelectra-pii-ner-v1
+      GATEWAY_AI_SAFETY_SIDECAR_LOCALE: ko-KR
+      GATEWAY_AI_SAFETY_SIDECAR_MODE: enforce
+      GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY: "true"
+      GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP: ${GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP:-}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY:-}
+      GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION: ${GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION:-v1}
+      GATELM_DEMO_API_KEY: ${GATELM_DEMO_API_KEY}
+      GATELM_DEMO_APP_TOKEN: ${GATELM_DEMO_APP_TOKEN}
+      GATELM_DEMO_TENANT_ID: ${GATELM_DEMO_TENANT_ID}
+      GATELM_DEMO_PROJECT_ID: ${GATELM_DEMO_PROJECT_ID}
+      GATELM_DEMO_APPLICATION_ID: ${GATELM_DEMO_APPLICATION_ID}
+      GATELM_DEMO_API_KEY_ID: ${GATELM_DEMO_API_KEY_ID}
+      GATELM_DEMO_APP_TOKEN_ID: ${GATELM_DEMO_APP_TOKEN_ID}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TENANT_CHAT_PRIVATE_GATEWAY_ENABLED: "true"
+      TENANT_CHAT_PRIVATE_LISTEN_ADDRESS: ":8081"
+      TENANT_CHAT_WORKLOAD_JWKS_FILE: /run/secrets/tenant-chat/jwks.json
+      TENANT_CHAT_BINDING_HMAC_KEYS_FILE: /run/secrets/tenant-chat/binding-hmac-keys.json
+      TENANT_CHAT_CACHE_KEYSETS_FILE: /run/secrets/tenant-chat/cache-keysets.json
+      TENANT_CHAT_USAGE_RECEIPT_TOKEN_FILE: /run/secrets/tenant-chat/usage-receipt-token
+      TENANT_CHAT_RAG_ENABLED: "true"
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-large}
+      RAG_EMBEDDING_DIMENSIONS: "${RAG_EMBEDDING_DIMENSIONS:-1536}"
+      RAG_EMBEDDING_PROFILE_VERSION: "${RAG_EMBEDDING_PROFILE_VERSION:-1}"
+      RAG_DISTANCE_METRIC: ${RAG_DISTANCE_METRIC:-cosine}
+      RAG_EMBEDDING_CREDENTIAL_REF_ID: ${RAG_EMBEDDING_CREDENTIAL_REF_ID:-credential_ref_openai_main}
+      RAG_EMBEDDING_OPENAI_BASE_URL: ${RAG_EMBEDDING_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      RAG_EMBEDDING_WORKLOAD_JWKS_FILE: /run/secrets/rag/workload-jwks.json
+      RAG_EMBEDDING_BINDING_HMAC_KEYS_FILE: /run/secrets/rag/workload-binding-hmac-keys.json
+      RAG_EMBEDDING_WORKLOAD_IDENTITIES_FILE: /run/secrets/rag/workload-identities.json
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:-10.78.2.20}:8080:8080"
+      - "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:-10.78.2.20}:8081:8081"
+    secrets:
+      - source: tenant_chat_workload_jwks
+        target: /run/secrets/tenant-chat/jwks.json
+      - source: tenant_chat_binding_hmac_keys
+        target: /run/secrets/tenant-chat/binding-hmac-keys.json
+      - source: tenant_chat_cache_keysets
+        target: /run/secrets/tenant-chat/cache-keysets.json
+      - source: tenant_chat_usage_receipt_token
+        target: /run/secrets/tenant-chat/usage-receipt-token
+      - source: rag_embedding_workload_jwks
+        target: /run/secrets/rag/workload-jwks.json
+      - source: rag_embedding_workload_binding_hmac_keys
+        target: /run/secrets/rag/workload-binding-hmac-keys.json
+      - source: rag_embedding_workload_identities
+        target: /run/secrets/rag/workload-identities.json
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq gateway-core /proc/1/cmdline"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [role_internal]
+
+  ai-service:
+    profiles: [ai]
+    image: gatelm/ai-service:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/ai-service.Dockerfile
+      args:
+        AI_SERVICE_INSTALL_ML_DEPS: ${AI_SERVICE_INSTALL_ML_DEPS}
+    restart: unless-stopped
+    environment:
+      AI_SERVICE_HOST: 0.0.0.0
+      AI_SERVICE_PORT: "8001"
+      AI_SERVICE_LOG_LEVEL: ${AI_SERVICE_LOG_LEVEL}
+      AI_SERVICE_REMOTE_SAFETY_MODE: ${AI_SERVICE_REMOTE_SAFETY_MODE}
+      AI_SERVICE_ACCESS_LOG_ENABLED: ${AI_SERVICE_ACCESS_LOG_ENABLED}
+      TRANSFORMERS_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
+      HF_HUB_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
+      AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: ${AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME}
+      AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: ${AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID}
+      AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS}
+      DEPLOYMENT_MODE: aws
+      TENANT_CHAT_RAG_ENABLED: "true"
+      AI_SERVICE_RAG_SERVICE_TOKEN: ${AI_SERVICE_RAG_SERVICE_TOKEN:?AI_SERVICE_RAG_SERVICE_TOKEN is required}
+      AI_SERVICE_RAG_TEMP_DIR: /run/gatelm-rag-tmp
+      AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS: ${AI_SERVICE_RAG_MAX_CONCURRENT_EXTRACTIONS:-2}
+      AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES: ${AI_SERVICE_RAG_PDF_MEMORY_LIMIT_BYTES:-536870912}
+      AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS: ${AI_SERVICE_RAG_PDF_CPU_LIMIT_SECONDS:-30}
+      AI_SERVICE_RAG_MAX_INPUT_BYTES: ${AI_SERVICE_RAG_MAX_INPUT_BYTES:-20971520}
+      AI_SERVICE_RAG_MAX_PDF_PAGES: ${AI_SERVICE_RAG_MAX_PDF_PAGES:-300}
+      AI_SERVICE_RAG_MAX_EXTRACTED_CHARS: ${AI_SERVICE_RAG_MAX_EXTRACTED_CHARS:-2000000}
+      AI_SERVICE_RAG_PDF_PARSE_TIMEOUT_SECONDS: ${AI_SERVICE_RAG_PDF_PARSE_TIMEOUT_SECONDS:-30}
+      AI_SERVICE_RAG_MIN_PDF_TEXT_CHARS: ${AI_SERVICE_RAG_MIN_PDF_TEXT_CHARS:-20}
+      AI_SERVICE_RAG_MAX_CHUNKS: ${AI_SERVICE_RAG_MAX_CHUNKS:-10000}
+      AI_SERVICE_RAG_CHUNK_TARGET_TOKENS: ${AI_SERVICE_RAG_CHUNK_TARGET_TOKENS:-600}
+      AI_SERVICE_RAG_CHUNK_OVERLAP_TOKENS: ${AI_SERVICE_RAG_CHUNK_OVERLAP_TOKENS:-100}
+      AI_SERVICE_RAG_CHUNK_MAX_TOKENS: ${AI_SERVICE_RAG_CHUNK_MAX_TOKENS:-900}
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8001:8001"
+    tmpfs:
+      - /run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777
+    mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}
+    pids_limit: ${AI_SERVICE_PIDS_LIMIT:-128}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [role_internal]
+
+  mock-provider:
+    profiles: [ai]
+    image: python:3.12-alpine
+    restart: unless-stopped
+    environment:
+      MOCK_PROVIDER_PORT: "8090"
+      MOCK_PROVIDER_DEFAULT_LATENCY_MS: ${MOCK_PROVIDER_DEFAULT_LATENCY_MS}
+    command:
+      - python
+      - -c
+      - |
+        import json, os, time
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        port = int(os.getenv("MOCK_PROVIDER_PORT", "8090"))
+        latency_ms = int(os.getenv("MOCK_PROVIDER_DEFAULT_LATENCY_MS", "100"))
+
+        class ConcurrentHTTPServer(ThreadingHTTPServer):
+            daemon_threads = True
+            request_queue_size = 128
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                return
+
+            def send_json(self, status, payload):
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                if self.path == "/healthz":
+                    self.send_json(200, {"status": "ok"})
+                    return
+                if self.path == "/v1/models":
+                    self.send_json(200, {"object": "list", "data": [
+                        {"id": "mock-fast", "object": "model", "owned_by": "gatelm-aws-triage"},
+                        {"id": "mock-balanced", "object": "model", "owned_by": "gatelm-aws-triage"},
+                        {"id": "mock-smart", "object": "model", "owned_by": "gatelm-aws-triage"}
+                    ]})
+                    return
+                self.send_json(404, {"error": {"code": "not_found"}})
+
+            def do_POST(self):
+                if self.path != "/v1/chat/completions":
+                    self.send_json(404, {"error": {"code": "not_found"}})
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length) if length else b"{}"
+                try:
+                    payload = json.loads(raw.decode("utf-8"))
+                except Exception:
+                    payload = {}
+                time.sleep(latency_ms / 1000)
+                model = str(payload.get("model") or "mock-balanced").strip() or "mock-balanced"
+                self.send_json(200, {
+                    "id": "mock_chatcmpl_aws_triage",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Mock response generated by GateLM AWS triage mock provider."
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+                })
+
+        ConcurrentHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8090:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [role_internal]
+
+
+  web:
+    profiles: [edge]
+    image: gatelm/web:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      GATELM_PUBLIC_DOMAIN: ${GATELM_PUBLIC_DOMAIN}
+      GATELM_PUBLIC_BASE_URL: ${GATELM_PUBLIC_BASE_URL}
+      GATELM_CHAT_WEB_ORIGIN: ${GATELM_CHAT_WEB_ORIGIN}
+      GATELM_CONTROL_PLANE_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:3001
+      GATELM_GATEWAY_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:-10.78.2.20}:8080
+      GATELM_GATEWAY_OBSERVABILITY_INTERNAL_TOKEN: ${GATEWAY_OBSERVABILITY_INTERNAL_TOKEN:?GATEWAY_OBSERVABILITY_INTERNAL_TOKEN is required}
+      GATELM_CONTROL_PLANE_TENANT_ID: ${GATELM_CONTROL_PLANE_TENANT_ID:-${GATELM_DEMO_TENANT_ID}}
+      GATELM_CONTROL_PLANE_PROJECT_ID: ${GATELM_CONTROL_PLANE_PROJECT_ID:-${GATELM_DEMO_PROJECT_ID}}
+      GATELM_CONTROL_PLANE_APPLICATION_ID: ${GATELM_CONTROL_PLANE_APPLICATION_ID:-${GATELM_DEMO_APPLICATION_ID}}
+      GATELM_DEMO_PROJECT_ID: ${GATELM_DEMO_PROJECT_ID}
+      GATELM_LEGACY_CUSTOMER_DEMO_ENABLED: "false"
+      GATELM_WEB_RATE_LIMIT_MAX_ATTEMPTS: ${GATELM_WEB_RATE_LIMIT_MAX_ATTEMPTS}
+      GATELM_GATEWAY_API_KEY: ${GATELM_GATEWAY_API_KEY:?GATELM_GATEWAY_API_KEY is required}
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [role_internal]
+
+  chat-web:
+    profiles: [edge]
+    image: gatelm/chat-web:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/chat-web.Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "3002"
+      HOSTNAME: 0.0.0.0
+      GATELM_CHAT_WEB_ORIGIN: ${GATELM_CHAT_WEB_ORIGIN}
+      TENANT_CHAT_API_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}:3003
+      TENANT_CHAT_WEB_SERVICE_TOKEN: ${TENANT_CHAT_WEB_SERVICE_TOKEN:?TENANT_CHAT_WEB_SERVICE_TOKEN is required}
+    expose: ["3002"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3002/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [role_internal]
+
+  caddy:
+    profiles: [edge]
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    restart: unless-stopped
+    environment:
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-}
+      GATELM_PUBLIC_DOMAIN: ${GATELM_PUBLIC_DOMAIN:-gatelm.co.kr}
+      GATELM_CHAT_DOMAIN: ${GATELM_CHAT_DOMAIN:-chat.gatelm.co.kr}
+      GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP: ${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:-10.78.2.20}
+      GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP: ${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:-10.78.2.30}
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_EDGE_PRIVATE_IP:-10.78.1.10}:80:80"
+      - "${GATELM_PRODUCTION_DISTRIBUTED_EDGE_PRIVATE_IP:-10.78.1.10}:443:443"
+    volumes:
+      - ${GATELM_PRODUCTION_DISTRIBUTED_CADDYFILE:-./Caddyfile.production-distributed.rehearsal}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      chat-web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [role_internal]
+
+volumes:
+  postgres_data:
+    name: ${GATELM_PRODUCTION_DISTRIBUTED_POSTGRES_VOLUME_NAME:-gatelm-production-distributed-postgres-data}
+  redis_data:
+    name: ${GATELM_PRODUCTION_DISTRIBUTED_REDIS_VOLUME_NAME:-gatelm-production-distributed-redis-data}
+  caddy_data:
+    name: ${GATELM_PRODUCTION_DISTRIBUTED_CADDY_DATA_VOLUME_NAME:-gatelm-production-distributed-caddy-data}
+  caddy_config:
+    name: ${GATELM_PRODUCTION_DISTRIBUTED_CADDY_CONFIG_VOLUME_NAME:-gatelm-production-distributed-caddy-config}
+
+secrets:
+  tenant_chat_workload_signing_jwk:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/tenant-chat/signing.jwk.json
+  tenant_chat_workload_jwks:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/tenant-chat/jwks.json
+  tenant_chat_binding_hmac_keys:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/tenant-chat/binding-hmac-keys.json
+  tenant_chat_content_keys:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/tenant-chat/content-keys.json
+  tenant_chat_cache_keysets:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/tenant-chat/cache-keysets.json
+  tenant_chat_usage_receipt_token:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/tenant-chat/usage-receipt-token
+  rag_content_wrapping_keys:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/content-wrapping-keys.json
+  rag_query_embedding_signing_jwk:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/query-signing.jwk.json
+  rag_query_embedding_binding_hmac_keys:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/query-binding-hmac-keys.json
+  rag_worker_embedding_signing_jwk:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/worker-signing.jwk.json
+  rag_worker_embedding_binding_hmac_keys:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/worker-binding-hmac-keys.json
+  rag_embedding_workload_jwks:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/workload-jwks.json
+  rag_embedding_workload_binding_hmac_keys:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/workload-binding-hmac-keys.json
+  rag_embedding_workload_identities:
+    file: ${GATELM_PRODUCTION_DISTRIBUTED_SECRET_ROOT:-.secrets}/rag/workload-identities.json
+
+networks:
+  role_internal:
+    driver: bridge

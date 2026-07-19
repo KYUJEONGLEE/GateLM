@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "GateLM GitHub Actions OIDC and Systems Manager deployment roles for one AWS triage EC2 instance.",
+  "Description": "GateLM GitHub Actions OIDC and Systems Manager deployment roles for distributed production.",
   "Parameters": {
     "GitHubOrganization": {
       "Type": "String",
@@ -17,7 +17,19 @@
       "Default": "production",
       "AllowedPattern": "[A-Za-z0-9_.-]+"
     },
-    "DeploymentInstanceId": {
+    "EdgeInstanceId": {
+      "Type": "AWS::EC2::Instance::Id"
+    },
+    "GatewayInstanceId": {
+      "Type": "AWS::EC2::Instance::Id"
+    },
+    "DataInstanceId": {
+      "Type": "AWS::EC2::Instance::Id"
+    },
+    "AiInstanceId": {
+      "Type": "AWS::EC2::Instance::Id"
+    },
+    "PiiInstanceId": {
       "Type": "AWS::EC2::Instance::Id"
     },
     "CreateGitHubOidcProvider": {
@@ -107,8 +119,8 @@
     "GitHubDeployRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Allows the approved GateLM production GitHub environment to deploy one EC2 instance through SSM.",
-        "MaxSessionDuration": 3600,
+        "Description": "Allows the approved GateLM production GitHub environment to deploy five production roles through SSM.",
+        "MaxSessionDuration": 10800,
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -146,7 +158,7 @@
               "Version": "2012-10-17",
               "Statement": [
                 {
-                  "Sid": "SendCommandToGateLMInstance",
+                  "Sid": "SendCommandToGateLMDistributedInstances",
                   "Effect": "Allow",
                   "Action": "ssm:SendCommand",
                   "Resource": [
@@ -154,7 +166,19 @@
                       "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript"
                     },
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${DeploymentInstanceId}"
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${EdgeInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${GatewayInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${DataInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${AiInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${PiiInstanceId}"
                     }
                   ]
                 },
@@ -203,9 +227,29 @@
         "Ref": "GateLMEc2SsmInstanceProfile"
       }
     },
-    "DeploymentInstanceId": {
+    "EdgeInstanceId": {
       "Value": {
-        "Ref": "DeploymentInstanceId"
+        "Ref": "EdgeInstanceId"
+      }
+    },
+    "GatewayInstanceId": {
+      "Value": {
+        "Ref": "GatewayInstanceId"
+      }
+    },
+    "DataInstanceId": {
+      "Value": {
+        "Ref": "DataInstanceId"
+      }
+    },
+    "AiInstanceId": {
+      "Value": {
+        "Ref": "AiInstanceId"
+      }
+    },
+    "PiiInstanceId": {
+      "Value": {
+        "Ref": "PiiInstanceId"
       }
     }
   }

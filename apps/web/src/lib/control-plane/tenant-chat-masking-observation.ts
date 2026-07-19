@@ -1,4 +1,7 @@
-import type { LiveRequestSafetyAction } from "@/lib/gateway/live-requests-types";
+import type {
+  LiveRequestCacheStatus,
+  LiveRequestSafetyAction
+} from "@/lib/gateway/live-requests-types";
 
 export type TenantChatMaskingAction = "none" | "redacted" | "blocked" | null;
 export type TenantChatMaskingObservationState = "observed" | "unavailable";
@@ -10,6 +13,15 @@ export type TenantChatMaskingObservation = {
   observationState: TenantChatMaskingObservationState;
   safetyOutcome: TenantChatSafetyOutcome;
 };
+
+export function resolveTenantChatCacheStatus(
+  cacheOutcome: string
+): LiveRequestCacheStatus {
+  if (cacheOutcome === "hit") return "HIT";
+  if (cacheOutcome === "miss") return "MISS";
+  if (cacheOutcome === "off") return "BYPASS";
+  return "NONE";
+}
 
 export function resolveTenantChatMaskingObservation(input: {
   maskingAction: TenantChatMaskingAction;

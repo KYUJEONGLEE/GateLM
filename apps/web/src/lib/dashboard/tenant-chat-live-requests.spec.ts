@@ -1,5 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { resolveTenantChatMaskingObservation } from "@/lib/control-plane/tenant-chat-masking-observation";
+import {
+  resolveTenantChatCacheStatus,
+  resolveTenantChatMaskingObservation
+} from "@/lib/control-plane/tenant-chat-masking-observation";
+
+test("maps Tenant Chat cache outcomes to live-request values", () => {
+  expect(resolveTenantChatCacheStatus("hit")).toBe("HIT");
+  expect(resolveTenantChatCacheStatus("miss")).toBe("MISS");
+  expect(resolveTenantChatCacheStatus("off")).toBe("BYPASS");
+  expect(resolveTenantChatCacheStatus("unknown")).toBe("NONE");
+});
 
 test("maps explicit Tenant Chat masking actions to live-request safety values", () => {
   expect(observation("redacted").liveAction).toBe("REDACTED");

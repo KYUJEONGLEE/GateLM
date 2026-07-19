@@ -34,7 +34,11 @@ jobs:
       DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-      AWS_INSTANCE_ID: ${{ vars.AWS_INSTANCE_ID }}
+      AWS_EDGE_INSTANCE_ID: ${{ vars.AWS_EDGE_INSTANCE_ID }}
+      AWS_GATEWAY_INSTANCE_ID: ${{ vars.AWS_GATEWAY_INSTANCE_ID }}
+      AWS_DATA_INSTANCE_ID: ${{ vars.AWS_DATA_INSTANCE_ID }}
+      AWS_AI_INSTANCE_ID: ${{ vars.AWS_AI_INSTANCE_ID }}
+      AWS_PII_INSTANCE_ID: ${{ vars.AWS_PII_INSTANCE_ID }}
       GATELM_PUBLIC_URL: ${{ vars.GATELM_PUBLIC_URL }}
       GATELM_CHAT_URL: ${{ vars.GATELM_CHAT_URL }}
 
@@ -57,7 +61,11 @@ jobs:
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
           : "${AWS_REGION:?AWS_REGION production variable is required}"
           : "${AWS_ROLE_ARN:?AWS_ROLE_ARN production variable is required}"
-          : "${AWS_INSTANCE_ID:?AWS_INSTANCE_ID production variable is required}"
+          : "${AWS_EDGE_INSTANCE_ID:?AWS_EDGE_INSTANCE_ID production variable is required}"
+          : "${AWS_GATEWAY_INSTANCE_ID:?AWS_GATEWAY_INSTANCE_ID production variable is required}"
+          : "${AWS_DATA_INSTANCE_ID:?AWS_DATA_INSTANCE_ID production variable is required}"
+          : "${AWS_AI_INSTANCE_ID:?AWS_AI_INSTANCE_ID production variable is required}"
+          : "${AWS_PII_INSTANCE_ID:?AWS_PII_INSTANCE_ID production variable is required}"
           : "${GATELM_PUBLIC_URL:?GATELM_PUBLIC_URL production variable is required}"
           : "${GATELM_CHAT_URL:?GATELM_CHAT_URL production variable is required}"
           git fetch --no-tags origin main
@@ -138,13 +146,19 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           role-session-name: gatelm-production-${{ github.run_id }}
+          role-duration-seconds: 10800
 
       - name: Deploy through AWS Systems Manager
+        id: distributed-deploy
         shell: bash
         run: |
           set -euo pipefail
-          bash deploy/aws-triage/scripts/send-ssm-deploy.sh \
-            "$AWS_INSTANCE_ID" \
+          bash deploy/aws-triage/scripts/send-ssm-deploy-distributed.sh \
+            "$AWS_EDGE_INSTANCE_ID" \
+            "$AWS_GATEWAY_INSTANCE_ID" \
+            "$AWS_DATA_INSTANCE_ID" \
+            "$AWS_AI_INSTANCE_ID" \
+            "$AWS_PII_INSTANCE_ID" \
             "$DEPLOY_SHA" \
             "$GATELM_PUBLIC_URL" \
             "$GATELM_CHAT_URL"
@@ -172,3 +186,19 @@ jobs:
           TENANT_CHAT_SMOKE_ORIGIN: ${{ env.GATELM_CHAT_URL }}
           TENANT_CHAT_SMOKE_PASSWORD: ${{ secrets.TENANT_CHAT_SMOKE_PASSWORD }}
         run: node scripts/smoke/tenant-chat-production.mjs
+
+      - name: Roll back distributed application roles after failed smoke
+        if: ${{ failure() && steps.distributed-deploy.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deploy/aws-triage/scripts/send-ssm-deploy-distributed.sh \
+            "$AWS_EDGE_INSTANCE_ID" \
+            "$AWS_GATEWAY_INSTANCE_ID" \
+            "$AWS_DATA_INSTANCE_ID" \
+            "$AWS_AI_INSTANCE_ID" \
+            "$AWS_PII_INSTANCE_ID" \
+            "$DEPLOY_SHA" \
+            "$GATELM_PUBLIC_URL" \
+            "$GATELM_CHAT_URL" \
+            rollback

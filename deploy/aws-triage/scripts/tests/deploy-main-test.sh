@@ -8,6 +8,7 @@ AWS_TRIAGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${AWS_TRIAGE_DIR}/../.." && pwd)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-main.sh"
 SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy.sh"
+DISTRIBUTED_SSM_SCRIPT="${SCRIPT_DIR}/send-ssm-deploy-distributed.sh"
 E5_BUNDLE_SCRIPT="${SCRIPT_DIR}/prepare-gateway-e5-runtime-bundle.sh"
 E5_QUANTIZER_DOCKERFILE="${REPO_ROOT}/infra/docker/e5-artifact-quantizer.Dockerfile"
 E5_QUANTIZER_SCRIPT="${REPO_ROOT}/scripts/routing_difficulty_model/quantize_e5_onnx.py"
@@ -40,7 +41,7 @@ assert_fails_with() {
     fail "Expected failure text was not found: ${expected}"
 }
 
-for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${MAINTENANCE_SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
+for file in "${DEPLOY_SCRIPT}" "${SSM_SCRIPT}" "${DISTRIBUTED_SSM_SCRIPT}" "${MAINTENANCE_SSM_SCRIPT}" "${E5_BUNDLE_SCRIPT}"; do
   bash -n "${file}"
 done
 if python3 --version >/dev/null 2>&1; then
@@ -101,8 +102,13 @@ if (!trustJson.includes(":environment:${GitHubEnvironment}")) {
 
 const policies = resources.GitHubDeployRole.Properties.Policies ?? [];
 const policyJson = JSON.stringify(policies);
-if (!policyJson.includes("AWS-RunShellScript") || !policyJson.includes("${DeploymentInstanceId}")) {
-  throw new Error("SSM SendCommand is not restricted to the deployment instance and document");
+for (const instanceParameter of ["EdgeInstanceId", "GatewayInstanceId", "DataInstanceId", "AiInstanceId", "PiiInstanceId"]) {
+  if (!policyJson.includes(`\${${instanceParameter}}`)) {
+    throw new Error(`SSM SendCommand is missing the ${instanceParameter} restriction`);
+  }
+}
+if (!policyJson.includes("AWS-RunShellScript")) {
+  throw new Error("SSM SendCommand is not restricted to AWS-RunShellScript");
 }
 NODE
 
@@ -111,6 +117,14 @@ grep -Fq "id-token: write" "${WORKFLOW_FILE}" || fail "OIDC permission is missin
 grep -Fq "name: production" "${WORKFLOW_FILE}" || fail "production environment is missing"
 grep -Fq "517a711dbcd0e402f90c77e7e2f81e849156e31d" "${WORKFLOW_FILE}" || \
   fail "AWS credentials action is not pinned"
+grep -Fq "send-ssm-deploy-distributed.sh" "${WORKFLOW_FILE}" || \
+  fail "Production deployment must use the distributed SSM sender"
+grep -Fq "Roll back distributed application roles after failed smoke" "${WORKFLOW_FILE}" || \
+  fail "A failed public or authenticated smoke must roll back distributed application roles"
+for role_variable in AWS_EDGE_INSTANCE_ID AWS_GATEWAY_INSTANCE_ID AWS_DATA_INSTANCE_ID AWS_AI_INSTANCE_ID AWS_PII_INSTANCE_ID; do
+  grep -Fq "${role_variable}" "${WORKFLOW_FILE}" || \
+    fail "Distributed production instance variable is missing: ${role_variable}"
+done
 for required_smoke_secret in \
   'secrets.TENANT_CHAT_SMOKE_EMAIL' \
   'secrets.TENANT_CHAT_SMOKE_PASSWORD'
@@ -472,6 +486,49 @@ if (!remoteScript.includes("deploy-main.sh")) {
 }
 if (!remoteScript.includes("0000000000000000000000000000000000000000")) {
   throw new Error("Deployment SHA was not sent");
+}
+NODE
+
+: > "${fake_log}"
+PATH="${fake_bin}:${PATH}" \
+FAKE_AWS_LOG="${fake_log}" \
+AWS_REGION=ap-northeast-2 \
+GATELM_SSM_POLL_INTERVAL_SECONDS=0 \
+bash "${DISTRIBUTED_SSM_SCRIPT}" \
+  i-0123456789abcde01 \
+  i-0123456789abcde02 \
+  i-0123456789abcde03 \
+  i-0123456789abcde04 \
+  i-0123456789abcde05 \
+  0000000000000000000000000000000000000000 \
+  https://gatelm.co.kr \
+  https://chat.gatelm.co.kr >/dev/null
+
+node - "${fake_log}" <<'NODE'
+const fs = require("node:fs");
+const lines = fs.readFileSync(process.argv[2], "utf8").split(/\r?\n/);
+const parameters = lines
+  .filter((line) => line.startsWith('{"commands":'))
+  .map((line) => JSON.parse(line));
+if (parameters.length !== 5) {
+  throw new Error(`Expected five distributed SSM commands, observed ${parameters.length}`);
+}
+for (const parameter of parameters) {
+  const command = parameter.commands?.[0];
+  const match = command?.match(/^printf '%s' '([A-Za-z0-9+/=]+)' \| base64 --decode \| bash$/);
+  if (!match) throw new Error("Distributed SSM payload is not POSIX-safe");
+  const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
+  if (!remoteScript.includes("production-distributed-deploy-role.sh")) {
+    throw new Error("Distributed bootstrap does not load the role deploy script");
+  }
+  if (remoteScript.includes('\\"')) {
+    throw new Error("Distributed remote Bash arguments contain literal quote characters");
+  }
+}
+const comments = lines.filter((line) => line.startsWith("GateLM distributed deploy "));
+const expectedRoles = ["pii", "ai", "data", "gateway", "edge"];
+if (comments.length !== expectedRoles.length || comments.some((line, index) => !line.endsWith(` ${expectedRoles[index]}`))) {
+  throw new Error(`Unexpected distributed deploy order: ${comments.join(", ")}`);
 }
 NODE
 

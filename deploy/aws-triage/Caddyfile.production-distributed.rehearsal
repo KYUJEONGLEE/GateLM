@@ -1,0 +1,30 @@
+{
+	admin off
+}
+{$GATELM_PUBLIC_DOMAIN:gatelm.co.kr} {
+	tls internal
+	encode zstd gzip
+
+	handle /v1/* {
+		reverse_proxy {$GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP:10.78.2.20}:8080
+	}
+
+	handle /admin/v1/* {
+		reverse_proxy {$GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP:10.78.2.30}:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+www.{$GATELM_PUBLIC_DOMAIN:gatelm.co.kr} {
+	tls internal
+	redir https://{$GATELM_PUBLIC_DOMAIN:gatelm.co.kr}{uri} permanent
+}
+
+{$GATELM_CHAT_DOMAIN:chat.gatelm.co.kr} {
+	tls internal
+	encode zstd gzip
+	reverse_proxy chat-web:3002
+}

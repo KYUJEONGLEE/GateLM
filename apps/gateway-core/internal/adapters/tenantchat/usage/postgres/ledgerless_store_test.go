@@ -51,6 +51,49 @@ func TestLedgerlessTerminalPayloadCarriesBoundedCacheObservability(t *testing.T)
 	}
 }
 
+func TestLedgerlessCacheHitOmitsMissingCompatibilityTier(t *testing.T) {
+	observability := tenantchat.LedgerlessObservability{
+		EffectiveProviderID: "provider_001", EffectiveModelKey: "model_001",
+		SavedCostMicroUSD: 425,
+	}
+	if !validLedgerlessObservability("cache_hit", observability) {
+		t.Fatal("cache hit rejected a compatibility route without tier")
+	}
+	payload, err := ledgerlessTerminalPayload(
+		"event_001",
+		tenantchat.RequestContext{
+			RequestID: "request_001", TurnID: "turn_001", IdempotencyKey: "idem_001",
+			ExecutionScope: tenantchat.ExecutionScope{
+				TenantID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+				Actor:    tenantchat.Actor{UserID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", ActorKind: "tenant_admin"},
+			},
+			Snapshot: tenantchat.SnapshotReference{Version: 3},
+		},
+		tenantruntime.Snapshot{Pricing: tenantruntime.Pricing{Version: 7}},
+		"cache_hit", "", "hit", observability,
+		1500,
+		time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("build ledgerless payload: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("decode ledgerless payload: %v", err)
+	}
+	if _, exists := decoded["effectiveRouteTier"]; exists {
+		t.Fatalf("compatibility route tier must remain unobserved: %+v", decoded)
+	}
+	unknownTier := observability
+	unknownTier.EffectiveRouteTier = "premium"
+	missingProvider := observability
+	missingProvider.EffectiveProviderID = ""
+	if validLedgerlessObservability("cache_hit", unknownTier) ||
+		validLedgerlessObservability("cache_hit", missingProvider) {
+		t.Fatal("cache observability accepted an unknown tier or missing provider")
+	}
+}
+
 func TestLedgerlessLatencyUsesAdmissionLifetimeAndClampsClockSkew(t *testing.T) {
 	startedAt := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
 	if latencyMs := ledgerlessLatencyMs(startedAt, startedAt.Add(1750*time.Millisecond)); latencyMs != 1750 {

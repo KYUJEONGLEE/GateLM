@@ -1,0 +1,51 @@
+name: gatelm-production-distributed
+
+services:
+  pii-service:
+    profiles: [pii]
+    image: gatelm/pii-service:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
+    build:
+      context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
+      dockerfile: infra/docker/ai-service.Dockerfile
+      args:
+        AI_SERVICE_INSTALL_ML_DEPS: "true"
+    restart: unless-stopped
+    environment:
+      AI_SERVICE_HOST: 0.0.0.0
+      AI_SERVICE_PORT: "8001"
+      AI_SERVICE_LOG_LEVEL: INFO
+      AI_SERVICE_ACCESS_LOG_ENABLED: "false"
+      AI_SERVICE_REMOTE_SAFETY_MODE: disabled
+      AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: onnx
+      AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: /models/gatelm--koelectra-small-v3-pii-ner-quantized
+      AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ""
+      AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES: person_name
+      AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS: person_name=0.9
+      AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY: "true"
+      AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED: "true"
+      AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE: "4"
+      AI_SERVICE_ONNX_INTRA_OP_THREADS: "4"
+      AI_SERVICE_ONNX_INTER_OP_THREADS: "1"
+      AI_SERVICE_ONNX_ALLOW_SPINNING: "false"
+      TENANT_CHAT_RAG_ENABLED: "false"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_OFFLINE: "1"
+      DEPLOYMENT_MODE: aws
+    ports:
+      - "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP:-10.78.2.50}:8001:8001"
+    volumes:
+      - ${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR:?PII model directory is required}:/models/gatelm--koelectra-small-v3-pii-ner-quantized:ro
+    cpus: "4.0"
+    mem_limit: 4g
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=2).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [role_internal]
+
+networks:
+  role_internal:
+    driver: bridge
