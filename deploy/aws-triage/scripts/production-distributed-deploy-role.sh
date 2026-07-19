@@ -26,7 +26,7 @@ mode="deploy"
 while (( $# > 0 )); do
   case "$1" in
     --role)
-      [[ $# -ge 2 ]] || deploy_fail "--role requires edge, gateway, data, or ai."
+      [[ $# -ge 2 ]] || deploy_fail "--role requires edge, gateway, data, ai, or pii."
       role="$2"
       shift 2
       ;;
@@ -47,7 +47,7 @@ while (( $# > 0 )); do
   esac
 done
 
-case "${role}" in edge|gateway|data|ai) ;; *) deploy_fail "A valid --role is required." ;; esac
+case "${role}" in edge|gateway|data|ai|pii) ;; *) deploy_fail "A valid --role is required." ;; esac
 [[ "${target_sha}" =~ ^[0-9a-f]{40}$ ]] || deploy_fail "A full lowercase Git SHA is required."
 
 repo_dir="${GATELM_PRODUCTION_DISTRIBUTED_REPO_DIR:-/home/ubuntu/GateLM}"
@@ -100,10 +100,13 @@ set_env_value() {
 
 artifact_paths=(
   docker-compose.production.distributed.yml
+  docker-compose.production.pii.yml
   Caddyfile.production-distributed.production
   Caddyfile.production-distributed.rehearsal
   scripts/perf-lib.sh
   scripts/prepare-gateway-e5-runtime-bundle.sh
+  scripts/prepare-production-pii-model.sh
+  pii-v36-model-manifest.sha256
   scripts/production-distributed-lib.sh
   scripts/production-distributed-preflight.sh
   scripts/production-distributed-up.sh
@@ -266,6 +269,10 @@ set_env_value GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG "${target_sha:0:12}"
 if [[ "${role}" == "gateway" ]]; then
   deploy_log "Preparing the pinned Gateway E5 runtime bundle."
   bash "${repo_dir}/deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh" "${repo_dir}"
+fi
+if [[ "${role}" == "pii" ]]; then
+  deploy_log "Preparing the pinned PII model bundle."
+  bash "${orchestration_dir}/scripts/prepare-production-pii-model.sh"
 fi
 
 run_preflight

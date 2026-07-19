@@ -11,7 +11,7 @@ check_dependencies=false
 while (( $# > 0 )); do
   case "$1" in
     --role)
-      [[ $# -ge 2 ]] || production_fail "--role requires edge, gateway, data, or ai."
+      [[ $# -ge 2 ]] || production_fail "--role requires edge, gateway, data, ai, or pii."
       role="$2"
       shift 2
       ;;
@@ -22,7 +22,7 @@ while (( $# > 0 )); do
     *) production_fail "Unknown option: $1" ;;
   esac
 done
-case "${role}" in edge|gateway|data|ai) ;; *) production_fail "A valid --role is required." ;; esac
+case "${role}" in edge|gateway|data|ai|pii) ;; *) production_fail "A valid --role is required." ;; esac
 
 perf_check_docker
 production_load_env
@@ -53,6 +53,7 @@ case "${role}" in
   ai)
     production_require_active_env ai AI_SERVICE_RAG_SERVICE_TOKEN
     ;;
+  pii) ;;
 esac
 
 production_compose "${role}" config --quiet
@@ -66,6 +67,11 @@ if [[ "${role}" == "data" ]]; then
   command -v aws >/dev/null 2>&1 || production_fail "AWS CLI is required on the Data host."
   aws sts get-caller-identity --output text --query Account >/dev/null
   aws s3api head-bucket --bucket "${RAG_S3_BUCKET}" >/dev/null
+fi
+if [[ "${role}" == "pii" ]]; then
+  command -v aws >/dev/null 2>&1 || production_fail "AWS CLI is required on the PII host."
+  command -v sha256sum >/dev/null 2>&1 || production_fail "sha256sum is required on the PII host."
+  production_assert_pii_model_artifact
 fi
 
 if [[ "${check_dependencies}" == "true" ]]; then
@@ -88,7 +94,7 @@ if [[ "${check_dependencies}" == "true" ]]; then
       production_assert_tcp "Private Gateway" "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_PRIVATE_IP}" 8081
       production_assert_tcp "AI Service" "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" 8001
       ;;
-    ai) ;;
+    ai|pii) ;;
   esac
 fi
 
