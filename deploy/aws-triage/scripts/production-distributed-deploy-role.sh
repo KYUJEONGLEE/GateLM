@@ -59,7 +59,7 @@ lock_file="/tmp/gatelm-production-distributed-${role}.lock"
 cutover_started=false
 deployment_succeeded=false
 
-for command_name in awk bash chmod chown cp date df docker flock git install mkdir mktemp mv rm stat tar tr; do
+for command_name in awk bash chmod chown cp curl date df docker flock git install mkdir mktemp mv rm stat tar timeout tr; do
   need_command "${command_name}"
 done
 docker compose version >/dev/null 2>&1 || deploy_fail "Docker Compose v2 is required."
@@ -132,6 +132,14 @@ sync_artifacts() {
   done
 }
 
+run_preflight() {
+  local args=(--role "${role}")
+  if [[ "${role}" == "gateway" ]]; then
+    args+=(--check-dependencies)
+  fi
+  bash "${orchestration_dir}/scripts/production-distributed-preflight.sh" "${args[@]}"
+}
+
 restore_state() {
   local previous_sha
   [[ -f "${state_dir}/previous-sha" ]] || deploy_fail "Previous SHA evidence is missing."
@@ -182,7 +190,7 @@ if [[ "${mode}" == "check" ]]; then
     deploy_fail "Current repository SHA does not match ${target_sha}."
   grep -Fqx "GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA=${target_sha}" "${env_file}" || \
     deploy_fail "Current production overlay does not match ${target_sha}."
-  bash "${orchestration_dir}/scripts/production-distributed-preflight.sh" --role "${role}"
+  run_preflight
   verify_role_containers
   deploy_log "Read-only role check passed for ${role} at ${target_sha}."
   exit 0
@@ -260,7 +268,7 @@ if [[ "${role}" == "gateway" ]]; then
   bash "${repo_dir}/deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh" "${repo_dir}"
 fi
 
-bash "${orchestration_dir}/scripts/production-distributed-preflight.sh" --role "${role}"
+run_preflight
 # shellcheck source=/dev/null
 source "${orchestration_dir}/scripts/production-distributed-lib.sh"
 production_load_env
