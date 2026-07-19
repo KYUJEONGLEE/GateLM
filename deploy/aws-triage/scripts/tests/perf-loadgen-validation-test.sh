@@ -5,8 +5,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PERF_SCRIPTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RUNNER_PATH="${PERF_SCRIPTS_DIR}/perf-loadgen-run.sh"
+K6_SCRIPT_PATH="$(cd "${PERF_SCRIPTS_DIR}/../../.." && pwd)/scripts/perf/k6-gateway-load.js"
 
 grep -Fq 'safe.directory=${REPO_ROOT}' "${RUNNER_PATH}"
+grep -Fq 'hostnameFromBaseUrl(gatewayBaseUrl)' "${K6_SCRIPT_PATH}"
+if grep -Fq 'new URL(gatewayBaseUrl)' "${K6_SCRIPT_PATH}"; then
+  printf '%s\n' "k6 script must not depend on the browser URL global" >&2
+  exit 1
+fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT

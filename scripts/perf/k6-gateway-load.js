@@ -48,6 +48,7 @@ const evidenceBasename = optionalIdentifierEnv(
   "GATELM_K6_EVIDENCE_BASENAME",
   "",
 );
+const gatewayHostname = hostnameFromBaseUrl(gatewayBaseUrl);
 
 if (
   !allowedGatewayBaseUrls.has(gatewayBaseUrl) &&
@@ -79,7 +80,7 @@ if (gatewayBaseUrl.startsWith("https://") && !edgePrivateIp) {
 
 export const options = {
   hosts: edgePrivateIp
-    ? { [new URL(gatewayBaseUrl).hostname]: edgePrivateIp }
+    ? { [gatewayHostname]: edgePrivateIp }
     : {},
   insecureSkipTLSVerify: tlsInsecure,
   scenarios: {
@@ -334,6 +335,16 @@ function optionalIdentifierEnv(name, fallback) {
 
 function normalizeBaseUrl(value) {
   return String(value).trim().replace(/\/+$/, "");
+}
+
+function hostnameFromBaseUrl(value) {
+  const match = String(value).match(
+    /^https?:\/\/([^\/:?#]+)(?::[0-9]{1,5})?$/,
+  );
+  if (!match) {
+    throw new Error("Gateway base URL must contain only a hostname and optional port.");
+  }
+  return match[1];
 }
 
 function isExplicitPrivateMockTarget(value) {
