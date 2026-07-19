@@ -46,7 +46,7 @@ observed_archive_sha="$(sha256sum "${archive}" | awk '{print $1}')"
 while IFS= read -r entry; do
   [[ -n "${entry}" ]] || continue
   case "${entry}" in
-    .|./|./config.json|./export-report.json|./model.onnx|./special_tokens_map.json|./tokenizer.json|./tokenizer_config.json|./vocab.txt) ;;
+    .|./|config.json|./config.json|export-report.json|./export-report.json|model.onnx|./model.onnx|special_tokens_map.json|./special_tokens_map.json|tokenizer.json|./tokenizer.json|tokenizer_config.json|./tokenizer_config.json|vocab.txt|./vocab.txt) ;;
     *) production_fail "PII model archive contains an unexpected path." ;;
   esac
 done < <(tar -tzf "${archive}")

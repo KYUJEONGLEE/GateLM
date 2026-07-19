@@ -39,7 +39,7 @@ services:
     mem_limit: 4g
     pids_limit: 128
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=2).read()\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=2).read()\""]
       interval: 10s
       timeout: 5s
       retries: 30

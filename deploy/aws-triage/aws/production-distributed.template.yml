@@ -786,6 +786,8 @@ Resources:
           systemctl enable --now docker
           usermod -aG docker ubuntu
           install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          install -d -o root -g root -m 0755 /opt/gatelm/pii-v36
+          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v36/releases
           install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v36/releases/171bbde0
           printf '%s\n' pii > /etc/gatelm-production-role
       Tags:
