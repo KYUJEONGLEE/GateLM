@@ -161,10 +161,10 @@ func main() {
 		log.Printf("gateway-core difficulty E5 shadow initialized; product routing unchanged")
 	}
 	if difficultyRemoteStatus == DifficultyRemoteRuntimeUnavailable {
-		log.Printf("gateway-core remote difficulty experiment unavailable; auto routing falls back to rule difficulty")
+		log.Printf("gateway-core remote difficulty runtime unavailable; auto routing falls back to rule difficulty")
 	}
 	if difficultyRemote != nil {
-		log.Printf("gateway-core remote difficulty experiment initialized; AI Service E5 is authoritative for eligible auto routes")
+		log.Printf("gateway-core remote difficulty runtime initialized; AI Service E5 is authoritative for eligible auto routes")
 	}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)

@@ -20,7 +20,7 @@ type difficultySemanticRuntimeJob struct {
 }
 
 // DifficultySemanticClassifier is the hot-path boundary shared by the
-// process-local E5 runtime and contract-gated experimental remote runtimes.
+// process-local E5 runtime and contract-gated remote runtimes.
 // Any non-ready result keeps the existing rule-based difficulty authoritative.
 type DifficultySemanticClassifier interface {
 	Classify(context.Context, PromptFeatures, string) DifficultySemanticShadowResult

@@ -22,7 +22,7 @@ const (
 	ModelVersion             = "difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1"
 	ModelContentHash         = "sha256:4c2c4f516206530d3b3f9c393b0633b7694a2e0aa5e20400d65faf088a184f5d"
 	ServiceTokenHeader       = "X-GateLM-AI-Service-Token"
-	DefaultTimeout           = 100 * time.Millisecond
+	DefaultTimeout           = 250 * time.Millisecond
 	DefaultMaximumConcurrent = 64
 	maximumResponseBytes     = 4096
 )
@@ -36,7 +36,7 @@ type Config struct {
 	Observer          Observer
 }
 
-// Observation contains aggregate-only experiment telemetry. It deliberately
+// Observation contains aggregate-only remote inference telemetry. It deliberately
 // excludes request text, feature vectors, model scores, and identifiers.
 type Observation struct {
 	Status   string
@@ -45,7 +45,7 @@ type Observation struct {
 
 type Observer func(Observation)
 
-// Classifier calls the private AI Service E5 experiment without persisting or
+// Classifier calls the private AI Service E5 runtime without persisting or
 // logging instruction text, rule vectors, or response material. Any transport,
 // timeout, saturation, or validation failure returns a bounded status so the
 // caller can retain the existing rule-based difficulty.
@@ -107,7 +107,7 @@ func (classifier *Classifier) Classify(
 	if classifier == nil || classifier.closed.Load() {
 		return statusResult(routingdomain.DifficultySemanticShadowUnavailable)
 	}
-	remoteInput, ok := routingdomain.DifficultyRemoteInputForExperiment(features, category)
+	remoteInput, ok := routingdomain.BuildDifficultyRemoteInput(features, category)
 	if !ok {
 		return statusResult(routingdomain.DifficultySemanticShadowNotApplicable)
 	}

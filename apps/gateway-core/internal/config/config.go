@@ -353,11 +353,11 @@ func LoadWithError() (Config, error) {
 	}
 	difficultyE5ShadowEnabled := envBool("GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED", false)
 	if enabledCount(difficultyE5RuntimeEnabled, difficultyRemoteEnabled, difficultyE5ShadowEnabled) > 1 {
-		return Config{}, errors.New("local difficulty E5 runtime, remote difficulty experiment, and shadow cannot be enabled together")
+		return Config{}, errors.New("local difficulty E5 runtime, remote difficulty runtime, and shadow cannot be enabled together")
 	}
 	difficultyRemoteTimeout, difficultyRemoteTimeoutErr := envDurationMillisInRange(
 		"GATEWAY_DIFFICULTY_REMOTE_TIMEOUT_MS",
-		100,
+		250,
 		1,
 		1000,
 	)

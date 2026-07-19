@@ -4,9 +4,9 @@
 |---|---|
 | Status | Active routing target contract + authoritative 106D model-path difficulty runtime |
 | Applies to | General Gateway category and difficulty classification hot path |
-| Canonical implementation | Go structs and deterministic local inference |
+| Canonical implementation | Go feature extraction + private AI Service deterministic E5/ONNX inference |
 | Active entrypoint | [`README.md`](README.md) |
-| Last verified | 2026-07-16 |
+| Last verified | 2026-07-20 |
 
 이 문서는 일반 Gateway에서 앞으로 사용하는 category·difficulty 분류 구현 구조를 정의한다. Category와 difficulty의 의미, 허용 값, routing policy 연결은 [`contracts.md`](contracts.md)가 정의하고, 이 문서는 그 의미를 계산하는 canonical 내부 파이프라인을 정의한다. Logistic Regression 입력 encoder의 exact v1 계약은 [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md)가 정의한다.
 
@@ -129,7 +129,7 @@ Semantic encoder execution shape는 `difficulty-e5-single-request-execution.2026
 
 Model path의 calibrated `0.8`은 평가 모집단에서 비슷한 score를 받은 표본의 실제 `complex` 비율이 약 80%에 가깝도록 보정됐다는 뜻이다. 개별 요청이 절대적으로 80% 확률로 complex임을 보장하지 않으며 dataset 구성, sample size, category 분포와 distribution drift에 영향을 받는다. Confidence, SLA 또는 개별 요청의 확정적 진실로 해석하지 않는다. 두 deterministic sentinel은 calibration bin, log loss와 Brier score에서 제외하고 model-path calibration과 end-to-end hybrid directional error를 분리해서 보고한다.
 
-현재 as-built에는 `difficulty-feature-vector.v1` encoder, [`difficulty-logistic-training.md`](difficulty-logistic-training.md)의 offline tooling, strict 106D codegen profile과 opt-in request shadow evaluator가 존재한다. Immutable artifact `difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1`은 PCA, Logistic Regression, Platt, `0.096`과 component/bundle/content hash를 고정한다. Pure Go model-path seam은 `DifficultyFeatures + pooled float32[384]`를 받아 `42D rule + PCA 64D` final score를 numeric parity로 재현하며 JSON/file I/O와 success-path heap allocation을 사용하지 않는다. Optional Linux amd64 profile은 이 bundle과 local E5 tokenizer/ONNX encoder를 request shadow runner에 연결하지만 `SimpleRouter`의 rule result, RuntimeSnapshot과 product route decision에는 연결하지 않는다. Current product runtime은 계속 rule-based classifier를 사용하고 `productRuntimeChanged=false`다.
+현재 as-built에는 `difficulty-feature-vector.v1` encoder, [`difficulty-logistic-training.md`](difficulty-logistic-training.md)의 offline tooling, strict 106D artifact와 private AI Service runtime이 존재한다. Immutable artifact `difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1`은 PCA, Logistic Regression, Platt, `0.096`과 component/bundle/content hash를 고정한다. Gateway는 masking 이후 instruction text와 exact 42D vector만 private authenticated endpoint에 전송하고, AI Service는 pinned E5 QInt8 ONNX encoder와 동일 artifact로 `simple | complex`를 반환한다. `ready` 결과는 `SimpleRouter`의 auto-routing decision에 사용하고 non-ready 결과는 요청 단위 rule difficulty로 fallback한다. Local Gateway E5 runtime은 비교·이전 SHA rollback compatibility로만 유지한다.
 
 Offline evaluator의 artifact 사용은 명시적인 `-difficulty-shadow-model-artifact` 입력에만 반응한다. 이 flag는 Gateway request shadow의 scope opt-in이나 product runtime activation을 대신하지 않는다.
 
@@ -142,15 +142,15 @@ Offline evaluator의 artifact 사용은 명시적인 `-difficulty-shadow-model-a
 다음 동작은 authoritative Gateway product decision path에 추가하지 않는다.
 
 - feature 추출을 위한 외부 LLM 호출
-- 외부 또는 network embedding 호출
-- 별도 네트워크 요청
+- 외부 embedding 또는 Provider 호출
+- 계약된 private AI Service endpoint 이외의 별도 네트워크 요청
 - clock 또는 randomness에 의존하는 score 계산
 - runtime model 학습 또는 calibrator 재학습
 - feature 객체의 JSON 변환과 재파싱
 
 Unicode compatibility normalization, bounded head+tail scan, code-fence 분리, 목록 구조 추출, whitespace 정규화, 토큰화와 길이 계산은 `ExtractPromptFeatures`에서 한 번만 수행한다. Category 분류와 difficulty 분류는 같은 `PromptFeatures` 값을 공유한다.
 
-Package-private `difficultyEmbeddingInput`은 semantic encoder의 유일한 input boundary다. 의미 있는 `instructionText`만 반환하며 `normalizedText`, `payloadText` 또는 raw prompt로 fallback하지 않는다. Payload-only 또는 의미 없는 instruction이면 encoder candidate가 없다고 반환한다. Approved offline tooling과 Gateway runtime evaluator는 이 exact boundary만 process-local에서 사용할 수 있으며 반환 text를 report, log, metric, lock manifest 또는 artifact에 저장하지 않는다. Empty input은 tokenizer 이전에 `not_applicable`로 제외하고 zero vector로 교정하지 않는다. Canonical component는 [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md)의 pinned E5 QInt8, attention-mask mean pooling, train-only PCA 384→64와 post-PCA L2를 사용한다. Checked-in selected 106D Go bundle은 pooled 384D 이후의 PCA, final difficulty head, Platt와 threshold만 소유한다. Bundle은 codegen 시 JSON을 검증하고 runtime에는 고정 배열만 남기며 request마다 artifact shape/hash를 재검증하지 않는다. Optional E5 runtime profile은 global enable일 때 시작 시 전체 inference smoke를 수행하고, worker 1개와 bounded 대기 job 4개의 synchronous dispatcher를 `SimpleRouter`에 주입한다. Bundle은 current decision boundary와 일치하며 historical baseline waiver를 허용하지 않는다. `ready` semantic difficulty는 auto-routing matrix lookup의 권위값이고, `not_applicable | unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`는 해당 요청의 rule difficulty를 유지한다. Category와 `difficulty-feature-vector.v1` 42차원 외부 계약은 변경되지 않는다.
+Package-private `difficultyEmbeddingInput`은 semantic encoder의 유일한 input boundary다. 의미 있는 `instructionText`만 반환하며 `normalizedText`, `payloadText` 또는 raw prompt로 fallback하지 않는다. Payload-only 또는 의미 없는 instruction이면 encoder candidate가 없다고 반환한다. Approved offline tooling과 Gateway runtime은 이 exact boundary만 사용할 수 있으며 반환 text를 report, log, metric, lock manifest 또는 artifact에 저장하지 않는다. Empty input은 tokenizer 이전에 `not_applicable`로 제외하고 zero vector로 교정하지 않는다. Canonical component는 [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md)의 pinned E5 QInt8, attention-mask mean pooling, train-only PCA 384→64와 post-PCA L2를 사용한다. AI Service는 시작 시 manifest, model artifact, tokenizer와 ONNX hash를 검증하고 warmup한 뒤에만 `/readyz`를 통과한다. Authoritative execution은 single process, batch 1, wait 0ms, worker 4, bounded queue 16, ONNX intra/inter-op 1/1이다. `ready` semantic difficulty는 auto-routing matrix lookup의 권위값이고, `not_applicable | unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`는 해당 요청의 rule difficulty를 유지한다. Category와 `difficulty-feature-vector.v1` 42차원 외부 계약은 변경되지 않는다.
 
 ## 4. Compatibility Policy
 

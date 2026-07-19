@@ -18,9 +18,9 @@ func TestDifficultyRemoteRequiresExplicitOptIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.DifficultyRemote.Enabled {
-		t.Fatal("remote difficulty experiment must be disabled by default")
+		t.Fatal("remote difficulty runtime must be disabled by default")
 	}
-	if cfg.DifficultyRemote.Timeout != 100*time.Millisecond || cfg.DifficultyRemote.MaximumConcurrent != 64 {
+	if cfg.DifficultyRemote.Timeout != 250*time.Millisecond || cfg.DifficultyRemote.MaximumConcurrent != 64 {
 		t.Fatalf("unexpected defaults: %#v", cfg.DifficultyRemote)
 	}
 }

@@ -49,11 +49,11 @@ func TestDifficultySemanticInputForOfflineMatchesPackagePrivateBoundary(t *testi
 	}
 }
 
-func TestDifficultyRemoteInputForExperimentUsesInstructionAndExact42DVector(t *testing.T) {
+func TestBuildDifficultyRemoteInputUsesInstructionAndExact42DVector(t *testing.T) {
 	t.Parallel()
 
 	features := ExtractPromptFeatures("Explain OAuth briefly.\n```\nraw payload must stay excluded\n```")
-	input, ok := DifficultyRemoteInputForExperiment(features, CategoryGeneral)
+	input, ok := BuildDifficultyRemoteInput(features, CategoryGeneral)
 	if !ok {
 		t.Fatal("expected remote input to be applicable")
 	}

@@ -1,7 +1,7 @@
 package routing
 
 // DifficultyRemoteInferenceInput is an ephemeral, request-local transfer
-// object for the disabled-by-default remote E5 experiment. InstructionText is
+// object for authoritative remote E5 inference. InstructionText is
 // sensitive request material and must not be persisted or logged. RuleVector
 // contains only the stable 42D difficulty-feature-vector.v1 values.
 type DifficultyRemoteInferenceInput struct {
@@ -26,11 +26,9 @@ func DifficultySemanticInputForOffline(features PromptFeatures) (string, bool) {
 	return difficultyEmbeddingInput(features)
 }
 
-// DifficultyRemoteInputForExperiment builds the exact instruction and rule
-// vector consumed by the experimental remote E5 classifier. It deliberately
-// remains outside active routing contracts until parity and performance gates
-// are met.
-func DifficultyRemoteInputForExperiment(
+// BuildDifficultyRemoteInput builds the exact instruction and rule vector
+// consumed by the private remote E5 classifier.
+func BuildDifficultyRemoteInput(
 	features PromptFeatures,
 	category string,
 ) (DifficultyRemoteInferenceInput, bool) {

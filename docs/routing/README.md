@@ -6,7 +6,7 @@
 | Applies to | General Gateway routing, Control Plane routing policy, published RuntimeSnapshot routing |
 | Schema version | `gatelm.routing-policy.v2` |
 | Active entrypoint | [`../current/README.md`](../current/README.md) |
-| Last verified | 2026-07-14 |
+| Last verified | 2026-07-20 |
 
 이 폴더는 일반 Gateway 라우팅의 현재 기준이다. [`contracts.md`](contracts.md)가 의미 계약이고, [`classification-pipeline.md`](classification-pipeline.md)가 category·difficulty 분류의 active 구현 구조이며, `schemas/`와 `fixtures/`는 정책 계약의 machine-readable pairing이다.
 
@@ -18,6 +18,8 @@
 | [`classification-pipeline.md`](classification-pipeline.md) | 공통 feature 추출, category 결과, category-aware difficulty 분류의 canonical 내부 구조 |
 | [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md) | `difficulty-feature-vector.v1`의 42차원 순서, scaling, enum과 zero-fill 계약 |
 | [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | Owner-approved 500건의 300/100/100 split, exact 42D·106D·118D offline candidate 학습·artifact·비활성 selection evidence 경계 |
+| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64와 verified AI Service runtime bundle |
+| [`remote-e5-inference-experiment.md`](remote-e5-inference-experiment.md) | Gateway local E5 병목의 측정 근거, private AI Service 전환 결정과 운영 guardrail |
 | [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 전역 Simple/Complex/단일 fallback을 5 category × 2 difficulty에 투영하는 routing policy v2 schema |
 | [`fixtures/routing-policy.fixture.json`](fixtures/routing-policy.fixture.json) | 모든 셀이 `mock-balanced`인 안전한 bootstrap fixture |
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |
@@ -28,9 +30,7 @@
 | Path | Status | Scope |
 |---|---|---|
 | [`difficulty-feature-vector-v2-proposal.md`](difficulty-feature-vector-v2-proposal.md) | Proposed; not active | Exact v1 42D를 보존하고 `instructionText` projection과 4-head/12D probability를 분리해 비교하는 offline/shadow difficulty candidate |
-| [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Canonical offline + authoritative Gateway model-path difficulty runtime | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64, verified local bundle과 bounded optional Linux amd64 runtime 계약 |
 | [`difficulty-decision-loss-threshold-experiment.md`](difficulty-decision-loss-threshold-experiment.md) | Offline experiment; not active | 고정 threshold grid의 FP/FN, Expected Decision Loss, break-even `C_FN`과 safety-constrained optimum을 aggregate로 비교 |
-| [`remote-e5-inference-experiment.md`](remote-e5-inference-experiment.md) | Runtime experiment; not active | Gateway 로컬 E5 병목을 private AI Service로 분리해 parity, Gateway/AI CPU, routing 지연과 fallback을 비교하는 제안 |
 
 이 표의 문서는 active contract가 아니다. 별도 승인과 source-of-truth 승격 전에는 Gateway hot path, routing policy 또는 제품 surface의 근거로 사용할 수 없다.
 
@@ -58,4 +58,4 @@ corepack pnpm run verify:v2-docs
 
 Local pinned E5 artifact cache와 Docker가 준비된 환경에서는 `corepack pnpm run verify:v2.1-gateway-e5-shadow`로 Linux amd64 native/Python parity, optional image build와 startup smoke를 추가 검증한다. 이 명령은 runtime download를 수행하지 않는다.
 
-106D difficulty runtime의 활성화, 장애 시 rule fallback, memory guardrail과 rollback 절차는 [`../testing/difficulty-live-shadow-runbook.md`](../testing/difficulty-live-shadow-runbook.md)를 따른다. Historical request shadow는 runtime과 동시에 활성화할 수 없다.
+106D difficulty runtime의 활성화, 장애 시 rule fallback, worker/queue guardrail과 rollback 절차는 [`contracts.md`](contracts.md)와 [`remote-e5-inference-experiment.md`](remote-e5-inference-experiment.md)를 따른다. Historical request shadow와 local/remote runtime은 동시에 활성화할 수 없다.

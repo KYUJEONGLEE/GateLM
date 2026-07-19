@@ -230,9 +230,7 @@ services:
     image: gatelm/gateway-core:production-distributed-${GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG:?production image tag is required}
     build:
       context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
-      dockerfile: infra/docker/gateway-core-e5-runtime.Dockerfile
-      additional_contexts:
-        difficulty_e5: ${GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT:-../../.tmp/gateway-e5-runtime-bundle}
+      dockerfile: infra/docker/gateway-core.Dockerfile
     restart: unless-stopped
     user: "${TENANT_CHAT_RUNTIME_UID:-1000}:${TENANT_CHAT_RUNTIME_GID:-1000}"
     environment:
@@ -246,9 +244,13 @@ services:
       GATEWAY_OBSERVABILITY_AUTH_REQUIRED: "true"
       GATEWAY_CONTROL_PLANE_TIMEOUT_MS: ${GATEWAY_CONTROL_PLANE_TIMEOUT_MS}
       GATEWAY_RUNTIME_SNAPSHOT_MODE: ${GATEWAY_RUNTIME_SNAPSHOT_MODE}
-      GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "true"
-      GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_E5_RUNTIME_TIMEOUT_MS:-100}
+      GATEWAY_DIFFICULTY_E5_RUNTIME_ENABLED: "false"
       GATEWAY_DIFFICULTY_E5_SHADOW_ENABLED: "false"
+      GATEWAY_DIFFICULTY_REMOTE_ENABLED: "true"
+      GATEWAY_DIFFICULTY_REMOTE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8001/internal/routing/difficulty/v1/classify
+      GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN: ${GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN:-}
+      GATEWAY_DIFFICULTY_REMOTE_TIMEOUT_MS: ${GATEWAY_DIFFICULTY_REMOTE_TIMEOUT_MS:-250}
+      GATEWAY_DIFFICULTY_REMOTE_MAX_CONCURRENT: ${GATEWAY_DIFFICULTY_REMOTE_MAX_CONCURRENT:-64}
       GATEWAY_PROVIDER_TIMEOUT_MS: ${GATEWAY_PROVIDER_TIMEOUT_MS:-60000}
       MOCK_PROVIDER_BASE_URL: http://${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8090
       GATEWAY_DEFAULT_PROVIDER: ${GATEWAY_DEFAULT_PROVIDER}
@@ -335,7 +337,8 @@ services:
       context: ${GATELM_PRODUCTION_DISTRIBUTED_BUILD_CONTEXT:-../..}
       dockerfile: infra/docker/ai-service.Dockerfile
       args:
-        AI_SERVICE_INSTALL_ML_DEPS: ${AI_SERVICE_INSTALL_ML_DEPS}
+        AI_SERVICE_INSTALL_ML_DEPS: "true"
+        AI_SERVICE_ML_EXTRA: routing
     restart: unless-stopped
     environment:
       AI_SERVICE_HOST: 0.0.0.0
@@ -364,18 +367,29 @@ services:
       AI_SERVICE_RAG_CHUNK_TARGET_TOKENS: ${AI_SERVICE_RAG_CHUNK_TARGET_TOKENS:-600}
       AI_SERVICE_RAG_CHUNK_OVERLAP_TOKENS: ${AI_SERVICE_RAG_CHUNK_OVERLAP_TOKENS:-100}
       AI_SERVICE_RAG_CHUNK_MAX_TOKENS: ${AI_SERVICE_RAG_CHUNK_MAX_TOKENS:-900}
+      AI_SERVICE_ROUTING_DIFFICULTY_ENABLED: "true"
+      AI_SERVICE_ROUTING_DIFFICULTY_SERVICE_TOKEN: ${GATEWAY_DIFFICULTY_REMOTE_SERVICE_TOKEN:-}
+      AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT: ${AI_SERVICE_ROUTING_DIFFICULTY_MAX_CONCURRENT:-16}
+      AI_SERVICE_ROUTING_DIFFICULTY_WORKER_COUNT: ${AI_SERVICE_ROUTING_DIFFICULTY_WORKER_COUNT:-4}
+      AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE: ${AI_SERVICE_ROUTING_DIFFICULTY_BATCH_SIZE:-1}
+      AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS: ${AI_SERVICE_ROUTING_DIFFICULTY_BATCH_MAX_WAIT_MS:-0}
+      AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS: ${AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTRA_OP_THREADS:-1}
+      AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS: ${AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS:-1}
     ports:
       - "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP:-10.78.2.40}:8001:8001"
+    volumes:
+      - ${GATELM_PRODUCTION_DISTRIBUTED_E5_BUNDLE_CONTEXT:-../../.tmp/gateway-e5-runtime-bundle}/multilingual-e5-small/614241f622f53c4eeff9890bdc4f31cfecc418b3:/opt/gatelm/difficulty-e5/multilingual-e5-small/614241f622f53c4eeff9890bdc4f31cfecc418b3:ro
     tmpfs:
       - /run/gatelm-rag-tmp:rw,noexec,nosuid,nodev,size=${AI_SERVICE_RAG_TMPFS_SIZE:-64m},mode=1777
-    mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-2g}
-    pids_limit: ${AI_SERVICE_PIDS_LIMIT:-128}
+    cpus: ${AI_SERVICE_CPU_LIMIT:-4.0}
+    mem_limit: ${AI_SERVICE_MEMORY_LIMIT:-3g}
+    pids_limit: ${AI_SERVICE_PIDS_LIMIT:-256}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2).read()\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=2).read()\""]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 15
+      start_period: 90s
     networks: [role_internal]
 
   mock-provider:

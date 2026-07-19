@@ -1,1 +1,1 @@
-"""Experimental remote E5 difficulty inference domain."""
+"""Private remote E5 difficulty inference domain."""
