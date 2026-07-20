@@ -90,7 +90,9 @@ func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap
 	}
 	joined := strings.Join(db.queries, "\n")
 	if len(db.queries) != 1 || strings.Count(joined, "from p0_llm_invocation_logs") != 1 ||
-		!strings.Contains(joined, "with filtered as not materialized") ||
+		!strings.Contains(joined, "project_source as materialized") ||
+		!strings.Contains(joined, "jsonb_to_record") ||
+		!strings.Contains(joined, "filtered as not materialized") ||
 		!strings.Contains(joined, "grouped as materialized") {
 		t.Fatalf("expected one source scan feeding one materialized pre-aggregate, got %d queries: %s", len(db.queries), joined)
 	}
@@ -138,8 +140,9 @@ func TestBuildAnalyticsPolicyImpactFilteredCTEUsesPersistedProjectMetadata(t *te
 	})
 
 	for _, expected := range []string{
-		"metadata->>'promptDifficulty'",
-		"metadata->>'providerCalled'",
+		"jsonb_to_record",
+		`"promptDifficulty" text`,
+		`"providerCalled" text`,
 	} {
 		if !strings.Contains(query, expected) {
 			t.Fatalf("project policy impact must read persisted metadata %q: %s", expected, query)
