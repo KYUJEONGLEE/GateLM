@@ -606,7 +606,7 @@ export class DashboardRollupService
     const providerLatencyEligible = `${latencyEligible} AND provider_latency_ms IS NOT NULL`;
     const ttftEligible = 'stream = true AND ttft_ms IS NOT NULL';
     await tx.$executeRaw(Prisma.sql`
-      WITH filtered AS (
+      WITH filtered AS MATERIALIZED (
         SELECT
           tenant_id,
           project_id::text AS project_id,
@@ -715,7 +715,7 @@ export class DashboardRollupService
     `);
 
     await tx.$executeRaw(Prisma.sql`
-      WITH filtered AS (
+      WITH filtered AS MATERIALIZED (
         SELECT
           tenant_id,
           project_id::text AS project_id,
