@@ -4,8 +4,16 @@ import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-conn
 
 import {
   getRoutingModelOptions,
-  groupRoutingModelOptionsByProvider
+  groupRoutingModelOptionsByProvider,
+  parseOptionalBoundedInteger
 } from "./runtime-policy-editor-utils";
+
+test("allows a policy number field to be cleared while editing", () => {
+  expect(parseOptionalBoundedInteger("", 1, 100000)).toBeNull();
+  expect(parseOptionalBoundedInteger("   ", 1, 100000)).toBeNull();
+  expect(parseOptionalBoundedInteger("12", 1, 100000)).toBe(12);
+  expect(parseOptionalBoundedInteger("0", 1, 100000)).toBe(1);
+});
 
 test("keeps duplicate provider families separate by Provider Connection", () => {
   const modelOptions = getRoutingModelOptions([

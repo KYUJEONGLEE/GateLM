@@ -11,6 +11,10 @@ const routingSourceUrl = new URL(
   "./runtime-policy-panels/routing-panel.tsx",
   import.meta.url
 );
+const rateLimitSourceUrl = new URL(
+  "./runtime-policy-panels/rate-limit-panel.tsx",
+  import.meta.url
+);
 const stylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
 
 test("project policy settings opt into the responsive full-width editor layout", async () => {
@@ -90,5 +94,40 @@ test("project routing role copy uses tighter heading spacing", async () => {
   );
   expect(styles).toMatch(
     /\.policy-category-model-card \.tenant-routing-model-heading-copy > p \{\s*margin-top: 6px;/
+  );
+});
+
+test("request limits use focused configuration cards without unsupported panels", async () => {
+  const [rateLimitSource, styles] = await Promise.all([
+    readFile(rateLimitSourceUrl, "utf8"),
+    readFile(stylesSourceUrl, "utf8")
+  ]);
+
+  expect(rateLimitSource).toContain('className="rate-limit-enable-card"');
+  expect(rateLimitSource).toContain('className="rate-limit-setting-card"');
+  expect(rateLimitSource).not.toContain('className="rate-limit-policy-summary"');
+  expect(rateLimitSource).not.toContain("rateLimitEnabledHint");
+  expect(rateLimitSource).not.toContain("refillRateDescription");
+  expect(rateLimitSource).not.toContain("rateLimitMaximumDescription");
+  expect(rateLimitSource).not.toContain("최근 24시간");
+  expect(rateLimitSource).not.toContain("프리셋");
+  expect(rateLimitSource).toMatch(
+    /<header>\s*<h4>\{text\.refillRate\}<\/h4>\s*<\/header>/
+  );
+  expect(rateLimitSource).toMatch(
+    /<header>\s*<h4>\{text\.maxBucketTokens\}<\/h4>\s*<\/header>/
+  );
+  expect(styles).toMatch(
+    /\.policy-settings-list \.policy-tab-panel > \.rate-limit-policy-panel \{[\s\S]*?width: min\(100%, 760px\);/
+  );
+  expect(styles).toMatch(
+    /@media \(max-width: 760px\) \{[\s\S]*?\.rate-limit-enable-card \{[\s\S]*?flex-direction: column;/
+  );
+  expect(rateLimitSource).not.toContain("text.rateLimitDescription");
+  expect(styles).toMatch(
+    /html\[data-presentation-mode="true"\][\s\S]*?> \.rate-limit-policy-panel \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);[\s\S]*?width: min\(100%, 960px\);/
+  );
+  expect(styles).toMatch(
+    /html\[data-presentation-mode="true"\][\s\S]*?\.rate-limit-setting-control\.policy-field \{[\s\S]*?width: 180px;/
   );
 });
